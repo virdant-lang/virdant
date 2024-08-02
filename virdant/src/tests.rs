@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use crate::{expr::Expr, *};
+use crate::*;
 
 const CHECK: char = '✅';
 const BATSU: char = '❌';
@@ -13,7 +13,7 @@ const ERROR_EXAMPLES_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| std::p
 
 #[test]
 fn parse_examples() {
-    use parse::*;
+    use crate::parse::*;
     let mut errors = vec![];
 
     for filepath in example_files().chain(test_example_files()) {

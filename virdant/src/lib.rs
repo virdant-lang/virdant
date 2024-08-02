@@ -29,7 +29,6 @@ use std::sync::Arc;
 use table::Table;
 use types::Type;
 
-use crate::expr::Driver;
 use crate::expr::DriverType;
 
 
@@ -859,6 +858,7 @@ impl Virdant {
                         let expr_ast = driver_ast.clone().expr().unwrap();
                         let exprroot_info = self.exprroots.register(expr_id);
                         exprroot_info.ast.set(expr_ast.clone());
+                        exprroot_info.moddef.set(moddef);
 
                         let expr_ast = driver_ast.clone().expr().unwrap();
                         let component = self.resolve_component(target_path, moddef).unwrap();

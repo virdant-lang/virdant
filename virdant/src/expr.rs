@@ -79,7 +79,6 @@ impl Expr {
     }
 
     fn ast_to_expr_if(expr_if_ast: Ast) -> Arc<Expr> {
-        let asts: Vec<_> = expr_if_ast.children().collect();
         let subject_ast = expr_if_ast.subject().unwrap();
         let subject = Expr::from_ast(subject_ast);
         let true_expr = Expr::from_ast(expr_if_ast.child(2));
@@ -89,7 +88,7 @@ impl Expr {
         let mut else_ifs: Vec<(Arc<Expr>, Arc<Expr>)> = vec![];
         let mut else_expr: Option<Arc<Expr>> = None;
 
-        while let Some(child) = children.next() {
+        while let Some(_child) = children.next() {
             let node = children.next().unwrap();
             // if it's an "if" as in "else if"
             if node.is_kw_if() {
@@ -111,7 +110,6 @@ impl Expr {
     }
 
     fn ast_to_expr_match(expr_match_ast: Ast) -> Arc<Expr> {
-        let asts: Vec<_> = expr_match_ast.children().collect();
         let subject_ast = expr_match_ast.subject().unwrap();
         let subject = Expr::from_ast(subject_ast);
 
