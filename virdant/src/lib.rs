@@ -2,6 +2,8 @@ pub mod parse;
 pub mod error;
 pub mod id;
 pub mod types;
+pub mod ast;
+pub mod location;
 
 mod table;
 mod ready;
@@ -18,7 +20,7 @@ use ready::Ready;
 use error::VirErr;
 use error::VirErrs;
 use id::*;
-use parse::Ast;
+use ast::Ast;
 use types::CtorSig;
 use std::hash::Hash;
 use table::Table;
