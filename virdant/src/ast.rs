@@ -6,10 +6,10 @@ use crate::location::*;
 
 /// A node of the parse tree
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Ast<'a>(Pair<'a, Rule>);
+pub struct Ast(Pair<'static, Rule>);
 
-impl<'a> Ast<'a> {
-    pub(crate) fn new(pair: Pair<'a, Rule>) -> Self {
+impl Ast {
+    pub(crate) fn new(pair: Pair<'static, Rule>) -> Self {
         Ast(pair)
     }
 
@@ -18,16 +18,16 @@ impl<'a> Ast<'a> {
     }
 
     /// Get a child node with a given tag.
-    pub fn get(&'a self, tag: &'a str) -> Option<Ast<'a>> {
+    pub fn get(&self, tag: &'static str) -> Option<Ast> {
         self.pair().clone().into_inner().find_first_tagged(tag).map(|pair| Ast(pair))
     }
 
-    pub fn has(&'a self, tag: &'a str) -> bool {
+    pub fn has(&self, tag: &'static str) -> bool {
         self.get(tag).is_some()
     }
 
     /// Get the underlying string for a child node with a given tag.
-    pub fn get_as_str(&'a self, tag: &'a str) -> Option<&'a str> {
+    pub fn get_as_str(&self, tag: &'static str) -> Option<&str> {
         self.pair().clone().into_inner().find_first_tagged(tag).map(|pair| pair.as_str())
     }
 
@@ -40,7 +40,7 @@ impl<'a> Ast<'a> {
     }
 
     /// Get the child nodes of this node in the parse tree.
-    pub fn children<'b>(self: &'b Ast<'a>) -> impl Iterator<Item = Ast<'a>> where 'a: 'b {
+    pub fn children(self: &Ast) -> impl Iterator<Item = Ast> {
         let inner = self.pair().clone().into_inner();
         inner
             .filter(|pair| pair.as_rule() != Rule::EOI)
@@ -79,7 +79,7 @@ impl<'a> Ast<'a> {
         }
     }
 
-    fn pair(&self) -> &Pair<'a, Rule> {
+    fn pair(&self) -> &Pair<'static, Rule> {
         &self.0
     }
 

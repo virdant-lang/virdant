@@ -51,14 +51,14 @@ pub struct Virdant {
 struct PackageInfo {
     name: String,
     source: std::path::PathBuf,
-    ast: Ready<Ast<'static>>,
+    ast: Ready<Ast>,
 }
 
 #[derive(Default, Clone, Debug)]
 struct ItemInfo {
     name: String,
     package: Ready<Id<Package>>,
-    ast: Ready<Ast<'static>>,
+    ast: Ready<Ast>,
     kind: Ready<ItemKind>,
     deps: Ready<Vec<Id<Item>>>,
 }
@@ -181,8 +181,7 @@ impl Virdant {
             match self.package_text(package) {
                 Err(err) => self.errors.add(err),
                 Ok(text) => {
-                    let text: &'static str = text.leak(); // TODO
-                    let result: Result<Ast, _> = parse::parse_package(text);
+                    let result: Result<Ast, _> = parse::parse_package(&text);
                     match result {
                         Ok(package_ast) => {
                             let package_info = &mut self.packages[package];
@@ -216,7 +215,7 @@ impl Virdant {
         }
     }
 
-    fn register_item(&mut self, item_ast: Ast<'static>, package: Id<Package>) {
+    fn register_item(&mut self, item_ast: Ast, package: Id<Package>) {
         let item_name = item_ast.name().unwrap();
         let qualified_item_name = format!("{package}::{item_name}");
         let item: Id<Item> = Id::new(qualified_item_name.clone());
