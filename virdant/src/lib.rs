@@ -39,6 +39,7 @@ pub struct Virdant {
 
     packages: Table<Package, PackageInfo>,
     items: Table<Item, ItemInfo>,
+    builtindefs: Table<BuiltinDef, BuiltinDefInfo>,
     structdefs: Table<StructDef, StructDefInfo>,
     fields: Table<Field, FieldInfo>,
     uniondefs: Table<UnionDef, UnionDefInfo>,
@@ -50,7 +51,7 @@ pub struct Virdant {
 #[derive(Default, Clone, Debug)]
 struct PackageInfo {
     name: String,
-    source: std::path::PathBuf,
+    source: PackageSource,
     ast: Ready<Ast>,
 }
 
@@ -61,6 +62,11 @@ struct ItemInfo {
     ast: Ready<Ast>,
     kind: Ready<ItemKind>,
     deps: Ready<Vec<Id<Item>>>,
+}
+
+#[derive(Default, Clone, Debug)]
+struct BuiltinDefInfo {
+    item: Ready<Id<Item>>,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -151,6 +157,7 @@ impl Virdant {
         }
 
         self.check_no_item_dep_cycles();
+        self.register_builtindefs();
         self.register_structdefs();
         self.register_uniondefs();
 
@@ -167,11 +174,16 @@ impl Virdant {
 
 impl Virdant {
     fn register_packages(&mut self, sources: IndexMap<String, std::path::PathBuf>) {
+        let package: Id<Package> = Id::new("builtin");
+        let package_info = self.packages.register(package);
+        package_info.name = "builtin".to_string();
+        package_info.source = PackageSource::Builtin;
+
         for (package_name, package_path) in sources {
             let package: Id<Package> = Id::new(package_name.clone());
             let package_info = self.packages.register(package);
             package_info.name = package_name;
-            package_info.source = package_path;
+            package_info.source = PackageSource::File(package_path);
         }
     }
 
@@ -195,10 +207,15 @@ impl Virdant {
     }
 
     fn package_text(&self, package: Id<Package>) -> Result<String, VirErr> {
-        let path = &self.packages[package].source;
-        match std::fs::read_to_string(path) {
-            Ok(source) => Ok(source),
-            Err(err) => Err(err.into()),
+        let source = &self.packages[package].source;
+        match source {
+            PackageSource::Builtin => Ok(include_str!("../../lib/builtin.vir").to_string()),
+            PackageSource::File(path) => {
+                match std::fs::read_to_string(path) {
+                    Ok(source) => Ok(source),
+                    Err(err) => Err(err.into()),
+                }
+            },
         }
     }
 
@@ -425,6 +442,15 @@ impl Virdant {
 ////////////////////////////////////////////////////////////////////////////////
 
 impl Virdant {
+    fn register_builtindefs(&mut self) {
+        let builtindefs = self.items_by_kind(ItemKind::BuiltinDef);
+        for item in builtindefs {
+            let builtindef: Id<BuiltinDef> = item.cast();
+            let builtindef_info = self.builtindefs.register(builtindef);
+            builtindef_info.item.set(item);
+        }
+    }
+
     fn register_structdefs(&mut self) {
         let structdefs = self.items_by_kind(ItemKind::StructDef);
         for item in structdefs {
@@ -671,6 +697,11 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        deps: {:?}", item_info.deps)?;
         }
 
+        writeln!(f, "BUILTINDEFS:")?;
+        for (builtindef, _builtindef_info) in self.builtindefs.iter() {
+            writeln!(f, "    {builtindef}")?;
+        }
+
         writeln!(f, "STRUCTDEFS:")?;
         for (structdef, structdef_info) in self.structdefs.iter() {
             writeln!(f, "    {structdef}")?;
@@ -743,4 +774,11 @@ impl ItemKind {
 pub enum ChannelDir {
     Mosi,
     Miso,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, Hash, Default)]
+pub enum PackageSource {
+    #[default]
+    Builtin,
+    File(std::path::PathBuf),
 }
