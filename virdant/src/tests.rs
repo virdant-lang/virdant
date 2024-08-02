@@ -258,6 +258,7 @@ fn test_foo() {
 
     virdant.check().unwrap();
 
+    /*
     for moddef in virdant.moddefs().iter() {
         let moddef_ast = virdant.items[moddef.as_item()].ast.unwrap().child(0);
         for node in moddef_ast.children() {
@@ -270,6 +271,7 @@ fn test_foo() {
             }
         }
     }
+*/
 
     eprintln!("{virdant:?}");
 }
