@@ -1,4 +1,5 @@
 use crate::ast::Ast;
+use crate::id::*;
 
 use std::sync::Arc;
 
@@ -225,11 +226,10 @@ fn parse_wordlit(wordlit: &str) -> WordLit {
     }
 }
 
-/*
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypedExpr {
     Reference(Type, Referent),
-    Word(Type, ast::WordLit),
+    Word(Type, WordLit),
     MethodCall(Type, Arc<TypedExpr>, Ident, Vec<Arc<TypedExpr>>),
     Struct(Type, Option<QualIdent>, Vec<(Ident, Arc<TypedExpr>)>),
     Ctor(Type, Ident, Vec<Arc<TypedExpr>>),
@@ -239,4 +239,59 @@ pub enum TypedExpr {
     If(Type, Arc<TypedExpr>, Arc<TypedExpr>, Arc<TypedExpr>),
     Match(Type, Arc<TypedExpr>, Option<Arc<Type>>, Vec<TypedMatchArm>),
 }
-*/
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TypedMatchArm(pub TypedPat, pub Arc<TypedExpr>);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TypedPat {
+    At(Type, Ident, Vec<TypedPat>),
+    Bind(Type, Ident),
+    Otherwise(Type),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Referent {
+    Binding(Ident),
+    Component(Id<Component>),
+}
+
+pub trait Typed {
+    fn typ(&self) -> Type;
+}
+
+impl Typed for TypedExpr {
+    fn typ(&self) -> Type {
+        match self {
+            TypedExpr::Reference(typ, _) => typ.clone(),
+            TypedExpr::Word(typ, _) => typ.clone(),
+            TypedExpr::Struct(typ, _, _) => typ.clone(),
+            TypedExpr::MethodCall(typ, _, _, _) => typ.clone(),
+            TypedExpr::Ctor(typ, _, _) => typ.clone(),
+            TypedExpr::Idx(typ, _, _) => typ.clone(),
+            TypedExpr::IdxRange(typ, _, _, _) => typ.clone(),
+            TypedExpr::Cat(typ, _) => typ.clone(),
+            TypedExpr::If(typ, _, _, _) => typ.clone(),
+            TypedExpr::Match(typ, _subject, _ascription, _arms) => typ.clone(),
+        }
+    }
+}
+
+impl Typed for TypedPat {
+    fn typ(&self) -> Type {
+        match self {
+            TypedPat::At(typ, _, _) => typ.clone(),
+            TypedPat::Bind(typ, _) => typ.clone(),
+            TypedPat::Otherwise(typ) => typ.clone(),
+        }
+    }
+}
+
+impl Typed for TypedMatchArm {
+    fn typ(&self) -> Type {
+        let binding_typ = self.0.typ();
+        let expr_typ = self.1.typ();
+        assert_eq!(binding_typ, expr_typ);
+        expr_typ
+    }
+}
