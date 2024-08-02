@@ -52,6 +52,7 @@ pub mod types {
 
     id_type!(Ctor);
     id_type!(Field);
+    id_type!(Channel);
 }
 
 pub use types::*;

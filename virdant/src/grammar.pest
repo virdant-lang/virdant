@@ -82,7 +82,7 @@ structdef_statement = {
 }
 
 portdef_statement = {
-    (#dir=channel_dir) ~ (#name=ident) ~ ":" ~ (#type=type) ~ ";"
+    (#dir=channel_dir) ~ (#name=ident) ~ ":" ~ (#type=type)
 }
 
 
