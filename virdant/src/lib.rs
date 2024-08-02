@@ -9,6 +9,8 @@ pub mod location;
 mod table;
 mod ready;
 mod cycle;
+mod typecheck;
+mod context;
 
 #[cfg(test)]
 mod tests;
@@ -23,7 +25,9 @@ use error::VirErr;
 use error::VirErrs;
 use id::*;
 use ast::Ast;
+use typecheck::TypingContext;
 use types::CtorSig;
+use types::Nat;
 use std::hash::Hash;
 use std::sync::Arc;
 use table::Table;
@@ -658,6 +662,10 @@ impl Virdant {
     fn clock_type(&self) -> Type {
         Type::builtindef(self.builtindefs.resolve("builtin::Clock").unwrap(), None)
     }
+
+    fn word_type(&self, width: Nat) -> Type {
+        Type::builtindef(self.builtindefs.resolve("builtin::Word").unwrap(), Some(width))
+    }
 }
 
 
@@ -872,8 +880,14 @@ impl Virdant {
 
                         let expr = Expr::from_ast(expr_ast);
                         let exprroot_info = self.exprroots.register(expr_id);
-                        exprroot_info.expr.set(expr);
-                        exprroot_info.typ.set(*component_info.typ.unwrap());
+                        exprroot_info.expr.set(expr.clone());
+                        let typ = *component_info.typ.unwrap();
+                        exprroot_info.typ.set(typ);
+
+                        let context = TypingContext::new(self, moddef);
+                        let typed_expr = context.check(expr, typ);
+                        dbg!(typed_expr);
+
                     } else if node.child(0).is_reg() {
                         let reg_ast = node.child(0);
                         let expr_ast = reg_ast.clone().expr().unwrap();

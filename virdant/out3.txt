@@ -1,0 +1,222 @@
+diff --git a/virdant/src/error.rs b/virdant/src/error.rs
+index 97d1746..fe542c0 100644
+--- a/virdant/src/error.rs
++++ b/virdant/src/error.rs
+@@ -11,6 +11,7 @@ pub enum VirErr {
+     CantImport(Id<Package>),
+     DupImport(Id<Package>),
+     Other(String),
++    Unknown,
+ }
+ 
+ #[derive(Debug, Clone, Default)]
+diff --git a/virdant/src/lib.rs b/virdant/src/lib.rs
+index 23e7481..6f94f41 100644
+--- a/virdant/src/lib.rs
++++ b/virdant/src/lib.rs
+@@ -9,6 +9,7 @@ mod ready;
+ mod tests;
+ 
+ use indexmap::IndexSet;
++use parse::QualIdent;
+ use ready::Ready;
+ use error::VirErr;
+ use error::VirErrs;
+@@ -41,6 +42,7 @@ struct ItemInfo<'a> {
+     package: Ready<Id<Package>>,
+     ast: Ready<Ast<'a>>,
+     kind: Ready<ItemKind>,
++    deps: Ready<Vec<Id<Item>>>,
+ }
+ 
+ ////////////////////////////////////////////////////////////////////////////////
+@@ -76,10 +78,58 @@ impl<'a> Virdant<'a> {
+             }
+         }
+ 
++        for item in self.items() {
++            let item_deps = self.item_deps(item).clone();
++            let item_info = self.items.get_mut(item).unwrap();
++            item_info.deps.set(item_deps);
++        }
++
+         self.errors.clone().check()
+     }
+ }
+ 
++impl<'a> Virdant<'a> {
++    fn item_deps(&self, item: Id<Item>) -> Vec<Id<Item>> {
++        let mut results = IndexSet::new();
++        if let Ok(item_ast) = self.items[item].ast.get() {
++            if item_ast.child(0).is_moddef() {
++                let moddef_ast = item_ast.child(0);
++                for node in moddef_ast.children() {
++                    if let Some(type_node) = node.typ() {
++                        self.item_deps_type(type_node);
++                        todo!()
++                    }
++
++                    if let Some(qualident) = node.of() {
++                        if let Ok(dep_item) = self.resolve_qualident(&qualident, item) {
++                            results.insert(dep_item);
++                        } else {
++                            //errors.add
++                            todo!()
++                        }
++                    }
++                }
++            }
++        }
++        results.into_iter().collect()
++    }
++
++    fn item_deps_type(&self, type_ast: Ast) -> Result<Id<Item>, VirErr> {
++        eprintln!("{}", type_ast.summary());
++        eprintln!("  of: {:?}", type_ast.of());
++//        let qualident = QualIdent::new(qualident);
++        todo!()
++    }
++
++    fn resolve_qualident(&self, qualident: &str, in_item: Id<Item>) -> Result<Id<Item>, VirErr> {
++        let qualident = QualIdent::new(qualident);
++        let in_package = self.items[in_item].package.unwrap().clone();
++        //let in_package_name = self.packages[in_package].name.clone();
++        let resolved_package_name = qualident.in_package(&in_package.to_string()).to_string();
++        self.items.resolve(&resolved_package_name).ok_or_else(|| VirErr::Unknown)
++    }
++}
++
+ 
+ ////////////////////////////////////////////////////////////////////////////////
+ // Analyses
+@@ -123,7 +173,6 @@ impl<'a> Virdant<'a> {
+         }
+     }
+ 
+-    #[cfg(test)]
+     fn items(&self) -> Vec<Id<Item>> {
+         self.items.keys().cloned().collect()
+     }
+diff --git a/virdant/src/parse.rs b/virdant/src/parse.rs
+index aebe313..58b78bd 100644
+--- a/virdant/src/parse.rs
++++ b/virdant/src/parse.rs
+@@ -15,6 +15,48 @@ use crate::ItemKind;
+ #[grammar = "grammar.pest"]
+ struct Parser;
+ 
++#[derive(Debug, Clone, PartialEq, Eq, Hash)]
++pub struct QualIdent(Option<String>, String);
++
++impl QualIdent {
++    pub fn new(qualident: &str) -> QualIdent {
++        if let Some(idx) = qualident.find("::") {
++            let package = qualident[..idx].to_string();
++            let name = qualident[idx+2..].to_string();
++            QualIdent(Some(package), name)
++        } else {
++            QualIdent(None, qualident.to_string())
++        }
++    }
++
++    pub fn package(&self) -> Option<&String> {
++        self.0.as_ref()
++    }
++
++    pub fn name(&self) -> &str {
++        &self.1
++    }
++
++    pub fn in_package(&self, in_package: &str) -> QualIdent {
++        if self.0.is_some() {
++            self.clone()
++        } else {
++            QualIdent(Some(in_package.to_string()), self.name().to_string())
++        }
++    }
++}
++
++impl std::fmt::Display for QualIdent {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        let name = self.name();
++        if let Some(package) = self.package() {
++            write!(f, "{package}::{name}")
++        } else {
++            write!(f, "{name}")
++        }
++    }
++}
++
+ /// A node of the parse tree
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+ pub struct Ast<'a>(Pair<'a, Rule>);
+@@ -106,8 +148,13 @@ impl<'a> Ast<'a> {
+         &self.0
+     }
+ 
+-    pub fn is_item(&self) -> bool { self.rule() == Rule::item }
+     pub fn is_import(&self) -> bool { self.rule() == Rule::import }
++    pub fn is_item(&self) -> bool { self.rule() == Rule::item }
++
++    pub fn is_moddef(&self) -> bool { self.rule() == Rule::moddef }
++    pub fn is_uniondef(&self) -> bool { self.rule() == Rule::uniondef }
++    pub fn is_structdef(&self) -> bool { self.rule() == Rule::structdef }
++    pub fn is_portdef(&self) -> bool { self.rule() == Rule::portdef }
+ 
+     pub fn is_statement(&self) -> bool {
+         self.rule() == Rule::moddef_statement ||
+@@ -116,6 +163,8 @@ impl<'a> Ast<'a> {
+         self.rule() == Rule::portdef_statement
+     }
+ 
++    pub fn is_submodule(&self) -> bool { self.rule() == Rule::moddef_statement_mod }
++
+     pub fn is_list(&self) -> bool {
+         self.rule() == Rule::arg_list ||
+         self.rule() == Rule::type_list ||
+diff --git a/virdant/src/table.rs b/virdant/src/table.rs
+index 31bfe1d..953ec9c 100644
+--- a/virdant/src/table.rs
++++ b/virdant/src/table.rs
+@@ -47,6 +47,15 @@ impl<E: Copy + Eq + Hash, D: Default> Table<E, D> {
+     pub fn iter_mut(&mut self) -> impl Iterator<Item = (&Id<E>, &mut D)> {
+         self.0.iter_mut()
+     }
++
++    pub fn resolve(&self, name: &str) -> Option<Id<E>> {
++        let id = Id::new(name);
++        if self.0.contains_key(&id) {
++            Some(id)
++        } else {
++            None
++        }
++    }
+ }
+ 
+ impl<E: Copy + Eq + Hash, D> std::ops::Index<Id<E>> for Table<E, D> {
+diff --git a/virdant/src/tests.rs b/virdant/src/tests.rs
+index 337071d..2b9b2fc 100644
+--- a/virdant/src/tests.rs
++++ b/virdant/src/tests.rs
+@@ -5,6 +5,7 @@ const BATSU: char = '❌';
+ 
+ const EXAMPLES_DIR: &'static str = "../examples";
+ const ERROR_EXAMPLES_DIR: &'static str = "examples/errors";
++const TEST_EXAMPLES_DIR: &'static str = "examples";
+ 
+ #[test]
+ fn parse_examples() {
+@@ -152,3 +153,13 @@ fn test_items() {
+ 
+     assert_eq!(virdant.moddefs(), moddefs);
+ }
++
++#[test]
++fn test_foo() {
++    let error_examples_dir = std::path::Path::new(TEST_EXAMPLES_DIR);
++    let mut virdant = Virdant::new();
++
++    virdant.add_package_source("top", error_examples_dir.join("top.vir"));
++
++    virdant.check().unwrap();
++}

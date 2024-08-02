@@ -1,5 +1,6 @@
 use crate::ast::Ast;
 use crate::id::*;
+use crate::types::Type;
 
 use std::sync::Arc;
 
@@ -34,14 +35,6 @@ pub struct WordLit {
     pub value: WordVal,
     pub width: Option<Width>,
     pub spelling: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Type {
-    Clock,
-    Word(Width),
-    Vec(Arc<Type>, usize),
-    TypeRef(QualIdent),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

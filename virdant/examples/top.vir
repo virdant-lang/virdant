@@ -6,5 +6,5 @@ mod Top {
     reg r : Word[8] on clock;
     r <= inp;
 
-    out := inp;
+    out := 0;
 }

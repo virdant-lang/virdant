@@ -1,4 +1,4 @@
-use crate::id::*;
+use crate::{expr::Width, id::*};
 
 pub type Nat = u64;
 
@@ -54,8 +54,20 @@ impl Type {
         }
     }
 
-    fn args(&self) -> Option<Nat> {
-        self.1.clone()
+    pub fn args(&self) -> Option<Vec<Nat>> {
+        self.1.map(|n| vec![n]).clone()
+    }
+
+    pub(crate) fn is_word(&self) -> bool {
+        if let TypeScheme::BuiltinDef(builtindef) = &self.0 {
+            *builtindef == Id::new("builtin::Word")
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn width(&self) -> Width {
+        self.args().unwrap()[0]
     }
 }
 
@@ -64,7 +76,10 @@ impl std::fmt::Display for Type {
         let item_def = self.itemdef();
         let arg_str = match self.args() {
             None => format!(""),
-            Some(n) => format!("[{n}]"),
+            Some(args) => {
+                assert_eq!(args.len(), 1);
+                format!("[{}]", args[0])
+            }
         };
         write!(f, "{item_def}{arg_str}")
     }

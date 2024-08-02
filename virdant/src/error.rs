@@ -16,6 +16,7 @@ pub enum VirErr {
     ItemDepCycle(Vec<String>),
     KindError(String),
     WrongDriverType(String),
+    TypeError(String),
     Other(String),
 }
 

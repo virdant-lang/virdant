@@ -1,0 +1,503 @@
+    fn init_components(&mut self) {
+        self.moddef_components.set(HashMap::new());
+        for moddef in self.moddefs() {
+            eprintln!("MODDEF: {moddef}");
+            if let Ok(item_ast) = &self.item_asts[&moddef.as_item()] {
+                let moddef_ast = item_ast.child(0);
+                for node in moddef_ast.children() {
+                    if node.is_moddef_statement() {
+                        if !node.has("drivertype") {
+                            eprintln!("node: {:?}", node.name());
+                            eprintln!("{:?}", node.as_str());
+                            eprintln!("");
+                        }
+                    }
+                }
+            }
+        }
+        todo!()
+    }
+
+diff --cc virdant/src/lib.rs
+index c3ba300,4608313..0000000
+--- a/virdant/src/lib.rs
++++ b/virdant/src/lib.rs
+@@@ -19,13 -19,16 +19,16 @@@ use parse::Ast
+  /// Call [`check()`](Virdant::check) to get a list of errors in a design.
+  #[derive(Default)]
+  pub struct Virdant<'a> {
+ -    sources: HashMap<Id<Package>, std::path::PathBuf>,
+ +    sources: IndexMap<Id<Package>, std::path::PathBuf>,
+      errors: VirErrs,
+  
+ -    package_asts: Ready<HashMap<Id<Package>, Ast<'a>>>,
+ +    package_asts: Ready<IndexMap<Id<Package>, Ast<'a>>>,
+      items: Ready<Vec<Id<Item>>>,
+ -    item_asts: Ready<HashMap<Id<Item>, Result<Ast<'a>, VirErr>>>,
+ -    item_kinds: Ready<HashMap<Id<Item>, Result<ItemKind, VirErr>>>,
+ +    item_asts: Ready<IndexMap<Id<Item>, Result<Ast<'a>, VirErr>>>,
+ +    item_kinds: Ready<IndexMap<Id<Item>, Result<ItemKind, VirErr>>>,
++ 
+ -    submodules: Ready<HashMap<Id<ModDef>, Vec<Submodule>>>,
+ -//    submodule_ofness: Ready<HashMap<Id<Submodule>, ModDef>>,
+++    submodules: Ready<IndexMap<Id<ModDef>, Vec<Id<Submodule>>>>,
+++    submodule_ofness: Ready<IndexMap<Id<Submodule>, ModDef>>,
+  }
+  
+  
+@@@ -113,6 -118,26 +118,31 @@@ impl<'a> Virdant<'a> 
+          }
+      }
+  
++     fn init_submodules(&mut self) {
+ -        self.submodules.set(HashMap::new());
+++        self.submodules.set(IndexMap::new());
++         for moddef in self.moddefs() {
++             eprintln!("MODDEF: {moddef}");
++             if let Ok(item_ast) = &self.item_asts[&moddef.as_item()] {
+++                let mut submodules: Vec<Id<Submodule>> = vec![];
+++
++                 let moddef_ast = item_ast.child(0);
++                 for node in moddef_ast.children() {
++                     if node.is_moddef_statement() {
++                         let node = node.child(0);
++                         if node.is_submodule() {
++                             eprintln!("{}", node.as_summary_str());
++                             eprintln!("{:?} of {:?}", node.name(), node.of());
++                             eprintln!();
+++                            submodules.push(Id::new(node.name().unwrap()));
++                         }
++                     }
++                 }
+++
+++                self.submodules.insert(moddef, submodules);
++             }
++         }
++     }
++ 
+      #[cfg(test)]
+      fn items(&self) -> Vec<Id<Item>> {
+          self.items.iter().cloned().collect()
+diff --git a/virdant/src/grammar.pest b/virdant/src/grammar.pest
+index bbfb960..eb50a30 100644
+--- a/virdant/src/grammar.pest
++++ b/virdant/src/grammar.pest
+@@ -66,7 +66,7 @@ moddef_statement_port = { kw_port ~ (#name=ident) ~ kw_of ~ (#of=qualident) }
+ moddef_statement_driver = { (#target=path) ~ (#drivertype=drivertype) ~ (#expr=expr) }
+ 
+ uniondef_statement = {
+-    (#name=ident) ~ "(" ~ arg_list ~ ")"
++    (#name=ident) ~ "(" ~ (#args=arg_list) ~ ")"
+ }
+ 
+ structdef_statement = {
+diff --git a/virdant/src/id.rs b/virdant/src/id.rs
+index 7e343f2..f6055ef 100644
+--- a/virdant/src/id.rs
++++ b/virdant/src/id.rs
+@@ -51,23 +51,24 @@ impl<T> std::fmt::Debug for Id<T> {
+ }
+ 
+ pub mod types {
+-    #[derive(Clone, Copy, Eq, PartialEq, Hash)]
+-    pub struct Package(());
+-
+-    #[derive(Clone, Copy, Eq, PartialEq, Hash)]
+-    pub struct Item(());
++    macro_rules! id_type {
++        ($name:ident) => {
++            #[derive(Clone, Copy, Eq, PartialEq, Hash)]
++            pub struct $name(());
++        };
++    }
+ 
+-    #[derive(Clone, Copy, Eq, PartialEq, Hash)]
+-    pub struct ModDef(());
++    id_type!(Package);
+ 
+-    #[derive(Clone, Copy, Eq, PartialEq, Hash)]
+-    pub struct UnionDef(());
++    id_type!(Item);
+ 
+-    #[derive(Clone, Copy, Eq, PartialEq, Hash)]
+-    pub struct StructDef(());
++    id_type!(ModDef);
++    id_type!(UnionDef);
++    id_type!(StructDef);
++    id_type!(PortDef);
+ 
+-    #[derive(Clone, Copy, Eq, PartialEq, Hash)]
+-    pub struct PortDef(());
++    id_type!(Ctor);
++    id_type!(Field);
+ }
+ 
+ pub use types::*;
+diff --git a/virdant/src/lib.rs b/virdant/src/lib.rs
+index c3ba300..e8f62f3 100644
+--- a/virdant/src/lib.rs
++++ b/virdant/src/lib.rs
+@@ -26,6 +26,10 @@ pub struct Virdant<'a> {
+     items: Ready<Vec<Id<Item>>>,
+     item_asts: Ready<IndexMap<Id<Item>, Result<Ast<'a>, VirErr>>>,
+     item_kinds: Ready<IndexMap<Id<Item>, Result<ItemKind, VirErr>>>,
++
++    ctors: Ready<IndexMap<Id<UnionDef>, Id<Ctor>>>,
++
++    fields: Ready<IndexMap<Id<StructDef>, Id<Field>>>,
+ }
+ 
+ 
+@@ -59,6 +63,8 @@ impl<'a> Virdant<'a> {
+             }
+         }
+ 
++        self.init_elements();
++
+         self.errors.clone().check()
+     }
+ }
+@@ -113,6 +119,33 @@ impl<'a> Virdant<'a> {
+         }
+     }
+ 
++    fn init_elements(&mut self) {
++        self.init_ctors();
++    }
++
++    fn init_ctors(&mut self) {
++        self.ctors.set(IndexMap::new());
++        for uniondef in self.uniondefs() {
++            if let Ok(item_ast) = &self.item_asts[&uniondef.as_item()] {
++                let uniondef_ast = item_ast.child(0);
++                for node in uniondef_ast.children() {
++                    if node.is_statement() {
++                        eprintln!("{}", node.summary());
++                        let name = node.name().unwrap();
++                        let ctor: Id<Ctor> = Id::new(format!("{uniondef}::{name}"));
++                        let args = node.args().unwrap().children();
++                        eprintln!("{ctor}");
++                        for arg in args {
++                            eprintln!("  argument: {}", arg.summary());
++                        }
++
++                        eprintln!();
++                    }
++                }
++            }
++        }
++    }
++
+     #[cfg(test)]
+     fn items(&self) -> Vec<Id<Item>> {
+         self.items.iter().cloned().collect()
+@@ -129,6 +162,17 @@ impl<'a> Virdant<'a> {
+         }
+         results
+     }
++
++    fn uniondefs(&self) -> Vec<Id<UnionDef>> {
++        let mut results = vec![];
++        for item in self.items.iter() {
++            let item_ast = &self.item_asts[item];
++            if let Ok(Some(ItemKind::UnionDef)) = item_ast.as_ref().map(|ast| ast.item_kind()) {
++                results.push(item.cast());
++            }
++        }
++        results
++    }
+ }
+ 
+ 
+diff --git a/virdant/src/parse.rs b/virdant/src/parse.rs
+index 36c0491..904d9a9 100644
+--- a/virdant/src/parse.rs
++++ b/virdant/src/parse.rs
+@@ -84,18 +84,22 @@ impl<'a> Ast<'a> {
+         self.pair().as_str()
+     }
+ 
+-    pub fn as_summary_str(&self) -> String {
++    pub fn summary(&self) -> String {
+         let text = self.pair().as_str();
+         let lines: Vec<&str> = text.lines().collect();
+-        let first_line = lines[0];
+-        let rule = self.rule();
+-        let truncated_line = if lines.len() == 1 {
+-            first_line.to_string()
++        if lines.len() == 0 {
++            format!("[{:?}]", self.rule())
+         } else {
+-            format!("{first_line} ...")
+-        };
+-
+-        format!("[{rule:?}] {truncated_line:?}")
++            let first_line = lines[0];
++            let rule = self.rule();
++            let truncated_line = if lines.len() == 1 {
++                first_line.to_string()
++            } else {
++                format!("{first_line} ...")
++            };
++
++            format!("[{rule:?}] {truncated_line:?}")
++        }
+     }
+ 
+     fn pair(&self) -> &Pair<'a, Rule> {
+@@ -104,13 +108,28 @@ impl<'a> Ast<'a> {
+ 
+     pub fn is_item(&self) -> bool { self.rule() == Rule::item }
+     pub fn is_import(&self) -> bool { self.rule() == Rule::import }
+-    pub fn is_moddef_statement(&self) -> bool { self.rule() == Rule::moddef_statement }
++
++    pub fn is_statement(&self) -> bool {
++        self.rule() == Rule::moddef_statement ||
++        self.rule() == Rule::uniondef_statement ||
++        self.rule() == Rule::structdef_statement ||
++        self.rule() == Rule::portdef_statement
++    }
++
++    pub fn is_list(&self) -> bool {
++        self.rule() == Rule::arg_list ||
++        self.rule() == Rule::type_list ||
++        self.rule() == Rule::expr_list ||
++        self.rule() == Rule::pat_list
++    }
+ 
+     pub fn package(&self) -> Option<&str> { self.get_as_str("package") }
+     pub fn name(&self) -> Option<&str> { self.get_as_str("name") }
+-    pub fn typ(&self) -> Option<&str> { self.get_as_str("type") }
+     pub fn of(&self) -> Option<&str> { self.get_as_str("of") }
+-    pub fn expr(&self) -> Option<&str> { self.get_as_str("expr") }
++
++    pub fn typ(&self) -> Option<Ast> { self.get("type") }
++    pub fn expr(&self) -> Option<Ast> { self.get("expr") }
++    pub fn args(&self) -> Option<Ast> { self.get("args") }
+ 
+     pub fn item_kind(&self) -> Option<ItemKind> {
+         match self.child(0).rule() {
+diff --git a/virdant/src/grammar.pest b/virdant/src/grammar.pest
+index bbfb960..eb50a30 100644
+--- a/virdant/src/grammar.pest
++++ b/virdant/src/grammar.pest
+@@ -66,7 +66,7 @@ moddef_statement_port = { kw_port ~ (#name=ident) ~ kw_of ~ (#of=qualident) }
+ moddef_statement_driver = { (#target=path) ~ (#drivertype=drivertype) ~ (#expr=expr) }
+ 
+ uniondef_statement = {
+-    (#name=ident) ~ "(" ~ arg_list ~ ")"
++    (#name=ident) ~ "(" ~ (#args=arg_list) ~ ")"
+ }
+ 
+ structdef_statement = {
+diff --git a/virdant/src/lib.rs b/virdant/src/lib.rs
+index c3ba300..e8f62f3 100644
+--- a/virdant/src/lib.rs
++++ b/virdant/src/lib.rs
+@@ -26,6 +26,10 @@ pub struct Virdant<'a> {
+     items: Ready<Vec<Id<Item>>>,
+     item_asts: Ready<IndexMap<Id<Item>, Result<Ast<'a>, VirErr>>>,
+     item_kinds: Ready<IndexMap<Id<Item>, Result<ItemKind, VirErr>>>,
++
++    ctors: Ready<IndexMap<Id<UnionDef>, Id<Ctor>>>,
++
++    fields: Ready<IndexMap<Id<StructDef>, Id<Field>>>,
+ }
+ 
+ 
+@@ -59,6 +63,8 @@ impl<'a> Virdant<'a> {
+             }
+         }
+ 
++        self.init_elements();
++
+         self.errors.clone().check()
+     }
+ }
+@@ -113,6 +119,33 @@ impl<'a> Virdant<'a> {
+         }
+     }
+ 
++    fn init_elements(&mut self) {
++        self.init_ctors();
++    }
++
++    fn init_ctors(&mut self) {
++        self.ctors.set(IndexMap::new());
++        for uniondef in self.uniondefs() {
++            if let Ok(item_ast) = &self.item_asts[&uniondef.as_item()] {
++                let uniondef_ast = item_ast.child(0);
++                for node in uniondef_ast.children() {
++                    if node.is_statement() {
++                        eprintln!("{}", node.summary());
++                        let name = node.name().unwrap();
++                        let ctor: Id<Ctor> = Id::new(format!("{uniondef}::{name}"));
++                        let args = node.args().unwrap().children();
++                        eprintln!("{ctor}");
++                        for arg in args {
++                            eprintln!("  argument: {}", arg.summary());
++                        }
++
++                        eprintln!();
++                    }
++                }
++            }
++        }
++    }
++
+     #[cfg(test)]
+     fn items(&self) -> Vec<Id<Item>> {
+         self.items.iter().cloned().collect()
+@@ -129,6 +162,17 @@ impl<'a> Virdant<'a> {
+         }
+         results
+     }
++
++    fn uniondefs(&self) -> Vec<Id<UnionDef>> {
++        let mut results = vec![];
++        for item in self.items.iter() {
++            let item_ast = &self.item_asts[item];
++            if let Ok(Some(ItemKind::UnionDef)) = item_ast.as_ref().map(|ast| ast.item_kind()) {
++                results.push(item.cast());
++            }
++        }
++        results
++    }
+ }
+ 
+ 
+diff --git a/virdant/src/lib.rs b/virdant/src/lib.rs
+index e9e20b5..de10179 100644
+--- a/virdant/src/lib.rs
++++ b/virdant/src/lib.rs
+@@ -196,3 +196,16 @@ pub enum ItemKind {
+     StructDef,
+     PortDef,
+ }
++
++#[derive(Default, Clone)]
++struct TypeInfo {
++    flavor: Ready<TypeFlavor>,
++}
++
++#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
++pub enum TypeFlavor {
++    Clock,
++    Word,
++    UnionDef,
++    TypeDef,
++}
+diff --git a/virdant/src/lib.rs b/virdant/src/lib.rs
+index e9e20b5..68c63bf 100644
+--- a/virdant/src/lib.rs
++++ b/virdant/src/lib.rs
+@@ -36,8 +36,10 @@ struct PackageInfo<'a> {
+ 
+ #[derive(Default, Clone)]
+ struct ItemInfo<'a> {
++    package: Ready<Id<Package>>,
+     ast: Ready<Ast<'a>>,
+     kind: Ready<ItemKind>,
++    deps: Ready<Vec<Id<Item>>>,
+ }
+ 
+ ////////////////////////////////////////////////////////////////////////////////
+@@ -61,7 +63,7 @@ impl<'a> Virdant<'a> {
+     pub fn check(&mut self) -> Result<(), VirErrs> {
+         self.init_asts();
+ 
+-        for package in  self.packages() {
++        for package in self.packages() {
+             if let Err(errs) = self.all_imported_packages_exist(package) {
+                 self.errors.extend(errs)
+             }
+@@ -71,10 +73,46 @@ impl<'a> Virdant<'a> {
+             }
+         }
+ 
++        for item in self.items() {
++            let item_deps = self.item_deps(item).clone();
++            let item_info = self.items.get_mut(item).unwrap();
++            item_info.deps.set(item_deps);
++
++        }
++
+         self.errors.clone().check()
+     }
+ }
+ 
++impl<'a> Virdant<'a> {
++    fn item_deps(&self, item: Id<Item>) -> Vec<Id<Item>> {
++        let mut results = IndexSet::new();
++        if let Ok(item_ast) = self.items.get(item).unwrap().ast.get() {
++            if item_ast.child(0).is_moddef() {
++                let moddef_ast = item_ast.child(0);
++                for node in moddef_ast.children() {
++                    if let Some(type_node) = node.typ() {
++                        results.union(&self.item_deps_type(type_node));
++                    }
++
++                    if let Some(of_node) = node.of() {
++                        results.union(&self.item_deps_of(of_node));
++                    }
++                }
++            }
++        }
++        results.into_iter().collect()
++    }
++
++    fn item_deps_type(&self, type_ast: Ast) -> IndexSet<Id<Item>> {
++        todo!()
++    }
++
++    fn item_deps_of(&self, of: &str) -> IndexSet<Id<Item>> {
++        todo!()
++    }
++}
++
+ 
+ ////////////////////////////////////////////////////////////////////////////////
+ // Analyses
+@@ -112,12 +150,13 @@ impl<'a> Virdant<'a> {
+                 let kind = node.item_kind().unwrap();
+                 item_info.kind.set(kind);
+ 
++                item_info.package.set(package);
++
+                 item_info.ast.set(node);
+             }
+         }
+     }
+ 
+-    #[cfg(test)]
+     fn items(&self) -> Vec<Id<Item>> {
+         self.items.keys().cloned().collect()
+     }
+diff --git a/virdant/src/parse.rs b/virdant/src/parse.rs
+index 2b7be5c..bf90773 100644
+--- a/virdant/src/parse.rs
++++ b/virdant/src/parse.rs
+@@ -106,8 +106,13 @@ impl<'a> Ast<'a> {
+         &self.0
+     }
+ 
+-    pub fn is_item(&self) -> bool { self.rule() == Rule::item }
+     pub fn is_import(&self) -> bool { self.rule() == Rule::import }
++    pub fn is_item(&self) -> bool { self.rule() == Rule::item }
++
++    pub fn is_moddef(&self) -> bool { self.rule() == Rule::moddef }
++    pub fn is_uniondef(&self) -> bool { self.rule() == Rule::uniondef }
++    pub fn is_structdef(&self) -> bool { self.rule() == Rule::structdef }
++    pub fn is_portdef(&self) -> bool { self.rule() == Rule::portdef }
+ 
+     pub fn is_statement(&self) -> bool {
+         self.rule() == Rule::moddef_statement ||
+@@ -116,6 +121,8 @@ impl<'a> Ast<'a> {
+         self.rule() == Rule::portdef_statement
+     }
+ 
++    pub fn is_submodule(&self) -> bool { self.rule() == Rule::moddef_statement_mod }
++
+     pub fn is_list(&self) -> bool {
+         self.rule() == Rule::arg_list ||
+         self.rule() == Rule::type_list ||
