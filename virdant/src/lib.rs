@@ -43,6 +43,8 @@ pub struct Virdant {
     fields: Table<Field, FieldInfo>,
     uniondefs: Table<UnionDef, UnionDefInfo>,
     ctors: Table<Ctor, CtorInfo>,
+    portdefs: Table<PortDef, PortDefInfo>,
+    channels: Table<Channel, ChannelInfo>,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -86,6 +88,21 @@ struct CtorInfo {
     name: String,
     sig: Ready<CtorSig>,
 }
+
+#[derive(Default, Clone, Debug)]
+struct PortDefInfo {
+    item: Ready<Id<Item>>,
+    channels: Ready<Vec<Id<Channel>>>,
+}
+
+#[derive(Default, Clone, Debug)]
+struct ChannelInfo {
+    portdef: Ready<Id<PortDef>>,
+    name: String,
+    typ: Ready<Type>,
+    dir: Ready<ChannelDir>,
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Public Virdant API
@@ -136,6 +153,8 @@ impl Virdant {
         self.check_no_item_dep_cycles();
         self.register_structdefs();
         self.register_uniondefs();
+
+        self.register_portdefs();
 
         self.errors.clone().check()
     }
@@ -561,6 +580,58 @@ impl Virdant {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+// PortDefs
+////////////////////////////////////////////////////////////////////////////////
+
+impl Virdant {
+    fn register_portdefs(&mut self) {
+        let portdefs = self.items_by_kind(ItemKind::PortDef);
+        for item in portdefs {
+            let portdef: Id<PortDef> = item.cast();
+            let portdef_info = self.portdefs.register(portdef);
+            portdef_info.item.set(item);
+
+            let mut channels = vec![];
+
+            let item_info = &self.items[item];
+            let portdef_ast = item_info.ast.unwrap().child(0);
+            for node in portdef_ast.children() {
+                if node.is_statement() {
+                    let channel_name = node.name().unwrap();
+                    let channel_type_ast = node.typ().unwrap();
+                    let channel_dir = if node.dir().unwrap().is_mosi() {
+                        ChannelDir::Mosi
+                    } else {
+                        ChannelDir::Miso
+                    };
+
+                    let channel_type = match self.resolve_type(channel_type_ast, item) {
+                        Ok(channel_type) => channel_type,
+                        Err(err) => {
+                            self.errors.add(err);
+                            continue;
+                        },
+                    };
+
+                    let channel: Id<Channel> = Id::new(format!("{item}::{channel_name}"));
+                    let channel_info = self.channels.register(channel);
+                    channel_info.portdef.set(portdef);
+                    channel_info.name = channel_name.to_string();
+                    channel_info.typ.set(channel_type);
+                    channel_info.dir.set(channel_dir);
+
+                    channels.push(channel);
+                }
+            }
+
+            let portdef_info = &mut self.portdefs[portdef];
+            portdef_info.channels.set(channels);
+        }
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
 // For testing
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -629,6 +700,21 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        sig: {:?}", ctor_info.sig)?;
         }
 
+        writeln!(f, "PORTDEFS:")?;
+        for (portdef, portdef_info) in self.portdefs.iter() {
+            writeln!(f, "    {portdef}")?;
+            writeln!(f, "    channels: {:?}", portdef_info.channels)?;
+        }
+
+        writeln!(f, "CHANNELS:")?;
+        for (channel, channel_info) in self.channels.iter() {
+            writeln!(f, "    {channel}")?;
+            writeln!(f, "        portdef: {:?}", channel_info.portdef)?;
+            writeln!(f, "        name: {:?}", channel_info.name)?;
+            writeln!(f, "        type: {:?}", channel_info.typ)?;
+            writeln!(f, "        dir: {:?}", channel_info.dir)?;
+        }
+
         Ok(())
     }
 }
@@ -652,4 +738,10 @@ impl ItemKind {
             ItemKind::PortDef => false,
         }
     }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub enum ChannelDir {
+    Mosi,
+    Miso,
 }
