@@ -22,6 +22,10 @@ impl Ast {
         self.pair().clone().into_inner().find_first_tagged(tag).map(|pair| Ast(pair))
     }
 
+    pub fn get_all(&self, tag: &'static str) -> Vec<Ast> {
+        self.pair().clone().into_inner().find_tagged(tag).map(|pair| Ast(pair)).collect()
+    }
+
     pub fn has(&self, tag: &'static str) -> bool {
         self.get(tag).is_some()
     }
@@ -124,6 +128,8 @@ impl Ast {
     pub fn is_path(&self) -> bool { self.rule() == Rule::path }
 
     pub fn is_kw_if(&self) -> bool { self.rule() == Rule::kw_if }
+    pub fn is_kw_else(&self) -> bool { self.rule() == Rule::kw_else }
+    pub fn is_kw_cat(&self) -> bool { self.rule() == Rule::kw_cat }
 
     pub fn is_list(&self) -> bool {
         self.rule() == Rule::arg_list ||
@@ -134,6 +140,8 @@ impl Ast {
 
     pub fn is_type(&self) -> bool { self.rule() == Rule::r#type }
     pub fn is_nat(&self) -> bool { self.rule() == Rule::nat  }
+    pub fn is_ctor(&self) -> bool { self.rule() == Rule::ctor  }
+    pub fn is_ident(&self) -> bool { self.rule() == Rule::ident  }
 
     pub fn package(&self) -> Option<&str> { self.get_as_str("package") }
     pub fn name(&self) -> Option<&str> { self.get_as_str("name") }
@@ -145,6 +153,8 @@ impl Ast {
     pub fn typ(&self) -> Option<Ast> { self.get("type") }
     pub fn expr(&self) -> Option<Ast> { self.get("expr") }
     pub fn subject(&self) -> Option<Ast> { self.get("subject") }
+    pub fn match_arms(&self) -> Vec<Ast> { self.get_all("arms") }
+    pub fn pat(&self) -> Option<Ast> { self.get("pat") }
 
     pub fn dir(&self) -> Option<Ast> { self.get("dir") }
     pub fn is_miso(&self) -> bool { self.as_str() == "miso" }

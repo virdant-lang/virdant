@@ -167,7 +167,7 @@ expr_match = {
 }
 
 expr_match_arm = {
-    pat ~ "=>" ~ expr ~ ";"
+    (#pat=pat) ~ "=>" ~ (#expr=expr) ~ ";"
 }
 
 expr_call = {

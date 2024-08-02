@@ -759,7 +759,7 @@ impl Virdant {
                             Ok(portdef) => {
                             let path = vec![port_name.to_string()];
                                 self.register_port_components(path, portdef, moddef);
-                            }, 
+                            },
                             Err(err) => self.errors.add(err),
                         }
                     } else if node.child(0).is_driver() {
@@ -802,7 +802,7 @@ impl Virdant {
                         Ok(portdef) => {
                             let path = vec![name.to_string(), port_name.to_string()];
                             self.register_port_components(path, portdef, in_moddef);
-                        }, 
+                        },
                         Err(err) => self.errors.add(err),
                     }
                 }
@@ -871,7 +871,6 @@ impl Virdant {
                         }
 
                         let expr = Expr::from_ast(expr_ast);
-                        eprintln!("expr= {expr:#?}");
                         let exprroot_info = self.exprroots.register(expr_id);
                         exprroot_info.expr.set(expr);
                         exprroot_info.typ.set(*component_info.typ.unwrap());
@@ -995,7 +994,7 @@ impl std::fmt::Debug for Virdant {
         for (exprroot, exprroot_info) in self.exprroots.iter() {
             writeln!(f, "    {exprroot}")?;
             writeln!(f, "        ast: {:?}", exprroot_info.ast.get().map(|ast| ast.summary()))?;
-            writeln!(f, "        expr: {:?}", exprroot_info.expr)?;
+            writeln!(f, "        expr: (omitted)")?;
             writeln!(f, "        typ: {:?}", exprroot_info.typ)?;
         }
 
