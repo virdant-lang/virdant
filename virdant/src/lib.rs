@@ -2,6 +2,7 @@ pub mod parse;
 pub mod error;
 pub mod id;
 pub mod types;
+pub mod expr;
 pub mod ast;
 pub mod location;
 
@@ -13,6 +14,7 @@ mod cycle;
 mod tests;
 
 use cycle::detect_cycle;
+use expr::Expr;
 use indexmap::IndexMap;
 use indexmap::IndexSet;
 use parse::QualIdent;
@@ -23,6 +25,7 @@ use id::*;
 use ast::Ast;
 use types::CtorSig;
 use std::hash::Hash;
+use std::sync::Arc;
 use table::Table;
 use types::Type;
 
@@ -46,6 +49,8 @@ pub struct Virdant {
     ctors: Table<Ctor, CtorInfo>,
     portdefs: Table<PortDef, PortDefInfo>,
     channels: Table<Channel, ChannelInfo>,
+    components: Table<Component, ComponentInfo>,
+    exprroots: Table<ExprRoot, ExprRootInfo>,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -109,6 +114,22 @@ struct ChannelInfo {
     dir: Ready<ChannelDir>,
 }
 
+#[derive(Default, Clone, Debug)]
+struct ComponentInfo {
+    moddef: Ready<Id<ModDef>>,
+    path: Vec<String>,
+    typ: Ready<Type>,
+    is_reg: Ready<bool>,
+}
+
+#[derive(Default, Clone, Debug)]
+struct ExprRootInfo {
+    moddef: Ready<Id<ModDef>>,
+    ast: Ready<Ast>,
+    expr: Ready<Arc<Expr>>,
+    typ: Ready<Type>,
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Public Virdant API
@@ -162,6 +183,9 @@ impl Virdant {
         self.register_uniondefs();
 
         self.register_portdefs();
+        self.register_components();
+
+        self.register_exprroots();
 
         self.errors.clone().check()
     }
@@ -657,6 +681,69 @@ impl Virdant {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+// Components and Expressions
+////////////////////////////////////////////////////////////////////////////////
+
+impl Virdant {
+    fn register_components(&mut self) {
+        let moddefs = self.moddefs();
+
+        for moddef in moddefs {
+            let moddef_ast = self.items[moddef.as_item()].ast.unwrap().child(0);
+            for node in moddef_ast.children() {
+                if node.is_statement() && node.child(0).is_component() {
+                    let component_name = node.name().unwrap();
+                    let component_typ_ast = node.typ().unwrap();
+                    eprintln!("  COMPONENT: {component_name:?} : {:?}", component_typ_ast.summary());
+
+                    let component: Id<Component> = Id::new(format!("{moddef}::{component_name}"));
+                    let component_info = self.components.register(component);
+
+                    component_info.moddef.set(moddef);
+                    component_info.path = vec![component_name.to_string()];
+                    component_info.is_reg.set(node.is_reg());
+                    if let Ok(typ) = self.resolve_type(component_typ_ast, moddef.as_item()) {
+                        let component_info = &mut self.components[component];
+                        component_info.typ.set(typ);
+                    }
+                }
+            }
+        }
+    }
+
+    fn register_submodule_components(&mut self, moddef: Id<ModDef>) {
+    }
+
+    fn register_port_components(&mut self, portdef: Id<PortDef>) {
+    }
+
+    fn register_exprroots(&mut self) {
+        let moddefs = self.moddefs();
+        for moddef in moddefs {
+            let mut i = 0;
+            let moddef_ast = self.items[moddef.as_item()].ast.unwrap().child(0);
+            for node in moddef_ast.children() {
+                if node.is_statement() && node.child(0).is_driver() {
+                    let expr_id: Id<ExprRoot> = Id::new(format!("{moddef}::expr[{i}]"));
+                    i += 1;
+
+                    let exprroot_info = self.exprroots.register(expr_id);
+
+                    let driver_ast = node.child(0);
+                    let expr_ast = driver_ast.clone().expr().unwrap();
+                    exprroot_info.ast.set(expr_ast.clone());
+
+                    let expr = Expr::from_ast(expr_ast);
+                    eprintln!("expr= {expr:#?}");
+                    exprroot_info.expr.set(expr);
+                }
+            }
+        }
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
 // For testing
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -666,13 +753,13 @@ impl Virdant {
         self.items.keys().cloned().collect()
     }
 
-    #[cfg(test)]
     fn moddefs(&self) -> Vec<Id<ModDef>> {
         let mut results = vec![];
         for item in self.items.keys() {
-            let item_ast = &self.items[*item].ast.unwrap();
-            if let Some(ItemKind::ModDef) = item_ast.item_kind() {
-                results.push(item.cast());
+            if let Ok(item_ast) = &self.items[*item].ast.get() {
+                if let Some(ItemKind::ModDef) = item_ast.item_kind() {
+                    results.push(item.cast());
+                }
             }
         }
         results
@@ -743,6 +830,23 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        name: {:?}", channel_info.name)?;
             writeln!(f, "        type: {:?}", channel_info.typ)?;
             writeln!(f, "        dir: {:?}", channel_info.dir)?;
+        }
+
+        writeln!(f, "COMPONENTS:")?;
+        for (component, component_info) in self.components.iter() {
+            writeln!(f, "    {component}")?;
+            writeln!(f, "        moddef: {:?}", component_info.moddef)?;
+            writeln!(f, "        path: {}", component_info.path.join("."))?;
+            writeln!(f, "        typ: {:?}", component_info.typ)?;
+            writeln!(f, "        is_reg: {:?}", component_info.is_reg)?;
+        }
+
+        writeln!(f, "EXPRROOTS:")?;
+        for (exprroot, exprroot_info) in self.exprroots.iter() {
+            writeln!(f, "    {exprroot}")?;
+            writeln!(f, "        ast: {:?}", exprroot_info.ast.get().map(|ast| ast.summary()))?;
+            writeln!(f, "        expr: {:?}", exprroot_info.expr)?;
+            writeln!(f, "        typ: {:?}", exprroot_info.typ)?;
         }
 
         Ok(())

@@ -149,7 +149,7 @@ expr = {
 }
 
 expr_if = {
-    kw_if ~ expr ~ "{" ~
+    kw_if ~ (#subject=expr) ~ "{" ~
         expr ~
     (
         "}" ~ kw_else ~ kw_if ~ expr ~ "{" ~
@@ -161,8 +161,8 @@ expr_if = {
 }
 
 expr_match = {
-    kw_match ~ expr ~ "{" ~
-        expr_match_arm* ~
+    kw_match ~ (#subject=expr) ~ "{" ~
+        (#arms=expr_match_arm*) ~
     "}"
 }
 
@@ -175,9 +175,9 @@ expr_call = {
 }
 
 expr_call_suffix = {
-    "->" ~ ident ~ "(" ~ expr_list ~ ")" |
-    "[" ~ nat ~ "]" |
-    "[" ~ nat ~ ".." ~ nat ~ "]"
+    "->" ~ (#method=ident) ~ "(" ~ (#args=expr_list) ~ ")" |
+    "[" ~ (#i=nat) ~ "]" |
+    "[" ~ (#j=nat) ~ ".." ~ (#i=nat) ~ "]"
 }
 
 expr_base = {

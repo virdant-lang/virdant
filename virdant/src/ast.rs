@@ -101,6 +101,15 @@ impl Ast {
 
     pub fn is_submodule(&self) -> bool { self.rule() == Rule::moddef_statement_mod }
     pub fn is_driver(&self) -> bool { self.rule() == Rule::moddef_statement_driver }
+    pub fn is_reg(&self) -> bool { self.rule() == Rule::moddef_statement_reg }
+
+    pub fn is_component(&self) -> bool {
+        self.rule() == Rule::moddef_statement_implicit ||
+        self.rule() == Rule::moddef_statement_incoming ||
+        self.rule() == Rule::moddef_statement_outgoing ||
+        self.rule() == Rule::moddef_statement_reg ||
+        self.rule() == Rule::moddef_statement_node
+    }
 
     pub fn is_expr(&self) -> bool { self.rule() == Rule::expr }
     pub fn is_expr_if(&self) -> bool { self.rule() == Rule::expr_if }

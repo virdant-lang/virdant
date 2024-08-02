@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use crate::*;
+use crate::{expr::Expr, *};
 
 const CHECK: char = '✅';
 const BATSU: char = '❌';
@@ -247,4 +247,29 @@ fn test_check_kind_error() {
         },
         _ => panic!(),
     }
+}
+
+#[test]
+fn test_foo() {
+    let mut virdant = Virdant::new(&[
+        ("builtin", LIB_DIR.join("builtin.vir")),
+        ("top", TEST_EXAMPLES_DIR.join("top.vir")),
+    ]);
+
+    virdant.check().unwrap();
+
+    for moddef in virdant.moddefs().iter() {
+        let moddef_ast = virdant.items[moddef.as_item()].ast.unwrap().child(0);
+        for node in moddef_ast.children() {
+            if node.is_statement() && node.child(0).is_driver() {
+                let driver_ast = node.child(0);
+                let expr_ast = driver_ast.expr().unwrap();
+                eprintln!("  {:?}", expr_ast.summary());
+                let expr = Expr::from_ast(expr_ast);
+                eprintln!("expr= {expr:#?}");
+            }
+        }
+    }
+
+    eprintln!("{virdant:?}");
 }

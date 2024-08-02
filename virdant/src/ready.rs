@@ -35,6 +35,10 @@ impl<T: Clone + Hash + Eq> Ready<T> {
         }
     }
 
+    pub fn is_ready(&self) -> bool {
+        self.0.len() == 1
+    }
+
     pub fn unwrap(&self) -> &T {
         self.get().unwrap()
     }
