@@ -58,8 +58,9 @@ impl std::fmt::Display for QualIdent {
 }
 
 /// Parse a Virdant package
-pub fn parse_package<'a>(text: &'a str) -> Result<Ast<'a>, ParseError> {
+pub fn parse_package(text: &str) -> Result<Ast, ParseError> {
     use pest::Parser as PestParser;
+    let text = text.to_owned().leak(); // TODO
     Parser::parse(Rule::package, text)
         .map(|mut pairs| Ast::new(pairs.next().unwrap()))
         .map_err(|err| ParseError(err))
