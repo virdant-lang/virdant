@@ -15,18 +15,13 @@ pub enum VirErr {
     UnresolvedIdent(String),
     ItemDepCycle(Vec<String>),
     KindError(String),
+    WrongDriverType(String),
     Other(String),
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct VirErrs {
     errors: IndexSet<VirErr>,
-}
-
-impl From<std::io::Error> for VirErr {
-    fn from(err: std::io::Error) -> VirErr {
-        VirErr::Io(format!("{err:?}"))
-    }
 }
 
 impl VirErrs {

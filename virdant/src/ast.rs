@@ -139,6 +139,8 @@ impl Ast {
     pub fn name(&self) -> Option<&str> { self.get_as_str("name") }
     pub fn of(&self) -> Option<&str> { self.get_as_str("of") }
     pub fn method(&self) -> Option<&str> { self.get_as_str("method") }
+    pub fn target(&self) -> Option<&str> { self.get_as_str("target") }
+    pub fn drivertype(&self) -> Option<&str> { self.get_as_str("drivertype") }
 
     pub fn typ(&self) -> Option<Ast> { self.get("type") }
     pub fn expr(&self) -> Option<Ast> { self.get("expr") }

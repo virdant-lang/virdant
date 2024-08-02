@@ -250,6 +250,29 @@ fn test_check_kind_error() {
 }
 
 #[test]
+fn test_check_wrong_drivertype() {
+    let mut virdant = Virdant::new(&[
+        ("builtin", LIB_DIR.join("builtin.vir")),
+        ("top", ERROR_EXAMPLES_DIR.join("wrong_drivertype.vir")),
+    ]);
+
+    match virdant.check() {
+        Err(errors) => {
+            eprintln!("{errors:?}");
+            assert_eq!(errors.len(), 2);
+            for error in errors.into_iter() {
+                if let VirErr::WrongDriverType(_) = &error {
+                    ()
+                } else {
+                    panic!()
+                }
+            }
+        },
+        _ => panic!(),
+    }
+}
+
+#[test]
 fn test_foo() {
     let mut virdant = Virdant::new(&[
         ("builtin", LIB_DIR.join("builtin.vir")),

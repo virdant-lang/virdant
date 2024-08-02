@@ -29,6 +29,9 @@ use std::sync::Arc;
 use table::Table;
 use types::Type;
 
+use crate::expr::Driver;
+use crate::expr::DriverType;
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Types
@@ -185,7 +188,7 @@ impl Virdant {
         self.register_portdefs();
         self.register_components();
 
-//        self.register_exprroots();
+        self.register_exprroots();
 
         self.errors.clone().check()
     }
@@ -237,7 +240,7 @@ impl Virdant {
             PackageSource::File(path) => {
                 match std::fs::read_to_string(path) {
                     Ok(source) => Ok(source),
-                    Err(err) => Err(err.into()),
+                    Err(err) => Err(VirErr::Io(format!("Could not read {path:?}: {err:?}"))),
                 }
             },
         }
@@ -434,6 +437,14 @@ impl Virdant {
             Err(VirErr::Other(format!("Unable to resolve portdef: {qualident} in {in_item}")))
         }
     }
+
+    fn resolve_component(&self, path: &str, in_moddef: Id<ModDef>) -> Result<Id<Component>, VirErr> {
+        if let Some(component) = self.components.resolve(&format!("{in_moddef}::{path}")) {
+            Ok(component)
+        } else {
+            Err(VirErr::Other(format!("Unable to resolve component: {path} in {in_moddef}")))
+        }
+    }
 }
 
 
@@ -603,7 +614,6 @@ impl Virdant {
     fn resolve_type(&self, type_ast: Ast, in_item: Id<Item>) -> Result<Type, VirErr> {
         let item = self.resolve_item(type_ast.name().unwrap(), in_item)?;
 
-
         let mut width: Option<types::Nat> = None;
 
         if let Some(args) = type_ast.args() {
@@ -644,6 +654,10 @@ impl Virdant {
             },
             _ => unreachable!(),
         }
+    }
+
+    fn clock_type(&self) -> Type {
+        Type::builtindef(self.builtindefs.resolve("builtin::Clock").unwrap(), None)
     }
 }
 
@@ -722,7 +736,7 @@ impl Virdant {
 
                         component_info.moddef.set(moddef);
                         component_info.path = vec![component_name.to_string()];
-                        component_info.is_reg.set(node.is_reg());
+                        component_info.is_reg.set(node.child(0).is_reg());
                         if let Ok(typ) = self.resolve_type(component_typ_ast, moddef.as_item()) {
                             let component_info = &mut self.components[component];
                             component_info.typ.set(typ);
@@ -823,24 +837,55 @@ impl Virdant {
     }
 
     fn register_exprroots(&mut self) {
+        let clock_type = self.clock_type();
         let moddefs = self.moddefs();
         for moddef in moddefs {
             let mut i = 0;
             let moddef_ast = self.items[moddef.as_item()].ast.unwrap().child(0);
             for node in moddef_ast.children() {
-                if node.is_statement() && node.child(0).is_driver() {
-                    let expr_id: Id<ExprRoot> = Id::new(format!("{moddef}::expr[{i}]"));
-                    i += 1;
+                if node.is_statement() {
+                    if node.child(0).is_driver() {
+                        let expr_id: Id<ExprRoot> = Id::new(format!("{moddef}::expr[{i}]"));
+                        i += 1;
 
-                    let exprroot_info = self.exprroots.register(expr_id);
+                        let driver_ast = node.child(0);
+                        let target_path = driver_ast.target().unwrap();
+                        let drivertype = if driver_ast.drivertype().unwrap() == "<=" {
+                            DriverType::Latched
+                        } else {
+                            DriverType::Continuous
+                        };
 
-                    let driver_ast = node.child(0);
-                    let expr_ast = driver_ast.clone().expr().unwrap();
-                    exprroot_info.ast.set(expr_ast.clone());
+                        let expr_ast = driver_ast.clone().expr().unwrap();
+                        let exprroot_info = self.exprroots.register(expr_id);
+                        exprroot_info.ast.set(expr_ast.clone());
 
-                    let expr = Expr::from_ast(expr_ast);
-                    eprintln!("expr= {expr:#?}");
-                    exprroot_info.expr.set(expr);
+                        let expr_ast = driver_ast.clone().expr().unwrap();
+                        let component = self.resolve_component(target_path, moddef).unwrap();
+                        let component_info = &self.components[component];
+
+                        match drivertype {
+                            DriverType::Continuous if *component_info.is_reg.get().unwrap() => self.errors.add(VirErr::WrongDriverType(format!("{target_path} in {moddef}"))),
+                            DriverType::Latched if !*component_info.is_reg.get().unwrap() => self.errors.add(VirErr::WrongDriverType(format!("{target_path} in {moddef}"))),
+                            _ => (),
+                        }
+
+                        let expr = Expr::from_ast(expr_ast);
+                        eprintln!("expr= {expr:#?}");
+                        let exprroot_info = self.exprroots.register(expr_id);
+                        exprroot_info.expr.set(expr);
+                        exprroot_info.typ.set(*component_info.typ.unwrap());
+                    } else if node.child(0).is_reg() {
+                        let reg_ast = node.child(0);
+                        let expr_ast = reg_ast.clone().expr().unwrap();
+
+                        let expr_id: Id<ExprRoot> = Id::new(format!("{moddef}::expr[{i}]"));
+                        i += 1;
+
+                        let exprroot_info = &mut self.exprroots.register(expr_id);
+                        exprroot_info.ast.set(expr_ast.clone());
+                        exprroot_info.typ.set(clock_type)
+                    }
                 }
             }
         }

@@ -3,8 +3,8 @@ mod Top {
     incoming inp : Word[8];
     outgoing out : Word[8];
 
-    reg r : Word[8] on clock;
-    r <= inp;
+    out <= inp;
 
-    out := inp;
+    reg temp : Word[8] on clock;
+    temp := 0;
 }

@@ -83,7 +83,7 @@ impl Expr {
 
     fn ast_to_expr_if(expr_if_ast: Ast) -> Arc<Expr> {
         let asts: Vec<_> = expr_if_ast.children().collect();
-        for ast in asts { 
+        for ast in asts {
             eprint!(" {}", ast.summary());
         }
         eprintln!("{:?}", expr_if_ast.summary());

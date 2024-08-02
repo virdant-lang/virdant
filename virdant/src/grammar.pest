@@ -67,7 +67,7 @@ moddef_statement = {
 moddef_statement_implicit = { kw_implicit ~ (#name=ident) ~ ":" ~ (#type=type) }
 moddef_statement_incoming = { kw_incoming ~ (#name=ident) ~ ":" ~ (#type=type) }
 moddef_statement_outgoing = { kw_outgoing ~ (#name=ident) ~ ":" ~ (#type=type) }
-moddef_statement_reg = { kw_reg ~ (#name=ident) ~ ":" ~ (#type=type) ~ ("on" ~ (#clock=expr))? }
+moddef_statement_reg = { kw_reg ~ (#name=ident) ~ ":" ~ (#type=type) ~ ("on" ~ (#expr=expr))? }
 moddef_statement_node = { kw_node ~ (#name=ident) ~ ":" ~ (#type=type) }
 moddef_statement_mod = { kw_mod ~ (#name=ident) ~ kw_of ~ (#of=qualident) }
 moddef_statement_port = { port_role ~ kw_port ~ (#name=ident) ~ kw_of ~ (#of=qualident) }
