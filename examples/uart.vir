@@ -14,7 +14,7 @@ mod UartSender {
     outgoing uart_tx    : Word[1];
 
     reg uart_tx_reg : Word[1] on clock;
-    uart_tx <= uart_tx_reg;
+    uart_tx := uart_tx_reg;
 
     reg latched_data : Word[8] on clock;
     reg state : UartState on clock;
@@ -61,7 +61,7 @@ mod UartSender {
         }
     };
 
-    latched_data := match state {
+    latched_data <= match state {
         @Idle() =>
             if data_valid {
                 data
@@ -116,19 +116,19 @@ mod UartReceiver {
         @Idle()
     } else {
         match state {
-            @Idle() => 
+            @Idle() =>
                 if uart_rx->eq(0) {
                     @Start(625w11) // ~= 1250 * 0.5
                 } else {
                     @Idle()
                 };
-            @Start(pulse) => 
+            @Start(pulse) =>
                 if pulse->eq(0) {
                     @Bit(0, 1250)
                 } else {
                     @Start(pulse->dec())
                 };
-            @Bit(bit, pulse) => 
+            @Bit(bit, pulse) =>
                 if pulse->eq(0) {
                     if bit->eq(7) {
                         @Stop(1150) // fudge this one a little bit to be slightly less than 1250
@@ -138,7 +138,7 @@ mod UartReceiver {
                 } else {
                     @Bit(bit, pulse->dec())
                 };
-            @Stop(pulse) => 
+            @Stop(pulse) =>
                 if pulse->eq(0) {
                     @Idle()
                 } else {
@@ -153,7 +153,7 @@ mod UartReceiver {
         match state {
             @Idle() => 0;
             @Start(pulse) => 0;
-            @Bit(bit, pulse) => 
+            @Bit(bit, pulse) =>
                 if pulse->eq(0) {
                     if bit->eq(0) {
                         data_reg->or(cat(0w7, uart_rx))
