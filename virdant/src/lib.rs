@@ -11,6 +11,7 @@ mod ready;
 mod cycle;
 mod typecheck;
 mod context;
+mod info;
 
 #[cfg(test)]
 mod tests;
@@ -34,6 +35,7 @@ use table::Table;
 use types::Type;
 
 use crate::expr::DriverType;
+use crate::info::*;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -57,83 +59,6 @@ pub struct Virdant {
     channels: Table<Channel, ChannelInfo>,
     components: Table<Component, ComponentInfo>,
     exprroots: Table<ExprRoot, ExprRootInfo>,
-}
-
-#[derive(Default, Clone, Debug)]
-struct PackageInfo {
-    name: String,
-    source: PackageSource,
-    ast: Ready<Ast>,
-}
-
-#[derive(Default, Clone, Debug)]
-struct ItemInfo {
-    name: String,
-    package: Ready<Id<Package>>,
-    ast: Ready<Ast>,
-    kind: Ready<ItemKind>,
-    deps: Ready<Vec<Id<Item>>>,
-}
-
-#[derive(Default, Clone, Debug)]
-struct BuiltinDefInfo {
-    item: Ready<Id<Item>>,
-}
-
-#[derive(Default, Clone, Debug)]
-struct StructDefInfo {
-    item: Ready<Id<Item>>,
-    fields: Ready<Vec<Id<Field>>>,
-}
-
-#[derive(Default, Clone, Debug)]
-struct FieldInfo {
-    structdef: Ready<Id<StructDef>>,
-    name: String,
-    typ: Ready<Type>,
-}
-
-#[derive(Default, Clone, Debug)]
-struct UnionDefInfo {
-    item: Ready<Id<Item>>,
-    ctors: Ready<Vec<Id<Ctor>>>,
-}
-
-#[derive(Default, Clone, Debug)]
-struct CtorInfo {
-    uniondef: Ready<Id<UnionDef>>,
-    name: String,
-    sig: Ready<CtorSig>,
-}
-
-#[derive(Default, Clone, Debug)]
-struct PortDefInfo {
-    item: Ready<Id<Item>>,
-    channels: Ready<Vec<Id<Channel>>>,
-}
-
-#[derive(Default, Clone, Debug)]
-struct ChannelInfo {
-    portdef: Ready<Id<PortDef>>,
-    name: String,
-    typ: Ready<Type>,
-    dir: Ready<ChannelDir>,
-}
-
-#[derive(Default, Clone, Debug)]
-struct ComponentInfo {
-    moddef: Ready<Id<ModDef>>,
-    path: Vec<String>,
-    typ: Ready<Type>,
-    is_reg: Ready<bool>,
-}
-
-#[derive(Default, Clone, Debug)]
-struct ExprRootInfo {
-    moddef: Ready<Id<ModDef>>,
-    ast: Ready<Ast>,
-    expr: Ready<Arc<Expr>>,
-    typ: Ready<Type>,
 }
 
 
