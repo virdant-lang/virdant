@@ -304,3 +304,12 @@ fn test_foo() {
 
     eprintln!("{virdant:?}");
 }
+
+#[test]
+fn test_typecheck() {
+    let mut virdant = Virdant::new(&[
+        ("top", TEST_EXAMPLES_DIR.join("typecheck.vir")),
+    ]);
+
+    virdant.check().unwrap();
+}

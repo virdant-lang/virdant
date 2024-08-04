@@ -4,7 +4,7 @@ use internment::Intern;
 
 use crate::error::VirErr;
 use crate::types::{Type, TypeScheme};
-use crate::Virdant;
+use crate::{CtorInfo, FieldInfo, StructDefInfo, UnionDefInfo, Virdant};
 use crate::expr::{MatchArm, Pat, QualIdent, StaticIndex, Typed, TypedExpr, TypedMatchArm, TypedPat, WordLit};
 use crate::expr::Referent;
 use crate::expr::Expr;
@@ -108,7 +108,7 @@ impl<'a> TypingContext<'a> {
             let typ = self.virdant.word_type(width);
             Ok(Arc::new(TypedExpr::Word(typ, wordlit.clone())))
         } else {
-            Err(VirErr::TypeError(format!("")))
+            Err(VirErr::TypeError(format!("Can't infer word with no width")))
         }
     }
 
@@ -137,14 +137,25 @@ impl<'a> TypingContext<'a> {
 
     fn infer_struct(&self, struct_name: QualIdent, assigns: &[(Ident, Arc<Expr>)]) -> Result<Arc<TypedExpr>, VirErr> {
         let structdef = self.virdant.resolve_structdef(&struct_name, self.moddef.as_item())?;
+        let structdef_info = &self.virdant.structdefs[structdef];
         let mut typed_assigns = vec![];
         for (field, expr) in assigns {
-            // TODO should check after looking up ctor sig
-            let typed_expr = self.infer(expr.clone())?;
+            let structdef_field = self.structdef_field(structdef_info, *field)?;
+            let typed_expr = self.check(expr.clone(), *structdef_field.typ.unwrap())?;
             typed_assigns.push((field.clone(), typed_expr));
         }
         let typ = Type::structdef(structdef);
         Ok(Arc::new(TypedExpr::Struct(typ, struct_name, typed_assigns)))
+    }
+
+    fn structdef_field(&self, structdef_info: &StructDefInfo, field_name: Ident) -> Result<&FieldInfo, VirErr> {
+        for field in structdef_info.fields.unwrap() {
+            let field_info = &self.virdant.fields[*field];
+            if field_info.name == *field_name {
+                return Ok(field_info);
+            }
+        }
+        Err(VirErr::Other(format!("asdf")))
     }
 
     fn infer_field(&self, subject: Arc<Expr>, field: Ident) -> Result<Arc<TypedExpr>, VirErr> {
@@ -168,13 +179,37 @@ impl<'a> TypingContext<'a> {
     }
 
     fn check_ctor(&self, ctor: Ident, args: &[Arc<Expr>], expected_typ: Type) -> Result<Arc<TypedExpr>, VirErr> {
+        let uniondef  = if let TypeScheme::UnionDef(uniondef) = expected_typ.scheme() {
+            uniondef
+        } else {
+            return Err(VirErr::Other(format!("Not a union type: {expected_typ}")));
+        };
+        let uniondef_info = &self.virdant.uniondefs[uniondef];
+
         let mut typed_args = vec![];
-        for arg in args {
-            // TODO should check after looking up ctor sig
-            typed_args.push(self.infer(arg.clone())?);
+        let ctor_info = self.uniondef_ctor(uniondef_info, ctor)?;
+        let ctor_sig = ctor_info.sig.unwrap();
+
+        if args.len() != ctor_sig.params().len() {
+            eprintln!("{:?}", ctor_sig.params());
+            return Err(VirErr::Other(format!("Incorrect number of args: found {} expected {}", args.len(), ctor_sig.params().len())));
+        }
+
+        for ((_param_name, param_typ), arg) in ctor_sig.params().iter().zip(args) {
+            typed_args.push(self.check(arg.clone(), param_typ.clone())?);
         }
 
         Ok(Arc::new(TypedExpr::Ctor(expected_typ, ctor, typed_args)))
+    }
+
+    fn uniondef_ctor(&self, uniondef_info: &UnionDefInfo, ctor_name: Ident) -> Result<&CtorInfo, VirErr> {
+        for ctor in uniondef_info.ctors.unwrap() {
+            let ctor_info = &self.virdant.ctors[*ctor];
+            if ctor_info.name == *ctor_name {
+                return Ok(ctor_info);
+            }
+        }
+        Err(VirErr::Other(format!("asdf")))
     }
 
     fn infer_idx(&self, subject: Arc<Expr>, i: StaticIndex) -> Result<Arc<TypedExpr>, VirErr> {

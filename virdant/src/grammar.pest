@@ -183,7 +183,7 @@ expr_call_suffix = {
 
 expr_base = {
     kw_cat ~ "(" ~ (#args=expr_list) ~ ")" |
-    ctor ~ "(" ~ expr_list ~ ")" |
+    ctor ~ "(" ~ (#args=expr_list) ~ ")" |
     struct ~ "{" ~ (#assigns=assign_list) ~ "}" |
     path |
     wordlit |
