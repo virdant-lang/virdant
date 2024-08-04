@@ -67,7 +67,7 @@ moddef_statement = {
 moddef_statement_implicit = { kw_implicit ~ (#name=ident) ~ ":" ~ (#type=type) }
 moddef_statement_incoming = { kw_incoming ~ (#name=ident) ~ ":" ~ (#type=type) }
 moddef_statement_outgoing = { kw_outgoing ~ (#name=ident) ~ ":" ~ (#type=type) }
-moddef_statement_reg = { kw_reg ~ (#name=ident) ~ ":" ~ (#type=type) ~ ("on" ~ (#clock=expr))? }
+moddef_statement_reg = { kw_reg ~ (#name=ident) ~ ":" ~ (#type=type) ~ ("on" ~ (#expr=expr))? }
 moddef_statement_node = { kw_node ~ (#name=ident) ~ ":" ~ (#type=type) }
 moddef_statement_mod = { kw_mod ~ (#name=ident) ~ kw_of ~ (#of=qualident) }
 moddef_statement_port = { port_role ~ kw_port ~ (#name=ident) ~ kw_of ~ (#of=qualident) }
@@ -134,7 +134,7 @@ assign_list = {
 }
 
 assign = {
-    ident ~ "=" ~ expr
+    (#field=ident) ~ "=" ~ (#expr=expr)
 }
 
 
@@ -149,7 +149,7 @@ expr = {
 }
 
 expr_if = {
-    kw_if ~ expr ~ "{" ~
+    kw_if ~ (#subject=expr) ~ "{" ~
         expr ~
     (
         "}" ~ kw_else ~ kw_if ~ expr ~ "{" ~
@@ -161,13 +161,13 @@ expr_if = {
 }
 
 expr_match = {
-    kw_match ~ expr ~ "{" ~
-        expr_match_arm* ~
+    kw_match ~ (#subject=expr) ~ "{" ~
+        (#arms=expr_match_arm*) ~
     "}"
 }
 
 expr_match_arm = {
-    pat ~ "=>" ~ expr ~ ";"
+    (#pat=pat) ~ "=>" ~ (#expr=expr) ~ ";"
 }
 
 expr_call = {
@@ -175,18 +175,19 @@ expr_call = {
 }
 
 expr_call_suffix = {
-    "->" ~ ident ~ "(" ~ expr_list ~ ")" |
-    "[" ~ nat ~ "]" |
-    "[" ~ nat ~ ".." ~ nat ~ "]"
+    "->" ~ (#method=ident) ~ "(" ~ (#args=expr_list) ~ ")" |
+    "->" ~ (#field=ident) |
+    "[" ~ (#i=nat) ~ "]" |
+    "[" ~ (#j=nat) ~ ".." ~ (#i=nat) ~ "]"
 }
 
 expr_base = {
-    kw_cat ~ "(" ~ expr_list ~ ")" |
-    ctor ~ "(" ~ expr_list ~ ")" |
-    struct ~ "{" ~ assign_list ~ "}" |
+    kw_cat ~ "(" ~ (#args=expr_list) ~ ")" |
+    ctor ~ "(" ~ (#args=expr_list) ~ ")" |
+    struct ~ "{" ~ (#assigns=assign_list) ~ "}" |
     path |
     wordlit |
-    boollit |
+    bitlit |
     "(" ~ expr ~ ")"
 }
 
@@ -226,7 +227,7 @@ wordlit = @{
     nat ~ ("w" ~ ASCII_DIGIT+)?
 }
 
-boollit = {
+bitlit = {
     kw_true |
     kw_false
 }

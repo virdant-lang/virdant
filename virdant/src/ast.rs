@@ -22,6 +22,10 @@ impl Ast {
         self.pair().clone().into_inner().find_first_tagged(tag).map(|pair| Ast(pair))
     }
 
+    pub fn get_all(&self, tag: &'static str) -> Vec<Ast> {
+        self.pair().clone().into_inner().find_tagged(tag).map(|pair| Ast(pair)).collect()
+    }
+
     pub fn has(&self, tag: &'static str) -> bool {
         self.get(tag).is_some()
     }
@@ -100,7 +104,20 @@ impl Ast {
     }
 
     pub fn is_submodule(&self) -> bool { self.rule() == Rule::moddef_statement_mod }
+    pub fn is_port(&self) -> bool { self.rule() == Rule::moddef_statement_port }
     pub fn is_driver(&self) -> bool { self.rule() == Rule::moddef_statement_driver }
+    pub fn is_reg(&self) -> bool { self.rule() == Rule::moddef_statement_reg }
+    pub fn is_implicit(&self) -> bool { self.rule() == Rule::moddef_statement_implicit }
+    pub fn is_incoming(&self) -> bool { self.rule() == Rule::moddef_statement_incoming }
+    pub fn is_outgoing(&self) -> bool { self.rule() == Rule::moddef_statement_outgoing }
+
+    pub fn is_component(&self) -> bool {
+        self.rule() == Rule::moddef_statement_implicit ||
+        self.rule() == Rule::moddef_statement_incoming ||
+        self.rule() == Rule::moddef_statement_outgoing ||
+        self.rule() == Rule::moddef_statement_reg ||
+        self.rule() == Rule::moddef_statement_node
+    }
 
     pub fn is_expr(&self) -> bool { self.rule() == Rule::expr }
     pub fn is_expr_if(&self) -> bool { self.rule() == Rule::expr_if }
@@ -108,9 +125,13 @@ impl Ast {
     pub fn is_expr_call(&self) -> bool { self.rule() == Rule::expr_call }
     pub fn is_expr_base(&self) -> bool { self.rule() == Rule::expr_base }
     pub fn is_wordlit(&self) -> bool { self.rule() == Rule::wordlit }
+    pub fn is_bitlit(&self) -> bool { self.rule() == Rule::bitlit }
     pub fn is_path(&self) -> bool { self.rule() == Rule::path }
+    pub fn is_struct(&self) -> bool { self.rule() == Rule::r#struct }
 
     pub fn is_kw_if(&self) -> bool { self.rule() == Rule::kw_if }
+    pub fn is_kw_else(&self) -> bool { self.rule() == Rule::kw_else }
+    pub fn is_kw_cat(&self) -> bool { self.rule() == Rule::kw_cat }
 
     pub fn is_list(&self) -> bool {
         self.rule() == Rule::arg_list ||
@@ -121,21 +142,29 @@ impl Ast {
 
     pub fn is_type(&self) -> bool { self.rule() == Rule::r#type }
     pub fn is_nat(&self) -> bool { self.rule() == Rule::nat  }
+    pub fn is_ctor(&self) -> bool { self.rule() == Rule::ctor  }
+    pub fn is_ident(&self) -> bool { self.rule() == Rule::ident  }
 
     pub fn package(&self) -> Option<&str> { self.get_as_str("package") }
     pub fn name(&self) -> Option<&str> { self.get_as_str("name") }
     pub fn of(&self) -> Option<&str> { self.get_as_str("of") }
     pub fn method(&self) -> Option<&str> { self.get_as_str("method") }
+    pub fn field(&self) -> Option<&str> { self.get_as_str("field") }
+    pub fn target(&self) -> Option<&str> { self.get_as_str("target") }
+    pub fn drivertype(&self) -> Option<&str> { self.get_as_str("drivertype") }
 
     pub fn typ(&self) -> Option<Ast> { self.get("type") }
     pub fn expr(&self) -> Option<Ast> { self.get("expr") }
     pub fn subject(&self) -> Option<Ast> { self.get("subject") }
+    pub fn match_arms(&self) -> Vec<Ast> { self.get_all("arms") }
+    pub fn pat(&self) -> Option<Ast> { self.get("pat") }
 
     pub fn dir(&self) -> Option<Ast> { self.get("dir") }
     pub fn is_miso(&self) -> bool { self.as_str() == "miso" }
     pub fn is_mosi(&self) -> bool { self.as_str() == "mosi" }
 
     pub fn args(&self) -> Option<Vec<Ast>> { self.get("args").map(|args| args.children().collect()) }
+    pub fn assigns(&self) -> Option<Vec<Ast>> { self.get("assigns").map(|args| args.children().collect()) }
     pub fn i(&self) -> Option<u64> { self.get("i").map(|ast| str::parse(ast.as_str()).unwrap()) }
     pub fn j(&self) -> Option<u64> { self.get("j").map(|ast| str::parse(ast.as_str()).unwrap()) }
 
