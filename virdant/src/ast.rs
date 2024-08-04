@@ -125,6 +125,7 @@ impl Ast {
     pub fn is_expr_call(&self) -> bool { self.rule() == Rule::expr_call }
     pub fn is_expr_base(&self) -> bool { self.rule() == Rule::expr_base }
     pub fn is_wordlit(&self) -> bool { self.rule() == Rule::wordlit }
+    pub fn is_bitlit(&self) -> bool { self.rule() == Rule::bitlit }
     pub fn is_path(&self) -> bool { self.rule() == Rule::path }
 
     pub fn is_kw_if(&self) -> bool { self.rule() == Rule::kw_if }

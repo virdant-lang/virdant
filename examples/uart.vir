@@ -13,6 +13,9 @@ mod UartSender {
     outgoing ready      : Word[1];
     outgoing uart_tx    : Word[1];
 
+    reg r : Word[8] on clock;
+    reg s : Word[8] on clock;
+
     reg uart_tx_reg : Word[1] on clock;
     uart_tx := uart_tx_reg;
 

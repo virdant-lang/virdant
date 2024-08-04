@@ -3,8 +3,19 @@ mod Top {
     incoming inp : Word[8];
     outgoing out : Word[8];
 
-    reg r : Word[8] on clock;
+    reg r : Word[8] on inp;
     r <= inp;
 
-    out := 0;
+    node foo : Foo;
+    foo := @Invalid();
+
+    out := match foo {
+        @Invalid() => 0;
+        @Valid(payload) => payload;
+    };
+}
+
+union type Foo {
+    Invalid();
+    Valid(payload : Word[8]);
 }

@@ -58,6 +58,18 @@ impl Type {
         self.1.map(|n| vec![n]).clone()
     }
 
+    pub fn scheme(&self) -> TypeScheme {
+        self.0
+    }
+
+    pub(crate) fn is_bit(&self) -> bool {
+        if let TypeScheme::BuiltinDef(builtindef) = &self.0 {
+            *builtindef == Id::new("builtin::Bit")
+        } else {
+            false
+        }
+    }
+
     pub(crate) fn is_word(&self) -> bool {
         if let TypeScheme::BuiltinDef(builtindef) = &self.0 {
             *builtindef == Id::new("builtin::Word")

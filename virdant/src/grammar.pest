@@ -186,7 +186,7 @@ expr_base = {
     struct ~ "{" ~ assign_list ~ "}" |
     path |
     wordlit |
-    boollit |
+    bitlit |
     "(" ~ expr ~ ")"
 }
 
@@ -226,7 +226,7 @@ wordlit = @{
     nat ~ ("w" ~ ASCII_DIGIT+)?
 }
 
-boollit = {
+bitlit = {
     kw_true |
     kw_false
 }

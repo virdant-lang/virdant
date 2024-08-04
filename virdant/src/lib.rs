@@ -666,6 +666,10 @@ impl Virdant {
     fn word_type(&self, width: Nat) -> Type {
         Type::builtindef(self.builtindefs.resolve("builtin::Word").unwrap(), Some(width))
     }
+
+    fn bit_type(&self) -> Type {
+        Type::builtindef(self.builtindefs.resolve("builtin::Bit").unwrap(), None)
+    }
 }
 
 
@@ -885,8 +889,9 @@ impl Virdant {
                         exprroot_info.typ.set(typ);
 
                         let context = TypingContext::new(self, moddef);
-                        let typed_expr = context.check(expr, typ);
-                        dbg!(typed_expr);
+                        if let Err(errs) = context.check(expr, typ) {
+                            self.errors.add(errs);
+                        }
 
                     } else if node.child(0).is_reg() {
                         let reg_ast = node.child(0);

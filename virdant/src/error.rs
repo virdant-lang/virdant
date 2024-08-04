@@ -17,6 +17,7 @@ pub enum VirErr {
     KindError(String),
     WrongDriverType(String),
     TypeError(String),
+    InvalidPat(String),
     Other(String),
 }
 

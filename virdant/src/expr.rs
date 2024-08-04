@@ -12,14 +12,15 @@ pub type Offset = u64;
 pub type Tag = u64;
 pub type StaticIndex = u64;
 
-type Ident = Intern<String>;
-type QualIdent = Intern<String>;
-type Path = Vec<Ident>;
+pub type Ident = Intern<String>;
+pub type Path = Vec<Ident>;
+pub type QualIdent = Intern<String>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expr {
     Reference(Path),
     Word(WordLit),
+    Bit(bool),
     MethodCall(Arc<Expr>, Ident, Vec<Arc<Expr>>),
     Struct(Option<QualIdent>, Vec<(Ident, Arc<Expr>)>),
     Ctor(Ident, Vec<Arc<Expr>>),
@@ -27,7 +28,7 @@ pub enum Expr {
     IdxRange(Arc<Expr>, StaticIndex, StaticIndex),
     Cat(Vec<Arc<Expr>>),
     If(Arc<Expr>, Arc<Expr>, Arc<Expr>),
-    Match(Arc<Expr>, Option<Arc<Type>>, Vec<MatchArm>),
+    Match(Arc<Expr>, Option<()>, Vec<MatchArm>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -49,9 +50,19 @@ pub enum DriverType {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MatchArm(pub Pat, pub Arc<Expr>);
 
+impl MatchArm {
+    pub fn pat(&self) -> &Pat {
+        &self.0
+    }
+
+    pub fn expr(&self) -> Arc<Expr> {
+        self.1.clone()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Pat {
-    At(Ident, Vec<Pat>),
+    CtorAt(Ident, Vec<Pat>),
     Bind(Ident),
     Else,
 }
@@ -129,7 +140,7 @@ impl Expr {
             for arg in pat_ast.child(1).children() {
                 subpats.push(Expr::ast_to_pat(arg));
             }
-            Pat::At(Ident::new(first_node.as_str().to_string()), subpats)
+            Pat::CtorAt(Ident::new(first_node.as_str()[1..].to_string()), subpats)
         } else if first_node.is_ident() {
             Pat::Bind(Ident::new(first_node.as_str().to_string()))
         } else if first_node.is_kw_else() {
@@ -171,6 +182,9 @@ impl Expr {
         let expr = if child.is_wordlit() {
             let spelling = child.as_str();
             Expr::Word(parse_wordlit(&spelling))
+        } else if child.is_bitlit() {
+            let spelling = child.as_str();
+            Expr::Bit(parse_bitlit(&spelling))
         } else if child.is_path() {
             let path = child.as_str()
                 .split('.')
@@ -194,6 +208,7 @@ impl Expr {
             }
             Expr::Cat(args)
         } else {
+            eprintln!("{}", expr_base_ast.summary());
             unreachable!()
         };
 
@@ -219,10 +234,15 @@ fn parse_wordlit(wordlit: &str) -> WordLit {
     }
 }
 
+fn parse_bitlit(wordlit: &str) -> bool {
+    str::parse(wordlit).unwrap()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypedExpr {
     Reference(Type, Referent),
     Word(Type, WordLit),
+    Bit(Type, bool),
     MethodCall(Type, Arc<TypedExpr>, Ident, Vec<Arc<TypedExpr>>),
     Struct(Type, Option<QualIdent>, Vec<(Ident, Arc<TypedExpr>)>),
     Ctor(Type, Ident, Vec<Arc<TypedExpr>>),
@@ -238,9 +258,9 @@ pub struct TypedMatchArm(pub TypedPat, pub Arc<TypedExpr>);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypedPat {
-    At(Type, Ident, Vec<TypedPat>),
+    CtorAt(Type, Ident, Vec<TypedPat>),
     Bind(Type, Ident),
-    Otherwise(Type),
+    Else(Type),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -258,6 +278,7 @@ impl Typed for TypedExpr {
         match self {
             TypedExpr::Reference(typ, _) => typ.clone(),
             TypedExpr::Word(typ, _) => typ.clone(),
+            TypedExpr::Bit(typ, _) => typ.clone(),
             TypedExpr::Struct(typ, _, _) => typ.clone(),
             TypedExpr::MethodCall(typ, _, _, _) => typ.clone(),
             TypedExpr::Ctor(typ, _, _) => typ.clone(),
@@ -273,9 +294,9 @@ impl Typed for TypedExpr {
 impl Typed for TypedPat {
     fn typ(&self) -> Type {
         match self {
-            TypedPat::At(typ, _, _) => typ.clone(),
+            TypedPat::CtorAt(typ, _, _) => typ.clone(),
             TypedPat::Bind(typ, _) => typ.clone(),
-            TypedPat::Otherwise(typ) => typ.clone(),
+            TypedPat::Else(typ) => typ.clone(),
         }
     }
 }
