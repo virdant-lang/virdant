@@ -17,6 +17,12 @@ pub struct ItemInfo {
 }
 
 #[derive(Default, Clone, Debug)]
+pub struct ModDefInfo {
+    pub item: Ready<Id<Item>>,
+    pub components: Ready<Vec<Id<Component>>>,
+}
+
+#[derive(Default, Clone, Debug)]
 pub struct BuiltinDefInfo {
     pub item: Ready<Id<Item>>,
 }

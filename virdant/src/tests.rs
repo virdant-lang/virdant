@@ -181,7 +181,7 @@ fn test_items() {
         .collect::<Vec<_>>();
 
     assert_eq!(
-        virdant.moddefs().iter()
+        virdant.moddefs.keys()
             .map(|item| item.to_string())
             .filter(|item| !item.starts_with("builtin"))
             .collect::<Vec<_>>(),
