@@ -134,7 +134,7 @@ assign_list = {
 }
 
 assign = {
-    ident ~ "=" ~ expr
+    (#field=ident) ~ "=" ~ (#expr=expr)
 }
 
 
@@ -176,6 +176,7 @@ expr_call = {
 
 expr_call_suffix = {
     "->" ~ (#method=ident) ~ "(" ~ (#args=expr_list) ~ ")" |
+    "->" ~ (#field=ident) |
     "[" ~ (#i=nat) ~ "]" |
     "[" ~ (#j=nat) ~ ".." ~ (#i=nat) ~ "]"
 }
@@ -183,7 +184,7 @@ expr_call_suffix = {
 expr_base = {
     kw_cat ~ "(" ~ (#args=expr_list) ~ ")" |
     ctor ~ "(" ~ expr_list ~ ")" |
-    struct ~ "{" ~ assign_list ~ "}" |
+    struct ~ "{" ~ (#assigns=assign_list) ~ "}" |
     path |
     wordlit |
     bitlit |

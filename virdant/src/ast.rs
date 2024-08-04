@@ -149,6 +149,7 @@ impl Ast {
     pub fn name(&self) -> Option<&str> { self.get_as_str("name") }
     pub fn of(&self) -> Option<&str> { self.get_as_str("of") }
     pub fn method(&self) -> Option<&str> { self.get_as_str("method") }
+    pub fn field(&self) -> Option<&str> { self.get_as_str("field") }
     pub fn target(&self) -> Option<&str> { self.get_as_str("target") }
     pub fn drivertype(&self) -> Option<&str> { self.get_as_str("drivertype") }
 
@@ -163,6 +164,7 @@ impl Ast {
     pub fn is_mosi(&self) -> bool { self.as_str() == "mosi" }
 
     pub fn args(&self) -> Option<Vec<Ast>> { self.get("args").map(|args| args.children().collect()) }
+    pub fn assigns(&self) -> Option<Vec<Ast>> { self.get("assigns").map(|args| args.children().collect()) } 
     pub fn i(&self) -> Option<u64> { self.get("i").map(|ast| str::parse(ast.as_str()).unwrap()) }
     pub fn j(&self) -> Option<u64> { self.get("j").map(|ast| str::parse(ast.as_str()).unwrap()) }
 

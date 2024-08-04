@@ -22,6 +22,7 @@ pub enum Expr {
     Word(WordLit),
     Bit(bool),
     MethodCall(Arc<Expr>, Ident, Vec<Arc<Expr>>),
+    Field(Arc<Expr>, Ident),
     Struct(QualIdent, Vec<(Ident, Arc<Expr>)>),
     Ctor(Ident, Vec<Arc<Expr>>),
     Idx(Arc<Expr>, StaticIndex),
@@ -163,6 +164,8 @@ impl Expr {
                 }
 
                 result = Arc::new(Expr::MethodCall(result, method.to_string().into(), arg_exprs));
+            } else if let Some(field) = expr_call_suffix_ast.field() {
+                result = Arc::new(Expr::Field(result, field.to_string().into()));
             } else if let Some(j) = expr_call_suffix_ast.j() {
                 let i = expr_call_suffix_ast.i().unwrap();
                 result = Arc::new(Expr::IdxRange(result, j, i));
@@ -205,6 +208,15 @@ impl Expr {
                 args.push(Expr::from_ast(arg));
             }
             Expr::Cat(args)
+        } else if child.is_struct() {
+            let struct_name = child.as_str();
+            let mut assigns = vec![];
+            for assign in expr_base_ast.assigns().unwrap() {
+                let field = Intern::new(assign.get_as_str("field").unwrap().to_string());
+                let expr = Expr::from_ast(assign.expr().unwrap());
+                assigns.push((field, expr));
+            }
+            Expr::Struct(Intern::new(struct_name[1..].to_string()), assigns)
         } else {
             eprintln!("{}", expr_base_ast.summary());
             unreachable!()
@@ -243,6 +255,7 @@ pub enum TypedExpr {
     Bit(Type, bool),
     MethodCall(Type, Arc<TypedExpr>, Ident, Vec<Arc<TypedExpr>>),
     Struct(Type, QualIdent, Vec<(Ident, Arc<TypedExpr>)>),
+    Field(Type, Arc<TypedExpr>, Ident),
     Ctor(Type, Ident, Vec<Arc<TypedExpr>>),
     Idx(Type, Arc<TypedExpr>, StaticIndex),
     IdxRange(Type, Arc<TypedExpr>, StaticIndex, StaticIndex),
@@ -279,6 +292,7 @@ impl Typed for TypedExpr {
             TypedExpr::Bit(typ, _) => typ.clone(),
             TypedExpr::Struct(typ, _, _) => typ.clone(),
             TypedExpr::MethodCall(typ, _, _, _) => typ.clone(),
+            TypedExpr::Field(typ, _, _) => typ.clone(),
             TypedExpr::Ctor(typ, _, _) => typ.clone(),
             TypedExpr::Idx(typ, _, _) => typ.clone(),
             TypedExpr::IdxRange(typ, _, _, _) => typ.clone(),

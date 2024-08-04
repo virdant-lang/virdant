@@ -448,6 +448,15 @@ impl Virdant {
             Err(VirErr::Other(format!("Unable to resolve component: {path} in {in_moddef}")))
         }
     }
+
+    fn resolve_structdef(&self, qualident: &str, in_item: Id<Item>) -> Result<Id<StructDef>, VirErr> {
+        let qi = QualIdent::new(qualident);
+        let in_package = self.items[in_item].package.unwrap().clone();
+        let resolved_package_name = qi.in_package(&in_package.to_string()).to_string();
+        self.structdefs
+            .resolve(&resolved_package_name)
+            .ok_or_else(|| VirErr::UnresolvedIdent(format!("{qualident}")))
+    }
 }
 
 

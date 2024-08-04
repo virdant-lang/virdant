@@ -3,9 +3,9 @@ use std::sync::Arc;
 use internment::Intern;
 
 use crate::error::VirErr;
-use crate::types::Type;
+use crate::types::{Type, TypeScheme};
 use crate::Virdant;
-use crate::expr::{MatchArm, Pat, StaticIndex, Typed, TypedExpr, TypedMatchArm, TypedPat, WordLit};
+use crate::expr::{MatchArm, Pat, QualIdent, StaticIndex, Typed, TypedExpr, TypedMatchArm, TypedPat, WordLit};
 use crate::expr::Referent;
 use crate::expr::Expr;
 use crate::expr::Ident;
@@ -50,7 +50,6 @@ impl<'a> TypingContext<'a> {
     pub fn check(&self, expr: Arc<Expr>, expected_typ: Type) -> Result<Arc<TypedExpr>, VirErr> {
         match expr.as_ref() {
             Expr::Word(wordlit) => self.check_word(wordlit, expected_typ),
-            Expr::Struct(_, _) => self.check_struct(),
             Expr::Ctor(ctor, args) => self.check_ctor(*ctor, args, expected_typ),
             Expr::If(c, a, b) => self.check_if(c.clone(), a.clone(), b.clone(), expected_typ),
             Expr::Match(subject, ascription, match_arms) => self.check_match(subject.clone(), ascription.clone(), &match_arms, expected_typ),
@@ -71,7 +70,9 @@ impl<'a> TypingContext<'a> {
             Expr::Reference(path) => Ok(self.infer_reference(path).unwrap()),
             Expr::Word(wordlit) => self.infer_word(wordlit),
             Expr::Bit(bitlit) => self.infer_bit(*bitlit),
+            Expr::Struct(struct_name, assigns) => self.infer_struct(*struct_name, assigns),
             Expr::MethodCall(subject, method, args) => self.infer_methodcall(subject.clone(), method.clone(), args),
+            Expr::Field(subject, field) => self.infer_field(subject.clone(), field.clone()),
             Expr::Cat(es) => self.infer_cat(es),
             Expr::Idx(subject, i) => self.infer_idx(subject.clone(), *i),
             Expr::IdxRange(subject, j, i) => self.infer_idxrange(subject.clone(), *j, *i),
@@ -134,7 +135,38 @@ impl<'a> TypingContext<'a> {
         Ok(Arc::new(TypedExpr::MethodCall(typ, typed_subject, method, typed_args)))
     }
 
-    fn check_struct(&self) -> Result<Arc<TypedExpr>, VirErr> { todo!() }
+    fn infer_struct(&self, struct_name: QualIdent, assigns: &[(Ident, Arc<Expr>)]) -> Result<Arc<TypedExpr>, VirErr> {
+        let structdef = self.virdant.resolve_structdef(&struct_name, self.moddef.as_item())?;
+        let mut typed_assigns = vec![];
+        for (field, expr) in assigns {
+            // TODO should check after looking up ctor sig
+            let typed_expr = self.infer(expr.clone())?;
+            typed_assigns.push((field.clone(), typed_expr));
+        }
+        let typ = Type::structdef(structdef);
+        Ok(Arc::new(TypedExpr::Struct(typ, struct_name, typed_assigns)))
+    }
+
+    fn infer_field(&self, subject: Arc<Expr>, field: Ident) -> Result<Arc<TypedExpr>, VirErr> {
+        let typed_subject = self.infer(subject)?;
+        let subject_typ = typed_subject.typ();
+        let structdef  = if let TypeScheme::StructDef(structdef) = subject_typ.scheme() {
+            structdef
+        } else {
+            return Err(VirErr::Other(format!("Not a struct type: {subject_typ}")));
+        };
+
+        let structdef_info = &self.virdant.structdefs[structdef];
+        for field_id in structdef_info.fields.unwrap() {
+            let field_info = &self.virdant.fields[*field_id];
+            if field_info.name == *field {
+                let typ = *field_info.typ.unwrap();
+                return Ok(Arc::new(TypedExpr::Field(typ, typed_subject, field)));
+            }
+        }
+        Err(VirErr::Other(format!("No such field {field} on {structdef}")))
+    }
+
     fn check_ctor(&self, ctor: Ident, args: &[Arc<Expr>], expected_typ: Type) -> Result<Arc<TypedExpr>, VirErr> {
         let mut typed_args = vec![];
         for arg in args {

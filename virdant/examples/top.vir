@@ -9,13 +9,27 @@ mod Top {
     node foo : Foo;
     foo := @Invalid();
 
-    out := match foo {
-        @Invalid() => 0;
-        @Valid(payload) => payload;
+//    out := match foo {
+//        @Invalid() => 0;
+//        @Valid(payload) => cat(payload, 0w1);
+//    };
+//    out := cat(0w7, cat(0w4, 0w4)->get(inp[3..0]));
+
+    node bar : Bar;
+    bar := $Bar {
+        x = true,
+        y = 0w8,
     };
+
+    out := bar->y;
 }
 
 union type Foo {
     Invalid();
-    Valid(payload : Word[8]);
+    Valid(payload : Word[7]);
+}
+
+struct type Bar {
+    x : Bit;
+    y : Word[8];
 }
