@@ -13,7 +13,7 @@ const ERROR_EXAMPLES_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| std::p
 
 #[test]
 fn parse_examples() {
-    use parse::*;
+    use crate::parse::*;
     let mut errors = vec![];
 
     for filepath in example_files().chain(test_example_files()) {
@@ -198,8 +198,14 @@ fn test_check_missing_dependency() {
 
     match virdant.check() {
         Err(errors) => {
+            for error in errors.iter() {
+                if let VirErr::UnresolvedIdent(_) = &error {
+                    // OK
+                } else {
+                    panic!();
+                }
+            }
             eprintln!("{errors:?}");
-            assert_eq!(errors.len(), 2);
         },
         _ => panic!(),
     }

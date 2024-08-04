@@ -2,19 +2,21 @@ pub mod parse;
 pub mod error;
 pub mod id;
 pub mod types;
+pub mod expr;
 pub mod ast;
 pub mod location;
 
 mod table;
 mod ready;
 mod cycle;
-mod expr;
+mod typecheck;
 mod context;
 
 #[cfg(test)]
 mod tests;
 
 use cycle::detect_cycle;
+use expr::Expr;
 use indexmap::IndexMap;
 use indexmap::IndexSet;
 use parse::QualIdent;
@@ -23,10 +25,15 @@ use error::VirErr;
 use error::VirErrs;
 use id::*;
 use ast::Ast;
+use typecheck::TypingContext;
 use types::CtorSig;
+use types::Nat;
 use std::hash::Hash;
+use std::sync::Arc;
 use table::Table;
 use types::Type;
+
+use crate::expr::DriverType;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -48,6 +55,8 @@ pub struct Virdant {
     ctors: Table<Ctor, CtorInfo>,
     portdefs: Table<PortDef, PortDefInfo>,
     channels: Table<Channel, ChannelInfo>,
+    components: Table<Component, ComponentInfo>,
+    exprroots: Table<ExprRoot, ExprRootInfo>,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -111,6 +120,22 @@ struct ChannelInfo {
     dir: Ready<ChannelDir>,
 }
 
+#[derive(Default, Clone, Debug)]
+struct ComponentInfo {
+    moddef: Ready<Id<ModDef>>,
+    path: Vec<String>,
+    typ: Ready<Type>,
+    is_reg: Ready<bool>,
+}
+
+#[derive(Default, Clone, Debug)]
+struct ExprRootInfo {
+    moddef: Ready<Id<ModDef>>,
+    ast: Ready<Ast>,
+    expr: Ready<Arc<Expr>>,
+    typ: Ready<Type>,
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Public Virdant API
@@ -164,6 +189,9 @@ impl Virdant {
         self.register_uniondefs();
 
         self.register_portdefs();
+        self.register_components();
+
+        self.register_exprroots();
 
         self.errors.clone().check()
     }
@@ -215,7 +243,7 @@ impl Virdant {
             PackageSource::File(path) => {
                 match std::fs::read_to_string(path) {
                     Ok(source) => Ok(source),
-                    Err(err) => Err(err.into()),
+                    Err(err) => Err(VirErr::Io(format!("Could not read {path:?}: {err:?}"))),
                 }
             },
         }
@@ -294,7 +322,7 @@ impl Virdant {
             }
 
             if let Some(qualident) = node.of() {
-                match self.resolve_qualident(&qualident, item) {
+                match self.resolve_item(&qualident, item) {
                     Ok(dep_item) => {
                         results.insert(dep_item);
                     },
@@ -340,7 +368,7 @@ impl Virdant {
 
     fn item_deps_type(&self, type_ast: Ast, in_item: Id<Item>) -> (Vec<Id<Item>>, VirErrs) {
         let mut errors = VirErrs::new();
-        match self.resolve_qualident(type_ast.name().unwrap(), in_item) {
+        match self.resolve_item(type_ast.name().unwrap(), in_item) {
             Ok(item) => (vec![item], errors),
             Err(err) => {
                 errors.add(err);
@@ -382,7 +410,7 @@ impl Virdant {
         None
     }
 
-    fn resolve_qualident(&self, qualident: &str, in_item: Id<Item>) -> Result<Id<Item>, VirErr> {
+    fn resolve_item(&self, qualident: &str, in_item: Id<Item>) -> Result<Id<Item>, VirErr> {
         let qi = QualIdent::new(qualident);
         let in_package = self.items[in_item].package.unwrap().clone();
         let resolved_package_name = qi.in_package(&in_package.to_string()).to_string();
@@ -390,6 +418,43 @@ impl Virdant {
         self.items
             .resolve(&resolved_package_name)
             .or_else(|| self.items.resolve(&builtin_resolved_package_name))
+            .ok_or_else(|| VirErr::UnresolvedIdent(format!("{qualident}")))
+    }
+
+    fn resolve_moddef(&self, qualident: &str, in_item: Id<Item>) -> Result<Id<ModDef>, VirErr> {
+        let item = self.resolve_item(qualident, in_item)?;
+        let item_info = &self.items[item];
+        if let Ok(ItemKind::ModDef) = item_info.kind.get() {
+            Ok(item.cast())
+        } else {
+            Err(VirErr::Other(format!("Unable to resolve moddef: {qualident} in {in_item}")))
+        }
+    }
+
+    fn resolve_portdef(&self, qualident: &str, in_item: Id<Item>) -> Result<Id<PortDef>, VirErr> {
+        let item = self.resolve_item(qualident, in_item)?;
+        let item_info = &self.items[item];
+        if let Ok(ItemKind::PortDef) = item_info.kind.get() {
+            Ok(item.cast())
+        } else {
+            Err(VirErr::Other(format!("Unable to resolve portdef: {qualident} in {in_item}")))
+        }
+    }
+
+    fn resolve_component(&self, path: &str, in_moddef: Id<ModDef>) -> Result<Id<Component>, VirErr> {
+        if let Some(component) = self.components.resolve(&format!("{in_moddef}::{path}")) {
+            Ok(component)
+        } else {
+            Err(VirErr::Other(format!("Unable to resolve component: {path} in {in_moddef}")))
+        }
+    }
+
+    fn resolve_structdef(&self, qualident: &str, in_item: Id<Item>) -> Result<Id<StructDef>, VirErr> {
+        let qi = QualIdent::new(qualident);
+        let in_package = self.items[in_item].package.unwrap().clone();
+        let resolved_package_name = qi.in_package(&in_package.to_string()).to_string();
+        self.structdefs
+            .resolve(&resolved_package_name)
             .ok_or_else(|| VirErr::UnresolvedIdent(format!("{qualident}")))
     }
 }
@@ -559,8 +624,7 @@ impl Virdant {
     }
 
     fn resolve_type(&self, type_ast: Ast, in_item: Id<Item>) -> Result<Type, VirErr> {
-        let item = self.resolve_qualident(type_ast.name().unwrap(), in_item)?;
-
+        let item = self.resolve_item(type_ast.name().unwrap(), in_item)?;
 
         let mut width: Option<types::Nat> = None;
 
@@ -590,7 +654,7 @@ impl Virdant {
                 Ok(Type::structdef(item.cast()))
             },
             ItemKind::BuiltinDef => {
-                let word_builitindef = self.resolve_qualident("builtin::Word", in_item).unwrap();
+                let word_builitindef = self.resolve_item("builtin::Word", in_item).unwrap();
 
                 if item == word_builitindef && width.is_none() {
                     return Err(VirErr::KindError("Word requires a length".to_string()));
@@ -602,6 +666,18 @@ impl Virdant {
             },
             _ => unreachable!(),
         }
+    }
+
+    fn clock_type(&self) -> Type {
+        Type::builtindef(self.builtindefs.resolve("builtin::Clock").unwrap(), None)
+    }
+
+    fn word_type(&self, width: Nat) -> Type {
+        Type::builtindef(self.builtindefs.resolve("builtin::Word").unwrap(), Some(width))
+    }
+
+    fn bit_type(&self) -> Type {
+        Type::builtindef(self.builtindefs.resolve("builtin::Bit").unwrap(), None)
     }
 }
 
@@ -659,6 +735,191 @@ impl Virdant {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+// Components and Expressions
+////////////////////////////////////////////////////////////////////////////////
+
+impl Virdant {
+    fn register_components(&mut self) {
+        let moddefs = self.moddefs();
+
+        for moddef in moddefs {
+            let moddef_ast = self.items[moddef.as_item()].ast.unwrap().child(0);
+            for node in moddef_ast.children() {
+                if node.is_statement() {
+                    if node.child(0).is_component() {
+                        let component_name = node.name().unwrap();
+                        let component_typ_ast = node.typ().unwrap();
+
+                        let component: Id<Component> = Id::new(format!("{moddef}::{component_name}"));
+                        let component_info = self.components.register(component);
+
+                        component_info.moddef.set(moddef);
+                        component_info.path = vec![component_name.to_string()];
+                        component_info.is_reg.set(node.child(0).is_reg());
+                        if let Ok(typ) = self.resolve_type(component_typ_ast, moddef.as_item()) {
+                            let component_info = &mut self.components[component];
+                            component_info.typ.set(typ);
+                        }
+                    } else if node.child(0).is_submodule() {
+                        let submodule_name = node.name().unwrap();
+                        let submodule_moddef_name = node.of().unwrap();
+                        match self.resolve_moddef(submodule_moddef_name, moddef.as_item()) {
+                            Ok(submodule_moddef) => {
+                                self.register_submodule_components(submodule_name, submodule_moddef, moddef);
+                            },
+                            Err(err) => {
+                                self.errors.add(err);
+                            },
+                        }
+                    } else if node.child(0).is_port() {
+                        let port_name = node.name().unwrap();
+                        let port_portdef_name = node.of().unwrap();
+                        match self.resolve_portdef(port_portdef_name, moddef.as_item()) {
+                            Ok(portdef) => {
+                            let path = vec![port_name.to_string()];
+                                self.register_port_components(path, portdef, moddef);
+                            },
+                            Err(err) => self.errors.add(err),
+                        }
+                    } else if node.child(0).is_driver() {
+                        ()
+                    } else {
+                        unreachable!()
+                    }
+                }
+            }
+        }
+    }
+
+    fn register_submodule_components(&mut self, name: &str, submodule_moddef: Id<ModDef>, in_moddef: Id<ModDef>) {
+        let moddef_ast = self.items[submodule_moddef.as_item()].ast.unwrap().child(0);
+        for node in moddef_ast.children() {
+            if node.is_statement() {
+                let statement = node.child(0);
+                if statement.is_component() {
+                    if statement.is_implicit() || statement.is_incoming() || statement.is_outgoing() {
+                        let component_name = statement.name().unwrap();
+                        let component_typ_ast = statement.typ().unwrap();
+
+                        let component: Id<Component> = Id::new(format!("{in_moddef}::{name}.{component_name}"));
+
+                        let component_info = self.components.register(component);
+                        component_info.moddef.set(in_moddef);
+                        component_info.path = vec![name.to_string(), component_name.to_string()];
+                        component_info.is_reg.set(node.is_reg());
+                        if let Ok(typ) = self.resolve_type(component_typ_ast, submodule_moddef.as_item()) {
+                            let component_info = &mut self.components[component];
+                            component_info.typ.set(typ);
+                        }
+                    }
+                } else if statement.is_port() {
+                    let port_name = statement.name().unwrap();
+                    let port_portdef_name = statement.of().unwrap();
+                    match self.resolve_portdef(port_portdef_name, submodule_moddef.as_item()) {
+                        Ok(portdef) => {
+                            let path = vec![name.to_string(), port_name.to_string()];
+                            self.register_port_components(path, portdef, in_moddef);
+                        },
+                        Err(err) => self.errors.add(err),
+                    }
+                }
+            }
+        }
+    }
+
+    fn register_port_components(&mut self, path: Vec<String>, portdef: Id<PortDef>, in_moddef: Id<ModDef>) {
+        let portdef_info = &self.portdefs[portdef];
+        if let Ok(channels) = portdef_info.channels.get() {
+            for channel in channels {
+                let channel_info = &self.channels[*channel];
+
+                let channel_name = channel_info.name.clone();
+                let channel_typ = channel_info.typ.unwrap();
+
+                let name = format!("{}.{}", path.join("."), channel_name);
+                let component: Id<Component> = Id::new(format!("{in_moddef}::{name}"));
+
+                let component_info = self.components.register(component);
+                component_info.moddef.set(in_moddef);
+
+                let mut path = path.clone();
+                path.push(channel_name);
+                component_info.path = path;
+
+                component_info.is_reg.set(false);
+                component_info.typ.set(*channel_typ);
+            }
+        }
+    }
+
+    fn register_exprroots(&mut self) {
+        let clock_type = self.clock_type();
+        let moddefs = self.moddefs();
+        for moddef in moddefs {
+            let mut i = 0;
+            let moddef_ast = self.items[moddef.as_item()].ast.unwrap().child(0);
+            for node in moddef_ast.children() {
+                if node.is_statement() {
+                    if node.child(0).is_driver() {
+                        let expr_id: Id<ExprRoot> = Id::new(format!("{moddef}::expr[{i}]"));
+                        i += 1;
+
+                        let driver_ast = node.child(0);
+                        let target_path = driver_ast.target().unwrap();
+                        let drivertype = if driver_ast.drivertype().unwrap() == "<=" {
+                            DriverType::Latched
+                        } else {
+                            DriverType::Continuous
+                        };
+
+                        let expr_ast = driver_ast.clone().expr().unwrap();
+                        let exprroot_info = self.exprroots.register(expr_id);
+                        exprroot_info.ast.set(expr_ast.clone());
+                        exprroot_info.moddef.set(moddef);
+
+                        let expr_ast = driver_ast.clone().expr().unwrap();
+                        let component = self.resolve_component(target_path, moddef).unwrap();
+                        let component_info = &self.components[component];
+
+                        match drivertype {
+                            DriverType::Continuous if *component_info.is_reg.get().unwrap() => self.errors.add(VirErr::WrongDriverType(format!("{target_path} in {moddef}"))),
+                            DriverType::Latched if !*component_info.is_reg.get().unwrap() => self.errors.add(VirErr::WrongDriverType(format!("{target_path} in {moddef}"))),
+                            _ => (),
+                        }
+
+                        let expr = Expr::from_ast(expr_ast.clone());
+                        let exprroot_info = self.exprroots.register(expr_id);
+                        exprroot_info.expr.set(expr.clone());
+                        let typ = *component_info.typ.unwrap();
+                        exprroot_info.typ.set(typ);
+
+                        let context = TypingContext::new(self, moddef);
+                        if let Err(errs) = context.check(expr, typ) {
+                            self.errors.add(errs);
+                            // TODO
+                            let span = expr_ast.span();
+                            self.errors.add(VirErr::Other(format!("{span:?}")));
+                        }
+
+                    } else if node.child(0).is_reg() {
+                        let reg_ast = node.child(0);
+                        let expr_ast = reg_ast.clone().expr().unwrap();
+
+                        let expr_id: Id<ExprRoot> = Id::new(format!("{moddef}::expr[{i}]"));
+                        i += 1;
+
+                        let exprroot_info = &mut self.exprroots.register(expr_id);
+                        exprroot_info.ast.set(expr_ast.clone());
+                        exprroot_info.typ.set(clock_type)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
 // For testing
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -668,13 +929,13 @@ impl Virdant {
         self.items.keys().cloned().collect()
     }
 
-    #[cfg(test)]
     fn moddefs(&self) -> Vec<Id<ModDef>> {
         let mut results = vec![];
         for item in self.items.keys() {
-            let item_ast = &self.items[*item].ast.unwrap();
-            if let Some(ItemKind::ModDef) = item_ast.item_kind() {
-                results.push(item.cast());
+            if let Ok(item_ast) = &self.items[*item].ast.get() {
+                if let Some(ItemKind::ModDef) = item_ast.item_kind() {
+                    results.push(item.cast());
+                }
             }
         }
         results
@@ -745,6 +1006,23 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        name: {:?}", channel_info.name)?;
             writeln!(f, "        type: {:?}", channel_info.typ)?;
             writeln!(f, "        dir: {:?}", channel_info.dir)?;
+        }
+
+        writeln!(f, "COMPONENTS:")?;
+        for (component, component_info) in self.components.iter() {
+            writeln!(f, "    {component}")?;
+            writeln!(f, "        moddef: {:?}", component_info.moddef)?;
+            writeln!(f, "        path: {}", component_info.path.join("."))?;
+            writeln!(f, "        typ: {:?}", component_info.typ)?;
+            writeln!(f, "        is_reg: {:?}", component_info.is_reg)?;
+        }
+
+        writeln!(f, "EXPRROOTS:")?;
+        for (exprroot, exprroot_info) in self.exprroots.iter() {
+            writeln!(f, "    {exprroot}")?;
+            writeln!(f, "        ast: {:?}", exprroot_info.ast.get().map(|ast| ast.summary()))?;
+            writeln!(f, "        expr: (omitted)")?;
+            writeln!(f, "        typ: {:?}", exprroot_info.typ)?;
         }
 
         Ok(())

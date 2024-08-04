@@ -1,6 +1,5 @@
 //! Defines the [`VirErr`] and [`VirErrs`] types.
 
-use indexmap::IndexSet;
 use std::hash::Hash;
 
 use crate::parse::ParseError;
@@ -15,29 +14,27 @@ pub enum VirErr {
     UnresolvedIdent(String),
     ItemDepCycle(Vec<String>),
     KindError(String),
+    WrongDriverType(String),
+    TypeError(String),
+    InvalidPat(String),
+    CantInfer,
     Other(String),
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct VirErrs {
-    errors: IndexSet<VirErr>,
-}
-
-impl From<std::io::Error> for VirErr {
-    fn from(err: std::io::Error) -> VirErr {
-        VirErr::Io(format!("{err:?}"))
-    }
+    errors: Vec<VirErr>,
 }
 
 impl VirErrs {
     pub fn new() -> VirErrs {
         VirErrs {
-            errors: IndexSet::new(),
+            errors: vec![],
         }
     }
 
     pub fn add<E: Into<VirErr>>(&mut self, error: E) {
-        self.errors.insert(error.into());
+        self.errors.push(error.into());
     }
 
     pub fn add_on_err<T>(&mut self, result: Result<T, VirErr>) -> Option<T> {
@@ -68,6 +65,10 @@ impl VirErrs {
 
     pub fn into_iter(self) -> impl Iterator<Item = VirErr> {
         self.errors.into_iter()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &VirErr> {
+        self.errors.iter()
     }
 }
 
