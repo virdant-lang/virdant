@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use internment::Intern;
 
+use crate::ast::Ast;
 use crate::error::VirErr;
 use crate::types::{Type, TypeScheme};
 use crate::{CtorInfo, FieldInfo, StructDefInfo, UnionDefInfo, Virdant};
@@ -259,8 +260,14 @@ impl<'a> TypingContext<'a> {
         Ok(TypedExpr::If(expected_typ, typed_c, typed_a, typed_b).into())
     }
 
-    fn check_match(&self, subject: Arc<Expr>, _ascription: Option<()>, arms: &[MatchArm], expected_typ: Type) -> Result<Arc<TypedExpr>, VirErr> {
-        let typed_subject = self.infer(subject)?;
+    fn check_match(&self, subject: Arc<Expr>, ascription: Option<Ast>, arms: &[MatchArm], expected_typ: Type) -> Result<Arc<TypedExpr>, VirErr> {
+        let typed_subject = if let Some(typ_ast) = ascription {
+            let ascription_typ = self.virdant.resolve_type(typ_ast, self.moddef.as_item())?;
+            self.check(subject, ascription_typ)?
+        } else {
+            self.infer(subject)?
+        };
+
         let subject_typ = typed_subject.typ();
 
         let mut typed_arms = vec![];
