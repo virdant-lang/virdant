@@ -38,6 +38,13 @@ mod Top {
             @Valid(payload) => payload;
         };
 
+    node match1 : Word[8];
+    match1 :=
+        match union0 : ValidByte {
+            @Invalid() => 0;
+            @Valid(payload) => payload;
+        };
+
     node struct0 : Pair;
     struct0 :=
         $Pair {
