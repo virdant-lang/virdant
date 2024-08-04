@@ -199,7 +199,6 @@ impl Expr {
             for arg in expr_base_ast.args().unwrap() {
                 args.push(Expr::from_ast(arg));
             }
-            eprint!("args: {args:?}");
             Expr::Ctor(Ident::new(child.as_str()[1..].to_string()), args)
         } else if child.is_kw_cat() {
             let mut args = vec![];
@@ -217,7 +216,6 @@ impl Expr {
             }
             Expr::Struct(Intern::new(struct_name[1..].to_string()), assigns)
         } else {
-            eprintln!("{}", expr_base_ast.summary());
             unreachable!()
         };
 

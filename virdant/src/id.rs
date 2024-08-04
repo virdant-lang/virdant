@@ -55,6 +55,7 @@ pub mod types {
     id_type!(Channel);
 
     id_type!(Component);
+    id_type!(ExprRoot);
 }
 
 pub use types::*;
