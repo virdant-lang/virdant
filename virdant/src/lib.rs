@@ -8,6 +8,7 @@ pub mod location;
 mod table;
 mod ready;
 mod cycle;
+mod expr;
 mod context;
 
 #[cfg(test)]
