@@ -50,6 +50,7 @@ pub struct Virdant {
 
     packages: Table<Package, PackageInfo>,
     items: Table<Item, ItemInfo>,
+    moddefs: Table<ModDef, ModDefInfo>,
     builtindefs: Table<BuiltinDef, BuiltinDefInfo>,
     structdefs: Table<StructDef, StructDefInfo>,
     fields: Table<Field, FieldInfo>,
@@ -109,6 +110,7 @@ impl Virdant {
         }
 
         self.check_no_item_dep_cycles();
+        self.register_moddefs();
         self.register_builtindefs();
         self.register_structdefs();
         self.register_uniondefs();
@@ -430,6 +432,22 @@ impl Virdant {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+// ModDefs
+////////////////////////////////////////////////////////////////////////////////
+
+impl Virdant {
+    fn register_moddefs(&mut self) {
+        let moddef_items = self.items_by_kind(ItemKind::ModDef);
+        for item in moddef_items {
+            let moddef: Id<ModDef> = item.cast();
+            let moddef_info = self.moddefs.register(moddef);
+            moddef_info.item.set(item);
+        }
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
 // Register types
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -665,10 +683,15 @@ impl Virdant {
 
 impl Virdant {
     fn register_components(&mut self) {
-        let moddefs = self.moddefs();
+        let moddefs: Vec<_> = self.moddefs.keys().cloned().collect();
 
         for moddef in moddefs {
-            let moddef_ast = self.items[moddef.as_item()].ast.unwrap().child(0);
+            let moddef_ast = if let Ok(item_ast) = self.items[moddef.as_item()].ast.get() {
+                item_ast.child(0)
+            } else {
+                continue;
+            };
+            let mut components = vec![];
             for node in moddef_ast.children() {
                 if node.is_statement() {
                     if node.child(0).is_component() {
@@ -677,6 +700,7 @@ impl Virdant {
 
                         let component: Id<Component> = Id::new(format!("{moddef}::{component_name}"));
                         let component_info = self.components.register(component);
+                        components.push(component);
 
                         component_info.moddef.set(moddef);
                         component_info.path = vec![component_name.to_string()];
@@ -690,7 +714,7 @@ impl Virdant {
                         let submodule_moddef_name = node.of().unwrap();
                         match self.resolve_moddef(submodule_moddef_name, moddef.as_item()) {
                             Ok(submodule_moddef) => {
-                                self.register_submodule_components(submodule_name, submodule_moddef, moddef);
+                                components.extend(self.register_submodule_components(submodule_name, submodule_moddef, moddef));
                             },
                             Err(err) => {
                                 self.errors.add(err);
@@ -713,11 +737,20 @@ impl Virdant {
                     }
                 }
             }
+            let moddef_info = &mut self.moddefs[moddef];
+            moddef_info.components.set(components);
         }
     }
 
-    fn register_submodule_components(&mut self, name: &str, submodule_moddef: Id<ModDef>, in_moddef: Id<ModDef>) {
-        let moddef_ast = self.items[submodule_moddef.as_item()].ast.unwrap().child(0);
+    fn register_submodule_components(&mut self, name: &str, submodule_moddef: Id<ModDef>, in_moddef: Id<ModDef>) -> Vec<Id<Component>> {
+        let mut components = vec![];
+
+        let moddef_ast = if let Ok(item_ast) = self.items[submodule_moddef.as_item()].ast.get() {
+            item_ast.child(0)
+        } else {
+            return vec![];
+        };
+
         for node in moddef_ast.children() {
             if node.is_statement() {
                 let statement = node.child(0);
@@ -728,7 +761,9 @@ impl Virdant {
 
                         let component: Id<Component> = Id::new(format!("{in_moddef}::{name}.{component_name}"));
 
+                        components.push(component);
                         let component_info = self.components.register(component);
+                        components.push(component);
                         component_info.moddef.set(in_moddef);
                         component_info.path = vec![name.to_string(), component_name.to_string()];
                         component_info.is_reg.set(node.is_reg());
@@ -743,16 +778,18 @@ impl Virdant {
                     match self.resolve_portdef(port_portdef_name, submodule_moddef.as_item()) {
                         Ok(portdef) => {
                             let path = vec![name.to_string(), port_name.to_string()];
-                            self.register_port_components(path, portdef, in_moddef);
+                            components.extend(self.register_port_components(path, portdef, in_moddef));
                         },
                         Err(err) => self.errors.add(err),
                     }
                 }
             }
         }
+        components
     }
 
-    fn register_port_components(&mut self, path: Vec<String>, portdef: Id<PortDef>, in_moddef: Id<ModDef>) {
+    fn register_port_components(&mut self, path: Vec<String>, portdef: Id<PortDef>, in_moddef: Id<ModDef>) -> Vec<Id<Component>> {
+        let mut components = vec![];
         let portdef_info = &self.portdefs[portdef];
         if let Ok(channels) = portdef_info.channels.get() {
             for channel in channels {
@@ -765,6 +802,7 @@ impl Virdant {
                 let component: Id<Component> = Id::new(format!("{in_moddef}::{name}"));
 
                 let component_info = self.components.register(component);
+                components.push(component);
                 component_info.moddef.set(in_moddef);
 
                 let mut path = path.clone();
@@ -775,14 +813,19 @@ impl Virdant {
                 component_info.typ.set(*channel_typ);
             }
         }
+        components
     }
 
     fn register_exprroots(&mut self) {
         let clock_type = self.clock_type();
-        let moddefs = self.moddefs();
+        let moddefs: Vec<_> = self.moddefs.keys().cloned().collect();
         for moddef in moddefs {
             let mut i = 0;
-            let moddef_ast = self.items[moddef.as_item()].ast.unwrap().child(0);
+            let moddef_ast = if let Ok(item_ast) = self.items[moddef.as_item()].ast.get() {
+                item_ast.child(0)
+            } else {
+                continue;
+            };
             for node in moddef_ast.children() {
                 if node.is_statement() {
                     if node.child(0).is_driver() {
@@ -853,18 +896,6 @@ impl Virdant {
     fn items(&self) -> Vec<Id<Item>> {
         self.items.keys().cloned().collect()
     }
-
-    fn moddefs(&self) -> Vec<Id<ModDef>> {
-        let mut results = vec![];
-        for item in self.items.keys() {
-            if let Ok(item_ast) = &self.items[*item].ast.get() {
-                if let Some(ItemKind::ModDef) = item_ast.item_kind() {
-                    results.push(item.cast());
-                }
-            }
-        }
-        results
-    }
 }
 
 impl std::fmt::Debug for Virdant {
@@ -883,6 +914,12 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        package: {:?}", item_info.package)?;
             writeln!(f, "        kind: {:?}", item_info.kind)?;
             writeln!(f, "        deps: {:?}", item_info.deps)?;
+        }
+
+        writeln!(f, "MODDEFS:")?;
+        for (moddef, moddef_info) in self.moddefs.iter() {
+            writeln!(f, "    {moddef}")?;
+            writeln!(f, "    components: {:?}", moddef_info.components)?;
         }
 
         writeln!(f, "BUILTINDEFS:")?;
