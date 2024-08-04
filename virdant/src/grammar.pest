@@ -181,7 +181,7 @@ expr_call_suffix = {
 }
 
 expr_base = {
-    kw_cat ~ "(" ~ expr_list ~ ")" |
+    kw_cat ~ "(" ~ (#args=expr_list) ~ ")" |
     ctor ~ "(" ~ expr_list ~ ")" |
     struct ~ "{" ~ assign_list ~ "}" |
     path |

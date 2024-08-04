@@ -127,6 +127,7 @@ impl Ast {
     pub fn is_wordlit(&self) -> bool { self.rule() == Rule::wordlit }
     pub fn is_bitlit(&self) -> bool { self.rule() == Rule::bitlit }
     pub fn is_path(&self) -> bool { self.rule() == Rule::path }
+    pub fn is_struct(&self) -> bool { self.rule() == Rule::r#struct }
 
     pub fn is_kw_if(&self) -> bool { self.rule() == Rule::kw_if }
     pub fn is_kw_else(&self) -> bool { self.rule() == Rule::kw_else }

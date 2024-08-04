@@ -22,7 +22,7 @@ pub enum Expr {
     Word(WordLit),
     Bit(bool),
     MethodCall(Arc<Expr>, Ident, Vec<Arc<Expr>>),
-    Struct(Option<QualIdent>, Vec<(Ident, Arc<Expr>)>),
+    Struct(QualIdent, Vec<(Ident, Arc<Expr>)>),
     Ctor(Ident, Vec<Arc<Expr>>),
     Idx(Arc<Expr>, StaticIndex),
     IdxRange(Arc<Expr>, StaticIndex, StaticIndex),
@@ -79,7 +79,7 @@ impl Expr {
         } else if child.is_expr_call() {
             Expr::ast_to_expr_call(child)
         } else {
-            todo!()
+            unreachable!()
         }
     }
 
@@ -201,10 +201,8 @@ impl Expr {
             Expr::Ctor(Ident::new(child.as_str()[1..].to_string()), args)
         } else if child.is_kw_cat() {
             let mut args = vec![];
-            for arg in expr_base_ast.children() {
-                if arg.is_expr() {
-                    args.push(Expr::from_ast(arg));
-                }
+            for arg in expr_base_ast.args().unwrap() {
+                args.push(Expr::from_ast(arg));
             }
             Expr::Cat(args)
         } else {
@@ -244,7 +242,7 @@ pub enum TypedExpr {
     Word(Type, WordLit),
     Bit(Type, bool),
     MethodCall(Type, Arc<TypedExpr>, Ident, Vec<Arc<TypedExpr>>),
-    Struct(Type, Option<QualIdent>, Vec<(Ident, Arc<TypedExpr>)>),
+    Struct(Type, QualIdent, Vec<(Ident, Arc<TypedExpr>)>),
     Ctor(Type, Ident, Vec<Arc<TypedExpr>>),
     Idx(Type, Arc<TypedExpr>, StaticIndex),
     IdxRange(Type, Arc<TypedExpr>, StaticIndex, StaticIndex),

@@ -882,7 +882,7 @@ impl Virdant {
                             _ => (),
                         }
 
-                        let expr = Expr::from_ast(expr_ast);
+                        let expr = Expr::from_ast(expr_ast.clone());
                         let exprroot_info = self.exprroots.register(expr_id);
                         exprroot_info.expr.set(expr.clone());
                         let typ = *component_info.typ.unwrap();
@@ -891,6 +891,9 @@ impl Virdant {
                         let context = TypingContext::new(self, moddef);
                         if let Err(errs) = context.check(expr, typ) {
                             self.errors.add(errs);
+                            // TODO
+                            let span = expr_ast.span();
+                            self.errors.add(VirErr::Other(format!("{span:?}")));
                         }
 
                     } else if node.child(0).is_reg() {

@@ -198,8 +198,14 @@ fn test_check_missing_dependency() {
 
     match virdant.check() {
         Err(errors) => {
+            for error in errors.iter() {
+                if let VirErr::UnresolvedIdent(_) = &error {
+                    // OK
+                } else {
+                    panic!();
+                }
+            }
             eprintln!("{errors:?}");
-            assert_eq!(errors.len(), 2);
         },
         _ => panic!(),
     }
