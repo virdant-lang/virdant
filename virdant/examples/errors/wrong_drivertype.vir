@@ -1,0 +1,10 @@
+mod Top {
+    incoming clock : Clock;
+    incoming inp : Word[8];
+    outgoing out : Word[8];
+
+    out <= inp;
+
+    reg temp : Word[8] on clock;
+    temp := 0;
+}
