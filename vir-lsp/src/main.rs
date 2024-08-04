@@ -2,6 +2,7 @@ use virdant::parse::parse_package;
 use serde_json::{Value, json};
 use directories;
 use log::*;
+use virdant::Virdant;
 
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::collections::HashMap;
@@ -169,6 +170,26 @@ impl Buffer {
                 "message": message,
             });
             diagnostics.push(diagnostic);
+        }
+
+        let mut virdant = Virdant::new(&[
+            ("top", self.uri[7..].to_string()),
+        ]);
+        if let Err(errs) = virdant.check() {
+            for err in errs.into_iter() {
+                let message = format!("{err:?}");
+                warn!("{err:?}");
+                diagnostics.push(
+                    json!({
+                        "range": {
+                            "start": { "line": 1, "character": 1 },
+                            "end": { "line": 1, "character": 2 },
+                        },
+                        "severity": 1, // ERROR
+                        "message": message,
+                    })
+                );
+            }
         }
 
         let message = json!({
