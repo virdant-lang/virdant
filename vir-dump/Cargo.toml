@@ -1,0 +1,19 @@
+[package]
+name = "virdant-dump"
+version = "0.1.0-rc0"
+edition = "2021"
+license = "MIT"
+description = "The Virdant dump tool. Virdant is a modern hardware description language."
+readme = "../README.md"
+publish = true
+authors = ["Michael Maloney"]
+default-run = "vir-dump"
+
+[[bin]]
+name = "vir-dump"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0.204", features = ["derive"] }
+toml = "0.8.16"
+virdant = { path = "../virdant", version = "0.1.0-rc0" }
