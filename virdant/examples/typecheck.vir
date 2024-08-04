@@ -1,0 +1,63 @@
+mod Top {
+    node bit0 : Bit;
+    bit0 := true;
+
+    node bit1 : Bit;
+    bit1 := false;
+
+    node word0 : Word[8];
+    word0 := 0w8;
+
+    node word1 : Word[8];
+    word1 := 0;
+
+    node if0 : Word[8];
+    if0 :=
+        if bit0 {
+            0
+        } else {
+            1
+        };
+
+    node cat0 : Word[8];
+    cat0 := cat(0w4, 15w4);
+
+    node cat1 : Word[8];
+    cat1 := cat(0w7, true);
+
+    node cat2 : Word[8];
+    cat2 := cat(true, true, false, false, true, false, true, false);
+
+    node union0 : ValidByte;
+    union0 := @Valid(0);
+
+    node match0 : Word[8];
+    match0 :=
+        match union0 {
+            @Invalid() => 0;
+            @Valid(payload) => payload;
+        };
+
+    node struct0 : Pair;
+    struct0 :=
+        $Pair {
+            x = true,
+            y = 0,
+        };
+
+    node struct1 : Bit;
+    struct1 := struct0->x;
+
+    node struct2 : Word[8];
+    struct2 := struct0->y;
+}
+
+union type ValidByte {
+    Invalid();
+    Valid(payload : Word[8]);
+}
+
+struct type Pair {
+    x : Bit;
+    y : Word[8];
+}
