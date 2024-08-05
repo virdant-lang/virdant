@@ -5,7 +5,7 @@ use internment::Intern;
 use crate::ast::Ast;
 use crate::error::VirErr;
 use crate::types::{Type, TypeScheme};
-use crate::{CtorInfo, FieldInfo, StructDefInfo, UnionDefInfo, Virdant};
+use crate::{CtorInfo, FieldInfo, ItemInfo, Virdant};
 use crate::expr::{MatchArm, Pat, QualIdent, StaticIndex, Typed, TypedExpr, TypedMatchArm, TypedPat, WordLit};
 use crate::expr::Referent;
 use crate::expr::Expr;
@@ -32,7 +32,7 @@ impl<'a> TypingContext<'a> {
     fn lookup(&self, x: Intern<String>) -> Lookup {
         if let Some(val) = self.context.lookup(&x) {
             Lookup::Binding(val)
-        } else if let Ok(component) = self.virdant.resolve_component(x.as_ref(), self.moddef) {
+        } else if let Ok(component) = self.virdant.resolve_component(x.as_ref(), self.moddef.as_item()) {
             Lookup::Component(component, self.virdant.components[component].typ.unwrap().clone())
         } else {
             Lookup::NotFound
@@ -138,7 +138,7 @@ impl<'a> TypingContext<'a> {
 
     fn infer_struct(&self, struct_name: QualIdent, assigns: &[(Ident, Arc<Expr>)]) -> Result<Arc<TypedExpr>, VirErr> {
         let structdef = self.virdant.resolve_structdef(&struct_name, self.moddef.as_item())?;
-        let structdef_info = &self.virdant.structdefs[structdef];
+        let structdef_info = &self.virdant.items[structdef.as_item()];
         let mut typed_assigns = vec![];
         for (field, expr) in assigns {
             let structdef_field = self.structdef_field(structdef_info, *field)?;
@@ -149,7 +149,7 @@ impl<'a> TypingContext<'a> {
         Ok(Arc::new(TypedExpr::Struct(typ, struct_name, typed_assigns)))
     }
 
-    fn structdef_field(&self, structdef_info: &StructDefInfo, field_name: Ident) -> Result<&FieldInfo, VirErr> {
+    fn structdef_field(&self, structdef_info: &ItemInfo, field_name: Ident) -> Result<&FieldInfo, VirErr> {
         for field in structdef_info.fields.unwrap() {
             let field_info = &self.virdant.fields[*field];
             if field_info.name == *field_name {
@@ -168,7 +168,7 @@ impl<'a> TypingContext<'a> {
             return Err(VirErr::Other(format!("Not a struct type: {subject_typ}")));
         };
 
-        let structdef_info = &self.virdant.structdefs[structdef];
+        let structdef_info = &self.virdant.items[structdef.as_item()];
         for field_id in structdef_info.fields.unwrap() {
             let field_info = &self.virdant.fields[*field_id];
             if field_info.name == *field {
@@ -185,7 +185,7 @@ impl<'a> TypingContext<'a> {
         } else {
             return Err(VirErr::Other(format!("Not a union type: {expected_typ}")));
         };
-        let uniondef_info = &self.virdant.uniondefs[uniondef];
+        let uniondef_info = &self.virdant.items[uniondef.as_item()];
 
         let mut typed_args = vec![];
         let ctor_info = self.uniondef_ctor(uniondef_info, ctor)?;
@@ -202,7 +202,7 @@ impl<'a> TypingContext<'a> {
         Ok(Arc::new(TypedExpr::Ctor(expected_typ, ctor, typed_args)))
     }
 
-    fn uniondef_ctor(&self, uniondef_info: &UnionDefInfo, ctor_name: Ident) -> Result<&CtorInfo, VirErr> {
+    fn uniondef_ctor(&self, uniondef_info: &ItemInfo, ctor_name: Ident) -> Result<&CtorInfo, VirErr> {
         for ctor in uniondef_info.ctors.unwrap() {
             let ctor_info = &self.virdant.ctors[*ctor];
             if ctor_info.name == *ctor_name {
@@ -298,7 +298,7 @@ impl<'a> TypingContext<'a> {
                     crate::types::TypeScheme::BuiltinDef(_builtindef) => return Err(VirErr::InvalidPat(format!(""))),
                     crate::types::TypeScheme::UnionDef(uniondef) => uniondef,
                 };
-                let uniondef_info = &self.virdant.uniondefs[uniondef];
+                let uniondef_info = &self.virdant.items[uniondef.as_item()];
                 let ctors = &uniondef_info.ctors.unwrap();
 
                 let ctor_opt = ctors.into_iter().find(|ctor| {
