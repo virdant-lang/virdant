@@ -686,7 +686,7 @@ impl Virdant {
                         match self.resolve_portdef(port_portdef_name, item) {
                             Ok(portdef) => {
                             let path = vec![port_name.to_string()];
-                                self.register_port_components(path, portdef, moddef);
+                                components.extend(self.register_port_components(path, portdef, moddef));
                             },
                             Err(err) => self.errors.add(err),
                         }
