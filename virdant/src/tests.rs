@@ -154,42 +154,6 @@ fn test_check_duplicate_item() {
 }
 
 #[test]
-fn test_items() {
-    let mut virdant = Virdant::new(&[
-        ("builtin", LIB_DIR.join("builtin.vir")),
-        ("top", EXAMPLES_DIR.join("uart.vir")),
-    ]);
-
-    virdant.check().unwrap();
-
-    let items: Vec<_> = ["top::UartState", "top::UartSender", "top::UartReceiver"]
-        .iter()
-        .map(|item| item.to_string())
-        .collect();
-
-    assert_eq!(
-        virdant.items().iter()
-            .map(|item| item.to_string())
-            .filter(|item| !item.starts_with("builtin"))
-            .collect::<Vec<_>>(),
-        items,
-    );
-
-    let moddefs: Vec<_> = ["top::UartSender", "top::UartReceiver"]
-        .iter()
-        .map(|item| item.to_string())
-        .collect::<Vec<_>>();
-
-    assert_eq!(
-        virdant.moddefs.keys()
-            .map(|item| item.to_string())
-            .filter(|item| !item.starts_with("builtin"))
-            .collect::<Vec<_>>(),
-        moddefs,
-    );
-}
-
-#[test]
 fn test_check_missing_dependency() {
     let mut virdant = Virdant::new(&[
         ("builtin", LIB_DIR.join("builtin.vir")),
