@@ -50,13 +50,8 @@ pub struct Virdant {
 
     packages: Table<Package, PackageInfo>,
     items: Table<Item, ItemInfo>,
-    moddefs: Table<ModDef, ModDefInfo>,
-    builtindefs: Table<BuiltinDef, BuiltinDefInfo>,
-    structdefs: Table<StructDef, StructDefInfo>,
     fields: Table<Field, FieldInfo>,
-    uniondefs: Table<UnionDef, UnionDefInfo>,
     ctors: Table<Ctor, CtorInfo>,
-    portdefs: Table<PortDef, PortDefInfo>,
     channels: Table<Channel, ChannelInfo>,
     components: Table<Component, ComponentInfo>,
     exprroots: Table<ExprRoot, ExprRootInfo>,
@@ -110,12 +105,10 @@ impl Virdant {
         }
 
         self.check_no_item_dep_cycles();
-        self.register_moddefs();
-        self.register_builtindefs();
-        self.register_structdefs();
-        self.register_uniondefs();
 
-        self.register_portdefs();
+        self.register_fields();
+        self.register_ctors();
+        self.register_channels();
         self.register_components();
 
         self.register_exprroots();
@@ -368,7 +361,7 @@ impl Virdant {
         }
     }
 
-    fn resolve_component(&self, path: &str, in_moddef: Id<ModDef>) -> Result<Id<Component>, VirErr> {
+    fn resolve_component(&self, path: &str, in_moddef: Id<Item>) -> Result<Id<Component>, VirErr> {
         if let Some(component) = self.components.resolve(&format!("{in_moddef}::{path}")) {
             Ok(component)
         } else {
@@ -377,12 +370,13 @@ impl Virdant {
     }
 
     fn resolve_structdef(&self, qualident: &str, in_item: Id<Item>) -> Result<Id<StructDef>, VirErr> {
-        let qi = QualIdent::new(qualident);
-        let in_package = self.items[in_item].package.unwrap().clone();
-        let resolved_package_name = qi.in_package(&in_package.to_string()).to_string();
-        self.structdefs
-            .resolve(&resolved_package_name)
-            .ok_or_else(|| VirErr::UnresolvedIdent(format!("{qualident}")))
+        let item = self.resolve_item(qualident, in_item)?;
+        let item_info = &self.items[item];
+        if let Ok(ItemKind::StructDef) = item_info.kind.get() {
+            Ok(item.cast())
+        } else {
+            Err(VirErr::Other(format!("Unable to resolve structdef: {qualident} in {in_item}")))
+        }
     }
 }
 
@@ -432,42 +426,14 @@ impl Virdant {
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// ModDefs
-////////////////////////////////////////////////////////////////////////////////
-
-impl Virdant {
-    fn register_moddefs(&mut self) {
-        let moddef_items = self.items_by_kind(ItemKind::ModDef);
-        for item in moddef_items {
-            let moddef: Id<ModDef> = item.cast();
-            let moddef_info = self.moddefs.register(moddef);
-            moddef_info.item.set(item);
-        }
-    }
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
 // Register types
 ////////////////////////////////////////////////////////////////////////////////
 
 impl Virdant {
-    fn register_builtindefs(&mut self) {
-        let builtindefs = self.items_by_kind(ItemKind::BuiltinDef);
-        for item in builtindefs {
-            let builtindef: Id<BuiltinDef> = item.cast();
-            let builtindef_info = self.builtindefs.register(builtindef);
-            builtindef_info.item.set(item);
-        }
-    }
-
-    fn register_structdefs(&mut self) {
+    fn register_fields(&mut self) {
         let structdefs = self.items_by_kind(ItemKind::StructDef);
         for item in structdefs {
             let structdef: Id<StructDef> = item.cast();
-            let structdef_info = self.structdefs.register(structdef);
-            structdef_info.item.set(item);
-
             let mut fields = vec![];
 
             let item_info = &self.items[item];
@@ -502,18 +468,15 @@ impl Virdant {
                 }
             }
 
-            let structdef_info = &mut self.structdefs[structdef];
+            let structdef_info = &mut self.items[item];
             structdef_info.fields.set(fields);
         }
     }
 
-    fn register_uniondefs(&mut self) {
+    fn register_ctors(&mut self) {
         let uniondefs = self.items_by_kind(ItemKind::UnionDef);
         for item in uniondefs {
             let uniondef: Id<UnionDef> = item.cast();
-            let uniondef_info = self.uniondefs.register(uniondef);
-            uniondef_info.item.set(item);
-
             let mut ctors = vec![];
 
             let item_info = &self.items[item];
@@ -551,7 +514,7 @@ impl Virdant {
                 }
             }
 
-            let uniondef_info = &mut self.uniondefs[uniondef];
+            let uniondef_info = &mut self.items[item];
             uniondef_info.ctors.set(ctors);
         }
     }
@@ -612,15 +575,15 @@ impl Virdant {
     }
 
     fn clock_type(&self) -> Type {
-        Type::builtindef(self.builtindefs.resolve("builtin::Clock").unwrap(), None)
+        Type::builtindef(self.items.resolve("builtin::Clock").unwrap().cast(), None)
     }
 
     fn word_type(&self, width: Nat) -> Type {
-        Type::builtindef(self.builtindefs.resolve("builtin::Word").unwrap(), Some(width))
+        Type::builtindef(self.items.resolve("builtin::Word").unwrap().cast(), Some(width))
     }
 
     fn bit_type(&self) -> Type {
-        Type::builtindef(self.builtindefs.resolve("builtin::Bit").unwrap(), None)
+        Type::builtindef(self.items.resolve("builtin::Bit").unwrap().cast(), None)
     }
 }
 
@@ -630,13 +593,10 @@ impl Virdant {
 ////////////////////////////////////////////////////////////////////////////////
 
 impl Virdant {
-    fn register_portdefs(&mut self) {
+    fn register_channels(&mut self) {
         let portdefs = self.items_by_kind(ItemKind::PortDef);
         for item in portdefs {
             let portdef: Id<PortDef> = item.cast();
-            let portdef_info = self.portdefs.register(portdef);
-            portdef_info.item.set(item);
-
             let mut channels = vec![];
 
             let item_info = &self.items[item];
@@ -670,7 +630,7 @@ impl Virdant {
                 }
             }
 
-            let portdef_info = &mut self.portdefs[portdef];
+            let portdef_info = &mut self.items[item];
             portdef_info.channels.set(channels);
         }
     }
@@ -683,10 +643,10 @@ impl Virdant {
 
 impl Virdant {
     fn register_components(&mut self) {
-        let moddefs: Vec<_> = self.moddefs.keys().cloned().collect();
-
-        for moddef in moddefs {
-            let moddef_ast = if let Ok(item_ast) = self.items[moddef.as_item()].ast.get() {
+        let items = self.items_by_kind(ItemKind::ModDef);
+        for item in items {
+            let moddef: Id<ModDef> = item.cast();
+            let moddef_ast = if let Ok(item_ast) = self.items[item].ast.get() {
                 item_ast.child(0)
             } else {
                 continue;
@@ -698,21 +658,21 @@ impl Virdant {
                         let component_name = node.name().unwrap();
                         let component_typ_ast = node.typ().unwrap();
 
-                        let component: Id<Component> = Id::new(format!("{moddef}::{component_name}"));
+                        let component: Id<Component> = Id::new(format!("{item}::{component_name}"));
                         let component_info = self.components.register(component);
                         components.push(component);
 
                         component_info.moddef.set(moddef);
                         component_info.path = vec![component_name.to_string()];
                         component_info.is_reg.set(node.child(0).is_reg());
-                        if let Ok(typ) = self.resolve_type(component_typ_ast, moddef.as_item()) {
+                        if let Ok(typ) = self.resolve_type(component_typ_ast, item) {
                             let component_info = &mut self.components[component];
                             component_info.typ.set(typ);
                         }
                     } else if node.child(0).is_submodule() {
                         let submodule_name = node.name().unwrap();
                         let submodule_moddef_name = node.of().unwrap();
-                        match self.resolve_moddef(submodule_moddef_name, moddef.as_item()) {
+                        match self.resolve_moddef(submodule_moddef_name, item) {
                             Ok(submodule_moddef) => {
                                 components.extend(self.register_submodule_components(submodule_name, submodule_moddef, moddef));
                             },
@@ -723,7 +683,7 @@ impl Virdant {
                     } else if node.child(0).is_port() {
                         let port_name = node.name().unwrap();
                         let port_portdef_name = node.of().unwrap();
-                        match self.resolve_portdef(port_portdef_name, moddef.as_item()) {
+                        match self.resolve_portdef(port_portdef_name, item) {
                             Ok(portdef) => {
                             let path = vec![port_name.to_string()];
                                 self.register_port_components(path, portdef, moddef);
@@ -737,7 +697,7 @@ impl Virdant {
                     }
                 }
             }
-            let moddef_info = &mut self.moddefs[moddef];
+            let moddef_info = &mut self.items[item];
             moddef_info.components.set(components);
         }
     }
@@ -790,7 +750,7 @@ impl Virdant {
 
     fn register_port_components(&mut self, path: Vec<String>, portdef: Id<PortDef>, in_moddef: Id<ModDef>) -> Vec<Id<Component>> {
         let mut components = vec![];
-        let portdef_info = &self.portdefs[portdef];
+        let portdef_info = &self.items[portdef.as_item()];
         if let Ok(channels) = portdef_info.channels.get() {
             for channel in channels {
                 let channel_info = &self.channels[*channel];
@@ -818,10 +778,11 @@ impl Virdant {
 
     fn register_exprroots(&mut self) {
         let clock_type = self.clock_type();
-        let moddefs: Vec<_> = self.moddefs.keys().cloned().collect();
-        for moddef in moddefs {
+        let items = self.items_by_kind(ItemKind::ModDef);
+        for item in items {
+            let moddef: Id<ModDef> = item.cast();
             let mut i = 0;
-            let moddef_ast = if let Ok(item_ast) = self.items[moddef.as_item()].ast.get() {
+            let moddef_ast = if let Ok(item_ast) = self.items[item].ast.get() {
                 item_ast.child(0)
             } else {
                 continue;
@@ -829,7 +790,7 @@ impl Virdant {
             for node in moddef_ast.children() {
                 if node.is_statement() {
                     if node.child(0).is_driver() {
-                        let expr_id: Id<ExprRoot> = Id::new(format!("{moddef}::expr[{i}]"));
+                        let expr_id: Id<ExprRoot> = Id::new(format!("{item}::expr[{i}]"));
                         i += 1;
 
                         let driver_ast = node.child(0);
@@ -846,12 +807,12 @@ impl Virdant {
                         exprroot_info.moddef.set(moddef);
 
                         let expr_ast = driver_ast.clone().expr().unwrap();
-                        let component = self.resolve_component(target_path, moddef).unwrap();
+                        let component = self.resolve_component(target_path, item).unwrap();
                         let component_info = &self.components[component];
 
                         match drivertype {
-                            DriverType::Continuous if *component_info.is_reg.get().unwrap() => self.errors.add(VirErr::WrongDriverType(format!("{target_path} in {moddef}"))),
-                            DriverType::Latched if !*component_info.is_reg.get().unwrap() => self.errors.add(VirErr::WrongDriverType(format!("{target_path} in {moddef}"))),
+                            DriverType::Continuous if *component_info.is_reg.get().unwrap() => self.errors.add(VirErr::WrongDriverType(format!("{target_path} in {item}"))),
+                            DriverType::Latched if !*component_info.is_reg.get().unwrap() => self.errors.add(VirErr::WrongDriverType(format!("{target_path} in {item}"))),
                             _ => (),
                         }
 
@@ -891,13 +852,6 @@ impl Virdant {
 // For testing
 ////////////////////////////////////////////////////////////////////////////////
 
-impl Virdant {
-    #[cfg(test)]
-    fn items(&self) -> Vec<Id<Item>> {
-        self.items.keys().cloned().collect()
-    }
-}
-
 impl std::fmt::Debug for Virdant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "PACKAGES:")?;
@@ -914,23 +868,10 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        package: {:?}", item_info.package)?;
             writeln!(f, "        kind: {:?}", item_info.kind)?;
             writeln!(f, "        deps: {:?}", item_info.deps)?;
-        }
-
-        writeln!(f, "MODDEFS:")?;
-        for (moddef, moddef_info) in self.moddefs.iter() {
-            writeln!(f, "    {moddef}")?;
-            writeln!(f, "    components: {:?}", moddef_info.components)?;
-        }
-
-        writeln!(f, "BUILTINDEFS:")?;
-        for (builtindef, _builtindef_info) in self.builtindefs.iter() {
-            writeln!(f, "    {builtindef}")?;
-        }
-
-        writeln!(f, "STRUCTDEFS:")?;
-        for (structdef, structdef_info) in self.structdefs.iter() {
-            writeln!(f, "    {structdef}")?;
-            writeln!(f, "    fields: {:?}", structdef_info.fields)?;
+            writeln!(f, "        components: {:?}", item_info.components)?;
+            writeln!(f, "        fields: {:?}", item_info.fields)?;
+            writeln!(f, "        ctors: {:?}", item_info.ctors)?;
+            writeln!(f, "        channels: {:?}", item_info.channels)?;
         }
 
         writeln!(f, "FIELDS:")?;
@@ -941,24 +882,12 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        typ: {:?}", field_info.typ)?;
         }
 
-        writeln!(f, "UNIONDEFS:")?;
-        for (uniondef, uniondef_info) in self.uniondefs.iter() {
-            writeln!(f, "    {uniondef}")?;
-            writeln!(f, "    ctors: {:?}", uniondef_info.ctors)?;
-        }
-
         writeln!(f, "CTORS:")?;
         for (ctor, ctor_info) in self.ctors.iter() {
             writeln!(f, "    {ctor}")?;
             writeln!(f, "        uniondef: {:?}", ctor_info.uniondef)?;
             writeln!(f, "        name: {:?}", ctor_info.name)?;
             writeln!(f, "        sig: {:?}", ctor_info.sig)?;
-        }
-
-        writeln!(f, "PORTDEFS:")?;
-        for (portdef, portdef_info) in self.portdefs.iter() {
-            writeln!(f, "    {portdef}")?;
-            writeln!(f, "    channels: {:?}", portdef_info.channels)?;
         }
 
         writeln!(f, "CHANNELS:")?;

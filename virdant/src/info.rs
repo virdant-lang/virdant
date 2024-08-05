@@ -14,23 +14,18 @@ pub struct ItemInfo {
     pub ast: Ready<Ast>,
     pub kind: Ready<ItemKind>,
     pub deps: Ready<Vec<Id<Item>>>,
-}
 
-#[derive(Default, Clone, Debug)]
-pub struct ModDefInfo {
-    pub item: Ready<Id<Item>>,
+    // for moddefs
     pub components: Ready<Vec<Id<Component>>>,
-}
 
-#[derive(Default, Clone, Debug)]
-pub struct BuiltinDefInfo {
-    pub item: Ready<Id<Item>>,
-}
-
-#[derive(Default, Clone, Debug)]
-pub struct StructDefInfo {
-    pub item: Ready<Id<Item>>,
+    // for strucdefs
     pub fields: Ready<Vec<Id<Field>>>,
+
+    // for uniondefs
+    pub ctors: Ready<Vec<Id<Ctor>>>,
+
+    // for portdefs
+    pub channels: Ready<Vec<Id<Channel>>>,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -41,22 +36,10 @@ pub struct FieldInfo {
 }
 
 #[derive(Default, Clone, Debug)]
-pub struct UnionDefInfo {
-    pub item: Ready<Id<Item>>,
-    pub ctors: Ready<Vec<Id<Ctor>>>,
-}
-
-#[derive(Default, Clone, Debug)]
 pub struct CtorInfo {
     pub uniondef: Ready<Id<UnionDef>>,
     pub name: String,
     pub sig: Ready<CtorSig>,
-}
-
-#[derive(Default, Clone, Debug)]
-pub struct PortDefInfo {
-    pub item: Ready<Id<Item>>,
-    pub channels: Ready<Vec<Id<Channel>>>,
 }
 
 #[derive(Default, Clone, Debug)]
