@@ -1,8 +1,14 @@
 mod Top {
-
+    master port mem of Mem;
+    incoming clock : Clock;
 }
 
 port Mem {
     mosi addr : Word[16];
     miso data_in : Word[8];
+}
+
+struct type Foo {
+    x : Bit;
+    y : Word[8];
 }

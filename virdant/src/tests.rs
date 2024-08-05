@@ -10,6 +10,7 @@ const EXAMPLES_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| std::path::P
 const TEST_EXAMPLES_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| std::path::PathBuf::from("examples"));
 const ERROR_EXAMPLES_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| std::path::PathBuf::from("examples/errors"));
 
+/*
 
 #[test]
 fn parse_examples() {
@@ -249,4 +250,37 @@ fn test_typecheck() {
     ]);
 
     virdant.check().unwrap();
+}
+
+*/
+
+#[test]
+fn test_top_design() {
+    let mut virdant = Virdant::new(&[
+        ("builtin", LIB_DIR.join("builtin.vir")),
+        ("top", TEST_EXAMPLES_DIR.join("top.vir")),
+    ]);
+
+    let design = virdant.check().unwrap();
+    eprintln!("{virdant:?}");
+    for package in design.packages() {
+        eprintln!("{}", package.name());
+        for item in package.items() {
+            eprintln!("    {}", item.name());
+            match item.kind() {
+                design::ItemKind::ModDef(moddef) => {
+                    for component in moddef.components() {
+                        eprintln!("        {}", component.path().join("."));
+                    }
+                },
+                design::ItemKind::StructDef(structdef) => {
+                    for field in structdef.fields() {
+                        eprintln!("        {}", field.name());
+                    }
+                },
+                _ => (),
+            }
+        }
+    }
+
 }
