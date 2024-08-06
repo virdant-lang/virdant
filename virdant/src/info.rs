@@ -56,6 +56,7 @@ pub struct ComponentInfo {
     pub path: Vec<String>,
     pub typ: Ready<Type>,
     pub is_reg: Ready<bool>,
+    pub driver: Ready<Id<ExprRoot>>,
 }
 
 #[derive(Default, Clone, Debug)]
