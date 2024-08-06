@@ -20,7 +20,7 @@ item = {
 ////////////////////////////////////////////////////////////////////////////////
 
 moddef = {
-    kw_ext? ~ kw_mod ~ (#name=ident) ~ "{" ~
+    (#ext=kw_ext?) ~ kw_mod ~ (#name=ident) ~ "{" ~
         (moddef_statement ~ ";")* ~
     "}"
 }

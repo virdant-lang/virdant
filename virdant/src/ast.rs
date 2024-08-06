@@ -96,6 +96,8 @@ impl Ast {
     pub fn is_builtindef(&self) -> bool { self.rule() == Rule::builtindef }
     pub fn is_portdef(&self) -> bool { self.rule() == Rule::portdef }
 
+    pub fn is_ext(&self) -> bool { self.get_as_str("ext").is_some() }
+
     pub fn is_statement(&self) -> bool {
         self.rule() == Rule::moddef_statement ||
         self.rule() == Rule::uniondef_statement ||
