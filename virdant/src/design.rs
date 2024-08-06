@@ -142,6 +142,10 @@ impl Item {
         &self.info.name
     }
 
+    pub fn package(&self) -> Package {
+        self.root().packages[self.info.package.unwrap()].clone()
+    }
+
     pub fn kind(&self) -> ItemKind {
         match self.info.kind.unwrap() {
             crate::ItemKind::ModDef => ItemKind::ModDef(self.as_moddef()),
@@ -183,6 +187,10 @@ impl ModDef {
             }
         }
         components
+    }
+
+    pub fn is_ext(&self) -> bool {
+        *self.info.is_ext.unwrap()
     }
 }
 
@@ -306,6 +314,7 @@ macro_rules! impl_hasroot {
 
 impl_hasroot!(Package);
 
+impl_hasroot!(Item);
 impl_hasroot!(ModDef);
 impl_hasroot!(UnionDef);
 impl_hasroot!(StructDef);
@@ -336,6 +345,10 @@ macro_rules! item_fns {
 
             pub fn name(&self) -> String {
                 self.as_item().name().to_string()
+            }
+
+            pub fn package(&self) -> Package {
+                self.as_item().package()
             }
         }
     };

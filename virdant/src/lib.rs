@@ -200,6 +200,9 @@ impl Virdant {
         item_info.name = item_name.to_string();
         item_info.kind.set(kind);
         item_info.package.set(package);
+        if kind == ItemKind::ModDef {
+            item_info.is_ext.set(item_ast.is_ext());
+        }
         item_info.ast.set(item_ast);
     }
 }
@@ -873,6 +876,7 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        kind: {:?}", item_info.kind)?;
             writeln!(f, "        deps: {:?}", item_info.deps)?;
             writeln!(f, "        components: {:?}", item_info.components)?;
+            writeln!(f, "        is_ext: {:?}", item_info.is_ext)?;
             writeln!(f, "        fields: {:?}", item_info.fields)?;
             writeln!(f, "        ctors: {:?}", item_info.ctors)?;
             writeln!(f, "        channels: {:?}", item_info.channels)?;

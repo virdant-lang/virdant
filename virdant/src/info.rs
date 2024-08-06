@@ -17,6 +17,7 @@ pub struct ItemInfo {
 
     // for moddefs
     pub components: Ready<Vec<Id<Component>>>,
+    pub is_ext: Ready<bool>,
 
     // for strucdefs
     pub fields: Ready<Vec<Id<Field>>>,
