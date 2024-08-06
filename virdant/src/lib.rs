@@ -57,6 +57,7 @@ pub struct Virdant {
     channels: Table<Channel, ChannelInfo>,
     components: Table<Component, ComponentInfo>,
     exprroots: Table<ExprRoot, ExprRootInfo>,
+    submodules: Table<Submodule, SubmoduleInfo>,
 }
 
 
@@ -114,6 +115,7 @@ impl Virdant {
         self.register_components();
 
         self.register_exprroots();
+        self.register_submodules();
 
         self.errors.clone().check()?;
         Ok(self.design())
@@ -852,6 +854,38 @@ impl Virdant {
             }
         }
     }
+
+    fn register_submodules(&mut self) {
+        let items = self.items_by_kind(ItemKind::ModDef);
+        for item in items {
+            let moddef: Id<ModDef> = item.cast();
+            let moddef_ast = if let Ok(item_ast) = self.items[item].ast.get() {
+                item_ast.child(0)
+            } else {
+                continue;
+            };
+
+            let mut submodules = vec![];
+
+            for node in moddef_ast.children() {
+                if node.is_statement() && node.child(0).is_submodule() {
+                    let submodule_ast = node.child(0);
+                    let submodule_name = submodule_ast.name().unwrap();
+                    let submodule_of = submodule_ast.of().unwrap();
+
+                    let submodule_moddef: Id<ModDef> = self.resolve_item(submodule_of, item).unwrap().cast();
+
+                    let submodule_id: Id<Submodule> = Id::new(format!("{moddef}::{submodule_name}"));
+                    let submodule_info = self.submodules.register(submodule_id);
+                    submodule_info.moddef.set(item.cast());
+                    submodule_info.name = submodule_name.to_string();
+                    submodule_info.submodule_moddef.set(submodule_moddef);
+                    submodules.push(submodule_id);
+                }
+            }
+            self.items[item].submodules.set(submodules);
+        }
+    }
 }
 
 
@@ -875,6 +909,7 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        package: {:?}", item_info.package)?;
             writeln!(f, "        kind: {:?}", item_info.kind)?;
             writeln!(f, "        deps: {:?}", item_info.deps)?;
+            writeln!(f, "        submodules: {:?}", item_info.submodules)?;
             writeln!(f, "        components: {:?}", item_info.components)?;
             writeln!(f, "        is_ext: {:?}", item_info.is_ext)?;
             writeln!(f, "        fields: {:?}", item_info.fields)?;
@@ -923,6 +958,14 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        ast: {:?}", exprroot_info.ast.get().map(|ast| ast.summary()))?;
             writeln!(f, "        expr: (omitted)")?;
             writeln!(f, "        typ: {:?}", exprroot_info.typ)?;
+        }
+
+        writeln!(f, "SUBMODULES:")?;
+        for (submodule, submodule_info) in self.submodules.iter() {
+            writeln!(f, "    {submodule}")?;
+            writeln!(f, "        name: {}", submodule_info.name)?;
+            writeln!(f, "        submodule_moddef: {:?}", submodule_info.submodule_moddef)?;
+            writeln!(f, "        moddef: {:?}", submodule_info.moddef)?;
         }
 
         Ok(())

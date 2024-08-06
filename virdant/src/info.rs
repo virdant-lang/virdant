@@ -18,6 +18,7 @@ pub struct ItemInfo {
     // for moddefs
     pub components: Ready<Vec<Id<Component>>>,
     pub is_ext: Ready<bool>,
+    pub submodules: Ready<Vec<Id<Submodule>>>,
 
     // for strucdefs
     pub fields: Ready<Vec<Id<Field>>>,
@@ -66,4 +67,11 @@ pub struct ExprRootInfo {
     pub ast: Ready<Ast>,
     pub expr: Ready<Arc<Expr>>,
     pub typ: Ready<Type>,
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct SubmoduleInfo {
+    pub moddef: Ready<Id<ModDef>>,
+    pub name: String,
+    pub submodule_moddef: Ready<Id<ModDef>>,
 }
