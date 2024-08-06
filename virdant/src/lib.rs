@@ -5,6 +5,7 @@ pub mod types;
 pub mod expr;
 pub mod ast;
 pub mod location;
+pub mod design;
 
 mod table;
 mod ready;
@@ -29,6 +30,7 @@ use ast::Ast;
 use typecheck::TypingContext;
 use types::CtorSig;
 use types::Nat;
+use std::cell::OnceCell;
 use std::hash::Hash;
 use std::sync::Arc;
 use table::Table;
@@ -82,7 +84,7 @@ impl Virdant {
         virdant
     }
 
-    pub fn check(&mut self) -> Result<(), VirErrs> {
+    pub fn check(&mut self) -> Result<design::Design, VirErrs> {
         self.init_package_asts();
         self.register_items();
 
@@ -113,7 +115,8 @@ impl Virdant {
 
         self.register_exprroots();
 
-        self.errors.clone().check()
+        self.errors.clone().check()?;
+        Ok(self.design())
     }
 }
 
@@ -920,6 +923,11 @@ impl std::fmt::Debug for Virdant {
     }
 }
 
+
+////////////////////////////////////////////////////////////////////////////////
+// Extra Types
+////////////////////////////////////////////////////////////////////////////////
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum ItemKind {
     ModDef,
@@ -952,4 +960,111 @@ pub enum PackageSource {
     #[default]
     Builtin,
     File(std::path::PathBuf),
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Design
+////////////////////////////////////////////////////////////////////////////////
+
+impl Virdant {
+    pub fn design(&self) -> design::Design {
+        let mut packages: IndexMap<Id<Package>, design::Package> = IndexMap::new();
+        let mut items: IndexMap<Id<Item>, design::Item> = IndexMap::new();
+        let mut components: IndexMap<Id<Component>, design::Component> = IndexMap::new();
+        let mut fields: IndexMap<Id<Field>, design::Field> = IndexMap::new();
+        let mut ctors: IndexMap<Id<Ctor>, design::Ctor> = IndexMap::new();
+
+        for package in self.packages.keys() {
+            packages.insert(*package, self.make_design_package(*package));
+        }
+
+        for item in self.items.keys() {
+            items.insert(*item, self.make_design_items(*item));
+        }
+
+        for component in self.components.keys() {
+            components.insert(*component, self.make_design_components(*component));
+        }
+
+        for field in self.fields.keys() {
+            fields.insert(*field, self.make_design_fields(*field));
+        }
+
+        for ctor in self.ctors.keys() {
+            ctors.insert(*ctor, self.make_design_ctors(*ctor));
+        }
+
+        let root = Arc::new(design::DesignRoot {
+            packages,
+            items,
+            components,
+            fields,
+            ctors,
+        });
+
+        for package in root.packages.values() {
+            package.root.set(Arc::downgrade(&root)).unwrap();
+        }
+
+        for item in root.items.values() {
+            item.root.set(Arc::downgrade(&root)).unwrap();
+        }
+
+        for component in root.components.values() {
+            component.root.set(Arc::downgrade(&root)).unwrap();
+        }
+
+        for field in root.fields.values() {
+            field.root.set(Arc::downgrade(&root)).unwrap();
+        }
+
+        for ctor in root.ctors.values() {
+            ctor.root.set(Arc::downgrade(&root)).unwrap();
+        }
+
+        design::Design(root)
+    }
+
+    fn make_design_package(&self, package: Id<Package>) -> design::Package {
+        let info = self.packages[package].clone();
+        design::Package {
+            root: OnceCell::new(),
+            id: package,
+            info,
+        }
+    }
+
+    fn make_design_items(&self, item: Id<Item>) -> design::Item {
+        let info = self.items[item].clone();
+        design::Item {
+            root: OnceCell::new(),
+            id: item,
+            info,
+        }
+    }
+
+    fn make_design_components(&self, component: Id<Component>) -> design::Component {
+        let info = self.components[component].clone();
+        design::Component {
+            root: OnceCell::new(),
+            info,
+        }
+    }
+
+    fn make_design_fields(&self, field: Id<Field>) -> design::Field {
+        let info = self.fields[field].clone();
+        design::Field {
+            root: OnceCell::new(),
+            info,
+        }
+    }
+
+    fn make_design_ctors(&self, ctor: Id<Ctor>) -> design::Ctor {
+        let info = self.ctors[ctor].clone();
+        design::Ctor {
+            root: OnceCell::new(),
+            info,
+        }
+    }
 }

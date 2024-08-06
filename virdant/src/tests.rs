@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::{collections::HashSet, sync::LazyLock};
 
 use crate::*;
 
@@ -249,4 +249,43 @@ fn test_typecheck() {
     ]);
 
     virdant.check().unwrap();
+}
+
+#[test]
+fn test_top_design() {
+    let mut virdant = Virdant::new(&[
+        ("top", EXAMPLES_DIR.join("uart.vir")),
+    ]);
+
+    let design = virdant.check().unwrap();
+
+    let packages = design.packages();
+    assert_eq!(packages.len(), 2);
+
+    let package_names: HashSet<_> = packages.iter().map(|p| p.name()).collect();
+    assert_eq!(package_names, vec!["builtin", "top"].into_iter().collect());
+
+    let top_package: design::Package = packages.into_iter()
+        .filter(|p| p.name() == "top")
+        .collect::<Vec<_>>()
+        .first()
+        .unwrap()
+        .clone();
+
+    assert_eq!(
+        top_package.items()
+            .into_iter()
+            .map(|item| item.name().to_owned())
+            .collect::<Vec<_>>(),
+        vec!["UartState", "UartSender", "UartReceiver"],
+    );
+
+    let uart_state_item = top_package.items()[0].clone();
+    if let design::ItemKind::UnionDef(uniondef) = uart_state_item.kind() {
+        let ctors = uniondef.ctors();
+        let ctor_names = ctors.into_iter().map(|ctor| ctor.name().to_string()).collect::<Vec<String>>();
+        assert_eq!(ctor_names, vec!["Idle", "Start", "Bit", "Stop"]);
+    } else {
+        panic!("Expected Uniondef");
+    }
 }
