@@ -13,6 +13,7 @@ mod cycle;
 mod typecheck;
 mod context;
 mod info;
+mod verilog;
 
 #[cfg(test)]
 mod tests;
@@ -668,6 +669,23 @@ impl Virdant {
                         let component_info = self.components.register(component);
                         components.push(component);
 
+                        if node.child(0).is_outgoing() {
+                            component_info.class.set(ComponentClass::Port);
+                            component_info.flow.set(Flow::Sink);
+                        } else if node.child(0).is_incoming() {
+                            component_info.class.set(ComponentClass::Port);
+                            component_info.flow.set(Flow::Source);
+                        } else if node.child(0).is_node() {
+                            component_info.class.set(ComponentClass::Node);
+                            component_info.flow.set(Flow::Duplex);
+                        } else if node.child(0).is_reg() {
+                            component_info.class.set(ComponentClass::Reg);
+                            component_info.flow.set(Flow::Duplex);
+                        } else {
+                            eprintln!("{:?}", node.summary());
+                            unreachable!()
+                        }
+
                         component_info.moddef.set(moddef);
                         component_info.path = vec![component_name.to_string()];
                         component_info.is_reg.set(node.child(0).is_reg());
@@ -730,6 +748,12 @@ impl Virdant {
                         components.push(component);
                         let component_info = self.components.register(component);
                         components.push(component);
+                        component_info.class.set(ComponentClass::SubPort);
+                        if statement.is_implicit() || statement.is_incoming() {
+                            component_info.flow.set(Flow::Sink);
+                        } else {
+                            component_info.flow.set(Flow::Source);
+                        }
                         component_info.moddef.set(in_moddef);
                         component_info.path = vec![name.to_string(), component_name.to_string()];
                         component_info.is_reg.set(node.is_reg());
@@ -769,6 +793,8 @@ impl Virdant {
 
                 let component_info = self.components.register(component);
                 components.push(component);
+                component_info.class.set(ComponentClass::SubPort);
+                component_info.flow.set(Flow::Sink);
                 component_info.moddef.set(in_moddef);
 
                 let mut path = path.clone();
@@ -1073,4 +1099,19 @@ impl Virdant {
             info,
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ComponentClass {
+    Port,
+    SubPort,
+    Node,
+    Reg,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Flow {
+    Source,
+    Sink,
+    Duplex,
 }

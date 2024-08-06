@@ -1,8 +1,32 @@
-mod Top {
+ext mod Boop {
+}
 
+mod Top {
+    incoming clock : Clock;
+    incoming inp : Bit;
+    outgoing out : Bit;
+    incoming addr : Word[16];
+
+    out := inp;
+
+    master port mem of Mem;
+    mem.addr := addr;
+
+    mod foo of Foo;
+
+    reg r : Bit on clock;
+    r <= r;
+
+    node n : Bit;
+    n := true;
 }
 
 port Mem {
     mosi addr : Word[16];
     miso data_in : Word[8];
+}
+
+mod Foo {
+    incoming inp : Bit;
+    outgoing out : Bit;
 }

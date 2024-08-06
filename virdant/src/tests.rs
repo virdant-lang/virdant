@@ -289,3 +289,13 @@ fn test_top_design() {
         panic!("Expected Uniondef");
     }
 }
+
+#[test]
+fn test_verilog() {
+    let mut virdant = Virdant::new(&[
+        ("top", TEST_EXAMPLES_DIR.join("top.vir")),
+    ]);
+
+    let design = virdant.check().unwrap();
+    design.verilog("build/").unwrap();
+}

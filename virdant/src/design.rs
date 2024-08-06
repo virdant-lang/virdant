@@ -3,9 +3,10 @@ use std::sync::{Arc, Weak};
 
 use indexmap::IndexMap;
 
+use crate::expr::TypedExpr;
 use crate::id::{self, *};
 use crate::types::{self, Nat};
-use crate::info::*;
+use crate::{info::*, ComponentClass, Flow};
 
 /// `Design` is a representation of a given Virdant design.
 #[derive(Clone, Debug)]
@@ -189,6 +190,17 @@ impl ModDef {
         components
     }
 
+    pub fn ports(&self) -> Vec<Component> {
+        let mut components = vec![];
+        let component_ids = self.info.components.unwrap();
+        for (component_id, component) in self.root().components.iter() {
+            if component_ids.contains(component_id) && component.is_port() {
+                components.push(component.clone());
+            }
+        }
+        components
+    }
+
     pub fn is_ext(&self) -> bool {
         *self.info.is_ext.unwrap()
     }
@@ -223,6 +235,41 @@ impl StructDef {
 impl Component {
     pub fn path(&self) -> &[String] {
         &self.info.path
+    }
+
+    pub fn typ(&self) -> Type {
+        let typ = self.info.typ.unwrap();
+        Type::new(self.root.clone(), *typ)
+    }
+
+    pub fn moddef(&self) -> ModDef {
+        self.root().items[&self.info.moddef.unwrap().as_item()].clone().as_moddef()
+    }
+
+    pub fn package(&self) -> Package {
+        self.moddef().package()
+    }
+
+    pub fn is_local(&self) -> bool {
+        self.info.path.len() == 1
+    }
+
+    pub fn driver(&self) -> Option<TypedExpr> {
+        //self.info.driver.get().ok().map(|expr| expr.clone())
+        todo!()
+    }
+
+    pub fn class(&self) -> ComponentClass {
+        self.info.class.unwrap().clone()
+    }
+
+    pub fn flow(&self) -> Flow {
+        self.info.flow.unwrap().clone()
+    }
+
+    pub fn is_port(&self) -> bool {
+        self.class() == ComponentClass::Port ||
+        self.class() == ComponentClass::SubPort
     }
 }
 
@@ -388,6 +435,12 @@ impl std::fmt::Debug for TypeArg {
     }
 }
 
+impl std::fmt::Display for TypeArg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
 impl std::fmt::Debug for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(args) = self.args() {
@@ -405,5 +458,11 @@ impl std::fmt::Debug for Type {
         } else {
             write!(f, "{}", self.name())
         }
+    }
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
     }
 }

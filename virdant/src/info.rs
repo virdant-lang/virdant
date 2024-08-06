@@ -1,3 +1,5 @@
+use crate::ComponentClass;
+
 use super::*;
 
 #[derive(Default, Clone, Debug)]
@@ -58,6 +60,8 @@ pub struct ComponentInfo {
     pub typ: Ready<Type>,
     pub is_reg: Ready<bool>,
     pub driver: Ready<Id<ExprRoot>>,
+    pub class: Ready<ComponentClass>,
+    pub flow: Ready<Flow>,
 }
 
 #[derive(Default, Clone, Debug)]
