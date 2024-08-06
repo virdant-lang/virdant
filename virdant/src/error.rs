@@ -1,6 +1,6 @@
 //! Defines the [`VirErr`] and [`VirErrs`] types.
 
-use std::hash::Hash;
+use std::{error::Error, hash::Hash};
 
 use crate::parse::ParseError;
 
@@ -24,6 +24,15 @@ pub enum VirErr {
 #[derive(Debug, Clone, Default)]
 pub struct VirErrs {
     errors: Vec<VirErr>,
+}
+
+impl Error for VirErr {
+}
+
+impl std::fmt::Display for VirErr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
 }
 
 impl VirErrs {
