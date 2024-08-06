@@ -793,7 +793,7 @@ impl Virdant {
             for node in moddef_ast.children() {
                 if node.is_statement() {
                     if node.child(0).is_driver() {
-                        let expr_id: Id<ExprRoot> = Id::new(format!("{item}::expr[{i}]"));
+                        let exprroot_id: Id<ExprRoot> = Id::new(format!("{item}::expr[{i}]"));
                         i += 1;
 
                         let driver_ast = node.child(0);
@@ -805,13 +805,14 @@ impl Virdant {
                         };
 
                         let expr_ast = driver_ast.clone().expr().unwrap();
-                        let exprroot_info = self.exprroots.register(expr_id);
+                        let exprroot_info = self.exprroots.register(exprroot_id);
                         exprroot_info.ast.set(expr_ast.clone());
                         exprroot_info.moddef.set(moddef);
 
                         let expr_ast = driver_ast.clone().expr().unwrap();
                         let component = self.resolve_component(target_path, item).unwrap();
-                        let component_info = &self.components[component];
+                        let component_info = &mut self.components[component];
+                        component_info.driver.set(exprroot_id);
 
                         match drivertype {
                             DriverType::Continuous if *component_info.is_reg.get().unwrap() => self.errors.add(VirErr::WrongDriverType(format!("{target_path} in {item}"))),
@@ -820,7 +821,7 @@ impl Virdant {
                         }
 
                         let expr = Expr::from_ast(expr_ast.clone());
-                        let exprroot_info = self.exprroots.register(expr_id);
+                        let exprroot_info = self.exprroots.register(exprroot_id);
                         exprroot_info.expr.set(expr.clone());
                         let typ = *component_info.typ.unwrap();
                         exprroot_info.typ.set(typ);
@@ -909,6 +910,7 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        path: {}", component_info.path.join("."))?;
             writeln!(f, "        typ: {:?}", component_info.typ)?;
             writeln!(f, "        is_reg: {:?}", component_info.is_reg)?;
+            writeln!(f, "        driver: {:?}", component_info.driver)?;
         }
 
         writeln!(f, "EXPRROOTS:")?;
