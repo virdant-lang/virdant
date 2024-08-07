@@ -19,6 +19,7 @@ pub struct ItemInfo {
     pub components: Ready<Vec<Id<Component>>>,
     pub is_ext: Ready<bool>,
     pub submodules: Ready<Vec<Id<Submodule>>>,
+    pub ports: Ready<Vec<Id<Port>>>,
 
     // for strucdefs
     pub fields: Ready<Vec<Id<Field>>>,
@@ -74,4 +75,12 @@ pub struct SubmoduleInfo {
     pub moddef: Ready<Id<ModDef>>,
     pub name: String,
     pub submodule_moddef: Ready<Id<ModDef>>,
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct PortInfo {
+    pub moddef: Ready<Id<ModDef>>,
+    pub name: String,
+    pub role: Ready<PortRole>,
+    pub portdef: Ready<Id<PortDef>>,
 }
