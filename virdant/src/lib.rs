@@ -58,6 +58,7 @@ pub struct Virdant {
     components: Table<Component, ComponentInfo>,
     exprroots: Table<ExprRoot, ExprRootInfo>,
     submodules: Table<Submodule, SubmoduleInfo>,
+    ports: Table<Port, PortInfo>,
 }
 
 
@@ -115,6 +116,7 @@ impl Virdant {
         self.register_components();
 
         self.register_exprroots();
+        self.register_ports();
         self.register_submodules();
 
         self.errors.clone().check()?;
@@ -855,6 +857,49 @@ impl Virdant {
         }
     }
 
+    fn register_ports(&mut self) {
+        let items = self.items_by_kind(ItemKind::ModDef);
+        for item in items {
+            let moddef: Id<ModDef> = item.cast();
+            let moddef_ast = if let Ok(item_ast) = self.items[item].ast.get() {
+                item_ast.child(0)
+            } else {
+                continue;
+            };
+
+            let mut ports = vec![];
+
+            for node in moddef_ast.children() {
+                if node.is_statement() && node.child(0).is_port() {
+                    let port_ast = node.child(0);
+                    let port_name = port_ast.name().unwrap();
+                    let port_of = port_ast.of().unwrap();
+
+                    let portdef: Id<PortDef> = if let Ok(portdef) = self.resolve_item(port_of, item) {
+                        portdef.cast()
+                    } else {
+                        continue;
+                    };
+
+                    let port_role = if node.get_as_str("role").unwrap() == "master" {
+                        PortRole::Master
+                    } else {
+                        PortRole::Slave
+                    };
+
+                    let port_id: Id<Port> = Id::new(format!("{moddef}::{port_name}"));
+                    let port_info = self.ports.register(port_id);
+                    port_info.moddef.set(item.cast());
+                    port_info.name = port_name.to_string();
+                    port_info.role.set(port_role);
+                    port_info.portdef.set(portdef);
+                    ports.push(port_id);
+                }
+            }
+            self.items[item].ports.set(ports);
+        }
+    }
+
     fn register_submodules(&mut self) {
         let items = self.items_by_kind(ItemKind::ModDef);
         for item in items {
@@ -968,6 +1013,14 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        moddef: {:?}", submodule_info.moddef)?;
         }
 
+        writeln!(f, "PORTS:")?;
+        for (port, port_info) in self.ports.iter() {
+            writeln!(f, "    {port}")?;
+            writeln!(f, "        name: {}", port_info.name)?;
+            writeln!(f, "        portdef: {:?}", port_info.portdef)?;
+            writeln!(f, "        moddef: {:?}", port_info.moddef)?;
+        }
+
         Ok(())
     }
 }
@@ -1002,6 +1055,12 @@ impl ItemKind {
 pub enum ChannelDir {
     Mosi,
     Miso,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub enum PortRole {
+    Master,
+    Slave,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash, Default)]
