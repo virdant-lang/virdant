@@ -1,3 +1,5 @@
+use crate::expr::TypedExpr;
+use crate::{ComponentClass, Flow, PortRole};
 use std::cell::OnceCell;
 use std::sync::{Arc, Weak};
 
@@ -16,6 +18,9 @@ pub(crate) struct DesignRoot {
     pub packages: IndexMap<Id<id::Package>, Package>,
     pub items: IndexMap<Id<id::Item>, Item>,
     pub components: IndexMap<Id<id::Component>, Component>,
+    pub submodules: IndexMap<Id<id::Submodule>, Submodule>,
+    pub ports: IndexMap<Id<id::Port>, Port>,
+    pub exprroots: IndexMap<Id<id::ExprRoot>, ExprRoot>,
     pub fields: IndexMap<Id<id::Field>, Field>,
     pub ctors: IndexMap<Id<id::Ctor>, Ctor>,
 }
@@ -76,6 +81,24 @@ pub struct PortDef {
 pub struct Component {
     pub(crate) root: OnceCell<Weak<DesignRoot>>,
     pub(crate) info: ComponentInfo,
+}
+
+#[derive(Clone, Debug)]
+pub struct Submodule {
+    pub(crate) root: OnceCell<Weak<DesignRoot>>,
+    pub(crate) info: SubmoduleInfo,
+}
+
+#[derive(Clone, Debug)]
+pub struct Port {
+    pub(crate) root: OnceCell<Weak<DesignRoot>>,
+    pub(crate) info: PortInfo,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExprRoot {
+    pub(crate) root: OnceCell<Weak<DesignRoot>>,
+    pub(crate) info: ExprRootInfo,
 }
 
 #[derive(Clone, Debug)]
@@ -189,6 +212,35 @@ impl ModDef {
         components
     }
 
+    pub fn simple_ports(&self) -> Vec<Component> {
+        let mut components = vec![];
+        let component_ids = self.info.components.unwrap();
+        for (component_id, component) in self.root().components.iter() {
+            if component_ids.contains(component_id) && component.is_port() {
+                components.push(component.clone());
+            }
+        }
+        components
+    }
+
+    pub fn submodules(&self) -> Vec<Submodule> {
+        let mut submodules = vec![];
+        for submodule_id in self.info.submodules.unwrap() {
+            let submodule = self.root().submodules[submodule_id].clone();
+            submodules.push(submodule);
+        }
+        submodules
+    }
+
+    pub fn ports(&self) -> Vec<Port> {
+        let mut ports = vec![];
+        for port_id in self.info.ports.unwrap() {
+            let port = self.root().ports[port_id].clone();
+            ports.push(port);
+        }
+        ports
+    }
+
     pub fn is_ext(&self) -> bool {
         *self.info.is_ext.unwrap()
     }
@@ -223,6 +275,92 @@ impl StructDef {
 impl Component {
     pub fn path(&self) -> &[String] {
         &self.info.path
+    }
+
+    pub fn name(&self) -> String {
+        self.info.path.join(".")
+    }
+
+    pub fn typ(&self) -> Type {
+        let typ = self.info.typ.unwrap();
+        Type::new(self.root.clone(), *typ)
+    }
+
+    pub fn moddef(&self) -> ModDef {
+        self.root().items[&self.info.moddef.unwrap().as_item()].clone().as_moddef()
+    }
+
+    pub fn package(&self) -> Package {
+        self.moddef().package()
+    }
+
+    pub fn is_local(&self) -> bool {
+        self.info.path.len() == 1
+    }
+
+    pub fn class(&self) -> ComponentClass {
+        self.info.class.unwrap().clone()
+    }
+
+    pub fn driver(&self) -> Option<Arc<TypedExpr>> {
+        let exprroot_id = self.info.driver.unwrap();
+        let exprroot = self.root().exprroots[exprroot_id].clone();
+        exprroot.info.typedexpr.get().cloned().ok()
+    }
+
+    pub fn flow(&self) -> Flow {
+        self.info.flow.unwrap().clone()
+    }
+
+    pub fn is_port(&self) -> bool {
+        self.class() == ComponentClass::Port
+    }
+}
+
+impl Submodule {
+    pub fn name(&self) -> String {
+        self.info.name.clone()
+    }
+
+    pub fn of(&self) -> ModDef {
+        let submodule_moddef = *self.info.submodule_moddef.unwrap();
+        self.root().items[&submodule_moddef.as_item()].as_moddef()
+    }
+
+    pub fn moddef(&self) -> ModDef {
+        let moddef = *self.info.moddef.unwrap();
+        self.root().items[&moddef.as_item()].as_moddef()
+    }
+}
+
+impl Port {
+    pub fn name(&self) -> String {
+        self.info.name.clone()
+    }
+
+    pub fn of(&self) -> PortDef {
+        let portdef = *self.info.portdef.unwrap();
+        self.root().items[&portdef.as_item()].as_portdef()
+    }
+
+    pub fn moddef(&self) -> ModDef {
+        let moddef = *self.info.moddef.unwrap();
+        self.root().items[&moddef.as_item()].as_moddef()
+    }
+
+    pub fn role(&self) -> PortRole {
+        *self.info.role.unwrap()
+    }
+}
+
+impl ExprRoot {
+    pub fn expr(&self) -> Arc<TypedExpr> {
+        self.info.typedexpr.unwrap().clone()
+    }
+
+    pub fn typ(&self) -> Type {
+        let typ = self.info.typ.unwrap();
+        Type::new(self.root.clone(), *typ)
     }
 }
 
@@ -322,6 +460,8 @@ impl_hasroot!(PortDef);
 impl_hasroot!(BuiltinDef);
 
 impl_hasroot!(Component);
+impl_hasroot!(Submodule);
+impl_hasroot!(Port);
 impl_hasroot!(Field);
 impl_hasroot!(Ctor);
 
