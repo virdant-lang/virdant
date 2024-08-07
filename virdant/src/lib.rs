@@ -672,6 +672,23 @@ impl Virdant {
                         let component_info = self.components.register(component);
                         components.push(component);
 
+                        if node.child(0).is_outgoing() {
+                            component_info.class.set(ComponentClass::Port);
+                            component_info.flow.set(Flow::Sink);
+                        } else if node.child(0).is_incoming() {
+                            component_info.class.set(ComponentClass::Port);
+                            component_info.flow.set(Flow::Source);
+                        } else if node.child(0).is_node() {
+                            component_info.class.set(ComponentClass::Node);
+                            component_info.flow.set(Flow::Duplex);
+                        } else if node.child(0).is_reg() {
+                            component_info.class.set(ComponentClass::Reg);
+                            component_info.flow.set(Flow::Duplex);
+                        } else {
+                            eprintln!("{:?}", node.summary());
+                            unreachable!()
+                        }
+
                         component_info.moddef.set(moddef);
                         component_info.path = vec![component_name.to_string()];
                         component_info.is_reg.set(node.child(0).is_reg());
@@ -732,7 +749,14 @@ impl Virdant {
                         let component: Id<Component> = Id::new(format!("{in_moddef}::{name}.{component_name}"));
 
                         components.push(component);
+
                         let component_info = self.components.register(component);
+                        component_info.class.set(ComponentClass::SubPort);
+                        if statement.is_implicit() || statement.is_incoming() {
+                            component_info.flow.set(Flow::Sink);
+                        } else {
+                            component_info.flow.set(Flow::Source);
+                        }
                         components.push(component);
                         component_info.moddef.set(in_moddef);
                         component_info.path = vec![name.to_string(), component_name.to_string()];
@@ -772,6 +796,13 @@ impl Virdant {
                 let component: Id<Component> = Id::new(format!("{in_moddef}::{name}"));
 
                 let component_info = self.components.register(component);
+                component_info.class.set(ComponentClass::Port);
+                let flow = if *channel_info.dir.unwrap() == ChannelDir::Mosi {
+                    Flow::Source
+                } else {
+                    Flow::Sink
+                };
+                component_info.flow.set(flow);
                 components.push(component);
                 component_info.moddef.set(in_moddef);
 
@@ -834,13 +865,17 @@ impl Virdant {
                         exprroot_info.typ.set(typ);
 
                         let context = TypingContext::new(self, moddef);
-                        if let Err(errs) = context.check(expr, typ) {
-                            self.errors.add(errs);
-                            // TODO
-                            let span = expr_ast.span();
-                            self.errors.add(VirErr::Other(format!("{span:?}")));
-                        }
-
+                        match context.check(expr, typ) {
+                            Err(errs) => {
+                                self.errors.add(errs);
+                                let span = expr_ast.span();
+                                self.errors.add(VirErr::Other(format!("{span:?}")));
+                            },
+                            Ok(typed_expr) => {
+                                let exprroot_info = self.exprroots.register(exprroot_id);
+                                exprroot_info.typedexpr.set(typed_expr);
+                            },
+                         }
                     } else if node.child(0).is_reg() {
                         let reg_ast = node.child(0);
                         let expr_ast = reg_ast.clone().expr().unwrap();
@@ -992,6 +1027,8 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "    {component}")?;
             writeln!(f, "        moddef: {:?}", component_info.moddef)?;
             writeln!(f, "        path: {}", component_info.path.join("."))?;
+            writeln!(f, "        flow: {:?}", component_info.flow)?;
+            writeln!(f, "        class: {:?}", component_info.class)?;
             writeln!(f, "        typ: {:?}", component_info.typ)?;
             writeln!(f, "        is_reg: {:?}", component_info.is_reg)?;
             writeln!(f, "        driver: {:?}", component_info.driver)?;
@@ -1078,27 +1115,47 @@ pub enum PackageSource {
 impl Virdant {
     pub fn design(&self) -> design::Design {
         let mut packages: IndexMap<Id<Package>, design::Package> = IndexMap::new();
-        let mut items: IndexMap<Id<Item>, design::Item> = IndexMap::new();
-        let mut components: IndexMap<Id<Component>, design::Component> = IndexMap::new();
-        let mut fields: IndexMap<Id<Field>, design::Field> = IndexMap::new();
-        let mut ctors: IndexMap<Id<Ctor>, design::Ctor> = IndexMap::new();
-
         for package in self.packages.keys() {
             packages.insert(*package, self.make_design_package(*package));
         }
 
+        let mut items: IndexMap<Id<Item>, design::Item> = IndexMap::new();
         for item in self.items.keys() {
             items.insert(*item, self.make_design_items(*item));
         }
 
+        let mut components: IndexMap<Id<Component>, design::Component> = IndexMap::new();
         for component in self.components.keys() {
             components.insert(*component, self.make_design_components(*component));
         }
 
+        let mut submodules: IndexMap<Id<Submodule>, design::Submodule> = IndexMap::new();
+        for submodule in self.submodules.keys() {
+            let info = self.submodules[*submodule].clone();
+            let design_submodule = design::Submodule { root: OnceCell::new(), info };
+            submodules.insert(*submodule, design_submodule);
+        }
+
+        let mut ports: IndexMap<Id<Port>, design::Port> = IndexMap::new();
+        for port in self.ports.keys() {
+            let info = self.ports[*port].clone();
+            let design_port = design::Port { root: OnceCell::new(), info };
+            ports.insert(*port, design_port);
+        }
+
+        let mut exprroots: IndexMap<Id<ExprRoot>, design::ExprRoot> = IndexMap::new();
+        for exprroot in self.exprroots.keys() {
+            let info = self.exprroots[*exprroot].clone();
+            let design_exprroot = design::ExprRoot { root: OnceCell::new(), info };
+            exprroots.insert(*exprroot, design_exprroot);
+        }
+
+        let mut fields: IndexMap<Id<Field>, design::Field> = IndexMap::new();
         for field in self.fields.keys() {
             fields.insert(*field, self.make_design_fields(*field));
         }
 
+        let mut ctors: IndexMap<Id<Ctor>, design::Ctor> = IndexMap::new();
         for ctor in self.ctors.keys() {
             ctors.insert(*ctor, self.make_design_ctors(*ctor));
         }
@@ -1107,6 +1164,9 @@ impl Virdant {
             packages,
             items,
             components,
+            submodules,
+            ports,
+            exprroots,
             fields,
             ctors,
         });
@@ -1121,6 +1181,14 @@ impl Virdant {
 
         for component in root.components.values() {
             component.root.set(Arc::downgrade(&root)).unwrap();
+        }
+
+        for submodule in root.submodules.values() {
+            submodule.root.set(Arc::downgrade(&root)).unwrap();
+        }
+
+        for port in root.ports.values() {
+            port.root.set(Arc::downgrade(&root)).unwrap();
         }
 
         for field in root.fields.values() {
@@ -1175,4 +1243,19 @@ impl Virdant {
             info,
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ComponentClass {
+    Port,
+    SubPort,
+    Node,
+    Reg,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Flow {
+    Source,
+    Sink,
+    Duplex,
 }

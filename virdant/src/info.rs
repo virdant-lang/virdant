@@ -1,3 +1,5 @@
+use self::expr::TypedExpr;
+
 use super::*;
 
 #[derive(Default, Clone, Debug)]
@@ -59,6 +61,8 @@ pub struct ComponentInfo {
     pub path: Vec<String>,
     pub typ: Ready<Type>,
     pub is_reg: Ready<bool>,
+    pub class: Ready<ComponentClass>,
+    pub flow: Ready<Flow>,
     pub driver: Ready<Id<ExprRoot>>,
 }
 
@@ -68,6 +72,7 @@ pub struct ExprRootInfo {
     pub ast: Ready<Ast>,
     pub expr: Ready<Arc<Expr>>,
     pub typ: Ready<Type>,
+    pub typedexpr: Ready<Arc<TypedExpr>>,
 }
 
 #[derive(Default, Clone, Debug)]

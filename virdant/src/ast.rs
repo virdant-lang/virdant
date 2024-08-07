@@ -112,6 +112,7 @@ impl Ast {
     pub fn is_implicit(&self) -> bool { self.rule() == Rule::moddef_statement_implicit }
     pub fn is_incoming(&self) -> bool { self.rule() == Rule::moddef_statement_incoming }
     pub fn is_outgoing(&self) -> bool { self.rule() == Rule::moddef_statement_outgoing }
+    pub fn is_node(&self) -> bool { self.rule() == Rule::moddef_statement_node }
 
     pub fn is_component(&self) -> bool {
         self.rule() == Rule::moddef_statement_implicit ||
