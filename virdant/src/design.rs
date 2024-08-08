@@ -1,4 +1,3 @@
-use crate::expr::TypedExpr;
 use crate::{ComponentClass, Flow, PortRole};
 use std::cell::OnceCell;
 use std::sync::{Arc, Weak};
@@ -111,6 +110,12 @@ pub struct Field {
 pub struct Ctor {
     pub(crate) root: OnceCell<Weak<DesignRoot>>,
     pub(crate) info: CtorInfo,
+}
+
+#[derive(Clone, Debug)]
+pub struct Method {
+    pub(crate) root: OnceCell<Weak<DesignRoot>>,
+//    pub(crate) info: CtorInfo,
 }
 
 #[derive(Clone)]
@@ -302,10 +307,13 @@ impl Component {
         self.info.class.unwrap().clone()
     }
 
-    pub fn driver(&self) -> Option<Arc<TypedExpr>> {
+    pub fn driver(&self) -> Option<Arc<Expr>> {
+        todo!()
+        /*
         let exprroot_id = self.info.driver.unwrap();
         let exprroot = self.root().exprroots[exprroot_id].clone();
         exprroot.info.typedexpr.get().cloned().ok()
+*/
     }
 
     pub fn flow(&self) -> Flow {
@@ -354,10 +362,6 @@ impl Port {
 }
 
 impl ExprRoot {
-    pub fn expr(&self) -> Arc<TypedExpr> {
-        self.info.typedexpr.unwrap().clone()
-    }
-
     pub fn typ(&self) -> Type {
         let typ = self.info.typ.unwrap();
         Type::new(self.root.clone(), *typ)
@@ -386,6 +390,13 @@ impl Ctor {
 
     pub fn uniondef(&self) -> UnionDef {
         self.root().items[&self.info.uniondef.unwrap().as_item()].as_uniondef()
+    }
+}
+
+impl Method {
+    pub fn name(&self) -> &str {
+        //&self.info.name
+        todo!()
     }
 }
 
@@ -545,5 +556,142 @@ impl std::fmt::Debug for Type {
         } else {
             write!(f, "{}", self.name())
         }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum Expr {
+    Reference(expr::Reference),
+    Word(expr::Word),
+    Bit(expr::Bit),
+    MethodCall(expr::MethodCall),
+    Struct(expr::Struct),
+    Field(expr::Field),
+    Ctor(expr::Ctor),
+    Idx(expr::Idx),
+    IdxRange(expr::IdxRange),
+    Cat(expr::Cat),
+    If(expr::If),
+    Match(expr::Match),
+}
+
+#[derive(Clone, Debug)]
+pub enum Referent {
+    Component(Component),
+    Binding(Binding),
+}
+
+#[derive(Clone, Debug)]
+pub struct Binding();
+
+#[derive(Clone, Debug)]
+pub struct MatchArm();
+
+mod expr {
+    use crate::expr::{StaticIndex, WordVal};
+
+    use super::*;
+
+    #[derive(Clone, Debug)]
+    pub struct Reference {}
+
+    impl Reference {
+        pub fn typ(&self) -> Type { todo!() }
+        pub fn referent(&self) -> Referent { todo!() }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Word {}
+
+    impl Word {
+        pub fn typ(&self) -> Type { todo!() }
+        pub fn val(&self) -> WordVal { todo!() }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Bit {}
+
+    impl Bit {
+        pub fn typ(&self) -> Type { todo!() }
+        pub fn val(&self) -> bool { todo!() }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct MethodCall {}
+
+    impl MethodCall {
+        pub fn typ(&self) -> Type { todo!() }
+        pub fn method(&self) -> Method { todo!() }
+        pub fn subject(&self) -> Expr { todo!() }
+        pub fn args(&self) -> Vec<Expr> { todo!() }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Struct {}
+
+    impl Struct {
+        pub fn typ(&self) -> Type { todo!() }
+        pub fn assigns(&self) -> Vec<(Field, Expr)> { todo!() }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Field {}
+
+    impl Field {
+        pub fn typ(&self) -> Type { todo!() }
+        pub fn subject(&self) -> Expr { todo!() }
+        pub fn field(&self) -> Field { todo!() }
+    }
+    #[derive(Clone, Debug)]
+    pub struct Ctor {}
+
+    impl Ctor {
+        pub fn typ(&self) -> Type { todo!() }
+        pub fn ctor(&self) -> Ctor { todo!() }
+        pub fn args(&self) -> Vec<Expr> { todo!() }
+    }
+    #[derive(Clone, Debug)]
+    pub struct Idx {}
+
+    impl Idx {
+        pub fn typ(&self) -> Type { todo!() }
+        pub fn subject(&self) -> Expr { todo!() }
+        pub fn lo(&self) -> StaticIndex { todo!() }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct IdxRange {}
+
+    impl IdxRange {
+        pub fn typ(&self) -> Type { todo!() }
+        pub fn subject(&self) -> Expr { todo!() }
+        pub fn hi(&self) -> StaticIndex { todo!() }
+        pub fn lo(&self) -> StaticIndex { todo!() }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Cat {}
+
+    impl Cat {
+        pub fn typ(&self) -> Type { todo!() }
+        pub fn args(&self) -> Vec<Expr> { todo!() }
+    }
+    #[derive(Clone, Debug)]
+    pub struct If {}
+
+    impl If {
+        pub fn typ(&self) -> Type { todo!() }
+        pub fn subject(&self) -> Expr { todo!() }
+        pub fn truebranch(&self) -> Expr { todo!() }
+        pub fn falsebranch(&self) -> Expr { todo!() }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Match {}
+
+    impl Match {
+        pub fn typ(&self) -> Type { todo!() }
+        pub fn subject(&self) -> Expr { todo!() }
+        pub fn arms(&self) -> Vec<MatchArm> { todo!() }
     }
 }
