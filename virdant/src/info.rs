@@ -1,5 +1,3 @@
-use self::expr::TypedExpr;
-
 use super::*;
 
 #[derive(Default, Clone, Debug)]
@@ -63,16 +61,7 @@ pub struct ComponentInfo {
     pub is_reg: Ready<bool>,
     pub class: Ready<ComponentClass>,
     pub flow: Ready<Flow>,
-    pub driver: Ready<Id<ExprRoot>>,
-}
-
-#[derive(Default, Clone, Debug)]
-pub struct ExprRootInfo {
-    pub moddef: Ready<Id<ModDef>>,
-    pub ast: Ready<Ast>,
-    pub expr: Ready<Arc<Expr>>,
-    pub typ: Ready<Type>,
-    pub typedexpr: Ready<Arc<TypedExpr>>,
+    pub driver: Option<Id<ExprRoot>>,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -88,4 +77,17 @@ pub struct PortInfo {
     pub name: String,
     pub role: Ready<PortRole>,
     pub portdef: Ready<Id<PortDef>>,
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct ExprRootInfo {
+    pub moddef: Ready<Id<ModDef>>,
+    pub ast: Ready<Arc<ast::Expr>>,
+    pub expected_typ: Option<Type>,
+    pub typ: Ready<Type>,
+
+    pub parent: Option<Id<ExprRoot>>,
+    pub children: Vec<Id<ExprRoot>>,
+
+    pub reference_component: Option<Id<Component>>,
 }

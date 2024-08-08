@@ -1,8 +1,11 @@
+pub mod expr;
 use pest::iterators::Pair;
 
 use crate::ItemKind;
 use crate::parse::Rule;
 use crate::location::*;
+
+pub use expr::Expr;
 
 /// A node of the parse tree
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
