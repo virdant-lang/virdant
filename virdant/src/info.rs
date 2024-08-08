@@ -1,5 +1,3 @@
-use self::expr::TypedExpr;
-
 use super::*;
 
 #[derive(Default, Clone, Debug)]
@@ -70,9 +68,9 @@ pub struct ComponentInfo {
 pub struct ExprRootInfo {
     pub moddef: Ready<Id<ModDef>>,
     pub ast: Ready<Ast>,
-    pub expr: Ready<Arc<Expr>>,
     pub typ: Ready<Type>,
-    pub typedexpr: Ready<Arc<TypedExpr>>,
+    // pub expr: Ready<Arc<expr::Expr>>,
+    // pub typedexpr: Ready<Arc<TypedExpr>>,
 }
 
 #[derive(Default, Clone, Debug)]

@@ -2,23 +2,22 @@ pub mod parse;
 pub mod error;
 pub mod id;
 pub mod types;
-pub mod expr;
 pub mod ast;
 pub mod location;
 pub mod design;
 
+mod common;
 mod table;
 mod ready;
 mod cycle;
-mod typecheck;
 mod context;
 mod info;
 
 #[cfg(test)]
 mod tests;
 
+pub use common::*;
 use cycle::detect_cycle;
-use expr::Expr;
 use indexmap::IndexMap;
 use indexmap::IndexSet;
 use parse::QualIdent;
@@ -27,7 +26,6 @@ use error::VirErr;
 use error::VirErrs;
 use id::*;
 use ast::Ast;
-use typecheck::TypingContext;
 use types::CtorSig;
 use types::Nat;
 use std::cell::OnceCell;
@@ -36,7 +34,6 @@ use std::sync::Arc;
 use table::Table;
 use types::Type;
 
-use crate::expr::DriverType;
 use crate::info::*;
 
 
@@ -822,7 +819,7 @@ impl Virdant {
         let items = self.items_by_kind(ItemKind::ModDef);
         for item in items {
             let moddef: Id<ModDef> = item.cast();
-            let mut i = 0;
+            let mut expr_i = 0;
             let moddef_ast = if let Ok(item_ast) = self.items[item].ast.get() {
                 item_ast.child(0)
             } else {
@@ -831,8 +828,8 @@ impl Virdant {
             for node in moddef_ast.children() {
                 if node.is_statement() {
                     if node.child(0).is_driver() {
-                        let exprroot_id: Id<ExprRoot> = Id::new(format!("{item}::expr[{i}]"));
-                        i += 1;
+                        let exprroot_id: Id<ExprRoot> = Id::new(format!("{item}::expr[{expr_i}]"));
+                        expr_i += 1;
 
                         let driver_ast = node.child(0);
                         let target_path = driver_ast.target().unwrap();
@@ -858,30 +855,22 @@ impl Virdant {
                             _ => (),
                         }
 
-                        let expr = Expr::from_ast(expr_ast.clone());
+                        // TODO
+                        // let expr = expr::Expr::from_ast(expr_ast.clone());
                         let exprroot_info = self.exprroots.register(exprroot_id);
-                        exprroot_info.expr.set(expr.clone());
+                        // exprroot_info.expr.set(expr.clone());
                         let typ = *component_info.typ.unwrap();
                         exprroot_info.typ.set(typ);
 
-                        let context = TypingContext::new(self, moddef);
-                        match context.check(expr, typ) {
-                            Err(errs) => {
-                                self.errors.add(errs);
-                                let span = expr_ast.span();
-                                self.errors.add(VirErr::Other(format!("{span:?}")));
-                            },
-                            Ok(typed_expr) => {
-                                let exprroot_info = self.exprroots.register(exprroot_id);
-                                exprroot_info.typedexpr.set(typed_expr);
-                            },
-                         }
+                        // let context = TypingContext::new(self, moddef, expr_i);
+                        // context.check(expr, typ);
+
                     } else if node.child(0).is_reg() {
                         let reg_ast = node.child(0);
                         let expr_ast = reg_ast.clone().expr().unwrap();
 
-                        let expr_id: Id<ExprRoot> = Id::new(format!("{moddef}::expr[{i}]"));
-                        i += 1;
+                        let expr_id: Id<ExprRoot> = Id::new(format!("{moddef}::expr[{expr_i}]"));
+                        expr_i += 1;
 
                         let exprroot_info = &mut self.exprroots.register(expr_id);
                         exprroot_info.ast.set(expr_ast.clone());
@@ -1088,18 +1077,6 @@ impl ItemKind {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum ChannelDir {
-    Mosi,
-    Miso,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum PortRole {
-    Master,
-    Slave,
-}
-
 #[derive(Clone, PartialEq, Eq, Debug, Hash, Default)]
 pub enum PackageSource {
     #[default]
@@ -1243,19 +1220,4 @@ impl Virdant {
             info,
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum ComponentClass {
-    Port,
-    SubPort,
-    Node,
-    Reg,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Flow {
-    Source,
-    Sink,
-    Duplex,
 }

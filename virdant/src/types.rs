@@ -1,4 +1,5 @@
-use crate::{expr::Width, id::*};
+use crate::id::*;
+use crate::common::*;
 
 pub type Nat = u64;
 

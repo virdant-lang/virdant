@@ -1,3 +1,4 @@
+use crate::common::*;
 use crate::{ComponentClass, Flow, PortRole};
 use std::cell::OnceCell;
 use std::sync::{Arc, Weak};
@@ -588,8 +589,6 @@ pub struct Binding();
 pub struct MatchArm();
 
 mod expr {
-    use crate::expr::{StaticIndex, WordVal};
-
     use super::*;
 
     #[derive(Clone, Debug)]

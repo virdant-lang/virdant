@@ -56,6 +56,7 @@ pub mod types {
 
     id_type!(Component);
     id_type!(ExprRoot);
+    id_type!(Expr);
     id_type!(Submodule);
     id_type!(Port);
 }
