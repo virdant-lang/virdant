@@ -1,3 +1,4 @@
+use crate::common::*;
 use crate::ast::Ast;
 use crate::id::*;
 use crate::types::Type;
@@ -5,12 +6,6 @@ use crate::types::Type;
 use std::sync::Arc;
 
 use internment::Intern;
-
-pub type WordVal = u64;
-pub type Width = u64;
-pub type Offset = u64;
-pub type Tag = u64;
-pub type StaticIndex = u64;
 
 pub type Ident = Intern<String>;
 pub type Path = Vec<Ident>;
@@ -41,12 +36,6 @@ pub struct WordLit {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Driver(pub Path, pub DriverType, pub Arc<Expr>);
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
-pub enum DriverType {
-    Continuous,
-    Latched,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MatchArm(pub Pat, pub Arc<Expr>);
@@ -319,5 +308,64 @@ impl Typed for TypedMatchArm {
         let expr_typ = self.1.typ();
         assert_eq!(binding_typ, expr_typ);
         expr_typ
+    }
+}
+
+impl Expr {
+    pub fn subexprs(&self) -> Vec<Arc<Expr>> {
+        let mut results = vec![];
+
+        match self {
+            Expr::MethodCall(s, _, es) => {
+                results.push(s.clone());
+                results.extend(es.iter().cloned().collect::<Vec<_>>());
+            },
+            Expr::Field(s, _) => {
+                results.push(s.clone());
+            },
+            Expr::Ctor(_, es) => {
+                results.extend(es.iter().cloned().collect::<Vec<_>>());
+            },
+            Expr::Idx(s, _) => {
+                results.push(s.clone());
+            },
+            Expr::IdxRange(s, _, _) => {
+                results.push(s.clone());
+            },
+            Expr::Cat(es) => {
+                results.extend(es.iter().cloned().collect::<Vec<_>>());
+            },
+            Expr::If(s, a, b) => {
+                results.push(s.clone());
+                results.push(a.clone());
+                results.push(b.clone());
+            },
+            Expr::Match(s, _, arms) => {
+                results.push(s.clone());
+                for MatchArm(_pat, e) in arms {
+                    results.push(e.clone());
+                }
+            },
+            _ => (),
+        }
+
+        results
+    }
+
+    pub fn summary(&self) -> String {
+        match self {
+            Expr::Reference(_) => format!("Reference"),
+            Expr::Word(_) => format!("Word"),
+            Expr::Bit(_) => format!("Bit"),
+            Expr::MethodCall(_, _, _) => format!("MethodCall"),
+            Expr::Field(_, _) => format!("Field"),
+            Expr::Struct(_, _) => format!("Struct"),
+            Expr::Ctor(_, _) => format!("Ctor"),
+            Expr::Idx(_, _) => format!("Idx"),
+            Expr::IdxRange(_, _, _) => format!("IdxRange"),
+            Expr::Cat(_) => format!("Cat"),
+            Expr::If(_, _, _) => format!("If"),
+            Expr::Match(_, _, _) => format!("Match"),
+        }
     }
 }

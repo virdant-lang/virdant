@@ -1,3 +1,4 @@
+use crate::common::*;
 use crate::{ComponentClass, Flow, PortRole};
 use std::cell::OnceCell;
 use std::sync::{Arc, Weak};
@@ -110,12 +111,6 @@ pub struct Field {
 pub struct Ctor {
     pub(crate) root: OnceCell<Weak<DesignRoot>>,
     pub(crate) info: CtorInfo,
-}
-
-#[derive(Clone, Debug)]
-pub struct Method {
-    pub(crate) root: OnceCell<Weak<DesignRoot>>,
-//    pub(crate) info: CtorInfo,
 }
 
 #[derive(Clone)]
@@ -588,8 +583,6 @@ pub struct Binding();
 pub struct MatchArm();
 
 mod expr {
-    use crate::expr::{StaticIndex, WordVal};
-
     use super::*;
 
     #[derive(Clone, Debug)]
