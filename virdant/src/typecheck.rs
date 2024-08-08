@@ -3,25 +3,25 @@ use std::sync::Arc;
 use internment::Intern;
 
 use crate::ast::Ast;
+use crate::common::*;
 use crate::error::VirErr;
 use crate::types::{Type, TypeScheme};
-use crate::{CtorInfo, FieldInfo, ItemInfo, Virdant};
-use crate::expr::{MatchArm, Pat, QualIdent, StaticIndex, Typed, TypedExpr, TypedMatchArm, TypedPat, WordLit};
-use crate::expr::Referent;
-use crate::expr::Expr;
-use crate::expr::Ident;
+use crate::{FieldInfo, ItemInfo, Virdant};
+use crate::ast::expr::{MatchArm, Pat, QualIdent, TypedPat, WordLit};
+use crate::ast::expr::Expr;
+use crate::ast::expr::Ident;
 use crate::id::*;
 use crate::context::Context;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct TypingContext<'a> {
-    virdant: &'a Virdant,
+    virdant: &'a mut Virdant,
     moddef: Id<ModDef>,
     context: Context<Ident, Type>,
 }
 
 impl<'a> TypingContext<'a> {
-    pub fn new(virdant: &'a Virdant, moddef: Id<ModDef>) -> TypingContext<'a> {
+    pub fn new(virdant: &'a mut Virdant, moddef: Id<ModDef>) -> TypingContext<'a> {
         TypingContext {
             virdant,
             moddef,
@@ -48,45 +48,141 @@ enum Lookup {
 }
 
 impl<'a> TypingContext<'a> {
-    pub fn check(&self, expr: Arc<Expr>, expected_typ: Type) -> Result<Arc<TypedExpr>, VirErr> {
-        match expr.as_ref() {
+    pub fn check(&mut self, exprroot: Id<ExprRoot>, expected_typ: Type) -> Result<(), VirErr> {
+        let expr = &self.virdant.exprroots[exprroot].ast.unwrap();
+        let result = match expr.as_ref() {
             Expr::Word(wordlit) => self.check_word(wordlit, expected_typ),
-            Expr::Ctor(ctor, args) => self.check_ctor(*ctor, args, expected_typ),
-            Expr::If(c, a, b) => self.check_if(c.clone(), a.clone(), b.clone(), expected_typ),
-            Expr::Match(subject, ascription, match_arms) => self.check_match(subject.clone(), ascription.clone(), &match_arms, expected_typ),
+            Expr::Ctor(ctor, _) => self.check_ctor(exprroot, *ctor, expected_typ),
+            Expr::If(_, _, _) => self.check_if(exprroot, expected_typ),
+            Expr::Match(_subject, ascription, arms) => self.check_match(exprroot, ascription.clone(), arms.clone(), expected_typ),
             _ => {
-                let typed_expr = self.infer(expr)?;
-                let actual_typ = typed_expr.typ();
-                if expected_typ != actual_typ {
-                    Err(VirErr::TypeError(format!("Expected {expected_typ} but found {actual_typ}")))
-                } else {
-                    Ok(typed_expr)
+                match self.infer(exprroot) {
+                    Err(e) => Err(e),
+                    Ok(actual_typ) => {
+                        if expected_typ != actual_typ {
+                            Err(VirErr::TypeError(format!("Expected {expected_typ} but found {actual_typ}")))
+                        } else {
+                            Ok(())
+                        }
+                    },
                 }
             },
+        };
+
+        match result {
+            Ok(()) => {
+                let exprroot_info = &mut self.virdant.exprroots[exprroot];
+                exprroot_info.typ.set(expected_typ);
+                Ok(())
+            },
+            Err(e) => Err(e),
         }
     }
 
-    pub fn infer(&self, expr: Arc<Expr>) -> Result<Arc<TypedExpr>, VirErr> {
-        match expr.as_ref() {
-            Expr::Reference(path) => Ok(self.infer_reference(path).unwrap()),
+    pub fn infer(&mut self, exprroot: Id<ExprRoot>) -> Result<Type, VirErr> {
+        let expr = &self.virdant.exprroots[exprroot].ast.unwrap();
+        let result = match expr.as_ref() {
+            Expr::Reference(path) => {
+                let path = Intern::new(path.to_vec().into_iter().map(|s| s.to_string()).collect::<Vec<_>>().join("."));
+                match self.lookup(path) {
+                    Lookup::NotFound => Err(VirErr::Other(format!("Not Found: {path}"))),
+                    Lookup::Binding(typ) => Ok(typ),
+                    Lookup::Component(component, typ) => {
+                        let exprroot_info = &mut self.virdant.exprroots[exprroot];
+                        exprroot_info.reference_component = Some(component);
+                        Ok(typ)
+                    },
+                }
+            },
             Expr::Word(wordlit) => self.infer_word(wordlit),
-            Expr::Bit(bitlit) => self.infer_bit(*bitlit),
-            Expr::Struct(struct_name, assigns) => self.infer_struct(*struct_name, assigns),
-            Expr::MethodCall(subject, method, args) => self.infer_methodcall(subject.clone(), method.clone(), args),
-            Expr::Field(subject, field) => self.infer_field(subject.clone(), field.clone()),
-            Expr::Cat(es) => self.infer_cat(es),
-            Expr::Idx(subject, i) => self.infer_idx(subject.clone(), *i),
-            Expr::IdxRange(subject, j, i) => self.infer_idxrange(subject.clone(), *j, *i),
+            Expr::Bit(_bitlit) => self.infer_bit(),
+            Expr::Idx(_subject, i) => self.infer_idx(exprroot, *i),
+            Expr::IdxRange(_subject, j, i) => self.infer_idxrange(exprroot, *j, *i),
+            Expr::MethodCall(_subject, method, _args) => self.infer_methodcall(exprroot, *method),
+            Expr::Field(_subject, field) => self.infer_field(exprroot, field.clone()),
+            Expr::Cat(_es) => self.infer_cat(exprroot),
+            Expr::Struct(struct_name, assigns) => self.infer_struct(exprroot, *struct_name, assigns.to_vec()),
             _ => Err(VirErr::CantInfer),
+        };
+
+        match result {
+            Ok(typ) => {
+                let exprroot_info = &mut self.virdant.exprroots[exprroot];
+                exprroot_info.typ.set(typ);
+                Ok(typ)
+            },
+            Err(e) => Err(e),
         }
     }
 
+    fn infer_cat(&mut self, exprroot: Id<ExprRoot>) -> Result<Type, VirErr> {
+        let es = self.virdant.exprroots[exprroot].children.clone();
 
-    fn check_word(&self, wordlit: &WordLit, expected_typ: Type) -> Result<Arc<TypedExpr>, VirErr> {
+        let mut total_width = 0;
+        for e in es {
+            let e_typ  = self.infer(e)?;
+
+            let width = if e_typ.is_word() {
+                e_typ.width()
+            } else if e_typ.is_bit() {
+                1
+            } else {
+                return Err(VirErr::Other(format!("Arguments to cat must be word or bits. Found {e_typ}.")));
+            };
+
+            total_width += width;
+        }
+
+        let typ = self.virdant.word_type(total_width);
+        Ok(typ)
+    }
+
+    fn infer_idxrange(&mut self, exprroot: Id<ExprRoot>, j: StaticIndex, i: StaticIndex) -> Result<Type, VirErr> {
+        let subject = &self.virdant.exprroots[exprroot].children[0];
+        let subject_typ = self.infer(*subject)?;
+
+        if j < i {
+            return Err(VirErr::Other(format!("First index must be greater or equal to the second")))
+        } else if !subject_typ.is_word() {
+            Err(VirErr::TypeError("Can't index into non-Word".to_string()))
+        } else if j > subject_typ.width() {
+            Err(VirErr::TypeError(format!("Index too big: {j} > {width}", width = subject_typ.width())))
+        } else {
+            let width = j - i;
+            Ok(self.virdant.word_type(width))
+        }
+    }
+
+    fn infer_idx(&mut self, exprroot: Id<ExprRoot>, i: StaticIndex) -> Result<Type, VirErr> {
+        let subject = &self.virdant.exprroots[exprroot].children[0];
+        let subject_typ = self.infer(*subject)?;
+        if !subject_typ.is_word() {
+            Err(VirErr::TypeError("Can't index into non-Word".to_string()))
+        } else if i >= subject_typ.width() {
+            Err(VirErr::TypeError(format!("Index too big: {i} >= {width}", width = subject_typ.width())))
+        } else {
+            Ok(self.virdant.bit_type())
+        }
+    }
+
+    fn check_if(&mut self, exprroot: Id<ExprRoot>, expected_typ: Type) -> Result<(), VirErr> {
+        let bit_typ = self.virdant.bit_type();
+
+        let subject = self.virdant.exprroots[exprroot].children[0];
+        let a = self.virdant.exprroots[exprroot].children[1];
+        let b = self.virdant.exprroots[exprroot].children[2];
+
+        self.check(subject, bit_typ)?;
+        self.check(a, expected_typ.clone())?;
+        self.check(b, expected_typ.clone())?;
+        Ok(())
+    }
+
+    fn check_word(&self, wordlit: &WordLit, expected_typ: Type) -> Result<(), VirErr> {
         if let Some(width) = wordlit.width {
             let actual_typ = self.virdant.word_type(width);
             if expected_typ == actual_typ {
-                Ok(TypedExpr::Word(expected_typ, wordlit.clone()).into())
+                Ok(())
             } else {
                 Err(VirErr::TypeError(format!("Does not match: {expected_typ} and {actual_typ}")))
             }
@@ -94,7 +190,7 @@ impl<'a> TypingContext<'a> {
             if expected_typ.is_word() {
                 let n = expected_typ.width();
                 if wordlit.value < pow(2, n) {
-                    Ok(TypedExpr::Word(expected_typ, wordlit.clone()).into())
+                    Ok(())
                 } else {
                     Err(VirErr::TypeError(format!("Doesn't fit")))
                 }
@@ -104,23 +200,61 @@ impl<'a> TypingContext<'a> {
         }
     }
 
-    fn infer_word(&self, wordlit: &WordLit) -> Result<Arc<TypedExpr>, VirErr> {
+    fn infer_word(&self, wordlit: &WordLit) -> Result<Type, VirErr> {
         if let Some(width) = wordlit.width {
-            let typ = self.virdant.word_type(width);
-            Ok(Arc::new(TypedExpr::Word(typ, wordlit.clone())))
+            Ok(self.virdant.word_type(width))
         } else {
             Err(VirErr::TypeError(format!("Can't infer word with no width")))
         }
     }
 
-    fn infer_bit(&self, bit: bool) -> Result<Arc<TypedExpr>, VirErr> {
-        let typ = self.virdant.bit_type();
-        Ok(Arc::new(TypedExpr::Bit(typ, bit)))
+    fn infer_bit(&self) -> Result<Type, VirErr> {
+        Ok(self.virdant.bit_type())
     }
 
-    fn infer_methodcall(&self, subject: Arc<Expr>, method: Ident, args: &[Arc<Expr>]) -> Result<Arc<TypedExpr>, VirErr> {
-        let typed_subject = self.infer(subject)?;
-        let subject_typ = typed_subject.typ();
+    fn check_ctor(&mut self, exprroot: Id<ExprRoot>, ctor: Ident, expected_typ: Type) -> Result<(), VirErr> {
+        let exprroot_info = &mut self.virdant.exprroots[exprroot];
+        let args = exprroot_info.children.clone();
+
+        let uniondef  = if let TypeScheme::UnionDef(uniondef) = expected_typ.scheme() {
+            uniondef
+        } else {
+            return Err(VirErr::Other(format!("Not a union type: {expected_typ}")));
+        };
+        let uniondef_info = self.virdant.items[uniondef.as_item()].clone();
+
+        let ctor = self.uniondef_ctor(&uniondef_info, ctor)?;
+        let ctor_info = self.virdant.ctors[ctor].clone();
+        let ctor_sig = ctor_info.sig.unwrap();
+
+        if args.len() != ctor_sig.params().len() {
+            return Err(VirErr::Other(format!("Incorrect number of args: found {} expected {}", args.len(), ctor_sig.params().len())));
+        }
+
+        for ((_param_name, param_typ), arg) in ctor_sig.params().iter().zip(args) {
+            self.check(arg.clone(), param_typ.clone())?;
+        }
+
+        Ok(())
+    }
+
+    fn uniondef_ctor(&self, uniondef_info: &ItemInfo, ctor: Ident) -> Result<Id<Ctor>, VirErr> {
+        for ctor_id in uniondef_info.ctors.unwrap().iter() {
+            let ctor_info = &self.virdant.ctors[*ctor_id];
+            if ctor_info.name == *ctor {
+                return Ok(*ctor_id);
+            }
+
+        }
+        Err(VirErr::Other("No such ctor".to_string()))
+    }
+
+    fn infer_methodcall(&mut self, exprroot: Id<ExprRoot>, method: Ident) -> Result<Type, VirErr> {
+        let subexprs = self.virdant.exprroots[exprroot].children.clone();
+        let subject = subexprs[0].clone();
+        let args = subexprs[1..].to_vec();
+
+        let subject_typ = self.infer(subject)?;
 
         let method_sig = self.method_sig(subject_typ, method.clone())?;
 
@@ -128,40 +262,41 @@ impl<'a> TypingContext<'a> {
             return Err(VirErr::Other(format!("Wrong number of arguments to method {method}")));
         }
 
-        let mut typed_args = vec![];
         for (arg, param_typ) in args.iter().zip(method_sig.params()) {
-            typed_args.push(self.check(arg.clone(), *param_typ)?);
+            self.check(arg.clone(), *param_typ)?;
         }
         let typ = method_sig.ret();
-        Ok(Arc::new(TypedExpr::MethodCall(typ, typed_subject, method, typed_args)))
+        Ok(typ)
     }
 
-    fn infer_struct(&self, struct_name: QualIdent, assigns: &[(Ident, Arc<Expr>)]) -> Result<Arc<TypedExpr>, VirErr> {
+    fn infer_struct(&mut self, exprroot: Id<ExprRoot>, struct_name: QualIdent, assigns: Vec<(Ident, Arc<Expr>)>) -> Result<Type, VirErr> {
+        let args = self.virdant.exprroots[exprroot].children.clone();
+
         let structdef = self.virdant.resolve_structdef(&struct_name, self.moddef.as_item())?;
-        let structdef_info = &self.virdant.items[structdef.as_item()];
-        let mut typed_assigns = vec![];
-        for (field, expr) in assigns {
-            let structdef_field = self.structdef_field(structdef_info, *field)?;
-            let typed_expr = self.check(expr.clone(), *structdef_field.typ.unwrap())?;
-            typed_assigns.push((field.clone(), typed_expr));
+        let structdef_info = self.virdant.items[structdef.as_item()].clone();
+        for ((field, _expr), arg) in assigns.iter().zip(args) {
+            let structdef_field = self.structdef_field(&structdef_info, *field)?;
+            self.check(arg, *structdef_field.typ.unwrap())?;
         }
         let typ = Type::structdef(structdef);
-        Ok(Arc::new(TypedExpr::Struct(typ, struct_name, typed_assigns)))
+        Ok(typ)
     }
 
-    fn structdef_field(&self, structdef_info: &ItemInfo, field_name: Ident) -> Result<&FieldInfo, VirErr> {
+    fn structdef_field(&self, structdef_info: &ItemInfo, field_name: Ident) -> Result<FieldInfo, VirErr> {
         for field in structdef_info.fields.unwrap() {
             let field_info = &self.virdant.fields[*field];
             if field_info.name == *field_name {
-                return Ok(field_info);
+                return Ok(field_info.clone());
             }
         }
         Err(VirErr::Other(format!("Unknown field {field_name}")))
     }
 
-    fn infer_field(&self, subject: Arc<Expr>, field: Ident) -> Result<Arc<TypedExpr>, VirErr> {
-        let typed_subject = self.infer(subject)?;
-        let subject_typ = typed_subject.typ();
+    fn infer_field(&mut self, exprroot: Id<ExprRoot>, field: Ident) -> Result<Type, VirErr> {
+        let subexprs = &self.virdant.exprroots[exprroot].children;
+        let subject = subexprs[0].clone();
+
+        let subject_typ = self.infer(subject)?;
         let structdef  = if let TypeScheme::StructDef(structdef) = subject_typ.scheme() {
             structdef
         } else {
@@ -173,121 +308,34 @@ impl<'a> TypingContext<'a> {
             let field_info = &self.virdant.fields[*field_id];
             if field_info.name == *field {
                 let typ = *field_info.typ.unwrap();
-                return Ok(Arc::new(TypedExpr::Field(typ, typed_subject, field)));
+                return Ok(typ);
             }
         }
         Err(VirErr::Other(format!("No such field {field} on {structdef}")))
     }
 
-    fn check_ctor(&self, ctor: Ident, args: &[Arc<Expr>], expected_typ: Type) -> Result<Arc<TypedExpr>, VirErr> {
-        let uniondef  = if let TypeScheme::UnionDef(uniondef) = expected_typ.scheme() {
-            uniondef
-        } else {
-            return Err(VirErr::Other(format!("Not a union type: {expected_typ}")));
-        };
-        let uniondef_info = &self.virdant.items[uniondef.as_item()];
 
-        let mut typed_args = vec![];
-        let ctor_info = self.uniondef_ctor(uniondef_info, ctor)?;
-        let ctor_sig = ctor_info.sig.unwrap();
+    fn check_match(&mut self, exprroot: Id<ExprRoot>, ascription: Option<Ast>, arms: Vec<MatchArm>, expected_typ: Type) -> Result<(), VirErr> {
+        eprintln!("check_match({exprroot})");
+        let subexprs = &self.virdant.exprroots[exprroot].children;
+        let subject = subexprs[0].clone();
+        let arm_exprroots = subexprs[1..].to_vec();
+        eprintln!("  arm_exprroots = {arm_exprroots:?}");
 
-        if args.len() != ctor_sig.params().len() {
-            return Err(VirErr::Other(format!("Incorrect number of args: found {} expected {}", args.len(), ctor_sig.params().len())));
-        }
-
-        for ((_param_name, param_typ), arg) in ctor_sig.params().iter().zip(args) {
-            typed_args.push(self.check(arg.clone(), param_typ.clone())?);
-        }
-
-        Ok(Arc::new(TypedExpr::Ctor(expected_typ, ctor, typed_args)))
-    }
-
-    fn uniondef_ctor(&self, uniondef_info: &ItemInfo, ctor_name: Ident) -> Result<&CtorInfo, VirErr> {
-        for ctor in uniondef_info.ctors.unwrap() {
-            let ctor_info = &self.virdant.ctors[*ctor];
-            if ctor_info.name == *ctor_name {
-                return Ok(ctor_info);
-            }
-        }
-        Err(VirErr::Other(format!("Unknown ctor {ctor_name}")))
-    }
-
-    fn infer_idx(&self, subject: Arc<Expr>, i: StaticIndex) -> Result<Arc<TypedExpr>, VirErr> {
-        let typed_subject = self.infer(subject)?;
-        Ok(Arc::new(TypedExpr::Idx(self.virdant.bit_type(), typed_subject, i)))
-
-    }
-
-    fn infer_idxrange(&self, subject: Arc<Expr>, j: StaticIndex, i: StaticIndex) -> Result<Arc<TypedExpr>, VirErr> {
-        if j < i {
-            return Err(VirErr::Other(format!("First index must be greater or equal to the second")))
-        }
-
-        let width = j - i;
-
-        let typed_subject = self.infer(subject)?;
-        Ok(Arc::new(TypedExpr::IdxRange(self.virdant.word_type(width), typed_subject, j, i)))
-    }
-
-    fn infer_cat(&self, es: &[Arc<Expr>]) -> Result<Arc<TypedExpr>, VirErr> {
-        let mut total_width = 0;
-        let mut typed_es = vec![];
-        for e in es {
-            let typed_e = self.infer(e.clone())?;
-            let e_typ = typed_e.typ();
-
-            let width = if e_typ.is_word() {
-                typed_e.typ().width()
-            } else if e_typ.is_bit() {
-                1
-            } else {
-                return Err(VirErr::Other(format!("Arguments to cat must be word or bits. Found {e_typ}.")));
-            };
-
-            total_width += width;
-            typed_es.push(typed_e);
-        }
-
-        let typ = self.virdant.word_type(total_width);
-        Ok(Arc::new(TypedExpr::Cat(typ, typed_es)))
-    }
-
-    fn check_if(&self, c: Arc<Expr>, a: Arc<Expr>, b: Arc<Expr>, expected_typ: Type) -> Result<Arc<TypedExpr>, VirErr> {
-        let bit_typ = self.virdant.bit_type();
-        let typed_c = self.check(c, bit_typ)?;
-        let typed_a = self.check(a, expected_typ.clone())?;
-        let typed_b = self.check(b, expected_typ.clone())?;
-        Ok(TypedExpr::If(expected_typ, typed_c, typed_a, typed_b).into())
-    }
-
-    fn check_match(&self, subject: Arc<Expr>, ascription: Option<Ast>, arms: &[MatchArm], expected_typ: Type) -> Result<Arc<TypedExpr>, VirErr> {
-        let typed_subject = if let Some(typ_ast) = ascription {
+        let subject_typ = if let Some(typ_ast) = ascription {
             let ascription_typ = self.virdant.resolve_type(typ_ast, self.moddef.as_item())?;
-            self.check(subject, ascription_typ)?
+            self.check(subject, ascription_typ)?;
+            ascription_typ
         } else {
             self.infer(subject)?
         };
 
-        let subject_typ = typed_subject.typ();
-
-        let mut typed_arms = vec![];
-        for arm in arms {
+        for (arm, arm_exprroot) in arms.iter().zip(arm_exprroots) {
             let typed_pat = self.type_pat(arm.pat().clone(), subject_typ)?;
-            let typed_expr = self.extend_with_pat(&typed_pat).check(arm.expr(), expected_typ.clone())?;
-            let typed_arm = TypedMatchArm(typed_pat, typed_expr);
-            typed_arms.push(typed_arm);
+            self.extend_with_pat(&typed_pat).check(arm_exprroot, expected_typ.clone())?;
         }
 
-        Ok(TypedExpr::Match(subject_typ.clone(), typed_subject, None, typed_arms).into())
-    }
-
-    fn infer_reference(&self, path: &[Intern<String>]) -> Result<Arc<TypedExpr>, VirErr> {
-        let path = Intern::new(path.to_vec().into_iter().map(|s| s.to_string()).collect::<Vec<_>>().join("."));
-        match self.lookup(path) {
-            Lookup::Binding(actual_typ) => Ok(TypedExpr::Reference(actual_typ, Referent::Binding(path)).into()),
-            Lookup::Component(component, actual_typ) => Ok(TypedExpr::Reference(actual_typ, Referent::Component(component)).into()),
-            Lookup::NotFound => Err(VirErr::Other(format!("Not Found: {path}"))),
-        }
+        Ok(())
     }
 
     fn type_pat(&self, pat: Pat, typ: Type) -> Result<TypedPat, VirErr> {
@@ -330,24 +378,40 @@ impl<'a> TypingContext<'a> {
         }
     }
 
-    fn extend(&self, x: Ident, typ: Type) -> TypingContext<'a> {
-        let mut result = self.clone();
-        result.context = result.context.extend(x, typ);
+    fn duplicate<'b>(&'b mut self) -> TypingContext<'b>
+        where 'a: 'b {
+        TypingContext {
+            virdant: self.virdant,
+            moddef: self.moddef,
+            context: self.context.clone(),
+        }
+    }
+
+    fn extend_with_pat<'b>(&'b mut self, pat: &TypedPat) -> TypingContext<'b>
+        where 'a: 'b {
+        let extension = TypingContext::pat_to_extension(pat);
+        let mut new_context = self.context.clone();
+        for (x, typ) in extension {
+            new_context = new_context.extend(x, typ);
+        }
+
+        let mut result = self.duplicate();
+        result.context = new_context;
         result
     }
 
-    fn extend_with_pat(&self, pat: &TypedPat) -> TypingContext<'a> {
+    fn pat_to_extension(pat: &TypedPat) -> Vec<(Ident, Type)> {
         match pat {
             TypedPat::Bind(typ, x) => {
-                self.extend(*x, *typ)
+                vec![(*x, *typ)]
             },
-            TypedPat::Else(_) => self.clone(),
+            TypedPat::Else(_) => vec![],
             TypedPat::CtorAt(_typ, _ctor, pats) => {
-                let mut new_context = self.clone();
+                let mut results = vec![];
                 for pat in pats {
-                    new_context = new_context.extend_with_pat(pat);
+                    results.extend(TypingContext::pat_to_extension(pat));
                 }
-                new_context
+                results
             },
         }
     }

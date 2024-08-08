@@ -58,6 +58,8 @@ pub mod types {
     id_type!(ExprRoot);
     id_type!(Submodule);
     id_type!(Port);
+
+    id_type!(Method);
 }
 
 pub use types::*;

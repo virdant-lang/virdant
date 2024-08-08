@@ -1,3 +1,4 @@
+use crate::common::*;
 use crate::{ComponentClass, Flow, PortRole};
 use std::cell::OnceCell;
 use std::sync::{Arc, Weak};
@@ -97,6 +98,7 @@ pub struct Port {
 #[derive(Clone, Debug)]
 pub struct ExprRoot {
     pub(crate) root: OnceCell<Weak<DesignRoot>>,
+    pub(crate) id: Id<id::ExprRoot>,
     pub(crate) info: ExprRootInfo,
 }
 
@@ -112,10 +114,11 @@ pub struct Ctor {
     pub(crate) info: CtorInfo,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Method {
     pub(crate) root: OnceCell<Weak<DesignRoot>>,
-//    pub(crate) info: CtorInfo,
+    pub(crate) name: String,
 }
 
 #[derive(Clone)]
@@ -275,6 +278,16 @@ impl StructDef {
         }
         fields
     }
+
+    fn field(&self, name: &str) -> Field {
+        let field_ids = self.info.fields.unwrap();
+        for (field_id, field) in self.root().fields.iter() {
+            if field_ids.contains(field_id) && field.name() == name {
+                return field.clone();
+            }
+        }
+        panic!("No such field")
+    }
 }
 
 impl Component {
@@ -307,13 +320,13 @@ impl Component {
         self.info.class.unwrap().clone()
     }
 
-    pub fn driver(&self) -> Option<Arc<Expr>> {
-        todo!()
-        /*
-        let exprroot_id = self.info.driver.unwrap();
-        let exprroot = self.root().exprroots[exprroot_id].clone();
-        exprroot.info.typedexpr.get().cloned().ok()
-*/
+    pub fn driver(&self) -> Option<Expr> {
+        if let Some(exprroot_id) = self.info.driver {
+            let exprroot = self.root().exprroots[&exprroot_id].clone();
+            Some(exprroot.to_expr())
+        } else {
+            None
+        }
     }
 
     pub fn flow(&self) -> Flow {
@@ -366,6 +379,28 @@ impl ExprRoot {
         let typ = self.info.typ.unwrap();
         Type::new(self.root.clone(), *typ)
     }
+
+    fn to_expr(&self) -> Expr {
+        let expr_ast = self.info.ast.unwrap();
+        let id = self.id;
+        let root = self.root.clone();
+        let info = self.info.clone();
+
+        match expr_ast.as_ref() {
+            crate::ast::Expr::Reference(_) => Expr::Reference(expr::Reference { root, id, info }),
+            crate::ast::Expr::Word(_) => Expr::Word(expr::Word { root, id, info }),
+            crate::ast::Expr::Bit(_) => Expr::Bit(expr::Bit { root, id, info }),
+            crate::ast::Expr::MethodCall(_, _, _) => Expr::MethodCall(expr::MethodCall { root, id, info }),
+            crate::ast::Expr::Field(_, _) => Expr::Field(expr::Field { root, id, info }),
+            crate::ast::Expr::Struct(_, _) => Expr::Struct(expr::Struct { root, id, info }),
+            crate::ast::Expr::Ctor(_, _) => Expr::Ctor(expr::Ctor { root, id, info }),
+            crate::ast::Expr::Idx(_, _) => Expr::Idx(expr::Idx { root, id, info }),
+            crate::ast::Expr::IdxRange(_, _, _) => Expr::IdxRange(expr::IdxRange { root, id, info }),
+            crate::ast::Expr::Cat(_) => Expr::Cat(expr::Cat { root, id, info }),
+            crate::ast::Expr::If(_, _, _) => Expr::If(expr::If { root, id, info }),
+            crate::ast::Expr::Match(_, _, _) => Expr::Match(expr::Match { root, id, info }),
+        }
+    }
 }
 
 impl Field {
@@ -395,8 +430,7 @@ impl Ctor {
 
 impl Method {
     pub fn name(&self) -> &str {
-        //&self.info.name
-        todo!()
+        &self.name
     }
 }
 
@@ -539,6 +573,12 @@ impl std::fmt::Debug for TypeArg {
     }
 }
 
+impl std::fmt::Display for TypeArg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
 impl std::fmt::Debug for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(args) = self.args() {
@@ -556,6 +596,12 @@ impl std::fmt::Debug for Type {
         } else {
             write!(f, "{}", self.name())
         }
+    }
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
     }
 }
 
@@ -581,117 +627,350 @@ pub enum Referent {
     Binding(Binding),
 }
 
-#[derive(Clone, Debug)]
-pub struct Binding();
+#[derive(Debug, Clone)]
+pub enum Pat {
+    CtorAt(Ctor, Vec<Pat>),
+    Bind(Binding),
+    Else,
+}
+
+impl Pat {
+    fn new(root: &DesignRoot, pat: &crate::ast::expr::Pat, typ: types::Type) -> Pat {
+        match pat {
+            crate::ast::expr::Pat::CtorAt(ctor_name, pats) => {
+                let mut new_pats = vec![];
+                for pat in pats {
+                    new_pats.push(Pat::new(root, pat, typ));
+                }
+
+                let uniondef_id = match typ.scheme() {
+                    types::TypeScheme::StructDef(_) => unreachable!(),
+                    types::TypeScheme::BuiltinDef(_) => unreachable!(),
+                    types::TypeScheme::UnionDef(uniondef) => uniondef,
+                };
+                let uniondef = &root.items[&uniondef_id.as_item()].as_uniondef();
+
+                for ctor in uniondef.ctors() {
+                    if ctor.name() == **ctor_name {
+                        return Pat::CtorAt(ctor, new_pats);
+                    }
+                }
+                unreachable!()
+            },
+            crate::ast::expr::Pat::Bind(ident) => Pat::Bind(Binding(ident.to_string())),
+            crate::ast::expr::Pat::Else => Pat::Else,
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
-pub struct MatchArm();
+pub struct Binding(String);
+
+impl Binding {
+    pub fn name(&self) -> &str {
+        &self.0
+    }
+}
 
 mod expr {
-    use crate::expr::{StaticIndex, WordVal};
+    use crate::ast::expr::MatchArm;
 
     use super::*;
 
-    #[derive(Clone, Debug)]
-    pub struct Reference {}
+    macro_rules! expr_type {
+        ($name:ident) => {
+            #[allow(dead_code)]
+            #[derive(Clone, Debug)]
+            pub struct $name {
+                pub(crate) root: OnceCell<Weak<DesignRoot>>,
+                pub(crate) id: Id<id::ExprRoot>,
+                pub(crate) info: ExprRootInfo,
+            }
+
+            impl_hasroot!($name);
+
+            impl $name {
+                pub fn typ(&self) -> Type {
+                    let exprroot = &self.root().exprroots[&self.id];
+                    let exprroot_info = &exprroot.info;
+                    let typ = exprroot_info.typ.unwrap();
+                    Type::new(self.root.clone(), *typ)
+                }
+
+                #[allow(dead_code)]
+                fn ast(&self) -> Arc<crate::ast::Expr> {
+                    let exprroot = &self.root().exprroots[&self.id];
+                    let exprroot_info = &exprroot.info;
+                    exprroot_info.ast.unwrap().clone()
+                }
+            }
+        };
+    }
+
+    expr_type!(Reference);
+    expr_type!(Word);
+    expr_type!(Bit);
+    expr_type!(MethodCall);
+    expr_type!(Struct);
+    expr_type!(Field);
+    expr_type!(Ctor);
+    expr_type!(Idx);
+    expr_type!(IdxRange);
+    expr_type!(Cat);
+    expr_type!(If);
+    expr_type!(Match);
 
     impl Reference {
-        pub fn typ(&self) -> Type { todo!() }
-        pub fn referent(&self) -> Referent { todo!() }
-    }
+        pub fn referent(&self) -> Referent {
+            let path = if let crate::ast::Expr::Reference(path) = self.ast().as_ref() {
+                path.clone()
+            } else {
+                unreachable!()
+            };
 
-    #[derive(Clone, Debug)]
-    pub struct Word {}
+            if let Some(component) = self.info.reference_component {
+                let component = self.root().components[&component].clone();
+                Referent::Component(component)
+            } else {
+                assert_eq!(path.len(), 1);
+                let binding = Binding(path[0].to_string());
+                Referent::Binding(binding)
+            }
+        }
+    }
 
     impl Word {
-        pub fn typ(&self) -> Type { todo!() }
-        pub fn val(&self) -> WordVal { todo!() }
+        pub fn val(&self) -> WordVal {
+            if let crate::ast::Expr::Word(wordlit) = self.ast().as_ref() {
+                wordlit.value
+            } else {
+                unreachable!()
+            }
+        }
     }
-
-    #[derive(Clone, Debug)]
-    pub struct Bit {}
 
     impl Bit {
-        pub fn typ(&self) -> Type { todo!() }
-        pub fn val(&self) -> bool { todo!() }
+        pub fn val(&self) -> bool {
+            if let crate::ast::Expr::Bit(bitlit) = self.ast().as_ref() {
+                *bitlit
+            } else {
+                unreachable!()
+            }
+        }
     }
-
-    #[derive(Clone, Debug)]
-    pub struct MethodCall {}
 
     impl MethodCall {
-        pub fn typ(&self) -> Type { todo!() }
-        pub fn method(&self) -> Method { todo!() }
-        pub fn subject(&self) -> Expr { todo!() }
-        pub fn args(&self) -> Vec<Expr> { todo!() }
-    }
+        pub fn method(&self) -> Method {
+            let name = if let crate::ast::Expr::MethodCall(_, method_name, _) = self.ast().as_ref() {
+                method_name.to_string()
+            } else {
+                unreachable!()
+            };
 
-    #[derive(Clone, Debug)]
-    pub struct Struct {}
+            super::Method {
+                root: self.root.clone(),
+                name,
+            }
+        }
+
+        pub fn subject(&self) -> Expr {
+            let subject: Id<_> = self.info.children[0];
+            let exprroot = self.root().exprroots[&subject].clone();
+            exprroot.to_expr()
+        }
+
+        pub fn args(&self) -> Vec<Expr> {
+            let args: Vec<Id<_>> = self.info.children[1..].to_vec();
+            let exprroots: Vec<_> = args.iter()
+                .map(|id| self.root().exprroots[id].to_expr())
+                .collect();
+            exprroots
+        }
+    }
 
     impl Struct {
-        pub fn typ(&self) -> Type { todo!() }
-        pub fn assigns(&self) -> Vec<(Field, Expr)> { todo!() }
-    }
+        pub fn assigns(&self) -> Vec<(super::Field, super::Expr)> {
+            if let crate::ast::Expr::Struct(_, assigns) = self.ast().as_ref() {
+                let field_args: Vec<Id<_>> = self.info.children.clone();
 
-    #[derive(Clone, Debug)]
-    pub struct Field {}
+                let typ = self.info.typ.unwrap();
+                let structdef_id = match typ.scheme() {
+                    types::TypeScheme::BuiltinDef(_) => unreachable!(),
+                    types::TypeScheme::UnionDef(_) => unreachable!(),
+                    types::TypeScheme::StructDef(structdef) => structdef,
+                };
+                let structdef = &self.root().items[&structdef_id.as_item()].as_structdef();
+
+                let mut results = vec![];
+
+                for ((field_name, _), field_arg) in assigns.iter().zip(field_args) {
+                    let field = structdef.field(field_name);
+                    let exprroot = self.root().exprroots[&field_arg].clone();
+
+                    results.push((field, exprroot.to_expr()));
+                }
+
+                results
+            } else {
+                unreachable!()
+            }
+        }
+    }
 
     impl Field {
-        pub fn typ(&self) -> Type { todo!() }
-        pub fn subject(&self) -> Expr { todo!() }
-        pub fn field(&self) -> Field { todo!() }
+        pub fn subject(&self) -> Expr {
+            let subject: Id<_> = self.info.children[0];
+            let exprroot = self.root().exprroots[&subject].clone();
+            exprroot.to_expr()
+        }
+
+        pub fn field(&self) -> super::Field {
+            if let crate::ast::Expr::Field(_, field_name) = self.ast().as_ref() {
+                let typ = self.info.typ.unwrap();
+                let structdef_id = match typ.scheme() {
+                    types::TypeScheme::BuiltinDef(_) => unreachable!(),
+                    types::TypeScheme::UnionDef(_) => unreachable!(),
+                    types::TypeScheme::StructDef(structdef) => structdef,
+                };
+                let structdef = &self.root().items[&structdef_id.as_item()].as_structdef();
+
+                for field in structdef.fields() {
+                    if field.name() == **field_name {
+                        return field;
+                    }
+                }
+                unreachable!()
+            } else {
+                unreachable!()
+            }
+        }
     }
-    #[derive(Clone, Debug)]
-    pub struct Ctor {}
 
     impl Ctor {
-        pub fn typ(&self) -> Type { todo!() }
-        pub fn ctor(&self) -> Ctor { todo!() }
-        pub fn args(&self) -> Vec<Expr> { todo!() }
+        pub fn ctor(&self) -> super::Ctor {
+            if let crate::ast::Expr::Ctor(ctor_name, _) = self.ast().as_ref() {
+                let typ = self.info.typ.unwrap();
+                let uniondef_id = match typ.scheme() {
+                    types::TypeScheme::StructDef(_) => unreachable!(),
+                    types::TypeScheme::BuiltinDef(_) => unreachable!(),
+                    types::TypeScheme::UnionDef(uniondef) => uniondef,
+                };
+                let uniondef = &self.root().items[&uniondef_id.as_item()].as_uniondef();
+
+                for ctor in uniondef.ctors() {
+                    if ctor.name() == **ctor_name {
+                        return ctor;
+                    }
+                }
+                unreachable!()
+            } else {
+                unreachable!()
+            }
+        }
+
+        pub fn args(&self) -> Vec<Expr> {
+            let args: Vec<Id<_>> = self.info.children.clone();
+            let exprroots: Vec<_> = args.iter()
+                .map(|id| self.root().exprroots[id].to_expr())
+                .collect();
+            exprroots
+        }
     }
-    #[derive(Clone, Debug)]
-    pub struct Idx {}
 
     impl Idx {
-        pub fn typ(&self) -> Type { todo!() }
-        pub fn subject(&self) -> Expr { todo!() }
-        pub fn lo(&self) -> StaticIndex { todo!() }
-    }
+        pub fn subject(&self) -> Expr {
+            let subject: Id<_> = self.info.children[0];
+            let exprroot = self.root().exprroots[&subject].clone();
+            exprroot.to_expr()
+        }
 
-    #[derive(Clone, Debug)]
-    pub struct IdxRange {}
+        pub fn lo(&self) -> StaticIndex {
+            if let crate::ast::Expr::Idx(_, i) = self.ast().as_ref() {
+                *i
+            } else {
+                unreachable!()
+            }
+        }
+    }
 
     impl IdxRange {
-        pub fn typ(&self) -> Type { todo!() }
-        pub fn subject(&self) -> Expr { todo!() }
-        pub fn hi(&self) -> StaticIndex { todo!() }
-        pub fn lo(&self) -> StaticIndex { todo!() }
-    }
+        pub fn subject(&self) -> Expr {
+            let subject: Id<_> = self.info.children[0];
+            let exprroot = self.root().exprroots[&subject].clone();
+            exprroot.to_expr()
+        }
 
-    #[derive(Clone, Debug)]
-    pub struct Cat {}
+        pub fn hi(&self) -> StaticIndex {
+            if let crate::ast::Expr::IdxRange(_, j, _i) = self.ast().as_ref() {
+                *j
+            } else {
+                unreachable!()
+            }
+        }
+
+        pub fn lo(&self) -> StaticIndex {
+            if let crate::ast::Expr::IdxRange(_, _j, i) = self.ast().as_ref() {
+                *i
+            } else {
+                unreachable!()
+            }
+        }
+    }
 
     impl Cat {
-        pub fn typ(&self) -> Type { todo!() }
-        pub fn args(&self) -> Vec<Expr> { todo!() }
+        pub fn args(&self) -> Vec<Expr> {
+            let args: Vec<Id<_>> = self.info.children.clone();
+            let exprroots: Vec<_> = args.iter()
+                .map(|id| self.root().exprroots[id].to_expr())
+                .collect();
+            exprroots
+        }
     }
-    #[derive(Clone, Debug)]
-    pub struct If {}
 
     impl If {
-        pub fn typ(&self) -> Type { todo!() }
-        pub fn subject(&self) -> Expr { todo!() }
-        pub fn truebranch(&self) -> Expr { todo!() }
-        pub fn falsebranch(&self) -> Expr { todo!() }
+        pub fn subject(&self) -> Expr {
+            let subject: Id<_> = self.info.children[0];
+            let exprroot = self.root().exprroots[&subject].clone();
+            exprroot.to_expr()
+        }
+
+        pub fn truebranch(&self) -> Expr {
+            let truebranch: Id<_> = self.info.children[1];
+            let exprroot = self.root().exprroots[&truebranch].clone();
+            exprroot.to_expr()
+        }
+
+        pub fn falsebranch(&self) -> Expr {
+            let falsebranch: Id<_> = self.info.children[1];
+            let exprroot = self.root().exprroots[&falsebranch].clone();
+            exprroot.to_expr()
+        }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct Match {}
-
     impl Match {
-        pub fn typ(&self) -> Type { todo!() }
-        pub fn subject(&self) -> Expr { todo!() }
-        pub fn arms(&self) -> Vec<MatchArm> { todo!() }
+        pub fn subject(&self) -> Expr {
+            let subject: Id<_> = self.info.children[0];
+            let exprroot = self.root().exprroots[&subject].clone();
+            exprroot.to_expr()
+        }
+
+        pub fn arms(&self) -> Vec<(super::Pat, super::Expr)> {
+            if let crate::ast::Expr::Match(_subject, _ascription, arms) = self.ast().as_ref() {
+                let typ: types::Type = self.typ().typ;
+                let arm_exprroots: Vec<_> = self.info.children.iter()
+                    .map(|id| self.root().exprroots[id].to_expr())
+                    .collect();
+                let mut results = vec![];
+
+                for (MatchArm(pat, _), arm_exprroot) in arms.iter().zip(arm_exprroots) {
+                    let new_pat = Pat::new(&self.root(), pat, typ);
+                    results.push((new_pat, arm_exprroot))
+                }
+
+                results
+            } else {
+                unreachable!()
+            }
+        }
     }
 }

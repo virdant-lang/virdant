@@ -2,23 +2,23 @@ pub mod parse;
 pub mod error;
 pub mod id;
 pub mod types;
-pub mod expr;
 pub mod ast;
 pub mod location;
 pub mod design;
 pub mod context;
 
+mod common;
 mod table;
 mod ready;
 mod cycle;
-mod typecheck;
 mod info;
+mod typecheck;
 
 #[cfg(test)]
 mod tests;
 
+pub use common::*;
 use cycle::detect_cycle;
-use expr::Expr;
 use indexmap::IndexMap;
 use indexmap::IndexSet;
 use parse::QualIdent;
@@ -36,7 +36,6 @@ use std::sync::Arc;
 use table::Table;
 use types::Type;
 
-use crate::expr::DriverType;
 use crate::info::*;
 
 
@@ -48,17 +47,17 @@ use crate::info::*;
 /// Call [`check()`](Virdant::check) to get a list of errors in a design.
 #[derive(Default)]
 pub struct Virdant {
-    errors: VirErrs,
+    pub(crate) errors: VirErrs,
 
-    packages: Table<Package, PackageInfo>,
-    items: Table<Item, ItemInfo>,
-    fields: Table<Field, FieldInfo>,
-    ctors: Table<Ctor, CtorInfo>,
-    channels: Table<Channel, ChannelInfo>,
-    components: Table<Component, ComponentInfo>,
-    exprroots: Table<ExprRoot, ExprRootInfo>,
-    submodules: Table<Submodule, SubmoduleInfo>,
-    ports: Table<Port, PortInfo>,
+    pub(crate) packages: Table<Package, PackageInfo>,
+    pub(crate) items: Table<Item, ItemInfo>,
+    pub(crate) fields: Table<Field, FieldInfo>,
+    pub(crate) ctors: Table<Ctor, CtorInfo>,
+    pub(crate) channels: Table<Channel, ChannelInfo>,
+    pub(crate) components: Table<Component, ComponentInfo>,
+    pub(crate) exprroots: Table<ExprRoot, ExprRootInfo>,
+    pub(crate) submodules: Table<Submodule, SubmoduleInfo>,
+    pub(crate) ports: Table<Port, PortInfo>,
 }
 
 
@@ -118,6 +117,8 @@ impl Virdant {
         self.register_exprroots();
         self.register_ports();
         self.register_submodules();
+
+        self.typecheck();
 
         self.errors.clone().check()?;
         Ok(self.design())
@@ -822,7 +823,7 @@ impl Virdant {
         let items = self.items_by_kind(ItemKind::ModDef);
         for item in items {
             let moddef: Id<ModDef> = item.cast();
-            let mut i = 0;
+            let mut expr_i = 0;
             let moddef_ast = if let Ok(item_ast) = self.items[item].ast.get() {
                 item_ast.child(0)
             } else {
@@ -831,9 +832,6 @@ impl Virdant {
             for node in moddef_ast.children() {
                 if node.is_statement() {
                     if node.child(0).is_driver() {
-                        let exprroot_id: Id<ExprRoot> = Id::new(format!("{item}::expr[{i}]"));
-                        i += 1;
-
                         let driver_ast = node.child(0);
                         let target_path = driver_ast.target().unwrap();
                         let drivertype = if driver_ast.drivertype().unwrap() == "<=" {
@@ -843,14 +841,9 @@ impl Virdant {
                         };
 
                         let expr_ast = driver_ast.clone().expr().unwrap();
-                        let exprroot_info = self.exprroots.register(exprroot_id);
-                        exprroot_info.ast.set(expr_ast.clone());
-                        exprroot_info.moddef.set(moddef);
-
-                        let expr_ast = driver_ast.clone().expr().unwrap();
                         let component = self.resolve_component(target_path, item).unwrap();
                         let component_info = &mut self.components[component];
-                        component_info.driver.set(exprroot_id);
+                        let typ = *component_info.typ.unwrap();
 
                         match drivertype {
                             DriverType::Continuous if *component_info.is_reg.get().unwrap() => self.errors.add(VirErr::WrongDriverType(format!("{target_path} in {item}"))),
@@ -858,38 +851,61 @@ impl Virdant {
                             _ => (),
                         }
 
-                        let expr = Expr::from_ast(expr_ast.clone());
-                        let exprroot_info = self.exprroots.register(exprroot_id);
-                        exprroot_info.expr.set(expr.clone());
-                        let typ = *component_info.typ.unwrap();
-                        exprroot_info.typ.set(typ);
+                        let exprroot = self.register_exprroots_for(ast::Expr::from_ast(expr_ast.clone()), moddef, &vec![expr_i]);
+                        expr_i += 1;
 
-                        let context = TypingContext::new(self, moddef);
-                        match context.check(expr, typ) {
-                            Err(errs) => {
-                                self.errors.add(errs);
-                                let span = expr_ast.span();
-                                self.errors.add(VirErr::Other(format!("{span:?}")));
-                            },
-                            Ok(typed_expr) => {
-                                let exprroot_info = self.exprroots.register(exprroot_id);
-                                exprroot_info.typedexpr.set(typed_expr);
-                            },
-                         }
+                        let exprroot_info = &mut self.exprroots[exprroot];
+                        exprroot_info.expected_typ = Some(typ);
+
+                        let component_info = &mut self.components[component];
+                        component_info.driver = Some(exprroot);
                     } else if node.child(0).is_reg() {
                         let reg_ast = node.child(0);
                         let expr_ast = reg_ast.clone().expr().unwrap();
 
-                        let expr_id: Id<ExprRoot> = Id::new(format!("{moddef}::expr[{i}]"));
-                        i += 1;
+                        let exprroot = self.register_exprroots_for(ast::Expr::from_ast(expr_ast.clone()), moddef, &vec![expr_i]);
+                        expr_i += 1;
 
-                        let exprroot_info = &mut self.exprroots.register(expr_id);
-                        exprroot_info.ast.set(expr_ast.clone());
-                        exprroot_info.typ.set(clock_type)
+                        let exprroot_info = &mut self.exprroots[exprroot];
+                        exprroot_info.expected_typ = Some(clock_type);
                     }
                 }
             }
         }
+    }
+
+    fn exprroot_id(moddef: Id<ModDef>, path: &[usize]) -> Id<ExprRoot> {
+        let mut parts = vec![format!("{moddef}::expr")];
+        for p in path {
+            parts.push(format!("[{p}]"));
+        }
+        Id::new(parts.join(""))
+    }
+
+    fn register_exprroots_for(&mut self, expr: Arc<ast::Expr>, moddef: Id<ModDef>, path: &[usize]) -> Id<ExprRoot> {
+        let exprroot_id: Id<ExprRoot> = Self::exprroot_id(moddef, path);
+        let mut subexprs = vec![];
+
+        for (i, e) in expr.subexprs().iter().enumerate() {
+            let subexpr = self.register_exprroots_for(e.clone(), moddef, &Self::extend(path, i));
+            let info = &mut self.exprroots[subexpr];
+            info.parent = Some(exprroot_id);
+            subexprs.push(subexpr);
+        }
+
+        let exprroot_info = self.exprroots.register(exprroot_id);
+
+        exprroot_info.ast.set(expr.clone());
+        exprroot_info.children = subexprs;
+        exprroot_info.moddef.set(moddef);
+
+        exprroot_id
+    }
+
+    fn extend(path: &[usize], p: usize) -> Vec<usize> {
+        let mut result = path.to_vec();
+        result.push(p);
+        result
     }
 
     fn register_ports(&mut self) {
@@ -970,6 +986,25 @@ impl Virdant {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+// Typechecking
+////////////////////////////////////////////////////////////////////////////////
+///
+impl Virdant {
+    fn typecheck(&mut self) {
+        let roots: Vec<(_, _)> = self.exprroots.iter().map(|(id, info)| (id.clone(), info.clone())).collect();
+        for (exprroot, exprroot_info) in roots {
+            if exprroot_info.parent.is_none() {
+                let moddef = exprroot_info.moddef.unwrap();
+                let mut typing_context = TypingContext::new(self, *moddef);
+                if let Err(err) = typing_context.check(exprroot, exprroot_info.expected_typ.unwrap()) {
+                    self.errors.add(err);
+                }
+            }
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // For testing
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1038,8 +1073,16 @@ impl std::fmt::Debug for Virdant {
         for (exprroot, exprroot_info) in self.exprroots.iter() {
             writeln!(f, "    {exprroot}")?;
             writeln!(f, "        ast: {:?}", exprroot_info.ast.get().map(|ast| ast.summary()))?;
-            writeln!(f, "        expr: (omitted)")?;
+            if let Some(expected_typ) = exprroot_info.expected_typ {
+                writeln!(f, "        expected_typ: {:?}", expected_typ)?;
+            }
             writeln!(f, "        typ: {:?}", exprroot_info.typ)?;
+            if let Some(parent) = exprroot_info.parent {
+                writeln!(f, "        parent: {:?}", parent)?;
+            }
+            if exprroot_info.children.len() > 0 {
+                writeln!(f, "        children: {:?}", exprroot_info.children)?;
+            }
         }
 
         writeln!(f, "SUBMODULES:")?;
@@ -1088,18 +1131,6 @@ impl ItemKind {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum ChannelDir {
-    Mosi,
-    Miso,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum PortRole {
-    Master,
-    Slave,
-}
-
 #[derive(Clone, PartialEq, Eq, Debug, Hash, Default)]
 pub enum PackageSource {
     #[default]
@@ -1145,8 +1176,9 @@ impl Virdant {
 
         let mut exprroots: IndexMap<Id<ExprRoot>, design::ExprRoot> = IndexMap::new();
         for exprroot in self.exprroots.keys() {
+            let id = *exprroot;
             let info = self.exprroots[*exprroot].clone();
-            let design_exprroot = design::ExprRoot { root: OnceCell::new(), info };
+            let design_exprroot = design::ExprRoot { root: OnceCell::new(), id, info };
             exprroots.insert(*exprroot, design_exprroot);
         }
 
@@ -1243,19 +1275,4 @@ impl Virdant {
             info,
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum ComponentClass {
-    Port,
-    SubPort,
-    Node,
-    Reg,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Flow {
-    Source,
-    Sink,
-    Duplex,
 }

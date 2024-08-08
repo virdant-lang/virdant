@@ -289,3 +289,46 @@ fn test_top_design() {
         panic!("Expected Uniondef");
     }
 }
+
+#[test]
+fn foo() {
+    let mut virdant = Virdant::new(&[
+        ("top", TEST_EXAMPLES_DIR.join("top.vir")),
+    ]);
+
+    let design = virdant.check().unwrap();
+
+    let packages = design.packages();
+    assert_eq!(packages.len(), 2);
+
+    let package_names: HashSet<_> = packages.iter().map(|p| p.name()).collect();
+    assert_eq!(package_names, vec!["builtin", "top"].into_iter().collect());
+
+    let top_package: design::Package = packages.into_iter()
+        .filter(|p| p.name() == "top")
+        .collect::<Vec<_>>()
+        .first()
+        .unwrap()
+        .clone();
+
+    for item in top_package.items() {
+        eprintln!("item: {} [{:?}]", item.name(), item.kind());
+    }
+
+    let top_item: design::Item = top_package.items()
+        .into_iter()
+        .filter(|p| p.name() == "Top")
+        .collect::<Vec<_>>()
+        .first()
+        .unwrap()
+        .clone();
+
+    let top_moddef = if let design::ItemKind::ModDef(moddef) = top_item.kind() { moddef } else { unreachable!() };
+
+    for component in top_moddef.components() {
+        eprintln!("component: {} : {:?}", component.name(), component.typ());
+        if let Some(driver) = component.driver() {
+            eprintln!("  driver: {driver:?}");
+        }
+    }
+}
