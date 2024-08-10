@@ -6,12 +6,12 @@ pub mod expr;
 pub mod ast;
 pub mod location;
 pub mod design;
+pub mod context;
 
 mod table;
 mod ready;
 mod cycle;
 mod typecheck;
-mod context;
 mod info;
 
 #[cfg(test)]

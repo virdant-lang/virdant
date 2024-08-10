@@ -17,10 +17,6 @@ impl<T: Clone + Hash + Eq> Default for Ready<T> {
 }
 
 impl<T: Clone + Hash + Eq> Ready<T> {
-    pub fn new() -> Self {
-        Ready(IndexSet::new())
-    }
-
     pub fn set(&mut self, t: T) {
         self.0.insert(t);
     }
