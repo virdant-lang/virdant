@@ -16,10 +16,6 @@ impl<E: Copy + Eq + Hash, D: Default> Table<E, D> {
         Table(IndexMap::new())
     }
 
-    pub fn get(&self, key: Id<E>) -> Option<&D> {
-       self.0.get(&key)
-    }
-
     pub fn get_mut(&mut self, key: Id<E>) -> Option<&mut D> {
        self.0.get_mut(&key)
     }
@@ -43,10 +39,6 @@ impl<E: Copy + Eq + Hash, D: Default> Table<E, D> {
 
     pub fn iter(&self) -> impl Iterator<Item = (&Id<E>, &D)> {
         self.0.iter()
-    }
-
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&Id<E>, &mut D)> {
-        self.0.iter_mut()
     }
 
     pub fn resolve(&self, name: &str) -> Option<Id<E>> {
