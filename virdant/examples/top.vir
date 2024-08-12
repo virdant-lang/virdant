@@ -1,8 +1,20 @@
 mod Top {
+    node v : Valid;
+    v := @Valid(7);
 
+    node c : Word[8];
+    c := match v {
+        @Invalid() => 0;
+        @Valid(payload) => payload;
+    };
 }
 
 port Mem {
     mosi addr : Word[16];
     miso data_in : Word[8];
+}
+
+union type Valid {
+    Invalid();
+    Valid(payload : Word[8]);
 }

@@ -162,7 +162,6 @@ impl Ast {
     pub fn typ(&self) -> Option<Ast> { self.get("type") }
     pub fn expr(&self) -> Option<Ast> { self.get("expr") }
     pub fn subject(&self) -> Option<Ast> { self.get("subject") }
-    pub fn match_arms(&self) -> Vec<Ast> { self.get_all("arms") }
     pub fn pat(&self) -> Option<Ast> { self.get("pat") }
 
     pub fn dir(&self) -> Option<Ast> { self.get("dir") }
@@ -173,6 +172,8 @@ impl Ast {
     pub fn assigns(&self) -> Option<Vec<Ast>> { self.get("assigns").map(|args| args.children().collect()) }
     pub fn i(&self) -> Option<u64> { self.get("i").map(|ast| str::parse(ast.as_str()).unwrap()) }
     pub fn j(&self) -> Option<u64> { self.get("j").map(|ast| str::parse(ast.as_str()).unwrap()) }
+
+    pub fn is_match_arm(&self) -> bool { self.rule() == Rule::expr_match_arm }
 
     pub fn item_kind(&self) -> Option<ItemKind> {
         match self.child(0).rule() {

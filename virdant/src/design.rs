@@ -426,6 +426,15 @@ impl Ctor {
     pub fn uniondef(&self) -> UnionDef {
         self.root().items[&self.info.uniondef.unwrap().as_item()].as_uniondef()
     }
+
+    pub fn params(&self) -> Vec<(String, Type)> {
+        let mut results = vec![];
+        for (name, typ) in self.info.sig.unwrap().params() {
+            let typ = Type::new(self.root.clone(), typ.clone());
+            results.push((name.clone(), typ));
+        }
+        results
+    }
 }
 
 impl Method {
@@ -621,6 +630,25 @@ pub enum Expr {
     Match(expr::Match),
 }
 
+impl Expr {
+    pub fn typ(&self) -> Type {
+        match self {
+            Expr::Reference(reference) => reference.typ(),
+            Expr::Word(word) => word.typ(),
+            Expr::Bit(bit) => bit.typ(),
+            Expr::MethodCall(methodcall) => methodcall.typ(),
+            Expr::Struct(struct_) => struct_.typ(),
+            Expr::Field(field) => field.typ(),
+            Expr::Ctor(ctor) => ctor.typ(),
+            Expr::Idx(idx) => idx.typ(),
+            Expr::IdxRange(idxrange) => idxrange.typ(),
+            Expr::Cat(cat) => cat.typ(),
+            Expr::If(if_) => if_.typ(),
+            Expr::Match(match_) => match_.typ(),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Referent {
     Component(Component),
@@ -740,17 +768,21 @@ mod expr {
     }
 
     impl Word {
-        pub fn val(&self) -> WordVal {
+        pub fn value(&self) -> WordVal {
             if let crate::ast::Expr::Word(wordlit) = self.ast().as_ref() {
                 wordlit.value
             } else {
                 unreachable!()
             }
         }
+
+        pub fn width(&self) -> Width {
+            self.typ().typ.width()
+        }
     }
 
     impl Bit {
-        pub fn val(&self) -> bool {
+        pub fn value(&self) -> bool {
             if let crate::ast::Expr::Bit(bitlit) = self.ast().as_ref() {
                 *bitlit
             } else {
@@ -760,7 +792,7 @@ mod expr {
     }
 
     impl MethodCall {
-        pub fn method(&self) -> Method {
+        pub fn method(&self) -> super::Method {
             let name = if let crate::ast::Expr::MethodCall(_, method_name, _) = self.ast().as_ref() {
                 method_name.to_string()
             } else {
@@ -884,7 +916,7 @@ mod expr {
             exprroot.to_expr()
         }
 
-        pub fn lo(&self) -> StaticIndex {
+        pub fn idx(&self) -> StaticIndex {
             if let crate::ast::Expr::Idx(_, i) = self.ast().as_ref() {
                 *i
             } else {
@@ -900,7 +932,7 @@ mod expr {
             exprroot.to_expr()
         }
 
-        pub fn hi(&self) -> StaticIndex {
+        pub fn idx_hi(&self) -> StaticIndex {
             if let crate::ast::Expr::IdxRange(_, j, _i) = self.ast().as_ref() {
                 *j
             } else {
@@ -908,7 +940,7 @@ mod expr {
             }
         }
 
-        pub fn lo(&self) -> StaticIndex {
+        pub fn idx_lo(&self) -> StaticIndex {
             if let crate::ast::Expr::IdxRange(_, _j, i) = self.ast().as_ref() {
                 *i
             } else {
@@ -956,14 +988,14 @@ mod expr {
 
         pub fn arms(&self) -> Vec<(super::Pat, super::Expr)> {
             if let crate::ast::Expr::Match(_subject, _ascription, arms) = self.ast().as_ref() {
-                let typ: types::Type = self.typ().typ;
+                let subject_typ = self.subject().typ().typ;
                 let arm_exprroots: Vec<_> = self.info.children.iter()
                     .map(|id| self.root().exprroots[id].to_expr())
                     .collect();
                 let mut results = vec![];
 
                 for (MatchArm(pat, _), arm_exprroot) in arms.iter().zip(arm_exprroots) {
-                    let new_pat = Pat::new(&self.root(), pat, typ);
+                    let new_pat = Pat::new(&self.root(), pat, subject_typ);
                     results.push((new_pat, arm_exprroot))
                 }
 

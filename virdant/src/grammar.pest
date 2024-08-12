@@ -162,7 +162,7 @@ expr_if = {
 
 expr_match = {
     kw_match ~ (#subject=expr) ~ (":" ~ (#type=type))? ~ "{" ~
-        (#arms=expr_match_arm*) ~
+        expr_match_arm* ~
     "}"
 }
 

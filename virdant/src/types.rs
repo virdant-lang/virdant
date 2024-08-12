@@ -63,6 +63,14 @@ impl Type {
         self.0
     }
 
+    pub(crate) fn is_clock(&self) -> bool {
+        if let TypeScheme::BuiltinDef(builtindef) = &self.0 {
+            *builtindef == Id::new("builtin::Clock")
+        } else {
+            false
+        }
+    }
+
     pub(crate) fn is_bit(&self) -> bool {
         if let TypeScheme::BuiltinDef(builtindef) = &self.0 {
             *builtindef == Id::new("builtin::Bit")

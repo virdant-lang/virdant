@@ -6,6 +6,7 @@ pub mod ast;
 pub mod location;
 pub mod design;
 pub mod context;
+pub mod verilog;
 
 mod common;
 mod table;
@@ -686,7 +687,6 @@ impl Virdant {
                             component_info.class.set(ComponentClass::Reg);
                             component_info.flow.set(Flow::Duplex);
                         } else {
-                            eprintln!("{:?}", node.summary());
                             unreachable!()
                         }
 
@@ -1229,6 +1229,10 @@ impl Virdant {
 
         for ctor in root.ctors.values() {
             ctor.root.set(Arc::downgrade(&root)).unwrap();
+        }
+
+        for exprroot in root.exprroots.values() {
+            exprroot.root.set(Arc::downgrade(&root)).unwrap();
         }
 
         design::Design(root)

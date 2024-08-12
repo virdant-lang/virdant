@@ -111,8 +111,10 @@ impl Expr {
         let ascription_ast = expr_match_ast.typ();
 
         let mut match_arms = vec![];
-        for match_arm_ast in expr_match_ast.match_arms() {
-            match_arms.push(Expr::ast_to_expr_match_arm(match_arm_ast));
+        for node in expr_match_ast.children() {
+            if node.is_match_arm() {
+                match_arms.push(Expr::ast_to_expr_match_arm(node));
+            }
         }
 
         Arc::new(Expr::Match(subject, ascription_ast, match_arms))
