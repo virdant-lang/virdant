@@ -316,11 +316,9 @@ impl<'a> TypingContext<'a> {
 
 
     fn check_match(&mut self, exprroot: Id<ExprRoot>, ascription: Option<Ast>, arms: Vec<MatchArm>, expected_typ: Type) -> Result<(), VirErr> {
-        eprintln!("check_match({exprroot})");
         let subexprs = &self.virdant.exprroots[exprroot].children;
         let subject = subexprs[0].clone();
         let arm_exprroots = subexprs[1..].to_vec();
-        eprintln!("  arm_exprroots = {arm_exprroots:?}");
 
         let subject_typ = if let Some(typ_ast) = ascription {
             let ascription_typ = self.virdant.resolve_type(typ_ast, self.moddef.as_item())?;
@@ -417,7 +415,23 @@ impl<'a> TypingContext<'a> {
     }
 
     fn method_sig(&self, typ: Type, method: Ident) -> Result<MethodSig, VirErr> {
-        if typ.is_word() {
+        if typ.is_bit() {
+            if *method == "eq" {
+                Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
+            } else if *method == "neq" {
+                Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
+            } else if *method == "not" {
+                Ok(MethodSig(vec![], typ.clone()))
+            } else if *method == "and" {
+                Ok(MethodSig(vec![typ.clone()], typ.clone()))
+            } else if *method == "or" {
+                Ok(MethodSig(vec![typ.clone()], typ.clone()))
+            } else if *method == "xor" {
+                Ok(MethodSig(vec![typ.clone()], typ.clone()))
+            } else {
+                Err(VirErr::Other(format!("No such method {method} for type {typ}")))
+            }
+        } else if typ.is_word() {
             let n = typ.width();
             if *method == "add" {
                 Ok(MethodSig(vec![typ.clone()], typ.clone()))
@@ -474,24 +488,4 @@ impl MethodSig {
     pub fn ret(&self) -> Type {
         self.1
     }
-}
-
-fn pow(n: u64, k: u64) -> u64 {
-    let mut p = 1;
-    for _ in 0..k {
-        p *= n
-    }
-    p
-}
-
-fn clog2(n: u64) -> u64 {
-    let mut result = 0;
-    while n > (1 << result) {
-        result += 1;
-    }
-    result
-}
-
-fn is_pow2(n: u64) -> bool {
-    n != 0 && (n & (n - 1)) == 0
 }
