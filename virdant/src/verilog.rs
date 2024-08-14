@@ -93,13 +93,16 @@ impl Verilog {
             let submodule_moddef = submodule.of();
             let ports = submodule_moddef.simple_ports();
             for port in ports.iter() {
-                let port_name = format!("{}__{}", submodule.name(), port.name());
-                writeln!(f, "    wire {port_name};")?;
+                let port_name = format!("{}__{}", submodule.name(), port.path().join("__"));
+                let typ = port.typ();
+                let width_str = self.width_str(&typ);
+                writeln!(f, "    wire {width_str}{port_name};")?;
             }
 
             writeln!(f, "    {} {}(", submodule.of().name(), submodule.name())?;
             for (i, port) in ports.iter().enumerate() {
-                write!(f, "        .{}({})", port.name(), format!("{}__{}", submodule.name(), port.name()))?;
+                let port_name = format!("{}__{}", submodule.name(), port.path().join("__"));
+                write!(f, "        .{}({})", port.path().join("__"), port_name)?;
                 if i + 1 < ports.len() {
                     writeln!(f, ",")?;
                 } else {
@@ -130,7 +133,7 @@ impl Verilog {
                     return Ok(());
                 };
                 let typ = component.typ();
-                let component_name = component.name();
+                let component_name = component.path().join("__");
                 writeln!(f, "    // outgoing {component_name} : {typ}")?;
                 let ssa = self.verilog_expr(f, expr, Context::empty())?;
                 writeln!(f, "    assign {component_name} = {ssa};")?;
