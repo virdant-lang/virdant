@@ -713,8 +713,13 @@ impl Virdant {
                         let port_portdef_name = node.of().unwrap();
                         match self.resolve_portdef(port_portdef_name, item) {
                             Ok(portdef) => {
-                            let path = vec![port_name.to_string()];
-                                components.extend(self.register_port_components(path, portdef, moddef));
+                                let path = vec![port_name.to_string()];
+                                let role = if node.role().unwrap() == "master" {
+                                    PortRole::Master
+                                } else {
+                                    PortRole::Slave
+                                };
+                                components.extend(self.register_port_components(path, portdef, moddef, false, role));
                             },
                             Err(err) => self.errors.add(err),
                         }
@@ -773,7 +778,12 @@ impl Virdant {
                     match self.resolve_portdef(port_portdef_name, submodule_moddef.as_item()) {
                         Ok(portdef) => {
                             let path = vec![name.to_string(), port_name.to_string()];
-                            components.extend(self.register_port_components(path, portdef, in_moddef));
+                            let role = if statement.role().unwrap() == "master" {
+                                PortRole::Master
+                            } else {
+                                PortRole::Slave
+                            };
+                            components.extend(self.register_port_components(path, portdef, in_moddef, true, role));
                         },
                         Err(err) => self.errors.add(err),
                     }
@@ -783,7 +793,14 @@ impl Virdant {
         components
     }
 
-    fn register_port_components(&mut self, path: Vec<String>, portdef: Id<PortDef>, in_moddef: Id<ModDef>) -> Vec<Id<Component>> {
+    fn register_port_components(
+        &mut self,
+        path: Vec<String>,
+        portdef: Id<PortDef>,
+        in_moddef: Id<ModDef>,
+        is_submodule: bool,
+        role: PortRole,
+    ) -> Vec<Id<Component>> {
         let mut components = vec![];
         let portdef_info = &self.items[portdef.as_item()];
         if let Ok(channels) = portdef_info.channels.get() {
@@ -797,12 +814,20 @@ impl Virdant {
                 let component: Id<Component> = Id::new(format!("{in_moddef}::{name}"));
 
                 let component_info = self.components.register(component);
-                component_info.class.set(ComponentClass::Port);
-                let flow = if *channel_info.dir.unwrap() == ChannelDir::Mosi {
-                    Flow::Source
+                if is_submodule {
+                    component_info.class.set(ComponentClass::SubPort);
                 } else {
-                    Flow::Sink
+                    component_info.class.set(ComponentClass::Port);
+                }
+
+                let channel_dir = *channel_info.dir.unwrap();
+                let flow = match (channel_dir, role) {
+                    (ChannelDir::Mosi, PortRole::Slave) => Flow::Source,
+                    (ChannelDir::Mosi, PortRole::Master) => Flow::Sink,
+                    (ChannelDir::Miso, PortRole::Slave) => Flow::Sink,
+                    (ChannelDir::Miso, PortRole::Master) => Flow::Source,
                 };
+
                 component_info.flow.set(flow);
                 components.push(component);
                 component_info.moddef.set(in_moddef);

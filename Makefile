@@ -14,5 +14,4 @@ install:
 
 	mkdir -p ${HOME}/.local/virdant/bin
 	cp ./target/release/vir ${HOME}/.local/virdant/bin/
-	cp ./target/release/vir-dump ${HOME}/.local/virdant/bin/
-	cp ./target/release/vir-lsp ${HOME}/.local/virdant/bin/
+	cp ./target/release/vir-* ${HOME}/.local/virdant/bin/

@@ -2,7 +2,7 @@ use clap::Parser;
 use virdant::Virdant;
 
 #[derive(Parser)]
-#[command(name = "myapp")]
+#[command(name = "vir compile")]
 #[command(about = "A simple example CLI", long_about = None)]
 struct Args {
     filename: std::path::PathBuf,
@@ -50,11 +50,8 @@ fn main() {
         filepaths.push((package.clone(), parent.join(format!("{package}.vir"))));
     }
 
-    for (package, filepath) in &filepaths {
-        eprintln!("{package}: {filepath:?}");
-    }
-
     let mut virdant = Virdant::new(&filepaths);
     let design = virdant.check().unwrap();
     design.verilog("build").unwrap();
+    println!("Build complete: See build/");
 }

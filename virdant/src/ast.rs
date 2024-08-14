@@ -158,6 +158,7 @@ impl Ast {
     pub fn field(&self) -> Option<&str> { self.get_as_str("field") }
     pub fn target(&self) -> Option<&str> { self.get_as_str("target") }
     pub fn drivertype(&self) -> Option<&str> { self.get_as_str("drivertype") }
+    pub fn role(&self) -> Option<&str> { self.get_as_str("role") }
 
     pub fn typ(&self) -> Option<Ast> { self.get("type") }
     pub fn expr(&self) -> Option<Ast> { self.get("expr") }
