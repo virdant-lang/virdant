@@ -4,5 +4,6 @@ members = [
     "vir",
     "vir-lsp",
     "vir-dump",
+    "vir-compile",
     "virdant"
 ]
