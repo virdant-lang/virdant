@@ -106,6 +106,46 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
+name = "clap"
+version = "4.5.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11d8838454fda655dafd3accb2b6e2bea645b9e4078abe84a22ceb947235c5cc"
+dependencies = [
+ "clap_builder",
+ "clap_derive",
+]
+
+[[package]]
+name = "clap_builder"
+version = "4.5.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "216aec2b177652e3846684cbfe25c9964d18ec45234f0f5da5157b207ed1aab6"
+dependencies = [
+ "anstream",
+ "anstyle",
+ "clap_lex",
+ "strsim",
+]
+
+[[package]]
+name = "clap_derive"
+version = "4.5.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "501d359d5f3dcaf6ecdeee48833ae73ec6e42723a1e52419c79abf9507eec0a0"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "clap_lex"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1462739cb27611015575c0c11df5df7601141071f07518d56fcc1be504cbec97"
+
+[[package]]
 name = "colorchoice"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -220,6 +260,12 @@ dependencies = [
  "ahash",
  "allocator-api2",
 ]
+
+[[package]]
+name = "heck"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "humantime"
@@ -472,6 +518,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "strsim"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
+
+[[package]]
 name = "syn"
 version = "2.0.72"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -574,17 +626,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "virdant"
+name = "vir-compile"
 version = "0.1.0-rc0"
 dependencies = [
- "indexmap",
- "internment",
+ "clap",
  "pest",
  "pest_derive",
+ "serde",
+ "toml",
+ "virdant",
 ]
 
 [[package]]
-name = "virdant-dump"
+name = "vir-dump"
 version = "0.1.0-rc0"
 dependencies = [
  "serde",
@@ -593,7 +647,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "virdant-lsp"
+name = "vir-lsp"
 version = "0.1.0-rc0"
 dependencies = [
  "directories",
@@ -601,6 +655,16 @@ dependencies = [
  "log",
  "serde_json",
  "virdant",
+]
+
+[[package]]
+name = "virdant"
+version = "0.1.0-rc0"
+dependencies = [
+ "indexmap",
+ "internment",
+ "pest",
+ "pest_derive",
 ]
 
 [[package]]
