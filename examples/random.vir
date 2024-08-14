@@ -4,11 +4,11 @@ import lfsr;
 
 mod Top {
     incoming clock : Clock;
-    outgoing led_0 : Word[1];
-    outgoing led_1 : Word[1];
-    outgoing led_2 : Word[1];
-    outgoing led_3 : Word[1];
-    outgoing led_4 : Word[1];
+    outgoing led_0 : Bit;
+    outgoing led_1 : Bit;
+    outgoing led_2 : Bit;
+    outgoing led_3 : Bit;
+    outgoing led_4 : Bit;
 
     mod edge_detector of edge::Edge;
     edge_detector.clock := clock;
