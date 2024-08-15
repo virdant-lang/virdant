@@ -7,24 +7,26 @@ use std::sync::Arc;
 
 use internment::Intern;
 
+use super::Span;
+
 pub type Ident = Intern<String>;
 pub type Path = Vec<Ident>;
 pub type QualIdent = Intern<String>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expr {
-    Reference(Path),
-    Word(WordLit),
-    Bit(bool),
-    MethodCall(Arc<Expr>, Ident, Vec<Arc<Expr>>),
-    Field(Arc<Expr>, Ident),
-    Struct(QualIdent, Vec<(Ident, Arc<Expr>)>),
-    Ctor(Ident, Vec<Arc<Expr>>),
-    Idx(Arc<Expr>, StaticIndex),
-    IdxRange(Arc<Expr>, StaticIndex, StaticIndex),
-    Cat(Vec<Arc<Expr>>),
-    If(Arc<Expr>, Arc<Expr>, Arc<Expr>),
-    Match(Arc<Expr>, Option<Ast>, Vec<MatchArm>),
+    Reference(Span, Path),
+    Word(Span, WordLit),
+    Bit(Span, bool),
+    MethodCall(Span, Arc<Expr>, Ident, Vec<Arc<Expr>>),
+    Field(Span, Arc<Expr>, Ident),
+    Struct(Span, QualIdent, Vec<(Ident, Arc<Expr>)>),
+    Ctor(Span, Ident, Vec<Arc<Expr>>),
+    Idx(Span, Arc<Expr>, StaticIndex),
+    IdxRange(Span, Arc<Expr>, StaticIndex, StaticIndex),
+    Cat(Span, Vec<Arc<Expr>>),
+    If(Span, Arc<Expr>, Arc<Expr>, Arc<Expr>),
+    Match(Span, Arc<Expr>, Option<Ast>, Vec<MatchArm>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -98,10 +100,10 @@ impl Expr {
         let mut result = else_expr.unwrap();
 
         for (cond, expr) in else_ifs {
-            result = Arc::new(Expr::If(cond, expr, result));
+            result = Arc::new(Expr::If(expr_if_ast.span(), cond, expr, result));
         }
 
-        Arc::new(Expr::If(subject, true_expr, result))
+        Arc::new(Expr::If(expr_if_ast.span(), subject, true_expr, result))
     }
 
     fn ast_to_expr_match(expr_match_ast: Ast) -> Arc<Expr> {
@@ -117,7 +119,7 @@ impl Expr {
             }
         }
 
-        Arc::new(Expr::Match(subject, ascription_ast, match_arms))
+        Arc::new(Expr::Match(expr_match_ast.span(), subject, ascription_ast, match_arms))
     }
 
     fn ast_to_expr_match_arm(match_arm_ast: Ast) -> MatchArm {
@@ -157,14 +159,14 @@ impl Expr {
                     arg_exprs.push(Expr::from_ast(arg));
                 }
 
-                result = Arc::new(Expr::MethodCall(result, method.to_string().into(), arg_exprs));
+                result = Arc::new(Expr::MethodCall(expr_call_ast.span(), result, method.to_string().into(), arg_exprs));
             } else if let Some(field) = expr_call_suffix_ast.field() {
-                result = Arc::new(Expr::Field(result, field.to_string().into()));
+                result = Arc::new(Expr::Field(expr_call_ast.span(), result, field.to_string().into()));
             } else if let Some(j) = expr_call_suffix_ast.j() {
                 let i = expr_call_suffix_ast.i().unwrap();
-                result = Arc::new(Expr::IdxRange(result, j, i));
+                result = Arc::new(Expr::IdxRange(expr_call_ast.span(), result, j, i));
             } else if let Some(i) = expr_call_suffix_ast.i() {
-                result = Arc::new(Expr::Idx(result, i));
+                result = Arc::new(Expr::Idx(expr_call_ast.span(), result, i));
             } else {
                 unreachable!()
             }
@@ -178,28 +180,28 @@ impl Expr {
 
         let expr = if child.is_wordlit() {
             let spelling = child.as_str();
-            Expr::Word(parse_wordlit(&spelling))
+            Expr::Word(expr_base_ast.span(), parse_wordlit(&spelling))
         } else if child.is_bitlit() {
             let spelling = child.as_str();
-            Expr::Bit(parse_bitlit(&spelling))
+            Expr::Bit(expr_base_ast.span(), parse_bitlit(&spelling))
         } else if child.is_path() {
             let path = child.as_str()
                 .split('.')
                 .map(|s| Intern::new(s.to_string()))
                 .collect::<Vec<_>>();
-            Expr::Reference(path)
+            Expr::Reference(expr_base_ast.span(), path)
         } else if child.is_ctor() {
             let mut args = vec![];
             for arg in expr_base_ast.args().unwrap() {
                 args.push(Expr::from_ast(arg));
             }
-            Expr::Ctor(Ident::new(child.as_str()[1..].to_string()), args)
+            Expr::Ctor(expr_base_ast.span(), Ident::new(child.as_str()[1..].to_string()), args)
         } else if child.is_kw_cat() {
             let mut args = vec![];
             for arg in expr_base_ast.args().unwrap() {
                 args.push(Expr::from_ast(arg));
             }
-            Expr::Cat(args)
+            Expr::Cat(expr_base_ast.span(), args)
         } else if child.is_struct() {
             let struct_name = child.as_str();
             let mut assigns = vec![];
@@ -208,7 +210,7 @@ impl Expr {
                 let expr = Expr::from_ast(assign.expr().unwrap());
                 assigns.push((field, expr));
             }
-            Expr::Struct(Intern::new(struct_name[1..].to_string()), assigns)
+            Expr::Struct(expr_base_ast.span(), Intern::new(struct_name[1..].to_string()), assigns)
         } else {
             unreachable!()
         };
@@ -318,44 +320,44 @@ impl Expr {
         let mut results = vec![];
 
         match self {
-            Expr::MethodCall(s, _, es) => {
+            Expr::MethodCall(_, s, _, es) => {
                 results.push(s.clone());
                 results.extend(es.iter().cloned().collect::<Vec<_>>());
             },
-            Expr::Field(s, _) => {
+            Expr::Field(_, s, _) => {
                 results.push(s.clone());
             },
-            Expr::Ctor(_, es) => {
+            Expr::Ctor(_, _, es) => {
                 results.extend(es.iter().cloned().collect::<Vec<_>>());
             },
-            Expr::Idx(s, _) => {
+            Expr::Idx(_, s, _) => {
                 results.push(s.clone());
             },
-            Expr::IdxRange(s, _, _) => {
+            Expr::IdxRange(_, s, _, _) => {
                 results.push(s.clone());
             },
-            Expr::Cat(es) => {
+            Expr::Cat(_, es) => {
                 results.extend(es.iter().cloned().collect::<Vec<_>>());
             },
-            Expr::If(s, a, b) => {
+            Expr::If(_, s, a, b) => {
                 results.push(s.clone());
                 results.push(a.clone());
                 results.push(b.clone());
             },
-            Expr::Match(s, _, arms) => {
+            Expr::Match(_, s, _, arms) => {
                 results.push(s.clone());
                 for MatchArm(_pat, e) in arms {
                     results.push(e.clone());
                 }
             },
-            Expr::Struct(_, assigns) => {
+            Expr::Struct(_, _, assigns) => {
                 for (_field, e) in assigns {
                     results.push(e.clone());
                 }
             },
-            Expr::Reference(_) => (),
-            Expr::Word(_) => (),
-            Expr::Bit(_) => (),
+            Expr::Reference(_, _) => (),
+            Expr::Word(_, _) => (),
+            Expr::Bit(_, _) => (),
         }
 
         results
@@ -363,18 +365,35 @@ impl Expr {
 
     pub fn summary(&self) -> String {
         match self {
-            Expr::Reference(_) => format!("Reference"),
-            Expr::Word(_) => format!("Word"),
-            Expr::Bit(_) => format!("Bit"),
-            Expr::MethodCall(_, _, _) => format!("MethodCall"),
-            Expr::Field(_, _) => format!("Field"),
-            Expr::Struct(_, _) => format!("Struct"),
-            Expr::Ctor(_, _) => format!("Ctor"),
-            Expr::Idx(_, _) => format!("Idx"),
-            Expr::IdxRange(_, _, _) => format!("IdxRange"),
-            Expr::Cat(_) => format!("Cat"),
-            Expr::If(_, _, _) => format!("If"),
-            Expr::Match(_, _, _) => format!("Match"),
+            Expr::Reference(_, _) => format!("Reference"),
+            Expr::Word(_, _) => format!("Word"),
+            Expr::Bit(_, _) => format!("Bit"),
+            Expr::MethodCall(_, _, _, _) => format!("MethodCall"),
+            Expr::Field(_, _, _) => format!("Field"),
+            Expr::Struct(_, _, _) => format!("Struct"),
+            Expr::Ctor(_, _, _) => format!("Ctor"),
+            Expr::Idx(_, _, _) => format!("Idx"),
+            Expr::IdxRange(_, _, _, _) => format!("IdxRange"),
+            Expr::Cat(_, _) => format!("Cat"),
+            Expr::If(_, _, _, _) => format!("If"),
+            Expr::Match(_, _, _, _) => format!("Match"),
+        }
+    }
+
+    pub fn span(&self) -> Span {
+        match self {
+            Expr::Reference(span, _) => *span,
+            Expr::Word(span, _) => *span,
+            Expr::Bit(span, _) => *span,
+            Expr::MethodCall(span, _, _, _) => *span,
+            Expr::Field(span, _, _) => *span,
+            Expr::Struct(span, _, _) => *span,
+            Expr::Ctor(span, _, _) => *span,
+            Expr::Idx(span, _, _) => *span,
+            Expr::IdxRange(span, _, _, _) => *span,
+            Expr::Cat(span, _) => *span,
+            Expr::If(span, _, _, _) => *span,
+            Expr::Match(span, _, _, _) => *span,
         }
     }
 }
