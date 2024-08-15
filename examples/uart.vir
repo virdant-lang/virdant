@@ -13,9 +13,6 @@ mod UartSender {
     outgoing ready      : Bit;
     outgoing uart_tx    : Bit;
 
-    reg r : Word[8] on clock;
-    reg s : Word[8] on clock;
-
     reg uart_tx_reg : Bit on clock;
     uart_tx := uart_tx_reg;
 
@@ -120,7 +117,7 @@ mod UartReceiver {
     } else {
         match state {
             @Idle() =>
-                if uart_rx->eq(0) {
+                if uart_rx->eq(false) {
                     @Start(625w11) // ~= 1250 * 0.5
                 } else {
                     @Idle()
