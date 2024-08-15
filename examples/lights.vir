@@ -6,16 +6,16 @@ import lfsr;
 mod Top {
     incoming clock      : Clock; // 12MHz
 
-    outgoing uart_tx    : Word[1];
-    incoming uart_rx    : Word[1];
+    outgoing uart_tx    : Bit;
+    incoming uart_rx    : Bit;
 
-    outgoing led_0      : Word[1];
-    outgoing led_1      : Word[1];
-    outgoing led_2      : Word[1];
-    outgoing led_3      : Word[1];
-    outgoing led_4      : Word[1];
+    outgoing led_0      : Bit;
+    outgoing led_1      : Bit;
+    outgoing led_2      : Bit;
+    outgoing led_3      : Bit;
+    outgoing led_4      : Bit;
 
-    node reset : Word[1];
+    node reset : Bit;
 
     mod resetter of resetter::Resetter;
     resetter.clock := clock;
@@ -79,7 +79,7 @@ mod Top {
 }
 
 union type LedControllerState {
-    Idle(round : Word[4], next : Word[1]);
+    Idle(round : Word[4], next : Bit);
     SpinCW(x : Word[5], round : Word[4]);
     SpinCCW(x : Word[5], round : Word[4]);
     Memory(addr : Word[16]);
@@ -88,14 +88,14 @@ union type LedControllerState {
 
 mod LedController {
     incoming clock      : Clock; // 12MHz
-    incoming reset      : Word[1];
+    incoming reset      : Bit;
     outgoing leds       : Word[5];
 
-    incoming set_random : Word[1];
-    incoming set_cw     : Word[1];
-    incoming set_ccw    : Word[1];
-    incoming set_idle   : Word[1];
-    incoming set_rate   : Word[1];
+    incoming set_random : Bit;
+    incoming set_cw     : Bit;
+    incoming set_ccw    : Bit;
+    incoming set_idle   : Bit;
+    incoming set_rate   : Bit;
     incoming rate       : Word[3];
 
     reg counter : Word[32] on clock;
@@ -132,7 +132,7 @@ mod LedController {
             counter[17]
         };
 
-    node change : Word[1];
+    node change : Bit;
     change := edge_detector.out;
 
     reg state : LedControllerState on clock;
@@ -143,34 +143,34 @@ mod LedController {
         //@Random(lfsr.out[5..0])
         @Memory(0)
     } else if set_idle {
-        @Idle(0, 0)
+        @Idle(0, false)
     } else if set_cw {
-        @SpinCW(0b00001, 0)
+        @SpinCW(1, 0)
     } else if set_ccw {
-        @SpinCCW(0b01000, 0)
+        @SpinCCW(8, 0)
     } else if change {
         match state {
             @Idle(round, next) => if round->lt(3) {
                 @Idle(round->inc(), next)
             } else if next {
-                @SpinCCW(0b01000, 0)
+                @SpinCCW(8, 0)
             } else {
-                @SpinCW(0b00001, 0)
+                @SpinCW(1, 0)
             };
-            @SpinCW(x, round) => if x->eq(0b01000) {
+            @SpinCW(x, round) => if x->eq(8) {
                 if round->lt(3) {
-                    @SpinCW(0b00001, round->inc())
+                    @SpinCW(1, round->inc())
                 } else {
-                    @Idle(0, 1)
+                    @Idle(0, true)
                 }
             } else {
                 @SpinCW(x->sll(1), round)
             };
-            @SpinCCW(x, round) => if x->eq(0b00001) {
+            @SpinCCW(x, round) => if x->eq(1) {
                 if round->lt(3) {
-                    @SpinCCW(0b01000, round->inc())
+                    @SpinCCW(8, round->inc())
                 } else {
-                    @Idle(0, 0)
+                    @Idle(0, false)
                 }
             } else {
                 @SpinCCW(x->srl(1), round)
