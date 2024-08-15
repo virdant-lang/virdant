@@ -1,9 +1,9 @@
 /// A line-col pair (1-indexed)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Pos(usize, usize);
 
 /// A start-end position pair
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Span(Pos, Pos);
 
 impl Pos {

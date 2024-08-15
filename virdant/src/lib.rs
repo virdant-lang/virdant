@@ -866,6 +866,7 @@ impl Virdant {
                         };
 
                         let expr_ast = driver_ast.clone().expr().unwrap();
+                        let span = driver_ast.span();
                         let component = self.resolve_component(target_path, item).unwrap();
                         let component_info = &mut self.components[component];
                         let typ = *component_info.typ.unwrap();
@@ -880,6 +881,7 @@ impl Virdant {
                         expr_i += 1;
 
                         let exprroot_info = &mut self.exprroots[exprroot];
+                        exprroot_info.span = Some(span);
                         exprroot_info.expected_typ = Some(typ);
 
                         let component_info = &mut self.components[component];
@@ -893,6 +895,8 @@ impl Virdant {
 
                         let exprroot_info = &mut self.exprroots[exprroot];
                         exprroot_info.expected_typ = Some(clock_type);
+                        let span = reg_ast.span();
+                        exprroot_info.span = Some(span);
                     }
                 }
             }
@@ -920,7 +924,9 @@ impl Virdant {
 
         let exprroot_info = self.exprroots.register(exprroot_id);
 
+
         exprroot_info.ast.set(expr.clone());
+        exprroot_info.span = Some(expr.span());
         exprroot_info.children = subexprs;
         exprroot_info.moddef.set(moddef);
 
@@ -1098,6 +1104,7 @@ impl std::fmt::Debug for Virdant {
         for (exprroot, exprroot_info) in self.exprroots.iter() {
             writeln!(f, "    {exprroot}")?;
             writeln!(f, "        ast: {:?}", exprroot_info.ast.get().map(|ast| ast.summary()))?;
+            writeln!(f, "        span: {:?}", exprroot_info.span)?;
             if let Some(expected_typ) = exprroot_info.expected_typ {
                 writeln!(f, "        expected_typ: {:?}", expected_typ)?;
             }

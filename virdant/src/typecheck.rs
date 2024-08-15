@@ -51,10 +51,10 @@ impl<'a> TypingContext<'a> {
     pub fn check(&mut self, exprroot: Id<ExprRoot>, expected_typ: Type) -> Result<(), VirErr> {
         let expr = &self.virdant.exprroots[exprroot].ast.unwrap();
         let result = match expr.as_ref() {
-            Expr::Word(wordlit) => self.check_word(wordlit, expected_typ),
-            Expr::Ctor(ctor, _) => self.check_ctor(exprroot, *ctor, expected_typ),
-            Expr::If(_, _, _) => self.check_if(exprroot, expected_typ),
-            Expr::Match(_subject, ascription, arms) => self.check_match(exprroot, ascription.clone(), arms.clone(), expected_typ),
+            Expr::Word(_span, wordlit) => self.check_word(exprroot, wordlit, expected_typ),
+            Expr::Ctor(_span, ctor, _) => self.check_ctor(exprroot, *ctor, expected_typ),
+            Expr::If(_span, _, _, _) => self.check_if(exprroot, expected_typ),
+            Expr::Match(_span, _subject, ascription, arms) => self.check_match(exprroot, ascription.clone(), arms.clone(), expected_typ),
             _ => {
                 match self.infer(exprroot) {
                     Err(e) => Err(e),
@@ -82,7 +82,7 @@ impl<'a> TypingContext<'a> {
     pub fn infer(&mut self, exprroot: Id<ExprRoot>) -> Result<Type, VirErr> {
         let expr = &self.virdant.exprroots[exprroot].ast.unwrap();
         let result = match expr.as_ref() {
-            Expr::Reference(path) => {
+            Expr::Reference(_span, path) => {
                 let path = Intern::new(path.to_vec().into_iter().map(|s| s.to_string()).collect::<Vec<_>>().join("."));
                 match self.lookup(path) {
                     Lookup::NotFound => Err(VirErr::Other(format!("Not Found: {path}"))),
@@ -94,14 +94,14 @@ impl<'a> TypingContext<'a> {
                     },
                 }
             },
-            Expr::Word(wordlit) => self.infer_word(wordlit),
-            Expr::Bit(_bitlit) => self.infer_bit(),
-            Expr::Idx(_subject, i) => self.infer_idx(exprroot, *i),
-            Expr::IdxRange(_subject, j, i) => self.infer_idxrange(exprroot, *j, *i),
-            Expr::MethodCall(_subject, method, _args) => self.infer_methodcall(exprroot, *method),
-            Expr::Field(_subject, field) => self.infer_field(exprroot, field.clone()),
-            Expr::Cat(_es) => self.infer_cat(exprroot),
-            Expr::Struct(struct_name, assigns) => self.infer_struct(exprroot, *struct_name, assigns.to_vec()),
+            Expr::Word(_span, wordlit) => self.infer_word(wordlit),
+            Expr::Bit(_span, _bitlit) => self.infer_bit(),
+            Expr::Idx(_span, _subject, i) => self.infer_idx(exprroot, *i),
+            Expr::IdxRange(_span, _subject, j, i) => self.infer_idxrange(exprroot, *j, *i),
+            Expr::MethodCall(_span, _subject, method, _args) => self.infer_methodcall(exprroot, *method),
+            Expr::Field(_span, _subject, field) => self.infer_field(exprroot, field.clone()),
+            Expr::Cat(_span, _es) => self.infer_cat(exprroot),
+            Expr::Struct(_span, struct_name, assigns) => self.infer_struct(exprroot, *struct_name, assigns.to_vec()),
             _ => Err(VirErr::CantInfer),
         };
 
@@ -178,7 +178,7 @@ impl<'a> TypingContext<'a> {
         Ok(())
     }
 
-    fn check_word(&self, wordlit: &WordLit, expected_typ: Type) -> Result<(), VirErr> {
+    fn check_word(&self, exprroot: Id<ExprRoot>, wordlit: &WordLit, expected_typ: Type) -> Result<(), VirErr> {
         if let Some(width) = wordlit.width {
             let actual_typ = self.virdant.word_type(width);
             if expected_typ == actual_typ {
@@ -195,7 +195,9 @@ impl<'a> TypingContext<'a> {
                     Err(VirErr::TypeError(format!("Doesn't fit")))
                 }
             } else {
-                    Err(VirErr::TypeError(format!("Expected Word type")))
+                let exprroot_info = &self.virdant.exprroots[exprroot];
+                let span = exprroot_info.span.unwrap();
+                Err(VirErr::TypeError(format!("Expected Word type: {:?} to {:?}", span.start(), span.end())))
             }
         }
     }

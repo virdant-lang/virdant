@@ -1,3 +1,5 @@
+use self::location::Span;
+
 use super::*;
 
 #[derive(Default, Clone, Debug)]
@@ -84,6 +86,7 @@ pub struct ExprRootInfo {
     pub moddef: Ready<Id<ModDef>>,
     pub ast: Ready<Arc<ast::Expr>>,
     pub expected_typ: Option<Type>,
+    pub span: Option<Span>,
     pub typ: Ready<Type>,
 
     pub parent: Option<Id<ExprRoot>>,

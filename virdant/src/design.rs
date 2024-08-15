@@ -387,18 +387,18 @@ impl ExprRoot {
         let info = self.info.clone();
 
         match expr_ast.as_ref() {
-            crate::ast::Expr::Reference(_) => Expr::Reference(expr::Reference { root, id, info }),
-            crate::ast::Expr::Word(_) => Expr::Word(expr::Word { root, id, info }),
-            crate::ast::Expr::Bit(_) => Expr::Bit(expr::Bit { root, id, info }),
-            crate::ast::Expr::MethodCall(_, _, _) => Expr::MethodCall(expr::MethodCall { root, id, info }),
-            crate::ast::Expr::Field(_, _) => Expr::Field(expr::Field { root, id, info }),
-            crate::ast::Expr::Struct(_, _) => Expr::Struct(expr::Struct { root, id, info }),
-            crate::ast::Expr::Ctor(_, _) => Expr::Ctor(expr::Ctor { root, id, info }),
-            crate::ast::Expr::Idx(_, _) => Expr::Idx(expr::Idx { root, id, info }),
-            crate::ast::Expr::IdxRange(_, _, _) => Expr::IdxRange(expr::IdxRange { root, id, info }),
-            crate::ast::Expr::Cat(_) => Expr::Cat(expr::Cat { root, id, info }),
-            crate::ast::Expr::If(_, _, _) => Expr::If(expr::If { root, id, info }),
-            crate::ast::Expr::Match(_, _, _) => Expr::Match(expr::Match { root, id, info }),
+            crate::ast::Expr::Reference(_, _) => Expr::Reference(expr::Reference { root, id, info }),
+            crate::ast::Expr::Word(_, _) => Expr::Word(expr::Word { root, id, info }),
+            crate::ast::Expr::Bit(_, _) => Expr::Bit(expr::Bit { root, id, info }),
+            crate::ast::Expr::MethodCall(_, _, _, _) => Expr::MethodCall(expr::MethodCall { root, id, info }),
+            crate::ast::Expr::Field(_, _, _) => Expr::Field(expr::Field { root, id, info }),
+            crate::ast::Expr::Struct(_, _, _) => Expr::Struct(expr::Struct { root, id, info }),
+            crate::ast::Expr::Ctor(_, _, _) => Expr::Ctor(expr::Ctor { root, id, info }),
+            crate::ast::Expr::Idx(_, _, _) => Expr::Idx(expr::Idx { root, id, info }),
+            crate::ast::Expr::IdxRange(_, _, _, _) => Expr::IdxRange(expr::IdxRange { root, id, info }),
+            crate::ast::Expr::Cat(_, _) => Expr::Cat(expr::Cat { root, id, info }),
+            crate::ast::Expr::If(_, _, _, _) => Expr::If(expr::If { root, id, info }),
+            crate::ast::Expr::Match(_, _, _, _) => Expr::Match(expr::Match { root, id, info }),
         }
     }
 }
@@ -750,7 +750,7 @@ mod expr {
 
     impl Reference {
         pub fn referent(&self) -> Referent {
-            let path = if let crate::ast::Expr::Reference(path) = self.ast().as_ref() {
+            let path = if let crate::ast::Expr::Reference(_span, path) = self.ast().as_ref() {
                 path.clone()
             } else {
                 unreachable!()
@@ -769,7 +769,7 @@ mod expr {
 
     impl Word {
         pub fn value(&self) -> WordVal {
-            if let crate::ast::Expr::Word(wordlit) = self.ast().as_ref() {
+            if let crate::ast::Expr::Word(_span, wordlit) = self.ast().as_ref() {
                 wordlit.value
             } else {
                 unreachable!()
@@ -783,7 +783,7 @@ mod expr {
 
     impl Bit {
         pub fn value(&self) -> bool {
-            if let crate::ast::Expr::Bit(bitlit) = self.ast().as_ref() {
+            if let crate::ast::Expr::Bit(_span, bitlit) = self.ast().as_ref() {
                 *bitlit
             } else {
                 unreachable!()
@@ -793,7 +793,7 @@ mod expr {
 
     impl MethodCall {
         pub fn method(&self) -> super::Method {
-            let name = if let crate::ast::Expr::MethodCall(_, method_name, _) = self.ast().as_ref() {
+            let name = if let crate::ast::Expr::MethodCall(_span, _, method_name, _) = self.ast().as_ref() {
                 method_name.to_string()
             } else {
                 unreachable!()
@@ -822,7 +822,7 @@ mod expr {
 
     impl Struct {
         pub fn assigns(&self) -> Vec<(super::Field, super::Expr)> {
-            if let crate::ast::Expr::Struct(_, assigns) = self.ast().as_ref() {
+            if let crate::ast::Expr::Struct(_span, _, assigns) = self.ast().as_ref() {
                 let field_args: Vec<Id<_>> = self.info.children.clone();
 
                 let typ = self.info.typ.unwrap();
@@ -857,7 +857,7 @@ mod expr {
         }
 
         pub fn field(&self) -> super::Field {
-            if let crate::ast::Expr::Field(_, field_name) = self.ast().as_ref() {
+            if let crate::ast::Expr::Field(_span, _, field_name) = self.ast().as_ref() {
                 let typ = self.info.typ.unwrap();
                 let structdef_id = match typ.scheme() {
                     types::TypeScheme::BuiltinDef(_) => unreachable!(),
@@ -880,7 +880,7 @@ mod expr {
 
     impl Ctor {
         pub fn ctor(&self) -> super::Ctor {
-            if let crate::ast::Expr::Ctor(ctor_name, _) = self.ast().as_ref() {
+            if let crate::ast::Expr::Ctor(_span, ctor_name, _) = self.ast().as_ref() {
                 let typ = self.info.typ.unwrap();
                 let uniondef_id = match typ.scheme() {
                     types::TypeScheme::StructDef(_) => unreachable!(),
@@ -917,7 +917,7 @@ mod expr {
         }
 
         pub fn idx(&self) -> StaticIndex {
-            if let crate::ast::Expr::Idx(_, i) = self.ast().as_ref() {
+            if let crate::ast::Expr::Idx(_span, _, i) = self.ast().as_ref() {
                 *i
             } else {
                 unreachable!()
@@ -933,7 +933,7 @@ mod expr {
         }
 
         pub fn idx_hi(&self) -> StaticIndex {
-            if let crate::ast::Expr::IdxRange(_, j, _i) = self.ast().as_ref() {
+            if let crate::ast::Expr::IdxRange(_span, _, j, _i) = self.ast().as_ref() {
                 *j
             } else {
                 unreachable!()
@@ -941,7 +941,7 @@ mod expr {
         }
 
         pub fn idx_lo(&self) -> StaticIndex {
-            if let crate::ast::Expr::IdxRange(_, _j, i) = self.ast().as_ref() {
+            if let crate::ast::Expr::IdxRange(_span, _, _j, i) = self.ast().as_ref() {
                 *i
             } else {
                 unreachable!()
@@ -987,7 +987,7 @@ mod expr {
         }
 
         pub fn arms(&self) -> Vec<(super::Pat, super::Expr)> {
-            if let crate::ast::Expr::Match(_subject, _ascription, arms) = self.ast().as_ref() {
+            if let crate::ast::Expr::Match(_span, _subject, _ascription, arms) = self.ast().as_ref() {
                 let subject_typ = self.subject().typ().typ;
                 let arm_exprroots: Vec<_> = self.info.children.iter()
                     .skip(1)
