@@ -973,7 +973,7 @@ mod expr {
         }
 
         pub fn falsebranch(&self) -> Expr {
-            let falsebranch: Id<_> = self.info.children[1];
+            let falsebranch: Id<_> = self.info.children[2];
             let exprroot = self.root().exprroots[&falsebranch].clone();
             exprroot.to_expr()
         }
@@ -990,6 +990,7 @@ mod expr {
             if let crate::ast::Expr::Match(_subject, _ascription, arms) = self.ast().as_ref() {
                 let subject_typ = self.subject().typ().typ;
                 let arm_exprroots: Vec<_> = self.info.children.iter()
+                    .skip(1)
                     .map(|id| self.root().exprroots[id].to_expr())
                     .collect();
                 let mut results = vec![];
