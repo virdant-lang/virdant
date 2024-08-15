@@ -140,7 +140,15 @@ impl Verilog {
                 writeln!(f)?;
             },
             ComponentClass::SubPort => {
-                ()
+                if let Flow::Sink = component.flow() {
+                    let expr = component.driver().unwrap();
+                    let typ = component.typ();
+                    let component_name = component.name();
+                    writeln!(f, "    // submodule port {component_name} : {typ}")?;
+                    let ssa = self.verilog_expr(f, expr, Context::empty())?;
+                    writeln!(f, "    assign {} = {ssa};", component.path().join("__"))?;
+                    writeln!(f)?;
+                }
             },
             ComponentClass::Node => {
                 let expr = component.driver().unwrap();
@@ -201,7 +209,7 @@ impl Verilog {
                             let path = component.path();
                             let sm = &path[0];
                             let port = &path[1];
-                            Ok(format!("__TEMP_{sm}_{port}"))
+                            Ok(format!("{sm}__{port}"))
                         }
                     },
                 }
