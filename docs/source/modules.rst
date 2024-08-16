@@ -1,82 +1,58 @@
 Modules
 =======
-Modules are the basic unit of reusable hardware.
-
-Module Definitions
-------------------
-Modules are declared using the `mod` keyword.
+Modules are the basic unit of hardware.
 
 Modules consist of a list of statements.
 These do things like:
 
 * declare ports to allow the module to communicate with the outside world
 * declare registers for tracking the state of the module
-* instantiate submodules
-* perform logic
+* instantiate other modules as submodules
+* declare logic to perform on the registers and ports
 
-The following example is a `Buffer` module, which demonstrates all three parts:
+We'll look at modules in detail with the following example:
 
 .. literalinclude:: examples/buffer.vir
    :caption: buffer.vir
    :language: virdant
    :linenos:
 
-This module has two ports, an incoming port `in` and and outgoing port `out`.
-Both carry a value of type `Word[8]` -- a byte -- to and from the module.
 
-This module contains one subcomponent: a `reg` (register) named `queue`.
-It stores a value of type `Word[1]`.
-The `reset` clause declares that the reset value of the register is `0`.
+Module Definitions
+------------------
+Modules are declared using the `mod` keyword.
+We can see that in our example, there are two modules defined: `Top` and `Buffer`.
+The order of module definitions does not matter.
 
-The final two statements are wires.
+Let's look at the `Buffer` module definition.
 
-The first wire, `queue <= in`, will connect the incoming port `in` to the register `queue`.
-The syntax `<=` is a *latching* wire.
-It is only used with `reg`\s, and it tells us that the register will latch the value of `in` on the next clock cycle.
+This module has two ports, an incoming port `inp` and and outgoing port `out`.
+Both carry a value of type `Word[4]`.
+This is how we say "a 4-bit value" in Virdant.
 
+This module contains one subcomponent: a `reg` named `queue`, also with type `Word[4]`.
+
+The then have two driver statements.
+The first driver, `queue <= inp`, will latch the value of `inp` into the register `queue` on every clock cycle.
 The second wire, `out := queue`, will connect the register `queue` to the outgoing port `out`.
-The syntax `:=` is a *direct* connect.
-It is used with ports and with nodes,
-and it tells us that the value of `queue` will be sent to the port `out` on the same clock cycle.
 
-In Virdant, clocks and resets are usually passed implicitly to a module.
-There is no need to declare them for synchronous circuits.
+The second module is `Top`.
 
-Module Instances
-----------------
-Once a module is defined, it may be instantiated.
+We see it declares two ports, `clock` and `out`, and a register `counter`.
+The driver statement for `counter` says that every cycle, `counter` is incremented.
 
-Let's assume the above definition for `Buffer` has been given.
-We can use several buffers in a row to make a 4-bit shift register:
 
-.. literalinclude:: examples/tutorial_shift_reg.vir
-   :language: virdant
-   :linenos:
+Submodule Instances
+-------------------
+The next statements `mod buffer of Buffer` declares a new submodule instance.
+This acts as if we have a copy of `Buffer` inside of `Top`.
+We give this submodule the name `buffer`.
 
-You can see the experssion `cat(buf3.out, buf2.out, buf1.out, buf0.out)` is used
-to concatenate the output of each of the buffers together.
-Since each of the four values is a single bit, the result is a `Word[4]`.
+A module can only access a submodule through its ports.
+Moreover, a module is obligated to drive all `incoming` ports of its submodules.
 
-You can see at a glance that because the module has four latch wires (`<=`),
-a value will take four cycles to get from `cin` to `cout`.
+After declaring `buffer`, we must drive its `clock` and `inp` ports.
+We do this by using driver statements: `buffer.clock := clock` and `buffer.inp := counter`.
 
-External Modules
-----------------
-In Virdant, you can declare modules whose behavior is determined by the simulator.
-These are called external modules.
-They are declared with the `ext` keyword, together with their list of ports.
-
-The following would be a declaration for an external module
-which might log the value presented on the port `in` on every cycle.
-
-.. code-block::
-
-   ext mod Monitor {
-        incoming in of Word[8];
-    }
-
-These can be instantiated with the `mod` keyword just like a normal module.
-
-.. literalinclude:: examples/tutorial_ext.vir
-   :language: virdant
-   :linenos:
+A module may use the `outgoing` ports of its submodules in expressions.
+Thus, our last statement drives the outgoing port `out` with `buffer.out`.
