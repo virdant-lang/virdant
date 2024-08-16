@@ -5,7 +5,7 @@ Tradition dictates that the first program that is written in any programming lan
 In that spirit, in hardware languages, we write a design which blinks an LED on and off.
 So let's make an LED blink by writing the "hello world" of Virdant:
 
-.. literalinclude:: examples/blink.vir
+.. literalinclude:: /examples/blink.vir
    :caption: blink.vir
    :language: virdant
    :linenos:

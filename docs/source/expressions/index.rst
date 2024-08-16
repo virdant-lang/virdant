@@ -2,9 +2,13 @@ Expressions
 ===========
 Expressions represent combinational logic.
 
-**Literals**
+Literals
+--------
+Literals are hard-coded constants.
 
-To represent integers of arbitrary bitwdith, we annotate constants with their bitwidth.
+To represent `Bit`\s, we use `true` and `false`.
+
+To represent values of type `Word[n]`, we annotate constants with their bitwidth.
 The literal `42w16` is a 16-bit integer with the value 42.
 
 We may also elide the width in any context where the type can be inferred.
@@ -12,150 +16,124 @@ For example, if we define a register:
 
 .. code-block:: virdant
 
-    reg counter of Word[4] reset 0;
+    reg counter : Word[4] on clock;
+    counter <= 0;
 
-The reset value, `0` is inferred to have type `Word[4]`, and is the same as if we had written `0w4`.
+The value of `counter` is written `0`, but is inferred as if we had written `0w4`.
 
-**References**
 
-You may reference ports, registers, and nodes, accessing their current value.
+References
+----------
+A reference is a name that points to something that carries a value.
 
-References must be visible to the moduel they appear in.
-That means they may be:
+Most references point to components.
+Components include ports, registers, the ports of submodules, and the channels of a socket.
 
-* the name of a `node`, `reg`, or `incoming` in the same module
-* the name of a submodule dotted with a `node` or `outgoing` of that submodule.
-* the name of an external module dotted with one of its `outgoing` ports.
+References of local ports and registers are just simple identifiers, like `clock` or `out` or `counter`.
+References to ports of submodules and channels of a socket will be dotted expressions: `buffer.clock`, `buffer.inp`, etc.
 
-When using a register in this way, it references the *current* value of the register,
-regardless of whatever the latching wire (`<=`) is going to do next cycle.
+Since using a reference implies reading it, when a reference points to a component, 
+it must correspond to a component which sources values.
+You can reference a `reg` or an `incoming` port, but you cannot reference an `outgoing` port.
 
-**Operations**
+For clarity, when referencing a `reg`, it results to the *previous* value of the register, as opposed to the *next* value.
+This means a statement such as `counter <= counter->inc()` is taking the previous value of `counter`, incrementing it,
+and then that value gets latched to supply `counter` with its next value.
 
-Some basic operations are supported:
+In certain expressions, references can also point to locally-bound variables.
+For example, in the match expression:
 
-* `||` or
-* `&&` and
-* `!` not
-* `^` xor
-* `==` equals
-* `!=` different
-* `<` less than
-* `+` sum (wrapping)
-* `+%` sum (carrying)
-* `-` difference (wrapping)
+.. code-block:: virdant
 
-**Concatenation, Indexing, and Slicing**
+    match maybe_data {
+        @Invalid => 0;
+        @Valid(payload) => payload;
+    }
 
-You can concatenate words with the syntax `cat(w1, w2)`.
-If `w1` is `Word[n]` and `w2` is `Word[m]`, the result is `Word[n + m]`.
-The bits of `w1` become the high-order bits and `w2` become the lower bits.
+The reference `payload` on the right hand side of the `=>` references the locally-bound variable (of the same name)
+declared inside the pattern on the left hand side: `@Valid(payload)`.
 
-You can index into a `Word[n]` with the syntax `w[0]`.
-Note that we use a plain old literal and not `0w8` here.
-This creates a static indexing of the word.
-It has type `Word[1]`.
+Methods
+-------
+A type may define methods, similar to many programming languages.
 
-You can also slice a word with the syntax `w[8..4]`.
-This will give you a `Word[4]` with the same result as if you had written
-`cat(w[7], w[6], w[5], w[4])`.
-Pay attention!
-This might surprise you coming from Verilog, since `w[8]` is *not* included in the result.
-However, experience from programming languages such as Python and Rust shows
-that this is a very natural way to handle slicing
-(albeit the ordering is reversed to align with the way we write out bitstrings).
+The syntax is `subject->method(arg1, ..., argn)`.
 
-**mux and if expressions**
+The type of the subject must be inferrable.
 
-`mux` is used to create a simple multiplexer.
-The syntax is `mux(s, a, b)`, and evaluates to `a` when `s` is asserted and `b` when `s` is asserted.
+The method supplies a type signature which gives each argument an expected type, as well as the return type.
 
-`if` expressions be used to create mux trees with more than one condition.
+Some important methods include:
+
+* `a->inc()` (increment `a`)
+* `a->dec()` (decrement `a`)
+* `a->add(b)` (add `a` and `b`)
+* `a->sub(b)` (subtract `b` from `a`)
+* `a->not()` (logical NOT `a`)
+* `a->and(b)` (logical AND `a` with `b`)
+* `a->or(b)` (logical OR `a` with `b`)
+* `a->xor(b)` (logical XOR `a` with `b`)
+* `a->eq(b)` (test if `a` equals `b`)
+* `a->neq(b)` (test if `a` does not equal `b`)
+* `a->gt(b)` (test if `a` is greater than `b`)
+* `a->lt(b)` (test if `a` is less than `b`)
+* `a->get(i)` (dynamically index into `a` to get bit `i`)
+
+
+Concatenation
+-------------
+You can concatenate words with the syntax `cat(a, b)`.
+
+The syntax is variadic, and so you can write things like `cat(a, b, c, d)`.
+You can also write `cat(a)` to cast `a` (if it's a `Bit` to a `Word[1]`),
+or write `cat()` to generate the zero value of `Word[0]`.
+
+Each argument of `cat` must have an inferrable type.
+Each must have a `Word` type or else must have type `Bit`.
+
+The result will have a `Word` type with its width equal to the sum of all the widths of all the arguments.
+
+The arguments to `cat` are ordered big-end first.
+So `cat(1w1, 0w3)` will result in the value `0b1000w4`.
+
+
+Indexing
+--------
+You can statically index into a `Word[n]` with the syntax `w[0]`.
+
+The index must be a constant value.
+Note that we use a plain literal and not `0w8` here.
+Moreover, it must be in the range of `0` to `n - 1`.
+
+The result has type `Bit`.
+
+
+Slice Indexing
+--------------
+You can also slice a word with the syntax `w[8..6]`.
+
+The two indexes must be literal integers.
+Both must be in the range of `0` to `n - 1`.
+Moreover, the high index comes first and must be greater than or equal to the lower index.
+
+
+.. warning::
+
+    Note that this is totally different from how Verilog indexes.
+    It was chosen so thta we preserve the ordering of the indexes (high bit first),
+    but otherwise mirrors what is conventional in most programming languages.
+
+The result of a slice index is `Word[k]` where `k` is the difference between the high and low index.
+In the example `w[8..6]`, the result is a `Word` type with width 8 - 6.
+Thus, the result is `Word[2]`.
+
+
+`if` Expressions
+----------------
+`if` expressions be used to create mux trees with one or more conditions.
 All `if` expressions must have an `else` branch.
 
-**let statements**
 
-`let` statements allow you to name subexpressions.
-
-An example is `let x = foo + bar; x + 1`.
-This defines a new variable `x` with the value `foo + bar`.
-This value is only in scope for the remainder of the expression.
-
-**match statements**
-
+`match` Statements
+------------------
 `match` statements allow you to select an expression based on a result.
-Think of it like a fancy `if` statement that works well with enum types and alt types.
-
-Each `match` statement has a subject, which is used to determine which match arm is used.
-
-.. code-block:: virdant
-
-    node typ of InstrType;
-    typ := match opcode {
-        @OP => InstrType::R;
-        @OP_IMM => InstrType::I;
-        @LOAD => InstrType::I;
-        @STORE => InstrType::S;
-        @JAL => InstrType::J;
-        @BRANCH => InstrType::B;
-        @LUI => InstrType::U;
-        @AUIPC => InstrType::U;
-        @JALR => InstrType::I;
-    };
-
-**sext and zext**
-
-You can extend a word to a larger word by using `sext` (sign-extend) and `zext` (zero-extend).
-The width of the result is automatically inferred from context.
-You cannot use `sext` on a `Word[0]`.
-
-**word and trycast**
-
-Given an enum type, you can cast it to its underlying numeric value using the `word` builtin.
-For example, given the enum type:
-
-.. code-block:: virdant
-
-    enum type OpFunct7 {
-        ADD  = 0b0000000w7;
-        SUB  = 0b0100000w7;
-    }
-
-The expression `word(OpFunct7::ADD)` evaluates to `0b0000000w7` and
-`word(OpFunct7::SUB)` evaluates to `0b0100000w7`.
-
-You can't cast from a word back to an enum,
-since the value may not be a valid value in that enum type.
-However, you can use `trycast` to get a `Valid` for that type.
-
-In other words, `trycast(0b0000000w7)` evaluates to `@Valid(OpFunct7::ADD)`,
-while `trycast(0b1111111w7)` evaluates to `@Invalid`.
-
-**User-defined functions**
-
-You can define your own functions in Virdant:
-
-.. code-block:: virdant
-
-    fn inc(x of Word[8]) -> Word[8] {
-        x + 1
-    }
-
-You can then use these functions in expressions:
-
-.. code-block:: virdant
-
-    pub mod Top {
-        reg counter of Word[8] reset 0;
-        counter <= inc(counter);
-    }
-
-**Holes**
-
-A hole is an undefined expression.
-They are handy for when you want to get an unfinished program to typecheck.
-
-We write holes as `?` for an unnamed hole or `?foo` for a hole with a name (here, `foo`).
-
-A circuit with a hole is unfinished.
-However, a hole-aware evaluator may still be able to simulate in their presence.
