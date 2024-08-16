@@ -280,6 +280,10 @@ impl<'a> TypingContext<'a> {
             let structdef_field = self.structdef_field(&structdef_info, *field)?;
             self.check(arg, *structdef_field.typ.unwrap())?;
         }
+
+        let exprroot_info = &mut self.virdant.exprroots[exprroot];
+        exprroot_info.struct_structdef = Some(structdef);
+
         let typ = Type::structdef(structdef);
         Ok(typ)
     }

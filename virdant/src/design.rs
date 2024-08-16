@@ -821,6 +821,12 @@ mod expr {
     }
 
     impl Struct {
+        pub fn structdef(&self) -> StructDef {
+            let structdef_id = self.info.struct_structdef.unwrap();
+            let item = &self.root().items[&structdef_id.as_item()];
+            item.as_structdef()
+        }
+
         pub fn assigns(&self) -> Vec<(super::Field, super::Expr)> {
             if let crate::ast::Expr::Struct(_span, _, assigns) = self.ast().as_ref() {
                 let field_args: Vec<Id<_>> = self.info.children.clone();
@@ -858,7 +864,7 @@ mod expr {
 
         pub fn field(&self) -> super::Field {
             if let crate::ast::Expr::Field(_span, _, field_name) = self.ast().as_ref() {
-                let typ = self.info.typ.unwrap();
+                let typ = self.subject().typ().typ;
                 let structdef_id = match typ.scheme() {
                     types::TypeScheme::BuiltinDef(_) => unreachable!(),
                     types::TypeScheme::UnionDef(_) => unreachable!(),

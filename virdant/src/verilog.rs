@@ -4,6 +4,7 @@ use crate::design::*;
 use crate::context::Context;
 use crate::ComponentClass;
 use crate::Flow;
+use std::collections::HashMap;
 use std::io::Write;
 
 type VerilogError = Box<dyn std::error::Error>;
@@ -428,10 +429,45 @@ impl Verilog {
 
                 Ok(gs)
             },
-            _ => {
-                let gs = self.gensym();
-                writeln!(f, "    {gs} = ...{expr:?}")?;
-                todo!()
+            Expr::Struct(inner) => {
+                let structdef = inner.structdef();
+                let mut field_ssas = vec![];
+
+                let assigns: HashMap<String, Expr> = inner.assigns().into_iter()
+                    .map(|(field, e)| (field.name().to_string(), e))
+                    .collect();
+
+                for field in self.layout.field_slot_order(structdef) {
+                    let e = assigns[field.name()].clone();
+                    let field_ssa = self.verilog_expr(f, e, ctx.clone())?;
+                    field_ssas.push(field_ssa);
+                }
+
+                let gs = self.gensym_hint("struct");
+                let typ = inner.typ();
+                let width_str = self.width_str(&typ);
+                writeln!(f, "    wire {width_str}{gs} = {{{}}};", field_ssas.join(", "))?;
+                Ok(gs)
+            },
+            Expr::Field(inner) => {
+                let subject = inner.subject();
+
+                let gs = self.gensym_hint(&format!("field__{}", inner.field().name()));
+                let subject_ssa = self.verilog_expr(f, subject.clone(), ctx.clone())?;
+
+                let (offset, width) = self.layout.field_slot(&inner.field());
+
+                let width_str = if width > 1 {
+                    format!("[{}:0] ", width - 1)
+                } else {
+                    "".to_string()
+                };
+
+                let index_str = format!("[{}:{}]", offset + width - 1, offset);
+
+                writeln!(f, "    wire {width_str}{gs} = {subject_ssa}{index_str};")?;
+
+                Ok(gs)
             },
         }
     }
@@ -518,6 +554,25 @@ impl Layout {
             }
         }
 
+        unreachable!()
+    }
+
+    pub fn field_slot_order(&self, structdef: StructDef) -> Vec<Field> {
+        let mut fields = structdef.fields();
+        fields.sort_by_key(|field| self.field_slot(field).0);
+        fields
+    }
+
+    pub fn field_slot(&self, field: &Field) -> (Offset, Width) {
+        let mut offset = 0;
+        for current_field in field.structdef().fields() {
+            let width = self.width(&field.typ());
+            if current_field.name() == field.name() {
+                return (offset, width);
+            } else {
+                offset += width;
+            }
+        }
         unreachable!()
     }
 }
