@@ -12,7 +12,7 @@ These do things like:
 
 We'll look at modules in detail with the following example:
 
-.. literalinclude:: examples/buffer.vir
+.. literalinclude:: /examples/buffer.vir
    :caption: buffer.vir
    :language: virdant
    :linenos:
