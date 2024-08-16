@@ -93,4 +93,5 @@ pub struct ExprRootInfo {
     pub children: Vec<Id<ExprRoot>>,
 
     pub reference_component: Option<Id<Component>>,
+    pub struct_structdef: Option<Id<StructDef>>,
 }

@@ -693,9 +693,11 @@ impl Virdant {
                         component_info.moddef.set(moddef);
                         component_info.path = vec![component_name.to_string()];
                         component_info.is_reg.set(node.child(0).is_reg());
-                        if let Ok(typ) = self.resolve_type(component_typ_ast, item) {
+                        if let Ok(typ) = self.resolve_type(component_typ_ast.clone(), item) {
                             let component_info = &mut self.components[component];
                             component_info.typ.set(typ);
+                        } else {
+                            self.errors.add(VirErr::Other(format!("Could not resolve type: {:?}", component_typ_ast.summary())));
                         }
                     } else if node.child(0).is_submodule() {
                         let submodule_name = node.name().unwrap();
