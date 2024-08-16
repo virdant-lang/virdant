@@ -1,0 +1,44 @@
+union type State {
+    Idle();
+    Running(x : Word[8], y : Word[8]);
+    Done(result : Word[8]);
+}
+
+mod Gcd {
+    incoming clock : Clock;
+    incoming a : Word[8];
+    incoming b : Word[8];
+    outgoing result : Word[8];
+
+    reg state : State on clock;
+
+    state <= 
+        match state {
+            @Idle() => @Running(a, b);
+            @Running(x, y) =>
+                if y->eq(0) {
+                    @Done(x)
+                } else {
+                    if x->lt(y) {
+                        @Running(y->sub(x), x)
+                    } else {
+                        @Running(x->sub(y), y)
+                    }
+                };
+            @Done(result) => @Idle();
+        };
+
+    result := match state {
+        @Idle() => 0;
+        @Running(x, y) => 0;
+        @Done(result) => result;
+    };
+}
+
+mod Top {
+    incoming clock : Clock;
+    mod gcd of Gcd;
+    gcd.clock := clock;
+    gcd.a := 89;
+    gcd.b := 144;
+}

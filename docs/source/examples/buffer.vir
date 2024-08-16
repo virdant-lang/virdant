@@ -1,0 +1,24 @@
+mod Buffer {
+    incoming clock : Clock;
+    incoming inp : Word[4];
+    outgoing out : Word[4];
+
+    reg queue : Word[4] on clock;
+    queue <= inp;
+
+    out := queue;
+}
+
+mod Top {
+    incoming clock : Clock;
+    outgoing out : Word[4];
+
+    reg counter : Word[4] on clock;
+    counter <= counter->inc();
+
+    mod buffer of Buffer;
+    buffer.clock := clock;
+    buffer.inp := counter;
+
+    out := buffer.out;
+}
