@@ -25,32 +25,22 @@ it still detracts from the experience whenever a preventable error occurs.
 
 Virdant's strong type systems is designed so that if your circuit synthesizes, it works.
 
-The expression sublanguage is a `total language`_:
+Under normal operation, the expression sublanguage has many nice properties:
 
 * Operations must always be totally defined.
 * All conditional expressions are required to have full case coverage.
-* Indexing into a `Vec<T, n>` must be guaranteed to be in bounds.
 * You are prohibited from observing the unset bits in a value.
 * Virdant's equivalent of Verilog's `X` values are handled in a principled way.
 
-.. * For operations which might fail, we use the `Valid<T>` type.
-
-Virdant also avoids many of the pitfalls of working in Verilog:
-
 * No components may be left uninitialized.
 * All nets must have a single driver.
-* Unsynchronized clock domain crossings are illegal.
-
-.. Layout
-.. ------
-.. Outside of types annotated as such, Virdant does not guarantee the bit layout of its shapes.
-.. This allows the compiiler total freedom in choosing a sutiable representation.
 
 
 Digital
 -------
 Virdant is oriented towards digital circuits.
-Every module with a register operates on an implicit clock and reset domain.
+It does not support latches or tristate buffers.
+It has no support for analog hardware.
 
 
 Synthesizable
@@ -63,10 +53,3 @@ Fun
 ---
 Virdant is a fun language to write in.
 Otherwise, what's the point?
-
-
-.. _total language: https://www.jucs.org/jucs_10_7/total_functional_programming/jucs_10_07_0751_0768_turner.pdf
-
-.. Footnotes
-.. ---------
-.. .. [#unset_bits] For example, you may not inspect the "payload" of a `Valid<S>` when the value is `@Invalid`.

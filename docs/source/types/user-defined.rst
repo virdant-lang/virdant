@@ -1,94 +1,80 @@
-User-defined Types
-===================
-There are two classes of user-defined types in Virdant.
+Type Schemes
+============
+It is possible to define new types in Virdant.
 
-Enums
------
-You can define your own enumerations with `enum type`.
+Each user-defined type belongs to one of the following type schemes:
 
-For example, in a RISC-V core, you might find the following definition
-to capture the list of 7-bit instruction opcodes:
 
-.. code-block:: virdant
+Struct Types
+------------
+A `struct type` is a type which breaks down into several fields.
 
-    enum type Opcode {
-        OP      = 0b0110011w7;
-        OP_IMM  = 0b0010011w7;
-        LOAD    = 0b0000011w7;
-        STORE   = 0b0100011w7;
-        JAL     = 0b1101111w7;
-        BRANCH  = 0b1100011w7;
-        LUI     = 0b0110111w7;
-        AUIPC   = 0b0010111w7;
-        JALR    = 0b1100111w7;
-    }
+For example, suppose you were writing hardware which made heavy use of 24-bit RGB color values.
+You could encode a color with `Word[24]`.
+However, this has the disadvantage that the designers have to keep track of the color encoding in their head.
 
-You can create a constant literal for any `enum` with the syntax `Opcode::OP_IMM`.
-You can convert an enum value to a `Word` of the appropriate size with `word`.
-For example, `word(Opcode::OP_IMM)` would equal `0b0010011w7`.
+Instead, Virdant allows you to define a new struct type `Color` as:
 
-Structs
--------
-You can define your own struct types with `struct type`.
+.. literalinclude:: /examples/rgb.vir
+    :language: virdant
+    :dedent:
+    :lines: 1-5
 
-For example, if you were writing hardware which made heavy use of 24-bit RGB color values,
-you could define `Color` as:
+You can construct values of a struct type with the syntax `$Color { red = 0, green = 0, blue = 0 }`.
 
-.. code-block:: virdant
+If you are given a value of type `Color`, you can project out each field using the syntax `color->red`, etc.
 
-    struct type Color {
-        red   of Word[8];
-        green of Word[8];
-        blue  of Word[8];
-    }
 
-You can construct values of a struct type with the syntax
-`{red = 0, green = 0, blue = 0}`.
-You can take a value with a struct type and refer to its components with the syntax
-`color->red`, etc.
-
-Alts
-----
-An `alt type` is what's sometimes known as an algebraic data type.
+Union Types
+-----------
+A `union type` is what's sometimes known as an algebraic data type.
 Some programming languages also call them `enum` types.
 
-Alt types are defined with a set of constructors.
+Union types are useful when defining state machines.
+
+Union types are defined with a set of constructors.
 Each constructor takes zero or more arguments.
-The type of each argument is given when defining the alt type.
+The type of each argument is given when defining the type.
 
-Here is an example of a definition for an alt type:
+Here is an example of a definition for an union type:
 
-.. code-block:: virdant
-
-    alt type State {
-        Idle();
-        Running(Word[32], Word[32]);
-        Done(Word[32]);
-    }
+.. literalinclude:: /examples/gcd.vir
+    :language: virdant
+    :lines: 1-5
 
 We define `State` to have three constructors: `Idle`, `Running`, and `Done`.
 
-You construct values of an alt type by calling the constructors.
-Prepend the constructors with an `@` symbol to distinguish them from functions.
-The `@` also reminds us that the identifier is not a variable or a fixed symbol.
-Instead, it is resolved to a concrete constructor only once you know the type.
+You construct values of a union type by calling the constructors, prepended with an `@` sign.
+For example, `@Idle()` is a `State`, as is `@Done(15)` or `@Running(7, 8)`.
 
-.. code-block:: virdant
+To make use of a value with a union type, you can match on it with a `match` statement:
 
-   mod StateMachine {
-        reg state of State reset @Idle();
-        // ...
-   }
+.. literalinclude:: /examples/gcd.vir
+    :language: virdant
+    :dedent:
+    :lines: 16-29
 
-To make use of an alt type, you can match on it:
+Here, the subject of the match, `state`, has type `State`.
+The body of the match statement consists of three match arms.
+Each one starts with a pattern:
 
-.. code-block:: virdant
+* `@Idle() => ...`
+* `@Running(x, y) => ...`
+* `@Done(result) => ...`
 
-   mod StateMachine {
-        reg state of State reset @Idle();
-        state <= match state {
-            @Idle() => ?idle_next_state;
-            @Running(x, y) => ?running_next_state;
-            @Done(x) => ?done_next_state;
-        };
-   }
+And each ends with an expression.
+
+The patterns may introduce new variable bindings.
+
+* `@Running(x, y)` introduces `x` and `y`, which both have type `Word[8]`.
+* `@Result(result)` introduces `result` which has also type `Word[8]`.
+
+Unions help communicate intent that certain data is only "valid" in certain states.
+In this example, the `x` and `y` variables are only valid when the machine is running.
+And so Virdant prevents you from even accessing these values otherwise.
+
+So, in English, the whole match statement above says:
+
+* If the state is idle, start it running with values `a` and `b`. (These are ports of the module).
+* If the state is running, subtract the larger or `x` and `y` from the other, or halt if `y` is zero.
+* If the state is done, move it on to idle after one cycle.
