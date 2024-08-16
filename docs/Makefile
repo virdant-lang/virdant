@@ -10,20 +10,16 @@ BUILDDIR      = build
 EXAMPLES      = $(wildcard sources/examples/*.vir)
 
 
-auto: Makefile examples $(EXAMPLES) # rustdocs
+auto: Makefile $(EXAMPLES) # rustdocs
 	$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
-.PHONY: auto clean examples push rustdocs
+.PHONY: auto clean push rustdocs
 
 clean:
 	rm -rf $(BUILDDIR)
-	rm -rf ./latexbuild/
 
 %.pdf: %.tex
 	mkdir -p ./build/html
-	mkdir -p ./latexbuild/
-	pdflatex -output-directory=./latexbuild/ $<
-	cp ./latexbuild/$@ $(BUILDDIR)/html/
 
 push: auto
 	rsync -cazvhP $(BUILDDIR)/html/* digitalocean:/root/projects/virdant/docs/build/html
