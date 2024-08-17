@@ -70,6 +70,12 @@ pub struct BuiltinDef {
     pub(crate) info: ItemInfo,
 }
 
+#[derive(Clone, Debug)]
+pub struct FnDef {
+    pub(crate) root: OnceCell<Weak<DesignRoot>>,
+    pub(crate) info: ItemInfo,
+}
+
 #[derive(Clone)]
 pub struct SocketDef {
     pub(crate) root: OnceCell<Weak<DesignRoot>>,
@@ -183,6 +189,7 @@ impl Item {
             crate::ItemKind::UnionDef => ItemKind::UnionDef(self.as_uniondef()),
             crate::ItemKind::StructDef => ItemKind::StructDef(self.as_structdef()),
             crate::ItemKind::BuiltinDef => ItemKind::BuiltinDef(self.as_builtindef()),
+            crate::ItemKind::FnDef => ItemKind::FnDef(self.as_fndef()),
             crate::ItemKind::SocketDef => ItemKind::SocketDef(self.as_socketdef()),
         }
     }
@@ -201,6 +208,10 @@ impl Item {
 
     fn as_builtindef(&self) -> BuiltinDef {
         BuiltinDef { root: self.root.clone(), id: self.id.cast(), info: self.info.clone() }
+    }
+
+    fn as_fndef(&self) -> FnDef {
+        FnDef { root: self.root.clone(), info: self.info.clone() }
     }
 
     fn as_socketdef(&self) -> SocketDef {
@@ -287,6 +298,27 @@ impl StructDef {
             }
         }
         panic!("No such field")
+    }
+}
+
+impl FnDef {
+    pub fn name(&self) -> String {
+        self.info.name.to_string()
+    }
+
+    pub fn params(&self) -> Vec<(String, Type)> {
+        let mut results = vec![];
+        for (name, typ) in self.info.sig.unwrap().params() {
+            let typ = Type::new(self.root.clone(), typ.clone());
+            results.push((name.clone(), typ));
+        }
+        results
+    }
+
+    pub fn body(&self) -> Expr {
+        let exprroot_id: Id<_> = self.info.body.unwrap().clone();
+        let exprroot = self.root().exprroots[&exprroot_id].clone();
+        exprroot.to_expr()
     }
 }
 
@@ -515,6 +547,7 @@ impl_hasroot!(ModDef);
 impl_hasroot!(UnionDef);
 impl_hasroot!(StructDef);
 impl_hasroot!(SocketDef);
+impl_hasroot!(FnDef);
 impl_hasroot!(BuiltinDef);
 
 impl_hasroot!(Component);
@@ -531,6 +564,7 @@ pub enum ItemKind {
     UnionDef(UnionDef),
     StructDef(StructDef),
     BuiltinDef(BuiltinDef),
+    FnDef(FnDef),
     SocketDef(SocketDef),
 }
 

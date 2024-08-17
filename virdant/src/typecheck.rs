@@ -3,7 +3,7 @@ use std::sync::Arc;
 use internment::Intern;
 
 use crate::ast::Ast;
-use crate::common::*;
+use crate::{common::*, ItemKind};
 use crate::error::VirErr;
 use crate::types::{Type, TypeScheme};
 use crate::{FieldInfo, ItemInfo, Virdant};
@@ -16,23 +16,51 @@ use crate::context::Context;
 #[derive(Debug)]
 pub struct TypingContext<'a> {
     virdant: &'a mut Virdant,
-    moddef: Id<ModDef>,
+    item: Id<Item>,
     context: Context<Ident, Type>,
 }
 
 impl<'a> TypingContext<'a> {
-    pub fn new(virdant: &'a mut Virdant, moddef: Id<ModDef>) -> TypingContext<'a> {
+    pub fn new(virdant: &'a mut Virdant, item: Id<Item>) -> TypingContext<'a> {
+        let item_info = &virdant.items[item];
+        let kind = *item_info.kind.unwrap();
+        match kind {
+            ItemKind::ModDef => Self::new_from_moddef(virdant, item.cast()),
+            ItemKind::FnDef => Self::new_from_fndef(virdant, item.cast()),
+            _ => panic!("Can't typecheck an expression in item of kind {kind:?}"),
+        }
+    }
+
+    fn new_from_moddef(virdant: &'a mut Virdant, moddef: Id<ModDef>) -> TypingContext<'a> {
         TypingContext {
             virdant,
-            moddef,
+            item: moddef.as_item(),
             context: Context::empty(),
+        }
+    }
+
+    fn new_from_fndef(virdant: &'a mut Virdant, fndef: Id<FnDef>) -> TypingContext<'a> {
+        let item = fndef.as_item();
+
+        let fndef_info = &virdant.items[item];
+        let fnsig = fndef_info.sig.unwrap();
+
+        let mut context = Context::empty();
+        for (param_name, param_typ) in fnsig.params() {
+            context = context.extend(Ident::new(param_name.clone()), param_typ.clone());
+        }
+
+        TypingContext {
+            virdant,
+            item,
+            context,
         }
     }
 
     fn lookup(&self, x: Intern<String>) -> Lookup {
         if let Some(val) = self.context.lookup(&x) {
             Lookup::Binding(val)
-        } else if let Ok(component) = self.virdant.resolve_component(x.as_ref(), self.moddef.as_item()) {
+        } else if let Ok(component) = self.virdant.resolve_component(x.as_ref(), self.item) {
             Lookup::Component(component, self.virdant.components[component].typ.unwrap().clone())
         } else {
             Lookup::NotFound
@@ -274,7 +302,7 @@ impl<'a> TypingContext<'a> {
     fn infer_struct(&mut self, exprroot: Id<ExprRoot>, struct_name: QualIdent, assigns: Vec<(Ident, Arc<Expr>)>) -> Result<Type, VirErr> {
         let args = self.virdant.exprroots[exprroot].children.clone();
 
-        let structdef = self.virdant.resolve_structdef(&struct_name, self.moddef.as_item())?;
+        let structdef = self.virdant.resolve_structdef(&struct_name, self.item)?;
         let structdef_info = self.virdant.items[structdef.as_item()].clone();
         for ((field, _expr), arg) in assigns.iter().zip(args) {
             let structdef_field = self.structdef_field(&structdef_info, *field)?;
@@ -327,7 +355,7 @@ impl<'a> TypingContext<'a> {
         let arm_exprroots = subexprs[1..].to_vec();
 
         let subject_typ = if let Some(typ_ast) = ascription {
-            let ascription_typ = self.virdant.resolve_type(typ_ast, self.moddef.as_item())?;
+            let ascription_typ = self.virdant.resolve_type(typ_ast, self.item)?;
             self.check(subject, ascription_typ)?;
             ascription_typ
         } else {
@@ -386,7 +414,7 @@ impl<'a> TypingContext<'a> {
         where 'a: 'b {
         TypingContext {
             virdant: self.virdant,
-            moddef: self.moddef,
+            item: self.item,
             context: self.context.clone(),
         }
     }

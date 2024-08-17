@@ -16,12 +16,33 @@ pub enum TypeScheme {
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct CtorSig(Id<Ctor>, Vec<(String, Type)>, Type);
 
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct FnSig(Id<FnDef>, Vec<(String, Type)>, Type);
+
 impl CtorSig {
     pub fn new(ctor: Id<Ctor>, params: Vec<(String, Type)>, ret_typ: Type) -> Self {
         CtorSig(ctor, params, ret_typ)
     }
 
     pub fn ctor(&self) -> Id<Ctor> {
+        self.0
+    }
+
+    pub fn params(&self) -> &[(String, Type)] {
+        &self.1
+    }
+
+    pub fn ret(&self) -> Type {
+        self.2
+    }
+}
+
+impl FnSig {
+    pub fn new(fndef: Id<FnDef>, params: Vec<(String, Type)>, ret_typ: Type) -> Self {
+        FnSig(fndef, params, ret_typ)
+    }
+
+    pub fn fndef(&self) -> Id<FnDef> {
         self.0
     }
 
@@ -107,6 +128,27 @@ impl std::fmt::Display for Type {
 }
 
 impl std::fmt::Debug for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
+    }
+}
+
+impl std::fmt::Display for FnSig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = self.fndef();
+        write!(f, "{name}(")?;
+        for (i, (name, typ)) in self.params().iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{name} : {typ}")?;
+        }
+        write!(f, ") : {}", self.ret())?;
+        Ok(())
+    }
+}
+
+impl std::fmt::Debug for FnSig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self}")
     }
