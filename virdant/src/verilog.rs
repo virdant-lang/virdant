@@ -209,7 +209,7 @@ impl Verilog {
                         } else {
                             let path = component.path();
                             let sm = &path[0];
-                            let port = &path[1];
+                            let port = path[1..].join("__");
                             Ok(format!("{sm}__{port}"))
                         }
                     },
