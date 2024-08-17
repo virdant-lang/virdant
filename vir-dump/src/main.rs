@@ -17,6 +17,6 @@ fn main() {
             }
             std::process::exit(1);
         },
-        Ok(_) => eprintln!("{virdant:?}"),
+        Ok(_) => println!("{virdant:?}"),
     }
 }
