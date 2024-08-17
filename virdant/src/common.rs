@@ -32,7 +32,7 @@ pub enum ChannelDir {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum PortRole {
+pub enum SocketRole {
     Master,
     Slave,
 }

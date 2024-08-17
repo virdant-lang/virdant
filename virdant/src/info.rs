@@ -21,7 +21,7 @@ pub struct ItemInfo {
     pub components: Ready<Vec<Id<Component>>>,
     pub is_ext: Ready<bool>,
     pub submodules: Ready<Vec<Id<Submodule>>>,
-    pub ports: Ready<Vec<Id<Port>>>,
+    pub sockets: Ready<Vec<Id<Socket>>>,
 
     // for strucdefs
     pub fields: Ready<Vec<Id<Field>>>,
@@ -29,7 +29,7 @@ pub struct ItemInfo {
     // for uniondefs
     pub ctors: Ready<Vec<Id<Ctor>>>,
 
-    // for portdefs
+    // for socketdefs
     pub channels: Ready<Vec<Id<Channel>>>,
 }
 
@@ -49,7 +49,7 @@ pub struct CtorInfo {
 
 #[derive(Default, Clone, Debug)]
 pub struct ChannelInfo {
-    pub portdef: Ready<Id<PortDef>>,
+    pub socketdef: Ready<Id<SocketDef>>,
     pub name: String,
     pub typ: Ready<Type>,
     pub dir: Ready<ChannelDir>,
@@ -74,11 +74,11 @@ pub struct SubmoduleInfo {
 }
 
 #[derive(Default, Clone, Debug)]
-pub struct PortInfo {
+pub struct SocketInfo {
     pub moddef: Ready<Id<ModDef>>,
     pub path: Vec<String>,
-    pub role: Ready<PortRole>,
-    pub portdef: Ready<Id<PortDef>>,
+    pub role: Ready<SocketRole>,
+    pub socketdef: Ready<Id<SocketDef>>,
 }
 
 #[derive(Default, Clone, Debug)]

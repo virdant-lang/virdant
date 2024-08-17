@@ -1,5 +1,5 @@
 use crate::common::*;
-use crate::{ComponentClass, Flow, PortRole};
+use crate::{ComponentClass, Flow, SocketRole};
 use std::cell::OnceCell;
 use std::sync::{Arc, Weak};
 
@@ -19,7 +19,7 @@ pub(crate) struct DesignRoot {
     pub items: IndexMap<Id<id::Item>, Item>,
     pub components: IndexMap<Id<id::Component>, Component>,
     pub submodules: IndexMap<Id<id::Submodule>, Submodule>,
-    pub ports: IndexMap<Id<id::Port>, Port>,
+    pub sockets: IndexMap<Id<id::Socket>, Socket>,
     pub exprroots: IndexMap<Id<id::ExprRoot>, ExprRoot>,
     pub fields: IndexMap<Id<id::Field>, Field>,
     pub ctors: IndexMap<Id<id::Ctor>, Ctor>,
@@ -71,7 +71,7 @@ pub struct BuiltinDef {
 }
 
 #[derive(Clone)]
-pub struct PortDef {
+pub struct SocketDef {
     pub(crate) root: OnceCell<Weak<DesignRoot>>,
     pub(crate) id: Id<id::StructDef>,
     pub(crate) info: ItemInfo,
@@ -90,9 +90,9 @@ pub struct Submodule {
 }
 
 #[derive(Clone, Debug)]
-pub struct Port {
+pub struct Socket {
     pub(crate) root: OnceCell<Weak<DesignRoot>>,
-    pub(crate) info: PortInfo,
+    pub(crate) info: SocketInfo,
 }
 
 #[derive(Clone, Debug)]
@@ -183,7 +183,7 @@ impl Item {
             crate::ItemKind::UnionDef => ItemKind::UnionDef(self.as_uniondef()),
             crate::ItemKind::StructDef => ItemKind::StructDef(self.as_structdef()),
             crate::ItemKind::BuiltinDef => ItemKind::BuiltinDef(self.as_builtindef()),
-            crate::ItemKind::PortDef => ItemKind::PortDef(self.as_portdef()),
+            crate::ItemKind::SocketDef => ItemKind::SocketDef(self.as_socketdef()),
         }
     }
 
@@ -203,8 +203,8 @@ impl Item {
         BuiltinDef { root: self.root.clone(), id: self.id.cast(), info: self.info.clone() }
     }
 
-    fn as_portdef(&self) -> PortDef {
-        PortDef { root: self.root.clone(), id: self.id.cast(), info: self.info.clone() }
+    fn as_socketdef(&self) -> SocketDef {
+        SocketDef { root: self.root.clone(), id: self.id.cast(), info: self.info.clone() }
     }
 }
 
@@ -220,7 +220,7 @@ impl ModDef {
         components
     }
 
-    pub fn simple_ports(&self) -> Vec<Component> {
+    pub fn ports(&self) -> Vec<Component> {
         let mut components = vec![];
         let component_ids = self.info.components.unwrap();
         for (component_id, component) in self.root().components.iter() {
@@ -240,10 +240,10 @@ impl ModDef {
         submodules
     }
 
-    pub fn ports(&self) -> Vec<Port> {
+    pub fn sockets(&self) -> Vec<Socket> {
         let mut ports = vec![];
-        for port_id in self.info.ports.unwrap() {
-            let port = self.root().ports[port_id].clone();
+        for port_id in self.info.sockets.unwrap() {
+            let port = self.root().sockets[port_id].clone();
             ports.push(port);
         }
         ports
@@ -354,7 +354,7 @@ impl Submodule {
     }
 }
 
-impl Port {
+impl Socket {
     pub fn name(&self) -> String {
         self.info.path.join(".")
     }
@@ -363,9 +363,9 @@ impl Port {
         self.info.path.clone()
     }
 
-    pub fn of(&self) -> PortDef {
-        let portdef = *self.info.portdef.unwrap();
-        self.root().items[&portdef.as_item()].as_portdef()
+    pub fn of(&self) -> SocketDef {
+        let socketdef = *self.info.socketdef.unwrap();
+        self.root().items[&socketdef.as_item()].as_socketdef()
     }
 
     pub fn moddef(&self) -> ModDef {
@@ -373,7 +373,7 @@ impl Port {
         self.root().items[&moddef.as_item()].as_moddef()
     }
 
-    pub fn role(&self) -> PortRole {
+    pub fn role(&self) -> SocketRole {
         *self.info.role.unwrap()
     }
 }
@@ -514,12 +514,12 @@ impl_hasroot!(Item);
 impl_hasroot!(ModDef);
 impl_hasroot!(UnionDef);
 impl_hasroot!(StructDef);
-impl_hasroot!(PortDef);
+impl_hasroot!(SocketDef);
 impl_hasroot!(BuiltinDef);
 
 impl_hasroot!(Component);
 impl_hasroot!(Submodule);
-impl_hasroot!(Port);
+impl_hasroot!(Socket);
 impl_hasroot!(Field);
 impl_hasroot!(Ctor);
 
@@ -531,7 +531,7 @@ pub enum ItemKind {
     UnionDef(UnionDef),
     StructDef(StructDef),
     BuiltinDef(BuiltinDef),
-    PortDef(PortDef),
+    SocketDef(SocketDef),
 }
 
 macro_rules! item_fns {
@@ -555,7 +555,7 @@ macro_rules! item_fns {
 item_fns!(ModDef);
 item_fns!(UnionDef);
 item_fns!(StructDef);
-item_fns!(PortDef);
+item_fns!(SocketDef);
 item_fns!(BuiltinDef);
 
 macro_rules! name_as_debug {
@@ -575,7 +575,7 @@ name_as_debug!(ModDef);
 name_as_debug!(UnionDef);
 name_as_debug!(StructDef);
 name_as_debug!(BuiltinDef);
-name_as_debug!(PortDef);
+name_as_debug!(SocketDef);
 
 impl std::fmt::Debug for TypeArg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

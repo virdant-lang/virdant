@@ -11,7 +11,7 @@ item = {
     uniondef |
     structdef |
     builtindef |
-    portdef
+    socketdef
 }
 
 
@@ -42,9 +42,9 @@ builtindef = {
     "}"
 }
 
-portdef = {
-    kw_port ~ (#name=ident) ~ "{" ~
-        (portdef_statement ~ ";")* ~
+socketdef = {
+    kw_socket ~ (#name=ident) ~ "{" ~
+        (socketdef_statement ~ ";")* ~
     "}"
 }
 
@@ -60,9 +60,9 @@ moddef_statement = {
     moddef_statement_reg |
     moddef_statement_node |
     moddef_statement_mod |
-    moddef_statement_port |
+    moddef_statement_socket |
     moddef_statement_driver |
-    moddef_statement_port_driver
+    moddef_statement_socket_driver
 }
 
 moddef_statement_implicit = { kw_implicit ~ (#name=ident) ~ ":" ~ (#type=type) }
@@ -71,9 +71,9 @@ moddef_statement_outgoing = { kw_outgoing ~ (#name=ident) ~ ":" ~ (#type=type) }
 moddef_statement_reg = { kw_reg ~ (#name=ident) ~ ":" ~ (#type=type) ~ ("on" ~ (#expr=expr))? }
 moddef_statement_node = { kw_node ~ (#name=ident) ~ ":" ~ (#type=type) }
 moddef_statement_mod = { kw_mod ~ (#name=ident) ~ kw_of ~ (#of=qualident) }
-moddef_statement_port = { (#role=port_role) ~ kw_port ~ (#name=ident) ~ kw_of ~ (#of=qualident) }
+moddef_statement_socket = { (#role=socket_role) ~ kw_socket ~ (#name=ident) ~ kw_of ~ (#of=qualident) }
 moddef_statement_driver = { (#target=path) ~ (#drivertype=drivertype) ~ (#expr=expr) }
-moddef_statement_port_driver = { (#slave=path) ~ ":=:" ~ (#master=path) }
+moddef_statement_socket_driver = { (#slave=path) ~ ":=:" ~ (#master=path) }
 
 uniondef_statement = {
     (#name=ident) ~ "(" ~ (#args=arg_list) ~ ")"
@@ -83,7 +83,7 @@ structdef_statement = {
     (#name=ident) ~ ":" ~ (#type=type)
 }
 
-portdef_statement = {
+socketdef_statement = {
     (#dir=channel_dir) ~ (#name=ident) ~ ":" ~ (#type=type)
 }
 
@@ -220,7 +220,7 @@ typearg = {
 
 path = @{ ident ~ ("." ~ ident)* }
 
-port_role = {
+socket_role = {
     kw_master |
     kw_slave
 }
@@ -262,7 +262,7 @@ kw_incoming     = @{ "incoming"   ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_outgoing     = @{ "outgoing"   ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_reg          = @{ "reg"        ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_node         = @{ "node"       ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_port         = @{ "port"       ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_socket       = @{ "socket"     ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_of           = @{ "of"         ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_if           = @{ "if"         ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_else         = @{ "else"       ~ !(ASCII_ALPHANUMERIC | "_") }
@@ -287,7 +287,7 @@ keyword = {
     kw_outgoing |
     kw_reg |
     kw_node |
-    kw_port |
+    kw_socket |
     kw_of |
     kw_if |
     kw_else |

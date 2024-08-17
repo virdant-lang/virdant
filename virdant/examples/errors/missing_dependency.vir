@@ -3,7 +3,7 @@ mod Top {
     incoming inp : Word[8];
     outgoing foo : Foo;
 
-    master port mem of Mem;
+    master socket mem of Mem;
 }
 
 union type Foo {

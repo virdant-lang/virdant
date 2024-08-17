@@ -8,17 +8,17 @@ mod Top {
 }
 
 mod Core {
-    master port mem of Mem;
+    master socket mem of Mem;
     mem.addr := 0;
 }
 
 mod Memory {
-    slave port mem of Mem;
+    slave socket mem of Mem;
 
     mem.data := 10;
 }
 
-port Mem {
+socket Mem {
     mosi addr : Word[16];
     miso data : Word[8];
 }

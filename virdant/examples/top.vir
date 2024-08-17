@@ -9,7 +9,7 @@ mod Top {
     };
 }
 
-port Mem {
+socket Mem {
     mosi addr : Word[16];
     miso data_in : Word[8];
 }

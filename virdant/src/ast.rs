@@ -97,7 +97,7 @@ impl Ast {
     pub fn is_uniondef(&self) -> bool { self.rule() == Rule::uniondef }
     pub fn is_structdef(&self) -> bool { self.rule() == Rule::structdef }
     pub fn is_builtindef(&self) -> bool { self.rule() == Rule::builtindef }
-    pub fn is_portdef(&self) -> bool { self.rule() == Rule::portdef }
+    pub fn is_socketdef(&self) -> bool { self.rule() == Rule::socketdef }
 
     pub fn is_ext(&self) -> bool { self.get_as_str("ext").is_some() }
 
@@ -105,18 +105,18 @@ impl Ast {
         self.rule() == Rule::moddef_statement ||
         self.rule() == Rule::uniondef_statement ||
         self.rule() == Rule::structdef_statement ||
-        self.rule() == Rule::portdef_statement
+        self.rule() == Rule::socketdef_statement
     }
 
     pub fn is_submodule(&self) -> bool { self.rule() == Rule::moddef_statement_mod }
-    pub fn is_port(&self) -> bool { self.rule() == Rule::moddef_statement_port }
+    pub fn is_socket(&self) -> bool { self.rule() == Rule::moddef_statement_socket }
     pub fn is_driver(&self) -> bool { self.rule() == Rule::moddef_statement_driver }
     pub fn is_reg(&self) -> bool { self.rule() == Rule::moddef_statement_reg }
     pub fn is_implicit(&self) -> bool { self.rule() == Rule::moddef_statement_implicit }
     pub fn is_incoming(&self) -> bool { self.rule() == Rule::moddef_statement_incoming }
     pub fn is_outgoing(&self) -> bool { self.rule() == Rule::moddef_statement_outgoing }
     pub fn is_node(&self) -> bool { self.rule() == Rule::moddef_statement_node }
-    pub fn is_port_driver(&self) -> bool { self.rule() == Rule::moddef_statement_port_driver }
+    pub fn is_socket_driver(&self) -> bool { self.rule() == Rule::moddef_statement_socket_driver }
 
     pub fn is_component(&self) -> bool {
         self.rule() == Rule::moddef_statement_implicit ||
@@ -186,7 +186,7 @@ impl Ast {
             Rule::uniondef => Some(ItemKind::UnionDef),
             Rule::structdef => Some(ItemKind::StructDef),
             Rule::builtindef => Some(ItemKind::BuiltinDef),
-            Rule::portdef => Some(ItemKind::PortDef),
+            Rule::socketdef => Some(ItemKind::SocketDef),
             _ => None,
         }
     }
