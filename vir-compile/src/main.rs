@@ -51,7 +51,16 @@ fn main() {
     }
 
     let mut virdant = Virdant::new(&filepaths);
-    let design = virdant.check().unwrap();
-    design.verilog("build").unwrap();
-    println!("Build complete: See build/");
+    match virdant.check() {
+        Ok(design) => {
+            design.verilog("build").unwrap();
+            println!("Build complete: See build/");
+        },
+        Err(errs) => {
+            for err in errs.iter() {
+                eprintln!("{err}");
+            }
+            std::process::exit(1);
+        }
+    }
 }
