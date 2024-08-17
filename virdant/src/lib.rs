@@ -18,10 +18,13 @@ mod typecheck;
 #[cfg(test)]
 mod tests;
 
+use ast::expr::Path;
 pub use common::*;
 use cycle::detect_cycle;
 use indexmap::IndexMap;
 use indexmap::IndexSet;
+use internment::Intern;
+use location::Span;
 use parse::QualIdent;
 use ready::Ready;
 use error::VirErr;
@@ -115,10 +118,10 @@ impl Virdant {
         self.register_channels();
         self.register_components();
 
-        self.register_exprroots();
         self.register_submodules();
         self.register_ports();
 
+        self.register_exprroots();
         self.typecheck();
 
         self.errors.clone().check()?;
@@ -378,6 +381,14 @@ impl Virdant {
             Ok(component)
         } else {
             Err(VirErr::Other(format!("Unable to resolve component: {path} in {in_moddef}")))
+        }
+    }
+
+    fn resolve_port(&self, path: &str, in_moddef: Id<Item>) -> Result<Id<Port>, VirErr> {
+        if let Some(port) = self.ports.resolve(&format!("{in_moddef}::{path}")) {
+            Ok(port)
+        } else {
+            Err(VirErr::Other(format!("Unable to resolve port: {path} in {in_moddef}")))
         }
     }
 
@@ -727,6 +738,8 @@ impl Virdant {
                         }
                     } else if node.child(0).is_driver() {
                         ()
+                    } else if node.child(0).is_port_driver() {
+                        ()
                     } else {
                         unreachable!()
                     }
@@ -892,6 +905,8 @@ impl Virdant {
 
                         let component_info = &mut self.components[component];
                         component_info.driver = Some(exprroot);
+                    } else if node.child(0).is_port_driver() {
+                        self.register_exprroots_for_port_driver(node, moddef, &mut expr_i);
                     } else if node.child(0).is_reg() {
                         let reg_ast = node.child(0);
                         let expr_ast = reg_ast.clone().expr().unwrap();
@@ -907,6 +922,80 @@ impl Virdant {
                 }
             }
         }
+    }
+
+    fn register_exprroots_for_port_driver(&mut self, node: Ast, moddef: Id<ModDef>, expr_i: &mut usize) {
+        let master_port_name = node.master().unwrap();
+        let slave_port_name = node.slave().unwrap();
+
+        let master_port = match self.resolve_port(master_port_name, moddef.as_item()) {
+            Ok(port) => port,
+            Err(e) => {
+                self.errors.add(e);
+                return;
+            },
+        };
+
+        let slave_port = match self.resolve_port(slave_port_name, moddef.as_item()) {
+            Ok(port) => port,
+            Err(e) => {
+                self.errors.add(e);
+                return;
+            },
+        };
+
+        let master_port_info = self.ports[master_port].clone();
+        let slave_port_info = self.ports[slave_port].clone();
+
+        let master_portdef = master_port_info.portdef.unwrap();
+        let slave_portdef = slave_port_info.portdef.unwrap();
+
+        if master_portdef != slave_portdef {
+            self.errors.add(VirErr::Other(format!("Port defs don't match: {master_port_name} is {master_portdef} while {slave_port_name} is {slave_portdef}.")));
+            return;
+        }
+
+        let portdef_info = self.items[master_portdef.as_item()].clone();
+
+        let channels = portdef_info.channels.unwrap();
+        for channel in channels {
+            let channel_info = &self.channels[*channel];
+            let master_component: Id<Component> = Id::new(format!("{moddef}::{}.{}", master_port_info.path.join("."), &channel_info.name));
+            let slave_component: Id<Component> = Id::new(format!("{moddef}::{}.{}", slave_port_info.path.join("."), &channel_info.name));
+
+            let typ = channel_info.typ.unwrap().clone();
+            match channel_info.dir.unwrap() {
+                ChannelDir::Mosi => {
+                    let reference_path = format!("{}.{}", master_port_info.path.join("."), &channel_info.name);
+                    let exprroot = self.register_exprroots_synthetic_reference(node.span(), &reference_path, moddef, typ, expr_i);
+                    let slave_component_info = &mut self.components[slave_component];
+                    slave_component_info.driver = Some(exprroot);
+                },
+                ChannelDir::Miso => {
+                    let reference_path = format!("{}.{}", slave_port_info.path.join("."), &channel_info.name);
+                    let exprroot = self.register_exprroots_synthetic_reference(node.span(), &reference_path, moddef, typ, expr_i);
+                    let master_component_info = &mut self.components[master_component];
+                    master_component_info.driver = Some(exprroot);
+                },
+            }
+        }
+    }
+
+    fn register_exprroots_synthetic_reference(&mut self, span: Span, path: &str, moddef: Id<ModDef>, typ: Type, expr_i: &mut usize) -> Id<ExprRoot> {
+        let ref_path: Path = path.split(".").map(|part| Intern::new(part.to_string())).collect::<Vec<_>>();
+        let expr = Arc::new(ast::Expr::Reference(span, ref_path));
+        let exprroot_id: Id<ExprRoot> = Self::exprroot_id(moddef, &[*expr_i]);
+        *expr_i += 1;
+
+        let exprroot_info = self.exprroots.register(exprroot_id);
+        exprroot_info.ast.set(expr.clone());
+        exprroot_info.span = Some(expr.span());
+        exprroot_info.children = vec![];
+        exprroot_info.moddef.set(moddef);
+        exprroot_info.expected_typ = Some(typ);
+        exprroot_info.synthetic = true;
+
+        exprroot_id
     }
 
     fn exprroot_id(moddef: Id<ModDef>, path: &[usize]) -> Id<ExprRoot> {
@@ -1173,6 +1262,10 @@ impl std::fmt::Debug for Virdant {
             }
             if exprroot_info.children.len() > 0 {
                 writeln!(f, "        children: {:?}", exprroot_info.children)?;
+            }
+            writeln!(f, "        synthetic: {}", exprroot_info.synthetic)?;
+            if let Some(component) = exprroot_info.reference_component {
+                writeln!(f, "        component: {component:?}", )?;
             }
         }
 

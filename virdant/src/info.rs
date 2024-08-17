@@ -94,4 +94,7 @@ pub struct ExprRootInfo {
 
     pub reference_component: Option<Id<Component>>,
     pub struct_structdef: Option<Id<StructDef>>,
+
+    // debug
+    pub synthetic: bool,
 }

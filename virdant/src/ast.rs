@@ -116,6 +116,7 @@ impl Ast {
     pub fn is_incoming(&self) -> bool { self.rule() == Rule::moddef_statement_incoming }
     pub fn is_outgoing(&self) -> bool { self.rule() == Rule::moddef_statement_outgoing }
     pub fn is_node(&self) -> bool { self.rule() == Rule::moddef_statement_node }
+    pub fn is_port_driver(&self) -> bool { self.rule() == Rule::moddef_statement_port_driver }
 
     pub fn is_component(&self) -> bool {
         self.rule() == Rule::moddef_statement_implicit ||
@@ -164,6 +165,9 @@ impl Ast {
     pub fn expr(&self) -> Option<Ast> { self.get("expr") }
     pub fn subject(&self) -> Option<Ast> { self.get("subject") }
     pub fn pat(&self) -> Option<Ast> { self.get("pat") }
+
+    pub fn master(&self) -> Option<&str> { self.get_as_str("master") }
+    pub fn slave(&self) -> Option<&str> { self.get_as_str("slave") }
 
     pub fn dir(&self) -> Option<Ast> { self.get("dir") }
     pub fn is_miso(&self) -> bool { self.as_str() == "miso" }
