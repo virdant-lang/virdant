@@ -49,7 +49,7 @@ impl Verilog {
                 ItemKind::ModDef(moddef) => self.verilog_moddef(f, moddef)?,
                 ItemKind::UnionDef(uniondef) => writeln!(f, "// UnionDef {}", uniondef.name())?,
                 ItemKind::StructDef(structdef) => writeln!(f, "// StructDef {}", structdef.name())?,
-                ItemKind::PortDef(portdef) => writeln!(f, "// PortDef {}", portdef.name())?,
+                ItemKind::SocketDef(socketdef) => writeln!(f, "// SocketDef {}", socketdef.name())?,
                 ItemKind::BuiltinDef(_builtindef) => (),
             }
 
@@ -69,7 +69,7 @@ impl Verilog {
 
         writeln!(f, "module {}(", moddef.name())?;
 
-        let ports = moddef.simple_ports();
+        let ports = moddef.ports();
         for (i, component) in ports.iter().enumerate() {
             let typ = component.typ();
             let width_str = self.width_str(&typ);
@@ -92,7 +92,7 @@ impl Verilog {
 
         for submodule in moddef.submodules() {
             let submodule_moddef = submodule.of();
-            let ports = submodule_moddef.simple_ports();
+            let ports = submodule_moddef.ports();
             for port in ports.iter() {
                 let port_name = format!("{}__{}", submodule.name(), port.path().join("__"));
                 let typ = port.typ();

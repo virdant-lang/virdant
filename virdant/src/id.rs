@@ -48,7 +48,7 @@ pub mod types {
     id_type!(UnionDef);
     id_type!(BuiltinDef);
     id_type!(StructDef);
-    id_type!(PortDef);
+    id_type!(SocketDef);
 
     id_type!(Ctor);
     id_type!(Field);
@@ -57,7 +57,7 @@ pub mod types {
     id_type!(Component);
     id_type!(ExprRoot);
     id_type!(Submodule);
-    id_type!(Port);
+    id_type!(Socket);
 
     id_type!(Method);
 }
@@ -88,7 +88,7 @@ impl Id<BuiltinDef> {
     }
 }
 
-impl Id<PortDef> {
+impl Id<SocketDef> {
     pub fn as_item(&self) -> Id<Item> {
         self.cast()
     }

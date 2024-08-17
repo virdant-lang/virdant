@@ -61,7 +61,7 @@ pub struct Virdant {
     pub(crate) components: Table<Component, ComponentInfo>,
     pub(crate) exprroots: Table<ExprRoot, ExprRootInfo>,
     pub(crate) submodules: Table<Submodule, SubmoduleInfo>,
-    pub(crate) ports: Table<Port, PortInfo>,
+    pub(crate) sockets: Table<Socket, SocketInfo>,
 }
 
 
@@ -119,7 +119,7 @@ impl Virdant {
         self.register_components();
 
         self.register_submodules();
-        self.register_ports();
+        self.register_sockets();
 
         self.register_exprroots();
         self.typecheck();
@@ -233,7 +233,7 @@ impl Virdant {
                     self.item_deps_structdef(item, item_ast.child(0))
                 } else if item_ast.child(0).is_builtindef() {
                     (vec![], VirErrs::new())
-                } else if item_ast.child(0).is_portdef() {
+                } else if item_ast.child(0).is_socketdef() {
                     self.item_deps_moddef(item, item_ast.child(0))
                 } else {
                     unreachable!()
@@ -366,13 +366,13 @@ impl Virdant {
         }
     }
 
-    fn resolve_portdef(&self, qualident: &str, in_item: Id<Item>) -> Result<Id<PortDef>, VirErr> {
+    fn resolve_socketdef(&self, qualident: &str, in_item: Id<Item>) -> Result<Id<SocketDef>, VirErr> {
         let item = self.resolve_item(qualident, in_item)?;
         let item_info = &self.items[item];
-        if let Ok(ItemKind::PortDef) = item_info.kind.get() {
+        if let Ok(ItemKind::SocketDef) = item_info.kind.get() {
             Ok(item.cast())
         } else {
-            Err(VirErr::Other(format!("Unable to resolve portdef: {qualident} in {in_item}")))
+            Err(VirErr::Other(format!("Unable to resolve socketdef: {qualident} in {in_item}")))
         }
     }
 
@@ -384,11 +384,11 @@ impl Virdant {
         }
     }
 
-    fn resolve_port(&self, path: &str, in_moddef: Id<Item>) -> Result<Id<Port>, VirErr> {
-        if let Some(port) = self.ports.resolve(&format!("{in_moddef}::{path}")) {
-            Ok(port)
+    fn resolve_socket(&self, path: &str, in_moddef: Id<Item>) -> Result<Id<Socket>, VirErr> {
+        if let Some(socket) = self.sockets.resolve(&format!("{in_moddef}::{path}")) {
+            Ok(socket)
         } else {
-            Err(VirErr::Other(format!("Unable to resolve port: {path} in {in_moddef}")))
+            Err(VirErr::Other(format!("Unable to resolve socket: {path} in {in_moddef}")))
         }
     }
 
@@ -612,19 +612,19 @@ impl Virdant {
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// PortDefs
+// SocketDefs
 ////////////////////////////////////////////////////////////////////////////////
 
 impl Virdant {
     fn register_channels(&mut self) {
-        let portdefs = self.items_by_kind(ItemKind::PortDef);
-        for item in portdefs {
-            let portdef: Id<PortDef> = item.cast();
+        let socketdefs = self.items_by_kind(ItemKind::SocketDef);
+        for item in socketdefs {
+            let socketdef: Id<SocketDef> = item.cast();
             let mut channels = vec![];
 
             let item_info = &self.items[item];
-            let portdef_ast = item_info.ast.unwrap().child(0);
-            for node in portdef_ast.children() {
+            let socketdef_ast = item_info.ast.unwrap().child(0);
+            for node in socketdef_ast.children() {
                 if node.is_statement() {
                     let channel_name = node.name().unwrap();
                     let channel_type_ast = node.typ().unwrap();
@@ -644,7 +644,7 @@ impl Virdant {
 
                     let channel: Id<Channel> = Id::new(format!("{item}::{channel_name}"));
                     let channel_info = self.channels.register(channel);
-                    channel_info.portdef.set(portdef);
+                    channel_info.socketdef.set(socketdef);
                     channel_info.name = channel_name.to_string();
                     channel_info.typ.set(channel_type);
                     channel_info.dir.set(channel_dir);
@@ -653,8 +653,8 @@ impl Virdant {
                 }
             }
 
-            let portdef_info = &mut self.items[item];
-            portdef_info.channels.set(channels);
+            let socketdef_info = &mut self.items[item];
+            socketdef_info.channels.set(channels);
         }
     }
 }
@@ -721,24 +721,24 @@ impl Virdant {
                                 self.errors.add(err);
                             },
                         }
-                    } else if node.child(0).is_port() {
-                        let port_name = node.name().unwrap();
-                        let port_portdef_name = node.of().unwrap();
-                        match self.resolve_portdef(port_portdef_name, item) {
-                            Ok(portdef) => {
-                                let path = vec![port_name.to_string()];
+                    } else if node.child(0).is_socket() {
+                        let socket_name = node.name().unwrap();
+                        let socket_socketdef_name = node.of().unwrap();
+                        match self.resolve_socketdef(socket_socketdef_name, item) {
+                            Ok(socketdef) => {
+                                let path = vec![socket_name.to_string()];
                                 let role = if node.role().unwrap() == "master" {
-                                    PortRole::Master
+                                    SocketRole::Master
                                 } else {
-                                    PortRole::Slave
+                                    SocketRole::Slave
                                 };
-                                components.extend(self.register_port_components(path, portdef, moddef, false, role));
+                                components.extend(self.register_socket_components(path, socketdef, moddef, false, role));
                             },
                             Err(err) => self.errors.add(err),
                         }
                     } else if node.child(0).is_driver() {
                         ()
-                    } else if node.child(0).is_port_driver() {
+                    } else if node.child(0).is_socket_driver() {
                         ()
                     } else {
                         unreachable!()
@@ -787,18 +787,18 @@ impl Virdant {
                             component_info.typ.set(typ);
                         }
                     }
-                } else if statement.is_port() {
-                    let port_name = statement.name().unwrap();
-                    let port_portdef_name = statement.of().unwrap();
-                    match self.resolve_portdef(port_portdef_name, submodule_moddef.as_item()) {
-                        Ok(portdef) => {
-                            let path = vec![name.to_string(), port_name.to_string()];
+                } else if statement.is_socket() {
+                    let socket_name = statement.name().unwrap();
+                    let socket_socketdef_name = statement.of().unwrap();
+                    match self.resolve_socketdef(socket_socketdef_name, submodule_moddef.as_item()) {
+                        Ok(socketdef) => {
+                            let path = vec![name.to_string(), socket_name.to_string()];
                             let role = if statement.role().unwrap() == "master" {
-                                PortRole::Master
+                                SocketRole::Master
                             } else {
-                                PortRole::Slave
+                                SocketRole::Slave
                             };
-                            components.extend(self.register_port_components(path, portdef, in_moddef, true, role));
+                            components.extend(self.register_socket_components(path, socketdef, in_moddef, true, role));
                         },
                         Err(err) => self.errors.add(err),
                     }
@@ -808,17 +808,17 @@ impl Virdant {
         components
     }
 
-    fn register_port_components(
+    fn register_socket_components(
         &mut self,
         path: Vec<String>,
-        portdef: Id<PortDef>,
+        socketdef: Id<SocketDef>,
         in_moddef: Id<ModDef>,
         is_submodule: bool,
-        role: PortRole,
+        role: SocketRole,
     ) -> Vec<Id<Component>> {
         let mut components = vec![];
-        let portdef_info = &self.items[portdef.as_item()];
-        if let Ok(channels) = portdef_info.channels.get() {
+        let socketdef_info = &self.items[socketdef.as_item()];
+        if let Ok(channels) = socketdef_info.channels.get() {
             for channel in channels {
                 let channel_info = &self.channels[*channel];
 
@@ -837,14 +837,14 @@ impl Virdant {
 
                 let channel_dir = *channel_info.dir.unwrap();
                 let flow = match (channel_dir, role, is_submodule) {
-                    (ChannelDir::Mosi, PortRole::Slave, true) => Flow::Sink,
-                    (ChannelDir::Mosi, PortRole::Master, true) => Flow::Source,
-                    (ChannelDir::Miso, PortRole::Slave, true) => Flow::Source,
-                    (ChannelDir::Miso, PortRole::Master, true) => Flow::Sink,
-                    (ChannelDir::Mosi, PortRole::Slave, false) => Flow::Source,
-                    (ChannelDir::Mosi, PortRole::Master, false) => Flow::Sink,
-                    (ChannelDir::Miso, PortRole::Slave, false) => Flow::Sink,
-                    (ChannelDir::Miso, PortRole::Master, false) => Flow::Source,
+                    (ChannelDir::Mosi, SocketRole::Slave, true) => Flow::Sink,
+                    (ChannelDir::Mosi, SocketRole::Master, true) => Flow::Source,
+                    (ChannelDir::Miso, SocketRole::Slave, true) => Flow::Source,
+                    (ChannelDir::Miso, SocketRole::Master, true) => Flow::Sink,
+                    (ChannelDir::Mosi, SocketRole::Slave, false) => Flow::Source,
+                    (ChannelDir::Mosi, SocketRole::Master, false) => Flow::Sink,
+                    (ChannelDir::Miso, SocketRole::Slave, false) => Flow::Sink,
+                    (ChannelDir::Miso, SocketRole::Master, false) => Flow::Source,
                 };
 
                 component_info.flow.set(flow);
@@ -905,8 +905,8 @@ impl Virdant {
 
                         let component_info = &mut self.components[component];
                         component_info.driver = Some(exprroot);
-                    } else if node.child(0).is_port_driver() {
-                        self.register_exprroots_for_port_driver(node, moddef, &mut expr_i);
+                    } else if node.child(0).is_socket_driver() {
+                        self.register_exprroots_for_socket_driver(node, moddef, &mut expr_i);
                     } else if node.child(0).is_reg() {
                         let reg_ast = node.child(0);
                         let expr_ast = reg_ast.clone().expr().unwrap();
@@ -924,55 +924,55 @@ impl Virdant {
         }
     }
 
-    fn register_exprroots_for_port_driver(&mut self, node: Ast, moddef: Id<ModDef>, expr_i: &mut usize) {
-        let master_port_name = node.master().unwrap();
-        let slave_port_name = node.slave().unwrap();
+    fn register_exprroots_for_socket_driver(&mut self, node: Ast, moddef: Id<ModDef>, expr_i: &mut usize) {
+        let master_socket_name = node.master().unwrap();
+        let slave_socket_name = node.slave().unwrap();
 
-        let master_port = match self.resolve_port(master_port_name, moddef.as_item()) {
-            Ok(port) => port,
+        let master_socket = match self.resolve_socket(master_socket_name, moddef.as_item()) {
+            Ok(socket) => socket,
             Err(e) => {
                 self.errors.add(e);
                 return;
             },
         };
 
-        let slave_port = match self.resolve_port(slave_port_name, moddef.as_item()) {
-            Ok(port) => port,
+        let slave_socket = match self.resolve_socket(slave_socket_name, moddef.as_item()) {
+            Ok(socket) => socket,
             Err(e) => {
                 self.errors.add(e);
                 return;
             },
         };
 
-        let master_port_info = self.ports[master_port].clone();
-        let slave_port_info = self.ports[slave_port].clone();
+        let master_socket_info = self.sockets[master_socket].clone();
+        let slave_socket_info = self.sockets[slave_socket].clone();
 
-        let master_portdef = master_port_info.portdef.unwrap();
-        let slave_portdef = slave_port_info.portdef.unwrap();
+        let master_socketdef = master_socket_info.socketdef.unwrap();
+        let slave_socketdef = slave_socket_info.socketdef.unwrap();
 
-        if master_portdef != slave_portdef {
-            self.errors.add(VirErr::Other(format!("Port defs don't match: {master_port_name} is {master_portdef} while {slave_port_name} is {slave_portdef}.")));
+        if master_socketdef != slave_socketdef {
+            self.errors.add(VirErr::Other(format!("Port defs don't match: {master_socket_name} is {master_socketdef} while {slave_socket_name} is {slave_socketdef}.")));
             return;
         }
 
-        let portdef_info = self.items[master_portdef.as_item()].clone();
+        let socketdef_info = self.items[master_socketdef.as_item()].clone();
 
-        let channels = portdef_info.channels.unwrap();
+        let channels = socketdef_info.channels.unwrap();
         for channel in channels {
             let channel_info = &self.channels[*channel];
-            let master_component: Id<Component> = Id::new(format!("{moddef}::{}.{}", master_port_info.path.join("."), &channel_info.name));
-            let slave_component: Id<Component> = Id::new(format!("{moddef}::{}.{}", slave_port_info.path.join("."), &channel_info.name));
+            let master_component: Id<Component> = Id::new(format!("{moddef}::{}.{}", master_socket_info.path.join("."), &channel_info.name));
+            let slave_component: Id<Component> = Id::new(format!("{moddef}::{}.{}", slave_socket_info.path.join("."), &channel_info.name));
 
             let typ = channel_info.typ.unwrap().clone();
             match channel_info.dir.unwrap() {
                 ChannelDir::Mosi => {
-                    let reference_path = format!("{}.{}", master_port_info.path.join("."), &channel_info.name);
+                    let reference_path = format!("{}.{}", master_socket_info.path.join("."), &channel_info.name);
                     let exprroot = self.register_exprroots_synthetic_reference(node.span(), &reference_path, moddef, typ, expr_i);
                     let slave_component_info = &mut self.components[slave_component];
                     slave_component_info.driver = Some(exprroot);
                 },
                 ChannelDir::Miso => {
-                    let reference_path = format!("{}.{}", slave_port_info.path.join("."), &channel_info.name);
+                    let reference_path = format!("{}.{}", slave_socket_info.path.join("."), &channel_info.name);
                     let exprroot = self.register_exprroots_synthetic_reference(node.span(), &reference_path, moddef, typ, expr_i);
                     let master_component_info = &mut self.components[master_component];
                     master_component_info.driver = Some(exprroot);
@@ -1066,7 +1066,7 @@ impl Virdant {
         }
     }
 
-    fn register_ports(&mut self) {
+    fn register_sockets(&mut self) {
         let items = self.items_by_kind(ItemKind::ModDef);
         for item in items {
             let moddef: Id<ModDef> = item.cast();
@@ -1076,39 +1076,39 @@ impl Virdant {
                 continue;
             };
 
-            let mut ports = vec![];
+            let mut sockets = vec![];
 
             for node in moddef_ast.children() {
-                if node.is_statement() && node.child(0).is_port() {
-                    let port_ast = node.child(0);
-                    let port_name = port_ast.name().unwrap();
-                    let port_of = port_ast.of().unwrap();
+                if node.is_statement() && node.child(0).is_socket() {
+                    let socket_ast = node.child(0);
+                    let socket_name = socket_ast.name().unwrap();
+                    let socket_of = socket_ast.of().unwrap();
 
-                    let portdef: Id<PortDef> = if let Ok(portdef) = self.resolve_item(port_of, item) {
-                        portdef.cast()
+                    let socketdef: Id<SocketDef> = if let Ok(socketdef) = self.resolve_item(socket_of, item) {
+                        socketdef.cast()
                     } else {
                         continue;
                     };
 
-                    let port_role = if node.get_as_str("role").unwrap() == "master" {
-                        PortRole::Master
+                    let socket_role = if node.get_as_str("role").unwrap() == "master" {
+                        SocketRole::Master
                     } else {
-                        PortRole::Slave
+                        SocketRole::Slave
                     };
 
-                    let port_id: Id<Port> = Id::new(format!("{moddef}::{port_name}"));
-                    let port_info = self.ports.register(port_id);
-                    port_info.moddef.set(item.cast());
-                    port_info.path = vec![port_name.to_string()];
-                    port_info.role.set(port_role);
-                    port_info.portdef.set(portdef);
-                    ports.push(port_id);
+                    let socket_id: Id<Socket> = Id::new(format!("{moddef}::{socket_name}"));
+                    let socket_info = self.sockets.register(socket_id);
+                    socket_info.moddef.set(item.cast());
+                    socket_info.path = vec![socket_name.to_string()];
+                    socket_info.role.set(socket_role);
+                    socket_info.socketdef.set(socketdef);
+                    sockets.push(socket_id);
                 } else if node.is_statement() && node.child(0).is_submodule() {
                     let submodule_name = node.name().unwrap();
                     let submodule_moddef_name = node.of().unwrap();
                     match self.resolve_moddef(submodule_moddef_name, item) {
                         Ok(submodule_moddef) => {
-                            ports.extend(self.register_submodule_ports(submodule_name, submodule_moddef, moddef));
+                            sockets.extend(self.register_submodule_sockets(submodule_name, submodule_moddef, moddef));
                         },
                         Err(err) => {
                             self.errors.add(err);
@@ -1116,12 +1116,12 @@ impl Virdant {
                     }
                 }
             }
-            self.items[item].ports.set(ports);
+            self.items[item].sockets.set(sockets);
         }
     }
 
-    fn register_submodule_ports(&mut self, submodule_name: &str, submodule_moddef: Id<ModDef>, moddef: Id<ModDef>) -> Vec<Id<Port>> {
-        let mut ports: Vec<Id<Port>> = vec![];
+    fn register_submodule_sockets(&mut self, submodule_name: &str, submodule_moddef: Id<ModDef>, moddef: Id<ModDef>) -> Vec<Id<Socket>> {
+        let mut sockets: Vec<Id<Socket>> = vec![];
 
         let moddef_ast = if let Ok(item_ast) = self.items[submodule_moddef.as_item()].ast.get() {
             item_ast.child(0)
@@ -1132,34 +1132,34 @@ impl Virdant {
         for node in moddef_ast.children() {
             if node.is_statement() {
                 let statement = node.child(0);
-                if statement.is_port() {
-                    let port_name = statement.name().unwrap();
-                    let port_portdef_name = statement.of().unwrap();
-                    let portdef_result = self.resolve_portdef(port_portdef_name, submodule_moddef.as_item());
-                    match portdef_result {
-                        Ok(portdef) => {
-                            let port_id: Id<Port> = Id::new(format!("{moddef}::{submodule_name}.{port_name}"));
-                            let port_info = self.ports.register(port_id);
+                if statement.is_socket() {
+                    let socket_name = statement.name().unwrap();
+                    let socket_socketdef_name = statement.of().unwrap();
+                    let socketdef_result = self.resolve_socketdef(socket_socketdef_name, submodule_moddef.as_item());
+                    match socketdef_result {
+                        Ok(socketdef) => {
+                            let socket_id: Id<Socket> = Id::new(format!("{moddef}::{submodule_name}.{socket_name}"));
+                            let socket_info = self.sockets.register(socket_id);
 
-                            let port_role = if statement.role().unwrap() == "master" {
-                                PortRole::Master
+                            let socket_role = if statement.role().unwrap() == "master" {
+                                SocketRole::Master
                             } else {
-                                PortRole::Slave
+                                SocketRole::Slave
                             };
 
-                            port_info.moddef.set(moddef);
-                            port_info.path = vec![submodule_name.to_string(), port_name.to_string()];
-                            port_info.role.set(port_role);
-                            port_info.portdef.set(portdef);
+                            socket_info.moddef.set(moddef);
+                            socket_info.path = vec![submodule_name.to_string(), socket_name.to_string()];
+                            socket_info.role.set(socket_role);
+                            socket_info.socketdef.set(socketdef);
 
-                            ports.push(port_id);
+                            sockets.push(socket_id);
                         },
                         Err(err) => self.errors.add(err),
                     }
                 }
             }
         }
-        ports
+        sockets
     }
 }
 
@@ -1230,7 +1230,7 @@ impl std::fmt::Debug for Virdant {
         writeln!(f, "CHANNELS:")?;
         for (channel, channel_info) in self.channels.iter() {
             writeln!(f, "    {channel}")?;
-            writeln!(f, "        portdef: {:?}", channel_info.portdef)?;
+            writeln!(f, "        socketdef: {:?}", channel_info.socketdef)?;
             writeln!(f, "        name: {:?}", channel_info.name)?;
             writeln!(f, "        type: {:?}", channel_info.typ)?;
             writeln!(f, "        dir: {:?}", channel_info.dir)?;
@@ -1277,13 +1277,13 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        moddef: {:?}", submodule_info.moddef)?;
         }
 
-        writeln!(f, "PORTS:")?;
-        for (port, port_info) in self.ports.iter() {
-            writeln!(f, "    {port}")?;
-            writeln!(f, "        path: {}", port_info.path.join("."))?;
-            writeln!(f, "        portdef: {:?}", port_info.portdef)?;
-            writeln!(f, "        moddef: {:?}", port_info.moddef)?;
-            writeln!(f, "        role: {:?}", port_info.role)?;
+        writeln!(f, "SOCKETS:")?;
+        for (socket, socket_info) in self.sockets.iter() {
+            writeln!(f, "    {socket}")?;
+            writeln!(f, "        path: {}", socket_info.path.join("."))?;
+            writeln!(f, "        socketdef: {:?}", socket_info.socketdef)?;
+            writeln!(f, "        moddef: {:?}", socket_info.moddef)?;
+            writeln!(f, "        role: {:?}", socket_info.role)?;
         }
 
         Ok(())
@@ -1301,7 +1301,7 @@ pub enum ItemKind {
     UnionDef,
     StructDef,
     BuiltinDef,
-    PortDef,
+    SocketDef,
 }
 
 impl ItemKind {
@@ -1311,7 +1311,7 @@ impl ItemKind {
             ItemKind::UnionDef => true,
             ItemKind::StructDef => true,
             ItemKind::BuiltinDef => true,
-            ItemKind::PortDef => false,
+            ItemKind::SocketDef => false,
         }
     }
 }
@@ -1352,11 +1352,11 @@ impl Virdant {
             submodules.insert(*submodule, design_submodule);
         }
 
-        let mut ports: IndexMap<Id<Port>, design::Port> = IndexMap::new();
-        for port in self.ports.keys() {
-            let info = self.ports[*port].clone();
-            let design_port = design::Port { root: OnceCell::new(), info };
-            ports.insert(*port, design_port);
+        let mut sockets: IndexMap<Id<Socket>, design::Socket> = IndexMap::new();
+        for socket in self.sockets.keys() {
+            let info = self.sockets[*socket].clone();
+            let design_socket = design::Socket { root: OnceCell::new(), info };
+            sockets.insert(*socket, design_socket);
         }
 
         let mut exprroots: IndexMap<Id<ExprRoot>, design::ExprRoot> = IndexMap::new();
@@ -1382,7 +1382,7 @@ impl Virdant {
             items,
             components,
             submodules,
-            ports,
+            sockets,
             exprroots,
             fields,
             ctors,
@@ -1404,8 +1404,8 @@ impl Virdant {
             submodule.root.set(Arc::downgrade(&root)).unwrap();
         }
 
-        for port in root.ports.values() {
-            port.root.set(Arc::downgrade(&root)).unwrap();
+        for socket in root.sockets.values() {
+            socket.root.set(Arc::downgrade(&root)).unwrap();
         }
 
         for field in root.fields.values() {
