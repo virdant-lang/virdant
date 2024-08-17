@@ -41,6 +41,7 @@ use table::Table;
 use types::Type;
 
 use crate::info::*;
+use crate::types::FnSig;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -121,6 +122,7 @@ impl Virdant {
         self.register_submodules();
         self.register_sockets();
 
+        self.set_fn_sigs();
         self.register_exprroots();
         self.typecheck();
 
@@ -234,7 +236,9 @@ impl Virdant {
                 } else if item_ast.child(0).is_builtindef() {
                     (vec![], VirErrs::new())
                 } else if item_ast.child(0).is_socketdef() {
-                    self.item_deps_moddef(item, item_ast.child(0))
+                    self.item_deps_socketdef(item, item_ast.child(0))
+                } else if item_ast.child(0).is_fndef() {
+                    self.item_deps_fndef(item, item_ast.child(0))
                 } else {
                     unreachable!()
                 };
@@ -250,6 +254,30 @@ impl Virdant {
         let mut errors = VirErrs::new();
         let mut results = IndexSet::new();
         for node in moddef_ast.children() {
+            if let Some(type_node) = node.typ() {
+                let (deps, errs) = self.item_deps_type(type_node, item);
+                errors.extend(errs);
+                results.extend(deps);
+            }
+
+            if let Some(qualident) = node.of() {
+                match self.resolve_item(&qualident, item) {
+                    Ok(dep_item) => {
+                        results.insert(dep_item);
+                    },
+                    Err(err) => {
+                        errors.add(err);
+                    },
+                }
+            }
+        }
+        (results.into_iter().collect(), errors)
+    }
+
+    fn item_deps_socketdef(&self, item: Id<Item>, socketdef_ast: Ast) -> (Vec<Id<Item>>, VirErrs) {
+        let mut errors = VirErrs::new();
+        let mut results = IndexSet::new();
+        for node in socketdef_ast.children() {
             if let Some(type_node) = node.typ() {
                 let (deps, errs) = self.item_deps_type(type_node, item);
                 errors.extend(errs);
@@ -298,6 +326,25 @@ impl Virdant {
                 errors.extend(errs);
             }
         }
+        (results.into_iter().collect(), errors)
+    }
+
+    fn item_deps_fndef(&self, item: Id<Item>, fndef_ast: Ast) -> (Vec<Id<Item>>, VirErrs) {
+        let mut errors = VirErrs::new();
+        let mut results = IndexSet::new();
+
+        let ret_typ = fndef_ast.get("ret").unwrap();
+        let (deps, errs) = self.item_deps_type(ret_typ, item);
+        results.extend(deps);
+        errors.extend(errs);
+
+        for node in fndef_ast.get("args").unwrap().children() {
+            let arg_typ = node.child(1);
+            let (deps, errs) = self.item_deps_type(arg_typ, item);
+            results.extend(deps);
+            errors.extend(errs);
+        }
+
         (results.into_iter().collect(), errors)
     }
 
@@ -376,19 +423,19 @@ impl Virdant {
         }
     }
 
-    fn resolve_component(&self, path: &str, in_moddef: Id<Item>) -> Result<Id<Component>, VirErr> {
-        if let Some(component) = self.components.resolve(&format!("{in_moddef}::{path}")) {
+    fn resolve_component(&self, path: &str, in_item: Id<Item>) -> Result<Id<Component>, VirErr> {
+        if let Some(component) = self.components.resolve(&format!("{in_item}::{path}")) {
             Ok(component)
         } else {
-            Err(VirErr::Other(format!("Unable to resolve component: {path} in {in_moddef}")))
+            Err(VirErr::Other(format!("Unable to resolve component: {path} in {in_item}")))
         }
     }
 
-    fn resolve_socket(&self, path: &str, in_moddef: Id<Item>) -> Result<Id<Socket>, VirErr> {
-        if let Some(socket) = self.sockets.resolve(&format!("{in_moddef}::{path}")) {
+    fn resolve_socket(&self, path: &str, in_item: Id<Item>) -> Result<Id<Socket>, VirErr> {
+        if let Some(socket) = self.sockets.resolve(&format!("{in_item}::{path}")) {
             Ok(socket)
         } else {
-            Err(VirErr::Other(format!("Unable to resolve socket: {path} in {in_moddef}")))
+            Err(VirErr::Other(format!("Unable to resolve socket: {path} in {in_item}")))
         }
     }
 
@@ -862,11 +909,55 @@ impl Virdant {
         components
     }
 
+    fn set_fn_sigs(&mut self) {
+        let items = self.items_by_kind(ItemKind::FnDef);
+        'outer: for item in items {
+            let fndef : Id<FnDef> = item.cast();
+            let fndef_ast = if let Ok(item_ast) = self.items[item].ast.get() {
+                item_ast.child(0)
+            } else {
+                continue;
+            };
+            eprintln!("{item}");
+
+            let ret_typ_ast = fndef_ast.get("ret").unwrap();
+            let ret_typ = match self.resolve_type(ret_typ_ast, item) {
+                Err(err) => {
+                    self.errors.add(err);
+                    continue;
+                },
+                Ok(ret_typ) => ret_typ,
+            };
+
+            let mut arg_typs = vec![];
+            for node in fndef_ast.get("args").unwrap().children() {
+                let arg_name = node.get_as_str("name").unwrap().to_string();
+                let arg_typ_ast = node.child(1);
+                let arg_typ = match self.resolve_type(arg_typ_ast, item) {
+                    Err(err) => {
+                        self.errors.add(err);
+                        continue 'outer;
+                    },
+                    Ok(arg_typ) => arg_typ,
+                };
+                arg_typs.push((arg_name, arg_typ));
+            }
+
+            let fndef_info = &mut self.items[item];
+            fndef_info.sig.set(dbg!(FnSig::new(fndef, arg_typs, ret_typ)));
+        }
+    }
+
     fn register_exprroots(&mut self) {
+        self.register_exprroots_moddefs();
+        self.register_exprroots_fndefs();
+    }
+
+    fn register_exprroots_moddefs(&mut self) {
         let clock_type = self.clock_type();
         let items = self.items_by_kind(ItemKind::ModDef);
         for item in items {
-            let moddef: Id<ModDef> = item.cast();
+            let moddef: Id<Item> = item.cast();
             let mut expr_i = 0;
             let moddef_ast = if let Ok(item_ast) = self.items[item].ast.get() {
                 item_ast.child(0)
@@ -896,7 +987,7 @@ impl Virdant {
                             _ => (),
                         }
 
-                        let exprroot = self.register_exprroots_for(ast::Expr::from_ast(expr_ast.clone()), moddef, &vec![expr_i]);
+                        let exprroot = self.register_exprroots_for(ast::Expr::from_ast(expr_ast.clone()), item, &vec![expr_i]);
                         expr_i += 1;
 
                         let exprroot_info = &mut self.exprroots[exprroot];
@@ -911,7 +1002,7 @@ impl Virdant {
                         let reg_ast = node.child(0);
                         let expr_ast = reg_ast.clone().expr().unwrap();
 
-                        let exprroot = self.register_exprroots_for(ast::Expr::from_ast(expr_ast.clone()), moddef, &vec![expr_i]);
+                        let exprroot = self.register_exprroots_for(ast::Expr::from_ast(expr_ast.clone()), item, &vec![expr_i]);
                         expr_i += 1;
 
                         let exprroot_info = &mut self.exprroots[exprroot];
@@ -924,11 +1015,30 @@ impl Virdant {
         }
     }
 
-    fn register_exprroots_for_socket_driver(&mut self, node: Ast, moddef: Id<ModDef>, expr_i: &mut usize) {
+    fn register_exprroots_fndefs(&mut self) {
+        let items = self.items_by_kind(ItemKind::FnDef);
+        for item in items {
+            let fndef_ast = if let Ok(item_ast) = self.items[item].ast.get() {
+                item_ast.child(0)
+            } else {
+                continue;
+            };
+            let expr_ast = fndef_ast.get("body").unwrap();
+            let exprroot = self.register_exprroots_for(ast::Expr::from_ast(expr_ast.clone()), item, &vec![0]);
+            let exprroot_info = &mut self.exprroots[exprroot];
+            exprroot_info.span = Some(expr_ast.span());
+            let fnsig = self.items[item].sig.unwrap().clone();
+            exprroot_info.expected_typ = Some(fnsig.ret());
+            let fndef_info = &mut self.items[item];
+            fndef_info.body.set(exprroot);
+        }
+    }
+
+    fn register_exprroots_for_socket_driver(&mut self, node: Ast, moddef: Id<Item>, expr_i: &mut usize) {
         let master_socket_name = node.master().unwrap();
         let slave_socket_name = node.slave().unwrap();
 
-        let master_socket = match self.resolve_socket(master_socket_name, moddef.as_item()) {
+        let master_socket = match self.resolve_socket(master_socket_name, moddef) {
             Ok(socket) => socket,
             Err(e) => {
                 self.errors.add(e);
@@ -936,7 +1046,7 @@ impl Virdant {
             },
         };
 
-        let slave_socket = match self.resolve_socket(slave_socket_name, moddef.as_item()) {
+        let slave_socket = match self.resolve_socket(slave_socket_name, moddef) {
             Ok(socket) => socket,
             Err(e) => {
                 self.errors.add(e);
@@ -981,24 +1091,24 @@ impl Virdant {
         }
     }
 
-    fn register_exprroots_synthetic_reference(&mut self, span: Span, path: &str, moddef: Id<ModDef>, typ: Type, expr_i: &mut usize) -> Id<ExprRoot> {
+    fn register_exprroots_synthetic_reference(&mut self, span: Span, path: &str, item: Id<Item>, typ: Type, expr_i: &mut usize) -> Id<ExprRoot> {
         let ref_path: Path = path.split(".").map(|part| Intern::new(part.to_string())).collect::<Vec<_>>();
         let expr = Arc::new(ast::Expr::Reference(span, ref_path));
-        let exprroot_id: Id<ExprRoot> = Self::exprroot_id(moddef, &[*expr_i]);
+        let exprroot_id: Id<ExprRoot> = Self::exprroot_id(item, &[*expr_i]);
         *expr_i += 1;
 
         let exprroot_info = self.exprroots.register(exprroot_id);
         exprroot_info.ast.set(expr.clone());
         exprroot_info.span = Some(expr.span());
         exprroot_info.children = vec![];
-        exprroot_info.moddef.set(moddef);
+        exprroot_info.item.set(item);
         exprroot_info.expected_typ = Some(typ);
         exprroot_info.synthetic = true;
 
         exprroot_id
     }
 
-    fn exprroot_id(moddef: Id<ModDef>, path: &[usize]) -> Id<ExprRoot> {
+    fn exprroot_id(moddef: Id<Item>, path: &[usize]) -> Id<ExprRoot> {
         let mut parts = vec![format!("{moddef}::expr")];
         for p in path {
             parts.push(format!("[{p}]"));
@@ -1006,12 +1116,12 @@ impl Virdant {
         Id::new(parts.join(""))
     }
 
-    fn register_exprroots_for(&mut self, expr: Arc<ast::Expr>, moddef: Id<ModDef>, path: &[usize]) -> Id<ExprRoot> {
-        let exprroot_id: Id<ExprRoot> = Self::exprroot_id(moddef, path);
+    fn register_exprroots_for(&mut self, expr: Arc<ast::Expr>, item: Id<Item>, path: &[usize]) -> Id<ExprRoot> {
+        let exprroot_id: Id<ExprRoot> = Self::exprroot_id(item, path);
         let mut subexprs = vec![];
 
         for (i, e) in expr.subexprs().iter().enumerate() {
-            let subexpr = self.register_exprroots_for(e.clone(), moddef, &Self::extend(path, i));
+            let subexpr = self.register_exprroots_for(e.clone(), item, &Self::extend(path, i));
             let info = &mut self.exprroots[subexpr];
             info.parent = Some(exprroot_id);
             subexprs.push(subexpr);
@@ -1023,7 +1133,7 @@ impl Virdant {
         exprroot_info.ast.set(expr.clone());
         exprroot_info.span = Some(expr.span());
         exprroot_info.children = subexprs;
-        exprroot_info.moddef.set(moddef);
+        exprroot_info.item.set(item);
 
         exprroot_id
     }
@@ -1037,7 +1147,7 @@ impl Virdant {
     fn register_submodules(&mut self) {
         let items = self.items_by_kind(ItemKind::ModDef);
         for item in items {
-            let moddef: Id<ModDef> = item.cast();
+            let moddef: Id<Item> = item.cast();
             let moddef_ast = if let Ok(item_ast) = self.items[item].ast.get() {
                 item_ast.child(0)
             } else {
@@ -1052,7 +1162,7 @@ impl Virdant {
                     let submodule_name = submodule_ast.name().unwrap();
                     let submodule_of = submodule_ast.of().unwrap();
 
-                    let submodule_moddef: Id<ModDef> = self.resolve_item(submodule_of, item).unwrap().cast();
+                    let submodule_moddef: Id<ModDef> = self.resolve_moddef(submodule_of, item).unwrap().cast();
 
                     let submodule_id: Id<Submodule> = Id::new(format!("{moddef}::{submodule_name}"));
                     let submodule_info = self.submodules.register(submodule_id);
@@ -1173,8 +1283,8 @@ impl Virdant {
         let roots: Vec<(_, _)> = self.exprroots.iter().map(|(id, info)| (id.clone(), info.clone())).collect();
         for (exprroot, exprroot_info) in roots {
             if exprroot_info.parent.is_none() {
-                let moddef = exprroot_info.moddef.unwrap();
-                let mut typing_context = TypingContext::new(self, *moddef);
+                let item = *exprroot_info.item.unwrap();
+                let mut typing_context = TypingContext::new(self, item);
                 if let Err(err) = typing_context.check(exprroot, exprroot_info.expected_typ.unwrap()) {
                     self.errors.add(err);
                 }
@@ -1301,6 +1411,7 @@ pub enum ItemKind {
     UnionDef,
     StructDef,
     BuiltinDef,
+    FnDef,
     SocketDef,
 }
 
@@ -1311,6 +1422,7 @@ impl ItemKind {
             ItemKind::UnionDef => true,
             ItemKind::StructDef => true,
             ItemKind::BuiltinDef => true,
+            ItemKind::FnDef => false,
             ItemKind::SocketDef => false,
         }
     }

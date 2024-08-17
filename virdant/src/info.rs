@@ -1,4 +1,5 @@
-use self::location::Span;
+use crate::location::Span;
+use crate::types::FnSig;
 
 use super::*;
 
@@ -28,6 +29,10 @@ pub struct ItemInfo {
 
     // for uniondefs
     pub ctors: Ready<Vec<Id<Ctor>>>,
+
+    // for fndefs
+    pub sig : Ready<FnSig>,
+    pub body : Ready<Id<ExprRoot>>,
 
     // for socketdefs
     pub channels: Ready<Vec<Id<Channel>>>,
@@ -83,7 +88,7 @@ pub struct SocketInfo {
 
 #[derive(Default, Clone, Debug)]
 pub struct ExprRootInfo {
-    pub moddef: Ready<Id<ModDef>>,
+    pub item: Ready<Id<Item>>,
     pub ast: Ready<Arc<ast::Expr>>,
     pub expected_typ: Option<Type>,
     pub span: Option<Span>,

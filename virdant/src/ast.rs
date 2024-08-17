@@ -97,6 +97,7 @@ impl Ast {
     pub fn is_uniondef(&self) -> bool { self.rule() == Rule::uniondef }
     pub fn is_structdef(&self) -> bool { self.rule() == Rule::structdef }
     pub fn is_builtindef(&self) -> bool { self.rule() == Rule::builtindef }
+    pub fn is_fndef(&self) -> bool { self.rule() == Rule::fndef }
     pub fn is_socketdef(&self) -> bool { self.rule() == Rule::socketdef }
 
     pub fn is_ext(&self) -> bool { self.get_as_str("ext").is_some() }
@@ -187,6 +188,7 @@ impl Ast {
             Rule::structdef => Some(ItemKind::StructDef),
             Rule::builtindef => Some(ItemKind::BuiltinDef),
             Rule::socketdef => Some(ItemKind::SocketDef),
+            Rule::fndef => Some(ItemKind::FnDef),
             _ => None,
         }
     }

@@ -47,10 +47,11 @@ impl Verilog {
         for (i, item) in items.iter().enumerate() {
             match item.kind() {
                 ItemKind::ModDef(moddef) => self.verilog_moddef(f, moddef)?,
+                ItemKind::FnDef(fndef) => self.verilog_fndef(f, fndef)?,
                 ItemKind::UnionDef(uniondef) => writeln!(f, "// UnionDef {}", uniondef.name())?,
                 ItemKind::StructDef(structdef) => writeln!(f, "// StructDef {}", structdef.name())?,
-                ItemKind::SocketDef(socketdef) => writeln!(f, "// SocketDef {}", socketdef.name())?,
                 ItemKind::BuiltinDef(_builtindef) => (),
+                ItemKind::SocketDef(socketdef) => writeln!(f, "// SocketDef {}", socketdef.name())?,
             }
 
             if i + 1 < items.len() {
@@ -182,6 +183,26 @@ impl Verilog {
             },
         }
 
+        Ok(())
+    }
+
+    fn verilog_fndef(&mut self, f: &mut dyn Write, fndef: FnDef) -> Result<(), VerilogError> {
+        writeln!(f, "// FnDef {}", fndef.name())?;
+
+        let name = fndef.name();
+        let mut context = Context::empty();
+        writeln!(f, "module {name}(")?;
+        for (param_name, param_typ) in fndef.params() {
+            context = context.extend(param_name.clone(), param_name.clone());
+            let width_str = self.width_str(&param_typ);
+            writeln!(f, "    input {width_str}{param_name},")?;
+        }
+        writeln!(f, "    output __out")?;
+        writeln!(f, ");")?;
+
+        let out_ssa = self.verilog_expr(f, fndef.body(), context)?;
+        writeln!(f, "    assign __out = {out_ssa};")?;
+        writeln!(f, "endmodule")?;
         Ok(())
     }
 
