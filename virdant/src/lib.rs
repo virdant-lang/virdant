@@ -823,11 +823,15 @@ impl Virdant {
                 }
 
                 let channel_dir = *channel_info.dir.unwrap();
-                let flow = match (channel_dir, role) {
-                    (ChannelDir::Mosi, PortRole::Slave) => Flow::Source,
-                    (ChannelDir::Mosi, PortRole::Master) => Flow::Sink,
-                    (ChannelDir::Miso, PortRole::Slave) => Flow::Sink,
-                    (ChannelDir::Miso, PortRole::Master) => Flow::Source,
+                let flow = match (channel_dir, role, is_submodule) {
+                    (ChannelDir::Mosi, PortRole::Slave, true) => Flow::Sink,
+                    (ChannelDir::Mosi, PortRole::Master, true) => Flow::Source,
+                    (ChannelDir::Miso, PortRole::Slave, true) => Flow::Source,
+                    (ChannelDir::Miso, PortRole::Master, true) => Flow::Sink,
+                    (ChannelDir::Mosi, PortRole::Slave, false) => Flow::Source,
+                    (ChannelDir::Mosi, PortRole::Master, false) => Flow::Sink,
+                    (ChannelDir::Miso, PortRole::Slave, false) => Flow::Sink,
+                    (ChannelDir::Miso, PortRole::Master, false) => Flow::Source,
                 };
 
                 component_info.flow.set(flow);
