@@ -76,7 +76,7 @@ pub struct SubmoduleInfo {
 #[derive(Default, Clone, Debug)]
 pub struct PortInfo {
     pub moddef: Ready<Id<ModDef>>,
-    pub name: String,
+    pub path: Vec<String>,
     pub role: Ready<PortRole>,
     pub portdef: Ready<Id<PortDef>>,
 }

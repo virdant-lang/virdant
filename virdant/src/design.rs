@@ -356,7 +356,11 @@ impl Submodule {
 
 impl Port {
     pub fn name(&self) -> String {
-        self.info.name.clone()
+        self.info.path.join(".")
+    }
+
+    pub fn path(&self) -> Vec<String> {
+        self.info.path.clone()
     }
 
     pub fn of(&self) -> PortDef {

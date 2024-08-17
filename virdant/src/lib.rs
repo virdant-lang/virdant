@@ -116,8 +116,8 @@ impl Virdant {
         self.register_components();
 
         self.register_exprroots();
-        self.register_ports();
         self.register_submodules();
+        self.register_ports();
 
         self.typecheck();
 
@@ -941,6 +941,38 @@ impl Virdant {
         result
     }
 
+    fn register_submodules(&mut self) {
+        let items = self.items_by_kind(ItemKind::ModDef);
+        for item in items {
+            let moddef: Id<ModDef> = item.cast();
+            let moddef_ast = if let Ok(item_ast) = self.items[item].ast.get() {
+                item_ast.child(0)
+            } else {
+                continue;
+            };
+
+            let mut submodules = vec![];
+
+            for node in moddef_ast.children() {
+                if node.is_statement() && node.child(0).is_submodule() {
+                    let submodule_ast = node.child(0);
+                    let submodule_name = submodule_ast.name().unwrap();
+                    let submodule_of = submodule_ast.of().unwrap();
+
+                    let submodule_moddef: Id<ModDef> = self.resolve_item(submodule_of, item).unwrap().cast();
+
+                    let submodule_id: Id<Submodule> = Id::new(format!("{moddef}::{submodule_name}"));
+                    let submodule_info = self.submodules.register(submodule_id);
+                    submodule_info.moddef.set(item.cast());
+                    submodule_info.name = submodule_name.to_string();
+                    submodule_info.submodule_moddef.set(submodule_moddef);
+                    submodules.push(submodule_id);
+                }
+            }
+            self.items[item].submodules.set(submodules);
+        }
+    }
+
     fn register_ports(&mut self) {
         let items = self.items_by_kind(ItemKind::ModDef);
         for item in items {
@@ -974,46 +1006,67 @@ impl Virdant {
                     let port_id: Id<Port> = Id::new(format!("{moddef}::{port_name}"));
                     let port_info = self.ports.register(port_id);
                     port_info.moddef.set(item.cast());
-                    port_info.name = port_name.to_string();
+                    port_info.path = vec![port_name.to_string()];
                     port_info.role.set(port_role);
                     port_info.portdef.set(portdef);
                     ports.push(port_id);
+                } else if node.is_statement() && node.child(0).is_submodule() {
+                    let submodule_name = node.name().unwrap();
+                    let submodule_moddef_name = node.of().unwrap();
+                    match self.resolve_moddef(submodule_moddef_name, item) {
+                        Ok(submodule_moddef) => {
+                            ports.extend(self.register_submodule_ports(submodule_name, submodule_moddef, moddef));
+                        },
+                        Err(err) => {
+                            self.errors.add(err);
+                        },
+                    }
                 }
             }
             self.items[item].ports.set(ports);
         }
     }
 
-    fn register_submodules(&mut self) {
-        let items = self.items_by_kind(ItemKind::ModDef);
-        for item in items {
-            let moddef: Id<ModDef> = item.cast();
-            let moddef_ast = if let Ok(item_ast) = self.items[item].ast.get() {
-                item_ast.child(0)
-            } else {
-                continue;
-            };
+    fn register_submodule_ports(&mut self, submodule_name: &str, submodule_moddef: Id<ModDef>, moddef: Id<ModDef>) -> Vec<Id<Port>> {
+        let mut ports: Vec<Id<Port>> = vec![];
 
-            let mut submodules = vec![];
+        let moddef_ast = if let Ok(item_ast) = self.items[submodule_moddef.as_item()].ast.get() {
+            item_ast.child(0)
+        } else {
+            return vec![];
+        };
 
-            for node in moddef_ast.children() {
-                if node.is_statement() && node.child(0).is_submodule() {
-                    let submodule_ast = node.child(0);
-                    let submodule_name = submodule_ast.name().unwrap();
-                    let submodule_of = submodule_ast.of().unwrap();
+        for node in moddef_ast.children() {
+            if node.is_statement() {
+                let statement = node.child(0);
+                if statement.is_port() {
+                    let port_name = statement.name().unwrap();
+                    let port_portdef_name = statement.of().unwrap();
+                    let portdef_result = self.resolve_portdef(port_portdef_name, submodule_moddef.as_item());
+                    match portdef_result {
+                        Ok(portdef) => {
+                            let port_id: Id<Port> = Id::new(format!("{moddef}::{submodule_name}.{port_name}"));
+                            let port_info = self.ports.register(port_id);
 
-                    let submodule_moddef: Id<ModDef> = self.resolve_item(submodule_of, item).unwrap().cast();
+                            let port_role = if statement.role().unwrap() == "master" {
+                                PortRole::Master
+                            } else {
+                                PortRole::Slave
+                            };
 
-                    let submodule_id: Id<Submodule> = Id::new(format!("{moddef}::{submodule_name}"));
-                    let submodule_info = self.submodules.register(submodule_id);
-                    submodule_info.moddef.set(item.cast());
-                    submodule_info.name = submodule_name.to_string();
-                    submodule_info.submodule_moddef.set(submodule_moddef);
-                    submodules.push(submodule_id);
+                            port_info.moddef.set(moddef);
+                            port_info.path = vec![submodule_name.to_string(), port_name.to_string()];
+                            port_info.role.set(port_role);
+                            port_info.portdef.set(portdef);
+
+                            ports.push(port_id);
+                        },
+                        Err(err) => self.errors.add(err),
+                    }
                 }
             }
-            self.items[item].submodules.set(submodules);
         }
+        ports
     }
 }
 
@@ -1021,7 +1074,7 @@ impl Virdant {
 ////////////////////////////////////////////////////////////////////////////////
 // Typechecking
 ////////////////////////////////////////////////////////////////////////////////
-///
+
 impl Virdant {
     fn typecheck(&mut self) {
         let roots: Vec<(_, _)> = self.exprroots.iter().map(|(id, info)| (id.clone(), info.clone())).collect();
@@ -1130,9 +1183,10 @@ impl std::fmt::Debug for Virdant {
         writeln!(f, "PORTS:")?;
         for (port, port_info) in self.ports.iter() {
             writeln!(f, "    {port}")?;
-            writeln!(f, "        name: {}", port_info.name)?;
+            writeln!(f, "        path: {}", port_info.path.join("."))?;
             writeln!(f, "        portdef: {:?}", port_info.portdef)?;
             writeln!(f, "        moddef: {:?}", port_info.moddef)?;
+            writeln!(f, "        role: {:?}", port_info.role)?;
         }
 
         Ok(())
