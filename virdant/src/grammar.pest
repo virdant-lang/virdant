@@ -247,9 +247,9 @@ ctor = @{ "@" ~ qualident }
 struct = @{ "$" ~ qualident }
 
 nat = @{
-    "0x" ~ ("_" | ASCII_HEX_DIGIT)+ |
-    "0b" ~ ("_" | ASCII_BIN_DIGIT)+ |
-    ASCII_DIGIT+
+    "0x" ~ !"_" ~ ("_" | ASCII_HEX_DIGIT)+ |
+    "0b" ~ !"_" ~ ("_" | ASCII_BIN_DIGIT)+ |
+    !"_" ~ ("_" | ASCII_DIGIT)+
 }
 
 

@@ -1,0 +1,28 @@
+mod Top {
+    node explicit : Word[4];
+    explicit := 0w4;
+
+    node inferred : Word[4];
+    inferred := 0;
+
+    node bin : Word[4];
+    bin := 0b1010;
+
+    node hex : Word[8];
+    hex := 0xfe;
+
+    node explicit_bin : Word[4];
+    explicit_bin := 0b1010w4;
+
+    node explicit_hex : Word[8];
+    explicit_hex := 0xfew8;
+
+    node underscore : Word[32];
+    underscore := 100_000;
+
+    node underscore_bin : Word[7];
+    underscore_bin := 0b00_101_11;
+
+    node underscore_hex : Word[32];
+    underscore_hex := 0xcafe_babe;
+}
