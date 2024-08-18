@@ -223,17 +223,27 @@ fn parse_wordlit(wordlit: &str) -> WordLit {
     let spelling = wordlit.to_string();
 
     let (value, width) = if let Some(idx) = wordlit.find("w") {
-        let value = str::parse(&spelling[..idx]).unwrap();
+        let value = parse_nat(&spelling[..idx]);
         let width = str::parse(&spelling[idx+1..]).unwrap();
         (value, Some(width))
     } else {
-        (str::parse(&spelling).unwrap(), None)
+        (parse_nat(&spelling), None)
     };
 
     WordLit {
         value,
         width,
         spelling,
+    }
+}
+
+fn parse_nat(nat: &str) -> WordVal {
+    if nat.starts_with("0x") {
+        WordVal::from_str_radix(&nat[2..].replace("_", ""), 16).unwrap()
+    } else if nat.starts_with("0b") {
+        WordVal::from_str_radix(&nat[2..].replace("_", ""), 2).unwrap()
+    } else {
+        WordVal::from_str_radix(&nat.replace("_", ""), 10).unwrap()
     }
 }
 
