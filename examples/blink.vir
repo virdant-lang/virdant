@@ -1,0 +1,11 @@
+import resetter;
+
+mod Top {
+    incoming clock : Clock;
+    outgoing led : Bit;
+
+    reg led_on : Bit on clock;
+    led_on <= led_on->not();
+
+    led := led_on->not();
+}
