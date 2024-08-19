@@ -1,0 +1,73 @@
+package = { SOI ~ import* }
+
+import = { kw_import ~ (#package=ident) ~ ";" }
+
+ident = @{ !keyword ~ ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANUMERIC)* }
+
+////////////////////////////////////////////////////////////////////////////////
+// Keywords
+////////////////////////////////////////////////////////////////////////////////
+
+kw_ext          = @{ "ext"        ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_import       = @{ "import"     ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_mod          = @{ "mod"        ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_struct       = @{ "struct"     ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_union        = @{ "union"      ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_builtin      = @{ "builtin"    ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_type         = @{ "type"       ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_implicit     = @{ "implicit"   ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_incoming     = @{ "incoming"   ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_outgoing     = @{ "outgoing"   ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_reg          = @{ "reg"        ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_node         = @{ "node"       ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_port         = @{ "port"       ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_of           = @{ "of"         ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_if           = @{ "if"         ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_else         = @{ "else"       ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_match        = @{ "match"      ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_cat          = @{ "cat"        ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_mosi         = @{ "mosi"       ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_miso         = @{ "miso"       ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_master       = @{ "master"     ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_slave        = @{ "slave"      ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_true         = @{ "true"       ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_false        = @{ "false"      ~ !(ASCII_ALPHANUMERIC | "_") }
+
+keyword = {
+    kw_ext |
+    kw_import |
+    kw_mod |
+    kw_struct |
+    kw_union |
+    kw_type |
+    kw_incoming |
+    kw_implicit |
+    kw_outgoing |
+    kw_reg |
+    kw_node |
+    kw_port |
+    kw_of |
+    kw_if |
+    kw_else |
+    kw_match |
+    kw_cat |
+    kw_mosi |
+    kw_miso |
+    kw_true |
+    kw_false
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Extras
+////////////////////////////////////////////////////////////////////////////////
+
+COMMENT = _{
+    "//" ~ (!NEWLINE ~ ANY)* ~ NEWLINE |
+    "/*" ~ (!"*/" ~ ANY)* ~ "*/"
+}
+
+WHITESPACE = _{
+    " " |
+    NEWLINE
+}

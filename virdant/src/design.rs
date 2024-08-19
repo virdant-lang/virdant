@@ -523,6 +523,34 @@ impl Type {
             None
         }
     }
+
+    pub fn is_clock(&self) -> bool {
+        if let TypeScheme::BuiltinDef(builtindef) = self.scheme() {
+            builtindef.id == Id::new("builtin::Clock")
+        } else {
+            false
+        }
+    }
+
+    pub fn is_bit(&self) -> bool {
+        if let TypeScheme::BuiltinDef(builtindef) = self.scheme() {
+            builtindef.id == Id::new("builtin::Bit")
+        } else {
+            false
+        }
+    }
+
+    pub fn is_word(&self) -> bool {
+        if let TypeScheme::BuiltinDef(builtindef) = self.scheme() {
+            builtindef.id == Id::new("builtin::Word")
+        } else {
+            false
+        }
+    }
+
+    pub fn width(&self) -> Width {
+        self.typ.args().unwrap()[0]
+    }
 }
 
 

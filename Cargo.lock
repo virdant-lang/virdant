@@ -658,6 +658,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "vir-mlir"
+version = "0.1.0-rc0"
+dependencies = [
+ "clap",
+ "pest",
+ "pest_derive",
+ "serde",
+ "toml",
+ "virdant",
+]
+
+[[package]]
 name = "virdant"
 version = "0.1.0-rc0"
 dependencies = [
