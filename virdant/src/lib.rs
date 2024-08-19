@@ -918,7 +918,6 @@ impl Virdant {
             } else {
                 continue;
             };
-            eprintln!("{item}");
 
             let ret_typ_ast = fndef_ast.get("ret").unwrap();
             let ret_typ = match self.resolve_type(ret_typ_ast, item) {
@@ -944,7 +943,7 @@ impl Virdant {
             }
 
             let fndef_info = &mut self.items[item];
-            fndef_info.sig.set(dbg!(FnSig::new(fndef, arg_typs, ret_typ)));
+            fndef_info.sig.set(FnSig::new(fndef, arg_typs, ret_typ));
         }
     }
 
