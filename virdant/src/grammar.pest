@@ -180,6 +180,11 @@ expr_match_arm = {
 }
 
 expr_call = {
+    (#fn=qualident) ~ "(" ~ (#args=expr_list) ~ ")" |
+    expr_method
+}
+
+expr_method = {
     expr_base ~ expr_call_suffix*
 }
 

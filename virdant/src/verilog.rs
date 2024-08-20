@@ -197,7 +197,8 @@ impl Verilog {
             let width_str = self.width_str(&param_typ);
             writeln!(f, "    input {width_str}{param_name},")?;
         }
-        writeln!(f, "    output __out")?;
+        let width_str = self.width_str(&fndef.ret());
+        writeln!(f, "    output {width_str}__out")?;
         writeln!(f, ");")?;
 
         let out_ssa = self.verilog_expr(f, fndef.body(), context)?;
@@ -316,6 +317,30 @@ impl Verilog {
                     "get" => writeln!(f, "    wire {width_str} {gs} = {subject_ssa}[{}];", args_ssa[0])?,
                     _ => panic!("Unknown method: {}", method),
                 }
+                Ok(gs)
+            },
+            Expr::FnCall(fncall) => {
+                let args = fncall.args();
+                let fnname = fncall.name().to_string();
+                let gs = self.gensym();
+
+                let mut args_ssa: Vec<SsaName> = vec![];
+                for arg in args {
+                    let arg_ssa = self.verilog_expr(f, arg.clone(), ctx.clone())?;
+                    args_ssa.push(arg_ssa);
+                }
+                let width_str = self.width_str(&expr.typ());
+                let instance_gs = self.gensym_hint(&format!("fn_{fnname}"));
+                writeln!(f, "    wire {width_str}{gs};")?;
+                writeln!(f, "    {fnname} {instance_gs}(")?;
+
+                let fndef = fncall.fndef();
+                for ((param_name, _param_typ), arg_ssa) in fndef.params().into_iter().zip(args_ssa) {
+                    writeln!(f, "        .{param_name}({arg_ssa}),")?;
+                }
+
+                writeln!(f, "        .__out({gs})")?;
+                writeln!(f, "    );")?;
                 Ok(gs)
             },
             Expr::If(if_) => {

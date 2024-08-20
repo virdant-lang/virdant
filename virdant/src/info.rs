@@ -99,6 +99,7 @@ pub struct ExprRootInfo {
 
     pub reference_component: Option<Id<Component>>,
     pub struct_structdef: Option<Id<StructDef>>,
+    pub fncall_fndef: Option<Id<FnDef>>,
 
     // debug
     pub synthetic: bool,

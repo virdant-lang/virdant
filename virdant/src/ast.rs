@@ -130,6 +130,7 @@ impl Ast {
     pub fn is_expr(&self) -> bool { self.rule() == Rule::expr }
     pub fn is_expr_if(&self) -> bool { self.rule() == Rule::expr_if }
     pub fn is_expr_match(&self) -> bool { self.rule() == Rule::expr_match }
+    pub fn is_expr_method(&self) -> bool { self.rule() == Rule::expr_method }
     pub fn is_expr_call(&self) -> bool { self.rule() == Rule::expr_call }
     pub fn is_expr_base(&self) -> bool { self.rule() == Rule::expr_base }
     pub fn is_wordlit(&self) -> bool { self.rule() == Rule::wordlit }
@@ -155,6 +156,7 @@ impl Ast {
 
     pub fn package(&self) -> Option<&str> { self.get_as_str("package") }
     pub fn name(&self) -> Option<&str> { self.get_as_str("name") }
+    pub fn fnname(&self) -> Option<&str> { self.get_as_str("fn") }
     pub fn of(&self) -> Option<&str> { self.get_as_str("of") }
     pub fn method(&self) -> Option<&str> { self.get_as_str("method") }
     pub fn field(&self) -> Option<&str> { self.get_as_str("field") }

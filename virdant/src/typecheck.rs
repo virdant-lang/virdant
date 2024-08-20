@@ -127,6 +127,7 @@ impl<'a> TypingContext<'a> {
             Expr::Idx(_span, _subject, i) => self.infer_idx(exprroot, *i),
             Expr::IdxRange(_span, _subject, j, i) => self.infer_idxrange(exprroot, *j, *i),
             Expr::MethodCall(_span, _subject, method, _args) => self.infer_methodcall(exprroot, *method),
+            Expr::FnCall(_span, fndef, _args) => self.infer_fncall(exprroot, *fndef),
             Expr::Field(_span, _subject, field) => self.infer_field(exprroot, field.clone()),
             Expr::Cat(_span, _es) => self.infer_cat(exprroot),
             Expr::Struct(_span, struct_name, assigns) => self.infer_struct(exprroot, *struct_name, assigns.to_vec()),
@@ -296,6 +297,29 @@ impl<'a> TypingContext<'a> {
             self.check(arg.clone(), *param_typ)?;
         }
         let typ = method_sig.ret();
+        Ok(typ)
+    }
+
+    fn infer_fncall(&mut self, exprroot: Id<ExprRoot>, fndef: Ident) -> Result<Type, VirErr> {
+        let args = self.virdant.exprroots[exprroot].children.clone();
+
+        let fndef = self.virdant.resolve_fndef(&fndef, self.item)?;
+        let fndef_info = self.virdant.items[fndef.as_item()].clone();
+
+        let fn_sig = fndef_info.sig.unwrap();
+        let typ = fn_sig.ret();
+
+        if args.len() != fn_sig.params().len() {
+            return Err(VirErr::Other(format!("Wrong number of arguments to function {fndef}")));
+        }
+
+        for (arg, (_param_name, param_typ)) in args.iter().zip(fn_sig.params()) {
+            self.check(arg.clone(), *param_typ)?;
+        }
+
+        let exprroot_info = &mut self.virdant.exprroots[exprroot];
+        exprroot_info.fncall_fndef = Some(fndef);
+
         Ok(typ)
     }
 

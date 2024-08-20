@@ -315,6 +315,11 @@ impl FnDef {
         results
     }
 
+    pub fn ret(&self) -> Type {
+        let sig = self.info.sig.unwrap().clone();
+        Type::new(self.root.clone(), sig.ret())
+    }
+
     pub fn body(&self) -> Expr {
         let exprroot_id: Id<_> = self.info.body.unwrap().clone();
         let exprroot = self.root().exprroots[&exprroot_id].clone();
@@ -426,6 +431,7 @@ impl ExprRoot {
             crate::ast::Expr::Reference(_, _) => Expr::Reference(expr::Reference { root, id, info }),
             crate::ast::Expr::Word(_, _) => Expr::Word(expr::Word { root, id, info }),
             crate::ast::Expr::Bit(_, _) => Expr::Bit(expr::Bit { root, id, info }),
+            crate::ast::Expr::FnCall(_, _, _) => Expr::FnCall(expr::FnCall { root, id, info }),
             crate::ast::Expr::MethodCall(_, _, _, _) => Expr::MethodCall(expr::MethodCall { root, id, info }),
             crate::ast::Expr::Field(_, _, _) => Expr::Field(expr::Field { root, id, info }),
             crate::ast::Expr::Struct(_, _, _) => Expr::Struct(expr::Struct { root, id, info }),
@@ -657,6 +663,7 @@ pub enum Expr {
     Reference(expr::Reference),
     Word(expr::Word),
     Bit(expr::Bit),
+    FnCall(expr::FnCall),
     MethodCall(expr::MethodCall),
     Struct(expr::Struct),
     Field(expr::Field),
@@ -675,6 +682,7 @@ impl Expr {
             Expr::Word(word) => word.typ(),
             Expr::Bit(bit) => bit.typ(),
             Expr::MethodCall(methodcall) => methodcall.typ(),
+            Expr::FnCall(fncall) => fncall.typ(),
             Expr::Struct(struct_) => struct_.typ(),
             Expr::Field(field) => field.typ(),
             Expr::Ctor(ctor) => ctor.typ(),
@@ -777,6 +785,7 @@ mod expr {
     expr_type!(Word);
     expr_type!(Bit);
     expr_type!(MethodCall);
+    expr_type!(FnCall);
     expr_type!(Struct);
     expr_type!(Field);
     expr_type!(Ctor);
@@ -851,6 +860,31 @@ mod expr {
 
         pub fn args(&self) -> Vec<Expr> {
             let args: Vec<Id<_>> = self.info.children[1..].to_vec();
+            let exprroots: Vec<_> = args.iter()
+                .map(|id| self.root().exprroots[id].to_expr())
+                .collect();
+            exprroots
+        }
+    }
+
+    impl FnCall {
+        pub fn fndef(&self) -> super::FnDef {
+            let fndef_id = &self.info.fncall_fndef.unwrap();
+            let info = self.root().items[&fndef_id.as_item()].info.clone();
+            super::FnDef {
+                root: self.root.clone(),
+                info,
+            }
+        }
+
+        pub fn name(&self) -> String {
+            let fndef_id = &self.info.fncall_fndef.unwrap();
+            let fndef = &self.root().items[&fndef_id.as_item()];
+            fndef.name().to_owned()
+        }
+
+        pub fn args(&self) -> Vec<Expr> {
+            let args: Vec<Id<_>> = self.info.children.to_vec();
             let exprroots: Vec<_> = args.iter()
                 .map(|id| self.root().exprroots[id].to_expr())
                 .collect();
