@@ -57,6 +57,7 @@ impl MatchArm {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Pat {
     CtorAt(Ident, Vec<Pat>),
+    EnumerantAt(Ident),
     Bind(Ident),
     Else,
 }
@@ -142,6 +143,8 @@ impl Expr {
                 subpats.push(Expr::ast_to_pat(arg));
             }
             Pat::CtorAt(Ident::new(first_node.as_str()[1..].to_string()), subpats)
+        } else if first_node.is_enumerant() {
+            Pat::EnumerantAt(Ident::new(first_node.as_str()[1..].to_string()))
         } else if first_node.is_ident() {
             Pat::Bind(Ident::new(first_node.as_str().to_string()))
         } else if first_node.is_kw_else() {
@@ -295,6 +298,7 @@ pub struct TypedMatchArm(pub TypedPat, pub Arc<TypedExpr>);
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypedPat {
     CtorAt(Type, Ident, Vec<TypedPat>),
+    EnumerantAt(Type, Ident),
     Bind(Type, Ident),
     Else(Type),
 }
@@ -332,6 +336,7 @@ impl Typed for TypedPat {
     fn typ(&self) -> Type {
         match self {
             TypedPat::CtorAt(typ, _, _) => typ.clone(),
+            TypedPat::EnumerantAt(typ, _) => typ.clone(),
             TypedPat::Bind(typ, _) => typ.clone(),
             TypedPat::Else(typ) => typ.clone(),
         }

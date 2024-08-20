@@ -764,6 +764,7 @@ pub enum Referent {
 #[derive(Debug, Clone)]
 pub enum Pat {
     CtorAt(Ctor, Vec<Pat>),
+    EnumerantAt(Enumerant),
     Bind(Binding),
     Else,
 }
@@ -788,6 +789,22 @@ impl Pat {
                 for ctor in uniondef.ctors() {
                     if ctor.name() == **ctor_name {
                         return Pat::CtorAt(ctor, new_pats);
+                    }
+                }
+                unreachable!()
+            },
+            crate::ast::expr::Pat::EnumerantAt(ctor_name) => {
+                let enumdef_id = match typ.scheme() {
+                    types::TypeScheme::StructDef(_) => unreachable!(),
+                    types::TypeScheme::BuiltinDef(_) => unreachable!(),
+                    types::TypeScheme::EnumDef(enumdef) => enumdef,
+                    types::TypeScheme::UnionDef(_) => unreachable!(),
+                };
+                let enumdef = &root.items[&enumdef_id.as_item()].as_enumdef();
+
+                for enumerant in enumdef.enumerants() {
+                    if enumerant.name() == **ctor_name {
+                        return Pat::EnumerantAt(enumerant);
                     }
                 }
                 unreachable!()
