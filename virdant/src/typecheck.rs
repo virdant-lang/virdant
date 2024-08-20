@@ -456,6 +456,27 @@ impl<'a> TypingContext<'a> {
 
                 Ok(TypedPat::CtorAt(typ.clone(), ctor_name, typed_pats))
             },
+            Pat::EnumerantAt(enumerant_name) => {
+                let enumdef = match typ.scheme() {
+                    crate::types::TypeScheme::StructDef(_structdef) => return Err(VirErr::InvalidPat(format!(""))),
+                    crate::types::TypeScheme::BuiltinDef(_builtindef) => return Err(VirErr::InvalidPat(format!(""))),
+                    crate::types::TypeScheme::EnumDef(enumdef) => enumdef,
+                    crate::types::TypeScheme::UnionDef(_uniondef) => return Err(VirErr::InvalidPat(format!(""))),
+                };
+                let enumdef_info = &self.virdant.items[enumdef.as_item()];
+                let enumerants = &enumdef_info.enumerants.unwrap();
+
+                let enumerant_opt = enumerants.into_iter().find(|enumerant| {
+                    let ctor_info = &self.virdant.enumerants[**enumerant];
+                    ctor_info.name == *enumerant_name
+                });
+
+                if enumerant_opt.is_none() {
+                    return Err(VirErr::Other(format!("No such enumerant {enumerant_name} on {typ}")));
+                }
+
+                Ok(TypedPat::EnumerantAt(typ.clone(), enumerant_name))
+            },
             Pat::Bind(x) => Ok(TypedPat::Bind(typ.clone(), x.clone())),
             Pat::Else => Ok(TypedPat::Else(typ.clone())),
         }
@@ -489,6 +510,7 @@ impl<'a> TypingContext<'a> {
                 vec![(*x, *typ)]
             },
             TypedPat::Else(_) => vec![],
+            TypedPat::EnumerantAt(_typ, _ctor) => vec![],
             TypedPat::CtorAt(_typ, _ctor, pats) => {
                 let mut results = vec![];
                 for pat in pats {
