@@ -10,6 +10,7 @@ item = {
     moddef |
     uniondef |
     structdef |
+    enumdef |
     builtindef |
     fndef |
     socketdef
@@ -29,6 +30,12 @@ moddef = {
 uniondef = {
     kw_union ~ kw_type ~ (#name=ident) ~ "{" ~
         (uniondef_statement ~ ";")* ~
+    "}"
+}
+
+enumdef = {
+    kw_enum ~ kw_type ~ (#name=ident) ~ kw_width ~ (#width=nat) ~ "{" ~
+        (enumdef_statement ~ ";")* ~
     "}"
 }
 
@@ -84,6 +91,10 @@ moddef_statement_socket_driver = { (#slave=path) ~ ":=:" ~ (#master=path) }
 
 uniondef_statement = {
     (#name=ident) ~ "(" ~ (#args=arg_list) ~ ")"
+}
+
+enumdef_statement = {
+    (#name=ident) ~ "=" ~ (#value=wordlit)
 }
 
 structdef_statement = {
@@ -194,6 +205,7 @@ expr_base = {
     kw_cat ~ "(" ~ (#args=expr_list) ~ ")" |
     ctor ~ "(" ~ (#args=expr_list) ~ ")" |
     struct ~ "{" ~ (#assigns=assign_list) ~ "}" |
+    enumerant |
     path |
     wordlit |
     bitlit |
@@ -244,6 +256,7 @@ bitlit = {
 qualident = @{ (ident ~ "::")? ~ ident }
 ident = @{ !keyword ~ ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANUMERIC)* }
 ctor = @{ "@" ~ qualident }
+enumerant = @{ "#" ~ qualident }
 struct = @{ "$" ~ qualident }
 
 nat = @{
@@ -262,6 +275,8 @@ kw_import       = @{ "import"     ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_mod          = @{ "mod"        ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_struct       = @{ "struct"     ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_union        = @{ "union"      ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_enum         = @{ "enum"       ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_width        = @{ "width"      ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_builtin      = @{ "builtin"    ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_fn           = @{ "fn"         ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_type         = @{ "type"       ~ !(ASCII_ALPHANUMERIC | "_") }
@@ -289,6 +304,8 @@ keyword = {
     kw_mod |
     kw_struct |
     kw_union |
+    kw_enum |
+    kw_width |
     kw_builtin |
     kw_fn |
     kw_type |

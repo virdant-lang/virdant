@@ -23,6 +23,7 @@ pub(crate) struct DesignRoot {
     pub exprroots: IndexMap<Id<id::ExprRoot>, ExprRoot>,
     pub fields: IndexMap<Id<id::Field>, Field>,
     pub ctors: IndexMap<Id<id::Ctor>, Ctor>,
+    pub enumerants: IndexMap<Id<id::Enumerant>, Enumerant>,
 }
 
 /// `Package` is a representation of a given Virdant package.
@@ -60,6 +61,13 @@ pub struct UnionDef {
 pub struct StructDef {
     pub(crate) root: OnceCell<Weak<DesignRoot>>,
     pub(crate) id: Id<id::StructDef>,
+    pub(crate) info: ItemInfo,
+}
+
+#[derive(Clone)]
+pub struct EnumDef {
+    pub(crate) root: OnceCell<Weak<DesignRoot>>,
+    pub(crate) id: Id<id::EnumDef>,
     pub(crate) info: ItemInfo,
 }
 
@@ -120,6 +128,12 @@ pub struct Ctor {
     pub(crate) info: CtorInfo,
 }
 
+#[derive(Clone, Debug)]
+pub struct Enumerant {
+    pub(crate) root: OnceCell<Weak<DesignRoot>>,
+    pub(crate) info: EnumerantInfo,
+}
+
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Method {
@@ -143,6 +157,7 @@ pub enum TypeArg {
 pub enum TypeScheme {
     StructDef(StructDef),
     UnionDef(UnionDef),
+    EnumDef(EnumDef),
     BuiltinDef(BuiltinDef),
 }
 
@@ -188,6 +203,7 @@ impl Item {
             crate::ItemKind::ModDef => ItemKind::ModDef(self.as_moddef()),
             crate::ItemKind::UnionDef => ItemKind::UnionDef(self.as_uniondef()),
             crate::ItemKind::StructDef => ItemKind::StructDef(self.as_structdef()),
+            crate::ItemKind::EnumDef => ItemKind::EnumDef(self.as_enumdef()),
             crate::ItemKind::BuiltinDef => ItemKind::BuiltinDef(self.as_builtindef()),
             crate::ItemKind::FnDef => ItemKind::FnDef(self.as_fndef()),
             crate::ItemKind::SocketDef => ItemKind::SocketDef(self.as_socketdef()),
@@ -200,6 +216,10 @@ impl Item {
 
     fn as_structdef(&self) -> StructDef {
         StructDef { root: self.root.clone(), id: self.id.cast(), info: self.info.clone() }
+    }
+
+    fn as_enumdef(&self) -> EnumDef {
+        EnumDef { root: self.root.clone(), id: self.id.cast(), info: self.info.clone() }
     }
 
     fn as_uniondef(&self) -> UnionDef {
@@ -322,6 +342,19 @@ impl FnDef {
     }
 }
 
+impl EnumDef {
+    pub fn enumerants(&self) -> Vec<Enumerant> {
+        let mut enumerants = vec![];
+        let enumerant_ids = self.info.enumerants.unwrap();
+        for (enumerant_id, enumerant) in self.root().enumerants.iter() {
+            if enumerant_ids.contains(enumerant_id) {
+                enumerants.push(enumerant.clone());
+            }
+        }
+        enumerants
+    }
+}
+
 impl Component {
     pub fn path(&self) -> &[String] {
         &self.info.path
@@ -430,6 +463,7 @@ impl ExprRoot {
             crate::ast::Expr::Field(_, _, _) => Expr::Field(expr::Field { root, id, info }),
             crate::ast::Expr::Struct(_, _, _) => Expr::Struct(expr::Struct { root, id, info }),
             crate::ast::Expr::Ctor(_, _, _) => Expr::Ctor(expr::Ctor { root, id, info }),
+            crate::ast::Expr::Enumerant(_, _) => Expr::Enumerant(expr::Enumerant { root, id, info }),
             crate::ast::Expr::Idx(_, _, _) => Expr::Idx(expr::Idx { root, id, info }),
             crate::ast::Expr::IdxRange(_, _, _, _) => Expr::IdxRange(expr::IdxRange { root, id, info }),
             crate::ast::Expr::Cat(_, _) => Expr::Cat(expr::Cat { root, id, info }),
@@ -473,6 +507,20 @@ impl Ctor {
     }
 }
 
+impl Enumerant {
+    pub fn name(&self) -> &str {
+        &self.info.name
+    }
+
+    pub fn enumdef(&self) -> EnumDef {
+        self.root().items[&self.info.enumdef.unwrap().as_item()].as_enumdef()
+    }
+
+    pub fn value(&self) -> WordVal {
+        self.info.value
+    }
+}
+
 impl Method {
     pub fn name(&self) -> &str {
         &self.name
@@ -495,6 +543,10 @@ impl Type {
                 let item = root.items[&uniondef.as_item()].as_uniondef();
                 TypeScheme::UnionDef(item)
             },
+            types::TypeScheme::EnumDef(enumdef) => {
+                let item = root.items[&enumdef.as_item()].as_enumdef();
+                TypeScheme::EnumDef(item)
+            },
             types::TypeScheme::BuiltinDef(builtindef) => {
                 let item = root.items[&builtindef.as_item()].as_builtindef();
                 TypeScheme::BuiltinDef(item)
@@ -507,6 +559,7 @@ impl Type {
         let item = match self.typ.scheme() {
             types::TypeScheme::StructDef(structdef) => &root.items[&structdef.as_item()],
             types::TypeScheme::UnionDef(uniondef) => &root.items[&uniondef.as_item()],
+            types::TypeScheme::EnumDef(uniondef) => &root.items[&uniondef.as_item()],
             types::TypeScheme::BuiltinDef(builtindef) => &root.items[&builtindef.as_item()],
         };
         item.name().to_string()
@@ -546,6 +599,7 @@ impl_hasroot!(Item);
 impl_hasroot!(ModDef);
 impl_hasroot!(UnionDef);
 impl_hasroot!(StructDef);
+impl_hasroot!(EnumDef);
 impl_hasroot!(SocketDef);
 impl_hasroot!(FnDef);
 impl_hasroot!(BuiltinDef);
@@ -555,6 +609,7 @@ impl_hasroot!(Submodule);
 impl_hasroot!(Socket);
 impl_hasroot!(Field);
 impl_hasroot!(Ctor);
+impl_hasroot!(Enumerant);
 
 impl_hasroot!(Type);
 
@@ -563,6 +618,7 @@ pub enum ItemKind {
     ModDef(ModDef),
     UnionDef(UnionDef),
     StructDef(StructDef),
+    EnumDef(EnumDef),
     BuiltinDef(BuiltinDef),
     FnDef(FnDef),
     SocketDef(SocketDef),
@@ -589,6 +645,7 @@ macro_rules! item_fns {
 item_fns!(ModDef);
 item_fns!(UnionDef);
 item_fns!(StructDef);
+item_fns!(EnumDef);
 item_fns!(SocketDef);
 item_fns!(BuiltinDef);
 
@@ -608,6 +665,7 @@ name_as_debug!(Item);
 name_as_debug!(ModDef);
 name_as_debug!(UnionDef);
 name_as_debug!(StructDef);
+name_as_debug!(EnumDef);
 name_as_debug!(BuiltinDef);
 name_as_debug!(SocketDef);
 
@@ -661,6 +719,7 @@ pub enum Expr {
     Struct(expr::Struct),
     Field(expr::Field),
     Ctor(expr::Ctor),
+    Enumerant(expr::Enumerant),
     Idx(expr::Idx),
     IdxRange(expr::IdxRange),
     Cat(expr::Cat),
@@ -678,6 +737,7 @@ impl Expr {
             Expr::Struct(struct_) => struct_.typ(),
             Expr::Field(field) => field.typ(),
             Expr::Ctor(ctor) => ctor.typ(),
+            Expr::Enumerant(enumerant) => enumerant.typ(),
             Expr::Idx(idx) => idx.typ(),
             Expr::IdxRange(idxrange) => idxrange.typ(),
             Expr::Cat(cat) => cat.typ(),
@@ -712,6 +772,7 @@ impl Pat {
                 let uniondef_id = match typ.scheme() {
                     types::TypeScheme::StructDef(_) => unreachable!(),
                     types::TypeScheme::BuiltinDef(_) => unreachable!(),
+                    types::TypeScheme::EnumDef(_) => unreachable!(),
                     types::TypeScheme::UnionDef(uniondef) => uniondef,
                 };
                 let uniondef = &root.items[&uniondef_id.as_item()].as_uniondef();
@@ -780,6 +841,7 @@ mod expr {
     expr_type!(Struct);
     expr_type!(Field);
     expr_type!(Ctor);
+    expr_type!(Enumerant);
     expr_type!(Idx);
     expr_type!(IdxRange);
     expr_type!(Cat);
@@ -873,6 +935,7 @@ mod expr {
                 let structdef_id = match typ.scheme() {
                     types::TypeScheme::BuiltinDef(_) => unreachable!(),
                     types::TypeScheme::UnionDef(_) => unreachable!(),
+                    types::TypeScheme::EnumDef(_) => unreachable!(),
                     types::TypeScheme::StructDef(structdef) => structdef,
                 };
                 let structdef = &self.root().items[&structdef_id.as_item()].as_structdef();
@@ -906,6 +969,7 @@ mod expr {
                 let structdef_id = match typ.scheme() {
                     types::TypeScheme::BuiltinDef(_) => unreachable!(),
                     types::TypeScheme::UnionDef(_) => unreachable!(),
+                    types::TypeScheme::EnumDef(_) => unreachable!(),
                     types::TypeScheme::StructDef(structdef) => structdef,
                 };
                 let structdef = &self.root().items[&structdef_id.as_item()].as_structdef();
@@ -929,6 +993,7 @@ mod expr {
                 let uniondef_id = match typ.scheme() {
                     types::TypeScheme::StructDef(_) => unreachable!(),
                     types::TypeScheme::BuiltinDef(_) => unreachable!(),
+                    types::TypeScheme::EnumDef(_) => unreachable!(),
                     types::TypeScheme::UnionDef(uniondef) => uniondef,
                 };
                 let uniondef = &self.root().items[&uniondef_id.as_item()].as_uniondef();
@@ -950,6 +1015,30 @@ mod expr {
                 .map(|id| self.root().exprroots[id].to_expr())
                 .collect();
             exprroots
+        }
+    }
+
+    impl Enumerant {
+        pub fn enumerant(&self) -> super::Enumerant {
+            if let crate::ast::Expr::Enumerant(_span, enumerant_name) = self.ast().as_ref() {
+                let typ = self.info.typ.unwrap();
+                let enumdef_id = match typ.scheme() {
+                    types::TypeScheme::StructDef(_) => unreachable!(),
+                    types::TypeScheme::BuiltinDef(_) => unreachable!(),
+                    types::TypeScheme::UnionDef(_) => unreachable!(),
+                    types::TypeScheme::EnumDef(enumdef) => enumdef,
+                };
+                let enumdef = &self.root().items[&enumdef_id.as_item()].as_enumdef();
+
+                for enumerant in enumdef.enumerants() {
+                    if enumerant.name() == **enumerant_name {
+                        return enumerant;
+                    }
+                }
+                unreachable!()
+            } else {
+                unreachable!()
+            }
         }
     }
 

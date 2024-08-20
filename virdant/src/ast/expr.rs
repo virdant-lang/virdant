@@ -22,6 +22,7 @@ pub enum Expr {
     Field(Span, Arc<Expr>, Ident),
     Struct(Span, QualIdent, Vec<(Ident, Arc<Expr>)>),
     Ctor(Span, Ident, Vec<Arc<Expr>>),
+    Enumerant(Span, Ident),
     Idx(Span, Arc<Expr>, StaticIndex),
     IdxRange(Span, Arc<Expr>, StaticIndex, StaticIndex),
     Cat(Span, Vec<Arc<Expr>>),
@@ -211,6 +212,8 @@ impl Expr {
                 assigns.push((field, expr));
             }
             Expr::Struct(expr_base_ast.span(), Intern::new(struct_name[1..].to_string()), assigns)
+        } else if child.is_enumerant() {
+            Expr::Enumerant(expr_base_ast.span(), Ident::new(child.as_str()[1..].to_string()))
         } else {
             unreachable!()
         };
@@ -237,7 +240,7 @@ fn parse_wordlit(wordlit: &str) -> WordLit {
     }
 }
 
-fn parse_nat(nat: &str) -> WordVal {
+pub fn parse_nat(nat: &str) -> WordVal {
     if nat.starts_with("0x") {
         WordVal::from_str_radix(&nat[2..].replace("_", ""), 16).unwrap()
     } else if nat.starts_with("0b") {
@@ -368,6 +371,7 @@ impl Expr {
             Expr::Reference(_, _) => (),
             Expr::Word(_, _) => (),
             Expr::Bit(_, _) => (),
+            Expr::Enumerant(_, _) => (),
         }
 
         results
@@ -382,6 +386,7 @@ impl Expr {
             Expr::Field(_, _, _) => format!("Field"),
             Expr::Struct(_, _, _) => format!("Struct"),
             Expr::Ctor(_, _, _) => format!("Ctor"),
+            Expr::Enumerant(_, _) => format!("Enumerant"),
             Expr::Idx(_, _, _) => format!("Idx"),
             Expr::IdxRange(_, _, _, _) => format!("IdxRange"),
             Expr::Cat(_, _) => format!("Cat"),
@@ -399,6 +404,7 @@ impl Expr {
             Expr::Field(span, _, _) => *span,
             Expr::Struct(span, _, _) => *span,
             Expr::Ctor(span, _, _) => *span,
+            Expr::Enumerant(span, _) => *span,
             Expr::Idx(span, _, _) => *span,
             Expr::IdxRange(span, _, _, _) => *span,
             Expr::Cat(span, _) => *span,
