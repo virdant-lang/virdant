@@ -50,6 +50,7 @@ impl Verilog {
                 ItemKind::FnDef(fndef) => self.verilog_fndef(f, fndef)?,
                 ItemKind::UnionDef(uniondef) => writeln!(f, "// UnionDef {}", uniondef.name())?,
                 ItemKind::StructDef(structdef) => writeln!(f, "// StructDef {}", structdef.name())?,
+                ItemKind::EnumDef(enumdef) => writeln!(f, "// EnumDef {}", enumdef.name())?,
                 ItemKind::BuiltinDef(_builtindef) => (),
                 ItemKind::SocketDef(socketdef) => writeln!(f, "// SocketDef {}", socketdef.name())?,
             }
@@ -298,6 +299,7 @@ impl Verilog {
                 let width_str = self.width_str(&expr.typ());
 
                 match method.as_str() {
+                    "value" => writeln!(f, "    wire {width_str} {gs} = {subject_ssa};")?,
                     "add" => writeln!(f, "    wire {width_str} {gs} = {subject_ssa} + {};", args_ssa[0])?,
                     "inc" => writeln!(f, "    wire {width_str} {gs} = {subject_ssa} + 1;")?,
                     "dec" => writeln!(f, "    wire {width_str} {gs} = {subject_ssa} - 1;")?,
@@ -393,6 +395,19 @@ impl Verilog {
 
                 Ok(gs)
             },
+            Expr::Enumerant(inner) => {
+                let gs = self.gensym();
+                let enumerant = inner.enumerant();
+                let value = enumerant.value();
+                let typ = inner.typ();
+
+                let width = self.layout.width(&typ);
+                let width_str = format!("[{}:0]", width - 1);
+
+                writeln!(f, "    wire {width_str} {gs} = {value};")?;
+
+                Ok(gs)
+            },
             Expr::Match(inner) => {
                 let subject = inner.subject();
                 let typ = inner.typ();
@@ -401,6 +416,7 @@ impl Verilog {
                 let uniondef = match subject.typ().scheme() {
                     TypeScheme::StructDef(_) => todo!(),
                     TypeScheme::BuiltinDef(_) => todo!(),
+                    TypeScheme::EnumDef(_) => todo!(),
                     TypeScheme::UnionDef(uniondef) => uniondef,
                 };
 
@@ -550,6 +566,9 @@ impl Layout {
                     }
                 }
                 width
+            },
+            TypeScheme::EnumDef(enumdef) => {
+                *enumdef.info.width.unwrap()
             },
             TypeScheme::BuiltinDef(_builtindef) => {
                 if typ.typ.is_clock() {

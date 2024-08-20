@@ -49,10 +49,12 @@ pub mod types {
     id_type!(BuiltinDef);
     id_type!(FnDef);
     id_type!(StructDef);
+    id_type!(EnumDef);
     id_type!(SocketDef);
 
     id_type!(Ctor);
     id_type!(Field);
+    id_type!(Enumerant);
     id_type!(Channel);
 
     id_type!(Component);
@@ -78,6 +80,12 @@ impl Id<UnionDef> {
 }
 
 impl Id<StructDef> {
+    pub fn as_item(&self) -> Id<Item> {
+        self.cast()
+    }
+}
+
+impl Id<EnumDef> {
     pub fn as_item(&self) -> Id<Item> {
         self.cast()
     }

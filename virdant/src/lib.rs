@@ -58,6 +58,7 @@ pub struct Virdant {
     pub(crate) items: Table<Item, ItemInfo>,
     pub(crate) fields: Table<Field, FieldInfo>,
     pub(crate) ctors: Table<Ctor, CtorInfo>,
+    pub(crate) enumerants: Table<Enumerant, EnumerantInfo>,
     pub(crate) channels: Table<Channel, ChannelInfo>,
     pub(crate) components: Table<Component, ComponentInfo>,
     pub(crate) exprroots: Table<ExprRoot, ExprRootInfo>,
@@ -116,6 +117,7 @@ impl Virdant {
 
         self.register_fields();
         self.register_ctors();
+        self.register_enumerants();
         self.register_channels();
         self.register_components();
 
@@ -213,6 +215,8 @@ impl Virdant {
         item_info.package.set(package);
         if kind == ItemKind::ModDef {
             item_info.is_ext.set(item_ast.is_ext());
+        } else if kind == ItemKind::EnumDef {
+            item_info.width.set(item_ast.width().unwrap());
         }
         item_info.ast.set(item_ast);
     }
@@ -233,6 +237,8 @@ impl Virdant {
                     self.item_deps_uniondef(item, item_ast.child(0))
                 } else if item_ast.child(0).is_structdef() {
                     self.item_deps_structdef(item, item_ast.child(0))
+                } else if item_ast.child(0).is_enumdef() {
+                    self.item_deps_enumdef(item, item_ast.child(0))
                 } else if item_ast.child(0).is_builtindef() {
                     (vec![], VirErrs::new())
                 } else if item_ast.child(0).is_socketdef() {
@@ -327,6 +333,10 @@ impl Virdant {
             }
         }
         (results.into_iter().collect(), errors)
+    }
+
+    fn item_deps_enumdef(&self, _item: Id<Item>, _enumdef_ast: Ast) -> (Vec<Id<Item>>, VirErrs) {
+        (vec![], VirErrs::new())
     }
 
     fn item_deps_fndef(&self, item: Id<Item>, fndef_ast: Ast) -> (Vec<Id<Item>>, VirErrs) {
@@ -599,6 +609,36 @@ impl Virdant {
         }
     }
 
+    fn register_enumerants(&mut self) {
+        let enumdefs = self.items_by_kind(ItemKind::EnumDef);
+        for item in enumdefs {
+            let enumdef: Id<EnumDef> = item.cast();
+            let mut enumerants = vec![];
+
+            let item_info = &self.items[item];
+            let enumdef_ast = item_info.ast.unwrap().child(0);
+            for node in enumdef_ast.children() {
+                if node.is_statement() {
+                    let enumerant_name = node.name().unwrap();
+                    let enumerant_value = node.value().unwrap();
+
+                    let enumerant: Id<Enumerant> = Id::new(format!("{item}::{enumerant_name}"));
+
+                    let enumerant_info = self.enumerants.register(enumerant);
+                    enumerant_info.enumdef.set(enumdef);
+                    enumerant_info.name = enumerant_name.to_string();
+                    enumerant_info.value = enumerant_value;
+                    enumerant_info.width = *item_info.width.unwrap();
+
+                    enumerants.push(enumerant);
+                }
+            }
+
+            let enumdef_info = &mut self.items[item];
+            enumdef_info.enumerants.set(enumerants);
+        }
+    }
+
     fn items_by_kind(&self, kind: ItemKind) -> Vec<Id<Item>> {
         let mut items = vec![];
         for (item, item_info) in self.items.iter() {
@@ -638,6 +678,12 @@ impl Virdant {
                     return Err(VirErr::KindError(format!("Struct definition {item} does not take a generic")));
                 }
                 Ok(Type::structdef(item.cast()))
+            },
+            ItemKind::EnumDef => {
+                if width.is_some() {
+                    return Err(VirErr::KindError(format!("Struct definition {item} does not take a generic")));
+                }
+                Ok(Type::enumdef(item.cast()))
             },
             ItemKind::BuiltinDef => {
                 let word_builitindef = self.resolve_item("builtin::Word", in_item).unwrap();
@@ -1346,6 +1392,15 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        sig: {:?}", ctor_info.sig)?;
         }
 
+        writeln!(f, "ENUMS:")?;
+        for (enumerant, enumerant_info) in self.enumerants.iter() {
+            writeln!(f, "    {enumerant}")?;
+            writeln!(f, "        enumdef: {:?}", enumerant_info.enumdef)?;
+            writeln!(f, "        name: {:?}", enumerant_info.name)?;
+            writeln!(f, "        value: {:?}", enumerant_info.value)?;
+            writeln!(f, "        width: {:?}", enumerant_info.width)?;
+        }
+
         writeln!(f, "CHANNELS:")?;
         for (channel, channel_info) in self.channels.iter() {
             writeln!(f, "    {channel}")?;
@@ -1419,6 +1474,7 @@ pub enum ItemKind {
     ModDef,
     UnionDef,
     StructDef,
+    EnumDef,
     BuiltinDef,
     FnDef,
     SocketDef,
@@ -1430,6 +1486,7 @@ impl ItemKind {
             ItemKind::ModDef => false,
             ItemKind::UnionDef => true,
             ItemKind::StructDef => true,
+            ItemKind::EnumDef => true,
             ItemKind::BuiltinDef => true,
             ItemKind::FnDef => false,
             ItemKind::SocketDef => false,
@@ -1498,6 +1555,11 @@ impl Virdant {
             ctors.insert(*ctor, self.make_design_ctors(*ctor));
         }
 
+        let mut enumerants: IndexMap<Id<Enumerant>, design::Enumerant> = IndexMap::new();
+        for enumerant in self.enumerants.keys() {
+            enumerants.insert(*enumerant, self.make_design_enumerants(*enumerant));
+        }
+
         let root = Arc::new(design::DesignRoot {
             packages,
             items,
@@ -1507,6 +1569,7 @@ impl Virdant {
             exprroots,
             fields,
             ctors,
+            enumerants,
         });
 
         for package in root.packages.values() {
@@ -1535,6 +1598,10 @@ impl Virdant {
 
         for ctor in root.ctors.values() {
             ctor.root.set(Arc::downgrade(&root)).unwrap();
+        }
+
+        for enumerant in root.enumerants.values() {
+            enumerant.root.set(Arc::downgrade(&root)).unwrap();
         }
 
         for exprroot in root.exprroots.values() {
@@ -1581,6 +1648,14 @@ impl Virdant {
     fn make_design_ctors(&self, ctor: Id<Ctor>) -> design::Ctor {
         let info = self.ctors[ctor].clone();
         design::Ctor {
+            root: OnceCell::new(),
+            info,
+        }
+    }
+
+    fn make_design_enumerants(&self, enumerant: Id<Enumerant>) -> design::Enumerant {
+        let info = self.enumerants[enumerant].clone();
+        design::Enumerant {
             root: OnceCell::new(),
             info,
         }
