@@ -19,6 +19,7 @@ pub enum Expr {
     Word(Span, WordLit),
     Bit(Span, bool),
     MethodCall(Span, Arc<Expr>, Ident, Vec<Arc<Expr>>),
+    FnCall(Span, Ident, Vec<Arc<Expr>>),
     Field(Span, Arc<Expr>, Ident),
     Struct(Span, QualIdent, Vec<(Ident, Arc<Expr>)>),
     Ctor(Span, Ident, Vec<Arc<Expr>>),
@@ -70,6 +71,8 @@ impl Expr {
             Expr::ast_to_expr_match(child)
         } else if child.is_expr_call() {
             Expr::ast_to_expr_call(child)
+        } else if child.is_expr_method() {
+            Expr::ast_to_expr_method(child)
         } else {
             unreachable!()
         }
@@ -148,10 +151,26 @@ impl Expr {
     }
 
     fn ast_to_expr_call(expr_call_ast: Ast) -> Arc<Expr> {
-        let expr_base_ast = expr_call_ast.child(0);
+        let fndef: &str = if let Some(fndef) = &expr_call_ast.fnname() {
+            fndef
+        } else {
+            return Expr::ast_to_expr_method(expr_call_ast.child(0));
+        };
+
+        let args = expr_call_ast.args().unwrap();
+        let mut arg_exprs = vec![];
+        for arg in args {
+            arg_exprs.push(Expr::from_ast(arg));
+        }
+
+        Arc::new(Expr::FnCall(expr_call_ast.span(), fndef.to_string().into(), arg_exprs))
+    }
+
+    fn ast_to_expr_method(expr_method_ast: Ast) -> Arc<Expr> {
+        let expr_base_ast = expr_method_ast.child(0);
         let mut result = Expr::ast_to_expr_base(expr_base_ast);
 
-        for expr_call_suffix_ast in expr_call_ast.children().skip(1) {
+        for expr_call_suffix_ast in expr_method_ast.children().skip(1) {
             if let Some(method) = expr_call_suffix_ast.method() {
                 let args = expr_call_suffix_ast.args().unwrap();
                 let mut arg_exprs = vec![];
@@ -159,14 +178,14 @@ impl Expr {
                     arg_exprs.push(Expr::from_ast(arg));
                 }
 
-                result = Arc::new(Expr::MethodCall(expr_call_ast.span(), result, method.to_string().into(), arg_exprs));
+                result = Arc::new(Expr::MethodCall(expr_method_ast.span(), result, method.to_string().into(), arg_exprs));
             } else if let Some(field) = expr_call_suffix_ast.field() {
-                result = Arc::new(Expr::Field(expr_call_ast.span(), result, field.to_string().into()));
+                result = Arc::new(Expr::Field(expr_method_ast.span(), result, field.to_string().into()));
             } else if let Some(j) = expr_call_suffix_ast.j() {
                 let i = expr_call_suffix_ast.i().unwrap();
-                result = Arc::new(Expr::IdxRange(expr_call_ast.span(), result, j, i));
+                result = Arc::new(Expr::IdxRange(expr_method_ast.span(), result, j, i));
             } else if let Some(i) = expr_call_suffix_ast.i() {
-                result = Arc::new(Expr::Idx(expr_call_ast.span(), result, i));
+                result = Arc::new(Expr::Idx(expr_method_ast.span(), result, i));
             } else {
                 unreachable!()
             }
@@ -334,6 +353,9 @@ impl Expr {
                 results.push(s.clone());
                 results.extend(es.iter().cloned().collect::<Vec<_>>());
             },
+            Expr::FnCall(_, _, es) => {
+                results.extend(es.iter().cloned().collect::<Vec<_>>());
+            },
             Expr::Field(_, s, _) => {
                 results.push(s.clone());
             },
@@ -379,6 +401,7 @@ impl Expr {
             Expr::Word(_, _) => format!("Word"),
             Expr::Bit(_, _) => format!("Bit"),
             Expr::MethodCall(_, _, _, _) => format!("MethodCall"),
+            Expr::FnCall(_, _, _) => format!("FnCall"),
             Expr::Field(_, _, _) => format!("Field"),
             Expr::Struct(_, _, _) => format!("Struct"),
             Expr::Ctor(_, _, _) => format!("Ctor"),
@@ -396,6 +419,7 @@ impl Expr {
             Expr::Word(span, _) => *span,
             Expr::Bit(span, _) => *span,
             Expr::MethodCall(span, _, _, _) => *span,
+            Expr::FnCall(span, _, _) => *span,
             Expr::Field(span, _, _) => *span,
             Expr::Struct(span, _, _) => *span,
             Expr::Ctor(span, _, _) => *span,

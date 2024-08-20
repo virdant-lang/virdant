@@ -413,6 +413,16 @@ impl Virdant {
         }
     }
 
+    fn resolve_fndef(&self, qualident: &str, in_item: Id<Item>) -> Result<Id<FnDef>, VirErr> {
+        let item = self.resolve_item(qualident, in_item)?;
+        let item_info = &self.items[item];
+        if let Ok(ItemKind::FnDef) = item_info.kind.get() {
+            Ok(item.cast())
+        } else {
+            Err(VirErr::Other(format!("Unable to resolve fndef: {qualident} in {in_item}")))
+        }
+    }
+
     fn resolve_socketdef(&self, qualident: &str, in_item: Id<Item>) -> Result<Id<SocketDef>, VirErr> {
         let item = self.resolve_item(qualident, in_item)?;
         let item_info = &self.items[item];
