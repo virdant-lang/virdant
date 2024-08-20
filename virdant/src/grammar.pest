@@ -72,7 +72,7 @@ moddef_statement = {
     moddef_statement_incoming |
     moddef_statement_outgoing |
     moddef_statement_reg |
-    moddef_statement_node |
+    moddef_statement_wire |
     moddef_statement_mod |
     moddef_statement_socket |
     moddef_statement_driver |
@@ -83,7 +83,7 @@ moddef_statement_implicit = { kw_implicit ~ (#name=ident) ~ ":" ~ (#type=type) }
 moddef_statement_incoming = { kw_incoming ~ (#name=ident) ~ ":" ~ (#type=type) }
 moddef_statement_outgoing = { kw_outgoing ~ (#name=ident) ~ ":" ~ (#type=type) }
 moddef_statement_reg = { kw_reg ~ (#name=ident) ~ ":" ~ (#type=type) ~ ("on" ~ (#expr=expr))? }
-moddef_statement_node = { kw_node ~ (#name=ident) ~ ":" ~ (#type=type) }
+moddef_statement_wire = { kw_wire ~ (#name=ident) ~ ":" ~ (#type=type) }
 moddef_statement_mod = { kw_mod ~ (#name=ident) ~ kw_of ~ (#of=qualident) }
 moddef_statement_socket = { (#role=socket_role) ~ kw_socket ~ (#name=ident) ~ kw_of ~ (#of=qualident) }
 moddef_statement_driver = { (#target=path) ~ (#drivertype=drivertype) ~ (#expr=expr) }
@@ -290,7 +290,7 @@ kw_implicit     = @{ "implicit"   ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_incoming     = @{ "incoming"   ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_outgoing     = @{ "outgoing"   ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_reg          = @{ "reg"        ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_node         = @{ "node"       ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_wire         = @{ "wire"       ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_socket       = @{ "socket"     ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_of           = @{ "of"         ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_if           = @{ "if"         ~ !(ASCII_ALPHANUMERIC | "_") }
@@ -319,7 +319,7 @@ keyword = {
     kw_implicit |
     kw_outgoing |
     kw_reg |
-    kw_node |
+    kw_wire |
     kw_socket |
     kw_of |
     kw_if |

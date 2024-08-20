@@ -120,7 +120,7 @@ impl Ast {
     pub fn is_implicit(&self) -> bool { self.rule() == Rule::moddef_statement_implicit }
     pub fn is_incoming(&self) -> bool { self.rule() == Rule::moddef_statement_incoming }
     pub fn is_outgoing(&self) -> bool { self.rule() == Rule::moddef_statement_outgoing }
-    pub fn is_node(&self) -> bool { self.rule() == Rule::moddef_statement_node }
+    pub fn is_wire(&self) -> bool { self.rule() == Rule::moddef_statement_wire }
     pub fn is_socket_driver(&self) -> bool { self.rule() == Rule::moddef_statement_socket_driver }
 
     pub fn is_component(&self) -> bool {
@@ -128,7 +128,7 @@ impl Ast {
         self.rule() == Rule::moddef_statement_incoming ||
         self.rule() == Rule::moddef_statement_outgoing ||
         self.rule() == Rule::moddef_statement_reg ||
-        self.rule() == Rule::moddef_statement_node
+        self.rule() == Rule::moddef_statement_wire
     }
 
     pub fn is_expr(&self) -> bool { self.rule() == Rule::expr }
