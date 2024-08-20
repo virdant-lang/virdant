@@ -81,6 +81,7 @@ impl<'a> TypingContext<'a> {
         let result = match expr.as_ref() {
             Expr::Word(_span, wordlit) => self.check_word(exprroot, wordlit, expected_typ),
             Expr::Ctor(_span, ctor, _) => self.check_ctor(exprroot, *ctor, expected_typ),
+            Expr::Enumerant(_span, enumerant) => self.check_enumerant(exprroot, *enumerant, expected_typ),
             Expr::If(_span, _, _, _) => self.check_if(exprroot, expected_typ),
             Expr::Match(_span, _subject, ascription, arms) => self.check_match(exprroot, ascription.clone(), arms.clone(), expected_typ),
             _ => {
@@ -269,6 +270,20 @@ impl<'a> TypingContext<'a> {
         Ok(())
     }
 
+    fn check_enumerant(&mut self, _exprroot: Id<ExprRoot>, enumerant: Ident, expected_typ: Type) -> Result<(), VirErr> {
+        let enumdef  = if let TypeScheme::EnumDef(enumdef) = expected_typ.scheme() {
+            enumdef
+        } else {
+            return Err(VirErr::Other(format!("Not an enum type: {expected_typ}")));
+        };
+        let enumdef_info = self.virdant.items[enumdef.as_item()].clone();
+
+        let enumerant = self.enumdef_enumerant(&enumdef_info, enumerant)?;
+        let _enumerant_info = self.virdant.enumerants[enumerant].clone();
+
+        Ok(())
+    }
+
     fn uniondef_ctor(&self, uniondef_info: &ItemInfo, ctor: Ident) -> Result<Id<Ctor>, VirErr> {
         for ctor_id in uniondef_info.ctors.unwrap().iter() {
             let ctor_info = &self.virdant.ctors[*ctor_id];
@@ -278,6 +293,17 @@ impl<'a> TypingContext<'a> {
 
         }
         Err(VirErr::Other("No such ctor".to_string()))
+    }
+
+    fn enumdef_enumerant(&self, enumdef_info: &ItemInfo, enumerant: Ident) -> Result<Id<Enumerant>, VirErr> {
+        for enumerant_id in enumdef_info.enumerants.unwrap().iter() {
+            let enumerant_info = &self.virdant.enumerants[*enumerant_id];
+            if enumerant_info.name == *enumerant {
+                return Ok(*enumerant_id);
+            }
+
+        }
+        Err(VirErr::Other(format!("No such enumerant: {enumerant}")))
     }
 
     fn infer_methodcall(&mut self, exprroot: Id<ExprRoot>, method: Ident) -> Result<Type, VirErr> {
@@ -400,6 +426,7 @@ impl<'a> TypingContext<'a> {
                 let uniondef = match typ.scheme() {
                     crate::types::TypeScheme::StructDef(_structdef) => return Err(VirErr::InvalidPat(format!(""))),
                     crate::types::TypeScheme::BuiltinDef(_builtindef) => return Err(VirErr::InvalidPat(format!(""))),
+                    crate::types::TypeScheme::EnumDef(_enumdef) => return Err(VirErr::InvalidPat(format!(""))),
                     crate::types::TypeScheme::UnionDef(uniondef) => uniondef,
                 };
                 let uniondef_info = &self.virdant.items[uniondef.as_item()];
@@ -473,64 +500,83 @@ impl<'a> TypingContext<'a> {
     }
 
     fn method_sig(&self, typ: Type, method: Ident) -> Result<MethodSig, VirErr> {
-        if typ.is_bit() {
-            if *method == "eq" {
-                Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
-            } else if *method == "neq" {
-                Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
-            } else if *method == "not" {
-                Ok(MethodSig(vec![], typ.clone()))
-            } else if *method == "and" {
-                Ok(MethodSig(vec![typ.clone()], typ.clone()))
-            } else if *method == "or" {
-                Ok(MethodSig(vec![typ.clone()], typ.clone()))
-            } else if *method == "xor" {
-                Ok(MethodSig(vec![typ.clone()], typ.clone()))
-            } else {
+        match typ.scheme() {
+            TypeScheme::StructDef(_) => {
                 Err(VirErr::Other(format!("No such method {method} for type {typ}")))
-            }
-        } else if typ.is_word() {
-            let n = typ.width();
-            if *method == "add" {
-                Ok(MethodSig(vec![typ.clone()], typ.clone()))
-            } else if *method == "inc" {
-                Ok(MethodSig(vec![], typ.clone()))
-            } else if *method == "dec" {
-                Ok(MethodSig(vec![], typ.clone()))
-            } else if *method == "sll" {
-                Ok(MethodSig(vec![typ.clone()], typ.clone()))
-            } else if *method == "srl" {
-                Ok(MethodSig(vec![typ.clone()], typ.clone()))
-            } else if *method == "sub" {
-                Ok(MethodSig(vec![typ.clone()], typ.clone()))
-            } else if *method == "and" {
-                Ok(MethodSig(vec![typ.clone()], typ.clone()))
-            } else if *method == "or" {
-                Ok(MethodSig(vec![typ.clone()], typ.clone()))
-            } else if *method == "xor" {
-                Ok(MethodSig(vec![typ.clone()], typ.clone()))
-            } else if *method == "lt" {
-                Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
-            } else if *method == "lte" {
-                Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
-            } else if *method == "gt" {
-                Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
-            } else if *method == "gte" {
-                Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
-            } else if *method == "eq" {
-                Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
-            } else if *method == "neq" {
-                Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
-            } else if *method == "not" {
-                Ok(MethodSig(vec![], typ.clone()))
-            } else if is_pow2(n) && *method == "get" {
-                let argtyp = self.virdant.word_type(clog2(n));
-                Ok(MethodSig(vec![argtyp.clone()], self.virdant.bit_type()))
-            } else {
+            },
+            TypeScheme::UnionDef(_) => {
                 Err(VirErr::Other(format!("No such method {method} for type {typ}")))
-            }
-        } else {
-            Err(VirErr::Other(format!("No such method {method} for type {typ}")))
+            },
+            TypeScheme::EnumDef(enumdef) => {
+                if *method == "value" {
+                    let enumdef_info = &self.virdant.items[enumdef.as_item()];
+                    let width = *enumdef_info.width.unwrap();
+                    Ok(MethodSig(vec![], self.virdant.word_type(width)))
+                } else {
+                    Err(VirErr::Other(format!("No such method {method} for type {typ}")))
+                }
+            },
+            TypeScheme::BuiltinDef(_) => {
+                if typ.is_bit() {
+                    if *method == "eq" {
+                        Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
+                    } else if *method == "neq" {
+                        Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
+                    } else if *method == "not" {
+                        Ok(MethodSig(vec![], typ.clone()))
+                    } else if *method == "and" {
+                        Ok(MethodSig(vec![typ.clone()], typ.clone()))
+                    } else if *method == "or" {
+                        Ok(MethodSig(vec![typ.clone()], typ.clone()))
+                    } else if *method == "xor" {
+                        Ok(MethodSig(vec![typ.clone()], typ.clone()))
+                    } else {
+                        Err(VirErr::Other(format!("No such method {method} for type {typ}")))
+                    }
+                } else if typ.is_word() {
+                    let n = typ.width();
+                    if *method == "add" {
+                        Ok(MethodSig(vec![typ.clone()], typ.clone()))
+                    } else if *method == "inc" {
+                        Ok(MethodSig(vec![], typ.clone()))
+                    } else if *method == "dec" {
+                        Ok(MethodSig(vec![], typ.clone()))
+                    } else if *method == "sll" {
+                        Ok(MethodSig(vec![typ.clone()], typ.clone()))
+                    } else if *method == "srl" {
+                        Ok(MethodSig(vec![typ.clone()], typ.clone()))
+                    } else if *method == "sub" {
+                        Ok(MethodSig(vec![typ.clone()], typ.clone()))
+                    } else if *method == "and" {
+                        Ok(MethodSig(vec![typ.clone()], typ.clone()))
+                    } else if *method == "or" {
+                        Ok(MethodSig(vec![typ.clone()], typ.clone()))
+                    } else if *method == "xor" {
+                        Ok(MethodSig(vec![typ.clone()], typ.clone()))
+                    } else if *method == "lt" {
+                        Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
+                    } else if *method == "lte" {
+                        Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
+                    } else if *method == "gt" {
+                        Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
+                    } else if *method == "gte" {
+                        Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
+                    } else if *method == "eq" {
+                        Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
+                    } else if *method == "neq" {
+                        Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
+                    } else if *method == "not" {
+                        Ok(MethodSig(vec![], typ.clone()))
+                    } else if is_pow2(n) && *method == "get" {
+                        let argtyp = self.virdant.word_type(clog2(n));
+                        Ok(MethodSig(vec![argtyp.clone()], self.virdant.bit_type()))
+                    } else {
+                        Err(VirErr::Other(format!("No such method {method} for type {typ}")))
+                    }
+                } else {
+                    Err(VirErr::Other(format!("No such method {method} for type {typ}")))
+                }
+            },
         }
     }
 }

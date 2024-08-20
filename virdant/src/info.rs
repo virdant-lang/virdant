@@ -30,6 +30,10 @@ pub struct ItemInfo {
     // for uniondefs
     pub ctors: Ready<Vec<Id<Ctor>>>,
 
+    // for enumdefs
+    pub width: Ready<Width>,
+    pub enumerants: Ready<Vec<Id<Enumerant>>>,
+
     // for fndefs
     pub sig : Ready<FnSig>,
     pub body : Ready<Id<ExprRoot>>,
@@ -50,6 +54,14 @@ pub struct CtorInfo {
     pub uniondef: Ready<Id<UnionDef>>,
     pub name: String,
     pub sig: Ready<CtorSig>,
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct EnumerantInfo {
+    pub enumdef: Ready<Id<EnumDef>>,
+    pub name: String,
+    pub width: Width,
+    pub value: WordVal,
 }
 
 #[derive(Default, Clone, Debug)]

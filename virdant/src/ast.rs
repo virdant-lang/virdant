@@ -1,11 +1,13 @@
 pub mod expr;
 use pest::iterators::Pair;
 
-use crate::ItemKind;
+use crate::{ItemKind, Width, WordVal};
 use crate::parse::Rule;
 use crate::location::*;
 
 pub use expr::Expr;
+
+use self::expr::parse_nat;
 
 /// A node of the parse tree
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -96,6 +98,7 @@ impl Ast {
     pub fn is_moddef(&self) -> bool { self.rule() == Rule::moddef }
     pub fn is_uniondef(&self) -> bool { self.rule() == Rule::uniondef }
     pub fn is_structdef(&self) -> bool { self.rule() == Rule::structdef }
+    pub fn is_enumdef(&self) -> bool { self.rule() == Rule::enumdef }
     pub fn is_builtindef(&self) -> bool { self.rule() == Rule::builtindef }
     pub fn is_fndef(&self) -> bool { self.rule() == Rule::fndef }
     pub fn is_socketdef(&self) -> bool { self.rule() == Rule::socketdef }
@@ -106,6 +109,7 @@ impl Ast {
         self.rule() == Rule::moddef_statement ||
         self.rule() == Rule::uniondef_statement ||
         self.rule() == Rule::structdef_statement ||
+        self.rule() == Rule::enumdef_statement ||
         self.rule() == Rule::socketdef_statement
     }
 
@@ -137,6 +141,7 @@ impl Ast {
     pub fn is_bitlit(&self) -> bool { self.rule() == Rule::bitlit }
     pub fn is_path(&self) -> bool { self.rule() == Rule::path }
     pub fn is_struct(&self) -> bool { self.rule() == Rule::r#struct }
+    pub fn is_enumerant(&self) -> bool { self.rule() == Rule::enumerant }
 
     pub fn is_kw_if(&self) -> bool { self.rule() == Rule::kw_if }
     pub fn is_kw_else(&self) -> bool { self.rule() == Rule::kw_else }
@@ -163,6 +168,8 @@ impl Ast {
     pub fn target(&self) -> Option<&str> { self.get_as_str("target") }
     pub fn drivertype(&self) -> Option<&str> { self.get_as_str("drivertype") }
     pub fn role(&self) -> Option<&str> { self.get_as_str("role") }
+    pub fn value(&self) -> Option<WordVal> { self.get_as_str("value").map(|w| parse_nat(w)) }
+    pub fn width(&self) -> Option<Width> { self.get_as_str("width").map(|n| str::parse(n).unwrap()) }
 
     pub fn typ(&self) -> Option<Ast> { self.get("type") }
     pub fn expr(&self) -> Option<Ast> { self.get("expr") }
@@ -188,6 +195,7 @@ impl Ast {
             Rule::moddef => Some(ItemKind::ModDef),
             Rule::uniondef => Some(ItemKind::UnionDef),
             Rule::structdef => Some(ItemKind::StructDef),
+            Rule::enumdef => Some(ItemKind::EnumDef),
             Rule::builtindef => Some(ItemKind::BuiltinDef),
             Rule::socketdef => Some(ItemKind::SocketDef),
             Rule::fndef => Some(ItemKind::FnDef),

@@ -10,6 +10,7 @@ pub struct Type(TypeScheme, Option<Nat>);
 pub enum TypeScheme {
     StructDef(Id<StructDef>),
     UnionDef(Id<UnionDef>),
+    EnumDef(Id<EnumDef>),
     BuiltinDef(Id<BuiltinDef>),
 }
 
@@ -64,6 +65,10 @@ impl Type {
         Type(TypeScheme::UnionDef(uniondef), None)
     }
 
+    pub fn enumdef(enumdef: Id<EnumDef>) -> Self {
+        Type(TypeScheme::EnumDef(enumdef), None)
+    }
+
     pub fn builtindef(builtindef: Id<BuiltinDef>, arg: Option<Nat>) -> Self {
         Type(TypeScheme::BuiltinDef(builtindef), arg)
     }
@@ -72,6 +77,7 @@ impl Type {
         match self.0 {
             TypeScheme::StructDef(structdef) => structdef.as_item(),
             TypeScheme::UnionDef(uniondef) => uniondef.as_item(),
+            TypeScheme::EnumDef(enumdef) => enumdef.as_item(),
             TypeScheme::BuiltinDef(builtindef) => builtindef.as_item(),
         }
     }
