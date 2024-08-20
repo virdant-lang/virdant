@@ -794,8 +794,8 @@ impl Virdant {
                         } else if node.child(0).is_incoming() {
                             component_info.class.set(ComponentClass::Port);
                             component_info.flow.set(Flow::Source);
-                        } else if node.child(0).is_node() {
-                            component_info.class.set(ComponentClass::Node);
+                        } else if node.child(0).is_wire() {
+                            component_info.class.set(ComponentClass::Wire);
                             component_info.flow.set(Flow::Duplex);
                         } else if node.child(0).is_reg() {
                             component_info.class.set(ComponentClass::Reg);

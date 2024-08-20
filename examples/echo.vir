@@ -14,7 +14,7 @@ mod Top {
     outgoing led_3      : Bit;
     outgoing led_4      : Bit;
 
-    node reset : Bit;
+    wire reset : Bit;
 
     mod resetter of resetter::Resetter;
     resetter.clock := clock;

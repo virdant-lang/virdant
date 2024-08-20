@@ -1,8 +1,8 @@
 mod Top {
-    node v : Valid;
+    wire v : Valid;
     v := @Valid(7);
 
-    node c : Word[8];
+    wire c : Word[8];
     c := match v {
         @Invalid() => 0;
         @Valid(payload) => payload;

@@ -15,7 +15,7 @@ mod Top {
     outgoing led_3      : Bit;
     outgoing led_4      : Bit;
 
-    node reset : Bit;
+    wire reset : Bit;
 
     mod resetter of resetter::Resetter;
     resetter.clock := clock;
@@ -50,7 +50,7 @@ mod Top {
     led_controller.set_ccw := uart_receiver.data_valid->and(uart_receiver.data->eq(119));
     led_controller.set_rate := rate->eq(0)->not();
 
-    node rate : Word[3];
+    wire rate : Word[3];
     rate := 
         if uart_receiver.data->eq(49) {
             1
@@ -132,7 +132,7 @@ mod LedController {
             counter[17]
         };
 
-    node change : Bit;
+    wire change : Bit;
     change := edge_detector.out;
 
     reg state : LedControllerState on clock;

@@ -153,7 +153,7 @@ impl Verilog {
                     writeln!(f)?;
                 }
             },
-            ComponentClass::Node => {
+            ComponentClass::Wire => {
                 let expr = component.driver().unwrap();
                 let typ = component.typ();
                 let width_str = self.width_str(&typ);

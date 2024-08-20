@@ -6,7 +6,7 @@ struct type Foo {
 mod Top {
     incoming clk : Clock;
 
-    node foo : Foo;
+    wire foo : Foo;
     foo :=
         $Foo {
             bar = 0w1,

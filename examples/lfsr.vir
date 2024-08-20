@@ -3,7 +3,7 @@ mod Lfsr {
     incoming reset : Bit;
     outgoing out : Word[8];
 
-    node taps : Word[8];
+    wire taps : Word[8];
     taps := 29w8;
 
     reg r : Word[8] on clock;
@@ -15,7 +15,7 @@ mod Lfsr {
 
     out := r;
 
-    node feedback : Bit;
+    wire feedback : Bit;
     feedback := r[7];
 
     reg s : Word[4] on clock;

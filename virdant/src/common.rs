@@ -8,7 +8,7 @@ pub type StaticIndex = u64;
 pub enum ComponentClass {
     Port,
     SubPort,
-    Node,
+    Wire,
     Reg,
 }
 
