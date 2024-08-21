@@ -1,0 +1,39 @@
+import types;
+
+/*
+    `Ifetch` is the instruction fetch unit.
+    It maintains the program counter (`pc`).
+    It receives signals for when to branch.
+    It emits the 32-bit instruction as `instr`.
+
+*/
+mod Ifetch {
+    incoming clock : Clock;
+    incoming reset : Bit;
+
+    incoming clock : Clock;
+    incoming pc_advancement : types::PcAdvancement;
+
+    outgoing instr_mem_addr : Word[32];
+    incoming instr_mem_data : Word[32];
+
+    outgoing instr : Word[32];
+    outgoing program_counter : Word[32];
+
+    program_counter := pc;
+
+    reg pc : Word[32] on clock;
+    instr_mem_addr := pc;
+
+    pc <= if reset {
+        0x1000
+    } else {
+        match pc_advancement {
+            @Next() => pc->add(4);
+            @Offset(offset) => pc->add(offset);
+            @Abs(next_pc) => next_pc;
+        }
+    };
+
+    instr := instr_mem_data;
+}

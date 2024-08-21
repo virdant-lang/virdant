@@ -1,0 +1,26 @@
+import core;
+import types;
+import rf;
+import control;
+import alu;
+import immgen;
+import decoder;
+import ifetch;
+
+mod Top {
+    incoming clock : Clock;
+
+    reg reset_hack : Word[2] on clock;
+    reset_hack <= if reset_hack->gt(0) {
+        reset_hack->dec()
+    } else {
+        0
+    };
+
+    mod core of core::Core;
+    core.clock := clock;
+    core.reset := reset_hack->eq(1);
+
+    core.instr_mem_read_data := 0x00000513;
+    core.mem_read_data := 0w32;
+}

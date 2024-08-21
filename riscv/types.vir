@@ -1,0 +1,122 @@
+/*
+    The `Alu` mod always sources its first argument from the value of RS1 in the register file.
+    However, it may source its second argument from either RS2 or from the immediate generator.
+    `AluSource` is the type of the `alu_source` output of the `Control` mod and determines which to use.
+*/
+enum type AluSource width 1 {
+    IMM = 0;
+    RS2 = 1;
+}
+
+union type PcAdvancement {
+    Next();
+    Offset(offset : Word[32]);
+    Abs(abs : Word[32]);
+}
+
+/*
+    There are several instruction formats in RISC-V.
+    `InstrType` tells us which we have so we can decode.
+*/
+enum type InstrType width 3 {
+    I = 1;
+    S = 2;
+    B = 3;
+    U = 4;
+    J = 5;
+    R = 6;
+}
+
+/*
+    Some RISC-V instructions have a funct3 field, which tells us things like
+    which operation, what kind of branch, or what size to load or store.
+    `OpFunct3` tells us which operation to perform for OP and OP-IMM instructions.
+*/
+enum type OpFunct3 width 3 {
+    ADD  = 0b000;
+    SLL  = 0b001;
+    SLT  = 0b010;
+    SLTU = 0b011;
+    XOR  = 0b100;
+    SR   = 0b101;
+    OR   = 0b110;
+    AND  = 0b111;
+}
+
+enum type BranchFunct3 width 3 {
+    BEQ  = 0b000;
+    BNE  = 0b001;
+    BLT  = 0b100;
+    BGE  = 0b101;
+    BLTU = 0b110;
+    BGEU = 0b111;
+}
+
+enum type LoadFunct3 width 3 {
+    LB  = 0b000;
+    LH  = 0b001;
+    LW  = 0b010;
+    LBU = 0b100;
+    LHU = 0b101;
+}
+
+enum type StoreFunct3 width 3 {
+    SB  = 0b000;
+    SH  = 0b001;
+    SW  = 0b010;
+}
+
+enum type SystemFunct3 width 3 {
+    ECALLBREAK = 0b000;
+    CSRRW      = 0b001;
+    CSRRS      = 0b010;
+    CSRRC      = 0b011;
+    CSRRWI     = 0b101;
+    CSRRSI     = 0b110;
+    CSRRCI     = 0b111;
+}
+
+enum type SystemFunct12 width 12 {
+    ECALL  = 0b0000000;
+    EBREAK = 0b0000001;
+}
+
+enum type Funct7 width 7 {
+    ADD  = 0b0000000;
+    SUB  = 0b0100000;
+}
+
+/*
+    The lower 7 bits of every RISC-V instruction are the opcode.
+    `Opcode` allows us to name these opcodes as they appear in the spec.
+*/
+enum type Opcode width 7 {
+    OP      = 0b01_100_11;
+    OP_IMM  = 0b00_100_11;
+    LOAD    = 0b00_000_11;
+    STORE   = 0b01_000_11;
+    JAL     = 0b11_011_11;
+    BRANCH  = 0b11_000_11;
+    LUI     = 0b01_101_11;
+    AUIPC   = 0b00_101_11;
+    JALR    = 0b11_001_11;
+    FENCE   = 0b00_011_11;
+    SYSTEM  = 0b11_100_11;
+}
+
+enum type AluOp width 4 {
+    AND  =  0;
+    OR   =  1;
+    ADD  =  2;
+    SUB  =  3;
+    LT   =  4;
+    LTU  =  5;
+    GE   =  6;
+    GEU  =  7;
+    EQ   =  8;
+    NEQ  =  9;
+    XOR  = 10;
+    SLL  = 11;
+    SRL  = 12;
+    SRA  = 13;
+}

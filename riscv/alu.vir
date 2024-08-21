@@ -1,0 +1,211 @@
+import types;
+
+/*
+    `Alu` is the arithmetic logic unit.
+*/
+mod Alu {
+    incoming a : Word[32];
+    incoming b : Word[32];
+    incoming op : types::AluOp;
+    outgoing r : Word[32];
+
+    r := match op {
+        #AND => a->and(b);
+        #OR => a->or(b);
+        #ADD => a->add(b);
+        #SUB => a->sub(b);
+        #XOR => a->xor(b);
+        #AND => a->and(b);
+        #OR => a->or(b);
+        #ADD => a->add(b);
+        #SUB => a->sub(b);
+        #XOR => a->xor(b);
+
+    /*
+        #LT => zext(lt(a, b));
+        #LTU => zext(ltu(a, b));
+        #GE => zext(ge(a, b));
+        #GEU => zext(geu(a, b));
+        #SRL => srl(a, b[5..0]);
+        #SRA => sra(a, b[5..0]);
+    */
+
+        #EQ => zext(cat(a->eq(b)));
+        #NEQ => zext(cat(a->neq(b)));
+        #SLL => sll(a, b[5..0]);
+
+        else => 0;
+    };
+}
+
+fn sll(a : Word[32], b : Word[5]) -> Word[32] {
+    if b->eq(0) { a }
+    else if b->eq( 1) { cat(a[31..0],  0w1) }
+    else if b->eq( 2) { cat(a[30..0],  0w2) }
+    else if b->eq( 3) { cat(a[29..0],  0w3) }
+    else if b->eq( 4) { cat(a[28..0],  0w4) }
+    else if b->eq( 5) { cat(a[27..0],  0w5) }
+    else if b->eq( 6) { cat(a[26..0],  0w6) }
+    else if b->eq( 6) { cat(a[26..0],  0w6) }
+    else if b->eq( 7) { cat(a[25..0],  0w7) }
+    else if b->eq( 8) { cat(a[24..0],  0w8) }
+    else if b->eq( 9) { cat(a[23..0],  0w9) }
+    else if b->eq(10) { cat(a[22..0], 0w10) }
+    else if b->eq(11) { cat(a[21..0], 0w11) }
+    else if b->eq(12) { cat(a[20..0], 0w12) }
+    else if b->eq(13) { cat(a[19..0], 0w13) }
+    else if b->eq(14) { cat(a[18..0], 0w14) }
+    else if b->eq(15) { cat(a[17..0], 0w15) }
+    else if b->eq(16) { cat(a[16..0], 0w16) }
+    else if b->eq(17) { cat(a[15..0], 0w17) }
+    else if b->eq(18) { cat(a[14..0], 0w18) }
+    else if b->eq(19) { cat(a[13..0], 0w19) }
+    else if b->eq(20) { cat(a[12..0], 0w20) }
+    else if b->eq(21) { cat(a[11..0], 0w21) }
+    else if b->eq(22) { cat(a[10..0], 0w22) }
+    else if b->eq(23) { cat(a[9..0],  0w23) }
+    else if b->eq(24) { cat(a[8..0],  0w24) }
+    else if b->eq(25) { cat(a[7..0],  0w25) }
+    else if b->eq(26) { cat(a[6..0],  0w26) }
+    else if b->eq(27) { cat(a[5..0],  0w27) }
+    else if b->eq(28) { cat(a[4..0],  0w28) }
+    else if b->eq(29) { cat(a[3..0],  0w29) }
+    else if b->eq(30) { cat(a[2..0],  0w30) }
+    else { cat(a[0], 0w31) }
+}
+
+/*
+fn sll(a : Word[32], b : Word[5]) -> Word[32] {
+    if b->eq(0) { a }
+    else if b->eq( 1) { cat(a[31..0],  0w1) }
+    else if b->eq( 2) { cat(a[30..0],  0w2) }
+    else if b->eq( 3) { cat(a[29..0],  0w3) }
+    else if b->eq( 4) { cat(a[28..0],  0w4) }
+    else if b->eq( 5) { cat(a[27..0],  0w5) }
+    else if b->eq( 6) { cat(a[26..0],  0w6) }
+    else if b->eq( 6) { cat(a[26..0],  0w6) }
+    else if b->eq( 7) { cat(a[25..0],  0w7) }
+    else if b->eq( 8) { cat(a[24..0],  0w8) }
+    else if b->eq( 9) { cat(a[23..0],  0w9) }
+    else if b->eq(10) { cat(a[22..0], 0w10) }
+    else if b->eq(11) { cat(a[21..0], 0w11) }
+    else if b->eq(12) { cat(a[20..0], 0w12) }
+    else if b->eq(13) { cat(a[19..0], 0w13) }
+    else if b->eq(14) { cat(a[18..0], 0w14) }
+    else if b->eq(15) { cat(a[17..0], 0w15) }
+    else if b->eq(16) { cat(a[16..0], 0w16) }
+    else if b->eq(17) { cat(a[15..0], 0w17) }
+    else if b->eq(18) { cat(a[14..0], 0w18) }
+    else if b->eq(19) { cat(a[13..0], 0w19) }
+    else if b->eq(20) { cat(a[12..0], 0w20) }
+    else if b->eq(21) { cat(a[11..0], 0w21) }
+    else if b->eq(22) { cat(a[10..0], 0w22) }
+    else if b->eq(23) { cat(a[9..0],  0w23) }
+    else if b->eq(24) { cat(a[8..0],  0w24) }
+    else if b->eq(25) { cat(a[7..0],  0w25) }
+    else if b->eq(26) { cat(a[6..0],  0w26) }
+    else if b->eq(27) { cat(a[5..0],  0w27) }
+    else if b->eq(28) { cat(a[4..0],  0w28) }
+    else if b->eq(29) { cat(a[3..0],  0w29) }
+    else if b->eq(30) { cat(a[2..0],  0w30) }
+    else { cat(a[0], 0w31) }
+}
+
+fn srl(a : Word[32], b : Word[5]) -> Word[32] {
+    if b->eq(0) { a }
+    else if b->eq( 1) { zext(a[32.. 1]) }
+    else if b->eq( 2) { zext(a[32.. 2]) }
+    else if b->eq( 3) { zext(a[32.. 3]) }
+    else if b->eq( 4) { zext(a[32.. 4]) }
+    else if b->eq( 5) { zext(a[32.. 5]) }
+    else if b->eq( 6) { zext(a[32.. 6]) }
+    else if b->eq( 7) { zext(a[32.. 7]) }
+    else if b->eq( 8) { zext(a[32.. 8]) }
+    else if b->eq( 9) { zext(a[32.. 9]) }
+    else if b->eq(10) { zext(a[32..10]) }
+    else if b->eq(11) { zext(a[32..11]) }
+    else if b->eq(12) { zext(a[32..12]) }
+    else if b->eq(13) { zext(a[32..13]) }
+    else if b->eq(14) { zext(a[32..14]) }
+    else if b->eq(15) { zext(a[32..15]) }
+    else if b->eq(16) { zext(a[32..16]) }
+    else if b->eq(17) { zext(a[32..17]) }
+    else if b->eq(18) { zext(a[32..18]) }
+    else if b->eq(19) { zext(a[32..19]) }
+    else if b->eq(20) { zext(a[32..20]) }
+    else if b->eq(21) { zext(a[32..21]) }
+    else if b->eq(22) { zext(a[32..22]) }
+    else if b->eq(23) { zext(a[32..23]) }
+    else if b->eq(24) { zext(a[32..24]) }
+    else if b->eq(25) { zext(a[32..25]) }
+    else if b->eq(26) { zext(a[32..26]) }
+    else if b->eq(27) { zext(a[32..27]) }
+    else if b->eq(28) { zext(a[32..28]) }
+    else if b->eq(29) { zext(a[32..29]) }
+    else if b->eq(30) { zext(a[32..30]) }
+    else { zext(a[31]) }
+}
+
+fn sra(a : Word[32], b : Word[5]) -> Word[32] {
+    if b->eq(0 { a }
+    else if b->eq( 1 { sext(a[32.. 1]) }
+    else if b->eq( 2 { sext(a[32.. 2]) }
+    else if b->eq( 3 { sext(a[32.. 3]) }
+    else if b->eq( 4 { sext(a[32.. 4]) }
+    else if b->eq( 5 { sext(a[32.. 5]) }
+    else if b->eq( 6 { sext(a[32.. 6]) }
+    else if b->eq( 7 { sext(a[32.. 7]) }
+    else if b->eq( 8 { sext(a[32.. 8]) }
+    else if b->eq( 9 { sext(a[32.. 9]) }
+    else if b->eq(10 { sext(a[32..10]) }
+    else if b->eq(11 { sext(a[32..11]) }
+    else if b->eq(12 { sext(a[32..12]) }
+    else if b->eq(13 { sext(a[32..13]) }
+    else if b->eq(14 { sext(a[32..14]) }
+    else if b->eq(15 { sext(a[32..15]) }
+    else if b->eq(16 { sext(a[32..16]) }
+    else if b->eq(17 { sext(a[32..17]) }
+    else if b->eq(18 { sext(a[32..18]) }
+    else if b->eq(19 { sext(a[32..19]) }
+    else if b->eq(20 { sext(a[32..20]) }
+    else if b->eq(21 { sext(a[32..21]) }
+    else if b->eq(22 { sext(a[32..22]) }
+    else if b->eq(23 { sext(a[32..23]) }
+    else if b->eq(24 { sext(a[32..24]) }
+    else if b->eq(25 { sext(a[32..25]) }
+    else if b->eq(26 { sext(a[32..26]) }
+    else if b->eq(27 { sext(a[32..27]) }
+    else if b->eq(28 { sext(a[32..28]) }
+    else if b->eq(29 { sext(a[32..29]) }
+    else if b->eq(30 { sext(a[32..30]) }
+    else { sext(a[31]) }
+}
+
+fn ltu(a : Word[32], b : Word[32]) -> Bit {
+    a < b
+}
+
+fn lt(a : Word[32], b : Word[32]) -> Bit {
+    if a[31] && !b[31] {
+        1
+    } else if !a[31] && b[31] {
+        0
+    } else {
+        a < b
+    }
+}
+
+fn geu(a : Word[32], b : Word[32]) -> Bit {
+    a->eq(b || b < a
+}
+
+fn ge(a : Word[32], b : Word[32]) -> Bit {
+    if a[31] && !b[31] {
+        0
+    } else if !a[31] && b[31] {
+        1
+    } else {
+        a->eq(b || b < a
+    }
+}
+*/

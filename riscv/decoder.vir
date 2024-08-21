@@ -1,0 +1,56 @@
+import types;
+
+/*
+    `Decoder` is the instruction decoder.
+    It takes the instruction parses it into its relevant pieces.
+    Not all pieces are guaranteed to be meaningful for all instructions.
+*/
+mod Decoder {
+    incoming instr : Word[32];
+
+    outgoing opcode : types::Opcode;
+    outgoing rd     : Word[5];
+    outgoing rs1    : Word[5];
+    outgoing rs2    : Word[5];
+    outgoing funct3     : Word[3];
+    outgoing funct7     : Word[7];
+    outgoing funct12    : Word[12];
+    outgoing exception  : Bit;
+    outgoing write_mask : Word[4];
+
+    write_mask :=
+        if instr[15..12]->eq(cat(#SB[types::StoreFunct3])) {
+            0b0001
+        } else if instr[15..12]->eq(cat(#SH[types::StoreFunct3])) {
+            0b0011
+        } else {
+            0b1111
+        };
+
+    exception := false;
+
+    rd      := instr[12..7];
+    funct3  := instr[15..12];
+    rs1     := instr[20..15];
+    rs2     := instr[25..20];
+    funct7  := instr[32..25];
+    funct12 := instr[32..20];
+
+    wire maybe_opcode : Word[7];
+    maybe_opcode := instr[7..0];
+
+    opcode :=
+     if maybe_opcode->eq(0b01_100_11w7) { #OP }
+     else if maybe_opcode->eq(0b00_100_11w7) { #OP_IMM }
+     else if maybe_opcode->eq(0b00_000_11w7) { #LOAD }
+     else if maybe_opcode->eq(0b01_000_11w7) { #STORE }
+     else if maybe_opcode->eq(0b11_011_11w7) { #JAL }
+     else if maybe_opcode->eq(0b11_000_11w7) { #BRANCH }
+     else if maybe_opcode->eq(0b01_101_11w7) { #LUI }
+     else if maybe_opcode->eq(0b00_101_11w7) { #AUIPC }
+     else if maybe_opcode->eq(0b11_001_11w7) { #JALR }
+     else if maybe_opcode->eq(0b00_011_11w7) { #FENCE }
+     else if maybe_opcode->eq(0b11_100_11w7) { #SYSTEM }
+     else { #OP };
+}
+

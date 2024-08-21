@@ -1,0 +1,88 @@
+import types;
+
+/*
+    `Control` is the control unit.
+    It receives the decoded instruction and sends out signals which
+    guide the behavior : the rest : the core.
+*/
+mod Control {
+    incoming opcode : types::Opcode;
+    incoming funct3 : Word[3];
+    incoming funct7 : Word[7];
+    incoming funct12 : Word[12];
+
+    outgoing mem_read : Bit;
+    outgoing mem_write : Bit;
+    outgoing mem_to_reg : Bit;
+    outgoing alu_op : types::AluOp;
+    outgoing alu_source : types::AluSource;
+    outgoing reg_write : Bit;
+
+    mem_read := opcode->eq(#LOAD);
+    mem_write := opcode->eq(#STORE);
+    mem_to_reg := opcode->eq(#LOAD);
+
+    alu_op := if opcode->eq(#OP)->or(opcode->eq(#OP_IMM)) {
+        if funct3->eq(cat(#ADD[types::OpFunct3])) { // ADD
+            #ADD
+        } else if funct3->eq(cat(#SLL[types::OpFunct3])) {
+            #SLL
+        } else if funct3->eq(cat(#SLT[types::OpFunct3])) {
+            #LT
+        } else if funct3->eq(cat(#SLTU[types::OpFunct3])) {
+            #LTU
+        } else if funct3->eq(cat(#XOR[types::OpFunct3])) {
+            #XOR
+        } else if funct3->eq(cat(#SR[types::OpFunct3])) {
+            if funct7[5] {
+                #SRA
+            } else {
+                #SRL
+            }
+        } else if funct3->eq(cat(#OR[types::OpFunct3])) { // OR
+            #OR
+        } else if funct3->eq(cat(#AND[types::OpFunct3])) { // AND
+            #AND
+        } else {
+            #ADD
+        }
+    } else if opcode->eq(#BRANCH) {
+        if funct3->eq(cat(#BEQ[types::BranchFunct3])) {
+            #EQ
+        } else if funct3->eq(cat(#BNE[types::BranchFunct3])) {
+            #NEQ
+        } else if funct3->eq(cat(#BLT[types::BranchFunct3])) {
+            #LT
+        } else if funct3->eq(cat(#BLTU[types::BranchFunct3])) {
+            #LTU
+        } else if funct3->eq(cat(#BGE[types::BranchFunct3])) {
+            #GE
+        } else if funct3->eq(cat(#BGEU[types::BranchFunct3])) {
+            #GEU
+        } else {
+            #GEU
+        }
+    } else if opcode->eq(#SYSTEM) {
+        #ADD
+    } else if opcode->eq(#JAL) {
+        #ADD
+    } else if opcode->eq(#JALR) {
+        #ADD
+    } else {
+        #ADD
+    };
+
+    alu_source := if opcode->eq(#OP_IMM)->or(opcode->eq(#LOAD))->or(opcode->eq(#STORE)) {
+        #IMM // IMM
+    } else {
+        #RS2 // RS2
+    };
+
+    reg_write :=
+        opcode->eq(#OP)->or(  // OP
+        opcode->eq(#OP_IMM))->or( // IMM
+        opcode->eq(#LOAD))->or( // LOAD
+        opcode->eq(#LUI))->or( // LUI
+        opcode->eq(#JAL))->or( // JAL
+        opcode->eq(#JALR)); // JALR
+}

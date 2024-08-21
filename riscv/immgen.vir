@@ -1,0 +1,35 @@
+import types;
+
+/*
+    `Immgen` is the immediate generator.
+    It takes the instruction and calculates the 32-bit immediate
+*/
+mod Immgen {
+    incoming instr : Word[32];
+    incoming opcode : types::Opcode;
+    outgoing imm : Word[32];
+
+    wire typ : types::InstrType;
+    typ := match opcode {
+            #OP => #R;
+            #OP_IMM => #I;
+            #LOAD => #I;
+            #STORE => #S;
+            #JAL => #J;
+            #BRANCH => #B;
+            #LUI => #U;
+            #AUIPC => #U;
+            #JALR => #I;
+            #FENCE => #I;
+            #SYSTEM => #I;
+    };
+
+    imm := match typ {
+        #I => sext(cat(instr[31], instr[32..20]));
+        #S => sext(cat(instr[31], instr[32..25], instr[12..7]));
+        #B => sext(cat(instr[31], instr[7], instr[31..25], instr[12..8], 0w1));
+        #U => sext(cat(instr[32..12], 0w12));
+        #J => sext(cat(instr[31], instr[20..12], instr[20], instr[31..21], 0w1));
+        #R => 0;
+    };
+}
