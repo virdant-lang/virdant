@@ -531,6 +531,38 @@ impl Verilog {
 
                 Ok(gs)
             },
+            Expr::Sext(inner) => {
+                let arg = inner.arg();
+                let typ = inner.typ();
+                let arg_typ = arg.typ();
+
+                let ext_width: Width = typ.typ.width() - arg_typ.typ.width();
+                let sign_idx = arg_typ.typ.width() - 1;
+
+                let bit_gs = self.gensym_hint("bit");
+                let gs = self.gensym();
+
+                let arg_ssa = self.verilog_expr(f, inner.arg(), ctx)?;
+                writeln!(f, "    wire {bit_gs} = {arg_ssa}[{sign_idx}];")?;
+
+                let width_str = self.width_str(&typ);
+                writeln!(f, "    wire {width_str}{gs} = {{{{{ext_width}{{{bit_gs}}}}}, {arg_ssa}}};")?;
+                Ok(gs)
+            },
+            Expr::Zext(inner) => {
+                let arg = inner.arg();
+                let typ = inner.typ();
+                let arg_typ = arg.typ();
+
+                let ext_width: Width = typ.typ.width() - arg_typ.typ.width();
+
+                let gs = self.gensym();
+                let arg_ssa = self.verilog_expr(f, inner.arg(), ctx)?;
+
+                let width_str = self.width_str(&typ);
+                writeln!(f, "    wire {width_str}{gs} = {{{{{ext_width}{{1'b0}}}}, {arg_ssa}}};")?;
+                Ok(gs)
+            },
         }
     }
 
