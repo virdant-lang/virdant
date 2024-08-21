@@ -1,4 +1,3 @@
-use crate::ast::expr::Ident;
 use crate::common::*;
 use crate::design::*;
 use crate::context::Context;
@@ -418,70 +417,21 @@ impl Verilog {
                 let gs = self.gensym_hint("match");
                 let subject_ssa = self.verilog_expr(f, subject.clone(), ctx.clone())?;
 
-                // TODO
-                let uniondef = match subject.typ().scheme() {
-                    TypeScheme::StructDef(_) => todo!(),
-                    TypeScheme::BuiltinDef(_) => todo!(),
-                    TypeScheme::EnumDef(_) => todo!(),
-                    TypeScheme::UnionDef(uniondef) => uniondef,
-                };
-                let tag_ssa = self.gensym();
-                let tag_width = self.layout.tag_width(&uniondef);
-                let tag_top = tag_width - 1;
-
-                let mut arm_ssas: Vec<(Tag, Ident, SsaName)> = vec![];
+                let mut arm_ssas: Vec<SsaName> = vec![];
                 writeln!(f, "    // match arm")?;
                 for (pat, expr) in inner.arms() {
-                    match pat {
-                        Pat::CtorAt(_typ, ctor, pats) => {
-                            writeln!(f, "    // case {}", ctor.name())?;
-                            let tag = self.layout.tag(&ctor);
-                            let mut new_ctx = ctx.clone();
-                            writeln!(f, "    // (pats are {pats:?})")?;
-                            for (i, pat) in pats.iter().enumerate() {
-                                let (offset, width) = self.layout.ctor_slot(&ctor, i);
-                                let width_minus_1 = width - 1;
-                                if let Pat::Bind(_typ, binding) = pat {
-                                    let x_ssa = self.gensym_hint(binding.name());
-                                    new_ctx = new_ctx.extend(binding.name().to_string(), x_ssa.clone());
-                                    let bot_bit = offset;
-                                    let top_bit = offset + width - 1;
-                                    writeln!(f, "    // binding variable {} to slot", binding.name())?;
-                                    writeln!(f, "    wire [{width_minus_1}:0] {x_ssa} = {subject_ssa}[{top_bit}:{bot_bit}];")?;
-                                } else {
-                                    panic!()
-                                }
-                            }
-                            let arm_ssa = self.verilog_expr(f, expr.clone(), new_ctx)?;
-                            arm_ssas.push((tag, ctor.name().to_string().into(), arm_ssa));
-                        },
-                        _ => todo!(),
-                    }
+                    let new_ctx = ctx.extend_from(&self.deconstruct_by_pat(f, &subject_ssa, &pat));
+                    let arm_ssa = self.verilog_expr(f, expr, new_ctx)?;
+                    arm_ssas.push(arm_ssa);
                 }
-
-                writeln!(f, "    // project tag ({tag_width} bits)")?;
-                let tag_width_str = if tag_width == 1 {
-                    format!("")
-                } else {
-                    format!("[{tag_top}:0]")
-                };
-
-                let subject_tag_idx = if tag_width == 1 {
-                    format!("[0]")
-                } else {
-                    format!("[{tag_top}:0]")
-                };
 
                 writeln!(f, "    reg {width_str} {gs};")?;
 
-                writeln!(f, "    wire {tag_width_str} {tag_ssa} = {subject_ssa}{subject_tag_idx};")?;
-
                 writeln!(f, "    always @(*) begin")?;
-                writeln!(f, "        case ({tag_ssa})")?;
+                writeln!(f, "        casez ({subject_ssa})")?;
 
-                for (tag, ctor, arm_ssa) in &arm_ssas {
-                    writeln!(f, "            // @{ctor}:")?;
-                    writeln!(f, "            {tag}: {gs} <= {arm_ssa};")?;
+                for ((pat, _expr), arm_ssa) in inner.arms().iter().zip(arm_ssas) {
+                    writeln!(f, "            {}: {gs} <= {arm_ssa};", self.pat_mask(&pat))?;
                 }
 
                 writeln!(f, "            default: {gs} <= 32'bx;")?;
@@ -565,6 +515,75 @@ impl Verilog {
         }
     }
 
+    fn pat_mask(&self, pat: &Pat) -> PatMask {
+        match pat {
+            Pat::CtorAt(typ, ctor, pats) => {
+                let width = self.layout.width(&typ);
+                let ctor_unused_width = width - self.layout.ctor_used_width(&ctor);
+                let tag_width = self.layout.tag_width(&ctor.uniondef());
+                let tag = self.layout.tag(ctor);
+
+                let mut patmask = PatMask(vec![(None, ctor_unused_width)]);
+                for pat in pats.iter().rev() {
+                    patmask = patmask.append(&self.pat_mask(pat));
+                }
+                let tag_patmask = PatMask(vec![(Some(tag), tag_width)]);
+                patmask = patmask.append(&tag_patmask);
+                patmask
+            },
+            Pat::EnumerantAt(typ, enumerant) => {
+                let width = self.layout.width(&typ);
+                let value = enumerant.value();
+                PatMask(vec![(Some(value), width)])
+            },
+            Pat::Bind(typ, _) => {
+                let width = self.layout.width(&typ);
+                PatMask(vec![(None, width)])
+            },
+            Pat::Else(typ) => {
+                let width = self.layout.width(&typ);
+                PatMask(vec![(None, width)])
+            },
+        }
+    }
+
+    fn deconstruct_by_pat(
+        &mut self,
+        f: &mut dyn Write,
+        subject_ssa: &SsaName,
+        pat: &Pat,
+    ) -> Context<String, SsaName> {
+        self.deconstruct_by_pat_within(f, subject_ssa, pat, 0)
+    }
+
+    fn deconstruct_by_pat_within(
+        &mut self,
+        f: &mut dyn Write,
+        subject_ssa: &SsaName,
+        pat: &Pat,
+        offset: Offset,
+    ) -> Context<String, SsaName> {
+        match pat {
+            Pat::CtorAt(_typ, ctor, pats) => {
+                let mut ctx = Context::empty();
+                for (i, pat) in pats.iter().enumerate() {
+                    let (slot_offset, _slot_width) = self.layout.ctor_slot(ctor, i);
+                    ctx = ctx.extend_from(&self.deconstruct_by_pat_within(f, subject_ssa, pat, offset + slot_offset));
+                }
+                ctx
+            },
+            Pat::EnumerantAt(_, _) => Context::empty(),
+            Pat::Bind(typ, binding) => {
+                let gs = self.gensym();
+                let width_str = self.width_str(typ);
+                let width = self.layout.width(typ);
+                writeln!(f, "    wire {width_str}{gs} = {subject_ssa}[{}:{}];", offset + width - 1, offset).unwrap();
+                Context::empty().extend(binding.name().to_string(), gs)
+            },
+            Pat::Else(_) => Context::empty(),
+        }
+    }
+
     fn gensym(&mut self) -> SsaName {
         self.gensym += 1;
         format!("__TEMP_{}", self.gensym)
@@ -573,6 +592,39 @@ impl Verilog {
     fn gensym_hint(&mut self, hint: &str) -> SsaName {
         self.gensym += 1;
         format!("__TEMP_{}_{hint}", self.gensym)
+    }
+}
+
+struct PatMask(Vec<(Option<WordVal>, Width)>);
+
+impl std::fmt::Display for PatMask {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut total_width = 0;
+        for (_val, width) in &self.0 {
+            total_width += width;
+        }
+
+        write!(f, "{total_width}'b")?;
+        for (val, width) in &self.0 {
+            let width = *width as usize;
+
+            if let Some(val) = val {
+                write!(f, "{val:0>width$b}")?;
+            } else {
+                let val = "?".repeat(width);
+                write!(f, "{val}")?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl PatMask {
+    fn append(&self, other: &PatMask) -> PatMask {
+        let mut inner = self.0.clone();
+        inner.extend(other.0.iter());
+        PatMask(inner)
     }
 }
 
