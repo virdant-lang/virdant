@@ -769,22 +769,17 @@ pub enum Referent {
 
 #[derive(Debug, Clone)]
 pub enum Pat {
-    CtorAt(Ctor, Vec<Pat>),
-    EnumerantAt(Enumerant),
-    Bind(Binding),
-    Else,
+    CtorAt(Type, Ctor, Vec<Pat>),
+    EnumerantAt(Type, Enumerant),
+    Bind(Type, Binding),
+    Else(Type),
 }
 
 impl Pat {
-    fn new(root: &DesignRoot, pat: &crate::ast::expr::Pat, typ: types::Type) -> Pat {
+    fn new(root: &DesignRoot, pat: &crate::ast::expr::Pat, typ: Type) -> Pat {
         match pat {
             crate::ast::expr::Pat::CtorAt(ctor_name, pats) => {
-                let mut new_pats = vec![];
-                for pat in pats {
-                    new_pats.push(Pat::new(root, pat, typ));
-                }
-
-                let uniondef_id = match typ.scheme() {
+                let uniondef_id = match typ.typ.scheme() {
                     types::TypeScheme::StructDef(_) => unreachable!(),
                     types::TypeScheme::BuiltinDef(_) => unreachable!(),
                     types::TypeScheme::EnumDef(_) => unreachable!(),
@@ -794,13 +789,19 @@ impl Pat {
 
                 for ctor in uniondef.ctors() {
                     if ctor.name() == **ctor_name {
-                        return Pat::CtorAt(ctor, new_pats);
+                        let ctor_sig = ctor.info.sig.unwrap();
+                        let mut new_pats = vec![];
+                        for (pat, (_param_name, param_typ)) in pats.into_iter().zip(ctor_sig.params()) {
+                            let param_typ = Type::new(ctor.root.clone(), *param_typ);
+                            new_pats.push(Pat::new(root, pat, param_typ.clone()));
+                        }
+                        return Pat::CtorAt(typ, ctor, new_pats);
                     }
                 }
                 unreachable!()
             },
             crate::ast::expr::Pat::EnumerantAt(ctor_name) => {
-                let enumdef_id = match typ.scheme() {
+                let enumdef_id = match typ.typ.scheme() {
                     types::TypeScheme::StructDef(_) => unreachable!(),
                     types::TypeScheme::BuiltinDef(_) => unreachable!(),
                     types::TypeScheme::EnumDef(enumdef) => enumdef,
@@ -810,13 +811,22 @@ impl Pat {
 
                 for enumerant in enumdef.enumerants() {
                     if enumerant.name() == **ctor_name {
-                        return Pat::EnumerantAt(enumerant);
+                        return Pat::EnumerantAt(typ, enumerant);
                     }
                 }
                 unreachable!()
             },
-            crate::ast::expr::Pat::Bind(ident) => Pat::Bind(Binding(ident.to_string())),
-            crate::ast::expr::Pat::Else => Pat::Else,
+            crate::ast::expr::Pat::Bind(ident) => Pat::Bind(typ, Binding(ident.to_string())),
+            crate::ast::expr::Pat::Else => Pat::Else(typ),
+        }
+    }
+
+    pub fn typ(&self) -> Type {
+        match self {
+            Pat::CtorAt(typ, _, _) => typ.clone(),
+            Pat::EnumerantAt(typ, _) => typ.clone(),
+            Pat::Bind(typ, _) => typ.clone(),
+            Pat::Else(typ) => typ.clone(),
         }
     }
 }
@@ -1194,7 +1204,7 @@ mod expr {
 
         pub fn arms(&self) -> Vec<(super::Pat, super::Expr)> {
             if let crate::ast::Expr::Match(_span, _subject, _ascription, arms) = self.ast().as_ref() {
-                let subject_typ = self.subject().typ().typ;
+                let subject_typ = self.subject().typ();
                 let arm_exprroots: Vec<_> = self.info.children.iter()
                     .skip(1)
                     .map(|id| self.root().exprroots[id].to_expr())
@@ -1202,7 +1212,7 @@ mod expr {
                 let mut results = vec![];
 
                 for (MatchArm(pat, _), arm_exprroot) in arms.iter().zip(arm_exprroots) {
-                    let new_pat = Pat::new(&self.root(), pat, subject_typ);
+                    let new_pat = Pat::new(&self.root(), pat, subject_typ.clone());
                     results.push((new_pat, arm_exprroot))
                 }
 

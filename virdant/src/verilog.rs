@@ -412,6 +412,12 @@ impl Verilog {
                 let subject = inner.subject();
                 let typ = inner.typ();
 
+                let width = self.layout.width(&typ);
+                let width_str = format!("[{}:0]", width - 1);
+
+                let gs = self.gensym_hint("match");
+                let subject_ssa = self.verilog_expr(f, subject.clone(), ctx.clone())?;
+
                 // TODO
                 let uniondef = match subject.typ().scheme() {
                     TypeScheme::StructDef(_) => todo!(),
@@ -419,13 +425,6 @@ impl Verilog {
                     TypeScheme::EnumDef(_) => todo!(),
                     TypeScheme::UnionDef(uniondef) => uniondef,
                 };
-
-                let width = self.layout.width(&typ);
-                let width_str = format!("[{}:0]", width - 1);
-
-                let gs = self.gensym_hint("match");
-                let subject_ssa = self.verilog_expr(f, subject.clone(), ctx.clone())?;
-
                 let tag_ssa = self.gensym();
                 let tag_width = self.layout.tag_width(&uniondef);
                 let tag_top = tag_width - 1;
@@ -434,7 +433,7 @@ impl Verilog {
                 writeln!(f, "    // match arm")?;
                 for (pat, expr) in inner.arms() {
                     match pat {
-                        Pat::CtorAt(ctor, pats) => {
+                        Pat::CtorAt(_typ, ctor, pats) => {
                             writeln!(f, "    // case {}", ctor.name())?;
                             let tag = self.layout.tag(&ctor);
                             let mut new_ctx = ctx.clone();
@@ -442,7 +441,7 @@ impl Verilog {
                             for (i, pat) in pats.iter().enumerate() {
                                 let (offset, width) = self.layout.ctor_slot(&ctor, i);
                                 let width_minus_1 = width - 1;
-                                if let Pat::Bind(binding) = pat {
+                                if let Pat::Bind(_typ, binding) = pat {
                                     let x_ssa = self.gensym_hint(binding.name());
                                     new_ctx = new_ctx.extend(binding.name().to_string(), x_ssa.clone());
                                     let bot_bit = offset;
