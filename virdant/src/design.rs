@@ -473,6 +473,8 @@ impl ExprRoot {
             crate::ast::Expr::Idx(_, _, _) => Expr::Idx(expr::Idx { root, id, info }),
             crate::ast::Expr::IdxRange(_, _, _, _) => Expr::IdxRange(expr::IdxRange { root, id, info }),
             crate::ast::Expr::Cat(_, _) => Expr::Cat(expr::Cat { root, id, info }),
+            crate::ast::Expr::Sext(_, _) => Expr::Sext(expr::Sext { root, id, info }),
+            crate::ast::Expr::Zext(_, _) => Expr::Zext(expr::Zext { root, id, info }),
             crate::ast::Expr::If(_, _, _, _) => Expr::If(expr::If { root, id, info }),
             crate::ast::Expr::Match(_, _, _, _) => Expr::Match(expr::Match { root, id, info }),
         }
@@ -730,6 +732,8 @@ pub enum Expr {
     Idx(expr::Idx),
     IdxRange(expr::IdxRange),
     Cat(expr::Cat),
+    Sext(expr::Sext),
+    Zext(expr::Zext),
     If(expr::If),
     Match(expr::Match),
 }
@@ -749,6 +753,8 @@ impl Expr {
             Expr::Idx(idx) => idx.typ(),
             Expr::IdxRange(idxrange) => idxrange.typ(),
             Expr::Cat(cat) => cat.typ(),
+            Expr::Sext(sext) => sext.typ(),
+            Expr::Zext(zext) => zext.typ(),
             Expr::If(if_) => if_.typ(),
             Expr::Match(match_) => match_.typ(),
         }
@@ -871,6 +877,8 @@ mod expr {
     expr_type!(Idx);
     expr_type!(IdxRange);
     expr_type!(Cat);
+    expr_type!(Sext);
+    expr_type!(Zext);
     expr_type!(If);
     expr_type!(Match);
 
@@ -1140,6 +1148,20 @@ mod expr {
                 .map(|id| self.root().exprroots[id].to_expr())
                 .collect();
             exprroots
+        }
+    }
+
+    impl Sext {
+        pub fn arg(&self) -> Expr {
+            let arg: Id<_> = self.info.children[0];
+            self.root().exprroots[&arg].to_expr()
+        }
+    }
+
+    impl Zext {
+        pub fn arg(&self) -> Expr {
+            let arg: Id<_> = self.info.children[0];
+            self.root().exprroots[&arg].to_expr()
         }
     }
 

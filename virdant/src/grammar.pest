@@ -191,6 +191,8 @@ expr_match_arm = {
 }
 
 expr_call = {
+    kw_sext ~ "(" ~ (#arg=expr) ~ ")" |
+    kw_zext ~ "(" ~ (#arg=expr) ~ ")" |
     (#fn=qualident) ~ "(" ~ (#args=expr_list) ~ ")" |
     expr_method
 }
@@ -297,6 +299,8 @@ kw_if           = @{ "if"         ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_else         = @{ "else"       ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_match        = @{ "match"      ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_cat          = @{ "cat"        ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_sext         = @{ "sext"       ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_zext         = @{ "zext"       ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_mosi         = @{ "mosi"       ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_miso         = @{ "miso"       ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_master       = @{ "master"     ~ !(ASCII_ALPHANUMERIC | "_") }
@@ -326,6 +330,8 @@ keyword = {
     kw_else |
     kw_match |
     kw_cat |
+    kw_sext |
+    kw_zext |
     kw_mosi |
     kw_miso |
     kw_true |

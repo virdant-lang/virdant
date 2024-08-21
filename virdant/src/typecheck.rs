@@ -84,6 +84,8 @@ impl<'a> TypingContext<'a> {
             Expr::Enumerant(_span, enumerant) => self.check_enumerant(exprroot, *enumerant, expected_typ),
             Expr::If(_span, _, _, _) => self.check_if(exprroot, expected_typ),
             Expr::Match(_span, _subject, ascription, arms) => self.check_match(exprroot, ascription.clone(), arms.clone(), expected_typ),
+            Expr::Zext(_span, _arg) => self.check_zext(exprroot, expected_typ),
+            Expr::Sext(_span, _arg) => self.check_sext(exprroot, expected_typ),
             _ => {
                 match self.infer(exprroot) {
                     Err(e) => Err(e),
@@ -229,6 +231,44 @@ impl<'a> TypingContext<'a> {
                 let span = exprroot_info.span.unwrap();
                 Err(VirErr::TypeError(format!("Expected Word type: {:?} to {:?}", span.start(), span.end())))
             }
+        }
+    }
+
+    fn check_zext(&mut self, exprroot: Id<ExprRoot>, expected_typ: Type) -> Result<(), VirErr> {
+        if expected_typ.is_word() {
+            let expr = self.virdant.exprroots[exprroot].children[0].clone();
+            let expr_typ  = self.infer(expr)?;
+
+            if !expected_typ.is_word() {
+                return Err(VirErr::TypeError(format!("Argument of zext must be a word.")))
+            }
+
+            if expr_typ.width() > expected_typ.width() {
+                return Err(VirErr::TypeError(format!("Argument of zext must be a smaller word size than what it is being extended to.")))
+            }
+
+            Ok(())
+        } else {
+            Err(VirErr::TypeError(format!("Can't zext to {expected_typ}")))
+        }
+    }
+
+    fn check_sext(&mut self, exprroot: Id<ExprRoot>, expected_typ: Type) -> Result<(), VirErr> {
+        if expected_typ.is_word() {
+            let expr = self.virdant.exprroots[exprroot].children[0].clone();
+            let expr_typ  = self.infer(expr)?;
+
+            if !expected_typ.is_word() {
+                return Err(VirErr::TypeError(format!("Argument of sext must be a word.")))
+            }
+
+            if expr_typ.width() > expected_typ.width() {
+                return Err(VirErr::TypeError(format!("Argument of sext must be a smaller word size than what it is being extended to.")))
+            }
+
+            Ok(())
+        } else {
+            Err(VirErr::TypeError(format!("Can't sext to {expected_typ}")))
         }
     }
 

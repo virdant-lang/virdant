@@ -27,6 +27,8 @@ pub enum Expr {
     Idx(Span, Arc<Expr>, StaticIndex),
     IdxRange(Span, Arc<Expr>, StaticIndex, StaticIndex),
     Cat(Span, Vec<Arc<Expr>>),
+    Zext(Span, Arc<Expr>),
+    Sext(Span, Arc<Expr>),
     If(Span, Arc<Expr>, Arc<Expr>, Arc<Expr>),
     Match(Span, Arc<Expr>, Option<Ast>, Vec<MatchArm>),
 }
@@ -155,19 +157,30 @@ impl Expr {
     }
 
     fn ast_to_expr_call(expr_call_ast: Ast) -> Arc<Expr> {
-        let fndef: &str = if let Some(fndef) = &expr_call_ast.fnname() {
-            fndef
+        let child = expr_call_ast.child(0);
+        if child.is_kw_zext() {
+            let arg_ast = expr_call_ast.child(1);
+            let arg = Expr::from_ast(arg_ast);
+            Arc::new(Expr::Zext(expr_call_ast.span(), arg))
+        } else if child.is_kw_sext() {
+            let arg_ast = expr_call_ast.child(1);
+            let arg = Expr::from_ast(arg_ast);
+            Arc::new(Expr::Sext(expr_call_ast.span(), arg))
         } else {
-            return Expr::ast_to_expr_method(expr_call_ast.child(0));
-        };
+            let fndef: &str = if let Some(fndef) = &expr_call_ast.fnname() {
+                fndef
+            } else {
+                return Expr::ast_to_expr_method(expr_call_ast.child(0));
+            };
 
-        let args = expr_call_ast.args().unwrap();
-        let mut arg_exprs = vec![];
-        for arg in args {
-            arg_exprs.push(Expr::from_ast(arg));
+            let args = expr_call_ast.args().unwrap();
+            let mut arg_exprs = vec![];
+            for arg in args {
+                arg_exprs.push(Expr::from_ast(arg));
+            }
+
+            Arc::new(Expr::FnCall(expr_call_ast.span(), fndef.to_string().into(), arg_exprs))
         }
-
-        Arc::new(Expr::FnCall(expr_call_ast.span(), fndef.to_string().into(), arg_exprs))
     }
 
     fn ast_to_expr_method(expr_method_ast: Ast) -> Arc<Expr> {
@@ -379,6 +392,12 @@ impl Expr {
             Expr::Cat(_, es) => {
                 results.extend(es.iter().cloned().collect::<Vec<_>>());
             },
+            Expr::Sext(_, arg) => {
+                results.push(arg.clone());
+            },
+            Expr::Zext(_, arg) => {
+                results.push(arg.clone());
+            },
             Expr::If(_, s, a, b) => {
                 results.push(s.clone());
                 results.push(a.clone());
@@ -418,6 +437,8 @@ impl Expr {
             Expr::Idx(_, _, _) => format!("Idx"),
             Expr::IdxRange(_, _, _, _) => format!("IdxRange"),
             Expr::Cat(_, _) => format!("Cat"),
+            Expr::Sext(_, _) => format!("Sext"),
+            Expr::Zext(_, _) => format!("Zext"),
             Expr::If(_, _, _, _) => format!("If"),
             Expr::Match(_, _, _, _) => format!("Match"),
         }
@@ -437,6 +458,8 @@ impl Expr {
             Expr::Idx(span, _, _) => *span,
             Expr::IdxRange(span, _, _, _) => *span,
             Expr::Cat(span, _) => *span,
+            Expr::Sext(span, _) => *span,
+            Expr::Zext(span, _) => *span,
             Expr::If(span, _, _, _) => *span,
             Expr::Match(span, _, _, _) => *span,
         }

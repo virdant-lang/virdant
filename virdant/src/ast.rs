@@ -146,6 +146,8 @@ impl Ast {
     pub fn is_kw_if(&self) -> bool { self.rule() == Rule::kw_if }
     pub fn is_kw_else(&self) -> bool { self.rule() == Rule::kw_else }
     pub fn is_kw_cat(&self) -> bool { self.rule() == Rule::kw_cat }
+    pub fn is_kw_zext(&self) -> bool { self.rule() == Rule::kw_zext }
+    pub fn is_kw_sext(&self) -> bool { self.rule() == Rule::kw_sext }
 
     pub fn is_list(&self) -> bool {
         self.rule() == Rule::arg_list ||
