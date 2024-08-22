@@ -66,6 +66,12 @@ mod Top {
 
     wire cat_on_enum : Word[8];
     cat_on_bit := cat(0w6, #foo[Foo]);
+
+    wire test_zext : Word[8];
+    test_zext := zext(0w5);
+
+    wire test_sext : Word[8];
+    test_sext := sext(0b100w3);
 }
 
 union type ValidByte {
