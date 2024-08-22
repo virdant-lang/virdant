@@ -573,6 +573,12 @@ impl<'a> TypingContext<'a> {
     }
 
     fn method_sig(&self, typ: Type, method: Ident) -> Result<MethodSig, VirErr> {
+        if *method == "eq" {
+            return Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()));
+        } else if *method == "neq" {
+            return Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()));
+        }
+
         match typ.scheme() {
             TypeScheme::StructDef(_) => {
                 Err(VirErr::Other(format!("No such method {method} for type {typ}")))
@@ -591,11 +597,7 @@ impl<'a> TypingContext<'a> {
             },
             TypeScheme::BuiltinDef(_) => {
                 if typ.is_bit() {
-                    if *method == "eq" {
-                        Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
-                    } else if *method == "neq" {
-                        Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
-                    } else if *method == "not" {
+                    if *method == "not" {
                         Ok(MethodSig(vec![], typ.clone()))
                     } else if *method == "and" {
                         Ok(MethodSig(vec![typ.clone()], typ.clone()))

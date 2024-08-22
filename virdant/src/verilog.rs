@@ -308,6 +308,7 @@ impl Verilog {
                     "not" => writeln!(f, "    wire {width_str} {gs} = ~{subject_ssa};")?,
                     "xor" => writeln!(f, "    wire {width_str} {gs} = {subject_ssa} ^ {};", args_ssa[0])?,
                     "eq"  => writeln!(f, "    wire {width_str} {gs} = {subject_ssa} == {};", args_ssa[0])?,
+                    "neq"  => writeln!(f, "    wire {width_str} {gs} = {subject_ssa} != {};", args_ssa[0])?,
                     "mux" => writeln!(f, "    wire {width_str} {gs} = {subject_ssa} ? {};", args_ssa.join(" : "))?,
                     "sll" => writeln!(f, "    wire {width_str} {gs} = {subject_ssa} << {};", args_ssa.join(" : "))?,
                     "srl" => writeln!(f, "    wire {width_str} {gs} = {subject_ssa} >> {};", args_ssa.join(" : "))?,
