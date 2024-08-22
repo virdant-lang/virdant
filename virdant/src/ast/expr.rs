@@ -24,6 +24,7 @@ pub enum Expr {
     Struct(Span, QualIdent, Vec<(Ident, Arc<Expr>)>),
     Ctor(Span, Ident, Vec<Arc<Expr>>),
     Enumerant(Span, Ident),
+    As(Span, Arc<Expr>, Ast),
     Idx(Span, Arc<Expr>, StaticIndex),
     IdxRange(Span, Arc<Expr>, StaticIndex, StaticIndex),
     Cat(Span, Vec<Arc<Expr>>),
@@ -203,6 +204,8 @@ impl Expr {
                 result = Arc::new(Expr::IdxRange(expr_method_ast.span(), result, j, i));
             } else if let Some(i) = expr_call_suffix_ast.i() {
                 result = Arc::new(Expr::Idx(expr_method_ast.span(), result, i));
+            } else if let Some(typ_ast) = expr_call_suffix_ast.typ() {
+                result = Arc::new(Expr::As(expr_method_ast.span(), result, typ_ast));
             } else {
                 unreachable!()
             }
@@ -383,6 +386,9 @@ impl Expr {
             Expr::Ctor(_, _, es) => {
                 results.extend(es.iter().cloned().collect::<Vec<_>>());
             },
+            Expr::As(_, s, _) => {
+                results.push(s.clone());
+            },
             Expr::Idx(_, s, _) => {
                 results.push(s.clone());
             },
@@ -434,6 +440,7 @@ impl Expr {
             Expr::Struct(_, _, _) => format!("Struct"),
             Expr::Ctor(_, _, _) => format!("Ctor"),
             Expr::Enumerant(_, _) => format!("Enumerant"),
+            Expr::As(_, _, _) => format!("As"),
             Expr::Idx(_, _, _) => format!("Idx"),
             Expr::IdxRange(_, _, _, _) => format!("IdxRange"),
             Expr::Cat(_, _) => format!("Cat"),
@@ -455,6 +462,7 @@ impl Expr {
             Expr::Struct(span, _, _) => *span,
             Expr::Ctor(span, _, _) => *span,
             Expr::Enumerant(span, _) => *span,
+            Expr::As(span, _, _) => *span,
             Expr::Idx(span, _, _) => *span,
             Expr::IdxRange(span, _, _, _) => *span,
             Expr::Cat(span, _) => *span,

@@ -57,6 +57,9 @@ mod Top {
 
     wire struct2 : Word[8];
     struct2 := struct0->y;
+
+    wire ascription : Word[8];
+    ascription := 0[Word[8]];
 }
 
 union type ValidByte {

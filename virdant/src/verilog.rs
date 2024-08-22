@@ -512,6 +512,10 @@ impl Verilog {
                 writeln!(f, "    wire {width_str}{gs} = {{{{{ext_width}{{1'b0}}}}, {arg_ssa}}};")?;
                 Ok(gs)
             },
+            Expr::As(inner) => {
+                let gs = self.verilog_expr(f, inner.subject(), ctx)?;
+                Ok(gs)
+            },
         }
     }
 
