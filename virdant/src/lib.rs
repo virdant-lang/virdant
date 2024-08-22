@@ -106,6 +106,8 @@ impl Virdant {
             }
         }
 
+        self.errors.check()?;
+
         let items: Vec<_> = self.items.keys().cloned().collect();
         for item in items {
             let item_deps = self.item_deps(item).clone();

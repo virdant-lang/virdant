@@ -56,11 +56,11 @@ impl VirErrs {
         }
     }
 
-    pub fn check(self) -> Result<(), VirErrs> {
+    pub fn check(&self) -> Result<(), VirErrs> {
         if self.errors.len() == 0 {
             Ok(())
         } else {
-            Err(self)
+            Err(self.clone())
         } 
     }
 
