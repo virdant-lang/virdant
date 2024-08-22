@@ -159,6 +159,9 @@ impl<'a> TypingContext<'a> {
                 e_typ.width()
             } else if e_typ.is_bit() {
                 1
+            } else if let TypeScheme::EnumDef(enumdef) = e_typ.scheme() {
+                let enumdef_info = self.virdant.items[enumdef.as_item()].clone();
+                *enumdef_info.width.unwrap()
             } else {
                 return Err(VirErr::Other(format!("Arguments to cat must be word or bits. Found {e_typ}.")));
             };

@@ -60,6 +60,12 @@ mod Top {
 
     wire ascription : Word[8];
     ascription := 0[Word[8]];
+
+    wire cat_on_bit : Word[8];
+    cat_on_bit := cat(0w7, false);
+
+    wire cat_on_enum : Word[8];
+    cat_on_bit := cat(0w6, #foo[Foo]);
 }
 
 union type ValidByte {
@@ -70,4 +76,10 @@ union type ValidByte {
 struct type Pair {
     x : Bit;
     y : Word[8];
+}
+
+enum type Foo width 2 {
+    foo = 0b01;
+    bar = 0b10;
+    baz = 0b11;
 }
