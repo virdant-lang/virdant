@@ -269,7 +269,11 @@ impl Verilog {
                 let i = idx.idx();
                 let gs = self.gensym();
                 let subject_ssa = self.verilog_expr(f, subject, ctx)?;
-                writeln!(f, "    wire {gs} = {subject_ssa}[{i}];")?;
+                if idx.subject().typ().typ.width() > 1 {
+                    writeln!(f, "    wire {gs} = {subject_ssa}[{i}];")?;
+                } else {
+                    writeln!(f, "    wire {gs} = {subject_ssa};")?;
+                }
                 Ok(gs)
             },
             Expr::IdxRange(idx) => {
