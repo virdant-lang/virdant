@@ -470,6 +470,7 @@ impl ExprRoot {
             crate::ast::Expr::Struct(_, _, _) => Expr::Struct(expr::Struct { root, id, info }),
             crate::ast::Expr::Ctor(_, _, _) => Expr::Ctor(expr::Ctor { root, id, info }),
             crate::ast::Expr::Enumerant(_, _) => Expr::Enumerant(expr::Enumerant { root, id, info }),
+            crate::ast::Expr::As(_, _, _) => Expr::As(expr::As { root, id, info }),
             crate::ast::Expr::Idx(_, _, _) => Expr::Idx(expr::Idx { root, id, info }),
             crate::ast::Expr::IdxRange(_, _, _, _) => Expr::IdxRange(expr::IdxRange { root, id, info }),
             crate::ast::Expr::Cat(_, _) => Expr::Cat(expr::Cat { root, id, info }),
@@ -729,6 +730,7 @@ pub enum Expr {
     Field(expr::Field),
     Ctor(expr::Ctor),
     Enumerant(expr::Enumerant),
+    As(expr::As),
     Idx(expr::Idx),
     IdxRange(expr::IdxRange),
     Cat(expr::Cat),
@@ -750,6 +752,7 @@ impl Expr {
             Expr::Field(field) => field.typ(),
             Expr::Ctor(ctor) => ctor.typ(),
             Expr::Enumerant(enumerant) => enumerant.typ(),
+            Expr::As(as_) => as_.typ(),
             Expr::Idx(idx) => idx.typ(),
             Expr::IdxRange(idxrange) => idxrange.typ(),
             Expr::Cat(cat) => cat.typ(),
@@ -884,6 +887,7 @@ mod expr {
     expr_type!(Field);
     expr_type!(Ctor);
     expr_type!(Enumerant);
+    expr_type!(As);
     expr_type!(Idx);
     expr_type!(IdxRange);
     expr_type!(Cat);
@@ -1108,6 +1112,14 @@ mod expr {
             } else {
                 unreachable!()
             }
+        }
+    }
+
+    impl As {
+        pub fn subject(&self) -> Expr {
+            let subject: Id<_> = self.info.children[0];
+            let exprroot = self.root().exprroots[&subject].clone();
+            exprroot.to_expr()
         }
     }
 

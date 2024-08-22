@@ -127,6 +127,7 @@ impl<'a> TypingContext<'a> {
             },
             Expr::Word(_span, wordlit) => self.infer_word(wordlit),
             Expr::Bit(_span, _bitlit) => self.infer_bit(),
+            Expr::As(_span, _subject, typ_ast) => self.infer_as(exprroot, typ_ast.clone()),
             Expr::Idx(_span, _subject, i) => self.infer_idx(exprroot, *i),
             Expr::IdxRange(_span, _subject, j, i) => self.infer_idxrange(exprroot, *j, *i),
             Expr::MethodCall(_span, _subject, method, _args) => self.infer_methodcall(exprroot, *method),
@@ -183,6 +184,13 @@ impl<'a> TypingContext<'a> {
             let width = j - i;
             Ok(self.virdant.word_type(width))
         }
+    }
+
+    fn infer_as(&mut self, exprroot: Id<ExprRoot>, typ_ast: Ast) -> Result<Type, VirErr> {
+        let subject = self.virdant.exprroots[exprroot].children[0];
+        let ascription_typ = self.virdant.resolve_type(typ_ast, self.item)?;
+        self.check(subject, ascription_typ)?;
+        Ok(ascription_typ)
     }
 
     fn infer_idx(&mut self, exprroot: Id<ExprRoot>, i: StaticIndex) -> Result<Type, VirErr> {

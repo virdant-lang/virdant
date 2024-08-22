@@ -204,6 +204,7 @@ expr_method = {
 expr_call_suffix = {
     "->" ~ (#method=ident) ~ "(" ~ (#args=expr_list) ~ ")" |
     "->" ~ (#field=ident) |
+    "[" ~ (#type=type) ~ "]" |
     "[" ~ (#i=nat) ~ "]" |
     "[" ~ (#j=nat) ~ ".." ~ (#i=nat) ~ "]"
 }
