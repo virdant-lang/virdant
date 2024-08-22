@@ -250,7 +250,7 @@ impl<'a> TypingContext<'a> {
             let expr = self.virdant.exprroots[exprroot].children[0].clone();
             let expr_typ  = self.infer(expr)?;
 
-            if !expected_typ.is_word() {
+            if !expr_typ.is_word() {
                 return Err(VirErr::TypeError(format!("Argument of zext must be a word.")))
             }
 
