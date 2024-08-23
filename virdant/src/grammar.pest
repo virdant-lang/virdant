@@ -46,7 +46,7 @@ structdef = {
 }
 
 builtindef = {
-    kw_builtin ~ kw_type ~ (#name=ident) ~ "{" ~
+    kw_builtin ~ kw_type ~ (#name=ident) ~ ("[" ~ (#params=typeparams_list) ~ "]")? ~ "{" ~
     "}"
 }
 
@@ -143,6 +143,10 @@ arg_list = {
 
 typeargs_list = {
     (typearg ~ ("," ~ typearg)* ~ ","?)?
+}
+
+typeparams_list = {
+    (typeparam ~ ("," ~ typeparam)* ~ ","?)?
 }
 
 pat_list = {
@@ -246,6 +250,15 @@ typearg = {
     nat
 }
 
+typeparam = {
+    (#name=ident) ~ ":" ~ (#kind=kind)
+}
+
+kind = {
+    kw_type_kind |
+    kw_nat_kind
+}
+
 path = @{ ident ~ ("." ~ ident)* }
 
 socket_role = {
@@ -308,6 +321,8 @@ kw_master       = @{ "master"     ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_slave        = @{ "slave"      ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_true         = @{ "true"       ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_false        = @{ "false"      ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_type_kind    = @{ "Type"       ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_nat_kind     = @{ "Nat"        ~ !(ASCII_ALPHANUMERIC | "_") }
 
 keyword = {
     kw_ext |
@@ -336,7 +351,9 @@ keyword = {
     kw_mosi |
     kw_miso |
     kw_true |
-    kw_false
+    kw_false |
+    kw_type_kind |
+    kw_nat_kind
 }
 
 
