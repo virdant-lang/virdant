@@ -238,7 +238,7 @@ impl Verilog {
                 }
             },
             Expr::Bit(bit) => {
-                let gs = self.gensym();
+                let gs = self.gensym_hint("bit_literal");
                 if bit.value() {
                     writeln!(f, "    wire {gs} = 1'b1;")?;
                 } else {
@@ -247,14 +247,14 @@ impl Verilog {
                 Ok(gs)
             },
             Expr::Word(word) => {
-                let gs = self.gensym();
+                let gs = self.gensym_hint("word_lit");
                 let typ = expr.typ();
                 let width_str = self.width_str(&typ);
                 writeln!(f, "    wire {width_str} {gs} = {}'d{};", word.width(), word.value())?;
                 Ok(gs)
             },
             Expr::Cat(cat) => {
-                let gs = self.gensym();
+                let gs = self.gensym_hint("cat");
                 let mut arg_ssas: Vec<SsaName> = vec![];
                 for arg in cat.args() {
                     let arg_ssa = self.verilog_expr(f, arg.clone(), ctx.clone())?;
@@ -267,7 +267,7 @@ impl Verilog {
             Expr::Idx(idx) => {
                 let subject = idx.subject();
                 let i = idx.idx();
-                let gs = self.gensym();
+                let gs = self.gensym_hint("idx");
                 let subject_ssa = self.verilog_expr(f, subject, ctx)?;
                 if idx.subject().typ().typ.width() > 1 {
                     writeln!(f, "    wire {gs} = {subject_ssa}[{i}];")?;
@@ -280,7 +280,7 @@ impl Verilog {
                 let subject = idx.subject();
                 let i = idx.idx_lo();
                 let j = idx.idx_hi();
-                let gs = self.gensym();
+                let gs = self.gensym_hint("idxrange");
                 let subject_ssa = self.verilog_expr(f, subject.clone(), ctx)?;
                 let end = j - 1;
                 let width_str = self.width_str(&idx.typ());
@@ -291,7 +291,7 @@ impl Verilog {
                 let subject = meth.subject();
                 let args = meth.args();
                 let method = meth.method().name().to_string();
-                let gs = self.gensym();
+                let gs = self.gensym_hint("methodcall");
                 let subject_ssa = self.verilog_expr(f, subject.clone(), ctx.clone())?;
                 let mut args_ssa: Vec<SsaName> = vec![];
                 self.verilog_expr(f, subject.clone(), ctx.clone())?;
@@ -328,7 +328,7 @@ impl Verilog {
             Expr::FnCall(fncall) => {
                 let args = fncall.args();
                 let fnname = fncall.name().to_string();
-                let gs = self.gensym();
+                let gs = self.gensym_hint("fncall");
 
                 let mut args_ssa: Vec<SsaName> = vec![];
                 for arg in args {
@@ -354,7 +354,7 @@ impl Verilog {
                 let a = if_.truebranch();
                 let b = if_.falsebranch();
 
-                let gs = self.gensym();
+                let gs = self.gensym_hint("if");
                 let cond_ssa = self.verilog_expr(f, c.clone(), ctx.clone())?;
                 let a_ssa = self.verilog_expr(f, a.clone(), ctx.clone())?;
                 let b_ssa = self.verilog_expr(f, b.clone(), ctx.clone())?;
@@ -363,8 +363,8 @@ impl Verilog {
                 Ok(gs)
             },
             Expr::Ctor(inner) => {
-                let gs = self.gensym();
                 let ctor = inner.ctor();
+                let gs = self.gensym_hint(&format!("ctor_{}", ctor.name()));
                 let typ = inner.typ();
 
                 let mut args_ssa: Vec<SsaName> = vec![];
@@ -400,8 +400,8 @@ impl Verilog {
                 Ok(gs)
             },
             Expr::Enumerant(inner) => {
-                let gs = self.gensym();
                 let enumerant = inner.enumerant();
+                let gs = self.gensym_hint(&format!("enumerant_{}", enumerant.name()));
                 let value = enumerant.value();
                 let typ = inner.typ();
 
@@ -494,7 +494,7 @@ impl Verilog {
                 let sign_idx = arg_typ.typ.width() - 1;
 
                 let bit_gs = self.gensym_hint("bit");
-                let gs = self.gensym();
+                let gs = self.gensym_hint("sext");
 
                 let arg_ssa = self.verilog_expr(f, inner.arg(), ctx)?;
                 writeln!(f, "    wire {bit_gs} = {arg_ssa}[{sign_idx}];")?;
@@ -510,7 +510,7 @@ impl Verilog {
 
                 let ext_width: Width = typ.typ.width() - arg_typ.typ.width();
 
-                let gs = self.gensym();
+                let gs = self.gensym_hint("zext");
                 let arg_ssa = self.verilog_expr(f, inner.arg(), ctx)?;
 
                 let width_str = self.width_str(&typ);
