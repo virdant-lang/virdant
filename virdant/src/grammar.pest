@@ -214,7 +214,7 @@ expr_call_suffix = {
 }
 
 expr_base = {
-    kw_cat ~ "(" ~ (#args=expr_list) ~ ")" |
+    kw_word ~ "(" ~ (#args=expr_list) ~ ")" |
     ctor ~ "(" ~ (#args=expr_list) ~ ")" |
     struct ~ "{" ~ (#assigns=assign_list) ~ "}" |
     enumerant |
@@ -312,7 +312,7 @@ kw_of           = @{ "of"         ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_if           = @{ "if"         ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_else         = @{ "else"       ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_match        = @{ "match"      ~ !(ASCII_ALPHANUMERIC | "_") }
-kw_cat          = @{ "cat"        ~ !(ASCII_ALPHANUMERIC | "_") }
+kw_word         = @{ "word"       ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_sext         = @{ "sext"       ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_zext         = @{ "zext"       ~ !(ASCII_ALPHANUMERIC | "_") }
 kw_mosi         = @{ "mosi"       ~ !(ASCII_ALPHANUMERIC | "_") }
@@ -345,7 +345,7 @@ keyword = {
     kw_if |
     kw_else |
     kw_match |
-    kw_cat |
+    kw_word |
     kw_sext |
     kw_zext |
     kw_mosi |

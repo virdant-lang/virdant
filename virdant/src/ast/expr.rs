@@ -235,7 +235,7 @@ impl Expr {
                 args.push(Expr::from_ast(arg));
             }
             Expr::Ctor(expr_base_ast.span(), Ident::new(child.as_str()[1..].to_string()), args)
-        } else if child.is_kw_cat() {
+        } else if child.is_kw_word() {
             let mut args = vec![];
             for arg in expr_base_ast.args().unwrap() {
                 args.push(Expr::from_ast(arg));
