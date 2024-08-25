@@ -1,0 +1,22 @@
+enum type AluOp width 3 {
+    and = 1;
+    or  = 2;
+    xor = 3;
+    add = 4;
+    sub = 5;
+}
+
+mod Alu {
+    incoming a : Word[8];
+    incoming b : Word[8];
+    incoming op : AluOp;
+    outgoing r : Word[8];
+
+    r := match op {
+        #and => a->and(b);
+        #or  => a->or(b);
+        #xor => a->xor(b);
+        #add => a->add(b);
+        #sub => a->sub(b);
+    };
+}
