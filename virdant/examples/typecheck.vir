@@ -28,6 +28,9 @@ mod Top {
     wire word2 : Word[8];
     word2 := word(true, true, false, false, true, false, true, false);
 
+    wire word3 : Word[8];
+    word3 := word(#foo[Foo], #bar[Foo], #baz[Foo], true, false);
+
     wire union0 : ValidByte;
     union0 := @Valid(0);
 
