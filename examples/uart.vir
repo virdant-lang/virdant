@@ -156,21 +156,21 @@ mod UartReceiver {
             @Bit(bit, pulse) =>
                 if pulse->eq(0) {
                     if bit->eq(0) {
-                        data_reg->or(cat(0w7, uart_rx))
+                        data_reg->or(word(0w7, uart_rx))
                     } else if bit->eq(1) {
-                        data_reg->or(cat(0w7, uart_rx)->sll(1))
+                        data_reg->or(word(0w7, uart_rx)->sll(1))
                     } else if bit->eq(2) {
-                        data_reg->or(cat(0w7, uart_rx)->sll(2))
+                        data_reg->or(word(0w7, uart_rx)->sll(2))
                     } else if bit->eq(3) {
-                        data_reg->or(cat(0w7, uart_rx)->sll(3))
+                        data_reg->or(word(0w7, uart_rx)->sll(3))
                     } else if bit->eq(4) {
-                        data_reg->or(cat(0w7, uart_rx)->sll(4))
+                        data_reg->or(word(0w7, uart_rx)->sll(4))
                     } else if bit->eq(5) {
-                        data_reg->or(cat(0w7, uart_rx)->sll(5))
+                        data_reg->or(word(0w7, uart_rx)->sll(5))
                     } else if bit->eq(6) {
-                        data_reg->or(cat(0w7, uart_rx)->sll(6))
+                        data_reg->or(word(0w7, uart_rx)->sll(6))
                     } else {
-                        data_reg->or(cat(0w7, uart_rx)->sll(7))
+                        data_reg->or(word(0w7, uart_rx)->sll(7))
                     }
                 } else {
                     data_reg

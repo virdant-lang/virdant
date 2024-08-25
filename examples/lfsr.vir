@@ -10,7 +10,7 @@ mod Lfsr {
     r <= if reset {
         255w8
     } else {
-        cat(r[7..0], 0w1)->xor(if feedback { taps }  else { 0w8 })
+        word(r[7..0], 0w1)->xor(if feedback { taps }  else { 0w8 })
     };
 
     out := r;
@@ -22,6 +22,6 @@ mod Lfsr {
     s <= if reset {
         1
     } else {
-        cat(s[3..0], s[3])
+        word(s[3..0], s[3])
     };
 }

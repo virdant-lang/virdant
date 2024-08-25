@@ -19,14 +19,14 @@ mod Top {
             1
         };
 
-    wire cat0 : Word[8];
-    cat0 := cat(0w4, 15w4);
+    wire word0 : Word[8];
+    word0 := word(0w4, 15w4);
 
-    wire cat1 : Word[8];
-    cat1 := cat(0w7, true);
+    wire word1 : Word[8];
+    word1 := word(0w7, true);
 
-    wire cat2 : Word[8];
-    cat2 := cat(true, true, false, false, true, false, true, false);
+    wire word2 : Word[8];
+    word2 := word(true, true, false, false, true, false, true, false);
 
     wire union0 : ValidByte;
     union0 := @Valid(0);
@@ -61,11 +61,11 @@ mod Top {
     wire ascription : Word[8];
     ascription := 0[Word[8]];
 
-    wire cat_on_bit : Word[8];
-    cat_on_bit := cat(0w7, false);
+    wire word_on_bit : Word[8];
+    word_on_bit := word(0w7, false);
 
-    wire cat_on_enum : Word[8];
-    cat_on_bit := cat(0w6, #foo[Foo]);
+    wire word_on_enum : Word[8];
+    word_on_bit := word(0w6, #foo[Foo]);
 
     wire test_zext : Word[8];
     test_zext := zext(0w5);
