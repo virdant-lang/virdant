@@ -11,17 +11,17 @@ mod Immgen {
 
     wire typ : types::InstrType;
     typ := match opcode {
-            #OP => #R;
-            #OP_IMM => #I;
-            #LOAD => #I;
-            #STORE => #S;
-            #JAL => #J;
-            #BRANCH => #B;
-            #LUI => #U;
-            #AUIPC => #U;
-            #JALR => #I;
-            #FENCE => #I;
-            #SYSTEM => #I;
+        #OP => #R;
+        #OP_IMM => #I;
+        #LOAD => #I;
+        #STORE => #S;
+        #JAL => #J;
+        #BRANCH => #B;
+        #LUI => #U;
+        #AUIPC => #U;
+        #JALR => #I;
+        #FENCE => #I;
+        #SYSTEM => #I;
     };
 
     imm := match typ {

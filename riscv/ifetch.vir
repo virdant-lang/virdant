@@ -26,7 +26,7 @@ mod Ifetch {
     instr_mem_addr := pc;
 
     pc <= if reset {
-        0x1000
+        0x1_0000
     } else {
         match pc_advancement {
             @Next() => pc->add(4);

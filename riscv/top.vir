@@ -6,21 +6,47 @@ import alu;
 import immgen;
 import decoder;
 import ifetch;
+import memorysubsystem;
+import uart;
 
 mod Top {
     incoming clock : Clock;
 
+    outgoing uart_tx    : Bit;
+
     reg reset_hack : Word[2] on clock;
-    reset_hack <= if reset_hack->gt(0) {
-        reset_hack->dec()
+    reset_hack <= if reset_hack->lt(3) {
+        reset_hack->inc()
     } else {
-        0
+        3
     };
+
+    wire reset : Bit;
+    reset := reset_hack->eq(2);
 
     mod core of core::Core;
     core.clock := clock;
-    core.reset := reset_hack->eq(1);
+    core.reset := reset;
 
-    core.instr_mem_read_data := 0x00000513;
-    core.mem_read_data := 0w32;
+    mod instr_rom of memorysubsystem::InstrMem;
+    instr_rom.addr := core.instr_mem_addr[16..0];
+    core.instr_mem_data := instr_rom.data;
+
+    mod mem of memorysubsystem::MemorySubsystem;
+    mem.clock := clock;
+
+    mem.addr := core.mem_addr;
+    mem.write_enable := core.mem_write_enable;
+    mem.write_data   := core.mem_write_data;
+    mem.write_mask   := core.mem_write_mask;
+
+    core.mem_read_data := mem.read_data;
+
+    mod uart_sender of uart::UartSender;
+    uart_sender.clock := clock;
+    uart_sender.reset := reset;
+    uart_sender.data := core.mem_write_data[8..0];
+    uart_sender.data_valid := core.mem_write_enable->and(core.mem_addr->eq(0x4_0000));
+
+    uart_tx := uart_sender.uart_tx;
 }

@@ -8,7 +8,7 @@ import ifetch;
 
 fn mem_to_reg_data(data : Word[32], opcode : types::Opcode, funct3 : Word[3]) -> Word[32] {
     if opcode->eq(#LOAD) {
-        if funct3->eq(0b000w3) {
+        if funct3->eq(0b000w5) {
             sext(data[8..0])
         } else if funct3->eq(0b100w3) {
             zext(data[8..0])
@@ -64,13 +64,13 @@ mod Core {
     outgoing ebreak : Bit;
     outgoing exception : Bit;
 
-    outgoing instr_mem_read_addr : Word[32];
-    incoming instr_mem_read_data : Word[32];
+    outgoing instr_mem_addr : Word[32];
+    incoming instr_mem_data : Word[32];
 
+    // true when writing to memory
     outgoing mem_write_enable : Bit;
-    outgoing mem_write_addr   : Word[32];
+    outgoing mem_addr   : Word[32];
     outgoing mem_write_data   : Word[32];
-    outgoing mem_read_addr    : Word[32];
     incoming mem_read_data    : Word[32];
     outgoing mem_write_mask   : Word[4];
 
@@ -78,16 +78,15 @@ mod Core {
     ebreak    := decoder.opcode->eq(#SYSTEM)->and(decoder.funct12->eq(cat(#EBREAK[types::SystemFunct12])));
     exception := decoder.exception;
 
-    mem_read_addr  := rf.rs1_val->add(immgen.imm);
-    mem_write_addr := rf.rs1_val->add(immgen.imm);
+    mem_addr  := rf.rs1_val->add(immgen.imm);
     mem_write_data := rf.rs2_val;
     mem_write_enable := control.mem_write;
     mem_write_mask := decoder.write_mask;
 
     ifetch.pc_advancement := next_pc(decoder.opcode, rf.rs1_val, immgen.imm, alu.r);
 
-    instr_mem_read_addr := ifetch.instr_mem_addr;
-    ifetch.instr_mem_data := instr_mem_read_data;
+    instr_mem_addr := ifetch.instr_mem_addr;
+    ifetch.instr_mem_data := instr_mem_data;
 
     rf.rs1 := decoder.rs1;
     rf.rs2 := decoder.rs2;
