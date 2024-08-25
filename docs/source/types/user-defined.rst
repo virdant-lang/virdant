@@ -78,3 +78,31 @@ So, in English, the whole match statement above says:
 * If the state is idle, start it running with values `a` and `b`. (These are ports of the module).
 * If the state is running, subtract the larger or `x` and `y` from the other, or halt if `y` is zero.
 * If the state is done, move it on to idle after one cycle.
+
+
+Enum Types
+----------
+When we want to capture a number of values symbolically,
+such as a set of opcodes, we use an `enum type`.
+
+.. literalinclude:: /examples/opcodes.vir
+    :language: virdant
+    :dedent:
+    :lines: 1-7
+
+Each enum types are declared with an explicit `width`, indicating the number of bits needed to represent each value.
+Then, each enumerant is given an explicit value.
+
+To create an value of an enum type, you can use the syntax `#AND`.
+You can also match against an enum type:
+
+Just like with union types, you can pattern match on enumerants.
+
+.. literalinclude:: /examples/opcodes.vir
+    :language: virdant
+    :dedent:
+    :lines: 15-21
+
+
+To get the underlying value, you can use the `word()` construct.
+For example, `word(#XOR)` evaluates to the value `3`.

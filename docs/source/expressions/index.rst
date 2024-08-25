@@ -32,7 +32,7 @@ Components include ports, registers, the ports of submodules, and the channels o
 References of local ports and registers are just simple identifiers, like `clock` or `out` or `counter`.
 References to ports of submodules and channels of a socket will be dotted expressions: `buffer.clock`, `buffer.inp`, etc.
 
-Since using a reference implies reading it, when a reference points to a component, 
+Since using a reference implies reading it, when a reference points to a component,
 it must correspond to a component which sources values.
 You can reference a `reg` or an `incoming` port, but you cannot reference an `outgoing` port.
 
@@ -82,19 +82,21 @@ Some important methods include:
 
 Concatenation
 -------------
-You can concatenate words with the syntax `cat(a, b)`.
+You can concatenate words with the syntax `word(a, b)`.
 
-The syntax is variadic, and so you can write things like `cat(a, b, c, d)`.
-You can also write `cat(a)` to cast `a` (if it's a `Bit` to a `Word[1]`),
-or write `cat()` to generate the zero value of `Word[0]`.
-
-Each argument of `cat` must have an inferrable type.
-Each must have a `Word` type or else must have type `Bit`.
-
+The syntax is variadic, and so you can write things like `word(a, b, c, d)`.
+Each argument of `word` must have an inferrable type.
+The type of each one must be one of `Word`, `Bit`, or of an enum type.
 The result will have a `Word` type with its width equal to the sum of all the widths of all the arguments.
 
-The arguments to `cat` are ordered big-end first.
-So `cat(1w1, 0w3)` will result in the value `0b1000w4`.
+The bits of the result are ordered such that early arguments are placed in the higher-order bits.
+So `word(1w1, 0w3)` will result in the value `0b1000`.
+
+In addition to concatenation, you can use `word` to cast a value to a `Word` type.
+For example, `word(false)` will result in the value `0` and has type `Word[1]`.
+You can also use it on values of enum types.
+
+As a piece of trivia, you can also write `word()` to result in `0` with type `Word[0]`.
 
 
 Indexing
@@ -116,7 +118,6 @@ The two indexes must be literal integers.
 Both must be in the range of `0` to `n - 1`.
 Moreover, the high index comes first and must be greater than or equal to the lower index.
 
-
 .. warning::
 
     Note that this is totally different from how Verilog indexes.
@@ -133,7 +134,38 @@ Thus, the result is `Word[2]`.
 `if` expressions be used to create mux trees with one or more conditions.
 All `if` expressions must have an `else` branch.
 
+.. literalinclude:: /examples/conditions.vir
+    :language: virdant
+    :dedent:
+    :lines: 6-10
+
+
+Note that the syntax does not require parentheses around the condition,
+but it *does* require curly braces.
+
+If you want to test multiple conditions, you write `else if`.
+Conditions are checked in order, as you would expect.
+
 
 `match` Statements
 ------------------
 `match` statements allow you to select an expression based on a result.
+
+
+Type Ascription
+---------------
+In some cases, you may want to supply the type of a value explicitly.
+
+Type asription in Virdant is written `e[Foo]`.
+This causes the expression `e` to be checked against type `Foo`.
+
+This is required in some cases where the typechecker needs to be able to infer an expression's type,
+such as when using `word` on an enumerant literal.
+For example, you cannot simply write `word(#xor)`, since the arguments of `word` must be inferrable,
+but there might be multiple enum types with an `#xor`.
+So instead, we write `word(#xor[AluOp])`
+
+Type ascription is also very handy when you run into a type error you don't understand,
+and you want to figure out where the source of the issue is.
+It's also an alternative way to be explicit about the width of a literal.
+Eg, `0w8` can also be written `0[Word[8]]`.

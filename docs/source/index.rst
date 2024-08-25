@@ -9,7 +9,7 @@ The Virdant Hardware Language
   types/index
   expressions/index
   principles
-  Repository <https://github.com/virdant/>
+  Repository <https://github.com/virdant-lang/virdant>
   Crate Docs <https://virdant.org/doc/virdant/>
 
 Virdant is a modern hardware description language.
@@ -26,4 +26,4 @@ Some notable painpoints include:
 
 The other industry standard VHDL suffers from the fact the author of Virdant doesn't know it and doesn't want to know it.
 
-Repository: `https://github.com/virdant/virdant <https://github.com/virdant/virdant>`_
+Repository: `https://github.com/virdant-lang/virdant <https://github.com/virdant-lang/virdant>`_

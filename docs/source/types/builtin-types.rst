@@ -27,7 +27,7 @@ A `Word[n]` is an n-bit value.
 When used as a number, it is interpreted to be unsigned integer in 2's complement.
 
 Note that `Word[1]` and `Bit` are distinct types.
-You can cast between them with `w[0]` (to go from `Word[1]` to `Bit`) or `cat(b)` (to go from `Bit` to `Word[1]`).
+You can cast between them with `w[0]` (to go from `Word[1]` to `Bit`) or `word(b)` (to go from `Bit` to `Word[1]`).
 
 Finally, `Word[0]` is a legal type.
 It has zero-width and requires special handling when compiling to Verilog.
