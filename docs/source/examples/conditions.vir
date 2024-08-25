@@ -1,0 +1,11 @@
+mod Top {
+    incoming clock : Clock;
+    incoming reset : Bit;
+
+    reg counter : Word[8] on clock;
+    counter <= if reset {
+        0
+    } else {
+        counter->inc()
+    };
+}
