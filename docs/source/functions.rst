@@ -16,13 +16,8 @@ and the return type is given after the arrow.
 
 The body of the function definition is a single expression which may make use of the parameters.
 
-To call a function, we do so as you would in math class:
-
-.. literalinclude:: /examples/maximum.vir
-    :language: virdant
-    :lines: 20
-    :dedent:
-
+To call a function, we do so as you would in math class: `max(a, b)`,
+where `a` and `b` can be any two expressions of the proper type.
 
 Even when a function is only used in one place, they still provide two key benefits.
 First, they allow you to name a piece of logic in a way that is meaningful to anyone who reads your code.
