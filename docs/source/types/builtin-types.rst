@@ -2,8 +2,8 @@ Builtin Types
 =============
 Virdant includes the following built-in types:
 
-`Clock`
--------
+Clock
+-----
 A `Clock` is a clock.
 It represents a 1-bit signal that oscillates at a fixed frequency in standard operation.
 
@@ -15,13 +15,13 @@ There are no safe operations which can manipulate or inspect values of type `Clo
 All you are allowed to do with clocks is pass them around through ports or to associate them to `reg`\s using the `on` keyword.
 
 
-`Bit`
------
+Bit
+---
 A `Bit` is a 1-bit value.
 
 
-`Word[n]`
----------
+Word
+----
 A `Word[n]` is an n-bit value.
 
 When used as a number, it is interpreted to be unsigned integer in 2's complement.

@@ -129,8 +129,8 @@ In the example `w[8..6]`, the result is a `Word` type with width 8 - 6.
 Thus, the result is `Word[2]`.
 
 
-`if` Expressions
-----------------
+If Expressions
+--------------
 `if` expressions be used to create mux trees with one or more conditions.
 All `if` expressions must have an `else` branch.
 
@@ -147,9 +147,9 @@ If you want to test multiple conditions, you write `else if`.
 Conditions are checked in order, as you would expect.
 
 
-`match` Statements
-------------------
-`match` statements allow you to select an expression based on a result.
+Match Expressions
+-----------------
+`match` expressions allow you to select an expression based on a result.
 
 
 Type Ascription
