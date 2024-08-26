@@ -6,7 +6,7 @@ Each user-defined type belongs to one of the following type schemes:
 
 
 Struct Types
-------------
+============
 A `struct type` is a type which breaks down into several fields.
 
 For example, suppose you were writing hardware which made heavy use of 24-bit RGB color values.
@@ -26,7 +26,7 @@ If you are given a value of type `Color`, you can project out each field using t
 
 
 Union Types
------------
+===========
 A `union type` is what's sometimes known as an algebraic data type.
 Some programming languages also call them `enum` types.
 
@@ -81,7 +81,7 @@ So, in English, the whole match statement above says:
 
 
 Enum Types
-----------
+==========
 When we want to capture a number of values symbolically,
 such as a set of opcodes, we use an `enum type`.
 
