@@ -10,7 +10,6 @@ The Virdant Hardware Language
   expressions/index
   principles
   Repository <https://github.com/virdant-lang/virdant>
-  Crate Docs <https://virdant.org/doc/virdant/>
 
 Virdant is a modern hardware description language.
 
