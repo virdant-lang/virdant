@@ -10,6 +10,7 @@ The Virdant Hardware Language
   expressions/index
   packages
   functions
+  sockets
   principles
   coding-conventions
   Repository <https://github.com/virdant-lang/virdant>

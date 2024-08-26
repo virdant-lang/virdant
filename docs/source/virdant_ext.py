@@ -16,7 +16,7 @@ class VirdantLexer(RegexLexer):
         'incoming', 'outgoing', 'enum', 'of', 'type',
         'fn', 'pub', 'otherwise', 'match', 'union', 'struct', 'enum', 'builtin',
         'implicit', 'socket', 'master', 'slave', 'word', 'zext', 'sext',
-        'import'
+        'import', 'mosi', 'miso',
     ]
 
     BUILTINS = ['Bit', 'Word', 'Vec', 'tuple', 'Nat', 'Shape', 'io']
