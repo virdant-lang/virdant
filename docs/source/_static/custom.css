@@ -1,14 +1,89 @@
+p {
+    font-family: "Nunito", sans-serif !important;
+/*    font-optical-sizing: auto; */
+    font-weight: 600;
+    font-style: normal;
+    font-size: 17px !important;
+    line-height: 1.6 !important;
+}
+
+code, pre {
+    font-family: "Fira Mono", monospace !important;
+    font-weight: 100;
+    font-style: normal;
+    font-size: 17px !important;
+}
+
+@media (max-width: 600px) {
+    code, pre {
+        font-family: "Fira Mono", monospace !important;
+        font-weight: 100;
+        font-style: normal;
+        font-size: 11px !important;
+    }
+}
+
+.code {
+    background: #f8fff8 !important;
+    border: 1px solid #aaa !important;
+    border-radius: 6px;
+    padding: 1px 5px !important;
+}
+
+.literal-block-wrapper {
+    background: #e6ffe6 !important;
+    border: 1px solid #000;
+    border-radius: 25px 25px 0 0 !important;
+    margin-bottom: 24px !important;
+}
+
+.literal-block-wrapper .highlight-virdant {
+    margin-bottom: 0 !important;
+    border: 0 solid #000 !important;
+}
+
+.literal-block-wrapper .highlight-verilog {
+    margin-bottom: 0 !important;
+    border: 0 solid #000 !important;
+}
+
+.highlight-virdant {
+    margin-bottom: 24px;
+    border: 1px solid #000 !important;
+}
+
+.highlight {
+    background: #f8f8f8;
+}
+
+div.code-block-caption {
+    background: #e6ffe6 !important;
+    border-radius: 25px 25px 0 0 !important;
+    display: flex;
+    justify-content: center;
+    font-family: "Fira Mono", monospace !important;
+    font-weight: 100;
+    font-style: normal;
+    font-size: 17px !important;
+    border-bottom: 1px solid #000 !important;
+}
+
 .rst-content code.literal, .rst-content tt.literal {
     color: inherit;
     white-space: nowrap;
 }
 
+.wy-side-nav-search a, .wy-nav-top a {
+    color: #333 !important;
+}
+
 .wy-side-nav-search {
-    background-color: #167d60;
+    background-color: #a0d0a0;
 }
 
 .wy-nav-top {
-    background-color: #167d60;
+    color: #333 !important;
+    background-color: #a0d0a0;
 }
 
 /*********************************************************************************/
