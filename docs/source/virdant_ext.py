@@ -12,10 +12,10 @@ class VirdantLexer(RegexLexer):
     filenames = ['*.vir']
 
     KEYWORDS = [
-        'top', 'reg', 'node', 'mod', 'ext', 'if', 'else', 'on',
+        'top', 'reg', 'wire', 'mod', 'ext', 'if', 'else', 'on',
         'incoming', 'outgoing', 'enum', 'of', 'type',
-        'fn', 'pub', 'otherwise', 'match', 'union', 'struct',
-        'implicit',
+        'fn', 'pub', 'otherwise', 'match', 'union', 'struct', 'enum', 'builtin',
+        'implicit', 'socket', 'master', 'slave', 'word', 'zext', 'sext',
     ]
 
     BUILTINS = ['Bit', 'Word', 'Vec', 'tuple', 'Nat', 'Shape', 'io']
