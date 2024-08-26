@@ -121,7 +121,7 @@ Moreover, the high index comes first and must be greater than or equal to the lo
 .. warning::
 
     Note that this is totally different from how Verilog indexes.
-    It was chosen so thta we preserve the ordering of the indexes (high bit first),
+    It was chosen so that we preserve the ordering of the indexes (high bit first),
     but otherwise mirrors what is conventional in most programming languages.
 
 The result of a slice index is `Word[k]` where `k` is the difference between the high and low index.
