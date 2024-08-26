@@ -5,7 +5,7 @@ The Virdant Hardware Language
   :hidden:
 
   getting-started
-  modules
+  modules/index
   types/index
   expressions/index
   principles
