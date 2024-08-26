@@ -1,0 +1,22 @@
+import buffer;
+
+mod Top {
+    incoming clock : Clock;
+    outgoing out : Word[4];
+
+    reg counter : Word[4] on clock;
+    counter <= counter->inc();
+
+    mod buffer of buffer::Buffer;
+    buffer.clock := clock;
+    buffer.inp := counter;
+
+    wire counter_is_zero : Bit;
+    counter_is_zero := counter->eq(0);
+
+    out := if counter_is_zero {
+        0
+    } else {
+        buffer.out
+    };
+}

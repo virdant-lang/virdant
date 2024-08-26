@@ -8,6 +8,7 @@ The Virdant Hardware Language
   modules/index
   types/index
   expressions/index
+  packages
   principles
   coding-conventions
   Repository <https://github.com/virdant-lang/virdant>

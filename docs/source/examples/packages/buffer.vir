@@ -1,0 +1,10 @@
+mod Buffer {
+    incoming clock : Clock;
+    incoming inp : Word[4];
+    outgoing out : Word[4];
+
+    reg queue : Word[4] on clock;
+    queue <= inp;
+
+    out := queue;
+}
