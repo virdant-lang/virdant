@@ -1,0 +1,22 @@
+mod Top {
+    incoming inp : Valid;
+    outgoing out : Word[8];
+
+    out :=
+        match inp {
+            @Invalid() => 0;
+            @Valid(payload) => payload;
+        };
+
+    wire another : Word[8];
+    another :=
+        match inp : Valid {
+            @Invalid() => 0;
+            @Valid(payload) => payload;
+        };
+}
+
+union type Valid {
+    Invalid();
+    Valid(payload : Word[8]);
+}

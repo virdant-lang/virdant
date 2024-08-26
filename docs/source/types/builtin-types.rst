@@ -18,6 +18,8 @@ All you are allowed to do with clocks is pass them around through ports or to as
 Bit
 ---
 A `Bit` is a 1-bit value.
+It is the analog of the boolean type found in programming langauges.
+Its values are `true` and `false`.
 
 
 Word

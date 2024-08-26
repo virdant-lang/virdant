@@ -2,6 +2,7 @@ Expressions
 ===========
 Expressions represent combinational logic.
 
+
 Literals
 --------
 Literals are hard-coded constants.
@@ -53,6 +54,7 @@ For example, in the match expression:
 The reference `payload` on the right hand side of the `=>` references the locally-bound variable (of the same name)
 declared inside the pattern on the left hand side: `@Valid(payload)`.
 
+
 Methods
 -------
 A type may define methods, similar to many programming languages.
@@ -65,19 +67,19 @@ The method supplies a type signature which gives each argument an expected type,
 
 Some important methods include:
 
-* `a->inc()` (increment `a`)
-* `a->dec()` (decrement `a`)
-* `a->add(b)` (add `a` and `b`)
-* `a->sub(b)` (subtract `b` from `a`)
-* `a->not()` (logical NOT `a`)
-* `a->and(b)` (logical AND `a` with `b`)
-* `a->or(b)` (logical OR `a` with `b`)
-* `a->xor(b)` (logical XOR `a` with `b`)
-* `a->eq(b)` (test if `a` equals `b`)
-* `a->neq(b)` (test if `a` does not equal `b`)
-* `a->gt(b)` (test if `a` is greater than `b`)
-* `a->lt(b)` (test if `a` is less than `b`)
-* `a->get(i)` (dynamically index into `a` to get bit `i`)
+* `a->inc()` increment `a`
+* `a->dec()` decrement `a`
+* `a->add(b)` add `a` and `b`
+* `a->sub(b)` subtract `b` from `a`
+* `a->not()` logical NOT `a`
+* `a->and(b)` logical AND `a` with `b`
+* `a->or(b)` logical OR `a` with `b`
+* `a->xor(b)` logical XOR `a` with `b`
+* `a->eq(b)` test if `a` equals `b`
+* `a->neq(b)` test if `a` does not equal `b`
+* `a->gt(b)` test if `a` is greater than `b`
+* `a->lt(b)` test if `a` is less than `b`
+* `a->get(i)` dynamically index into `a` to get bit `i`
 
 
 Concatenation
@@ -150,6 +152,24 @@ Conditions are checked in order, as you would expect.
 Match Expressions
 -----------------
 `match` expressions allow you to select an expression based on a result.
+
+A match statement can be used to break a value apart and then analyze the pieces.
+Think of it as a powerful version of the `if` statement.
+It works nicely with union types and enum types.
+
+Here is an example:
+
+.. literalinclude:: /examples/matches.vir
+    :language: virdant
+    :dedent:
+    :lines: 6-9
+
+You may optionally place a colon and a type to give a type ascription here:
+
+.. literalinclude:: /examples/matches.vir
+    :language: virdant
+    :dedent:
+    :lines: 13-16
 
 
 Type Ascription
