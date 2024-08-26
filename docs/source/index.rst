@@ -9,6 +9,7 @@ The Virdant Hardware Language
   types/index
   expressions/index
   principles
+  coding-conventions
   Repository <https://github.com/virdant-lang/virdant>
 
 Virdant is a modern hardware description language.
