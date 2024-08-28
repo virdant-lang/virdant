@@ -27,7 +27,7 @@ Be considerate of others who might want to read and understand your code.
 Make good use of your IDE, including autocomplete, to save effort on typing.
 
 The names of module definitions, types, and sockets should begin with an uppercase letter.
-Everythign else, including the names of function definitions, should begin with a lowercase letter.
+Everything else, including the names of function definitions, should begin with a lowercase letter.
 
 For names that begin with an uppercase letter, use camel case.
 For abbreviations that appear in names, such as SPI, UART, or DDR, only the first letter is capitalized.
@@ -39,7 +39,7 @@ A good name for a UART receiver is `uart_receiver`.
 
 Types
 -----
-Whenever you give the type of a component, you should put a place both before and after the colon.
+Whenever you give the type of a component, you should put a space both before and after the colon.
 That is, we write `wire w : Bit` instead of `wire w: Bit`.
 
 When declaring many components on consecutive lines, if adding a few extra spaces would cause the colons to line up,
