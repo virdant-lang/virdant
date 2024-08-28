@@ -169,7 +169,7 @@ assign = {
 expr = {
     expr_if |
     expr_match |
-    expr_call
+    expr_logic
 }
 
 expr_if = {
@@ -194,11 +194,40 @@ expr_match_arm = {
     (#pat=pat) ~ "=>" ~ (#expr=expr) ~ ";"
 }
 
+expr_logic = {
+    expr_cmp ~ bin_op_logic ~ expr_cmp |
+    expr_cmp
+}
+
+bin_op_logic = {
+    "&&" |
+    "||"
+}
+
+expr_cmp = {
+    expr_call ~ bin_op_cmp ~ expr_call |
+    expr_call
+}
+
+bin_op_cmp = {
+    "==" |
+    "!=" |
+    "<"  |
+    "<=" |
+    ">"  |
+    ">="
+}
+
 expr_call = {
+    unop ~ expr |
     kw_sext ~ "(" ~ (#arg=expr) ~ ")" |
     kw_zext ~ "(" ~ (#arg=expr) ~ ")" |
     (#fn=qualident) ~ "(" ~ (#args=expr_list) ~ ")" |
     expr_method
+}
+
+unop = {
+    "!"
 }
 
 expr_method = {

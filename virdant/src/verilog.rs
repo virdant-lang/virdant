@@ -287,6 +287,38 @@ impl Verilog {
                 writeln!(f, "    wire {width_str} {gs} = {subject_ssa}[{end}:{i}];")?;
                 Ok(gs)
             },
+            Expr::UnOp(unop) => {
+                let gs = self.gensym_hint("unop");
+                let subject = unop.subject();
+                let subject_ssa = self.verilog_expr(f, subject.clone(), ctx)?;
+                let width_str = self.width_str(&unop.typ());
+
+                match unop.op() {
+                    "!" => writeln!(f, "    wire {width_str} {gs} = !{subject_ssa};")?,
+                    _ => unreachable!(),
+                }
+
+                Ok(gs)
+            },
+            Expr::BinOp(binop) => {
+                let gs = self.gensym_hint("binop");
+                let width_str = self.width_str(&binop.typ());
+
+                let left_ssa = self.verilog_expr(f, binop.left(), ctx.clone())?;
+                let right_ssa = self.verilog_expr(f, binop.right(), ctx.clone())?;
+
+                match binop.op() {
+                    "==" => writeln!(f, "    wire {width_str} {gs} = {left_ssa} == {right_ssa};")?,
+                    "!=" => writeln!(f, "    wire {width_str} {gs} = {left_ssa} != {right_ssa};")?,
+                    "<" => writeln!(f, "    wire {width_str} {gs} = {left_ssa} < {right_ssa};")?,
+                    "<=" => writeln!(f, "    wire {width_str} {gs} = {left_ssa} <= {right_ssa};")?,
+                    ">" => writeln!(f, "    wire {width_str} {gs} = {left_ssa} > {right_ssa};")?,
+                    ">=" => writeln!(f, "    wire {width_str} {gs} = {left_ssa} >= {right_ssa};")?,
+                    _ => unreachable!(),
+                }
+
+                Ok(gs)
+            },
             Expr::MethodCall(meth) => {
                 let subject = meth.subject();
                 let args = meth.args();

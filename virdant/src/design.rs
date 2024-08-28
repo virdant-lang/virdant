@@ -465,6 +465,8 @@ impl ExprRoot {
             crate::ast::Expr::Word(_, _) => Expr::Word(expr::Word { root, id, info }),
             crate::ast::Expr::Bit(_, _) => Expr::Bit(expr::Bit { root, id, info }),
             crate::ast::Expr::FnCall(_, _, _) => Expr::FnCall(expr::FnCall { root, id, info }),
+            crate::ast::Expr::UnOp(_, _, _,) => Expr::UnOp(expr::UnOp { root, id, info }),
+            crate::ast::Expr::BinOp(_, _, _, _) => Expr::BinOp(expr::BinOp { root, id, info }),
             crate::ast::Expr::MethodCall(_, _, _, _) => Expr::MethodCall(expr::MethodCall { root, id, info }),
             crate::ast::Expr::Field(_, _, _) => Expr::Field(expr::Field { root, id, info }),
             crate::ast::Expr::Struct(_, _, _) => Expr::Struct(expr::Struct { root, id, info }),
@@ -725,6 +727,8 @@ pub enum Expr {
     Word(expr::Word),
     Bit(expr::Bit),
     FnCall(expr::FnCall),
+    UnOp(expr::UnOp),
+    BinOp(expr::BinOp),
     MethodCall(expr::MethodCall),
     Struct(expr::Struct),
     Field(expr::Field),
@@ -746,6 +750,8 @@ impl Expr {
             Expr::Reference(reference) => reference.typ(),
             Expr::Word(word) => word.typ(),
             Expr::Bit(bit) => bit.typ(),
+            Expr::UnOp(unop) => unop.typ(),
+            Expr::BinOp(binop) => binop.typ(),
             Expr::MethodCall(methodcall) => methodcall.typ(),
             Expr::FnCall(fncall) => fncall.typ(),
             Expr::Struct(struct_) => struct_.typ(),
@@ -844,7 +850,7 @@ impl Binding {
 }
 
 mod expr {
-    use crate::ast::expr::MatchArm;
+    use crate::ast::{self, expr::MatchArm};
 
     use super::*;
 
@@ -881,6 +887,8 @@ mod expr {
     expr_type!(Reference);
     expr_type!(Word);
     expr_type!(Bit);
+    expr_type!(UnOp);
+    expr_type!(BinOp);
     expr_type!(MethodCall);
     expr_type!(FnCall);
     expr_type!(Struct);
@@ -936,6 +944,44 @@ mod expr {
             } else {
                 unreachable!()
             }
+        }
+    }
+
+    impl UnOp {
+        pub fn op(&self) -> &str {
+            if let ast::expr::Expr::UnOp(_, op, _) = self.info.ast.unwrap().as_ref() {
+                return &*op;
+            } else {
+                unreachable!()
+            }
+        }
+
+        pub fn subject(&self) -> Expr {
+            let subject: Id<_> = self.info.children[0];
+            let exprroot = self.root().exprroots[&subject].clone();
+            exprroot.to_expr()
+        }
+    }
+
+    impl BinOp {
+        pub fn op(&self) -> &str {
+            if let ast::expr::Expr::BinOp(_, _, op, _) = self.info.ast.unwrap().as_ref() {
+                return &*op;
+            } else {
+                unreachable!()
+            }
+        }
+
+        pub fn left(&self) -> Expr {
+            let subject: Id<_> = self.info.children[0];
+            let exprroot = self.root().exprroots[&subject].clone();
+            exprroot.to_expr()
+        }
+
+        pub fn right(&self) -> Expr {
+            let subject: Id<_> = self.info.children[1];
+            let exprroot = self.root().exprroots[&subject].clone();
+            exprroot.to_expr()
         }
     }
 
