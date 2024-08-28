@@ -135,6 +135,8 @@ impl Ast {
     pub fn is_expr_if(&self) -> bool { self.rule() == Rule::expr_if }
     pub fn is_expr_match(&self) -> bool { self.rule() == Rule::expr_match }
     pub fn is_expr_method(&self) -> bool { self.rule() == Rule::expr_method }
+    pub fn is_expr_logic(&self) -> bool { self.rule() == Rule::expr_logic }
+    pub fn is_expr_cmp(&self) -> bool { self.rule() == Rule::expr_cmp }
     pub fn is_expr_call(&self) -> bool { self.rule() == Rule::expr_call }
     pub fn is_expr_base(&self) -> bool { self.rule() == Rule::expr_base }
     pub fn is_wordlit(&self) -> bool { self.rule() == Rule::wordlit }
@@ -142,6 +144,7 @@ impl Ast {
     pub fn is_path(&self) -> bool { self.rule() == Rule::path }
     pub fn is_struct(&self) -> bool { self.rule() == Rule::r#struct }
     pub fn is_enumerant(&self) -> bool { self.rule() == Rule::enumerant }
+    pub fn is_unop(&self) -> bool { self.rule() == Rule::unop }
 
     pub fn is_kw_if(&self) -> bool { self.rule() == Rule::kw_if }
     pub fn is_kw_else(&self) -> bool { self.rule() == Rule::kw_else }

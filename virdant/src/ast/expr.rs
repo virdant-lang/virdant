@@ -18,6 +18,8 @@ pub enum Expr {
     Reference(Span, Path),
     Word(Span, WordLit),
     Bit(Span, bool),
+    UnOp(Span, Ident, Arc<Expr>),
+    BinOp(Span, Arc<Expr>, Ident, Arc<Expr>),
     MethodCall(Span, Arc<Expr>, Ident, Vec<Arc<Expr>>),
     FnCall(Span, Ident, Vec<Arc<Expr>>),
     Field(Span, Arc<Expr>, Ident),
@@ -74,8 +76,8 @@ impl Expr {
             Expr::ast_to_expr_if(child)
         } else if child.is_expr_match() {
             Expr::ast_to_expr_match(child)
-        } else if child.is_expr_call() {
-            Expr::ast_to_expr_call(child)
+        } else if child.is_expr_logic() {
+            Expr::ast_to_expr_logic(child)
         } else if child.is_expr_method() {
             Expr::ast_to_expr_method(child)
         } else {
@@ -157,9 +159,42 @@ impl Expr {
         }
     }
 
+    fn ast_to_expr_logic(expr_logic_ast: Ast) -> Arc<Expr> {
+        let children = expr_logic_ast.children().collect::<Vec<_>>();
+        if children.len() > 1 {
+            let span = expr_logic_ast.span();
+            let op = children[1].as_str();
+            let left = Expr::ast_to_expr_eq(children[0].clone());
+            let right = Expr::ast_to_expr_eq(children[2].clone());
+            Arc::new(Expr::BinOp(span, left, Intern::new(op.to_string()), right))
+        } else {
+            let child = expr_logic_ast.child(0);
+            Expr::ast_to_expr_eq(child)
+        }
+    }
+
+    fn ast_to_expr_eq(expr_logic_ast: Ast) -> Arc<Expr> {
+        let children = expr_logic_ast.children().collect::<Vec<_>>();
+        if children.len() > 1 {
+            let span = expr_logic_ast.span();
+            let op = children[1].as_str();
+            let left = Expr::ast_to_expr_call(children[0].clone());
+            let right = Expr::ast_to_expr_call(children[2].clone());
+            Arc::new(Expr::BinOp(span, left, Intern::new(op.to_string()), right))
+        } else {
+            let child = expr_logic_ast.child(0);
+            Expr::ast_to_expr_call(child)
+        }
+    }
+
     fn ast_to_expr_call(expr_call_ast: Ast) -> Arc<Expr> {
         let child = expr_call_ast.child(0);
-        if child.is_kw_zext() {
+        if child.is_unop() {
+            let op = expr_call_ast.child(0).as_str().to_string();
+            let subject_ast = expr_call_ast.child(1);
+            let subject = Expr::from_ast(subject_ast);
+            Arc::new(Expr::UnOp(expr_call_ast.span(), Intern::new(op), subject))
+        } else if child.is_kw_zext() {
             let arg_ast = expr_call_ast.child(1);
             let arg = Expr::from_ast(arg_ast);
             Arc::new(Expr::Zext(expr_call_ast.span(), arg))
@@ -315,6 +350,13 @@ impl Expr {
         let mut results = vec![];
 
         match self {
+            Expr::UnOp(_, _, s) => {
+                results.push(s.clone());
+            },
+            Expr::BinOp(_, l, _, r) => {
+                results.push(l.clone());
+                results.push(r.clone());
+            },
             Expr::MethodCall(_, s, _, es) => {
                 results.push(s.clone());
                 results.extend(es.iter().cloned().collect::<Vec<_>>());
@@ -376,6 +418,8 @@ impl Expr {
             Expr::Reference(_, _) => format!("Reference"),
             Expr::Word(_, _) => format!("Word"),
             Expr::Bit(_, _) => format!("Bit"),
+            Expr::UnOp(_, _, _) => format!("UnOp"),
+            Expr::BinOp(_, _, _, _) => format!("BinOp"),
             Expr::MethodCall(_, _, _, _) => format!("MethodCall"),
             Expr::FnCall(_, _, _) => format!("FnCall"),
             Expr::Field(_, _, _) => format!("Field"),
@@ -398,6 +442,8 @@ impl Expr {
             Expr::Reference(span, _) => *span,
             Expr::Word(span, _) => *span,
             Expr::Bit(span, _) => *span,
+            Expr::UnOp(span, _, _) => *span,
+            Expr::BinOp(span, _, _, _) => *span,
             Expr::MethodCall(span, _, _, _) => *span,
             Expr::FnCall(span, _, _) => *span,
             Expr::Field(span, _, _) => *span,

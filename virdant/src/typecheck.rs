@@ -130,6 +130,8 @@ impl<'a> TypingContext<'a> {
             Expr::As(_span, _subject, typ_ast) => self.infer_as(exprroot, typ_ast.clone()),
             Expr::Idx(_span, _subject, i) => self.infer_idx(exprroot, *i),
             Expr::IdxRange(_span, _subject, j, i) => self.infer_idxrange(exprroot, *j, *i),
+            Expr::UnOp(_span, op, _subject) => self.infer_unop(exprroot, *op),
+            Expr::BinOp(_span, _left, op, _right) => self.infer_binop(exprroot, *op),
             Expr::MethodCall(_span, _subject, method, _args) => self.infer_methodcall(exprroot, *method),
             Expr::FnCall(_span, fndef, _args) => self.infer_fncall(exprroot, *fndef),
             Expr::Field(_span, _subject, field) => self.infer_field(exprroot, field.clone()),
@@ -355,6 +357,35 @@ impl<'a> TypingContext<'a> {
 
         }
         Err(VirErr::Other(format!("No such enumerant: {enumerant}")))
+    }
+
+    fn infer_unop(&mut self, exprroot: Id<ExprRoot>, op: Ident) -> Result<Type, VirErr> {
+        let subexprs = self.virdant.exprroots[exprroot].children.clone();
+        let subject = subexprs[0].clone();
+
+        match op.as_str() {
+            "!" => {
+                let bit_type = self.virdant.bit_type();
+                self.check(subject, bit_type)?;
+                Ok(bit_type)
+            },
+            _ => unreachable!(),
+        }
+    }
+
+    fn infer_binop(&mut self, exprroot: Id<ExprRoot>, op: Ident) -> Result<Type, VirErr> {
+        let subexprs = self.virdant.exprroots[exprroot].children.clone();
+        let left = subexprs[0].clone();
+        let right = subexprs[1].clone();
+
+        match op.as_str() {
+            "==" | "!=" | "<" | "<=" | ">" | ">=" => {
+                let left_typ = self.infer(left)?;
+                self.check(right.clone(), left_typ)?;
+                Ok(self.virdant.bit_type())
+            },
+            _ => unreachable!(),
+        }
     }
 
     fn infer_methodcall(&mut self, exprroot: Id<ExprRoot>, method: Ident) -> Result<Type, VirErr> {
