@@ -93,7 +93,7 @@ such as a set of opcodes, we use an `enum type`.
 Each enum types are declared with an explicit `width`, indicating the number of bits needed to represent each value.
 Then, each enumerant is given an explicit value.
 
-To create an value of an enum type, you can use the syntax `#AND`.
+To create a value of an enum type, you can use the syntax `#AND`.
 You can also match against an enum type:
 
 Just like with union types, you can pattern match on enumerants.
