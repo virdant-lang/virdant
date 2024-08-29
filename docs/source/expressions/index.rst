@@ -75,6 +75,8 @@ Some important methods include:
 * `a->and(b)` logical AND `a` with `b`
 * `a->or(b)` logical OR `a` with `b`
 * `a->xor(b)` logical XOR `a` with `b`
+* `a->all()` logical AND of all bits of `a`
+* `a->any()` logical OR of all bits of `a`
 * `a->eq(b)` test if `a` equals `b`
 * `a->neq(b)` test if `a` does not equal `b`
 * `a->gt(b)` test if `a` is greater than `b`
