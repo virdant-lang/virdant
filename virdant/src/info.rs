@@ -90,11 +90,12 @@ pub struct SubmoduleInfo {
     pub submodule_moddef: Ready<Id<ModDef>>,
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct SocketInfo {
     pub moddef: Ready<Id<ModDef>>,
     pub path: Vec<String>,
-    pub role: Ready<SocketRole>,
+    pub role: SocketRole,
+    pub perspective: Perspective,
     pub socketdef: Ready<Id<SocketDef>>,
 }
 
@@ -115,4 +116,16 @@ pub struct ExprRootInfo {
 
     // debug
     pub synthetic: bool,
+}
+
+impl Default for SocketInfo {
+    fn default() -> Self {
+        SocketInfo {
+            moddef: Ready::default(),
+            path: Vec::default(),
+            role: SocketRole::Master,
+            perspective: Perspective::Interior,
+            socketdef: Ready::default(),
+        }
+    }
 }

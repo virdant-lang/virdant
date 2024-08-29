@@ -1092,10 +1092,10 @@ impl Virdant {
     }
 
     fn register_exprroots_for_socket_driver(&mut self, node: Ast, moddef: Id<Item>, expr_i: &mut usize) {
-        let master_socket_name = node.master().unwrap();
-        let slave_socket_name = node.slave().unwrap();
+        let send_socket_name = node.socket_send().unwrap();
+        let recv_socket_name = node.socket_recv().unwrap();
 
-        let master_socket = match self.resolve_socket(master_socket_name, moddef) {
+        let send_socket = match self.resolve_socket(send_socket_name, moddef) {
             Ok(socket) => socket,
             Err(e) => {
                 self.errors.add(e);
@@ -1103,7 +1103,7 @@ impl Virdant {
             },
         };
 
-        let slave_socket = match self.resolve_socket(slave_socket_name, moddef) {
+        let recv_socket = match self.resolve_socket(recv_socket_name, moddef) {
             Ok(socket) => socket,
             Err(e) => {
                 self.errors.add(e);
@@ -1111,37 +1111,67 @@ impl Virdant {
             },
         };
 
-        let master_socket_info = self.sockets[master_socket].clone();
-        let slave_socket_info = self.sockets[slave_socket].clone();
+        let send_socket_info = self.sockets[send_socket].clone();
+        let recv_socket_info = self.sockets[recv_socket].clone();
 
-        let master_socketdef = master_socket_info.socketdef.unwrap();
-        let slave_socketdef = slave_socket_info.socketdef.unwrap();
+        let send_socketdef = send_socket_info.socketdef.unwrap();
+        let recv_socketdef = recv_socket_info.socketdef.unwrap();
 
-        if master_socketdef != slave_socketdef {
-            self.errors.add(VirErr::Other(format!("Port defs don't match: {master_socket_name} is {master_socketdef} while {slave_socket_name} is {slave_socketdef}.")));
+        if send_socketdef != recv_socketdef {
+            self.errors.add(VirErr::Other(format!("Port defs don't match: {send_socket_name} is {send_socketdef} while {recv_socket_name} is {recv_socketdef}.")));
             return;
         }
 
-        let socketdef_info = self.items[master_socketdef.as_item()].clone();
+        match (recv_socket_info.role, recv_socket_info.perspective, send_socket_info.role, send_socket_info.perspective) {
+            // GOOD
+            (SocketRole::Master, Perspective::Interior, SocketRole::Master, Perspective::Exterior) |
+            (SocketRole::Master, Perspective::Interior, SocketRole::Slave,  Perspective::Interior) |
+            (SocketRole::Slave,  Perspective::Exterior, SocketRole::Slave,  Perspective::Interior) |
+            (SocketRole::Slave,  Perspective::Exterior, SocketRole::Master, Perspective::Exterior) |
+            (SocketRole::Slave,  Perspective::Exterior, SocketRole::Master, Perspective::Interior) => (),
+
+            // WRONG ORDER
+            (SocketRole::Master, Perspective::Exterior, SocketRole::Slave,  Perspective::Exterior) |
+            (SocketRole::Slave,  Perspective::Interior, SocketRole::Master, Perspective::Exterior) |
+            (SocketRole::Slave,  Perspective::Interior, SocketRole::Master, Perspective::Interior) |
+            (SocketRole::Slave,  Perspective::Interior, SocketRole::Slave,  Perspective::Exterior) |
+            (SocketRole::Master, Perspective::Exterior, SocketRole::Master, Perspective::Interior) => {
+                self.errors.add(VirErr::Other(format!("Ports are in the wrong order")));
+                return;
+            }
+
+            // BAD
+            (SocketRole::Master, Perspective::Exterior, SocketRole::Master, Perspective::Exterior) => todo!(),
+            (SocketRole::Master, Perspective::Interior, SocketRole::Master, Perspective::Interior) => todo!(),
+            (SocketRole::Slave,  Perspective::Exterior, SocketRole::Slave,  Perspective::Exterior) => todo!(),
+            (SocketRole::Slave,  Perspective::Interior, SocketRole::Slave,  Perspective::Interior) => todo!(),
+            (SocketRole::Master, Perspective::Exterior, SocketRole::Slave,  Perspective::Interior) => todo!(),
+            (SocketRole::Master, Perspective::Interior, SocketRole::Slave,  Perspective::Exterior) => {
+                self.errors.add(VirErr::Other(format!("Can't connect these two ports together")));
+                return;
+            }
+        }
+
+        let socketdef_info = self.items[send_socketdef.as_item()].clone();
 
         let channels = socketdef_info.channels.unwrap();
         for channel in channels {
             let channel_info = &self.channels[*channel];
-            let master_component: Id<Component> = Id::new(format!("{moddef}::{}.{}", master_socket_info.path.join("."), &channel_info.name));
-            let slave_component: Id<Component> = Id::new(format!("{moddef}::{}.{}", slave_socket_info.path.join("."), &channel_info.name));
+            let send_component: Id<Component> = Id::new(format!("{moddef}::{}.{}", send_socket_info.path.join("."), &channel_info.name));
+            let recv_component: Id<Component> = Id::new(format!("{moddef}::{}.{}", recv_socket_info.path.join("."), &channel_info.name));
 
             let typ = channel_info.typ.unwrap().clone();
             match channel_info.dir.unwrap() {
                 ChannelDir::Mosi => {
-                    let reference_path = format!("{}.{}", master_socket_info.path.join("."), &channel_info.name);
+                    let reference_path = format!("{}.{}", send_socket_info.path.join("."), &channel_info.name);
                     let exprroot = self.register_exprroots_synthetic_reference(node.span(), &reference_path, moddef, typ, expr_i);
-                    let slave_component_info = &mut self.components[slave_component];
+                    let slave_component_info = &mut self.components[recv_component];
                     slave_component_info.driver = Some(exprroot);
                 },
                 ChannelDir::Miso => {
-                    let reference_path = format!("{}.{}", slave_socket_info.path.join("."), &channel_info.name);
+                    let reference_path = format!("{}.{}", recv_socket_info.path.join("."), &channel_info.name);
                     let exprroot = self.register_exprroots_synthetic_reference(node.span(), &reference_path, moddef, typ, expr_i);
-                    let master_component_info = &mut self.components[master_component];
+                    let master_component_info = &mut self.components[send_component];
                     master_component_info.driver = Some(exprroot);
                 },
             }
@@ -1267,7 +1297,8 @@ impl Virdant {
                     let socket_info = self.sockets.register(socket_id);
                     socket_info.moddef.set(item.cast());
                     socket_info.path = vec![socket_name.to_string()];
-                    socket_info.role.set(socket_role);
+                    socket_info.role = socket_role;
+                    socket_info.perspective = Perspective::Interior;
                     socket_info.socketdef.set(socketdef);
                     sockets.push(socket_id);
                 } else if node.is_statement() && node.child(0).is_submodule() {
@@ -1316,7 +1347,8 @@ impl Virdant {
 
                             socket_info.moddef.set(moddef);
                             socket_info.path = vec![submodule_name.to_string(), socket_name.to_string()];
-                            socket_info.role.set(socket_role);
+                            socket_info.role = socket_role;
+                            socket_info.perspective = Perspective::Exterior;
                             socket_info.socketdef.set(socketdef);
 
                             sockets.push(socket_id);
@@ -1460,6 +1492,7 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        socketdef: {:?}", socket_info.socketdef)?;
             writeln!(f, "        moddef: {:?}", socket_info.moddef)?;
             writeln!(f, "        role: {:?}", socket_info.role)?;
+            writeln!(f, "        perspective: {:?}", socket_info.perspective)?;
         }
 
         Ok(())
