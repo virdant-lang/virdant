@@ -87,7 +87,7 @@ moddef_statement_wire = { kw_wire ~ (#name=ident) ~ ":" ~ (#type=type) }
 moddef_statement_mod = { kw_mod ~ (#name=ident) ~ kw_of ~ (#of=qualident) }
 moddef_statement_socket = { (#role=socket_role) ~ kw_socket ~ (#name=ident) ~ kw_of ~ (#of=qualident) }
 moddef_statement_driver = { (#target=path) ~ (#drivertype=drivertype) ~ (#expr=expr) }
-moddef_statement_socket_driver = { (#slave=path) ~ ":=:" ~ (#master=path) }
+moddef_statement_socket_driver = { (#recv=path) ~ ":=:" ~ (#send=path) }
 
 uniondef_statement = {
     (#name=ident) ~ "(" ~ (#args=arg_list) ~ ")"

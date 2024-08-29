@@ -37,6 +37,12 @@ pub enum SocketRole {
     Slave,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub enum Perspective {
+    Exterior,
+    Interior,
+}
+
 pub fn pow(n: u64, k: u64) -> u64 {
     let mut p = 1;
     for _ in 0..k {

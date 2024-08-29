@@ -444,7 +444,11 @@ impl Socket {
     }
 
     pub fn role(&self) -> SocketRole {
-        *self.info.role.unwrap()
+        self.info.role
+    }
+
+    pub fn perspective(&self) -> Perspective {
+        self.info.perspective
     }
 }
 

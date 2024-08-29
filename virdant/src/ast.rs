@@ -181,8 +181,8 @@ impl Ast {
     pub fn subject(&self) -> Option<Ast> { self.get("subject") }
     pub fn pat(&self) -> Option<Ast> { self.get("pat") }
 
-    pub fn master(&self) -> Option<&str> { self.get_as_str("master") }
-    pub fn slave(&self) -> Option<&str> { self.get_as_str("slave") }
+    pub fn socket_send(&self) -> Option<&str> { self.get_as_str("send") }
+    pub fn socket_recv(&self) -> Option<&str> { self.get_as_str("recv") }
 
     pub fn dir(&self) -> Option<Ast> { self.get("dir") }
     pub fn is_miso(&self) -> bool { self.as_str() == "miso" }
