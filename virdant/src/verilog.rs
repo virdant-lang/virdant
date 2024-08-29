@@ -342,6 +342,8 @@ impl Verilog {
                     "and" => writeln!(f, "    wire {width_str} {gs} = {subject_ssa} & {};", args_ssa[0])?,
                     "or"  => writeln!(f, "    wire {width_str} {gs} = {subject_ssa} | {};", args_ssa[0])?,
                     "not" => writeln!(f, "    wire {width_str} {gs} = ~{subject_ssa};")?,
+                    "any" => writeln!(f, "    wire {width_str} {gs} = |{subject_ssa};")?,
+                    "all" => writeln!(f, "    wire {width_str} {gs} = &{subject_ssa};")?,
                     "xor" => writeln!(f, "    wire {width_str} {gs} = {subject_ssa} ^ {};", args_ssa[0])?,
                     "eq"  => writeln!(f, "    wire {width_str} {gs} = {subject_ssa} == {};", args_ssa[0])?,
                     "neq"  => writeln!(f, "    wire {width_str} {gs} = {subject_ssa} != {};", args_ssa[0])?,

@@ -672,7 +672,11 @@ impl<'a> TypingContext<'a> {
                     } else if *method == "neq" {
                         Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
                     } else if *method == "not" {
-                        Ok(MethodSig(vec![], typ.clone()))
+                        Ok(MethodSig(vec![typ.clone()], self.virdant.bit_type()))
+                    } else if *method == "all" {
+                        Ok(MethodSig(vec![], self.virdant.bit_type()))
+                    } else if *method == "any" {
+                        Ok(MethodSig(vec![], self.virdant.bit_type()))
                     } else if is_pow2(n) && *method == "get" {
                         let argtyp = self.virdant.word_type(clog2(n));
                         Ok(MethodSig(vec![argtyp.clone()], self.virdant.bit_type()))
