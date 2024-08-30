@@ -938,13 +938,13 @@ impl Virdant {
 
                 let channel_dir = *channel_info.dir.unwrap();
                 let flow = match (channel_dir, role, is_submodule) {
-                    (ChannelDir::Mosi, SocketRole::Slave, true) => Flow::Sink,
-                    (ChannelDir::Mosi, SocketRole::Master, true) => Flow::Source,
-                    (ChannelDir::Miso, SocketRole::Slave, true) => Flow::Source,
-                    (ChannelDir::Miso, SocketRole::Master, true) => Flow::Sink,
-                    (ChannelDir::Mosi, SocketRole::Slave, false) => Flow::Source,
+                    (ChannelDir::Mosi, SocketRole::Slave,  true)  => Flow::Sink,
+                    (ChannelDir::Mosi, SocketRole::Master, true)  => Flow::Source,
+                    (ChannelDir::Miso, SocketRole::Slave,  true)  => Flow::Source,
+                    (ChannelDir::Miso, SocketRole::Master, true)  => Flow::Sink,
+                    (ChannelDir::Mosi, SocketRole::Slave,  false) => Flow::Source,
                     (ChannelDir::Mosi, SocketRole::Master, false) => Flow::Sink,
-                    (ChannelDir::Miso, SocketRole::Slave, false) => Flow::Sink,
+                    (ChannelDir::Miso, SocketRole::Slave,  false) => Flow::Sink,
                     (ChannelDir::Miso, SocketRole::Master, false) => Flow::Source,
                 };
 
