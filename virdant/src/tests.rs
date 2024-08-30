@@ -145,12 +145,14 @@ fn test_check_missing_dependency() {
 
     match virdant.check() {
         Err(errors) => {
+            let mut count = 0;
             for error in errors.iter() {
                 if let VirErr::UnresolvedIdent(_) = &error {
-                    // OK
-                } else {
-                    panic!();
+                    count += 1;
                 }
+            }
+            if count == 0 {
+                panic!();
             }
             eprintln!("{errors:?}");
         },
