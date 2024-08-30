@@ -138,6 +138,7 @@ impl Virdant {
         self.set_fn_sigs();
         self.register_exprroots();
         self.typecheck();
+        self.drivercheck();
 
         self.errors.clone().check()?;
         Ok(self.design())
@@ -1376,6 +1377,28 @@ impl Virdant {
         }
     }
 }
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Driver Checking
+////////////////////////////////////////////////////////////////////////////////
+
+impl Virdant {
+    fn drivercheck(&mut self) {
+        let components = self.components.iter();
+        for (component, component_info) in components {
+            match *component_info.flow.unwrap() {
+                Flow::Source => (),
+                Flow::Sink | Flow::Duplex => {
+                    if component_info.driver.is_none() {
+                        self.errors.add(VirErr::NoDriver(format!("{component:?}")));
+                    }
+                },
+            }
+        }
+    }
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // For testing
