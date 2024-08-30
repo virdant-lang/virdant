@@ -5,11 +5,11 @@ mod Top {
     wire bit1 : Bit;
     bit1 := false;
 
-    wire word0 : Word[8];
-    word0 := 0w8;
+    wire wordlit0 : Word[8];
+    wordlit0 := 0w8;
 
-    wire word1 : Word[8];
-    word1 := 0;
+    wire wordlit1 : Word[8];
+    wordlit1 := 0;
 
     wire if0 : Word[8];
     if0 :=

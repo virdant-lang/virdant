@@ -1048,7 +1048,11 @@ impl Virdant {
                         exprroot_info.expected_typ = Some(typ);
 
                         let component_info = &mut self.components[component];
-                        component_info.driver = Some(exprroot);
+                        if component_info.driver.is_some() {
+                            self.errors.add(VirErr::MultipleDrivers(format!("{component:?}")));
+                        } else {
+                            component_info.driver = Some(exprroot);
+                        }
                     } else if node.child(0).is_socket_driver() {
                         self.register_exprroots_for_socket_driver(node, moddef, &mut expr_i);
                     } else if node.child(0).is_reg() {
@@ -1161,14 +1165,22 @@ impl Virdant {
                 ChannelDir::Mosi => {
                     let reference_path = format!("{}.{}", send_socket_info.path.join("."), &channel_info.name);
                     let exprroot = self.register_exprroots_synthetic_reference(node.span(), &reference_path, moddef, typ, expr_i);
-                    let slave_component_info = &mut self.components[recv_component];
-                    slave_component_info.driver = Some(exprroot);
+                    let recv_component_info = &mut self.components[recv_component];
+                    if recv_component_info.driver.is_some() {
+                        self.errors.add(VirErr::MultipleDrivers(format!("{recv_component:?}")));
+                    } else {
+                        recv_component_info.driver = Some(exprroot);
+                    }
                 },
                 ChannelDir::Miso => {
                     let reference_path = format!("{}.{}", recv_socket_info.path.join("."), &channel_info.name);
                     let exprroot = self.register_exprroots_synthetic_reference(node.span(), &reference_path, moddef, typ, expr_i);
-                    let master_component_info = &mut self.components[send_component];
-                    master_component_info.driver = Some(exprroot);
+                    let send_component_info = &mut self.components[send_component];
+                    if send_component_info.driver.is_some() {
+                        self.errors.add(VirErr::MultipleDrivers(format!("{send_component:?}")));
+                    } else {
+                        send_component_info.driver = Some(exprroot);
+                    }
                 },
             }
         }
