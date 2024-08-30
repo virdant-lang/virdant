@@ -219,6 +219,46 @@ fn test_check_wrong_drivertype() {
 }
 
 #[test]
+fn test_check_no_drivers() {
+    let mut virdant = Virdant::new(ERROR_EXAMPLES_DIR.join("no_drivers.vir"));
+
+    match virdant.check() {
+        Err(errors) => {
+            eprintln!("{errors:?}");
+            assert_eq!(errors.len(), 1);
+            for error in errors.into_iter() {
+                if let VirErr::NoDriver(_) = &error {
+                    ()
+                } else {
+                    panic!()
+                }
+            }
+        },
+        _ => panic!(),
+    }
+}
+
+#[test]
+fn test_check_multiple_drivers() {
+    let mut virdant = Virdant::new(ERROR_EXAMPLES_DIR.join("multiple_drivers.vir"));
+
+    match virdant.check() {
+        Err(errors) => {
+            eprintln!("{errors:?}");
+            assert_eq!(errors.len(), 1);
+            for error in errors.into_iter() {
+                if let VirErr::MultipleDrivers(_) = &error {
+                    ()
+                } else {
+                    panic!()
+                }
+            }
+        },
+        _ => panic!(),
+    }
+}
+
+#[test]
 fn test_typecheck() {
     let mut virdant = Virdant::new(TEST_EXAMPLES_DIR.join("typecheck.vir"));
     virdant.check().unwrap();
