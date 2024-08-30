@@ -172,9 +172,7 @@ impl Buffer {
             diagnostics.push(diagnostic);
         }
 
-        let mut virdant = Virdant::new(&[
-            ("top", self.uri[7..].to_string()),
-        ]);
+        let mut virdant = Virdant::new(self.uri[7..].to_string());
         if let Err(errs) = virdant.check() {
             for err in errs.into_iter() {
                 let message = format!("{err:?}");

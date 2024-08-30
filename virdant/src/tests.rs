@@ -5,7 +5,6 @@ use crate::*;
 const CHECK: char = '✅';
 const BATSU: char = '❌';
 
-const LIB_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| std::path::PathBuf::from("../lib"));
 const EXAMPLES_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| std::path::PathBuf::from("../examples"));
 const TEST_EXAMPLES_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| std::path::PathBuf::from("examples"));
 const ERROR_EXAMPLES_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| std::path::PathBuf::from("examples/errors"));
@@ -68,24 +67,18 @@ fn test_example_files() -> impl Iterator<Item = std::path::PathBuf> {
 
 #[test]
 fn test_top() {
-    let mut virdant = Virdant::new(&[
-        ("builtin", LIB_DIR.join("builtin.vir")),
-        ("top", TEST_EXAMPLES_DIR.join("top.vir")),
-    ]);
-
+    let mut virdant = Virdant::new(TEST_EXAMPLES_DIR.join("top.vir"));
     virdant.check().unwrap();
 }
 
 #[test]
 fn test_check_syntax_error() {
-    let mut virdant = Virdant::new(&[
-        ("top", ERROR_EXAMPLES_DIR.join("syntax_error.vir")),
-    ]);
+    let mut virdant = Virdant::new(ERROR_EXAMPLES_DIR.join("syntax_error.vir"));
 
     match virdant.check() {
         Err(errors) => {
             assert_eq!(errors.len(), 1);
-            if let VirErr::Parse(_err) = &errors[0] {
+            if let VirErr::Parse(_source, _err) = &errors[0] {
                 ()
             } else {
                 panic!()
@@ -97,9 +90,7 @@ fn test_check_syntax_error() {
 
 #[test]
 fn test_check_no_such_package() {
-    let mut virdant = Virdant::new(&[
-        ("top", ERROR_EXAMPLES_DIR.join("no_such_package.vir")),
-    ]);
+    let mut virdant = Virdant::new(ERROR_EXAMPLES_DIR.join("no_such_package.vir"));
 
     match virdant.check() {
         Err(errors) => {
@@ -116,10 +107,7 @@ fn test_check_no_such_package() {
 
 #[test]
 fn test_check_dup_import() {
-    let mut virdant = Virdant::new(&[
-        ("top", ERROR_EXAMPLES_DIR.join("dup_import.vir")),
-        ("bar", ERROR_EXAMPLES_DIR.join("bar.vir")),
-    ]);
+    let mut virdant = Virdant::new(ERROR_EXAMPLES_DIR.join("dup_import.vir"));
 
     match virdant.check() {
         Err(errors) => {
@@ -136,9 +124,7 @@ fn test_check_dup_import() {
 
 #[test]
 fn test_check_duplicate_item() {
-    let mut virdant = Virdant::new(&[
-        ("top", ERROR_EXAMPLES_DIR.join("duplicate_item.vir")),
-    ]);
+    let mut virdant = Virdant::new(ERROR_EXAMPLES_DIR.join("duplicate_item.vir"));
 
     match virdant.check() {
         Err(errors) => {
@@ -155,10 +141,7 @@ fn test_check_duplicate_item() {
 
 #[test]
 fn test_check_missing_dependency() {
-    let mut virdant = Virdant::new(&[
-        ("builtin", LIB_DIR.join("builtin.vir")),
-        ("top", ERROR_EXAMPLES_DIR.join("missing_dependency.vir")),
-    ]);
+    let mut virdant = Virdant::new(ERROR_EXAMPLES_DIR.join("missing_dependency.vir"));
 
     match virdant.check() {
         Err(errors) => {
@@ -177,10 +160,7 @@ fn test_check_missing_dependency() {
 
 #[test]
 fn test_check_item_dep_cycle() {
-    let mut virdant = Virdant::new(&[
-        ("builtin", LIB_DIR.join("builtin.vir")),
-        ("top", ERROR_EXAMPLES_DIR.join("item_dep_cycle.vir")),
-    ]);
+    let mut virdant = Virdant::new(ERROR_EXAMPLES_DIR.join("item_dep_cycle.vir"));
 
     match virdant.check() {
         Err(errors) => {
@@ -198,10 +178,7 @@ fn test_check_item_dep_cycle() {
 
 #[test]
 fn test_check_kind_error() {
-    let mut virdant = Virdant::new(&[
-        ("builtin", LIB_DIR.join("builtin.vir")),
-        ("top", ERROR_EXAMPLES_DIR.join("kind_error.vir")),
-    ]);
+    let mut virdant = Virdant::new(ERROR_EXAMPLES_DIR.join("kind_error.vir"));
 
     match virdant.check() {
         Err(errors) => {
@@ -221,10 +198,7 @@ fn test_check_kind_error() {
 
 #[test]
 fn test_check_wrong_drivertype() {
-    let mut virdant = Virdant::new(&[
-        ("builtin", LIB_DIR.join("builtin.vir")),
-        ("top", ERROR_EXAMPLES_DIR.join("wrong_drivertype.vir")),
-    ]);
+    let mut virdant = Virdant::new(ERROR_EXAMPLES_DIR.join("wrong_drivertype.vir"));
 
     match virdant.check() {
         Err(errors) => {
@@ -244,18 +218,13 @@ fn test_check_wrong_drivertype() {
 
 #[test]
 fn test_typecheck() {
-    let mut virdant = Virdant::new(&[
-        ("top", TEST_EXAMPLES_DIR.join("typecheck.vir")),
-    ]);
-
+    let mut virdant = Virdant::new(TEST_EXAMPLES_DIR.join("typecheck.vir"));
     virdant.check().unwrap();
 }
 
 #[test]
 fn test_verilog() {
-    let mut virdant = Virdant::new(&[
-        ("top", TEST_EXAMPLES_DIR.join("top.vir")),
-    ]);
+    let mut virdant = Virdant::new(TEST_EXAMPLES_DIR.join("top.vir"));
 
     let design = virdant.check().unwrap();
     eprintln!("{virdant:?}");
