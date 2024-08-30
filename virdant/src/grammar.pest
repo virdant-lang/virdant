@@ -2,6 +2,8 @@
 // Package
 ////////////////////////////////////////////////////////////////////////////////
 
+package_imports = { SOI ~ import* }
+
 package = { SOI ~ import* ~ item* ~ EOI }
 
 import = { kw_import ~ (#package=ident) ~ ";" }

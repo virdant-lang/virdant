@@ -3,10 +3,8 @@ use virdant::Virdant;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
-    let sources: &[(&str, std::path::PathBuf)] = &[
-        ("top", args[1].clone().into()),
-    ];
-    let mut virdant = Virdant::new(sources);
+    let top_path: String = args[1].clone().into();
+    let mut virdant = Virdant::new(&top_path);
 
     match virdant.check() {
         Err(errors) => {

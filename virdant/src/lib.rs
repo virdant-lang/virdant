@@ -14,6 +14,7 @@ mod ready;
 mod cycle;
 mod info;
 mod typecheck;
+mod loader;
 
 #[cfg(test)]
 mod tests;
@@ -24,6 +25,7 @@ use cycle::detect_cycle;
 use indexmap::IndexMap;
 use indexmap::IndexSet;
 use internment::Intern;
+use loader::Loader;
 use location::Span;
 use parse::QualIdent;
 use ready::Ready;
@@ -50,9 +52,10 @@ use crate::types::FnSig;
 
 /// A [`Virdant`] is a context type for manipulating Virdant designs.
 /// Call [`check()`](Virdant::check) to get a list of errors in a design.
-#[derive(Default)]
 pub struct Virdant {
     pub(crate) errors: VirErrs,
+
+    pub(crate) loader: Loader,
 
     pub(crate) packages: Table<Package, PackageInfo>,
     pub(crate) items: Table<Item, ItemInfo>,
@@ -66,28 +69,38 @@ pub struct Virdant {
     pub(crate) sockets: Table<Socket, SocketInfo>,
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
 // Public Virdant API
 ////////////////////////////////////////////////////////////////////////////////
-
 impl Virdant {
-    pub fn new<S, P>(sources: &[(S, P)]) -> Virdant
-        where
-            S: AsRef<str>,
-            P: AsRef<std::path::Path> {
-        let mut virdant = Virdant::default();
+    pub fn new<P>(top_path: P) -> Virdant
+        where P: AsRef<std::path::Path> {
+        let top_name = top_path.as_ref().file_stem().unwrap().to_string_lossy();
+        let parent_dir = top_path.as_ref().parent().unwrap().to_path_buf();
+        let mut loader = Loader::new(parent_dir);
 
-        let sources: IndexMap<String, std::path::PathBuf> = sources
-            .into_iter()
-            .map(|(s, p)| {
-                let s: String = s.as_ref().to_owned();
-                let p: std::path::PathBuf = p.as_ref().to_owned();
-                (s, p)
-            })
-            .collect();
+        loader.load(&top_name);
 
-        virdant.register_packages(sources);
+        let mut virdant = Virdant {
+            errors: Default::default(),
+            loader,
+            packages: Default::default(),
+            items: Default::default(),
+            fields: Default::default(),
+            ctors: Default::default(),
+            enumerants: Default::default(),
+            channels: Default::default(),
+            components: Default::default(),
+            exprroots: Default::default(),
+            submodules: Default::default(),
+            sockets: Default::default(),
+        };
+
+        if let Err(errs) = virdant.loader.errors() {
+            virdant.errors.extend(errs);
+        }
+
+        virdant.register_packages();
         virdant
     }
 
@@ -97,10 +110,6 @@ impl Virdant {
 
         let packages: Vec<_> = self.packages.keys().cloned().collect();
         for package in packages {
-            if let Err(errs) = self.check_all_imported_packages_exist(package) {
-                self.errors.extend(errs)
-            }
-
             if let Err(errs) = self.check_no_duplicate_imports(package) {
                 self.errors.extend(errs)
             }
@@ -141,7 +150,8 @@ impl Virdant {
 ////////////////////////////////////////////////////////////////////////////////
 
 impl Virdant {
-    fn register_packages(&mut self, sources: IndexMap<String, std::path::PathBuf>) {
+    fn register_packages(&mut self) {
+        let sources = self.loader.sources();
         let package: Id<Package> = Id::new("builtin");
         let package_info = self.packages.register(package);
         package_info.name = "builtin".to_string();
@@ -151,7 +161,7 @@ impl Virdant {
             let package: Id<Package> = Id::new(package_name.clone());
             let package_info = self.packages.register(package);
             package_info.name = package_name;
-            package_info.source = PackageSource::File(package_path);
+            package_info.source = package_path;
         }
     }
 
@@ -159,7 +169,9 @@ impl Virdant {
         let packages: Vec<_> = self.packages.keys().cloned().collect();
         for package in packages {
             match self.package_text(package) {
-                Err(err) => self.errors.add(err),
+                Err(err) => {
+                    self.errors.add(err)
+                },
                 Ok(text) => {
                     let result: Result<Ast, _> = parse::parse_package(&text);
                     match result {
@@ -167,7 +179,10 @@ impl Virdant {
                             let package_info = &mut self.packages[package];
                             package_info.ast.set(package_ast.clone());
                         },
-                        Err(err) => self.errors.add(VirErr::Parse(err)),
+                        Err(err) => {
+                            let source = self.packages[package].source.clone();
+                            self.errors.add(VirErr::Parse(source, err));
+                        },
                     }
                 }
             }
@@ -395,15 +410,6 @@ impl Virdant {
 ////////////////////////////////////////////////////////////////////////////////
 
 impl Virdant {
-    fn resolve_package(&self, package_name: &str) -> Option<Id<Package>> {
-        for (package, package_info) in self.packages.iter() {
-            if package_name == package_info.name {
-                return Some(*package);
-            }
-        }
-        None
-    }
-
     fn resolve_item(&self, qualident: &str, in_item: Id<Item>) -> Result<Id<Item>, VirErr> {
         let qi = QualIdent::new(qualident);
         let in_package = self.items[in_item].package.unwrap().clone();
@@ -478,17 +484,6 @@ impl Virdant {
 ////////////////////////////////////////////////////////////////////////////////
 
 impl Virdant {
-    fn check_all_imported_packages_exist(&mut self, package: Id<Package>) -> Result<(), VirErrs> {
-        let mut errors = VirErrs::new();
-        for imported_package_name in self.package_imports(package) {
-            let imported_package = self.resolve_package(&imported_package_name);
-            if imported_package.is_none() {
-                errors.add(VirErr::CantImport(imported_package_name));
-            }
-        }
-        errors.check()
-    }
-
     fn check_no_duplicate_imports(&mut self, package: Id<Package>) -> Result<(), VirErrs> {
         let mut errors = VirErrs::new();
         let mut imports: IndexSet<String> = IndexSet::new();

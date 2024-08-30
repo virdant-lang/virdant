@@ -96,3 +96,29 @@ impl ParseError {
         &self.0
     }
 }
+
+pub mod imports {
+    use pest::*;
+    use pest_derive::*;
+
+    #[derive(Parser)]
+    #[grammar = "import_grammar.pest"]
+    struct ImportParser;
+
+    pub fn parse_imports(text: &str) -> Vec<String> {
+        let text = text.to_owned().leak(); // TODO
+        let results = ImportParser::parse(Rule::package, text).unwrap();
+
+        let imports = results.clone().into_iter()
+            .collect::<Vec<_>>()
+            .first() .unwrap()
+            .clone().into_inner();
+
+        let mut packages = vec![];
+        for import_ast in imports {
+            let package = import_ast.clone().into_inner().find_first_tagged("package").unwrap().as_str();
+            packages.push(package.to_string());
+        }
+        packages
+    }
+}

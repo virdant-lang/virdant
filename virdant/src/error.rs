@@ -2,12 +2,13 @@
 
 use std::{error::Error, hash::Hash};
 
+use crate::PackageSource;
 use crate::parse::ParseError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VirErr {
     Io(String),
-    Parse(ParseError),
+    Parse(PackageSource, ParseError),
     DupItem(String),
     CantImport(String),
     DupImport(String),
