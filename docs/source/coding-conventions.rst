@@ -46,6 +46,16 @@ When declaring many components on consecutive lines, if adding a few extra space
 you may insert them to make it easier to read off the types.
 
 
+Keep Code Organized
+---------------------
+The order of statements inside module definitions is irrelevant in Virdant.
+Please use this to your advantage to make code easy to read!
+
+For example, if you define a module, consider connecting the clock and reset immediately after declaring the submodule.
+Think about whether the order you have defined things will make it easy for the next person to understand what your intent was.
+Use blank spaces to help separate your statements into meaningful groups.
+
+
 Curly Braces
 ------------
 Virdant should be written with the opening curly brace at the end of the line which needed to open it.
