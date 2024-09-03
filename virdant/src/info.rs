@@ -78,6 +78,7 @@ pub struct ComponentInfo {
     pub path: Vec<String>,
     pub typ: Ready<Type>,
     pub is_reg: Ready<bool>,
+    pub clock: Ready<Id<ExprRoot>>,
     pub class: Ready<ComponentClass>,
     pub flow: Ready<Flow>,
     pub driver: Option<Id<ExprRoot>>,

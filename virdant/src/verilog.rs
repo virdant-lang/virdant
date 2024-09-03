@@ -170,9 +170,10 @@ impl Verilog {
                 let component_name = component.name();
                 writeln!(f, "    // reg {component_name} : {typ}")?;
                 writeln!(f, "    reg  {width_str} {component_name};")?;
-                let clk = "clock"; //component.clock().unwrap();
+                let clk = component.clock().unwrap();
+                let clk_ssa = self.verilog_expr(f, clk, Context::empty())?;
                 let connect_ssa = self.verilog_expr(f, expr.clone(), Context::empty())?;
-                writeln!(f, "    always @(posedge {clk}) begin")?;
+                writeln!(f, "    always @(posedge {clk_ssa}) begin")?;
                 writeln!(f, "        {component_name} <= {connect_ssa};")?;
                 writeln!(f, "    end")?;
                 writeln!(f)?;
