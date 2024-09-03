@@ -272,3 +272,12 @@ fn test_verilog() {
     eprintln!("{virdant:?}");
     design.verilog("build/").unwrap();
 }
+
+#[test]
+fn test_ext() {
+    let mut virdant = Virdant::new(TEST_EXAMPLES_DIR.join("ext.vir"));
+
+    let design = virdant.check().unwrap();
+    eprintln!("{virdant:?}");
+    design.verilog("build/").unwrap();
+}
