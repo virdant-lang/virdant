@@ -1399,6 +1399,11 @@ impl Virdant {
     fn drivercheck(&mut self) {
         let components = self.components.iter();
         for (component, component_info) in components {
+            let moddef_info = &self.items[component_info.moddef.unwrap().as_item()];
+            if *moddef_info.is_ext.unwrap() {
+                continue;
+            }
+
             match *component_info.flow.unwrap() {
                 Flow::Source => (),
                 Flow::Sink | Flow::Duplex => {
