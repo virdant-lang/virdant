@@ -399,6 +399,15 @@ impl Component {
         }
     }
 
+    pub fn clock(&self) -> Option<Expr> {
+        if let Ok(exprroot_id) = self.info.clock.get() {
+            let exprroot = self.root().exprroots[exprroot_id].clone();
+            Some(exprroot.to_expr())
+        } else {
+            None
+        }
+    }
+
     pub fn flow(&self) -> Flow {
         self.info.flow.unwrap().clone()
     }

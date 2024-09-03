@@ -1066,6 +1066,10 @@ impl Virdant {
                         exprroot_info.expected_typ = Some(clock_type);
                         let span = reg_ast.span();
                         exprroot_info.span = Some(span);
+
+                        let component = self.resolve_component(node.name().unwrap(), item).unwrap();
+                        let component_info = &mut self.components[component];
+                        component_info.clock.set(exprroot);
                     }
                 }
             }
@@ -1488,6 +1492,7 @@ impl std::fmt::Debug for Virdant {
             writeln!(f, "        class: {:?}", component_info.class)?;
             writeln!(f, "        typ: {:?}", component_info.typ)?;
             writeln!(f, "        is_reg: {:?}", component_info.is_reg)?;
+            writeln!(f, "        clock: {:?}", component_info.clock)?;
             writeln!(f, "        driver: {:?}", component_info.driver)?;
         }
 
