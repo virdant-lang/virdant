@@ -1,0 +1,65 @@
+import memory;
+
+mod PicoRv32 {
+    incoming clock : Clock;
+    incoming reset : Bit;
+    outgoing trap  : Bit;
+
+    master socket mem of memory::Mem;
+
+    mod core of picorv32;
+    core.clk    := clock;
+    core.resetn := reset->not();
+    trap        := core.trap;
+
+    mem.mem_valid  := core.mem_valid;
+    mem.mem_instr  := core.mem_instr;
+    core.mem_ready := mem.mem_ready;
+
+    mem.mem_addr   := core.mem_addr;
+    mem.mem_wdata  := core.mem_wdata;
+    mem.mem_wstrb  := core.mem_wstrb;
+    core.mem_rdata := mem.mem_rdata;
+}
+
+ext mod picorv32 {
+    incoming clk    : Clock;
+    incoming resetn : Bit;
+    outgoing trap   : Bit;
+
+    outgoing mem_valid : Bit;
+    outgoing mem_instr : Bit;
+    incoming mem_ready : Bit;
+
+    outgoing mem_addr  : Word[32];
+    outgoing mem_wdata : Word[32];
+    outgoing mem_wstrb : Word[4];
+    incoming mem_rdata : Word[32];
+
+/*
+    // Look-Ahead Interface
+    outgoing mem_la_read  : Bit;
+    outgoing mem_la_write : Bit;
+    outgoing mem_la_addr  : Word[32];
+    outgoing mem_la_wdata : Word[32];
+    outgoing mem_la_wstrb : Word[4];
+
+    // Pico Co-Processor Interface (PCPI)
+    outgoing pcpi_valid : Bit;
+    outgoing pcpi_insn  : Word[32];
+    outgoing pcpi_rs1   : Word[32];
+    outgoing pcpi_rs2   : Word[32];
+    incoming pcpi_wr    : Bit;
+    incoming pcpi_rd    : Word[32];
+    incoming pcpi_wait  : Bit;
+    incoming pcpi_ready : Bit;
+
+    // IRQ Interface
+    incoming irq : Word[32];
+    outgoing eoi : Word[32];
+
+    // Trace Interface
+    outgoing trace_valid : Bit;
+    outgoing trace_data : Word[36];
+*/
+}

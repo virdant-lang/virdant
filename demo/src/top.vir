@@ -1,0 +1,40 @@
+import resetter;
+import uart;
+import edge;
+import spi;
+import picorv32;
+import memory;
+
+union type Valid {
+    Invalid();
+    Valid(payload : Word[8]);
+}
+
+mod Top {
+    incoming clock : Clock;
+
+    master socket leds of memory::Leds;
+    leds :=: memory_subsystem.leds;
+
+    mod resetter of resetter::Resetter;
+    resetter.clock := clock;
+
+    wire reset : Bit;
+    reset := resetter.out;
+
+    master socket spi of spi::Spi;
+    master socket uart of uart::Uart;
+
+    uart :=: memory_subsystem.uart;
+
+    mod core of picorv32::PicoRv32;
+    core.clock := clock;
+    core.reset := reset;
+
+    mod memory_subsystem of memory::MemorySubsystem;
+    memory_subsystem.clock := clock;
+    memory_subsystem.reset := reset;
+
+    memory_subsystem.mem :=: core.mem;
+    spi :=: memory_subsystem.spi;
+}

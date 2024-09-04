@@ -1,0 +1,227 @@
+import pipe;
+
+socket Uart {
+    mosi tx : Bit;
+    miso rx : Bit;
+}
+
+
+mod UartController {
+    master socket uart of Uart;
+
+    incoming clock : Clock;
+    incoming reset : Bit;
+
+    slave  socket send of pipe::Pipe8;
+    master socket recv of pipe::Pipe8;
+
+    mod sender of UartSender;
+    sender.clock := clock;
+    sender.reset := reset;
+
+    sender.data := send.data;
+    sender.data_valid := send.valid;
+    send.ready := sender.ready;
+
+    mod recver of UartReceiver;
+    recver.clock := clock;
+    recver.reset := reset;
+
+    recv.data  := recver.data;
+    recv.valid := recver.data_valid;
+
+    uart.tx := sender.uart_tx;
+    recver.uart_rx := uart.rx;
+}
+
+
+union type UartState {
+    Idle();
+    Start(pulse : Word[11]);
+    Bit(bit : Word[3], pulse : Word[11]);
+    Stop(pulse : Word[11]);
+}
+
+mod UartSender {
+    incoming clock      : Clock; // 12MHz
+    incoming reset      : Bit;
+    incoming data       : Word[8];
+    incoming data_valid : Bit;
+    outgoing ready      : Bit;
+    outgoing uart_tx    : Bit;
+
+    reg uart_tx_reg : Bit on clock;
+    uart_tx := uart_tx_reg;
+
+    reg latched_data : Word[8] on clock;
+    reg state : UartState on clock;
+
+    ready := match state {
+        @Idle() => true;
+        @Start(pulse) => false;
+        @Bit(bit, pulse) => false;
+        @Stop(pulse) => false;
+    };
+
+    state <= if reset {
+        @Idle()
+    } else {
+        match state {
+            @Idle() =>
+                if data_valid {
+                    @Start(1250w11)
+                } else {
+                    @Idle()
+                };
+            @Start(pulse) =>
+                if pulse->eq(0) {
+                    @Bit(0, 1250w11)
+                } else {
+                    @Start(pulse->dec())
+                };
+            @Bit(bit, pulse) =>
+                if pulse->eq(0) {
+                    if bit->lt(7) {
+                        @Bit(bit->inc(), 1250w11)
+                    } else {
+                        @Stop(1250w11)
+                    }
+                } else {
+                    @Bit(bit, pulse->dec())
+                };
+            @Stop(pulse) =>
+                if pulse->eq(0) {
+                    @Idle()
+                } else {
+                    @Stop(pulse->dec())
+                };
+        }
+    };
+
+    latched_data <= match state {
+        @Idle() =>
+            if data_valid {
+                data
+            } else {
+                latched_data
+            };
+        @Start(pulse) => latched_data;
+        @Bit(bit, pulse) => latched_data;
+        @Stop(pulse) => latched_data;
+    };
+
+    uart_tx_reg <= if reset {
+        true
+    } else {
+        match state {
+            @Idle() => true;
+            @Start(pulse) => false;
+            @Bit(bit, pulse) =>
+                if bit->eq(0) {
+                    latched_data[0]
+                } else if bit->eq(1) {
+                    latched_data[1]
+                } else if bit->eq(2) {
+                    latched_data[2]
+                } else if bit->eq(3) {
+                    latched_data[3]
+                } else if bit->eq(4) {
+                    latched_data[4]
+                } else if bit->eq(5) {
+                    latched_data[5]
+                } else if bit->eq(6) {
+                    latched_data[6]
+                } else {
+                    latched_data[7]
+                };
+            @Stop(pulse) => true;
+        }
+    };
+}
+
+mod UartReceiver {
+    incoming clock      : Clock; // 12MHz
+    incoming reset      : Bit;
+    incoming uart_rx    : Bit;
+    outgoing data       : Word[8];
+    outgoing data_valid : Bit;
+
+    reg state : UartState on clock;
+    reg data_reg : Word[8] on clock;
+
+    state <= if reset {
+        @Idle()
+    } else {
+        match state {
+            @Idle() =>
+                if uart_rx->eq(false) {
+                    @Start(625w11) // ~= 1250 * 0.5
+                } else {
+                    @Idle()
+                };
+            @Start(pulse) =>
+                if pulse->eq(0) {
+                    @Bit(0, 1250)
+                } else {
+                    @Start(pulse->dec())
+                };
+            @Bit(bit, pulse) =>
+                if pulse->eq(0) {
+                    if bit->eq(7) {
+                        @Stop(1150) // fudge this one a little bit to be slightly less than 1250
+                    } else {
+                        @Bit(bit->inc(), 1250)
+                    }
+                } else {
+                    @Bit(bit, pulse->dec())
+                };
+            @Stop(pulse) =>
+                if pulse->eq(0) {
+                    @Idle()
+                } else {
+                    @Stop(pulse->dec())
+                };
+        }
+    };
+
+    data_reg <= if reset {
+        0
+    } else {
+        match state {
+            @Idle() => 0;
+            @Start(pulse) => 0;
+            @Bit(bit, pulse) =>
+                if pulse->eq(0) {
+                    if bit->eq(0) {
+                        data_reg->or(word(0w7, uart_rx))
+                    } else if bit->eq(1) {
+                        data_reg->or(word(0w7, uart_rx)->sll(1))
+                    } else if bit->eq(2) {
+                        data_reg->or(word(0w7, uart_rx)->sll(2))
+                    } else if bit->eq(3) {
+                        data_reg->or(word(0w7, uart_rx)->sll(3))
+                    } else if bit->eq(4) {
+                        data_reg->or(word(0w7, uart_rx)->sll(4))
+                    } else if bit->eq(5) {
+                        data_reg->or(word(0w7, uart_rx)->sll(5))
+                    } else if bit->eq(6) {
+                        data_reg->or(word(0w7, uart_rx)->sll(6))
+                    } else {
+                        data_reg->or(word(0w7, uart_rx)->sll(7))
+                    }
+                } else {
+                    data_reg
+                };
+            @Stop(pulse) => data_reg;
+        }
+    };
+
+    data := data_reg;
+
+    data_valid := match state {
+        @Idle() => false;
+        @Start(pulse) => false;
+        @Bit(bit, pulse) => false;
+        @Stop(pulse) => pulse->eq(0);
+    };
+}

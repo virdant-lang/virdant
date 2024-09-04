@@ -1,0 +1,158 @@
+socket Mem {
+    mosi addr : Word[32];
+    mosi read_enable : Bit;
+
+    miso read_data : Word[32];
+    miso read_data_valid : Bit;
+}
+
+union type SpiFlashState {
+    idle();
+    send(send_buffer : Word[32], bits_sent : Word[6]);
+    recv(recv_buffer : Word[32], bits_read : Word[6]);
+    done(data : Word[32]);
+}
+
+socket Spi {
+    mosi cs  : Bit;
+    mosi clk : Clock;
+    mosi do  : Bit;
+    miso di  : Bit;
+}
+
+mod SpiFlash {
+    incoming clock : Clock;
+    incoming reset : Bit;
+
+    master socket spi of Spi;
+    slave  socket mem of Mem;
+
+    mod clock_inverter of ClockInverter;
+    clock_inverter.enable :=
+        if reset {
+            false
+        } else {
+            match state {
+                @idle() => false;
+                @done(data) => false;
+                _ => true;
+            }
+        };
+
+    clock_inverter.clock := clock;
+    spi.clk := clock_inverter.inv_clock;
+
+    reg spi_clk_tick : Bit on clock_inverter.inv_clock;
+    spi_clk_tick <= spi_clk_tick->not();
+
+    wire is_sending : Bit;
+    is_sending :=
+        match state {
+            @idle() => false;
+            @send(send_buffer, bits_sent) => true;
+            @recv(recv_buffer, bits_read) => false;
+            @done(data) => false;
+        };
+
+    wire is_receiving : Bit;
+    is_receiving :=
+        match state {
+            @idle() => false;
+            @send(send_buffer, bits_sent) => false;
+            @recv(recv_buffer, bits_read) => true;
+            @done(data) => false;
+        };
+
+    reg state : SpiFlashState on clock;
+    state <=
+        if reset {
+            @idle()
+        } else {
+            match state {
+                @idle() =>
+                    if mem.read_enable {
+                        @send(word(0x03w8, mem.addr[24..0]), 0)
+                    } else {
+                        @idle()
+                    };
+                @send(send_buffer, bits_sent) =>
+                    if bits_sent->lt(31) {
+                        @send(send_buffer->sll(1), bits_sent->inc())
+                    } else {
+                        @recv(0, 0)
+                    };
+                @recv(recv_buffer, bits_read) =>
+                    if bits_read->lt(31) {
+                        @recv(recv_buffer->sll(1)->or(word(0w31, spi.di)), bits_read->inc())
+                    } else {
+                        @done(recv_buffer->sll(1)->or(word(0w31, spi.di)))
+                    };
+                @done(data) =>
+                    @idle();
+            }
+        };
+
+    wire buffer : Word[32];
+    buffer :=
+        match state {
+            @idle() => 0;
+            @send(send_buffer, bits_sent) => send_buffer;
+            @recv(recv_buffer, bits_read) => recv_buffer;
+            @done(data) => data;
+        };
+
+    wire sent : Word[6];
+    sent :=
+        match state {
+            @idle() => 0;
+            @send(send_buffer, bits_sent) => bits_sent;
+            @recv(recv_buffer, bits_read) => bits_read;
+            @done(data) => 0;
+        };
+
+    wire is_idle : Bit;
+    is_idle :=
+        match state {
+            @idle() => true;
+            _ => false;
+        };
+
+    spi.cs := if reset {
+        true
+    } else {
+        match state {
+            @idle() => true;
+            @done(data) => true;
+            _ => false;
+        }
+    };
+
+    spi.do :=
+        if reset {
+            true
+        } else {
+            match state {
+                @send(send_buffer, bits) => send_buffer[31];
+                _ => true;
+            }
+        };
+
+    mem.read_data :=
+        match state {
+            @done(result) => word(result[8..0], result[16..8], result[24..16], result[32..24]);
+            //@done(result) => result;
+            _ => 0xffffffffw32;
+        };
+
+    mem.read_data_valid :=
+        match state {
+            @done(result) => true;
+            _ => false;
+        };
+}
+
+ext mod ClockInverter {
+    incoming clock : Clock;
+    incoming enable : Bit;
+    outgoing inv_clock : Clock;
+}

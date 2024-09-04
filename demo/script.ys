@@ -1,0 +1,1 @@
+read_verilog -I .. build/*.v; synth_ice40 -top Top -json build/top.json

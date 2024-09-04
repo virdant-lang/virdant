@@ -1,0 +1,68 @@
+import uart;
+import spi;
+
+socket Leds {
+    mosi led0 : Bit;
+    mosi led1 : Bit;
+    mosi led2 : Bit;
+}
+
+socket Mem {
+    mosi mem_valid : Bit;
+    mosi mem_instr : Bit;
+    miso mem_ready : Bit;
+
+    mosi mem_addr  : Word[32];
+    mosi mem_wdata : Word[32];
+    mosi mem_wstrb : Word[4];
+    miso mem_rdata : Word[32];
+}
+
+mod MemorySubsystem {
+    incoming clock : Clock;
+    incoming reset : Bit;
+
+    master socket leds of Leds;
+    master socket spi of spi::Spi;
+    slave  socket mem of Mem;
+    master socket uart of uart::Uart;
+
+    wire is_write : Bit;
+    is_write := mem.mem_wstrb->any();
+
+    wire is_read : Bit;
+    is_read := is_write->not();
+
+    mod spi_flash of spi::SpiFlash;
+    spi_flash.clock := clock;
+    spi_flash.reset := reset;
+
+    spi :=: spi_flash.spi;
+
+    spi_flash.mem.read_enable := mem.mem_valid->and(is_read)->and(mem.mem_addr[21]); // 0x20_0000 - 0x2f_ffff
+    spi_flash.mem.addr := mem.mem_addr;
+    mem.mem_rdata := spi_flash.mem.read_data;
+    mem.mem_ready := spi_flash.mem.read_data_valid->or(mem.mem_addr[20])->or(mem.mem_addr[22]);
+
+    reg leds_reg : Word[3] on clock;
+    leds_reg <=
+        if reset {
+            0b111w3
+        } else if mem.mem_valid->and(is_write)->and(mem.mem_addr[20]) { // 0x10_0000 - 0x1f_ffff
+            mem.mem_wdata[3..0]
+        } else {
+            leds_reg
+        };
+
+    leds.led0 := leds_reg[0];
+    leds.led1 := leds_reg[1];
+    leds.led2 := leds_reg[2];
+
+    mod uart_controller of uart::UartController;
+    uart_controller.clock := clock;
+    uart_controller.reset := reset;
+    uart_controller.send.data  := mem.mem_wdata[8..0];
+    uart_controller.send.valid := is_write->and(mem.mem_addr[22]);
+    uart_controller.recv.ready := false;
+    uart :=: uart_controller.uart;
+}

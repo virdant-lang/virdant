@@ -1,0 +1,78 @@
+socket Pipe8 {
+    mosi data : Word[8];
+    mosi valid : Bit;
+    miso ready : Bit;
+}
+
+socket Pipe32 {
+    mosi data : Word[32];
+    mosi valid : Bit;
+    miso ready : Bit;
+}
+
+union type Valid32 {
+    invalid();
+    valid(data : Word[32]);
+}
+
+mod Pipe32ToPipe8 {
+    incoming clock : Clock;
+    incoming reset : Bit;
+
+    slave  socket inp of Pipe32;
+    master socket out of Pipe8;
+
+    reg latch : Valid32 on clock;
+    latch <= if reset {
+        @invalid()
+    } else if inp.valid {
+        @valid(inp.data)
+    } else if out.ready->and(idx == 3) {
+        @invalid()
+    } else {
+        latch
+    };
+
+    reg idx : Word[2] on clock;
+    idx <= if reset {
+        0
+    } else {
+        match latch {
+            @valid(data) => 
+                if out.ready {
+                    idx->inc()
+                } else {
+                    idx
+                };
+            @invalid() => 0;
+        }
+    };
+
+    out.data  :=
+        match latch {
+            @valid(data) =>
+                if idx == 0 {
+                    data[32..24]
+                } else if idx == 1 {
+                    data[24..16]
+                } else if idx == 2 {
+                    data[16..8]
+                } else {
+                    data[8..0]
+                };
+            @invalid() =>
+                0;
+        };
+
+    out.valid :=
+        match latch {
+            @valid(data) => true;
+            @invalid() => false;
+        };
+
+    inp.ready :=
+        match latch {
+            @valid(data) => false;
+            @invalid() => true;
+        };
+}
