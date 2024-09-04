@@ -1,0 +1,4 @@
+ext mod ClockInverter {
+    incoming clock : Clock;
+    outgoing inv_clock : Clock;
+}
