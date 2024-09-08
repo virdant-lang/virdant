@@ -281,3 +281,24 @@ fn test_ext() {
     eprintln!("{virdant:?}");
     design.verilog("build/").unwrap();
 }
+
+#[test]
+fn test_no_clock() {
+    let mut virdant = Virdant::new(ERROR_EXAMPLES_DIR.join("no_clock.vir"));
+
+    match virdant.check() {
+        Err(errors) => {
+            let mut count = 0;
+            for error in errors.iter() {
+                if let VirErr::NoClock(_) = &error {
+                    count += 1;
+                }
+            }
+            if count == 0 {
+                panic!();
+            }
+            eprintln!("{errors:?}");
+        },
+        _ => panic!(),
+    }
+}

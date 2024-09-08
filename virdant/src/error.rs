@@ -20,6 +20,7 @@ pub enum VirErr {
     InvalidPat(String),
     CantInfer,
     NoDriver(String),
+    NoClock(String),
     MultipleDrivers(String),
     Other(String),
 }
