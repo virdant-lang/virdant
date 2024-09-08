@@ -1030,7 +1030,12 @@ impl Virdant {
 
                         let expr_ast = driver_ast.clone().expr().unwrap();
                         let span = driver_ast.span();
-                        let component = self.resolve_component(target_path, item).unwrap();
+                        let component = if let Ok(component) = self.resolve_component(target_path, item) {
+                            component
+                        } else {
+                            continue
+                        };
+
                         let component_info = &mut self.components[component];
                         let typ = *component_info.typ.unwrap();
 
@@ -1056,7 +1061,11 @@ impl Virdant {
                     } else if node.child(0).is_socket_driver() {
                         self.register_exprroots_for_socket_driver(node, moddef, &mut expr_i);
                     } else if node.child(0).is_reg() {
-                        let component = self.resolve_component(node.name().unwrap(), item).unwrap();
+                        let component = if let Ok(component) = self.resolve_component(node.name().unwrap(), item) {
+                            component
+                        } else {
+                            continue
+                        };
 
                         let reg_ast = node.child(0);
                         let expr_ast = if let Some(expr_ast) = reg_ast.clone().expr() {
@@ -1074,7 +1083,11 @@ impl Virdant {
                         let span = reg_ast.span();
                         exprroot_info.span = Some(span);
 
-                        let component = self.resolve_component(node.name().unwrap(), item).unwrap();
+                        let component = if let Ok(component) = self.resolve_component(node.name().unwrap(), item) {
+                            component
+                        } else {
+                            continue
+                        };
                         let component_info = &mut self.components[component];
                         component_info.clock.set(exprroot);
                     }

@@ -116,7 +116,10 @@ impl<'a> TypingContext<'a> {
             Expr::Reference(_span, path) => {
                 let path = Intern::new(path.to_vec().into_iter().map(|s| s.to_string()).collect::<Vec<_>>().join("."));
                 match self.lookup(path) {
-                    Lookup::NotFound => Err(VirErr::Other(format!("Not Found: {path}"))),
+                    Lookup::NotFound => {
+                        let item = &self.item;
+                        Err(VirErr::Other(format!("Not Found: {path} in {item}")))
+                    },
                     Lookup::Binding(typ) => Ok(typ),
                     Lookup::Component(component, typ) => {
                         let exprroot_info = &mut self.virdant.exprroots[exprroot];
