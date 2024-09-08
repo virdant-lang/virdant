@@ -121,6 +121,11 @@ impl<'a> TypingContext<'a> {
                     Lookup::Component(component, typ) => {
                         let exprroot_info = &mut self.virdant.exprroots[exprroot];
                         exprroot_info.reference_component = Some(component);
+
+                        let component_info = &self.virdant.components[component];
+                        if *component_info.flow.unwrap() == Flow::Sink {
+                            self.virdant.errors.add(VirErr::ReadFromSink(format!("{component}")));
+                        }
                         Ok(typ)
                     },
                 }

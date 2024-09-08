@@ -1,0 +1,7 @@
+mod Top {
+    outgoing out : Bit;
+    out := false;
+
+    wire w : Bit;
+    w := out;
+}

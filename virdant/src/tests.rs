@@ -302,3 +302,24 @@ fn test_no_clock() {
         _ => panic!(),
     }
 }
+
+#[test]
+fn test_read_from_sink() {
+    let mut virdant = Virdant::new(ERROR_EXAMPLES_DIR.join("read_from_sink.vir"));
+
+    match virdant.check() {
+        Err(errors) => {
+            let mut count = 0;
+            for error in errors.iter() {
+                if let VirErr::ReadFromSink(_) = &error {
+                    count += 1;
+                }
+            }
+            if count == 0 {
+                panic!();
+            }
+            eprintln!("{errors:?}");
+        },
+        _ => panic!(),
+    }
+}
