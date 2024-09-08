@@ -1056,8 +1056,15 @@ impl Virdant {
                     } else if node.child(0).is_socket_driver() {
                         self.register_exprroots_for_socket_driver(node, moddef, &mut expr_i);
                     } else if node.child(0).is_reg() {
+                        let component = self.resolve_component(node.name().unwrap(), item).unwrap();
+
                         let reg_ast = node.child(0);
-                        let expr_ast = reg_ast.clone().expr().unwrap();
+                        let expr_ast = if let Some(expr_ast) = reg_ast.clone().expr() {
+                            expr_ast
+                        } else {
+                            self.errors.add(VirErr::NoClock(format!("{component}")));
+                            continue;
+                        };
 
                         let exprroot = self.register_exprroots_for(ast::Expr::from_ast(expr_ast.clone()), item, &vec![expr_i]);
                         expr_i += 1;
