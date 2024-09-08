@@ -1037,7 +1037,11 @@ impl Virdant {
                         };
 
                         let component_info = &mut self.components[component];
-                        let typ = *component_info.typ.unwrap();
+                        let typ = if let Ok(typ) = component_info.typ.get() {
+                            *typ
+                        } else {
+                            continue
+                        };
 
                         match drivertype {
                             DriverType::Continuous if *component_info.is_reg.get().unwrap() => self.errors.add(VirErr::WrongDriverType(format!("{target_path} in {item}"))),
