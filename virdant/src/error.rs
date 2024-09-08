@@ -21,6 +21,7 @@ pub enum VirErr {
     CantInfer,
     NoDriver(String),
     NoClock(String),
+    ReadFromSink(String),
     MultipleDrivers(String),
     Other(String),
 }
