@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use crate::*;
+use crate::{tokenizer::TokenKind, *};
 
 const CHECK: char = '✅';
 const BATSU: char = '❌';
@@ -321,5 +321,43 @@ fn test_read_from_sink() {
             eprintln!("{errors:?}");
         },
         _ => panic!(),
+    }
+}
+
+#[test]
+fn test_parses() {
+    let mut errors = vec![];
+
+    for filepath in example_files().chain(test_example_files()) {
+        let text = std::fs::read_to_string(filepath.clone()).unwrap();
+
+        let filename = filepath
+            .file_name()
+            .unwrap()
+            .to_owned()
+            .to_string_lossy()
+            .into_owned();
+
+        if let Err(_error) = std::panic::catch_unwind(|| {
+            let tokens = crate::tokenizer::tokenize(text.as_bytes());
+            for token in tokens {
+                if let TokenKind::Unknown = token.kind() {
+                    let start = usize::from(token.pos());
+                    let end = start + token.len() as usize;
+                    panic!(
+                        "Unexpected token: {:?} in {filename} starting at byte {start}",
+                        String::from_utf8_lossy(&text.as_bytes()[start..end]),
+                    );
+                }
+            }
+        }) {
+            eprintln!("    {BATSU} {filename}");
+            errors.push(filename);
+        } else {
+            eprintln!("    {CHECK} {filename}");
+        }
+    }
+    if errors.len() > 0 {
+        panic!("Errors in examples:\n  - {}", errors.join("\n  - "))
     }
 }
