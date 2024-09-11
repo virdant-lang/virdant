@@ -109,7 +109,7 @@ impl Expr {
 
         let mut result = else_expr.unwrap();
 
-        for (cond, expr) in else_ifs {
+        for (cond, expr) in else_ifs.into_iter().rev() {
             result = Arc::new(Expr::If(expr_if_ast.span(), cond, expr, result));
         }
 
