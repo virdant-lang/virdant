@@ -1,14 +1,29 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Pos(u32);
+
+impl Pos {
+    pub fn new(pos: u32) -> Self {
+        Pos(pos)
+    }
+}
+
+impl From<Pos> for u32 {
+    fn from(value: Pos) -> Self {
+        value.0
+    }
+}
+
 /// A line-col pair (1-indexed)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Pos(usize, usize);
+pub struct LineCol(usize, usize);
 
 /// A start-end position pair
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Span(Pos, Pos);
+pub struct Span(LineCol, LineCol);
 
-impl Pos {
+impl LineCol {
     pub fn new(line: usize, col: usize) -> Self {
-        Pos(line, col)
+        LineCol(line, col)
     }
 
     /// The line numbrer (1-indexed).
@@ -23,17 +38,17 @@ impl Pos {
 }
 
 impl Span {
-    pub fn new(start: Pos, end: Pos) -> Self {
+    pub fn new(start: LineCol, end: LineCol) -> Self {
         Span(start, end)
     }
 
     /// The start position.
-    pub fn start(&self) -> Pos {
+    pub fn start(&self) -> LineCol {
         self.0
     }
 
     /// The end position.
-    pub fn end(&self) -> Pos {
+    pub fn end(&self) -> LineCol {
         self.1
     }
 }

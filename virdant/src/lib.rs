@@ -15,6 +15,7 @@ mod cycle;
 mod info;
 mod typecheck;
 mod loader;
+pub mod tokenizer;
 
 #[cfg(test)]
 mod tests;

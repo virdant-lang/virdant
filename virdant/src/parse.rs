@@ -9,7 +9,7 @@ use pest::error::LineColLocation;
 use pest_derive::Parser;
 
 use crate::ast::Ast;
-use crate::location::{Pos, Span};
+use crate::location::{LineCol, Span};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -75,14 +75,14 @@ impl ParseError {
     pub fn span(&self) -> Span {
         match self.err().line_col {
             LineColLocation::Pos((line, col)) => {
-                let start = Pos::new(line, col);
-                let end = Pos::new(line, col);
+                let start = LineCol::new(line, col);
+                let end = LineCol::new(line, col);
                 Span::new(start, end)
             },
             LineColLocation::Span(start, end) => {
                 let (start_line, start_col) = start;
                 let (end_line, end_col) = end;
-                Span::new(Pos::new(start_line, start_col), Pos::new(end_line, end_col))
+                Span::new(LineCol::new(start_line, start_col), LineCol::new(end_line, end_col))
             },
         }
 

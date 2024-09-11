@@ -45,7 +45,7 @@ impl Ast {
         let span = self.pair().as_span();
         let (start_line, start_col) = span.start_pos().line_col();
         let (end_line, end_col) = span.end_pos().line_col();
-        Span::new(Pos::new(start_line, start_col), Pos::new(end_line, end_col))
+        Span::new(LineCol::new(start_line, start_col), LineCol::new(end_line, end_col))
     }
 
     /// Get the child nodes of this node in the parse tree.
