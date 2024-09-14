@@ -1,3 +1,4 @@
+use std::{marker::PhantomData, sync::Arc};
 use crate::location::{LineCol, Pos};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -100,32 +101,41 @@ pub enum TokenKind {
     KwFalse,
 }
 
-pub fn tokenize(input: &[u8]) -> Vec<Token> {
-    let mut tokenizer = Tokenizer::new(input);
-    tokenizer.tokenize()
-}
-
-struct Tokenizer<'a> {
-    input: &'a [u8],
+pub struct Tokenizer<'a> {
+    input: Arc<[u8]>,
     pos: u32,
+    tokens: Vec<Token>,
+    tag: std::marker::PhantomData<&'a ()>,
 }
 
 impl<'a> Tokenizer<'a> {
-    pub fn new(input: &'a [u8]) -> Self {
-        Tokenizer {
+    pub fn new(input: Arc<[u8]>) -> Self {
+        let mut tokenizer = Tokenizer {
             input,
             pos: 0,
-        }
+            tokens: vec![],
+            tag: PhantomData,
+        };
+        tokenizer.tokenize();
+        tokenizer
     }
 
-    pub fn tokenize(&mut self) -> Vec<Token> {
+    fn tokenize(&mut self) {
         let mut tokens = Vec::new();
 
         while let Some(token) = self.token() {
             tokens.push(token);
         }
         tokens.push(Token(TokenKind::Eof, Pos::new(self.pos), 0));
-        tokens
+        self.tokens = tokens;
+    }
+
+    pub fn tokens(&self) -> &[Token] {
+        &self.tokens
+    }
+
+    pub fn text(&self) -> &[u8] {
+        &self.input
     }
 
     pub fn token(&mut self) -> Option<Token> {
@@ -340,48 +350,5 @@ impl<'a> Tokenizer<'a> {
         assert!(len < 256, "Token length cannot exceed 256");
 
         Token(token_kind, Pos::new(start_pos), len as u8)
-    }
-}
-
-pub fn pos_to_lineno(text: &str, pos: Pos) -> usize {
-    let mut lineno = 1;
-
-    for (i, ch) in text.as_bytes().iter().copied().enumerate() {
-        if usize::from(pos) == i {
-            break;
-        }
-        if ch == b'\n' {
-            lineno += 1;
-        }
-    }
-
-    lineno
-}
-
-pub fn pretty_token_debug(text: &str) {
-    let toks = tokenize(text.as_bytes()) ;
-
-    let mut tok_iter = toks.into_iter();
-    let mut current_tok = tok_iter.next();
-
-    for (i, line) in text.lines().enumerate() {
-        let lineno = i + 1;
-        println!("{lineno}: {line}");
-        loop {
-            if let Some(tok) = current_tok.clone() {
-                if pos_to_lineno(text, tok.pos()) == lineno {
-                    eprint!("{:?}({}) ", tok.kind(), usize::from(tok.pos()));
-                    current_tok = tok_iter.next();
-                } else {
-                    eprintln!();
-                    eprintln!();
-                    break;
-                }
-            } else {
-                eprintln!();
-                eprintln!();
-                break;
-            }
-        }
     }
 }

@@ -1,16 +1,7 @@
-use crate::tokenizer::{tokenize, Token, TokenKind};
+use crate::tokenizer::{Token, TokenKind, Tokenizer};
 use crate::ItemKind;
+use std::marker::PhantomData;
 use std::sync::Arc;
-
-pub fn parse(input: &str) -> Result<Arc<Ast>, Vec<ParseError>> {
-    let mut parser = Parser::new(&input);
-    let ast = parser.parse();
-    if parser.errors.is_empty() {
-        Ok(ast)
-    } else {
-        Err(parser.errors)
-    }
-}
 
 #[derive(Debug, Clone)]
 pub enum ParseError {
@@ -31,26 +22,25 @@ impl ParseError {
     }
 }
 
-struct Parser<'a> {
-    text: &'a [u8],
-    tokens: Vec<Token>,
+pub struct Parser<'a> {
+    tokenizer: Tokenizer<'a>,
     pos: usize,
     errors: Vec<ParseError>,
+    tag: std::marker::PhantomData<&'a ()>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(text: &'a str) -> Self {
-        let text_bytes = text.as_bytes();
-        let tokens = tokenize(text_bytes);
+    pub fn new(text: Arc<[u8]>) -> Self {
+        let tokenizer = Tokenizer::new(text);
         Parser {
-            text: text_bytes,
-            tokens,
+            tokenizer,
             pos: 0,
             errors: vec![],
+            tag: PhantomData,
         }
     }
 
-    pub fn parse(&mut self) -> Arc<Ast> {
+    pub fn ast(&mut self) -> Arc<Ast> {
         let mut imports = vec![];
         while let TokenKind::KwImport = self.peek() {
             match self.parse_import() {
@@ -70,6 +60,18 @@ impl<'a> Parser<'a> {
             }
         }
         Arc::new(Ast::Package { imports, items })
+    }
+
+    pub fn errors(&self) -> Vec<ParseError> {
+        self.errors.clone()
+    }
+
+    pub fn tokens(&self) -> &[Token] {
+        self.tokenizer.tokens()
+    }
+
+    pub fn text(&self) -> &[u8] {
+        self.tokenizer.text()
     }
 
     fn recover_item(&mut self) {
@@ -95,11 +97,11 @@ impl<'a> Parser<'a> {
     }
 
     fn peek(&self) -> TokenKind {
-        self.tokens[self.pos].kind()
+        self.tokens()[self.pos].kind()
     }
 
     fn debug_ahead(&self) {
-        for token in &self.tokens[self.pos..self.pos + 11] {
+        for token in &self.tokens()[self.pos..self.pos + 11] {
             eprintln!("    {:?}({})", token.kind(), usize::from(token.pos()));
         }
     }
@@ -114,7 +116,7 @@ impl<'a> Parser<'a> {
     }
 
     fn take(&mut self) -> Token {
-        let token = self.tokens[self.pos].clone();
+        let token = self.tokens()[self.pos].clone();
         self.pos += 1;
         if token.kind() == TokenKind::Unknown {
             self.errors.push(ParseError::Unexpected(token.clone()));
@@ -138,7 +140,7 @@ impl<'a> Parser<'a> {
     fn token_str(&self, token: Token) -> std::borrow::Cow<str> {
         let idx_start = usize::from(token.pos());
         let idx_end = idx_start + usize::from(token.len());
-        String::from_utf8_lossy(&self.text[idx_start..idx_end])
+        String::from_utf8_lossy(&self.text()[idx_start..idx_end])
     }
 
     fn consume_ident(&mut self) -> Result<Token, ParseError> {
@@ -619,16 +621,16 @@ impl<'a> Parser<'a> {
     fn parse_driver(&mut self) -> Result<Arc<Ast>, ParseError> {
         let target = self.parse_path()?;
         let driver_type = self.peek();
-        if driver_type == TokenKind::RevFatArrow {
-            self.consume(TokenKind::RevFatArrow)?;
+        let driver_type_token = if driver_type == TokenKind::RevFatArrow {
+            self.consume(TokenKind::RevFatArrow)?
         } else {
-            self.consume(TokenKind::ColonEq)?;
-        }
+            self.consume(TokenKind::ColonEq)?
+        };
 
         let driver = self.parse_expr()?;
         self.consume(TokenKind::Semicolon)?;
 
-        Ok(Arc::new(Ast::Driver(target, driver_type, driver)))
+        Ok(Arc::new(Ast::Driver(target, driver_type_token, driver)))
     }
 }
 
@@ -647,7 +649,7 @@ pub enum Ast {
     Type { name: QualIdent, args: Option<Vec<Arc<Ast>>> },
     TypeArgWidth { width: Width },
     Component { kind: ComponentKind, name: Ident, typ: Arc<Ast>, on: Option<Arc<Ast>> },
-    Driver(Path, TokenKind, Arc<Ast>),
+    Driver(Path, Token, Arc<Ast>),
     FieldDef(Ident, Arc<Ast>),
     CtorDef(Ident, Vec<Arc<Ast>>),
     EnumerantDef(Ident, Token),
