@@ -100,6 +100,7 @@ impl<'a> Parser<'a> {
         self.tokens()[self.pos].kind()
     }
 
+    #[allow(dead_code)]
     fn debug_ahead(&self) {
         for token in &self.tokens()[self.pos..self.pos + 11] {
             eprintln!("    {:?}({})", token.kind(), usize::from(token.pos()));
@@ -135,12 +136,6 @@ impl<'a> Parser<'a> {
 
     fn is_eof(&self) -> bool {
         self.peek() == TokenKind::Eof
-    }
-
-    fn token_str(&self, token: Token) -> std::borrow::Cow<str> {
-        let idx_start = usize::from(token.pos());
-        let idx_end = idx_start + usize::from(token.len());
-        String::from_utf8_lossy(&self.text()[idx_start..idx_end])
     }
 
     fn consume_ident(&mut self) -> Result<Token, ParseError> {
@@ -193,7 +188,7 @@ impl<'a> Parser<'a> {
     fn parse_moddef_statement(&mut self) -> Result<Arc<Ast>, ParseError> {
         let ast = match self.peek() {
             TokenKind::KwIncoming => {
-                let token = self.take();
+                self.take();
                 let name = self.consume_ident()?;
                 self.consume(TokenKind::Colon)?;
                 let typ = self.parse_type()?;
@@ -206,7 +201,7 @@ impl<'a> Parser<'a> {
                 }))
             },
             TokenKind::KwOutgoing => {
-                let token = self.take();
+                self.take();
                 let name = self.consume_ident()?;
                 self.consume(TokenKind::Colon)?;
                 let typ = self.parse_type()?;
@@ -219,7 +214,7 @@ impl<'a> Parser<'a> {
                 }))
             },
             TokenKind::KwWire => {
-                let token = self.take();
+                self.take();
                 let name = self.consume_ident()?;
                 self.consume(TokenKind::Colon)?;
                 let typ = self.parse_type()?;
@@ -232,7 +227,7 @@ impl<'a> Parser<'a> {
                 }))
             },
             TokenKind::KwReg => {
-                let token = self.take();
+                self.take();
                 let name = self.consume_ident()?;
                 self.consume(TokenKind::Colon)?;
                 let typ = self.parse_type()?;

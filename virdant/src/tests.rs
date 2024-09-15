@@ -2,6 +2,8 @@ use std::sync::LazyLock;
 
 use crate::{tokenizer::TokenKind, *};
 
+use self::tokenizer::Tokenizer;
+
 const CHECK: char = '✅';
 const BATSU: char = '❌';
 
@@ -339,14 +341,15 @@ fn test_parses() {
             .into_owned();
 
         if let Err(_error) = std::panic::catch_unwind(|| {
-            let tokens = crate::tokenizer::tokenize(text.as_bytes());
-            for token in tokens {
+            let text: Arc<[u8]> = Arc::from(text.into_bytes().into_boxed_slice());
+            let tokenizer = Tokenizer::new(text.clone());
+            for token in tokenizer.tokens() {
                 if let TokenKind::Unknown = token.kind() {
                     let start = usize::from(token.pos());
                     let end = start + token.len() as usize;
                     panic!(
                         "Unexpected token: {:?} in {filename} starting at byte {start}",
-                        String::from_utf8_lossy(&text.as_bytes()[start..end]),
+                        String::from_utf8_lossy(&text.as_ref()[start..end]),
                     );
                 }
             }

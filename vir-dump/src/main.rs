@@ -86,8 +86,8 @@ pub fn pretty_print_ast(ast: &Ast, parser: &Parser, indent_level: usize) {
                 pretty_print_ast(stmt.as_ref(), parser, indent_level + 1);
             }
         },
-        Ast::Type { name, args } => println!("{indent}Type"),
-        Ast::TypeArgWidth { width } => println!("{indent}TypeArgWidth"),
+        Ast::Type { name: _, args: _ } => println!("{indent}Type"),
+        Ast::TypeArgWidth { width: _ } => println!("{indent}TypeArgWidth"),
         Ast::Component { kind, name, typ, on } => {
             println!("{indent}Component");
             println!("{indent}  kind:  {kind:?}");
@@ -149,9 +149,9 @@ pub fn pretty_print_ast(ast: &Ast, parser: &Parser, indent_level: usize) {
         Ast::IdxRange(_, _, _) => println!("{indent}IdxRange"),
         Ast::Cat(_) => println!("{indent}Cat"),
         Ast::Zext(_) => println!("{indent}Zext"),
-        Ast::If { subject, true_branch, false_branch } => println!("{indent}If"),
-        Ast::Match { subject, arms } => println!("{indent}Match"),
-        Ast::MatchArm { pat, expr } => println!("{indent}MatchArm"),
+        Ast::If { subject: _, true_branch: _, false_branch : _} => println!("{indent}If"),
+        Ast::Match { subject: _, arms : _} => println!("{indent}Match"),
+        Ast::MatchArm { pat: _, expr: _ } => println!("{indent}MatchArm"),
         Ast::PatBind(_) => println!("{indent}PatBind"),
         Ast::PatAt(_, _) => println!("{indent}PatAt"),
     };

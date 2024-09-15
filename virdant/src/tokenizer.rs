@@ -1,5 +1,5 @@
 use std::{marker::PhantomData, sync::Arc};
-use crate::location::{LineCol, Pos};
+use crate::location::Pos;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TokenizeErr(pub String);
