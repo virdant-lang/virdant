@@ -1,71 +1,18 @@
+use paste::paste;
 use std::sync::LazyLock;
+use std::time::Instant;
 
 use crate::{tokenizer::TokenKind, *};
 
-use self::tokenizer::Tokenizer;
+use self::{parser::Parser, tokenizer::Tokenizer};
 
 const CHECK: char = '✅';
 const BATSU: char = '❌';
 
-const EXAMPLES_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| std::path::PathBuf::from("../examples"));
+const EXAMPLES_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| std::fs::canonicalize(std::path::PathBuf::from("../examples")).unwrap());
 const TEST_EXAMPLES_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| std::path::PathBuf::from("examples"));
 const ERROR_EXAMPLES_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| std::path::PathBuf::from("examples/errors"));
 
-
-#[test]
-fn parse_examples() {
-    use crate::parse::*;
-    let mut errors = vec![];
-
-    for filepath in example_files().chain(test_example_files()) {
-        let text = std::fs::read_to_string(filepath.clone()).unwrap();
-
-        let filename = filepath
-            .file_name()
-            .unwrap()
-            .to_owned()
-            .to_string_lossy()
-            .into_owned();
-
-        if let Err(_error) = std::panic::catch_unwind(|| {
-            parse_package(&text).unwrap();
-        }) {
-            eprintln!("    {BATSU} {filename}");
-            errors.push(filename);
-        } else {
-            eprintln!("    {CHECK} {filename}");
-        }
-    }
-    if errors.len() > 0 {
-        panic!("Errors in examples:\n  - {}", errors.join("\n  - "))
-    }
-}
-
-fn example_files() -> impl Iterator<Item = std::path::PathBuf> {
-    let mut results = vec![];
-    let entries = std::fs::read_dir(&*EXAMPLES_DIR).unwrap();
-    for entry in entries {
-        let entry = entry.unwrap();
-        let filename = entry.file_name().to_string_lossy().into_owned();
-        if filename.ends_with(".vir") {
-            results.push(entry.path())
-        }
-    }
-    results.into_iter()
-}
-
-fn test_example_files() -> impl Iterator<Item = std::path::PathBuf> {
-    let mut results = vec![];
-    let entries = std::fs::read_dir(&*EXAMPLES_DIR).unwrap();
-    for entry in entries {
-        let entry = entry.unwrap();
-        let filename = entry.file_name().to_string_lossy().into_owned();
-        if filename.ends_with(".vir") {
-            results.push(entry.path())
-        }
-    }
-    results.into_iter()
-}
 
 #[test]
 fn test_top() {
@@ -326,8 +273,9 @@ fn test_read_from_sink() {
     }
 }
 
+/*
 #[test]
-fn test_parses() {
+fn test_tokenize() {
     let mut errors = vec![];
 
     for filepath in example_files().chain(test_example_files()) {
@@ -340,9 +288,13 @@ fn test_parses() {
             .to_string_lossy()
             .into_owned();
 
-        if let Err(_error) = std::panic::catch_unwind(|| {
+        let result = std::panic::catch_unwind(|| {
+            let start = Instant::now();
+
             let text: Arc<[u8]> = Arc::from(text.into_bytes().into_boxed_slice());
             let tokenizer = Tokenizer::new(text.clone());
+            let stop = Instant::now();
+
             for token in tokenizer.tokens() {
                 if let TokenKind::Unknown = token.kind() {
                     let start = usize::from(token.pos());
@@ -353,14 +305,78 @@ fn test_parses() {
                     );
                 }
             }
-        }) {
-            eprintln!("    {BATSU} {filename}");
-            errors.push(filename);
-        } else {
-            eprintln!("    {CHECK} {filename}");
+
+            stop - start
+        });
+
+        match result {
+            Err(_error) => {
+                eprintln!("    {BATSU} {filename}");
+                errors.push(filename);
+            }, 
+            Ok(duration) => {
+                eprintln!("    {CHECK} {filename:<20}{:>6} us", duration.as_micros());
+            },
         }
     }
     if errors.len() > 0 {
         panic!("Errors in examples:\n  - {}", errors.join("\n  - "))
     }
 }
+*/
+
+macro_rules! test_example {
+    ($filename:ident) => {
+        paste!(
+            #[test]
+            fn [< test_parse_ $filename >]() {
+                let filename = format!("{}.vir", stringify!($filename));
+                let filepath = EXAMPLES_DIR.join(&filename);
+                let text = std::fs::read_to_string(&filepath).unwrap();
+
+                let start = Instant::now();
+
+                let text: Arc<[u8]> = Arc::from(text.into_bytes().into_boxed_slice());
+                let mut parser = Parser::new(text.clone());
+                parser.ast();
+                let stop = Instant::now();
+                let duration = stop - start;
+
+                if parser.errors().len() > 0 {
+                    eprintln!("    {BATSU} {filename:<20}{:>6} us", duration.as_micros());
+
+                    for error in parser.errors() {
+                        eprintln!("        {error:?}");
+                    }
+                    panic!("{} errors while parsing {filepath:?}", parser.errors().len());
+
+                } else {
+                    eprintln!("    {CHECK} {filename:<20}{:>6} us", duration.as_micros());
+                }
+            }
+        );
+    }
+}
+
+test_example!(blink);
+test_example!(buffer);
+test_example!(delay);
+test_example!(echo);
+test_example!(edge);
+test_example!(enums);
+test_example!(extensions);
+test_example!(fns);
+test_example!(gcd);
+test_example!(lfsr);
+test_example!(lights);
+test_example!(literals);
+test_example!(matches);
+test_example!(passthrough);
+test_example!(queue);
+test_example!(random);
+test_example!(resetter);
+test_example!(rf);
+test_example!(sockets);
+test_example!(structs);
+test_example!(top);
+test_example!(uart);

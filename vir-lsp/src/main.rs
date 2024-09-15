@@ -2,10 +2,12 @@ use virdant::parse::parse_package;
 use serde_json::{Value, json};
 use directories;
 use log::*;
+use virdant::parser::Parser;
 use virdant::Virdant;
 
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 
 type Uri = String;
@@ -150,6 +152,7 @@ impl Buffer {
     fn send_diagnostics(&mut self) {
         let mut diagnostics = vec![];
 
+        /*
         if let Err(err) = parse_package(&self.text) {
             let span = err.span();
 
@@ -171,7 +174,28 @@ impl Buffer {
             });
             diagnostics.push(diagnostic);
         }
+*/
 
+        let text = std::fs::read_to_string(self.uri[7..].to_string()).unwrap();
+        let mut parser = Parser::new(Arc::from(text.into_bytes().into_boxed_slice()));
+        parser.ast();
+        for error in parser.errors() {
+            let token = error.token();
+            let linecol = parser.token_linecol(token.clone());
+            let stop_col = linecol.col() + parser.token_len(token);
+            diagnostics.push(
+                json!({
+                    "range": {
+                        "start": { "line": linecol.line() - 1, "character": linecol.col() - 1 },
+                        "end": { "line": linecol.line() - 1, "character": stop_col - 1 },
+                    },
+                    "severity": 1, // ERROR
+                    "message": format!("{error:?}"),
+                })
+            );
+        }
+
+        /*
         let mut virdant = Virdant::new(self.uri[7..].to_string());
         if let Err(errs) = virdant.check() {
             for err in errs.into_iter() {
@@ -189,6 +213,7 @@ impl Buffer {
                 );
             }
         }
+*/
 
         let message = json!({
             "jsonrpc": "2.0",

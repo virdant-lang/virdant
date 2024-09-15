@@ -73,15 +73,14 @@ pub fn pretty_print_ast(ast: &Ast, parser: &Parser, indent_level: usize) {
             let name = token_to_str(name_token, parser);
             println!("{indent}  {name:?}");
         },
-        Ast::Item { kind, name, stmts, width } => {
+        Ast::Item { kind, name, stmts, attrs } => {
             println!("{indent}Item");
             println!("{indent}  kind:  {kind:?}");
             let name_str = token_to_str(name, parser);
             println!("{indent}  name:  {name_str:?}");
-            let width_str = width.as_ref().map(|token| {
-                token_to_str(token, parser)
-            });
-            println!("{indent}  width: {width_str:?}");
+            for attr in attrs {
+                pretty_print_ast(attr.as_ref(), parser, indent_level + 1);
+            };
             for stmt in stmts {
                 pretty_print_ast(stmt.as_ref(), parser, indent_level + 1);
             }
@@ -154,6 +153,7 @@ pub fn pretty_print_ast(ast: &Ast, parser: &Parser, indent_level: usize) {
         Ast::MatchArm { pat: _, expr: _ } => println!("{indent}MatchArm"),
         Ast::PatBind(_) => println!("{indent}PatBind"),
         Ast::PatAt(_, _) => println!("{indent}PatAt"),
+        _ => todo!(),
     };
 }
 

@@ -1,5 +1,5 @@
 use std::{marker::PhantomData, sync::Arc};
-use crate::location::Pos;
+use crate::location::{LineCol, Pos};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TokenizeErr(pub String);
@@ -75,6 +75,7 @@ pub enum TokenKind {
     KwUnion,
     KwStruct,
     KwEnum,
+    KwFn,
 
     KwWidth,
 
@@ -83,7 +84,10 @@ pub enum TokenKind {
     KwReg,
     KwWire,
 
+    KwSubmod,
+
     KwOn,
+    KwOf,
 
     KwSocket,
     KwMaster,
@@ -247,8 +251,11 @@ impl<'a> Tokenizer<'a> {
     fn tokenize_identifierlike(&mut self) -> Token {
         let start_pos = self.pos;
 
+        let peek_char = self.consume().unwrap();
+        assert!(peek_char.is_ascii_alphabetic() || peek_char == b'_');
+
         while let Some(peek_char) = self.peek() {
-            if peek_char.is_ascii_alphabetic() || peek_char == b'_' {
+            if peek_char.is_ascii_alphanumeric() || peek_char == b'_' {
                 self.consume();
             } else {
                 break;
@@ -273,6 +280,7 @@ impl<'a> Tokenizer<'a> {
             kw_token!("union", TokenKind::KwUnion);
             kw_token!("struct", TokenKind::KwStruct);
             kw_token!("enum", TokenKind::KwEnum);
+            kw_token!("fn", TokenKind::KwFn);
 
             kw_token!("width", TokenKind::KwWidth);
 
@@ -281,6 +289,9 @@ impl<'a> Tokenizer<'a> {
             kw_token!("reg", TokenKind::KwReg);
             kw_token!("wire", TokenKind::KwWire);
 
+            kw_token!("submod", TokenKind::KwSubmod);
+
+            kw_token!("of", TokenKind::KwOf);
             kw_token!("on", TokenKind::KwOn);
 
             kw_token!("socket", TokenKind::KwSocket);
@@ -309,19 +320,41 @@ impl<'a> Tokenizer<'a> {
         let start_pos = self.pos;
 
         let input = &self.input[self.pos as usize..];
-        if input.starts_with(b"0x") {
+        let base: u8 = if input.starts_with(b"0x") {
             self.consume();
             self.consume();
+            16
         } else if input.starts_with(b"0b") {
             self.consume();
             self.consume();
-        }
+            2
+        } else {
+            10
+        };
 
-        while let Some(peek_char) = self.peek() {
-            if peek_char.is_ascii_digit() || peek_char == b'_' {
-                self.consume();
-            } else {
-                break;
+        if base == 2 {
+            while let Some(peek_char) = self.peek() {
+                if peek_char == b'0' || peek_char == b'1' || peek_char == b'_' {
+                    self.consume();
+                } else {
+                    break;
+                }
+            }
+        } else if base == 16 {
+            while let Some(peek_char) = self.peek() {
+                if peek_char.is_ascii_hexdigit() || peek_char == b'_' {
+                    self.consume();
+                } else {
+                    break;
+                }
+            }
+        } else {
+            while let Some(peek_char) = self.peek() {
+                if peek_char.is_ascii_digit() || peek_char == b'_' {
+                    self.consume();
+                } else {
+                    break;
+                }
             }
         }
 
@@ -350,5 +383,30 @@ impl<'a> Tokenizer<'a> {
         assert!(len < 256, "Token length cannot exceed 256");
 
         Token(token_kind, Pos::new(start_pos), len as u8)
+    }
+
+    pub fn token_linecol(&self, token: Token) -> LineCol {
+        let pos = usize::from(token.pos());
+
+        let mut lineno = 1;
+        let mut col = 1;
+
+        for (i, ch) in self.input.iter().copied().enumerate() {
+            if pos == i {
+                break;
+            }
+            if ch == b'\n' {
+                col = 1;
+                lineno += 1;
+            } else {
+                col += 1;
+            }
+        }
+
+        LineCol::new(lineno, col)
+    }
+
+    pub fn token_len(&self, token: Token) -> usize {
+        usize::from(token.len())
     }
 }

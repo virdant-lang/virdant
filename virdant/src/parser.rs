@@ -1,3 +1,4 @@
+use crate::location::LineCol;
 use crate::tokenizer::{Token, TokenKind, Tokenizer};
 use crate::ItemKind;
 use std::marker::PhantomData;
@@ -38,6 +39,7 @@ impl<'a> Parser<'a> {
             errors: vec![],
             tag: PhantomData,
         }
+
     }
 
     pub fn ast(&mut self) -> Arc<Ast> {
@@ -74,22 +76,34 @@ impl<'a> Parser<'a> {
         self.tokenizer.text()
     }
 
+    pub fn token_linecol(&self, token: Token) -> LineCol {
+        self.tokenizer.token_linecol(token)
+    }
+
+    pub fn token_len(&self, token: Token) -> usize {
+        self.tokenizer.token_len(token)
+    }
+
     fn recover_item(&mut self) {
         loop {
             let token_kind = self.peek();
             if token_kind == TokenKind::Eof {
                 return;
+            } else if token_kind == TokenKind::KwSubmod {
+                return;
             } else if token_kind == TokenKind::KwMod {
                 return;
-            } if token_kind == TokenKind::KwExt {
+            } else if token_kind == TokenKind::KwExt {
                 return;
-            } if token_kind == TokenKind::KwSocket {
+            } else if token_kind == TokenKind::KwSocket {
                 return;
-            } if token_kind == TokenKind::KwEnum {
+            } else if token_kind == TokenKind::KwEnum {
                 return;
-            } if token_kind == TokenKind::KwStruct {
+            } else if token_kind == TokenKind::KwStruct {
                 return;
-            } if token_kind == TokenKind::KwUnion {
+            } else if token_kind == TokenKind::KwUnion {
+                return;
+            } else if token_kind == TokenKind::KwFn {
                 return;
             }
             self.take();
@@ -98,6 +112,14 @@ impl<'a> Parser<'a> {
 
     fn peek(&self) -> TokenKind {
         self.tokens()[self.pos].kind()
+    }
+
+    fn peek2(&self) -> TokenKind {
+        if self.pos + 1 > self.tokens().len() {
+            TokenKind::Eof
+        } else {
+            self.tokens()[self.pos + 1].kind()
+        }
     }
 
     #[allow(dead_code)]
@@ -151,10 +173,12 @@ impl<'a> Parser<'a> {
 
     fn parse_item(&mut self) -> Result<Arc<Ast>, ParseError> {
         match self.peek() {
-            TokenKind::KwMod | TokenKind::KwExt => self.parse_moddef(),
+            TokenKind::KwSubmod | TokenKind::KwMod | TokenKind::KwExt => self.parse_moddef(),
             TokenKind::KwUnion => self.parse_uniondef(),
             TokenKind::KwStruct => self.parse_structdef(),
+            TokenKind::KwSocket => self.parse_socketdef(),
             TokenKind::KwEnum => self.parse_enumdef(),
+            TokenKind::KwFn => self.parse_fndef(),
             _ => {
                 let token = self.take();
                 let error = ParseError::ExpectedItemStart(token);
@@ -165,11 +189,17 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_moddef(&mut self) -> Result<Arc<Ast>, ParseError> {
-        let is_ext = self.consume_if(TokenKind::KwExt);
-        self.consume(TokenKind::KwMod)?;
+        let mut attrs = vec![];
+        if self.consume_if(TokenKind::KwExt) {
+            attrs.push(Arc::new(Ast::ItemExt));
+        }
+
+        if !self.consume_if(TokenKind::KwSubmod) {
+            self.consume(TokenKind::KwMod)?;
+        }
+
         let name = self.consume_ident()?;
         self.consume(TokenKind::CurlyLeft)?;
-        eprintln!("MODDEF {name:?}{}", if is_ext { " EXT" } else { "" });
         let mut stmts = vec![];
         while TokenKind::CurlyRight != self.peek() {
             let stmt = self.parse_moddef_statement()?;
@@ -181,7 +211,7 @@ impl<'a> Parser<'a> {
             name,
             kind: ItemKind::ModDef,
             stmts,
-            width: None,
+            attrs,
         }))
     }
 
@@ -241,6 +271,30 @@ impl<'a> Parser<'a> {
                     on,
                 }))
             },
+            TokenKind::KwMod => {
+                self.take();
+                let name = self.consume_ident()?;
+                self.consume(TokenKind::KwOf)?;
+                let moddef = self.parse_qualident()?;
+                self.consume(TokenKind::Semicolon)?;
+                Ok(Arc::new(Ast::Submod {
+                    name,
+                    moddef,
+                }))
+            },
+            TokenKind::KwMaster | TokenKind::KwSlave => {
+                let role = self.take();
+                self.consume(TokenKind::KwSocket)?;
+                let name = self.consume_ident()?;
+                self.consume(TokenKind::KwOf)?;
+                let socketdef = self.parse_qualident()?;
+                self.consume(TokenKind::Semicolon)?;
+                Ok(Arc::new(Ast::Socket {
+                    role,
+                    name,
+                    socketdef,
+                }))
+            },
             TokenKind::Ident => {
                 self.parse_driver()
             },
@@ -268,12 +322,12 @@ impl<'a> Parser<'a> {
             name,
             kind: ItemKind::ModDef,
             stmts,
-            width: None,
+            attrs: vec![],
         }))
     }
 
     fn parse_uniondef_statement(&mut self) -> Result<Arc<Ast>, ParseError> {
-        let ctor_name = self.consume_ident()?; 
+        let ctor_name = self.consume_ident()?;
         let params = self.parse_param_list()?;
         self.consume(TokenKind::Semicolon)?;
         Ok(Arc::new(Ast::CtorDef(ctor_name, params)))
@@ -295,12 +349,12 @@ impl<'a> Parser<'a> {
             name,
             kind: ItemKind::ModDef,
             stmts,
-            width: None,
+            attrs: vec![],
         }))
     }
 
     fn parse_structdef_statement(&mut self) -> Result<Arc<Ast>, ParseError> {
-        let field_name = self.consume_ident()?; 
+        let field_name = self.consume_ident()?;
         self.consume(TokenKind::Colon)?;
         let typ = self.parse_type()?;
         self.consume(TokenKind::Semicolon)?;
@@ -344,20 +398,75 @@ impl<'a> Parser<'a> {
         }
         self.consume(TokenKind::CurlyRight)?;
 
+        let width_attr = Arc::new(Ast::ItemWidth { width });
+
         Ok(Arc::new(Ast::Item {
             name,
             kind: ItemKind::EnumDef,
             stmts,
-            width: Some(width),
+            attrs: vec![width_attr],
         }))
     }
 
     fn parse_enumdef_statement(&mut self) -> Result<Arc<Ast>, ParseError> {
-        let name = self.consume_ident()?; 
+        let name = self.consume_ident()?;
         self.consume(TokenKind::Eq)?;
-        let value = self.consume(TokenKind::Word)?;
+        let value = self.parse_expr_word()?;
         self.consume(TokenKind::Semicolon)?;
         Ok(Arc::new(Ast::EnumerantDef(name, value)))
+    }
+
+    fn parse_socketdef(&mut self) -> Result<Arc<Ast>, ParseError> {
+        self.consume(TokenKind::KwSocket)?;
+        let name = self.consume_ident()?;
+        self.consume(TokenKind::CurlyLeft)?;
+        let mut stmts = vec![];
+        while TokenKind::CurlyRight != self.peek() {
+            let stmt = self.parse_socketdef_statement()?;
+            stmts.push(stmt);
+        }
+        self.consume(TokenKind::CurlyRight)?;
+
+        Ok(Arc::new(Ast::Item {
+            name,
+            kind: ItemKind::SocketDef,
+            attrs: vec![],
+            stmts,
+        }))
+    }
+
+    fn parse_socketdef_statement(&mut self) -> Result<Arc<Ast>, ParseError> {
+        let dir = if self.peek() == TokenKind::KwMiso || self.peek() == TokenKind::KwMosi {
+            self.take()
+        } else {
+            return Err(ParseError::Unknown(self.take()));
+        };
+
+        let name = self.consume_ident()?;
+        self.consume(TokenKind::Colon)?;
+        let typ = self.parse_type()?;
+        self.consume(TokenKind::Semicolon)?;
+        Ok(Arc::new(Ast::ChannelDef(dir, name, typ)))
+    }
+
+    fn parse_fndef(&mut self) -> Result<Arc<Ast>, ParseError> {
+        self.consume(TokenKind::KwFn)?;
+        let name = self.consume_ident()?;
+        let params = self.parse_param_list()?;
+        self.consume(TokenKind::Arrow)?;
+        let ret = self.parse_type()?;
+        self.consume(TokenKind::CurlyLeft)?;
+        let body = self.parse_expr()?;
+        self.consume(TokenKind::CurlyRight)?;
+
+        let sig = Arc::new(Ast::ItemSig { params, ret });
+
+        Ok(Arc::new(Ast::Item {
+            name,
+            kind: ItemKind::FnDef,
+            attrs: vec![sig],
+            stmts: vec![body],
+        }))
     }
 
     fn parse_path(&mut self) -> Result<Vec<Token>, ParseError> {
@@ -431,7 +540,7 @@ impl<'a> Parser<'a> {
 
         let mut result = false_branch;
         for (elseif_subject, elseif_expr) in elseifs.into_iter().rev() {
-            result = Arc::new(Ast::If { 
+            result = Arc::new(Ast::If {
                 subject: elseif_subject,
                 true_branch: elseif_expr,
                 false_branch: result,
@@ -528,6 +637,19 @@ impl<'a> Parser<'a> {
         let mut result = if self.consume_if(TokenKind::KwWord) {
             let exprs = self.parse_expr_list()?;
             Arc::new(Ast::Word(exprs))
+        } else if self.consume_if(TokenKind::KwSext) {
+            self.consume(TokenKind::ParenLeft)?;
+            let expr = self.parse_expr()?;
+            self.consume(TokenKind::ParenRight)?;
+            Arc::new(Ast::Sext(expr))
+        } else if self.consume_if(TokenKind::KwZext) {
+            self.consume(TokenKind::ParenLeft)?;
+            let expr = self.parse_expr()?;
+            self.consume(TokenKind::ParenRight)?;
+            Arc::new(Ast::Zext(expr))
+        } else if self.peek() == TokenKind::Ident &&
+            (self.peek2() == TokenKind::ColonColon || self.peek2() == TokenKind::ParenLeft) {
+            self.parse_expr_fncall()?
         } else {
             self.parse_expr_base()?
         };
@@ -579,7 +701,14 @@ impl<'a> Parser<'a> {
         self.peek() == TokenKind::ParenLeft ||
         self.peek() == TokenKind::At ||
         self.peek() == TokenKind::Hash ||
+        self.peek() == TokenKind::KwIf ||
         self.peek() == TokenKind::Ident
+    }
+
+    fn parse_expr_fncall(&mut self) -> Result<Arc<Ast>, ParseError> {
+        let name = self.parse_qualident()?;
+        let exprs = self.parse_expr_list()?;
+        Ok(Arc::new(Ast::FnCall(name, exprs)))
     }
 
     fn parse_expr_base(&mut self) -> Result<Arc<Ast>, ParseError> {
@@ -595,6 +724,8 @@ impl<'a> Parser<'a> {
             self.parse_expr_word()
         } else if self.peek() == TokenKind::At {
             self.parse_expr_ctor()
+        } else if self.peek() == TokenKind::Hash {
+            self.parse_expr_enumerant()
         } else {
             let path = self.parse_path()?;
             Ok(Arc::new(Ast::Reference(path)))
@@ -608,6 +739,12 @@ impl<'a> Parser<'a> {
         Ok(Arc::new(Ast::Ctor(name, exprs)))
     }
 
+    fn parse_expr_enumerant(&mut self) -> Result<Arc<Ast>, ParseError> {
+        self.consume(TokenKind::Hash)?;
+        let name = self.consume_ident()?;
+        Ok(Arc::new(Ast::Enumerant(name)))
+    }
+
     fn parse_expr_word(&mut self) -> Result<Arc<Ast>, ParseError> {
         let token = self.take();
         Ok(Arc::new(Ast::Lit(token)))
@@ -618,14 +755,21 @@ impl<'a> Parser<'a> {
         let driver_type = self.peek();
         let driver_type_token = if driver_type == TokenKind::RevFatArrow {
             self.consume(TokenKind::RevFatArrow)?
-        } else {
+        } else if driver_type == TokenKind::ColonEq {
             self.consume(TokenKind::ColonEq)?
+        } else {
+            self.consume(TokenKind::ColonEqColon)?
         };
 
-        let driver = self.parse_expr()?;
-        self.consume(TokenKind::Semicolon)?;
-
-        Ok(Arc::new(Ast::Driver(target, driver_type_token, driver)))
+        if driver_type_token.kind() == TokenKind::RevFatArrow || driver_type_token.kind() == TokenKind::ColonEq {
+            let driver = self.parse_expr()?;
+            self.consume(TokenKind::Semicolon)?;
+            Ok(Arc::new(Ast::Driver(target, driver_type_token, driver)))
+        } else {
+            let source = self.parse_path()?;
+            self.consume(TokenKind::Semicolon)?;
+            Ok(Arc::new(Ast::DriverSocket(target, source)))
+        }
     }
 }
 
@@ -640,14 +784,21 @@ pub enum Ast {
     None,
     Package { imports: Vec<Arc<Ast>>, items: Vec<Arc<Ast>> },
     Import(Ident),
-    Item { kind: ItemKind, name: Ident, stmts: Vec<Arc<Ast>>, width: Option<Token> },
+    Item { kind: ItemKind, name: Ident, attrs: Vec<Arc<Ast>>, stmts: Vec<Arc<Ast>> },
+    ItemWidth { width: Token },
+    ItemSig { params: Vec<Arc<Ast>>, ret: Arc<Ast> },
+    ItemExt,
     Type { name: QualIdent, args: Option<Vec<Arc<Ast>>> },
     TypeArgWidth { width: Width },
     Component { kind: ComponentKind, name: Ident, typ: Arc<Ast>, on: Option<Arc<Ast>> },
+    Submod { name: Ident, moddef: QualIdent },
+    Socket { role: Ident, name: Ident, socketdef: QualIdent },
     Driver(Path, Token, Arc<Ast>),
+    DriverSocket(Path, Path),
     FieldDef(Ident, Arc<Ast>),
     CtorDef(Ident, Vec<Arc<Ast>>),
-    EnumerantDef(Ident, Token),
+    EnumerantDef(Ident, Arc<Ast>),
+    ChannelDef(Token, Ident, Arc<Ast>),
     Reference(Path),
     Lit(Token),
     Word(Vec<Arc<Ast>>),
@@ -657,7 +808,7 @@ pub enum Ast {
     MethodCall(Arc<Ast>, Ident, Vec<Arc<Ast>>),
     Struct(Ident, Vec<Arc<Ast>>),
     Assign(Ident, Arc<Ast>),
-    FnCall(Ident, Vec<Arc<Ast>>),
+    FnCall(QualIdent, Vec<Arc<Ast>>),
     Field(Arc<Ast>, Ident),
     Ctor(Ident, Vec<Arc<Ast>>),
     Param(Ident, Arc<Ast>),
@@ -667,6 +818,7 @@ pub enum Ast {
     IdxRange(Arc<Ast>, StaticIndex, StaticIndex),
     Cat(Vec<Arc<Ast>>),
     Zext(Arc<Ast>),
+    Sext(Arc<Ast>),
     If { subject: Arc<Ast>, true_branch: Arc<Ast>, false_branch: Arc<Ast> },
     Match { subject: Arc<Ast>, arms: Vec<Arc<Ast>> },
     MatchArm { pat: Arc<Ast>, expr: Arc<Ast> },
