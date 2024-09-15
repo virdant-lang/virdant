@@ -7,8 +7,8 @@ use virdant_common::text::Text;
 
 pub type TokenLen = u32;
 
-#[derive(PartialEq, Eq, Clone)]
-struct Token(TokenKind, Pos, TokenLen);
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub struct Token(TokenKind, Pos, TokenLen);
 
 impl std::fmt::Debug for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -17,6 +17,10 @@ impl std::fmt::Debug for Token {
 }
 
 impl Token {
+    pub fn new(token_kind: TokenKind, pos: Pos, len: TokenLen) -> Token {
+        Token(token_kind, pos, len)
+    }
+
     pub fn kind(&self) -> TokenKind {
         self.0
     }
@@ -118,12 +122,28 @@ impl Tokenization {
         self.token_kinds.len()
     }
 
+    pub fn text(&self) -> Text {
+        self.text.clone()
+    }
+
     pub fn kinds(&self) -> &[TokenKind] {
         &self.token_kinds
     }
 
     pub fn positions(&self) -> &[Pos] {
         &self.token_positions
+    }
+
+    pub fn token_lens(&self) -> &[TokenLen] {
+        &self.token_lens
+    }
+
+    pub fn tokens(&self) -> Vec<Token> {
+        let mut results = vec![];
+        for i in 0..self.len() {
+            results.push(Token::new(self.token_kinds[i], self.token_positions[i], self.token_lens[i]));
+        }
+        results
     }
 
     pub fn has_errors(&self) -> bool {

@@ -16,4 +16,7 @@ path = "src/main.rs"
 [dependencies]
 serde = { version = "1.0.204", features = ["derive"] }
 toml = "0.8.16"
-virdant = { path = "../virdant", version = "0.1.0-rc0" }
+virdant-common = { path = "../virdant-common" }
+virdant-parser = { path = "../virdant-parser" }
+virdant-tokenizer = { path = "../virdant-tokenizer" }
+# virdant = { path = "../virdant", version = "0.1.0-rc0" }

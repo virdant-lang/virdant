@@ -649,7 +649,9 @@ version = "0.1.0-rc0"
 dependencies = [
  "serde",
  "toml",
- "virdant",
+ "virdant-common",
+ "virdant-parser",
+ "virdant-tokenizer",
 ]
 
 [[package]]

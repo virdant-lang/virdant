@@ -5,20 +5,12 @@ use std::sync::Arc;
 
 use virdant_common::text::Text;
 use virdant_common::location::Pos;
-use virdant_tokenizer::{tokenize, TokenKind, Tokenization};
+use virdant_tokenizer::{tokenize, TokenKind, Tokenization, Token};
 use virdant_common::ItemKind;
 
 pub fn parse(text: Text) -> Arc<Ast> {
     let mut parser = Parser::new(text);
     parser.ast()
-}
-
-#[derive(Debug, Clone)]
-pub struct Token(TokenKind, Pos);
-
-impl Token {
-    pub fn kind(&self) -> TokenKind { self.0 }
-    pub fn pos(&self) -> Pos { self.1 }
 }
 
 #[derive(Debug, Clone)]
@@ -133,7 +125,8 @@ impl Parser {
     fn take(&mut self) -> Token {
         let token_kind = self.tokenization.kinds()[self.pos];
         let pos = self.tokenization.positions()[self.pos];
-        let token = Token(token_kind, pos);
+        let len = self.tokenization.token_lens()[self.pos];
+        let token = Token::new(token_kind, pos, len);
         self.pos += 1;
         if token.kind() == TokenKind::Unknown {
             self.errors.push(ParseError::Unexpected(token.clone()));
