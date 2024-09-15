@@ -1,5 +1,7 @@
+use virdant_common::clog2;
 use crate::common::*;
 use crate::design::*;
+use crate::design::ItemKind;
 use crate::context::Context;
 use crate::ComponentClass;
 use crate::Flow;
