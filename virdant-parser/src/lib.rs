@@ -1,8 +1,25 @@
-use crate::location::LineCol;
-use crate::tokenizer::{Token, TokenKind, Tokenizer};
-use crate::ItemKind;
-use std::marker::PhantomData;
+#[cfg(test)]
+mod tests;
+
 use std::sync::Arc;
+
+use virdant_common::text::Text;
+use virdant_common::location::Pos;
+use virdant_tokenizer::{tokenize, TokenKind, Tokenization};
+use virdant_common::ItemKind;
+
+pub fn parse(text: Text) -> Arc<Ast> {
+    let mut parser = Parser::new(text);
+    parser.ast()
+}
+
+#[derive(Debug, Clone)]
+pub struct Token(TokenKind, Pos);
+
+impl Token {
+    pub fn kind(&self) -> TokenKind { self.0 }
+    pub fn pos(&self) -> Pos { self.1 }
+}
 
 #[derive(Debug, Clone)]
 pub enum ParseError {
@@ -13,31 +30,29 @@ pub enum ParseError {
 }
 
 impl ParseError {
-    pub fn token(&self) -> Token {
+    pub fn pos(&self) -> Pos {
         match self {
-            ParseError::Unexpected(token) => token,
-            ParseError::Expected(_expected_token_kind, token) => token,
-            ParseError::ExpectedItemStart(token) => token,
-            ParseError::Unknown(token) => token,
+            ParseError::Unexpected(token) => token.pos(),
+            ParseError::Expected(_expected_token_kind, token) => token.pos(),
+            ParseError::ExpectedItemStart(token) => token.pos(),
+            ParseError::Unknown(token) => token.pos(),
         }.clone()
     }
 }
 
-pub struct Parser<'a> {
-    tokenizer: Tokenizer<'a>,
+pub struct Parser {
+    tokenization: Tokenization,
     pos: usize,
     errors: Vec<ParseError>,
-    tag: std::marker::PhantomData<&'a ()>,
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(text: Arc<[u8]>) -> Self {
-        let tokenizer = Tokenizer::new(text);
+impl Parser {
+    pub fn new(text: Text) -> Self {
+        let tokenization = tokenize(text);
         Parser {
-            tokenizer,
+            tokenization,
             pos: 0,
             errors: vec![],
-            tag: PhantomData,
         }
 
     }
@@ -68,22 +83,6 @@ impl<'a> Parser<'a> {
         self.errors.clone()
     }
 
-    pub fn tokens(&self) -> Vec<Token> {
-        self.tokenizer.tokens()
-    }
-
-    pub fn text(&self) -> &[u8] {
-        self.tokenizer.text()
-    }
-
-    pub fn token_linecol(&self, token: Token) -> LineCol {
-        self.tokenizer.token_linecol(token)
-    }
-
-    pub fn token_len(&self, token: Token) -> usize {
-        self.tokenizer.token_len(token) as usize
-    }
-
     fn recover_item(&mut self) {
         loop {
             let token_kind = self.peek();
@@ -111,21 +110,14 @@ impl<'a> Parser<'a> {
     }
 
     fn peek(&self) -> TokenKind {
-        self.tokens()[self.pos].kind()
+        self.tokenization.kinds()[self.pos]
     }
 
     fn peek2(&self) -> TokenKind {
-        if self.pos + 1 > self.tokens().len() {
+        if self.pos + 1 > self.tokenization.len() {
             TokenKind::Eof
         } else {
-            self.tokens()[self.pos + 1].kind()
-        }
-    }
-
-    #[allow(dead_code)]
-    fn debug_ahead(&self) {
-        for token in &self.tokens()[self.pos..self.pos + 11] {
-            eprintln!("    {:?}({})", token.kind(), usize::from(token.pos()));
+            self.tokenization.kinds()[self.pos + 1]
         }
     }
 
@@ -139,7 +131,9 @@ impl<'a> Parser<'a> {
     }
 
     fn take(&mut self) -> Token {
-        let token = self.tokens()[self.pos].clone();
+        let token_kind = self.tokenization.kinds()[self.pos];
+        let pos = self.tokenization.positions()[self.pos];
+        let token = Token(token_kind, pos);
         self.pos += 1;
         if token.kind() == TokenKind::Unknown {
             self.errors.push(ParseError::Unexpected(token.clone()));
@@ -578,9 +572,10 @@ impl<'a> Parser<'a> {
 
             Ok(Arc::new(Ast::PatAt(ctor_name, Some(subpats))))
         } else if self.consume_if(TokenKind::Hash) {
-            todo!()
+            let ctor_name = self.consume_ident()?;
+            Ok(Arc::new(Ast::PatAt(ctor_name, None)))
         } else if self.consume_if(TokenKind::KwElse) {
-            todo!()
+            Ok(Arc::new(Ast::PatElse))
         } else {
             let name = self.consume_ident()?;
             Ok(Arc::new(Ast::PatBind(name)))
@@ -781,7 +776,7 @@ pub type Width = Token;
 
 #[derive(Debug, Clone)]
 pub enum Ast {
-    None,
+    Error,
     Package { imports: Vec<Arc<Ast>>, items: Vec<Arc<Ast>> },
     Import(Ident),
     Item { kind: ItemKind, name: Ident, attrs: Vec<Arc<Ast>>, stmts: Vec<Arc<Ast>> },
@@ -824,6 +819,109 @@ pub enum Ast {
     MatchArm { pat: Arc<Ast>, expr: Arc<Ast> },
     PatBind(Token),
     PatAt(Token, Option<Vec<Arc<Ast>>>),
+    PatElse,
+}
+
+impl Ast {
+    pub fn children(&self) -> Vec<Arc<Ast>> {
+        match self {
+            Ast::Error => vec![],
+            Ast::Package { imports, items } => {
+                let mut results = imports.clone();
+                results.extend(items.iter().cloned());
+                results
+            },
+            Ast::Import(_) => vec![],
+            Ast::Item { kind: _, name: _, attrs, stmts } => {
+                let mut results = attrs.clone();
+                results.extend(stmts.iter().cloned());
+                results
+            },
+            Ast::ItemWidth { width: _ } => vec![],
+            Ast::ItemSig { params, ret } => {
+                let mut results = params.clone();
+                results.push(ret.clone());
+                results
+            },
+            Ast::ItemExt => vec![],
+            Ast::Type { name: _, args } => {
+                if let Some(args) = args {
+                    args.clone()
+                } else {
+                    vec![]
+                }
+            },
+            Ast::TypeArgWidth { width: _ } => vec![],
+            Ast::Component { kind: _, name: _, typ, on } => {
+                let mut results = vec![typ.clone()];
+                if let Some(on) = on {
+                    results.push(on.clone());
+                }
+                results
+            },
+            Ast::Submod { name: _, moddef: _ } => vec![],
+            Ast::Socket { role: _, name: _, socketdef: _ } => vec![],
+            Ast::Driver(_, _, expr) => vec![expr.clone()],
+            Ast::DriverSocket(_, _) => vec![],
+            Ast::FieldDef(_, typ) => vec![typ.clone()],
+            Ast::CtorDef(_, params) => params.clone(),
+            Ast::EnumerantDef(_, value) => vec![value.clone()],
+            Ast::ChannelDef(_, _, typ) => vec![typ.clone()],
+            Ast::Reference(_) => vec![],
+            Ast::Lit(_) => vec![],
+            Ast::Word(_) => vec![],
+            Ast::Bit(_) => vec![],
+            Ast::UnOp(_, subject) => vec![subject.clone()],
+            Ast::BinOp(lhs, _, rhs) => vec![lhs.clone(), rhs.clone()],
+            Ast::MethodCall(subject, _, args) => {
+                let mut results = vec![subject.clone()];
+                results.extend(args.iter().cloned());
+                results
+            },
+            Ast::Struct(_, assigns) => assigns.clone(),
+            Ast::Assign(_, expr) => vec![expr.clone()],
+            Ast::FnCall(_, args) => args.clone(),
+            Ast::Field(subject, _) => vec![subject.clone()],
+            Ast::Ctor(_, args) => args.clone(),
+            Ast::Param(_, typ) => vec![typ.clone()],
+            Ast::Enumerant(_) => vec![],
+            Ast::As(subject, typ) => vec![subject.clone(), typ.clone()],
+            Ast::Idx(subject, _) => vec![subject.clone()],
+            Ast::IdxRange(subject, _, _) => vec![subject.clone()],
+            Ast::Cat(args) => args.clone(),
+            Ast::Zext(subject) => vec![subject.clone()],
+            Ast::Sext(subject) => vec![subject.clone()],
+            Ast::If { subject, true_branch, false_branch } => vec![subject.clone(), true_branch.clone(), false_branch.clone()],
+            Ast::Match { subject, arms } => {
+                let mut results = vec![subject.clone()];
+                results.extend(arms.iter().cloned());
+                results
+            },
+            Ast::MatchArm { pat, expr } => vec![pat.clone(), expr.clone()],
+            Ast::PatBind(_) => vec![],
+            Ast::PatAt(_, subpats) => {
+                if let Some(subpats) = subpats {
+                    subpats.clone()
+                } else {
+                    vec![]
+                }
+            },
+            Ast::PatElse => vec![],
+        }
+    }
+
+    pub fn has_errors(&self) -> bool {
+        if let Ast::Error = self {
+            return true;
+        } else {
+            for child in self.children() {
+                if child.has_errors() {
+                    return true;
+                }
+            }
+            false
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

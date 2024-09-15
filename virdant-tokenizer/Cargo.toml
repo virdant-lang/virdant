@@ -1,0 +1,8 @@
+[package]
+name = "virdant-tokenizer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+paste = "1.0.15"
+virdant-common = { path = "../virdant-common", version = "0.1.0-rc0" }

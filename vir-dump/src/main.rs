@@ -167,7 +167,7 @@ fn token_vec_to_path_str<'a>(tokens: &[Token], parser: &'a Parser) -> String {
 
 fn token_to_str<'a>(token: &Token, parser: &'a Parser) -> std::borrow::Cow<'a, str> {
     let start = usize::from(token.pos());
-    let len = usize::from(token.len());
+    let len = token.len() as usize;
     let end = start + len;
 
     String::from_utf8_lossy(&parser.text()[start..end])

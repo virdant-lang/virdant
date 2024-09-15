@@ -1,13 +1,14 @@
-use std::{marker::PhantomData, sync::Arc};
-use crate::location::{LineCol, Pos};
+#[cfg(test)]
+mod tests;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct TokenizeErr(pub String);
+use virdant_common::location::{LineCol, Span, Pos};
+use virdant_common::text::Text;
+
 
 pub type TokenLen = u32;
 
 #[derive(PartialEq, Eq, Clone)]
-pub struct Token(TokenKind, Pos, TokenLen);
+struct Token(TokenKind, Pos, TokenLen);
 
 impl std::fmt::Debug for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -106,12 +107,17 @@ pub enum TokenKind {
 }
 
 pub struct Tokenization {
+    text: Text,
     token_kinds: Vec<TokenKind>,
     token_positions: Vec<Pos>,
     token_lens: Vec<u32>,
 }
 
 impl Tokenization {
+    pub fn len(&self) -> usize {
+        self.token_kinds.len()
+    }
+
     pub fn kinds(&self) -> &[TokenKind] {
         &self.token_kinds
     }
@@ -120,13 +126,62 @@ impl Tokenization {
         &self.token_positions
     }
 
-    pub fn lens(&self) -> &[u32] {
-        &self.token_lens
+    pub fn has_errors(&self) -> bool {
+        for token_kind in &self.token_kinds {
+            if *token_kind == TokenKind::Unknown {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn error_positions(&self) -> Vec<Pos> {
+        let mut results = vec![];
+        for (token_kind, pos) in self.token_kinds.iter().zip(self.token_positions.iter()) {
+            if *token_kind == TokenKind::Unknown {
+                results.push(*pos);
+            }
+        }
+        results
+    }
+
+    pub fn linecol(&self, pos: Pos) -> LineCol {
+        let pos = usize::from(pos);
+
+        let mut lineno = 1;
+        let mut col = 1;
+
+        for (i, ch) in self.text.iter().copied().enumerate() {
+            if pos == i {
+                break;
+            }
+            if ch == b'\n' {
+                col = 1;
+                lineno += 1;
+            } else {
+                col += 1;
+            }
+        }
+
+        LineCol::new(lineno, col)
+    }
+
+    pub fn span(&self, pos: Pos) -> Span {
+        for (i, other_pos) in self.token_positions.iter().enumerate() {
+            if pos == *other_pos {
+                let len = self.token_lens[i];
+                let start = self.linecol(pos);
+                let end_pos = Pos::new(u32::from(pos) + len as u32);
+                let end = self.linecol(end_pos);
+                return Span::new(start, end);
+            }
+        }
+        panic!("No token found at position {pos:?}")
     }
 }
 
-pub fn tokenize(text: Arc<[u8]>) -> Tokenization {
-    let tokenizer = Tokenizer::new(text);
+pub fn tokenize(text: Text) -> Tokenization {
+    let tokenizer = Tokenizer::new(text.clone());
 
     let mut token_kinds = vec![];
     let mut token_pos = vec![];
@@ -138,31 +193,32 @@ pub fn tokenize(text: Arc<[u8]>) -> Tokenization {
         token_lens.push(len);
     }
 
+
+
     Tokenization {
+        text,
         token_kinds,
         token_positions: token_pos,
         token_lens,
     }
 }
 
-pub struct Tokenizer<'a> {
-    input: Arc<[u8]>,
+struct Tokenizer {
+    text: Text,
     pos: u32,
     token_kinds: Vec<TokenKind>,
     token_pos: Vec<Pos>,
     token_lens: Vec<u32>,
-    tag: std::marker::PhantomData<&'a ()>,
 }
 
-impl<'a> Tokenizer<'a> {
-    pub fn new(input: Arc<[u8]>) -> Self {
+impl Tokenizer {
+    fn new(text: Text) -> Self {
         let mut tokenizer = Tokenizer {
-            input,
+            text,
             pos: 0,
             token_kinds: vec![],
             token_pos: vec![],
             token_lens: vec![],
-            tag: PhantomData,
         };
         tokenizer.tokenize();
         tokenizer
@@ -176,23 +232,21 @@ impl<'a> Tokenizer<'a> {
         }
     }
 
-    pub fn tokens(&self) -> Vec<Token> {
+    fn tokens(&self) -> Vec<Token> {
         let mut results = vec![];
         for ((token_kind, token_pos), len) in self.token_kinds.iter().zip(self.token_pos.iter()).zip(self.token_lens.iter()) {
             results.push(Token(*token_kind, *token_pos, *len));
         }
+
+        results.push(Token(TokenKind::Eof, Pos::new(self.pos), 0));
         results
     }
 
-    pub fn text(&self) -> &[u8] {
-        &self.input
-    }
-
-    pub fn token(&mut self) -> Option<Token> {
+    fn token(&mut self) -> Option<Token> {
         while let Some(head_char) = self.peek() {
             if head_char.is_ascii_whitespace() {
                 self.consume();
-            } else if self.input[self.pos as usize..].starts_with(b"//") {
+            } else if self.text[self.pos as usize..].starts_with(b"//") {
                 self.consume_comment();
             } else {
                 break;
@@ -217,7 +271,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn peek(&self) -> Option<u8> {
-        self.input.get(self.pos as usize).copied()
+        self.text.get(self.pos as usize).copied()
     }
 
     fn consume(&mut self) -> Option<u8> {
@@ -233,7 +287,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn consume_comment(&mut self) {
-        assert!(self.input[self.pos as usize..].starts_with(b"//"));
+        assert!(self.text[self.pos as usize..].starts_with(b"//"));
         while let Some(consume_char) = self.consume() {
             if consume_char == b'\n' {
                 break
@@ -243,7 +297,7 @@ impl<'a> Tokenizer<'a> {
 
     fn tokenize_punctuation(&mut self) -> Option<Token>  {
         let pos = self.pos;
-        let input = &self.input[self.pos as usize..];
+        let input = &self.text[self.pos as usize..];
 
         let (token_kind, len) = 'result: {
             macro_rules! punc_token {
@@ -307,7 +361,7 @@ impl<'a> Tokenizer<'a> {
             }
         }
 
-        let ident = String::from_utf8_lossy(&self.input[start_pos as usize..self.pos as usize]);
+        let ident = String::from_utf8_lossy(&self.text[start_pos as usize..self.pos as usize]);
 
         let token_kind = 'result: {
             macro_rules! kw_token {
@@ -363,7 +417,7 @@ impl<'a> Tokenizer<'a> {
     fn tokenize_number(&mut self) -> Token {
         let start_pos = self.pos;
 
-        let input = &self.input[self.pos as usize..];
+        let input = &self.text[self.pos as usize..];
         let base: u8 = if input.starts_with(b"0x") {
             self.consume();
             self.consume();
@@ -424,33 +478,7 @@ impl<'a> Tokenizer<'a> {
 
         let len = self.pos - start_pos;
 
-        assert!(len < 256, "Token length cannot exceed 256");
-
         Token(token_kind, Pos::new(start_pos), len as u32)
     }
-
-    pub fn token_linecol(&self, token: Token) -> LineCol {
-        let pos = usize::from(token.pos());
-
-        let mut lineno = 1;
-        let mut col = 1;
-
-        for (i, ch) in self.input.iter().copied().enumerate() {
-            if pos == i {
-                break;
-            }
-            if ch == b'\n' {
-                col = 1;
-                lineno += 1;
-            } else {
-                col += 1;
-            }
-        }
-
-        LineCol::new(lineno, col)
-    }
-
-    pub fn token_len(&self, token: Token) -> u32 {
-        token.len()
-    }
 }
+

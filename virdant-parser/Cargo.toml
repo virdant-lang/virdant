@@ -1,0 +1,9 @@
+[package]
+name = "virdant-parser"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+virdant-common = { path = "../virdant-common", version = "0.1.0-rc0" }
+virdant-tokenizer = { path = "../virdant-tokenizer", version = "0.1.0-rc0" }
+paste = "1.0.15"

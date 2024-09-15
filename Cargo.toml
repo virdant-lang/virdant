@@ -5,5 +5,8 @@ members = [
     "vir-lsp",
     "vir-dump",
     "vir-compile",
-    "virdant"
+    "virdant",
+    "virdant-tokenizer",
+    "virdant-parser",
+    "virdant-common",
 ]

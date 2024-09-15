@@ -1,8 +1,5 @@
-pub type WordVal = u64;
-pub type Width = u64;
-pub type Offset = u64;
-pub type Tag = u64;
-pub type StaticIndex = u64;
+pub mod text;
+pub mod location;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ComponentClass {
