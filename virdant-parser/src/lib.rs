@@ -126,7 +126,7 @@ impl Parser {
         let token_kind = self.tokenization.kinds()[self.pos];
         let pos = self.tokenization.positions()[self.pos];
         let len = self.tokenization.token_lens()[self.pos];
-        let token = Token::new(token_kind, pos, len);
+        let token = Token::new(token_kind, pos, len, self.tokenization.text());
         self.pos += 1;
         if token.kind() == TokenKind::Unknown {
             self.errors.push(ParseError::Unexpected(token.clone()));

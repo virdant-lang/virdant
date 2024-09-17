@@ -7,8 +7,8 @@ use virdant_common::text::Text;
 
 pub type TokenLen = u32;
 
-#[derive(PartialEq, Eq, Clone, Copy)]
-pub struct Token(TokenKind, Pos, TokenLen);
+#[derive(Clone)]
+pub struct Token(TokenKind, Pos, TokenLen, Text);
 
 impl std::fmt::Debug for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -17,8 +17,8 @@ impl std::fmt::Debug for Token {
 }
 
 impl Token {
-    pub fn new(token_kind: TokenKind, pos: Pos, len: TokenLen) -> Token {
-        Token(token_kind, pos, len)
+    pub fn new(token_kind: TokenKind, pos: Pos, len: TokenLen, text: Text) -> Token {
+        Token(token_kind, pos, len, text)
     }
 
     pub fn kind(&self) -> TokenKind {
@@ -31,6 +31,13 @@ impl Token {
 
     pub fn len(&self) -> u32 {
         self.2
+    }
+
+    pub fn as_string(&self) -> String {
+        let text = &self.3;
+        let start = usize::from(self.pos());
+        let end = start + self.len() as usize;
+        String::from_utf8_lossy(&text[start..end]).to_string()
     }
 }
 
@@ -141,7 +148,8 @@ impl Tokenization {
     pub fn tokens(&self) -> Vec<Token> {
         let mut results = vec![];
         for i in 0..self.len() {
-            results.push(Token::new(self.token_kinds[i], self.token_positions[i], self.token_lens[i]));
+            let token = Token::new(self.token_kinds[i], self.token_positions[i], self.token_lens[i], self.text.clone());
+            results.push(token);
         }
         results
     }
@@ -207,7 +215,7 @@ pub fn tokenize(text: Text) -> Tokenization {
     let mut token_pos = vec![];
     let mut token_lens = vec![];
 
-    for Token(token_kind, pos, len) in tokenizer.tokens() {
+    for Token(token_kind, pos, len, _text) in tokenizer.tokens() {
         token_kinds.push(token_kind);
         token_pos.push(pos);
         token_lens.push(len);
@@ -255,10 +263,10 @@ impl Tokenizer {
     fn tokens(&self) -> Vec<Token> {
         let mut results = vec![];
         for ((token_kind, token_pos), len) in self.token_kinds.iter().zip(self.token_pos.iter()).zip(self.token_lens.iter()) {
-            results.push(Token(*token_kind, *token_pos, *len));
+            results.push(Token(*token_kind, *token_pos, *len, self.text.clone()));
         }
 
-        results.push(Token(TokenKind::Eof, Pos::new(self.pos), 0));
+        results.push(Token(TokenKind::Eof, Pos::new(self.pos), 0, self.text.clone()));
         results
     }
 
@@ -283,7 +291,7 @@ impl Tokenizer {
             } else {
                 let pos = Pos::new(self.pos);
                 self.pos += 1;
-                Some(Token(TokenKind::Unknown, pos, 1))
+                Some(Token(TokenKind::Unknown, pos, 1, self.text.clone()))
             }
         } else {
             None
@@ -363,7 +371,7 @@ impl Tokenizer {
             None
         } else {
             self.pos += len;
-            Some(Token(token_kind, Pos::new(pos), len))
+            Some(Token(token_kind, Pos::new(pos), len, self.text.clone()))
         }
     }
 
@@ -431,7 +439,7 @@ impl Tokenizer {
             TokenKind::Ident
         };
 
-        Token(token_kind, Pos::new(start_pos), ident.len() as u32)
+        Token(token_kind, Pos::new(start_pos), ident.len() as u32, self.text.clone())
     }
 
     fn tokenize_number(&mut self) -> Token {
@@ -498,7 +506,7 @@ impl Tokenizer {
 
         let len = self.pos - start_pos;
 
-        Token(token_kind, Pos::new(start_pos), len as u32)
+        Token(token_kind, Pos::new(start_pos), len as u32, self.text.clone())
     }
 }
 

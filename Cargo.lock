@@ -682,6 +682,15 @@ name = "virdant-common"
 version = "0.1.0"
 
 [[package]]
+name = "virdant-hir"
+version = "0.1.0"
+dependencies = [
+ "paste",
+ "virdant-common",
+ "virdant-parser",
+]
+
+[[package]]
 name = "virdant-parser"
 version = "0.1.0"
 dependencies = [

@@ -9,4 +9,5 @@ members = [
     "virdant-tokenizer",
     "virdant-parser",
     "virdant-common",
+    "virdant-hir",
 ]
