@@ -1,7 +1,8 @@
 use paste::paste;
+use virdant_tokenizer::TokenKind;
 use std::sync::Arc;
 
-use virdant_common::{ComponentClass, Flow, ItemKind};
+use virdant_common::{ChannelDir, ComponentClass, Flow, ItemKind, SocketRole};
 use virdant_parser::{Ast, ComponentKind};
 use crate::symbols::*;
 
@@ -28,7 +29,7 @@ macro_rules! symbol_table_methods {
     ($name:ident, $symbol:ident) => {
         paste!{
             fn [<add_ $name >](&mut self, mut $name: $symbol) -> Id<$symbol> {
-                let id = Id::new(self.typedefs.len());
+                let id = Id::new(self.[< $name s >].len());
                 $name.set_id(id.clone());
                 self.[<$name s>].push($name);
                 id
@@ -77,7 +78,10 @@ impl SymbolTable {
         add_items(&mut st, package, ast.as_ref());
         add_typedef_symbols(&mut st, package, ast.as_ref());
         add_socketdef_symbols(&mut st, package, ast.as_ref());
-        add_modef_symbols(&mut st, package, ast.as_ref());
+        add_moddef_symbols(&mut st, package, ast.as_ref());
+        add_moddef_subports(&mut st);
+        add_moddef_socketports(&mut st);
+        add_moddef_subsocketports(&mut st);
         st
     }
 
@@ -156,8 +160,18 @@ impl SymbolTable {
     fn moddef_ports(&self, moddef: Id<ModDef>) -> Vec<Id<Component>> {
         let mut results = vec![];
         for component in &self.components {
-            if component.moddef == moddef {
+            if component.moddef == moddef && component.class == ComponentClass::Port {
                 results.push(component.id());
+            }
+        }
+        results
+    }
+
+    fn moddef_sockets(&self, moddef: Id<ModDef>) -> Vec<Id<Socket>> {
+        let mut results = vec![];
+        for socket in &self.sockets {
+            if socket.moddef == moddef {
+                results.push(socket.id());
             }
         }
         results
@@ -322,13 +336,20 @@ fn add_socketdef_symbols_for(st: &mut SymbolTable, package_name: &str, socketdef
             let socketdef_qualname = format!("{package_name}::{socketdef_name}");
             let socketdef_id = st.resolve_socketdef(&socketdef_qualname, package_name).unwrap();
             match stmt.as_ref() {
-                Ast::ChannelDef(_dir, name, _typ) => {
+                Ast::ChannelDef(dir, name, _typ) => {
                     let name = name.as_string();
                     let qualname = format!("{package_name}::{socketdef_name}::{name}");
+                    let dir = match dir.kind() {
+                        TokenKind::KwMosi => ChannelDir::Mosi,
+                        TokenKind::KwMiso => ChannelDir::Miso,
+                        _ => unreachable!(),
+                    };
                     let channel = Channel {
                         id: None,
                         qualname,
+                        name,
                         socketdef: socketdef_id,
+                        dir,
                     };
                     st.add_channel(channel);
                 },
@@ -340,14 +361,14 @@ fn add_socketdef_symbols_for(st: &mut SymbolTable, package_name: &str, socketdef
     }
 }
 
-fn add_modef_symbols(st: &mut SymbolTable, package: &str, ast: &Ast) {
+fn add_moddef_symbols(st: &mut SymbolTable, package: &str, ast: &Ast) {
     if let Ast::Package { items, imports: _ } = ast {
         for item in items {
             match item.as_ref() {
                 Ast::Item { kind, name, attrs: _, stmts: _ } => {
                     match kind {
                         ItemKind::ModDef => {
-                            add_modef_symbols_for(st, package, &name.as_string(), item);
+                            add_moddef_symbols_for(st, package, &name.as_string(), item);
                         },
                         _ => (),
                     }
@@ -360,7 +381,7 @@ fn add_modef_symbols(st: &mut SymbolTable, package: &str, ast: &Ast) {
     }
 }
 
-fn add_modef_symbols_for(st: &mut SymbolTable, package_name: &str, moddef_name: &str, ast: &Ast) {
+fn add_moddef_symbols_for(st: &mut SymbolTable, package_name: &str, moddef_name: &str, ast: &Ast) {
     if let Ast::Item { stmts, .. } = ast {
         let moddef_qualname = format!("{package_name}::{moddef_name}");
         let moddef_id = st.resolve_moddef(&moddef_qualname, package_name).unwrap();
@@ -384,6 +405,7 @@ fn add_modef_symbols_for(st: &mut SymbolTable, package_name: &str, moddef_name: 
                     let component = Component {
                         id: None,
                         qualname,
+                        path: vec![name],
                         moddef: moddef_id.clone(),
                         flow,
                         class,
@@ -392,7 +414,7 @@ fn add_modef_symbols_for(st: &mut SymbolTable, package_name: &str, moddef_name: 
                 },
                 Ast::Submod { name, moddef } => {
                     let submoddef: String = moddef.into_iter().map(|m| m.as_string()).collect::<Vec<_>>().join("::");
-                    let moddef_id = if let Some(moddef_id) = st.resolve_moddef(&submoddef, package_name) {
+                    let submodule_moddef_id = if let Some(moddef_id) = st.resolve_moddef(&submoddef, package_name) {
                         moddef_id
                     } else {
                         st.errors.push(format!("Could not resolve name: {submoddef}"));
@@ -404,12 +426,13 @@ fn add_modef_symbols_for(st: &mut SymbolTable, package_name: &str, moddef_name: 
                     let submod = Submodule {
                         id: None,
                         qualname,
+                        name,
                         moddef: moddef_id,
+                        submodule_moddef: submodule_moddef_id,
                     };
                     st.add_submodule(submod);
-                    // add_modef_symbols_for_submodule(st, package_name, moddef, name);
                 },
-                Ast::Socket { name, socketdef, role: _ } => {
+                Ast::Socket { name, socketdef, role } => {
                     let socketdef: String = socketdef.into_iter().map(|m| m.as_string()).collect::<Vec<_>>().join("::");
                     let socketdef_id = if let Some(socketdef_id) = st.resolve_socketdef(&socketdef, package_name) {
                         socketdef_id
@@ -420,10 +443,18 @@ fn add_modef_symbols_for(st: &mut SymbolTable, package_name: &str, moddef_name: 
 
                     let name = name.as_string();
                     let qualname = format!("{package_name}::{moddef_name}::{name}");
+                    let role = match role.kind() {
+                        TokenKind::KwMaster => SocketRole::Master,
+                        TokenKind::KwSlave => SocketRole::Slave,
+                        _ => unreachable!(),
+                    };
                     let socket = Socket {
                         id: None,
                         qualname,
                         socketdef: socketdef_id,
+                        moddef: moddef_id,
+                        name,
+                        role,
                     };
                     st.add_socket(socket);
                 },
@@ -435,5 +466,96 @@ fn add_modef_symbols_for(st: &mut SymbolTable, package_name: &str, moddef_name: 
     }
 }
 
-fn add_modef_symbols_for_submodule(st: &mut SymbolTable, package: &str, moddef: &str) {
+fn add_moddef_subports(st: &mut SymbolTable) {
+    let submodules = st.submodules.clone();
+    for submodule in submodules {
+        add_moddef_subports_for(st, &submodule);
+    }
+}
+
+fn add_moddef_subports_for(st: &mut SymbolTable, submodule: &Submodule) {
+    for port_id in st.moddef_ports(submodule.moddef) {
+        let port = &st.component(port_id);
+        let port_name = port.path[port.path.len() - 1].to_string();
+        let qualname = format!("{}.{port_name}", &submodule.qualname);
+        let flow = match port.flow {
+            Flow::Source => Flow::Sink,
+            Flow::Sink => Flow::Source,
+            Flow::Duplex => unreachable!(),
+        };
+        let class = ComponentClass::SubPort;
+        let component = Component {
+            id: None,
+            qualname,
+            path: vec![submodule.name.clone(), port_name],
+            moddef: submodule.moddef,
+            flow,
+            class,
+        };
+        st.add_component(component);
+    }
+}
+
+fn add_moddef_socketports(st: &mut SymbolTable) {
+    let sockets = st.sockets.clone();
+    for socket in sockets {
+        add_moddef_socketports_for(st, &socket);
+    }
+}
+
+fn add_moddef_socketports_for(st: &mut SymbolTable, socket: &Socket) {
+    for channel_id in st.socketdef_channels(socket.socketdef) {
+        let channel = &st.channel(channel_id);
+        let qualname = format!("{}.{}", &socket.qualname, channel.name);
+        let flow = match (socket.role, channel.dir) {
+            (SocketRole::Master, ChannelDir::Mosi) => Flow::Sink,
+            (SocketRole::Master, ChannelDir::Miso) => Flow::Source,
+            (SocketRole::Slave, ChannelDir::Mosi) => Flow::Sink,
+            (SocketRole::Slave, ChannelDir::Miso) => Flow::Source,
+        };
+        let class = ComponentClass::SubPort;
+        let component = Component {
+            id: None,
+            qualname,
+            path: vec![socket.name.clone(), channel.name.clone()],
+            moddef: socket.moddef,
+            flow,
+            class,
+        };
+        st.add_component(component);
+    }
+}
+
+fn add_moddef_subsocketports(st: &mut SymbolTable) {
+    let submodules = st.submodules.clone();
+    for submodule in submodules {
+        let sockets = st.moddef_sockets(submodule.submodule_moddef);
+        for socket_id in sockets {
+            let socket = st.socket(socket_id).clone();
+            add_moddef_subsocketports_for(st, &submodule, &socket);
+        }
+    }
+}
+
+fn add_moddef_subsocketports_for(st: &mut SymbolTable, submodule: &Submodule, socket: &Socket) {
+    for channel_id in st.socketdef_channels(socket.socketdef) {
+        let channel = &st.channel(channel_id);
+        let qualname = format!("{}.{}.{}", &submodule.qualname, socket.name, channel.name);
+        let flow = match (socket.role, channel.dir) {
+            (SocketRole::Master, ChannelDir::Mosi) => Flow::Sink,
+            (SocketRole::Master, ChannelDir::Miso) => Flow::Source,
+            (SocketRole::Slave, ChannelDir::Mosi) => Flow::Sink,
+            (SocketRole::Slave, ChannelDir::Miso) => Flow::Source,
+        };
+        let class = ComponentClass::SubPort;
+        let component = Component {
+            id: None,
+            qualname,
+            path: vec![socket.name.clone(), channel.name.clone()],
+            moddef: socket.moddef,
+            flow,
+            class,
+        };
+        st.add_component(component);
+    }
 }

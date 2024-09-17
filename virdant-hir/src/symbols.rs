@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use virdant_common::{ComponentClass, Flow};
+use virdant_common::{ChannelDir, ComponentClass, Flow, SocketRole};
 
 #[derive(Hash)]
 pub struct Id<T>(u32, PhantomData<T>);
@@ -68,10 +68,10 @@ pub struct SocketDef {
 pub struct Component {
     pub id: Option<Id<Component>>,
     pub qualname: String,
+    pub path: Vec<String>,
     pub moddef: Id<ModDef>,
     pub flow: Flow,
     pub class: ComponentClass,
-//    pub path: Vec<String>,
 //    pub typ: Arc<Type>,
 //    pub clock: Option<Arc<Expr>>,
 //    pub driver: None
@@ -81,14 +81,19 @@ pub struct Component {
 pub struct Submodule {
     pub id: Option<Id<Submodule>>,
     pub qualname: String,
+    pub name: String,
     pub moddef: Id<ModDef>,
+    pub submodule_moddef: Id<ModDef>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Socket {
     pub id: Option<Id<Socket>>,
     pub qualname: String,
+    pub moddef: Id<ModDef>,
+    pub name: String,
     pub socketdef: Id<SocketDef>,
+    pub role: SocketRole,
 }
 
 #[derive(Debug, Clone)]
@@ -117,6 +122,8 @@ pub struct Channel {
     pub id: Option<Id<Channel>>,
     pub qualname: String,
     pub socketdef: Id<SocketDef>,
+    pub name: String,
+    pub dir: ChannelDir,
 }
 
 #[derive(Clone)]
