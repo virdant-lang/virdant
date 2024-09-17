@@ -1,0 +1,33 @@
+enum type MyEnum width 2 {
+    Foo = 0;
+    Baz = 1;
+    Qux = 2;
+}
+
+union type MyUnion {
+    Foo();
+    Bar(x : MyEnum);
+}
+
+mod Top {
+    wire my_union : MyUnion;
+    my_union := @Bar(#Baz);
+
+    wire union_match : MyEnum;
+    union_match :=
+        match my_union {
+            @Foo() => #Baz;
+            @Bar(x) => x;
+        };
+
+    wire my_enum : MyEnum;
+    my_enum := #Foo;
+
+    wire enum_match : Word[8];
+    enum_match :=
+        match my_enum {
+            #Foo => 0;
+            #Baz => 1;
+            #Qux => 2;
+        };
+}
