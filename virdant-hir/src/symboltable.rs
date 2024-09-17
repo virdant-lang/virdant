@@ -152,6 +152,26 @@ impl SymbolTable {
         }
         None
     }
+
+    fn moddef_ports(&self, moddef: Id<ModDef>) -> Vec<Id<Component>> {
+        let mut results = vec![];
+        for component in &self.components {
+            if component.moddef == moddef {
+                results.push(component.id());
+            }
+        }
+        results
+    }
+
+    fn socketdef_channels(&self, socketdef: Id<SocketDef>) -> Vec<Id<Channel>> {
+        let mut results = vec![];
+        for channel in &self.channels {
+            if channel.socketdef == socketdef {
+                results.push(channel.id());
+            }
+        }
+        results
+    }
 }
 
 

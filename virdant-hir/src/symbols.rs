@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use virdant_common::{ComponentClass, Flow};
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash)]
 pub struct Id<T>(u32, PhantomData<T>);
 
 impl<T> Clone for Id<T> {
@@ -12,6 +12,14 @@ impl<T> Clone for Id<T> {
 }
 
 impl<T> Copy for Id<T> {}
+
+impl<T> PartialEq for Id<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<T> Eq for Id<T> {}
 
 impl<T> Id<T> {
     pub(crate) fn new(id: usize) -> Id<T> {
