@@ -2,10 +2,10 @@
 resolver = "2"
 members = [
     "vir",
-    "vir-lsp",
-    "vir-dump",
-    "vir-compile",
-    "virdant",
+    #    "vir-lsp",
+    #    "vir-dump",
+    #    "vir-compile",
+    #    "virdant",
     "virdant-tokenizer",
     "virdant-parser",
     "virdant-common",

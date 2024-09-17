@@ -307,7 +307,7 @@ impl Parser {
 
         Ok(Arc::new(Ast::Item {
             name,
-            kind: ItemKind::ModDef,
+            kind: ItemKind::UnionDef,
             stmts,
             attrs: vec![],
         }))
@@ -334,7 +334,7 @@ impl Parser {
 
         Ok(Arc::new(Ast::Item {
             name,
-            kind: ItemKind::ModDef,
+            kind: ItemKind::StructDef,
             stmts,
             attrs: vec![],
         }))

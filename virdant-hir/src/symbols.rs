@@ -1,7 +1,17 @@
 use std::marker::PhantomData;
 
-#[derive(Hash, PartialEq, Eq, Clone, Copy)]
+use virdant_common::{ComponentClass, Flow};
+
+#[derive(Hash, PartialEq, Eq)]
 pub struct Id<T>(u32, PhantomData<T>);
+
+impl<T> Clone for Id<T> {
+    fn clone(&self) -> Self {
+        Id::new(self.0 as usize)
+    }
+}
+
+impl<T> Copy for Id<T> {}
 
 impl<T> Id<T> {
     pub(crate) fn new(id: usize) -> Id<T> {
@@ -17,58 +27,95 @@ impl<T> Id<T> {
 
 impl<T> std::fmt::Debug for Id<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let parts: Vec<&str> = std::any::type_name::<T>().split("::").collect();
-        write!(f, "{}({})", parts[1], self.to_usize())
+        let name: &str = std::any::type_name::<T>().split("::").last().unwrap();
+        write!(f, "{name}({})", self.to_usize())
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct TypeDef {
-    pub(crate) id: Option<Id<TypeDef>>,
-    pub(crate) qualname: String,
+    pub id: Option<Id<TypeDef>>,
+    pub qualname: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct ModDef {
-    pub(crate) id: Option<Id<ModDef>>,
-    pub(crate) qualname: String,
+    pub id: Option<Id<ModDef>>,
+    pub qualname: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct FnDef {
-    pub(crate) id: Option<Id<FnDef>>,
-    pub(crate) qualname: String,
+    pub id: Option<Id<FnDef>>,
+    pub qualname: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct SocketDef {
-    pub(crate) id: Option<Id<SocketDef>>,
-    pub(crate) qualname: String,
+    pub id: Option<Id<SocketDef>>,
+    pub qualname: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct Component {
-    pub(crate) id: Option<Id<Component>>,
-    pub(crate) qualname: String,
+    pub id: Option<Id<Component>>,
+    pub qualname: String,
+    pub moddef: Id<ModDef>,
+    pub flow: Flow,
+    pub class: ComponentClass,
+//    pub path: Vec<String>,
+//    pub typ: Arc<Type>,
+//    pub clock: Option<Arc<Expr>>,
+//    pub driver: None
 }
 
 #[derive(Debug, Clone)]
 pub struct Submodule {
-    pub(crate) id: Option<Id<Submodule>>,
-    pub(crate) qualname: String,
+    pub id: Option<Id<Submodule>>,
+    pub qualname: String,
+    pub moddef: Id<ModDef>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Socket {
-    pub(crate) id: Option<Id<Socket>>,
-    pub(crate) qualname: String,
+    pub id: Option<Id<Socket>>,
+    pub qualname: String,
+    pub socketdef: Id<SocketDef>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Field {
+    pub id: Option<Id<Field>>,
+    pub qualname: String,
+    pub typedef: Id<TypeDef>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Ctor {
+    pub id: Option<Id<Ctor>>,
+    pub qualname: String,
+    pub typedef: Id<TypeDef>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Enumerant {
+    pub id: Option<Id<Enumerant>>,
+    pub qualname: String,
+    pub typedef: Id<TypeDef>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Channel {
+    pub id: Option<Id<Channel>>,
+    pub qualname: String,
+    pub socketdef: Id<SocketDef>,
 }
 
 #[derive(Clone)]
 pub enum ItemId {
     TypeDef(Id<TypeDef>),
     ModDef(Id<ModDef>),
-    Component(Id<Component>),
+    SocketDef(Id<SocketDef>),
 }
 
 impl std::fmt::Debug for ItemId {
@@ -76,7 +123,7 @@ impl std::fmt::Debug for ItemId {
         match self {
             ItemId::TypeDef(id) => write!(f, "TypeDef({})", id.to_usize()),
             ItemId::ModDef(id) => write!(f, "ModDef({})", id.to_usize()),
-            ItemId::Component(id) => write!(f, "Component({})", id.to_usize()),
+            ItemId::SocketDef(id) => write!(f, "SocketDef({})", id.to_usize()),
         }
     }
 }
@@ -98,3 +145,7 @@ symbol_methods!(FnDef);
 symbol_methods!(Component);
 symbol_methods!(Submodule);
 symbol_methods!(Socket);
+symbol_methods!(Field);
+symbol_methods!(Ctor);
+symbol_methods!(Enumerant);
+symbol_methods!(Channel);

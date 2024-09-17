@@ -6,4 +6,5 @@ edition = "2021"
 [dependencies]
 virdant-common = { path = "../virdant-common" }
 virdant-parser = { path = "../virdant-parser" }
+virdant-tokenizer = { path = "../virdant-tokenizer" }
 paste = "1.0.15"

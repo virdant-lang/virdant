@@ -1,6 +1,8 @@
 pub mod text;
 pub mod location;
 
+pub type WordVal = u64;
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ComponentClass {
     Port,
