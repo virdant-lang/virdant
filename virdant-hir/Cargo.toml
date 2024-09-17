@@ -1,0 +1,9 @@
+[package]
+name = "virdant-hir"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+virdant-common = { path = "../virdant-common" }
+virdant-parser = { path = "../virdant-parser" }
+paste = "1.0.15"
