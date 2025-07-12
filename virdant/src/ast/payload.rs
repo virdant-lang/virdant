@@ -1,6 +1,6 @@
 use crate::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, UnOp};
 
-use super::*;
+use crate::stringtable::InternedString;
 
 #[derive(Clone, Debug)]
 pub struct Import {

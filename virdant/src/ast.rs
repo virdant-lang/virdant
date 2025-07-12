@@ -1,10 +1,12 @@
-lalrpop_util::lalrpop_mod!(grammar);
-mod node;
-mod payload;
+pub mod node;
+pub mod payload;
 
 use std::sync::Arc;
 
 use bstr::{BStr, ByteSlice};
+
+pub mod parser_lalrpop;
+pub use parser_lalrpop as parser;
 
 use crate::fqn::PackageFqn;
 use crate::source::{Region, Source, SourceOffset, Span};
@@ -96,7 +98,7 @@ impl Ast {
         const INIT_CAP: usize = 4096;
         const ERROR_CAP: usize = 16;
 
-        let mut ast = AstData {
+        let mut ast_data = AstData {
             source: source.clone(),
             stringtable: stringtable.clone(),
             payloads: Vec::with_capacity(INIT_CAP),
@@ -106,27 +108,9 @@ impl Ast {
             errors: Vec::with_capacity(ERROR_CAP),
         };
 
-        let parser = grammar::PackageParser::new();
-        let text = String::from_utf8_lossy(&*source.text()).to_string();
-        parser
-            .parse(&mut ast, &stringtable, &source, &text)
-            .unwrap();
+        parser::parse(&mut ast_data, stringtable, source);
 
-        ast.parents = vec![AstNodeId(u16::MAX); ast.payloads.len()];
-        let mut stack = Vec::with_capacity(ast.payloads.len());
-        for i in 0..ast.payloads.len() {
-            let ast_node_id = AstNodeId(i.try_into().unwrap());
-
-            let num_children = ast.num_children[i];
-            for _ in 0..num_children {
-                let child_ast_node_id = stack.pop().unwrap();
-                ast.parents[usize::from(child_ast_node_id)] = ast_node_id;
-            }
-
-            stack.push(ast_node_id);
-        }
-
-        Ast(Arc::new(ast))
+        Ast(Arc::new(ast_data))
     }
 
     pub fn root(&self) -> node::Package {
