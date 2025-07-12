@@ -79,6 +79,17 @@ pub struct ExprCtor {
 }
 
 #[derive(Clone, Debug)]
+pub struct ExprIndex {
+    pub index: u16,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExprIndexRange {
+    pub index_hi: u16,
+    pub index_lo: u16,
+}
+
+#[derive(Clone, Debug)]
 pub struct Assign {
     pub name: InternedString,
 }

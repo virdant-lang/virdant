@@ -51,6 +51,7 @@ macro_rules! test_example {
     }
 }
 
+test_example!(basic);
 test_example!(blink);
 test_example!(buffer);
 test_example!(delay);

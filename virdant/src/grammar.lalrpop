@@ -377,6 +377,20 @@ ExprAtom: AstNodeId = {
 
         ast.add_node(payload, region, num_children)
     },
+    <ll:@L> <e:ExprAtom> "[" <index:Index> "]" <rr:@R> => {
+        let payload = AstNodePayload::ExprIndex(payload::ExprIndex { index });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1;
+
+        ast.add_node(payload, region, num_children)
+    },
+    <ll:@L> <e:ExprAtom> "[" <index_hi:Index> ".." <index_lo:Index> "]" <rr:@R> => {
+        let payload = AstNodePayload::ExprIndexRange(payload::ExprIndexRange { index_hi, index_lo });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1;
+
+        ast.add_node(payload, region, num_children)
+    },
     <ll:@L> "@" <ctor:Ident> <rr:@R> => {
         let payload = AstNodePayload::ExprCtor(payload::ExprCtor { ctor });
         let region = ast.region(source, ll, rr);
@@ -439,6 +453,10 @@ Path: AstNodeId = {
     },
 }
 
+Index: u16 = {
+    <index:r"[0-9]+"> => str::parse(index).unwrap(),
+}
+
 WordLit: InternedString = {
     <lit:Nat> => lit,
     <lit:Word> => lit,
@@ -485,7 +503,7 @@ match {
     "=", "=>", "->",
     "@", "$",
 
-    "::",
+    "::", "..",
     ":", ";", ",", ".",
 
     "{", "}",
