@@ -177,12 +177,12 @@ impl AstData {
         ast_node_id
     }
 
-    fn add_error_node(&mut self, region: Region, num_children: u16) -> AstNodeId {
+    fn add_error_node(&mut self, region: Region) -> AstNodeId {
         let payload = AstNodePayload::Error;
         let ast_node_id = AstNodeId(self.payloads.len().try_into().unwrap());
         self.payloads.push(payload);
         self.regions.push(region);
-        self.num_children.push(num_children);
+        self.num_children.push(0);
         self.errors.push(ast_node_id);
         ast_node_id
     }

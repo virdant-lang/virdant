@@ -21,12 +21,8 @@ PackageStmt: AstNodeId = {
     <item:Item> => item,
     <ll:@L> ! <rr:@R> => {
         let region = ast.region(source, ll, rr);
-        let num_children = 0;
 
-        ast.add_error_node(
-            region,
-            num_children,
-        )
+        ast.add_error_node(region)
     },
 }
 
@@ -194,12 +190,8 @@ ModDefStmt: AstNodeId = {
     <socket:ModDefStmtSocket> => socket,
     <ll:@L> ! <rr:@R> => {
         let region = ast.region(source, ll, rr);
-        let num_children = 0;
 
-        ast.add_error_node(
-            region,
-            num_children,
-        )
+        ast.add_error_node(region)
     },
 }
 
