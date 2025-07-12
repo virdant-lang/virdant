@@ -111,7 +111,7 @@ ParamList: u16 = {
 
 Params: u16 = {
     <param:Param> => 1,
-    <params:Params> <param:Param> => params + 1,
+    <params:Params> "," <param:Param> => params + 1,
 }
 
 Param: AstNodeId = {
