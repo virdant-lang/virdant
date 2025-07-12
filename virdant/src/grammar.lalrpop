@@ -192,6 +192,15 @@ ModDefStmt: AstNodeId = {
     <driver:ModDefStmtDriver> => driver,
     <instance:ModDefStmtInstance> => instance,
     <socket:ModDefStmtSocket> => socket,
+    <ll:@L> ! <rr:@R> => {
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
+
+        ast.add_error_node(
+            region,
+            num_children,
+        )
+    },
 }
 
 ModDefStmtComponent: AstNodeId = {
@@ -266,15 +275,6 @@ ModDefStmtDriver: AstNodeId = {
         let num_children = 2;
 
         ast.add_node(payload, region, num_children)
-    },
-    <ll:@L> ! <rr:@R> => {
-        let region = ast.region(source, ll, rr);
-        let num_children = 0;
-
-        ast.add_error_node(
-            region,
-            num_children,
-        )
     },
 }
 

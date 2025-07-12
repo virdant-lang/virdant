@@ -15,7 +15,7 @@ trait IsVirError: std::fmt::Debug + 'static {
 /// `import` statement names a package which does not exist.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseError {
-    pub package: PackageFqn,
+    pub region: Region,
     //pub error: VirParseError, // TODO
 }
 
@@ -109,7 +109,6 @@ pub struct UnresolvedComponent {
 /// Eg, a read from an `outgoing` port.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReadFromSink;
-
 
 /// Failed to resolve a method.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -214,13 +213,23 @@ impl IsVirError for DuplicateImportError {
     }
 }
 
+impl IsVirError for ParseError {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> String {
+        format!("Parse Error")
+    }
+}
+
 impl IsVirError for UnresolvedImportError {
     fn region(&self) -> Region {
         self.region.clone()
     }
 
     fn message(&self) -> String {
-        format!("Unresolved import")
+        format!("Unresolved import: {}", self.imported_package)
     }
 }
 
