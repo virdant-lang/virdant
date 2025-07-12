@@ -90,5 +90,6 @@ pub struct PatIdent {
 
 #[derive(Clone, Debug)]
 pub struct Ofness {
+    pub package: Option<InternedString>,
     pub name: InternedString,
 }

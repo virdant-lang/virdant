@@ -408,7 +408,20 @@ ArgList: u16 = {
 
 Ofness: AstNodeId = {
     <ll:@L> <name:Ident> <rr:@R> => {
-        let payload = AstNodePayload::Ofness(payload::Ofness { name });
+        let payload = AstNodePayload::Ofness(payload::Ofness {
+            package: None,
+            name,
+        });
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
+
+        ast.add_node(payload, region, num_children)
+    },
+    <ll:@L> <package:Ident> "::" <name:Ident> <rr:@R> => {
+        let payload = AstNodePayload::Ofness(payload::Ofness {
+            package: Some(package),
+            name,
+        });
         let region = ast.region(source, ll, rr);
         let num_children = 0;
 
@@ -441,4 +454,44 @@ Nat: InternedString = {
 
 Word: InternedString = {
     <nat:r"[0-9]+w[1-9][0-9]*"> => stringtable.intern(nat.as_bytes()),
+}
+
+match {
+    "import",
+    "mod",
+    "struct",
+    "union",
+    "type",
+
+    "incoming",
+    "outgoing",
+    "wire",
+    "reg",
+    "on",
+    "of",
+
+    "if",
+    "else",
+    "match",
+
+    r"[a-zA-Z_][a-zA-Z_0-9]*",
+    r"[0-9]+",
+    r"[0-9]+w[1-9][0-9]*",
+
+    "==",
+    "+",
+
+    ":=", "<=", ":=:",
+    "=", "=>", "->",
+    "@", "$",
+
+    "::",
+    ":", ";", ",", ".",
+
+    "{", "}",
+    "(", ")",
+    "[", "]",
+} else {
+    r"\s+" => { },
+    r"//[^\n]*\n" => { },
 }
