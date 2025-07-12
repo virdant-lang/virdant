@@ -1,4 +1,4 @@
-use crate::common::{BinOp, ComponentKind, DriverType, UnOp};
+use crate::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, UnOp};
 
 use super::*;
 
@@ -30,6 +30,16 @@ pub struct EnumDef {
 }
 
 #[derive(Clone, Debug)]
+pub struct SocketDef {
+    pub name: InternedString,
+}
+
+#[derive(Clone, Debug)]
+pub struct FnDef {
+    pub name: InternedString,
+}
+
+#[derive(Clone, Debug)]
 pub struct Component {
     pub name: InternedString,
     pub kind: ComponentKind,
@@ -46,6 +56,12 @@ pub struct Module {
 }
 
 #[derive(Clone, Debug)]
+pub struct Socket {
+    pub name: InternedString,
+    pub role: SocketRole,
+}
+
+#[derive(Clone, Debug)]
 pub struct Field {
     pub name: InternedString,
 }
@@ -58,6 +74,12 @@ pub struct Ctor {
 #[derive(Clone, Debug)]
 pub struct Enumerant {
     pub name: InternedString,
+}
+
+#[derive(Clone, Debug)]
+pub struct Channel {
+    pub name: InternedString,
+    pub dir: ChannelDir,
 }
 
 #[derive(Clone, Debug)]

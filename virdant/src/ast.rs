@@ -37,15 +37,19 @@ pub enum AstNodePayload {
     StructDef(payload::StructDef),
     UnionDef(payload::UnionDef),
     EnumDef(payload::EnumDef),
+    FnDef(payload::FnDef),
+    SocketDef(payload::SocketDef),
 
     Component(payload::Component),
     Driver(payload::Driver),
     BidirectionalDriver,
     Module(payload::Module),
+    Socket(payload::Socket),
 
     Field(payload::Field),
     Ctor(payload::Ctor),
     Enumerant(payload::Enumerant),
+    Channel(payload::Channel),
 
     Param(payload::Param),
 

@@ -2,7 +2,7 @@ use crate::ast::{AstData, AstNodeId, AstNodePayload};
 use crate::ast::payload;
 use crate::stringtable::{StringTable, InternedString};
 use crate::source::Source;
-use crate::common::{DriverType, ComponentKind, BinOp};
+use crate::common::{DriverType, ComponentKind, BinOp, ChannelDir, SocketRole};
 
 grammar<'a>(ast: &'a mut AstData, stringtable: &StringTable, source: &Source);
 
@@ -45,7 +45,7 @@ Item: AstNodeId = {
     <structdef:StructDef> => structdef,
     <uniondef:UnionDef> => uniondef,
     <enumdef:EnumDef> => enumdef,
-//  <socketdef:SocketDef> => socketdef,
+    <socketdef:SocketDef> => socketdef,
 //  <fndef:FnDef> => fndef,
 }
 
@@ -146,10 +146,40 @@ EnumDefStmt: AstNodeId = {
     },
 }
 
+SocketDef: AstNodeId = {
+    <ll:@L> "socket" <name:Ident> "{"
+        <stmts:SocketDefStmt*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::SocketDef(payload::SocketDef { name });
+        let region = ast.region(source, ll, rr);
+        let num_children = stmts.len().try_into().unwrap();
+
+        ast.add_node(payload, region, num_children)
+    },
+}
+
+SocketDefStmt: AstNodeId = {
+    <ll:@L> "mosi" <name:Ident> ":" Type ";" <rr:@R> => {
+        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Mosi });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1;
+
+        ast.add_node(payload, region, num_children)
+    },
+    <ll:@L> "miso" <name:Ident> ":" Type ";" <rr:@R> => {
+        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Miso });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1;
+
+        ast.add_node(payload, region, num_children)
+    },
+}
+
 ModDefStmt: AstNodeId = {
     <component:ModDefStmtComponent> => component,
     <driver:ModDefStmtDriver> => driver,
     <instance:ModDefStmtInstance> => instance,
+    <socket:ModDefStmtSocket> => socket,
 }
 
 ModDefStmtComponent: AstNodeId = {
@@ -244,6 +274,23 @@ ModDefStmtInstance: AstNodeId = {
 
         ast.add_node(payload, region, num_children)
     }
+}
+
+ModDefStmtSocket: AstNodeId = {
+    <ll:@L> "master" "socket" <name:Ident> "of" <ofness:Ofness> ";" <rr:@R> => {
+        let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Master });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1;
+
+        ast.add_node(payload, region, num_children)
+    },
+    <ll:@L> "slave" "socket" <name:Ident> "of" <ofness:Ofness> ";" <rr:@R> => {
+        let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Slave });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1;
+
+        ast.add_node(payload, region, num_children)
+    },
 }
 
 Type: AstNodeId = {
@@ -541,8 +588,14 @@ match {
     "union",
     "enum",
     "type",
+    "socket",
+    "fn",
 
     "width",
+    "mosi",
+    "miso",
+    "master",
+    "slave",
 
     "incoming",
     "outgoing",
