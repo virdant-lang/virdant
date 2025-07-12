@@ -1,4 +1,0 @@
-mod Top {
-    reg r : Bit;
-    r <= false;
-}

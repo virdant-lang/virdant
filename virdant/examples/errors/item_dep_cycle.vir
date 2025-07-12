@@ -1,7 +1,0 @@
-mod Foo {
-    mod bar of Bar;
-}
-
-mod Bar {
-    mod foo of Foo;
-}

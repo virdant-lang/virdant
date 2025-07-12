@@ -1,9 +1,0 @@
-[workspace]
-resolver = "2"
-members = [
-    "vir",
-    "vir-lsp",
-    "vir-dump",
-    "vir-compile",
-    "virdant"
-]
