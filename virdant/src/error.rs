@@ -19,6 +19,11 @@ pub struct ParseError {
     //pub error: VirParseError, // TODO
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportNotAtTopError {
+    pub region: Region,
+}
+
 /// `import` statement names a package which does not exist.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedImportError {
@@ -220,6 +225,16 @@ impl IsVirError for ParseError {
 
     fn message(&self) -> String {
         format!("Parse Error")
+    }
+}
+
+impl IsVirError for ImportNotAtTopError {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> String {
+        format!("Import not at top of file")
     }
 }
 

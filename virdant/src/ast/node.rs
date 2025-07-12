@@ -44,12 +44,21 @@ macro_rules! ast_with_payload {
 }
 
 ast!(Package);
+ast!(PackageStmt);
 ast_with_payload!(Import);
 ast!(Item);
 ast_with_payload!(ModDef);
 ast_with_payload!(Component);
 
 impl Package {
+    pub fn stmts(&self) -> Vec<PackageStmt> {
+        let mut result = vec![];
+        for child in self.as_ast_node().children() {
+            result.push(PackageStmt(self.ast(), child.id()));
+        }
+        result
+    }
+
     pub fn imports(&self) -> Vec<Import> {
         let mut imports = vec![];
         for child in self.as_ast_node().children() {
@@ -78,6 +87,23 @@ impl Package {
             }
         }
         results
+    }
+}
+
+impl PackageStmt {
+    pub fn as_import(&self) -> Option<Import> {
+        if let AstNodePayload::Import(_) = self.as_ast_node().payload() {
+            Some(Import(self.ast(), self.ast_node_id()))
+        } else {
+            None
+        }
+    }
+
+    pub fn as_item(&self) -> Option<Item> {
+        match self.as_ast_node().payload() {
+            AstNodePayload::ModDef(_) => Some(Item(self.ast(), self.ast_node_id())),
+            _ => None
+        }
     }
 }
 

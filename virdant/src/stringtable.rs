@@ -4,7 +4,7 @@ use internment::ArcIntern;
 #[derive(Clone)]
 pub struct StringTable;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct InternedString {
     data: ArcIntern<BString>,
 }
