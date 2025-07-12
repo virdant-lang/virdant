@@ -36,6 +36,7 @@ pub enum AstNodePayload {
     ModDef(payload::ModDef),
     StructDef(payload::StructDef),
     UnionDef(payload::UnionDef),
+    EnumDef(payload::EnumDef),
 
     Component(payload::Component),
     Driver(payload::Driver),
@@ -44,6 +45,7 @@ pub enum AstNodePayload {
 
     Field(payload::Field),
     Ctor(payload::Ctor),
+    Enumerant(payload::Enumerant),
 
     Param(payload::Param),
 
@@ -58,13 +60,18 @@ pub enum AstNodePayload {
     ExprUnOp(payload::ExprUnOp),
     ExprMethod(payload::ExprMethod),
     ExprCtor(payload::ExprCtor),
+    ExprEnumerant(payload::ExprEnumerant),
     ExprStruct,
     ExprIndex(payload::ExprIndex),
     ExprIndexRange(payload::ExprIndexRange),
+    ExprWord,
+    ExprZext,
+    ExprSext,
 
     Assign(payload::Assign),
 
     PatIdent(payload::PatIdent),
+    PatEnumerant(payload::PatEnumerant),
     PatElse,
 
     Ofness(payload::Ofness),

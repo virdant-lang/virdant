@@ -44,16 +44,16 @@ Item: AstNodeId = {
     <moddef:ModDef> => moddef,
     <structdef:StructDef> => structdef,
     <uniondef:UnionDef> => uniondef,
-//  <enumdef:EnumDef> => enumdef,
+    <enumdef:EnumDef> => enumdef,
 //  <socketdef:SocketDef> => socketdef,
 //  <fndef:FnDef> => fndef,
 }
 
 ModDef: AstNodeId = {
-    <ll:@L> "mod" <ident:Ident> "{"
+    <ll:@L> <ext:"ext"?> "mod" <ident:Ident> "{"
         <stmts:ModDefStmt*>
     "}" <rr:@R> => {
-        let payload = AstNodePayload::ModDef(payload::ModDef { name: ident });
+        let payload = AstNodePayload::ModDef(payload::ModDef { name: ident, is_ext: ext.is_some() });
         let region = ast.region(source, ll, rr);
         let num_children = stmts.len().try_into().unwrap();
 
@@ -117,6 +117,28 @@ Params: u16 = {
 Param: AstNodeId = {
     <ll:@L> <name:Ident> ":" Type <rr:@R> => {
         let payload = AstNodePayload::Param(payload::Param { name });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1;
+
+        ast.add_node(payload, region, num_children)
+    },
+}
+
+EnumDef: AstNodeId = {
+    <ll:@L> "enum" "type" <name:Ident> "width" <width:Width> "{"
+        <stmts:EnumDefStmt*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::EnumDef(payload::EnumDef { name, width });
+        let region = ast.region(source, ll, rr);
+        let num_children = stmts.len().try_into().unwrap();
+
+        ast.add_node(payload, region, num_children)
+    },
+}
+
+EnumDefStmt: AstNodeId = {
+    <ll:@L> <name:Ident> "=" Expr ";" <rr:@R> => {
+        let payload = AstNodePayload::Enumerant(payload::Enumerant { name });
         let region = ast.region(source, ll, rr);
         let num_children = 1;
 
@@ -284,6 +306,13 @@ ExprMatchArm: () = {
 }
 
 Pat: () = {
+    <ll:@L> "#" <name:Ident> <rr:@R> => {
+        let payload = AstNodePayload::PatEnumerant(payload::PatEnumerant { name });
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
+
+        ast.add_node(payload, region, num_children);
+    },
     <ll:@L> "@" <name:Ident> <rr:@R> => {
         let payload = AstNodePayload::PatIdent(payload::PatIdent { name });
         let region = ast.region(source, ll, rr);
@@ -370,6 +399,27 @@ ExprAtom: AstNodeId = {
 
         ast.add_node(payload, region, num_children)
     },
+    <ll:@L> "word" "(" <args:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprWord;
+        let region = ast.region(source, ll, rr);
+        let num_children = args;
+
+        ast.add_node(payload, region, num_children)
+    },
+    <ll:@L> "sext" "(" <args:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprSext;
+        let region = ast.region(source, ll, rr);
+        let num_children = args;
+
+        ast.add_node(payload, region, num_children)
+    },
+    <ll:@L> "zext" "(" <args:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprZext;
+        let region = ast.region(source, ll, rr);
+        let num_children = args;
+
+        ast.add_node(payload, region, num_children)
+    },
     <ll:@L> <e:ExprAtom> "->" <method:Ident> "(" <arglist:ArgList> ")" <rr:@R> => {
         let payload = AstNodePayload::ExprMethod(payload::ExprMethod { method });
         let region = ast.region(source, ll, rr);
@@ -388,6 +438,13 @@ ExprAtom: AstNodeId = {
         let payload = AstNodePayload::ExprIndexRange(payload::ExprIndexRange { index_hi, index_lo });
         let region = ast.region(source, ll, rr);
         let num_children = 1;
+
+        ast.add_node(payload, region, num_children)
+    },
+    <ll:@L> "#" <enumerant:Ident> <rr:@R> => {
+        let payload = AstNodePayload::ExprEnumerant(payload::ExprEnumerant { enumerant });
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
 
         ast.add_node(payload, region, num_children)
     },
@@ -454,32 +511,38 @@ Path: AstNodeId = {
 }
 
 Index: u16 = {
-    <index:r"[0-9]+"> => str::parse(index).unwrap(),
+    <index:NAT> => str::parse(index).unwrap(),
+}
+
+Width: u16 = {
+    <index:NAT> => str::parse(index).unwrap(),
 }
 
 WordLit: InternedString = {
-    <lit:Nat> => lit,
-    <lit:Word> => lit,
+    <nat:NAT> => stringtable.intern(nat.as_bytes()),
+    <nat:WORD_DEC> => stringtable.intern(nat.as_bytes()),
+    <nat:WORD_HEX> => stringtable.intern(nat.as_bytes()),
+    <nat:WORD_BIN> => stringtable.intern(nat.as_bytes()),
 }
 
 Ident: InternedString = {
-    <ident:r"[a-zA-Z_][a-zA-Z_0-9]*"> => stringtable.intern(ident.as_bytes()),
+    <ident:IDENT> => stringtable.intern(ident.as_bytes()),
 }
 
 Nat: InternedString = {
-    <nat:r"[0-9]+"> => stringtable.intern(nat.as_bytes()),
-}
-
-Word: InternedString = {
-    <nat:r"[0-9]+w[1-9][0-9]*"> => stringtable.intern(nat.as_bytes()),
+    <nat:NAT> => stringtable.intern(nat.as_bytes()),
 }
 
 match {
     "import",
+    "ext",
     "mod",
     "struct",
     "union",
+    "enum",
     "type",
+
+    "width",
 
     "incoming",
     "outgoing",
@@ -492,16 +555,16 @@ match {
     "else",
     "match",
 
-    r"[a-zA-Z_][a-zA-Z_0-9]*",
-    r"[0-9]+",
-    r"[0-9]+w[1-9][0-9]*",
+    "word",
+    "sext",
+    "zext",
 
     "==",
     "+",
 
     ":=", "<=", ":=:",
     "=", "=>", "->",
-    "@", "$",
+    "@", "$", "#",
 
     "::", "..",
     ":", ";", ",", ".",
@@ -509,6 +572,13 @@ match {
     "{", "}",
     "(", ")",
     "[", "]",
+
+    r"[0-9]+" => NAT,
+    r"[a-zA-Z_][a-zA-Z_0-9]*" => IDENT,
+} else {
+    r"[0-9][0-9_]*(w[1-9][0-9]*)?" => WORD_DEC,
+    r"0x[0-9a-fA-F][0-9a-fA-F_]*(w[1-9][0-9]*)?" => WORD_HEX,
+    r"0b[01][01_]*(w[1-9][0-9]*)?" => WORD_BIN,
 } else {
     r"\s+" => { },
     r"//[^\n]*\n" => { },

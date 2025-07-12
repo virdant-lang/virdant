@@ -10,6 +10,7 @@ pub struct Import {
 #[derive(Clone, Debug)]
 pub struct ModDef {
     pub name: InternedString,
+    pub is_ext: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -20,6 +21,12 @@ pub struct StructDef {
 #[derive(Clone, Debug)]
 pub struct UnionDef {
     pub name: InternedString,
+}
+
+#[derive(Clone, Debug)]
+pub struct EnumDef {
+    pub name: InternedString,
+    pub width: u16,
 }
 
 #[derive(Clone, Debug)]
@@ -45,6 +52,11 @@ pub struct Field {
 
 #[derive(Clone, Debug)]
 pub struct Ctor {
+    pub name: InternedString,
+}
+
+#[derive(Clone, Debug)]
+pub struct Enumerant {
     pub name: InternedString,
 }
 
@@ -79,6 +91,11 @@ pub struct ExprCtor {
 }
 
 #[derive(Clone, Debug)]
+pub struct ExprEnumerant {
+    pub enumerant: InternedString,
+}
+
+#[derive(Clone, Debug)]
 pub struct ExprIndex {
     pub index: u16,
 }
@@ -96,6 +113,11 @@ pub struct Assign {
 
 #[derive(Clone, Debug)]
 pub struct PatIdent {
+    pub name: InternedString,
+}
+
+#[derive(Clone, Debug)]
+pub struct PatEnumerant {
     pub name: InternedString,
 }
 
