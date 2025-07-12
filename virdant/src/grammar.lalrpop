@@ -654,4 +654,6 @@ match {
 } else {
     r"\s+" => { },
     r"//[^\n]*\n" => { },
+} else {
+    r"[^\w]" => INVALID,
 }
