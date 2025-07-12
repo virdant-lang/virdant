@@ -1,0 +1,14 @@
+[package]
+name = "virdant"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.98"
+bstr = "1.12.0"
+internment = { version = "0.8.6", features = ["arc"] }
+lalrpop-util = { version = "0.22.2", features = ["lexer"] }
+paste = "1.0.15"
+
+[build-dependencies]
+lalrpop = { version = "0.22.2" }

@@ -1,0 +1,516 @@
+use crate::ast::{AstData, AstNodeId, AstNodePayload};
+use crate::ast::payload;
+use crate::stringtable::{StringTable, InternedString};
+use crate::source::Source;
+use crate::common::{DriverType, ComponentKind, BinOp};
+
+grammar<'a>(ast: &'a mut AstData, stringtable: &StringTable, source: &Source);
+
+pub Package: AstNodeId = {
+    <ll:@L> <stmts:PackageStmt*> <rr:@R> => {
+        let payload = AstNodePayload::Package;
+        let region = ast.region(source, ll, rr);
+        let num_children: u16 = stmts.len().try_into().unwrap();
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+}
+
+PackageStmt: AstNodeId = {
+    <import:PackageImport> => import,
+    <item:Item> => item,
+    <ll:@L> ! <rr:@R> => {
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
+
+        ast.add_error_node(
+            region,
+            num_children,
+        )
+    },
+}
+
+PackageImport: AstNodeId = {
+    <ll:@L> "import" <ident:Ident> ";" <rr:@R> => {
+        let payload = AstNodePayload::Import(payload::Import { package: ident });
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+}
+
+Item: AstNodeId = {
+    <moddef:ModDef> => moddef,
+//  <structdef:StructDef> => structdef,
+  <uniondef:UnionDef> => uniondef,
+//  <enumdef:EnumDef> => enumdef,
+//  <socketdef:SocketDef> => socketdef,
+//  <fndef:FnDef> => fndef,
+}
+
+ModDef: AstNodeId = {
+    <ll:@L> "mod" <ident:Ident> "{"
+        <stmts:ModDefStmt*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::ModDef(payload::ModDef { name: ident });
+        let region = ast.region(source, ll, rr);
+        let num_children = stmts.len().try_into().unwrap();
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+}
+
+UnionDef: AstNodeId = {
+    <ll:@L> "union" "type" <name:Ident> "{"
+        <stmts:UnionDefStmt*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::UnionDef(payload::UnionDef { name });
+        let region = ast.region(source, ll, rr);
+        let num_children = stmts.len().try_into().unwrap();
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+}
+
+UnionDefStmt: AstNodeId = {
+    <ll:@L> <name:Ident> <paramlist:ParamList?> ";" <rr:@R> => {
+        let payload = AstNodePayload::Ctor(payload::Ctor { name });
+        let region = ast.region(source, ll, rr);
+        let num_children = paramlist.unwrap_or(0);
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+}
+
+ParamList: u16 = {
+    "(" <params:Params?> ")" => params.unwrap_or(0),
+}
+
+Params: u16 = {
+    <param:Param> => 1,
+    <params:Params> <param:Param> => params + 1,
+}
+
+Param: AstNodeId = {
+    <ll:@L> <name:Ident> ":" Type <rr:@R> => {
+        let payload = AstNodePayload::Param(payload::Param { name });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+}
+
+ModDefStmt: AstNodeId = {
+    <component:ModDefStmtComponent> => component,
+    <driver:ModDefStmtDriver> => driver,
+    <instance:ModDefStmtInstance> => instance,
+}
+
+ModDefStmtComponent: AstNodeId = {
+    <ll:@L> "incoming" <ident:Ident> ":" <typ:Type> <on:OnClause?> ";" <rr:@R> => {
+        let payload = AstNodePayload::Component(payload::Component {
+            name: ident,
+            kind: ComponentKind::Incoming,
+        });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1 + if on.is_none() { 0 } else { 1 };
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+    <ll:@L> "outgoing" <ident:Ident> ":" <typ:Type> <on:OnClause?> ";" <rr:@R> => {
+        let payload = AstNodePayload::Component(payload::Component {
+            name: ident,
+            kind: ComponentKind::Outgoing,
+        });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1 + if on.is_none() { 0 } else { 1 };
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+    <ll:@L> "wire" <ident:Ident> ":" <typ:Type> <on:OnClause?> ";" <rr:@R> => {
+        let payload = AstNodePayload::Component(payload::Component {
+            name: ident,
+            kind: ComponentKind::Wire,
+        });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1 + if on.is_none() { 0 } else { 1 };
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+    <ll:@L> "reg" <ident:Ident> ":" <typ:Type> <on:OnClause?> ";" <rr:@R> => {
+        let payload = AstNodePayload::Component(payload::Component {
+            name: ident,
+            kind: ComponentKind::Reg,
+        });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1 + if on.is_none() { 0 } else { 1 };
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+}
+
+OnClause: AstNodeId = {
+    "on" <expr:Expr> => expr,
+}
+
+ModDefStmtDriver: AstNodeId = {
+    <ll:@L> <lhs:Path> ":=" <rhs:Expr> ";" <rr:@R> => {
+        let payload = AstNodePayload::Driver(payload::Driver {
+            driver_type: DriverType::Continuous,
+        });
+        let region = ast.region(source, ll, rr);
+        let num_children = 2;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+    <ll:@L> <lhs:Path> "<=" <rhs:Expr> ";" <rr:@R> => {
+        let payload = AstNodePayload::Driver(payload::Driver {
+            driver_type: DriverType::Latched,
+        });
+        let region = ast.region(source, ll, rr);
+        let num_children = 2;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+    <ll:@L> <lhs:Path> ":=:" <rhs:Path> ";" <rr:@R> => {
+        let payload = AstNodePayload::BidirectionalDriver;
+        let region = ast.region(source, ll, rr);
+        let num_children = 2;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+    <ll:@L> ! <rr:@R> => {
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
+
+        ast.add_error_node(
+            region,
+            num_children,
+        )
+    },
+}
+
+ModDefStmtInstance: AstNodeId = {
+    <ll:@L> "mod" <name:Ident> "of" <ofness:Ofness> ";" <rr:@R> => {
+        let payload = AstNodePayload::Module(payload::Module { name });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    }
+}
+
+Type: AstNodeId = {
+    <ll:@L> <ident:Ident> <generics:("[" Nat "]")?> <rr:@R> => {
+        let payload = AstNodePayload::Type(ident, generics.map(|g| g.1));
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+}
+
+Expr: AstNodeId = {
+    <e:ExprIf> => e,
+    <e:ExprMatch> => e,
+//    expr_struct |
+    <e:ExprOpCmp> => e,
+}
+
+ExprIf: AstNodeId = {
+    <ll:@L> ExprIfStart <middles:ExprIfMiddle?> ExprIfEnd <rr:@R> => {
+        let payload = AstNodePayload::ExprIf;
+        let region = ast.region(source, ll, rr);
+        let num_children = 3 + middles.unwrap_or(0);
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    }
+}
+
+ExprIfStart: () = {
+    "if" Expr "{" Expr "}" "else" => (),
+}
+
+ExprIfMiddle: u16 = {
+    <another:ExprIfMiddle?> "if" Expr "{" Expr "}" "else" => another.unwrap_or(0) + 2,
+}
+
+ExprIfEnd: () = {
+    "{" Expr "}" => (),
+}
+
+ExprMatch: AstNodeId = {
+    <ll:@L> "match" Expr <annot:ExprMatchAnnotation?> "{"
+        <arms:ExprMatchArm*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::ExprMatch;
+        let region = ast.region(source, ll, rr);
+        let num_children = (arms.len() + 1 + annot.map(|_| 1).unwrap_or(0)).try_into().unwrap();
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+}
+
+ExprMatchAnnotation: () = {
+    ":" Type => (),
+}
+
+ExprMatchArm: () = {
+    Pat "=>" Expr ";" => (),
+}
+
+Pat: () = {
+    <ll:@L> "@" <name:Ident> <rr:@R> => {
+        let payload = AstNodePayload::PatIdent(payload::PatIdent { name });
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        );
+    },
+    <ll:@L> "@" <name:Ident> "(" <args: ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::PatIdent(payload::PatIdent { name });
+        let region = ast.region(source, ll, rr);
+        let num_children = args;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        );
+    },
+    <ll:@L> "else" <rr:@R> => {
+        let payload = AstNodePayload::PatElse;
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        );
+    },
+}
+
+ExprOpCmp: AstNodeId = {
+    <ll:@L> <lhs:ExprOpCmp> "==" <rhs:ExprOpAdd> <rr:@R> => {
+        let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op: BinOp::Eq });
+        let region = ast.region(source, ll, rr);
+        let num_children = 2;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+    <e:ExprOpAdd> => e,
+}
+
+ExprOpAdd: AstNodeId = {
+    <ll:@L> <lhs:ExprOpAdd> "+" <rhs:ExprAtom> <rr:@R> => {
+        let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op: BinOp::Add });
+        let region = ast.region(source, ll, rr);
+        let num_children = 2;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+    <e:ExprAtom> => e,
+}
+
+ExprAtom: AstNodeId = {
+    <ll:@L> <path:Path> <rr:@R> => {
+        let payload = AstNodePayload::ExprReference;
+        let region = ast.region(source, ll, rr);
+        let num_children = 1;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+    <ll:@L> <lit:WordLit> <rr:@R> => {
+        let payload = AstNodePayload::ExprWordLit(payload::ExprWordLit { literal: lit });
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+    <ll:@L> <e:ExprAtom> "->" <method:Ident> "(" <arglist:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprMethod(payload::ExprMethod { method });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1 + arglist;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+    <ll:@L> "@" <ctor:Ident> <rr:@R> => {
+        let payload = AstNodePayload::ExprCtor(payload::ExprCtor { ctor });
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+    <ll:@L> "@" <ctor:Ident> "(" <args:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprCtor(payload::ExprCtor { ctor });
+        let region = ast.region(source, ll, rr);
+        let num_children = args;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+    <ll:@L> "(" <e:Expr> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprParen;
+        let region = ast.region(source, ll, rr);
+        let num_children = 1;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+}
+
+ArgList: u16 = {
+    <start:(Expr ",")+> Expr ","? => u16::try_from(start.len()).unwrap() + 1,
+    Expr ","? => 1,
+    => 0,
+}
+
+Ofness: AstNodeId = {
+    <ll:@L> <name:Ident> <rr:@R> => {
+        let payload = AstNodePayload::Ofness(payload::Ofness { name });
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+}
+
+Path: AstNodeId = {
+    <ll:@L> <start:(Ident ".")*> <end:Ident> <rr:@R> => {
+        let payload = AstNodePayload::Path;
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
+
+        ast.add_node(
+            payload,
+            region,
+            num_children,
+        )
+    },
+}
+
+WordLit: InternedString = {
+    <lit:Nat> => lit,
+    <lit:Word> => lit,
+}
+
+Ident: InternedString = {
+    <ident:r"[a-zA-Z_][a-zA-Z_0-9]*"> => stringtable.intern(ident.as_bytes()),
+}
+
+Nat: InternedString = {
+    <nat:r"[0-9]+"> => stringtable.intern(nat.as_bytes()),
+}
+
+Word: InternedString = {
+    <nat:r"[0-9]+w[1-9][0-9]*"> => stringtable.intern(nat.as_bytes()),
+}
