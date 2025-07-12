@@ -63,6 +63,7 @@ pub enum AstNodePayload {
     ExprBinOp(payload::ExprBinOp),
     ExprUnOp(payload::ExprUnOp),
     ExprMethod(payload::ExprMethod),
+    ExprFn,
     ExprCtor(payload::ExprCtor),
     ExprEnumerant(payload::ExprEnumerant),
     ExprStruct,

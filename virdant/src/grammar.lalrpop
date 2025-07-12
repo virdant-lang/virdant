@@ -46,7 +46,7 @@ Item: AstNodeId = {
     <uniondef:UnionDef> => uniondef,
     <enumdef:EnumDef> => enumdef,
     <socketdef:SocketDef> => socketdef,
-//  <fndef:FnDef> => fndef,
+    <fndef:FnDef> => fndef,
 }
 
 ModDef: AstNodeId = {
@@ -170,6 +170,18 @@ SocketDefStmt: AstNodeId = {
         let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Miso });
         let region = ast.region(source, ll, rr);
         let num_children = 1;
+
+        ast.add_node(payload, region, num_children)
+    },
+}
+
+FnDef: AstNodeId = {
+    <ll:@L> "fn" <name:Ident> <paramlist:ParamList> "->" Type "{"
+        Expr
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::FnDef(payload::FnDef { name });
+        let region = ast.region(source, ll, rr);
+        let num_children = paramlist + 2;
 
         ast.add_node(payload, region, num_children)
     },
@@ -464,6 +476,13 @@ ExprAtom: AstNodeId = {
         let payload = AstNodePayload::ExprZext;
         let region = ast.region(source, ll, rr);
         let num_children = args;
+
+        ast.add_node(payload, region, num_children)
+    },
+    <ll:@L> <ofness:Ofness> "(" <args:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprFn;
+        let region = ast.region(source, ll, rr);
+        let num_children = 1 + args;
 
         ast.add_node(payload, region, num_children)
     },
