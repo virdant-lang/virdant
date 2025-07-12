@@ -1,0 +1,22 @@
+enum type Opcode width 7 {
+    OP      = 0b01_100_11;
+    OP_IMM  = 0b00_100_11;
+    LOAD    = 0b00_000_11;
+    STORE   = 0b01_000_11;
+    JAL     = 0b11_011_11;
+    BRANCH  = 0b11_000_11;
+    LUI     = 0b01_101_11;
+    AUIPC   = 0b00_101_11;
+    JALR    = 0b11_001_11;
+    FENCE   = 0b00_011_11;
+    SYSTEM  = 0b11_100_11;
+}
+
+mod Top {
+    outgoing out : Word[7];
+
+    wire n : Opcode;
+    n := #OP;
+
+    out := n->value();
+}

@@ -1,0 +1,75 @@
+import resetter;
+
+mod Top {
+    incoming clock : Clock;
+    outgoing led_0 : Bit;
+    outgoing led_1 : Bit;
+    outgoing led_2 : Bit;
+    outgoing led_3 : Bit;
+    outgoing led_4 : Bit;
+
+    mod delay of Delay;
+    delay.clock := clock;
+    delay.start := true;
+    delay.amount := delay_amount;
+
+    mod resetter of resetter::Resetter;
+    resetter.clock := clock;
+
+    reg delay_amount : Word[24] on clock;
+    delay_amount <= if resetter.out {
+        8388608
+    } else if delay_amount->gt(8388608) {
+        8388608
+    } else if delay.end_pulse {
+        delay_amount->sub(100000)
+    } else {
+        delay_amount
+    };
+
+    reg leds_on : Bit on clock;
+    leds_on <= if delay.end_pulse {
+        leds_on->not()
+    } else {
+        leds_on
+    };
+
+    led_0 := leds_on->not();
+    led_1 := leds_on;
+    led_2 := leds_on->not();
+    led_3 := leds_on;
+    led_4 := grue;
+}
+
+union type DelayState {
+    Idle();
+    Delay(countdown : Word[24]);
+    Extra();
+}
+
+mod Delay {
+    incoming clock : Clock;
+    incoming start : Bit;
+    incoming amount : Word[24];
+    outgoing end_pulse : Bit;
+
+    reg state : DelayState on clock;
+    state <= match state {
+        @Idle() => if start {
+            @Delay(amount)
+        } else {
+            @Idle()
+        };
+        @Delay(countdown) => if countdown->eq(0) {
+            @Idle()
+        } else {
+            @Delay(countdown->dec())
+        };
+    };
+
+    end_pulse := match state {
+        @Idle() => false;
+        @Delay(countdown) => countdown->eq(0);
+    };
+}
+

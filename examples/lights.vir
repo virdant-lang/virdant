@@ -51,7 +51,7 @@ mod Top {
     led_controller.set_rate := rate->eq(0)->not();
 
     wire rate : Word[3];
-    rate := 
+    rate :=
         if uart_receiver.data->eq(49) {
             1
         } else if uart_receiver.data->eq(50) {

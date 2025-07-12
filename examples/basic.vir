@@ -1,0 +1,19 @@
+mod Top {
+    incoming inp : Bit;
+    outgoing out : Bit;
+
+    out <= inp;
+
+    mod foo of Foo;
+}
+
+mod Foo {
+    incoming clock : Clock;
+    incoming inp : Bit;
+    outgoing out : Bit;
+
+    reg r : Bit on clock;
+
+    out := r;
+    r <= r;
+}
