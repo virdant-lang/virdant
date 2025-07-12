@@ -25,8 +25,8 @@ pub struct AstData {
     errors: Vec<AstNodeId>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AstNodeId(pub u16);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AstNodeId(PackageFqn, u16);
 
 #[derive(Debug, Clone)]
 pub enum AstNodePayload {
@@ -115,13 +115,13 @@ impl Ast {
 
     pub fn root(&self) -> node::Package {
         let ast_node_id: u16 = (self.payloads.len() - 1).try_into().unwrap();
-        node::Package(self.clone(), AstNodeId(ast_node_id))
+        node::Package(self.clone(), AstNodeId(self.package(), ast_node_id))
     }
 
     pub fn ast_node(&self, ast_node_id: AstNodeId) -> AstNode {
-        let payload = self.payloads[usize::from(ast_node_id)].clone();
-        let region = self.regions[usize::from(ast_node_id)].clone();
-        let parent = self.parents[usize::from(ast_node_id)].clone();
+        let payload = self.payloads[ast_node_id.index()].clone();
+        let region = self.regions[ast_node_id.index()].clone();
+        let parent = self.parents[ast_node_id.index()].clone();
 
         AstNode {
             ast: self.clone(),
@@ -135,7 +135,7 @@ impl Ast {
     pub fn errors(&self) -> Vec<AstNode> {
         let mut errors = vec![];
         for ast_node_id in &self.errors {
-            errors.push(self.ast_node(*ast_node_id));
+            errors.push(self.ast_node(ast_node_id.clone()));
         }
         errors
     }
@@ -170,7 +170,7 @@ impl AstData {
         region: Region,
         num_children: u16,
     ) -> AstNodeId {
-        let ast_node_id = AstNodeId(self.payloads.len().try_into().unwrap());
+        let ast_node_id = AstNodeId(self.package(), self.payloads.len().try_into().unwrap());
         self.payloads.push(payload);
         self.regions.push(region);
         self.num_children.push(num_children);
@@ -179,18 +179,12 @@ impl AstData {
 
     fn add_error_node(&mut self, region: Region) -> AstNodeId {
         let payload = AstNodePayload::Error;
-        let ast_node_id = AstNodeId(self.payloads.len().try_into().unwrap());
+        let ast_node_id = AstNodeId(self.package(), self.payloads.len().try_into().unwrap());
         self.payloads.push(payload);
         self.regions.push(region);
         self.num_children.push(0);
-        self.errors.push(ast_node_id);
+        self.errors.push(ast_node_id.clone());
         ast_node_id
-    }
-}
-
-impl From<AstNodeId> for usize {
-    fn from(value: AstNodeId) -> Self {
-        usize::from(value.0)
     }
 }
 
@@ -206,7 +200,7 @@ impl AstNode {
     }
 
     pub fn id(&self) -> AstNodeId {
-        self.id
+        self.id.clone()
     }
 
     pub fn spelling(&self) -> &BStr {
@@ -214,7 +208,7 @@ impl AstNode {
     }
 
     pub fn parent(&self) -> AstNode {
-        self.ast.ast_node(self.parent)
+        self.ast.ast_node(self.parent.clone())
     }
 
     pub fn child(&self, mut n: u16) -> AstNode {
@@ -224,7 +218,7 @@ impl AstNode {
                 if n == 0 {
                     return self
                         .ast
-                        .ast_node(AstNodeId(ast_node_id.try_into().unwrap()));
+                        .ast_node(AstNodeId(self.id.package(), ast_node_id.try_into().unwrap()));
                 }
                 n -= 1;
             }
@@ -234,7 +228,7 @@ impl AstNode {
 
     pub fn children(&self) -> Vec<AstNode> {
         let mut result = vec![];
-        let num_children = self.ast.num_children[usize::from(self.id)];
+        let num_children = self.ast.num_children[self.id.index()];
         for i in 0..num_children {
             result.push(self.child(i.try_into().unwrap()));
         }
@@ -246,6 +240,16 @@ impl AstNode {
     }
 
     pub fn region(&self) -> Region {
-        self.ast.regions[usize::from(self.id)].clone()
+        self.ast.regions[self.id.index()].clone()
+    }
+}
+
+impl AstNodeId {
+    pub fn package(&self) -> PackageFqn {
+        self.0.clone()
+    }
+
+    pub fn index(&self) -> usize {
+        self.1 as usize
     }
 }

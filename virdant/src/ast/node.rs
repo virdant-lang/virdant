@@ -13,7 +13,7 @@ macro_rules! ast {
                 self.0.clone()
             }
             pub fn ast_node_id(&self) -> AstNodeId {
-                self.1
+                self.1.clone()
             }
             pub fn as_ast_node(&self) -> AstNode {
                 self.ast().ast_node(self.ast_node_id())
