@@ -12,11 +12,7 @@ pub Package: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children: u16 = stmts.len().try_into().unwrap();
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
 }
 
@@ -40,18 +36,14 @@ PackageImport: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 0;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
 }
 
 Item: AstNodeId = {
     <moddef:ModDef> => moddef,
-//  <structdef:StructDef> => structdef,
-  <uniondef:UnionDef> => uniondef,
+    <structdef:StructDef> => structdef,
+    <uniondef:UnionDef> => uniondef,
 //  <enumdef:EnumDef> => enumdef,
 //  <socketdef:SocketDef> => socketdef,
 //  <fndef:FnDef> => fndef,
@@ -65,11 +57,29 @@ ModDef: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = stmts.len().try_into().unwrap();
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
+    },
+}
+
+StructDef: AstNodeId = {
+    <ll:@L> "struct" "type" <name:Ident> "{"
+        <stmts:StructDefStmt*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::StructDef(payload::StructDef { name });
+        let region = ast.region(source, ll, rr);
+        let num_children = stmts.len().try_into().unwrap();
+
+        ast.add_node(payload, region, num_children)
+    },
+}
+
+StructDefStmt: AstNodeId = {
+    <ll:@L> <name:Ident> ":" Type ";" <rr:@R> => {
+        let payload = AstNodePayload::Field(payload::Field { name });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1;
+
+        ast.add_node(payload, region, num_children)
     },
 }
 
@@ -81,11 +91,7 @@ UnionDef: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = stmts.len().try_into().unwrap();
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
 }
 
@@ -95,11 +101,7 @@ UnionDefStmt: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = paramlist.unwrap_or(0);
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
 }
 
@@ -118,11 +120,7 @@ Param: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 1;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
 }
 
@@ -141,11 +139,7 @@ ModDefStmtComponent: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 1 + if on.is_none() { 0 } else { 1 };
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
     <ll:@L> "outgoing" <ident:Ident> ":" <typ:Type> <on:OnClause?> ";" <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
@@ -155,11 +149,7 @@ ModDefStmtComponent: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 1 + if on.is_none() { 0 } else { 1 };
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
     <ll:@L> "wire" <ident:Ident> ":" <typ:Type> <on:OnClause?> ";" <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
@@ -169,11 +159,7 @@ ModDefStmtComponent: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 1 + if on.is_none() { 0 } else { 1 };
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
     <ll:@L> "reg" <ident:Ident> ":" <typ:Type> <on:OnClause?> ";" <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
@@ -183,11 +169,7 @@ ModDefStmtComponent: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 1 + if on.is_none() { 0 } else { 1 };
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
 }
 
@@ -203,11 +185,7 @@ ModDefStmtDriver: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 2;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
     <ll:@L> <lhs:Path> "<=" <rhs:Expr> ";" <rr:@R> => {
         let payload = AstNodePayload::Driver(payload::Driver {
@@ -216,22 +194,14 @@ ModDefStmtDriver: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 2;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
     <ll:@L> <lhs:Path> ":=:" <rhs:Path> ";" <rr:@R> => {
         let payload = AstNodePayload::BidirectionalDriver;
         let region = ast.region(source, ll, rr);
         let num_children = 2;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
     <ll:@L> ! <rr:@R> => {
         let region = ast.region(source, ll, rr);
@@ -250,11 +220,7 @@ ModDefStmtInstance: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 1;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     }
 }
 
@@ -264,18 +230,14 @@ Type: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 0;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
 }
 
 Expr: AstNodeId = {
     <e:ExprIf> => e,
     <e:ExprMatch> => e,
-//    expr_struct |
+    <e:ExprStruct> => e,
     <e:ExprOpCmp> => e,
 }
 
@@ -285,11 +247,7 @@ ExprIf: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 3 + middles.unwrap_or(0);
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     }
 }
 
@@ -313,11 +271,7 @@ ExprMatch: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = (arms.len() + 1 + annot.map(|_| 1).unwrap_or(0)).try_into().unwrap();
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
 }
 
@@ -335,34 +289,48 @@ Pat: () = {
         let region = ast.region(source, ll, rr);
         let num_children = 0;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        );
+        ast.add_node(payload, region, num_children);
     },
     <ll:@L> "@" <name:Ident> "(" <args: ArgList> ")" <rr:@R> => {
         let payload = AstNodePayload::PatIdent(payload::PatIdent { name });
         let region = ast.region(source, ll, rr);
         let num_children = args;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        );
+        ast.add_node(payload, region, num_children);
     },
     <ll:@L> "else" <rr:@R> => {
         let payload = AstNodePayload::PatElse;
         let region = ast.region(source, ll, rr);
         let num_children = 0;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        );
+        ast.add_node(payload, region, num_children);
     },
+}
+
+ExprStruct: AstNodeId = {
+    <ll:@L> "$" <ofness:Ofness> "{" <assigns:AssignList> "}" <rr:@R> => {
+        let payload = AstNodePayload::ExprStruct;
+        let region = ast.region(source, ll, rr);
+        let num_children = 1 + assigns;
+
+        ast.add_node(payload, region, num_children)
+    },
+}
+
+AssignList: u16 = {
+    <start:(Assign ",")*> Assign ","? => u16::try_from(start.len()).unwrap() + 1,
+    Expr ","? => 1,
+    => 0,
+}
+
+Assign: AstNodeId = {
+    <ll:@L> <name:Ident> "=" Expr <rr:@R> => {
+        let payload = AstNodePayload::Assign(payload::Assign { name });
+        let region = ast.region(source, ll, rr);
+        let num_children = 1;
+
+        ast.add_node(payload, region, num_children)
+    }
 }
 
 ExprOpCmp: AstNodeId = {
@@ -371,11 +339,7 @@ ExprOpCmp: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 2;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
     <e:ExprOpAdd> => e,
 }
@@ -386,11 +350,7 @@ ExprOpAdd: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 2;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
     <e:ExprAtom> => e,
 }
@@ -401,66 +361,42 @@ ExprAtom: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 1;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
     <ll:@L> <lit:WordLit> <rr:@R> => {
         let payload = AstNodePayload::ExprWordLit(payload::ExprWordLit { literal: lit });
         let region = ast.region(source, ll, rr);
         let num_children = 0;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
     <ll:@L> <e:ExprAtom> "->" <method:Ident> "(" <arglist:ArgList> ")" <rr:@R> => {
         let payload = AstNodePayload::ExprMethod(payload::ExprMethod { method });
         let region = ast.region(source, ll, rr);
         let num_children = 1 + arglist;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
     <ll:@L> "@" <ctor:Ident> <rr:@R> => {
         let payload = AstNodePayload::ExprCtor(payload::ExprCtor { ctor });
         let region = ast.region(source, ll, rr);
         let num_children = 0;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
     <ll:@L> "@" <ctor:Ident> "(" <args:ArgList> ")" <rr:@R> => {
         let payload = AstNodePayload::ExprCtor(payload::ExprCtor { ctor });
         let region = ast.region(source, ll, rr);
         let num_children = args;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
     <ll:@L> "(" <e:Expr> ")" <rr:@R> => {
         let payload = AstNodePayload::ExprParen;
         let region = ast.region(source, ll, rr);
         let num_children = 1;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
 }
 
@@ -476,11 +412,7 @@ Ofness: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 0;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
 }
 
@@ -490,11 +422,7 @@ Path: AstNodeId = {
         let region = ast.region(source, ll, rr);
         let num_children = 0;
 
-        ast.add_node(
-            payload,
-            region,
-            num_children,
-        )
+        ast.add_node(payload, region, num_children)
     },
 }
 

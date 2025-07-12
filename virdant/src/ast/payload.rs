@@ -39,6 +39,11 @@ pub struct Module {
 }
 
 #[derive(Clone, Debug)]
+pub struct Field {
+    pub name: InternedString,
+}
+
+#[derive(Clone, Debug)]
 pub struct Ctor {
     pub name: InternedString,
 }
@@ -71,6 +76,11 @@ pub struct ExprMethod {
 #[derive(Clone, Debug)]
 pub struct ExprCtor {
     pub ctor: InternedString,
+}
+
+#[derive(Clone, Debug)]
+pub struct Assign {
+    pub name: InternedString,
 }
 
 #[derive(Clone, Debug)]

@@ -42,6 +42,7 @@ pub enum AstNodePayload {
     BidirectionalDriver,
     Module(payload::Module),
 
+    Field(payload::Field),
     Ctor(payload::Ctor),
 
     Param(payload::Param),
@@ -57,6 +58,9 @@ pub enum AstNodePayload {
     ExprUnOp(payload::ExprUnOp),
     ExprMethod(payload::ExprMethod),
     ExprCtor(payload::ExprCtor),
+    ExprStruct,
+
+    Assign(payload::Assign),
 
     PatIdent(payload::PatIdent),
     PatElse,
