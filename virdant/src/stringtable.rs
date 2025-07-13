@@ -24,7 +24,7 @@ impl StringTable {
         string.data.as_bstr()
     }
 
-    pub fn intern(&self, string: &[u8]) -> InternedString {
+    pub fn intern(&self, string: &BStr) -> InternedString {
         InternedString {
             data: ArcIntern::new(BString::from(string)),
         }

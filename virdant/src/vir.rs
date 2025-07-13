@@ -127,7 +127,7 @@ impl Vir {
                 let regions = import_regions.get_mut(&import.name()).unwrap();
                 regions.push(stmt.as_ast_node().region());
 
-                let package_name = PackageFqn::new(self.stringtable.get(&import.name()));
+                let package_name = PackageFqn::new(self.stringtable.get(&import.name()).to_owned());
                 if !packages_that_exist.contains(&package_name) {
                     errors.push(
                         error::UnresolvedImportError {
@@ -145,7 +145,7 @@ impl Vir {
                     errors.push(
                         error::DuplicateImportError {
                             regions: vec![region],
-                            imported_package: PackageFqn::new(&self.stringtable.get(&import_name)),
+                            imported_package: PackageFqn::new(self.stringtable.get(&import_name).to_owned()),
                         }.into(),
                     );
                 }

@@ -1,4 +1,5 @@
 use paste::paste;
+use bstr::BString;
 
 use std::sync::LazyLock;
 use std::time::Instant;
@@ -26,7 +27,7 @@ macro_rules! test_example {
                 file.read_to_end(&mut text).unwrap();
 
                 let stringtable = StringTable::new();
-                let source = Source::new(PackageFqn::new(stringify!($filename).as_bytes()), &text);
+                let source = Source::new(PackageFqn::new(BString::from(stringify!($filename))), &text);
 
                 let start = Instant::now();
                 let ast = Ast::new(source, stringtable);

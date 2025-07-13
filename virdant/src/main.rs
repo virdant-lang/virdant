@@ -2,7 +2,7 @@ use std::io::Read;
 use std::os::unix::ffi::OsStrExt;
 
 use bstr::io::BufReadExt;
-use bstr::{BStr, BString};
+use bstr::BString;
 use virdant::ast::{Ast, AstNode};
 use virdant::fqn::PackageFqn;
 use virdant::Vir;
@@ -14,8 +14,8 @@ fn main() {
     let mut text = vec![];
     file.read_to_end(&mut text).unwrap();
 
-    let package_name = BStr::new(filepath.file_stem().unwrap().as_bytes());
-    let package = PackageFqn::new(&package_name);
+    let package_name = BString::new(filepath.file_stem().unwrap().as_bytes().to_vec());
+    let package = PackageFqn::new(package_name);
 
     let mut vir = Vir::new();
     vir.set_source(package.clone(), BString::from(text)).unwrap();
@@ -47,11 +47,11 @@ fn main() {
         eprintln!("    {moddef:?}");
         eprintln!("    COMPONENTS");
         for component in moddef.components() {
-            eprintln!("        {:?} {}", component.kind(), component.name());
+            eprintln!("            {:?} {}", component.kind(), component.name());
         }
         eprintln!("    ITEM REFS");
         for reference in moddef.as_item().item_references() {
-            eprintln!("        {:?}", reference);
+            eprintln!("            {:?}", reference);
         }
     }
 }

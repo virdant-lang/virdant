@@ -1,3 +1,5 @@
+use bstr::ByteSlice;
+
 use crate::ast::{AstData, AstNodeId, AstNodePayload};
 use crate::ast::payload;
 use crate::stringtable::{StringTable, InternedString};
@@ -600,18 +602,18 @@ Width: u16 = {
 }
 
 WordLit: InternedString = {
-    <nat:NAT> => stringtable.intern(nat.as_bytes()),
-    <nat:WORD_DEC> => stringtable.intern(nat.as_bytes()),
-    <nat:WORD_HEX> => stringtable.intern(nat.as_bytes()),
-    <nat:WORD_BIN> => stringtable.intern(nat.as_bytes()),
+    <nat:NAT> => stringtable.intern(nat.as_bytes().as_bstr()),
+    <nat:WORD_DEC> => stringtable.intern(nat.as_bytes().as_bstr()),
+    <nat:WORD_HEX> => stringtable.intern(nat.as_bytes().as_bstr()),
+    <nat:WORD_BIN> => stringtable.intern(nat.as_bytes().as_bstr()),
 }
 
 Ident: InternedString = {
-    <ident:IDENT> => stringtable.intern(ident.as_bytes()),
+    <ident:IDENT> => stringtable.intern(ident.as_bytes().as_bstr()),
 }
 
 Nat: InternedString = {
-    <nat:NAT> => stringtable.intern(nat.as_bytes()),
+    <nat:NAT> => stringtable.intern(nat.as_bytes().as_bstr()),
 }
 
 match {
