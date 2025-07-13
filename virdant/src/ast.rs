@@ -39,6 +39,7 @@ pub enum AstNodePayload {
     StructDef(payload::StructDef),
     UnionDef(payload::UnionDef),
     EnumDef(payload::EnumDef),
+    BuiltinDef(payload::BuiltinDef),
     FnDef(payload::FnDef),
     SocketDef(payload::SocketDef),
 
@@ -55,6 +56,7 @@ pub enum AstNodePayload {
 
     Param(payload::Param),
 
+    Kind(payload::Kind),
     Type(payload::Type),
 
     ExprReference,

@@ -1,23 +1,26 @@
 use std::io::Read;
+use std::os::unix::ffi::OsStrExt;
 
 use bstr::io::BufReadExt;
+use bstr::{BStr, BString};
 use virdant::ast::{Ast, AstNode};
 use virdant::fqn::PackageFqn;
-use virdant::source::Source;
-use virdant::stringtable::StringTable;
+use virdant::Vir;
 
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
-    let filepath = args.into_iter().skip(1).next().unwrap();
-    let mut file = std::fs::File::open(filepath).unwrap();
+    let filepath = std::path::PathBuf::from(args.into_iter().skip(1).next().unwrap());
+    let mut file = std::fs::File::open(&filepath).unwrap();
     let mut text = vec![];
     file.read_to_end(&mut text).unwrap();
 
-    let stringtable = StringTable::new();
-    let source = Source::new(PackageFqn::new(b"top"), &text);
-    let ast = Ast::new(source, stringtable);
-    eprintln!();
+    let package_name = BStr::new(filepath.file_stem().unwrap().as_bytes());
+    let package = PackageFqn::new(&package_name);
 
+    let mut vir = Vir::new();
+    vir.set_source(package.clone(), BString::from(text)).unwrap();
+
+    let ast = vir.ast(package).unwrap();
     let node = ast.root().as_ast_node();
     dbg!(&node);
     eprintln!();

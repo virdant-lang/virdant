@@ -41,6 +41,7 @@ Item: AstNodeId = {
     <structdef:StructDef> => structdef,
     <uniondef:UnionDef> => uniondef,
     <enumdef:EnumDef> => enumdef,
+    <builtindef:BuiltinDef> => builtindef,
     <socketdef:SocketDef> => socketdef,
     <fndef:FnDef> => fndef,
 }
@@ -137,6 +138,17 @@ EnumDefStmt: AstNodeId = {
         let payload = AstNodePayload::Enumerant(payload::Enumerant { name });
         let region = ast.region(source, ll, rr);
         let num_children = 1;
+
+        ast.add_node(payload, region, num_children)
+    },
+}
+
+BuiltinDef: AstNodeId = {
+    <ll:@L> "builtin" "type" <name:Ident> <generics:("[" Ident ":" Kind "]")?> "{"
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::BuiltinDef(payload::BuiltinDef { name });
+        let region = ast.region(source, ll, rr);
+        let num_children = if generics.is_some() { 1 } else { 0 };
 
         ast.add_node(payload, region, num_children)
     },
@@ -292,6 +304,16 @@ ModDefStmtSocket: AstNodeId = {
         let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Slave });
         let region = ast.region(source, ll, rr);
         let num_children = 1;
+
+        ast.add_node(payload, region, num_children)
+    },
+}
+
+Kind: AstNodeId = {
+    <ll:@L> <name:Ident> <rr:@R> => {
+        let payload = AstNodePayload::Kind(payload::Kind { name } );
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
 
         ast.add_node(payload, region, num_children)
     },
@@ -599,6 +621,7 @@ match {
     "struct",
     "union",
     "enum",
+    "builtin",
     "type",
     "socket",
     "fn",

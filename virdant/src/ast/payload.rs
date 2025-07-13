@@ -30,6 +30,11 @@ pub struct EnumDef {
 }
 
 #[derive(Clone, Debug)]
+pub struct BuiltinDef {
+    pub name: InternedString,
+}
+
+#[derive(Clone, Debug)]
 pub struct SocketDef {
     pub name: InternedString,
 }
@@ -84,6 +89,11 @@ pub struct Channel {
 
 #[derive(Clone, Debug)]
 pub struct Param {
+    pub name: InternedString,
+}
+
+#[derive(Clone, Debug)]
+pub struct Kind {
     pub name: InternedString,
 }
 

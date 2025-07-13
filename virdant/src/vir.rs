@@ -41,6 +41,15 @@ impl Vir {
         Ok(())
     }
 
+    pub fn ast(&self, package: PackageFqn) -> Option<&Ast> {
+        for ast in self.asts.iter() {
+            if ast.package() == package {
+                return Some(ast);
+            }
+        }
+        None
+    }
+
     fn get_ast_mut(&mut self, package: PackageFqn) -> Option<&mut Ast> {
         for ast in self.asts.iter_mut() {
             if ast.package() == package {
