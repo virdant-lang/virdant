@@ -129,9 +129,23 @@ impl Item {
             None
         }
     }
+
+    pub fn item_references(&self) -> Vec<AstNode> {
+        let mut results = vec![];
+        for node in self.as_ast_node().walk() {
+            if let AstNodePayload::Ofness(_ofness) = node.payload() {
+                results.push(node);
+            }
+        }
+        results
+    }
 }
 
 impl ModDef {
+    pub fn as_item(&self) -> Item {
+        Item(self.ast(), self.ast_node_id())
+    }
+
     pub fn name(&self) -> BString {
         let stringtable = self.ast().stringtable();
         stringtable.get(&self.payload().name).to_owned()

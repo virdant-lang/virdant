@@ -298,10 +298,11 @@ ModDefStmtSocket: AstNodeId = {
 }
 
 Type: AstNodeId = {
-    <ll:@L> <ident:Ident> <generics:("[" Nat "]")?> <rr:@R> => {
-        let payload = AstNodePayload::Type(ident, generics.map(|g| g.1));
+    <ll:@L> <ofness:Ofness> <generics:("[" Nat "]")?> <rr:@R> => {
+        let num_generics = if generics.is_some() { 1 } else { 0 };
+        let payload = AstNodePayload::Type(payload::Type { num_generics } );
         let region = ast.region(source, ll, rr);
-        let num_children = 0;
+        let num_children = 1;
 
         ast.add_node(payload, region, num_children)
     },

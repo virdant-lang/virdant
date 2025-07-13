@@ -42,8 +42,13 @@ fn main() {
     eprintln!("MODDEFS:");
     for moddef in package.moddefs() {
         eprintln!("    {moddef:?}");
+        eprintln!("    COMPONENTS");
         for component in moddef.components() {
             eprintln!("        {:?} {}", component.kind(), component.name());
+        }
+        eprintln!("    ITEM REFS");
+        for reference in moddef.as_item().item_references() {
+            eprintln!("        {:?}", reference);
         }
     }
 }

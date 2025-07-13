@@ -55,7 +55,7 @@ pub enum AstNodePayload {
 
     Param(payload::Param),
 
-    Type(InternedString, Option<InternedString>),
+    Type(payload::Type),
 
     ExprReference,
     ExprParen,
@@ -85,6 +85,7 @@ pub enum AstNodePayload {
     Path,
 }
 
+#[derive(Clone)]
 pub struct AstNode {
     ast: Ast,
     id: AstNodeId,
@@ -231,6 +232,18 @@ impl AstNode {
         let num_children = self.ast.num_children[self.id.index()];
         for i in 0..num_children {
             result.push(self.child(i.try_into().unwrap()));
+        }
+        result
+    }
+
+    pub fn walk(&self) -> Vec<AstNode> {
+        let mut result = vec![];
+        let mut queue = vec![self.clone()];
+        while let Some(node) = queue.pop() {
+            result.push(node.clone());
+            for child in node.children() {
+                queue.push(child);
+            }
         }
         result
     }

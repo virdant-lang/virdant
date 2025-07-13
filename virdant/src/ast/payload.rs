@@ -88,6 +88,11 @@ pub struct Param {
 }
 
 #[derive(Clone, Debug)]
+pub struct Type {
+    pub num_generics: u16,
+}
+
+#[derive(Clone, Debug)]
 pub struct ExprWordLit {
     pub literal: InternedString,
 }
