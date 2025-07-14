@@ -24,6 +24,12 @@ pub struct ImportNotAtTopError {
     pub region: Region,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportCycle {
+    pub region: Region,
+    pub package_cycle: Vec<String>,
+}
+
 /// `import` statement names a package which does not exist.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedImportError {
@@ -235,6 +241,22 @@ impl IsVirError for ImportNotAtTopError {
 
     fn message(&self) -> String {
         format!("Import not at top of file")
+    }
+}
+
+impl IsVirError for ImportCycle {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> String {
+        debug_assert!(self.package_cycle.len() > 0);
+
+        if self.package_cycle.len() > 1 {
+            format!("Import cycle: {}", self.package_cycle.join(" "))
+        } else {
+            format!("Package imports itself: {}", &self.package_cycle[0])
+        }
     }
 }
 

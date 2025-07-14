@@ -8,6 +8,8 @@ pub mod stringtable;
 pub mod error;
 pub mod vir;
 
+pub(crate) mod graph;
+
 #[cfg(test)]
 mod tests;
 

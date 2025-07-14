@@ -108,7 +108,7 @@ impl PackageStmt {
 }
 
 impl Import {
-    pub fn name(&self) -> InternedString {
+    pub fn imported_package(&self) -> InternedString {
         self.payload().package
     }
 }

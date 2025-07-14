@@ -6,6 +6,7 @@ use std::string::ParseError;
 use bstr::BStr;
 use bstr::BString;
 
+use crate::graph::*;
 use crate::ast::*;
 use crate::fqn::*;
 use crate::source::*;
@@ -27,7 +28,7 @@ impl Vir {
     }
 
     pub fn set_source(&mut self, package: PackageFqn, text: BString) -> anyhow::Result<()> {
-        tracing::info!("set_source({package}, {:?})", BStr::new(&text[..16]));
+        tracing::info!("set_source({package}, {:?})", BStr::new(&text[..16.min(text.len())]));
         let stringtable = self.stringtable.clone().clone();
         if let Some(ast) = self.get_ast_mut(package.clone()) {
             let source = Source::new(package.clone(), &text);
@@ -76,6 +77,11 @@ impl Vir {
 
         for ast in &self.asts {
             errors.extend(self.diagnostics_parse_errors(ast));
+        }
+
+        errors.extend(self.diagnostics_import_cycles());
+
+        for ast in &self.asts {
             errors.extend(self.diagnostics_import_errors(ast));
         }
 
@@ -94,6 +100,63 @@ impl Vir {
                     region: error_node.region(),
                 }.into(),
             );
+        }
+        errors
+    }
+
+    fn diagnostics_import_cycles(&self) -> Vec<error::VirError> {
+        let mut errors = vec![];
+        let mut import_graph: Graph<PackageFqn> = Graph::new();
+
+        // import_sites[(from_package, to_package)] points to the first import statement of to_package is in from_package.
+        let mut import_sites: HashMap<(PackageFqn, PackageFqn), Region> = HashMap::new();
+
+        for ast in &self.asts {
+            import_graph.add_vert(ast.package());
+        }
+
+        for ast in &self.asts {
+            for import in ast.root().imports() {
+                let from_package = ast.package();
+                let to_package = PackageFqn::new(self.stringtable.get(&import.imported_package()).into());
+
+                // Skip if either package is unresolved.
+                // This gets handled later.
+                if let (Some(from_index), Some(to_index)) = (
+                    import_graph.vertex(&from_package),
+                    import_graph.vertex(&to_package),
+                ) {
+                    import_graph.add_edge(from_index, to_index);
+                }
+
+                // Record import site if this is the first import statement.
+                let key = (from_package, to_package);
+                if !import_sites.contains_key(&key) {
+                    import_sites.insert(key, import.as_ast_node().region());
+                }
+            }
+        }
+
+        // Are there any import cycles?
+        if let Err(CycleError(cycle)) = import_graph.toposort() {
+            // This gives goes from the cycle [a, b, c] to an iterator [(a, b), (b, c), (c, a)].
+            // This allows us to add one "copy" of the error for each import site.
+            let cyclic_pair_iter = cycle.iter().zip(cycle.iter().cycle().skip(1)).take(cycle.len());
+
+            for (from_package_index, to_package_index) in cyclic_pair_iter {
+                let from_package = import_graph[*from_package_index].clone();
+                let to_package = import_graph[*to_package_index].clone();
+                let key = (from_package, to_package);
+                let region = import_sites[&key].clone();
+
+                // This is just the string representation of the cycle.
+                let package_cycle = cycle.iter().cloned().map(|index| import_graph[index].to_string()).collect();
+
+                errors.push(error::ImportCycle {
+                    region,
+                    package_cycle,
+                }.into());
+            }
         }
         errors
     }
@@ -121,13 +184,13 @@ impl Vir {
             }
 
             if let Some(import) = stmt.as_import() {
-                if !import_regions.contains_key(&import.name()) {
-                    import_regions.insert(import.name(), vec![]);
+                if !import_regions.contains_key(&import.imported_package()) {
+                    import_regions.insert(import.imported_package(), vec![]);
                 }
-                let regions = import_regions.get_mut(&import.name()).unwrap();
+                let regions = import_regions.get_mut(&import.imported_package()).unwrap();
                 regions.push(stmt.as_ast_node().region());
 
-                let package_name = PackageFqn::new(self.stringtable.get(&import.name()).to_owned());
+                let package_name = PackageFqn::new(self.stringtable.get(&import.imported_package()).to_owned());
                 if !packages_that_exist.contains(&package_name) {
                     errors.push(
                         error::UnresolvedImportError {

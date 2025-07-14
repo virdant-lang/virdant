@@ -9,26 +9,40 @@ use virdant::Vir;
 
 fn main() {
     let args = std::env::args().collect::<Vec<String>>();
-    let filepath = std::path::PathBuf::from(args.into_iter().skip(1).next().unwrap());
-    let mut file = std::fs::File::open(&filepath).unwrap();
-    let mut text = vec![];
-    file.read_to_end(&mut text).unwrap();
 
-    let package_name = BString::new(filepath.file_stem().unwrap().as_bytes().to_vec());
-    let package = PackageFqn::new(package_name);
+    let filepaths = args
+        .iter()
+        .skip(1)
+        .map(|arg| std::path::PathBuf::from(arg));
 
     let mut vir = Vir::new();
-    vir.set_source(package.clone(), BString::from(text)).unwrap();
 
-    let ast = vir.ast(package).unwrap();
+    let mut first_package = None;
+
+    for filepath in filepaths {
+        let mut file = std::fs::File::open(&filepath).unwrap();
+        let mut text = vec![];
+        file.read_to_end(&mut text).unwrap();
+
+        let package_name = BString::new(filepath.file_stem().unwrap().as_bytes().to_vec());
+        let package = PackageFqn::new(package_name);
+
+        vir.set_source(package.clone(), BString::from(text)).unwrap();
+
+        if first_package.is_none() {
+            first_package = Some(package);
+        }
+    }
+
+    let top_package = first_package.unwrap();
+    dbg!(&top_package);
+
+    let ast = vir.ast(top_package).unwrap();
     let node = ast.root().as_ast_node();
     dbg!(&node);
     eprintln!();
 
     dump(node, 0);
-    eprintln!();
-
-    dump_errors(&ast);
     eprintln!();
 
     let package = ast.root();
@@ -54,6 +68,15 @@ fn main() {
             eprintln!("            {:?}", reference);
         }
     }
+
+    if let Err(errors) = vir.diagnostics() {
+        eprintln!("DIAGNOSTICS");
+        for error in errors {
+            eprintln!("    {}: {}", error.region(), error.message());
+        }
+        eprintln!();
+    }
+
 }
 
 fn dump(node: AstNode, level: usize) {
