@@ -3,7 +3,7 @@ use std::os::unix::ffi::OsStrExt;
 
 use bstr::io::BufReadExt;
 use bstr::BString;
-use virdant::ast::{Ast, AstNode};
+use virdant::ast::AstNode;
 use virdant::fqn::PackageFqn;
 use virdant::Vir;
 
@@ -72,7 +72,7 @@ fn main() {
     if let Err(errors) = vir.diagnostics() {
         eprintln!("DIAGNOSTICS");
         for error in errors {
-            eprintln!("    {}: {}", error.region(), error.message());
+            eprintln!("    {} {}: {}", error.level(), error.region(), error.message());
         }
         eprintln!();
     }
@@ -99,11 +99,5 @@ fn dump(node: AstNode, level: usize) {
     }
     for child in node.children() {
         dump(child, level + 1);
-    }
-}
-
-fn dump_errors(ast: &Ast) {
-    for ast_node in ast.errors() {
-        eprintln!("error: {} {:?}", ast_node.region(), ast_node.spelling());
     }
 }

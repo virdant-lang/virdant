@@ -5,11 +5,18 @@ use crate::source::Region;
 use crate::types::Type;
 
 #[derive(Clone, Debug)]
-pub struct VirError(Arc<dyn IsVirError>);
+pub struct Diagnostic(Arc<dyn IsDiagnostic>);
 
-trait IsVirError: std::fmt::Debug + 'static {
+trait IsDiagnostic: std::fmt::Debug + 'static {
     fn region(&self) -> Region;
     fn message(&self) -> String;
+    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Error }
+}
+
+pub enum DiagnosticLevel {
+    Error,
+    Warning,
+    Info,
 }
 
 /// `import` statement names a package which does not exist.
@@ -41,7 +48,7 @@ pub struct UnresolvedImportError {
 /// Lists regions to all such statements.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuplicateImportError {
-    pub regions: Vec<Region>,
+    pub region: Region,
     pub imported_package: PackageFqn,
 }
 
@@ -168,7 +175,7 @@ pub struct WrongArgCount {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-impl VirError {
+impl Diagnostic {
     pub fn region(&self) -> Region {
         self.0.region()
     }
@@ -176,15 +183,30 @@ impl VirError {
     pub fn message(&self) -> String {
         self.0.message()
     }
-}
 
-impl<E: IsVirError> From<E> for VirError {
-    fn from(value: E) -> Self {
-        VirError(Arc::new(value))
+    pub fn level(&self) -> DiagnosticLevel {
+        self.0.level()
     }
 }
 
-impl IsVirError for UnresolvedMethod {
+impl std::fmt::Display for DiagnosticLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            DiagnosticLevel::Error => "Error",
+            DiagnosticLevel::Warning => "Warning",
+            DiagnosticLevel::Info => "Info",
+        };
+        write!(f, "{name}")
+    }
+}
+
+impl<E: IsDiagnostic> From<E> for Diagnostic {
+    fn from(value: E) -> Self {
+        Diagnostic(Arc::new(value))
+    }
+}
+
+impl IsDiagnostic for UnresolvedMethod {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -194,7 +216,7 @@ impl IsVirError for UnresolvedMethod {
     }
 }
 
-impl IsVirError for Unknown {
+impl IsDiagnostic for Unknown {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -204,7 +226,7 @@ impl IsVirError for Unknown {
     }
 }
 
-impl IsVirError for DuplicateItem {
+impl IsDiagnostic for DuplicateItem {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -214,9 +236,9 @@ impl IsVirError for DuplicateItem {
     }
 }
 
-impl IsVirError for DuplicateImportError {
+impl IsDiagnostic for DuplicateImportError {
     fn region(&self) -> Region {
-        self.regions[0].clone()
+        self.region.clone()
     }
 
     fn message(&self) -> String {
@@ -224,7 +246,7 @@ impl IsVirError for DuplicateImportError {
     }
 }
 
-impl IsVirError for ParseError {
+impl IsDiagnostic for ParseError {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -234,7 +256,7 @@ impl IsVirError for ParseError {
     }
 }
 
-impl IsVirError for ImportNotAtTopError {
+impl IsDiagnostic for ImportNotAtTopError {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -244,7 +266,7 @@ impl IsVirError for ImportNotAtTopError {
     }
 }
 
-impl IsVirError for ImportCycle {
+impl IsDiagnostic for ImportCycle {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -260,7 +282,7 @@ impl IsVirError for ImportCycle {
     }
 }
 
-impl IsVirError for UnresolvedImportError {
+impl IsDiagnostic for UnresolvedImportError {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -270,7 +292,7 @@ impl IsVirError for UnresolvedImportError {
     }
 }
 
-impl IsVirError for DuplicateSlot {
+impl IsDiagnostic for DuplicateSlot {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -280,7 +302,7 @@ impl IsVirError for DuplicateSlot {
     }
 }
 
-impl IsVirError for NoDrivers {
+impl IsDiagnostic for NoDrivers {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -290,7 +312,7 @@ impl IsVirError for NoDrivers {
     }
 }
 
-impl IsVirError for MultipleDrivers {
+impl IsDiagnostic for MultipleDrivers {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -300,7 +322,7 @@ impl IsVirError for MultipleDrivers {
     }
 }
 
-impl IsVirError for UnresolvedComponent {
+impl IsDiagnostic for UnresolvedComponent {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -310,7 +332,7 @@ impl IsVirError for UnresolvedComponent {
     }
 }
 
-impl IsVirError for UnresolvedItem {
+impl IsDiagnostic for UnresolvedItem {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -320,7 +342,7 @@ impl IsVirError for UnresolvedItem {
     }
 }
 
-impl IsVirError for UnresolvedPackage {
+impl IsDiagnostic for UnresolvedPackage {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -330,7 +352,7 @@ impl IsVirError for UnresolvedPackage {
     }
 }
 
-impl IsVirError for WrongType {
+impl IsDiagnostic for WrongType {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -340,7 +362,7 @@ impl IsVirError for WrongType {
     }
 }
 
-impl IsVirError for DoesntFit {
+impl IsDiagnostic for DoesntFit {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -350,7 +372,7 @@ impl IsVirError for DoesntFit {
     }
 }
 
-impl IsVirError for NotWordType {
+impl IsDiagnostic for NotWordType {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -362,7 +384,7 @@ impl IsVirError for NotWordType {
     }
 }
 
-impl IsVirError for CantInfer {
+impl IsDiagnostic for CantInfer {
     fn region(&self) -> Region {
         self.region.clone()
     }
@@ -372,7 +394,7 @@ impl IsVirError for CantInfer {
     }
 }
 
-impl IsVirError for WrongArgCount {
+impl IsDiagnostic for WrongArgCount {
     fn region(&self) -> Region {
         self.region.clone()
     }

@@ -72,7 +72,7 @@ impl Vir {
         result
     }
 
-    pub fn diagnostics(&self) -> Result<(), Vec<error::VirError>> {
+    pub fn diagnostics(&self) -> Result<(), Vec<error::Diagnostic>> {
         let mut errors = vec![];
 
         for ast in &self.asts {
@@ -92,7 +92,7 @@ impl Vir {
         }
     }
 
-    fn diagnostics_parse_errors(&self, ast: &Ast) -> Vec<error::VirError> {
+    fn diagnostics_parse_errors(&self, ast: &Ast) -> Vec<error::Diagnostic> {
         let mut errors = vec![];
         for error_node in ast.errors() {
             errors.push(
@@ -104,7 +104,7 @@ impl Vir {
         errors
     }
 
-    fn diagnostics_import_cycles(&self) -> Vec<error::VirError> {
+    fn diagnostics_import_cycles(&self) -> Vec<error::Diagnostic> {
         let mut errors = vec![];
         let mut import_graph: Graph<PackageFqn> = Graph::new();
 
@@ -161,7 +161,7 @@ impl Vir {
         errors
     }
 
-    fn diagnostics_import_errors(&self, ast: &Ast) -> Vec<error::VirError> {
+    fn diagnostics_import_errors(&self, ast: &Ast) -> Vec<error::Diagnostic> {
         let mut errors = vec![];
         let mut is_in_header = true;
 
@@ -172,6 +172,8 @@ impl Vir {
 
         for stmt in package.stmts() {
             if stmt.as_item().is_some() {
+                // this is set once we reach the first item
+                // any imports found after this point is an error.
                 is_in_header = false;
             } else if !is_in_header {
                 if stmt.as_import().is_some() {
@@ -183,13 +185,16 @@ impl Vir {
                 }
             }
 
+            // shares the same loop to save a few cycles
             if let Some(import) = stmt.as_import() {
+                // track where this import is so we can go back and mark duplicates
                 if !import_regions.contains_key(&import.imported_package()) {
                     import_regions.insert(import.imported_package(), vec![]);
                 }
                 let regions = import_regions.get_mut(&import.imported_package()).unwrap();
                 regions.push(stmt.as_ast_node().region());
 
+                // see if this package is loaded into the Vir object and error if it's missing.
                 let package_name = PackageFqn::new(self.stringtable.get(&import.imported_package()).to_owned());
                 if !packages_that_exist.contains(&package_name) {
                     errors.push(
@@ -202,12 +207,13 @@ impl Vir {
             }
         }
 
+        // find all imports which are duplicated and flag all but the first.
         for (import_name, regions) in import_regions {
             if regions.len() > 1 {
-                for region in regions {
+                for region in regions.into_iter().skip(1) {
                     errors.push(
                         error::DuplicateImportError {
-                            regions: vec![region],
+                            region,
                             imported_package: PackageFqn::new(self.stringtable.get(&import_name).to_owned()),
                         }.into(),
                     );
