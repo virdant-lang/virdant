@@ -71,15 +71,6 @@ impl<T> Union<T> {
         }
     }
 
-    pub fn into_representatives(mut self) -> Vec<T> {
-        self.normalize();
-        let mut result = vec![];
-        for mut group in self.into_iter() {
-            result.push(group.pop().unwrap());
-        }
-        result
-    }
-
     pub fn into_iter(mut self) -> Vec<Vec<T>> {
         self.normalize();
         let mut group_for = HashMap::new();

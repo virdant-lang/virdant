@@ -27,7 +27,7 @@ fn main() {
         let package_name = BString::new(filepath.file_stem().unwrap().as_bytes().to_vec());
         let package = PackageFqn::new(package_name);
 
-        vir.set_source(package.clone(), BString::from(text)).unwrap();
+        vir.set_source(package.clone(), BString::from(text));
 
         if first_package.is_none() {
             first_package = Some(package);

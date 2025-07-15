@@ -8,6 +8,9 @@ pub mod stringtable;
 pub mod error;
 pub mod vir;
 
+pub mod db;
+pub mod queries;
+
 pub(crate) mod graph;
 pub(crate) mod union;
 

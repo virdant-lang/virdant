@@ -6,7 +6,9 @@ use std::string::ParseError;
 use bstr::BStr;
 use bstr::BString;
 
-use crate::graph::*;
+use crate::db::{Db, DbContext};
+use crate::graph::CycleError;
+use crate::graph::Graph;
 use crate::ast::*;
 use crate::fqn::*;
 use crate::source::*;
@@ -16,49 +18,35 @@ use crate::stringtable::StringTable;
 use crate::union::Union;
 
 pub struct Vir {
-    asts: Vec<Ast>,
+    db: Db,
     stringtable: StringTable,
 }
 
 impl Vir {
     pub fn new() -> Vir {
+        let stringtable = StringTable::new();
+        let mut db = Db::new(DbContext {
+            stringtable: stringtable.clone(),
+        });
+
+        let package = crate::fqn::PackageFqn::new(bstr::BString::new("builtin".as_bytes().to_vec()));
+        let builtin_source = bstr::BString::new(include_bytes!("../../lib/builtin.vir").to_vec());
+
+        db.set_source(package.clone(), builtin_source.clone());
+
         Vir {
-            asts: vec![],
-            stringtable: StringTable::new(),
+            db,
+            stringtable,
         }
     }
 
-    pub fn set_source(&mut self, package: PackageFqn, text: BString) -> anyhow::Result<()> {
-        tracing::info!("set_source({package}, {:?})", BStr::new(&text[..16.min(text.len())]));
-        let stringtable = self.stringtable.clone().clone();
-        if let Some(ast) = self.get_ast_mut(package.clone()) {
-            let source = Source::new(package.clone(), &text);
-            let mut new_ast = Ast::new(source, stringtable);
-            std::mem::replace(ast, new_ast);
-        } else {
-            let source = Source::new(package.clone(), &text);
-            self.asts.push(Ast::new(source, self.stringtable.clone()));
-        }
-        tracing::info!("number ASTs: {}", self.asts.len());
-        Ok(())
+    pub fn set_source(&mut self, package: PackageFqn, text: BString) {
+        self.db.set_source(package, text);
     }
 
-    pub fn ast(&self, package: PackageFqn) -> Option<&Ast> {
-        for ast in self.asts.iter() {
-            if ast.package() == package {
-                return Some(ast);
-            }
-        }
-        None
-    }
-
-    fn get_ast_mut(&mut self, package: PackageFqn) -> Option<&mut Ast> {
-        for ast in self.asts.iter_mut() {
-            if ast.package() == package {
-                return Some(ast);
-            }
-        }
-        None
+    pub fn ast(&self, package: PackageFqn) -> Option<Ast> {
+        let ast = self.db.get_ast(package);
+        Some(ast)
     }
 
     pub fn set_packages(&mut self, package: Vec<PackageFqn>) -> anyhow::Result<()> {
@@ -67,14 +55,15 @@ impl Vir {
 
     fn packages(&self) -> Vec<PackageFqn> {
         let mut result = vec![];
-        for ast in &self.asts {
-            result.push(ast.package());
-        }
+//        for ast in &self.asts {
+//            result.push(ast.package());
+//        }
         result
     }
 
     pub fn diagnostics(&self) -> Result<(), Vec<error::Diagnostic>> {
         let mut errors = vec![];
+        /*
 
         for ast in &self.asts {
             errors.extend(self.diagnostics_parse_errors(ast));
@@ -85,6 +74,7 @@ impl Vir {
         for ast in &self.asts {
             errors.extend(self.diagnostics_import_errors(ast));
         }
+*/
 
         if errors.len() > 0 {
             Err(errors)
@@ -154,6 +144,7 @@ impl Vir {
 
     fn diagnostics_import_cycles(&self) -> Vec<error::Diagnostic> {
         let mut errors = vec![];
+        /*
         let mut import_graph: Graph<PackageFqn> = Graph::new();
 
         // import_sites[(from_package, to_package)] points to the first import statement of to_package is in from_package.
@@ -206,6 +197,7 @@ impl Vir {
                 }.into());
             }
         }
+*/
         errors
     }
 

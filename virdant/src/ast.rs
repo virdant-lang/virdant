@@ -257,6 +257,37 @@ impl AstNode {
     pub fn region(&self) -> Region {
         self.ast.regions[self.id.index()].clone()
     }
+
+    #[allow(dead_code)]
+    pub(crate) fn dump(&self) {
+        self.dump_level(0);
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn dump_level(&self, level: usize) {
+        use bstr::io::BufReadExt;
+
+        let padding = " ".repeat(4 * level);
+        let spelling = self.spelling();
+        if spelling.byte_lines().collect::<Vec<_>>().len() == 1 {
+            eprintln!(
+                "{padding}{:?} {:?} @ {} {spelling:?}",
+                self.payload(),
+                self.id(),
+                self.region()
+            );
+        } else {
+            eprintln!(
+                "{padding}{:?} {:?} @ {}",
+                self.payload(),
+                self.id(),
+                self.region()
+            );
+        }
+        for child in self.children() {
+            child.dump_level(level + 1);
+        }
+    }
 }
 
 impl AstNodeId {
