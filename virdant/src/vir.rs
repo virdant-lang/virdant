@@ -13,6 +13,7 @@ use crate::source::*;
 use crate::error;
 
 use crate::stringtable::StringTable;
+use crate::union::Union;
 
 pub struct Vir {
     asts: Vec<Ast>,
@@ -94,13 +95,60 @@ impl Vir {
 
     fn diagnostics_parse_errors(&self, ast: &Ast) -> Vec<error::Diagnostic> {
         let mut errors = vec![];
-        for error_node in ast.errors() {
+        let mut i = 0;
+        let ast_errors = ast.errors();
+        let mut error_union: Union<AstNode> = Union::new();
+
+        let mut indexes = vec![];
+
+        // The parser will sometimes report multiple errors for what should be a single error.
+        // We coalesce errors together when they should be reported as just one.
+        for error in ast_errors.clone() {
+            let index = error_union.insert(error);
+            indexes.push(index);
+        }
+
+        // Inefficient double loop, but hopefully you don't have billions of syntax errors.
+        for i in indexes.iter().cloned() {
+            for j in indexes.iter().cloned() {
+                let i_region = error_union[i].region();
+                let j_region = &error_union[j].region();
+
+                // This condition is fudged.
+                // It should be that the regions either overlap
+                // or that one region immediately follows another.
+                // It should also join when the interspersing source is
+                // whitespace or invalid tokens.
+                //
+                // It does none of these things.
+                //
+                // Instead, we just look to see if the two errors start on the same line.
+                if i_region.end().line() == j_region.start().line() {
+                    error_union.join(i, j);
+                }
+            }
+        }
+
+        for error_group in error_union.into_iter() {
+            let first_error_region = error_group.first().unwrap().region();
+
+            let mut package = first_error_region.package();
+            let mut start = first_error_region.start();
+            let mut end = first_error_region.end();
+
+            // take the individual error regions and create a big error region contianing them all.
+            for error in error_group {
+                start = start.min(error.region().start());
+                end = end.max(error.region().end());
+            }
+            let region = Region::new(package, Span::new(start, end));
             errors.push(
                 error::ParseError {
-                    region: error_node.region(),
+                    region,
                 }.into(),
             );
         }
+
         errors
     }
 

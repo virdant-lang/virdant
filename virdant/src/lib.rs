@@ -9,6 +9,7 @@ pub mod error;
 pub mod vir;
 
 pub(crate) mod graph;
+pub(crate) mod union;
 
 #[cfg(test)]
 mod tests;
