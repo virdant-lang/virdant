@@ -73,8 +73,14 @@ impl Package {
     pub fn items(&self) -> Vec<Item> {
         let mut items = vec![];
         for child in self.as_ast_node().children() {
-            if let AstNodePayload::ModDef(_) = child.payload() {
-                items.push(Item(self.ast(), child.id()));
+            match child.payload() {
+                AstNodePayload::ModDef(_) => items.push(Item(self.ast(), child.id())),
+                AstNodePayload::UnionDef(_) => items.push(Item(self.ast(), child.id())),
+                AstNodePayload::StructDef(_) => items.push(Item(self.ast(), child.id())),
+                AstNodePayload::EnumDef(_) => items.push(Item(self.ast(), child.id())),
+                AstNodePayload::FnDef(_) => items.push(Item(self.ast(), child.id())),
+                AstNodePayload::SocketDef(_) => items.push(Item(self.ast(), child.id())),
+                _ => (),
             }
         }
         items
@@ -123,6 +129,7 @@ impl Item {
             AstNodePayload::StructDef(structdef) => structdef.name,
             AstNodePayload::EnumDef(enumdef) => enumdef.name,
             AstNodePayload::FnDef(fndef) => fndef.name,
+            AstNodePayload::SocketDef(socketdef) => socketdef.name,
             _ => unreachable!(),
         };
         stringtable.get(&name).to_owned()
@@ -130,7 +137,12 @@ impl Item {
 
     pub fn kind(&self) -> ItemKind {
         match self.as_ast_node().payload() {
-            AstNodePayload::ModDef(_) => ItemKind::ModDef,
+            AstNodePayload::ModDef(_moddef) => ItemKind::ModDef,
+            AstNodePayload::UnionDef(_uniondef) => ItemKind::UnionDef,
+            AstNodePayload::StructDef(_structdef) => ItemKind::StructDef,
+            AstNodePayload::EnumDef(_enumdef) => ItemKind::EnumDef,
+            AstNodePayload::FnDef(_fndef) => ItemKind::FnDef,
+            AstNodePayload::SocketDef(_socketdef) => ItemKind::SocketDef,
             _ => unreachable!(),
         }
     }

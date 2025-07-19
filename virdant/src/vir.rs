@@ -1,6 +1,7 @@
 #![allow(unused, dead_code, unused_variables)] // TODO
 
 use hashbrown::HashMap;
+use std::os::unix::ffi::OsStrExt;
 use std::string::ParseError;
 
 use bstr::BStr;
@@ -44,6 +45,25 @@ impl Vir {
         }
     }
 
+    pub fn open_dir(&mut self, dirpath: &std::path::Path) -> std::io::Result<()> {
+        use std::io::Read;
+
+        for entry in std::fs::read_dir(dirpath)? {
+            let filepath = entry?.path();
+            if filepath.extension().map(|s| s.as_bytes()) == Some(b"vir") {
+                let package_name = BString::new(filepath.file_stem().unwrap().as_bytes().to_vec());
+                let package = PackageFqn::new(package_name);
+
+                let mut text = vec![];
+                let mut file = std::fs::File::open(filepath)?;
+                file.read_to_end(&mut text).unwrap();
+
+                self.set_source(package.clone(), BString::from(text));
+            }
+        }
+        Ok(())
+    }
+
     pub fn set_source(&mut self, package: PackageFqn, text: BString) {
         self.db.set_source(package.clone(), text);
         if !self.packages.contains(&package.clone()) {
@@ -63,5 +83,9 @@ impl Vir {
 
     pub fn diagnostics(&self) -> Result<(), Vec<error::Diagnostic>> {
         self.db.diagnostics()
+    }
+
+    pub fn db(&self) -> &Db {
+        &self.db
     }
 }

@@ -42,7 +42,7 @@ impl ItemFqn {
         let colon_index = s.iter().position(|ch| *ch == b':').unwrap();
         assert_eq!(s[colon_index + 1], b':');
         let package = PackageFqn::new(s[..colon_index].to_owned());
-        let name = ArcIntern::from_ref(BStr::new(&s[colon_index + 1..]));
+        let name = ArcIntern::from_ref(BStr::new(&s[colon_index + 2..]));
         ItemFqn(package, name)
     }
 
