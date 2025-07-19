@@ -27,7 +27,7 @@ enum SortState {
     Visited,
 }
 
-impl<V> Graph<V> {
+impl<V: Clone> Graph<V> {
     pub fn new() -> Graph<V> {
         Graph {
             verts: vec![],
@@ -46,8 +46,12 @@ impl<V> Graph<V> {
         self.adj[from_index.0].push(to_index);
     }
 
-    pub fn toposort(&self) -> Result<Vec<VertIndex>, CycleError> {
-        TopoSortContext::new(self).sort()
+    pub fn toposort(&self) -> Result<Vec<V>, CycleError> {
+        let mut results = vec![];
+        for vert_index in TopoSortContext::new(self).sort()? {
+            results.push(self[vert_index].clone());
+        }
+        Ok(results)
     }
 }
 

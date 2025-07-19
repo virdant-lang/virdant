@@ -62,6 +62,6 @@ impl Vir {
     }
 
     pub fn diagnostics(&self) -> Result<(), Vec<error::Diagnostic>> {
-        self.db.get_diagnostics(())
+        self.db.diagnostics()
     }
 }

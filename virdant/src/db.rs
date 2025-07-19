@@ -51,6 +51,10 @@ impl<'d> Builder<'d> {
     pub fn stringtable(&self) -> StringTable {
         self.db.context.stringtable.clone()
     }
+
+    pub(crate) fn flag_error(&self, error: Diagnostic) {
+        self.db.flag_error(error);
+    }
 }
 
 impl Db {
@@ -131,8 +135,26 @@ impl Db {
         val
     }
 
+    pub(crate) fn flag_error(&self, error: Diagnostic) {
+        self.errors.lock().unwrap().push(error);
+    }
+
     fn clear_errors(&self) {
         self.errors.lock().unwrap().clear();
+    }
+
+    pub fn diagnostics(&self) -> Result<(), Vec<Diagnostic>> {
+        self.get_diagnostics(());
+        let errors = self.errors.lock().unwrap();
+        if errors.len() > 0 {
+            let mut results = vec![];
+            for error in errors.iter().cloned() {
+                results.push(error);
+            }
+            Err(results)
+        } else {
+            Ok(())
+        }
     }
 }
 

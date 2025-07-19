@@ -9,9 +9,9 @@ use crate::source::{Region, Span};
 use crate::union::Union;
 
 pub type Params = ();
-pub type Response = Result<(), Vec<error::Diagnostic>>;
+pub type Response = ();
 
-pub fn build(builder: &mut Builder, _: ()) -> Result<(), Vec<error::Diagnostic>> {
+pub fn build(builder: &mut Builder, _: ()) -> () {
     let mut errors = vec![];
 
     let asts = get_asts(builder);
@@ -26,10 +26,8 @@ pub fn build(builder: &mut Builder, _: ()) -> Result<(), Vec<error::Diagnostic>>
         errors.extend(diagnostics_import_errors(builder, ast));
     }
 
-    if errors.len() > 0 {
-        Err(errors)
-    } else {
-        Ok(())
+    for error in errors {
+        builder.flag_error(error);
     }
 }
 
@@ -138,7 +136,7 @@ fn diagnostics_import_cycles(builder: &mut Builder) -> Vec<error::Diagnostic> {
     }
 
     // Are there any import cycles?
-    if let Err(CycleError(cycle)) = import_graph.toposort() {
+    if let Err(CycleError(cycle)) = builder.get_importorder(()) {
         // This gives goes from the cycle [a, b, c] to an iterator [(a, b), (b, c), (c, a)].
         // This allows us to add one "copy" of the error for each import site.
         let cyclic_pair_iter = cycle.iter().zip(cycle.iter().cycle().skip(1)).take(cycle.len());
