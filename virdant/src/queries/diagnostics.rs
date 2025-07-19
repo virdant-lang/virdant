@@ -11,7 +11,7 @@ use crate::union::Union;
 pub type Params = ();
 pub type Response = ();
 
-pub fn build(builder: &mut Builder, _: ()) -> () {
+pub fn build_diagnostics(builder: &mut Builder, _: ()) -> () {
     let mut errors = vec![];
 
     let asts = get_asts(builder);

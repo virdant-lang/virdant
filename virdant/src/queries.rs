@@ -3,5 +3,6 @@ pub mod source;
 
 pub mod ast;
 pub mod importorder;
+pub mod itemresolution;
 
 pub mod diagnostics;

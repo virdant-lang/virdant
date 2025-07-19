@@ -6,6 +6,7 @@ use super::*;
 
 macro_rules! ast {
     ($name:ident) => {
+        #[derive(Clone)]
         pub struct $name(pub(super) Ast, pub(super) AstNodeId);
 
         impl $name {
@@ -114,6 +115,19 @@ impl Import {
 }
 
 impl Item {
+    pub fn name(&self) -> BString {
+        let stringtable = self.ast().stringtable();
+        let name = match self.as_ast_node().payload() {
+            AstNodePayload::ModDef(moddef) => moddef.name,
+            AstNodePayload::UnionDef(uniondef) => uniondef.name,
+            AstNodePayload::StructDef(structdef) => structdef.name,
+            AstNodePayload::EnumDef(enumdef) => enumdef.name,
+            AstNodePayload::FnDef(fndef) => fndef.name,
+            _ => unreachable!(),
+        };
+        stringtable.get(&name).to_owned()
+    }
+
     pub fn kind(&self) -> ItemKind {
         match self.as_ast_node().payload() {
             AstNodePayload::ModDef(_) => ItemKind::ModDef,

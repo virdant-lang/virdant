@@ -9,7 +9,7 @@ use crate::source::Region;
 pub type Params = ();
 pub type Response = Result<Vec<PackageFqn>, CycleError>;
 
-pub fn build(builder: &mut Builder, (): ()) -> Result<Vec<PackageFqn>, CycleError> {
+pub fn build_importorder(builder: &mut Builder, (): ()) -> Result<Vec<PackageFqn>, CycleError> {
     let mut import_graph: Graph<PackageFqn> = Graph::new();
 
     let asts = get_asts(builder);

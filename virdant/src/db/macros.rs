@@ -28,7 +28,9 @@ macro_rules! define_queries {
                     $(
                         Query::$qname(params)  => {
                             let mut builder = crate::db::Builder::new(db);
-                            let built_val = defile! { @$qpath::build } (&mut builder, params);
+                            paste! {
+                                let built_val = defile! { @$qpath:: [<build_ $qname>] } (&mut builder, params);
+                            }
                             let val = QueryResult::$qname(built_val);
                             crate::db::CachedVal {
                                 val,
