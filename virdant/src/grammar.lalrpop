@@ -1,4 +1,7 @@
 use bstr::ByteSlice;
+use crate::token::{Token, TokenError};
+use atoi::atoi;
+
 
 use crate::ast::{AstData, AstNodeId, AstNodePayload};
 use crate::ast::payload;
@@ -475,6 +478,20 @@ ExprAtom: AstNodeId = {
 
         ast.add_node(payload, region, num_children)
     },
+    <ll:@L> "true" <rr:@R> => {
+        let payload = AstNodePayload::ExprBitLit(payload::ExprBitLit { literal: true });
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
+
+        ast.add_node(payload, region, num_children)
+    },
+    <ll:@L> "false" <rr:@R> => {
+        let payload = AstNodePayload::ExprBitLit(payload::ExprBitLit { literal: false });
+        let region = ast.region(source, ll, rr);
+        let num_children = 0;
+
+        ast.add_node(payload, region, num_children)
+    },
     <ll:@L> "word" "(" <args:ArgList> ")" <rr:@R> => {
         let payload = AstNodePayload::ExprWord;
         let region = ast.region(source, ll, rr);
@@ -594,84 +611,124 @@ Path: AstNodeId = {
 }
 
 Index: u16 = {
-    <index:NAT> => str::parse(index).unwrap(),
+    <ll:@L> "Nat" <rr:@R> => {
+        let region = ast.region(source, ll, rr);
+        let text = &source[region.span()];
+        atoi(text).unwrap()
+    },
 }
 
 Width: u16 = {
-    <index:NAT> => str::parse(index).unwrap(),
+    <ll:@L> "Nat" <rr:@R> => {
+        let region = ast.region(source, ll, rr);
+        let text = &source[region.span()];
+        atoi(text).unwrap()
+    }
 }
 
 WordLit: InternedString = {
-    <nat:NAT> => stringtable.intern(nat.as_bytes().as_bstr()),
-    <nat:WORD_DEC> => stringtable.intern(nat.as_bytes().as_bstr()),
-    <nat:WORD_HEX> => stringtable.intern(nat.as_bytes().as_bstr()),
-    <nat:WORD_BIN> => stringtable.intern(nat.as_bytes().as_bstr()),
+    <ll:@L> "Nat" <rr:@R> => {
+        let region = ast.region(source, ll, rr);
+        let text = &source[region.span()];
+        stringtable.intern(text.as_bytes().as_bstr())
+    },
+
+    <ll:@L> "Word" <rr:@R> => {
+        let region = ast.region(source, ll, rr);
+        let text = &source[region.span()];
+        stringtable.intern(text.as_bytes().as_bstr())
+    },
+
+//    <nat:WORD_HEX> => stringtable.intern(nat.as_bytes().as_bstr()),
+//    <nat:WORD_BIN> => stringtable.intern(nat.as_bytes().as_bstr()),
 }
 
 Ident: InternedString = {
-    <ident:IDENT> => stringtable.intern(ident.as_bytes().as_bstr()),
+    <ll:@L> <ident:"Ident"> <rr:@R> => {
+        let region = ast.region(source, ll, rr);
+        let text = &source[region.span()];
+        stringtable.intern(text.as_bytes().as_bstr())
+    },
 }
 
 Nat: InternedString = {
-    <nat:NAT> => stringtable.intern(nat.as_bytes().as_bstr()),
+    <ll:@L> <nat:"Nat"> <rr:@R> => {
+        let region = ast.region(source, ll, rr);
+        let text = &source[region.span()];
+        stringtable.intern(text.as_bytes().as_bstr())
+    },
 }
 
-match {
-    "import",
-    "ext",
-    "mod",
-    "struct",
-    "union",
-    "enum",
-    "builtin",
-    "type",
-    "socket",
-    "fn",
+extern {
+    type Location = usize;
+    type Error = TokenError;
 
-    "width",
-    "mosi",
-    "miso",
-    "master",
-    "slave",
+    enum Token {
+        "Ident" => Token::Ident,
+        "Nat" => Token::Nat,
+        "Word" => Token::Word,
 
-    "incoming",
-    "outgoing",
-    "wire",
-    "reg",
-    "on",
-    "of",
+        // Punctuation
+        ";" => Token::Semi,
+        "." => Token::Dot,
+        ".." => Token::DotDot,
+        "::" => Token::ColonColon,
+        "=" => Token::Eq,
+        "==" => Token::EqEq,
+        ":=" => Token::EqColon,
+        ":=:" => Token::EqColoneq,
+        "<=" => Token::RevFatArrow,
+        "=>" => Token::FatArrow,
+        "->" => Token::Arrow,
+        ":" => Token::Colon,
+        "," => Token::Comma,
+        "$" => Token::Dollar,
+        "+" => Token::Add,
+        "-" => Token::Sub,
+        "#" => Token::Hash,
+        "@" => Token::At,
 
-    "if",
-    "else",
-    "match",
+        // Groupings
+        "(" => Token::ParenLeft,
+        ")" => Token::ParenRight,
+        "{" => Token::CurlyLeft,
+        "}" => Token::CurlyRight,
+        "[" => Token::BracketLeft,
+        "]" => Token::BracketRight,
 
-    "word",
-    "sext",
-    "zext",
+        // Keywords
+        "pub" => Token::KwPub,
+        "import" => Token::KwImport,
+        "mod" => Token::KwMod,
+        "ext" => Token::KwExt,
+        "builtin" => Token::KwBuiltin,
+        "type" => Token::KwType,
+        "union" => Token::KwUnion,
+        "struct" => Token::KwStruct,
+        "enum" => Token::KwEnum,
+        "fn" => Token::KwFn,
+        "width" => Token::KwWidth,
+        "incoming" => Token::KwIncoming,
+        "outgoing" => Token::KwOutgoing,
+        "reg" => Token::KwReg,
+        "wire" => Token::KwWire,
+        "submod" => Token::KwSubmod,
+        "on" => Token::KwOn,
+        "of" => Token::KwOf,
+        "socket" => Token::KwSocket,
+        "master" => Token::KwMaster,
+        "slave" => Token::KwSlave,
+        "mosi" => Token::KwMosi,
+        "miso" => Token::KwMiso,
+        "word" => Token::KwWord,
+        "sext" => Token::KwSext,
+        "zext" => Token::KwZext,
+        "if" => Token::KwIf,
+        "else" => Token::KwElse,
+        "match" => Token::KwMatch,
+        "true" => Token::KwTrue,
+        "false" => Token::KwFalse,
 
-    "==",
-    "+",
-
-    ":=", "<=", ":=:",
-    "=", "=>", "->",
-    "@", "$", "#",
-
-    "::", "..",
-    ":", ";", ",", ".",
-
-    "{", "}",
-    "(", ")",
-    "[", "]",
-
-    r"[0-9]+" => NAT,
-    r"[a-zA-Z_][a-zA-Z_0-9]*" => IDENT,
-} else {
-    r"[0-9][0-9_]*(w[1-9][0-9]*)?" => WORD_DEC,
-    r"0x[0-9a-fA-F][0-9a-fA-F_]*(w[1-9][0-9]*)?" => WORD_HEX,
-    r"0b[01][01_]*(w[1-9][0-9]*)?" => WORD_BIN,
-} else {
-    r"\s+" => { },
-    r"//[^\n]*\n" => { },
-} else {
-    r"[^\w]" => INVALID,
+        "ERROR" => Token::Error,
+    }
 }

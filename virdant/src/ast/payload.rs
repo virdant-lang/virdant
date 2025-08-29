@@ -103,6 +103,11 @@ pub struct Type {
 }
 
 #[derive(Clone, Debug)]
+pub struct ExprBitLit {
+    pub literal: bool,
+}
+
+#[derive(Clone, Debug)]
 pub struct ExprWordLit {
     pub literal: InternedString,
 }

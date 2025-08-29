@@ -1,17 +1,18 @@
+use bstr::BStr;
+
 use crate::ast::{AstData, AstNodeId};
-use crate::stringtable::StringTable;
 use crate::source::Source;
+use crate::stringtable::StringTable;
+use crate::token::tokenize;
 
 lalrpop_util::lalrpop_mod!(grammar);
 
 pub fn parse(ast_data: &mut AstData, stringtable: StringTable, source: Source) {
     let parser = grammar::PackageParser::new();
-    let text = String::from_utf8_lossy(&*source.text()).to_string();
+    let text = source.text();
+    let tokens = tokenize(BStr::new(text.as_ref()));
 
-    parser
-        .parse(ast_data, &stringtable, &source, &text)
-        .unwrap();
-
+    let _ = parser.parse(ast_data, &stringtable, &source, tokens);
     let package = ast_data.package();
 
     ast_data.parents = vec![AstNodeId(package.clone(), u16::MAX); ast_data.payloads.len()];

@@ -63,6 +63,7 @@ pub enum AstNodePayload {
     ExprParen,
     ExprIf,
     ExprMatch,
+    ExprBitLit(payload::ExprBitLit),
     ExprWordLit(payload::ExprWordLit),
     ExprBinOp(payload::ExprBinOp),
     ExprUnOp(payload::ExprUnOp),

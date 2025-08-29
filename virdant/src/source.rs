@@ -247,14 +247,25 @@ impl Region {
 
 impl std::fmt::Display for Region {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}[{}:{}-{}:{}]",
-            self.package,
-            self.span.start().line(),
-            self.span.start().col(),
-            self.span.end().line(),
-            self.span.end().col(),
-        )
+        if self.span.start().line() == self.span.end().line() {
+            write!(
+                f,
+                "{}[{}:{}-{}]",
+                self.package,
+                self.span.start().line(),
+                self.span.start().col(),
+                self.span.end().col(),
+            )
+        } else {
+            write!(
+                f,
+                "{}[{}:{}-{}:{}]",
+                self.package,
+                self.span.start().line(),
+                self.span.start().col(),
+                self.span.end().line(),
+                self.span.end().col(),
+            )
+        }
     }
 }

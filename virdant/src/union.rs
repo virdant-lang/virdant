@@ -122,12 +122,15 @@ fn union_test() {
     union.join(j, g);
 
     union.normalize();
-    dbg!(&union);
+    //dbg!(&union);
 
     for group in union.into_iter() {
-        eprintln!("GROUP:");
-        for item in group {
-            eprintln!("    {item:?}");
+        //eprintln!("GROUP:");
+        for _item in group {
+            //eprintln!("    {item:?}");
         }
     }
+
+    // TODO
+    // NO TEST
 }

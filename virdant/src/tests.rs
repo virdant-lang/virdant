@@ -40,7 +40,7 @@ macro_rules! test_example {
                     eprintln!("    {BATSU} {filename:<20}{:>6} us", duration.as_micros());
                     eprintln!("        ERRORS:");
                     for error in &errors {
-                        eprintln!("            {:?}", error);
+                        eprintln!("            {:?}  {}", error, error.region());
                     }
                 } else {
                     eprintln!("    {CHECK} {filename:<20}{:>6} us", duration.as_micros());
