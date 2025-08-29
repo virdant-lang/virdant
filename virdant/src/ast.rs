@@ -162,9 +162,9 @@ impl AstData {
         self.source.package()
     }
 
-    fn region(&self, source: &Source, ll: usize, rr: usize) -> Region {
-        let start = source.to_linecol(SourceOffset(ll.try_into().unwrap()));
-        let end = source.to_linecol(SourceOffset(rr.try_into().unwrap()));
+    fn region(&self, source: &Source, ll: SourceOffset, rr: SourceOffset) -> Region {
+        let start = source.to_linecol(ll);
+        let end = source.to_linecol(rr);
         Region::new(self.package().clone(), Span::new(start, end))
     }
 

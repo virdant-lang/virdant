@@ -30,3 +30,7 @@ path = "src/bin/debug.rs"
 [[bin]]
 name = "vir-init"
 path = "src/bin/init.rs"
+
+[[bin]]
+name = "vir-tokenize"
+path = "src/bin/tokenize.rs"

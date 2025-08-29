@@ -2,6 +2,8 @@ use bstr::BStr;
 use logos::Logos;
 use logos::SpannedIter;
 
+use crate::source::SourceOffset;
+
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub struct TokenError;
 
@@ -113,11 +115,11 @@ pub fn tokenize<'input>(input: &'input BStr) -> Lexer<'input> {
 }
 
 impl<'input> Iterator for Lexer<'input> {
-    type Item = Spanned<Token, usize, TokenError>;
+    type Item = Spanned<Token, SourceOffset, TokenError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.token_stream
             .next()
-            .map(|(token, span)| Ok((span.start, token.unwrap_or(Token::Error), span.end)))
+            .map(|(token, span)| Ok((SourceOffset(span.start as u32), token.unwrap_or(Token::Error), SourceOffset(span.end as u32))))
     }
 }

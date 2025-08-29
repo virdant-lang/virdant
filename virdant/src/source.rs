@@ -10,7 +10,7 @@ pub struct Source {
 }
 
 /// A byte offset in a `Source`.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct SourceOffset(pub(crate) u32);
 
 /// A line-col pair (1-indexed)
@@ -88,6 +88,13 @@ impl Source {
         }
 
         LineCol(line, col)
+    }
+
+    pub fn to_region(&self, start: SourceOffset, end: SourceOffset) -> Region {
+        let start_linecol = self.to_linecol(start);
+        let end_linecol = self.to_linecol(end);
+        let span = Span::new(start_linecol, end_linecol);
+        Region::new(self.package.clone(), span)
     }
 }
 
@@ -265,6 +272,29 @@ impl std::fmt::Display for Region {
                 self.span.start().col(),
                 self.span.end().line(),
                 self.span.end().col(),
+            )
+        }
+    }
+}
+
+impl std::fmt::Display for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.start().line() == self.end().line() {
+            write!(
+                f,
+                "[{}:{}-{}]",
+                self.start().line(),
+                self.start().col(),
+                self.end().col(),
+            )
+        } else {
+            write!(
+                f,
+                "[{}:{}-{}:{}]",
+                self.start().line(),
+                self.start().col(),
+                self.end().line(),
+                self.end().col(),
             )
         }
     }

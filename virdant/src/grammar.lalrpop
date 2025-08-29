@@ -6,7 +6,7 @@ use atoi::atoi;
 use crate::ast::{AstData, AstNodeId, AstNodePayload};
 use crate::ast::payload;
 use crate::stringtable::{StringTable, InternedString};
-use crate::source::Source;
+use crate::source::{Source, SourceOffset};
 use crate::common::{DriverType, ComponentKind, BinOp, ChannelDir, SocketRole};
 
 grammar<'a>(ast: &'a mut AstData, stringtable: &StringTable, source: &Source);
@@ -660,7 +660,7 @@ Nat: InternedString = {
 }
 
 extern {
-    type Location = usize;
+    type Location = SourceOffset;
     type Error = TokenError;
 
     enum Token {
