@@ -7,31 +7,33 @@ use virdant::ast::AstNode;
 use virdant::fqn::PackageFqn;
 use virdant::Vir;
 
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about)]
+struct Args {
+    path: String,
+}
+
 fn main() {
-    let args = std::env::args().collect::<Vec<String>>();
+    let args = Args::parse();
 
-    let filepaths = args
-        .iter()
-        .skip(1)
-        .map(|arg| std::path::PathBuf::from(arg));
-
+    let filepath = std::path::PathBuf::from(args.path);
     let mut vir = Vir::new();
 
     let mut first_package = None;
 
-    for filepath in filepaths {
-        let mut file = std::fs::File::open(&filepath).unwrap();
-        let mut text = vec![];
-        file.read_to_end(&mut text).unwrap();
+    let mut file = std::fs::File::open(&filepath).unwrap();
+    let mut text = vec![];
+    file.read_to_end(&mut text).unwrap();
 
-        let package_name = BString::new(filepath.file_stem().unwrap().as_bytes().to_vec());
-        let package = PackageFqn::new(package_name);
+    let package_name = BString::new(filepath.file_stem().unwrap().as_bytes().to_vec());
+    let package = PackageFqn::new(package_name);
 
-        vir.set_source(package.clone(), BString::from(text));
+    vir.set_source(package.clone(), BString::from(text));
 
-        if first_package.is_none() {
-            first_package = Some(package);
-        }
+    if first_package.is_none() {
+        first_package = Some(package);
     }
 
     let top_package = first_package.unwrap();

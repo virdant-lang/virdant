@@ -861,6 +861,7 @@ dependencies = [
  "anyhow",
  "atoi",
  "bstr",
+ "clap",
  "defile",
  "hashbrown 0.15.4",
  "internment",

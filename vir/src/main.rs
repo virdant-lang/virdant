@@ -1,8 +1,8 @@
 use clap::CommandFactory;
 use clap::{Parser, Subcommand};
-use nix::unistd::execvp;
 
 use std::ffi::CString;
+use nix::unistd::execvp;
 
 /// The Virdant Hardware Language
 #[derive(Parser, Debug)]
@@ -10,35 +10,16 @@ use std::ffi::CString;
 struct Args {
     #[command(subcommand)]
     command: Option<Command>,
-
-    #[doc(hidden)]
-    args: Vec<String>,
 }
 
 #[derive(Subcommand, Debug)]
 enum Command {
     /// Compile a Virdant source file
-    Compile { source: String },
+    Compile { args: Vec<String> },
 }
 
 fn main() {
-    let parse_args = Args::parse();
-    let mut args: Vec<String> = vec![];
-
-    match parse_args.command {
-        Some(Command::Compile { source } ) => {
-            args.push("compile".to_string());
-            args.push(source);
-        }
-        None => {
-            args.extend(parse_args.args.into_iter());
-        }
-    }
-
-    if args.is_empty() {
-        Args::command().print_help().unwrap();
-        std::process::exit(2);
-    }
+    let args: Vec<String> = std::env::args().into_iter().skip(1).collect();
 
     let command = &args[0];
 
