@@ -15,5 +15,13 @@ logos = "0.15.1"
 paste = "1.0.15"
 tracing = "0.1.41"
 
+[[bin]]
+name = "vir-compile"
+path = "src/bin/compile.rs"
+
+[[bin]]
+name = "vir-debug"
+path = "src/bin/debug.rs"
+
 [build-dependencies]
 lalrpop = { version = "0.22.2" }
