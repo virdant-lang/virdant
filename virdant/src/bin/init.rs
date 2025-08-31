@@ -31,56 +31,35 @@ pub fn main() {
         std::process::exit(1);
     });
 
-    let src_dir = project_dir.join("src");
-    std::fs::create_dir(&src_dir).unwrap_or_else(|e| {
-        eprintln!("Error: {e:?}");
-        std::process::exit(1);
-    });
+    macro_rules! make_template_file {
+        ($name:literal) => {
+            let filepath = project_dir.join($name);
 
-    let mut top_vir = File::create(src_dir.join("top.vir"))
-        .unwrap_or_else(|e| {
-            eprintln!("Error: {e:?}");
-            std::process::exit(1);
-        });
+            std::fs::create_dir_all(filepath.parent().unwrap())
+                .unwrap_or_else(|e| {
+                    eprintln!(concat!("Error creating ", $name, " directory"));
+                    eprintln!("{e:?}");
+                    std::process::exit(1);
+                });
 
-    #[rustfmt::skip]
-    Write::write_all(&mut top_vir,
-b"mod Top {
-    incoming clock : Clock;
-    incoming inp : Word[8];
-    incoming out : Word[8];
+            let mut file = File::create(&filepath)
+                .unwrap_or_else(|e| {
+                    eprintln!(concat!("Error creating ", $name));
+                    eprintln!("{e:?}");
+                    std::process::exit(1);
+                });
 
-    reg buf : Word[8] on clock;
-    buf <= inpt;
-    out := buf;
-}
-")
-        .unwrap_or_else(|e| {
-            eprintln!("Error: {e:?}");
-            std::process::exit(1);
-        });
+            #[rustfmt::skip]
+            Write::write_all(&mut file, include_bytes!(concat!("../templates/", $name)))
+                .unwrap_or_else(|e| {
+                    eprintln!(concat!("Error creating (2) ", $name));
+                    eprintln!("Error: {e:?}");
+                    std::process::exit(1);
+                });
+        }
+    }
 
-    let mut makefile_vir = File::create(project_dir.join("Makefile"))
-        .unwrap_or_else(|e| {
-            eprintln!("Error: {e:?}");
-            std::process::exit(1);
-        });
-
-    #[rustfmt::skip]
-    Write::write_all(&mut makefile_vir,
-b"
-all: build/top.v
-
-build/top.v: src/top.vir
-	vir compile src/top.vir
-
-clean:
-	rm -rf build/
-
-.PHONY: all clean
-")
-        .unwrap_or_else(|e| {
-            eprintln!("Error: {e:?}");
-            std::process::exit(1);
-        });
+    make_template_file!("src/top.vir");
+    make_template_file!("tb/testbench.v");
+    make_template_file!("Makefile");
 }
