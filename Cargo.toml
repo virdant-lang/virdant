@@ -2,5 +2,5 @@
 resolver = "2"
 members = [
     "virdant", 
-    "vir",
+    "vir", "vir-lsp",
 ]
