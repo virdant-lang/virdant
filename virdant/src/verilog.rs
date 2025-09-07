@@ -1,4 +1,6 @@
 use crate::common::PortDir;
+use crate::common::Radix;
+use std::io::Write;
 
 pub struct Verilog {
     pub files: Vec<File>,
@@ -54,34 +56,39 @@ pub struct Initial {
 }
 
 pub enum Expr {
-    Reference(payload::Reference),
-    ExprBinOp(payload::ExprBinOp),
-    ExprUnOp(payload::ExprUnOp),
-    ExprBitLit(payload::ExprBitLit),
-    ExprWordLit(payload::ExprWordLit),
+    Reference(expr::Reference),
+    BinOp(expr::BinOp),
+    UnOp(expr::UnOp),
+    BitLit(expr::BitLit),
+    WordLit(expr::WordLit),
 }
 
-mod payload {
+mod expr {
     use super::*;
 
     pub struct Reference {
         pub name: String,
     }
 
-    pub struct ExprBinOp {
-        pub op: BinOp,
+    pub struct BinOp {
+        pub op: super::BinOp,
+        pub lhs: Box<Expr>,
+        pub rhs: Box<Expr>,
     }
 
-    pub struct ExprUnOp {
-        pub op: UnOp,
+    pub struct UnOp {
+        pub op: super::UnOp,
+        pub expr: Box<Expr>,
     }
 
-    pub struct ExprBitLit {
+    pub struct BitLit {
         pub value: bool,
     }
 
-    pub struct ExprWordLit {
+    pub struct WordLit {
         pub value: u128, // TODO
+        pub width: u16,
+        pub radix: Radix,
     }
 }
 
@@ -111,7 +118,6 @@ impl<'f> Writer<'f> {
 macro_rules! verilog_write {
     ($writer:expr, $fmt:literal $($arg:tt)*) => {{
         let indentation = str::repeat(" ", ($writer.indent * 4) as usize);
-        use std::io::Write;
         write!($writer.file, "{indentation}")?;
         write!($writer.file, $fmt, $($arg)*)
     }};
@@ -120,13 +126,11 @@ macro_rules! verilog_write {
 macro_rules! verilog_writeln {
     ($writer:expr, $fmt:literal $($arg:tt)*) => {{
         let indentation = str::repeat(" ", ($writer.indent * 4) as usize);
-        use std::io::Write;
         write!($writer.file, "{indentation}")?;
         writeln!($writer.file, $fmt, $($arg)*)
     }};
     ($writer:expr) => {{
         let indentation = str::repeat(" ", ($writer.indent * 4) as usize);
-        use std::io::Write;
         write!($writer.file, "{indentation}")?;
         writeln!($writer.file)
     }};
@@ -232,26 +236,49 @@ impl Reg {
 impl Assign {
     fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
         let name = &self.name;
-        verilog_writeln!(writer, "assign {name} = ")?;
-        writer.indent();
+        verilog_write!(writer, "assign {name} = ")?;
         self.expr.write(writer)?;
-        writer.dedent();
-        verilog_writeln!(writer)?;
+        writeln!(writer.file, ";")?;
         Ok(())
     }
 }
 
 impl Expr {
     fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
-        use std::io::Write;
-        verilog_write!(writer, "")?;
+        write!(writer.file, "(")?;
         match self {
             Expr::Reference(reference) => write!(writer.file, "{}", reference.name)?,
-            Expr::ExprBinOp(expr_bin_op) => todo!(), //expr_bin_op.write(f),
-            Expr::ExprUnOp(expr_un_op) => todo!(),   //expr_un_op.write(f),
-            Expr::ExprBitLit(expr_bit_lit) => todo!(), //expr_bit_lit.write(f),
-            Expr::ExprWordLit(expr_word_lit) => todo!(), //expr_word_lit.write(f),
+            Expr::BinOp(expr_bin_op) => {
+                expr_bin_op.lhs.write(writer)?;
+                match expr_bin_op.op {
+                    BinOp::Add => write!(writer.file, " + ")?,
+                }
+                expr_bin_op.rhs.write(writer)?;
+            }
+            Expr::UnOp(expr_un_op) => {
+                match expr_un_op.op {
+                    UnOp::Neg => write!(writer.file, "-")?,
+                }
+                expr_un_op.expr.write(writer)?;
+            }
+            Expr::BitLit(expr_bit_lit) => {
+                if expr_bit_lit.value {
+                    write!(writer.file, "1'b1")?
+                } else {
+                    write!(writer.file, "1'b0")?
+                }
+            }
+            Expr::WordLit(expr_word_lit) => {
+                let width = expr_word_lit.width;
+                let value = expr_word_lit.value;
+                match expr_word_lit.radix {
+                    Radix::Dec => write!(writer.file, "{width}'d{value}")?,
+                    Radix::Hex => write!(writer.file, "{width}'h{value:x}")?,
+                    Radix::Bin => write!(writer.file, "{width}'b{value:b}")?,
+                }
+            }
         }
+        write!(writer.file, ")")?;
         Ok(())
     }
 }
@@ -276,8 +303,18 @@ fn test_verilog() {
                     },
                 ],
                 elements: vec![Element::Assign(Assign {
-                    name: "name".to_string(),
-                    expr: Expr::Reference(payload::Reference { name: "out".to_string() }),
+                    name: "out".to_string(),
+                    expr: Expr::BinOp(expr::BinOp {
+                        op: BinOp::Add,
+                        lhs: Box::new(Expr::Reference(expr::Reference {
+                            name: "inp".to_string(),
+                        })),
+                        rhs: Box::new(Expr::WordLit(expr::WordLit {
+                            value: 4095,
+                            width: 13,
+                            radix: Radix::Hex,
+                        })),
+                    }),
                 })],
             }],
         }],
