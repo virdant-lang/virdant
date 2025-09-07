@@ -8,6 +8,7 @@ pub mod source;
 pub mod stringtable;
 pub mod error;
 pub mod vir;
+pub mod verilog;
 
 pub mod db;
 pub mod queries;
