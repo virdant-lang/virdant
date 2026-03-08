@@ -1,9 +1,0 @@
-mod Top {
-    incoming clock : Clock;
-    incoming inp : Word[8];
-    incoming out : Word[8];
-
-    reg buf : Word[8] on clock;
-    buf <= inp;
-    out := buf;
-}

@@ -1,8 +1,8 @@
 use clap::CommandFactory;
 use clap::{Parser, Subcommand};
 
-use std::ffi::CString;
 use nix::unistd::execvp;
+use std::ffi::CString;
 
 /// The Virdant Hardware Language
 #[derive(Parser, Debug)]
@@ -21,6 +21,10 @@ enum Command {
 fn main() {
     let args: Vec<String> = std::env::args().into_iter().skip(1).collect();
 
+    if args.len() == 0 {
+        Args::command().print_help().unwrap();
+        std::process::exit(3);
+    }
     let command = &args[0];
 
     let bin_path = std::env::current_exe().unwrap();
@@ -35,7 +39,7 @@ fn main() {
                 .map(|s| CString::new(s.as_str()).unwrap())
                 .collect();
 
-            execvp(&program, &c_args).unwrap();
+            let _ = execvp(&program, &c_args);
         }
         Ok(false) => {
             Args::command().print_help().unwrap();
