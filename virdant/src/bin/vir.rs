@@ -1,8 +1,10 @@
 use clap::CommandFactory;
 use clap::{Parser, Subcommand};
 
+use bstr::{BStr, ByteSlice};
 use nix::unistd::execvp;
 use std::ffi::CString;
+use virdant::token::tokenize;
 
 /// The Virdant Hardware Language
 #[derive(Parser, Debug)]
@@ -18,6 +20,42 @@ enum Command {
     Compile { args: Vec<String> },
 }
 
+fn tokenize_file(path: &str) {
+    let input = match std::fs::read(path) {
+        Ok(input) => input,
+        Err(e) => {
+            eprintln!("ERROR");
+            eprintln!("{e:?}");
+            std::process::exit(-1);
+        }
+    };
+
+    for (i, token) in tokenize(input.as_bstr()).enumerate() {
+        match token {
+            Ok((start, token, end)) => {
+                let start = usize::from(start);
+                let end = usize::from(end);
+                let loc = format!("{start}..{end}");
+                let token_str = token.to_string();
+
+                let snippet = match token {
+                    virdant::token::Token::Ident |
+                    virdant::token::Token::Nat |
+                    virdant::token::Token::Word |
+                    virdant::token::Token::Error => BStr::new(&input[start..end]),
+                    _ => BStr::new(""),
+                };
+                println!("{i:>5} {loc:>10}   {token_str:>15}      {snippet}");
+            }
+            Err(err) => {
+                eprintln!("ERROR");
+                eprintln!("{err:?}");
+                std::process::exit(-1);
+            }
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().into_iter().skip(1).collect();
 
@@ -26,6 +64,21 @@ fn main() {
         std::process::exit(3);
     }
     let command = &args[0];
+
+    if command == "tokenize" {
+        let path = match args.get(1) {
+            Some(path) => path,
+            None => {
+                eprintln!("ERROR");
+                eprintln!("usage: vir tokenize <file>");
+                std::process::exit(3);
+            }
+        };
+
+        tokenize_file(path);
+
+        return;
+    }
 
     let bin_path = std::env::current_exe().unwrap();
     let bin_dir = bin_path.parent().unwrap();

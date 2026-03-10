@@ -10,6 +10,7 @@ pub struct TokenError;
 #[rustfmt::skip]
 #[derive(Logos, Clone, Debug, PartialEq)]
 #[logos(skip br"[ \t\n\f]+", skip br"//.*\n?", error = TokenError)]
+#[repr(u16)]
 pub enum Token {
     // Literals
     #[regex(br"[_a-zA-Z][_a-zA-Z0-9]*")]
