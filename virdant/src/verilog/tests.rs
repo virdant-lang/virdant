@@ -42,6 +42,54 @@ macro_rules! binop {
 }
 
 #[macro_export]
+macro_rules! index {
+    ($subject:expr, $index:literal) => {
+        Expr::Index(expr::Index {
+            subject: $subject.into(),
+            index: refr!($index).into(),
+        })
+    };
+    ($subject:expr, $index:expr) => {
+        Expr::Index(expr::Index {
+            subject: $subject.into(),
+            index: $index.into(),
+        })
+    };
+}
+
+#[macro_export]
+macro_rules! index_range {
+    ($subject:expr, $index_hi:literal, $index_lo:literal) => {
+        Expr::IndexRange(expr::IndexRange {
+            subject: $subject.into(),
+            index_hi: refr!($index_hi).into(),
+            index_lo: refr!($index_lo).into(),
+        })
+    };
+    ($subject:expr, $index_hi:literal, $index_lo:expr) => {
+        Expr::IndexRange(expr::IndexRange {
+            subject: $subject.into(),
+            index_hi: refr!($index_hi).into(),
+            index_lo: $index_lo.into(),
+        })
+    };
+    ($subject:expr, $index_hi:expr, $index_lo:literal) => {
+        Expr::IndexRange(expr::IndexRange {
+            subject: $subject.into(),
+            index_hi: $index_hi.into(),
+            index_lo: refr!($index_lo).into(),
+        })
+    };
+    ($subject:expr, $index_hi:expr, $index_lo:expr) => {
+        Expr::IndexRange(expr::IndexRange {
+            subject: $subject.into(),
+            index_hi: $index_hi.into(),
+            index_lo: $index_lo.into(),
+        })
+    };
+}
+
+#[macro_export]
 macro_rules! input {
     ($name:ident, $width:literal) => {
         Port {
@@ -214,6 +262,24 @@ fn test_verilog() {
                                 @clock
                                 assign_blocking!(y, lit!(0, 1)),
                             ],
+                        }
+                    )
+                ],
+            },
+            VerilogFile {
+                name: "indexing.v".to_string(),
+                modules: vec![
+                    module!(
+                        Indexing
+                        ports {
+                            input!(x, 8),
+                            input!(y, 16),
+                            output!(x0, 1),
+                            output!(y_lo, 8),
+                        }
+                        elements {
+                            assign!(x0, index!(refr!(x), 0)),
+                            assign!(y_lo, index_range!(refr!(y), 7, 0)),
                         }
                     )
                 ],
