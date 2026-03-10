@@ -84,7 +84,30 @@ pub enum Expr {
 }
 
 pub enum BinOp {
+    Pow,
+    Mul,
+    Div,
+    Mod,
     Add,
+    Sub,
+    Shl,
+    Shr,
+    AShl,
+    AShr,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Eq,
+    Ne,
+    CaseEq,
+    CaseNe,
+    BitAnd,
+    BitXor,
+    BitXnor,
+    BitOr,
+    LogAnd,
+    LogOr,
 }
 
 pub enum UnOp {
@@ -410,7 +433,30 @@ impl Expr {
                 write!(writer.file, "(")?;
                 expr_bin_op.lhs.write(writer)?;
                 match expr_bin_op.op {
+                    BinOp::Pow => write!(writer.file, " ** ")?,
+                    BinOp::Mul => write!(writer.file, " * ")?,
+                    BinOp::Div => write!(writer.file, " / ")?,
+                    BinOp::Mod => write!(writer.file, " % ")?,
                     BinOp::Add => write!(writer.file, " + ")?,
+                    BinOp::Sub => write!(writer.file, " - ")?,
+                    BinOp::Shl => write!(writer.file, " << ")?,
+                    BinOp::Shr => write!(writer.file, " >> ")?,
+                    BinOp::AShl => write!(writer.file, " <<< ")?,
+                    BinOp::AShr => write!(writer.file, " >>> ")?,
+                    BinOp::Lt => write!(writer.file, " < ")?,
+                    BinOp::Le => write!(writer.file, " <= ")?,
+                    BinOp::Gt => write!(writer.file, " > ")?,
+                    BinOp::Ge => write!(writer.file, " >= ")?,
+                    BinOp::Eq => write!(writer.file, " == ")?,
+                    BinOp::Ne => write!(writer.file, " != ")?,
+                    BinOp::CaseEq => write!(writer.file, " === ")?,
+                    BinOp::CaseNe => write!(writer.file, " !== ")?,
+                    BinOp::BitAnd => write!(writer.file, " & ")?,
+                    BinOp::BitXor => write!(writer.file, " ^ ")?,
+                    BinOp::BitXnor => write!(writer.file, " ^~ ")?,
+                    BinOp::BitOr => write!(writer.file, " | ")?,
+                    BinOp::LogAnd => write!(writer.file, " && ")?,
+                    BinOp::LogOr => write!(writer.file, " || ")?,
                 }
                 expr_bin_op.rhs.write(writer)?;
                 write!(writer.file, ")")?;

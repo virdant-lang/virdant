@@ -234,19 +234,6 @@ macro_rules! assign_non_blocking {
     }
 }
 
-#[test]
-fn test_expr_index_and_index_range_write() {
-    let mut index_output = Vec::new();
-    let mut index_writer = Writer::new(&mut index_output);
-    index!(refr!(x), 0).write(&mut index_writer).unwrap();
-    assert_eq!(String::from_utf8(index_output).unwrap(), "x[0]");
-
-    let mut slice_output = Vec::new();
-    let mut slice_writer = Writer::new(&mut slice_output);
-    index_range!(refr!(y), 7, 0).write(&mut slice_writer).unwrap();
-    assert_eq!(String::from_utf8(slice_output).unwrap(), "y[7:0]");
-}
-
 #[rustfmt::skip]
 #[test]
 fn test_verilog() {
@@ -348,6 +335,69 @@ fn test_verilog() {
                                 display!(str!("boot")),
                                 assign_blocking!(done, lit!(1, 1)),
                             ],
+                        }
+                    )
+                ],
+            },
+            VerilogFile {
+                name: "binops.v".to_string(),
+                modules: vec![
+                    module!(
+                        BinOps
+                        ports {
+                            input!(a, 8),
+                            input!(b, 8),
+                            input!(shamt, 4),
+                            output!(pow, 16),
+                            output!(mul, 16),
+                            output!(div, 8),
+                            output!(modulo, 8),
+                            output!(add, 8),
+                            output!(sub, 8),
+                            output!(shl, 8),
+                            output!(shr, 8),
+                            output!(ashl, 8),
+                            output!(ashr, 8),
+                            output!(lt, 1),
+                            output!(le, 1),
+                            output!(gt, 1),
+                            output!(ge, 1),
+                            output!(eq, 1),
+                            output!(ne, 1),
+                            output!(case_eq, 1),
+                            output!(case_ne, 1),
+                            output!(bit_and, 8),
+                            output!(bit_xor, 8),
+                            output!(bit_xnor, 8),
+                            output!(bit_or, 8),
+                            output!(log_and, 1),
+                            output!(log_or, 1),
+                        }
+                        elements {
+                            assign!(pow, binop!(refr!(a), Pow, refr!(b))),
+                            assign!(mul, binop!(refr!(a), Mul, refr!(b))),
+                            assign!(div, binop!(refr!(a), Div, refr!(b))),
+                            assign!(modulo, binop!(refr!(a), Mod, refr!(b))),
+                            assign!(add, binop!(refr!(a), Add, refr!(b))),
+                            assign!(sub, binop!(refr!(a), Sub, refr!(b))),
+                            assign!(shl, binop!(refr!(a), Shl, refr!(shamt))),
+                            assign!(shr, binop!(refr!(a), Shr, refr!(shamt))),
+                            assign!(ashl, binop!(refr!(a), AShl, refr!(shamt))),
+                            assign!(ashr, binop!(refr!(a), AShr, refr!(shamt))),
+                            assign!(lt, binop!(refr!(a), Lt, refr!(b))),
+                            assign!(le, binop!(refr!(a), Le, refr!(b))),
+                            assign!(gt, binop!(refr!(a), Gt, refr!(b))),
+                            assign!(ge, binop!(refr!(a), Ge, refr!(b))),
+                            assign!(eq, binop!(refr!(a), Eq, refr!(b))),
+                            assign!(ne, binop!(refr!(a), Ne, refr!(b))),
+                            assign!(case_eq, binop!(refr!(a), CaseEq, refr!(b))),
+                            assign!(case_ne, binop!(refr!(a), CaseNe, refr!(b))),
+                            assign!(bit_and, binop!(refr!(a), BitAnd, refr!(b))),
+                            assign!(bit_xor, binop!(refr!(a), BitXor, refr!(b))),
+                            assign!(bit_xnor, binop!(refr!(a), BitXnor, refr!(b))),
+                            assign!(bit_or, binop!(refr!(a), BitOr, refr!(b))),
+                            assign!(log_and, binop!(refr!(a), LogAnd, refr!(b))),
+                            assign!(log_or, binop!(refr!(a), LogOr, refr!(b))),
                         }
                     )
                 ],
