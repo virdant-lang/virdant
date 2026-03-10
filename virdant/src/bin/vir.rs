@@ -45,7 +45,9 @@ fn tokenize_file(path: &str) {
                     virdant::token::Token::Error => BStr::new(&input[start..end]),
                     _ => BStr::new(""),
                 };
-                println!("{i:>5} {loc:>10}   {token_str:>15}      {snippet}");
+
+                let token_num = format!("{:>3}#", token as usize);
+                println!("{i:>5} {loc:>10}   {token_str:>13} {token_num}      {snippet}");
             }
             Err(err) => {
                 eprintln!("ERROR");
