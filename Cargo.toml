@@ -1,25 +1,5 @@
-[package]
-name = "virdant"
-version = "0.3.0"
-edition = "2024"
-
-[dependencies]
-anyhow = "1.0.98"
-atoi = "2.0.0"
-bstr = "1.12.0"
-clap = { version = "4.5.46", features = ["derive"] }
-defile = "0.2.1"
-hashbrown = "0.15.4"
-internment = { version = "0.8.6", features = ["arc"] }
-lalrpop-util = { version = "0.22.2", features = ["lexer"] }
-logos = "0.15.1"
-nix = { version = "0.31.2", features = ["process"] }
-paste = "1.0.15"
-tracing = "0.1.41"
-
-[build-dependencies]
-lalrpop = { version = "0.22.2" }
-
-[[bin]]
-name = "vir"
-path = "virdant/src/bin/vir.rs"
+[workspace]
+resolver = "2"
+members = [
+    "virdant",
+]
