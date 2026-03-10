@@ -42,6 +42,17 @@ macro_rules! binop {
 }
 
 #[macro_export]
+macro_rules! if_ {
+    ($cond:expr, $then_expr:expr, $else_expr:expr) => {
+        Expr::If(expr::If {
+            cond: $cond.into(),
+            then_expr: $then_expr.into(),
+            else_expr: $else_expr.into(),
+        })
+    }
+}
+
+#[macro_export]
 macro_rules! index {
     ($subject:expr, $index:literal) => {
         Expr::Index(expr::Index {
@@ -186,6 +197,15 @@ macro_rules! always {
 }
 
 #[macro_export]
+macro_rules! initial {
+    ($( $stmt:expr ,)*) => {
+        Element::Initial(Initial {
+            stmts: vec![$( $stmt ),*],
+        })
+    };
+}
+
+#[macro_export]
 macro_rules! display {
     ($( $expr:expr ),*) => {
         Stmt::Display(stmt::Display {
@@ -212,6 +232,19 @@ macro_rules! assign_non_blocking {
             expr: $expr.into(),
         })
     }
+}
+
+#[test]
+fn test_expr_index_and_index_range_write() {
+    let mut index_output = Vec::new();
+    let mut index_writer = Writer::new(&mut index_output);
+    index!(refr!(x), 0).write(&mut index_writer).unwrap();
+    assert_eq!(String::from_utf8(index_output).unwrap(), "x[0]");
+
+    let mut slice_output = Vec::new();
+    let mut slice_writer = Writer::new(&mut slice_output);
+    index_range!(refr!(y), 7, 0).write(&mut slice_writer).unwrap();
+    assert_eq!(String::from_utf8(slice_output).unwrap(), "y[7:0]");
 }
 
 #[rustfmt::skip]
@@ -280,6 +313,41 @@ fn test_verilog() {
                         elements {
                             assign!(x0, index!(refr!(x), 0)),
                             assign!(y_lo, index_range!(refr!(y), 7, 0)),
+                        }
+                    )
+                ],
+            },
+            VerilogFile {
+                name: "ternary.v".to_string(),
+                modules: vec![
+                    module!(
+                        Ternary
+                        ports {
+                            input!(sel, 1),
+                            input!(a, 8),
+                            input!(b, 8),
+                            output!(z, 8),
+                        }
+                        elements {
+                            assign!(z, if_!(refr!(sel), refr!(a), refr!(b))),
+                        }
+                    )
+                ],
+            },
+            VerilogFile {
+                name: "initial.v".to_string(),
+                modules: vec![
+                    module!(
+                        InitialExample
+                        ports {
+                            output!(done, 1),
+                        }
+                        elements {
+                            reg!(done, 1),
+                            initial![
+                                display!(str!("boot")),
+                                assign_blocking!(done, lit!(1, 1)),
+                            ],
                         }
                     )
                 ],

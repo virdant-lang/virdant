@@ -62,7 +62,6 @@ pub struct Always {
 }
 
 pub struct Initial {
-    pub name: String,
     pub stmts: Vec<Stmt>,
 }
 
@@ -79,6 +78,7 @@ pub enum Expr {
     BitLit(expr::BitLit),
     WordLit(expr::WordLit),
     StrLit(expr::StrLit),
+    If(expr::If),
     Index(expr::Index),
     IndexRange(expr::IndexRange),
 }
@@ -273,8 +273,7 @@ impl Element {
             Element::Reg(reg) => reg.write(f),
             Element::Assign(assign) => assign.write(f),
             Element::Always(always) => always.write(f),
-            //            Element::Initial(initial) => initial.write(f),
-            _ => todo!(),
+            Element::Initial(initial) => initial.write(f),
         }
     }
 }
@@ -360,6 +359,19 @@ impl Always {
     }
 }
 
+impl Initial {
+    fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
+        verilog_writeln!(writer, "initial begin")?;
+        writer.indent();
+        for stmt in &self.stmts {
+            stmt.write(writer)?;
+        }
+        writer.dedent();
+        verilog_writeln!(writer, "end")?;
+        Ok(())
+    }
+}
+
 impl Stmt {
     fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
         match self {
@@ -430,6 +442,15 @@ impl Expr {
             Expr::StrLit(expr_str_lit) => {
                 let value = str_escape(&expr_str_lit.value);
                 write!(writer.file, "{value}")?;
+            }
+            Expr::If(expr_if) => {
+                write!(writer.file, "(")?;
+                expr_if.cond.write(writer)?;
+                write!(writer.file, " ? ")?;
+                expr_if.then_expr.write(writer)?;
+                write!(writer.file, " : ")?;
+                expr_if.else_expr.write(writer)?;
+                write!(writer.file, ")")?;
             }
             Expr::Index(index) => {
                 index.subject.write(writer)?;
