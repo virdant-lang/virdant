@@ -123,11 +123,18 @@ macro_rules! module {
 
 #[macro_export]
 macro_rules! always {
-    ($( $stmt:expr ,)*) => {
+    (@ $clock:ident $( $stmt:expr ,)*) => {
         Element::Always(Always {
+            clock: Some(stringify!($clock).into()),
             stmts: vec![$( $stmt ),*],
         })
-    }
+    };
+    (@* $( $stmt:expr ,)*) => {
+        Element::Always(Always {
+            clock: None,
+            stmts: vec![$( $stmt ),*],
+        })
+    };
 }
 
 #[macro_export]
@@ -189,6 +196,7 @@ fn test_verilog() {
                     module!(
                         Adder
                         ports {
+                            input!(clock, 1),
                             input!(a, 8),
                             input!(b, 8),
                             output!(z, 8),
@@ -198,8 +206,12 @@ fn test_verilog() {
                             reg!(x, 1),
                             reg!(y, 1),
                             always![
+                                @*
                                 display!(str!("Hello world!")),
                                 assign_non_blocking!(x, lit!(1, 1)),
+                            ],
+                            always![
+                                @clock
                                 assign_blocking!(y, lit!(0, 1)),
                             ],
                         }

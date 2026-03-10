@@ -57,7 +57,7 @@ pub struct Assign {
 }
 
 pub struct Always {
-//    pub on_expr: Expr,
+    pub clock: Option<String>,
     pub stmts: Vec<Stmt>,
 }
 
@@ -236,6 +236,7 @@ impl Module {
         writer.dedent();
 
         verilog_writeln!(writer, "endmodule")?;
+        verilog_writeln!(writer)?;
         Ok(())
     }
 }
@@ -344,7 +345,11 @@ impl Assign {
 
 impl Always {
     fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
-        verilog_writeln!(writer, "always @(*) begin")?;
+        if let Some(clock) = &self.clock {
+            verilog_writeln!(writer, "always @(posedge {clock}) begin")?;
+        } else {
+            verilog_writeln!(writer, "always @(*) begin")?;
+        }
         writer.indent();
         for stmt in &self.stmts {
             stmt.write(writer)?;
@@ -362,13 +367,15 @@ impl Stmt {
                 verilog_write!(writer, "{} = ", &assign_blocking.name)?;
                 writer.skip_indent();
                 assign_blocking.expr.write(writer)?;
-                verilog_writeln!(writer)?;
+                writer.skip_indent();
+                verilog_writeln!(writer, ";")?;
             }
             Stmt::AssignNonBlocking(assign_non_blocking) => {
                 verilog_write!(writer, "{} <= ", &assign_non_blocking.name)?;
                 writer.skip_indent();
                 assign_non_blocking.expr.write(writer)?;
-                verilog_writeln!(writer)?;
+                writer.skip_indent();
+                verilog_writeln!(writer, ";")?;
             }
             Stmt::Display(display) => {
                 verilog_write!(writer, "$display(")?;
