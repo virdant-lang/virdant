@@ -139,6 +139,26 @@ macro_rules! display {
     }
 }
 
+#[macro_export]
+macro_rules! assign_blocking {
+    ($name:ident, $expr:expr) => {
+        Stmt::AssignBlocking(stmt::AssignBlocking {
+            name: stringify!($name).to_string(),
+            expr: $expr.into(),
+        })
+    }
+}
+
+#[macro_export]
+macro_rules! assign_non_blocking {
+    ($name:ident, $expr:expr) => {
+        Stmt::AssignNonBlocking(stmt::AssignNonBlocking {
+            name: stringify!($name).to_string(),
+            expr: $expr.into(),
+        })
+    }
+}
+
 #[rustfmt::skip]
 #[test]
 fn test_verilog() {
@@ -175,8 +195,12 @@ fn test_verilog() {
                         }
                         elements {
                             assign!(out, binop!(refr!(a), Add, refr!(b))),
+                            reg!(x, 1),
+                            reg!(y, 1),
                             always![
                                 display!(str!("Hello world!")),
+                                assign_non_blocking!(x, lit!(1, 1)),
+                                assign_blocking!(y, lit!(0, 1)),
                             ],
                         }
                     )

@@ -358,11 +358,17 @@ impl Always {
 impl Stmt {
     fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
         match self {
-            Stmt::AssignBlocking(assign_blocking) => verilog_writeln!(writer, "... = ...")?,
+            Stmt::AssignBlocking(assign_blocking) => {
+                verilog_write!(writer, "{} = ", &assign_blocking.name)?;
+                writer.skip_indent();
+                assign_blocking.expr.write(writer)?;
+                verilog_writeln!(writer)?;
+            }
             Stmt::AssignNonBlocking(assign_non_blocking) => {
                 verilog_write!(writer, "{} <= ", &assign_non_blocking.name)?;
                 writer.skip_indent();
                 assign_non_blocking.expr.write(writer)?;
+                verilog_writeln!(writer)?;
             }
             Stmt::Display(display) => {
                 verilog_write!(writer, "$display(")?;
