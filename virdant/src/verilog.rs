@@ -1,4 +1,5 @@
 mod expr;
+mod stmt;
 
 #[cfg(test)]
 mod tests;
@@ -56,8 +57,7 @@ pub struct Assign {
 }
 
 pub struct Always {
-    pub name: String,
-    pub on_expr: Expr,
+//    pub on_expr: Expr,
     pub stmts: Vec<Stmt>,
 }
 
@@ -67,9 +67,9 @@ pub struct Initial {
 }
 
 pub enum Stmt {
-    AssignBlocking(AssignBlocking),
-    AssignNonBlocking(AssignNonBlocking),
-
+    AssignBlocking(stmt::AssignBlocking),
+    AssignNonBlocking(stmt::AssignNonBlocking),
+    Display(stmt::Display),
 }
 
 pub enum Expr {
@@ -78,6 +78,7 @@ pub enum Expr {
     UnOp(expr::UnOp),
     BitLit(expr::BitLit),
     WordLit(expr::WordLit),
+    StrLit(expr::StrLit),
     Index(expr::Index),
     IndexRange(expr::IndexRange),
 }
@@ -120,7 +121,10 @@ impl<'f> Writer<'f> {
 }
 
 macro_rules! verilog_write {
-    ($writer:expr, $fmt:literal $($arg:tt)*) => {{
+    ($writer:expr, $fmt:literal) => {{
+        verilog_write!($writer, $fmt,)
+    }};
+    ($writer:expr, $fmt:literal, $($arg:expr),*) => {{
         if $writer.skip_indent {
            $writer.skip_indent = false;
         } else {
@@ -132,7 +136,10 @@ macro_rules! verilog_write {
 }
 
 macro_rules! verilog_writeln {
-    ($writer:expr, $fmt:literal $($arg:tt)*) => {{
+    ($writer:expr, $fmt:literal) => {{
+        verilog_writeln!($writer, $fmt,)
+    }};
+    ($writer:expr, $fmt:literal, $($arg:expr),*) => {{
         if $writer.skip_indent {
            $writer.skip_indent = false;
         } else {
@@ -178,6 +185,7 @@ impl Verilog {
         for verilog_file in &self.files {
             let stdout = &mut std::io::stdout();
             let mut writer = Writer::new(stdout);
+            writeln!(writer.file, "// {}", &verilog_file.name)?;
             verilog_file.write_to_file(&mut writer)?;
         }
         Ok(())
@@ -263,7 +271,7 @@ impl Element {
             Element::Wire(wire) => wire.write(f),
             Element::Reg(reg) => reg.write(f),
             Element::Assign(assign) => assign.write(f),
-            //            Element::Always(always) => always.write(f),
+            Element::Always(always) => always.write(f),
             //            Element::Initial(initial) => initial.write(f),
             _ => todo!(),
         }
@@ -334,6 +342,41 @@ impl Assign {
     }
 }
 
+impl Always {
+    fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
+        verilog_writeln!(writer, "always @(*) begin")?;
+        writer.indent();
+        for stmt in &self.stmts {
+            stmt.write(writer)?;
+        }
+        writer.dedent();
+        verilog_writeln!(writer, "end")?;
+        Ok(())
+    }
+}
+
+impl Stmt {
+    fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
+        match self {
+            Stmt::AssignBlocking(assign_blocking) => verilog_writeln!(writer, "... = ...")?,
+            Stmt::AssignNonBlocking(assign_non_blocking) => {
+                verilog_write!(writer, "{} <= ", &assign_non_blocking.name)?;
+                writer.skip_indent();
+                assign_non_blocking.expr.write(writer)?;
+            }
+            Stmt::Display(display) => {
+                verilog_write!(writer, "$display(")?;
+                for expr in &display.exprs {
+                    writer.skip_indent();
+                    expr.write(writer)?;
+                }
+                verilog_writeln!(writer, ");")?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl Expr {
     fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
         match self {
@@ -371,6 +414,10 @@ impl Expr {
                     Radix::Bin => write!(writer.file, "{width}'b{value:b}")?,
                 }
             }
+            Expr::StrLit(expr_str_lit) => {
+                let value = str_escape(&expr_str_lit.value);
+                write!(writer.file, "{value}")?;
+            }
             Expr::Index(index) => {
                 index.subject.write(writer)?;
                 write!(writer.file, "[")?;
@@ -388,4 +435,10 @@ impl Expr {
         }
         Ok(())
     }
+}
+
+fn str_escape(s: &str) -> String {
+    // FIXME This should handle Verilog style escape strings
+    // and should escape all quotes, etc.
+    format!("\"{s}\"")
 }

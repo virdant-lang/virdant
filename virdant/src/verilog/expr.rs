@@ -25,6 +25,10 @@ pub struct WordLit {
     pub radix: Radix,
 }
 
+pub struct StrLit {
+    pub value: String,
+}
+
 pub struct Index {
     pub subject: Box<Expr>,
     pub index: Box<Expr>,

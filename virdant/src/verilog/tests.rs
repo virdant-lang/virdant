@@ -22,6 +22,15 @@ macro_rules! lit {
 }
 
 #[macro_export]
+macro_rules! str {
+    ($value:literal) => {
+        Expr::StrLit(expr::StrLit {
+            value: $value.into(),
+        })
+    };
+}
+
+#[macro_export]
 macro_rules! binop {
     ($lhs:expr, $op:ident, $rhs:expr) => {
         Expr::BinOp(expr::BinOp {
@@ -114,20 +123,20 @@ macro_rules! module {
 
 #[macro_export]
 macro_rules! always {
-    ($name:ident ports { $( $ports:expr ,)* } elements { $($elements:expr,)* }) => {
-        Module {
-            name: stringify!($name).to_string(),
-            ports: vec![$( $ports ),*],
-            elements: vec![$( $elements ),*],
-        }
+    ($( $stmt:expr ,)*) => {
+        Element::Always(Always {
+            stmts: vec![$( $stmt ),*],
+        })
     }
 }
 
-
-pub struct Always {
-    pub name: String,
-    pub on_expr: Expr,
-    pub stmts: Vec<Stmt>,
+#[macro_export]
+macro_rules! display {
+    ($( $expr:expr ),*) => {
+        Stmt::Display(stmt::Display {
+            exprs: vec![$( $expr ),*],
+        })
+    }
 }
 
 #[rustfmt::skip]
@@ -136,10 +145,10 @@ fn test_verilog() {
     let verilog = Verilog {
         files: vec![
             VerilogFile {
-                name: "foo.v".to_string(),
+                name: "top.v".to_string(),
                 modules: vec![
                     module!(
-                        top
+                        Top
                         ports {
                             input!(inp, 8),
                             output!(out, 1),
@@ -155,10 +164,10 @@ fn test_verilog() {
                 ],
             },
             VerilogFile {
-                name: "bar.v".to_string(),
+                name: "adder.v".to_string(),
                 modules: vec![
                     module!(
-                        adder
+                        Adder
                         ports {
                             input!(a, 8),
                             input!(b, 8),
@@ -166,6 +175,9 @@ fn test_verilog() {
                         }
                         elements {
                             assign!(out, binop!(refr!(a), Add, refr!(b))),
+                            always![
+                                display!(str!("Hello world!")),
+                            ],
                         }
                     )
                 ],
