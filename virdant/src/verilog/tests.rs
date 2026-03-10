@@ -42,6 +42,16 @@ macro_rules! binop {
 }
 
 #[macro_export]
+macro_rules! unop {
+    ($op:ident, $expr:expr) => {
+        Expr::UnOp(expr::UnOp {
+            op: UnOp::$op,
+            expr: $expr.into(),
+        })
+    }
+}
+
+#[macro_export]
 macro_rules! if_ {
     ($cond:expr, $then_expr:expr, $else_expr:expr) => {
         Expr::If(expr::If {
@@ -234,6 +244,31 @@ macro_rules! assign_non_blocking {
     }
 }
 
+#[test]
+fn test_expr_unop_write_all() {
+    fn assert_unop_write(op: UnOp, expected: &str) {
+        let expr = Expr::UnOp(expr::UnOp {
+            op,
+            expr: refr!(a).into(),
+        });
+        let mut output = Vec::new();
+        let mut writer = Writer::new(&mut output);
+        expr.write(&mut writer).unwrap();
+        assert_eq!(String::from_utf8(output).unwrap(), expected);
+    }
+
+    assert_unop_write(UnOp::Pos, "+(a)");
+    assert_unop_write(UnOp::Neg, "-(a)");
+    assert_unop_write(UnOp::LogNot, "!(a)");
+    assert_unop_write(UnOp::BitNot, "~(a)");
+    assert_unop_write(UnOp::RedAnd, "&(a)");
+    assert_unop_write(UnOp::RedNand, "~&(a)");
+    assert_unop_write(UnOp::RedOr, "|(a)");
+    assert_unop_write(UnOp::RedNor, "~|(a)");
+    assert_unop_write(UnOp::RedXor, "^(a)");
+    assert_unop_write(UnOp::RedXnor, "~^(a)");
+}
+
 #[rustfmt::skip]
 #[test]
 fn test_verilog() {
@@ -398,6 +433,39 @@ fn test_verilog() {
                             assign!(bit_or, binop!(refr!(a), BitOr, refr!(b))),
                             assign!(log_and, binop!(refr!(a), LogAnd, refr!(b))),
                             assign!(log_or, binop!(refr!(a), LogOr, refr!(b))),
+                        }
+                    )
+                ],
+            },
+            VerilogFile {
+                name: "unops.v".to_string(),
+                modules: vec![
+                    module!(
+                        UnaryOps
+                        ports {
+                            input!(a, 8),
+                            output!(pos, 8),
+                            output!(neg, 8),
+                            output!(log_not, 1),
+                            output!(bit_not, 8),
+                            output!(red_and, 1),
+                            output!(red_nand, 1),
+                            output!(red_or, 1),
+                            output!(red_nor, 1),
+                            output!(red_xor, 1),
+                            output!(red_xnor, 1),
+                        }
+                        elements {
+                            assign!(pos, unop!(Pos, refr!(a))),
+                            assign!(neg, unop!(Neg, refr!(a))),
+                            assign!(log_not, unop!(LogNot, refr!(a))),
+                            assign!(bit_not, unop!(BitNot, refr!(a))),
+                            assign!(red_and, unop!(RedAnd, refr!(a))),
+                            assign!(red_nand, unop!(RedNand, refr!(a))),
+                            assign!(red_or, unop!(RedOr, refr!(a))),
+                            assign!(red_nor, unop!(RedNor, refr!(a))),
+                            assign!(red_xor, unop!(RedXor, refr!(a))),
+                            assign!(red_xnor, unop!(RedXnor, refr!(a))),
                         }
                     )
                 ],

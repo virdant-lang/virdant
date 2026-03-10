@@ -111,7 +111,16 @@ pub enum BinOp {
 }
 
 pub enum UnOp {
+    Pos,
     Neg,
+    LogNot,
+    BitNot,
+    RedAnd,
+    RedNand,
+    RedOr,
+    RedNor,
+    RedXor,
+    RedXnor,
 }
 
 struct Writer<'f> {
@@ -463,7 +472,16 @@ impl Expr {
             }
             Expr::UnOp(expr_un_op) => {
                 match expr_un_op.op {
+                    UnOp::Pos => write!(writer.file, "+")?,
                     UnOp::Neg => write!(writer.file, "-")?,
+                    UnOp::LogNot => write!(writer.file, "!")?,
+                    UnOp::BitNot => write!(writer.file, "~")?,
+                    UnOp::RedAnd => write!(writer.file, "&")?,
+                    UnOp::RedNand => write!(writer.file, "~&")?,
+                    UnOp::RedOr => write!(writer.file, "|")?,
+                    UnOp::RedNor => write!(writer.file, "~|")?,
+                    UnOp::RedXor => write!(writer.file, "^")?,
+                    UnOp::RedXnor => write!(writer.file, "~^")?,
                 }
                 write!(writer.file, "(")?;
                 expr_un_op.expr.write(writer)?;
