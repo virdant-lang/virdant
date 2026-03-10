@@ -304,6 +304,22 @@ macro_rules! display {
 }
 
 #[macro_export]
+macro_rules! assert_stmt {
+    ($( $expr:expr ),*) => {
+        Stmt::Assert(stmt::Assert {
+            exprs: vec![$( $expr ),*],
+        })
+    }
+}
+
+#[macro_export]
+macro_rules! finish {
+    () => {
+        Stmt::Finish
+    }
+}
+
+#[macro_export]
 macro_rules! assign_blocking {
     ($name:ident, $expr:expr) => {
         Stmt::AssignBlocking(stmt::AssignBlocking {
@@ -421,7 +437,7 @@ fn test_verilog() {
                         elements {
                             reg!(done, 1),
                             initial![
-                                display!(str!("boot")),
+                                assign_blocking!(done, lit!(0, 1)),
                                 assign_blocking!(done, lit!(1, 1)),
                             ],
                         }
@@ -577,6 +593,27 @@ fn test_verilog() {
                                     case_item!(pat!("??????????????11", 16, Bin) => assign_non_blocking!(match_out, lit!(1, 1))),
                                     case_item!(default => assign_non_blocking!(match_out, lit!(0, 1))),
                                 ),
+                            ],
+                        }
+                    )
+                ],
+            },
+            VerilogFile {
+                name: "commands.v".to_string(),
+                modules: vec![
+                    module!(
+                        Commands
+                        ports {
+                        }
+                        elements {
+                            reg!(done, 1, lit!(0, 1)),
+                            initial![
+                                display!(str!("commands")),
+                                assert_stmt!(binop!(refr!(done), Eq, lit!(0, 1))),
+                                assign_non_blocking!(done, lit!(1, 1)),
+                                assert_stmt!(binop!(refr!(done), Eq, lit!(1, 1))),
+                                Stmt::Fatal,
+                                finish!(),
                             ],
                         }
                     )

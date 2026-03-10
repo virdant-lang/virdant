@@ -15,6 +15,10 @@ pub struct Display {
     pub exprs: Vec<Expr>,
 }
 
+pub struct Assert {
+    pub exprs: Vec<Expr>,
+}
+
 pub struct Case {
     pub subject: Expr,
     pub items: Vec<CaseItem>,

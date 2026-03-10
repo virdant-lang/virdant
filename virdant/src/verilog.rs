@@ -69,6 +69,9 @@ pub enum Stmt {
     AssignBlocking(stmt::AssignBlocking),
     AssignNonBlocking(stmt::AssignNonBlocking),
     Display(stmt::Display),
+    Assert(stmt::Assert),
+    Fatal,
+    Finish,
     Case(stmt::Case),
     CaseZ(stmt::CaseZ),
 }
@@ -431,7 +434,23 @@ impl Stmt {
                     writer.skip_indent();
                     expr.write(writer)?;
                 }
+                writer.skip_indent();
                 verilog_writeln!(writer, ");")?;
+            }
+            Stmt::Assert(assert) => {
+                verilog_write!(writer, "$assert(")?;
+                for expr in &assert.exprs {
+                    writer.skip_indent();
+                    expr.write(writer)?;
+                }
+                writer.skip_indent();
+                verilog_writeln!(writer, ");")?;
+            }
+            Stmt::Fatal => {
+                verilog_writeln!(writer, "$fatal;")?;
+            }
+            Stmt::Finish => {
+                verilog_writeln!(writer, "$finish;")?;
             }
             Stmt::Case(case) => case.write(writer)?,
             Stmt::CaseZ(casez) => casez.write(writer)?,
@@ -482,21 +501,14 @@ impl stmt::CaseItem {
             }
         }
 
-        if self.stmts.len() == 1 {
-            writer.skip_indent();
-            verilog_write!(writer, ": ")?;
-            writer.skip_indent();
-            self.stmts[0].write(writer)?;
-        } else {
-            writer.skip_indent();
-            verilog_writeln!(writer, ": begin")?;
-            writer.indent();
-            for stmt in &self.stmts {
-                stmt.write(writer)?;
-            }
-            writer.dedent();
-            verilog_writeln!(writer, "end")?;
+        writer.skip_indent();
+        verilog_writeln!(writer, ": begin")?;
+        writer.indent();
+        for stmt in &self.stmts {
+            stmt.write(writer)?;
         }
+        writer.dedent();
+        verilog_writeln!(writer, "end")?;
         Ok(())
     }
 }
