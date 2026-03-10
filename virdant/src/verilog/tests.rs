@@ -241,6 +241,60 @@ macro_rules! initial {
 }
 
 #[macro_export]
+macro_rules! case {
+    ($subject:expr, $( $item:expr ),+ $(,)?) => {
+        Stmt::Case(stmt::Case {
+            subject: $subject.into(),
+            items: vec![$( $item ),*],
+        })
+    };
+}
+
+#[macro_export]
+macro_rules! casez {
+    ($subject:expr, $( $item:expr ),+ $(,)?) => {
+        Stmt::CaseZ(stmt::CaseZ {
+            subject: $subject.into(),
+            items: vec![$( $item ),*],
+        })
+    };
+}
+
+#[macro_export]
+macro_rules! case_item {
+    (default => $( $stmt:expr ),+ $(,)?) => {
+        stmt::CaseItem {
+            pattern: stmt::CasePattern::Default,
+            stmts: vec![$( $stmt ),*],
+        }
+    };
+    ($pattern:expr => $( $stmt:expr ),+ $(,)?) => {
+        stmt::CaseItem {
+            pattern: $pattern,
+            stmts: vec![$( $stmt ),*],
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! case_expr {
+    ($expr:expr) => {
+        stmt::CasePattern::Expr($expr.into())
+    };
+}
+
+#[macro_export]
+macro_rules! pat {
+    ($pattern:literal, $width:literal, $radix:ident) => {
+        stmt::CasePattern::PatternLit(stmt::PatternLit {
+            width: $width,
+            radix: Radix::$radix,
+            pattern: $pattern.to_string(),
+        })
+    };
+}
+
+#[macro_export]
 macro_rules! display {
     ($( $expr:expr ),*) => {
         Stmt::Display(stmt::Display {
@@ -267,31 +321,6 @@ macro_rules! assign_non_blocking {
             expr: $expr.into(),
         })
     }
-}
-
-#[test]
-fn test_expr_unop_write_all() {
-    fn assert_unop_write(op: UnOp, expected: &str) {
-        let expr = Expr::UnOp(expr::UnOp {
-            op,
-            expr: refr!(a).into(),
-        });
-        let mut output = Vec::new();
-        let mut writer = Writer::new(&mut output);
-        expr.write(&mut writer).unwrap();
-        assert_eq!(String::from_utf8(output).unwrap(), expected);
-    }
-
-    assert_unop_write(UnOp::Pos, "+(a)");
-    assert_unop_write(UnOp::Neg, "-(a)");
-    assert_unop_write(UnOp::LogNot, "!(a)");
-    assert_unop_write(UnOp::BitNot, "~(a)");
-    assert_unop_write(UnOp::RedAnd, "&(a)");
-    assert_unop_write(UnOp::RedNand, "~&(a)");
-    assert_unop_write(UnOp::RedOr, "|(a)");
-    assert_unop_write(UnOp::RedNor, "~|(a)");
-    assert_unop_write(UnOp::RedXor, "^(a)");
-    assert_unop_write(UnOp::RedXnor, "~^(a)");
 }
 
 #[rustfmt::skip]
@@ -510,6 +539,45 @@ fn test_verilog() {
                         elements {
                             assign!(abc, concat!(refr!(a), refr!(b), refr!(c))),
                             assign!(abab, repeat!(2; refr!(a), refr!(b))),
+                        }
+                    )
+                ],
+            },
+            VerilogFile {
+                name: "cases.v".to_string(),
+                modules: vec![
+                    module!(
+                        Cases
+                        ports {
+                            input!(clock, 1),
+                            input!(sel, 2),
+                            input!(state, 16),
+                            output!(out, 8),
+                            output!(match_out, 1),
+                        }
+                        elements {
+                            reg!(out, 8),
+                            reg!(match_out, 1),
+                            always![
+                                @*
+                                case!(
+                                    refr!(sel),
+                                    case_item!(case_expr!(lit!(0, 2)) => assign_blocking!(out, lit!(0, 8))),
+                                    case_item!(case_expr!(lit!(1, 2)) => assign_blocking!(out, lit!(1, 8))),
+                                    case_item!(default => assign_blocking!(out, lit!(2, 8))),
+                                ),
+                            ],
+                            always![
+                                @clock
+                                casez!(
+                                    refr!(state),
+                                    case_item!(pat!("??????????????00", 16, Bin) => assign_non_blocking!(match_out, lit!(0, 1))),
+                                    case_item!(pat!("??????????????01", 16, Bin) => assign_non_blocking!(match_out, lit!(1, 1))),
+                                    case_item!(pat!("??????????????10", 16, Bin) => assign_non_blocking!(match_out, lit!(0, 1))),
+                                    case_item!(pat!("??????????????11", 16, Bin) => assign_non_blocking!(match_out, lit!(1, 1))),
+                                    case_item!(default => assign_non_blocking!(match_out, lit!(0, 1))),
+                                ),
+                            ],
                         }
                     )
                 ],

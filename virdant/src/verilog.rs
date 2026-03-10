@@ -69,6 +69,8 @@ pub enum Stmt {
     AssignBlocking(stmt::AssignBlocking),
     AssignNonBlocking(stmt::AssignNonBlocking),
     Display(stmt::Display),
+    Case(stmt::Case),
+    CaseZ(stmt::CaseZ),
 }
 
 pub enum Expr {
@@ -431,6 +433,93 @@ impl Stmt {
                 }
                 verilog_writeln!(writer, ");")?;
             }
+            Stmt::Case(case) => case.write(writer)?,
+            Stmt::CaseZ(casez) => casez.write(writer)?,
+        }
+        Ok(())
+    }
+}
+
+impl stmt::Case {
+    fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
+        verilog_write!(writer, "case (")?;
+        self.subject.write(writer)?;
+        writer.skip_indent();
+        verilog_writeln!(writer, ")")?;
+        writer.indent();
+        for item in &self.items {
+            item.write(writer)?;
+        }
+        writer.dedent();
+        verilog_writeln!(writer, "endcase")?;
+        Ok(())
+    }
+}
+
+impl stmt::CaseZ {
+    fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
+        verilog_write!(writer, "casez (")?;
+        self.subject.write(writer)?;
+        writer.skip_indent();
+        verilog_writeln!(writer, ")")?;
+        writer.indent();
+        for item in &self.items {
+            item.write(writer)?;
+        }
+        writer.dedent();
+        verilog_writeln!(writer, "endcase")?;
+        Ok(())
+    }
+}
+
+impl stmt::CaseItem {
+    fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
+        match &self.pattern {
+            stmt::CasePattern::Default => verilog_write!(writer, "default")?,
+            pattern => {
+                verilog_write!(writer, "")?;
+                pattern.write(writer)?;
+            }
+        }
+
+        if self.stmts.len() == 1 {
+            writer.skip_indent();
+            verilog_write!(writer, ": ")?;
+            writer.skip_indent();
+            self.stmts[0].write(writer)?;
+        } else {
+            writer.skip_indent();
+            verilog_writeln!(writer, ": begin")?;
+            writer.indent();
+            for stmt in &self.stmts {
+                stmt.write(writer)?;
+            }
+            writer.dedent();
+            verilog_writeln!(writer, "end")?;
+        }
+        Ok(())
+    }
+}
+
+impl stmt::CasePattern {
+    fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
+        match self {
+            stmt::CasePattern::Expr(expr) => expr.write(writer)?,
+            stmt::CasePattern::PatternLit(pattern_lit) => pattern_lit.write(writer)?,
+            stmt::CasePattern::Default => write!(writer.file, "default")?,
+        }
+        Ok(())
+    }
+}
+
+impl stmt::PatternLit {
+    fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
+        let width = self.width;
+        let pattern = &self.pattern;
+        match self.radix {
+            Radix::Dec => write!(writer.file, "{width}'d{pattern}")?,
+            Radix::Hex => write!(writer.file, "{width}'h{pattern}")?,
+            Radix::Bin => write!(writer.file, "{width}'b{pattern}")?,
         }
         Ok(())
     }
