@@ -79,6 +79,8 @@ pub enum Expr {
     WordLit(expr::WordLit),
     StrLit(expr::StrLit),
     If(expr::If),
+    Concat(expr::Concat),
+    Repeat(expr::Repeat),
     Index(expr::Index),
     IndexRange(expr::IndexRange),
 }
@@ -515,6 +517,28 @@ impl Expr {
                 write!(writer.file, " : ")?;
                 expr_if.else_expr.write(writer)?;
                 write!(writer.file, ")")?;
+            }
+            Expr::Concat(concat) => {
+                write!(writer.file, "{{")?;
+                for (i, expr) in concat.exprs.iter().enumerate() {
+                    if i > 0 {
+                        write!(writer.file, ", ")?;
+                    }
+                    expr.write(writer)?;
+                }
+                write!(writer.file, "}}")?;
+            }
+            Expr::Repeat(repeat) => {
+                write!(writer.file, "{{")?;
+                repeat.count.write(writer)?;
+                write!(writer.file, "{{")?;
+                for (i, expr) in repeat.exprs.iter().enumerate() {
+                    if i > 0 {
+                        write!(writer.file, ", ")?;
+                    }
+                    expr.write(writer)?;
+                }
+                write!(writer.file, "}}}}")?;
             }
             Expr::Index(index) => {
                 index.subject.write(writer)?;

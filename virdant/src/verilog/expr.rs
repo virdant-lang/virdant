@@ -35,6 +35,15 @@ pub struct If {
     pub else_expr: Box<Expr>,
 }
 
+pub struct Concat {
+    pub exprs: Vec<Expr>,
+}
+
+pub struct Repeat {
+    pub count: Box<Expr>,
+    pub exprs: Vec<Expr>,
+}
+
 pub struct Index {
     pub subject: Box<Expr>,
     pub index: Box<Expr>,

@@ -63,6 +63,31 @@ macro_rules! if_ {
 }
 
 #[macro_export]
+macro_rules! concat {
+    ($( $expr:expr ),+ $(,)?) => {
+        Expr::Concat(expr::Concat {
+            exprs: vec![$( $expr.into() ),*],
+        })
+    }
+}
+
+#[macro_export]
+macro_rules! repeat {
+    ($count:literal; $( $expr:expr ),+ $(,)?) => {
+        Expr::Repeat(expr::Repeat {
+            count: refr!($count).into(),
+            exprs: vec![$( $expr.into() ),*],
+        })
+    };
+    ($count:expr; $( $expr:expr ),+ $(,)?) => {
+        Expr::Repeat(expr::Repeat {
+            count: $count.into(),
+            exprs: vec![$( $expr.into() ),*],
+        })
+    }
+}
+
+#[macro_export]
 macro_rules! index {
     ($subject:expr, $index:literal) => {
         Expr::Index(expr::Index {
@@ -466,6 +491,25 @@ fn test_verilog() {
                             assign!(red_nor, unop!(RedNor, refr!(a))),
                             assign!(red_xor, unop!(RedXor, refr!(a))),
                             assign!(red_xnor, unop!(RedXnor, refr!(a))),
+                        }
+                    )
+                ],
+            },
+            VerilogFile {
+                name: "concat_repeat.v".to_string(),
+                modules: vec![
+                    module!(
+                        ConcatRepeat
+                        ports {
+                            input!(a, 8),
+                            input!(b, 8),
+                            input!(c, 8),
+                            output!(abc, 24),
+                            output!(abab, 16),
+                        }
+                        elements {
+                            assign!(abc, concat!(refr!(a), refr!(b), refr!(c))),
+                            assign!(abab, repeat!(2; refr!(a), refr!(b))),
                         }
                     )
                 ],
