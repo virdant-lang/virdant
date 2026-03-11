@@ -2,8 +2,7 @@ use bstr::ByteSlice;
 use crate::syntax::ast::AstNodeId;
 use crate::syntax::parse::Parser;
 use crate::syntax::payload;
-use crate::syntax::payload::InternedString;
-use crate::syntax::parse::AstNodePayload;
+use crate::syntax::parse::{InternedString, AstNodePayload};
 use crate::syntax::token::{Token, TokenError};
 use atoi::atoi;
 

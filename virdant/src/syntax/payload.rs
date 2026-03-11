@@ -1,6 +1,5 @@
+use crate::syntax::parse::InternedString;
 use crate::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, UnOp};
-
-pub type InternedString = ();
 
 #[derive(Clone, Debug)]
 pub struct Import {

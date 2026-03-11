@@ -1,16 +1,22 @@
 use bstr::BStr;
 
 use crate::source::{Region, Source, SourceOffset, Span};
-use crate::syntax::ast::{AstNodeId, AstNodePayload};
+use crate::syntax::ast::{AstNode, AstNodeId, AstNodePayload};
 
 lalrpop_util::lalrpop_mod!(grammar);
 
 pub struct Parser {
     source: Source,
     strings: Vec<String>,
+
+    payloads: Vec<AstNodePayload>,
+    regions: Vec<Region>,
+    parents: Vec<AstNodeId>,
+    num_children: Vec<u16>,
+    errors: Vec<AstNodeId>,
 }
 
-pub type InternedString = ();
+pub type InternedString = usize;
 
 impl Parser {
     pub fn parse(&mut self, source: &Source) {
@@ -36,6 +42,20 @@ impl Parser {
     pub(crate) fn text(&self, span: Span) -> &BStr {
         let text = &self.source[span];
         BStr::new(text)
+    }
+
+    pub fn ast_node(&self, ast_node_id: AstNodeId) -> AstNode {
+        let payload = self.payloads[ast_node_id.index()].clone();
+        let region = self.regions[ast_node_id.index()].clone();
+        let parent = self.parents[ast_node_id.index()].clone();
+
+        AstNode {
+            id: ast_node_id,
+            payload,
+            region,
+            parent,
+            parser: self,
+        }
     }
 }
 

@@ -9,21 +9,13 @@ use bstr::{BStr, ByteSlice};
 
 use crate::fqn::PackageFqn;
 use crate::source::{Region, Source, SourceOffset, Span};
+use crate::syntax::parse::Parser;
 //use crate::stringtable::{InternedString, StringTable};
-
-pub type StringTable = ();
 
 #[derive(Clone)]
 pub struct Ast(Arc<AstData>);
 
 pub struct AstData {
-    source: Source,
-    stringtable: StringTable,
-    payloads: Vec<AstNodePayload>,
-    regions: Vec<Region>,
-    parents: Vec<AstNodeId>,
-    num_children: Vec<u16>,
-    errors: Vec<AstNodeId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,12 +82,12 @@ pub enum AstNodePayload {
 }
 
 #[derive(Clone)]
-pub struct AstNode {
-    ast: Ast,
-    id: AstNodeId,
-    payload: AstNodePayload,
-    region: Region,
-    parent: AstNodeId,
+pub struct AstNode<'a> {
+    pub(crate) parser: &'a Parser,
+    pub(crate) id: AstNodeId,
+    pub(crate) payload: AstNodePayload,
+    pub(crate) region: Region,
+    pub(crate) parent: AstNodeId,
 }
 
 impl Ast {
@@ -125,19 +117,6 @@ impl Ast {
     }
 */
 
-    pub fn ast_node(&self, ast_node_id: AstNodeId) -> AstNode {
-        let payload = self.payloads[ast_node_id.index()].clone();
-        let region = self.regions[ast_node_id.index()].clone();
-        let parent = self.parents[ast_node_id.index()].clone();
-
-        AstNode {
-            ast: self.clone(),
-            id: ast_node_id,
-            payload,
-            region,
-            parent,
-        }
-    }
 
 /*
     pub fn errors(&self) -> Vec<AstNode> {
@@ -162,6 +141,7 @@ impl std::ops::Deref for Ast {
     }
 }
 
+/*
 impl AstData {
     pub fn package(&self) -> PackageFqn {
         self.source.package()
@@ -196,13 +176,15 @@ impl AstData {
         ast_node_id
     }
 }
+*/
 
-impl std::fmt::Debug for AstNode {
+impl<'p> std::fmt::Debug for AstNode<'p> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?} {:?}", self.id, &self.payload)
     }
 }
 
+/*
 impl AstNode {
     pub fn ast(&self) -> Ast {
         self.ast.clone()
@@ -295,6 +277,7 @@ impl AstNode {
         }
     }
 }
+*/
 
 impl AstNodeId {
     pub fn package(&self) -> PackageFqn {
