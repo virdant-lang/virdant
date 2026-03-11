@@ -85,33 +85,6 @@ pub struct AstNode<'a> {
 }
 
 /*
-    pub fn new(source: Source, stringtable: StringTable) -> Ast {
-        const INIT_CAP: usize = 4096;
-        const ERROR_CAP: usize = 16;
-
-        let mut ast_data = AstData {
-            source: source.clone(),
-            stringtable: stringtable.clone(),
-            payloads: Vec::with_capacity(INIT_CAP),
-            regions: Vec::with_capacity(INIT_CAP),
-            parents: Vec::with_capacity(INIT_CAP),
-            num_children: Vec::with_capacity(INIT_CAP),
-            errors: Vec::with_capacity(ERROR_CAP),
-        };
-
-        parser::parse(&mut ast_data, stringtable, source);
-
-        Ast(Arc::new(ast_data))
-    }
-
-    pub fn root(&self) -> node::Package {
-        let ast_node_id: u16 = (self.payloads.len() - 1).try_into().unwrap();
-        node::Package(self.clone(), AstNodeId(self.package(), ast_node_id))
-    }
-*/
-
-
-/*
     pub fn errors(&self) -> Vec<AstNode> {
         let mut errors = vec![];
         for ast_node_id in &self.errors {
@@ -123,43 +96,6 @@ pub struct AstNode<'a> {
     pub fn stringtable(&self) -> StringTable {
         self.stringtable.clone()
     }
-*/
-
-/*
-impl AstData {
-    pub fn package(&self) -> PackageFqn {
-        self.source.package()
-    }
-
-    fn region(&self, source: &Source, ll: SourceOffset, rr: SourceOffset) -> Region {
-        let start = source.to_linecol(ll);
-        let end = source.to_linecol(rr);
-        Region::new(self.package().clone(), Span::new(start, end))
-    }
-
-    fn add_node(
-        &mut self,
-        payload: AstNodePayload,
-        region: Region,
-        num_children: u16,
-    ) -> AstNodeId {
-        let ast_node_id = AstNodeId(self.package(), self.payloads.len().try_into().unwrap());
-        self.payloads.push(payload);
-        self.regions.push(region);
-        self.num_children.push(num_children);
-        ast_node_id
-    }
-
-    fn add_error_node(&mut self, region: Region) -> AstNodeId {
-        let payload = AstNodePayload::Error;
-        let ast_node_id = AstNodeId(self.package(), self.payloads.len().try_into().unwrap());
-        self.payloads.push(payload);
-        self.regions.push(region);
-        self.num_children.push(0);
-        self.errors.push(ast_node_id.clone());
-        ast_node_id
-    }
-}
 */
 
 impl<'p> std::fmt::Debug for AstNode<'p> {
@@ -228,12 +164,6 @@ impl<'p> AstNode<'p> {
         self.payload.clone()
     }
 
-/*
-    pub fn region(&self) -> Region {
-        self.ast.regions[self.id.index()].clone()
-    }
-*/
-
     pub fn span(&self) -> Span {
         self.parsing.spans[self.id.index()].clone()
     }
@@ -245,10 +175,6 @@ impl<'p> AstNode<'p> {
 
     #[allow(dead_code)]
     pub(crate) fn dump_level(&self, level: usize) {
-//        let summary = &format!("[{self:?}]")[0..10].replace("\n", " ");
-        let payload = self.payload().clone();
-        let summary = payload.kind();
-//        println!("dump_level(\"{summary}\", {level})");
         use bstr::io::BufReadExt;
 
         let padding = " ".repeat(4 * level);
