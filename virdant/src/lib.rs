@@ -9,6 +9,7 @@ pub mod syntax;
 // pub mod math;
 // pub mod stringtable;
 // pub mod error;
+pub mod virir;
 pub mod verilog;
 
 // pub mod db;

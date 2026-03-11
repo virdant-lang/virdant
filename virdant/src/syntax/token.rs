@@ -73,6 +73,7 @@ pub enum Token {
 
     // Keywords
     #[token(b"pub")]       KwPub,
+    #[token(b"export")]    KwExport,
     #[token(b"import")]    KwImport,
     #[token(b"mod")]       KwMod,
     #[token(b"ext")]       KwExt,

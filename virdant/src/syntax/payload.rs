@@ -132,6 +132,7 @@ pub struct Import {
 pub struct ModDef {
     pub name: InternedString,
     pub is_ext: bool,
+    pub is_export: bool,
 }
 
 #[derive(Clone, Debug)]

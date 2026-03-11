@@ -52,10 +52,14 @@ Item: AstNodeId = {
 }
 
 ModDef: AstNodeId = {
-    <ll:@L> <ext:"ext"?> "mod" <ident:Ident> "{"
+    <ll:@L> <ext:"ext"?> <export:"export"?> "mod" <ident:Ident> "{"
         <stmts:ModDefStmt*>
     "}" <rr:@R> => {
-        let payload = AstNodePayload::ModDef(payload::ModDef { name: ident, is_ext: ext.is_some() });
+        let payload = AstNodePayload::ModDef(payload::ModDef {
+            name: ident,
+            is_ext: ext.is_some(),
+            is_export: export.is_some(),
+        });
         let span = parser.span(ll, rr);
         let num_children = stmts.len().try_into().unwrap();
 
@@ -791,6 +795,7 @@ extern {
 
         // Keywords
         "pub" => Token::KwPub,
+        "export" => Token::KwExport,
         "import" => Token::KwImport,
         "mod" => Token::KwMod,
         "ext" => Token::KwExt,

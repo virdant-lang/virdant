@@ -134,7 +134,12 @@ impl<'p> AstNode<'p> {
                 } else {
                     ""
                 };
-                format!("ModDef {ext}{}", parsing.string(mod_def.name))
+                let export = if mod_def.is_export {
+                    "export "
+                } else {
+                    ""
+                };
+                format!("ModDef {ext}{export}{}", parsing.string(mod_def.name))
             }
             AstNodePayload::StructDef(struct_def) => format!("StructDef"),
             AstNodePayload::UnionDef(union_def) => format!("UnionDef"),
