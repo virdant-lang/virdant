@@ -10,27 +10,32 @@ use std::io::Write;
 
 type Width = u64;
 
+#[derive(Debug)]
 pub struct Verilog {
     pub files: Vec<VerilogFile>,
 }
 
+#[derive(Debug)]
 pub struct VerilogFile {
     pub name: String,
     pub modules: Vec<Module>,
 }
 
+#[derive(Debug)]
 pub struct Module {
     pub name: String,
     pub ports: Vec<Port>,
     pub elements: Vec<Element>,
 }
 
+#[derive(Debug)]
 pub struct Port {
     pub name: String,
     pub dir: PortDir,
     pub width: Width,
 }
 
+#[derive(Debug)]
 pub enum Element {
     Wire(Wire),
     Reg(Reg),
@@ -39,32 +44,38 @@ pub enum Element {
     Initial(Initial),
 }
 
+#[derive(Debug)]
 pub struct Wire {
     pub name: String,
     pub width: Width,
     pub expr: Option<Expr>,
 }
 
+#[derive(Debug)]
 pub struct Reg {
     pub name: String,
     pub width: Width,
     pub expr: Option<Expr>,
 }
 
+#[derive(Debug)]
 pub struct Assign {
     pub name: String,
     pub expr: Expr,
 }
 
+#[derive(Debug)]
 pub struct Always {
     pub clock: Option<String>,
     pub stmts: Vec<Stmt>,
 }
 
+#[derive(Debug)]
 pub struct Initial {
     pub stmts: Vec<Stmt>,
 }
 
+#[derive(Debug)]
 pub enum Stmt {
     AssignBlocking(stmt::AssignBlocking),
     AssignNonBlocking(stmt::AssignNonBlocking),
@@ -76,6 +87,7 @@ pub enum Stmt {
     CaseZ(stmt::CaseZ),
 }
 
+#[derive(Debug)]
 pub enum Expr {
     Reference(expr::Reference),
     BinOp(expr::BinOp),
@@ -90,6 +102,7 @@ pub enum Expr {
     IndexRange(expr::IndexRange),
 }
 
+#[derive(Debug)]
 pub enum BinOp {
     Pow,
     Mul,
@@ -117,6 +130,7 @@ pub enum BinOp {
     LogOr,
 }
 
+#[derive(Debug)]
 pub enum UnOp {
     Pos,
     Neg,

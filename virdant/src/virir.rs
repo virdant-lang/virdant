@@ -15,6 +15,12 @@ use crate::virir::typ::Type;
 pub type Width = u16;
 pub struct TypeId(u32);
 
+impl TypeId {
+    pub fn new(id: u32) -> Self {
+        TypeId(id)
+    }
+}
+
 pub struct VirIr {
     pub packages: Vec<Package>,
     pub types: Vec<Arc<Type>>,

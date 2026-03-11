@@ -1,3 +1,11 @@
+use std::sync::Arc;
+
+use super::convert_virir_to_verilog;
+use crate::common::PortDir;
+use crate::fqn::PackageFqn;
+use crate::source::{LineCol, Region, Span};
+use crate::virir::expr::{Expr, Reference};
+use crate::virir::typ::Type;
 use crate::virir::*;
 
 #[test]
@@ -31,11 +39,16 @@ fn test_conversion() {
                     expr: Arc::new(Expr::Reference(Reference {
                         region: region.clone(),
                         path: "inp".to_string(),
-                        typ: TypeId(0),
+                        typ: TypeId::new(0),
                     })),
                 }],
             })],
         }],
         types: vec![Arc::new(Type::Word(8))],
     };
+
+    let verilog = convert_virir_to_verilog(virir);
+
+    println!("{verilog:#?}");
+    verilog.write_to_stdout().unwrap();
 }
