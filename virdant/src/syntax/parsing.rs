@@ -1,7 +1,8 @@
 use bstr::{BStr, BString};
 
 use crate::source::{Region, Source, SourceOffset, Span};
-use crate::syntax::ast::{AstNode, AstNodeId, AstNodePayload};
+use crate::syntax::ast::{AstNode, AstNodeId};
+use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::grammar::PackageParser;
 use crate::syntax::token::tokenize;
 

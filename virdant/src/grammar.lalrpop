@@ -1,12 +1,12 @@
-use bstr::ByteSlice;
 use crate::syntax::ast::AstNodeId;
 use crate::syntax::payload;
-use crate::syntax::parsing::{InternedString, AstNodePayload, Parsing};
+use crate::syntax::payload::AstNodePayload;
+use crate::syntax::parsing::{InternedString, Parsing};
 use crate::syntax::token::{Token, TokenError};
 use atoi::atoi;
 
 
-use crate::source::{Source, SourceOffset};
+use crate::source::SourceOffset;
 use crate::common::{DriverType, ComponentKind, BinOp, ChannelDir, SocketRole};
 
 grammar<'a>(parser: &mut Parsing);
