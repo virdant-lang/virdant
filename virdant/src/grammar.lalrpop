@@ -456,6 +456,7 @@ BinOp: BinOp = {
     "==" => BinOp::Eq,
     "!=" => BinOp::Neq,
     "+" => BinOp::Add,
+    "-" => BinOp::Sub,
 }
 
 ExprAtom: AstNodeId = {
