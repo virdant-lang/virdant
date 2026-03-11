@@ -206,7 +206,7 @@ ModDefStmt: AstNodeId = {
     <instance:ModDefStmtInstance> => instance,
     <socket:ModDefStmtSocket> => socket,
     <if_:ModDefStmtIf> => if_,
-//    <m:ModDefStmtMatch>
+    <m:ModDefStmtMatch> => m,
     <ll:@L> ! <rr:@R> => {
         let span = parser.span(ll, rr);
 
@@ -353,6 +353,22 @@ ModDefStmtIfMiddle: u16 = {
 ModDefStmtIfEnd: u16 = {
     "{" <stmts:ModDefStmt*> "}" => {
         u16::try_from(stmts.len()).unwrap()
+    },
+}
+
+ModDefStmtMatch: AstNodeId = {
+    <ll:@L> "match" Expr "{" <arms:ModDefStmtMatchArm*> "}" <rr:@R> => {
+        let payload = AstNodePayload::ModDefStmtMatch;
+        let span = parser.span(ll, rr);
+        let num_children = 1 + arms.into_iter().sum::<u16>();
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+ModDefStmtMatchArm: u16 = {
+    Pat "=>" "{" <stmts:ModDefStmt*> "}" => {
+        1 + u16::try_from(stmts.len()).unwrap()
     },
 }
 
