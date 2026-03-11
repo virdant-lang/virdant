@@ -1,8 +1,7 @@
 use bstr::ByteSlice;
 use crate::syntax::ast::AstNodeId;
-use crate::syntax::parse::Parser;
 use crate::syntax::payload;
-use crate::syntax::parse::{InternedString, AstNodePayload};
+use crate::syntax::parsing::{InternedString, AstNodePayload, Parsing};
 use crate::syntax::token::{Token, TokenError};
 use atoi::atoi;
 
@@ -10,7 +9,7 @@ use atoi::atoi;
 use crate::source::{Source, SourceOffset};
 use crate::common::{DriverType, ComponentKind, BinOp, ChannelDir, SocketRole};
 
-grammar<'a>(parser: &mut Parser);
+grammar<'a>(parser: &mut Parsing);
 
 pub Package: AstNodeId = {
     <ll:@L> <stmts:PackageStmt*> <rr:@R> => {

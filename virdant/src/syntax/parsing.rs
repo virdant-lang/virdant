@@ -5,7 +5,7 @@ use crate::syntax::ast::{AstNode, AstNodeId, AstNodePayload};
 
 lalrpop_util::lalrpop_mod!(grammar);
 
-pub struct Parser {
+pub struct Parsing {
     source: Source,
     strings: Vec<String>,
 
@@ -18,9 +18,21 @@ pub struct Parser {
 
 pub type InternedString = usize;
 
-impl Parser {
-    pub fn parse(&mut self, source: &Source) {
-        todo!()
+pub fn parse(source: &Source) -> Parsing {
+    Parsing::new(source)
+}
+
+impl Parsing {
+    pub(crate) fn new(source: &Source) -> Parsing {
+        Parsing {
+            source: source.clone(),
+            strings: vec![],
+            payloads: vec![],
+            spans: vec![],
+            parents: vec![],
+            num_children: vec![],
+            errors: vec![],
+        }
     }
 
     pub(crate) fn add_node(&mut self, payload: AstNodePayload, span: Span, num_children: u16) -> AstNodeId {

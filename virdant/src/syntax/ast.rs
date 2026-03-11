@@ -9,7 +9,7 @@ use bstr::{BStr, ByteSlice};
 
 use crate::fqn::PackageFqn;
 use crate::source::{Region, Source, SourceOffset, Span};
-use crate::syntax::parse::Parser;
+use crate::syntax::parsing::Parsing;
 //use crate::stringtable::{InternedString, StringTable};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,7 +77,7 @@ pub enum AstNodePayload {
 
 #[derive(Clone)]
 pub struct AstNode<'a> {
-    pub(crate) parser: &'a Parser,
+    pub(crate) parser: &'a Parsing,
     pub(crate) id: AstNodeId,
     pub(crate) payload: AstNodePayload,
     pub(crate) region: Region,

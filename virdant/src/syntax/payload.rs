@@ -1,4 +1,4 @@
-use crate::syntax::parse::InternedString;
+use crate::syntax::parsing::InternedString;
 use crate::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, UnOp};
 
 #[derive(Clone, Debug)]
