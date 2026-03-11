@@ -14,7 +14,7 @@ fn test_virir() {
         Span::new(LineCol::new(0, 0), LineCol::new(0, 0)),
     );
 
-    let virir = Design {
+    let virir = VirIr {
         packages: vec![Package {
             items: vec![Item::ModDef(ModDef {
                 region: region.clone(),
