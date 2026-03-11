@@ -109,18 +109,23 @@ pub struct Lexer<'input> {
     token_stream: SpannedIter<'input, Token>,
 }
 
-pub fn tokenize<'input>(input: &'input BStr) -> Lexer<'input> {
-    Lexer {
-        token_stream: Token::lexer(input).spanned(),
-    }
-}
-
 impl<'input> Iterator for Lexer<'input> {
     type Item = Spanned<Token, SourceOffset, TokenError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.token_stream
             .next()
-            .map(|(token, span)| Ok((SourceOffset(span.start as u32), token.unwrap_or(Token::Error), SourceOffset(span.end as u32))))
+            .map(|(token, span)| {
+                let start = SourceOffset(span.start as u32);
+                let end = SourceOffset(span.end as u32);
+                let token = token.unwrap_or(Token::Error);
+                Ok((start, token, end))
+            })
+    }
+}
+
+pub fn tokenize<'input>(input: &'input BStr) -> Lexer<'input> {
+    Lexer {
+        token_stream: Token::lexer(input).spanned(),
     }
 }

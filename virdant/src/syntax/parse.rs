@@ -10,7 +10,7 @@ pub struct Parser {
     strings: Vec<String>,
 
     payloads: Vec<AstNodePayload>,
-    regions: Vec<Region>,
+    spans: Vec<Span>,
     parents: Vec<AstNodeId>,
     num_children: Vec<u16>,
     errors: Vec<AstNodeId>,
@@ -23,15 +23,15 @@ impl Parser {
         todo!()
     }
 
-    pub(crate) fn add_node(&mut self, payload: AstNodePayload, region: Region, num_children: u16) -> AstNodeId {
+    pub(crate) fn add_node(&mut self, payload: AstNodePayload, span: Span, num_children: u16) -> AstNodeId {
         todo!()
     }
 
-    pub(crate) fn add_error_node(&mut self, region: Region) -> AstNodeId {
+    pub(crate) fn add_error_node(&mut self, span: Span) -> AstNodeId {
         todo!()
     }
 
-    pub(crate) fn region(&mut self, ll: SourceOffset, rr: SourceOffset) -> Region {
+    pub(crate) fn span(&mut self, ll: SourceOffset, rr: SourceOffset) -> Span {
         todo!()
     }
 
@@ -46,8 +46,9 @@ impl Parser {
 
     pub fn ast_node(&self, ast_node_id: AstNodeId) -> AstNode {
         let payload = self.payloads[ast_node_id.index()].clone();
-        let region = self.regions[ast_node_id.index()].clone();
+        let span = self.spans[ast_node_id.index()].clone();
         let parent = self.parents[ast_node_id.index()].clone();
+        let region = Region::new(self.source.package(), span);
 
         AstNode {
             id: ast_node_id,
