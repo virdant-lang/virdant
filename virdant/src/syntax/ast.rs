@@ -177,6 +177,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::PatEnumerant(pat_enumerant) => format!("PatEnumerant"),
             AstNodePayload::PatElse => format!("PatElse"),
             AstNodePayload::Ofness(ofness) => format!("Ofness"),
+            AstNodePayload::It => format!("It"),
             AstNodePayload::Path => format!("Path"),
         }
     }

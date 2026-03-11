@@ -288,10 +288,22 @@ ModDefStmtDriver: AstNodeId = {
 }
 
 ModDefStmtInstance: AstNodeId = {
-    <ll:@L> "mod" <name:Ident> "of" <ofness:Ofness> ";" <rr:@R> => {
+    <ll:@L> "mod" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> ";" <rr:@R> => {
         let payload = AstNodePayload::Module(payload::Module { name });
         let span = parser.span(ll, rr);
         let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    }
+}
+
+ItBlock: AstNodeId = {
+    <ll:@L> "{"
+        <drivers:ModDefStmtDriver*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::It;
+        let span = parser.span(ll, rr);
+        let num_children: u16 = drivers.len().try_into().unwrap();
 
         parser.add_node(payload, span, num_children)
     }

@@ -75,3 +75,4 @@ test_example!(sockets);
 test_example!(structs);
 test_example!(top);
 test_example!(uart);
+test_example!(it);
