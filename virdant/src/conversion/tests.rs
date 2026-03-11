@@ -1,14 +1,7 @@
-use std::sync::Arc;
-
-use super::*;
-use crate::common::PortDir;
-use crate::fqn::PackageFqn;
-use crate::source::{LineCol, Region, Span};
-use crate::virir::expr::{Expr, Reference};
-use crate::virir::typ::Type;
+use crate::virir::*;
 
 #[test]
-fn test_virir() {
+fn test_conversion() {
     let region = Region::new(
         PackageFqn::new("dummy".into()),
         Span::new(LineCol::new(0, 0), LineCol::new(0, 0)),

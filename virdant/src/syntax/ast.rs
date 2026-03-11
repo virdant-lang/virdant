@@ -9,14 +9,14 @@ use crate::syntax::parsing::Parsing;
 //use crate::stringtable::{InternedString, StringTable};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AstNodeId(pub(crate) u16);
+pub struct AstNodeId(pub u16);
 
 #[derive(Clone)]
 pub struct AstNode<'a> {
-    pub(crate) parsing: &'a Parsing,
-    pub(crate) id: AstNodeId,
-    pub(crate) payload: AstNodePayload,
-    pub(crate) parent: Option<AstNodeId>,
+    pub parsing: &'a Parsing,
+    pub id: AstNodeId,
+    pub payload: AstNodePayload,
+    pub parent: Option<AstNodeId>,
 }
 
 impl<'p> std::fmt::Debug for AstNode<'p> {
@@ -94,12 +94,12 @@ impl<'p> AstNode<'p> {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn dump(&self) {
+    pub fn dump(&self) {
         self.dump_level(0);
     }
 
     #[allow(dead_code)]
-    pub(crate) fn dump_level(&self, level: usize) {
+    pub fn dump_level(&self, level: usize) {
         use bstr::io::BufReadExt;
 
         let padding = " ".repeat(4 * level);

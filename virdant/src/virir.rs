@@ -41,7 +41,7 @@ pub struct Port {
     pub width: Width,
 }
 
-struct Driver {
+pub struct Driver {
     pub region: Region,
     pub name: String,
     pub expr: Arc<Expr>,

@@ -13,7 +13,7 @@ pub struct Source {
 
 /// A byte offset in a `Source`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct SourceOffset(pub(crate) u32);
+pub struct SourceOffset(pub u32);
 
 /// A line-col pair (1-indexed)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -10,13 +10,14 @@ pub mod syntax;
 // pub mod stringtable;
 // pub mod error;
 pub mod virir;
+pub mod conversion;
 pub mod verilog;
 
 // pub mod db;
 // pub mod queries;
 
-//pub(crate) mod graph;
-//pub(crate) mod union;
+//pub mod graph;
+//pub mod union;
 
 //#[cfg(test)]
 //mod tests;

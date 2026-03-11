@@ -32,3 +32,9 @@ pub struct BinOp {
     pub typ: TypeId,
     pub op: common::BinOp,
 }
+
+impl BitLit {
+    pub fn value(&self) -> bool {
+        self.value
+    }
+}

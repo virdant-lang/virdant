@@ -10,13 +10,13 @@ lalrpop_util::lalrpop_mod!(grammar);
 
 #[derive(Debug)]
 pub struct Parsing {
-    pub(crate) source: Source,
+    pub source: Source,
     strings: Vec<BString>,
 
     payloads: Vec<AstNodePayload>,
-    pub(crate) spans: Vec<Span>,
-    pub(crate) parents: Vec<AstNodeId>,
-    pub(crate) num_children: Vec<u16>,
+    pub spans: Vec<Span>,
+    pub parents: Vec<AstNodeId>,
+    pub num_children: Vec<u16>,
     errors: Vec<AstNodeId>,
 }
 
@@ -74,7 +74,7 @@ pub fn parse(source: &Source) -> Parsing {
 }
 
 impl Parsing {
-    pub(crate) fn new(source: &Source) -> Parsing {
+    pub fn new(source: &Source) -> Parsing {
         Parsing {
             source: source.clone(),
             strings: vec![],
@@ -86,7 +86,7 @@ impl Parsing {
         }
     }
 
-    pub(crate) fn add_node(&mut self, payload: AstNodePayload, span: Span, num_children: u16) -> AstNodeId {
+    pub fn add_node(&mut self, payload: AstNodePayload, span: Span, num_children: u16) -> AstNodeId {
         let ast_node_id = AstNodeId(self.payloads.len().try_into().unwrap());
         self.payloads.push(payload);
         self.spans.push(span);
@@ -94,7 +94,7 @@ impl Parsing {
         ast_node_id
     }
 
-    pub(crate) fn add_error_node(&mut self, span: Span) -> AstNodeId {
+    pub fn add_error_node(&mut self, span: Span) -> AstNodeId {
         let payload = AstNodePayload::Error;
         let ast_node_id = AstNodeId(self.payloads.len().try_into().unwrap());
         self.payloads.push(payload);
@@ -104,24 +104,24 @@ impl Parsing {
         ast_node_id
     }
 
-    pub(crate) fn span(&mut self, ll: SourceOffset, rr: SourceOffset) -> Span {
+    pub fn span(&mut self, ll: SourceOffset, rr: SourceOffset) -> Span {
         let start = self.source.to_linecol(ll);
         let end = self.source.to_linecol(rr);
         Span::new(start, end)
     }
 
-    pub(crate) fn intern(&mut self, span: Span) -> InternedString {
+    pub fn intern(&mut self, span: Span) -> InternedString {
         let string_id = self.strings.len();
         self.strings.push(self.text(span).to_owned());
         InternedString(string_id)
     }
 
-    pub(crate) fn text(&self, span: Span) -> &BStr {
+    pub fn text(&self, span: Span) -> &BStr {
         let text = &self.source[span];
         BStr::new(text)
     }
 
-    pub(crate) fn string(&self, s: InternedString) -> &BStr {
+    pub fn string(&self, s: InternedString) -> &BStr {
         BStr::new(&self.strings[s.0])
     }
 
