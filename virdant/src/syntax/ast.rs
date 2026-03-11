@@ -12,12 +12,6 @@ use crate::source::{Region, Source, SourceOffset, Span};
 use crate::syntax::parse::Parser;
 //use crate::stringtable::{InternedString, StringTable};
 
-#[derive(Clone)]
-pub struct Ast(Arc<AstData>);
-
-pub struct AstData {
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AstNodeId(PackageFqn, u16);
 
@@ -90,7 +84,6 @@ pub struct AstNode<'a> {
     pub(crate) parent: AstNodeId,
 }
 
-impl Ast {
 /*
     pub fn new(source: Source, stringtable: StringTable) -> Ast {
         const INIT_CAP: usize = 4096;
@@ -131,15 +124,6 @@ impl Ast {
         self.stringtable.clone()
     }
 */
-}
-
-impl std::ops::Deref for Ast {
-    type Target = AstData;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_ref()
-    }
-}
 
 /*
 impl AstData {
