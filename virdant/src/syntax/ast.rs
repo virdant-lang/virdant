@@ -20,20 +20,6 @@ pub struct AstNode<'a> {
     pub(crate) parent: Option<AstNodeId>,
 }
 
-/*
-    pub fn errors(&self) -> Vec<AstNode> {
-        let mut errors = vec![];
-        for ast_node_id in &self.errors {
-            errors.push(self.ast_node(ast_node_id.clone()));
-        }
-        errors
-    }
-
-    pub fn stringtable(&self) -> StringTable {
-        self.stringtable.clone()
-    }
-*/
-
 impl<'p> std::fmt::Debug for AstNode<'p> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?} {:?}", self.id, &self.payload)
