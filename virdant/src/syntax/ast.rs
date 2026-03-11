@@ -103,21 +103,78 @@ impl<'p> AstNode<'p> {
         let spelling = self.spelling();
         if spelling.byte_lines().collect::<Vec<_>>().len() == 1 {
             eprintln!(
-                "{padding}{:?} {:?} @ {} {spelling:?}",
-                self.payload(),
-                self.id(),
+                "{padding}{:} @ {} {spelling:?}",
+                self.summary(),
                 self.span()
             );
         } else {
             eprintln!(
-                "{padding}{:?} {:?} @ {}",
-                self.payload(),
-                self.id(),
+                "{padding}{:} @ {}",
+                self.summary(),
                 self.span()
             );
         }
         for child in self.children() {
             child.dump_level(level + 1);
+        }
+    }
+
+    pub fn summary(&self) -> String {
+        let parsing = self.parsing;
+        match &self.payload {
+            AstNodePayload::Error => format!("Error"),
+            AstNodePayload::Package => format!("Package"),
+            AstNodePayload::Import(import) => format!("Import {}", parsing.string(import.package)),
+            AstNodePayload::ModDef(mod_def) => {
+                let ext = if mod_def.is_ext {
+                    "ext "
+                } else {
+                    ""
+                };
+                format!("ModDef {ext}{}", parsing.string(mod_def.name))
+            }
+            AstNodePayload::StructDef(struct_def) => format!("StructDef"),
+            AstNodePayload::UnionDef(union_def) => format!("UnionDef"),
+            AstNodePayload::EnumDef(enum_def) => format!("EnumDef"),
+            AstNodePayload::BuiltinDef(builtin_def) => format!("BuiltinDef"),
+            AstNodePayload::FnDef(fn_def) => format!("FnDef"),
+            AstNodePayload::SocketDef(socket_def) => format!("SocketDef"),
+            AstNodePayload::Component(component) => format!("Component {:?} {}", component.kind, parsing.string(component.name)),
+            AstNodePayload::Driver(driver) => format!("Driver"),
+            AstNodePayload::BidirectionalDriver => format!("BidirectionalDriver"),
+            AstNodePayload::Module(module) => format!("Module"),
+            AstNodePayload::Socket(socket) => format!("Socket"),
+            AstNodePayload::Field(field) => format!("Field"),
+            AstNodePayload::Ctor(ctor) => format!("Ctor"),
+            AstNodePayload::Enumerant(enumerant) => format!("Enumerant"),
+            AstNodePayload::Channel(channel) => format!("Channel"),
+            AstNodePayload::Param(param) => format!("Param"),
+            AstNodePayload::Kind(kind) => format!("Kind"),
+            AstNodePayload::Type(_) => format!("Type"),
+            AstNodePayload::ExprReference => format!("ExprReference"),
+            AstNodePayload::ExprParen => format!("ExprParen"),
+            AstNodePayload::ExprIf => format!("ExprIf"),
+            AstNodePayload::ExprMatch => format!("ExprMatch"),
+            AstNodePayload::ExprBitLit(expr_bit_lit) => format!("ExprBitLit"),
+            AstNodePayload::ExprWordLit(expr_word_lit) => format!("ExprWordLit"),
+            AstNodePayload::ExprBinOp(expr_bin_op) => format!("ExprBinOp"),
+            AstNodePayload::ExprUnOp(expr_un_op) => format!("ExprUnOp"),
+            AstNodePayload::ExprMethod(expr_method) => format!("ExprMethod"),
+            AstNodePayload::ExprFn => format!("ExprFn"),
+            AstNodePayload::ExprCtor(expr_ctor) => format!("ExprCtor"),
+            AstNodePayload::ExprEnumerant(expr_enumerant) => format!("ExprEnumerant"),
+            AstNodePayload::ExprStruct => format!("ExprStruct"),
+            AstNodePayload::ExprIndex(expr_index) => format!("ExprIndex"),
+            AstNodePayload::ExprIndexRange(expr_index_range) => format!("ExprIndexRange"),
+            AstNodePayload::ExprWord => format!("ExprWord"),
+            AstNodePayload::ExprZext => format!("ExprZext"),
+            AstNodePayload::ExprSext => format!("ExprSext"),
+            AstNodePayload::Assign(assign) => format!("Assign"),
+            AstNodePayload::PatIdent(pat_ident) => format!("PatIdent"),
+            AstNodePayload::PatEnumerant(pat_enumerant) => format!("PatEnumerant"),
+            AstNodePayload::PatElse => format!("PatElse"),
+            AstNodePayload::Ofness(ofness) => format!("Ofness"),
+            AstNodePayload::Path => format!("Path"),
         }
     }
 }

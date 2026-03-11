@@ -68,7 +68,6 @@ pub fn parse(source: &Source) -> Parsing {
         }
     }
 
-    dbg!(&parsing);
     parsing.dump();
 
     parsing
@@ -114,6 +113,10 @@ impl Parsing {
     pub(crate) fn text(&self, span: Span) -> &BStr {
         let text = &self.source[span];
         BStr::new(text)
+    }
+
+    pub(crate) fn string(&self, s: InternedString) -> &BStr {
+        BStr::new(&self.strings[s.0])
     }
 
     pub fn ast_node(&self, ast_node_id: AstNodeId) -> AstNode {

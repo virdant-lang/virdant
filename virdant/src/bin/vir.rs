@@ -1,9 +1,14 @@
 use clap::CommandFactory;
 use clap::{Parser, Subcommand};
 
-use bstr::{BStr, ByteSlice};
+use bstr::{BStr, BString, ByteSlice};
 use nix::unistd::execvp;
 use std::ffi::CString;
+use std::os::unix::ffi::OsStrExt;
+use std::path::Path;
+use virdant::fqn::PackageFqn;
+use virdant::source::Source;
+use virdant::syntax::parsing::parse;
 use virdant::syntax::token::tokenize;
 use virdant::syntax::token::Token;
 
@@ -19,6 +24,30 @@ struct Args {
 enum Command {
     /// Compile a Virdant source file
     Compile { args: Vec<String> },
+}
+
+fn parse_file(path: &str) {
+    let path = Path::new(path);
+    let input = match std::fs::read(path) {
+        Ok(input) => input,
+        Err(e) => {
+            eprintln!("ERROR");
+            eprintln!("{e:?}");
+            std::process::exit(-1);
+        }
+    };
+
+    let package = match path.file_stem() {
+        Some(stem) => PackageFqn::new(BString::from(stem.as_bytes())),
+        None => {
+            eprintln!("ERROR");
+            eprintln!("could not determine package name from path: {}", path.display());
+            std::process::exit(-1);
+        }
+    };
+
+    let source = Source::new(package, input.into());
+    let _parsing = parse(&source);
 }
 
 fn tokenize_file(path: &str) {
@@ -68,6 +97,20 @@ fn main() {
     }
     let command = &args[0];
 
+    if command == "parse" {
+        let path = match args.get(1) {
+            Some(path) => path,
+            None => {
+                eprintln!("ERROR");
+                eprintln!("usage: vir parse <file>");
+                std::process::exit(3);
+            }
+        };
+
+        parse_file(path);
+
+        return;
+    }
     if command == "tokenize" {
         let path = match args.get(1) {
             Some(path) => path,
