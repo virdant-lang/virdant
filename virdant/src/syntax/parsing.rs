@@ -6,7 +6,7 @@ use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::grammar::PackageParser;
 use crate::syntax::token::tokenize;
 
-lalrpop_util::lalrpop_mod!(grammar);
+lalrpop_util::lalrpop_mod!(grammar, "/syntax/grammar.rs");
 
 #[derive(Debug)]
 pub struct Parsing {
