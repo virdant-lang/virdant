@@ -146,6 +146,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Driver(driver) => format!("Driver"),
             AstNodePayload::BidirectionalDriver => format!("BidirectionalDriver"),
             AstNodePayload::Module(module) => format!("Module"),
+            AstNodePayload::ModDefStmtIf => format!("ModDefStmtIf"),
             AstNodePayload::Socket(socket) => format!("Socket"),
             AstNodePayload::Field(field) => format!("Field"),
             AstNodePayload::Ctor(ctor) => format!("Ctor"),

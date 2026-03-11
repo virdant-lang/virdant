@@ -205,6 +205,8 @@ ModDefStmt: AstNodeId = {
     <driver:ModDefStmtDriver> => driver,
     <instance:ModDefStmtInstance> => instance,
     <socket:ModDefStmtSocket> => socket,
+    <if_:ModDefStmtIf> => if_,
+//    <m:ModDefStmtMatch>
     <ll:@L> ! <rr:@R> => {
         let span = parser.span(ll, rr);
 
@@ -323,6 +325,34 @@ ModDefStmtSocket: AstNodeId = {
         let num_children = 1;
 
         parser.add_node(payload, span, num_children)
+    },
+}
+
+ModDefStmtIf: AstNodeId = {
+    <ll:@L> <start:ModDefStmtIfStart> <middles:ModDefStmtIfMiddle?> <end:ModDefStmtIfEnd> <rr:@R> => {
+        let payload = AstNodePayload::ModDefStmtIf;
+        let span = parser.span(ll, rr);
+        let num_children = start + middles.unwrap_or(0) + end;
+
+        parser.add_node(payload, span, num_children)
+    }
+}
+
+ModDefStmtIfStart: u16 = {
+    "if" Expr "{" <stmts:ModDefStmt*> "}" "else" => {
+        1 + u16::try_from(stmts.len()).unwrap()
+    },
+}
+
+ModDefStmtIfMiddle: u16 = {
+    <another:ModDefStmtIfMiddle?> "if" Expr "{" <stmts:ModDefStmt*> "}" "else" => {
+        another.unwrap_or(0) + 1 + u16::try_from(stmts.len()).unwrap()
+    },
+}
+
+ModDefStmtIfEnd: u16 = {
+    "{" <stmts:ModDefStmt*> "}" => {
+        u16::try_from(stmts.len()).unwrap()
     },
 }
 

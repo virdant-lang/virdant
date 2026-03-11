@@ -20,6 +20,7 @@ pub enum AstNodePayload {
     Driver(Driver),
     BidirectionalDriver,
     Module(Module),
+    ModDefStmtIf,
     Socket(Socket),
 
     Field(Field),
@@ -79,6 +80,7 @@ impl AstNodePayload {
             AstNodePayload::Driver(driver) => "Driver",
             AstNodePayload::BidirectionalDriver => "BidirectionalDriver",
             AstNodePayload::Module(module) => "Module",
+            AstNodePayload::ModDefStmtIf => "ModDefStmtIf",
             AstNodePayload::Socket(socket) => "Socket",
             AstNodePayload::Field(field) => "Field",
             AstNodePayload::Ctor(ctor) => "Ctor",
