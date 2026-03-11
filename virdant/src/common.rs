@@ -73,6 +73,7 @@ pub enum ComponentKind {
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum BinOp {
     Eq,
+    Neq,
     Add,
     Sub,
 }

@@ -339,7 +339,7 @@ Expr: AstNodeId = {
     <e:ExprIf> => e,
     <e:ExprMatch> => e,
     <e:ExprStruct> => e,
-    <e:ExprOpCmp> => e,
+    <e:ExprBinOp> => e,
 }
 
 ExprIf: AstNodeId = {
@@ -441,26 +441,21 @@ Assign: AstNodeId = {
     }
 }
 
-ExprOpCmp: AstNodeId = {
-    <ll:@L> <lhs:ExprOpCmp> "==" <rhs:ExprOpAdd> <rr:@R> => {
-        let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op: BinOp::Eq });
-        let span = parser.span(ll, rr);
-        let num_children = 2;
-
-        parser.add_node(payload, span, num_children)
-    },
-    <e:ExprOpAdd> => e,
-}
-
-ExprOpAdd: AstNodeId = {
-    <ll:@L> <lhs:ExprOpAdd> "+" <rhs:ExprAtom> <rr:@R> => {
-        let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op: BinOp::Add });
+ExprBinOp: AstNodeId = {
+    <ll:@L> <lhs:ExprBinOp> <op:BinOp> <rhs:ExprAtom> <rr:@R> => {
+        let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op });
         let span = parser.span(ll, rr);
         let num_children = 2;
 
         parser.add_node(payload, span, num_children)
     },
     <e:ExprAtom> => e,
+}
+
+BinOp: BinOp = {
+    "==" => BinOp::Eq,
+    "!=" => BinOp::Neq,
+    "+" => BinOp::Add,
 }
 
 ExprAtom: AstNodeId = {
@@ -671,6 +666,7 @@ extern {
         "::" => Token::ColonColon,
         "=" => Token::Eq,
         "==" => Token::EqEq,
+        "!=" => Token::BangEq,
         ":=" => Token::EqColon,
         ":=:" => Token::EqColoneq,
         "<=" => Token::RevFatArrow,

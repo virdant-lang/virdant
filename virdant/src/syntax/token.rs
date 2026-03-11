@@ -40,6 +40,7 @@ pub enum Token {
     #[token(b"::")]  ColonColon,
     #[token(b"=")]   Eq,
     #[token(b"==")]  EqEq,
+    #[token(b"!=")]  BangEq,
     #[token(b":=")]  EqColon,
     #[token(b":=:")] EqColoneq,
     #[token(b"<=")]  RevFatArrow,
