@@ -95,7 +95,13 @@ impl Parsing {
     }
 
     pub(crate) fn add_error_node(&mut self, span: Span) -> AstNodeId {
-        todo!()
+        let payload = AstNodePayload::Error;
+        let ast_node_id = AstNodeId(self.payloads.len().try_into().unwrap());
+        self.payloads.push(payload);
+        self.spans.push(span);
+        self.num_children.push(0);
+        self.errors.push(ast_node_id.clone());
+        ast_node_id
     }
 
     pub(crate) fn span(&mut self, ll: SourceOffset, rr: SourceOffset) -> Span {
