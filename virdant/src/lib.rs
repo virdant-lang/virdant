@@ -3,7 +3,7 @@ pub mod id;
 pub mod vir;
 pub mod source;
 pub mod fqn;
-pub mod token;
+pub mod syntax;
 // pub mod ast;
 // pub mod types;
 // pub mod math;

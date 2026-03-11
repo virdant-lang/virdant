@@ -4,7 +4,8 @@ use clap::{Parser, Subcommand};
 use bstr::{BStr, ByteSlice};
 use nix::unistd::execvp;
 use std::ffi::CString;
-use virdant::token::tokenize;
+use virdant::syntax::token::tokenize;
+use virdant::syntax::token::Token;
 
 /// The Virdant Hardware Language
 #[derive(Parser, Debug)]
@@ -39,10 +40,10 @@ fn tokenize_file(path: &str) {
                 let token_str = token.to_string();
 
                 let snippet = match token {
-                    virdant::token::Token::Ident |
-                    virdant::token::Token::Nat |
-                    virdant::token::Token::Word |
-                    virdant::token::Token::Error => BStr::new(&input[start..end]),
+                    Token::Ident |
+                    Token::Nat |
+                    Token::Word |
+                    Token::Error => BStr::new(&input[start..end]),
                     _ => BStr::new(""),
                 };
 
