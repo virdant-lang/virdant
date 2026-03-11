@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
+use bstr::{BStr, BString};
+
 use crate::fqn::PackageFqn;
 
 /// A source file loaded into memory for use by the tokenizer with a given package name.
 #[derive(Clone, Debug)]
 pub struct Source {
     package: PackageFqn,
-    text: Arc<[u8]>,
+    text: BString,
 }
 
 /// A byte offset in a `Source`.
@@ -18,7 +20,7 @@ pub struct SourceOffset(pub(crate) u32);
 pub struct LineCol(usize, usize);
 
 /// A start-end line-col pair
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Span(LineCol, LineCol);
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
@@ -34,9 +36,7 @@ pub struct Region {
 }
 
 impl Source {
-    pub fn new(package: PackageFqn, text: &[u8]) -> Source {
-        let text: Arc<[u8]> = Arc::from(text.to_vec().into_boxed_slice());
-
+    pub fn new(package: PackageFqn, text: BString) -> Source {
         Source { package, text }
     }
 
@@ -44,8 +44,8 @@ impl Source {
         self.package.clone()
     }
 
-    pub fn text(&self) -> Arc<[u8]> {
-        Arc::clone(&self.text)
+    pub fn text(&self) -> &BStr {
+        BStr::new(&self.text)
     }
 
     pub fn str(&self) -> String {
@@ -56,7 +56,7 @@ impl Source {
         let mut offset = 0;
         let LineCol(mut line, mut col) = linecol;
         while line > 1 {
-            if self.text.as_ref()[offset] == b'\n' {
+            if self.text[offset] == b'\n' {
                 line -= 1;
             }
             offset += 1;
@@ -78,7 +78,7 @@ impl Source {
 
         let SourceOffset(offset) = offset;
         while offset - i > 0 {
-            if self.text.as_ref()[i as usize] == b'\n' {
+            if self.text[i as usize] == b'\n' {
                 line += 1;
                 col = 1;
             } else {
@@ -102,7 +102,7 @@ impl std::ops::Index<SourceOffset> for Source {
     type Output = u8;
 
     fn index(&self, index: SourceOffset) -> &Self::Output {
-        &self.text.as_ref()[index.0 as usize]
+        &self.text[index.0 as usize]
     }
 }
 
@@ -112,7 +112,7 @@ impl std::ops::Index<Span> for Source {
     fn index(&self, span: Span) -> &Self::Output {
         let start_idx = self.to_offset(span.start());
         let end_idx = self.to_offset(span.end());
-        &self.text.as_ref()[start_idx.0 as usize..end_idx.0 as usize]
+        &self.text[start_idx.0 as usize..end_idx.0 as usize]
     }
 }
 
@@ -278,6 +278,29 @@ impl std::fmt::Display for Region {
 }
 
 impl std::fmt::Display for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.start().line() == self.end().line() {
+            write!(
+                f,
+                "[{}:{}-{}]",
+                self.start().line(),
+                self.start().col(),
+                self.end().col(),
+            )
+        } else {
+            write!(
+                f,
+                "[{}:{}-{}:{}]",
+                self.start().line(),
+                self.start().col(),
+                self.end().line(),
+                self.end().col(),
+            )
+        }
+    }
+}
+
+impl std::fmt::Debug for Span {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.start().line() == self.end().line() {
             write!(

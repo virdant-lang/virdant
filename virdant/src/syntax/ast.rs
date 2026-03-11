@@ -13,7 +13,7 @@ use crate::syntax::parsing::Parsing;
 //use crate::stringtable::{InternedString, StringTable};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AstNodeId(PackageFqn, u16);
+pub struct AstNodeId(pub(crate) u16);
 
 #[derive(Debug, Clone)]
 pub enum AstNodePayload {
@@ -77,11 +77,11 @@ pub enum AstNodePayload {
 
 #[derive(Clone)]
 pub struct AstNode<'a> {
-    pub(crate) parser: &'a Parsing,
+    pub(crate) parsing: &'a Parsing,
     pub(crate) id: AstNodeId,
     pub(crate) payload: AstNodePayload,
     pub(crate) region: Region,
-    pub(crate) parent: AstNodeId,
+    pub(crate) parent: Option<AstNodeId>,
 }
 
 /*
@@ -168,32 +168,32 @@ impl<'p> std::fmt::Debug for AstNode<'p> {
     }
 }
 
-/*
-impl AstNode {
-    pub fn ast(&self) -> Ast {
-        self.ast.clone()
-    }
-
+impl<'p> AstNode<'p> {
     pub fn id(&self) -> AstNodeId {
         self.id.clone()
     }
 
     pub fn spelling(&self) -> &BStr {
-        self.ast.source[self.region.span()].as_bstr()
+        self.parsing.source[self.region.span()].as_bstr()
     }
 
-    pub fn parent(&self) -> AstNode {
-        self.ast.ast_node(self.parent.clone())
+    pub fn parent(&self) -> Option<AstNode> {
+        if let Some(parent) = &self.parent {
+            Some(self.parsing.ast_node(parent.clone()))
+        } else {
+            None
+        }
     }
 
     pub fn child(&self, mut n: u16) -> AstNode {
         let mut ast_node_id = 0;
         loop {
-            if self.ast.parents[ast_node_id] == self.id {
+            if self.parsing.parents[ast_node_id] == self.id {
                 if n == 0 {
+                    let ast_node_id = AstNodeId(ast_node_id.try_into().unwrap());
                     return self
-                        .ast
-                        .ast_node(AstNodeId(self.id.package(), ast_node_id.try_into().unwrap()));
+                        .parsing
+                        .ast_node(ast_node_id);
                 }
                 n -= 1;
             }
@@ -203,13 +203,14 @@ impl AstNode {
 
     pub fn children(&self) -> Vec<AstNode> {
         let mut result = vec![];
-        let num_children = self.ast.num_children[self.id.index()];
+        let num_children = self.parsing.num_children[self.id.index()];
         for i in 0..num_children {
             result.push(self.child(i.try_into().unwrap()));
         }
         result
     }
 
+/*
     pub fn walk(&self) -> Vec<AstNode> {
         let mut result = vec![];
         let mut queue = vec![self.clone()];
@@ -221,13 +222,20 @@ impl AstNode {
         }
         result
     }
+*/
 
     pub fn payload(&self) -> AstNodePayload {
         self.payload.clone()
     }
 
+/*
     pub fn region(&self) -> Region {
         self.ast.regions[self.id.index()].clone()
+    }
+*/
+
+    pub fn span(&self) -> Span {
+        self.parsing.spans[self.id.index()].clone()
     }
 
     #[allow(dead_code)]
@@ -237,6 +245,10 @@ impl AstNode {
 
     #[allow(dead_code)]
     pub(crate) fn dump_level(&self, level: usize) {
+//        let summary = &format!("[{self:?}]")[0..10].replace("\n", " ");
+        let payload = self.payload().clone();
+        let summary = payload.kind();
+//        println!("dump_level(\"{summary}\", {level})");
         use bstr::io::BufReadExt;
 
         let padding = " ".repeat(4 * level);
@@ -246,14 +258,14 @@ impl AstNode {
                 "{padding}{:?} {:?} @ {} {spelling:?}",
                 self.payload(),
                 self.id(),
-                self.region()
+                self.span()
             );
         } else {
             eprintln!(
                 "{padding}{:?} {:?} @ {}",
                 self.payload(),
                 self.id(),
-                self.region()
+                self.span()
             );
         }
         for child in self.children() {
@@ -261,14 +273,62 @@ impl AstNode {
         }
     }
 }
-*/
 
 impl AstNodeId {
-    pub fn package(&self) -> PackageFqn {
-        self.0.clone()
-    }
-
     pub fn index(&self) -> usize {
-        self.1 as usize
+        self.0 as usize
+    }
+}
+
+impl AstNodePayload {
+    pub fn kind(&self) -> &str {
+        match self {
+            AstNodePayload::Error => "Error",
+            AstNodePayload::Package => "Package",
+            AstNodePayload::Import(import) => "Import",
+            AstNodePayload::ModDef(mod_def) => "ModDef",
+            AstNodePayload::StructDef(struct_def) => "StructDef",
+            AstNodePayload::UnionDef(union_def) => "UnionDef",
+            AstNodePayload::EnumDef(enum_def) => "EnumDef",
+            AstNodePayload::BuiltinDef(builtin_def) => "BuiltinDef",
+            AstNodePayload::FnDef(fn_def) => "FnDef",
+            AstNodePayload::SocketDef(socket_def) => "SocketDef",
+            AstNodePayload::Component(component) => "Component",
+            AstNodePayload::Driver(driver) => "Driver",
+            AstNodePayload::BidirectionalDriver => "BidirectionalDriver",
+            AstNodePayload::Module(module) => "Module",
+            AstNodePayload::Socket(socket) => "Socket",
+            AstNodePayload::Field(field) => "Field",
+            AstNodePayload::Ctor(ctor) => "Ctor",
+            AstNodePayload::Enumerant(enumerant) => "Enumerant",
+            AstNodePayload::Channel(channel) => "Channel",
+            AstNodePayload::Param(param) => "Param",
+            AstNodePayload::Kind(kind) => "Kind",
+            AstNodePayload::Type(_) => "Type",
+            AstNodePayload::ExprReference => "ExprReference",
+            AstNodePayload::ExprParen => "ExprParen",
+            AstNodePayload::ExprIf => "ExprIf",
+            AstNodePayload::ExprMatch => "ExprMatch",
+            AstNodePayload::ExprBitLit(expr_bit_lit) => "ExprBitLit",
+            AstNodePayload::ExprWordLit(expr_word_lit) => "ExprWordLit",
+            AstNodePayload::ExprBinOp(expr_bin_op) => "ExprBinOp",
+            AstNodePayload::ExprUnOp(expr_un_op) => "ExprUnOp",
+            AstNodePayload::ExprMethod(expr_method) => "ExprMethod",
+            AstNodePayload::ExprFn => "ExprFn",
+            AstNodePayload::ExprCtor(expr_ctor) => "ExprCtor",
+            AstNodePayload::ExprEnumerant(expr_enumerant) => "ExprEnumerant",
+            AstNodePayload::ExprStruct => "ExprStruct",
+            AstNodePayload::ExprIndex(expr_index) => "ExprIndex",
+            AstNodePayload::ExprIndexRange(expr_index_range) => "ExprIndexRange",
+            AstNodePayload::ExprWord => "ExprWord",
+            AstNodePayload::ExprZext => "ExprZext",
+            AstNodePayload::ExprSext => "ExprSext",
+            AstNodePayload::Assign(assign) => "Assign",
+            AstNodePayload::PatIdent(pat_ident) => "PatIdent",
+            AstNodePayload::PatEnumerant(pat_enumerant) => "PatEnumerant",
+            AstNodePayload::PatElse => "PatElse",
+            AstNodePayload::Ofness(ofness) => "Ofness",
+            AstNodePayload::Path => "Path",
+        }
     }
 }
