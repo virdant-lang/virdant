@@ -18,6 +18,7 @@ fn test_virir() {
         packages: vec![Package {
             items: vec![Item::ModDef(ModDef {
                 region: region.clone(),
+                name: "Buffer".to_string(),
                 ports: vec![
                     Port {
                         region: region.clone(),

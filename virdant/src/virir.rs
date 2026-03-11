@@ -4,6 +4,8 @@ pub mod typ;
 #[cfg(test)]
 pub mod tests;
 
+lalrpop_util::lalrpop_mod!(grammar, "/virir/grammar.rs");
+
 use std::sync::Arc;
 
 use crate::common::PortDir;
@@ -36,6 +38,7 @@ pub enum Item {
 
 pub struct ModDef {
     pub region: Region,
+    pub name: String,
     pub ports: Vec<Port>,
     pub drivers: Vec<Driver>,
 }
