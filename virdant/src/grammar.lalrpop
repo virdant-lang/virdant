@@ -442,14 +442,14 @@ Assign: AstNodeId = {
 }
 
 ExprBinOp: AstNodeId = {
-    <ll:@L> <lhs:ExprBinOp> <op:BinOp> <rhs:ExprAtom> <rr:@R> => {
+    <ll:@L> <lhs:ExprBinOp> <op:BinOp> <rhs:ExprPrimary> <rr:@R> => {
         let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op });
         let span = parser.span(ll, rr);
         let num_children = 2;
 
         parser.add_node(payload, span, num_children)
     },
-    <e:ExprAtom> => e,
+    <e:ExprPrimary> => e,
 }
 
 BinOp: BinOp = {
@@ -457,6 +457,66 @@ BinOp: BinOp = {
     "!=" => BinOp::Neq,
     "+" => BinOp::Add,
     "-" => BinOp::Sub,
+}
+
+ExprPrimary: AstNodeId = {
+    <ll:@L> "word" "(" <args:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprWord;
+        let span = parser.span(ll, rr);
+        let num_children = args;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "sext" "(" <args:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprSext;
+        let span = parser.span(ll, rr);
+        let num_children = args;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "zext" "(" <args:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprZext;
+        let span = parser.span(ll, rr);
+        let num_children = args;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <ofness:Ofness> "(" <args:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprFn;
+        let span = parser.span(ll, rr);
+        let num_children = 1 + args;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <e:ExprPrimary> "->" <method:Ident> "(" <arglist:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprMethod(payload::ExprMethod { method });
+        let span = parser.span(ll, rr);
+        let num_children = 1 + arglist;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <e:ExprPrimary> "[" <index:Index> "]" <rr:@R> => {
+        let payload = AstNodePayload::ExprIndex(payload::ExprIndex { index });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <e:ExprPrimary> "[" <index_hi:Index> ".." <index_lo:Index> "]" <rr:@R> => {
+        let payload = AstNodePayload::ExprIndexRange(payload::ExprIndexRange { index_hi, index_lo });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "@" <ctor:Ident> "(" <args:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprCtor(payload::ExprCtor { ctor });
+        let span = parser.span(ll, rr);
+        let num_children = args;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <e:ExprAtom> => e,
 }
 
 ExprAtom: AstNodeId = {
@@ -488,55 +548,6 @@ ExprAtom: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "word" "(" <args:ArgList> ")" <rr:@R> => {
-        let payload = AstNodePayload::ExprWord;
-        let span = parser.span(ll, rr);
-        let num_children = args;
-
-        parser.add_node(payload, span, num_children)
-    },
-    <ll:@L> "sext" "(" <args:ArgList> ")" <rr:@R> => {
-        let payload = AstNodePayload::ExprSext;
-        let span = parser.span(ll, rr);
-        let num_children = args;
-
-        parser.add_node(payload, span, num_children)
-    },
-    <ll:@L> "zext" "(" <args:ArgList> ")" <rr:@R> => {
-        let payload = AstNodePayload::ExprZext;
-        let span = parser.span(ll, rr);
-        let num_children = args;
-
-        parser.add_node(payload, span, num_children)
-    },
-    <ll:@L> <ofness:Ofness> "(" <args:ArgList> ")" <rr:@R> => {
-        let payload = AstNodePayload::ExprFn;
-        let span = parser.span(ll, rr);
-        let num_children = 1 + args;
-
-        parser.add_node(payload, span, num_children)
-    },
-    <ll:@L> <e:ExprAtom> "->" <method:Ident> "(" <arglist:ArgList> ")" <rr:@R> => {
-        let payload = AstNodePayload::ExprMethod(payload::ExprMethod { method });
-        let span = parser.span(ll, rr);
-        let num_children = 1 + arglist;
-
-        parser.add_node(payload, span, num_children)
-    },
-    <ll:@L> <e:ExprAtom> "[" <index:Index> "]" <rr:@R> => {
-        let payload = AstNodePayload::ExprIndex(payload::ExprIndex { index });
-        let span = parser.span(ll, rr);
-        let num_children = 1;
-
-        parser.add_node(payload, span, num_children)
-    },
-    <ll:@L> <e:ExprAtom> "[" <index_hi:Index> ".." <index_lo:Index> "]" <rr:@R> => {
-        let payload = AstNodePayload::ExprIndexRange(payload::ExprIndexRange { index_hi, index_lo });
-        let span = parser.span(ll, rr);
-        let num_children = 1;
-
-        parser.add_node(payload, span, num_children)
-    },
     <ll:@L> "#" <enumerant:Ident> <rr:@R> => {
         let payload = AstNodePayload::ExprEnumerant(payload::ExprEnumerant { enumerant });
         let span = parser.span(ll, rr);
@@ -548,13 +559,6 @@ ExprAtom: AstNodeId = {
         let payload = AstNodePayload::ExprCtor(payload::ExprCtor { ctor });
         let span = parser.span(ll, rr);
         let num_children = 0;
-
-        parser.add_node(payload, span, num_children)
-    },
-    <ll:@L> "@" <ctor:Ident> "(" <args:ArgList> ")" <rr:@R> => {
-        let payload = AstNodePayload::ExprCtor(payload::ExprCtor { ctor });
-        let span = parser.span(ll, rr);
-        let num_children = args;
 
         parser.add_node(payload, span, num_children)
     },
