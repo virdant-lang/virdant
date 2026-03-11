@@ -1,3 +1,4 @@
+use crate::syntax::ast::AstNodeId;
 use crate::syntax::parsing::InternedString;
 use crate::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, UnOp};
 
@@ -20,6 +21,7 @@ pub enum AstNodePayload {
     Driver(Driver),
     BidirectionalDriver,
     Module(Module),
+    ModDefStmtBlock(ModDefStmtBlock),
     ModDefStmtIf,
     ModDefStmtMatch,
     Socket(Socket),
@@ -81,6 +83,7 @@ impl AstNodePayload {
             AstNodePayload::Driver(driver) => "Driver",
             AstNodePayload::BidirectionalDriver => "BidirectionalDriver",
             AstNodePayload::Module(module) => "Module",
+            AstNodePayload::ModDefStmtBlock(mod_def_stmt_block) => "ModDefStmtBlock",
             AstNodePayload::ModDefStmtIf => "ModDefStmtIf",
             AstNodePayload::ModDefStmtMatch => "ModDefStmtMatch",
             AstNodePayload::Socket(socket) => "Socket",
@@ -176,6 +179,11 @@ pub struct Driver {
 #[derive(Clone, Debug)]
 pub struct Module {
     pub name: InternedString,
+}
+
+#[derive(Clone, Debug)]
+pub struct ModDefStmtBlock {
+    pub stmts: Vec<AstNodeId>,
 }
 
 #[derive(Clone, Debug)]

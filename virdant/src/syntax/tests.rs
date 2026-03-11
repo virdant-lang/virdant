@@ -76,3 +76,4 @@ test_example!(structs);
 test_example!(top);
 test_example!(uart);
 test_example!(it);
+test_example!(conditional_statements);

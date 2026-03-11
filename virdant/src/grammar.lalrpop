@@ -300,12 +300,10 @@ ModDefStmtInstance: AstNodeId = {
 }
 
 ItBlock: AstNodeId = {
-    <ll:@L> "{"
-        <drivers:ModDefStmtDriver*>
-    "}" <rr:@R> => {
+    <ll:@L> <block: ModDefStmtBlock> <rr:@R> => {
         let payload = AstNodePayload::It;
         let span = parser.span(ll, rr);
-        let num_children: u16 = drivers.len().try_into().unwrap();
+        let num_children: u16 = 1;
 
         parser.add_node(payload, span, num_children)
     }
@@ -329,30 +327,28 @@ ModDefStmtSocket: AstNodeId = {
 }
 
 ModDefStmtIf: AstNodeId = {
-    <ll:@L> <start:ModDefStmtIfStart> <middles:ModDefStmtIfMiddle?> <end:ModDefStmtIfEnd> <rr:@R> => {
+    <ll:@L> <start:ModDefStmtIfStart> <middles:ModDefStmtIfMiddle*> <end:ModDefStmtIfEnd> <rr:@R> => {
         let payload = AstNodePayload::ModDefStmtIf;
         let span = parser.span(ll, rr);
-        let num_children = start + middles.unwrap_or(0) + end;
+        let num_children = start + u16::try_from(2 * middles.len()).unwrap() + 1;
 
         parser.add_node(payload, span, num_children)
     }
 }
 
 ModDefStmtIfStart: u16 = {
-    "if" Expr "{" <stmts:ModDefStmt*> "}" "else" => {
-        1 + u16::try_from(stmts.len()).unwrap()
+    "if" Expr ModDefStmtBlock => {
+        2
     },
 }
 
-ModDefStmtIfMiddle: u16 = {
-    <another:ModDefStmtIfMiddle?> "if" Expr "{" <stmts:ModDefStmt*> "}" "else" => {
-        another.unwrap_or(0) + 1 + u16::try_from(stmts.len()).unwrap()
-    },
+ModDefStmtIfMiddle: () = {
+    "else" "if" Expr ModDefStmtBlock => (),
 }
 
 ModDefStmtIfEnd: u16 = {
-    "{" <stmts:ModDefStmt*> "}" => {
-        u16::try_from(stmts.len()).unwrap()
+    "else" ModDefStmtBlock ";" => {
+        1
     },
 }
 
@@ -360,15 +356,23 @@ ModDefStmtMatch: AstNodeId = {
     <ll:@L> "match" Expr "{" <arms:ModDefStmtMatchArm*> "}" <rr:@R> => {
         let payload = AstNodePayload::ModDefStmtMatch;
         let span = parser.span(ll, rr);
-        let num_children = 1 + arms.into_iter().sum::<u16>();
+        let num_children = 1 + u16::try_from(2 * arms.len()).unwrap();
 
         parser.add_node(payload, span, num_children)
     },
 }
 
-ModDefStmtMatchArm: u16 = {
-    Pat "=>" "{" <stmts:ModDefStmt*> "}" => {
-        1 + u16::try_from(stmts.len()).unwrap()
+ModDefStmtMatchArm: () = {
+    Pat "=>" ModDefStmtBlock ";" => (),
+}
+
+ModDefStmtBlock: AstNodeId = {
+    <ll:@L> "{" <stmts:ModDefStmt*> "}" <rr:@R> => {
+        let num_children = u16::try_from(stmts.len()).unwrap();
+        let payload = AstNodePayload::ModDefStmtBlock(payload::ModDefStmtBlock { stmts });
+        let span = parser.span(ll, rr);
+
+        parser.add_node(payload, span, num_children)
     },
 }
 
@@ -411,15 +415,15 @@ ExprIf: AstNodeId = {
 }
 
 ExprIfStart: () = {
-    "if" Expr "{" Expr "}" "else" => (),
+    "if" Expr "{" Expr "}" => (),
 }
 
 ExprIfMiddle: u16 = {
-    <another:ExprIfMiddle?> "if" Expr "{" Expr "}" "else" => another.unwrap_or(0) + 2,
+    <another:ExprIfMiddle?> "else" "if" Expr "{" Expr "}" => another.unwrap_or(0) + 2,
 }
 
 ExprIfEnd: () = {
-    "{" Expr "}" => (),
+    "else" "{" Expr "}" => (),
 }
 
 ExprMatch: AstNodeId = {
