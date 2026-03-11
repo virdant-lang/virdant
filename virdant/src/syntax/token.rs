@@ -43,16 +43,25 @@ pub enum Token {
     #[token(b"!=")]  BangEq,
     #[token(b":=")]  EqColon,
     #[token(b":=:")] EqColoneq,
-    #[token(b"<=")]  RevFatArrow,
+    #[token(b"<=")]  LtEq,
     #[token(b"=>")]  FatArrow,
     #[token(b"->")]  Arrow,
     #[token(b":")]   Colon,
     #[token(b",")]   Comma,
     #[token(b"$")]   Dollar,
-    #[token(b"+")]   Add,
-    #[token(b"-")]   Sub,
     #[token(b"#")]   Hash,
     #[token(b"@")]   At,
+
+    // Operators
+    #[token(b"+")]   Add,
+    #[token(b"-")]   Sub,
+    #[token(b"<")]   Lt,
+    #[token(b">")]   Gt,
+    #[token(b">=")]  GtEq,
+    #[token(b"&&")]  AndAnd,
+    #[token(b"||")]  PipePipe,
+    #[token(b"!")]   Bang,
+    #[token(b"~")]   Tilde,
 
     // Groupings
     #[token(b"(")]   ParenLeft,

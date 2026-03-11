@@ -7,7 +7,7 @@ use atoi::atoi;
 
 
 use crate::source::SourceOffset;
-use crate::common::{DriverType, ComponentKind, BinOp, ChannelDir, SocketRole};
+use crate::common::{DriverType, ComponentKind, BinOp, ChannelDir, SocketRole, UnOp};
 
 grammar<'a>(parser: &mut Parsing);
 
@@ -449,15 +449,39 @@ ExprBinOp: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <e:ExprPrimary> => e,
+    <e:ExprUnOp> => e,
 }
 
 BinOp: BinOp = {
+    "<" => BinOp::Lt,
+    "<=" => BinOp::Lte,
+    ">" => BinOp::Gt,
+    ">=" => BinOp::Gte,
     "==" => BinOp::Eq,
     "!=" => BinOp::Neq,
     "+" => BinOp::Add,
     "-" => BinOp::Sub,
+    "&&" => BinOp::And,
+    "||" => BinOp::Or,
 }
+
+ExprUnOp: AstNodeId = {
+    <ll:@L> <op:UnOp> <rhs:ExprUnOp> <rr:@R> => {
+        let payload = AstNodePayload::ExprUnOp(payload::ExprUnOp { op });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <e:ExprPrimary> => e,
+}
+
+UnOp: UnOp = {
+    "-" => UnOp::Neg,
+    "~" => UnOp::Inv,
+    "!" => UnOp::Not,
+}
+
 
 ExprPrimary: AstNodeId = {
     <ll:@L> "word" "(" <args:ArgList> ")" <rr:@R> => {
@@ -674,16 +698,26 @@ extern {
         "!=" => Token::BangEq,
         ":=" => Token::EqColon,
         ":=:" => Token::EqColoneq,
-        "<=" => Token::RevFatArrow,
+        "<=" => Token::LtEq,
         "=>" => Token::FatArrow,
         "->" => Token::Arrow,
         ":" => Token::Colon,
         "," => Token::Comma,
         "$" => Token::Dollar,
-        "+" => Token::Add,
-        "-" => Token::Sub,
         "#" => Token::Hash,
         "@" => Token::At,
+
+        // Operators
+        "+" => Token::Add,
+        "-" => Token::Sub,
+        "<" => Token::Lt,
+        "<=" => Token::LtEq,
+        ">" => Token::Gt,
+        ">=" => Token::GtEq,
+        "&&" => Token::AndAnd,
+        "||" => Token::PipePipe,
+        "!" => Token::Bang,
+        "~" => Token::Tilde,
 
         // Groupings
         "(" => Token::ParenLeft,

@@ -72,14 +72,24 @@ pub enum ComponentKind {
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum BinOp {
+    Lt,
+    Lte,
+    Gt,
+    Gte,
     Eq,
     Neq,
     Add,
     Sub,
+    And,
+    Or,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum UnOp {}
+pub enum UnOp {
+    Neg,
+    Inv,
+    Not,
+}
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum Radix {

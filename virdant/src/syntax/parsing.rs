@@ -130,15 +130,22 @@ impl Parsing {
         let span = self.spans[ast_node_id.index()].clone();
 
         let parent = self.parents.get(ast_node_id.index()).cloned();
-        let region = Region::new(self.source.package(), span);
 
         AstNode {
             id: ast_node_id,
             payload,
-            region,
             parent,
             parsing: self,
         }
+    }
+
+    pub fn errors(&self) -> Vec<AstNode<'_>> {
+        let mut errors = vec![];
+
+        for error_id in &self.errors {
+            errors.push(self.ast_node(error_id.clone()));
+        }
+        errors
     }
 
     pub fn dump(&self) {

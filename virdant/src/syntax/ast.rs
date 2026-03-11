@@ -16,7 +16,6 @@ pub struct AstNode<'a> {
     pub(crate) parsing: &'a Parsing,
     pub(crate) id: AstNodeId,
     pub(crate) payload: AstNodePayload,
-    pub(crate) region: Region,
     pub(crate) parent: Option<AstNodeId>,
 }
 
@@ -32,7 +31,7 @@ impl<'p> AstNode<'p> {
     }
 
     pub fn spelling(&self) -> &BStr {
-        self.parsing.source[self.region.span()].as_bstr()
+        self.parsing.source[self.span()].as_bstr()
     }
 
     pub fn parent(&self) -> Option<AstNode> {
@@ -84,6 +83,10 @@ impl<'p> AstNode<'p> {
 
     pub fn payload(&self) -> AstNodePayload {
         self.payload.clone()
+    }
+
+    pub fn region(&self) -> Region {
+        Region::new(self.parsing.source.package(), self.span())
     }
 
     pub fn span(&self) -> Span {
