@@ -51,9 +51,11 @@ impl LanguageServer for Backend {
             hover_provider: Some(HoverProviderCapability::Simple(true)),
             definition_provider: Some(OneOf::Left(true)),
 
-            code_lens_provider: Some(CodeLensOptions {
-                resolve_provider: Some(false),
-            }),
+//            code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+
+//            code_lens_provider: Some(CodeLensOptions {
+//                resolve_provider: Some(false),
+//            }),
 
 //            inlay_hint_provider: Some(OneOf::Left(false)),
 
@@ -197,48 +199,48 @@ impl LanguageServer for Backend {
         Ok(Some(CompletionResponse::Array(items)))
     }
 
-    async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
-        let uri = params.text_document.uri;
-        let package = uri_to_packagefqn(&uri);
-
-        let parsing = {
-            let mut state = self.state.lock().await;
-            state.vir.parsing(&package.to_string())
-        };
-        let mut lenses = vec![];
-        self.client
-            .log_message(MessageType::ERROR, format!("Root is {}", parsing.root().summary()))
-            .await;
-
-        for node in parsing.root().children() {
-            self.client
-                .log_message(MessageType::ERROR, format!("Considering lens for: {}", node.summary()))
-                .await;
-
-            if node.is_item() {
-                let range = span_to_range(node.span());
-                let lens = CodeLens {
-                    range,
-                    command: Some(Command {
-                        title: "Run test".into(),
-                        command: "VirdantRunTest".into(),
-                        arguments: Some(vec![
-                            json!(parsing.string(node.name().unwrap()).to_string()),
-                        ]),
-                    }),
-                    data: None,
-                };
-
-                self.client
-                    .log_message(MessageType::ERROR, format!("{lens:?}"))
-                    .await;
-
-                lenses.push(lens);
-            }
-        }
-
-        Ok(Some(lenses))
-    }
+//    async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
+//        let uri = params.text_document.uri;
+//        let package = uri_to_packagefqn(&uri);
+//
+//        let parsing = {
+//            let mut state = self.state.lock().await;
+//            state.vir.parsing(&package.to_string())
+//        };
+//        let mut lenses = vec![];
+//        self.client
+//            .log_message(MessageType::ERROR, format!("Root is {}", parsing.root().summary()))
+//            .await;
+//
+//        for node in parsing.root().children() {
+//            self.client
+//                .log_message(MessageType::ERROR, format!("Considering lens for: {}", node.summary()))
+//                .await;
+//
+//            if node.is_item() {
+//                let range = span_to_range(node.span());
+//                let lens = CodeLens {
+//                    range,
+//                    command: Some(Command {
+//                        title: "Run test".into(),
+//                        command: "VirdantRunTest".into(),
+//                        arguments: Some(vec![
+//                            json!(parsing.string(node.name().unwrap()).to_string()),
+//                        ]),
+//                    }),
+//                    data: None,
+//                };
+//
+//                self.client
+//                    .log_message(MessageType::ERROR, format!("{lens:?}"))
+//                    .await;
+//
+//                lenses.push(lens);
+//            }
+//        }
+//
+//        Ok(Some(lenses))
+//    }
 
 
     async fn inlay_hint(
@@ -304,48 +306,80 @@ impl LanguageServer for Backend {
 
     }
 
-    async fn code_action(
-        &self,
-        params: CodeActionParams,
-    ) -> Result<Option<Vec<CodeActionOrCommand>>> {
-        let mut actions = Vec::new();
-
-        // Just an example: if the user selected a range called "placeholder"
-        for diag in &params.context.diagnostics {
-            if diag.message.contains("placeholder") {
-                // WorkspaceEdit that replaces the placeholder text
-                let mut changes = std::collections::HashMap::new();
-                changes.insert(
-                    params.text_document.uri.clone(),
-                    vec![TextEdit {
-                        range: diag.range,
-                        new_text: "fixed_variable".into(),
-                    }],
-                );
-
-                let edit = WorkspaceEdit {
-                    changes: Some(changes),
-                    document_changes: None,
-                    change_annotations: None,
-                };
-
-                let action = CodeAction {
-                    title: "Run thing".into(),
-                    kind: None,
-                    diagnostics: Some(vec![]),
-                    edit: Some(edit),
-                    command: None, // optional, not needed for edits
-                    is_preferred: Some(true),
-                    data: None,
-                    disabled: None,
-                };
-
-                actions.push(CodeActionOrCommand::CodeAction(action));
-            }
-        }
-
-        Ok(Some(actions))
-    }
+//    async fn code_action(
+//        &self,
+//        params: CodeActionParams,
+//    ) -> Result<Option<Vec<CodeActionOrCommand>>> {
+//        let mut actions = Vec::new();
+//
+//        let uri = params.text_document.uri;
+//        let package = uri_to_packagefqn(&uri);
+//        let parsing = {
+//            let mut state = self.state.lock().await;
+//            state.vir.parsing(&package.to_string())
+//        };
+//        let mut code_actions = vec![];
+//
+//        for node in parsing.root().children() {
+//            if node.is_item() {
+//                let range = span_to_range(node.span());
+//
+//                let mut changes = std::collections::HashMap::new();
+//                changes.insert(
+//                    uri.clone(),
+//                    vec![],
+//                );
+//
+//                let edit = WorkspaceEdit {
+//                    changes: Some(changes),
+//                    document_changes: None,
+//                    change_annotations: None,
+//                };
+//
+//                let command = Command {
+//                    title: "Run test".into(),
+//                    command: "VirdantRunTest".into(),
+//                    arguments: Some(vec![
+//                        json!(parsing.string(node.name().unwrap()).to_string()),
+//                    ]),
+//                };
+//
+//                let diagnostic = Diagnostic {
+//                    range: span_to_range(node.span()),
+//                    severity: Some(DiagnosticSeverity::ERROR),
+//                    code: None,
+//                    code_description: None,
+//                    source: Some("virdant".to_string()),
+//                    message: "Syntax error".to_string(),
+//                    related_information: None,
+//                    tags: None,
+//                    data: None,
+//                };
+//
+//                let action = CodeAction {
+//                    title: "Run Test".into(),
+//                    kind: None,
+//                    diagnostics: Some(vec![diagnostic]),
+//                    edit: None,
+//                    command: Some(command),
+//                    is_preferred: Some(true),
+//                    data: None,
+//                    disabled: None,
+//                };
+//
+//                code_actions.push(CodeActionOrCommand::CodeAction(action));
+//            }
+//        }
+//
+//        // Just an example: if the user selected a range called "placeholder"
+//        for diag in &params.context.diagnostics {
+//            if diag.message.contains("placeholder") {
+//                // WorkspaceEdit that replaces the placeholder text
+//            }
+//        }
+//
+//        Ok(Some(actions))
+//    }
 }
 
 impl Backend {
