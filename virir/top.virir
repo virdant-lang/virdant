@@ -1,0 +1,37 @@
+virir {
+    package top {
+        export mod Top {
+            incoming sel : builtin::Bit;
+            incoming inp : builtin::Word[8];
+            outgoing out : builtin::Word[8];
+
+            mod passthrough of passthrough::Passthrough;
+            passthrough.sel := sel;
+            passthrough.inp := inp;
+            out := passthrough.out;
+        }
+    }
+
+    package passthrough {
+        mod Passthrough {
+            incoming sel : builtin::Bit;
+            incoming inp : builtin::Word[8];
+            outgoing out : builtin::Word[8];
+            out := (if sel { inp } else { ((inp : builtin::Word[8]) + inp) } : builtin::Word[8]);
+        }
+    }
+
+    package adder {
+        mod Adder {
+            incoming a : builtin::Word[8];
+            incoming b : builtin::Word[8];
+            outgoing z : builtin::Word[8];
+
+            z := ((a : builtin::Word[8]) && (b : builtin::Word[8]) : builtin::Word[8]);
+        }
+    }
+
+    type builtin::Bit;
+    type builtin::Word[8];
+    type builtin::Clock;
+}

@@ -2,7 +2,7 @@ use super::*;
 use crate::common::BinOp;
 use crate::conversion::convert_virir_to_verilog;
 
-const TEST_VIRIR: &str = include_str!("../top.virir");
+const TEST_VIRIR: &str = include_str!("../../../virir/top.virir");
 
 
 #[test]
