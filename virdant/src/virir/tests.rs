@@ -11,14 +11,14 @@ const TEST_VIRIR: &str = "virir {
             outgoing out : builtin::Word[8];
 
             mod passthrough of top::Passthrough;
-            passthrough.in := in;
+            passthrough.inp := inp;
             out := passthrough.out;
         }
 
         mod Passthrough {
             incoming inp : builtin::Word[8];
             outgoing out : builtin::Word[8];
-            out := (in : builtin::Word[8]);
+            out := (inp : builtin::Word[8]);
         }
     }
 
@@ -41,6 +41,18 @@ fn test_virir() {
     dbg!(&virir);
 
     let verilog = convert_virir_to_verilog(virir);
+
+    let crate::verilog::Element::Submodule(submodule) = &verilog.files[0].modules[0].elements[0] else {
+        panic!("expected converted Top module to start with a submodule instance");
+    };
+    assert_eq!(submodule.name, "passthrough");
+    assert_eq!(
+        submodule.connects,
+        vec![
+            ("inp".to_string(), "inp".to_string()),
+            ("out".to_string(), "out".to_string()),
+        ]
+    );
 
     println!("{verilog:#?}");
     verilog.write_to_stdout().unwrap();

@@ -54,6 +54,7 @@ pub struct ModDef {
     pub region: Region,
     pub name: String,
     pub ports: Vec<Port>,
+    pub instances: Vec<Instance>,
     pub drivers: Vec<Driver>,
 }
 
@@ -63,6 +64,13 @@ pub struct Port {
     pub name: String,
     pub dir: PortDir,
     pub width: Width,
+}
+
+#[derive(Debug)]
+pub struct Instance {
+    pub region: Region,
+    pub name: String,
+    pub module_path: String,
 }
 
 #[derive(Debug)]
@@ -250,6 +258,15 @@ fn build_module(
         .iter()
         .map(|instance| (instance.name.clone(), instance.module_path.clone()))
         .collect();
+    let instances = mod_def
+        .instances
+        .iter()
+        .map(|instance| Instance {
+            region: dummy_region(),
+            name: instance.name.clone(),
+            module_path: instance.module_path.clone(),
+        })
+        .collect();
 
     let drivers = mod_def
         .drivers
@@ -290,6 +307,7 @@ fn build_module(
                 width: port.typ.width(),
             })
             .collect(),
+        instances,
         drivers,
     }
 }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::verilog;
 use crate::virir;
 
@@ -17,49 +19,72 @@ pub fn convert_virir_to_verilog(virir: virir::VirIr) -> verilog::Verilog {
 
 fn convert_package(package_index: usize, package: virir::Package) -> verilog::VerilogFile {
     let file_stem = package_file_stem(package_index, &package);
-    let item_count = package.items.len();
 
     verilog::VerilogFile {
         name: format!("{file_stem}.v"),
-        modules: package
-            .items
-            .into_iter()
-            .enumerate()
-            .map(|(item_index, item)| convert_item(&file_stem, item_index, item_count, item))
-            .collect(),
+        modules: package.items.into_iter().map(convert_item).collect(),
     }
 }
 
-fn convert_item(
-    file_stem: &str,
-    item_index: usize,
-    item_count: usize,
-    item: virir::Item,
-) -> verilog::Module {
+fn convert_item(item: virir::Item) -> verilog::Module {
     match item {
-        virir::Item::ModDef(mod_def) => convert_mod_def(file_stem, item_index, item_count, mod_def),
+        virir::Item::ModDef(mod_def) => convert_mod_def(mod_def),
     }
 }
 
-fn convert_mod_def(
-    file_stem: &str,
-    item_index: usize,
-    item_count: usize,
-    mod_def: virir::ModDef,
-) -> verilog::Module {
-    // VirIr does not currently retain the module's source name, so we derive a
-    // plausible Verilog module name from the package/file stem.
-    let base_name = default_module_name(file_stem);
-    let name = if item_count == 1 {
-        base_name
-    } else {
-        format!("{base_name}{}", item_index + 1)
-    };
+fn convert_mod_def(mod_def: virir::ModDef) -> verilog::Module {
+    let mut connects_by_instance: HashMap<String, Vec<(String, String)>> = mod_def
+        .instances
+        .iter()
+        .map(|instance| (instance.name.clone(), vec![]))
+        .collect();
+    let mut ordinary_drivers = vec![];
+
+    for driver in mod_def.drivers {
+        if let Some((instance_name, port_name)) = split_instance_path(&driver.path) {
+            if let Some(connects) = connects_by_instance.get_mut(instance_name) {
+                connects.push((
+                    valid_verilog_name(port_name),
+                    convert_connect_expr(driver.expr.as_ref()),
+                ));
+                continue;
+            }
+        }
+
+        if let virir::expr::Expr::Reference(reference) = driver.expr.as_ref() {
+            if let Some((instance_name, port_name)) = split_instance_path(&reference.path) {
+                if let Some(connects) = connects_by_instance.get_mut(instance_name) {
+                    connects.push((
+                        valid_verilog_name(port_name),
+                        valid_verilog_name(&driver.path),
+                    ));
+                    continue;
+                }
+            }
+        }
+
+        ordinary_drivers.push(driver);
+    }
+
+    let mut elements: Vec<verilog::Element> = mod_def
+        .instances
+        .into_iter()
+        .map(|instance| {
+            let submodule_name = instance_module_name(&instance.module_path);
+            let connects = connects_by_instance.remove(&instance.name).unwrap_or_default();
+            verilog::Element::Submodule(verilog::Submodule {
+                name: valid_verilog_name(&instance.name),
+                submodule_name: valid_verilog_name(&submodule_name),
+                connects,
+            })
+        })
+        .collect();
+    elements.extend(ordinary_drivers.into_iter().map(convert_driver));
 
     verilog::Module {
-        name: valid_verilog_name(&name),
+        name: valid_verilog_name(&mod_def.name),
         ports: mod_def.ports.into_iter().map(convert_port).collect(),
-        elements: mod_def.drivers.into_iter().map(convert_driver).collect(),
+        elements,
     }
 }
 
@@ -78,6 +103,35 @@ fn convert_driver(driver: virir::Driver) -> verilog::Element {
         name,
         expr: convert_expr(driver.expr.as_ref()),
     })
+}
+
+fn convert_connect_expr(expr: &virir::expr::Expr) -> String {
+    match expr {
+        virir::expr::Expr::Reference(reference) => valid_verilog_name(&reference.path),
+        virir::expr::Expr::Literal(bit_lit) => {
+            if bit_lit.value() { "1'h1" } else { "1'h0" }.to_string()
+        }
+        virir::expr::Expr::BinOp(_) => {
+            panic!("VirIr::BinOp cannot yet be used as a submodule connection")
+        }
+    }
+}
+
+fn split_instance_path(path: &str) -> Option<(&str, &str)> {
+    let (instance_name, port_name) = path.split_once('.')?;
+    if port_name.contains('.') {
+        None
+    } else {
+        Some((instance_name, port_name))
+    }
+}
+
+fn instance_module_name(module_path: &str) -> String {
+    module_path
+        .rsplit("::")
+        .next()
+        .unwrap_or(module_path)
+        .to_string()
 }
 
 const VERILOG_KEYWORDS: &[&str] = &[
@@ -158,21 +212,4 @@ fn item_package_name(item: &virir::Item) -> String {
 
 fn normalize_name(name: &str) -> String {
     name.replace("::", "_").replace('-', "_")
-}
-
-fn default_module_name(file_stem: &str) -> String {
-    let mut module_name = String::new();
-    for part in file_stem.split('_').filter(|part| !part.is_empty()) {
-        let mut chars = part.chars();
-        if let Some(ch) = chars.next() {
-            module_name.extend(ch.to_uppercase());
-            module_name.push_str(chars.as_str());
-        }
-    }
-
-    if module_name.is_empty() {
-        "Top".to_string()
-    } else {
-        module_name
-    }
 }
