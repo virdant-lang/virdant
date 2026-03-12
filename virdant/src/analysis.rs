@@ -9,11 +9,20 @@ use crate::syntax::parsing::Parsing;
 use crate::syntax::parsing::parse;
 use crate::syntax::payload::AstNodePayload;
 
-#[derive(Debug)]
 pub struct PackageAnalysis<'p> {
     parsing: &'p Parsing,
     imports: Vec<PackageFqn>,
     items: HashMap<BString, Vec<AstNodeId>>,
+}
+
+impl<'p> std::fmt::Debug for PackageAnalysis<'p> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PackageAnalysis")
+            .field("parsing", &"[Parsing]")
+            .field("imports", &self.imports)
+            .field("items", &self.items)
+            .finish()
+    }
 }
 
 impl<'p> PackageAnalysis<'p> {
