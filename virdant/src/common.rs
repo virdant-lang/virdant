@@ -1,3 +1,7 @@
+pub mod math;
+pub mod graph;
+pub mod union;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ComponentClass {
     Port,
