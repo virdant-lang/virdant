@@ -19,6 +19,7 @@ fn test_conversion() {
         packages: vec![Package {
             items: vec![Item::ModDef(ModDef {
                 region: region.clone(),
+                name: "Dummy".to_string(),
                 ports: vec![
                     Port {
                         region: region.clone(),
