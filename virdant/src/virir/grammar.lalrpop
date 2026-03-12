@@ -1,9 +1,10 @@
 // REVIEW Don't use module renames in Rust. Use fully-qualified names instead.
+
 use crate::common::{BinOp as CommonBinOp, PortDir};
 use super::parse::{Driver, Expr, Instance, ModDef, ModStmt, Package, Port, Type};
 use super::{VirIr, build_mod_def, build_virir, join_path};
 
-grammar();
+grammar;
 
 pub VirIr: VirIr = {
     "virir" "{" <packages:PackageDecl*> <types:TypeDecl*> "}" => build_virir(packages, types),
@@ -111,4 +112,11 @@ Ident: String = {
 
 Nat: u16 = {
     <digits:r"[0-9]+"> => digits.parse().unwrap(),
+}
+
+match {
+    r"[ \t\r\n\f]+" => { },
+    r"//[^\n\r]*[\n\r]*" => { },
+    r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => { },
+    _
 }

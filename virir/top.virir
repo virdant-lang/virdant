@@ -1,10 +1,12 @@
 virir {
+    // top-level package used by the virir parser test
     package top {
         export mod Top {
-            incoming sel : builtin::Bit;
+            incoming sel : builtin::Bit; // select input
             incoming inp : builtin::Word[8];
             outgoing out : builtin::Word[8];
 
+            /* passthrough instance wiring */
             mod passthrough of passthrough::Passthrough;
             passthrough.sel := sel;
             passthrough.inp := inp;
@@ -12,6 +14,7 @@ virir {
         }
     }
 
+    /* package with an if-expression driver */
     package passthrough {
         mod Passthrough {
             incoming sel : builtin::Bit;
