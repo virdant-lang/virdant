@@ -3,6 +3,9 @@ use std::sync::Arc;
 
 use bstr::BString;
 
+use crate::diagnostics;
+use crate::diagnostics::Diagnostic;
+use crate::source::Region;
 use crate::syntax::parsing::Parsing;
 use crate::syntax::parsing::parse;
 use crate::source::Source;
@@ -73,6 +76,20 @@ impl Vir {
             self.parse(&package);
         }
     }
+
+    pub fn diagnostics(&self) -> Vec<Diagnostic> {
+        let mut diagnostics = vec![];
+        for parsing in self.parsings.values() {
+            for error in parsing.errors() {
+                let region = Region::new(parsing.package(), error.span());
+                let diagnostic = diagnostics::ParseError {
+                    region,
+                };
+                diagnostics.push(diagnostic.into());
+            }
+        }
+        diagnostics
+    }
 }
 
 impl std::fmt::Debug for Vir {
@@ -103,9 +120,11 @@ fn test_vir() {
     let mut vir = Vir::new();
 
     vir.add_package("top");
-    vir.add_package_from_file(EXAMPLES_DIR.join("basic.vir"));
+    vir.add_package_from_file(EXAMPLES_DIR.join("broken.vir"));
 
     vir.parse_all();
+
+    dbg!(vir.diagnostics());
 
     dbg!(&vir);
 }
