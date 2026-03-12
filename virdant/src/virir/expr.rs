@@ -6,7 +6,8 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub enum Expr {
     Reference(Reference),
-    Literal(BitLit),
+    BitLit(BitLit),
+    WordLit(WordLit),
     BinOp(BinOp),
     If(If),
 }
@@ -29,8 +30,7 @@ pub struct BitLit {
 pub struct WordLit {
     pub region: Region,
     pub typ: TypeId,
-    pub value: bool,
-    pub width: Width,
+    pub value: u64,
 }
 
 #[derive(Debug)]

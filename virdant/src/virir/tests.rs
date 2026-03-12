@@ -33,6 +33,31 @@ fn test_virir() {
     };
     assert_eq!(binop.op, BinOp::Add);
 
+    let storage_virir = parse(
+        r#"virir {
+            package storage {
+                mod Storage {
+                    wire ready : builtin::Bit;
+                    reg data : builtin::Word[8];
+                }
+            }
+
+            type builtin::Bit;
+            type builtin::Word[8];
+            type builtin::Clock;
+        }"#,
+    )
+    .unwrap();
+    let Item::ModDef(storage) = &storage_virir.packages[0].items[0] else {
+        panic!("expected first storage item to be a module");
+    };
+    let wire = &storage.wires[0];
+    assert_eq!(wire.name, "ready");
+    assert_eq!(wire.typ, TypeId::new(0));
+    let reg = &storage.regs[0];
+    assert_eq!(reg.name, "data");
+    assert_eq!(reg.typ, TypeId::new(1));
+
     let verilog = convert_virir_to_verilog(virir);
 
     println!("{verilog:#?}");

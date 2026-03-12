@@ -37,6 +37,8 @@ fn test_conversion() {
                             width: 8,
                         },
                     ],
+                    wires: vec![],
+                    regs: vec![],
                     instances: vec![Instance {
                         region: region.clone(),
                         name: "passthrough".to_string(),
@@ -81,6 +83,8 @@ fn test_conversion() {
                             width: 8,
                         },
                     ],
+                    wires: vec![],
+                    regs: vec![],
                     instances: vec![],
                     drivers: vec![Driver {
                         region: region.clone(),

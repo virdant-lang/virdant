@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::common;
+use crate::common::Radix;
 use crate::verilog;
 use crate::virir;
 
@@ -10,12 +11,13 @@ mod tests;
 /// Converts a parsed VirIr program into its Verilog representation.
 pub fn convert_virir_to_verilog(virir: virir::VirIr) -> verilog::Verilog {
     let emitted_module_names = collect_emitted_module_names(&virir);
+    let type_widths = collect_type_widths(&virir);
 
     verilog::Verilog {
         files: virir
             .packages
             .into_iter()
-            .map(|package| convert_package(&emitted_module_names, package))
+            .map(|package| convert_package(&emitted_module_names, &type_widths, package))
             .collect(),
     }
 }
@@ -23,6 +25,7 @@ pub fn convert_virir_to_verilog(virir: virir::VirIr) -> verilog::Verilog {
 /// Converts a single VirIr package into one emitted Verilog file.
 fn convert_package(
     emitted_module_names: &HashMap<String, String>,
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
     package: virir::Package,
 ) -> verilog::VerilogFile {
     let file_stem = package.name;
@@ -33,7 +36,7 @@ fn convert_package(
         modules: package
             .items
             .into_iter()
-            .map(|item| convert_item(emitted_module_names, &package_name, item))
+            .map(|item| convert_item(emitted_module_names, type_widths, &package_name, item))
             .collect(),
     }
 }
@@ -41,13 +44,12 @@ fn convert_package(
 /// Converts one VirIr item within a package into a Verilog module.
 fn convert_item(
     emitted_module_names: &HashMap<String, String>,
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
     package_name: &str,
     item: virir::Item,
 ) -> verilog::Module {
     match item {
-        virir::Item::ModDef(mod_def) => {
-            convert_mod_def(emitted_module_names, package_name, mod_def)
-        }
+        virir::Item::ModDef(mod_def) => convert_mod_def(emitted_module_names, type_widths, package_name, mod_def),
     }
 }
 
@@ -55,6 +57,7 @@ fn convert_item(
 /// REVIEW I don't fully understand what this does.
 fn convert_mod_def(
     emitted_module_names: &HashMap<String, String>,
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
     package_name: &str,
     mod_def: virir::ModDef,
 ) -> verilog::Module {
@@ -66,9 +69,21 @@ fn convert_mod_def(
         .map(|instance| (instance.name.clone(), vec![]))
         .collect();
 
-    let ordinary_drivers = collect_instance_connects(mod_def.drivers, &mut connects_by_instance);
+    let ordinary_drivers = collect_instance_connects(
+        type_widths,
+        mod_def.drivers,
+        &mut connects_by_instance,
+    );
 
     let mut elements: Vec<verilog::Element> = mod_def
+        .wires
+        .into_iter()
+        .map(|wire| convert_wire(type_widths, wire))
+        .collect();
+
+    elements.extend(mod_def.regs.into_iter().map(|reg| convert_reg(type_widths, reg)));
+
+    elements.extend(mod_def
         .instances
         .into_iter()
         .map(|instance| {
@@ -84,9 +99,13 @@ fn convert_mod_def(
                 connects,
             })
         })
-        .collect();
+        .collect::<Vec<_>>());
 
-    elements.extend(ordinary_drivers.into_iter().map(convert_driver));
+    elements.extend(
+        ordinary_drivers
+            .into_iter()
+            .map(|driver| convert_driver(type_widths, driver)),
+    );
 
     verilog::Module {
         name: module_name,
@@ -118,6 +137,21 @@ fn collect_emitted_module_names(virir: &virir::VirIr) -> HashMap<String, String>
     emitted_module_names
 }
 
+fn collect_type_widths(virir: &virir::VirIr) -> HashMap<virir::TypeId, virir::Width> {
+    virir
+        .types
+        .iter()
+        .enumerate()
+        .map(|(i, typ)| {
+            let width = match typ.as_ref() {
+                virir::typ::Type::Bit | virir::typ::Type::Clock => 1,
+                virir::typ::Type::Word(width) => *width,
+            };
+            (virir::TypeId::new(i.try_into().unwrap()), width)
+        })
+        .collect()
+}
+
 /// Returns the emitted Verilog name for a package-qualified VirIr module path.
 fn emitted_module_name_for_path(
     emitted_module_names: &HashMap<String, String>,
@@ -144,6 +178,7 @@ fn emitted_module_name(
 /// Collects submodule port connections from drivers and returns the remaining ordinary drivers.
 /// REVIEW I don't fully understand what this does.
 fn collect_instance_connects(
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
     drivers: Vec<virir::Driver>,
     connects_by_instance: &mut HashMap<String, Vec<(String, String)>>,
 ) -> Vec<virir::Driver> {
@@ -153,7 +188,7 @@ fn collect_instance_connects(
         if let Some((instance_name, port_name)) = split_instance_path(&driver.path) {
             if let Some(connects) = connects_by_instance.get_mut(instance_name) {
                 let verilog_name = exact_verilog_name(port_name);
-                let expr = convert_connect_expr(driver.expr.as_ref());
+                let expr = convert_connect_expr(type_widths, driver.expr.as_ref());
                 connects.push((verilog_name, expr));
                 continue;
             }
@@ -187,33 +222,67 @@ fn convert_port(port: &virir::Port) -> verilog::Port {
     }
 }
 
+fn convert_wire(
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
+    wire: virir::Wire,
+) -> verilog::Element {
+    verilog::Element::Wire(verilog::Wire {
+        name: exact_verilog_name(&wire.name),
+        width: type_widths[&wire.typ] as u64,
+        expr: None,
+    })
+}
+
+fn convert_reg(
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
+    reg: virir::Reg,
+) -> verilog::Element {
+    verilog::Element::Reg(verilog::Reg {
+        name: exact_verilog_name(&reg.name),
+        width: type_widths[&reg.typ] as u64,
+        expr: None,
+    })
+}
+
 /// Converts a VirIr driver into a Verilog continuous assignment.
-fn convert_driver(driver: virir::Driver) -> verilog::Element {
+fn convert_driver(
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
+    driver: virir::Driver,
+) -> verilog::Element {
     let name = valid_verilog_name(&driver.path);
     verilog::Element::Assign(verilog::Assign {
         name,
-        expr: convert_expr(driver.expr.as_ref()),
+        expr: convert_expr(type_widths, driver.expr.as_ref()),
     })
 }
 
 /// Converts an expression used in a submodule connection into Verilog source text.
-fn convert_connect_expr(expr: &virir::expr::Expr) -> String {
+fn convert_connect_expr(
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
+    expr: &virir::expr::Expr,
+) -> String {
     match expr {
         virir::expr::Expr::Reference(reference) => valid_verilog_name(&reference.path),
-        virir::expr::Expr::Literal(bit_lit) => {
+        virir::expr::Expr::WordLit(word_lit) => {
+            let width = type_widths[&word_lit.typ];
+            dbg!(&type_widths);
+            panic!();
+            format!("{width}'d{}", word_lit.value)
+        }
+        virir::expr::Expr::BitLit(bit_lit) => {
             if bit_lit.value() { "1'h1" } else { "1'h0" }.to_string()
         }
         virir::expr::Expr::BinOp(binop) => format!(
             "({} {} {})",
-            convert_connect_expr(binop.lhs.as_ref()),
+            convert_connect_expr(type_widths, binop.lhs.as_ref()),
             convert_connect_binop(binop.op),
-            convert_connect_expr(binop.rhs.as_ref())
+            convert_connect_expr(type_widths, binop.rhs.as_ref())
         ),
         virir::expr::Expr::If(expr_if) => format!(
             "({} ? {} : {})",
-            convert_connect_expr(expr_if.cond.as_ref()),
-            convert_connect_expr(expr_if.then_expr.as_ref()),
-            convert_connect_expr(expr_if.else_expr.as_ref())
+            convert_connect_expr(type_widths, expr_if.cond.as_ref()),
+            convert_connect_expr(type_widths, expr_if.then_expr.as_ref()),
+            convert_connect_expr(type_widths, expr_if.else_expr.as_ref())
         ),
     }
 }
@@ -322,7 +391,10 @@ fn convert_binop(op: common::BinOp) -> verilog::BinOp {
 }
 
 /// Converts a general VirIr expression into the corresponding Verilog expression node.
-fn convert_expr(expr: &virir::expr::Expr) -> verilog::Expr {
+fn convert_expr(
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
+    expr: &virir::expr::Expr,
+) -> verilog::Expr {
     match expr {
         virir::expr::Expr::Reference(reference) => {
             let name = valid_verilog_name(&reference.path);
@@ -331,20 +403,28 @@ fn convert_expr(expr: &virir::expr::Expr) -> verilog::Expr {
                 name,
             })
         }
-        virir::expr::Expr::Literal(bit_lit) => {
+        virir::expr::Expr::WordLit(wordlit) => {
+            let width = type_widths[&wordlit.typ];
+            verilog::Expr::WordLit(verilog::expr::WordLit {
+                value: wordlit.value.into(),
+                width,
+                radix: Radix::Dec,
+            })
+        }
+        virir::expr::Expr::BitLit(bit_lit) => {
             verilog::Expr::BitLit(verilog::expr::BitLit {
                 value: bit_lit.value(),
             })
         }
         virir::expr::Expr::BinOp(binop) => verilog::Expr::BinOp(verilog::expr::BinOp {
             op: convert_binop(binop.op),
-            lhs: Box::new(convert_expr(binop.lhs.as_ref())),
-            rhs: Box::new(convert_expr(binop.rhs.as_ref())),
+            lhs: Box::new(convert_expr(type_widths, binop.lhs.as_ref())),
+            rhs: Box::new(convert_expr(type_widths, binop.rhs.as_ref())),
         }),
         virir::expr::Expr::If(expr_if) => verilog::Expr::If(verilog::expr::If {
-            cond: Box::new(convert_expr(expr_if.cond.as_ref())),
-            then_expr: Box::new(convert_expr(expr_if.then_expr.as_ref())),
-            else_expr: Box::new(convert_expr(expr_if.else_expr.as_ref())),
+            cond: Box::new(convert_expr(type_widths, expr_if.cond.as_ref())),
+            then_expr: Box::new(convert_expr(type_widths, expr_if.then_expr.as_ref())),
+            else_expr: Box::new(convert_expr(type_widths, expr_if.else_expr.as_ref())),
         }),
     }
 }

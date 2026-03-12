@@ -16,7 +16,7 @@ use crate::fqn::PackageFqn;
 use crate::source::{LineCol, Span};
 use crate::source::Region;
 
-use crate::virir::expr::{BinOp as VirIrBinOp, Expr, If as VirIrIf, Reference};
+use crate::virir::expr::{BinOp as VirIrBinOp, Expr, If as VirIrIf, Reference, WordLit};
 use crate::virir::typ::Type;
 
 pub type Width = u16;
@@ -58,6 +58,8 @@ pub struct ModDef {
     pub is_export: bool,
     pub name: String,
     pub ports: Vec<Port>,
+    pub wires: Vec<Wire>,
+    pub regs: Vec<Reg>,
     pub instances: Vec<Instance>,
     pub drivers: Vec<Driver>,
 }
@@ -68,6 +70,20 @@ pub struct Port {
     pub name: String,
     pub dir: PortDir,
     pub width: Width,
+}
+
+#[derive(Debug)]
+pub struct Wire {
+    pub region: Region,
+    pub typ: TypeId,
+    pub name: String,
+}
+
+#[derive(Debug)]
+pub struct Reg {
+    pub region: Region,
+    pub typ: TypeId,
+    pub name: String,
 }
 
 #[derive(Debug)]
@@ -93,12 +109,16 @@ fn dummy_region() -> Region {
 
 fn build_mod_def(is_export: bool, name: String, stmts: Vec<parse::ModStmt>) -> parse::ModDef {
     let mut ports = vec![];
+    let mut wires = vec![];
+    let mut regs = vec![];
     let mut instances = vec![];
     let mut drivers = vec![];
 
     for stmt in stmts {
         match stmt {
             parse::ModStmt::Port(port) => ports.push(port),
+            parse::ModStmt::Wire(wire) => wires.push(wire),
+            parse::ModStmt::Reg(reg) => regs.push(reg),
             parse::ModStmt::Instance(instance) => instances.push(instance),
             parse::ModStmt::Driver(driver) => drivers.push(driver),
         }
@@ -108,6 +128,8 @@ fn build_mod_def(is_export: bool, name: String, stmts: Vec<parse::ModStmt>) -> p
         is_export,
         name,
         ports,
+        wires,
+        regs,
         instances,
         drivers,
     }
@@ -185,10 +207,12 @@ fn build_module(
     type_ids: &HashMap<String, TypeId>,
     module_signatures: &HashMap<String, HashMap<String, TypeId>>,
 ) -> ModDef {
-    let local_port_types: HashMap<String, TypeId> = mod_def
+    let local_types: HashMap<String, TypeId> = mod_def
         .ports
         .iter()
         .map(|port| (port.name.clone(), lookup_type_id(&port.typ, type_ids)))
+        .chain(mod_def.wires.iter().map(|wire| (wire.name.clone(), lookup_type_id(&wire.typ, type_ids))))
+        .chain(mod_def.regs.iter().map(|reg| (reg.name.clone(), lookup_type_id(&reg.typ, type_ids))))
         .collect();
 
     let instance_types: HashMap<String, String> = mod_def
@@ -206,13 +230,33 @@ fn build_module(
         })
         .collect();
 
+    let wires = mod_def
+        .wires
+        .into_iter()
+        .map(|wire| Wire {
+            region: dummy_region(),
+            typ: lookup_type_id(&wire.typ, type_ids),
+            name: wire.name,
+        })
+        .collect();
+
+    let regs = mod_def
+        .regs
+        .into_iter()
+        .map(|reg| Reg {
+            region: dummy_region(),
+            typ: lookup_type_id(&reg.typ, type_ids),
+            name: reg.name,
+        })
+        .collect();
+
     let drivers = mod_def
         .drivers
         .into_iter()
         .map(|driver| {
             let expected_type = resolve_path_type(
                 &driver.name,
-                &local_port_types,
+                &local_types,
                 &instance_types,
                 module_signatures,
             );
@@ -224,7 +268,7 @@ fn build_module(
                     driver.expr,
                     expected_type,
                     type_ids,
-                    &local_port_types,
+                    &local_types,
                     &instance_types,
                     module_signatures,
                 )),
@@ -246,6 +290,8 @@ fn build_module(
                 width: port.typ.width(),
             })
             .collect(),
+        wires,
+        regs,
         instances,
         drivers,
     }
@@ -255,7 +301,7 @@ fn build_expr(
     expr: parse::Expr,
     expected_type: Option<TypeId>,
     type_ids: &HashMap<String, TypeId>,
-    local_port_types: &HashMap<String, TypeId>,
+    local_types: &HashMap<String, TypeId>,
     instance_types: &HashMap<String, String>,
     module_signatures: &HashMap<String, HashMap<String, TypeId>>,
 ) -> Expr {
@@ -263,7 +309,7 @@ fn build_expr(
         parse::Expr::Reference { path, typ } => {
             let typ = typ
                 .map(|typ| lookup_type_id(&typ, type_ids))
-                .or_else(|| resolve_path_type(&path, local_port_types, instance_types, module_signatures))
+                .or_else(|| resolve_path_type(&path, local_types, instance_types, module_signatures))
                 .or(expected_type)
                 .unwrap_or(TypeId::new(0));
 
@@ -273,12 +319,23 @@ fn build_expr(
                 path,
             })
         }
+        parse::Expr::WordLit { value, typ } => {
+            let typ = Some(typ)
+                .map(|typ| lookup_type_id(&typ, type_ids))
+                .or(expected_type)
+                .unwrap_or(TypeId::new(0));
+            Expr::WordLit(WordLit {
+                region: dummy_region(),
+                value: value,
+                typ,
+            })
+        }
         parse::Expr::BinOp { lhs, op, rhs } => {
             let lhs = Arc::new(build_expr(
                 *lhs,
                 None,
                 type_ids,
-                local_port_types,
+                local_types,
                 instance_types,
                 module_signatures,
             ));
@@ -286,7 +343,7 @@ fn build_expr(
                 *rhs,
                 None,
                 type_ids,
-                local_port_types,
+                local_types,
                 instance_types,
                 module_signatures,
             ));
@@ -314,7 +371,7 @@ fn build_expr(
                 *cond,
                 Some(lookup_type_id(&parse::Type::Bit, type_ids)),
                 type_ids,
-                local_port_types,
+                local_types,
                 instance_types,
                 module_signatures,
             ));
@@ -322,7 +379,7 @@ fn build_expr(
                 *then_expr,
                 branch_expected_type,
                 type_ids,
-                local_port_types,
+                local_types,
                 instance_types,
                 module_signatures,
             ));
@@ -330,7 +387,7 @@ fn build_expr(
                 *else_expr,
                 branch_expected_type,
                 type_ids,
-                local_port_types,
+                local_types,
                 instance_types,
                 module_signatures,
             ));
@@ -378,7 +435,8 @@ fn infer_if_type(expected_type: Option<TypeId>, then_expr: &Expr, else_expr: &Ex
 fn expr_type_id(expr: &Expr) -> Option<TypeId> {
     match expr {
         Expr::Reference(reference) => Some(reference.typ),
-        Expr::Literal(bit_lit) => Some(bit_lit.typ),
+        Expr::WordLit(word_lit) => Some(word_lit.typ),
+        Expr::BitLit(bit_lit) => Some(bit_lit.typ),
         Expr::BinOp(binop) => Some(binop.typ),
         Expr::If(expr_if) => Some(expr_if.typ),
     }
@@ -392,11 +450,11 @@ fn lookup_type_id(typ: &parse::Type, type_ids: &HashMap<String, TypeId>) -> Type
 
 fn resolve_path_type(
     path: &str,
-    local_port_types: &HashMap<String, TypeId>,
+    local_types: &HashMap<String, TypeId>,
     instance_types: &HashMap<String, String>,
     module_signatures: &HashMap<String, HashMap<String, TypeId>>,
 ) -> Option<TypeId> {
-    if let Some(typ) = local_port_types.get(path) {
+    if let Some(typ) = local_types.get(path) {
         return Some(*typ);
     }
 

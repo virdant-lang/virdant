@@ -1,7 +1,6 @@
-// REVIEW Don't use module renames in Rust. Use fully-qualified names instead.
-
 use crate::common::{BinOp as CommonBinOp, PortDir};
-use super::parse::{Driver, Expr, Instance, ModDef, ModStmt, Package, Port, Type};
+use super::parse::{Driver, Expr, Instance, ModDef, ModStmt, Package, Port, Reg, Type, Wire};
+// REVIEW Inline all of these functions into grammar.lalrpop.
 use super::{VirIr, build_mod_def, build_virir, join_path};
 
 grammar;
@@ -22,6 +21,12 @@ ModStmt: ModStmt = {
     <port:PortDecl> => ModStmt::Port(port),
     <instance:InstanceDecl> => ModStmt::Instance(instance),
     <driver:DriverDecl> => ModStmt::Driver(driver),
+    "wire" <name:Ident> ":" <typ:VirType> ";" => {
+        ModStmt::Wire(Wire { name, typ })
+    },
+    "reg" <name:Ident> ":" <typ:VirType> ";" => {
+        ModStmt::Reg(Reg { name, typ })
+    },
 }
 
 PortDecl: Port = {
@@ -34,6 +39,7 @@ InstanceDecl: Instance = {
 }
 
 DriverDecl: Driver = {
+    <name:Path> "<=" <expr:ExprNode> ";" => Driver { name, expr }, // TODO distinguish between the two drivers
     <name:Path> ":=" <expr:ExprNode> ";" => Driver { name, expr },
 }
 
@@ -71,6 +77,12 @@ ExprPrimary: Expr = {
     },
     "(" <path:Path> ":" <typ:VirType> ")" => Expr::Reference { path, typ: Some(typ) },
     "(" <expr:ExprNode> ")" => expr,
+    "(" <value:Nat> ":" <typ:VirType> ")" => {
+        Expr::WordLit {
+            value: value.try_into().unwrap(),
+            typ,
+        }
+    },
     <path:Path> => Expr::Reference { path, typ: None },
 }
 

@@ -1,3 +1,4 @@
+use super::Width;
 use crate::common::{BinOp, PortDir};
 
 use super::typ::Type as VirIrType;
@@ -43,6 +44,8 @@ pub(super) struct ModDef {
     pub(super) is_export: bool,
     pub(super) name: String,
     pub(super) ports: Vec<Port>,
+    pub(super) wires: Vec<Wire>,
+    pub(super) regs: Vec<Reg>,
     pub(super) instances: Vec<Instance>,
     pub(super) drivers: Vec<Driver>,
 }
@@ -50,6 +53,16 @@ pub(super) struct ModDef {
 pub(super) struct Port {
     pub(super) name: String,
     pub(super) dir: PortDir,
+    pub(super) typ: Type,
+}
+
+pub(super) struct Wire {
+    pub(super) name: String,
+    pub(super) typ: Type,
+}
+
+pub(super) struct Reg {
+    pub(super) name: String,
     pub(super) typ: Type,
 }
 
@@ -68,6 +81,10 @@ pub(super) enum Expr {
         path: String,
         typ: Option<Type>,
     },
+    WordLit {
+        value: u64,
+        typ: Type,
+    },
     BinOp {
         lhs: Box<Expr>,
         op: BinOp,
@@ -83,6 +100,8 @@ pub(super) enum Expr {
 
 pub(super) enum ModStmt {
     Port(Port),
+    Wire(Wire),
+    Reg(Reg),
     Instance(Instance),
     Driver(Driver),
 }
