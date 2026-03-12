@@ -1,5 +1,6 @@
 // REVIEW Don't use module renames in Rust. Use fully-qualified names instead.
 use crate::common::{BinOp as CommonBinOp, PortDir};
+// REVIEW These should all be renamed, removing the Parsed prefix.
 use crate::virir::{ParsedDriver, ParsedExpr, ParsedInstance, ParsedModDef, ParsedModStmt, ParsedPackage, ParsedPort, ParsedType, VirIr, build_mod_def, build_virir, join_path};
 
 grammar();
@@ -55,6 +56,18 @@ ExprNode: ParsedExpr = {
 }
 
 ExprPrimary: ParsedExpr = {
+    "(" "if" <cond:ExprNode> "{" <then_expr:ExprNode> "}" "else" "{" <else_expr:ExprNode> "}" ":" <typ:VirType> ")" => ParsedExpr::If {
+        cond: Box::new(cond),
+        then_expr: Box::new(then_expr),
+        else_expr: Box::new(else_expr),
+        typ: Some(typ),
+    },
+    "(" "if" <cond:ExprNode> "{" <then_expr:ExprNode> "}" "else" "{" <else_expr:ExprNode> "}" ")" => ParsedExpr::If {
+        cond: Box::new(cond),
+        then_expr: Box::new(then_expr),
+        else_expr: Box::new(else_expr),
+        typ: None,
+    },
     "(" <path:Path> ":" <typ:VirType> ")" => ParsedExpr::Reference { path, typ: Some(typ) },
     "(" <expr:ExprNode> ")" => expr,
     <path:Path> => ParsedExpr::Reference { path, typ: None },

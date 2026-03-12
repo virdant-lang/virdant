@@ -73,12 +73,14 @@ fn convert_mod_def(
         .into_iter()
         .map(|instance| {
             let connects = connects_by_instance.remove(&instance.name).unwrap_or_default();
+            let name = valid_verilog_name(&instance.name);
+            let submodule_name = emitted_module_name_for_path(
+                emitted_module_names,
+                &instance.module_path,
+            );
             verilog::Element::Submodule(verilog::Submodule {
-                name: valid_verilog_name(&instance.name),
-                submodule_name: emitted_module_name_for_path(
-                    emitted_module_names,
-                    &instance.module_path,
-                ),
+                name,
+                submodule_name,
                 connects,
             })
         })
@@ -207,6 +209,12 @@ fn convert_connect_expr(expr: &virir::expr::Expr) -> String {
             convert_connect_binop(binop.op),
             convert_connect_expr(binop.rhs.as_ref())
         ),
+        virir::expr::Expr::If(expr_if) => format!(
+            "({} ? {} : {})",
+            convert_connect_expr(expr_if.cond.as_ref()),
+            convert_connect_expr(expr_if.then_expr.as_ref()),
+            convert_connect_expr(expr_if.else_expr.as_ref())
+        ),
     }
 }
 
@@ -251,6 +259,7 @@ fn exact_verilog_name(name: &str) -> String {
     verilog_name
 }
 
+#[rustfmt::skip]
 const VERILOG_KEYWORDS: &[&str] = &[
     "always", "and", "assign", "automatic", "begin", "buf", "bufif0", "bufif1", "case",
     "casex", "casez", "cell", "cmos", "config", "deassign", "default", "defparam", "design",
@@ -277,7 +286,7 @@ fn valid_verilog_name(path: &str) -> String {
     if is_simple_verilog_identifier(path) && !VERILOG_KEYWORDS.contains(&path) {
         path.to_string()
     } else {
-        format!(r"\{path} ")
+        format!(r"\{path}")
     }
 }
 
@@ -316,8 +325,10 @@ fn convert_binop(op: common::BinOp) -> verilog::BinOp {
 fn convert_expr(expr: &virir::expr::Expr) -> verilog::Expr {
     match expr {
         virir::expr::Expr::Reference(reference) => {
+            let name = valid_verilog_name(&reference.path);
+            debug_assert!(!name.contains(' '));
             verilog::Expr::Reference(verilog::expr::Reference {
-                name: valid_verilog_name(&reference.path),
+                name,
             })
         }
         virir::expr::Expr::Literal(bit_lit) => {
@@ -329,6 +340,11 @@ fn convert_expr(expr: &virir::expr::Expr) -> verilog::Expr {
             op: convert_binop(binop.op),
             lhs: Box::new(convert_expr(binop.lhs.as_ref())),
             rhs: Box::new(convert_expr(binop.rhs.as_ref())),
+        }),
+        virir::expr::Expr::If(expr_if) => verilog::Expr::If(verilog::expr::If {
+            cond: Box::new(convert_expr(expr_if.cond.as_ref())),
+            then_expr: Box::new(convert_expr(expr_if.then_expr.as_ref())),
+            else_expr: Box::new(convert_expr(expr_if.else_expr.as_ref())),
         }),
     }
 }

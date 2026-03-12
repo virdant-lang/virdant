@@ -14,7 +14,7 @@ use crate::fqn::PackageFqn;
 use crate::source::{LineCol, Span};
 use crate::source::Region;
 
-use crate::virir::expr::{BinOp as VirIrBinOp, Expr, Reference};
+use crate::virir::expr::{BinOp as VirIrBinOp, Expr, If as VirIrIf, Reference};
 use crate::virir::typ::Type;
 
 pub type Width = u16;
@@ -149,6 +149,12 @@ enum ParsedExpr {
         lhs: Box<ParsedExpr>,
         op: crate::common::BinOp,
         rhs: Box<ParsedExpr>,
+    },
+    If {
+        cond: Box<ParsedExpr>,
+        then_expr: Box<ParsedExpr>,
+        else_expr: Box<ParsedExpr>,
+        typ: Option<ParsedType>,
     },
 }
 
@@ -374,6 +380,50 @@ fn build_expr(
                 rhs,
             })
         }
+        ParsedExpr::If {
+            cond,
+            then_expr,
+            else_expr,
+            typ,
+        } => {
+            let branch_expected_type = typ
+                .as_ref()
+                .map(|typ| lookup_type_id(typ, type_ids))
+                .or(expected_type);
+            let cond = Arc::new(build_expr(
+                *cond,
+                Some(lookup_type_id(&ParsedType::Bit, type_ids)),
+                type_ids,
+                local_port_types,
+                instance_types,
+                module_signatures,
+            ));
+            let then_expr = Arc::new(build_expr(
+                *then_expr,
+                branch_expected_type,
+                type_ids,
+                local_port_types,
+                instance_types,
+                module_signatures,
+            ));
+            let else_expr = Arc::new(build_expr(
+                *else_expr,
+                branch_expected_type,
+                type_ids,
+                local_port_types,
+                instance_types,
+                module_signatures,
+            ));
+            let typ = infer_if_type(branch_expected_type, then_expr.as_ref(), else_expr.as_ref());
+
+            Expr::If(VirIrIf {
+                region: dummy_region(),
+                typ,
+                cond,
+                then_expr,
+                else_expr,
+            })
+        }
     }
 }
 
@@ -398,11 +448,19 @@ fn infer_binop_type(
     }
 }
 
+fn infer_if_type(expected_type: Option<TypeId>, then_expr: &Expr, else_expr: &Expr) -> TypeId {
+    expected_type.unwrap_or_else(|| {
+        expr_type_id(then_expr)
+            .unwrap_or_else(|| expr_type_id(else_expr).unwrap_or(TypeId::new(0)))
+    })
+}
+
 fn expr_type_id(expr: &Expr) -> Option<TypeId> {
     match expr {
         Expr::Reference(reference) => Some(reference.typ),
         Expr::Literal(bit_lit) => Some(bit_lit.typ),
         Expr::BinOp(binop) => Some(binop.typ),
+        Expr::If(expr_if) => Some(expr_if.typ),
     }
 }
 
