@@ -1,0 +1,22 @@
+virir {
+    package top {
+        mod Top {
+            incoming inp : builtin::Word[8];
+            outgoing out : builtin::Word[8];
+
+            mod passthrough of top::Passthrough;
+            passthrough.inp := inp;
+            out := passthrough.out;
+        }
+
+        mod Passthrough {
+            incoming inp : builtin::Word[8];
+            outgoing out : builtin::Word[8];
+            out := (inp : builtin::Word[8]);
+        }
+    }
+
+    type builtin::Bit;
+    type builtin::Word[8];
+    type builtin::Clock;
+}
