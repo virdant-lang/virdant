@@ -1,7 +1,7 @@
 // REVIEW Don't use module renames in Rust. Use fully-qualified names instead.
 use crate::common::{BinOp as CommonBinOp, PortDir};
-// REVIEW These should all be renamed, removing the Parsed prefix.
-use crate::virir::{ParsedDriver, ParsedExpr, ParsedInstance, ParsedModDef, ParsedModStmt, ParsedPackage, ParsedPort, ParsedType, VirIr, build_mod_def, build_virir, join_path};
+use super::parse::{Driver, Expr, Instance, ModDef, ModStmt, Package, Port, Type};
+use super::{VirIr, build_mod_def, build_virir, join_path};
 
 grammar();
 
@@ -9,36 +9,36 @@ pub VirIr: VirIr = {
     "virir" "{" <packages:PackageDecl*> <types:TypeDecl*> "}" => build_virir(packages, types),
 }
 
-PackageDecl: ParsedPackage = {
-    "package" <name:Ident> "{" <modules:ModuleDecl*> "}" => ParsedPackage { name, modules },
+PackageDecl: Package = {
+    "package" <name:Ident> "{" <modules:ModuleDecl*> "}" => Package { name, modules },
 }
 
-ModuleDecl: ParsedModDef = {
+ModuleDecl: ModDef = {
     <export:"export"?> "mod" <name:Ident> "{" <stmts:ModStmt*> "}" => build_mod_def(export.is_some(), name, stmts),
 }
 
-ModStmt: ParsedModStmt = {
-    <port:PortDecl> => ParsedModStmt::Port(port),
-    <instance:InstanceDecl> => ParsedModStmt::Instance(instance),
-    <driver:DriverDecl> => ParsedModStmt::Driver(driver),
+ModStmt: ModStmt = {
+    <port:PortDecl> => ModStmt::Port(port),
+    <instance:InstanceDecl> => ModStmt::Instance(instance),
+    <driver:DriverDecl> => ModStmt::Driver(driver),
 }
 
-PortDecl: ParsedPort = {
-    "incoming" <name:Ident> ":" <typ:VirType> ";" => ParsedPort { name, dir: PortDir::Input, typ },
-    "outgoing" <name:Ident> ":" <typ:VirType> ";" => ParsedPort { name, dir: PortDir::Output, typ },
+PortDecl: Port = {
+    "incoming" <name:Ident> ":" <typ:VirType> ";" => Port { name, dir: PortDir::Input, typ },
+    "outgoing" <name:Ident> ":" <typ:VirType> ";" => Port { name, dir: PortDir::Output, typ },
 }
 
-InstanceDecl: ParsedInstance = {
-    "mod" <name:Ident> "of" <module_path:Path> ";" => ParsedInstance { name, module_path },
+InstanceDecl: Instance = {
+    "mod" <name:Ident> "of" <module_path:Path> ";" => Instance { name, module_path },
 }
 
-DriverDecl: ParsedDriver = {
-    <name:Path> ":=" <expr:ExprNode> ";" => ParsedDriver { name, expr },
+DriverDecl: Driver = {
+    <name:Path> ":=" <expr:ExprNode> ";" => Driver { name, expr },
 }
 
-ExprNode: ParsedExpr = {
+ExprNode: Expr = {
     "(" <lhs:ExprNode> <op:BinOp> <rhs:ExprPrimary> ")" => {
-        ParsedExpr::BinOp {
+        Expr::BinOp {
             lhs: Box::new(lhs),
             op,
             rhs: Box::new(rhs),
@@ -46,7 +46,7 @@ ExprNode: ParsedExpr = {
     },
     "(" <lhs:ExprNode> <op:BinOp> <rhs:ExprPrimary> ":" <typ:VirType> ")" => {
         let _ = typ;
-        ParsedExpr::BinOp {
+        Expr::BinOp {
             lhs: Box::new(lhs),
             op,
             rhs: Box::new(rhs),
@@ -55,22 +55,22 @@ ExprNode: ParsedExpr = {
     <expr:ExprPrimary> => expr,
 }
 
-ExprPrimary: ParsedExpr = {
-    "(" "if" <cond:ExprNode> "{" <then_expr:ExprNode> "}" "else" "{" <else_expr:ExprNode> "}" ":" <typ:VirType> ")" => ParsedExpr::If {
+ExprPrimary: Expr = {
+    "(" "if" <cond:ExprNode> "{" <then_expr:ExprNode> "}" "else" "{" <else_expr:ExprNode> "}" ":" <typ:VirType> ")" => Expr::If {
         cond: Box::new(cond),
         then_expr: Box::new(then_expr),
         else_expr: Box::new(else_expr),
         typ: Some(typ),
     },
-    "(" "if" <cond:ExprNode> "{" <then_expr:ExprNode> "}" "else" "{" <else_expr:ExprNode> "}" ")" => ParsedExpr::If {
+    "(" "if" <cond:ExprNode> "{" <then_expr:ExprNode> "}" "else" "{" <else_expr:ExprNode> "}" ")" => Expr::If {
         cond: Box::new(cond),
         then_expr: Box::new(then_expr),
         else_expr: Box::new(else_expr),
         typ: None,
     },
-    "(" <path:Path> ":" <typ:VirType> ")" => ParsedExpr::Reference { path, typ: Some(typ) },
+    "(" <path:Path> ":" <typ:VirType> ")" => Expr::Reference { path, typ: Some(typ) },
     "(" <expr:ExprNode> ")" => expr,
-    <path:Path> => ParsedExpr::Reference { path, typ: None },
+    <path:Path> => Expr::Reference { path, typ: None },
 }
 
 BinOp: CommonBinOp = {
@@ -86,14 +86,14 @@ BinOp: CommonBinOp = {
     "||" => CommonBinOp::Or,
 }
 
-TypeDecl: ParsedType = {
+TypeDecl: Type = {
     "type" <typ:VirType> ";" => typ,
 }
 
-VirType: ParsedType = {
-    "builtin" "::" "Bit" => ParsedType::Bit,
-    "builtin" "::" "Clock" => ParsedType::Clock,
-    "builtin" "::" "Word" "[" <width:Nat> "]" => ParsedType::Word(width),
+VirType: Type = {
+    "builtin" "::" "Bit" => Type::Bit,
+    "builtin" "::" "Clock" => Type::Clock,
+    "builtin" "::" "Word" "[" <width:Nat> "]" => Type::Word(width),
 }
 
 Path: String = {

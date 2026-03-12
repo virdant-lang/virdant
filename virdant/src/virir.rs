@@ -1,6 +1,8 @@
 pub mod expr;
 pub mod typ;
 
+mod parse;
+
 #[cfg(test)]
 pub mod tests;
 
@@ -82,88 +84,6 @@ pub struct Driver {
     pub expr: Arc<Expr>,
 }
 
-#[derive(Clone)]
-enum ParsedType {
-    Bit,
-    Word(u16),
-    Clock,
-}
-
-impl ParsedType {
-    fn key(&self) -> String {
-        match self {
-            ParsedType::Bit => "builtin::Bit".to_string(),
-            ParsedType::Word(width) => format!("builtin::Word[{width}]"),
-            ParsedType::Clock => "builtin::Clock".to_string(),
-        }
-    }
-
-    fn width(&self) -> u16 {
-        match self {
-            ParsedType::Bit | ParsedType::Clock => 1,
-            ParsedType::Word(width) => *width,
-        }
-    }
-
-    fn to_type(&self) -> Type {
-        match self {
-            ParsedType::Bit => Type::Bit,
-            ParsedType::Word(width) => Type::Word(*width),
-            ParsedType::Clock => Type::Clock,
-        }
-    }
-}
-
-struct ParsedPackage {
-    name: String,
-    modules: Vec<ParsedModDef>,
-}
-
-struct ParsedModDef {
-    is_export: bool,
-    name: String,
-    ports: Vec<ParsedPort>,
-    instances: Vec<ParsedInstance>,
-    drivers: Vec<ParsedDriver>,
-}
-
-struct ParsedPort {
-    name: String,
-    dir: PortDir,
-    typ: ParsedType,
-}
-
-struct ParsedInstance {
-    name: String,
-    module_path: String,
-}
-
-struct ParsedDriver {
-    name: String,
-    expr: ParsedExpr,
-}
-
-enum ParsedExpr {
-    Reference { path: String, typ: Option<ParsedType> },
-    BinOp {
-        lhs: Box<ParsedExpr>,
-        op: crate::common::BinOp,
-        rhs: Box<ParsedExpr>,
-    },
-    If {
-        cond: Box<ParsedExpr>,
-        then_expr: Box<ParsedExpr>,
-        else_expr: Box<ParsedExpr>,
-        typ: Option<ParsedType>,
-    },
-}
-
-enum ParsedModStmt {
-    Port(ParsedPort),
-    Instance(ParsedInstance),
-    Driver(ParsedDriver),
-}
-
 fn dummy_region() -> Region {
     Region::new(
         PackageFqn::new("dummy".into()),
@@ -171,20 +91,20 @@ fn dummy_region() -> Region {
     )
 }
 
-fn build_mod_def(is_export: bool, name: String, stmts: Vec<ParsedModStmt>) -> ParsedModDef {
+fn build_mod_def(is_export: bool, name: String, stmts: Vec<parse::ModStmt>) -> parse::ModDef {
     let mut ports = vec![];
     let mut instances = vec![];
     let mut drivers = vec![];
 
     for stmt in stmts {
         match stmt {
-            ParsedModStmt::Port(port) => ports.push(port),
-            ParsedModStmt::Instance(instance) => instances.push(instance),
-            ParsedModStmt::Driver(driver) => drivers.push(driver),
+            parse::ModStmt::Port(port) => ports.push(port),
+            parse::ModStmt::Instance(instance) => instances.push(instance),
+            parse::ModStmt::Driver(driver) => drivers.push(driver),
         }
     }
 
-    ParsedModDef {
+    parse::ModDef {
         is_export,
         name,
         ports,
@@ -201,7 +121,7 @@ fn join_path(head: String, tails: Vec<String>) -> String {
     path
 }
 
-fn build_virir(packages: Vec<ParsedPackage>, parsed_types: Vec<ParsedType>) -> VirIr {
+fn build_virir(packages: Vec<parse::Package>, parsed_types: Vec<parse::Type>) -> VirIr {
     let type_ids: HashMap<String, TypeId> = parsed_types
         .iter()
         .enumerate()
@@ -223,7 +143,7 @@ fn build_virir(packages: Vec<ParsedPackage>, parsed_types: Vec<ParsedType>) -> V
 }
 
 fn build_module_signatures(
-    packages: &[ParsedPackage],
+    packages: &[parse::Package],
     type_ids: &HashMap<String, TypeId>,
 ) -> HashMap<String, HashMap<String, TypeId>> {
     let mut signatures = HashMap::new();
@@ -244,7 +164,7 @@ fn build_module_signatures(
 }
 
 fn build_package(
-    package: ParsedPackage,
+    package: parse::Package,
     type_ids: &HashMap<String, TypeId>,
     module_signatures: &HashMap<String, HashMap<String, TypeId>>,
 ) -> Package {
@@ -261,7 +181,7 @@ fn build_package(
 }
 
 fn build_module(
-    mod_def: ParsedModDef,
+    mod_def: parse::ModDef,
     type_ids: &HashMap<String, TypeId>,
     module_signatures: &HashMap<String, HashMap<String, TypeId>>,
 ) -> ModDef {
@@ -332,7 +252,7 @@ fn build_module(
 }
 
 fn build_expr(
-    expr: ParsedExpr,
+    expr: parse::Expr,
     expected_type: Option<TypeId>,
     type_ids: &HashMap<String, TypeId>,
     local_port_types: &HashMap<String, TypeId>,
@@ -340,7 +260,7 @@ fn build_expr(
     module_signatures: &HashMap<String, HashMap<String, TypeId>>,
 ) -> Expr {
     match expr {
-        ParsedExpr::Reference { path, typ } => {
+        parse::Expr::Reference { path, typ } => {
             let typ = typ
                 .map(|typ| lookup_type_id(&typ, type_ids))
                 .or_else(|| resolve_path_type(&path, local_port_types, instance_types, module_signatures))
@@ -353,7 +273,7 @@ fn build_expr(
                 path,
             })
         }
-        ParsedExpr::BinOp { lhs, op, rhs } => {
+        parse::Expr::BinOp { lhs, op, rhs } => {
             let lhs = Arc::new(build_expr(
                 *lhs,
                 None,
@@ -380,7 +300,7 @@ fn build_expr(
                 rhs,
             })
         }
-        ParsedExpr::If {
+        parse::Expr::If {
             cond,
             then_expr,
             else_expr,
@@ -392,7 +312,7 @@ fn build_expr(
                 .or(expected_type);
             let cond = Arc::new(build_expr(
                 *cond,
-                Some(lookup_type_id(&ParsedType::Bit, type_ids)),
+                Some(lookup_type_id(&parse::Type::Bit, type_ids)),
                 type_ids,
                 local_port_types,
                 instance_types,
@@ -442,7 +362,7 @@ fn infer_binop_type(
         | crate::common::BinOp::Eq
         | crate::common::BinOp::Neq
         | crate::common::BinOp::And
-        | crate::common::BinOp::Or => lookup_type_id(&ParsedType::Bit, type_ids),
+        | crate::common::BinOp::Or => lookup_type_id(&parse::Type::Bit, type_ids),
         crate::common::BinOp::Add | crate::common::BinOp::Sub => expected_type
             .unwrap_or_else(|| expr_type_id(lhs).unwrap_or_else(|| expr_type_id(rhs).unwrap_or(TypeId::new(0)))),
     }
@@ -464,7 +384,7 @@ fn expr_type_id(expr: &Expr) -> Option<TypeId> {
     }
 }
 
-fn lookup_type_id(typ: &ParsedType, type_ids: &HashMap<String, TypeId>) -> TypeId {
+fn lookup_type_id(typ: &parse::Type, type_ids: &HashMap<String, TypeId>) -> TypeId {
     *type_ids
         .get(&typ.key())
         .unwrap_or_else(|| panic!("type not declared at bottom of file: {}", typ.key()))
