@@ -1,5 +1,6 @@
 use bstr::{BStr, BString};
 
+use crate::fqn::PackageFqn;
 use crate::source::{LineCol, Region, Source, SourceOffset, Span};
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
@@ -68,8 +69,6 @@ pub fn parse(source: &Source) -> Parsing {
         }
     }
 
-    parsing.dump();
-
     parsing
 }
 
@@ -84,6 +83,10 @@ impl Parsing {
             num_children: vec![],
             errors: vec![],
         }
+    }
+
+    pub fn package(&self) -> PackageFqn {
+        self.source.package()
     }
 
     pub fn add_node(&mut self, payload: AstNodePayload, span: Span, num_children: u16) -> AstNodeId {
@@ -125,7 +128,12 @@ impl Parsing {
         BStr::new(&self.strings[s.0])
     }
 
-    pub fn ast_node(&self, ast_node_id: AstNodeId) -> AstNode {
+    pub fn root(&self) -> AstNode<'_> {
+        let root_node_id = AstNodeId((self.payloads.len() - 1) as u16);
+        self.ast_node(root_node_id)
+    }
+
+    pub fn ast_node(&self, ast_node_id: AstNodeId) -> AstNode<'_> {
         let payload = self.payloads[ast_node_id.index()].clone();
         let span = self.spans[ast_node_id.index()].clone();
 

@@ -11,3 +11,6 @@ pub mod conversion;
 pub mod verilog;
 
 pub use vir::Vir;
+
+#[cfg(test)]
+pub mod tests;

@@ -5,10 +5,10 @@ use bstr::{BStr, ByteSlice};
 
 use crate::source::{Region, Span};
 use crate::syntax::payload::AstNodePayload;
-use crate::syntax::parsing::Parsing;
+use crate::syntax::parsing::{InternedString, Parsing};
 //use crate::stringtable::{InternedString, StringTable};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AstNodeId(pub u16);
 
 #[derive(Clone)]
@@ -187,6 +187,25 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Ofness(ofness) => format!("Ofness"),
             AstNodePayload::It => format!("It"),
             AstNodePayload::Path => format!("Path"),
+        }
+    }
+
+    pub fn is_item(&self) -> bool {
+        matches!(&self.payload,
+            AstNodePayload::ModDef(_) |
+            AstNodePayload::StructDef(_) |
+            AstNodePayload::UnionDef(_) |
+            AstNodePayload::EnumDef(_) |
+            AstNodePayload::BuiltinDef(_) |
+            AstNodePayload::FnDef(_) |
+            AstNodePayload::SocketDef(_)
+        )
+    }
+
+    pub fn name(&self) -> Option<InternedString> {
+        match &self.payload {
+            AstNodePayload::ModDef(mod_def) => Some(mod_def.name),
+            _ => None,
         }
     }
 }
