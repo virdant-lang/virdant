@@ -1,6 +1,7 @@
 use bstr::BStr;
 use bstr::BString;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::fqn::PackageFqn;
 use crate::syntax::ast::AstNode;
@@ -9,13 +10,13 @@ use crate::syntax::parsing::Parsing;
 use crate::syntax::parsing::parse;
 use crate::syntax::payload::AstNodePayload;
 
-pub struct PackageAnalysis<'p> {
-    parsing: &'p Parsing,
+pub struct PackageAnalysis {
+    parsing: Arc<Parsing>,
     imports: Vec<PackageFqn>,
     items: HashMap<BString, Vec<AstNodeId>>,
 }
 
-impl<'p> std::fmt::Debug for PackageAnalysis<'p> {
+impl std::fmt::Debug for PackageAnalysis {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PackageAnalysis")
             .field("parsing", &"[Parsing]")
@@ -25,16 +26,16 @@ impl<'p> std::fmt::Debug for PackageAnalysis<'p> {
     }
 }
 
-impl<'p> PackageAnalysis<'p> {
-    pub fn new(parsing: &Parsing) -> PackageAnalysis {
+impl PackageAnalysis {
+    pub fn new(parsing: Arc<Parsing>) -> PackageAnalysis {
         let mut analysis = PackageAnalysis {
-            parsing,
+            parsing: parsing.clone(),
             imports: vec![PackageFqn::new("builtin".into())],
             items: HashMap::new(),
         };
 
-        analysis.add_imports(&parsing);
-        analysis.add_items(&parsing);
+        analysis.add_imports();
+        analysis.add_items();
 
         analysis
     }
@@ -56,23 +57,23 @@ impl<'p> PackageAnalysis<'p> {
         None
     }
 
-    fn add_imports(&mut self, parsing: &Parsing) {
-        let root = parsing.root();
+    fn add_imports(&mut self) {
+        let root = self.parsing.root();
         for child_node in root.children() {
             eprintln!("child: {}", child_node.summary());
             if let AstNodePayload::Import(import) = child_node.payload() {
-                let package = PackageFqn::new(parsing.string(import.package).into());
+                let package = PackageFqn::new(self.parsing.string(import.package).into());
                 self.imports.push(package);
             }
         }
     }
 
-    fn add_items(&mut self, parsing: &Parsing) {
-        let root = parsing.root();
+    fn add_items(&mut self) {
+        let root = self.parsing.root();
         for child_node in root.children() {
             eprintln!("child: {}", child_node.summary());
             if child_node.is_item() {
-                let name = parsing.string(child_node.name().unwrap()).to_owned();
+                let name = self.parsing.string(child_node.name().unwrap()).to_owned();
                 if !self.items.contains_key(&name) {
                     self.items.insert(name.clone(), vec![]);
                 }
@@ -91,7 +92,7 @@ fn tests_package_analysis() {
 
     let source = Source::load_file(EXAMPLES_DIR.join("basic.vir"));
     let parsing = parse(&source);
-    let analysis = PackageAnalysis::new(&parsing);
+    let analysis = PackageAnalysis::new(Arc::new(parsing));
 
     dbg!(&analysis);
 
