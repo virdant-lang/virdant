@@ -1,8 +1,11 @@
+use std::os::unix::ffi::OsStrExt;
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
+use virdant::fqn::PackageFqn;
 
 struct Backend {
     client: Client,
@@ -26,7 +29,11 @@ impl Backend {
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+        self.client
+            .log_message(MessageType::ERROR, "Hello from Virdant")
+            .await;
+
         let capabilities = ServerCapabilities {
             text_document_sync: Some(TextDocumentSyncCapability::Kind(
                 TextDocumentSyncKind::FULL,
@@ -63,13 +70,16 @@ impl LanguageServer for Backend {
         self.client
             .log_message(MessageType::INFO, "File opened")
             .await;
-        self.check_document(params.text_document.uri, "TODO".to_string()).await;
+
+        self.check_document(&params.text_document.uri, &params.text_document.text).await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         self.client
             .log_message(MessageType::INFO, "File changed")
             .await;
+
+        self.check_document(&params.text_document.uri, &params.content_changes[0].text).await;
     }
 
     async fn did_save(&self, _: DidSaveTextDocumentParams) {
@@ -113,40 +123,46 @@ impl LanguageServer for Backend {
 }
 
 use tower_lsp::lsp_types::*;
+use virdant::source::Source;
+use virdant::syntax::parsing::{Parsing, parse};
 
 impl Backend {
-    async fn check_document(&self, uri: Url, text: String) {
+    async fn check_document(&self, uri: &Url, text: &str) {
         let mut diagnostics = Vec::new();
 
-        if let Some(pos) = text.find("TODO") {
+        let package = Path::new(uri.path())
+            .file_stem()
+            .map(|stem| PackageFqn::new(stem.as_bytes().into()))
+            .unwrap_or_else(|| PackageFqn::new(uri.path().as_bytes().into()));
+        let source = Source::new(package, text.as_bytes().into());
+        let parsing: Parsing = parse(&source);
+        for error_node in parsing.errors() {
+            let region = error_node.region();
             let diagnostic = Diagnostic {
                 range: Range {
                     start: Position {
-                        line: 0,
-                        character: pos as u32,
+                        line: region.start().line().saturating_sub(1) as u32,
+                        character: region.start().col().saturating_sub(1) as u32,
                     },
                     end: Position {
-                        line: 0,
-                        character: (pos + 4) as u32,
+                        line: region.end().line().saturating_sub(1) as u32,
+                        character: region.end().col().saturating_sub(1) as u32,
                     },
                 },
-                severity: Some(DiagnosticSeverity::WARNING),
+                severity: Some(DiagnosticSeverity::ERROR),
                 code: None,
                 code_description: None,
-                source: Some("mylang".to_string()),
-                message: "Found a TODO".to_string(),
+                source: Some("virdant".to_string()),
+                message: "Syntax error".to_string(),
                 related_information: None,
                 tags: None,
                 data: None,
             };
-
             diagnostics.push(diagnostic);
-        } else {
-            panic!();
         }
 
         self.client
-            .publish_diagnostics(uri, diagnostics, None)
+            .publish_diagnostics(uri.clone(), diagnostics, None)
             .await;
     }
 }
