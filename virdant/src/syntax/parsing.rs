@@ -184,4 +184,8 @@ impl Parsing {
         let node = self.ast_node(ast_node_id);
         node.dump();
     }
+
+    pub fn summary(&self) -> String {
+        format!("[Parsing: \"{}\" with {} nodes and {} errors]", self.source.package(), self.payloads.len(), self.errors.len())
+    }
 }

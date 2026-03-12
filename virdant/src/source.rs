@@ -104,6 +104,23 @@ impl Source {
         let span = Span::new(start_linecol, end_linecol);
         Region::new(self.package.clone(), span)
     }
+
+    pub fn summary(&self) -> String {
+        use bstr::ByteSlice as _;
+
+        let preview_len = self.text.len().min(20);
+        if self.text.len() < 20 {
+            let text = BStr::new(&self.text).to_str_lossy()
+                .replace("\n", "\\n")
+                .replace("\"", "\\\"");
+            format!("[Source \"{}\" \"{}\"]", self.package, text)
+        } else {
+             let text = BStr::new(&self.text[0..preview_len]).to_str_lossy()
+                .replace("\n", "\\n")
+                .replace("\"", "\\\"");
+            format!("[Source \"{}\" \"{}\"...]", self.package, text)
+        }
+    }
 }
 
 impl std::ops::Index<SourceOffset> for Source {

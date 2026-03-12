@@ -86,7 +86,7 @@ impl PackageAnalysis {
 
 #[cfg(test)]
 #[test]
-fn tests_package_analysis() {
+fn test_package_analysis() {
     use crate::tests::EXAMPLES_DIR;
     use crate::source::Source;
 
