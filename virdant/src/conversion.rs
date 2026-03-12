@@ -57,7 +57,7 @@ fn convert_mod_def(
     };
 
     verilog::Module {
-        name,
+        name: valid_verilog_name(&name),
         ports: mod_def.ports.into_iter().map(convert_port).collect(),
         elements: mod_def.drivers.into_iter().map(convert_driver).collect(),
     }
@@ -65,24 +65,68 @@ fn convert_mod_def(
 
 fn convert_port(port: virir::Port) -> verilog::Port {
     verilog::Port {
-        name: port.name,
+        name: valid_verilog_name(&port.name),
         dir: port.dir,
         width: port.width.into(),
     }
 }
 
 fn convert_driver(driver: virir::Driver) -> verilog::Element {
+    let name = valid_verilog_name(&driver.path);
     verilog::Element::Assign(verilog::Assign {
-        name: driver.name,
+        name,
         expr: convert_expr(driver.expr.as_ref()),
     })
+}
+
+const VERILOG_KEYWORDS: &[&str] = &[
+    "always", "and", "assign", "automatic", "begin", "buf", "bufif0", "bufif1", "case",
+    "casex", "casez", "cell", "cmos", "config", "deassign", "default", "defparam", "design",
+    "disable", "edge", "else", "end", "endcase", "endconfig", "endfunction", "endgenerate",
+    "endmodule", "endprimitive", "endspecify", "endtable", "endtask", "event", "for", "force",
+    "forever", "fork", "function", "generate", "genvar", "highz0", "highz1", "if", "ifnone",
+    "incdir", "include", "initial", "inout", "input", "instance", "integer", "join", "large",
+    "liblist", "library", "localparam", "macromodule", "medium", "module", "nand", "negedge",
+    "nmos", "nor", "noshowcancelled", "not", "notif0", "notif1", "or", "output", "parameter",
+    "pmos", "posedge", "primitive", "pull0", "pull1", "pulldown", "pullup", "pulsestyle_ondetect",
+    "pulsestyle_onevent", "rcmos", "real", "realtime", "reg", "release", "repeat", "rnmos",
+    "rpmos", "rtran", "rtranif0", "rtranif1", "scalared", "showcancelled", "signed", "small",
+    "specify", "specparam", "strong0", "strong1", "supply0", "supply1", "table", "task",
+    "time", "tran", "tranif0", "tranif1", "tri", "tri0", "tri1", "triand",
+    "trior", "trireg", "unsigned", "use", "uwire", "vectored", "wait", "wand",
+    "weak0", "weak1", "while", "wire", "wor", "xnor", "xor",
+];
+
+/// Takes a Virdant path and converts it to a valid Verilog identifier.
+/// For paths that are already valid Verilog identifiers, it it preserves the name.
+/// If the path conflicts with a Verilog keyword, it prefixes the name with a \.
+/// If the path contains .'s, it will prefix the name with a \.
+fn valid_verilog_name(path: &str) -> String {
+    if is_simple_verilog_identifier(path) && !VERILOG_KEYWORDS.contains(&path) {
+        path.to_string()
+    } else {
+        format!(r"\{path} ")
+    }
+}
+
+fn is_simple_verilog_identifier(path: &str) -> bool {
+    let mut chars = path.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+
+    if !matches!(first, 'a'..='z' | 'A'..='Z' | '_') {
+        return false;
+    }
+
+    chars.all(|ch| matches!(ch, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_'))
 }
 
 fn convert_expr(expr: &virir::expr::Expr) -> verilog::Expr {
     match expr {
         virir::expr::Expr::Reference(reference) => {
             verilog::Expr::Reference(verilog::expr::Reference {
-                name: reference.path.clone(),
+                name: valid_verilog_name(&reference.path),
             })
         }
         virir::expr::Expr::Literal(bit_lit) => {

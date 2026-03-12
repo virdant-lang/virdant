@@ -68,7 +68,7 @@ pub struct Port {
 #[derive(Debug)]
 pub struct Driver {
     pub region: Region,
-    pub name: String,
+    pub path: String,
     pub expr: Arc<Expr>,
 }
 
@@ -264,7 +264,7 @@ fn build_module(
 
             Driver {
                 region: dummy_region(),
-                name: driver.name,
+                path: driver.name,
                 expr: Arc::new(build_expr(
                     driver.expr,
                     expected_type,

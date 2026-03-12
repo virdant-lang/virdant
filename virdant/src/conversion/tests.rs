@@ -36,7 +36,7 @@ fn test_conversion() {
                 ],
                 drivers: vec![Driver {
                     region: region.clone(),
-                    name: "out".to_string(),
+                    path: "out".to_string(),
                     expr: Arc::new(Expr::Reference(Reference {
                         region: region.clone(),
                         path: "inp".to_string(),
