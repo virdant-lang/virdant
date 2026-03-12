@@ -138,8 +138,28 @@ macro_rules! index_range {
 #[macro_export]
 macro_rules! input {
     ($name:ident, $width:literal) => {
+        input_wire!($name, $width)
+    }
+}
+
+#[macro_export]
+macro_rules! input_wire {
+    ($name:ident, $width:literal) => {
         Port {
             name:stringify!($name).to_string(),
+            kind: PortKind::Wire,
+            dir: PortDir::Input,
+            width: $width,
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! input_reg {
+    ($name:ident, $width:literal) => {
+        Port {
+            name:stringify!($name).to_string(),
+            kind: PortKind::Reg,
             dir: PortDir::Input,
             width: $width,
         }
@@ -149,8 +169,28 @@ macro_rules! input {
 #[macro_export]
 macro_rules! output {
     ($name:ident, $width:literal) => {
+        output_wire!($name, $width)
+    }
+}
+
+#[macro_export]
+macro_rules! output_wire {
+    ($name:ident, $width:literal) => {
         Port {
             name:stringify!($name).to_string(),
+            kind: PortKind::Wire,
+            dir: PortDir::Output,
+            width: $width,
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! output_reg {
+    ($name:ident, $width:literal) => {
+        Port {
+            name:stringify!($name).to_string(),
+            kind: PortKind::Reg,
             dir: PortDir::Output,
             width: $width,
         }
@@ -375,7 +415,7 @@ fn test_verilog() {
                             output!(z, 8),
                         }
                         elements {
-                            assign!(out, binop!(refr!(a), Add, refr!(b))),
+                            assign!(z, binop!(refr!(a), Add, refr!(b))),
                             reg!(x, 1),
                             reg!(y, 1),
                             always![
@@ -432,10 +472,9 @@ fn test_verilog() {
                     module!(
                         InitialExample
                         ports {
-                            output!(done, 1),
+                            output_reg!(done, 1),
                         }
                         elements {
-                            reg!(done, 1),
                             initial![
                                 assign_blocking!(done, lit!(0, 1)),
                                 assign_blocking!(done, lit!(1, 1)),
@@ -568,12 +607,10 @@ fn test_verilog() {
                             input!(clock, 1),
                             input!(sel, 2),
                             input!(state, 16),
-                            output!(out, 8),
-                            output!(match_out, 1),
+                            output_reg!(out, 8),
+                            output_reg!(match_out, 1),
                         }
                         elements {
-                            reg!(out, 8),
-                            reg!(match_out, 1),
                             always![
                                 @*
                                 case!(
@@ -617,6 +654,43 @@ fn test_verilog() {
                             ],
                         }
                     )
+                ],
+            },
+            VerilogFile {
+                name: "submodules.v".to_string(),
+                modules: vec![
+                    module!(
+                        ByteAdder
+                        ports {
+                            input!(a, 8),
+                            input!(b, 8),
+                            output!(sum, 8),
+                        }
+                        elements {
+                            assign!(sum, binop!(refr!(a), Add, refr!(b))),
+                        }
+                    ),
+                    module!(
+                        SubmoduleShowcase
+                        ports {
+                            input!(lhs, 8),
+                            input!(rhs, 8),
+                            output!(sum, 8),
+                        }
+                        elements {
+                            wire!(sum_from_adder, 8),
+                            Element::Submodule(Submodule {
+                                name: "u_adder".to_string(),
+                                submodule_name: "ByteAdder".to_string(),
+                                connects: vec![
+                                    ("a".to_string(), "lhs".to_string()),
+                                    ("b".to_string(), "rhs".to_string()),
+                                    ("sum".to_string(), "sum_from_adder".to_string()),
+                                ],
+                            }),
+                            assign!(sum, refr!(sum_from_adder)),
+                        }
+                    ),
                 ],
             },
         ],

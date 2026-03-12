@@ -14,6 +14,15 @@ use crate::verilog::stmt::Stmt;
 use std::io::Write;
 
 type Width = u64;
+const DIR_WIDTH: usize = 6;
+const KIND_WIDTH: usize = 4;
+const WIDTH_WIDTH: usize = 10;
+
+#[derive(Debug)]
+pub enum PortKind {
+    Wire,
+    Reg,
+}
 
 #[derive(Debug)]
 pub struct Verilog {
@@ -36,6 +45,7 @@ pub struct Module {
 #[derive(Debug)]
 pub struct Port {
     pub name: String,
+    pub kind: PortKind,
     pub dir: PortDir,
     pub width: Width,
 }
@@ -83,8 +93,8 @@ pub struct Initial {
 
 #[derive(Debug)]
 pub struct Submodule {
-    pub name: Vec<Stmt>,
-    pub submodule_name: Vec<Stmt>,
+    pub name: String,
+    pub submodule_name: String,
     pub connects: Vec<(String, String)>,
 }
 
@@ -259,18 +269,21 @@ impl Module {
 impl Port {
     fn write(&self, f: &mut Writer, is_last: bool) -> std::io::Result<()> {
         let dir = match self.dir {
-            PortDir::Input => "input ",
+            PortDir::Input => "input",
             PortDir::Output => "output",
         };
-        let width = if self.width == 1 {
-            format!("")
-        } else {
-            let top = self.width - 1;
-            format!("[{top}:0] ")
+        let kind = match self.kind {
+            PortKind::Wire => "wire",
+            PortKind::Reg => "reg",
         };
-        let name = &self.name;
         let comma = if is_last { "" } else { "," };
-        verilog_writeln!(f, "{dir} {width:>18} {name}{comma}")?;
+        let width = display_width(self.width);
+        let name = &self.name;
+        verilog_writeln!(
+            f,
+            "{dir:<DIR_WIDTH$} {kind:<KIND_WIDTH$} {width:>WIDTH_WIDTH$}  {name}{comma}"
+        )?;
+
         Ok(())
     }
 }
@@ -289,24 +302,17 @@ impl Element {
             Element::Assign(assign) => assign.write(f),
             Element::Always(always) => always.write(f),
             Element::Initial(initial) => initial.write(f),
+            Element::Submodule(submodule) => submodule.write(f),
         }
     }
 }
 
 impl Wire {
     fn write(&self, f: &mut Writer) -> std::io::Result<()> {
+        let kind = "wire";
         let name = &self.name;
-        let width_padding_len = 10;
-        if self.width < 2 {
-            let padding = " ".repeat(width_padding_len);
-            verilog_write!(f, "wire {padding} {name}")?;
-        } else {
-            let top = self.width - 1;
-            let width_str = format!("[{top}:0]");
-            assert!(width_padding_len >= width_str.len());
-            let padding = " ".repeat(width_padding_len - width_str.len());
-            verilog_write!(f, "wire {padding}{width_str} {name}")?;
-        }
+        let width = display_width(self.width);
+        verilog_write!(f, "{kind:<KIND_WIDTH$} {width:>WIDTH_WIDTH$}  {name}")?;
 
         if let Some(expr) = &self.expr {
             f.skip_indent();
@@ -322,18 +328,10 @@ impl Wire {
 
 impl Reg {
     fn write(&self, f: &mut Writer) -> std::io::Result<()> {
+        let kind = "reg";
         let name = &self.name;
-        let width_padding_len = 10;
-        if self.width < 2 {
-            let padding = " ".repeat(width_padding_len);
-            verilog_write!(f, "reg  {padding} {name}")?;
-        } else {
-            let top = self.width - 1;
-            let width_str = format!("[{top}:0]");
-            assert!(width_padding_len >= width_str.len());
-            let padding = " ".repeat(width_padding_len - width_str.len());
-            verilog_write!(f, "reg  {padding}{width_str} {name}")?;
-        }
+        let width = display_width(self.width);
+        verilog_write!(f, "{kind:<KIND_WIDTH$} {width:>WIDTH_WIDTH$}  {name}")?;
 
         if let Some(expr) = &self.expr {
             f.skip_indent();
@@ -344,6 +342,15 @@ impl Reg {
         f.skip_indent();
         verilog_writeln!(f, ";")?;
         Ok(())
+    }
+}
+
+fn display_width(width: Width) -> String {
+    if width < 2 {
+        String::new()
+    } else {
+        let top = width - 1;
+        format!("[{top}:0]")
     }
 }
 
@@ -383,6 +390,29 @@ impl Initial {
         }
         writer.dedent();
         verilog_writeln!(writer, "end")?;
+        Ok(())
+    }
+}
+
+impl Submodule {
+    fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
+        let submodule_name = &self.submodule_name;
+        let name = &self.name;
+
+        if self.connects.is_empty() {
+            verilog_writeln!(writer, "{submodule_name} {name}();")?;
+            return Ok(());
+        }
+
+        verilog_writeln!(writer, "{submodule_name} {name}(")?;
+        writer.indent();
+        let port_width = self.connects.iter().map(|(port, _)| port.len()).max().unwrap_or(0);
+        for (i, (port, signal)) in self.connects.iter().enumerate() {
+            let comma = if i + 1 == self.connects.len() { "" } else { "," };
+            verilog_writeln!(writer, ".{port:<port_width$}({signal}){comma}")?;
+        }
+        writer.dedent();
+        verilog_writeln!(writer, ");")?;
         Ok(())
     }
 }

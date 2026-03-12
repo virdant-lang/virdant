@@ -66,6 +66,7 @@ fn convert_mod_def(
 fn convert_port(port: virir::Port) -> verilog::Port {
     verilog::Port {
         name: valid_verilog_name(&port.name),
+        kind: verilog::PortKind::Wire,
         dir: port.dir,
         width: port.width.into(),
     }
