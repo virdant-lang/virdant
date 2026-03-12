@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
+use virdant::Vir;
 use virdant::fqn::PackageFqn;
 
 struct Backend {
@@ -15,6 +16,7 @@ struct Backend {
 }
 
 struct ServerState {
+    vir: Vir,
     sources: HashMap<Url, Source>,
 }
 
@@ -23,6 +25,7 @@ impl Backend {
         Self {
             client,
             state: Arc::new(Mutex::new(ServerState {
+                vir: Vir::new(),
                 sources: HashMap::new(),
             })),
         }
@@ -40,11 +43,14 @@ impl LanguageServer for Backend {
             text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
             hover_provider: Some(HoverProviderCapability::Simple(true)),
             definition_provider: Some(OneOf::Left(true)),
+            // NOTE Set this to true to provide completion.
             completion_provider: Some(CompletionOptions {
                 resolve_provider: Some(false),
                 trigger_characters: Some(vec![".".to_string()]),
                 ..Default::default()
             }),
+            // NOTE Set this to true to provide highlighting
+            document_highlight_provider: Some(OneOf::Left(false)), 
             ..Default::default()
         };
 
@@ -72,11 +78,15 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri;
         let package = uri_to_packagefqn(&uri);
         let text: BString = params.text_document.text.into();
-        let source = Source::new(package, text);
+        let source = Source::new(package.clone(), text.clone());
 
         {
             let mut state = self.state.lock().await;
             state.sources.insert(uri.clone(), source);
+            if !state.vir.packages().contains(&package.to_string()) {
+                state.vir.add_package(&package.to_string());
+            }
+            state.vir.set_package_text(&package.to_string(), text);
         }
 
         self.check_document(&uri).await;
@@ -90,11 +100,15 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri;
         let package = uri_to_packagefqn(&uri);
         let text: BString = params.content_changes[0].text.clone().into();
-        let source = Source::new(package, text);
+        let source = Source::new(package.clone(), text.clone());
 
         {
             let mut state = self.state.lock().await;
             state.sources.insert(uri.clone(), source);
+            if !state.vir.packages().contains(&package.to_string()) {
+                state.vir.add_package(&package.to_string());
+            }
+            state.vir.set_package_text(&package.to_string(), text);
         }
 
         self.check_document(&uri).await;
@@ -111,10 +125,11 @@ impl LanguageServer for Backend {
         let linecol = LineCol::new((position.line + 1) as usize, (position.character + 1) as usize);
 
         let uri = params.text_document_position_params.text_document.uri;
-        let parsing = if let Some(parsing) = self.parsing(&uri).await {
-            parsing
-        } else {
-            return Ok(None);
+        let package = uri_to_packagefqn(&uri);
+
+        let parsing = {
+            let mut state = self.state.lock().await;
+            state.vir.parsing(&package.to_string())
         };
 
         if let Some(node_id) = parsing.at(linecol) {
@@ -136,21 +151,17 @@ impl LanguageServer for Backend {
         &self,
         params: GotoDefinitionParams,
     ) -> Result<Option<GotoDefinitionResponse>> {
-        let loc = Location {
-            uri: params.text_document_position_params.text_document.uri,
-            range: Range {
-                start: Position {
-                    line: 10,
-                    character: 0,
-                },
-                end: Position {
-                    line: 11,
-                    character: 1,
-                },
-            },
-        };
+        // TODO find the AstNode to jump to
+        if let Some(node) = None::<AstNode> {
+            let loc = Location {
+                uri: params.text_document_position_params.text_document.uri,
+                range: span_to_range(node.span()),
+            };
 
-        Ok(Some(GotoDefinitionResponse::Scalar(loc)))
+            Ok(Some(GotoDefinitionResponse::Scalar(loc)))
+        } else {
+            Ok(None)
+        }
     }
 
     async fn completion(&self, _: CompletionParams) -> Result<Option<CompletionResponse>> {
@@ -171,10 +182,40 @@ impl LanguageServer for Backend {
 
         Ok(Some(CompletionResponse::Array(items)))
     }
+
+    async fn document_highlight(
+        &self,
+        params: DocumentHighlightParams,
+    ) -> Result<Option<Vec<DocumentHighlight>>> {
+
+        let position = params.text_document_position_params.position;
+        let linecol = LineCol::new((position.line + 1) as usize, (position.character + 1) as usize);
+
+        let uri = params.text_document_position_params.text_document.uri;
+        let package = uri_to_packagefqn(&uri);
+        let parsing = {
+            let mut state = self.state.lock().await;
+            state.vir.parsing(&package.to_string())
+        };
+
+        if let Some(node_id) = parsing.at(linecol) {
+            let node = parsing.ast_node(node_id);
+            let highlight = DocumentHighlight {
+                range: span_to_range(node.span()),
+                kind: Some(DocumentHighlightKind::TEXT),
+            };
+
+            Ok(Some(vec![highlight]))
+        } else {
+            Ok(None)
+        }
+
+    }
 }
 
 use tower_lsp::lsp_types::*;
-use virdant::source::{LineCol, Source};
+use virdant::source::{LineCol, Source, Span};
+use virdant::syntax::ast::AstNode;
 use virdant::syntax::parsing::{Parsing, parse};
 
 impl Backend {
@@ -183,34 +224,13 @@ impl Backend {
         state.sources.get(uri).cloned()
     }
 
-    async fn parsing(&self, uri: &Url) -> Option<Parsing> {
-        self.source(uri)
-            .await
-            .map(|source| parse(&source))
-    }
-
     async fn check_document(&self, uri: &Url) {
         let mut diagnostics = Vec::new();
 
-        let parsing = if let Some(parsing) = self.parsing(&uri).await {
-            parsing
-        } else {
-            return;
-        };
-
-        for error_node in parsing.errors() {
-            let region = error_node.region();
+        let mut state = self.state.lock().await;
+        for diag in state.vir.diagnostics() {
             let diagnostic = Diagnostic {
-                range: Range {
-                    start: Position {
-                        line: region.start().line().saturating_sub(1) as u32,
-                        character: region.start().col().saturating_sub(1) as u32,
-                    },
-                    end: Position {
-                        line: region.end().line().saturating_sub(1) as u32,
-                        character: region.end().col().saturating_sub(1) as u32,
-                    },
-                },
+                range: span_to_range(diag.region().span()),
                 severity: Some(DiagnosticSeverity::ERROR),
                 code: None,
                 code_description: None,
@@ -234,6 +254,19 @@ fn uri_to_packagefqn(uri: &Url) -> PackageFqn {
         .file_stem()
         .map(|stem| PackageFqn::new(stem.as_bytes().into()))
         .unwrap_or_else(|| PackageFqn::new(uri.path().as_bytes().into()))
+}
+
+fn span_to_range(span: Span) -> Range {
+    Range {
+        start: Position {
+            line: span.start().line().saturating_sub(1) as u32,
+            character: span.start().col().saturating_sub(1) as u32,
+        },
+        end: Position {
+            line: span.end().line().saturating_sub(1) as u32,
+            character: span.end().col().saturating_sub(1) as u32,
+        },
+    }
 }
 
 #[tokio::main]

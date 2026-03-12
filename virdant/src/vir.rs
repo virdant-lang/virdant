@@ -77,7 +77,13 @@ impl Vir {
         }
     }
 
-    pub fn diagnostics(&self) -> Vec<Diagnostic> {
+    pub fn parsing<S: AsRef<str>>(&self, package_name: S) -> Arc<Parsing> {
+        let package = self.sources[package_name.as_ref()].package();
+        self.parsings.get(&package).unwrap().clone()
+    }
+
+    pub fn diagnostics(&mut self) -> Vec<Diagnostic> {
+        self.parse_all();
         let mut diagnostics = vec![];
         for parsing in self.parsings.values() {
             for error in parsing.errors() {
