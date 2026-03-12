@@ -205,6 +205,12 @@ impl<'p> AstNode<'p> {
     pub fn name(&self) -> Option<InternedString> {
         match &self.payload {
             AstNodePayload::ModDef(mod_def) => Some(mod_def.name),
+            AstNodePayload::UnionDef(union_def) => Some(union_def.name),
+            AstNodePayload::StructDef(struct_def) => Some(struct_def.name),
+            AstNodePayload::FnDef(fn_def) => Some(fn_def.name),
+            AstNodePayload::SocketDef(socket_def) => Some(socket_def.name),
+            AstNodePayload::BuiltinDef(builtin_def) => Some(builtin_def.name),
+            AstNodePayload::EnumDef(enum_def) => Some(enum_def.name),
             _ => None,
         }
     }

@@ -2,13 +2,20 @@ use std::collections::HashMap;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::sync::Arc;
+
 use bstr::BString;
+use serde_json::json;
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
+use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
+
 use virdant::Vir;
 use virdant::fqn::PackageFqn;
+use virdant::source::{LineCol, Source, Span};
+use virdant::syntax::ast::AstNode;
+use virdant::syntax::parsing::{Parsing, parse};
 
 struct Backend {
     client: Client,
@@ -43,14 +50,21 @@ impl LanguageServer for Backend {
             text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
             hover_provider: Some(HoverProviderCapability::Simple(true)),
             definition_provider: Some(OneOf::Left(true)),
-            // NOTE Set this to true to provide completion.
-            completion_provider: Some(CompletionOptions {
+
+            code_lens_provider: Some(CodeLensOptions {
                 resolve_provider: Some(false),
-                trigger_characters: Some(vec![".".to_string()]),
-                ..Default::default()
             }),
-            // NOTE Set this to true to provide highlighting
-            document_highlight_provider: Some(OneOf::Left(false)), 
+
+//            inlay_hint_provider: Some(OneOf::Left(false)),
+
+//            completion_provider: Some(CompletionOptions {
+//                resolve_provider: Some(false),
+//                trigger_characters: Some(vec![".".to_string()]),
+//                ..Default::default()
+//            }),
+
+//            document_highlight_provider: Some(OneOf::Left(false)),
+
             ..Default::default()
         };
 
@@ -183,6 +197,84 @@ impl LanguageServer for Backend {
         Ok(Some(CompletionResponse::Array(items)))
     }
 
+    async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
+        let uri = params.text_document.uri;
+        let package = uri_to_packagefqn(&uri);
+
+        let parsing = {
+            let mut state = self.state.lock().await;
+            state.vir.parsing(&package.to_string())
+        };
+        let mut lenses = vec![];
+        self.client
+            .log_message(MessageType::ERROR, format!("Root is {}", parsing.root().summary()))
+            .await;
+
+        for node in parsing.root().children() {
+            self.client
+                .log_message(MessageType::ERROR, format!("Considering lens for: {}", node.summary()))
+                .await;
+
+            if node.is_item() {
+                let range = span_to_range(node.span());
+                let lens = CodeLens {
+                    range,
+                    command: Some(Command {
+                        title: "Run test".into(),
+                        command: "VirdantRunTest".into(),
+                        arguments: Some(vec![
+                            json!(parsing.string(node.name().unwrap()).to_string()),
+                        ]),
+                    }),
+                    data: None,
+                };
+
+                self.client
+                    .log_message(MessageType::ERROR, format!("{lens:?}"))
+                    .await;
+
+                lenses.push(lens);
+            }
+        }
+
+        Ok(Some(lenses))
+    }
+
+
+    async fn inlay_hint(
+        &self,
+        params: InlayHintParams,
+    ) -> Result<Option<Vec<InlayHint>>> {
+        let uri = params.text_document.uri;
+        let range = params.range;
+        let linecol = LineCol::new(1, 1);
+
+        let package = uri_to_packagefqn(&uri);
+        let parsing = {
+            let mut state = self.state.lock().await;
+            state.vir.parsing(&package.to_string())
+        };
+
+        let mut hints = vec![];
+
+        let hint = InlayHint {
+            position: Position {
+                line: 0,
+                character: 0,
+            },
+            label: InlayHintLabel::String(": i32".into()),
+            kind: None,
+            tooltip: Some(InlayHintTooltip::String("Example tooltip".into())),
+            text_edits: None,
+            padding_left: Some(true),
+            padding_right: Some(false),
+            data: None,
+        };
+        hints.push(hint);
+
+        Ok(Some(hints))
+    }
+
     async fn document_highlight(
         &self,
         params: DocumentHighlightParams,
@@ -211,12 +303,50 @@ impl LanguageServer for Backend {
         }
 
     }
-}
 
-use tower_lsp::lsp_types::*;
-use virdant::source::{LineCol, Source, Span};
-use virdant::syntax::ast::AstNode;
-use virdant::syntax::parsing::{Parsing, parse};
+    async fn code_action(
+        &self,
+        params: CodeActionParams,
+    ) -> Result<Option<Vec<CodeActionOrCommand>>> {
+        let mut actions = Vec::new();
+
+        // Just an example: if the user selected a range called "placeholder"
+        for diag in &params.context.diagnostics {
+            if diag.message.contains("placeholder") {
+                // WorkspaceEdit that replaces the placeholder text
+                let mut changes = std::collections::HashMap::new();
+                changes.insert(
+                    params.text_document.uri.clone(),
+                    vec![TextEdit {
+                        range: diag.range,
+                        new_text: "fixed_variable".into(),
+                    }],
+                );
+
+                let edit = WorkspaceEdit {
+                    changes: Some(changes),
+                    document_changes: None,
+                    change_annotations: None,
+                };
+
+                let action = CodeAction {
+                    title: "Run thing".into(),
+                    kind: None,
+                    diagnostics: Some(vec![]),
+                    edit: Some(edit),
+                    command: None, // optional, not needed for edits
+                    is_preferred: Some(true),
+                    data: None,
+                    disabled: None,
+                };
+
+                actions.push(CodeActionOrCommand::CodeAction(action));
+            }
+        }
+
+        Ok(Some(actions))
+    }
+}
 
 impl Backend {
     async fn source(&self, uri: &Url) -> Option<Source> {

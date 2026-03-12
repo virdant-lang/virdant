@@ -47,7 +47,8 @@ fn parse_file(path: &str) {
     };
 
     let source = Source::new(package, input.into());
-    let _parsing = parse(&source);
+    let parsing = parse(&source);
+    parsing.dump();
 }
 
 fn tokenize_file(path: &str) {

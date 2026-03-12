@@ -436,7 +436,7 @@ ExprMatch: AstNodeId = {
     "}" <rr:@R> => {
         let payload = AstNodePayload::ExprMatch;
         let span = parser.span(ll, rr);
-        let num_children = (arms.len() + 1 + annot.map(|_| 1).unwrap_or(0)).try_into().unwrap();
+        let num_children = (2 * arms.len() + 1 + annot.map(|_| 1).unwrap_or(0)).try_into().unwrap();
 
         parser.add_node(payload, span, num_children)
     },
