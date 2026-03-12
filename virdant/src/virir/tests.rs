@@ -1,4 +1,5 @@
 use super::*;
+use crate::common::BinOp;
 use crate::conversion::convert_virir_to_verilog;
 use crate::fqn::PackageFqn;
 use crate::source::{LineCol, Region, Span};
@@ -18,7 +19,7 @@ const TEST_VIRIR: &str = "virir {
         mod Passthrough {
             incoming inp : builtin::Word[8];
             outgoing out : builtin::Word[8];
-            out := (inp : builtin::Word[8]);
+            out := ((inp : builtin::Word[8]) + inp);
         }
     }
 
@@ -41,6 +42,13 @@ fn test_virir() {
     dbg!(&virir);
     assert_eq!(virir.packages.len(), 1);
     assert_eq!(virir.packages[0].name, "top");
+    let Item::ModDef(passthrough) = &virir.packages[0].items[1] else {
+        panic!("expected second item to be Passthrough");
+    };
+    let Expr::BinOp(binop) = passthrough.drivers[0].expr.as_ref() else {
+        panic!("expected Passthrough driver expression to parse as BinOp");
+    };
+    assert_eq!(binop.op, BinOp::Add);
 
     let verilog = convert_virir_to_verilog(virir);
     assert_eq!(verilog.files[0].name, "top.sv");
@@ -59,6 +67,14 @@ fn test_virir() {
             ("out".to_string(), "out".to_string()),
         ]
     );
+    let crate::verilog::Element::Assign(assign) = &verilog.files[0].modules[1].elements[0] else {
+        panic!("expected Passthrough module to contain an assign");
+    };
+    let crate::verilog::Expr::BinOp(binop) = &assign.expr else {
+        panic!("expected Passthrough assign expression to convert to BinOp");
+    };
+    assert!(matches!(&*binop.lhs, crate::verilog::Expr::Reference(reference) if reference.name == "inp"));
+    assert!(matches!(&*binop.rhs, crate::verilog::Expr::Reference(reference) if reference.name == "inp"));
 
     println!("{verilog:#?}");
     verilog.write_to_stdout().unwrap();

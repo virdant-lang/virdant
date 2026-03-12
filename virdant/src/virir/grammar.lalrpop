@@ -1,4 +1,5 @@
-use crate::common::PortDir;
+// REVIEW Don't use module renames in Rust. Use fully-qualified names instead.
+use crate::common::{BinOp as CommonBinOp, PortDir};
 use crate::virir::{ParsedDriver, ParsedExpr, ParsedInstance, ParsedModDef, ParsedModStmt, ParsedPackage, ParsedPort, ParsedType, VirIr, build_mod_def, build_virir, join_path};
 
 grammar();
@@ -35,9 +36,33 @@ DriverDecl: ParsedDriver = {
 }
 
 ExprNode: ParsedExpr = {
+    "(" <lhs:ExprNode> <op:BinOp> <rhs:ExprPrimary> ":" <typ:VirType> ")" => {
+        ParsedExpr::BinOp {
+            lhs: Box::new(lhs),
+            op,
+            rhs: Box::new(rhs),
+        }
+    },
+    <expr:ExprPrimary> => expr,
+}
+
+ExprPrimary: ParsedExpr = {
     "(" <path:Path> ":" <typ:VirType> ")" => ParsedExpr::Reference { path, typ: Some(typ) },
     "(" <expr:ExprNode> ")" => expr,
     <path:Path> => ParsedExpr::Reference { path, typ: None },
+}
+
+BinOp: CommonBinOp = {
+    "<" => CommonBinOp::Lt,
+    "<=" => CommonBinOp::Lte,
+    ">" => CommonBinOp::Gt,
+    ">=" => CommonBinOp::Gte,
+    "==" => CommonBinOp::Eq,
+    "!=" => CommonBinOp::Neq,
+    "+" => CommonBinOp::Add,
+    "-" => CommonBinOp::Sub,
+    "&&" => CommonBinOp::And,
+    "||" => CommonBinOp::Or,
 }
 
 TypeDecl: ParsedType = {

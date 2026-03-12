@@ -14,7 +14,7 @@ use crate::fqn::PackageFqn;
 use crate::source::{LineCol, Span};
 use crate::source::Region;
 
-use crate::virir::expr::{Expr, Reference};
+use crate::virir::expr::{BinOp as VirIrBinOp, Expr, Reference};
 use crate::virir::typ::Type;
 
 pub type Width = u16;
@@ -143,6 +143,11 @@ struct ParsedDriver {
 
 enum ParsedExpr {
     Reference { path: String, typ: Option<ParsedType> },
+    BinOp {
+        lhs: Box<ParsedExpr>,
+        op: crate::common::BinOp,
+        rhs: Box<ParsedExpr>,
+    },
 }
 
 enum ParsedModStmt {
@@ -338,6 +343,62 @@ fn build_expr(
                 path,
             })
         }
+        ParsedExpr::BinOp { lhs, op, rhs } => {
+            let lhs = Arc::new(build_expr(
+                *lhs,
+                None,
+                type_ids,
+                local_port_types,
+                instance_types,
+                module_signatures,
+            ));
+            let rhs = Arc::new(build_expr(
+                *rhs,
+                None,
+                type_ids,
+                local_port_types,
+                instance_types,
+                module_signatures,
+            ));
+            let typ = infer_binop_type(op, expected_type, lhs.as_ref(), rhs.as_ref(), type_ids);
+
+            Expr::BinOp(VirIrBinOp {
+                region: dummy_region(),
+                typ,
+                op,
+                lhs,
+                rhs,
+            })
+        }
+    }
+}
+
+fn infer_binop_type(
+    op: crate::common::BinOp,
+    expected_type: Option<TypeId>,
+    lhs: &Expr,
+    rhs: &Expr,
+    type_ids: &HashMap<String, TypeId>,
+) -> TypeId {
+    match op {
+        crate::common::BinOp::Lt
+        | crate::common::BinOp::Lte
+        | crate::common::BinOp::Gt
+        | crate::common::BinOp::Gte
+        | crate::common::BinOp::Eq
+        | crate::common::BinOp::Neq
+        | crate::common::BinOp::And
+        | crate::common::BinOp::Or => lookup_type_id(&ParsedType::Bit, type_ids),
+        crate::common::BinOp::Add | crate::common::BinOp::Sub => expected_type
+            .unwrap_or_else(|| expr_type_id(lhs).unwrap_or_else(|| expr_type_id(rhs).unwrap_or(TypeId::new(0)))),
+    }
+}
+
+fn expr_type_id(expr: &Expr) -> Option<TypeId> {
+    match expr {
+        Expr::Reference(reference) => Some(reference.typ),
+        Expr::Literal(bit_lit) => Some(bit_lit.typ),
+        Expr::BinOp(binop) => Some(binop.typ),
     }
 }
 

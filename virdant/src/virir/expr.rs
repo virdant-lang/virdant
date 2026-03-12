@@ -1,6 +1,7 @@
 use crate::common;
 use crate::virir::{TypeId, Width};
 use crate::source::Region;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum Expr {
@@ -36,6 +37,8 @@ pub struct BinOp {
     pub region: Region,
     pub typ: TypeId,
     pub op: common::BinOp,
+    pub lhs: Arc<Expr>,
+    pub rhs: Arc<Expr>,
 }
 
 impl BitLit {

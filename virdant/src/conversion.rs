@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 
+use crate::common;
 use crate::verilog;
 use crate::virir;
 
 #[cfg(test)]
 mod tests;
 
+/// Converts a parsed VirIr program into its Verilog representation.
 pub fn convert_virir_to_verilog(virir: virir::VirIr) -> verilog::Verilog {
     verilog::Verilog {
         files: virir
@@ -16,6 +18,7 @@ pub fn convert_virir_to_verilog(virir: virir::VirIr) -> verilog::Verilog {
     }
 }
 
+/// Converts a single VirIr package into one emitted Verilog file.
 fn convert_package(package: virir::Package) -> verilog::VerilogFile {
     let file_stem = package.name;
     let package_name = file_stem.clone();
@@ -30,27 +33,60 @@ fn convert_package(package: virir::Package) -> verilog::VerilogFile {
     }
 }
 
+/// Converts one VirIr item within a package into a Verilog module.
 fn convert_item(package_name: &str, item: virir::Item) -> verilog::Module {
     match item {
         virir::Item::ModDef(mod_def) => convert_mod_def(package_name, mod_def),
     }
 }
 
+/// Converts a VirIr module definition into a Verilog module, preserving package qualification.
+/// REVIEW I don't fully understand what this does.
 fn convert_mod_def(package_name: &str, mod_def: virir::ModDef) -> verilog::Module {
     let mut connects_by_instance: HashMap<String, Vec<(String, String)>> = mod_def
         .instances
         .iter()
         .map(|instance| (instance.name.clone(), vec![]))
         .collect();
+
+    let ordinary_drivers = collect_instance_connects(mod_def.drivers, &mut connects_by_instance);
+
+    let mut elements: Vec<verilog::Element> = mod_def
+        .instances
+        .into_iter()
+        .map(|instance| {
+            let connects = connects_by_instance.remove(&instance.name).unwrap_or_default();
+            verilog::Element::Submodule(verilog::Submodule {
+                name: valid_verilog_name(&instance.name),
+                submodule_name: valid_verilog_name(&instance.module_path),
+                connects,
+            })
+        })
+        .collect();
+
+    elements.extend(ordinary_drivers.into_iter().map(convert_driver));
+
+    verilog::Module {
+        name: valid_verilog_name(&qualified_module_name(package_name, &mod_def.name)),
+        ports: mod_def.ports.into_iter().map(convert_port).collect(),
+        elements,
+    }
+}
+
+/// Collects submodule port connections from drivers and returns the remaining ordinary drivers.
+/// REVIEW I don't fully understand what this does.
+fn collect_instance_connects(
+    drivers: Vec<virir::Driver>,
+    connects_by_instance: &mut HashMap<String, Vec<(String, String)>>,
+) -> Vec<virir::Driver> {
     let mut ordinary_drivers = vec![];
 
-    for driver in mod_def.drivers {
+    for driver in drivers {
         if let Some((instance_name, port_name)) = split_instance_path(&driver.path) {
             if let Some(connects) = connects_by_instance.get_mut(instance_name) {
-                connects.push((
-                    valid_verilog_name(port_name),
-                    convert_connect_expr(driver.expr.as_ref()),
-                ));
+                let verilog_name = valid_verilog_name(port_name);
+                let expr = convert_connect_expr(driver.expr.as_ref());
+                connects.push((verilog_name, expr));
                 continue;
             }
         }
@@ -70,27 +106,10 @@ fn convert_mod_def(package_name: &str, mod_def: virir::ModDef) -> verilog::Modul
         ordinary_drivers.push(driver);
     }
 
-    let mut elements: Vec<verilog::Element> = mod_def
-        .instances
-        .into_iter()
-        .map(|instance| {
-            let connects = connects_by_instance.remove(&instance.name).unwrap_or_default();
-            verilog::Element::Submodule(verilog::Submodule {
-                name: valid_verilog_name(&instance.name),
-                submodule_name: valid_verilog_name(&instance.module_path),
-                connects,
-            })
-        })
-        .collect();
-    elements.extend(ordinary_drivers.into_iter().map(convert_driver));
-
-    verilog::Module {
-        name: valid_verilog_name(&qualified_module_name(package_name, &mod_def.name)),
-        ports: mod_def.ports.into_iter().map(convert_port).collect(),
-        elements,
-    }
+    ordinary_drivers
 }
 
+/// Converts a VirIr port declaration into its Verilog port form.
 fn convert_port(port: virir::Port) -> verilog::Port {
     verilog::Port {
         name: valid_verilog_name(&port.name),
@@ -100,6 +119,7 @@ fn convert_port(port: virir::Port) -> verilog::Port {
     }
 }
 
+/// Converts a VirIr driver into a Verilog continuous assignment.
 fn convert_driver(driver: virir::Driver) -> verilog::Element {
     let name = valid_verilog_name(&driver.path);
     verilog::Element::Assign(verilog::Assign {
@@ -108,18 +128,39 @@ fn convert_driver(driver: virir::Driver) -> verilog::Element {
     })
 }
 
+/// Converts an expression used in a submodule connection into Verilog source text.
 fn convert_connect_expr(expr: &virir::expr::Expr) -> String {
     match expr {
         virir::expr::Expr::Reference(reference) => valid_verilog_name(&reference.path),
         virir::expr::Expr::Literal(bit_lit) => {
             if bit_lit.value() { "1'h1" } else { "1'h0" }.to_string()
         }
-        virir::expr::Expr::BinOp(_) => {
-            panic!("VirIr::BinOp cannot yet be used as a submodule connection")
-        }
+        virir::expr::Expr::BinOp(binop) => format!(
+            "({} {} {})",
+            convert_connect_expr(binop.lhs.as_ref()),
+            convert_connect_binop(binop.op),
+            convert_connect_expr(binop.rhs.as_ref())
+        ),
     }
 }
 
+/// Converts a VirIr binary operator into the corresponding textual Verilog operator.
+fn convert_connect_binop(op: common::BinOp) -> &'static str {
+    match op {
+        common::BinOp::Lt => "<",
+        common::BinOp::Lte => "<=",
+        common::BinOp::Gt => ">",
+        common::BinOp::Gte => ">=",
+        common::BinOp::Eq => "==",
+        common::BinOp::Neq => "!=",
+        common::BinOp::Add => "+",
+        common::BinOp::Sub => "-",
+        common::BinOp::And => "&&",
+        common::BinOp::Or => "||",
+    }
+}
+
+/// Splits a `instance.port` path into its instance name and port name components.
 fn split_instance_path(path: &str) -> Option<(&str, &str)> {
     let (instance_name, port_name) = path.split_once('.')?;
     if port_name.contains('.') {
@@ -129,6 +170,7 @@ fn split_instance_path(path: &str) -> Option<(&str, &str)> {
     }
 }
 
+/// Builds a package-qualified module name in `package::Module` form.
 fn qualified_module_name(package_name: &str, module_name: &str) -> String {
     format!("{package_name}::{module_name}")
 }
@@ -163,8 +205,10 @@ fn valid_verilog_name(path: &str) -> String {
     }
 }
 
+/// Returns whether a path is already a plain, unescaped Verilog identifier.
 fn is_simple_verilog_identifier(path: &str) -> bool {
     let mut chars = path.chars();
+
     let Some(first) = chars.next() else {
         return false;
     };
@@ -176,6 +220,23 @@ fn is_simple_verilog_identifier(path: &str) -> bool {
     chars.all(|ch| matches!(ch, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_'))
 }
 
+/// Converts a VirIr binary operator into the corresponding Verilog binary operator.
+fn convert_binop(op: common::BinOp) -> verilog::BinOp {
+    match op {
+        common::BinOp::Lt => verilog::BinOp::Lt,
+        common::BinOp::Lte => verilog::BinOp::Lte,
+        common::BinOp::Gt => verilog::BinOp::Gt,
+        common::BinOp::Gte => verilog::BinOp::Gte,
+        common::BinOp::Eq => verilog::BinOp::Eq,
+        common::BinOp::Neq => verilog::BinOp::Ne,
+        common::BinOp::Add => verilog::BinOp::Add,
+        common::BinOp::Sub => verilog::BinOp::Sub,
+        common::BinOp::And => verilog::BinOp::LogAnd,
+        common::BinOp::Or => verilog::BinOp::LogOr,
+    }
+}
+
+/// Converts a general VirIr expression into the corresponding Verilog expression node.
 fn convert_expr(expr: &virir::expr::Expr) -> verilog::Expr {
     match expr {
         virir::expr::Expr::Reference(reference) => {
@@ -188,9 +249,10 @@ fn convert_expr(expr: &virir::expr::Expr) -> verilog::Expr {
                 value: bit_lit.value(),
             })
         }
-        virir::expr::Expr::BinOp(_) => {
-            panic!("VirIr::BinOp cannot yet be converted because it does not store operands")
-        }
+        virir::expr::Expr::BinOp(binop) => verilog::Expr::BinOp(verilog::expr::BinOp {
+            op: convert_binop(binop.op),
+            lhs: Box::new(convert_expr(binop.lhs.as_ref())),
+            rhs: Box::new(convert_expr(binop.rhs.as_ref())),
+        }),
     }
 }
-

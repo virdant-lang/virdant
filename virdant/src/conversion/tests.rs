@@ -4,7 +4,7 @@ use super::convert_virir_to_verilog;
 use crate::common::PortDir;
 use crate::fqn::PackageFqn;
 use crate::source::{LineCol, Region, Span};
-use crate::virir::expr::{Expr, Reference};
+use crate::virir::expr::{BinOp, Expr, Reference};
 use crate::virir::typ::Type;
 use crate::virir::*;
 
@@ -83,10 +83,20 @@ fn test_conversion() {
                     drivers: vec![Driver {
                         region: region.clone(),
                         path: "out".to_string(),
-                        expr: Arc::new(Expr::Reference(Reference {
+                        expr: Arc::new(Expr::BinOp(BinOp {
                             region: region.clone(),
-                            path: "inp".to_string(),
                             typ: TypeId::new(0),
+                            op: crate::common::BinOp::Add,
+                            lhs: Arc::new(Expr::Reference(Reference {
+                                region: region.clone(),
+                                path: "inp".to_string(),
+                                typ: TypeId::new(0),
+                            })),
+                            rhs: Arc::new(Expr::Reference(Reference {
+                                region: region.clone(),
+                                path: "inp".to_string(),
+                                typ: TypeId::new(0),
+                            })),
                         })),
                     }],
                 }),
@@ -114,6 +124,15 @@ fn test_conversion() {
             ("out".to_string(), "out".to_string()),
         ]
     );
+    let crate::verilog::Element::Assign(assign) = &verilog.files[0].modules[1].elements[0] else {
+        panic!("expected second module element to be an assign");
+    };
+    let crate::verilog::Expr::BinOp(binop) = &assign.expr else {
+        panic!("expected assign expression to be a converted binop");
+    };
+    assert!(matches!(binop.op, crate::verilog::BinOp::Add));
+    assert!(matches!(&*binop.lhs, crate::verilog::Expr::Reference(reference) if reference.name == "inp"));
+    assert!(matches!(&*binop.rhs, crate::verilog::Expr::Reference(reference) if reference.name == "inp"));
 
     println!("{verilog:#?}");
     verilog.write_to_stdout().unwrap();
