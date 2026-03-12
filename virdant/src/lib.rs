@@ -1,14 +1,12 @@
-pub mod common;
-pub mod id;
 pub mod vir;
+pub mod common;
 pub mod source;
 pub mod fqn;
 pub mod syntax;
-// pub mod ast;
+pub mod analysis;
 // pub mod types;
-// pub mod math;
-// pub mod stringtable;
-// pub mod error;
+pub mod math;
+pub mod error;
 pub mod virir;
 pub mod conversion;
 pub mod verilog;
