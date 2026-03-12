@@ -35,10 +35,9 @@ impl LanguageServer for Backend {
             .await;
 
         let capabilities = ServerCapabilities {
-            text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                TextDocumentSyncKind::FULL,
-            )),
+            text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
             hover_provider: Some(HoverProviderCapability::Simple(true)),
+            definition_provider: Some(OneOf::Left(true)),
             completion_provider: Some(CompletionOptions {
                 resolve_provider: Some(false),
                 trigger_characters: Some(vec![".".to_string()]),
@@ -98,11 +97,28 @@ impl LanguageServer for Backend {
             range: None,
         }))
     }
-
-    async fn completion(
+    async fn goto_definition(
         &self,
-        _: CompletionParams,
-    ) -> Result<Option<CompletionResponse>> {
+        params: GotoDefinitionParams,
+    ) -> Result<Option<GotoDefinitionResponse>> {
+        let loc = Location {
+            uri: params.text_document_position_params.text_document.uri,
+            range: Range {
+                start: Position {
+                    line: 10,
+                    character: 0,
+                },
+                end: Position {
+                    line: 11,
+                    character: 1,
+                },
+            },
+        };
+
+        Ok(Some(GotoDefinitionResponse::Scalar(loc)))
+    }
+
+    async fn completion(&self, _: CompletionParams) -> Result<Option<CompletionResponse>> {
         let items = vec![
             CompletionItem {
                 label: "func".to_string(),
