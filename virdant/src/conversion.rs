@@ -9,17 +9,22 @@ mod tests;
 
 /// Converts a parsed VirIr program into its Verilog representation.
 pub fn convert_virir_to_verilog(virir: virir::VirIr) -> verilog::Verilog {
+    let emitted_module_names = collect_emitted_module_names(&virir);
+
     verilog::Verilog {
         files: virir
             .packages
             .into_iter()
-            .map(convert_package)
+            .map(|package| convert_package(&emitted_module_names, package))
             .collect(),
     }
 }
 
 /// Converts a single VirIr package into one emitted Verilog file.
-fn convert_package(package: virir::Package) -> verilog::VerilogFile {
+fn convert_package(
+    emitted_module_names: &HashMap<String, String>,
+    package: virir::Package,
+) -> verilog::VerilogFile {
     let file_stem = package.name;
     let package_name = file_stem.clone();
 
@@ -28,21 +33,33 @@ fn convert_package(package: virir::Package) -> verilog::VerilogFile {
         modules: package
             .items
             .into_iter()
-            .map(|item| convert_item(&package_name, item))
+            .map(|item| convert_item(emitted_module_names, &package_name, item))
             .collect(),
     }
 }
 
 /// Converts one VirIr item within a package into a Verilog module.
-fn convert_item(package_name: &str, item: virir::Item) -> verilog::Module {
+fn convert_item(
+    emitted_module_names: &HashMap<String, String>,
+    package_name: &str,
+    item: virir::Item,
+) -> verilog::Module {
     match item {
-        virir::Item::ModDef(mod_def) => convert_mod_def(package_name, mod_def),
+        virir::Item::ModDef(mod_def) => {
+            convert_mod_def(emitted_module_names, package_name, mod_def)
+        }
     }
 }
 
 /// Converts a VirIr module definition into a Verilog module, preserving package qualification.
 /// REVIEW I don't fully understand what this does.
-fn convert_mod_def(package_name: &str, mod_def: virir::ModDef) -> verilog::Module {
+fn convert_mod_def(
+    emitted_module_names: &HashMap<String, String>,
+    package_name: &str,
+    mod_def: virir::ModDef,
+) -> verilog::Module {
+    let module_name = emitted_module_name(emitted_module_names, package_name, &mod_def);
+    let ports = mod_def.ports.iter().map(convert_port).collect();
     let mut connects_by_instance: HashMap<String, Vec<(String, String)>> = mod_def
         .instances
         .iter()
@@ -58,7 +75,10 @@ fn convert_mod_def(package_name: &str, mod_def: virir::ModDef) -> verilog::Modul
             let connects = connects_by_instance.remove(&instance.name).unwrap_or_default();
             verilog::Element::Submodule(verilog::Submodule {
                 name: valid_verilog_name(&instance.name),
-                submodule_name: valid_verilog_name(&instance.module_path),
+                submodule_name: emitted_module_name_for_path(
+                    emitted_module_names,
+                    &instance.module_path,
+                ),
                 connects,
             })
         })
@@ -67,10 +87,56 @@ fn convert_mod_def(package_name: &str, mod_def: virir::ModDef) -> verilog::Modul
     elements.extend(ordinary_drivers.into_iter().map(convert_driver));
 
     verilog::Module {
-        name: valid_verilog_name(&qualified_module_name(package_name, &mod_def.name)),
-        ports: mod_def.ports.into_iter().map(convert_port).collect(),
+        name: module_name,
+        ports,
         elements,
     }
+}
+
+/// Collects the emitted Verilog name for each package-qualified VirIr module path.
+fn collect_emitted_module_names(virir: &virir::VirIr) -> HashMap<String, String> {
+    let mut emitted_module_names = HashMap::new();
+
+    for package in &virir.packages {
+        for item in &package.items {
+            match item {
+                virir::Item::ModDef(mod_def) => {
+                    let module_path = qualified_module_name(&package.name, &mod_def.name);
+                    let emitted_name = if mod_def.is_export {
+                        exact_verilog_name(&mod_def.name)
+                    } else {
+                        valid_verilog_name(&module_path)
+                    };
+                    emitted_module_names.insert(module_path, emitted_name);
+                }
+            }
+        }
+    }
+
+    emitted_module_names
+}
+
+/// Returns the emitted Verilog name for a package-qualified VirIr module path.
+fn emitted_module_name_for_path(
+    emitted_module_names: &HashMap<String, String>,
+    module_path: &str,
+) -> String {
+    emitted_module_names
+        .get(module_path)
+        .cloned()
+        .unwrap_or_else(|| valid_verilog_name(module_path))
+}
+
+/// Returns the emitted Verilog name for a VirIr module definition.
+fn emitted_module_name(
+    emitted_module_names: &HashMap<String, String>,
+    package_name: &str,
+    mod_def: &virir::ModDef,
+) -> String {
+    emitted_module_name_for_path(
+        emitted_module_names,
+        &qualified_module_name(package_name, &mod_def.name),
+    )
 }
 
 /// Collects submodule port connections from drivers and returns the remaining ordinary drivers.
@@ -84,7 +150,7 @@ fn collect_instance_connects(
     for driver in drivers {
         if let Some((instance_name, port_name)) = split_instance_path(&driver.path) {
             if let Some(connects) = connects_by_instance.get_mut(instance_name) {
-                let verilog_name = valid_verilog_name(port_name);
+                let verilog_name = exact_verilog_name(port_name);
                 let expr = convert_connect_expr(driver.expr.as_ref());
                 connects.push((verilog_name, expr));
                 continue;
@@ -95,7 +161,7 @@ fn collect_instance_connects(
             if let Some((instance_name, port_name)) = split_instance_path(&reference.path) {
                 if let Some(connects) = connects_by_instance.get_mut(instance_name) {
                     connects.push((
-                        valid_verilog_name(port_name),
+                        exact_verilog_name(port_name),
                         valid_verilog_name(&driver.path),
                     ));
                     continue;
@@ -110,9 +176,9 @@ fn collect_instance_connects(
 }
 
 /// Converts a VirIr port declaration into its Verilog port form.
-fn convert_port(port: virir::Port) -> verilog::Port {
+fn convert_port(port: &virir::Port) -> verilog::Port {
     verilog::Port {
-        name: valid_verilog_name(&port.name),
+        name: exact_verilog_name(&port.name),
         kind: verilog::PortKind::Wire,
         dir: port.dir,
         width: port.width.into(),
@@ -173,6 +239,16 @@ fn split_instance_path(path: &str) -> Option<(&str, &str)> {
 /// Builds a package-qualified module name in `package::Module` form.
 fn qualified_module_name(package_name: &str, module_name: &str) -> String {
     format!("{package_name}::{module_name}")
+}
+
+/// Returns a Verilog identifier only if it can be emitted exactly as written.
+fn exact_verilog_name(name: &str) -> String {
+    let verilog_name = valid_verilog_name(name);
+    if verilog_name != name {
+        // TODO Support exported names and port names that require escaping while preserving the source spelling.
+        panic!("Name `{name}` cannot be preserved exactly in Verilog");
+    }
+    verilog_name
 }
 
 const VERILOG_KEYWORDS: &[&str] = &[

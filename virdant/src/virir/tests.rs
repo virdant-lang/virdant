@@ -7,7 +7,7 @@ use crate::virir::typ::Type;
 
 const TEST_VIRIR: &str = "virir {
     package top {
-        mod Top {
+        export mod Top {
             incoming inp : builtin::Word[8];
             outgoing out : builtin::Word[8];
 
@@ -42,9 +42,14 @@ fn test_virir() {
     dbg!(&virir);
     assert_eq!(virir.packages.len(), 1);
     assert_eq!(virir.packages[0].name, "top");
+    let Item::ModDef(top) = &virir.packages[0].items[0] else {
+        panic!("expected first item to be Top");
+    };
+    assert!(top.is_export);
     let Item::ModDef(passthrough) = &virir.packages[0].items[1] else {
         panic!("expected second item to be Passthrough");
     };
+    assert!(!passthrough.is_export);
     let Expr::BinOp(binop) = passthrough.drivers[0].expr.as_ref() else {
         panic!("expected Passthrough driver expression to parse as BinOp");
     };
@@ -52,8 +57,10 @@ fn test_virir() {
 
     let verilog = convert_virir_to_verilog(virir);
     assert_eq!(verilog.files[0].name, "top.sv");
-    assert_eq!(verilog.files[0].modules[0].name, r"\top::Top ");
+    assert_eq!(verilog.files[0].modules[0].name, "Top");
     assert_eq!(verilog.files[0].modules[1].name, r"\top::Passthrough ");
+    assert_eq!(verilog.files[0].modules[0].ports[0].name, "inp");
+    assert_eq!(verilog.files[0].modules[0].ports[1].name, "out");
 
     let crate::verilog::Element::Submodule(submodule) = &verilog.files[0].modules[0].elements[0] else {
         panic!("expected converted Top module to start with a submodule instance");

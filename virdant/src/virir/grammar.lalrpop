@@ -13,7 +13,7 @@ PackageDecl: ParsedPackage = {
 }
 
 ModuleDecl: ParsedModDef = {
-    "mod" <name:Ident> "{" <stmts:ModStmt*> "}" => build_mod_def(name, stmts),
+    <export:"export"?> "mod" <name:Ident> "{" <stmts:ModStmt*> "}" => build_mod_def(export.is_some(), name, stmts),
 }
 
 ModStmt: ParsedModStmt = {
@@ -36,7 +36,15 @@ DriverDecl: ParsedDriver = {
 }
 
 ExprNode: ParsedExpr = {
+    "(" <lhs:ExprNode> <op:BinOp> <rhs:ExprPrimary> ")" => {
+        ParsedExpr::BinOp {
+            lhs: Box::new(lhs),
+            op,
+            rhs: Box::new(rhs),
+        }
+    },
     "(" <lhs:ExprNode> <op:BinOp> <rhs:ExprPrimary> ":" <typ:VirType> ")" => {
+        let _ = typ;
         ParsedExpr::BinOp {
             lhs: Box::new(lhs),
             op,

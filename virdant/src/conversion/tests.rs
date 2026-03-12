@@ -21,6 +21,7 @@ fn test_conversion() {
             items: vec![
                 Item::ModDef(ModDef {
                     region: region.clone(),
+                    is_export: true,
                     name: "Top".to_string(),
                     ports: vec![
                         Port {
@@ -64,6 +65,7 @@ fn test_conversion() {
                 }),
                 Item::ModDef(ModDef {
                     region: region.clone(),
+                    is_export: false,
                     name: "Passthrough".to_string(),
                     ports: vec![
                         Port {
@@ -110,8 +112,10 @@ fn test_conversion() {
     assert_eq!(verilog.files.len(), 1);
     assert_eq!(verilog.files[0].name, "top.sv");
     assert_eq!(verilog.files[0].modules.len(), 2);
-    assert_eq!(verilog.files[0].modules[0].name, r"\top::Top ");
+    assert_eq!(verilog.files[0].modules[0].name, "Top");
     assert_eq!(verilog.files[0].modules[1].name, r"\top::Passthrough ");
+    assert_eq!(verilog.files[0].modules[0].ports[0].name, "inp");
+    assert_eq!(verilog.files[0].modules[0].ports[1].name, "out");
     let crate::verilog::Element::Submodule(submodule) = &verilog.files[0].modules[0].elements[0] else {
         panic!("expected first top-level element to be a submodule instance");
     };

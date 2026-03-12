@@ -53,6 +53,7 @@ pub enum Item {
 #[derive(Debug)]
 pub struct ModDef {
     pub region: Region,
+    pub is_export: bool,
     pub name: String,
     pub ports: Vec<Port>,
     pub instances: Vec<Instance>,
@@ -119,6 +120,7 @@ struct ParsedPackage {
 }
 
 struct ParsedModDef {
+    is_export: bool,
     name: String,
     ports: Vec<ParsedPort>,
     instances: Vec<ParsedInstance>,
@@ -163,7 +165,7 @@ fn dummy_region() -> Region {
     )
 }
 
-fn build_mod_def(name: String, stmts: Vec<ParsedModStmt>) -> ParsedModDef {
+fn build_mod_def(is_export: bool, name: String, stmts: Vec<ParsedModStmt>) -> ParsedModDef {
     let mut ports = vec![];
     let mut instances = vec![];
     let mut drivers = vec![];
@@ -177,6 +179,7 @@ fn build_mod_def(name: String, stmts: Vec<ParsedModStmt>) -> ParsedModDef {
     }
 
     ParsedModDef {
+        is_export,
         name,
         ports,
         instances,
@@ -305,6 +308,7 @@ fn build_module(
 
     ModDef {
         region: dummy_region(),
+        is_export: mod_def.is_export,
         name: mod_def.name,
         ports: mod_def
             .ports
