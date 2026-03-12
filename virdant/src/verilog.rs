@@ -47,6 +47,7 @@ pub enum Element {
     Assign(Assign),
     Always(Always),
     Initial(Initial),
+    Submodule(Submodule),
 }
 
 #[derive(Debug)]
@@ -78,6 +79,13 @@ pub struct Always {
 #[derive(Debug)]
 pub struct Initial {
     pub stmts: Vec<Stmt>,
+}
+
+#[derive(Debug)]
+pub struct Submodule {
+    pub name: Vec<Stmt>,
+    pub submodule_name: Vec<Stmt>,
+    pub connects: Vec<(String, String)>,
 }
 
 #[derive(Debug)]
