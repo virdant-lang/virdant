@@ -10,16 +10,16 @@ use crate::syntax::parsing::parse;
 use crate::syntax::payload::AstNodePayload;
 
 #[derive(Debug)]
-pub struct PackageAnalysis {
-    package: PackageFqn,
+pub struct PackageAnalysis<'p> {
+    parsing: &'p Parsing,
     imports: Vec<PackageFqn>,
     items: HashMap<BString, Vec<AstNodeId>>,
 }
 
-impl PackageAnalysis {
+impl<'p> PackageAnalysis<'p> {
     pub fn new(parsing: &Parsing) -> PackageAnalysis {
         let mut analysis = PackageAnalysis {
-            package: parsing.package(),
+            parsing,
             imports: vec![PackageFqn::new("builtin".into())],
             items: HashMap::new(),
         };
@@ -30,11 +30,17 @@ impl PackageAnalysis {
         analysis
     }
 
-    pub fn item_ast<'p>(&self, parsing: &'p Parsing, item_name: &BStr) -> Option<AstNode<'p>> {
+    pub fn package(&self) -> PackageFqn {
+        self.parsing.package()
+    }
+
+//    pub fn errors<'p>(&self, parsing: &'p Parsing, item_name: &BStr) -> Option<AstNode<'p>> {
+
+    pub fn item_ast(&self, item_name: &BStr) -> Option<AstNode<'_>> {
         if let Some(items) = self.items.get(item_name) {
             if items.len() == 1 {
                 let item_ast_id = &items[0];
-                return Some(parsing.ast_node(*item_ast_id));
+                return Some(self.parsing.ast_node(*item_ast_id));
             }
         }
 
@@ -81,9 +87,9 @@ fn tests_package_analysis() {
     dbg!(&analysis);
 
     eprintln!("Top AST:");
-    analysis.item_ast(&parsing, "Top".into()).unwrap().dump();
+    analysis.item_ast("Top".into()).unwrap().dump();
     eprintln!();
 
     eprintln!("Foo AST:");
-    analysis.item_ast(&parsing, "Foo".into()).unwrap().dump();
+    analysis.item_ast("Foo".into()).unwrap().dump();
 }
