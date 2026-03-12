@@ -10,14 +10,13 @@ lalrpop_util::lalrpop_mod!(grammar, "/syntax/grammar.rs");
 
 #[derive(Debug)]
 pub struct Parsing {
-    pub source: Source,
-    strings: Vec<BString>,
-
-    payloads: Vec<AstNodePayload>,
-    pub spans: Vec<Span>,
-    pub parents: Vec<AstNodeId>,
-    pub num_children: Vec<u16>,
-    errors: Vec<AstNodeId>,
+    pub(super) source: Source,
+    pub(super) strings: Vec<BString>,
+    pub(super) payloads: Vec<AstNodePayload>,
+    pub(super) spans: Vec<Span>,
+    pub(super) parents: Vec<AstNodeId>,
+    pub(super) num_children: Vec<u16>,
+    pub(super) errors: Vec<AstNodeId>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -29,6 +28,7 @@ impl std::fmt::Debug for InternedString {
     }
 }
 
+#[cfg(test)]
 #[test]
 fn test_parse() {
     let text = b"mod Top {
