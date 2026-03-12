@@ -18,20 +18,25 @@ pub fn convert_virir_to_verilog(virir: virir::VirIr) -> verilog::Verilog {
 
 fn convert_package(package: virir::Package) -> verilog::VerilogFile {
     let file_stem = package.name;
+    let package_name = file_stem.clone();
 
     verilog::VerilogFile {
         name: format!("{file_stem}.sv"),
-        modules: package.items.into_iter().map(convert_item).collect(),
+        modules: package
+            .items
+            .into_iter()
+            .map(|item| convert_item(&package_name, item))
+            .collect(),
     }
 }
 
-fn convert_item(item: virir::Item) -> verilog::Module {
+fn convert_item(package_name: &str, item: virir::Item) -> verilog::Module {
     match item {
-        virir::Item::ModDef(mod_def) => convert_mod_def(mod_def),
+        virir::Item::ModDef(mod_def) => convert_mod_def(package_name, mod_def),
     }
 }
 
-fn convert_mod_def(mod_def: virir::ModDef) -> verilog::Module {
+fn convert_mod_def(package_name: &str, mod_def: virir::ModDef) -> verilog::Module {
     let mut connects_by_instance: HashMap<String, Vec<(String, String)>> = mod_def
         .instances
         .iter()
@@ -69,11 +74,10 @@ fn convert_mod_def(mod_def: virir::ModDef) -> verilog::Module {
         .instances
         .into_iter()
         .map(|instance| {
-            let submodule_name = instance_module_name(&instance.module_path);
             let connects = connects_by_instance.remove(&instance.name).unwrap_or_default();
             verilog::Element::Submodule(verilog::Submodule {
                 name: valid_verilog_name(&instance.name),
-                submodule_name: valid_verilog_name(&submodule_name),
+                submodule_name: valid_verilog_name(&instance.module_path),
                 connects,
             })
         })
@@ -81,7 +85,7 @@ fn convert_mod_def(mod_def: virir::ModDef) -> verilog::Module {
     elements.extend(ordinary_drivers.into_iter().map(convert_driver));
 
     verilog::Module {
-        name: valid_verilog_name(&mod_def.name),
+        name: valid_verilog_name(&qualified_module_name(package_name, &mod_def.name)),
         ports: mod_def.ports.into_iter().map(convert_port).collect(),
         elements,
     }
@@ -125,12 +129,8 @@ fn split_instance_path(path: &str) -> Option<(&str, &str)> {
     }
 }
 
-fn instance_module_name(module_path: &str) -> String {
-    module_path
-        .rsplit("::")
-        .next()
-        .unwrap_or(module_path)
-        .to_string()
+fn qualified_module_name(package_name: &str, module_name: &str) -> String {
+    format!("{package_name}::{module_name}")
 }
 
 const VERILOG_KEYWORDS: &[&str] = &[

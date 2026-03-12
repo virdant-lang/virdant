@@ -100,12 +100,13 @@ fn test_conversion() {
     assert_eq!(verilog.files.len(), 1);
     assert_eq!(verilog.files[0].name, "top.sv");
     assert_eq!(verilog.files[0].modules.len(), 2);
-    assert_eq!(verilog.files[0].modules[0].name, "Top");
+    assert_eq!(verilog.files[0].modules[0].name, r"\top::Top ");
+    assert_eq!(verilog.files[0].modules[1].name, r"\top::Passthrough ");
     let crate::verilog::Element::Submodule(submodule) = &verilog.files[0].modules[0].elements[0] else {
         panic!("expected first top-level element to be a submodule instance");
     };
     assert_eq!(submodule.name, "passthrough");
-    assert_eq!(submodule.submodule_name, "Passthrough");
+    assert_eq!(submodule.submodule_name, r"\top::Passthrough ");
     assert_eq!(
         submodule.connects,
         vec![
