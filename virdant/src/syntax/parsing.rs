@@ -1,6 +1,6 @@
 use bstr::{BStr, BString};
 
-use crate::source::{Region, Source, SourceOffset, Span};
+use crate::source::{LineCol, Region, Source, SourceOffset, Span};
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::grammar::PackageParser;
@@ -146,6 +146,25 @@ impl Parsing {
             errors.push(self.ast_node(error_id.clone()));
         }
         errors
+    }
+
+    pub fn at(&self, linecol: LineCol) -> Option<AstNodeId> {
+        let mut result: Option<AstNodeId> = None;
+
+        for (i, span) in self.spans.iter().enumerate() {
+            if span.contains(linecol) {
+                let ast_node_id = AstNodeId(i.try_into().unwrap());
+                if let Some(current) = &result {
+                    if self.spans[current.index()].contains_span(*span) {
+                        result = Some(ast_node_id);
+                    }
+                } else {
+                    result = Some(ast_node_id);
+                }
+            }
+        }
+
+        result
     }
 
     pub fn dump(&self) {

@@ -1,6 +1,7 @@
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::sync::Arc;
+use bstr::BString;
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -88,14 +89,24 @@ impl LanguageServer for Backend {
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
-        let contents = HoverContents::Scalar(MarkedString::String(
-            "Example hover information".to_string(),
-        ));
+        let position: Position = params.text_document_position_params.position;
+        let linecol = LineCol::new((position.line + 1) as usize, (position.character + 1) as usize);
+        let parsing = self.parsing(&params.text_document_position_params.text_document.uri);
 
-        Ok(Some(Hover {
-            contents,
-            range: None,
-        }))
+        if let Some(node_id) = parsing.at(linecol) {
+            let node = parsing.ast_node(node_id);
+            let contents = HoverContents::Scalar(MarkedString::String(
+                format!("Node: {}", node.summary())
+            ));
+
+            Ok(Some(Hover {
+                contents,
+                range: None,
+            }))
+        } else {
+            Ok(None)
+        }
+
     }
     async fn goto_definition(
         &self,
@@ -139,19 +150,38 @@ impl LanguageServer for Backend {
 }
 
 use tower_lsp::lsp_types::*;
-use virdant::source::Source;
+use virdant::source::{LineCol, Source};
 use virdant::syntax::parsing::{Parsing, parse};
 
 impl Backend {
-    async fn check_document(&self, uri: &Url, text: &str) {
-        let mut diagnostics = Vec::new();
-
+    fn source(&self, uri: &Url) -> Source {
         let package = Path::new(uri.path())
             .file_stem()
             .map(|stem| PackageFqn::new(stem.as_bytes().into()))
             .unwrap_or_else(|| PackageFqn::new(uri.path().as_bytes().into()));
-        let source = Source::new(package, text.as_bytes().into());
-        let parsing: Parsing = parse(&source);
+        let uri_path = uri
+            .to_file_path()
+            .unwrap_or_else(|_| Path::new(uri.path()).to_path_buf());
+        let path = uri_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(format!("{package}.vir"));
+        let text: BString = std::fs::read(&path)
+            .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()))
+            .into();
+
+        Source::new(package, text)
+    }
+
+    fn parsing(&self, uri: &Url) -> Parsing {
+        let source = self.source(uri);
+        parse(&source)
+    }
+
+    async fn check_document(&self, uri: &Url, text: &str) {
+        let mut diagnostics = Vec::new();
+
+        let parsing: Parsing = self.parsing(&uri);
         for error_node in parsing.errors() {
             let region = error_node.region();
             let diagnostic = Diagnostic {

@@ -206,6 +206,18 @@ impl Span {
     pub fn contains(&self, linecol: LineCol) -> bool {
         self.start() <= linecol && linecol < self.end()
     }
+
+    /// Returns whether or not the span contains a second given span.
+    ///
+    /// This containment is inclusive, meaning the starts may coincide,
+    /// and similarly, the ends may coincide.
+    ///
+    /// This containment relation is partial,
+    /// since for spans which overlap only partly or not at all,
+    /// neither contains the other.
+    pub fn contains_span(&self, span: Span) -> bool {
+        self.start() <= span.start() && span.end() <= self.end()
+    }
 }
 
 impl Location {
