@@ -126,7 +126,7 @@ fn test_vir() {
     let mut vir = Vir::new();
 
     vir.add_package("top");
-    vir.add_package_from_file(EXAMPLES_DIR.join("broken.vir"));
+    vir.add_package_from_file(EXAMPLES_DIR.join("basic.vir"));
 
     vir.parse_all();
 
