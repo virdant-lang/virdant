@@ -41,6 +41,7 @@ pub struct VirIr {
 
 #[derive(Debug)]
 pub struct Package {
+    pub name: String,
     pub items: Vec<Item>,
 }
 
@@ -233,7 +234,10 @@ fn build_package(
     type_ids: &HashMap<String, TypeId>,
     module_signatures: &HashMap<String, HashMap<String, TypeId>>,
 ) -> Package {
+    let name = package.name;
+
     Package {
+        name,
         items: package
             .modules
             .into_iter()

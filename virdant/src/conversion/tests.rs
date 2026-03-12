@@ -17,6 +17,7 @@ fn test_conversion() {
 
     let virir = VirIr {
         packages: vec![Package {
+            name: "top".to_string(),
             items: vec![
                 Item::ModDef(ModDef {
                     region: region.clone(),
@@ -97,6 +98,7 @@ fn test_conversion() {
     let verilog = convert_virir_to_verilog(virir);
 
     assert_eq!(verilog.files.len(), 1);
+    assert_eq!(verilog.files[0].name, "top.sv");
     assert_eq!(verilog.files[0].modules.len(), 2);
     assert_eq!(verilog.files[0].modules[0].name, "Top");
     let crate::verilog::Element::Submodule(submodule) = &verilog.files[0].modules[0].elements[0] else {

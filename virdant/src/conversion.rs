@@ -11,17 +11,16 @@ pub fn convert_virir_to_verilog(virir: virir::VirIr) -> verilog::Verilog {
         files: virir
             .packages
             .into_iter()
-            .enumerate()
-            .map(|(package_index, package)| convert_package(package_index, package))
+            .map(convert_package)
             .collect(),
     }
 }
 
-fn convert_package(package_index: usize, package: virir::Package) -> verilog::VerilogFile {
-    let file_stem = package_file_stem(package_index, &package);
+fn convert_package(package: virir::Package) -> verilog::VerilogFile {
+    let file_stem = package.name;
 
     verilog::VerilogFile {
-        name: format!("{file_stem}.v"),
+        name: format!("{file_stem}.sv"),
         modules: package.items.into_iter().map(convert_item).collect(),
     }
 }
@@ -195,21 +194,3 @@ fn convert_expr(expr: &virir::expr::Expr) -> verilog::Expr {
     }
 }
 
-fn package_file_stem(package_index: usize, package: &virir::Package) -> String {
-    package
-        .items
-        .iter()
-        .map(item_package_name)
-        .find(|name| !name.is_empty())
-        .unwrap_or_else(|| format!("package_{}", package_index + 1))
-}
-
-fn item_package_name(item: &virir::Item) -> String {
-    match item {
-        virir::Item::ModDef(mod_def) => normalize_name(&mod_def.region.package().to_string()),
-    }
-}
-
-fn normalize_name(name: &str) -> String {
-    name.replace("::", "_").replace('-', "_")
-}

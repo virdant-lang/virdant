@@ -2,6 +2,8 @@
 name = "virdant"
 version = "0.3.0"
 edition = "2024"
+autobins = false
+default-run = "vir"
 
 [dependencies]
 anyhow = "1.0.98"
@@ -23,3 +25,7 @@ lalrpop = { version = "0.22.2" }
 [[bin]]
 name = "vir"
 path = "src/bin/vir.rs"
+
+[[bin]]
+name = "vir-ir"
+path = "src/bin/virir.rs"

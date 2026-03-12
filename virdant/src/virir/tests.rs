@@ -39,8 +39,11 @@ fn test_virir() {
     );
 
     dbg!(&virir);
+    assert_eq!(virir.packages.len(), 1);
+    assert_eq!(virir.packages[0].name, "top");
 
     let verilog = convert_virir_to_verilog(virir);
+    assert_eq!(verilog.files[0].name, "top.sv");
 
     let crate::verilog::Element::Submodule(submodule) = &verilog.files[0].modules[0].elements[0] else {
         panic!("expected converted Top module to start with a submodule instance");

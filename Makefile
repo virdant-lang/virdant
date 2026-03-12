@@ -14,3 +14,4 @@ install:
 
 	mkdir -p ${HOME}/.local/virdant/bin
 	cp ./target/release/vir ${HOME}/.local/virdant/bin/
+	cp ./target/release/vir-ir ${HOME}/.local/virdant/bin/
