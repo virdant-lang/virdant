@@ -1,11 +1,16 @@
 pub mod expr;
 mod stmt;
+mod macros;
 
 #[cfg(test)]
 mod tests;
 
 use crate::common::PortDir;
 use crate::common::Radix;
+
+use self::macros::{verilog_write, verilog_writeln};
+use crate::verilog::stmt::Stmt;
+
 use std::io::Write;
 
 type Width = u64;
@@ -73,18 +78,6 @@ pub struct Always {
 #[derive(Debug)]
 pub struct Initial {
     pub stmts: Vec<Stmt>,
-}
-
-#[derive(Debug)]
-pub enum Stmt {
-    AssignBlocking(stmt::AssignBlocking),
-    AssignNonBlocking(stmt::AssignNonBlocking),
-    Display(stmt::Display),
-    Assert(stmt::Assert),
-    Fatal,
-    Finish,
-    Case(stmt::Case),
-    CaseZ(stmt::CaseZ),
 }
 
 #[derive(Debug)]
@@ -171,45 +164,6 @@ impl<'f> Writer<'f> {
         // disabled later by a call to verilog_write
         self.skip_indent = true;
     }
-}
-
-macro_rules! verilog_write {
-    ($writer:expr, $fmt:literal) => {{
-        verilog_write!($writer, $fmt,)
-    }};
-    ($writer:expr, $fmt:literal, $($arg:expr),*) => {{
-        if $writer.skip_indent {
-           $writer.skip_indent = false;
-        } else {
-            let indentation = str::repeat(" ", ($writer.indent * 4) as usize);
-            write!($writer.file, "{indentation}")?;
-        }
-        write!($writer.file, $fmt, $($arg)*)
-    }};
-}
-
-macro_rules! verilog_writeln {
-    ($writer:expr, $fmt:literal) => {{
-        verilog_writeln!($writer, $fmt,)
-    }};
-    ($writer:expr, $fmt:literal, $($arg:expr),*) => {{
-        if $writer.skip_indent {
-           $writer.skip_indent = false;
-        } else {
-            let indentation = str::repeat(" ", ($writer.indent * 4) as usize);
-            write!($writer.file, "{indentation}")?;
-        }
-        writeln!($writer.file, $fmt, $($arg)*)
-    }};
-    ($writer:expr) => {{
-        if $writer.skip_indent {
-           $writer.skip_indent = false;
-        } else {
-            let indentation = str::repeat(" ", ($writer.indent * 4) as usize);
-            write!($writer.file, "{indentation}")?;
-        }
-        writeln!($writer.file)
-    }};
 }
 
 impl Verilog {
@@ -421,54 +375,6 @@ impl Initial {
         }
         writer.dedent();
         verilog_writeln!(writer, "end")?;
-        Ok(())
-    }
-}
-
-impl Stmt {
-    fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
-        match self {
-            Stmt::AssignBlocking(assign_blocking) => {
-                verilog_write!(writer, "{} = ", &assign_blocking.name)?;
-                writer.skip_indent();
-                assign_blocking.expr.write(writer)?;
-                writer.skip_indent();
-                verilog_writeln!(writer, ";")?;
-            }
-            Stmt::AssignNonBlocking(assign_non_blocking) => {
-                verilog_write!(writer, "{} <= ", &assign_non_blocking.name)?;
-                writer.skip_indent();
-                assign_non_blocking.expr.write(writer)?;
-                writer.skip_indent();
-                verilog_writeln!(writer, ";")?;
-            }
-            Stmt::Display(display) => {
-                verilog_write!(writer, "$display(")?;
-                for expr in &display.exprs {
-                    writer.skip_indent();
-                    expr.write(writer)?;
-                }
-                writer.skip_indent();
-                verilog_writeln!(writer, ");")?;
-            }
-            Stmt::Assert(assert) => {
-                verilog_write!(writer, "$assert(")?;
-                for expr in &assert.exprs {
-                    writer.skip_indent();
-                    expr.write(writer)?;
-                }
-                writer.skip_indent();
-                verilog_writeln!(writer, ");")?;
-            }
-            Stmt::Fatal => {
-                verilog_writeln!(writer, "$fatal;")?;
-            }
-            Stmt::Finish => {
-                verilog_writeln!(writer, "$finish;")?;
-            }
-            Stmt::Case(case) => case.write(writer)?,
-            Stmt::CaseZ(casez) => casez.write(writer)?,
-        }
         Ok(())
     }
 }
