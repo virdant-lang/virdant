@@ -300,6 +300,7 @@ fn convert_connect_binop(op: common::BinOp) -> &'static str {
         common::BinOp::Sub => "-",
         common::BinOp::And => "&&",
         common::BinOp::Or => "||",
+        common::BinOp::Xor => "^",
     }
 }
 
@@ -375,6 +376,7 @@ fn is_simple_verilog_identifier(path: &str) -> bool {
 }
 
 /// Converts a VirIr binary operator into the corresponding Verilog binary operator.
+/// TODO I need to add a virir-level BinOp enum, since those are distinct.
 fn convert_binop(op: common::BinOp) -> verilog::BinOp {
     match op {
         common::BinOp::Lt => verilog::BinOp::Lt,
@@ -387,6 +389,7 @@ fn convert_binop(op: common::BinOp) -> verilog::BinOp {
         common::BinOp::Sub => verilog::BinOp::Sub,
         common::BinOp::And => verilog::BinOp::LogAnd,
         common::BinOp::Or => verilog::BinOp::LogOr,
+        common::BinOp::Xor => verilog::BinOp::BitXor,
     }
 }
 

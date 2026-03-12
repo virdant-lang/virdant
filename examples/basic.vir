@@ -1,10 +1,12 @@
-mod Top {
+export mod Top {
+    incoming clock : Clock;
     incoming inp : Bit;
     outgoing out : Bit;
 
-    out <= inp;
-
     mod foo of Foo;
+    foo.clock := clock;
+    foo.inp := inp;
+    out <= foo.inp;
 }
 
 mod Foo {

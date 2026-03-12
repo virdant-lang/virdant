@@ -62,6 +62,8 @@ pub enum Token {
     #[token(b"||")]  PipePipe,
     #[token(b"!")]   Bang,
     #[token(b"~")]   Tilde,
+    #[token(b"^")]   Hat,
+    #[token(b"^^")]  HatHat,
 
     // Groupings
     #[token(b"(")]   ParenLeft,

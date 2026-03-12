@@ -529,6 +529,7 @@ BinOp: BinOp = {
     "-" => BinOp::Sub,
     "&&" => BinOp::And,
     "||" => BinOp::Or,
+    "^^" => BinOp::Xor,
 }
 
 ExprUnOp: AstNodeId = {
@@ -784,6 +785,8 @@ extern {
         "||" => Token::PipePipe,
         "!" => Token::Bang,
         "~" => Token::Tilde,
+        "^" => Token::Hat,
+        "^^" => Token::HatHat,
 
         // Groupings
         "(" => Token::ParenLeft,

@@ -419,9 +419,15 @@ fn infer_binop_type(
         | crate::common::BinOp::Eq
         | crate::common::BinOp::Neq
         | crate::common::BinOp::And
-        | crate::common::BinOp::Or => lookup_type_id(&parse::Type::Bit, type_ids),
-        crate::common::BinOp::Add | crate::common::BinOp::Sub => expected_type
-            .unwrap_or_else(|| expr_type_id(lhs).unwrap_or_else(|| expr_type_id(rhs).unwrap_or(TypeId::new(0)))),
+        | crate::common::BinOp::Or
+        | crate::common::BinOp::Xor
+            => {
+            lookup_type_id(&parse::Type::Bit, type_ids)
+        }
+        crate::common::BinOp::Add | crate::common::BinOp::Sub => {
+            expected_type
+            .unwrap_or_else(|| expr_type_id(lhs).unwrap_or_else(|| expr_type_id(rhs).unwrap_or(TypeId::new(0))))
+        }
     }
 }
 

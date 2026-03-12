@@ -86,6 +86,7 @@ pub enum BinOp {
     Sub,
     And,
     Or,
+    Xor,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
