@@ -37,7 +37,6 @@ enum QueryResultPayload {
 
 pub struct Db {
     rev: usize,
-    errors: Mutex<Vec<Diagnostic>>,
     map: Mutex<HashMap<Query, CachedVal>>,
     context: DbContext,
 }
@@ -73,17 +72,12 @@ impl<'d> Builder<'d> {
         let query = Query::Parsing(package);
         cast!(self.get(query), Parsing)
     }
-
-    pub(crate) fn flag_error(&self, error: Diagnostic) {
-        self.db.flag_error(error);
-    }
 }
 
 impl Db {
     pub fn new(context: DbContext) -> Self {
         Db {
             map: Mutex::new(HashMap::new()),
-            errors: Mutex::new(Vec::new()),
             rev: 0,
             context,
         }
@@ -148,14 +142,6 @@ impl Db {
     fn get(&self, query: Query) -> QueryResult {
         let cached_val = self.get_or_build(query);
         cached_val.val
-    }
-
-    pub(crate) fn flag_error(&self, error: Diagnostic) {
-        self.errors.lock().unwrap().push(error);
-    }
-
-    fn clear_errors(&self) {
-        self.errors.lock().unwrap().clear();
     }
 }
 
