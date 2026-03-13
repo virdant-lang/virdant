@@ -1,3 +1,5 @@
+mod db;
+
 use bstr::BStr;
 use bstr::BString;
 use std::collections::HashMap;
@@ -10,10 +12,22 @@ use crate::syntax::parsing::Parsing;
 use crate::syntax::parsing::parse;
 use crate::syntax::payload::AstNodePayload;
 
+pub struct Location(PackageFqn, AstNodeId);
+
 pub struct PackageAnalysis {
     parsing: Arc<Parsing>,
     imports: Vec<PackageFqn>,
     items: HashMap<BString, Vec<AstNodeId>>,
+}
+
+impl Location {
+    pub fn package(&self) -> PackageFqn {
+        self.0.clone()
+    }
+
+    pub fn ast_node_id(&self) -> AstNodeId {
+        self.1.clone()
+    }
 }
 
 impl std::fmt::Debug for PackageAnalysis {
