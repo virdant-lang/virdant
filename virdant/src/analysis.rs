@@ -5,6 +5,7 @@ use bstr::BString;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::analysis::db::Builder;
 use crate::fqn::PackageFqn;
 use crate::syntax::ast::AstNode;
 use crate::syntax::ast::AstNodeId;
@@ -38,6 +39,11 @@ impl std::fmt::Debug for PackageAnalysis {
             .field("items", &self.items)
             .finish()
     }
+}
+
+fn build_package_analysis(builder: &mut Builder, package: PackageFqn) -> Arc<PackageAnalysis> {
+    let parsing = builder.get_parsing(package);
+    Arc::new(PackageAnalysis::new(parsing))
 }
 
 impl PackageAnalysis {

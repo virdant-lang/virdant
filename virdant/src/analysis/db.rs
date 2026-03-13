@@ -4,12 +4,13 @@ use std::sync::Mutex;
 use bstr::BString;
 use hashbrown::{HashMap, HashSet};
 
+use crate::analysis::PackageAnalysis;
 use crate::syntax::parsing::parse;
 use crate::{diagnostics::Diagnostic, fqn::PackageFqn, source::Source, syntax::parsing::Parsing};
 
 macro_rules! cast {
     ($query_result:expr, $query:ident) => {{
-        if let QueryResult::$query(value) = $query_result {
+        if let QueryResultPayload::$query(value) = $query_result.0 {
             value
         } else {
             panic!("Expected QueryResult::{}", stringify!($query))
@@ -21,12 +22,17 @@ macro_rules! cast {
 enum Query {
     Source(PackageFqn),
     Parsing(PackageFqn),
+    PackageAnalysis(PackageFqn),
 }
 
 #[derive(Clone, Debug)]
-enum QueryResult {
+pub struct QueryResult(QueryResultPayload);
+
+#[derive(Clone, Debug)]
+enum QueryResultPayload {
     Source(Source),
     Parsing(Arc<Parsing>),
+    PackageAnalysis(Arc<PackageAnalysis>),
 }
 
 pub struct Db {
@@ -43,6 +49,12 @@ pub struct CachedVal {
     deps: Vec<Query>,
 }
 
+impl From<QueryResultPayload> for QueryResult {
+    fn from(payload: QueryResultPayload) -> Self {
+        QueryResult(payload)
+    }
+}
+
 impl<'d> Builder<'d> {
     fn new(db: &'d Db) -> Builder<'d> {
         Builder {
@@ -55,6 +67,11 @@ impl<'d> Builder<'d> {
         self.deps.insert(query.clone());
         let cached_val = self.db.get_or_build(query);
         cached_val.val
+    }
+
+    pub(crate) fn get_parsing(&mut self, package: PackageFqn) -> Arc<Parsing> {
+        let query = Query::Parsing(package);
+        cast!(self.get(query), Parsing)
     }
 
     pub(crate) fn flag_error(&self, error: Diagnostic) {
@@ -148,7 +165,7 @@ impl Db {
 
         let query = Query::Source(package);
         let val = CachedVal {
-            val: QueryResult::Source(source),
+            val: QueryResultPayload::Source(source).into(),
             rev: self.rev,
             deps: vec![],
         };
@@ -193,7 +210,7 @@ impl Query {
                         Query::$query($( $args, )*) => {
                             let mut builder = Builder::new(db);
                             let built_val = $buildfn(&mut builder, $( $args.clone(), )*);
-                            let val = QueryResult::$query(built_val);
+                            let val = QueryResultPayload::$query(built_val).into();
                             CachedVal {
                                 val,
                                 rev: builder.db.rev,
@@ -210,6 +227,7 @@ impl Query {
         // $buildfn(&mut builder, arg1, ..., argN)
         dispatch_build!(
             build_parsing : Parsing(package);
+            crate::analysis::build_package_analysis : PackageAnalysis(analysis);
         )
     }
 }
