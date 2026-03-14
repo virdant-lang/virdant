@@ -17,7 +17,7 @@ use crate::syntax::payload::AstNodePayload;
 pub struct Location(PackageFqn, AstNodeId);
 
 pub struct PackageAnalysis {
-    parsing: Arc<Parsing>,
+    package: PackageFqn,
     imports: Vec<PackageFqn>,
     items: HashMap<BString, Vec<AstNodeId>>,
 }
@@ -50,51 +50,51 @@ fn build_package_analysis(builder: &mut Builder, package: PackageFqn) -> Arc<Pac
 impl PackageAnalysis {
     pub fn new(parsing: Arc<Parsing>) -> PackageAnalysis {
         let mut analysis = PackageAnalysis {
-            parsing: parsing.clone(),
+            package: parsing.package(),
             imports: vec![PackageFqn::new("builtin".into())],
             items: HashMap::new(),
         };
 
-        analysis.add_imports();
-        analysis.add_items();
+        analysis.add_imports(parsing.clone());
+        analysis.add_items(parsing.clone());
 
         analysis
     }
 
     pub fn package(&self) -> PackageFqn {
-        self.parsing.package()
+        self.package.clone()
     }
 
 //    pub fn errors<'p>(&self, parsing: &'p Parsing, item_name: &BStr) -> Option<AstNode<'p>> {
 
-    pub fn item_ast(&self, item_name: &BStr) -> Option<AstNode<'_>> {
+    pub fn item_ast_node_id(&self, item_name: &BStr) -> Option<AstNodeId> {
         if let Some(items) = self.items.get(item_name) {
             if items.len() == 1 {
                 let item_ast_id = &items[0];
-                return Some(self.parsing.ast_node(*item_ast_id));
+                return Some(*item_ast_id);
             }
         }
 
         None
     }
 
-    fn add_imports(&mut self) {
-        let root = self.parsing.root();
+    fn add_imports(&mut self, parsing: Arc<Parsing>) {
+        let root = parsing.root();
         for child_node in root.children() {
             eprintln!("child: {}", child_node.summary());
             if let AstNodePayload::Import(import) = child_node.payload() {
-                let package = PackageFqn::new(self.parsing.string(import.package).into());
+                let package = PackageFqn::new(parsing.string(import.package).into());
                 self.imports.push(package);
             }
         }
     }
 
-    fn add_items(&mut self) {
-        let root = self.parsing.root();
+    fn add_items(&mut self, parsing: Arc<Parsing>) {
+        let root = parsing.root();
         for child_node in root.children() {
             eprintln!("child: {}", child_node.summary());
             if child_node.is_item() {
-                let name = self.parsing.string(child_node.name().unwrap()).to_owned();
+                let name = parsing.string(child_node.name().unwrap()).to_owned();
                 if !self.items.contains_key(&name) {
                     self.items.insert(name.clone(), vec![]);
                 }
@@ -112,17 +112,19 @@ fn test_package_analysis() {
     use crate::source::Source;
 
     let source = Source::load_file(EXAMPLES_DIR.join("basic.vir"));
-    let parsing = parse(&source);
-    let analysis = PackageAnalysis::new(Arc::new(parsing));
+    let parsing = Arc::new(parse(&source));
+    let analysis = PackageAnalysis::new(parsing.clone());
 
     dbg!(&analysis);
 
     eprintln!("Top AST:");
-    analysis.item_ast("Top".into()).unwrap().dump();
+    let node_id = analysis.item_ast_node_id("Top".into()).unwrap();
+    parsing.ast_node(node_id).dump();
     eprintln!();
 
     eprintln!("Foo AST:");
-    analysis.item_ast("Foo".into()).unwrap().dump();
+    let node_id = analysis.item_ast_node_id("Foo".into()).unwrap();
+    parsing.ast_node(node_id).dump();
 }
 
 impl ToJson for PackageAnalysis {
