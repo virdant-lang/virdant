@@ -22,9 +22,11 @@ macro_rules! cast {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum Query {
+    Packages(),
     Source(PackageFqn),
     Parsing(PackageFqn),
     PackageAnalysis(PackageFqn),
+    Check(),
 }
 
 #[derive(Clone, Debug)]
@@ -32,9 +34,11 @@ pub struct QueryResult(QueryResultPayload);
 
 #[derive(Clone, Debug)]
 enum QueryResultPayload {
+    Packages(Vec<PackageFqn>),
     Source(Source),
     Parsing(Arc<Parsing>),
     PackageAnalysis(Arc<PackageAnalysis>),
+    Check(Result<(), Vec<Diagnostic>>),
 }
 
 #[derive(Debug)]
@@ -71,9 +75,24 @@ impl<'d> Builder<'d> {
         cached_val.val
     }
 
+    pub(crate) fn get_packages(&mut self) -> Vec<PackageFqn> {
+        let query = Query::Packages();
+        cast!(self.get(query), Packages)
+    }
+
+    pub(crate) fn get_source(&mut self, package: PackageFqn) -> Source {
+        let query = Query::Source(package);
+        cast!(self.get(query), Source)
+    }
+
     pub(crate) fn get_parsing(&mut self, package: PackageFqn) -> Arc<Parsing> {
         let query = Query::Parsing(package);
         cast!(self.get(query), Parsing)
+    }
+
+    pub(crate) fn get_package_analysis(&mut self, package: PackageFqn) -> Arc<PackageAnalysis> {
+        let query = Query::PackageAnalysis(package);
+        cast!(self.get(query), PackageAnalysis)
     }
 }
 
@@ -84,6 +103,11 @@ impl Db {
             rev: 0,
             context,
         }
+    }
+
+    pub fn check(&self) -> Result<(), Vec<Diagnostic>> {
+        let query = Query::Check();
+        cast!(self.get(query), Check)
     }
 
     fn get_or_build(&self, query: Query) -> CachedVal {
@@ -149,6 +173,24 @@ impl Db {
 }
 
 impl Db {
+    pub fn set_packages(&mut self, packages: Vec<PackageFqn>) {
+        self.rev += 1;
+
+        let query = Query::Packages();
+        let val = CachedVal {
+            val: QueryResultPayload::Packages(packages).into(),
+            rev: self.rev,
+            deps: vec![],
+        };
+
+        let mut map = self.map.lock().unwrap();
+        if let Some(entry) = map.get_mut(&query) {
+            *entry = val;
+        } else {
+            map.insert(query, val);
+        }
+    }
+
     pub fn set_source(&mut self, package: PackageFqn, source: Source) {
         self.rev += 1;
 
@@ -165,6 +207,11 @@ impl Db {
         } else {
             map.insert(query, val);
         }
+    }
+
+    pub fn get_packages(&mut self) -> Vec<PackageFqn> {
+        let query = Query::Packages();
+        cast!(self.get(query), Packages)
     }
 
     pub fn get_parsing(&mut self, package: PackageFqn) -> Arc<Parsing> {
@@ -189,7 +236,7 @@ pub struct Builder<'d> {
 
 impl Query {
     fn is_input(&self) -> bool {
-        matches!(self, Query::Source(_))
+        matches!(self, Query::Packages() | Query::Source(_))
     }
 
     fn build(&self, db: &Db) -> CachedVal {
@@ -213,7 +260,7 @@ impl Query {
                             }
                         }
                     )*
-                    _ => unreachable!(),
+                    _ => unreachable!("Tried to dispatch build for {_self:?}"),
                 }
             }
         }
@@ -223,7 +270,23 @@ impl Query {
         dispatch_build!(
             build_parsing : Parsing(package);
             crate::analysis::build_package_analysis : PackageAnalysis(analysis);
+            check : Check();
         )
+    }
+}
+
+fn check(builder: &mut Builder) -> Result<(), Vec<Diagnostic>> {
+    let mut diagnostics = vec![];
+
+    for package in builder.get_packages() {
+        let package_analysis = builder.get_package_analysis(package);
+        diagnostics.extend(package_analysis.diagnostics());
+    }
+
+    if diagnostics.is_empty() {
+        Ok(())
+    } else {
+        Err(diagnostics)
     }
 }
 
@@ -236,20 +299,42 @@ fn build_parsing(builder: &mut Builder<'_>, package: PackageFqn) -> Arc<Parsing>
 #[test]
 fn test_db() {
     let mut db = Db::new(DbContext { });
-    let package = crate::fqn::PackageFqn::new(bstr::BString::new("builtin".as_bytes().to_vec()));
+
+    let builtin_package = crate::fqn::PackageFqn::new(bstr::BString::new("builtin".as_bytes().to_vec()));
+    let basic_package = crate::fqn::PackageFqn::new(bstr::BString::new("basic".as_bytes().to_vec()));
+    db.set_packages(vec![builtin_package.clone(), basic_package.clone()]);
+
     let text = BString::new(include_bytes!("../../../lib/builtin.vir").to_vec());
-    let builtin_source = Source::new(package.clone(), text);
+    let builtin_source = Source::new(builtin_package.clone(), text);
+    db.set_source(builtin_package.clone(), builtin_source);
 
-    db.set_source(package.clone(), builtin_source);
-    for _ in 0 .. 10 {
-        db.get_parsing(package.clone());
-    }
-    let ast = db.get_parsing(package.clone());
-    ast.root().dump();
+    let text = BString::new(include_bytes!("../../../examples/basic.vir").to_vec());
+    let basic_source = Source::new(basic_package.clone(), text);
+    db.set_source(basic_package.clone(), basic_source);
 
-    db.get_package_analysis(package.clone());
 
     eprintln!("{}", db.to_json().pretty(4));
+    eprintln!("CHECK");
+    db.check();
+    eprintln!("{}", db.to_json().pretty(4));
+
+
+//    for _ in 0 .. 10 {
+//        db.get_parsing(builtin_package.clone());
+//    }
+//    let ast = db.get_parsing(builtin_package.clone());
+//    ast.root().dump();
+//
+//    db.get_package_analysis(builtin_package.clone());
+
+    if let Err(diagnostics) = db.check() {
+        println!("Diagnostics:");
+        for diagnostic in diagnostics {
+            println!("  {:?}", diagnostic);
+        }
+    }
+
+//    eprintln!("{}", db.to_json().pretty(4));
 }
 
 impl ToJson for Db {
@@ -266,9 +351,11 @@ impl ToJson for Db {
 impl ToJson for Query {
     fn to_json(&self) -> json::JsonValue {
         match self {
+            Query::Packages() => json::array!("Packages"),
             Query::Source(package) => json::array!("Source", package.to_json()),
             Query::Parsing(package) => json::array!("Parsing", package.to_json()),
             Query::PackageAnalysis(package) => json::array!("PackageAnalysis", package.to_json()),
+            Query::Check() => json::array!("Check"),
         }
     }
 }
@@ -282,9 +369,17 @@ impl ToJson for CachedVal {
 impl ToJson for QueryResult {
     fn to_json(&self) -> json::JsonValue {
         match &self.0 {
+            QueryResultPayload::Packages(packages) => packages.to_json(),
             QueryResultPayload::Source(source) => source.to_json(),
             QueryResultPayload::Parsing(parsing) => format!("{self:?}").into(),
             QueryResultPayload::PackageAnalysis(package_analysis) => package_analysis.to_json(),
+            QueryResultPayload::Check(result) => {
+                if let Err(diagnostics) = &result {
+                    json::value!(["Error", diagnostics.to_json()])
+                } else {
+                    json::value!(["Ok"])
+                }
+            }
         }
     }
 }

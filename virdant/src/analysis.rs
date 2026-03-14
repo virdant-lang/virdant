@@ -62,7 +62,9 @@ impl PackageAnalysis {
         self.package.clone()
     }
 
-//    pub fn errors<'p>(&self, parsing: &'p Parsing, item_name: &BStr) -> Option<AstNode<'p>> {
+    pub fn diagnostics(&self) -> Vec<Diagnostic> {
+        self.diagnostics.clone()
+    }
 
     pub fn item_ast_node_id(&self, item_name: &BStr) -> Option<AstNodeId> {
         if let Some(items) = self.items.get(item_name) {
