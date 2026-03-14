@@ -8,7 +8,7 @@ use crate::source::Region;
 pub type Type = BString;
 
 #[derive(Clone, Debug)]
-pub struct Diagnostic(Arc<dyn IsDiagnostic>);
+pub struct Diagnostic(Arc<dyn IsDiagnostic + Send + Sync>);
 
 trait IsDiagnostic: std::fmt::Debug + 'static + Send + Sync {
     fn region(&self) -> Region;

@@ -37,6 +37,22 @@ impl Vir {
         vir
     }
 
+    pub fn from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Vir {
+        let mut vir = Vir::new();
+        let db = &mut vir.db;
+        let builtin_source = Source::load_file(LIB_DIR.join("builtin.vir"));
+        let mut sources = vec![builtin_source.clone()];
+        db.set_source(builtin_source.package(), builtin_source.clone());
+
+        for filepath in std::fs::read_dir(source_dir.into()).unwrap() {
+            let source: Source = Source::load_file(filepath.unwrap().path());
+            db.set_source(source.package(), source.clone());
+            sources.push(source); 
+        }
+        db.set_packages(sources.iter().map(|source| source.package()).collect());
+        vir
+    }
+
     pub fn packages(&self) -> Vec<String> {
         self.sources.keys().cloned().collect()
     }
@@ -100,25 +116,21 @@ impl Vir {
 
 impl Vir {
     pub fn check_all<P: Into<std::path::PathBuf>>(source_dir: P) {
-        let mut db = Db::new();
+        let mut vir = Vir::from_dir(source_dir);
+        vir.dump_diagnostics();
+    }
 
-        let builtin_source = Source::load_file(LIB_DIR.join("builtin.vir"));
-        let mut sources = vec![builtin_source.clone()];
-        db.set_source(builtin_source.package(), builtin_source.clone());
-
-        for filepath in std::fs::read_dir(source_dir.into()).unwrap() {
-            let source: Source = Source::load_file(filepath.unwrap().path());
-            db.set_source(source.package(), source.clone());
-            sources.push(source); 
-        }
-        db.set_packages(sources.iter().map(|source| source.package()).collect());
-        db.check();
-        if let Err(diagnostics) = db.check() {
+    pub fn dump_diagnostics(&self) {
+        if let Err(diagnostics) = self.check() {
             println!("Diagnostics:");
             for diagnostic in diagnostics {
                 println!("  {:?}", diagnostic);
             }
         }
+    }
+
+    pub fn db(&self) -> &Db {
+        &self.db
     }
 }
 

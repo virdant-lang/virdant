@@ -6,6 +6,7 @@ use bstr::BString;
 use hashbrown::{HashMap, HashSet};
 
 use crate::analysis::PackageAnalysis;
+use crate::analysis::symboltable::SymbolTable;
 use crate::common::json::ToJson;
 use crate::syntax::parsing::parse;
 use crate::{diagnostics::Diagnostic, fqn::PackageFqn, source::Source, syntax::parsing::Parsing};
@@ -26,6 +27,7 @@ enum Query {
     Source(PackageFqn),
     Parsing(PackageFqn),
     PackageAnalysis(PackageFqn),
+    SymbolTable(),
     Check(),
 }
 
@@ -38,6 +40,7 @@ enum QueryResultPayload {
     Source(Source),
     Parsing(Arc<Parsing>),
     PackageAnalysis(Arc<PackageAnalysis>),
+    SymbolTable(Arc<SymbolTable>),
     Check(Result<(), Vec<Diagnostic>>),
 }
 
@@ -92,6 +95,11 @@ impl<'d> Builder<'d> {
     pub(crate) fn get_package_analysis(&mut self, package: PackageFqn) -> Arc<PackageAnalysis> {
         let query = Query::PackageAnalysis(package);
         cast!(self.get(query), PackageAnalysis)
+    }
+
+    pub(crate) fn get_symboltable(&mut self) -> Arc<SymbolTable> {
+        let query = Query::SymbolTable();
+        cast!(self.get(query), SymbolTable)
     }
 }
 
@@ -207,19 +215,24 @@ impl Db {
         }
     }
 
-    pub fn get_packages(&mut self) -> Vec<PackageFqn> {
+    pub fn get_packages(&self) -> Vec<PackageFqn> {
         let query = Query::Packages();
         cast!(self.get(query), Packages)
     }
 
-    pub fn get_parsing(&mut self, package: PackageFqn) -> Arc<Parsing> {
+    pub fn get_parsing(&self, package: PackageFqn) -> Arc<Parsing> {
         let query = Query::Parsing(package);
         cast!(self.get(query), Parsing)
     }
 
-    pub fn get_package_analysis(&mut self, package: PackageFqn) -> Arc<PackageAnalysis> {
+    pub fn get_package_analysis(&self, package: PackageFqn) -> Arc<PackageAnalysis> {
         let query = Query::PackageAnalysis(package);
         cast!(self.get(query), PackageAnalysis)
+    }
+
+    pub fn get_symboltable(&self) -> Arc<SymbolTable> {
+        let query = Query::SymbolTable();
+        cast!(self.get(query), SymbolTable)
     }
 }
 
@@ -264,23 +277,9 @@ impl Query {
         dispatch_build!(
             build_parsing : Parsing(package);
             crate::analysis::build_package_analysis : PackageAnalysis(analysis);
+            crate::analysis::symboltable::build_symboltable : SymbolTable();
             check : Check();
         )
-    }
-}
-
-fn check(builder: &mut Builder) -> Result<(), Vec<Diagnostic>> {
-    let mut diagnostics = vec![];
-
-    for package in builder.get_packages() {
-        let package_analysis = builder.get_package_analysis(package);
-        diagnostics.extend(package_analysis.diagnostics());
-    }
-
-    if diagnostics.is_empty() {
-        Ok(())
-    } else {
-        Err(diagnostics)
     }
 }
 
@@ -349,6 +348,7 @@ impl ToJson for Query {
             Query::Source(package) => json::array!("Source", package.to_json()),
             Query::Parsing(package) => json::array!("Parsing", package.to_json()),
             Query::PackageAnalysis(package) => json::array!("PackageAnalysis", package.to_json()),
+            Query::SymbolTable() => json::array!("SymbolTable"),
             Query::Check() => json::array!("Check"),
         }
     }
@@ -367,6 +367,7 @@ impl ToJson for QueryResult {
             QueryResultPayload::Source(source) => source.to_json(),
             QueryResultPayload::Parsing(parsing) => format!("{self:?}").into(),
             QueryResultPayload::PackageAnalysis(package_analysis) => package_analysis.to_json(),
+            QueryResultPayload::SymbolTable(symboltable) => symboltable.to_json(),
             QueryResultPayload::Check(result) => {
                 if let Err(diagnostics) = &result {
                     json::value!(["Error", diagnostics.to_json()])
@@ -375,5 +376,21 @@ impl ToJson for QueryResult {
                 }
             }
         }
+    }
+}
+
+fn check(builder: &mut Builder) -> Result<(), Vec<Diagnostic>> {
+    let mut diagnostics = vec![];
+    builder.get_symboltable();
+
+    for package in builder.get_packages() {
+        let package_analysis = builder.get_package_analysis(package);
+        diagnostics.extend(package_analysis.diagnostics());
+    }
+
+    if diagnostics.is_empty() {
+        Ok(())
+    } else {
+        Err(diagnostics)
     }
 }

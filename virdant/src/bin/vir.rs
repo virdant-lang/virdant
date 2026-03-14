@@ -131,13 +131,35 @@ fn main() {
             Some(path) => path,
             None => {
                 eprintln!("ERROR");
-                eprintln!("usage: vir parse <file>");
+                eprintln!("usage: vir check <file>");
                 std::process::exit(3);
             }
         };
 
         let path = args.get(1).unwrap();
         virdant::Vir::check_all(path);
+
+        return;
+    }
+
+    if command == "symbols" {
+        let path = match args.get(1) {
+            Some(path) => path,
+            None => {
+                eprintln!("ERROR");
+                eprintln!("usage: vir symbols <file>");
+                std::process::exit(3);
+            }
+        };
+
+        let path = args.get(1).unwrap();
+        let mut vir = virdant::Vir::from_dir(path);
+        vir.dump_diagnostics();
+
+        let symboltable = vir.db().get_symboltable();
+        for symbol in symboltable.symbols() {
+            println!("{symbol:?}");
+        }
 
         return;
     }

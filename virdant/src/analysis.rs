@@ -1,4 +1,5 @@
 pub mod db;
+pub mod symboltable;
 
 use bstr::BStr;
 use bstr::BString;
@@ -65,6 +66,10 @@ impl PackageAnalysis {
 
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         self.diagnostics.clone()
+    }
+
+    pub fn item_names(&self) -> Vec<&BString> {
+        self.items.keys().collect()
     }
 
     pub fn item_ast_node_id(&self, item_name: &BStr) -> Option<AstNodeId> {

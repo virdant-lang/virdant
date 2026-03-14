@@ -107,14 +107,16 @@ impl<'p> AstNode<'p> {
         let spelling = self.spelling();
         if spelling.byte_lines().collect::<Vec<_>>().len() == 1 {
             eprintln!(
-                "{padding}{:} @ {} {spelling:?}",
+                "{padding}{:}    {:?}    @{} {spelling:?}",
                 self.summary(),
+                self.id(),
                 self.span()
             );
         } else {
             eprintln!(
-                "{padding}{:} @ {}",
+                "{padding}{:}    {:?}    @{}",
                 self.summary(),
+                self.id(),
                 self.span()
             );
         }
