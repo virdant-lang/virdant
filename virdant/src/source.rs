@@ -368,3 +368,15 @@ impl ToJson for Source {
         )
     }
 }
+
+impl ToJson for Region {
+    fn to_json(&self) -> json::JsonValue {
+        format!("{self:?}").into()
+    }
+}
+
+impl ToJson for Span {
+    fn to_json(&self) -> json::JsonValue {
+        format!("{self:?}").into()
+    }
+}

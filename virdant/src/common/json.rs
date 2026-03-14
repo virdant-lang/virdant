@@ -39,6 +39,12 @@ impl<K: ToJson, V: ToJson> ToJson for hashbrown::HashMap<K, V> {
     }
 }
 
+impl<T: ToJson> ToJson for hashbrown::HashSet<T> {
+    fn to_json(&self) -> json::JsonValue {
+        json::array!(self.iter().map(|item| item.to_json()).collect::<Vec<_>>())
+    }
+}
+
 impl<K: ToJson, V: ToJson> ToJson for std::collections::HashMap<K, V> {
     fn to_json(&self) -> json::JsonValue {
         json::array!(self.iter().map(|(key, val)| {

@@ -1,19 +1,22 @@
+use bstr::BString;
 use std::sync::Arc;
 
+use crate::common::json::ToJson;
 use crate::fqn::PackageFqn;
 use crate::source::Region;
 
-pub type Type = String;
+pub type Type = BString;
 
 #[derive(Clone, Debug)]
 pub struct Diagnostic(Arc<dyn IsDiagnostic>);
 
 trait IsDiagnostic: std::fmt::Debug + 'static {
     fn region(&self) -> Region;
-    fn message(&self) -> String;
+    fn message(&self) -> BString;
     fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Error }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DiagnosticLevel {
     Error,
     Warning,
@@ -35,7 +38,7 @@ pub struct ImportNotAtTopError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportCycle {
     pub region: Region,
-    pub package_cycle: Vec<String>,
+    pub package_cycle: Vec<BString>,
 }
 
 /// `import` statement names a package which does not exist.
@@ -48,7 +51,7 @@ pub struct UnresolvedImportError {
 /// Package contains two or more `import` statements naming the same package.
 /// Lists regions to all such statements.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DuplicateImportError {
+pub struct DuplicateImport {
     pub region: Region,
     pub imported_package: PackageFqn,
 }
@@ -58,44 +61,44 @@ pub struct DuplicateImportError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuplicateItem {
     pub region: Region,
-    pub item: String,
+    pub item: BString,
 }
 
 /// Two items share the same name in the same package.
 /// Lists regions to all such item declarations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuplicateSlot {
-    pub item: String,
+    pub item: BString,
     pub region: Region,
-    pub slot: String,
+    pub slot: BString,
 }
 
 /// Failed to resolve a package.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedPackage {
     pub region: Region,
-    pub package: String,
+    pub package: BString,
 }
 
 /// Failed to resolve an item.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedItem {
     pub region: Region,
-    pub item: String,
+    pub item: BString,
 }
 
 /// A `reg` component is missing an `on` clause.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MissingOnClause {
     pub region: Region,
-    pub component: String,
+    pub component: BString,
 }
 
 /// A non-`reg` component has an unexpected `on` clause.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnexpectedOnClause {
     pub region: Region,
-    pub component: String,
+    pub component: BString,
 }
 
 /// A `driver` statement used the wrong driver type.
@@ -107,21 +110,21 @@ pub struct WrongDriverType;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoDrivers {
     pub region: Region,
-    pub target: String,
+    pub target: BString,
 }
 
 /// Component has multiple drivers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultipleDrivers {
     pub region: Region,
-    pub target: String,
+    pub target: BString,
 }
 
 /// A component could not be resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedComponent {
     pub region: Region,
-    pub path: String,
+    pub path: BString,
 }
 
 /// Read from a component which is a sink.
@@ -133,7 +136,7 @@ pub struct ReadFromSink;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedMethod {
     pub region: Region,
-    pub method: String,
+    pub method: BString,
     pub subject_typ: Type,
 }
 
@@ -147,7 +150,7 @@ pub struct WrongType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unknown {
     pub region: Region,
-    pub msg: String,
+    pub msg: BString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -181,7 +184,7 @@ impl Diagnostic {
         self.0.region()
     }
 
-    pub fn message(&self) -> String {
+    pub fn message(&self) -> BString {
         self.0.message()
     }
 
@@ -212,8 +215,8 @@ impl IsDiagnostic for UnresolvedMethod {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        format!("Unresovled method: {} on type {}", self.method, self.subject_typ)
+    fn message(&self) -> BString {
+        format!("Unresovled method: {} on type {}", self.method, self.subject_typ).into()
     }
 }
 
@@ -222,8 +225,8 @@ impl IsDiagnostic for Unknown {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        self.msg.to_string()
+    fn message(&self) -> BString {
+        self.msg.to_string().into()
     }
 }
 
@@ -232,18 +235,18 @@ impl IsDiagnostic for DuplicateItem {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        "Duplicate Item".to_owned()
+    fn message(&self) -> BString {
+        "Duplicate Item".to_owned().into()
     }
 }
 
-impl IsDiagnostic for DuplicateImportError {
+impl IsDiagnostic for DuplicateImport {
     fn region(&self) -> Region {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        format!("Duplicate import")
+    fn message(&self) -> BString {
+        format!("Duplicate import").into()
     }
 }
 
@@ -252,8 +255,8 @@ impl IsDiagnostic for ParseError {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        format!("Parse Error")
+    fn message(&self) -> BString {
+        format!("Parse Error").into()
     }
 }
 
@@ -262,8 +265,8 @@ impl IsDiagnostic for ImportNotAtTopError {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        format!("Import not at top of file")
+    fn message(&self) -> BString {
+        format!("Import not at top of file").into()
     }
 }
 
@@ -272,13 +275,19 @@ impl IsDiagnostic for ImportCycle {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
+    fn message(&self) -> BString {
         debug_assert!(self.package_cycle.len() > 0);
 
         if self.package_cycle.len() > 1 {
-            format!("Import cycle: {}", self.package_cycle.join(" "))
+            let package_cycle = self
+                .package_cycle
+                .iter()
+                .map(|package| package.to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("Import cycle: {package_cycle}").into()
         } else {
-            format!("Package imports itself: {}", &self.package_cycle[0])
+            format!("Package imports itself: {}", &self.package_cycle[0]).into()
         }
     }
 }
@@ -288,8 +297,8 @@ impl IsDiagnostic for UnresolvedImportError {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        format!("Unresolved import: {}", self.imported_package)
+    fn message(&self) -> BString {
+        format!("Unresolved import: {}", self.imported_package).into()
     }
 }
 
@@ -298,8 +307,8 @@ impl IsDiagnostic for DuplicateSlot {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        format!("Duplicate slot")
+    fn message(&self) -> BString {
+        format!("Duplicate slot").into()
     }
 }
 
@@ -308,8 +317,8 @@ impl IsDiagnostic for NoDrivers {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        format!("No drivers for {}", &self.target)
+    fn message(&self) -> BString {
+        format!("No drivers for {}", &self.target).into()
     }
 }
 
@@ -318,8 +327,8 @@ impl IsDiagnostic for MultipleDrivers {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        format!("Multiple drivers for {}", &self.target)
+    fn message(&self) -> BString {
+        format!("Multiple drivers for {}", &self.target).into()
     }
 }
 
@@ -328,8 +337,8 @@ impl IsDiagnostic for UnresolvedComponent {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        format!("Unresolved component {}", &self.path)
+    fn message(&self) -> BString {
+        format!("Unresolved component {}", &self.path).into()
     }
 }
 
@@ -338,8 +347,8 @@ impl IsDiagnostic for UnresolvedItem {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        format!("Unresolved item {}", &self.item)
+    fn message(&self) -> BString {
+        format!("Unresolved item {}", &self.item).into()
     }
 }
 
@@ -348,8 +357,8 @@ impl IsDiagnostic for UnresolvedPackage {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        format!("Unresolved package {}", &self.package)
+    fn message(&self) -> BString {
+        format!("Unresolved package {}", &self.package).into()
     }
 }
 
@@ -358,8 +367,8 @@ impl IsDiagnostic for WrongType {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        format!("Wrong type: Expected {} but found {}", self.expected, self.actual)
+    fn message(&self) -> BString {
+        format!("Wrong type: Expected {} but found {}", self.expected, self.actual).into()
     }
 }
 
@@ -368,8 +377,8 @@ impl IsDiagnostic for DoesntFit {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        format!("Value doesn't fit: {} is a {}-bit value, but literal is type builtin::Word[{}]", self.value, self.minwidth, self.width)
+    fn message(&self) -> BString {
+        format!("Value doesn't fit: {} is a {}-bit value, but literal is type builtin::Word[{}]", self.value, self.minwidth, self.width).into()
     }
 }
 
@@ -378,9 +387,9 @@ impl IsDiagnostic for NotWordType {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
+    fn message(&self) -> BString {
         // TODO
-        format!("Expected type TODO which is not a Word type")
+        format!("Expected type TODO which is not a Word type").into()
 //        format!("Expected type {} which is not a Word type", self.typ)
     }
 }
@@ -390,8 +399,8 @@ impl IsDiagnostic for CantInfer {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        format!("Can't infer")
+    fn message(&self) -> BString {
+        format!("Can't infer").into()
     }
 }
 
@@ -400,7 +409,23 @@ impl IsDiagnostic for WrongArgCount {
         self.region.clone()
     }
 
-    fn message(&self) -> String {
-        format!("Wrong arg count")
+    fn message(&self) -> BString {
+        format!("Wrong arg count").into()
+    }
+}
+
+impl ToJson for Diagnostic {
+    fn to_json(&self) -> json::JsonValue {
+        json::object!(
+            "message": self.message().to_json(),
+            "region": self.region().to_json(),
+            "level": self.level().to_json(),
+        )
+    }
+}
+
+impl ToJson for DiagnosticLevel {
+    fn to_json(&self) -> json::JsonValue {
+        format!("{self:?}").into()
     }
 }

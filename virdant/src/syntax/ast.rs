@@ -215,6 +215,13 @@ impl<'p> AstNode<'p> {
             _ => None,
         }
     }
+
+    pub fn package(&self) -> Option<InternedString> {
+        match &self.payload {
+            AstNodePayload::Import(import) => Some(import.package),
+            _ => None
+        }
+    }
 }
 
 impl AstNodeId {
