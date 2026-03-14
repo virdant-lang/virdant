@@ -45,7 +45,6 @@ enum QueryResultPayload {
 pub struct Db {
     rev: usize,
     map: Mutex<HashMap<Query, CachedVal>>,
-    context: DbContext,
 }
 
 #[derive(Debug, Clone)]
@@ -97,11 +96,10 @@ impl<'d> Builder<'d> {
 }
 
 impl Db {
-    pub fn new(context: DbContext) -> Self {
+    pub fn new() -> Self {
         Db {
             map: Mutex::new(HashMap::new()),
             rev: 0,
-            context,
         }
     }
 
@@ -225,10 +223,6 @@ impl Db {
     }
 }
 
-#[derive(Debug)]
-pub struct DbContext {
-}
-
 pub struct Builder<'d> {
     db: &'d Db,
     deps: HashSet<Query>,
@@ -298,7 +292,7 @@ fn build_parsing(builder: &mut Builder<'_>, package: PackageFqn) -> Arc<Parsing>
 
 #[test]
 fn test_db() {
-    let mut db = Db::new(DbContext { });
+    let mut db = Db::new();
 
     let builtin_package = crate::fqn::PackageFqn::new(bstr::BString::new("builtin".as_bytes().to_vec()));
     let basic_package = crate::fqn::PackageFqn::new(bstr::BString::new("basic".as_bytes().to_vec()));
