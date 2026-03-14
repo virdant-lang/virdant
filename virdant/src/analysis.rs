@@ -80,7 +80,6 @@ impl PackageAnalysis {
     fn add_imports(&mut self, parsing: Arc<Parsing>) {
         let root = parsing.root();
         for child_node in root.children() {
-            eprintln!("child: {}", child_node.summary());
             if let AstNodePayload::Import(import) = child_node.payload() {
                 let package = PackageFqn::new(parsing.string(import.package).into());
                 if !self.imports.insert(package) {
@@ -97,7 +96,6 @@ impl PackageAnalysis {
     fn add_items(&mut self, parsing: Arc<Parsing>) {
         let root = parsing.root();
         for child_node in root.children() {
-            eprintln!("child: {}", child_node.summary());
             if child_node.is_item() {
                 let name = parsing.string(child_node.name().unwrap()).to_owned();
                 if !self.items.contains_key(&name) {

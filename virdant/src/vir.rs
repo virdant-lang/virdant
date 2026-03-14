@@ -3,6 +3,8 @@ use std::sync::Arc;
 
 use bstr::BString;
 
+use crate::LIB_DIR;
+use crate::analysis::db::Db;
 use crate::diagnostics;
 use crate::diagnostics::Diagnostic;
 use crate::source::Region;
@@ -95,6 +97,30 @@ impl Vir {
             }
         }
         diagnostics
+    }
+}
+
+impl Vir {
+    pub fn check<P: Into<std::path::PathBuf>>(source_dir: P) {
+        let mut db = Db::new();
+
+        let builtin_source = Source::load_file(LIB_DIR.join("builtin.vir"));
+        let mut sources = vec![builtin_source.clone()];
+        db.set_source(builtin_source.package(), builtin_source.clone());
+
+        for filepath in std::fs::read_dir(source_dir.into()).unwrap() {
+            let source: Source = Source::load_file(filepath.unwrap().path());
+            db.set_source(source.package(), source.clone());
+            sources.push(source); 
+        }
+        db.set_packages(sources.iter().map(|source| source.package()).collect());
+        db.check();
+        if let Err(diagnostics) = db.check() {
+            println!("Diagnostics:");
+            for diagnostic in diagnostics {
+                println!("  {:?}", diagnostic);
+            }
+        }
     }
 }
 

@@ -3,7 +3,7 @@ use internment::ArcIntern;
 
 use crate::common::json::ToJson;
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct PackageFqn(ArcIntern<BString>);
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -60,5 +60,13 @@ impl ItemFqn {
 
     pub fn name(&self) -> &BStr {
         self.1.as_bstr()
+    }
+}
+
+impl std::fmt::Debug for PackageFqn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use bstr::ByteSlice;
+        let s = self.0.to_str_lossy().to_owned();
+        write!(f, "{s}")
     }
 }

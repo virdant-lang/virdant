@@ -126,6 +126,21 @@ fn main() {
 
         return;
     }
+    if command == "check" {
+        let path = match args.get(1) {
+            Some(path) => path,
+            None => {
+                eprintln!("ERROR");
+                eprintln!("usage: vir parse <file>");
+                std::process::exit(3);
+            }
+        };
+
+        let path = args.get(1).unwrap();
+        virdant::Vir::check(path);
+
+        return;
+    }
 
     let bin_path = std::env::current_exe().unwrap();
     let bin_dir = bin_path.parent().unwrap();
