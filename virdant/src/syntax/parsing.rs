@@ -1,5 +1,6 @@
 use bstr::{BStr, BString};
 
+use crate::diagnostics::{self, Diagnostic};
 use crate::fqn::PackageFqn;
 use crate::source::{LineCol, Region, Source, SourceOffset, Span};
 use crate::syntax::ast::{AstNode, AstNodeId};
@@ -154,6 +155,18 @@ impl Parsing {
             errors.push(self.ast_node(error_id.clone()));
         }
         errors
+    }
+
+    pub fn diagnostics(&self) -> Vec<Diagnostic> {
+        let mut diagnostics = vec![];
+        for error in self.errors() {
+            let region = Region::new(self.package(), error.span());
+            let diagnostic = diagnostics::ParseError {
+                region,
+            };
+            diagnostics.push(diagnostic.into());
+        }
+        diagnostics
     }
 
     pub fn at(&self, linecol: LineCol) -> Option<AstNodeId> {

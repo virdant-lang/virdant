@@ -137,7 +137,7 @@ fn main() {
         };
 
         let path = args.get(1).unwrap();
-        virdant::Vir::check(path);
+        virdant::Vir::check_all(path);
 
         return;
     }

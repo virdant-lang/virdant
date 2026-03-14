@@ -10,7 +10,7 @@ pub type Type = BString;
 #[derive(Clone, Debug)]
 pub struct Diagnostic(Arc<dyn IsDiagnostic>);
 
-trait IsDiagnostic: std::fmt::Debug + 'static {
+trait IsDiagnostic: std::fmt::Debug + 'static + Send + Sync {
     fn region(&self) -> Region;
     fn message(&self) -> BString;
     fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Error }

@@ -392,19 +392,21 @@ impl Backend {
         let mut diagnostics = Vec::new();
 
         let mut state = self.state.lock().await;
-        for diag in state.vir.diagnostics() {
-            let diagnostic = Diagnostic {
-                range: span_to_range(diag.region().span()),
-                severity: Some(DiagnosticSeverity::ERROR),
-                code: None,
-                code_description: None,
-                source: Some("virdant".to_string()),
-                message: "Syntax error".to_string(),
-                related_information: None,
-                tags: None,
-                data: None,
-            };
-            diagnostics.push(diagnostic);
+        if let Err(diags) = state.vir.check() {
+            for diag in diags {
+                let diagnostic = Diagnostic {
+                    range: span_to_range(diag.region().span()),
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    code: None,
+                    code_description: None,
+                    source: Some("virdant".to_string()),
+                    message: "Syntax error".to_string(),
+                    related_information: None,
+                    tags: None,
+                    data: None,
+                };
+                diagnostics.push(diagnostic);
+            }
         }
 
         self.client

@@ -16,17 +16,23 @@ use crate::fqn::PackageFqn;
 pub struct Vir {
     sources: HashMap<String, Source>,
     parsings: HashMap<PackageFqn, Arc<Parsing>>,
+    db: Db,
 }
 
 impl Vir {
     pub fn new() -> Vir {
         let mut vir = Vir {
+            db: Db::new(),
             sources: HashMap::new(),
             parsings: HashMap::new(),
         };
 
+        vir.db.set_packages(vec![]);
         vir.add_package("builtin");
         vir.set_package_text("builtin", include_bytes!("../../lib/builtin.vir"));
+
+        let builtin_package = PackageFqn::new("builtin".into());
+        let new_source = Source::new(builtin_package.clone(), include_bytes!("../../lib/builtin.vir").into());
 
         vir
     }
@@ -40,11 +46,17 @@ impl Vir {
         let package = PackageFqn::new(package_name.as_ref().into());
         let source = Source::new(package.clone(), "".into());
         self.sources.insert(package_name.as_ref().to_owned(), source);
+        let mut packages = self.db.get_packages();
+        if !packages.contains(&package) {
+            packages.push(package);
+            self.db.set_packages(packages);
+        }
     }
 
     pub fn remove_package<S: AsRef<str>>(&mut self, package_name: S) {
         assert!(self.sources.contains_key(package_name.as_ref()));
         self.sources.remove(package_name.as_ref());
+        self.db.set_packages(self.sources.keys().map(|package| package.clone().into()).collect());
     }
 
     pub fn set_package_text<S: AsRef<str>, T: Into<BString>>(&mut self, package_name: S, source: T) {
@@ -54,9 +66,10 @@ impl Vir {
         let new_source = Source::new(package.clone(), source.into());
 
         let mut source = self.sources.get_mut(package_name.as_ref()).unwrap();
-        *source = new_source;
+        *source = new_source.clone();
 
         self.parsings.remove(&package);
+        self.db.set_source(package, source.clone());
     }
 
     pub fn add_package_from_file<P: AsRef<std::path::Path>>(&mut self, filepath: P) {
@@ -64,7 +77,9 @@ impl Vir {
         assert!(!self.sources.contains_key(&package_name));
         let package = PackageFqn::new(package_name.clone().into());
         let source = Source::load_file(filepath);
-        self.sources.insert(package_name, source);
+        self.sources.insert(package_name, source.clone());
+        self.db.set_source(package, source);
+        self.db.set_packages(self.sources.keys().map(|package| package.clone().into()).collect());
     }
 
     pub fn parse<S: AsRef<str>>(&mut self, package_name: S) {
@@ -73,35 +88,18 @@ impl Vir {
         self.parsings.insert(source.package(), parsing);
     }
 
-    pub fn parse_all(&mut self) {
-        for package in self.packages() {
-            self.parse(&package);
-        }
-    }
-
     pub fn parsing<S: AsRef<str>>(&self, package_name: S) -> Arc<Parsing> {
         let package = self.sources[package_name.as_ref()].package();
         self.parsings.get(&package).unwrap().clone()
     }
 
-    pub fn diagnostics(&mut self) -> Vec<Diagnostic> {
-        self.parse_all();
-        let mut diagnostics = vec![];
-        for parsing in self.parsings.values() {
-            for error in parsing.errors() {
-                let region = Region::new(parsing.package(), error.span());
-                let diagnostic = diagnostics::ParseError {
-                    region,
-                };
-                diagnostics.push(diagnostic.into());
-            }
-        }
-        diagnostics
+    pub fn check(&self) -> Result<(), Vec<Diagnostic>> {
+        self.db.check()
     }
 }
 
 impl Vir {
-    pub fn check<P: Into<std::path::PathBuf>>(source_dir: P) {
+    pub fn check_all<P: Into<std::path::PathBuf>>(source_dir: P) {
         let mut db = Db::new();
 
         let builtin_source = Source::load_file(LIB_DIR.join("builtin.vir"));
@@ -151,12 +149,8 @@ fn test_vir() {
 
     let mut vir = Vir::new();
 
-    vir.add_package("top");
     vir.add_package_from_file(EXAMPLES_DIR.join("basic.vir"));
 
-    vir.parse_all();
-
-    dbg!(vir.diagnostics());
-
+    vir.check().unwrap();
     dbg!(&vir);
 }
