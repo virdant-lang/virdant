@@ -13,6 +13,7 @@ clap = { version = "4.5.46", features = ["derive"] }
 defile = "0.2.1"
 hashbrown = "0.15.4"
 internment = { version = "0.8.6", features = ["arc"] }
+json = "0.12.4"
 lalrpop-util = { version = "0.22.2", features = ["lexer"] }
 logos = "0.15.1"
 nix = { version = "0.31.2", features = ["process"] }

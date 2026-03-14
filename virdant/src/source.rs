@@ -3,7 +3,7 @@ use std::os::unix::ffi::OsStrExt;
 
 use bstr::{BStr, BString};
 
-use crate::fqn::PackageFqn;
+use crate::{common::json::ToJson, fqn::PackageFqn};
 
 /// A source file loaded into memory for use by the tokenizer with a given package name.
 #[derive(Clone, Debug)]
@@ -357,5 +357,14 @@ impl std::fmt::Debug for Span {
                 self.end().col(),
             )
         }
+    }
+}
+
+impl ToJson for Source {
+    fn to_json(&self) -> json::JsonValue {
+        json::object!(
+            "package": self.package().to_json(),
+            "text": self.text().to_json(),
+        )
     }
 }

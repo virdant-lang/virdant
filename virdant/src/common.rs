@@ -1,6 +1,7 @@
 pub mod math;
 pub mod graph;
 pub mod union;
+pub mod json;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ComponentClass {

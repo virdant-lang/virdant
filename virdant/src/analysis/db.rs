@@ -1,10 +1,12 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use bstr::BStr;
 use bstr::BString;
 use hashbrown::{HashMap, HashSet};
 
 use crate::analysis::PackageAnalysis;
+use crate::common::json::ToJson;
 use crate::syntax::parsing::parse;
 use crate::{diagnostics::Diagnostic, fqn::PackageFqn, source::Source, syntax::parsing::Parsing};
 
@@ -35,13 +37,14 @@ enum QueryResultPayload {
     PackageAnalysis(Arc<PackageAnalysis>),
 }
 
+#[derive(Debug)]
 pub struct Db {
     rev: usize,
     map: Mutex<HashMap<Query, CachedVal>>,
     context: DbContext,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct CachedVal {
     val: QueryResult,
     rev: usize,
@@ -168,8 +171,14 @@ impl Db {
         let query = Query::Parsing(package);
         cast!(self.get(query), Parsing)
     }
+
+    pub fn get_package_analysis(&mut self, package: PackageFqn) -> Arc<PackageAnalysis> {
+        let query = Query::PackageAnalysis(package);
+        cast!(self.get(query), PackageAnalysis)
+    }
 }
 
+#[derive(Debug)]
 pub struct DbContext {
 }
 
@@ -224,7 +233,6 @@ fn build_parsing(builder: &mut Builder<'_>, package: PackageFqn) -> Arc<Parsing>
     Arc::new(parsing)
 }
 
-
 #[test]
 fn test_db() {
     let mut db = Db::new(DbContext { });
@@ -238,4 +246,45 @@ fn test_db() {
     }
     let ast = db.get_parsing(package.clone());
     ast.root().dump();
+
+    db.get_package_analysis(package.clone());
+
+    eprintln!("{}", db.to_json().pretty(4));
+}
+
+impl ToJson for Db {
+    fn to_json(&self) -> json::JsonValue {
+        let mut pairs: Vec<json::JsonValue> = vec![];
+        let guard = self.map.lock().unwrap();
+        for (query, val) in guard.iter() {
+            pairs.push(json::array!(query.to_json(), val.to_json()));
+        }
+        json::array!(pairs)
+    }
+}
+
+impl ToJson for Query {
+    fn to_json(&self) -> json::JsonValue {
+        match self {
+            Query::Source(package) => json::array!("Source", package.to_json()),
+            Query::Parsing(package) => json::array!("Parsing", package.to_json()),
+            Query::PackageAnalysis(package) => json::array!("PackageAnalysis", package.to_json()),
+        }
+    }
+}
+
+impl ToJson for CachedVal {
+    fn to_json(&self) -> json::JsonValue {
+        self.val.to_json()
+    }
+}
+
+impl ToJson for QueryResult {
+    fn to_json(&self) -> json::JsonValue {
+        match &self.0 {
+            QueryResultPayload::Source(source) => source.to_json(),
+            QueryResultPayload::Parsing(parsing) => format!("{self:?}").into(),
+            QueryResultPayload::PackageAnalysis(package_analysis) => package_analysis.to_json(),
+        }
+    }
 }

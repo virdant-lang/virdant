@@ -1,4 +1,4 @@
-mod db;
+pub mod db;
 
 use bstr::BStr;
 use bstr::BString;
@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::analysis::db::Builder;
+use crate::common::json::ToJson;
 use crate::fqn::PackageFqn;
 use crate::syntax::ast::AstNode;
 use crate::syntax::ast::AstNodeId;
@@ -122,4 +123,13 @@ fn test_package_analysis() {
 
     eprintln!("Foo AST:");
     analysis.item_ast("Foo".into()).unwrap().dump();
+}
+
+impl ToJson for PackageAnalysis {
+    fn to_json(&self) -> json::JsonValue {
+        json::object!(
+            "imports": self.imports.to_json(),
+            "items": self.items.to_json(),
+        )
+    }
 }

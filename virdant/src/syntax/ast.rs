@@ -3,6 +3,7 @@ use bstr::{BStr, ByteSlice};
 //pub mod parser_lalrpop;
 //pub use parser_lalrpop as parser;
 
+use crate::common::json::ToJson;
 use crate::source::{Region, Span};
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::{InternedString, Parsing};
@@ -219,5 +220,11 @@ impl<'p> AstNode<'p> {
 impl AstNodeId {
     pub fn index(&self) -> usize {
         self.0 as usize
+    }
+}
+
+impl ToJson for AstNodeId {
+    fn to_json(&self) -> json::JsonValue {
+        format!("{self:?}").into()
     }
 }

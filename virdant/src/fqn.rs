@@ -1,11 +1,19 @@
 use bstr::{BStr, BString, ByteSlice};
 use internment::ArcIntern;
 
+use crate::common::json::ToJson;
+
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct PackageFqn(ArcIntern<BString>);
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct ItemFqn(PackageFqn, ArcIntern<BString>);
+
+impl ToJson for PackageFqn {
+    fn to_json(&self) -> json::JsonValue {
+        self.to_string().into()
+    }
+}
 
 impl std::fmt::Display for PackageFqn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
