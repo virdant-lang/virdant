@@ -22,7 +22,7 @@ impl Db {
 
         let mut dot = String::new();
         writeln!(&mut dot, "digraph db {{").unwrap();
-        writeln!(&mut dot, "    rankdir=LR;").unwrap();
+        writeln!(&mut dot, "    rankdir=RL;").unwrap();
         writeln!(
             &mut dot,
             "    graph [label=\"Db Query Dependencies\", labelloc=t];",
@@ -52,6 +52,22 @@ impl Db {
                 &mut dot,
                 "    q{node_id} [shape={shape}, style=\"{style}\", label=\"{label}\"];",
             ).unwrap();
+        }
+
+        let mut input_node_ids: Vec<usize> = queries
+            .iter()
+            .filter(|query| query.is_input())
+            .map(|query| query_indices[query])
+            .collect();
+        input_node_ids.sort_unstable();
+
+        if !input_node_ids.is_empty() {
+            writeln!(&mut dot, "    subgraph inputs {{").unwrap();
+            writeln!(&mut dot, "        rank=max;").unwrap();
+            for node_id in input_node_ids {
+                writeln!(&mut dot, "        q{node_id};").unwrap();
+            }
+            writeln!(&mut dot, "    }}").unwrap();
         }
 
         let mut edges: Vec<(usize, usize)> = vec![];
