@@ -14,6 +14,7 @@ use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 
+// TODO consolidate Widths into a single type in common.
 pub type Width = u64;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -354,8 +355,17 @@ impl Typing {
                 Some(Type::Bit)
             }
             AstNodePayload::ExprWordLit(expr_word_lit) => {
-                // TODO HACK This ignores width and just gives Word[8]
-                Some(Type::Word(8))
+                // TODO I shouldn't be doing string manip here.
+
+                use atoi::atoi;
+                let path = node.spelling();
+                if path.contains(&b'w') {
+                    let parts: Vec<_> = path.split(|ch| *ch == b'w').collect();
+                    let width = atoi(parts[1]).unwrap();
+                    Some(Type::Word(width))
+                } else {
+                    None
+                }
             }
             _ => None,
         }

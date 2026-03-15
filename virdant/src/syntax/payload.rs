@@ -1,3 +1,4 @@
+use crate::analysis::typecheck::Width;
 use crate::syntax::ast::AstNodeId;
 use crate::syntax::parsing::InternedString;
 use crate::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, UnOp};
