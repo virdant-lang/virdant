@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bstr::{BStr, BString};
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use indexmap::IndexMap;
 
 use crate::analysis::Location;
@@ -16,14 +16,19 @@ use crate::syntax::payload::AstNodePayload;
 pub struct SymbolTable {
     symbols: IndexMap<BString, Symbol>,
     diagnostics: Vec<Diagnostic>,
+    builtin_names: HashSet<BString>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Symbol {
+    id: SymbolId,
     fqn: BString,
     location: Location,
     kind: SymbolKind,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SymbolId(pub u32);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SymbolKind {
@@ -37,6 +42,10 @@ pub enum SymbolKind {
 }
 
 impl Symbol {
+    pub fn id(&self) -> SymbolId {
+        self.id
+    }
+
     pub fn fqn(&self) -> &BStr {
         use bstr::ByteSlice;
         self.fqn.as_bstr()
@@ -55,6 +64,7 @@ pub fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
     let packages = builder.get_packages();
     let mut diagnostics = vec![];
     let mut symbols = vec![];
+    let mut builtin_names = vec![];
 
     for package in packages {
         let analysis = builder.get_package_analysis(package.clone());
@@ -66,7 +76,8 @@ pub fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
             let node = parsing.ast_node(ast_node_id);
             let location = Location::new(package.clone(), ast_node_id);
             let fqn: BString = format!("{}::{}", package, item_name.clone()).into();
-            let kind = match node.payload() {
+            let payload = node.payload();
+            let kind = match &payload {
                 AstNodePayload::ModDef(mod_def) => SymbolKind::ModDef,
                 AstNodePayload::StructDef(struct_def) => SymbolKind::StructDef,
                 AstNodePayload::UnionDef(union_def) => SymbolKind::UnionDef,
@@ -76,9 +87,16 @@ pub fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
                 AstNodePayload::SocketDef(socket_def) => SymbolKind::SocketDef,
                 _ => unreachable!(),
             };
+
+            if let AstNodePayload::BuiltinDef(builtin_def) = payload {
+                builtin_names.push(item_name.to_owned());
+            }
+
+            let id = SymbolId(symbols.len().try_into().unwrap());
             symbols.push((
                 fqn.clone(),
                 Symbol {
+                    id,
                     fqn,
                     location,
                     kind,
@@ -90,10 +108,15 @@ pub fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
     Arc::new(SymbolTable {
         symbols: symbols.into_iter().collect(),
         diagnostics,
+        builtin_names: builtin_names.into_iter().collect(),
     })
 }
 
 impl SymbolTable {
+    pub fn symbol(&self, symbol_id: SymbolId) -> Symbol {
+        self.symbols[symbol_id.0 as usize].clone()
+    }
+
     pub fn symbols(&self) -> Vec<Symbol> {
         self.symbols.iter().map(|(key, val)| val.clone()).collect()
     }
@@ -111,6 +134,47 @@ impl SymbolTable {
             .filter(|val| val.kind.is_typedef())
             .collect()
     }
+
+    pub fn resolve_item(&self, name: &BStr, in_package: PackageFqn) -> Option<&Symbol> {
+        use bstr::ByteSlice;
+
+        let item_fqn: BString = if let Some((package_name, item_name)) = try_split_qualification(name) {
+            name.to_owned()
+        } else if self.builtin_names.contains(name) {
+            format!("builtin::{name}").into()
+        } else{
+            format!("{in_package}::{name}").into()
+        };
+        self.lookup_item_by_fqn(item_fqn.as_bstr())
+    }
+
+    fn lookup_item_by_fqn(&self, item_fqn: &BStr) -> Option<&Symbol> {
+        for (fqn, symbol) in &self.symbols {
+            if symbol.kind.is_item() && fqn == item_fqn {
+                return Some(symbol);
+            }
+        }
+        None
+    }
+}
+
+// Tries to split "foo::Bar" into Some(("foo", "bar")).
+// Returns None if it can't.
+fn try_split_qualification(item_fqn: &BStr) -> Option<(BString, BString)> {
+    if let Some(split_at) = item_fqn.windows(2).position(|window| window == b"::") {
+        let first = BString::from(item_fqn[..split_at].to_vec());
+        let second = BString::from(item_fqn[(split_at + 2)..].to_vec());
+        Some((first, second))
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn test_try_split_qualification() {
+    assert_eq!(try_split_qualification("foo::Bar".into()), Some(("foo".into(), "Bar".into())));
+    assert_eq!(try_split_qualification("Bar".into()), None);
 }
 
 impl SymbolKind {

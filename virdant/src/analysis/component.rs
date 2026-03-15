@@ -124,6 +124,7 @@ pub fn find_item_location(builder: &mut Builder, item_fqn: BString) -> Location 
     panic!("Couldn't find Item: {item_fqn}")
 }
 
+// TODO duplicate
 fn split(moddef_fqn: BString) -> (BString, BString) {
     let bytes = moddef_fqn.as_slice();
     let split_at = bytes

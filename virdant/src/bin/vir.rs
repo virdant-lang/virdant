@@ -175,7 +175,7 @@ fn main() {
 
         let symboltable = vir.db().get_symboltable();
         for symbol in symboltable.symbols() {
-            println!("{:<20}", symbol.fqn());
+            println!("{:?} {:<20} {:?}", symbol.id(), symbol.fqn(), symbol.kind());
         }
 
         return;
