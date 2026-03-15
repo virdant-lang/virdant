@@ -142,6 +142,18 @@ fn main() {
         return;
     }
 
+    if command == "db" {
+        let path = args.get(1).unwrap();
+        let outpath = args.get(2).unwrap();
+
+        let path = args.get(1).unwrap();
+        let mut vir = virdant::Vir::from_dir(path);
+        vir.check();
+        vir.db().save_graphviz(outpath);
+
+        return;
+    }
+
     if command == "symbols" {
         let path = match args.get(1) {
             Some(path) => path,

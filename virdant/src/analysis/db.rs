@@ -1,3 +1,6 @@
+mod graphviz;
+
+use std::fmt::Write;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -359,6 +362,13 @@ impl ToJson for Db {
         }
         json::array!(pairs)
     }
+}
+
+fn escape_graphviz_label(label: &str) -> String {
+    label
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
 }
 
 impl ToJson for Query {
