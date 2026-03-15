@@ -16,7 +16,7 @@ trait IsDiagnostic: std::fmt::Debug + 'static + Send + Sync {
     fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Error }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiagnosticLevel {
     Error,
     Warning,
@@ -177,11 +177,16 @@ pub struct WrongArgCount {
     pub region: Region,
 }
 
-/// `import` statement names a package which does not exist.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Todo {
     pub region: Region,
     pub message: BString,
+}
+
+#[derive(Debug, Clone)]
+pub struct Soften {
+    pub inner: Diagnostic,
+    pub level: DiagnosticLevel,
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -433,6 +438,20 @@ impl IsDiagnostic for Todo {
     fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Info }
 }
 
+impl IsDiagnostic for Soften {
+    fn region(&self) -> Region {
+        self.inner.region()
+    }
+
+    fn message(&self) -> BString {
+        self.inner.message()
+    }
+
+    fn level(&self) -> DiagnosticLevel {
+        self.level
+    }
+}
+
 impl ToJson for Diagnostic {
     fn to_json(&self) -> json::JsonValue {
         json::object!(
@@ -446,5 +465,21 @@ impl ToJson for Diagnostic {
 impl ToJson for DiagnosticLevel {
     fn to_json(&self) -> json::JsonValue {
         format!("{self:?}").into()
+    }
+}
+
+impl Diagnostic {
+    pub fn to_warning(self) -> Diagnostic {
+        (Soften {
+            inner: self,
+            level: DiagnosticLevel::Warning,
+        }).into()
+    }
+
+    fn to_info(self) -> Diagnostic {
+        (Soften {
+            inner: self,
+            level: DiagnosticLevel::Info,
+        }).into()
     }
 }

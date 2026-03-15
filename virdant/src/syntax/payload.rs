@@ -63,7 +63,7 @@ pub enum AstNodePayload {
 
     Ofness(Ofness),
     It,
-    Path,
+    Path(Path),
 }
 
 impl AstNodePayload {
@@ -118,7 +118,7 @@ impl AstNodePayload {
             AstNodePayload::PatElse => "PatElse",
             AstNodePayload::Ofness(ofness) => "Ofness",
             AstNodePayload::It => "It",
-            AstNodePayload::Path => "Path",
+            AstNodePayload::Path(path) => "Path",
         }
     }
 }
@@ -294,4 +294,9 @@ pub struct PatEnumerant {
 pub struct Ofness {
     pub package: Option<InternedString>,
     pub name: InternedString,
+}
+
+#[derive(Clone, Debug)]
+pub struct Path {
+    pub path: InternedString,
 }

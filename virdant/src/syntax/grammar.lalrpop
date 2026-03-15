@@ -692,9 +692,10 @@ Ofness: AstNodeId = {
 }
 
 Path: AstNodeId = {
-    <ll:@L> <start:(Ident ".")*> <end:Ident> <rr:@R> => {
-        let payload = AstNodePayload::Path;
+    <ll:@L> <_start:(Ident ".")*> <_end:Ident> <rr:@R> => {
         let span = parser.span(ll, rr);
+        let path = parser.intern(span);
+        let payload = AstNodePayload::Path(payload::Path { path });
         let num_children = 0;
 
         parser.add_node(payload, span, num_children)

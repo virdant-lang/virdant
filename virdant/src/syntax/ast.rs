@@ -190,7 +190,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::PatElse => format!("PatElse"),
             AstNodePayload::Ofness(ofness) => format!("Ofness"),
             AstNodePayload::It => format!("It"),
-            AstNodePayload::Path => format!("Path"),
+            AstNodePayload::Path(path) => format!("Path"),
         }
     }
 
@@ -215,6 +215,14 @@ impl<'p> AstNode<'p> {
             AstNodePayload::SocketDef(socket_def) => Some(socket_def.name),
             AstNodePayload::BuiltinDef(builtin_def) => Some(builtin_def.name),
             AstNodePayload::EnumDef(enum_def) => Some(enum_def.name),
+            _ => None,
+        }
+    }
+
+    pub fn path(&self) -> Option<InternedString> {
+        match &self.payload {
+            AstNodePayload::ExprReference => self.child(0).path(),
+            AstNodePayload::Path(path) => Some(path.path),
             _ => None,
         }
     }
