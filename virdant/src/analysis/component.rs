@@ -27,6 +27,10 @@ impl ComponentAnalysis {
         }
         panic!()
     }
+
+    pub fn components(&self) -> Vec<(BString, Type)> {
+        self.components.clone()
+    }
 }
 
 pub fn build_component_analysis(builder: &mut Builder, moddef_fqn: BString) -> Arc<ComponentAnalysis> {
@@ -100,7 +104,7 @@ fn node_to_typ(typ_node: AstNode<'_>, parsing: Arc<Parsing>) -> Type {
     }
 }
 
-fn find_item_location(builder: &mut Builder, item_fqn: BString) -> Location {
+pub fn find_item_location(builder: &mut Builder, item_fqn: BString) -> Location {
     // TODO HACK I really need to not use a BString and instead, use a SymbolId, which can locate
     // the package it's in. Until then, we can just brute force and deal with duplicates.
     let (package_name, moddef_name) = split(item_fqn.clone());

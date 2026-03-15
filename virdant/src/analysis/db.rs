@@ -13,7 +13,7 @@ use crate::analysis::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::symboltable::SymbolKind;
 use crate::analysis::symboltable::SymbolTable;
-use crate::analysis::typecheck::{ExprRoot, Typing};
+use crate::analysis::typecheck::{ExprRoot, Typing, TypingContext};
 use crate::common::json::ToJson;
 use crate::diagnostics::DiagnosticLevel;
 use crate::syntax::parsing::parse;
@@ -35,10 +35,12 @@ enum Query {
     Packages(),
     Source(PackageFqn),
     Parsing(PackageFqn),
+    SyntaxErrors(),
     PackageAnalysis(PackageFqn),
     ComponentAnalysis(BString),
     SymbolTable(),
     ExprRoots(),
+    TypingContext(BString),
     Typing(ExprRoot),
     TypeCheck(),
     Check(),
@@ -52,10 +54,12 @@ enum QueryResultPayload {
     Packages(Vec<PackageFqn>),
     Source(Source),
     Parsing(Arc<Parsing>),
+    SyntaxErrors(Vec<Diagnostic>),
     PackageAnalysis(Arc<PackageAnalysis>),
     ComponentAnalysis(Arc<ComponentAnalysis>),
     SymbolTable(Arc<SymbolTable>),
     ExprRoots(Vec<ExprRoot>),
+    TypingContext(TypingContext),
     Typing(Arc<Typing>),
     TypeCheck(Vec<Diagnostic>),
     Check(Result<Vec<Diagnostic>, Vec<Diagnostic>>),
@@ -109,6 +113,11 @@ impl<'d> Builder<'d> {
         cast!(self.get(query), Parsing)
     }
 
+    pub(crate) fn get_syntax_errors(&mut self) -> Vec<Diagnostic> {
+        let query = Query::SyntaxErrors();
+        cast!(self.get(query), SyntaxErrors)
+    }
+
     pub(crate) fn get_package_analysis(&mut self, package: PackageFqn) -> Arc<PackageAnalysis> {
         let query = Query::PackageAnalysis(package);
         cast!(self.get(query), PackageAnalysis)
@@ -127,6 +136,11 @@ impl<'d> Builder<'d> {
     pub(crate) fn get_exprroots(&mut self) -> Vec<ExprRoot> {
         let query = Query::ExprRoots();
         cast!(self.get(query), ExprRoots)
+    }
+
+    pub(crate) fn get_typing_context(&mut self, item_fqn: BString) -> TypingContext {
+        let query = Query::TypingContext(item_fqn);
+        cast!(self.get(query), TypingContext)
     }
 
     pub(crate) fn get_typing(&mut self, expr_root: ExprRoot) -> Arc<Typing> {
@@ -263,6 +277,11 @@ impl Db {
         cast!(self.get(query), Parsing)
     }
 
+    pub fn get_syntax_errors(&self) -> Vec<Diagnostic> {
+        let query = Query::SyntaxErrors();
+        cast!(self.get(query), SyntaxErrors)
+    }
+
     pub fn get_package_analysis(&self, package: PackageFqn) -> Arc<PackageAnalysis> {
         let query = Query::PackageAnalysis(package);
         cast!(self.get(query), PackageAnalysis)
@@ -276,6 +295,11 @@ impl Db {
     pub fn get_symboltable(&self) -> Arc<SymbolTable> {
         let query = Query::SymbolTable();
         cast!(self.get(query), SymbolTable)
+    }
+
+    pub fn get_typing_context(&self, item_fqn: BString) -> TypingContext {
+        let query = Query::TypingContext(item_fqn);
+        cast!(self.get(query), TypingContext)
     }
 
     pub fn get_typing(&self, expr_root: ExprRoot) -> Arc<Typing> {
@@ -334,10 +358,12 @@ impl Query {
         // $buildfn(&mut builder, arg1, ..., argN)
         dispatch_build!(
             build_parsing : Parsing(package);
+            build_syntax_errors : SyntaxErrors();
             crate::analysis::build_package_analysis : PackageAnalysis(analysis);
             crate::analysis::component::build_component_analysis : ComponentAnalysis(name);
             crate::analysis::symboltable::build_symboltable : SymbolTable();
             crate::analysis::typecheck::build_exprroots : ExprRoots();
+            crate::analysis::typecheck::build_typing_context : TypingContext(item_fqn);
             crate::analysis::typecheck::build_typing : Typing(expr_root);
             crate::analysis::typecheck::typecheck : TypeCheck();
             check : Check();
@@ -417,10 +443,12 @@ impl ToJson for Query {
             Query::Packages() => json::array!("Packages"),
             Query::Source(package) => json::array!("Source", package.to_json()),
             Query::Parsing(package) => json::array!("Parsing", package.to_json()),
+            Query::SyntaxErrors() => json::array!("SyntaxErrors"),
             Query::PackageAnalysis(package) => json::array!("PackageAnalysis", package.to_json()),
             Query::ComponentAnalysis(name) => json::array!("Components", name.to_json()),
             Query::SymbolTable() => json::array!("SymbolTable"),
             Query::ExprRoots() => json::array!("ExprRoots"),
+            Query::TypingContext(item_fqn) => json::array!("TypingContext", item_fqn.to_json()),
             Query::Typing(expr_root) => json::array!("Typecheck", expr_root.to_json()),
             Query::TypeCheck() => json::array!("TypeCheck"),
             Query::Check() => json::array!("Check"),
@@ -440,11 +468,13 @@ impl ToJson for QueryResult {
             QueryResultPayload::Packages(packages) => packages.to_json(),
             QueryResultPayload::Source(source) => source.to_json(),
             QueryResultPayload::Parsing(parsing) => format!("{self:?}").into(),
+            QueryResultPayload::SyntaxErrors(diagnostics) => diagnostics.to_json(),
             QueryResultPayload::PackageAnalysis(package_analysis) => package_analysis.to_json(),
             QueryResultPayload::ComponentAnalysis(component_analysis) => component_analysis.to_json(),
             QueryResultPayload::SymbolTable(symboltable) => symboltable.to_json(),
             QueryResultPayload::ExprRoots(expr_roots) => expr_roots.to_json(),
             QueryResultPayload::Typing(typecheck) => typecheck.to_json(),
+            QueryResultPayload::TypingContext(context) => context.to_json(),
             QueryResultPayload::TypeCheck(diagnostics) => diagnostics.to_json(),
             QueryResultPayload::Check(result) => {
                 if let Err(diagnostics) = &result {
@@ -457,9 +487,20 @@ impl ToJson for QueryResult {
     }
 }
 
+fn build_syntax_errors(builder: &mut Builder) -> Vec<Diagnostic> {
+    let mut diagnostics = vec![];
+    for package in builder.get_packages() {
+        let parsing = builder.get_parsing(package);
+        diagnostics.extend(parsing.diagnostics());
+    }
+
+    diagnostics
+}
+
 fn check(builder: &mut Builder) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
     let mut diagnostics = vec![];
 
+    diagnostics.extend(builder.get_syntax_errors());
     diagnostics.extend(builder.get_typecheck());
 
     if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {

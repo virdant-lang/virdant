@@ -3,6 +3,7 @@ use std::sync::Arc;
 use bstr::{BStr, BString, ByteSlice};
 use hashbrown::HashMap;
 
+use crate::analysis::component::find_item_location;
 use crate::analysis::db::Builder;
 use crate::analysis::Location;
 use crate::common::ComponentKind;
@@ -24,7 +25,7 @@ pub struct ExprRoot {
 pub struct Typing {
     expr_root: ExprRoot,
     expected_typ: Type,
-    context: TypingContext, // TODO
+    context: TypingContext,
     types: HashMap<AstNodeId, Type>,
     diagnostics: Vec<Diagnostic>,
 }
@@ -37,7 +38,21 @@ pub enum Type {
 }
 
 #[derive(Debug, Clone)]
-pub struct TypingContext {
+pub struct TypingContext(Vec<(BString, Type)>);
+
+impl TypingContext {
+    pub fn bindings(&self) -> &[(BString, Type)] {
+        self.0.as_slice()
+    }
+
+    pub fn get(&self, name: BString) -> Type {
+        for (name_, typ) in self.bindings().iter().rev() {
+            if name == *name_ {
+                return typ.clone();
+            }
+        }
+        panic!("No binding found for {name}")
+    }
 }
 
 impl ExprRoot {
@@ -52,6 +67,44 @@ impl ExprRoot {
     pub fn expected_typ(&self) -> Type {
         self.expected_typ.clone()
     }
+}
+
+pub fn build_typing_context(builder: &mut Builder, item_fqn: BString) -> TypingContext {
+    let location = find_item_location(builder, item_fqn.clone());
+    let parsing = builder.get_parsing(location.package());
+    let item_ast = parsing.ast_node(location.ast_node_id());
+    let component_analysis = builder.get_component_analysis(item_fqn);
+
+    // TODO HACK this isn't complete
+    let mut context = TypingContext(component_analysis.components());
+
+    for stmt in item_ast.children() {
+        let AstNodePayload::Module(module) = stmt.payload() else {
+            continue;
+        };
+
+        let instance_name = parsing.string(module.name);
+        let module_fqn = match stmt.child(0).payload() {
+            AstNodePayload::Ofness(ofness) => {
+                let module_package = ofness
+                    .package
+                    .map(|package| BString::from(parsing.string(package).to_vec()))
+                    .unwrap_or_else(|| location.package().to_string().into());
+                let module_name = parsing.string(ofness.name);
+                BString::from(format!("{}::{module_name}", module_package.to_str_lossy()).into_bytes())
+            }
+            _ => todo!(),
+        };
+
+        let module_component_analysis = builder.get_component_analysis(module_fqn);
+        for (port_name, typ) in module_component_analysis.components() {
+            let qualified_name =
+                BString::from(format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes());
+            context.0.push((qualified_name, typ));
+        }
+    }
+
+    context
 }
 
 pub fn build_exprroots(builder: &mut Builder) -> Vec<ExprRoot> {
@@ -142,10 +195,26 @@ pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typing> {
     let parsing = builder.get_parsing(location.package());
     let parsing_noborrow = parsing.clone();
 
+    let mut current_id = location.ast_node_id();
+    // REVIEW walk up until you find the containing item ast node.
+    let item_name = loop {
+        let current = parsing.ast_node(current_id);
+        if current.is_item() {
+            break parsing
+                .string(current.name().expect("expected containing item to have a name"))
+                .to_owned();
+        }
+        current_id = current
+            .parent()
+            .expect("expected expr root to be contained in an item")
+            .id();
+    };
+    let item_fqn = BString::from(format!("{}::{item_name}", location.package()).into_bytes());
+    let context = builder.get_typing_context(item_fqn);
+
     let node = parsing.ast_node(location.ast_node_id());
     let expected_typ = expr_root.expected_typ();
 
-    let context = TypingContext {}; // TODO
     let diagnostics = vec![];
     let mut typing = Typing {
         expr_root: expr_root.clone(),
@@ -211,13 +280,7 @@ impl Typing {
             AstNodePayload::ExprReference => {
                 // TODO HACK
                 let path = parsing.string(node.path().unwrap());
-                let typ = if path == b"clock" {
-                    // TODO HACK all "clock" signals are Clock
-                    Type::Clock
-                } else {
-                    // TODO HACK and the rest are Word[8]
-                    Type::Word(8)
-                };
+                let typ = self.context.get(path.to_owned());
                 Some(typ)
             }
             AstNodePayload::ExprBitLit(expr_bit_lit) => {
@@ -235,6 +298,12 @@ impl Typing {
 impl ToJson for Typing {
     fn to_json(&self) -> json::JsonValue {
         format!("{self:?}").into()
+    }
+}
+
+impl ToJson for TypingContext {
+    fn to_json(&self) -> json::JsonValue {
+        self.0.to_json()
     }
 }
 

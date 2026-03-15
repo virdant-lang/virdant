@@ -161,7 +161,7 @@ impl Parsing {
         let mut diagnostics = vec![];
         for error in self.errors() {
             let region = Region::new(self.package(), error.span());
-            let diagnostic = diagnostics::ParseError {
+            let diagnostic = diagnostics::SyntaxError {
                 region,
             };
             diagnostics.push(diagnostic.into());

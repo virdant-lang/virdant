@@ -52,3 +52,9 @@ impl<K: ToJson, V: ToJson> ToJson for std::collections::HashMap<K, V> {
         }).collect::<Vec<_>>())
     }
 }
+
+impl<S: ToJson, T:ToJson> ToJson for (S, T) {
+    fn to_json(&self) -> json::JsonValue {
+        json::array!(self.0.to_json(), self.1.to_json())
+    }
+}

@@ -25,7 +25,7 @@ pub enum DiagnosticLevel {
 
 /// `import` statement names a package which does not exist.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseError {
+pub struct SyntaxError {
     pub region: Region,
     //pub error: VirParseError, // TODO
 }
@@ -262,13 +262,13 @@ impl IsDiagnostic for DuplicateImport {
     }
 }
 
-impl IsDiagnostic for ParseError {
+impl IsDiagnostic for SyntaxError {
     fn region(&self) -> Region {
         self.region.clone()
     }
 
     fn message(&self) -> BString {
-        format!("Parse Error").into()
+        format!("Syntax Error").into()
     }
 }
 
