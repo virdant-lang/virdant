@@ -21,7 +21,7 @@ pub struct ExprRoot {
 }
 
 #[derive(Debug)]
-pub struct Typecheck {
+pub struct Typing {
     expr_root: ExprRoot,
     expected_typ: Type,
     context: TypingContext, // TODO
@@ -127,7 +127,17 @@ pub fn build_exprroots(builder: &mut Builder) -> Vec<ExprRoot> {
     exprroots
 }
 
-pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typecheck> {
+pub fn typecheck(builder: &mut Builder) -> Vec<Diagnostic> {
+    let mut diagnostics = vec![];
+    for exprroot in builder.get_exprroots() {
+        let typing = builder.get_typing(exprroot);
+        diagnostics.extend(typing.diagnostics());
+    }
+
+    diagnostics
+}
+
+pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typing> {
     let location = expr_root.location();
     let parsing = builder.get_parsing(location.package());
     let parsing_noborrow = parsing.clone();
@@ -137,7 +147,7 @@ pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typecheck
 
     let context = TypingContext {}; // TODO
     let diagnostics = vec![];
-    let mut typing = Typecheck {
+    let mut typing = Typing {
         expr_root: expr_root.clone(),
         context,
         types: HashMap::new(),
@@ -150,7 +160,7 @@ pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typecheck
     Arc::new(typing)
 }
 
-impl Typecheck {
+impl Typing {
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         self.diagnostics.clone()
     }
@@ -222,7 +232,7 @@ impl Typecheck {
     }
 }
 
-impl ToJson for Typecheck {
+impl ToJson for Typing {
     fn to_json(&self) -> json::JsonValue {
         format!("{self:?}").into()
     }

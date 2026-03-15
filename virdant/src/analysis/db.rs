@@ -13,7 +13,7 @@ use crate::analysis::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::symboltable::SymbolKind;
 use crate::analysis::symboltable::SymbolTable;
-use crate::analysis::typecheck::{ExprRoot, Typecheck};
+use crate::analysis::typecheck::{ExprRoot, Typing};
 use crate::common::json::ToJson;
 use crate::diagnostics::DiagnosticLevel;
 use crate::syntax::parsing::parse;
@@ -40,6 +40,7 @@ enum Query {
     SymbolTable(),
     ExprRoots(),
     Typing(ExprRoot),
+    TypeCheck(),
     Check(),
 }
 
@@ -55,7 +56,8 @@ enum QueryResultPayload {
     ComponentAnalysis(Arc<ComponentAnalysis>),
     SymbolTable(Arc<SymbolTable>),
     ExprRoots(Vec<ExprRoot>),
-    Typing(Arc<Typecheck>),
+    Typing(Arc<Typing>),
+    TypeCheck(Vec<Diagnostic>),
     Check(Result<Vec<Diagnostic>, Vec<Diagnostic>>),
 }
 
@@ -127,9 +129,14 @@ impl<'d> Builder<'d> {
         cast!(self.get(query), ExprRoots)
     }
 
-    pub(crate) fn get_typing(&mut self, expr_root: ExprRoot) -> Arc<Typecheck> {
+    pub(crate) fn get_typing(&mut self, expr_root: ExprRoot) -> Arc<Typing> {
         let query = Query::Typing(expr_root);
         cast!(self.get(query), Typing)
+    }
+
+    pub(crate) fn get_typecheck(&mut self) -> Vec<Diagnostic> {
+        let query = Query::TypeCheck();
+        cast!(self.get(query), TypeCheck)
     }
 }
 
@@ -271,9 +278,14 @@ impl Db {
         cast!(self.get(query), SymbolTable)
     }
 
-    pub fn get_typing(&self, expr_root: ExprRoot) -> Arc<Typecheck> {
+    pub fn get_typing(&self, expr_root: ExprRoot) -> Arc<Typing> {
         let query = Query::Typing(expr_root);
         cast!(self.get(query), Typing)
+    }
+
+    pub fn get_typecheck(&mut self) -> Vec<Diagnostic> {
+        let query = Query::TypeCheck();
+        cast!(self.get(query), TypeCheck)
     }
 
     pub fn get_exprroots(&self) -> Vec<ExprRoot> {
@@ -326,7 +338,8 @@ impl Query {
             crate::analysis::component::build_component_analysis : ComponentAnalysis(name);
             crate::analysis::symboltable::build_symboltable : SymbolTable();
             crate::analysis::typecheck::build_exprroots : ExprRoots();
-            crate::analysis::typecheck::build_typing : Typing(ast_node_id);
+            crate::analysis::typecheck::build_typing : Typing(expr_root);
+            crate::analysis::typecheck::typecheck : TypeCheck();
             check : Check();
 
         )
@@ -409,6 +422,7 @@ impl ToJson for Query {
             Query::SymbolTable() => json::array!("SymbolTable"),
             Query::ExprRoots() => json::array!("ExprRoots"),
             Query::Typing(expr_root) => json::array!("Typecheck", expr_root.to_json()),
+            Query::TypeCheck() => json::array!("TypeCheck"),
             Query::Check() => json::array!("Check"),
         }
     }
@@ -431,6 +445,7 @@ impl ToJson for QueryResult {
             QueryResultPayload::SymbolTable(symboltable) => symboltable.to_json(),
             QueryResultPayload::ExprRoots(expr_roots) => expr_roots.to_json(),
             QueryResultPayload::Typing(typecheck) => typecheck.to_json(),
+            QueryResultPayload::TypeCheck(diagnostics) => diagnostics.to_json(),
             QueryResultPayload::Check(result) => {
                 if let Err(diagnostics) = &result {
                     json::value!(["Error", diagnostics.to_json()])
@@ -459,12 +474,7 @@ fn check(builder: &mut Builder) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
         diagnostics.extend(package_analysis.diagnostics());
     }
 
-    /*
-    for exprroot in builder.get_exprroots() {
-        let typing = builder.get_typecheck(exprroot);
-        diagnostics.extend(typing.diagnostics());
-    }
-    */
+    diagnostics.extend(builder.get_typecheck());
 
     if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
         Err(diagnostics)
