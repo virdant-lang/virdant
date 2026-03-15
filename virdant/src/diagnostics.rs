@@ -177,6 +177,13 @@ pub struct WrongArgCount {
     pub region: Region,
 }
 
+/// `import` statement names a package which does not exist.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Todo {
+    pub region: Region,
+    pub message: BString,
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl Diagnostic {
@@ -412,6 +419,18 @@ impl IsDiagnostic for WrongArgCount {
     fn message(&self) -> BString {
         format!("Wrong arg count").into()
     }
+}
+
+impl IsDiagnostic for Todo {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("TODO: {}", self.message).into()
+    }
+
+    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Info }
 }
 
 impl ToJson for Diagnostic {

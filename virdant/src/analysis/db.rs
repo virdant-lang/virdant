@@ -5,9 +5,12 @@ use bstr::BStr;
 use bstr::BString;
 use hashbrown::{HashMap, HashSet};
 
+use crate::analysis::Location;
 use crate::analysis::PackageAnalysis;
 use crate::analysis::symboltable::SymbolTable;
+use crate::analysis::typecheck::TypeCheck as Typecheck;
 use crate::common::json::ToJson;
+use crate::diagnostics::DiagnosticLevel;
 use crate::syntax::parsing::parse;
 use crate::{diagnostics::Diagnostic, fqn::PackageFqn, source::Source, syntax::parsing::Parsing};
 
@@ -28,6 +31,8 @@ enum Query {
     Parsing(PackageFqn),
     PackageAnalysis(PackageFqn),
     SymbolTable(),
+    ExprRoots(),
+    Typecheck(Location),
     Check(),
 }
 
@@ -41,7 +46,9 @@ enum QueryResultPayload {
     Parsing(Arc<Parsing>),
     PackageAnalysis(Arc<PackageAnalysis>),
     SymbolTable(Arc<SymbolTable>),
-    Check(Result<(), Vec<Diagnostic>>),
+    ExprRoots(Vec<Location>),
+    Typecheck(Arc<Typecheck>),
+    Check(Result<Vec<Diagnostic>, Vec<Diagnostic>>),
 }
 
 #[derive(Debug)]
@@ -101,6 +108,16 @@ impl<'d> Builder<'d> {
         let query = Query::SymbolTable();
         cast!(self.get(query), SymbolTable)
     }
+
+    pub(crate) fn get_exprroots(&mut self) -> Vec<Location> {
+        let query = Query::ExprRoots();
+        cast!(self.get(query), ExprRoots)
+    }
+
+    pub(crate) fn get_typecheck(&mut self, location: Location) -> Arc<Typecheck> {
+        let query = Query::Typecheck(location);
+        cast!(self.get(query), Typecheck)
+    }
 }
 
 impl Db {
@@ -111,7 +128,7 @@ impl Db {
         }
     }
 
-    pub fn check(&self) -> Result<(), Vec<Diagnostic>> {
+    pub fn check(&self) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
         let query = Query::Check();
         cast!(self.get(query), Check)
     }
@@ -278,7 +295,10 @@ impl Query {
             build_parsing : Parsing(package);
             crate::analysis::build_package_analysis : PackageAnalysis(analysis);
             crate::analysis::symboltable::build_symboltable : SymbolTable();
+            crate::analysis::typecheck::build_exprroots : ExprRoots();
+            crate::analysis::typecheck::typecheck : Typecheck(ast_node_id);
             check : Check();
+
         )
     }
 }
@@ -349,6 +369,8 @@ impl ToJson for Query {
             Query::Parsing(package) => json::array!("Parsing", package.to_json()),
             Query::PackageAnalysis(package) => json::array!("PackageAnalysis", package.to_json()),
             Query::SymbolTable() => json::array!("SymbolTable"),
+            Query::ExprRoots() => json::array!("ExprRoots"),
+            Query::Typecheck(location) => json::array!("Typecheck", location.to_json()),
             Query::Check() => json::array!("Check"),
         }
     }
@@ -368,6 +390,8 @@ impl ToJson for QueryResult {
             QueryResultPayload::Parsing(parsing) => format!("{self:?}").into(),
             QueryResultPayload::PackageAnalysis(package_analysis) => package_analysis.to_json(),
             QueryResultPayload::SymbolTable(symboltable) => symboltable.to_json(),
+            QueryResultPayload::ExprRoots(locations) => locations.to_json(),
+            QueryResultPayload::Typecheck(typecheck) => typecheck.to_json(),
             QueryResultPayload::Check(result) => {
                 if let Err(diagnostics) = &result {
                     json::value!(["Error", diagnostics.to_json()])
@@ -379,8 +403,9 @@ impl ToJson for QueryResult {
     }
 }
 
-fn check(builder: &mut Builder) -> Result<(), Vec<Diagnostic>> {
+fn check(builder: &mut Builder) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
     let mut diagnostics = vec![];
+
     builder.get_symboltable();
 
     for package in builder.get_packages() {
@@ -388,9 +413,14 @@ fn check(builder: &mut Builder) -> Result<(), Vec<Diagnostic>> {
         diagnostics.extend(package_analysis.diagnostics());
     }
 
-    if diagnostics.is_empty() {
-        Ok(())
-    } else {
+    for exprroot in builder.get_exprroots() {
+        let typing = builder.get_typecheck(exprroot);
+        diagnostics.extend(typing.diagnostics());
+    }
+
+    if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
         Err(diagnostics)
+    } else {
+        Ok(diagnostics)
     }
 }

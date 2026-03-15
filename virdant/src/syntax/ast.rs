@@ -10,7 +10,7 @@ use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::{InternedString, Parsing};
 //use crate::stringtable::{InternedString, StringTable};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AstNodeId(pub u16);
 
 #[derive(Clone)]

@@ -47,7 +47,7 @@ impl Vir {
         for filepath in std::fs::read_dir(source_dir.into()).unwrap() {
             let source: Source = Source::load_file(filepath.unwrap().path());
             db.set_source(source.package(), source.clone());
-            sources.push(source); 
+            sources.push(source);
         }
         db.set_packages(sources.iter().map(|source| source.package()).collect());
         vir
@@ -109,7 +109,7 @@ impl Vir {
         self.parsings.get(&package).unwrap().clone()
     }
 
-    pub fn check(&self) -> Result<(), Vec<Diagnostic>> {
+    pub fn check(&self) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
         self.db.check()
     }
 }
@@ -121,7 +121,12 @@ impl Vir {
     }
 
     pub fn dump_diagnostics(&self) {
-        if let Err(diagnostics) = self.check() {
+        let diagnostics = match self.check() {
+            Ok(diags) => diags,
+            Err(diags) => diags,
+        };
+
+        if !diagnostics.is_empty() {
             println!("Diagnostics:");
             for diagnostic in diagnostics {
                 println!("  {:?}", diagnostic);

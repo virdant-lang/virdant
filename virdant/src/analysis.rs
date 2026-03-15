@@ -1,5 +1,6 @@
 pub mod db;
 pub mod symboltable;
+pub mod typecheck;
 
 use bstr::BStr;
 use bstr::BString;
@@ -20,6 +21,7 @@ use crate::syntax::parsing::Parsing;
 use crate::syntax::parsing::parse;
 use crate::syntax::payload::AstNodePayload;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Location(PackageFqn, AstNodeId);
 
 #[derive(Debug)]
@@ -32,6 +34,10 @@ pub struct PackageAnalysis {
 }
 
 impl Location {
+    pub fn new(package: PackageFqn, ast_node_id: AstNodeId) -> Location {
+        Location(package, ast_node_id)
+    }
+
     pub fn package(&self) -> PackageFqn {
         self.0.clone()
     }
@@ -187,5 +193,11 @@ impl ToJson for PackageAnalysis {
             "items": self.items.to_json(),
             "diagnostics": self.diagnostics.to_json(),
         )
+    }
+}
+
+impl ToJson for Location {
+    fn to_json(&self) -> json::JsonValue {
+        json::array!(self.package().to_json(), self.ast_node_id().to_json())
     }
 }
