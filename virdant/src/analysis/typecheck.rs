@@ -127,7 +127,7 @@ pub fn build_exprroots(builder: &mut Builder) -> Vec<ExprRoot> {
     exprroots
 }
 
-pub fn typecheck(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typecheck> {
+pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typecheck> {
     let location = expr_root.location();
     let parsing = builder.get_parsing(location.package());
     let parsing_noborrow = parsing.clone();
