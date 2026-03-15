@@ -27,7 +27,6 @@ pub struct TypeDef {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ExprRoot {
     location: Location,
-    expected_typ: Option<Type>,
 }
 
 #[derive(Debug)]
@@ -35,7 +34,7 @@ pub struct Typing {
     expr_root: ExprRoot,
     expected_typ: Type,
     context: TypingContext,
-    types: HashMap<AstNodeId, Type>,
+    typs: HashMap<AstNodeId, Type>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -66,16 +65,12 @@ impl TypingContext {
 }
 
 impl ExprRoot {
-    pub fn new(location: Location, expected_typ: Option<Type>) -> ExprRoot {
-        ExprRoot { location, expected_typ }
+    pub fn new(location: Location) -> ExprRoot {
+        ExprRoot { location }
     }
 
     pub fn location(&self) -> Location {
         self.location.clone()
-    }
-
-    pub fn expected_typ(&self) -> Option<Type> {
-        self.expected_typ.clone()
     }
 }
 
@@ -156,75 +151,74 @@ pub fn build_typing_context(builder: &mut Builder, item: SymbolId) -> TypingCont
 pub fn build_exprroots(builder: &mut Builder) -> Vec<ExprRoot> {
     let mut exprroots = vec![];
     for package in builder.get_packages() {
-        let parsing = builder.get_parsing(package.clone());
         let analysis = builder.get_package_analysis(package);
-        let symboltable = builder.get_symboltable();
 
         for ast_node_id in analysis.expr_roots_node_ids() {
             let location = Location::new(analysis.package(), ast_node_id);
-            let node = parsing.ast_node(ast_node_id);
-            let parent_node = node.parent().unwrap();
-            // dbg!(&parent_node);
-
-            let expected_typ = match parent_node.payload() {
-                AstNodePayload::Component(component) if component.kind == ComponentKind::Reg => Some(Type::Clock),
-                AstNodePayload::Driver(_) => {
-                    // TODO REVIEW I'm pretty sure this is all junk
-                    let lhs_path = parsing.string(parent_node.child(0).path().unwrap());
-
-                    let moddef_node = parent_node.parent().unwrap();
-                    let moddef_name = parsing.string(moddef_node.name().unwrap());
-                    let moddef = symboltable
-                        .resolve_item_in_package(moddef_name, location.package())
-                        .unwrap();
-                    let component_analysis = builder.get_component_analysis(moddef.id());
-
-                    if let Some(dot_index) = lhs_path.iter().position(|ch| *ch == b'.') {
-                        let instance_name = BStr::new(&lhs_path[..dot_index]);
-                        let port_name = BStr::new(&lhs_path[(dot_index + 1)..]);
-
-                        let instance_node = moddef_node
-                            .children()
-                            .into_iter()
-                            .find(|child| {
-                                matches!(child.payload(), AstNodePayload::Module(module)
-                                    if parsing.string(module.name) == instance_name)
-                            })
-                            .unwrap_or_else(|| panic!("Couldn't find instance {lhs_path}"));
-
-                        let module = match instance_node.child(0).payload() {
-                            AstNodePayload::Ofness(ofness) => {
-                                let module_package = ofness
-                                    .package
-                                    .map(|package| PackageFqn::new(BString::from(parsing.string(package).to_vec())))
-                                    .unwrap_or_else(|| location.package());
-                                let module_name = parsing.string(ofness.name);
-                                symboltable.resolve_item_in_package(module_name, module_package).unwrap()
-                            }
-                            _ => todo!(),
-                        };
-
-                        let module_component_analysis = builder.get_component_analysis(module.id());
-                        if port_name == b"clock" {
-                            Some(Type::Clock)
-                        } else {
-                            module_component_analysis.type_of(port_name)
-                        }
-                    } else {
-                        if lhs_path == b"clock" {
-                            Some(Type::Clock)
-                        } else {
-                            component_analysis.type_of(lhs_path)
-                        }
-                    }
-                },
-                _ => todo!(),
-            };
-
-            exprroots.push(ExprRoot::new(location, expected_typ));
+            exprroots.push(ExprRoot::new(location));
         }
     }
     exprroots
+}
+
+pub fn build_expected_type(builder: &mut Builder, location: Location) -> Option<Type> {
+    let parsing = builder.get_parsing(location.package());
+    let symboltable = builder.get_symboltable();
+
+    let node = parsing.ast_node(location.ast_node_id());
+    let parent_node = node.parent().unwrap();
+
+    match parent_node.payload() {
+        AstNodePayload::Component(component) if component.kind == ComponentKind::Reg => Some(Type::Clock),
+        AstNodePayload::Driver(_) => {
+            let lhs_path = parsing.string(parent_node.child(0).path().unwrap());
+
+            let moddef_node = parent_node.parent().unwrap();
+            let moddef_name = parsing.string(moddef_node.name().unwrap());
+            let moddef = symboltable
+                .resolve_item_in_package(moddef_name, location.package())
+                .unwrap();
+            let component_analysis = builder.get_component_analysis(moddef.id());
+
+            if let Some(dot_index) = lhs_path.iter().position(|ch| *ch == b'.') {
+                let instance_name = BStr::new(&lhs_path[..dot_index]);
+                let port_name = BStr::new(&lhs_path[(dot_index + 1)..]);
+
+                let instance_node = moddef_node
+                    .children()
+                    .into_iter()
+                    .find(|child| {
+                        matches!(child.payload(), AstNodePayload::Module(module)
+                            if parsing.string(module.name) == instance_name)
+                    })
+                    .unwrap_or_else(|| panic!("Couldn't find instance {lhs_path}"));
+
+                let module = match instance_node.child(0).payload() {
+                    AstNodePayload::Ofness(ofness) => {
+                        let module_package = ofness
+                            .package
+                            .map(|package| PackageFqn::new(BString::from(parsing.string(package).to_vec())))
+                            .unwrap_or_else(|| location.package());
+                        let module_name = parsing.string(ofness.name);
+                        symboltable.resolve_item_in_package(module_name, module_package).unwrap()
+                    }
+                    _ => todo!(),
+                };
+
+                let module_component_analysis = builder.get_component_analysis(module.id());
+                if port_name == b"clock" {
+                    Some(Type::Clock)
+                } else {
+                    module_component_analysis.type_of(port_name)
+                }
+            } else if lhs_path == b"clock" {
+                Some(Type::Clock)
+            } else {
+                component_analysis.type_of(lhs_path)
+            }
+        },
+        _ => todo!(),
+    }
 }
 
 pub fn typecheck(builder: &mut Builder) -> Vec<Diagnostic> {
@@ -235,6 +229,23 @@ pub fn typecheck(builder: &mut Builder) -> Vec<Diagnostic> {
     }
 
     diagnostics
+}
+
+pub fn build_typeof(builder: &mut Builder, location: Location) -> Option<Type> {
+    let exprroot = exprroot_anscestor(builder, location.clone());
+    let typing = builder.get_typing(exprroot);
+    let typ = typing.typs.get(&location.ast_node_id());
+    typ.cloned()
+}
+
+fn exprroot_anscestor(builder: &mut Builder, location: Location) -> ExprRoot {
+    let parsing = builder.get_parsing(location.package());
+    let mut node = parsing.ast_node(location.ast_node_id());
+    while node.id() != location.ast_node_id() {
+        let parent_id = node.parent().unwrap().id();
+        node = parsing.ast_node(parent_id);
+    }
+    ExprRoot::new(location)
 }
 
 pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typing> {
@@ -263,21 +274,21 @@ pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typing> {
     let context = builder.get_typing_context(item.id());
 
     let node = parsing.ast_node(location.ast_node_id());
-    let expected_typ = expr_root
-        .expected_typ()
-        .unwrap_or_else(|| builtin_bit_type(builder));
+    let expected_typ = builder.get_expected_type(location.clone());
+    let fallback_expected_typ = expected_typ.clone();
+    let expected_typ = expected_typ.unwrap_or_else(|| builtin_bit_type(builder));
 
     let diagnostics = vec![];
     let mut typing = Typing {
         expr_root: expr_root.clone(),
         context,
-        types: HashMap::new(),
+        typs: HashMap::new(),
         diagnostics,
         expected_typ: expected_typ.clone(),
     };
 
     // if there is no expected type, you can't type check the expression.
-    if expr_root.expected_typ().is_some() {
+    if fallback_expected_typ.is_some() {
         typing.check(parsing_noborrow, &node, &expected_typ);
     } else {
         typing.diagnostics.push(diagnostics::Todo {
@@ -306,7 +317,7 @@ impl Typing {
     fn check<'p>(&mut self, parsing: Arc<Parsing>, node: &AstNode<'p>, expected_typ: &Type) {
         if let Some(actual_typ) = self.infer(parsing, node) {
             if actual_typ == *expected_typ {
-                self.types.insert(node.id(), Type::Bit);
+                self.typs.insert(node.id(), Type::Bit);
             } else {
                 let diag: Diagnostic = diagnostics::WrongType {
                     region:  node.region(),
@@ -386,7 +397,7 @@ impl ToJson for TypingContext {
 
 impl ToJson for ExprRoot {
     fn to_json(&self) -> json::JsonValue {
-        json::array!(self.location.to_json(), self.expected_typ.to_json())
+        self.location.to_json()
     }
 }
 

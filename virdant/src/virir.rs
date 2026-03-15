@@ -8,6 +8,7 @@ pub mod tests;
 
 lalrpop_util::lalrpop_mod!(grammar, "/virir/grammar.rs");
 
+use std::fmt::Write;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -39,6 +40,24 @@ pub fn parse(text: &str) -> Result<VirIr, String> {
 pub struct VirIr {
     pub packages: Vec<Package>,
     pub types: Vec<Arc<Type>>,
+}
+
+impl VirIr {
+    pub fn to_text(&self) -> String {
+        let mut out = String::new();
+        writeln!(&mut out, "virir {{").unwrap();
+
+        for package in &self.packages {
+            write_package(&mut out, package, self);
+        }
+
+        for typ in &self.types {
+            writeln!(&mut out, "    type {};", type_to_text(typ.as_ref())).unwrap();
+        }
+
+        writeln!(&mut out, "}}").unwrap();
+        out
+    }
 }
 
 #[derive(Debug)]
@@ -105,6 +124,116 @@ fn dummy_region() -> Region {
         PackageFqn::new("dummy".into()),
         Span::new(LineCol::new(0, 0), LineCol::new(0, 0)),
     )
+}
+
+fn write_package(out: &mut String, package: &Package, virir: &VirIr) {
+    writeln!(out, "    package {} {{", package.name).unwrap();
+    for item in &package.items {
+        match item {
+            Item::ModDef(moddef) => write_moddef(out, moddef, virir),
+        }
+    }
+    writeln!(out, "    }}").unwrap();
+    writeln!(out).unwrap();
+}
+
+fn write_moddef(out: &mut String, moddef: &ModDef, virir: &VirIr) {
+    if moddef.is_export {
+        writeln!(out, "        export mod {} {{", moddef.name).unwrap();
+    } else {
+        writeln!(out, "        mod {} {{", moddef.name).unwrap();
+    }
+
+    for port in &moddef.ports {
+        let dir = match port.dir {
+            PortDir::Input => "incoming",
+            PortDir::Output => "outgoing",
+        };
+        writeln!(out, "            {dir} {} : {};", port.name, port_type_to_text(port)).unwrap();
+    }
+
+    for wire in &moddef.wires {
+        writeln!(out, "            wire {} : {};", wire.name, type_id_to_text(wire.typ, virir)).unwrap();
+    }
+
+    for reg in &moddef.regs {
+        writeln!(out, "            reg {} : {};", reg.name, type_id_to_text(reg.typ, virir)).unwrap();
+    }
+
+    for instance in &moddef.instances {
+        writeln!(out, "            mod {} of {};", instance.name, instance.module_path).unwrap();
+    }
+
+    for driver in &moddef.drivers {
+        writeln!(out, "            {} := {};", driver.path, expr_to_text(driver.expr.as_ref(), virir)).unwrap();
+    }
+
+    writeln!(out, "        }}").unwrap();
+}
+
+fn port_type_to_text(port: &Port) -> String {
+    match port.width {
+        1 => "builtin::Bit".to_string(),
+        width => format!("builtin::Word[{width}]"),
+    }
+}
+
+fn type_id_to_text(type_id: TypeId, virir: &VirIr) -> String {
+    let typ = virir.types[type_id.0 as usize].as_ref();
+    type_to_text(typ)
+}
+
+fn type_to_text(typ: &Type) -> String {
+    match typ {
+        Type::Bit => "builtin::Bit".to_string(),
+        Type::Clock => "builtin::Clock".to_string(),
+        Type::Word(width) => format!("builtin::Word[{width}]"),
+    }
+}
+
+fn expr_to_text(expr: &Expr, virir: &VirIr) -> String {
+    match expr {
+        Expr::Reference(reference) => {
+            format!("({} : {})", reference.path, type_id_to_text(reference.typ, virir))
+        }
+        Expr::BitLit(bit_lit) => {
+            let value = if bit_lit.value() { 1 } else { 0 };
+            format!("({value} : {})", type_id_to_text(bit_lit.typ, virir))
+        }
+        Expr::WordLit(word_lit) => {
+            format!("({} : {})", word_lit.value, type_id_to_text(word_lit.typ, virir))
+        }
+        Expr::BinOp(binop) => {
+            let op = match binop.op {
+                crate::common::BinOp::Lt => "<",
+                crate::common::BinOp::Lte => "<=",
+                crate::common::BinOp::Gt => ">",
+                crate::common::BinOp::Gte => ">=",
+                crate::common::BinOp::Eq => "==",
+                crate::common::BinOp::Neq => "!=",
+                crate::common::BinOp::Add => "+",
+                crate::common::BinOp::Sub => "-",
+                crate::common::BinOp::And => "&&",
+                crate::common::BinOp::Or => "||",
+                crate::common::BinOp::Xor => "!=",
+            };
+            format!(
+                "({} {op} {} : {})",
+                expr_to_text(binop.lhs.as_ref(), virir),
+                expr_to_text(binop.rhs.as_ref(), virir),
+                type_id_to_text(binop.typ, virir),
+            )
+        }
+        Expr::If(expr_if) => {
+            format!(
+                "(if {} {{ {} }} else {{ {} }} : {})",
+                expr_to_text(expr_if.cond.as_ref(), virir),
+                expr_to_text(expr_if.then_expr.as_ref(), virir),
+                expr_to_text(expr_if.else_expr.as_ref(), virir),
+                type_id_to_text(expr_if.typ, virir),
+            )
+        }
+    }
 }
 
 fn build_mod_def(is_export: bool, name: String, stmts: Vec<parse::ModStmt>) -> parse::ModDef {
@@ -475,4 +604,31 @@ fn resolve_path_type(
     let module_path = instance_types.get(instance_name)?;
     let signature = module_signatures.get(module_path)?;
     signature.get(port_name).copied()
+}
+
+#[cfg(test)]
+mod roundtrip_tests {
+    use std::fs;
+    use std::path::PathBuf;
+
+    use super::parse;
+
+    #[test]
+    fn test_roundtrip_all_virir_files() {
+        let virir_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../virir");
+
+        let mut paths: Vec<_> = fs::read_dir(&virir_dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.extension().is_some_and(|ext| ext == "virir"))
+            .collect();
+        paths.sort();
+
+        for path in paths {
+            let text = fs::read_to_string(&path).unwrap();
+            let virir = parse(&text).unwrap();
+            let roundtrip_text = virir.to_text();
+            parse(&roundtrip_text).unwrap();
+        }
+    }
 }

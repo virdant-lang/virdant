@@ -14,6 +14,7 @@ use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::symboltable::SymbolId;
 use crate::analysis::symboltable::SymbolKind;
 use crate::analysis::symboltable::SymbolTable;
+use crate::analysis::typecheck::Type;
 use crate::analysis::typecheck::TypeDef;
 use crate::analysis::typecheck::{ExprRoot, Typing, TypingContext};
 use crate::common::json::ToJson;
@@ -43,9 +44,11 @@ enum Query {
     SymbolTable(),
     TypeDefs(),
     ExprRoots(),
+    ExpectedType(Location),
     TypingContext(SymbolId),
     Typing(ExprRoot),
     TypeCheck(),
+    Typeof(Location),
     Check(),
 }
 
@@ -63,9 +66,11 @@ enum QueryResultPayload {
     SymbolTable(Arc<SymbolTable>),
     TypeDefs(Vec<TypeDef>),
     ExprRoots(Vec<ExprRoot>),
+    ExpectedType(Option<Type>),
     TypingContext(TypingContext),
     Typing(Arc<Typing>),
     TypeCheck(Vec<Diagnostic>),
+    Typeof(Option<Type>),
     Check(Result<Vec<Diagnostic>, Vec<Diagnostic>>),
 }
 
@@ -261,10 +266,12 @@ impl Query {
             crate::analysis::component::build_component_analysis : ComponentAnalysis(symbol_id);
             crate::analysis::symboltable::build_symboltable : SymbolTable();
             crate::analysis::typecheck::build_exprroots : ExprRoots();
+            crate::analysis::typecheck::build_expected_type : ExpectedType(location);
             crate::analysis::typecheck::build_typedefs : TypeDefs();
             crate::analysis::typecheck::build_typing_context : TypingContext(symbol_id);
             crate::analysis::typecheck::build_typing : Typing(expr_root);
             crate::analysis::typecheck::typecheck : TypeCheck();
+            crate::analysis::typecheck::build_typeof : Typeof(location);
             check : Check();
 
         )
@@ -347,11 +354,13 @@ impl ToJson for Query {
             Query::ComponentAnalysis(name) => json::array!("Components", name.to_json()),
             Query::SymbolTable() => json::array!("SymbolTable"),
             Query::ExprRoots() => json::array!("ExprRoots"),
+            Query::ExpectedType(location) => json::array!("ExpectedType", location.to_json()),
             Query::TypingContext(item_fqn) => json::array!("TypingContext", item_fqn.to_json()),
             Query::Typing(expr_root) => json::array!("Typecheck", expr_root.to_json()),
             Query::TypeCheck() => json::array!("TypeCheck"),
             Query::Check() => json::array!("Check"),
             Query::TypeDefs() => json::array!("TypeDefs"),
+            Query::Typeof(location) => json::array!("Typeof", location.to_json()),
         }
     }
 }
@@ -373,9 +382,11 @@ impl ToJson for QueryResult {
             QueryResultPayload::ComponentAnalysis(component_analysis) => component_analysis.to_json(),
             QueryResultPayload::SymbolTable(symboltable) => symboltable.to_json(),
             QueryResultPayload::ExprRoots(expr_roots) => expr_roots.to_json(),
+            QueryResultPayload::ExpectedType(typ) => typ.to_json(),
             QueryResultPayload::Typing(typecheck) => typecheck.to_json(),
             QueryResultPayload::TypingContext(context) => context.to_json(),
             QueryResultPayload::TypeCheck(diagnostics) => diagnostics.to_json(),
+            QueryResultPayload::Typeof(typ) => typ.to_json(),
             QueryResultPayload::Check(result) => {
                 if let Err(diagnostics) = &result {
                     json::value!(["Error", diagnostics.to_json()])
@@ -427,8 +438,10 @@ db_getter!(get_symboltable : SymbolTable() -> Arc<SymbolTable>);
 db_getter!(get_typing_context : TypingContext(item: SymbolId) -> TypingContext);
 db_getter!(get_typedefs : TypeDefs() -> Vec<TypeDef>);
 db_getter!(get_exprroots : ExprRoots() -> Vec<ExprRoot>);
+db_getter!(get_expected_type : ExpectedType(location: Location) -> Option<Type>);
 db_getter!(get_typing : Typing(expr_root: ExprRoot) -> Arc<Typing>);
 db_getter!(get_typecheck : TypeCheck() -> Vec<Diagnostic>);
+db_getter!(get_typeof : Typeof(location: Location) -> Option<Type>);
 
 
 fn check(builder: &mut Builder) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {

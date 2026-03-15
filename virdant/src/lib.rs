@@ -9,6 +9,7 @@ pub mod diagnostics;
 pub mod virir;
 pub mod conversion;
 pub mod verilog;
+pub mod transpile;
 
 pub use vir::Vir;
 

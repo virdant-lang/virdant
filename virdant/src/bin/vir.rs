@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 use bstr::{BStr, BString, ByteSlice};
 use nix::unistd::execvp;
 use virdant::analysis::Location;
+use virdant::transpile::transpile;
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
@@ -207,7 +208,7 @@ fn main() {
             let package = exprroot.location().package();
             let parsing = vir.db().get_parsing(package.clone());
             let location = exprroot.location();
-            let typ = exprroot.expected_typ();
+            let typ = vir.db().get_expected_type(location.clone());
             let node = parsing.ast_node(location.ast_node_id());
             let region = node.region();
             println!("{location:?} : {typ:?} at @{region}");
@@ -232,13 +233,28 @@ fn main() {
                 let package = exprroot.location().package();
                 let parsing = vir.db().get_parsing(package.clone());
                 let location = exprroot.location();
-                let typ = exprroot.expected_typ();
+                let typ = vir.db().get_expected_type(location.clone());
                 let node = parsing.ast_node(location.ast_node_id());
                 let region = node.region();
                 dbg!(&typing);
                 break;
             }
         }
+
+        return;
+    }
+
+    if command == "compile-to-virir" {
+        let path = args.get(1).unwrap();
+        let outfilepath = args.get(2).unwrap();
+
+        let mut vir = virdant::Vir::from_dir(path);
+        vir.dump_diagnostics();
+
+        let virir = &transpile(&vir.db());
+        dbg!(&virir);
+
+        std::fs::write(outfilepath, virir.to_text());
 
         return;
     }
