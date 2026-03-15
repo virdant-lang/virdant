@@ -26,7 +26,7 @@ pub struct TypeDef {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ExprRoot {
     location: Location,
-    expected_typ: Type,
+    expected_typ: Option<Type>,
 }
 
 #[derive(Debug)]
@@ -43,6 +43,7 @@ pub enum Type {
     Bit,
     Clock,
     Word(Width),
+    Usual(SymbolId), // TODO rename this
 }
 
 #[derive(Debug, Clone)]
@@ -64,7 +65,7 @@ impl TypingContext {
 }
 
 impl ExprRoot {
-    pub fn new(location: Location, expected_typ: Type) -> ExprRoot {
+    pub fn new(location: Location, expected_typ: Option<Type>) -> ExprRoot {
         ExprRoot { location, expected_typ }
     }
 
@@ -72,7 +73,7 @@ impl ExprRoot {
         self.location.clone()
     }
 
-    pub fn expected_typ(&self) -> Type {
+    pub fn expected_typ(&self) -> Option<Type> {
         self.expected_typ.clone()
     }
 }
@@ -112,7 +113,12 @@ pub fn build_typing_context(builder: &mut Builder, item: SymbolId) -> TypingCont
 
 
     // TODO HACK this isn't complete
-    let mut context = TypingContext(component_analysis.components());
+    let mut context = TypingContext(vec![]);
+    for (path, opt_typ) in component_analysis.components() {
+        if let Some(typ) = opt_typ {
+            context.0.push((path, typ));
+        }
+    }
 
     for stmt in item_ast.children() {
         let AstNodePayload::Module(module) = stmt.payload() else {
@@ -134,10 +140,12 @@ pub fn build_typing_context(builder: &mut Builder, item: SymbolId) -> TypingCont
 
 
         let module_component_analysis = builder.get_component_analysis(module.id());
-        for (port_name, typ) in module_component_analysis.components() {
+        for (port_name, opt_typ) in module_component_analysis.components() {
             let qualified_name =
                 BString::from(format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes());
-            context.0.push((qualified_name, typ));
+            if let Some(typ) = opt_typ {
+                context.0.push((qualified_name, typ));
+            }
         }
     }
 
@@ -158,7 +166,7 @@ pub fn build_exprroots(builder: &mut Builder) -> Vec<ExprRoot> {
             // dbg!(&parent_node);
 
             let expected_typ = match parent_node.payload() {
-                AstNodePayload::Component(component) if component.kind == ComponentKind::Reg => Type::Clock,
+                AstNodePayload::Component(component) if component.kind == ComponentKind::Reg => Some(Type::Clock),
                 AstNodePayload::Driver(_) => {
                     // TODO REVIEW I'm pretty sure this is all junk
                     let lhs_path = parsing.string(parent_node.child(0).path().unwrap());
@@ -197,18 +205,18 @@ pub fn build_exprroots(builder: &mut Builder) -> Vec<ExprRoot> {
 
                         let module_component_analysis = builder.get_component_analysis(module.id());
                         if port_name == b"clock" {
-                            Type::Clock
+                            Some(Type::Clock)
                         } else {
                             module_component_analysis.type_of(port_name)
                         }
                     } else {
                         if lhs_path == b"clock" {
-                            Type::Clock
+                            Some(Type::Clock)
                         } else {
                             component_analysis.type_of(lhs_path)
                         }
                     }
-                }
+                },
                 _ => todo!(),
             };
 
@@ -254,7 +262,9 @@ pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typing> {
     let context = builder.get_typing_context(item.id());
 
     let node = parsing.ast_node(location.ast_node_id());
-    let expected_typ = expr_root.expected_typ();
+    let expected_typ = expr_root
+        .expected_typ()
+        .unwrap_or_else(|| builtin_bit_type(builder));
 
     let diagnostics = vec![];
     let mut typing = Typing {
@@ -265,9 +275,25 @@ pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typing> {
         expected_typ: expected_typ.clone(),
     };
 
-    typing.check(parsing_noborrow, &node, &expected_typ);
+    // if there is no expected type, you can't type check the expression.
+    if expr_root.expected_typ().is_some() {
+        typing.check(parsing_noborrow, &node, &expected_typ);
+    } else {
+        typing.diagnostics.push(diagnostics::Todo {
+            region: node.region(),
+            message: format!("Can't typecheck expression because we don't know what type it should have").into(),
+        }.into());
+    }
 
     Arc::new(typing)
+}
+
+fn builtin_bit_type(builder: &mut Builder) -> Type {
+//    TODO
+//    let symboltable = builder.get_symboltable();
+//    let bit_symbol = symboltable.resolve("builtin::Bit".into()).unwrap();
+//    let _ = bit_symbol;
+    Type::Bit
 }
 
 impl Typing {
@@ -372,6 +398,7 @@ impl std::fmt::Display for Type {
             Type::Bit => write!(f, "Bit"),
             Type::Clock => write!(f, "Clock"),
             Type::Word(n) => write!(f, "Word[{n}]"),
+            Type::Usual(symbol_id) => write!(f, "{self:?}"),
         }
     }
 }

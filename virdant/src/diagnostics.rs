@@ -87,6 +87,13 @@ pub struct UnresolvedItem {
     pub item: BString,
 }
 
+/// Failed to resolve a type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnresolvedType {
+    pub region: Region,
+    pub typ: BString,
+}
+
 /// A `reg` component is missing an `on` clause.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MissingOnClause {
@@ -361,6 +368,16 @@ impl IsDiagnostic for UnresolvedItem {
 
     fn message(&self) -> BString {
         format!("Unresolved item {}", &self.item).into()
+    }
+}
+
+impl IsDiagnostic for UnresolvedType {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Unresolved type {}", &self.typ).into()
     }
 }
 

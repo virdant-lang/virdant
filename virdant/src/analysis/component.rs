@@ -4,9 +4,10 @@ use bstr::{BStr, BString};
 
 use crate::analysis::Location;
 use crate::analysis::db::Builder;
-use crate::analysis::symboltable::SymbolId;
+use crate::analysis::symboltable::{SymbolId, SymbolTable};
 use crate::analysis::typecheck::Type;
 use crate::common::json::ToJson;
+use crate::diagnostics::{self, Diagnostic};
 use crate::syntax::ast::AstNode;
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
@@ -15,21 +16,26 @@ use crate::syntax::payload::AstNodePayload;
 pub struct ComponentAnalysis {
     // TODO reference to ModDef this is created for
     moddef: SymbolId,
-    components: Vec<(BString, Type)>,
+    components: Vec<(BString, Option<Type>)>,
+    diagnostics: Vec<Diagnostic>,
 }
 
 impl ComponentAnalysis {
-    pub fn type_of(&self, path: &BStr) -> Type {
+    pub fn type_of(&self, path: &BStr) -> Option<Type> {
         for (path_, typ) in &self.components {
             if path == path_ {
                 return typ.clone();
             }
         }
-        panic!()
+        None
     }
 
-    pub fn components(&self) -> Vec<(BString, Type)> {
+    pub fn components(&self) -> Vec<(BString, Option<Type>)> {
         self.components.clone()
+    }
+
+    pub fn diagnostics(&self) -> Vec<Diagnostic> {
+        self.diagnostics.clone()
     }
 }
 
@@ -37,8 +43,10 @@ pub fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) -> Arc<
     let mut component_analysis = ComponentAnalysis {
         moddef,
         components: vec![],
+        diagnostics: vec![],
     };
 
+    let symboltable = builder.get_symboltable();
     let location = find_item_location(builder, moddef);
     let parsing = builder.get_parsing(location.package());
     let item_ast = parsing.ast_node(location.ast_node_id());
@@ -48,8 +56,10 @@ pub fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) -> Arc<
             AstNodePayload::Component(component) => {
                 let path = parsing.string(component.name).to_owned();
                 let typ_node = stmt.typ().unwrap();
-                let typ = node_to_typ(typ_node, parsing.clone());
-                component_analysis.components.push((path, typ));
+                match node_to_typ(typ_node, parsing.clone(), symboltable.clone()) {
+                    Ok(typ) => component_analysis.components.push((path, Some(typ))),
+                    Err(diag) => component_analysis.diagnostics.push(diag),
+                }
             }
 //            AstNodePayload::Module(module) => todo!(), // TODO
 //            AstNodePayload::ModDefStmtBlock(mod_def_stmt_block) => todo!(),
@@ -63,7 +73,7 @@ pub fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) -> Arc<
     Arc::new(component_analysis)
 }
 
-fn node_to_typ(typ_node: AstNode<'_>, parsing: Arc<Parsing>) -> Type {
+fn node_to_typ(typ_node: AstNode<'_>, parsing: Arc<Parsing>, symboltable: Arc<SymbolTable>) -> Result<Type, Diagnostic> {
     use bstr::ByteSlice;
 
     match typ_node.payload() {
@@ -77,16 +87,23 @@ fn node_to_typ(typ_node: AstNode<'_>, parsing: Arc<Parsing>) -> Type {
                         .package
                         .map(|package| parsing.string(package).to_owned())
                         .unwrap_or_else(|| BString::from(b"builtin".to_vec()));
-                    let name = parsing.string(ofness.name);
-                    BString::from(format!("{}::{name}", package.to_str_lossy()).into_bytes())
+                    parsing.string(ofness.name)
+//                    let name = parsing.string(ofness.name);
+//                    BString::from(format!("{}::{name}", package.to_str_lossy()).into_bytes())
                 }
                 _ => panic!(),
             };
 
-            match type_name.as_slice() {
-                b"builtin::Bit" => Type::Bit,
-                b"builtin::Clock" => Type::Clock,
-                b"builtin::Word" => {
+            if let Some(symbol) = symboltable.resolve_item(type_name.as_bstr(), parsing.package()) {
+                let bit_symbol = symboltable.resolve(b"builtin::Bit".into()).unwrap();
+                let word_symbol = symboltable.resolve(b"builtin::Word".into()).unwrap();
+                let clock_symbol = symboltable.resolve(b"builtin::Clock".into()).unwrap();
+
+                let typ = if symbol.id() == bit_symbol.id() {
+                    Type::Bit
+                } else if symbol.id() == clock_symbol.id() {
+                    Type::Clock
+                } else if symbol.id() == word_symbol.id() {
                     let spelling = typ_node.spelling().to_str_lossy().into_owned();
                     let width = spelling
                         .strip_prefix("Word[")
@@ -95,8 +112,15 @@ fn node_to_typ(typ_node: AstNode<'_>, parsing: Arc<Parsing>) -> Type {
                         .and_then(|width| width.parse::<u64>().ok())
                         .unwrap();
                     Type::Word(width)
-                }
-                _ => panic!("Unsupported type: {}", type_name.to_str_lossy()),
+                } else {
+                    Type::Usual(symbol.id())
+                };
+                Ok(typ)
+            } else {
+                Err(diagnostics::UnresolvedType {
+                    region: typ_node.region(),
+                    typ: type_name.into(),
+                }.into())
             }
         }
         _ => panic!(),

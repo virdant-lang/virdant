@@ -14,6 +14,16 @@ impl<T: ToJson> ToJson for Vec<T> {
     }
 }
 
+impl<T: ToJson> ToJson for Option<T> {
+    fn to_json(&self) -> json::JsonValue {
+        if let Some(self_) = self {
+            self_.to_json()
+        } else {
+            json::value!(null)
+        }
+    }
+}
+
 impl ToJson for bstr::BStr {
     fn to_json(&self) -> json::JsonValue {
         use bstr::ByteSlice;

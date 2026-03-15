@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 
 use bstr::{BStr, BString, ByteSlice};
 use nix::unistd::execvp;
+use virdant::analysis::Location;
 use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
@@ -210,6 +211,33 @@ fn main() {
             let node = parsing.ast_node(location.ast_node_id());
             let region = node.region();
             println!("{location:?} : {typ:?} at @{region}");
+        }
+
+        return;
+    }
+
+    if command == "typing" {
+        let path = args.get(1).unwrap();
+        let package = args.get(2).unwrap();
+        let ast_node_id: u16 = args.get(3).unwrap().parse().unwrap();
+
+        let mut vir = virdant::Vir::from_dir(path);
+        vir.dump_diagnostics();
+
+        let location = Location::new(PackageFqn::new(package.to_string().into()), virdant::syntax::ast::AstNodeId(ast_node_id));
+
+        for exprroot in vir.db().get_exprroots() {
+            if exprroot.location() == location {
+                let typing = vir.db().get_typing(exprroot.clone());
+                let package = exprroot.location().package();
+                let parsing = vir.db().get_parsing(package.clone());
+                let location = exprroot.location();
+                let typ = exprroot.expected_typ();
+                let node = parsing.ast_node(location.ast_node_id());
+                let region = node.region();
+                dbg!(&typing);
+                break;
+            }
         }
 
         return;

@@ -93,6 +93,7 @@ pub fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
             }
 
             let id = SymbolId(symbols.len().try_into().unwrap());
+
             symbols.push((
                 fqn.clone(),
                 Symbol {
@@ -115,6 +116,15 @@ pub fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
 impl SymbolTable {
     pub fn symbol(&self, symbol_id: SymbolId) -> Symbol {
         self.symbols[symbol_id.0 as usize].clone()
+    }
+
+    pub fn resolve(&self, fqn: &BStr) -> Option<&Symbol> {
+        for (symbol_fqn, symbol) in &self.symbols {
+            if symbol_fqn == fqn {
+                return Some(symbol);
+            }
+        }
+        None
     }
 
     pub fn symbols(&self) -> Vec<Symbol> {
