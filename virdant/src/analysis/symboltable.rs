@@ -5,11 +5,11 @@ use hashbrown::{HashMap, HashSet};
 use indexmap::IndexMap;
 
 use crate::analysis::Location;
-use crate::syntax::ast::AstNodeId;
-use crate::analysis::db::Builder;
-use crate::fqn::PackageFqn;
-use crate::diagnostics::Diagnostic;
 use crate::common::json::ToJson;
+use crate::db::Builder;
+use crate::diagnostics::Diagnostic;
+use crate::fqn::PackageFqn;
+use crate::syntax::ast::AstNodeId;
 use crate::syntax::payload::AstNodePayload;
 
 #[derive(Debug)]

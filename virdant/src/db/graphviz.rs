@@ -92,3 +92,10 @@ impl Db {
         std::fs::write(filepath, dot).unwrap();
     }
 }
+
+fn escape_graphviz_label(label: &str) -> String {
+    label
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+}

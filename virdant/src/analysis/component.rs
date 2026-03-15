@@ -3,10 +3,10 @@ use std::sync::Arc;
 use bstr::{BStr, BString};
 
 use crate::analysis::Location;
-use crate::analysis::db::Builder;
 use crate::analysis::symboltable::{SymbolId, SymbolTable};
 use crate::analysis::typecheck::Type;
 use crate::common::json::ToJson;
+use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
 use crate::syntax::ast::AstNode;
 use crate::syntax::parsing::Parsing;

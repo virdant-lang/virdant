@@ -1,4 +1,3 @@
-pub mod db;
 pub mod symboltable;
 pub mod typecheck;
 pub mod component;
@@ -9,7 +8,7 @@ use hashbrown::HashSet;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::analysis::db::Builder;
+use crate::db::Builder;
 use crate::common::ComponentKind;
 use crate::common::json::ToJson;
 use crate::diagnostics;
@@ -48,7 +47,7 @@ impl Location {
     }
 }
 
-fn build_package_analysis(builder: &mut Builder, package: PackageFqn) -> Arc<PackageAnalysis> {
+pub(crate) fn build_package_analysis(builder: &mut Builder, package: PackageFqn) -> Arc<PackageAnalysis> {
     let parsing = builder.get_parsing(package);
     Arc::new(PackageAnalysis::new(parsing))
 }

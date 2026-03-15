@@ -4,7 +4,7 @@ use std::sync::Arc;
 use bstr::BString;
 
 use crate::LIB_DIR;
-use crate::analysis::db::Db;
+use crate::db::Db;
 use crate::diagnostics;
 use crate::diagnostics::Diagnostic;
 use crate::source::Region;

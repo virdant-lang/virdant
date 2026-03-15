@@ -3,11 +3,11 @@ use std::sync::Arc;
 use bstr::{BStr, BString, ByteSlice};
 use hashbrown::HashMap;
 
-use crate::analysis::db::Builder;
 use crate::analysis::Location;
 use crate::analysis::symboltable::{SymbolId, SymbolKind};
 use crate::common::{ComponentKind, TypeScheme};
 use crate::common::json::ToJson;
+use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
 use crate::fqn::PackageFqn;
 use crate::syntax::ast::{AstNode, AstNodeId};

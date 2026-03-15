@@ -3,6 +3,7 @@ pub mod common;
 pub mod source;
 pub mod fqn;
 pub mod syntax;
+pub mod db;
 pub mod analysis;
 // pub mod types;
 pub mod diagnostics;
