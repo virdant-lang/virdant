@@ -39,7 +39,7 @@ pub fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
         diagnostics.extend(analysis.diagnostics());
 
         for item_name in analysis.item_names() {
-            let ast_node_id = analysis.item_ast_node_id(item_name.as_ref()).unwrap();
+            let ast_node_id = analysis.item_ast_node_id(item_name.as_ref());
             let location = Location::new(package.clone(), ast_node_id);
             symbols.push((
                 item_name.clone(),

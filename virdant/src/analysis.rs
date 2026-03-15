@@ -85,15 +85,13 @@ impl PackageAnalysis {
         self.expr_roots.clone()
     }
 
-    pub fn item_ast_node_id(&self, item_name: &BStr) -> Option<AstNodeId> {
+    pub fn item_ast_node_id(&self, item_name: &BStr) -> AstNodeId {
         if let Some(items) = self.items.get(item_name) {
-            if items.len() == 1 {
-                let item_ast_id = &items[0];
-                return Some(*item_ast_id);
-            }
+            let item_ast_id = &items[0];
+            return *item_ast_id;
         }
 
-        None
+        panic!("No such item: {item_name}")
     }
 
     fn propagate_diagnostics(&mut self, parsing: Arc<Parsing>) {

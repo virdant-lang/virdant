@@ -106,7 +106,7 @@ impl Vir {
 
     pub fn parsing<S: AsRef<str>>(&self, package_name: S) -> Arc<Parsing> {
         let package = self.sources[package_name.as_ref()].package();
-        self.parsings.get(&package).unwrap().clone()
+        self.db.get_parsing(package)
     }
 
     pub fn check(&self) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
