@@ -3,6 +3,7 @@ use bstr::{BStr, ByteSlice};
 //pub mod parser_lalrpop;
 //pub use parser_lalrpop as parser;
 
+use crate::common::ComponentKind;
 use crate::common::json::ToJson;
 use crate::source::{Region, Span};
 use crate::syntax::payload::AstNodePayload;
@@ -221,6 +222,21 @@ impl<'p> AstNode<'p> {
     pub fn package(&self) -> Option<InternedString> {
         match &self.payload {
             AstNodePayload::Import(import) => Some(import.package),
+            _ => None
+        }
+    }
+
+    pub fn driver(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::Driver(_driver) => Some(self.child(1)),
+            _ => None
+        }
+    }
+
+    pub fn clock(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::Component(component)
+                if component.kind == ComponentKind::Reg => Some(self.child(1)),
             _ => None
         }
     }

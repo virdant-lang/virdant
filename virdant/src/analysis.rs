@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::analysis::db::Builder;
+use crate::common::ComponentKind;
 use crate::common::json::ToJson;
 use crate::diagnostics;
 use crate::diagnostics::Diagnostic;
@@ -26,6 +27,7 @@ pub struct PackageAnalysis {
     package: PackageFqn,
     imports: HashSet<PackageFqn>,
     items: HashMap<BString, Vec<AstNodeId>>,
+    expr_roots: Vec<AstNodeId>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -50,6 +52,7 @@ impl PackageAnalysis {
             package: parsing.package(),
             imports: vec![PackageFqn::new("builtin".into())].into_iter().collect(),
             items: HashMap::new(),
+            expr_roots: vec![],
             diagnostics: vec![],
         };
 
@@ -70,6 +73,10 @@ impl PackageAnalysis {
 
     pub fn item_names(&self) -> Vec<&BString> {
         self.items.keys().collect()
+    }
+
+    pub fn expr_roots(&self) -> Vec<AstNodeId> {
+        self.expr_roots.clone()
     }
 
     pub fn item_ast_node_id(&self, item_name: &BStr) -> Option<AstNodeId> {
@@ -119,7 +126,34 @@ impl PackageAnalysis {
                 }
                 let mut items = self.items.get_mut(&name).unwrap();
                 items.push(child_node.id());
+
+                self.add_item_expr_roots(parsing.clone(), child_node);
             }
+        }
+    }
+
+    fn add_item_expr_roots(&mut self, parsing: Arc<Parsing>, node: AstNode<'_>) {
+        if matches!(node.payload(), AstNodePayload::ModDef(_)) {
+            for child_node in node.children() {
+                match child_node.payload() {
+                    AstNodePayload::Component(component) => {
+                        if component.kind== ComponentKind::Reg {
+                            let node_id = child_node.clock().unwrap().id();
+                            self.expr_roots.push(node_id);
+                        }
+                    }
+                    AstNodePayload::Driver(driver) => {
+                        let node_id = child_node.driver().unwrap().id();
+                        self.expr_roots.push(node_id);
+                    }
+                    AstNodePayload::Module(_module) => (),
+                    AstNodePayload::Socket(_socket) => (),
+
+                    _ => unreachable!("{:?}", child_node.summary()),
+                }
+            }
+        } else {
+            // TODO handle FnDefs
         }
     }
 }

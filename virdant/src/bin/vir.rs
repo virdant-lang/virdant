@@ -152,13 +152,29 @@ fn main() {
             }
         };
 
-        let path = args.get(1).unwrap();
         let mut vir = virdant::Vir::from_dir(path);
         vir.dump_diagnostics();
 
         let symboltable = vir.db().get_symboltable();
         for symbol in symboltable.symbols() {
             println!("{symbol:?}");
+        }
+
+        return;
+    }
+
+    if command == "exprroots" {
+        let path = args.get(1).unwrap();
+        let mut vir = virdant::Vir::from_dir(path);
+        vir.dump_diagnostics();
+
+        for package in vir.db().get_packages() {
+            let parsing = vir.db().get_parsing(package.clone());
+            let package_analysis = vir.db().get_package_analysis(package);
+            for expr_root in package_analysis.expr_roots() {
+                let node = parsing.ast_node(expr_root);
+                println!("{:?} at {:?}", node.summary(), node.region());
+            }
         }
 
         return;
