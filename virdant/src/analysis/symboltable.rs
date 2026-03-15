@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
-use bstr::BString;
+use bstr::{BStr, BString};
 use hashbrown::HashMap;
+use indexmap::IndexMap;
 
 use crate::syntax::ast::AstNodeId;
 use crate::analysis::db::Builder;
@@ -11,23 +12,46 @@ use crate::common::json::ToJson;
 
 #[derive(Debug)]
 pub struct SymbolTable {
-    symbols: HashMap<BString, Symbol>,
+    symbols: IndexMap<BString, Symbol>,
     diagnostics: Vec<Diagnostic>,
 }
 
 #[derive(Debug, Clone)]
-pub enum Symbol {
-    ModDef(ModDef),
+pub struct Symbol {
+    fqn: BString,
+    location: Location,
+    kind: SymbolKind,
 }
 
 #[derive(Debug, Clone)]
-pub struct ModDef {
-    name: BString,
-    location: Location,
+pub enum SymbolKind {
+    ModDef,
+    UnionDef,
+    StructDef,
+    EnumDef,
+    BuiltinDef,
+    FnDef,
+    SocketDef,
 }
 
+// TODO move this to maybe the ast module?
 #[derive(Debug, Clone)]
 pub struct Location(PackageFqn, AstNodeId);
+
+impl Symbol {
+    pub fn fqn(&self) -> &BStr {
+        use bstr::ByteSlice;
+        self.fqn.as_bstr()
+    }
+
+    pub fn location(&self) -> Location {
+        self.location.clone()
+    }
+
+    pub fn kind(&self) -> SymbolKind {
+        self.kind.clone()
+    }
+}
 
 pub fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
     let packages = builder.get_packages();
@@ -41,12 +65,14 @@ pub fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
         for item_name in analysis.item_names() {
             let ast_node_id = analysis.item_ast_node_id(item_name.as_ref());
             let location = Location::new(package.clone(), ast_node_id);
+            let fqn: BString = format!("{}::{}", package, item_name.clone()).into();
             symbols.push((
-                item_name.clone(),
-                Symbol::ModDef(ModDef {
-                    name: item_name.clone(),
+                fqn.clone(),
+                Symbol {
+                    fqn,
                     location,
-                }),
+                    kind: SymbolKind::ModDef,
+                },
             ));
         }
     }

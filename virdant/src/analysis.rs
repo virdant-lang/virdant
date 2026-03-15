@@ -1,6 +1,7 @@
 pub mod db;
 pub mod symboltable;
 pub mod typecheck;
+pub mod component;
 
 use bstr::BStr;
 use bstr::BString;

@@ -10,11 +10,13 @@ use hashbrown::{HashMap, HashSet};
 
 use crate::analysis::Location;
 use crate::analysis::PackageAnalysis;
+use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::symboltable::SymbolTable;
 use crate::analysis::typecheck::TypeCheck as Typecheck;
 use crate::common::json::ToJson;
 use crate::diagnostics::DiagnosticLevel;
 use crate::syntax::parsing::parse;
+use crate::syntax::payload::Component;
 use crate::{diagnostics::Diagnostic, fqn::PackageFqn, source::Source, syntax::parsing::Parsing};
 
 macro_rules! cast {
@@ -33,6 +35,7 @@ enum Query {
     Source(PackageFqn),
     Parsing(PackageFqn),
     PackageAnalysis(PackageFqn),
+    ComponentAnalysis(BString),
     SymbolTable(),
     ExprRoots(),
     Typecheck(Location),
@@ -48,6 +51,7 @@ enum QueryResultPayload {
     Source(Source),
     Parsing(Arc<Parsing>),
     PackageAnalysis(Arc<PackageAnalysis>),
+    ComponentAnalysis(Arc<ComponentAnalysis>),
     SymbolTable(Arc<SymbolTable>),
     ExprRoots(Vec<Location>),
     Typecheck(Arc<Typecheck>),
@@ -105,6 +109,11 @@ impl<'d> Builder<'d> {
     pub(crate) fn get_package_analysis(&mut self, package: PackageFqn) -> Arc<PackageAnalysis> {
         let query = Query::PackageAnalysis(package);
         cast!(self.get(query), PackageAnalysis)
+    }
+
+    pub(crate) fn get_component_analysis(&mut self, name: BString) -> Arc<ComponentAnalysis> {
+        let query = Query::ComponentAnalysis(name);
+        cast!(self.get(query), ComponentAnalysis)
     }
 
     pub(crate) fn get_symboltable(&mut self) -> Arc<SymbolTable> {
@@ -250,6 +259,11 @@ impl Db {
         cast!(self.get(query), PackageAnalysis)
     }
 
+    pub fn get_component_analysis(&self, name: BString) -> Arc<ComponentAnalysis> {
+        let query = Query::ComponentAnalysis(name);
+        cast!(self.get(query), ComponentAnalysis)
+    }
+
     pub fn get_symboltable(&self) -> Arc<SymbolTable> {
         let query = Query::SymbolTable();
         cast!(self.get(query), SymbolTable)
@@ -297,6 +311,7 @@ impl Query {
         dispatch_build!(
             build_parsing : Parsing(package);
             crate::analysis::build_package_analysis : PackageAnalysis(analysis);
+            crate::analysis::component::build_components : ComponentAnalysis(name);
             crate::analysis::symboltable::build_symboltable : SymbolTable();
             crate::analysis::typecheck::build_exprroots : ExprRoots();
             crate::analysis::typecheck::typecheck : Typecheck(ast_node_id);
@@ -332,6 +347,7 @@ fn test_db() {
     eprintln!("{}", db.to_json().pretty(4));
     eprintln!("CHECK");
     db.check();
+    dbg!(db.get_component_analysis(BString::new("clock".as_bytes().to_vec())));
     eprintln!("{}", db.to_json().pretty(4));
 
 
@@ -378,6 +394,7 @@ impl ToJson for Query {
             Query::Source(package) => json::array!("Source", package.to_json()),
             Query::Parsing(package) => json::array!("Parsing", package.to_json()),
             Query::PackageAnalysis(package) => json::array!("PackageAnalysis", package.to_json()),
+            Query::ComponentAnalysis(name) => json::array!("Components", name.to_json()),
             Query::SymbolTable() => json::array!("SymbolTable"),
             Query::ExprRoots() => json::array!("ExprRoots"),
             Query::Typecheck(location) => json::array!("Typecheck", location.to_json()),
@@ -399,6 +416,7 @@ impl ToJson for QueryResult {
             QueryResultPayload::Source(source) => source.to_json(),
             QueryResultPayload::Parsing(parsing) => format!("{self:?}").into(),
             QueryResultPayload::PackageAnalysis(package_analysis) => package_analysis.to_json(),
+            QueryResultPayload::ComponentAnalysis(component_analysis) => component_analysis.to_json(),
             QueryResultPayload::SymbolTable(symboltable) => symboltable.to_json(),
             QueryResultPayload::ExprRoots(locations) => locations.to_json(),
             QueryResultPayload::Typecheck(typecheck) => typecheck.to_json(),

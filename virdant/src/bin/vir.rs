@@ -169,7 +169,7 @@ fn main() {
 
         let symboltable = vir.db().get_symboltable();
         for symbol in symboltable.symbols() {
-            println!("{symbol:?}");
+            println!("{:<20}", symbol.fqn());
         }
 
         return;

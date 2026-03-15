@@ -1345,6 +1345,7 @@ dependencies = [
  "clap",
  "defile",
  "hashbrown 0.15.5",
+ "indexmap",
  "internment",
  "json",
  "lalrpop",

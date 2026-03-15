@@ -12,6 +12,7 @@ bstr = "1.12.0"
 clap = { version = "4.5.46", features = ["derive"] }
 defile = "0.2.1"
 hashbrown = "0.15.4"
+indexmap = "2.13.0"
 internment = { version = "0.8.6", features = ["arc"] }
 json = "0.12.4"
 lalrpop-util = { version = "0.22.2", features = ["lexer"] }
