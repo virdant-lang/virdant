@@ -45,7 +45,16 @@ impl Vir {
         db.set_source(builtin_source.package(), builtin_source.clone());
 
         for filepath in std::fs::read_dir(source_dir.into()).unwrap() {
-            let source: Source = Source::load_file(filepath.unwrap().path());
+            let filepath = match filepath {
+                Ok(filepath) => filepath.path(),
+                Err(_) => continue,
+            };
+
+            match filepath.extension() {
+                Some(ext) if ext.to_string_lossy() == "vir" => (),
+                _ => continue,
+            }
+            let source: Source = Source::load_file(filepath);
             db.set_source(source.package(), source.clone());
             sources.push(source);
         }

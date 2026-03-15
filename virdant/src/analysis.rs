@@ -152,7 +152,7 @@ impl PackageAnalysis {
                     }
                     AstNodePayload::Module(_module) => (),
                     AstNodePayload::Socket(_socket) => (),
-
+                    AstNodePayload::BidirectionalDriver => (),
                     _ => unreachable!("{:?}", child_node.summary()),
                 }
             }

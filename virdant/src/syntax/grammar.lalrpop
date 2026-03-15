@@ -297,7 +297,11 @@ ModDefStmtInstance: AstNodeId = {
     <ll:@L> "mod" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> ";" <rr:@R> => {
         let payload = AstNodePayload::Module(payload::Module { name });
         let span = parser.span(ll, rr);
-        let num_children = 1;
+        let num_children = if it.is_none() {
+            1
+        } else {
+            2
+        };
 
         parser.add_node(payload, span, num_children)
     }

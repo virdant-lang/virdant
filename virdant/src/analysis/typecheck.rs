@@ -56,7 +56,6 @@ pub fn typecheck(builder: &mut Builder, location: Location) -> Arc<TypeCheck> {
 
     match parent_node.payload() {
         _ => {
-            parent_node.dump();
             // TODO
         }
     }
@@ -102,6 +101,8 @@ impl TypeCheck {
             return;
         }
 
+        /*
+        // TODO
         match node.payload() {
             AstNodePayload::ExprParen => todo!(),
             AstNodePayload::ExprIf => todo!(),
@@ -121,6 +122,7 @@ impl TypeCheck {
             AstNodePayload::ExprSext => todo!(),
             _ => unreachable!(),
         }
+        */
     }
 
     fn infer<'p>(&mut self, parsing: Arc<Parsing>, node: &AstNode<'p>) -> Option<Type> {
@@ -144,7 +146,7 @@ impl TypeCheck {
                 // TODO HACK This ignores width and just gives Word[8]
                 Some(Type::Word(8))
             }
-            _ => unreachable!(),
+            _ => None,
         }
     }
 }
