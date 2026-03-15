@@ -460,20 +460,6 @@ impl ToJson for QueryResult {
 fn check(builder: &mut Builder) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
     let mut diagnostics = vec![];
 
-    /*
-    let symboltable = builder.get_symboltable();
-    for symbol in symboltable.symbols() {
-        if symbol.kind() == SymbolKind::ModDef {
-            let component_analysis = builder.get_component_analysis(symbol.fqn().to_owned());
-        }
-    }
-    */
-
-    for package in builder.get_packages() {
-        let package_analysis = builder.get_package_analysis(package);
-        diagnostics.extend(package_analysis.diagnostics());
-    }
-
     diagnostics.extend(builder.get_typecheck());
 
     if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
