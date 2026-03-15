@@ -64,10 +64,12 @@ pub fn build_exprroots(builder: &mut Builder) -> Vec<ExprRoot> {
             let location = Location::new(analysis.package(), ast_node_id);
             let node = parsing.ast_node(ast_node_id);
             let parent_node = node.parent().unwrap();
+            // dbg!(&parent_node);
 
             let expected_typ = match parent_node.payload() {
                 AstNodePayload::Component(component) if component.kind == ComponentKind::Reg => Type::Clock,
                 AstNodePayload::Driver(_) => {
+                    // TODO REVIEW I'm pretty sure this is all junk
                     let lhs_path = parsing.string(parent_node.child(0).path().unwrap());
 
                     let moddef_node = parent_node.parent().unwrap();

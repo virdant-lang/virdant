@@ -154,15 +154,21 @@ fn main() {
         return;
     }
 
+    if command == "components" {
+        let path = args.get(1).unwrap();
+        let moddef_fqn = args.get(2).unwrap();
+
+        let mut vir = virdant::Vir::from_dir(path);
+        vir.dump_diagnostics();
+
+        let component_analysis = vir.db().get_component_analysis(moddef_fqn.to_owned().into());
+        dbg!(&component_analysis);
+
+        return;
+    }
+
     if command == "symbols" {
-        let path = match args.get(1) {
-            Some(path) => path,
-            None => {
-                eprintln!("ERROR");
-                eprintln!("usage: vir symbols <file>");
-                std::process::exit(3);
-            }
-        };
+        let path = args.get(1).unwrap();
 
         let mut vir = virdant::Vir::from_dir(path);
         vir.dump_diagnostics();

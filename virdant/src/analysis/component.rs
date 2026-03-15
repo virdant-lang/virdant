@@ -7,7 +7,8 @@ use crate::analysis::db::Builder;
 use crate::analysis::typecheck::Type;
 use crate::common::json::ToJson;
 use crate::fqn::PackageFqn;
-use crate::syntax::ast::AstNodeId;
+use crate::syntax::ast::{AstNode, AstNodeId};
+use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 
 #[derive(Debug)]
@@ -35,7 +36,7 @@ pub fn build_component_analysis(builder: &mut Builder, moddef_fqn: BString) -> A
         components: vec![],
     };
 
-    let location = find_component(builder, moddef_fqn);
+    let location = find_item_location(builder, moddef_fqn);
     let parsing = builder.get_parsing(location.package());
     let item_ast = parsing.ast_node(location.ast_node_id());
 
@@ -43,7 +44,8 @@ pub fn build_component_analysis(builder: &mut Builder, moddef_fqn: BString) -> A
         match stmt.payload() {
             AstNodePayload::Component(component) => {
                 let path = parsing.string(component.name).to_owned();
-                let typ = Type::Word(8);
+                let typ_node = stmt.typ().unwrap();
+                let typ = node_to_typ(typ_node, parsing.clone());
                 component_analysis.components.push((path, typ));
             }
 //            AstNodePayload::Module(module) => todo!(), // TODO
@@ -58,14 +60,54 @@ pub fn build_component_analysis(builder: &mut Builder, moddef_fqn: BString) -> A
     Arc::new(component_analysis)
 }
 
-fn find_component(builder: &mut Builder, moddef_fqn: BString) -> Location {
+fn node_to_typ(typ_node: AstNode<'_>, parsing: Arc<Parsing>) -> Type {
+    use bstr::ByteSlice;
+
+    match typ_node.payload() {
+        AstNodePayload::Type(_typ) => {
+            // TODO Look at the internned string behind the "Ofness" node in the AST.
+            // Turn it into a fully-qualified type name if it's Bit, Clock, or Word[n].
+            // Then convert it to a Type::Bit, Type::Clock, or Type::Word[n], respectively.
+            let type_name = match typ_node.child(0).payload() {
+                AstNodePayload::Ofness(ofness) => {
+                    let package = ofness
+                        .package
+                        .map(|package| parsing.string(package).to_owned())
+                        .unwrap_or_else(|| BString::from(b"builtin".to_vec()));
+                    let name = parsing.string(ofness.name);
+                    BString::from(format!("{}::{name}", package.to_str_lossy()).into_bytes())
+                }
+                _ => panic!(),
+            };
+
+            match type_name.as_slice() {
+                b"builtin::Bit" => Type::Bit,
+                b"builtin::Clock" => Type::Clock,
+                b"builtin::Word" => {
+                    let spelling = typ_node.spelling().to_str_lossy().into_owned();
+                    let width = spelling
+                        .strip_prefix("Word[")
+                        .or_else(|| spelling.strip_prefix("builtin::Word["))
+                        .and_then(|rest| rest.strip_suffix(']'))
+                        .and_then(|width| width.parse::<u64>().ok())
+                        .unwrap();
+                    Type::Word(width)
+                }
+                _ => panic!("Unsupported type: {}", type_name.to_str_lossy()),
+            }
+        }
+        _ => panic!(),
+    }
+}
+
+fn find_item_location(builder: &mut Builder, item_fqn: BString) -> Location {
     // TODO HACK I really need to not use a BString and instead, use a SymbolId, which can locate
     // the package it's in. Until then, we can just brute force and deal with duplicates.
-    let (package_name, moddef_name) = split(moddef_fqn.clone());
+    let (package_name, moddef_name) = split(item_fqn.clone());
     let package: PackageFqn = PackageFqn::new(package_name.into());
     let parsing = builder.get_parsing(package.clone());
     for item_node in parsing.root().children() {
-        if !matches!(item_node.payload(), AstNodePayload::ModDef(_) | AstNodePayload::BuiltinDef(_)) {
+        if !item_node.is_item() {
             continue;
         }
 
@@ -75,7 +117,7 @@ fn find_component(builder: &mut Builder, moddef_fqn: BString) -> Location {
             return Location::new(package.clone(), item_node.id());
         }
     }
-    panic!("Couldn't find component {moddef_fqn}")
+    panic!("Couldn't find Item: {item_fqn}")
 }
 
 fn split(moddef_fqn: BString) -> (BString, BString) {

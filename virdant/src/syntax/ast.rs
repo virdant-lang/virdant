@@ -233,6 +233,13 @@ impl<'p> AstNode<'p> {
         }
     }
 
+    pub fn typ(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::Component(_component) => Some(self.child(0)),
+            _ => None,
+        }
+    }
+
     pub fn path(&self) -> Option<InternedString> {
         match &self.payload {
             AstNodePayload::ExprReference => self.child(0).path(),
