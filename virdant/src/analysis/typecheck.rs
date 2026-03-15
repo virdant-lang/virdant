@@ -3,13 +3,13 @@ use std::sync::Arc;
 use bstr::{BStr, BString, ByteSlice};
 use hashbrown::HashMap;
 
-use crate::analysis::component::find_item_location;
 use crate::analysis::db::Builder;
 use crate::analysis::Location;
-use crate::analysis::symboltable::SymbolKind;
+use crate::analysis::symboltable::{SymbolId, SymbolKind};
 use crate::common::{ComponentKind, TypeScheme};
 use crate::common::json::ToJson;
 use crate::diagnostics::{self, Diagnostic};
+use crate::fqn::PackageFqn;
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
@@ -97,11 +97,15 @@ pub fn build_typedefs(builder: &mut Builder) -> Vec<TypeDef> {
     typedefs
 }
 
-pub fn build_typing_context(builder: &mut Builder, item_fqn: BString) -> TypingContext {
-    let location = find_item_location(builder, item_fqn.clone());
+pub fn build_typing_context(builder: &mut Builder, item: SymbolId) -> TypingContext {
+    let symboltable = builder.get_symboltable();
+
+    let symbol = symboltable.symbol(item);
+    let location = symbol.location();
     let parsing = builder.get_parsing(location.package());
+
     let item_ast = parsing.ast_node(location.ast_node_id());
-    let component_analysis = builder.get_component_analysis(item_fqn);
+    let component_analysis = builder.get_component_analysis(item);
 
     // TODO How does this need to get used?
     let typedefs = builder.get_typedefs();
@@ -116,19 +120,20 @@ pub fn build_typing_context(builder: &mut Builder, item_fqn: BString) -> TypingC
         };
 
         let instance_name = parsing.string(module.name);
-        let module_fqn = match stmt.child(0).payload() {
+        let module = match stmt.child(0).payload() {
             AstNodePayload::Ofness(ofness) => {
                 let module_package = ofness
                     .package
-                    .map(|package| BString::from(parsing.string(package).to_vec()))
-                    .unwrap_or_else(|| location.package().to_string().into());
+                    .map(|package| PackageFqn::new(BString::from(parsing.string(package).to_vec())))
+                    .unwrap_or_else(|| location.package());
                 let module_name = parsing.string(ofness.name);
-                BString::from(format!("{}::{module_name}", module_package.to_str_lossy()).into_bytes())
+                symboltable.resolve_item_in_package(module_name, module_package).unwrap()
             }
             _ => todo!(),
         };
 
-        let module_component_analysis = builder.get_component_analysis(module_fqn);
+
+        let module_component_analysis = builder.get_component_analysis(module.id());
         for (port_name, typ) in module_component_analysis.components() {
             let qualified_name =
                 BString::from(format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes());
@@ -144,6 +149,7 @@ pub fn build_exprroots(builder: &mut Builder) -> Vec<ExprRoot> {
     for package in builder.get_packages() {
         let parsing = builder.get_parsing(package.clone());
         let analysis = builder.get_package_analysis(package);
+        let symboltable = builder.get_symboltable();
 
         for ast_node_id in analysis.expr_roots_node_ids() {
             let location = Location::new(analysis.package(), ast_node_id);
@@ -159,10 +165,10 @@ pub fn build_exprroots(builder: &mut Builder) -> Vec<ExprRoot> {
 
                     let moddef_node = parent_node.parent().unwrap();
                     let moddef_name = parsing.string(moddef_node.name().unwrap());
-                    let moddef_fqn = BString::from(
-                        format!("{}::{moddef_name}", location.package()).into_bytes()
-                    );
-                    let component_analysis = builder.get_component_analysis(moddef_fqn);
+                    let moddef = symboltable
+                        .resolve_item_in_package(moddef_name, location.package())
+                        .unwrap();
+                    let component_analysis = builder.get_component_analysis(moddef.id());
 
                     if let Some(dot_index) = lhs_path.iter().position(|ch| *ch == b'.') {
                         let instance_name = BStr::new(&lhs_path[..dot_index]);
@@ -177,19 +183,19 @@ pub fn build_exprroots(builder: &mut Builder) -> Vec<ExprRoot> {
                             })
                             .unwrap_or_else(|| panic!("Couldn't find instance {lhs_path}"));
 
-                        let module_fqn = match instance_node.child(0).payload() {
+                        let module = match instance_node.child(0).payload() {
                             AstNodePayload::Ofness(ofness) => {
                                 let module_package = ofness
                                     .package
-                                    .map(|package| BString::from(parsing.string(package).to_vec()))
-                                    .unwrap_or_else(|| location.package().to_string().into());
+                                    .map(|package| PackageFqn::new(BString::from(parsing.string(package).to_vec())))
+                                    .unwrap_or_else(|| location.package());
                                 let module_name = parsing.string(ofness.name);
-                                BString::from(format!("{}::{module_name}", module_package.to_str_lossy()).into_bytes())
+                                symboltable.resolve_item_in_package(module_name, module_package).unwrap()
                             }
                             _ => todo!(),
                         };
 
-                        let module_component_analysis = builder.get_component_analysis(module_fqn);
+                        let module_component_analysis = builder.get_component_analysis(module.id());
                         if port_name == b"clock" {
                             Type::Clock
                         } else {
@@ -241,8 +247,11 @@ pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typing> {
             .expect("expected expr root to be contained in an item")
             .id();
     };
-    let item_fqn = BString::from(format!("{}::{item_name}", location.package()).into_bytes());
-    let context = builder.get_typing_context(item_fqn);
+    let symboltable = builder.get_symboltable();
+    let item = symboltable
+        .resolve_item_in_package(item_name.as_bstr(), location.package())
+        .unwrap();
+    let context = builder.get_typing_context(item.id());
 
     let node = parsing.ast_node(location.ast_node_id());
     let expected_typ = expr_root.expected_typ();

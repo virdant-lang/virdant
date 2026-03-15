@@ -161,7 +161,9 @@ fn main() {
         let mut vir = virdant::Vir::from_dir(path);
         vir.dump_diagnostics();
 
-        let component_analysis = vir.db().get_component_analysis(moddef_fqn.to_owned().into());
+        let symboltable = vir.db().get_symboltable();
+        let moddef = symboltable.resolve_item_fqn(moddef_fqn.as_bytes().as_bstr()).unwrap();
+        let component_analysis = vir.db().get_component_analysis(moddef.id());
         dbg!(&component_analysis);
 
         return;

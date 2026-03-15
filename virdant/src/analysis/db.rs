@@ -11,6 +11,7 @@ use hashbrown::{HashMap, HashSet};
 use crate::analysis::Location;
 use crate::analysis::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
+use crate::analysis::symboltable::SymbolId;
 use crate::analysis::symboltable::SymbolKind;
 use crate::analysis::symboltable::SymbolTable;
 use crate::analysis::typecheck::TypeDef;
@@ -38,11 +39,11 @@ enum Query {
     Parsing(PackageFqn),
     SyntaxErrors(),
     PackageAnalysis(PackageFqn),
-    ComponentAnalysis(BString),
+    ComponentAnalysis(SymbolId),
     SymbolTable(),
     TypeDefs(),
     ExprRoots(),
-    TypingContext(BString),
+    TypingContext(SymbolId),
     Typing(ExprRoot),
     TypeCheck(),
     Check(),
@@ -257,11 +258,11 @@ impl Query {
             build_parsing : Parsing(package);
             build_syntax_errors : SyntaxErrors();
             crate::analysis::build_package_analysis : PackageAnalysis(analysis);
-            crate::analysis::component::build_component_analysis : ComponentAnalysis(name);
+            crate::analysis::component::build_component_analysis : ComponentAnalysis(symbol_id);
             crate::analysis::symboltable::build_symboltable : SymbolTable();
             crate::analysis::typecheck::build_exprroots : ExprRoots();
             crate::analysis::typecheck::build_typedefs : TypeDefs();
-            crate::analysis::typecheck::build_typing_context : TypingContext(item_fqn);
+            crate::analysis::typecheck::build_typing_context : TypingContext(symbol_id);
             crate::analysis::typecheck::build_typing : Typing(expr_root);
             crate::analysis::typecheck::typecheck : TypeCheck();
             check : Check();
@@ -421,9 +422,9 @@ db_getter!(get_source : Source(package : PackageFqn) -> Source);
 db_getter!(get_parsing : Parsing(package: PackageFqn) -> Arc<Parsing>);
 db_getter!(get_syntax_errors : SyntaxErrors() -> Vec<Diagnostic>);
 db_getter!(get_package_analysis : PackageAnalysis(package: PackageFqn) -> Arc<PackageAnalysis>);
-db_getter!(get_component_analysis : ComponentAnalysis(name: BString) -> Arc<ComponentAnalysis>);
+db_getter!(get_component_analysis : ComponentAnalysis(moddef: SymbolId) -> Arc<ComponentAnalysis>);
 db_getter!(get_symboltable : SymbolTable() -> Arc<SymbolTable>);
-db_getter!(get_typing_context : TypingContext(item_fqn: BString) -> TypingContext);
+db_getter!(get_typing_context : TypingContext(item: SymbolId) -> TypingContext);
 db_getter!(get_typedefs : TypeDefs() -> Vec<TypeDef>);
 db_getter!(get_exprroots : ExprRoots() -> Vec<ExprRoot>);
 db_getter!(get_typing : Typing(expr_root: ExprRoot) -> Arc<Typing>);

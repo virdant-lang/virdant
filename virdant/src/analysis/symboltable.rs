@@ -135,17 +135,25 @@ impl SymbolTable {
             .collect()
     }
 
-    pub fn resolve_item(&self, name: &BStr, in_package: PackageFqn) -> Option<&Symbol> {
+    pub fn resolve_item_fqn(&self, item_fqn: &BStr) -> Option<&Symbol> {
+        self.lookup_item_by_fqn(item_fqn)
+    }
+
+    pub fn resolve_item_in_package(&self, name: &BStr, package: PackageFqn) -> Option<&Symbol> {
         use bstr::ByteSlice;
 
-        let item_fqn: BString = if let Some((package_name, item_name)) = try_split_qualification(name) {
-            name.to_owned()
-        } else if self.builtin_names.contains(name) {
-            format!("builtin::{name}").into()
-        } else{
-            format!("{in_package}::{name}").into()
-        };
+        let item_fqn: BString = format!("{package}::{name}").into();
         self.lookup_item_by_fqn(item_fqn.as_bstr())
+    }
+
+    pub fn resolve_item(&self, name: &BStr, in_package: PackageFqn) -> Option<&Symbol> {
+        if let Some((_package_name, _item_name)) = try_split_qualification(name) {
+            self.resolve_item_fqn(name)
+        } else if self.builtin_names.contains(name) {
+            self.resolve_item_in_package(name, PackageFqn::new("builtin".into()))
+        } else{
+            self.resolve_item_in_package(name, in_package)
+        }
     }
 
     fn lookup_item_by_fqn(&self, item_fqn: &BStr) -> Option<&Symbol> {
@@ -203,6 +211,12 @@ impl SymbolKind {
 }
 
 impl ToJson for SymbolTable {
+    fn to_json(&self) -> json::JsonValue {
+        format!("{self:?}").into()
+    }
+}
+
+impl ToJson for SymbolId {
     fn to_json(&self) -> json::JsonValue {
         format!("{self:?}").into()
     }

@@ -4,17 +4,17 @@ use bstr::{BStr, BString};
 
 use crate::analysis::Location;
 use crate::analysis::db::Builder;
+use crate::analysis::symboltable::SymbolId;
 use crate::analysis::typecheck::Type;
 use crate::common::json::ToJson;
-use crate::fqn::PackageFqn;
-use crate::syntax::ast::{AstNode, AstNodeId};
+use crate::syntax::ast::AstNode;
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 
 #[derive(Debug)]
 pub struct ComponentAnalysis {
     // TODO reference to ModDef this is created for
-    moddef_fqn: BString,
+    moddef: SymbolId,
     components: Vec<(BString, Type)>,
 }
 
@@ -33,14 +33,13 @@ impl ComponentAnalysis {
     }
 }
 
-pub fn build_component_analysis(builder: &mut Builder, moddef_fqn: BString) -> Arc<ComponentAnalysis> {
-    use bstr::ByteSlice;
+pub fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) -> Arc<ComponentAnalysis> {
     let mut component_analysis = ComponentAnalysis {
-        moddef_fqn: moddef_fqn.clone(),
+        moddef,
         components: vec![],
     };
 
-    let location = find_item_location(builder, moddef_fqn);
+    let location = find_item_location(builder, moddef);
     let parsing = builder.get_parsing(location.package());
     let item_ast = parsing.ast_node(location.ast_node_id());
 
@@ -104,38 +103,9 @@ fn node_to_typ(typ_node: AstNode<'_>, parsing: Arc<Parsing>) -> Type {
     }
 }
 
-pub fn find_item_location(builder: &mut Builder, item_fqn: BString) -> Location {
-    // TODO HACK I really need to not use a BString and instead, use a SymbolId, which can locate
-    // the package it's in. Until then, we can just brute force and deal with duplicates.
-    let (package_name, moddef_name) = split(item_fqn.clone());
-    let package: PackageFqn = PackageFqn::new(package_name.into());
-    let parsing = builder.get_parsing(package.clone());
-    for item_node in parsing.root().children() {
-        if !item_node.is_item() {
-            continue;
-        }
-
-        let name = parsing.string(item_node.name().unwrap());
-
-        if name == moddef_name {
-            return Location::new(package.clone(), item_node.id());
-        }
-    }
-    panic!("Couldn't find Item: {item_fqn}")
-}
-
-// TODO duplicate
-fn split(moddef_fqn: BString) -> (BString, BString) {
-    let bytes = moddef_fqn.as_slice();
-    let split_at = bytes
-        .windows(2)
-        .position(|window| window == b"::")
-        .unwrap();
-
-    let first = BString::from(bytes[..split_at].to_vec());
-    let second = BString::from(bytes[(split_at + 2)..].to_vec());
-
-    (first, second)
+pub fn find_item_location(builder: &mut Builder, item: SymbolId) -> Location {
+    let symboltable = builder.get_symboltable();
+    symboltable.symbol(item).location()
 }
 
 impl ToJson for ComponentAnalysis {
