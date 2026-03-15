@@ -25,7 +25,7 @@ use crate::{diagnostics::Diagnostic, fqn::PackageFqn, source::Source, syntax::pa
 
 macro_rules! cast {
     ($query_result:expr, $query:ident) => {{
-        if let QueryResultPayload::$query(value) = $query_result.0 {
+        if let QueryResult::$query(value) = $query_result {
             value
         } else {
             panic!("Expected QueryResult::{}", stringify!($query))
@@ -33,45 +33,42 @@ macro_rules! cast {
     }};
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-enum Query {
-    Packages(),
-    Source(PackageFqn),
-    Parsing(PackageFqn),
-    SyntaxErrors(),
-    PackageAnalysis(PackageFqn),
-    ComponentAnalysis(SymbolId),
-    SymbolTable(),
-    TypeDefs(),
-    ExprRoots(),
-    ExpectedType(Location),
-    TypingContext(SymbolId),
-    Typing(ExprRoot),
-    TypeCheck(),
-    Typeof(Location),
-    Check(),
+macro_rules! queries {
+    ($(
+            $query:ident($($arg:ident : $typ:path),*) -> $ret:path;)*
+    ) => {
+        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        enum Query {
+            $(
+                $query($($typ),*),
+            )*
+        }
+
+        #[derive(Clone, Debug)]
+        enum QueryResult {
+            $(
+                $query($ret),
+            )*
+        }
+    }
 }
 
-#[derive(Clone, Debug)]
-pub struct QueryResult(QueryResultPayload);
-
-#[derive(Clone, Debug)]
-enum QueryResultPayload {
-    Packages(Vec<PackageFqn>),
-    Source(Source),
-    Parsing(Arc<Parsing>),
-    SyntaxErrors(Vec<Diagnostic>),
-    PackageAnalysis(Arc<PackageAnalysis>),
-    ComponentAnalysis(Arc<ComponentAnalysis>),
-    SymbolTable(Arc<SymbolTable>),
-    TypeDefs(Vec<TypeDef>),
-    ExprRoots(Vec<ExprRoot>),
-    ExpectedType(Option<Type>),
-    TypingContext(TypingContext),
-    Typing(Arc<Typing>),
-    TypeCheck(Vec<Diagnostic>),
-    Typeof(Option<Type>),
-    Check(Result<Vec<Diagnostic>, Vec<Diagnostic>>),
+queries! {
+    Packages() -> Vec<PackageFqn>;
+    Source(package: PackageFqn) -> Source;
+    Parsing(package: PackageFqn) -> Arc<Parsing>;
+    SyntaxErrors() -> Vec<Diagnostic>;
+    PackageAnalysis(package: PackageFqn) -> Arc<PackageAnalysis>;
+    ComponentAnalysis(symbol_id: SymbolId) -> Arc<ComponentAnalysis>;
+    SymbolTable() -> Arc<SymbolTable>;
+    TypeDefs() -> Vec<TypeDef>;
+    ExprRoots() -> Vec<ExprRoot>;
+    ExpectedType(location: Location) -> Option<Type>;
+    TypingContext(symbol_id: SymbolId) -> TypingContext;
+    Typing(exprroot: ExprRoot) -> Arc<Typing>;
+    TypeCheck() -> Vec<Diagnostic>;
+    Typeof(location: Location) -> Option<Type>;
+    Check() -> Result<Vec<Diagnostic>, Vec<Diagnostic>>;
 }
 
 #[derive(Debug)]
@@ -85,12 +82,6 @@ pub struct CachedVal {
     val: QueryResult,
     rev: usize,
     deps: Vec<Query>,
-}
-
-impl From<QueryResultPayload> for QueryResult {
-    fn from(payload: QueryResultPayload) -> Self {
-        QueryResult(payload)
-    }
 }
 
 impl<'d> Builder<'d> {
@@ -189,7 +180,7 @@ impl Db {
 
         let query = Query::Packages();
         let val = CachedVal {
-            val: QueryResultPayload::Packages(packages).into(),
+            val: QueryResult::Packages(packages).into(),
             rev: self.rev,
             deps: vec![],
         };
@@ -207,7 +198,7 @@ impl Db {
 
         let query = Query::Source(package);
         let val = CachedVal {
-            val: QueryResultPayload::Source(source).into(),
+            val: QueryResult::Source(source).into(),
             rev: self.rev,
             deps: vec![],
         };
@@ -244,7 +235,7 @@ impl Query {
                         Query::$query($( $args, )*) => {
                             let mut builder = Builder::new(db);
                             let built_val = $buildfn(&mut builder, $( $args.clone(), )*);
-                            let val = QueryResultPayload::$query(built_val).into();
+                            let val = QueryResult::$query(built_val).into();
                             CachedVal {
                                 val,
                                 rev: builder.db.rev,
@@ -373,28 +364,28 @@ impl ToJson for CachedVal {
 
 impl ToJson for QueryResult {
     fn to_json(&self) -> json::JsonValue {
-        match &self.0 {
-            QueryResultPayload::Packages(packages) => packages.to_json(),
-            QueryResultPayload::Source(source) => source.to_json(),
-            QueryResultPayload::Parsing(parsing) => format!("{self:?}").into(),
-            QueryResultPayload::SyntaxErrors(diagnostics) => diagnostics.to_json(),
-            QueryResultPayload::PackageAnalysis(package_analysis) => package_analysis.to_json(),
-            QueryResultPayload::ComponentAnalysis(component_analysis) => component_analysis.to_json(),
-            QueryResultPayload::SymbolTable(symboltable) => symboltable.to_json(),
-            QueryResultPayload::ExprRoots(expr_roots) => expr_roots.to_json(),
-            QueryResultPayload::ExpectedType(typ) => typ.to_json(),
-            QueryResultPayload::Typing(typecheck) => typecheck.to_json(),
-            QueryResultPayload::TypingContext(context) => context.to_json(),
-            QueryResultPayload::TypeCheck(diagnostics) => diagnostics.to_json(),
-            QueryResultPayload::Typeof(typ) => typ.to_json(),
-            QueryResultPayload::Check(result) => {
+        match &self {
+            QueryResult::Packages(packages) => packages.to_json(),
+            QueryResult::Source(source) => source.to_json(),
+            QueryResult::Parsing(parsing) => format!("{self:?}").into(),
+            QueryResult::SyntaxErrors(diagnostics) => diagnostics.to_json(),
+            QueryResult::PackageAnalysis(package_analysis) => package_analysis.to_json(),
+            QueryResult::ComponentAnalysis(component_analysis) => component_analysis.to_json(),
+            QueryResult::SymbolTable(symboltable) => symboltable.to_json(),
+            QueryResult::ExprRoots(expr_roots) => expr_roots.to_json(),
+            QueryResult::ExpectedType(typ) => typ.to_json(),
+            QueryResult::Typing(typecheck) => typecheck.to_json(),
+            QueryResult::TypingContext(context) => context.to_json(),
+            QueryResult::TypeCheck(diagnostics) => diagnostics.to_json(),
+            QueryResult::Typeof(typ) => typ.to_json(),
+            QueryResult::Check(result) => {
                 if let Err(diagnostics) = &result {
                     json::value!(["Error", diagnostics.to_json()])
                 } else {
                     json::value!(["Ok"])
                 }
             }
-            QueryResultPayload::TypeDefs(type_defs) => type_defs.to_json(),
+            QueryResult::TypeDefs(type_defs) => type_defs.to_json(),
         }
     }
 }
