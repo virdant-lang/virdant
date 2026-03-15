@@ -82,7 +82,7 @@ impl PackageAnalysis {
         self.items.keys().collect()
     }
 
-    pub fn expr_roots(&self) -> Vec<AstNodeId> {
+    pub fn expr_roots_node_ids(&self) -> Vec<AstNodeId> {
         self.expr_roots.clone()
     }
 
@@ -139,6 +139,9 @@ impl PackageAnalysis {
 
     fn add_item_expr_roots(&mut self, parsing: Arc<Parsing>, node: AstNode<'_>) {
         if matches!(node.payload(), AstNodePayload::ModDef(_)) {
+            if node.contains_errors() {
+                return;
+            }
             for child_node in node.children() {
                 match child_node.payload() {
                     AstNodePayload::Component(component) => {
@@ -154,6 +157,7 @@ impl PackageAnalysis {
                     AstNodePayload::Module(_module) => (),
                     AstNodePayload::Socket(_socket) => (),
                     AstNodePayload::BidirectionalDriver => (),
+                    AstNodePayload::Error => (), // TODO should we even have error nodes at this point?
                     _ => unreachable!("{:?}", child_node.summary()),
                 }
             }

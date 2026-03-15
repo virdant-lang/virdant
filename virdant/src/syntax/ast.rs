@@ -69,6 +69,20 @@ impl<'p> AstNode<'p> {
         result
     }
 
+    pub fn contains_errors(&self) -> bool {
+        let mut queue = vec![self.id()];
+        while let Some(node_id) = queue.pop() {
+            let node = self.parsing.ast_node(node_id);
+            if let AstNodePayload::Error = node.payload() {
+                return true;
+            }
+            for child in node.children() {
+                queue.push(child.id());
+            }
+        }
+        false
+    }
+
 /*
     pub fn walk(&self) -> Vec<AstNode> {
         let mut result = vec![];

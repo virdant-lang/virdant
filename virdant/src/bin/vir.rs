@@ -180,13 +180,14 @@ fn main() {
         let mut vir = virdant::Vir::from_dir(path);
         vir.dump_diagnostics();
 
-        for package in vir.db().get_packages() {
+        for exprroot in vir.db().get_exprroots() {
+            let package = exprroot.location().package();
             let parsing = vir.db().get_parsing(package.clone());
-            let package_analysis = vir.db().get_package_analysis(package);
-            for expr_root in package_analysis.expr_roots() {
-                let node = parsing.ast_node(expr_root);
-                println!("{:?} at {:?}", node.summary(), node.region());
-            }
+            let location = exprroot.location();
+            let typ = exprroot.expected_typ();
+            let node = parsing.ast_node(location.ast_node_id());
+            let region = node.region();
+            println!("{location:?} : {typ:?} at @{region}");
         }
 
         return;

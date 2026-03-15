@@ -1,27 +1,35 @@
 use std::sync::Arc;
 
+use bstr::{BStr, BString, ByteSlice};
 use hashbrown::HashMap;
 
 use crate::analysis::db::Builder;
+use crate::analysis::Location;
+use crate::common::ComponentKind;
 use crate::common::json::ToJson;
 use crate::diagnostics::{self, Diagnostic};
 use crate::syntax::ast::{AstNode, AstNodeId};
-use crate::analysis::Location;
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 
 pub type Width = u64;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ExprRoot {
+    location: Location,
+    expected_typ: Type,
+}
+
 #[derive(Debug)]
-pub struct TypeCheck {
-    expr_root: Location,
+pub struct Typecheck {
+    expr_root: ExprRoot,
     expected_typ: Type,
     context: TypingContext, // TODO
     types: HashMap<AstNodeId, Type>,
     diagnostics: Vec<Diagnostic>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Bit,
     Clock,
@@ -32,61 +40,115 @@ pub enum Type {
 pub struct TypingContext {
 }
 
-pub fn build_exprroots(builder: &mut Builder) -> Vec<Location> {
+impl ExprRoot {
+    pub fn new(location: Location, expected_typ: Type) -> ExprRoot {
+        ExprRoot { location, expected_typ }
+    }
+
+    pub fn location(&self) -> Location {
+        self.location.clone()
+    }
+
+    pub fn expected_typ(&self) -> Type {
+        self.expected_typ.clone()
+    }
+}
+
+pub fn build_exprroots(builder: &mut Builder) -> Vec<ExprRoot> {
     let mut exprroots = vec![];
     for package in builder.get_packages() {
+        let parsing = builder.get_parsing(package.clone());
         let analysis = builder.get_package_analysis(package);
-        exprroots.extend(
-            analysis
-                .expr_roots()
-                .into_iter()
-                .map(|ast_node_id| Location::new(analysis.package(), ast_node_id))
-        );
+
+        for ast_node_id in analysis.expr_roots_node_ids() {
+            let location = Location::new(analysis.package(), ast_node_id);
+            let node = parsing.ast_node(ast_node_id);
+            let parent_node = node.parent().unwrap();
+
+            let expected_typ = match parent_node.payload() {
+                AstNodePayload::Component(component) if component.kind == ComponentKind::Reg => Type::Clock,
+                AstNodePayload::Driver(_) => {
+                    let lhs_path = parsing.string(parent_node.child(0).path().unwrap());
+
+                    let moddef_node = parent_node.parent().unwrap();
+                    let moddef_name = parsing.string(moddef_node.name().unwrap());
+                    let moddef_fqn = BString::from(
+                        format!("{}::{moddef_name}", location.package()).into_bytes()
+                    );
+                    let component_analysis = builder.get_component_analysis(moddef_fqn);
+
+                    if let Some(dot_index) = lhs_path.iter().position(|ch| *ch == b'.') {
+                        let instance_name = BStr::new(&lhs_path[..dot_index]);
+                        let port_name = BStr::new(&lhs_path[(dot_index + 1)..]);
+
+                        let instance_node = moddef_node
+                            .children()
+                            .into_iter()
+                            .find(|child| {
+                                matches!(child.payload(), AstNodePayload::Module(module)
+                                    if parsing.string(module.name) == instance_name)
+                            })
+                            .unwrap_or_else(|| panic!("Couldn't find instance {lhs_path}"));
+
+                        let module_fqn = match instance_node.child(0).payload() {
+                            AstNodePayload::Ofness(ofness) => {
+                                let module_package = ofness
+                                    .package
+                                    .map(|package| BString::from(parsing.string(package).to_vec()))
+                                    .unwrap_or_else(|| location.package().to_string().into());
+                                let module_name = parsing.string(ofness.name);
+                                BString::from(format!("{}::{module_name}", module_package.to_str_lossy()).into_bytes())
+                            }
+                            _ => todo!(),
+                        };
+
+                        let module_component_analysis = builder.get_component_analysis(module_fqn);
+                        if port_name == b"clock" {
+                            Type::Clock
+                        } else {
+                            module_component_analysis.type_of(port_name)
+                        }
+                    } else {
+                        if lhs_path == b"clock" {
+                            Type::Clock
+                        } else {
+                            component_analysis.type_of(lhs_path)
+                        }
+                    }
+                }
+                _ => todo!(),
+            };
+
+            exprroots.push(ExprRoot::new(location, expected_typ));
+        }
     }
     exprroots
 }
 
-pub fn typecheck(builder: &mut Builder, location: Location) -> Arc<TypeCheck> {
+pub fn typecheck(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typecheck> {
+    let location = expr_root.location();
     let parsing = builder.get_parsing(location.package());
-
-    let component_analysis = {
-        // TODO walk up the AST from location and find the containing ModDef.
-        // JUST ASSUME that it's a ModDef, and panic otherwise.
-        let moddef_fqn = todo!();
-        builder.get_component_analysis(moddef_fqn)
-    };
     let parsing_noborrow = parsing.clone();
 
     let node = parsing.ast_node(location.ast_node_id());
-    // TODO get rid of this
-    let parent_node = node.parent().unwrap();
-
-    match parent_node.payload() {
-        _ => {
-            // TODO
-        }
-    }
-
-    let expected_typ = Type::Word(8);
+    let expected_typ = expr_root.expected_typ();
 
     let context = TypingContext {}; // TODO
     let diagnostics = vec![];
-    let mut typing = TypeCheck {
-        expr_root: location.clone(),
+    let mut typing = Typecheck {
+        expr_root: expr_root.clone(),
         context,
         types: HashMap::new(),
         diagnostics,
-        expected_typ,
+        expected_typ: expected_typ.clone(),
     };
-
-    let expected_typ = Type::Word(8);
 
     typing.check(parsing_noborrow, &node, &expected_typ);
 
     Arc::new(typing)
 }
 
-impl TypeCheck {
+impl Typecheck {
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         self.diagnostics.clone()
     }
@@ -158,9 +220,21 @@ impl TypeCheck {
     }
 }
 
-impl ToJson for TypeCheck {
+impl ToJson for Typecheck {
     fn to_json(&self) -> json::JsonValue {
         format!("{self:?}").into()
+    }
+}
+
+impl ToJson for ExprRoot {
+    fn to_json(&self) -> json::JsonValue {
+        json::array!(self.location.to_json(), self.expected_typ.to_json())
+    }
+}
+
+impl ToJson for Type {
+    fn to_json(&self) -> json::JsonValue {
+        self.to_string().into()
     }
 }
 

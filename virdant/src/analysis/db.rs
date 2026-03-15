@@ -13,7 +13,7 @@ use crate::analysis::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::symboltable::SymbolKind;
 use crate::analysis::symboltable::SymbolTable;
-use crate::analysis::typecheck::TypeCheck as Typecheck;
+use crate::analysis::typecheck::{ExprRoot, Typecheck};
 use crate::common::json::ToJson;
 use crate::diagnostics::DiagnosticLevel;
 use crate::syntax::parsing::parse;
@@ -39,7 +39,7 @@ enum Query {
     ComponentAnalysis(BString),
     SymbolTable(),
     ExprRoots(),
-    Typecheck(Location),
+    Typecheck(ExprRoot),
     Check(),
 }
 
@@ -54,7 +54,7 @@ enum QueryResultPayload {
     PackageAnalysis(Arc<PackageAnalysis>),
     ComponentAnalysis(Arc<ComponentAnalysis>),
     SymbolTable(Arc<SymbolTable>),
-    ExprRoots(Vec<Location>),
+    ExprRoots(Vec<ExprRoot>),
     Typecheck(Arc<Typecheck>),
     Check(Result<Vec<Diagnostic>, Vec<Diagnostic>>),
 }
@@ -122,13 +122,13 @@ impl<'d> Builder<'d> {
         cast!(self.get(query), SymbolTable)
     }
 
-    pub(crate) fn get_exprroots(&mut self) -> Vec<Location> {
+    pub(crate) fn get_exprroots(&mut self) -> Vec<ExprRoot> {
         let query = Query::ExprRoots();
         cast!(self.get(query), ExprRoots)
     }
 
-    pub(crate) fn get_typecheck(&mut self, location: Location) -> Arc<Typecheck> {
-        let query = Query::Typecheck(location);
+    pub(crate) fn get_typecheck(&mut self, expr_root: ExprRoot) -> Arc<Typecheck> {
+        let query = Query::Typecheck(expr_root);
         cast!(self.get(query), Typecheck)
     }
 }
@@ -269,6 +269,11 @@ impl Db {
         let query = Query::SymbolTable();
         cast!(self.get(query), SymbolTable)
     }
+
+    pub fn get_exprroots(&self) -> Vec<ExprRoot> {
+        let query = Query::ExprRoots();
+        cast!(self.get(query), ExprRoots)
+    }
 }
 
 pub struct Builder<'d> {
@@ -397,7 +402,7 @@ impl ToJson for Query {
             Query::ComponentAnalysis(name) => json::array!("Components", name.to_json()),
             Query::SymbolTable() => json::array!("SymbolTable"),
             Query::ExprRoots() => json::array!("ExprRoots"),
-            Query::Typecheck(location) => json::array!("Typecheck", location.to_json()),
+            Query::Typecheck(expr_root) => json::array!("Typecheck", expr_root.to_json()),
             Query::Check() => json::array!("Check"),
         }
     }
@@ -418,7 +423,7 @@ impl ToJson for QueryResult {
             QueryResultPayload::PackageAnalysis(package_analysis) => package_analysis.to_json(),
             QueryResultPayload::ComponentAnalysis(component_analysis) => component_analysis.to_json(),
             QueryResultPayload::SymbolTable(symboltable) => symboltable.to_json(),
-            QueryResultPayload::ExprRoots(locations) => locations.to_json(),
+            QueryResultPayload::ExprRoots(expr_roots) => expr_roots.to_json(),
             QueryResultPayload::Typecheck(typecheck) => typecheck.to_json(),
             QueryResultPayload::Check(result) => {
                 if let Err(diagnostics) = &result {
