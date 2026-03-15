@@ -181,6 +181,20 @@ fn main() {
         return;
     }
 
+    if command == "typedefs" {
+        let path = args.get(1).unwrap();
+
+        let mut vir = virdant::Vir::from_dir(path);
+        vir.dump_diagnostics();
+
+        let typedefs = vir.db().get_typedefs();
+        for typedef in typedefs {
+            println!("{typedef:?}");
+        }
+
+        return;
+    }
+
     if command == "exprroots" {
         let path = args.get(1).unwrap();
         let mut vir = virdant::Vir::from_dir(path);

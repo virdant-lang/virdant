@@ -6,7 +6,8 @@ use hashbrown::HashMap;
 use crate::analysis::component::find_item_location;
 use crate::analysis::db::Builder;
 use crate::analysis::Location;
-use crate::common::ComponentKind;
+use crate::analysis::symboltable::SymbolKind;
+use crate::common::{ComponentKind, TypeScheme};
 use crate::common::json::ToJson;
 use crate::diagnostics::{self, Diagnostic};
 use crate::syntax::ast::{AstNode, AstNodeId};
@@ -14,6 +15,13 @@ use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 
 pub type Width = u64;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TypeDef {
+    fqn: BString,
+    location: Location,
+    kind: TypeScheme,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ExprRoot {
@@ -69,11 +77,35 @@ impl ExprRoot {
     }
 }
 
+pub fn build_typedefs(builder: &mut Builder) -> Vec<TypeDef> {
+    let mut typedefs = vec![];
+    let symboltable = builder.get_symboltable();
+    for item_symbol in symboltable.typedefs() {
+        let kind = match item_symbol.kind() {
+            SymbolKind::UnionDef => TypeScheme::UnionDef,
+            SymbolKind::StructDef => TypeScheme::StructDef,
+            SymbolKind::EnumDef => TypeScheme::EnumDef,
+            SymbolKind::BuiltinDef => TypeScheme::BuiltinDef,
+            _ => unreachable!(),
+        };
+        typedefs.push(TypeDef {
+            fqn: item_symbol.fqn().into(),
+            location: item_symbol.location(),
+            kind,
+        });
+    }
+    typedefs
+}
+
 pub fn build_typing_context(builder: &mut Builder, item_fqn: BString) -> TypingContext {
     let location = find_item_location(builder, item_fqn.clone());
     let parsing = builder.get_parsing(location.package());
     let item_ast = parsing.ast_node(location.ast_node_id());
     let component_analysis = builder.get_component_analysis(item_fqn);
+
+    // TODO How does this need to get used?
+    let typedefs = builder.get_typedefs();
+
 
     // TODO HACK this isn't complete
     let mut context = TypingContext(component_analysis.components());
@@ -310,6 +342,12 @@ impl ToJson for TypingContext {
 impl ToJson for ExprRoot {
     fn to_json(&self) -> json::JsonValue {
         json::array!(self.location.to_json(), self.expected_typ.to_json())
+    }
+}
+
+impl ToJson for TypeDef {
+    fn to_json(&self) -> json::JsonValue {
+        format!("{self:?}").into()
     }
 }
 

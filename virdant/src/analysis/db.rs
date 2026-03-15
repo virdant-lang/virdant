@@ -13,6 +13,7 @@ use crate::analysis::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::symboltable::SymbolKind;
 use crate::analysis::symboltable::SymbolTable;
+use crate::analysis::typecheck::TypeDef;
 use crate::analysis::typecheck::{ExprRoot, Typing, TypingContext};
 use crate::common::json::ToJson;
 use crate::diagnostics::DiagnosticLevel;
@@ -39,6 +40,7 @@ enum Query {
     PackageAnalysis(PackageFqn),
     ComponentAnalysis(BString),
     SymbolTable(),
+    TypeDefs(),
     ExprRoots(),
     TypingContext(BString),
     Typing(ExprRoot),
@@ -58,6 +60,7 @@ enum QueryResultPayload {
     PackageAnalysis(Arc<PackageAnalysis>),
     ComponentAnalysis(Arc<ComponentAnalysis>),
     SymbolTable(Arc<SymbolTable>),
+    TypeDefs(Vec<TypeDef>),
     ExprRoots(Vec<ExprRoot>),
     TypingContext(TypingContext),
     Typing(Arc<Typing>),
@@ -257,6 +260,7 @@ impl Query {
             crate::analysis::component::build_component_analysis : ComponentAnalysis(name);
             crate::analysis::symboltable::build_symboltable : SymbolTable();
             crate::analysis::typecheck::build_exprroots : ExprRoots();
+            crate::analysis::typecheck::build_typedefs : TypeDefs();
             crate::analysis::typecheck::build_typing_context : TypingContext(item_fqn);
             crate::analysis::typecheck::build_typing : Typing(expr_root);
             crate::analysis::typecheck::typecheck : TypeCheck();
@@ -346,6 +350,7 @@ impl ToJson for Query {
             Query::Typing(expr_root) => json::array!("Typecheck", expr_root.to_json()),
             Query::TypeCheck() => json::array!("TypeCheck"),
             Query::Check() => json::array!("Check"),
+            Query::TypeDefs() => json::array!("TypeDefs"),
         }
     }
 }
@@ -377,6 +382,7 @@ impl ToJson for QueryResult {
                     json::value!(["Ok"])
                 }
             }
+            QueryResultPayload::TypeDefs(type_defs) => type_defs.to_json(),
         }
     }
 }
@@ -418,9 +424,11 @@ db_getter!(get_package_analysis : PackageAnalysis(package: PackageFqn) -> Arc<Pa
 db_getter!(get_component_analysis : ComponentAnalysis(name: BString) -> Arc<ComponentAnalysis>);
 db_getter!(get_symboltable : SymbolTable() -> Arc<SymbolTable>);
 db_getter!(get_typing_context : TypingContext(item_fqn: BString) -> TypingContext);
+db_getter!(get_typedefs : TypeDefs() -> Vec<TypeDef>);
 db_getter!(get_exprroots : ExprRoots() -> Vec<ExprRoot>);
 db_getter!(get_typing : Typing(expr_root: ExprRoot) -> Arc<Typing>);
 db_getter!(get_typecheck : TypeCheck() -> Vec<Diagnostic>);
+
 
 fn check(builder: &mut Builder) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
     let mut diagnostics = vec![];
