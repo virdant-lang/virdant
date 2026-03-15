@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use bstr::BString;
+use bstr::{BStr, BString};
 
 use crate::analysis::Location;
 use crate::analysis::db::Builder;
@@ -15,6 +15,17 @@ pub struct ComponentAnalysis {
     // TODO reference to ModDef this is created for
     moddef_fqn: BString,
     components: Vec<(BString, Type)>,
+}
+
+impl ComponentAnalysis {
+    pub fn type_of(&self, path: &BStr) -> Type {
+        for (path_, typ) in &self.components {
+            if path == path_ {
+                return typ.clone();
+            }
+        }
+        panic!()
+    }
 }
 
 pub fn build_component_analysis(builder: &mut Builder, moddef_fqn: BString) -> Arc<ComponentAnalysis> {
@@ -64,7 +75,7 @@ fn find_component(builder: &mut Builder, moddef_fqn: BString) -> Location {
             return Location::new(package.clone(), item_node.id());
         }
     }
-    panic!()
+    panic!("Couldn't find component {moddef_fqn}")
 }
 
 fn split(moddef_fqn: BString) -> (BString, BString) {

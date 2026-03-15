@@ -48,6 +48,13 @@ pub fn build_exprroots(builder: &mut Builder) -> Vec<Location> {
 
 pub fn typecheck(builder: &mut Builder, location: Location) -> Arc<TypeCheck> {
     let parsing = builder.get_parsing(location.package());
+
+    let component_analysis = {
+        // TODO walk up the AST from location and find the containing ModDef.
+        // JUST ASSUME that it's a ModDef, and panic otherwise.
+        let moddef_fqn = todo!();
+        builder.get_component_analysis(moddef_fqn)
+    };
     let parsing_noborrow = parsing.clone();
 
     let node = parsing.ast_node(location.ast_node_id());
