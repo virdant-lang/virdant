@@ -175,12 +175,12 @@ fn test_package_analysis() {
     dbg!(&analysis);
 
     eprintln!("Top AST:");
-    let node_id = analysis.item_ast_node_id("Top".into()).unwrap();
+    let node_id = analysis.item_ast_node_id("Top".into());
     parsing.ast_node(node_id).dump();
     eprintln!();
 
     eprintln!("Foo AST:");
-    let node_id = analysis.item_ast_node_id("Foo".into()).unwrap();
+    let node_id = analysis.item_ast_node_id("Foo".into());
     parsing.ast_node(node_id).dump();
 }
 
