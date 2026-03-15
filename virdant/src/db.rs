@@ -44,6 +44,7 @@ queries! {
     TypeCheck() -> Vec<Diagnostic>;
     Typeof(location: Location) -> Option<Type>;
     Check() -> Result<Vec<Diagnostic>, Vec<Diagnostic>>;
+    TypeMonomorphizations() -> Vec<Type>;
 }
 
 
@@ -74,6 +75,7 @@ impl Query {
             crate::analysis::typecheck::build_typing : Typing(expr_root);
             crate::analysis::typecheck::typecheck : TypeCheck();
             crate::analysis::typecheck::build_typeof : Typeof(location);
+            crate::analysis::typecheck::build_type_monomorphizations : TypeMonomorphizations();
             check : Check();
 
         )
@@ -94,8 +96,9 @@ db_getter!(get_typedefs : TypeDefs() -> Vec<TypeDef>);
 db_getter!(get_exprroots : ExprRoots() -> Vec<ExprRoot>);
 db_getter!(get_expected_type : ExpectedType(location: Location) -> Option<Type>);
 db_getter!(get_typing : Typing(expr_root: ExprRoot) -> Arc<Typing>);
-db_getter!(get_typecheck : TypeCheck() -> Vec<Diagnostic>);
+db_getter!(typecheck : TypeCheck() -> Vec<Diagnostic>);
 db_getter!(get_typeof : Typeof(location: Location) -> Option<Type>);
+db_getter!(get_type_monomorphizations : TypeMonomorphizations() -> Vec<Type>);
 
 
 fn build_parsing(builder: &mut Builder<'_>, package: PackageFqn) -> Arc<Parsing> {
@@ -118,7 +121,7 @@ fn check(builder: &mut Builder) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
     let mut diagnostics = vec![];
 
     diagnostics.extend(builder.get_syntax_errors());
-    diagnostics.extend(builder.get_typecheck());
+    diagnostics.extend(builder.typecheck());
 
     if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
         Err(diagnostics)

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bstr::{BStr, BString, ByteSlice};
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 
 use crate::analysis::Location;
 use crate::analysis::symboltable::{SymbolId, SymbolKind};
@@ -306,6 +306,21 @@ fn builtin_bit_type(builder: &mut Builder) -> Type {
 //    let bit_symbol = symboltable.resolve("builtin::Bit".into()).unwrap();
 //    let _ = bit_symbol;
     Type::Bit
+}
+
+pub fn build_type_monomorphizations(builder: &mut Builder) -> Vec<Type> {
+    let mut typs = HashSet::new();
+
+    builder.typecheck();
+
+    for exprroot in builder.get_exprroots() {
+        let typing = builder.get_typing(exprroot);
+        for typ in typing.typs.values() {
+            typs.insert(typ.clone());
+        }
+    }
+
+    typs.into_iter().collect()
 }
 
 impl Typing {

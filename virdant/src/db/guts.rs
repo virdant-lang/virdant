@@ -175,6 +175,7 @@ impl ToJson for Query {
             Query::Check() => json::array!("Check"),
             Query::TypeDefs() => json::array!("TypeDefs"),
             Query::Typeof(location) => json::array!("Typeof", location.to_json()),
+            Query::TypeMonomorphizations() => json::array!("TypeMonomorphizations"),
         }
     }
 }
@@ -209,6 +210,7 @@ impl ToJson for QueryResult {
                 }
             }
             QueryResult::TypeDefs(type_defs) => type_defs.to_json(),
+            QueryResult::TypeMonomorphizations(items) => items.to_json(),
         }
     }
 }

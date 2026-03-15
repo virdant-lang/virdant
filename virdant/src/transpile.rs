@@ -21,8 +21,10 @@ pub fn transpile(db: &Db) -> VirIr {
 
     let mut type_ids = HashMap::new();
     let mut all_types = vec![];
-    intern_type(&mut type_ids, &mut all_types, &Type::Bit);
-    intern_type(&mut type_ids, &mut all_types, &Type::Clock);
+
+    for typ in db.get_type_monomorphizations() {
+        intern_type(&mut type_ids, &mut all_types, &typ);
+    }
 
     let module_signatures = build_module_signatures(db, &mut type_ids, &mut all_types);
 
