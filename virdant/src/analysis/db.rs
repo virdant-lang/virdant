@@ -11,6 +11,7 @@ use hashbrown::{HashMap, HashSet};
 use crate::analysis::Location;
 use crate::analysis::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
+use crate::analysis::symboltable::SymbolKind;
 use crate::analysis::symboltable::SymbolTable;
 use crate::analysis::typecheck::TypeCheck as Typecheck;
 use crate::common::json::ToJson;
@@ -311,7 +312,7 @@ impl Query {
         dispatch_build!(
             build_parsing : Parsing(package);
             crate::analysis::build_package_analysis : PackageAnalysis(analysis);
-            crate::analysis::component::build_components : ComponentAnalysis(name);
+            crate::analysis::component::build_component_analysis : ComponentAnalysis(name);
             crate::analysis::symboltable::build_symboltable : SymbolTable();
             crate::analysis::typecheck::build_exprroots : ExprRoots();
             crate::analysis::typecheck::typecheck : Typecheck(ast_node_id);
@@ -347,7 +348,6 @@ fn test_db() {
     eprintln!("{}", db.to_json().pretty(4));
     eprintln!("CHECK");
     db.check();
-    dbg!(db.get_component_analysis(BString::new("clock".as_bytes().to_vec())));
     eprintln!("{}", db.to_json().pretty(4));
 
 
@@ -434,7 +434,12 @@ impl ToJson for QueryResult {
 fn check(builder: &mut Builder) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
     let mut diagnostics = vec![];
 
-    builder.get_symboltable();
+    let symboltable = builder.get_symboltable();
+    for symbol in symboltable.symbols() {
+        if symbol.kind() == SymbolKind::ModDef {
+            let component_analysis = builder.get_component_analysis(symbol.fqn().to_owned());
+        }
+    }
 
     for package in builder.get_packages() {
         let package_analysis = builder.get_package_analysis(package);

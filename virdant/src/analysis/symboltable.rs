@@ -23,7 +23,7 @@ pub struct Symbol {
     kind: SymbolKind,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SymbolKind {
     ModDef,
     UnionDef,
