@@ -4,7 +4,7 @@ use std::sync::Arc;
 use bstr::ByteSlice;
 
 use crate::analysis::db::Db;
-use crate::analysis::typecheck::Type as AnalysisType;
+use crate::analysis::typecheck::Type;
 use crate::analysis::Location;
 use crate::common::{BinOp as CommonBinOp, ComponentKind, PortDir};
 use crate::fqn::PackageFqn;
@@ -15,13 +15,14 @@ use crate::virir::expr::{BinOp, Expr, If, Reference, WordLit};
 use crate::virir::typ::Type as VirType;
 use crate::virir::{Driver, Instance, Item, ModDef, Package, Port, Reg, TypeId, VirIr, Wire};
 
+/// Lowers a checked analysis database into a `VirIr` module graph.
 pub fn transpile(db: &Db) -> VirIr {
     db.check().unwrap();
 
     let mut type_ids = HashMap::new();
     let mut all_types = vec![];
-    ensure_analysis_type(&mut type_ids, &mut all_types, &AnalysisType::Bit);
-    ensure_analysis_type(&mut type_ids, &mut all_types, &AnalysisType::Clock);
+    intern_type(&mut type_ids, &mut all_types, &Type::Bit);
+    intern_type(&mut type_ids, &mut all_types, &Type::Clock);
 
     let module_signatures = build_module_signatures(db, &mut type_ids, &mut all_types);
 
@@ -46,6 +47,7 @@ pub fn transpile(db: &Db) -> VirIr {
     }
 }
 
+/// Builds a lookup of `package::module` port names to their lowered VirIr types.
 fn build_module_signatures(
     db: &Db,
     type_ids: &mut HashMap<String, TypeId>,
@@ -80,7 +82,7 @@ fn build_module_signatures(
 
                 let name = parsing.string(component.name);
                 let typ = component_analysis.type_of(name).unwrap();
-                let type_id = ensure_analysis_type(type_ids, all_types, &typ);
+                let type_id = intern_type(type_ids, all_types, &typ);
                 signature.insert(name.to_str_lossy().into_owned(), type_id);
             }
 
@@ -91,6 +93,7 @@ fn build_module_signatures(
     module_signatures
 }
 
+/// Lowers all modules in a package into VirIr items and declarations.
 fn build_package(
     db: &Db,
     package: PackageFqn,
@@ -126,7 +129,7 @@ fn build_package(
                 AstNodePayload::Component(component) => {
                     let name = parsing.string(component.name);
                     let typ = component_analysis.type_of(name).unwrap();
-                    let type_id = ensure_analysis_type(type_ids, all_types, &typ);
+                    let type_id = intern_type(type_ids, all_types, &typ);
                     let rendered_name = name.to_str_lossy().into_owned();
                     local_types.insert(rendered_name.clone(), type_id);
 
@@ -176,7 +179,7 @@ fn build_package(
             let expr_node = stmt.driver().unwrap();
             let expected_type = db
                 .get_typeof(Location::new(package.clone(), expr_node.id()))
-                .map(|typ| ensure_analysis_type(type_ids, all_types, &typ))
+                .map(|typ| intern_type(type_ids, all_types, &typ))
                 .or_else(|| resolve_path_type(&path, &local_types, &instance_types, module_signatures));
 
             drivers.push(Driver {
@@ -213,6 +216,7 @@ fn build_package(
     }
 }
 
+/// Recursively lowers an expression AST node into a typed VirIr expression.
 fn build_expr(
     package: &PackageFqn,
     node: AstNode<'_>,
@@ -228,7 +232,7 @@ fn build_expr(
             let path = node.parsing.string(node.path().unwrap()).to_str_lossy().into_owned();
             let typ = resolve_path_type(&path, local_types, instance_types, module_signatures)
                 .or(expected_type)
-                .unwrap_or_else(|| ensure_analysis_type(type_ids, all_types, &AnalysisType::Bit));
+                .unwrap_or_else(|| intern_type(type_ids, all_types, &Type::Bit));
 
             Expr::Reference(Reference {
                 region: node.region(),
@@ -239,14 +243,14 @@ fn build_expr(
         AstNodePayload::ExprBitLit(expr_bit_lit) => Expr::WordLit(WordLit {
             region: node.region(),
             typ: expected_type
-                .unwrap_or_else(|| ensure_analysis_type(type_ids, all_types, &AnalysisType::Bit)),
+                .unwrap_or_else(|| intern_type(type_ids, all_types, &Type::Bit)),
             value: if expr_bit_lit.literal { 1 } else { 0 },
         }),
         AstNodePayload::ExprWordLit(expr_word_lit) => {
             let literal = node.parsing.string(expr_word_lit.literal).to_str_lossy().into_owned();
             let (value, width) = parse_word_literal(&literal);
             let typ = if let Some(width) = width {
-                ensure_analysis_type(type_ids, all_types, &AnalysisType::Word(width.into()))
+                intern_type(type_ids, all_types, &Type::Word(width.into()))
             } else {
                 expected_type.unwrap_or_else(|| panic!("word literal {literal} needs a type"))
             };
@@ -321,6 +325,7 @@ fn build_expr(
     }
 }
 
+/// Lowers an `if` expression, including chained `else if` branches.
 fn build_if_expr(
     package: &PackageFqn,
     region: Region,
@@ -335,7 +340,7 @@ fn build_if_expr(
     let cond = Arc::new(build_expr(
         package,
         children[0].clone(),
-        Some(ensure_analysis_type(type_ids, all_types, &AnalysisType::Bit)),
+        Some(intern_type(type_ids, all_types, &Type::Bit)),
         local_types,
         instance_types,
         module_signatures,
@@ -387,16 +392,17 @@ fn build_if_expr(
     })
 }
 
-fn ensure_analysis_type(
+/// Interns a type into the shared VirIr type table and returns its `TypeId`.
+fn intern_type(
     type_ids: &mut HashMap<String, TypeId>,
     all_types: &mut Vec<VirType>,
-    typ: &AnalysisType,
+    typ: &Type,
 ) -> TypeId {
     let vir_type = match typ {
-        AnalysisType::Bit => VirType::Bit,
-        AnalysisType::Clock => VirType::Clock,
-        AnalysisType::Word(width) => VirType::Word((*width).try_into().unwrap()),
-        AnalysisType::Usual(symbol_id) => panic!("VirIr cannot represent non-builtin type {symbol_id:?}"),
+        Type::Bit => VirType::Bit,
+        Type::Clock => VirType::Clock,
+        Type::Word(width) => VirType::Word((*width).try_into().unwrap()),
+        Type::Usual(symbol_id) => panic!("VirIr cannot represent non-builtin type {symbol_id:?}"),
     };
     let key = match vir_type {
         VirType::Bit => "builtin::Bit".to_string(),
@@ -414,14 +420,16 @@ fn ensure_analysis_type(
     }
 }
 
-fn analysis_type_width(typ: &AnalysisType) -> u16 {
+/// Converts an analysis type into the width expected by VirIr ports.
+fn analysis_type_width(typ: &Type) -> u16 {
     match typ {
-        AnalysisType::Bit | AnalysisType::Clock => 1,
-        AnalysisType::Word(width) => (*width).try_into().unwrap(),
-        AnalysisType::Usual(symbol_id) => panic!("VirIr cannot represent non-builtin type {symbol_id:?}"),
+        Type::Bit | Type::Clock => 1,
+        Type::Word(width) => (*width).try_into().unwrap(),
+        Type::Usual(symbol_id) => panic!("VirIr cannot represent non-builtin type {symbol_id:?}"),
     }
 }
 
+/// Renders an instance `of` clause as a fully qualified VirIr module path.
 fn render_ofness_path(ofness_node: AstNode<'_>, package: &PackageFqn) -> String {
     let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
         panic!("expected Ofness node")
@@ -435,6 +443,7 @@ fn render_ofness_path(ofness_node: AstNode<'_>, package: &PackageFqn) -> String 
     format!("{module_package}::{module_name}")
 }
 
+/// Parses a source word literal into its numeric value and optional explicit width.
 fn parse_word_literal(literal: &str) -> (u64, Option<u16>) {
     if let Some((value, width)) = literal.split_once('w') {
         (parse_nat_literal(value), Some(width.parse().unwrap()))
@@ -443,6 +452,7 @@ fn parse_word_literal(literal: &str) -> (u64, Option<u16>) {
     }
 }
 
+/// Parses decimal, binary, or hexadecimal naturals after removing separators.
 fn parse_nat_literal(literal: &str) -> u64 {
     let literal = literal.replace('_', "");
     if let Some(hex) = literal.strip_prefix("0x") {
@@ -454,6 +464,7 @@ fn parse_nat_literal(literal: &str) -> u64 {
     }
 }
 
+/// Infers the VirIr result type for a lowered binary operation.
 fn infer_binop_type(
     op: CommonBinOp,
     expected_type: Option<TypeId>,
@@ -471,11 +482,12 @@ fn infer_binop_type(
         | CommonBinOp::Neq
         | CommonBinOp::And
         | CommonBinOp::Or
-        | CommonBinOp::Xor => ensure_analysis_type(type_ids, all_types, &AnalysisType::Bit),
+        | CommonBinOp::Xor => intern_type(type_ids, all_types, &Type::Bit),
         CommonBinOp::Add | CommonBinOp::Sub => expected_type.unwrap_or_else(|| expr_type_id(lhs)),
     }
 }
 
+/// Returns the already-lowered type id stored on a VirIr expression node.
 fn expr_type_id(expr: &Expr) -> TypeId {
     match expr {
         Expr::Reference(reference) => reference.typ,
@@ -486,6 +498,7 @@ fn expr_type_id(expr: &Expr) -> TypeId {
     }
 }
 
+/// Resolves the type of a local name or instance-port path within a module body.
 fn resolve_path_type(
     path: &str,
     local_types: &HashMap<String, TypeId>,
