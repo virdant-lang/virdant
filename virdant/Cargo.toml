@@ -5,24 +5,25 @@ edition = "2024"
 autobins = false
 default-run = "vir"
 
+[features]
+default = []
+vir-bin = ["dep:nix"]
+vir-lsp-bin = ["dep:serde_json"]
+
 [dependencies]
-anyhow = "1.0.98"
-atoi = "2.0.0"
 bstr = "1.12.0"
 clap = { version = "4.5.46", features = ["derive"] }
-defile = "0.2.1"
 hashbrown = "0.15.4"
 indexmap = "2.13.0"
 internment = { version = "0.8.6", features = ["arc"] }
 json = "0.12.4"
 lalrpop-util = { version = "0.22.2", features = ["lexer"] }
 logos = "0.15.1"
-nix = { version = "0.31.2", features = ["process"] }
+nix = { version = "0.31.2", features = ["process"], optional = true }
 paste = "1.0.15"
-serde_json = "1.0.149"
+serde_json = { version = "1.0.149", optional = true }
 tokio = { version = "=1.49.0", features = ["macros", "rt-multi-thread", "io-std", "sync"] }
 tower-lsp = "0.20.0"
-tracing = "0.1.41"
 
 [build-dependencies]
 lalrpop = { version = "0.22.2" }
@@ -30,6 +31,7 @@ lalrpop = { version = "0.22.2" }
 [[bin]]
 name = "vir"
 path = "src/bin/vir.rs"
+required-features = ["vir-bin"]
 
 [[bin]]
 name = "vir-ir"
@@ -38,3 +40,4 @@ path = "src/bin/virir.rs"
 [[bin]]
 name = "vir-lsp"
 path = "src/bin/virlsp.rs"
+required-features = ["vir-lsp-bin"]

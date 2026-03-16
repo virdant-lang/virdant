@@ -3,7 +3,6 @@ use crate::syntax::payload;
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::{InternedString, Parsing};
 use crate::syntax::token::{Token, TokenError};
-use atoi::atoi;
 
 
 use crate::source::SourceOffset;
@@ -710,7 +709,7 @@ Index: u16 = {
     <ll:@L> "Nat" <rr:@R> => {
         let span = parser.span(ll, rr);
         let text = parser.text(span);
-        atoi(text).unwrap()
+        std::str::from_utf8(text).unwrap().parse().unwrap()
     },
 }
 
@@ -718,7 +717,7 @@ Width: u16 = {
     <ll:@L> "Nat" <rr:@R> => {
         let span = parser.span(ll, rr);
         let text = parser.text(span);
-        atoi(text).unwrap()
+        std::str::from_utf8(text).unwrap().parse().unwrap()
     }
 }
 

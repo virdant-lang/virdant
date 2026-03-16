@@ -383,11 +383,10 @@ impl Typing {
             AstNodePayload::ExprWordLit(expr_word_lit) => {
                 // TODO I shouldn't be doing string manip here.
 
-                use atoi::atoi;
                 let path = node.spelling();
                 if path.contains(&b'w') {
                     let parts: Vec<_> = path.split(|ch| *ch == b'w').collect();
-                    let width = atoi(parts[1]).unwrap();
+                    let width: Width = std::str::from_utf8(parts[1]).unwrap().parse().unwrap();
                     Some(Type::Word(width))
                 } else {
                     None

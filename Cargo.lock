@@ -81,12 +81,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anyhow"
-version = "1.0.102"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
-
-[[package]]
 name = "ascii-canvas"
 version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -107,15 +101,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "atoi"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f28d99ec8bfea296261ca1af174f24225171fea9664ba9003cbebee704810528"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "auto_impl"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -125,12 +110,6 @@ dependencies = [
  "quote",
  "syn",
 ]
-
-[[package]]
-name = "autocfg"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "beef"
@@ -280,21 +259,6 @@ dependencies = [
  "once_cell",
  "parking_lot_core",
 ]
-
-[[package]]
-name = "defile"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa3324a455850286c803c1c16d3835a44a9457765899417775e4dc6080cd942d"
-dependencies = [
- "defile-proc_macros",
-]
-
-[[package]]
-name = "defile-proc_macros"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87c5c1460bfb0f719e899feab6ae532e5e0f059cdc85913bab8e6a0d7980245e"
 
 [[package]]
 name = "digest"
@@ -792,15 +756,6 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
-]
-
-[[package]]
-name = "num-traits"
-version = "0.2.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
-dependencies = [
- "autocfg",
 ]
 
 [[package]]
@@ -1339,11 +1294,8 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "virdant"
 version = "0.3.0"
 dependencies = [
- "anyhow",
- "atoi",
  "bstr",
  "clap",
- "defile",
  "hashbrown 0.15.5",
  "indexmap",
  "internment",
@@ -1356,7 +1308,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tower-lsp",
- "tracing",
 ]
 
 [[package]]

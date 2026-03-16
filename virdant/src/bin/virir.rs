@@ -1,10 +1,11 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
 use clap::Parser;
 
 use virdant::conversion::convert_virir_to_verilog;
 use virdant::virir;
+
+type MainResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 /// Parse VirIr and emit Verilog.
 #[derive(Parser, Debug)]
@@ -18,26 +19,25 @@ struct Args {
     builddir: Option<PathBuf>,
 }
 
-fn main() -> Result<()> {
+fn main() -> MainResult<()> {
     let args = Args::parse();
     let text = std::fs::read_to_string(&args.input)
-        .with_context(|| format!("failed to read {}", args.input.display()))?;
+        .map_err(|err| std::io::Error::other(format!("failed to read {}: {err}", args.input.display())))?;
 
     let virir = virir::parse(&text)
-        .map_err(anyhow::Error::msg)
-        .with_context(|| format!("failed to parse {}", args.input.display()))?;
+        .map_err(|err| std::io::Error::other(format!("failed to parse {}: {err}", args.input.display())))?;
     let verilog = convert_virir_to_verilog(virir);
 
     if let Some(builddir) = args.builddir {
         std::fs::create_dir_all(&builddir)
-            .with_context(|| format!("failed to create {}", builddir.display()))?;
+            .map_err(|err| std::io::Error::other(format!("failed to create {}: {err}", builddir.display())))?;
         verilog
             .write_in_dir(&builddir)
-            .with_context(|| format!("failed to write Verilog to {}", builddir.display()))?;
+            .map_err(|err| std::io::Error::other(format!("failed to write Verilog to {}: {err}", builddir.display())))?;
     } else {
         verilog
             .write_to_stdout()
-            .context("failed to write Verilog to stdout")?;
+            .map_err(|err| std::io::Error::other(format!("failed to write Verilog to stdout: {err}")))?;
     }
 
     Ok(())

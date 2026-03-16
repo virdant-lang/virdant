@@ -4,7 +4,6 @@ use std::path::Path;
 use std::sync::Arc;
 
 use bstr::BString;
-use serde_json::json;
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
