@@ -237,12 +237,23 @@ pub fn build_typeof(builder: &mut Builder, location: Location) -> Option<Type> {
 
 fn exprroot_anscestor(builder: &mut Builder, location: Location) -> ExprRoot {
     let parsing = builder.get_parsing(location.package());
+    let exprroot_ids: HashSet<_> = builder
+        .get_exprroots()
+        .into_iter()
+        .map(|exprroot| exprroot.location().ast_node_id())
+        .collect();
     let mut node = parsing.ast_node(location.ast_node_id());
-    while node.id() != location.ast_node_id() {
-        let parent_id = node.parent().unwrap().id();
+    loop {
+        if exprroot_ids.contains(&node.id()) {
+            return ExprRoot::new(node.location());
+        }
+
+        let parent_id = node
+            .parent()
+            .expect("expected node to be contained in an expr root")
+            .id();
         node = parsing.ast_node(parent_id);
     }
-    ExprRoot::new(location)
 }
 
 pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typing> {
