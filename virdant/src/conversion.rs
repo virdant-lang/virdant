@@ -357,7 +357,7 @@ fn valid_verilog_name(path: &str) -> String {
     if is_simple_verilog_identifier(path) && !VERILOG_KEYWORDS.contains(&path) {
         path.to_string()
     } else {
-        format!(r"\{path}")
+        format!(r"\{path} ")
     }
 }
 
