@@ -13,7 +13,7 @@ use crate::syntax::ast::AstNode;
 use crate::syntax::payload::AstNodePayload;
 use crate::virir::expr::{BinOp, Expr, If, Reference, WordLit};
 use crate::virir::typ::Type as VirType;
-use crate::virir::{Driver, Instance, Item, ModDef, Package, Port, Reg, TypeId, VirIr, Wire};
+use crate::virir::{Command, Driver, Instance, Item, ModDef, On, Package, Port, Reg, TypeId, VirIr, Wire};
 
 /// Lowers a checked analysis database into a `VirIr` module graph.
 pub fn transpile(db: &Db) -> VirIr {
@@ -133,6 +133,7 @@ impl<'d> Transpiler<'d> {
             let mut regs = vec![];
             let mut instances = vec![];
             let mut drivers = vec![];
+            let mut on = None;
             let mut local_types = HashMap::new();
             let mut instance_types = HashMap::new();
 
@@ -183,32 +184,42 @@ impl<'d> Transpiler<'d> {
             }
 
             for stmt in item_ast.children() {
-                let AstNodePayload::Driver(_) = stmt.payload() else {
-                    continue;
-                };
+                match stmt.payload() {
+                    AstNodePayload::Driver(_) => {
+                        let path = parsing
+                            .string(stmt.child(0).path().unwrap())
+                            .to_str_lossy()
+                            .into_owned();
+                        let expr_node = stmt.driver().unwrap();
+                        let expected_type = self
+                            .db
+                            .get_typeof(Location::new(package.clone(), expr_node.id()))
+                            .map(|typ| self.intern_type(&typ))
+                            .or_else(|| self.resolve_path_type(&path, &local_types, &instance_types));
 
-                let path = parsing
-                    .string(stmt.child(0).path().unwrap())
-                    .to_str_lossy()
-                    .into_owned();
-                let expr_node = stmt.driver().unwrap();
-                let expected_type = self
-                    .db
-                    .get_typeof(Location::new(package.clone(), expr_node.id()))
-                    .map(|typ| self.intern_type(&typ))
-                    .or_else(|| self.resolve_path_type(&path, &local_types, &instance_types));
-
-                drivers.push(Driver {
-                    region: stmt.region(),
-                    path,
-                    expr: Arc::new(self.build_expr(
-                        &package,
-                        expr_node,
-                        expected_type,
-                        &local_types,
-                        &instance_types,
-                    )),
-                });
+                        drivers.push(Driver {
+                            region: stmt.region(),
+                            path,
+                            expr: Arc::new(self.build_expr(
+                                &package,
+                                expr_node,
+                                expected_type,
+                                &local_types,
+                                &instance_types,
+                            )),
+                        });
+                    }
+                    AstNodePayload::ModDefStmtOn => {
+                        assert!(on.is_none(), "Virdant transpilation supports at most one on block per module");
+                        on = Some(self.build_on_stmt(
+                            &package,
+                            stmt,
+                            &local_types,
+                            &instance_types,
+                        ));
+                    }
+                    _ => (),
+                }
             }
 
             items.push(Item::ModDef(ModDef {
@@ -220,13 +231,51 @@ impl<'d> Transpiler<'d> {
                 regs,
                 instances,
                 drivers,
-                on: None,
+                on,
             }));
         }
 
         Package {
             name: package.to_string(),
             items,
+        }
+    }
+
+    fn build_on_stmt(
+        &mut self,
+        package: &PackageFqn,
+        node: AstNode<'_>,
+        local_types: &HashMap<String, TypeId>,
+        instance_types: &HashMap<String, String>,
+    ) -> On {
+        let clock_type = self.intern_type(&Type::Clock);
+        let clock_node = node.clock().unwrap();
+        let commands = node
+            .children()
+            .into_iter()
+            .skip(1)
+            .map(Self::build_command)
+            .collect();
+
+        On {
+            region: node.region(),
+            clock: Arc::new(self.build_expr(
+                package,
+                clock_node,
+                Some(clock_type),
+                local_types,
+                instance_types,
+            )),
+            commands,
+        }
+    }
+
+    fn build_command(node: AstNode<'_>) -> Command {
+        match node.payload() {
+            AstNodePayload::CommandDisplay => Command::Display(),
+            AstNodePayload::CommandFinish => Command::Finish,
+            AstNodePayload::CommandFatal => Command::Fatal,
+            _ => panic!("expected command node, found {}", node.summary()),
         }
     }
 

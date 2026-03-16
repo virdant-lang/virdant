@@ -5,7 +5,7 @@ virir {
 
             on clock {
                 display();
-                finish;
+                fatal;
             }
         }
     }

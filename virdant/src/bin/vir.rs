@@ -274,28 +274,29 @@ fn main() {
         return;
     }
 
-    let bin_path = std::env::current_exe().unwrap();
-    let bin_dir = bin_path.parent().unwrap();
-    let bin = bin_dir.join(format!("vir-{}", command));
+    if let Some(bin) = find_bin(&format!("vir-{command}")) {
+        let program = CString::new(bin).unwrap();
+        let c_args: Vec<CString> = args
+            .into_iter()
+            .map(|s| CString::new(s.as_str()).unwrap())
+            .collect();
 
-    match std::fs::exists(&bin) {
-        Ok(true) => {
-            let program = CString::new(bin.to_str().unwrap()).unwrap();
-            let c_args: Vec<CString> = args
-                .into_iter()
-                .map(|s| CString::new(s.as_str()).unwrap())
-                .collect();
+        let _ = execvp(&program, &c_args);
+    } else {
+        Args::command().print_help().unwrap();
+        std::process::exit(3);
+    }
+}
 
-            let _ = execvp(&program, &c_args);
-        }
-        Ok(false) => {
-            Args::command().print_help().unwrap();
-            std::process::exit(3);
-        }
-        Err(e) => {
-            eprintln!("ERROR");
-            eprintln!("{e:?}");
-            std::process::exit(-1);
+fn find_bin(command: &str) -> Option<String> {
+    let path = std::env::var("PATH").unwrap();
+
+    for dirpath in path.split(":") {
+        let binpath: std::path::PathBuf = std::path::PathBuf::from(dirpath).join(command);
+        if std::fs::exists(&binpath).unwrap() {
+            return Some(binpath.to_string_lossy().to_string());
         }
     }
+
+    None
 }

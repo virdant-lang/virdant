@@ -1,6 +1,8 @@
 use super::*;
 use crate::common::BinOp;
 use crate::conversion::convert_virir_to_verilog;
+use crate::transpile::transpile;
+use crate::Vir;
 
 const TEST_VIRIR: &str = include_str!("../../../virir/top.virir");
 
@@ -62,4 +64,13 @@ fn test_virir() {
 
     println!("{verilog:#?}");
     verilog.write_to_stdout().unwrap();
+
+    let mut vir = Vir::new();
+    vir.add_package("on_stmts");
+    vir.set_package_text("on_stmts", include_str!("../../../examples/on_stmts.vir"));
+    let transpiled_virir = transpile(vir.db());
+    let transpiled_verilog = convert_virir_to_verilog(transpiled_virir);
+
+    println!("{transpiled_verilog:#?}");
+    transpiled_verilog.write_to_stdout().unwrap();
 }
