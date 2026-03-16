@@ -206,6 +206,6 @@ impl ToJson for Location {
 
 impl std::fmt::Debug for Location {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Location({})", self.0)
+        write!(f, "Location({}, {:?})", self.0, self.1)
     }
 }
