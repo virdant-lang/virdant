@@ -34,6 +34,10 @@ impl<'p> AstNode<'p> {
         self.id.clone()
     }
 
+    pub fn parsing(&self) -> &Parsing {
+        self.parsing
+    }
+
     pub fn spelling(&self) -> &BStr {
         self.parsing.source[self.span()].as_bstr()
     }

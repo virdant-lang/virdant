@@ -248,7 +248,6 @@ fn exprroot_anscestor(builder: &mut Builder, location: Location) -> ExprRoot {
 pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typing> {
     let location = expr_root.location();
     let parsing = builder.get_parsing(location.package());
-    let parsing_noborrow = parsing.clone();
 
     let mut current_id = location.ast_node_id();
     // REVIEW walk up until you find the containing item ast node.
@@ -286,7 +285,7 @@ pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typing> {
 
     // if there is no expected type, you can't type check the expression.
     if fallback_expected_typ.is_some() {
-        typing.check(parsing_noborrow, &node, &expected_typ);
+        typing.check(&node, &expected_typ);
     } else {
         typing.diagnostics.push(diagnostics::Todo {
             region: node.region(),
@@ -325,9 +324,8 @@ impl Typing {
         self.diagnostics.clone()
     }
 
-    // TODO Check should check *against* something*
-    fn check<'p>(&mut self, parsing: Arc<Parsing>, node: &AstNode<'p>, expected_typ: &Type) {
-        if let Some(actual_typ) = self.infer(parsing, node) {
+    fn check<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) {
+        if let Some(actual_typ) = self.infer(node) {
             if actual_typ == *expected_typ {
                 self.typs.insert(node.id(), actual_typ);
             } else {
@@ -342,8 +340,6 @@ impl Typing {
             return;
         }
 
-        /*
-        // TODO
         match node.payload() {
             AstNodePayload::ExprParen => todo!(),
             AstNodePayload::ExprIf => todo!(),
@@ -363,13 +359,13 @@ impl Typing {
             AstNodePayload::ExprSext => todo!(),
             _ => unreachable!(),
         }
-        */
     }
 
-    fn infer<'p>(&mut self, parsing: Arc<Parsing>, node: &AstNode<'p>) -> Option<Type> {
+    fn infer<'p>(&mut self, node: &AstNode<'p>) -> Option<Type> {
         match node.payload() {
             AstNodePayload::ExprReference => {
                 // TODO HACK
+                let parsing = node.parsing();
                 let path = parsing.string(node.path().unwrap());
                 let typ = self.context.get(path.to_owned()); // TODO need to walk backwards to get it.
                 Some(typ)
