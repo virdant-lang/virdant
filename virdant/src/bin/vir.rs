@@ -146,12 +146,15 @@ fn main() {
 
     if command == "db" {
         let path = args.get(1).unwrap();
-        let outpath = args.get(2).unwrap();
+        let outpath = args.get(2);
 
-        let path = args.get(1).unwrap();
         let mut vir = virdant::Vir::from_dir(path);
         vir.check();
-        vir.db().save_graphviz(outpath);
+        if let Some(outpath) = outpath {
+            println!("Saving graphviz: {outpath}");
+            vir.db().save_graphviz(outpath);
+        }
+        dbg!(vir.db());
 
         return;
     }

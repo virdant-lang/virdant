@@ -104,7 +104,7 @@ impl PackageAnalysis {
             if let AstNodePayload::Import(import) = child_node.payload() {
                 let package = PackageFqn::new(parsing.string(import.package).into());
                 if !self.imports.insert(package) {
-                    let imported_package = PackageFqn::new(parsing.string(child_node.package().unwrap()).to_owned());
+                    let imported_package = PackageFqn::new(parsing.string(child_node.import_package().unwrap()).to_owned());
                     self.diagnostics.push(diagnostics::DuplicateImport {
                         region: Region::new(self.package(), child_node.span()),
                         imported_package,

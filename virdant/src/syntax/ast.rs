@@ -3,8 +3,10 @@ use bstr::{BStr, ByteSlice};
 //pub mod parser_lalrpop;
 //pub use parser_lalrpop as parser;
 
+use crate::analysis::Location;
 use crate::common::ComponentKind;
 use crate::common::json::ToJson;
+use crate::fqn::PackageFqn;
 use crate::source::{Region, Span};
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::{InternedString, Parsing};
@@ -107,6 +109,14 @@ impl<'p> AstNode<'p> {
 
     pub fn span(&self) -> Span {
         self.parsing.spans[self.id.index()].clone()
+    }
+
+    pub fn location(&self) -> Location {
+        Location::new(self.package(), self.id)
+    }
+
+    pub fn package(&self) -> PackageFqn {
+        self.parsing.package()
     }
 
     #[allow(dead_code)]
@@ -248,7 +258,7 @@ impl<'p> AstNode<'p> {
         }
     }
 
-    pub fn package(&self) -> Option<InternedString> {
+    pub fn import_package(&self) -> Option<InternedString> {
         match &self.payload {
             AstNodePayload::Import(import) => Some(import.package),
             _ => None

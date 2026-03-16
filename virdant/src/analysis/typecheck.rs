@@ -26,7 +26,7 @@ pub struct TypeDef {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ExprRoot {
-    location: Location,
+    pub location: Location,
 }
 
 #[derive(Debug)]

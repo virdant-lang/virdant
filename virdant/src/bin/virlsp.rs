@@ -12,9 +12,11 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use virdant::Vir;
+use virdant::analysis::typecheck::ExprRoot;
+use virdant::db::Db;
 use virdant::fqn::PackageFqn;
 use virdant::source::{LineCol, Source, Span};
-use virdant::syntax::ast::AstNode;
+use virdant::syntax::ast::{AstNode, AstNodeId};
 use virdant::syntax::parsing::{Parsing, parse};
 
 struct Backend {
@@ -486,6 +488,13 @@ impl Backend {
 
         if let Some(node_id) = parsing.at(linecol) {
             let node = parsing.ast_node(node_id);
+
+            let typof = if let Some(exprroot) = get_expr_root(&self.client, db, &parsing, node.clone()).await {
+                let typing = db.get_typing(ExprRoot { location: exprroot.location() });
+                db.get_typeof(node.location())
+            } else {
+                None
+            };
             let contents = HoverContents::Markup(MarkupContent {
                 kind: MarkupKind::Markdown,
                 value: format!("# DEBUG NODE
@@ -502,11 +511,15 @@ impl Backend {
 
 ## Location
 {:?}
+
+## Typeof
+{:?}
 ",
                     node.spelling(),
                     node.summary(),
                     package,
                     node.id(),
+                    typof,
                 ),
 
             });
@@ -520,6 +533,28 @@ impl Backend {
         }
 
     }
+}
+
+async fn get_expr_root<'a>(client: &Client, db: &'a Db, parsing: &'a Parsing, node: AstNode<'a>) -> Option<AstNode<'a>> {
+    let exprroots: Vec<AstNodeId> = db.get_exprroots().into_iter().map(|exprroot| exprroot.location().ast_node_id()).collect();
+
+        client
+            .log_message(MessageType::ERROR, format!("get_expr_root({:?})", node.id()))
+            .await;
+
+        client
+            .log_message(MessageType::ERROR, format!("exprroots = ({exprroots:?})"))
+            .await;
+
+    let mut current = node;
+    while !exprroots.contains(&current.id()) {
+        let parent_id = current.parent()?.id();
+        current = parsing.ast_node(parent_id);
+        client
+            .log_message(MessageType::ERROR, format!("walk up to id {:?}", current.id()))
+            .await;
+    }
+    Some(current)
 }
 
 fn uri_to_packagefqn(uri: &Url) -> PackageFqn {

@@ -55,7 +55,8 @@ pub fn parse(source: &Source) -> Parsing {
 
     // Fix parents
     {
-        parsing.parents = vec![AstNodeId(u16::MAX); parsing.payloads.len()];
+        let root_id = AstNodeId(u16::try_from(parsing.payloads.len()).unwrap() - 1);
+        parsing.parents = vec![root_id; parsing.payloads.len()];
         let mut stack: Vec<AstNodeId> = Vec::with_capacity(parsing.payloads.len());
         for i in 0..parsing.payloads.len() {
             let ast_node_id = AstNodeId(i.try_into().unwrap());
@@ -138,7 +139,12 @@ impl Parsing {
         let payload = self.payloads[ast_node_id.index()].clone();
         let span = self.spans[ast_node_id.index()].clone();
 
-        let parent = self.parents.get(ast_node_id.index()).cloned();
+        let parent_id = self.parents[ast_node_id.index()];
+        let parent = if parent_id == ast_node_id {
+            None
+        } else {
+            Some(parent_id)
+        };
 
         AstNode {
             id: ast_node_id,
