@@ -159,6 +159,18 @@ fn main() {
         return;
     }
 
+    if command == "types" {
+        let path = args.get(1).unwrap();
+
+        let mut vir = virdant::Vir::from_dir(path);
+        vir.check();
+        for (location, typ) in vir.db().get_typeof_all() {
+            println!("{location:?} has type {typ:?}   {:?}  {:?}", vir.spelling(location.clone()), vir.region(location.clone()));
+        }
+
+        return;
+    }
+
     if command == "components" {
         let path = args.get(1).unwrap();
         let moddef_fqn = args.get(2).unwrap();

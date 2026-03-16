@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use bstr::BStr;
 use bstr::BString;
 
 use crate::LIB_DIR;
+use crate::analysis::Location;
 use crate::db::Db;
 use crate::diagnostics;
 use crate::diagnostics::Diagnostic;
@@ -120,6 +122,21 @@ impl Vir {
 
     pub fn check(&self) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
         self.db.check()
+    }
+
+    pub fn spelling(&self, location: Location) -> BString {
+        let package = location.package();
+        let parsing = self.db.get_parsing(package.clone());
+
+        let node = parsing.ast_node(location.ast_node_id());
+        node.spelling().to_owned()
+    }
+
+    pub fn region(&self, location: Location) -> Region {
+        let package = location.package();
+        let parsing = self.db.get_parsing(package.clone());
+        let node = parsing.ast_node(location.ast_node_id());
+        Region::new(package, node.span())
     }
 }
 
