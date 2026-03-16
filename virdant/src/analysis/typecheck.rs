@@ -332,7 +332,7 @@ impl Typing {
     fn check<'p>(&mut self, parsing: Arc<Parsing>, node: &AstNode<'p>, expected_typ: &Type) {
         if let Some(actual_typ) = self.infer(parsing, node) {
             if actual_typ == *expected_typ {
-                self.typs.insert(node.id(), Type::Bit);
+                self.typs.insert(node.id(), actual_typ);
             } else {
                 let diag: Diagnostic = diagnostics::WrongType {
                     region:  node.region(),
