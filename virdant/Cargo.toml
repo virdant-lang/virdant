@@ -6,7 +6,7 @@ autobins = false
 default-run = "vir"
 
 [features]
-default = []
+default = ["vir-bin"]
 vir-bin = ["dep:nix"]
 vir-lsp-bin = ["dep:serde_json"]
 
