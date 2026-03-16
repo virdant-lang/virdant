@@ -51,13 +51,13 @@ impl TypingContext {
         self.0.as_slice()
     }
 
-    pub fn get(&self, name: BString) -> Type {
+    pub fn get(&self, name: BString) -> Option<Type> {
         for (name_, typ) in self.bindings().iter().rev() {
             if name == *name_ {
-                return typ.clone();
+                return Some(typ.clone());
             }
         }
-        panic!("No binding found for {name}")
+        None
     }
 }
 
@@ -126,7 +126,11 @@ pub fn build_typing_context(builder: &mut Builder, item: SymbolId) -> TypingCont
                     .map(|package| PackageFqn::new(BString::from(parsing.string(package).to_vec())))
                     .unwrap_or_else(|| location.package());
                 let module_name = parsing.string(ofness.name);
-                symboltable.resolve_item_in_package(module_name, module_package).unwrap()
+                let module = symboltable.resolve_item_in_package(module_name, module_package);
+                if module.is_none() {
+                    continue;
+                }
+                module.unwrap()
             }
             _ => todo!(),
         };
@@ -321,14 +325,28 @@ impl Typing {
         }.into());
     }
 
+    fn flag_unresolved_component<'p>(&mut self, node: &AstNode<'p>, path: &BStr) {
+        self.diagnostics.push(diagnostics::UnresolvedComponent {
+            region: node.region(),
+            path: path.into(),
+        }.into());
+    }
+
     fn check<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) {
-        if let Some(actual_typ) = self.infer(node) {
-            if actual_typ == *expected_typ {
-                self.typs.insert(node.id(), actual_typ);
-            } else {
-                self.flag_wrong_type(node, expected_typ, &actual_typ);
+        match self.infer(node) {
+            Err(diagnostic) => {
+                self.diagnostics.push(diagnostic);
+                return;
             }
-            return;
+            Ok(Some(actual_typ)) => {
+                if actual_typ == *expected_typ {
+                    self.typs.insert(node.id(), actual_typ);
+                } else {
+                    self.flag_wrong_type(node, expected_typ, &actual_typ);
+                }
+                return;
+            }
+            _ => (),
         }
 
         match node.payload() {
@@ -347,7 +365,7 @@ impl Typing {
             AstNodePayload::ExprIndexRange(expr_index_range) => todo!(),
             AstNodePayload::ExprWord => self.check_word(node, expected_typ),
             AstNodePayload::ExprZext | AstNodePayload::ExprSext => self.check_ext(node, expected_typ),
-            _ => unreachable!(),
+            _ => unreachable!("Can't typecheck {:?}", node.summary()),
         }
     }
 
@@ -412,7 +430,7 @@ impl Typing {
         let lhs_typ = self.infer(&lhs);
         let rhs_typ = self.infer(&rhs);
 
-        let (Some(lhs_typ), Some(rhs_typ)) = (lhs_typ, rhs_typ) else {
+        let (Ok(Some(lhs_typ)), Ok(Some(rhs_typ))) = (lhs_typ, rhs_typ) else {
             self.flag_cant_infer(node);
             return;
         };
@@ -465,7 +483,7 @@ impl Typing {
 
     fn check_unop<'p>(&mut self, node: &AstNode<'p>, op: CommonUnOp, expected_typ: &Type) {
         let rhs = node.child(0);
-        let Some(rhs_typ) = self.infer(&rhs) else {
+        let Ok(Some(rhs_typ)) = self.infer(&rhs) else {
             self.flag_cant_infer(node);
             return;
         };
@@ -494,7 +512,7 @@ impl Typing {
 
     fn check_index<'p>(&mut self, node: &AstNode<'p>, index: Width, expected_typ: &Type) {
         let subject = node.child(0);
-        let Some(subject_typ) = self.infer(&subject) else {
+        let Ok(Some(subject_typ)) = self.infer(&subject) else {
             self.flag_cant_infer(node);
             return;
         };
@@ -519,22 +537,8 @@ impl Typing {
     }
 
     fn check_word<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) {
-        let mut width: Width = 0;
-        for child in node.children() {
-            let Some(child_typ) = self.infer(&child) else {
-                self.flag_cant_infer(&child);
-                return;
-            };
-
-            match child_typ {
-                Type::Bit | Type::Clock => width += 1,
-                Type::Word(child_width) => width += child_width,
-                Type::Usual(_) => {
-                    self.flag_cant_infer(&child);
-                    return;
-                }
-            }
-        }
+        // We can assume we have a width-less WordLit here, since it would have been inferred earlier.
+        let mut width: Width = todo!();
 
         let actual = Type::Word(width);
         if actual == *expected_typ {
@@ -545,6 +549,8 @@ impl Typing {
     }
 
     fn check_ext<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) {
+        todo!()
+        /*
         let Type::Word(target_width) = expected_typ else {
             self.flag_not_word_type(node, expected_typ);
             return;
@@ -571,9 +577,10 @@ impl Typing {
         }
 
         self.typs.insert(node.id(), expected_typ.clone());
+        */
     }
 
-    fn infer<'p>(&mut self, node: &AstNode<'p>) -> Option<Type> {
+    fn infer<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, Diagnostic> {
         match node.payload() {
             AstNodePayload::ExprParen => self.infer(&node.child(0)),
             AstNodePayload::ExprReference => {
@@ -581,10 +588,17 @@ impl Typing {
                 let parsing = node.parsing();
                 let path = parsing.string(node.path().unwrap());
                 let typ = self.context.get(path.to_owned()); // TODO need to walk backwards to get it.
-                Some(typ)
+                if typ.is_none() {
+                    Err(diagnostics::UnresolvedComponent {
+                        region: node.region(),
+                        path: path.into(),
+                    }.into())
+                } else {
+                    Ok(typ)
+                }
             }
             AstNodePayload::ExprBitLit(expr_bit_lit) => {
-                Some(Type::Bit)
+                Ok(Some(Type::Bit))
             }
             AstNodePayload::ExprWordLit(expr_word_lit) => {
                 // TODO I shouldn't be doing string manip here.
@@ -593,12 +607,12 @@ impl Typing {
                 if path.contains(&b'w') {
                     let parts: Vec<_> = path.split(|ch| *ch == b'w').collect();
                     let width: Width = std::str::from_utf8(parts[1]).unwrap().parse().unwrap();
-                    Some(Type::Word(width))
+                    Ok(Some(Type::Word(width)))
                 } else {
-                    None
+                    Ok(None)
                 }
             }
-            _ => None,
+            _ => Ok(None),
         }
     }
 }
