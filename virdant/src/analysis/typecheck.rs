@@ -5,7 +5,7 @@ use hashbrown::{HashMap, HashSet};
 
 use crate::analysis::Location;
 use crate::analysis::symboltable::{SymbolId, SymbolKind};
-use crate::common::{ComponentKind, TypeScheme, Width};
+use crate::common::{BinOp as CommonBinOp, ComponentKind, TypeScheme, UnOp as CommonUnOp, Width};
 use crate::common::json::ToJson;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
@@ -324,45 +324,283 @@ impl Typing {
         self.diagnostics.clone()
     }
 
+    fn flag_wrong_type<'p>(&mut self, node: &AstNode<'p>, expected: &Type, actual: &Type) {
+        let diag: Diagnostic = diagnostics::WrongType {
+            region: node.region(),
+            expected: expected.to_string().into(),
+            actual: actual.to_string().into(),
+        }.into();
+        self.diagnostics.push(diag.to_warning());
+    }
+
+    fn flag_not_word_type<'p>(&mut self, node: &AstNode<'p>, typ: &Type) {
+        self.diagnostics.push(diagnostics::NotWordType {
+            region: node.region(),
+            typ: typ.to_string().into(),
+        }.into());
+    }
+
+    fn flag_cant_infer<'p>(&mut self, node: &AstNode<'p>) {
+        self.diagnostics.push(diagnostics::CantInfer {
+            region: node.region(),
+        }.into());
+    }
+
     fn check<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) {
         if let Some(actual_typ) = self.infer(node) {
             if actual_typ == *expected_typ {
                 self.typs.insert(node.id(), actual_typ);
             } else {
-                let diag: Diagnostic = diagnostics::WrongType {
-                    region:  node.region(),
-                    expected: expected_typ.to_string().into(),
-                    actual: actual_typ.to_string().into(),
-                }.into();
-
-                self.diagnostics.push(diag.to_warning());
+                self.flag_wrong_type(node, expected_typ, &actual_typ);
             }
             return;
         }
 
         match node.payload() {
-            AstNodePayload::ExprParen => todo!(),
-            AstNodePayload::ExprIf => todo!(),
+            AstNodePayload::ExprParen => self.check_paren(node, expected_typ),
+            AstNodePayload::ExprIf => self.check_if(node, expected_typ),
             AstNodePayload::ExprMatch => todo!(),
-            AstNodePayload::ExprWordLit(expr_word_lit) => todo!(),
-            AstNodePayload::ExprBinOp(expr_bin_op) => todo!(),
-            AstNodePayload::ExprUnOp(expr_un_op) => todo!(),
+            AstNodePayload::ExprWordLit(_) => self.check_word_lit(node, expected_typ),
+            AstNodePayload::ExprBinOp(expr_bin_op) => self.check_binop(node, expr_bin_op.op, expected_typ),
+            AstNodePayload::ExprUnOp(expr_un_op) => self.check_unop(node, expr_un_op.op, expected_typ),
             AstNodePayload::ExprMethod(expr_method) => todo!(),
             AstNodePayload::ExprFn => todo!(),
             AstNodePayload::ExprCtor(expr_ctor) => todo!(),
             AstNodePayload::ExprEnumerant(expr_enumerant) => todo!(),
             AstNodePayload::ExprStruct => todo!(),
-            AstNodePayload::ExprIndex(expr_index) => todo!(),
+            AstNodePayload::ExprIndex(expr_index) => self.check_index(node, expr_index.index, expected_typ),
             AstNodePayload::ExprIndexRange(expr_index_range) => todo!(),
-            AstNodePayload::ExprWord => todo!(),
-            AstNodePayload::ExprZext => todo!(),
-            AstNodePayload::ExprSext => todo!(),
+            AstNodePayload::ExprWord => self.check_word(node, expected_typ),
+            AstNodePayload::ExprZext | AstNodePayload::ExprSext => self.check_ext(node, expected_typ),
             _ => unreachable!(),
         }
     }
 
+    fn check_paren<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) {
+        let child = node.child(0);
+        self.check(&child, expected_typ);
+        if self.typs.contains_key(&child.id()) {
+            self.typs.insert(node.id(), expected_typ.clone());
+        }
+    }
+
+    fn check_if<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) {
+        let children = node.children();
+        self.check(&children[0], &Type::Bit);
+        self.check(&children[1], expected_typ);
+        let mut i = 2;
+        while i + 1 < children.len() {
+            self.check(&children[i], &Type::Bit);
+            self.check(&children[i + 1], expected_typ);
+            i += 2;
+        }
+
+        if children.iter().all(|child| self.typs.contains_key(&child.id())) {
+            self.typs.insert(node.id(), expected_typ.clone());
+        }
+    }
+
+    fn check_word_lit<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) {
+        let Type::Word(width) = expected_typ else {
+            self.flag_not_word_type(node, expected_typ);
+            return;
+        };
+
+        let (value, explicit_width) = parse_word_literal(node.spelling().to_str_lossy().as_ref());
+        if let Some(explicit_width) = explicit_width {
+            let actual = Type::Word(explicit_width);
+            if actual == *expected_typ {
+                self.typs.insert(node.id(), actual);
+            } else {
+                self.flag_wrong_type(node, expected_typ, &actual);
+            }
+            return;
+        }
+
+        let minwidth = min_word_width(value);
+        if minwidth > u64::from(*width) {
+            self.diagnostics.push(diagnostics::DoesntFit {
+                region: node.region(),
+                value,
+                width: u64::from(*width),
+                minwidth,
+            }.into());
+            return;
+        }
+
+        self.typs.insert(node.id(), Type::Word(*width));
+    }
+
+    fn check_binop<'p>(&mut self, node: &AstNode<'p>, op: CommonBinOp, expected_typ: &Type) {
+        let lhs = node.child(0);
+        let rhs = node.child(1);
+        let lhs_typ = self.infer(&lhs);
+        let rhs_typ = self.infer(&rhs);
+
+        let (Some(lhs_typ), Some(rhs_typ)) = (lhs_typ, rhs_typ) else {
+            self.flag_cant_infer(node);
+            return;
+        };
+
+        match op {
+            CommonBinOp::Add | CommonBinOp::Sub => {
+                if lhs_typ != rhs_typ {
+                    self.flag_wrong_type(&rhs, &lhs_typ, &rhs_typ);
+                    return;
+                }
+                if lhs_typ == *expected_typ {
+                    self.typs.insert(node.id(), lhs_typ);
+                } else {
+                    self.flag_wrong_type(node, expected_typ, &lhs_typ);
+                }
+            }
+            CommonBinOp::Lt
+            | CommonBinOp::Lte
+            | CommonBinOp::Gt
+            | CommonBinOp::Gte
+            | CommonBinOp::Eq
+            | CommonBinOp::Neq => {
+                if lhs_typ != rhs_typ {
+                    self.flag_wrong_type(&rhs, &lhs_typ, &rhs_typ);
+                    return;
+                }
+                if Type::Bit == *expected_typ {
+                    self.typs.insert(node.id(), Type::Bit);
+                } else {
+                    self.flag_wrong_type(node, expected_typ, &Type::Bit);
+                }
+            }
+            CommonBinOp::And | CommonBinOp::Or | CommonBinOp::Xor => {
+                if lhs_typ != Type::Bit {
+                    self.flag_wrong_type(&lhs, &Type::Bit, &lhs_typ);
+                    return;
+                }
+                if rhs_typ != Type::Bit {
+                    self.flag_wrong_type(&rhs, &Type::Bit, &rhs_typ);
+                    return;
+                }
+                if Type::Bit == *expected_typ {
+                    self.typs.insert(node.id(), Type::Bit);
+                } else {
+                    self.flag_wrong_type(node, expected_typ, &Type::Bit);
+                }
+            }
+        }
+    }
+
+    fn check_unop<'p>(&mut self, node: &AstNode<'p>, op: CommonUnOp, expected_typ: &Type) {
+        let rhs = node.child(0);
+        let Some(rhs_typ) = self.infer(&rhs) else {
+            self.flag_cant_infer(node);
+            return;
+        };
+
+        match op {
+            CommonUnOp::Neg | CommonUnOp::Inv => {
+                if rhs_typ == *expected_typ {
+                    self.typs.insert(node.id(), rhs_typ);
+                } else {
+                    self.flag_wrong_type(node, expected_typ, &rhs_typ);
+                }
+            }
+            CommonUnOp::Not => {
+                if rhs_typ != Type::Bit {
+                    self.flag_wrong_type(&rhs, &Type::Bit, &rhs_typ);
+                    return;
+                }
+                if Type::Bit == *expected_typ {
+                    self.typs.insert(node.id(), Type::Bit);
+                } else {
+                    self.flag_wrong_type(node, expected_typ, &Type::Bit);
+                }
+            }
+        }
+    }
+
+    fn check_index<'p>(&mut self, node: &AstNode<'p>, index: Width, expected_typ: &Type) {
+        let subject = node.child(0);
+        let Some(subject_typ) = self.infer(&subject) else {
+            self.flag_cant_infer(node);
+            return;
+        };
+
+        match subject_typ {
+            Type::Word(width) => {
+                if index >= width {
+                    self.diagnostics.push(diagnostics::Unknown {
+                        region: node.region(),
+                        msg: format!("Index {index} out of bounds for Word[{width}]").into(),
+                    }.into());
+                    return;
+                }
+                if Type::Bit == *expected_typ {
+                    self.typs.insert(node.id(), Type::Bit);
+                } else {
+                    self.flag_wrong_type(node, expected_typ, &Type::Bit);
+                }
+            }
+            other => self.flag_not_word_type(&subject, &other),
+        }
+    }
+
+    fn check_word<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) {
+        let mut width: Width = 0;
+        for child in node.children() {
+            let Some(child_typ) = self.infer(&child) else {
+                self.flag_cant_infer(&child);
+                return;
+            };
+
+            match child_typ {
+                Type::Bit | Type::Clock => width += 1,
+                Type::Word(child_width) => width += child_width,
+                Type::Usual(_) => {
+                    self.flag_cant_infer(&child);
+                    return;
+                }
+            }
+        }
+
+        let actual = Type::Word(width);
+        if actual == *expected_typ {
+            self.typs.insert(node.id(), actual);
+        } else {
+            self.flag_wrong_type(node, expected_typ, &actual);
+        }
+    }
+
+    fn check_ext<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) {
+        let Type::Word(target_width) = expected_typ else {
+            self.flag_not_word_type(node, expected_typ);
+            return;
+        };
+
+        let subject = node.child(0);
+        let Some(subject_typ) = self.infer(&subject) else {
+            self.flag_cant_infer(node);
+            return;
+        };
+
+        let subject_width = match subject_typ {
+            Type::Bit | Type::Clock => 1,
+            Type::Word(width) => width,
+            other => {
+                self.flag_not_word_type(&subject, &other);
+                return;
+            }
+        };
+
+        if subject_width > *target_width {
+            self.flag_wrong_type(node, &Type::Word(subject_width), expected_typ);
+            return;
+        }
+
+        self.typs.insert(node.id(), expected_typ.clone());
+    }
+
     fn infer<'p>(&mut self, node: &AstNode<'p>) -> Option<Type> {
         match node.payload() {
+            AstNodePayload::ExprParen => self.infer(&node.child(0)),
             AstNodePayload::ExprReference => {
                 // TODO HACK
                 let parsing = node.parsing();
@@ -387,6 +625,33 @@ impl Typing {
             }
             _ => None,
         }
+    }
+}
+
+fn parse_word_literal(literal: &str) -> (u64, Option<Width>) {
+    if let Some((value, width)) = literal.split_once('w') {
+        (parse_nat_literal(value), Some(width.parse().unwrap()))
+    } else {
+        (parse_nat_literal(literal), None)
+    }
+}
+
+fn parse_nat_literal(literal: &str) -> u64 {
+    let literal = literal.replace('_', "");
+    if let Some(hex) = literal.strip_prefix("0x") {
+        u64::from_str_radix(hex, 16).unwrap()
+    } else if let Some(bin) = literal.strip_prefix("0b") {
+        u64::from_str_radix(bin, 2).unwrap()
+    } else {
+        literal.parse().unwrap()
+    }
+}
+
+fn min_word_width(value: u64) -> u64 {
+    if value == 0 {
+        0
+    } else {
+        u64::BITS as u64 - u64::leading_zeros(value) as u64
     }
 }
 
