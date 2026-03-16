@@ -192,6 +192,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Enumerant(enumerant) => format!("Enumerant"),
             AstNodePayload::Channel(channel) => format!("Channel"),
             AstNodePayload::Param(param) => format!("Param"),
+            AstNodePayload::GenericsParams(params) => format!("GenericsParams {:?}", params.value),
             AstNodePayload::Generics => format!("Generics"),
             AstNodePayload::Kind(kind) => format!("Kind"),
             AstNodePayload::Type(_) => format!("Type"),

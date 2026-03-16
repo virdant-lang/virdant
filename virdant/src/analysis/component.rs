@@ -11,7 +11,7 @@ use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
 use crate::syntax::ast::AstNode;
 use crate::syntax::parsing::Parsing;
-use crate::syntax::payload::AstNodePayload;
+use crate::syntax::payload::{self, AstNodePayload};
 
 #[derive(Debug)]
 pub struct ComponentAnalysis {
@@ -105,13 +105,12 @@ fn node_to_typ(typ_node: AstNode<'_>, parsing: Arc<Parsing>, symboltable: Arc<Sy
                 } else if symbol.id() == clock_symbol.id() {
                     Type::Clock
                 } else if symbol.id() == word_symbol.id() {
-                    let spelling = typ_node.spelling().to_str_lossy().into_owned();
-                    let width = spelling
-                        .strip_prefix("Word[")
-                        .or_else(|| spelling.strip_prefix("builtin::Word["))
-                        .and_then(|rest| rest.strip_suffix(']'))
-                        .and_then(|width| width.parse::<Width>().ok())
-                        .unwrap();
+                    let generics_node = typ_node.child(1);
+                    let AstNodePayload::GenericsParams(generics_params) = generics_node.payload() else {
+                        unreachable!()
+                    };
+                    let spelling = parsing.string(generics_params.value).to_str_lossy().into_owned();
+                    let width = spelling.parse::<Width>().unwrap();
                     Type::Word(width)
                 } else {
                     Type::Usual(symbol.id())

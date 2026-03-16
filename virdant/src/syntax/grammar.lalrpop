@@ -129,6 +129,16 @@ Param: AstNodeId = {
     },
 }
 
+GenericsParams: AstNodeId = {
+    <ll:@L> "[" <n: Nat> "]" <rr:@R> => {
+        let payload = AstNodePayload::GenericsParams(payload::GenericsParams { value: n } );
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    }
+}
+
 Generics: AstNodeId = {
     <ll:@L> "[" Ident ":" Kind "]" <rr:@R> => {
         let payload = AstNodePayload::Generics;
@@ -405,11 +415,11 @@ Kind: AstNodeId = {
 }
 
 Type: AstNodeId = {
-    <ll:@L> <ofness:Ofness> <generics:("[" Nat "]")?> <rr:@R> => {
+    <ll:@L> <ofness:Ofness> <generics:GenericsParams?> <rr:@R> => {
         let num_generics = if generics.is_some() { 1 } else { 0 };
         let payload = AstNodePayload::Type(payload::Type { num_generics } );
         let span = parser.span(ll, rr);
-        let num_children = 1;
+        let num_children = 1 + num_generics;
 
         parser.add_node(payload, span, num_children)
     },

@@ -31,6 +31,7 @@ pub enum AstNodePayload {
     Enumerant(Enumerant),
     Channel(Channel),
 
+    GenericsParams(GenericsParams),
     Generics,
     Param(Param),
 
@@ -93,6 +94,7 @@ impl AstNodePayload {
             AstNodePayload::Enumerant(enumerant) => "Enumerant",
             AstNodePayload::Channel(channel) => "Channel",
             AstNodePayload::Param(param) => "Param",
+            AstNodePayload::GenericsParams(_params) => "GenericsParams",
             AstNodePayload::Generics => "Generics",
             AstNodePayload::Kind(kind) => "Kind",
             AstNodePayload::Type(_) => "Type",
@@ -214,6 +216,11 @@ pub struct Enumerant {
 pub struct Channel {
     pub name: InternedString,
     pub dir: ChannelDir,
+}
+
+#[derive(Clone, Debug)]
+pub struct GenericsParams {
+    pub value: InternedString,
 }
 
 #[derive(Clone, Debug)]
