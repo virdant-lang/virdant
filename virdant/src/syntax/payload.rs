@@ -31,6 +31,7 @@ pub enum AstNodePayload {
     Enumerant(Enumerant),
     Channel(Channel),
 
+    Generics,
     Param(Param),
 
     Kind(Kind),
@@ -92,6 +93,7 @@ impl AstNodePayload {
             AstNodePayload::Enumerant(enumerant) => "Enumerant",
             AstNodePayload::Channel(channel) => "Channel",
             AstNodePayload::Param(param) => "Param",
+            AstNodePayload::Generics => "Generics",
             AstNodePayload::Kind(kind) => "Kind",
             AstNodePayload::Type(_) => "Type",
             AstNodePayload::ExprReference => "ExprReference",

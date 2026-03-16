@@ -129,6 +129,17 @@ Param: AstNodeId = {
     },
 }
 
+Generics: AstNodeId = {
+    <ll:@L> "[" Ident ":" Kind "]" <rr:@R> => {
+        let payload = AstNodePayload::Generics;
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    }
+
+}
+
 EnumDef: AstNodeId = {
     <ll:@L> "enum" "type" <name:Ident> "width" <width:Width> "{"
         <stmts:EnumDefStmt*>
@@ -152,7 +163,7 @@ EnumDefStmt: AstNodeId = {
 }
 
 BuiltinDef: AstNodeId = {
-    <ll:@L> "builtin" "type" <name:Ident> <generics:("[" Ident ":" Kind "]")?> "{"
+    <ll:@L> "builtin" "type" <name:Ident> <generics:Generics?> "{"
     "}" <rr:@R> => {
         let payload = AstNodePayload::BuiltinDef(payload::BuiltinDef { name });
         let span = parser.span(ll, rr);
