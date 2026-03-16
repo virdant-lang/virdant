@@ -6,7 +6,7 @@ use super::typ::Type as VirIrType;
 #[derive(Clone)]
 pub(super) enum Type {
     Bit,
-    Word(u16),
+    Word(Width),
     Clock,
 }
 
@@ -19,7 +19,7 @@ impl Type {
         }
     }
 
-    pub(super) fn width(&self) -> u16 {
+    pub(super) fn width(&self) -> Width {
         match self {
             Type::Bit | Type::Clock => 1,
             Type::Word(width) => *width,

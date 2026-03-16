@@ -5,7 +5,7 @@ use hashbrown::{HashMap, HashSet};
 
 use crate::analysis::Location;
 use crate::analysis::symboltable::{SymbolId, SymbolKind};
-use crate::common::{ComponentKind, TypeScheme};
+use crate::common::{ComponentKind, TypeScheme, Width};
 use crate::common::json::ToJson;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
@@ -13,9 +13,6 @@ use crate::fqn::PackageFqn;
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
-
-// TODO consolidate Widths into a single type in common.
-pub type Width = u64;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TypeDef {

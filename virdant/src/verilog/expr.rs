@@ -26,7 +26,7 @@ pub struct BitLit {
 #[derive(Debug)]
 pub struct WordLit {
     pub value: u128,
-    pub width: u16,
+    pub width: Width,
     pub radix: Radix,
 }
 

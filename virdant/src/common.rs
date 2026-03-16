@@ -3,6 +3,8 @@ pub mod graph;
 pub mod union;
 pub mod json;
 
+pub type Width = u16;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ComponentClass {
     Port,

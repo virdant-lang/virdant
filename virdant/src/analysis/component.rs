@@ -5,6 +5,7 @@ use bstr::{BStr, BString};
 use crate::analysis::Location;
 use crate::analysis::symboltable::{SymbolId, SymbolTable};
 use crate::analysis::typecheck::Type;
+use crate::common::Width;
 use crate::common::json::ToJson;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
@@ -109,7 +110,7 @@ fn node_to_typ(typ_node: AstNode<'_>, parsing: Arc<Parsing>, symboltable: Arc<Sy
                         .strip_prefix("Word[")
                         .or_else(|| spelling.strip_prefix("builtin::Word["))
                         .and_then(|rest| rest.strip_suffix(']'))
-                        .and_then(|width| width.parse::<u64>().ok())
+                        .and_then(|width| width.parse::<Width>().ok())
                         .unwrap();
                     Type::Word(width)
                 } else {

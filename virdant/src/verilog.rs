@@ -5,15 +5,13 @@ mod macros;
 #[cfg(test)]
 mod tests;
 
-use crate::common::PortDir;
-use crate::common::Radix;
+use crate::common::{PortDir, Radix, Width};
 
 use self::macros::{verilog_write, verilog_writeln};
 use crate::verilog::stmt::Stmt;
 
 use std::io::Write;
 
-type Width = u64;
 const DIR_WIDTH: usize = 6;
 const KIND_WIDTH: usize = 4;
 const WIDTH_WIDTH: usize = 10;

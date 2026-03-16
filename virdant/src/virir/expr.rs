@@ -1,5 +1,5 @@
 use crate::common;
-use crate::virir::{TypeId, Width};
+use crate::virir::TypeId;
 use crate::source::Region;
 use std::sync::Arc;
 

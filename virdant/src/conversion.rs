@@ -219,7 +219,7 @@ fn convert_port(
         name: exact_verilog_name(&port.name),
         kind: verilog::PortKind::Wire,
         dir: port.dir,
-        width: type_widths[&port.typ].into(),
+        width: type_widths[&port.typ],
     }
 }
 
@@ -229,7 +229,7 @@ fn convert_wire(
 ) -> verilog::Element {
     verilog::Element::Wire(verilog::Wire {
         name: exact_verilog_name(&wire.name),
-        width: type_widths[&wire.typ] as u64,
+        width: type_widths[&wire.typ],
         expr: None,
     })
 }
@@ -240,7 +240,7 @@ fn convert_reg(
 ) -> verilog::Element {
     verilog::Element::Reg(verilog::Reg {
         name: exact_verilog_name(&reg.name),
-        width: type_widths[&reg.typ] as u64,
+        width: type_widths[&reg.typ],
         expr: None,
     })
 }

@@ -3,7 +3,7 @@ use super::macros::{verilog_write, verilog_writeln};
 use crate::verilog::Writer;
 use super::Expr;
 
-use crate::common::Radix;
+use crate::common::{Radix, Width};
 
 #[derive(Debug)]
 pub enum Stmt {
@@ -114,7 +114,7 @@ pub enum CasePattern {
 
 #[derive(Debug)]
 pub struct PatternLit {
-    pub width: u16,
+    pub width: Width,
     pub radix: Radix,
     pub pattern: String,
 }

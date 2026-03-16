@@ -5,7 +5,7 @@ use bstr::ByteSlice;
 
 use crate::analysis::typecheck::Type;
 use crate::analysis::Location;
-use crate::common::{BinOp as CommonBinOp, ComponentKind, PortDir};
+use crate::common::{BinOp as CommonBinOp, ComponentKind, PortDir, Width};
 use crate::db::Db;
 use crate::fqn::PackageFqn;
 use crate::source::Region;
@@ -269,7 +269,7 @@ impl<'d> Transpiler<'d> {
                     .into_owned();
                 let (value, width) = parse_word_literal(&literal);
                 let typ = if let Some(width) = width {
-                    self.intern_type(&Type::Word(width.into()))
+                    self.intern_type(&Type::Word(width))
                 } else {
                     expected_type.unwrap_or_else(|| panic!("word literal {literal} needs a type"))
                 };
@@ -480,7 +480,7 @@ fn render_ofness_path(ofness_node: AstNode<'_>, package: &PackageFqn) -> String 
 }
 
 /// Parses a source word literal into its numeric value and optional explicit width.
-fn parse_word_literal(literal: &str) -> (u64, Option<u16>) {
+fn parse_word_literal(literal: &str) -> (u64, Option<Width>) {
     if let Some((value, width)) = literal.split_once('w') {
         (parse_nat_literal(value), Some(width.parse().unwrap()))
     } else {

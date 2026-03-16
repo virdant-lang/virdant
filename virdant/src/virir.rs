@@ -20,7 +20,8 @@ use crate::source::Region;
 use crate::virir::expr::{BinOp as VirIrBinOp, Expr, If as VirIrIf, Reference, WordLit};
 use crate::virir::typ::Type;
 
-pub type Width = u16;
+pub use crate::common::Width;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeId(u32);
 

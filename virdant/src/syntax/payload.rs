@@ -1,7 +1,6 @@
-use crate::analysis::typecheck::Width;
+use crate::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, UnOp, Width};
 use crate::syntax::ast::AstNodeId;
 use crate::syntax::parsing::InternedString;
-use crate::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, UnOp};
 
 #[derive(Debug, Clone)]
 pub enum AstNodePayload {
@@ -149,7 +148,7 @@ pub struct UnionDef {
 #[derive(Clone, Debug)]
 pub struct EnumDef {
     pub name: InternedString,
-    pub width: u16,
+    pub width: Width,
 }
 
 #[derive(Clone, Debug)]
