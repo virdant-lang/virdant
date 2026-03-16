@@ -116,9 +116,14 @@ impl Parsing {
     }
 
     pub fn intern(&mut self, span: Span) -> InternedString {
-        let string_id = self.strings.len();
-        self.strings.push(self.text(span).to_owned());
-        InternedString(string_id)
+        let text = self.text(span).to_owned();
+        if let Some(string_id) = self.strings.iter().position(|string| string == &text) {
+            InternedString(string_id)
+        } else {
+            let string_id = self.strings.len();
+            self.strings.push(text);
+            InternedString(string_id)
+        }
     }
 
     pub fn text(&self, span: Span) -> &BStr {
