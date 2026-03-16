@@ -25,6 +25,13 @@ struct Backend {
 struct ServerState {
     vir: Vir,
     sources: HashMap<Url, Source>,
+    hover_mode: HoverMode,
+}
+
+#[derive(Clone, Copy)]
+enum HoverMode {
+    Normal,
+    Debug,
 }
 
 impl Backend {
@@ -34,6 +41,7 @@ impl Backend {
             state: Arc::new(Mutex::new(ServerState {
                 vir: Vir::new(),
                 sources: HashMap::new(),
+                hover_mode: HoverMode::Debug,
             })),
         }
     }
@@ -50,6 +58,13 @@ impl LanguageServer for Backend {
             text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
             hover_provider: Some(HoverProviderCapability::Simple(true)),
             definition_provider: Some(OneOf::Left(true)),
+            execute_command_provider: Some(ExecuteCommandOptions {
+                commands: vec![
+                    "virdant.panic".into(),
+                    "virdant.debug".into(),
+                ],
+                ..Default::default()
+            }),
 
 //            code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
 
@@ -137,32 +152,12 @@ impl LanguageServer for Backend {
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
-        let position: Position = params.text_document_position_params.position;
-        let linecol = LineCol::new((position.line + 1) as usize, (position.character + 1) as usize);
-
-        let uri = params.text_document_position_params.text_document.uri;
-        let package = uri_to_packagefqn(&uri);
-
-        let parsing = {
-            let mut state = self.state.lock().await;
-            state.vir.parsing(&package.to_string())
-        };
-
-        if let Some(node_id) = parsing.at(linecol) {
-            let node = parsing.ast_node(node_id);
-            let contents = HoverContents::Scalar(MarkedString::String(
-                format!("Node: {}", node.summary())
-            ));
-
-            Ok(Some(Hover {
-                contents,
-                range: None,
-            }))
-        } else {
-            Ok(None)
+        match self.hover_mode().await {
+            HoverMode::Normal => self.hover_normal(params).await,
+            HoverMode::Debug => self.hover_debug(params).await,
         }
-
     }
+
     async fn goto_definition(
         &self,
         params: GotoDefinitionParams,
@@ -306,6 +301,28 @@ impl LanguageServer for Backend {
 
     }
 
+    async fn execute_command(
+        &self,
+        params: ExecuteCommandParams,
+    ) -> Result<Option<serde_json::Value>> {
+        match params.command.as_str() {
+            "virdant.panic" => {
+                panic!("virdant.panic: {:?}", params.arguments)
+            }
+            "virdant.debug" => {
+                let mut state = self.state.lock().await;
+                    if params.arguments.get(0) == Some(&json!("true")) {
+                    state.hover_mode = HoverMode::Debug;
+                } else {
+                    state.hover_mode = HoverMode::Normal;
+                }
+            }
+            _ => {}
+        }
+
+        Ok(None)
+    }
+
 //    async fn code_action(
 //        &self,
 //        params: CodeActionParams,
@@ -421,6 +438,88 @@ impl Backend {
             .publish_diagnostics(uri.clone(), diagnostics, None)
             .await;
     }
+
+    async fn hover_mode(&self) -> HoverMode {
+        let state = self.state.lock().await;
+        state.hover_mode
+    }
+
+    async fn hover_normal(&self, params: HoverParams) -> Result<Option<Hover>> {
+        let position: Position = params.text_document_position_params.position;
+        let linecol = LineCol::new((position.line + 1) as usize, (position.character + 1) as usize);
+
+        let uri = params.text_document_position_params.text_document.uri;
+        let package = uri_to_packagefqn(&uri);
+
+        let (parsing, hover_mode) = {
+            let mut state = self.state.lock().await;
+            (state.vir.parsing(&package.to_string()), state.hover_mode)
+        };
+
+        if let Some(node_id) = parsing.at(linecol) {
+            let node = parsing.ast_node(node_id);
+            let contents = HoverContents::Scalar(MarkedString::String(
+                format!("Node: {}", node.summary())
+            ));
+
+            Ok(Some(Hover {
+                contents,
+                range: None,
+            }))
+        } else {
+            Ok(None)
+        }
+
+    }
+
+    async fn hover_debug(&self, params: HoverParams) -> Result<Option<Hover>> {
+        let position: Position = params.text_document_position_params.position;
+        let linecol = LineCol::new((position.line + 1) as usize, (position.character + 1) as usize);
+
+        let uri = params.text_document_position_params.text_document.uri;
+        let package = uri_to_packagefqn(&uri);
+
+        let mut state = self.state.lock().await;
+        let db = state.vir.db();
+
+        let parsing = db.get_parsing(package.clone());
+
+        if let Some(node_id) = parsing.at(linecol) {
+            let node = parsing.ast_node(node_id);
+            let contents = HoverContents::Markup(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value: format!("# DEBUG NODE
+## Spelling
+```virdant
+{}
+```
+
+## Summary
+{}
+
+## Package
+{}
+
+## Location
+{:?}
+",
+                    node.spelling(),
+                    node.summary(),
+                    package,
+                    node.id(),
+                ),
+
+            });
+
+            Ok(Some(Hover {
+                contents,
+                range: Some(span_to_range(node.span())),
+            }))
+        } else {
+            Ok(None)
+        }
+
+    }
 }
 
 fn uri_to_packagefqn(uri: &Url) -> PackageFqn {
@@ -441,6 +540,45 @@ fn span_to_range(span: Span) -> Range {
             character: span.end().col().saturating_sub(1) as u32,
         },
     }
+}
+
+#[cfg(test)]
+#[test]
+fn test_escape_markdown() {
+    assert_eq!(escape_markdown("Word[8]"), "Word\\[8\\]");
+}
+
+fn escape_markdown(text: impl AsRef<str>) -> String {
+    let mut escaped = String::with_capacity(text.as_ref().len());
+
+    for ch in text.as_ref().chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '`' => escaped.push_str("\\`"),
+            '*' => escaped.push_str("\\*"),
+            '_' => escaped.push_str("\\_"),
+            '{' => escaped.push_str("\\{"),
+            '}' => escaped.push_str("\\}"),
+            '[' => escaped.push_str("\\["),
+            ']' => escaped.push_str("\\]"),
+            '(' => escaped.push_str("\\("),
+            ')' => escaped.push_str("\\)"),
+            '#' => escaped.push_str("\\#"),
+            '+' => escaped.push_str("\\+"),
+            '-' => escaped.push_str("\\-"),
+            '.' => escaped.push_str("\\."),
+            '!' => escaped.push_str("\\!"),
+            '|' => escaped.push_str("\\|"),
+            '>' => escaped.push_str("&gt;"),
+            '<' => escaped.push_str("&lt;"),
+            '&' => escaped.push_str("&amp;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&#39;"),
+            _ => escaped.push(ch),
+        }
+    }
+
+    escaped
 }
 
 #[tokio::main]
