@@ -62,7 +62,11 @@ fn convert_mod_def(
     mod_def: virir::ModDef,
 ) -> verilog::Module {
     let module_name = emitted_module_name(emitted_module_names, package_name, &mod_def);
-    let ports = mod_def.ports.iter().map(convert_port).collect();
+    let ports = mod_def
+        .ports
+        .iter()
+        .map(|port| convert_port(type_widths, port))
+        .collect();
     let mut connects_by_instance: HashMap<String, Vec<(String, String)>> = mod_def
         .instances
         .iter()
@@ -142,13 +146,7 @@ fn collect_type_widths(virir: &virir::VirIr) -> HashMap<virir::TypeId, virir::Wi
         .types
         .iter()
         .enumerate()
-        .map(|(i, typ)| {
-            let width = match typ.as_ref() {
-                virir::typ::Type::Bit | virir::typ::Type::Clock => 1,
-                virir::typ::Type::Word(width) => *width,
-            };
-            (virir::TypeId::new(i.try_into().unwrap()), width)
-        })
+        .map(|(i, typ)| (virir::TypeId::new(i.try_into().unwrap()), typ.width()))
         .collect()
 }
 
@@ -213,12 +211,15 @@ fn collect_instance_connects(
 }
 
 /// Converts a VirIr port declaration into its Verilog port form.
-fn convert_port(port: &virir::Port) -> verilog::Port {
+fn convert_port(
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
+    port: &virir::Port,
+) -> verilog::Port {
     verilog::Port {
         name: exact_verilog_name(&port.name),
         kind: verilog::PortKind::Wire,
         dir: port.dir,
-        width: port.width.into(),
+        width: type_widths[&port.typ].into(),
     }
 }
 

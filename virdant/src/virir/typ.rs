@@ -6,3 +6,12 @@ pub enum Type {
     Word(Width),
     Clock,
 }
+
+impl Type {
+    pub fn width(&self) -> Width {
+        match self {
+            Type::Bit | Type::Clock => 1,
+            Type::Word(width) => *width,
+        }
+    }
+}

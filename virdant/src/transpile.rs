@@ -154,7 +154,7 @@ impl<'d> Transpiler<'d> {
                                 } else {
                                     PortDir::Output
                                 },
-                                width: type_width(&typ),
+                                typ: type_id,
                             }),
                             ComponentKind::Wire => wires.push(Wire {
                                 region: stmt.region(),
@@ -456,15 +456,6 @@ impl<'d> Transpiler<'d> {
         let module_path = instance_types.get(instance_name)?;
         let signature = self.module_signatures.get(module_path)?;
         signature.get(port_name).copied()
-    }
-}
-
-/// Converts a type into the width expected by VirIr ports.
-fn type_width(typ: &Type) -> u16 {
-    match typ {
-        Type::Bit | Type::Clock => 1,
-        Type::Word(width) => (*width).try_into().unwrap(),
-        Type::Usual(symbol_id) => panic!("VirIr cannot represent non-builtin type {symbol_id:?}"),
     }
 }
 

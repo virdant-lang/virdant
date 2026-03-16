@@ -88,7 +88,7 @@ pub struct Port {
     pub region: Region,
     pub name: String,
     pub dir: PortDir,
-    pub width: Width,
+    pub typ: TypeId,
 }
 
 #[derive(Debug)]
@@ -149,7 +149,7 @@ fn write_moddef(out: &mut String, moddef: &ModDef, virir: &VirIr) {
             PortDir::Input => "incoming",
             PortDir::Output => "outgoing",
         };
-        writeln!(out, "            {dir} {} : {};", port.name, port_type_to_text(port)).unwrap();
+        writeln!(out, "            {dir} {} : {};", port.name, port_type_to_text(port, virir)).unwrap();
     }
 
     for wire in &moddef.wires {
@@ -171,11 +171,8 @@ fn write_moddef(out: &mut String, moddef: &ModDef, virir: &VirIr) {
     writeln!(out, "        }}").unwrap();
 }
 
-fn port_type_to_text(port: &Port) -> String {
-    match port.width {
-        1 => "builtin::Bit".to_string(),
-        width => format!("builtin::Word[{width}]"),
-    }
+fn port_type_to_text(port: &Port, virir: &VirIr) -> String {
+    type_id_to_text(port.typ, virir)
 }
 
 fn type_id_to_text(type_id: TypeId, virir: &VirIr) -> String {
@@ -416,7 +413,7 @@ fn build_module(
                 region: dummy_region(),
                 name: port.name,
                 dir: port.dir,
-                width: port.typ.width(),
+                typ: lookup_type_id(&port.typ, type_ids),
             })
             .collect(),
         wires,
