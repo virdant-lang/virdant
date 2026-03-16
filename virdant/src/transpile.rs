@@ -3,10 +3,10 @@ use std::sync::Arc;
 
 use bstr::ByteSlice;
 
-use crate::db::Db;
 use crate::analysis::typecheck::Type;
 use crate::analysis::Location;
 use crate::common::{BinOp as CommonBinOp, ComponentKind, PortDir};
+use crate::db::Db;
 use crate::fqn::PackageFqn;
 use crate::source::Region;
 use crate::syntax::ast::AstNode;
@@ -56,12 +56,12 @@ impl<'d> Transpiler<'d> {
             }
         }
 
-        let types = std::mem::take(&mut self.all_types).into_iter().map(Arc::new).collect();
+        let types = std::mem::take(&mut self.all_types)
+            .into_iter()
+            .map(Arc::new)
+            .collect();
 
-        VirIr {
-            packages,
-            types,
-        }
+        VirIr { packages, types }
     }
     /// Builds a lookup of `package::module` port names to their lowered VirIr types.
     fn build_module_signatures(&mut self) -> HashMap<String, HashMap<String, TypeId>> {
@@ -88,7 +88,10 @@ impl<'d> Transpiler<'d> {
                         continue;
                     };
 
-                    if !matches!(component.kind, ComponentKind::Incoming | ComponentKind::Outgoing) {
+                    if !matches!(
+                        component.kind,
+                        ComponentKind::Incoming | ComponentKind::Outgoing
+                    ) {
                         continue;
                     }
 
@@ -98,7 +101,10 @@ impl<'d> Transpiler<'d> {
                     signature.insert(name.to_str_lossy().into_owned(), type_id);
                 }
 
-                module_signatures.insert(format!("{package}::{}", moddef_name.to_str_lossy()), signature);
+                module_signatures.insert(
+                    format!("{package}::{}", moddef_name.to_str_lossy()),
+                    signature,
+                );
             }
         }
 
@@ -181,7 +187,10 @@ impl<'d> Transpiler<'d> {
                     continue;
                 };
 
-                let path = parsing.string(stmt.child(0).path().unwrap()).to_str_lossy().into_owned();
+                let path = parsing
+                    .string(stmt.child(0).path().unwrap())
+                    .to_str_lossy()
+                    .into_owned();
                 let expr_node = stmt.driver().unwrap();
                 let expected_type = self
                     .db
@@ -229,88 +238,96 @@ impl<'d> Transpiler<'d> {
         local_types: &HashMap<String, TypeId>,
         instance_types: &HashMap<String, String>,
     ) -> Expr {
-    match node.payload() {
-        AstNodePayload::ExprReference => {
-            let path = node.parsing.string(node.path().unwrap()).to_str_lossy().into_owned();
-            let typ = self.resolve_path_type(&path, local_types, instance_types)
-                .or(expected_type)
-                .unwrap_or_else(|| self.intern_type(&Type::Bit));
+        match node.payload() {
+            AstNodePayload::ExprReference => {
+                let path = node
+                    .parsing
+                    .string(node.path().unwrap())
+                    .to_str_lossy()
+                    .into_owned();
+                let typ = self
+                    .resolve_path_type(&path, local_types, instance_types)
+                    .or(expected_type)
+                    .unwrap_or_else(|| self.intern_type(&Type::Bit));
 
-            Expr::Reference(Reference {
+                Expr::Reference(Reference {
+                    region: node.region(),
+                    typ,
+                    path,
+                })
+            }
+            AstNodePayload::ExprBitLit(expr_bit_lit) => Expr::WordLit(WordLit {
                 region: node.region(),
-                typ,
-                path,
-            })
-        }
-        AstNodePayload::ExprBitLit(expr_bit_lit) => Expr::WordLit(WordLit {
-            region: node.region(),
-            typ: expected_type
-                .unwrap_or_else(|| self.intern_type(&Type::Bit)),
-            value: if expr_bit_lit.literal { 1 } else { 0 },
-        }),
-        AstNodePayload::ExprWordLit(expr_word_lit) => {
-            let literal = node.parsing.string(expr_word_lit.literal).to_str_lossy().into_owned();
-            let (value, width) = parse_word_literal(&literal);
-            let typ = if let Some(width) = width {
-                self.intern_type(&Type::Word(width.into()))
-            } else {
-                expected_type.unwrap_or_else(|| panic!("word literal {literal} needs a type"))
-            };
+                typ: expected_type.unwrap_or_else(|| self.intern_type(&Type::Bit)),
+                value: if expr_bit_lit.literal { 1 } else { 0 },
+            }),
+            AstNodePayload::ExprWordLit(expr_word_lit) => {
+                let literal = node
+                    .parsing
+                    .string(expr_word_lit.literal)
+                    .to_str_lossy()
+                    .into_owned();
+                let (value, width) = parse_word_literal(&literal);
+                let typ = if let Some(width) = width {
+                    self.intern_type(&Type::Word(width.into()))
+                } else {
+                    expected_type.unwrap_or_else(|| panic!("word literal {literal} needs a type"))
+                };
 
-            Expr::WordLit(WordLit {
-                region: node.region(),
-                typ,
-                value,
-            })
-        }
-        AstNodePayload::ExprBinOp(expr_bin_op) => {
-            let lhs = Arc::new(self.build_expr(
+                Expr::WordLit(WordLit {
+                    region: node.region(),
+                    typ,
+                    value,
+                })
+            }
+            AstNodePayload::ExprBinOp(expr_bin_op) => {
+                let lhs = Arc::new(self.build_expr(
+                    package,
+                    node.child(0),
+                    None,
+                    local_types,
+                    instance_types,
+                ));
+                let rhs_expected_type = Some(expr_type_id(lhs.as_ref()));
+                let rhs = Arc::new(self.build_expr(
+                    package,
+                    node.child(1),
+                    rhs_expected_type,
+                    local_types,
+                    instance_types,
+                ));
+                let typ = self.infer_binop_type(
+                    expr_bin_op.op,
+                    expected_type,
+                    lhs.as_ref(),
+                    rhs.as_ref(),
+                );
+
+                Expr::BinOp(BinOp {
+                    region: node.region(),
+                    typ,
+                    op: expr_bin_op.op,
+                    lhs,
+                    rhs,
+                })
+            }
+            AstNodePayload::ExprIf => self.build_if_expr(
+                package,
+                node.region(),
+                &node.children(),
+                expected_type,
+                local_types,
+                instance_types,
+            ),
+            AstNodePayload::ExprParen => self.build_expr(
                 package,
                 node.child(0),
-                None,
-                local_types,
-                instance_types,
-            ));
-            let rhs_expected_type = Some(expr_type_id(lhs.as_ref()));
-            let rhs = Arc::new(self.build_expr(
-                package,
-                node.child(1),
-                rhs_expected_type,
-                local_types,
-                instance_types,
-            ));
-            let typ = self.infer_binop_type(
-                expr_bin_op.op,
                 expected_type,
-                lhs.as_ref(),
-                rhs.as_ref(),
-            );
-
-            Expr::BinOp(BinOp {
-                region: node.region(),
-                typ,
-                op: expr_bin_op.op,
-                lhs,
-                rhs,
-            })
+                local_types,
+                instance_types,
+            ),
+            _ => todo!("unsupported expr in transpile: {}", node.summary()),
         }
-        AstNodePayload::ExprIf => self.build_if_expr(
-            package,
-            node.region(),
-            &node.children(),
-            expected_type,
-            local_types,
-            instance_types,
-        ),
-        AstNodePayload::ExprParen => self.build_expr(
-            package,
-            node.child(0),
-            expected_type,
-            local_types,
-            instance_types,
-        ),
-        _ => todo!("unsupported expr in transpile: {}", node.summary()),
-    }
     }
 
     /// Lowers an `if` expression, including chained `else if` branches.
@@ -323,72 +340,74 @@ impl<'d> Transpiler<'d> {
         local_types: &HashMap<String, TypeId>,
         instance_types: &HashMap<String, String>,
     ) -> Expr {
-    let bit_type = self.intern_type(&Type::Bit);
-    let cond = Arc::new(self.build_expr(
-        package,
-        children[0].clone(),
-        Some(bit_type),
-        local_types,
-        instance_types,
-    ));
-    let then_expr = Arc::new(self.build_expr(
-        package,
-        children[1].clone(),
-        expected_type,
-        local_types,
-        instance_types,
-    ));
-    let else_expr = if children.len() == 3 {
-        Arc::new(self.build_expr(
+        let bit_type = self.intern_type(&Type::Bit);
+        let cond = Arc::new(self.build_expr(
             package,
-            children[2].clone(),
+            children[0].clone(),
+            Some(bit_type),
+            local_types,
+            instance_types,
+        ));
+        let then_expr = Arc::new(self.build_expr(
+            package,
+            children[1].clone(),
             expected_type,
             local_types,
             instance_types,
-        ))
-    } else {
-        Arc::new(self.build_if_expr(
-            package,
-            children[2].region(),
-            &children[2..],
-            expected_type,
-            local_types,
-            instance_types,
-        ))
-    };
-    let typ = expected_type.unwrap_or_else(|| expr_type_id(then_expr.as_ref()));
+        ));
+        let else_expr = if children.len() == 3 {
+            Arc::new(self.build_expr(
+                package,
+                children[2].clone(),
+                expected_type,
+                local_types,
+                instance_types,
+            ))
+        } else {
+            Arc::new(self.build_if_expr(
+                package,
+                children[2].region(),
+                &children[2..],
+                expected_type,
+                local_types,
+                instance_types,
+            ))
+        };
+        let typ = expected_type.unwrap_or_else(|| expr_type_id(then_expr.as_ref()));
 
-    Expr::If(If {
-        region,
-        typ,
-        cond,
-        then_expr,
-        else_expr,
-    })
+        Expr::If(If {
+            region,
+            typ,
+            cond,
+            then_expr,
+            else_expr,
+        })
     }
 
     /// Interns a type into the shared VirIr type table and returns its `TypeId`.
     fn intern_type(&mut self, typ: &Type) -> TypeId {
-    let vir_type = match typ {
-        Type::Bit => VirType::Bit,
-        Type::Clock => VirType::Clock,
-        Type::Word(width) => VirType::Word((*width).try_into().unwrap()),
-        Type::Usual(symbol_id) => panic!("VirIr cannot represent non-builtin type {symbol_id:?}"),
-    };
-    let key = match vir_type {
-        VirType::Bit => "builtin::Bit".to_string(),
-        VirType::Clock => "builtin::Clock".to_string(),
-        VirType::Word(width) => format!("builtin::Word[{width}]"),
-    };
+        let vir_type = match typ {
+            Type::Bit => VirType::Bit,
+            Type::Clock => VirType::Clock,
+            Type::Word(width) => VirType::Word((*width).try_into().unwrap()),
+            Type::Usual(symbol_id) => {
+                panic!("VirIr cannot represent non-builtin type {symbol_id:?}")
+            }
+        };
+        let key = match vir_type {
+            VirType::Bit => "builtin::Bit".to_string(),
+            VirType::Clock => "builtin::Clock".to_string(),
+            VirType::Word(width) => format!("builtin::Word[{width}]"),
+        };
 
-    if let Some(type_id) = self.type_ids.get(&key) {
-        *type_id
-    } else {
-        let type_id = TypeId::new(self.all_types.len().try_into().unwrap());
-        self.type_ids.insert(key, type_id);
-        self.all_types.push(vir_type);
-        type_id
-    }
+        if let Some(type_id) = self.type_ids.get(&key) {
+            *type_id
+        } else {
+            let type_id = TypeId::new(self.all_types.len().try_into().unwrap());
+            self.type_ids.insert(key, type_id);
+            self.all_types.push(vir_type);
+            type_id
+        }
     }
 
     /// Infers the VirIr result type for a lowered binary operation.
@@ -409,7 +428,9 @@ impl<'d> Transpiler<'d> {
             | CommonBinOp::And
             | CommonBinOp::Or
             | CommonBinOp::Xor => self.intern_type(&Type::Bit),
-            CommonBinOp::Add | CommonBinOp::Sub => expected_type.unwrap_or_else(|| expr_type_id(lhs)),
+            CommonBinOp::Add | CommonBinOp::Sub => {
+                expected_type.unwrap_or_else(|| expr_type_id(lhs))
+            }
         }
     }
 
@@ -455,7 +476,13 @@ fn render_ofness_path(ofness_node: AstNode<'_>, package: &PackageFqn) -> String 
 
     let module_package = ofness
         .package
-        .map(|package_name| ofness_node.parsing.string(package_name).to_str_lossy().into_owned())
+        .map(|package_name| {
+            ofness_node
+                .parsing
+                .string(package_name)
+                .to_str_lossy()
+                .into_owned()
+        })
         .unwrap_or_else(|| package.to_string());
     let module_name = ofness_node.parsing.string(ofness.name).to_str_lossy();
     format!("{module_package}::{module_name}")
