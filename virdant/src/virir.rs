@@ -121,6 +121,7 @@ pub struct Reg {
     pub region: Region,
     pub typ: TypeId,
     pub name: String,
+    pub clock: Option<Arc<Expr>>,
 }
 
 #[derive(Debug)]
@@ -175,7 +176,17 @@ fn write_moddef(out: &mut String, moddef: &ModDef, virir: &VirIr) {
     }
 
     for reg in &moddef.regs {
-        writeln!(out, "            reg {} : {};", reg.name, type_id_to_text(reg.typ, virir)).unwrap();
+        if let Some(clock) = &reg.clock {
+            writeln!(
+                out,
+                "            reg {} : {} on {};",
+                reg.name,
+                type_id_to_text(reg.typ, virir),
+                expr_to_text(clock.as_ref(), virir),
+            ).unwrap();
+        } else {
+            writeln!(out, "            reg {} : {};", reg.name, type_id_to_text(reg.typ, virir)).unwrap();
+        }
     }
 
     for instance in &moddef.instances {
@@ -415,6 +426,14 @@ fn build_module(
             region: dummy_region(),
             typ: lookup_type_id(&reg.typ, type_ids),
             name: reg.name,
+            clock: reg.clock.map(|clock| Arc::new(build_expr(
+                clock,
+                Some(clock_type),
+                type_ids,
+                &local_types,
+                &instance_types,
+                module_signatures,
+            ))),
         })
         .collect();
 

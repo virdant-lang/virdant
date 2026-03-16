@@ -24,14 +24,18 @@ ModStmt: ModStmt = {
     "wire" <name:Ident> ":" <typ:VirType> ";" => {
         ModStmt::Wire(Wire { name, typ })
     },
-    "reg" <name:Ident> ":" <typ:VirType> ";" => {
-        ModStmt::Reg(Reg { name, typ })
+    "reg" <name:Ident> ":" <typ:VirType> <clock:RegOnClause?> ";" => {
+        ModStmt::Reg(Reg { name, typ, clock })
     },
     "on" <clock:ExprNode> "{"
         <commands:Command*>
     "}" => {
         ModStmt::On(On { clock, commands })
     },
+}
+
+RegOnClause: Expr = {
+    "on" <clock:ExprNode> => clock,
 }
 
 PortDecl: Port = {

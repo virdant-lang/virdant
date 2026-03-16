@@ -65,6 +65,7 @@ pub(super) struct Wire {
 pub(super) struct Reg {
     pub(super) name: String,
     pub(super) typ: Type,
+    pub(super) clock: Option<Expr>,
 }
 
 pub(super) struct Instance {

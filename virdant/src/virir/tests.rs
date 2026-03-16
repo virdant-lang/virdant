@@ -73,4 +73,13 @@ fn test_virir() {
 
     println!("{transpiled_verilog:#?}");
     transpiled_verilog.write_to_stdout().unwrap();
+
+    let mut vir = Vir::new();
+    vir.add_package("basic");
+    vir.set_package_text("basic", include_str!("../../../examples/basic.vir"));
+    let transpiled_virir = transpile(vir.db());
+    let transpiled_verilog = convert_virir_to_verilog(transpiled_virir);
+
+    println!("{transpiled_verilog:#?}");
+    transpiled_verilog.write_to_stdout().unwrap();
 }

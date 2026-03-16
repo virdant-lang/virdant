@@ -75,6 +75,31 @@ fn convert_mod_def(
         mod_def.drivers,
         &mut connects_by_instance,
     );
+    let sequential_regs: HashMap<_, _> = mod_def
+        .regs
+        .iter()
+        .filter_map(|reg| {
+            reg.clock
+                .as_deref()
+                .map(|clock| (reg.name.as_str(), clock))
+        })
+        .collect();
+    let mut combinational_drivers = vec![];
+    let mut sequential_driver_elements = vec![];
+    let reg_reset_elements: Vec<_> = mod_def
+        .regs
+        .iter()
+        .filter(|reg| reg.clock.is_some())
+        .map(|reg| convert_reg_reset(type_widths, reg))
+        .collect();
+
+    for driver in ordinary_drivers {
+        if let Some(clock) = sequential_regs.get(driver.path.as_str()) {
+            sequential_driver_elements.push(convert_sequential_reg_driver(type_widths, driver, clock));
+        } else {
+            combinational_drivers.push(driver);
+        }
+    }
 
     let mut elements: Vec<verilog::Element> = mod_def
         .wires
@@ -83,6 +108,8 @@ fn convert_mod_def(
         .collect();
 
     elements.extend(mod_def.regs.into_iter().map(|reg| convert_reg(type_widths, reg)));
+
+    elements.extend(reg_reset_elements);
 
     elements.extend(mod_def
         .instances
@@ -103,10 +130,12 @@ fn convert_mod_def(
         .collect::<Vec<_>>());
 
     elements.extend(
-        ordinary_drivers
+        combinational_drivers
             .into_iter()
             .map(|driver| convert_driver(type_widths, driver)),
     );
+
+    elements.extend(sequential_driver_elements);
 
     if let Some(on) = mod_def.on {
         elements.push(convert_on(type_widths, on));
@@ -246,6 +275,18 @@ fn convert_reg(
     })
 }
 
+fn convert_reg_reset(
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
+    reg: &virir::Reg,
+) -> verilog::Element {
+    verilog::Element::Initial(verilog::Initial {
+        stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
+            name: valid_verilog_name(&reg.name),
+            expr: reg_default_expr(type_widths[&reg.typ]),
+        })],
+    })
+}
+
 /// Converts a VirIr driver into a Verilog continuous assignment.
 fn convert_driver(
     type_widths: &HashMap<virir::TypeId, virir::Width>,
@@ -255,6 +296,36 @@ fn convert_driver(
     verilog::Element::Assign(verilog::Assign {
         name,
         expr: convert_expr(type_widths, driver.expr.as_ref()),
+    })
+}
+
+fn convert_sequential_reg_driver(
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
+    driver: virir::Driver,
+    clock: &virir::expr::Expr,
+) -> verilog::Element {
+    verilog::Element::Always(verilog::Always {
+        clock: Some(convert_expr(type_widths, clock)),
+        stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+            name: valid_verilog_name(&driver.path),
+            expr: convert_expr(type_widths, driver.expr.as_ref()),
+        })],
+    })
+}
+
+fn zero_expr(width: virir::Width) -> verilog::Expr {
+    verilog::Expr::WordLit(verilog::expr::WordLit {
+        value: 0,
+        width,
+        radix: Radix::Dec,
+    })
+}
+
+fn reg_default_expr(width: virir::Width) -> verilog::Expr {
+    verilog::Expr::WordLit(verilog::expr::WordLit {
+        value: 0,
+        width,
+        radix: Radix::Dec,
     })
 }
 

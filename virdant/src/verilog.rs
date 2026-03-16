@@ -8,7 +8,7 @@ mod tests;
 use crate::common::{PortDir, Radix, Width};
 
 use self::macros::{verilog_write, verilog_writeln};
-pub use self::stmt::{Assert, Display, Stmt};
+pub use self::stmt::{Assert, AssignBlocking, AssignNonBlocking, Display, Stmt};
 
 use std::io::Write;
 

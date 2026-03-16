@@ -162,11 +162,24 @@ impl<'d> Transpiler<'d> {
                                 typ: type_id,
                                 name: rendered_name,
                             }),
-                            ComponentKind::Reg => regs.push(Reg {
-                                region: stmt.region(),
-                                typ: type_id,
-                                name: rendered_name,
-                            }),
+                            ComponentKind::Reg => {
+                                let clock_type = self.intern_type(&Type::Clock);
+                                let clock = stmt.clock().map(|clock| {
+                                    Arc::new(self.build_expr(
+                                        &package,
+                                        clock,
+                                        Some(clock_type),
+                                        &local_types,
+                                        &instance_types,
+                                    ))
+                                });
+                                regs.push(Reg {
+                                    region: stmt.region(),
+                                    typ: type_id,
+                                    name: rendered_name,
+                                    clock,
+                                })
+                            }
                         }
                     }
                     AstNodePayload::Module(module) => {
