@@ -168,6 +168,7 @@ impl ToJson for Query {
             Query::ComponentAnalysis(name) => json::array!("Components", name.to_json()),
             Query::SymbolTable() => json::array!("SymbolTable"),
             Query::ExprRoots() => json::array!("ExprRoots"),
+            Query::AllExprs() => json::array!("AllExprs"),
             Query::ExpectedType(location) => json::array!("ExpectedType", location.to_json()),
             Query::TypingContext(item_fqn) => json::array!("TypingContext", item_fqn.to_json()),
             Query::Typing(expr_root) => json::array!("Typecheck", expr_root.to_json()),
@@ -175,6 +176,7 @@ impl ToJson for Query {
             Query::Check() => json::array!("Check"),
             Query::TypeDefs() => json::array!("TypeDefs"),
             Query::Typeof(location) => json::array!("Typeof", location.to_json()),
+            Query::TypeofAll() => json::array!("TypeofAll"),
             Query::TypeMonomorphizations() => json::array!("TypeMonomorphizations"),
         }
     }
@@ -197,11 +199,13 @@ impl ToJson for QueryResult {
             QueryResult::ComponentAnalysis(component_analysis) => component_analysis.to_json(),
             QueryResult::SymbolTable(symboltable) => symboltable.to_json(),
             QueryResult::ExprRoots(expr_roots) => expr_roots.to_json(),
+            QueryResult::AllExprs(exprs) => exprs.to_json(),
             QueryResult::ExpectedType(typ) => typ.to_json(),
             QueryResult::Typing(typecheck) => typecheck.to_json(),
             QueryResult::TypingContext(context) => context.to_json(),
             QueryResult::TypeCheck(diagnostics) => diagnostics.to_json(),
             QueryResult::Typeof(typ) => typ.to_json(),
+            QueryResult::TypeofAll(typs) => typs.to_json(),
             QueryResult::Check(result) => {
                 if let Err(diagnostics) = &result {
                     json::value!(["Error", diagnostics.to_json()])

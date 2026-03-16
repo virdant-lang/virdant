@@ -38,7 +38,7 @@ pub struct Typing {
     diagnostics: Vec<Diagnostic>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Bit,
     Clock,
@@ -217,7 +217,7 @@ pub fn build_expected_type(builder: &mut Builder, location: Location) -> Option<
                 component_analysis.type_of(lhs_path)
             }
         },
-        _ => todo!(),
+        _ => todo!("Can't build expected type for: {:?}", parent_node.summary()),
     }
 }
 
@@ -374,7 +374,7 @@ impl Typing {
             AstNodePayload::ExprReference => {
                 // TODO HACK
                 let path = parsing.string(node.path().unwrap());
-                let typ = self.context.get(path.to_owned());
+                let typ = self.context.get(path.to_owned()); // TODO need to walk backwards to get it.
                 Some(typ)
             }
             AstNodePayload::ExprBitLit(expr_bit_lit) => {
@@ -435,6 +435,17 @@ impl std::fmt::Display for Type {
             Type::Clock => write!(f, "Clock"),
             Type::Word(n) => write!(f, "Word[{n}]"),
             Type::Usual(symbol_id) => write!(f, "{self:?}"),
+        }
+    }
+}
+
+impl std::fmt::Debug for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Bit => write!(f, "Bit"),
+            Type::Clock => write!(f, "Clock"),
+            Type::Word(n) => write!(f, "Word[{n}]"),
+            Type::Usual(symbol_id) => write!(f, "Usual({symbol_id:?})"),
         }
     }
 }

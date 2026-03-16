@@ -27,7 +27,7 @@ pub struct Symbol {
     kind: SymbolKind,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SymbolId(pub u32);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -229,5 +229,11 @@ impl ToJson for SymbolTable {
 impl ToJson for SymbolId {
     fn to_json(&self) -> json::JsonValue {
         format!("{self:?}").into()
+    }
+}
+
+impl std::fmt::Debug for SymbolId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SymbolId({})", self.0)
     }
 }

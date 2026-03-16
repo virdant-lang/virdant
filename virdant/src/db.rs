@@ -22,8 +22,9 @@ use crate::analysis::typecheck::TypeDef;
 use crate::analysis::typecheck::{ExprRoot, Typing, TypingContext};
 use crate::common::json::ToJson;
 use crate::diagnostics::DiagnosticLevel;
+use crate::syntax::ast::AstNode;
 use crate::syntax::parsing::parse;
-use crate::syntax::payload::Component;
+use crate::syntax::payload::AstNodePayload;
 use crate::{diagnostics::Diagnostic, fqn::PackageFqn, source::Source, syntax::parsing::Parsing};
 
 pub use guts::*;
@@ -38,11 +39,13 @@ queries! {
     SymbolTable() -> Arc<SymbolTable>;
     TypeDefs() -> Vec<TypeDef>;
     ExprRoots() -> Vec<ExprRoot>;
+    AllExprs() -> Vec<Location>;
     ExpectedType(location: Location) -> Option<Type>;
     TypingContext(symbol_id: SymbolId) -> TypingContext;
     Typing(exprroot: ExprRoot) -> Arc<Typing>;
     TypeCheck() -> Vec<Diagnostic>;
     Typeof(location: Location) -> Option<Type>;
+    TypeofAll() -> HashMap<Location, Option<Type>>;
     Check() -> Result<Vec<Diagnostic>, Vec<Diagnostic>>;
     TypeMonomorphizations() -> Vec<Type>;
 }
@@ -69,12 +72,14 @@ impl Query {
             crate::analysis::component::build_component_analysis : ComponentAnalysis(symbol_id);
             crate::analysis::symboltable::build_symboltable : SymbolTable();
             crate::analysis::typecheck::build_exprroots : ExprRoots();
+            build_all_exprs : AllExprs();
             crate::analysis::typecheck::build_expected_type : ExpectedType(location);
             crate::analysis::typecheck::build_typedefs : TypeDefs();
             crate::analysis::typecheck::build_typing_context : TypingContext(symbol_id);
             crate::analysis::typecheck::build_typing : Typing(expr_root);
             crate::analysis::typecheck::typecheck : TypeCheck();
             crate::analysis::typecheck::build_typeof : Typeof(location);
+            build_typeof_all : TypeofAll();
             crate::analysis::typecheck::build_type_monomorphizations : TypeMonomorphizations();
             check : Check();
 
@@ -94,10 +99,12 @@ db_getter!(get_symboltable : SymbolTable() -> Arc<SymbolTable>);
 db_getter!(get_typing_context : TypingContext(item: SymbolId) -> TypingContext);
 db_getter!(get_typedefs : TypeDefs() -> Vec<TypeDef>);
 db_getter!(get_exprroots : ExprRoots() -> Vec<ExprRoot>);
+db_getter!(get_all_exprs : AllExprs() -> Vec<Location>);
 db_getter!(get_expected_type : ExpectedType(location: Location) -> Option<Type>);
 db_getter!(get_typing : Typing(expr_root: ExprRoot) -> Arc<Typing>);
 db_getter!(typecheck : TypeCheck() -> Vec<Diagnostic>);
 db_getter!(get_typeof : Typeof(location: Location) -> Option<Type>);
+db_getter!(get_typeof_all : TypeofAll() -> HashMap<Location, Option<Type>>);
 db_getter!(get_type_monomorphizations : TypeMonomorphizations() -> Vec<Type>);
 
 
@@ -117,11 +124,68 @@ fn build_syntax_errors(builder: &mut Builder) -> Vec<Diagnostic> {
     diagnostics
 }
 
+fn build_all_exprs(builder: &mut Builder) -> Vec<Location> {
+    let mut exprs = vec![];
+
+    for package in builder.get_packages() {
+        let parsing = builder.get_parsing(package);
+        collect_expr_locations(parsing.root(), &mut exprs);
+    }
+
+    exprs
+}
+
+fn collect_expr_locations(node: AstNode<'_>, exprs: &mut Vec<Location>) {
+    if is_expr_payload(&node.payload()) {
+        exprs.push(node.location());
+    }
+
+    for child in node.children() {
+        collect_expr_locations(child, exprs);
+    }
+}
+
+fn is_expr_payload(payload: &AstNodePayload) -> bool {
+    matches!(payload,
+        AstNodePayload::ExprReference |
+        AstNodePayload::ExprParen |
+        AstNodePayload::ExprIf |
+        AstNodePayload::ExprMatch |
+        AstNodePayload::ExprBitLit(_) |
+        AstNodePayload::ExprWordLit(_) |
+        AstNodePayload::ExprBinOp(_) |
+        AstNodePayload::ExprUnOp(_) |
+        AstNodePayload::ExprMethod(_) |
+        AstNodePayload::ExprFn |
+        AstNodePayload::ExprCtor(_) |
+        AstNodePayload::ExprEnumerant(_) |
+        AstNodePayload::ExprStruct |
+        AstNodePayload::ExprIndex(_) |
+        AstNodePayload::ExprIndexRange(_) |
+        AstNodePayload::ExprWord |
+        AstNodePayload::ExprZext |
+        AstNodePayload::ExprSext
+    )
+}
+
+fn build_typeof_all(builder: &mut Builder) -> HashMap<Location, Option<Type>> {
+    let mut typeof_all = HashMap::new();
+
+    for location in builder.get_all_exprs() {
+        let typ = builder.get_typeof(location.clone());
+        typeof_all.insert(location, typ);
+    }
+
+    typeof_all
+}
+
 fn check(builder: &mut Builder) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
     let mut diagnostics = vec![];
 
     diagnostics.extend(builder.get_syntax_errors());
     diagnostics.extend(builder.typecheck());
+
+    builder.get_typeof_all();
 
     if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
         Err(diagnostics)

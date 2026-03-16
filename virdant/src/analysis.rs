@@ -21,7 +21,7 @@ use crate::syntax::parsing::Parsing;
 use crate::syntax::parsing::parse;
 use crate::syntax::payload::AstNodePayload;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Location(PackageFqn, AstNodeId);
 
 #[derive(Debug)]
@@ -201,5 +201,11 @@ impl ToJson for PackageAnalysis {
 impl ToJson for Location {
     fn to_json(&self) -> json::JsonValue {
         json::array!(self.package().to_json(), self.ast_node_id().to_json())
+    }
+}
+
+impl std::fmt::Debug for Location {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Location({})", self.0)
     }
 }

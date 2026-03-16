@@ -12,7 +12,7 @@ use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::{InternedString, Parsing};
 //use crate::stringtable::{InternedString, StringTable};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AstNodeId(pub u16);
 
 #[derive(Clone)]
@@ -290,5 +290,11 @@ impl AstNodeId {
 impl ToJson for AstNodeId {
     fn to_json(&self) -> json::JsonValue {
         format!("{self:?}").into()
+    }
+}
+
+impl std::fmt::Debug for AstNodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AstNodeId({})", self.0)
     }
 }
