@@ -1,0 +1,14 @@
+virir {
+    package on_stmts {
+        export mod Top {
+            incoming clock : builtin::Clock;
+
+            on clock {
+                display();
+                finish;
+            }
+        }
+    }
+
+    type builtin::Clock;
+}

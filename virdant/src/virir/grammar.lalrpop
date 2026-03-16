@@ -1,7 +1,7 @@
 use crate::common::{BinOp as CommonBinOp, PortDir};
-use super::parse::{Driver, Expr, Instance, ModDef, ModStmt, Package, Port, Reg, Type, Wire};
+use super::parse::{Driver, Expr, Instance, ModDef, ModStmt, On, Package, Port, Reg, Type, Wire};
 // REVIEW Inline all of these functions into grammar.lalrpop.
-use super::{VirIr, build_mod_def, build_virir, join_path};
+use super::{Command, VirIr, build_mod_def, build_virir, join_path};
 
 grammar;
 
@@ -27,6 +27,11 @@ ModStmt: ModStmt = {
     "reg" <name:Ident> ":" <typ:VirType> ";" => {
         ModStmt::Reg(Reg { name, typ })
     },
+    "on" <clock:ExprNode> "{"
+        <commands:Command*>
+    "}" => {
+        ModStmt::On(On { clock, commands })
+    },
 }
 
 PortDecl: Port = {
@@ -41,6 +46,12 @@ InstanceDecl: Instance = {
 DriverDecl: Driver = {
     <name:Path> "<=" <expr:ExprNode> ";" => Driver { name, expr }, // TODO distinguish between the two drivers
     <name:Path> ":=" <expr:ExprNode> ";" => Driver { name, expr },
+}
+
+Command: Command = {
+    "display" "(" ")" ";" => Command::Display(),
+    "finish" ";" => Command::Finish,
+    "fatal" ";" => Command::Fatal,
 }
 
 ExprNode: Expr = {

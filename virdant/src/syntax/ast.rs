@@ -184,9 +184,13 @@ impl<'p> AstNode<'p> {
             AstNodePayload::BidirectionalDriver => format!("BidirectionalDriver"),
             AstNodePayload::Module(module) => format!("Module"),
             AstNodePayload::ModDefStmtBlock(mod_def_stmt_block) => format!("ModDefStmtBlock"),
+            AstNodePayload::ModDefStmtOn => format!("ModDefStmtOn"),
             AstNodePayload::ModDefStmtIf => format!("ModDefStmtIf"),
             AstNodePayload::ModDefStmtMatch => format!("ModDefStmtMatch"),
             AstNodePayload::Socket(socket) => format!("Socket"),
+            AstNodePayload::CommandDisplay => format!("CommandDisplay"),
+            AstNodePayload::CommandFinish => format!("CommandFinish"),
+            AstNodePayload::CommandFatal => format!("CommandFatal"),
             AstNodePayload::Field(field) => format!("Field"),
             AstNodePayload::Ctor(ctor) => format!("Ctor"),
             AstNodePayload::Enumerant(enumerant) => format!("Enumerant"),
@@ -282,6 +286,7 @@ impl<'p> AstNode<'p> {
         match &self.payload {
             AstNodePayload::Component(component)
                 if component.kind == ComponentKind::Reg => Some(self.child(1)),
+            AstNodePayload::ModDefStmtOn => Some(self.child(0)),
             _ => None
         }
     }

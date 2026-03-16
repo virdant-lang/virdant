@@ -181,7 +181,10 @@ pub fn build_expected_type(builder: &mut Builder, location: Location) -> Option<
                 .unwrap();
             let component_analysis = builder.get_component_analysis(moddef.id());
             component_analysis.type_of(lhs_path)
-        },
+        }
+        AstNodePayload::ModDefStmtOn => {
+            Some(Type::Clock)
+        }
         _ => todo!("Can't build expected type for: {:?}", parent_node.summary()),
     }
 }

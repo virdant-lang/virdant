@@ -1,5 +1,5 @@
 use super::Width;
-use crate::common::{BinOp, PortDir};
+use crate::{common::{BinOp, PortDir}, virir::Command};
 
 use super::typ::Type as VirIrType;
 
@@ -48,6 +48,7 @@ pub(super) struct ModDef {
     pub(super) regs: Vec<Reg>,
     pub(super) instances: Vec<Instance>,
     pub(super) drivers: Vec<Driver>,
+    pub(super) on: Option<On>,
 }
 
 pub(super) struct Port {
@@ -74,6 +75,11 @@ pub(super) struct Instance {
 pub(super) struct Driver {
     pub(super) name: String,
     pub(super) expr: Expr,
+}
+
+pub(super) struct On {
+    pub(super) clock: Expr,
+    pub(super) commands: Vec<Command>,
 }
 
 pub(super) enum Expr {
@@ -104,4 +110,5 @@ pub(super) enum ModStmt {
     Reg(Reg),
     Instance(Instance),
     Driver(Driver),
+    On(On),
 }

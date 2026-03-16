@@ -220,6 +220,7 @@ impl<'d> Transpiler<'d> {
                 regs,
                 instances,
                 drivers,
+                on: None,
             }));
         }
 

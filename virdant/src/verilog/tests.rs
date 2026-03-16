@@ -259,7 +259,7 @@ macro_rules! module {
 macro_rules! always {
     (@ $clock:ident $( $stmt:expr ,)*) => {
         Element::Always(Always {
-            clock: Some(stringify!($clock).into()),
+            clock: Some(refr!($clock)),
             stmts: vec![$( $stmt ),*],
         })
     };

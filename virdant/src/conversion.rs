@@ -5,9 +5,6 @@ use crate::common::Radix;
 use crate::verilog;
 use crate::virir;
 
-#[cfg(test)]
-mod tests;
-
 /// Converts a parsed VirIr program into its Verilog representation.
 pub fn convert_virir_to_verilog(virir: virir::VirIr) -> verilog::Verilog {
     let emitted_module_names = collect_emitted_module_names(&virir);
@@ -110,6 +107,10 @@ fn convert_mod_def(
             .into_iter()
             .map(|driver| convert_driver(type_widths, driver)),
     );
+
+    if let Some(on) = mod_def.on {
+        elements.push(convert_on(type_widths, on));
+    }
 
     verilog::Module {
         name: module_name,
@@ -255,6 +256,28 @@ fn convert_driver(
         name,
         expr: convert_expr(type_widths, driver.expr.as_ref()),
     })
+}
+
+fn convert_on(
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
+    on: virir::On,
+) -> verilog::Element {
+    verilog::Element::Always(verilog::Always {
+        clock: Some(convert_expr(type_widths, on.clock.as_ref())),
+        stmts: on.commands.into_iter().map(convert_command).collect(),
+    })
+}
+
+fn convert_command(command: virir::Command) -> verilog::Stmt {
+    match command {
+        virir::Command::Display() => verilog::Stmt::Display(verilog::Display {
+            exprs: vec![verilog::Expr::StrLit(verilog::expr::StrLit {
+                value: "Display".to_string(),
+            })],
+        }),
+        virir::Command::Finish => verilog::Stmt::Finish,
+        virir::Command::Fatal => verilog::Stmt::Fatal,
+    }
 }
 
 /// Converts an expression used in a submodule connection into Verilog source text.

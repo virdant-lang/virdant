@@ -8,7 +8,7 @@ mod tests;
 use crate::common::{PortDir, Radix, Width};
 
 use self::macros::{verilog_write, verilog_writeln};
-use crate::verilog::stmt::Stmt;
+pub use self::stmt::{Display, Stmt};
 
 use std::io::Write;
 
@@ -80,7 +80,7 @@ pub struct Assign {
 
 #[derive(Debug)]
 pub struct Always {
-    pub clock: Option<String>,
+    pub clock: Option<Expr>,
     pub stmts: Vec<Stmt>,
 }
 
@@ -365,7 +365,10 @@ impl Assign {
 impl Always {
     fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
         if let Some(clock) = &self.clock {
-            verilog_writeln!(writer, "always @(posedge {clock}) begin")?;
+            verilog_write!(writer, "always @(posedge ")?;
+            clock.write(writer)?;
+            writer.skip_indent();
+            verilog_writeln!(writer, ") begin")?;
         } else {
             verilog_writeln!(writer, "always @(*) begin")?;
         }

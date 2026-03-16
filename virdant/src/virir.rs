@@ -82,7 +82,23 @@ pub struct ModDef {
     pub regs: Vec<Reg>,
     pub instances: Vec<Instance>,
     pub drivers: Vec<Driver>,
+    pub on: Option<On>,
 }
+
+#[derive(Debug)]
+pub enum Command {
+    Display(),
+    Finish,
+    Fatal,
+}
+
+#[derive(Debug)]
+pub struct On {
+    pub region: Region,
+    pub clock: Arc<Expr>,
+    pub commands: Vec<Command>,
+}
+
 
 #[derive(Debug)]
 pub struct Port {
@@ -169,7 +185,23 @@ fn write_moddef(out: &mut String, moddef: &ModDef, virir: &VirIr) {
         writeln!(out, "            {} := {};", driver.path, expr_to_text(driver.expr.as_ref(), virir)).unwrap();
     }
 
+    if let Some(on) = &moddef.on {
+        writeln!(out, "            on {} {{", expr_to_text(on.clock.as_ref(), virir)).unwrap();
+        for command in &on.commands {
+            writeln!(out, "                {}", command_to_text(command)).unwrap();
+        }
+        writeln!(out, "            }}").unwrap();
+    }
+
     writeln!(out, "        }}").unwrap();
+}
+
+fn command_to_text(command: &Command) -> &'static str {
+    match command {
+        Command::Display() => "display();",
+        Command::Finish => "finish;",
+        Command::Fatal => "fatal;",
+    }
 }
 
 fn port_type_to_text(port: &Port, virir: &VirIr) -> String {
@@ -240,6 +272,7 @@ fn build_mod_def(is_export: bool, name: String, stmts: Vec<parse::ModStmt>) -> p
     let mut regs = vec![];
     let mut instances = vec![];
     let mut drivers = vec![];
+    let mut on = None;
 
     for stmt in stmts {
         match stmt {
@@ -248,6 +281,10 @@ fn build_mod_def(is_export: bool, name: String, stmts: Vec<parse::ModStmt>) -> p
             parse::ModStmt::Reg(reg) => regs.push(reg),
             parse::ModStmt::Instance(instance) => instances.push(instance),
             parse::ModStmt::Driver(driver) => drivers.push(driver),
+            parse::ModStmt::On(on_stmt) => {
+                assert!(on.is_none(), "VirIr supports at most one on statement per module");
+                on = Some(on_stmt);
+            }
         }
     }
 
@@ -259,6 +296,7 @@ fn build_mod_def(is_export: bool, name: String, stmts: Vec<parse::ModStmt>) -> p
         regs,
         instances,
         drivers,
+        on,
     }
 }
 
@@ -334,6 +372,7 @@ fn build_module(
     type_ids: &HashMap<String, TypeId>,
     module_signatures: &HashMap<String, HashMap<String, TypeId>>,
 ) -> ModDef {
+    let clock_type = lookup_type_id(&parse::Type::Clock, type_ids);
     let local_types: HashMap<String, TypeId> = mod_def
         .ports
         .iter()
@@ -403,6 +442,21 @@ fn build_module(
         })
         .collect();
 
+    let on = mod_def
+        .on
+        .map(|on_stmt| On {
+            region: dummy_region(),
+            clock: Arc::new(build_expr(
+                on_stmt.clock,
+                Some(clock_type),
+                type_ids,
+                &local_types,
+                &instance_types,
+                module_signatures,
+            )),
+            commands: on_stmt.commands,
+        });
+
     ModDef {
         region: dummy_region(),
         is_export: mod_def.is_export,
@@ -421,6 +475,7 @@ fn build_module(
         regs,
         instances,
         drivers,
+        on,
     }
 }
 

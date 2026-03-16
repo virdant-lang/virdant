@@ -229,6 +229,7 @@ ModDefStmt: AstNodeId = {
     <driver:ModDefStmtDriver> => driver,
     <instance:ModDefStmtInstance> => instance,
     <socket:ModDefStmtSocket> => socket,
+    <on:ModDefStmtOn> => on,
     <if_:ModDefStmtIf> => if_,
     <m:ModDefStmtMatch> => m,
     <ll:@L> ! <rr:@R> => {
@@ -349,6 +350,42 @@ ModDefStmtSocket: AstNodeId = {
         let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Slave });
         let span = parser.span(ll, rr);
         let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+ModDefStmtOn: AstNodeId = {
+    <ll:@L> "on" <clock_expr:Expr> "{"
+        <commands:Command*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::ModDefStmtOn;
+        let span = parser.span(ll, rr);
+        let num_children = 1 + u16::try_from(commands.len()).unwrap();
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+Command: AstNodeId = {
+    <ll:@L> "display" "(" ")" ";" <rr:@R> => {
+        let payload = AstNodePayload::CommandDisplay;
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "finish" ";" <rr:@R> => {
+        let payload = AstNodePayload::CommandFinish;
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "fatal" ";" <rr:@R> => {
+        let payload = AstNodePayload::CommandFatal;
+        let span = parser.span(ll, rr);
+        let num_children = 0;
 
         parser.add_node(payload, span, num_children)
     },
@@ -852,6 +889,9 @@ extern {
         "if" => Token::KwIf,
         "else" => Token::KwElse,
         "match" => Token::KwMatch,
+        "display" => Token::KwDisplay,
+        "finish" => Token::KwFinish,
+        "fatal" => Token::KwFatal,
         "true" => Token::KwTrue,
         "false" => Token::KwFalse,
 

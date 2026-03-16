@@ -156,6 +156,10 @@ impl PackageAnalysis {
                     AstNodePayload::Module(_module) => (),
                     AstNodePayload::Socket(_socket) => (),
                     AstNodePayload::BidirectionalDriver => (),
+                    AstNodePayload::ModDefStmtOn => {
+                        let node_id = child_node.clock().unwrap().id();
+                        self.expr_roots.push(node_id);
+                    }
                     AstNodePayload::Error => (), // TODO should we even have error nodes at this point?
                     _ => unreachable!("{:?}", child_node.summary()),
                 }

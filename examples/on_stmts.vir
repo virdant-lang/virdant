@@ -1,0 +1,8 @@
+export mod Top {
+    incoming clock : Clock;
+
+    on clock {
+        display();
+        finish;
+    }
+}
