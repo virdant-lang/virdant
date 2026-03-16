@@ -176,43 +176,7 @@ pub fn build_expected_type(builder: &mut Builder, location: Location) -> Option<
                 .resolve_item_in_package(moddef_name, location.package())
                 .unwrap();
             let component_analysis = builder.get_component_analysis(moddef.id());
-
-            if let Some(dot_index) = lhs_path.iter().position(|ch| *ch == b'.') {
-                let instance_name = BStr::new(&lhs_path[..dot_index]);
-                let port_name = BStr::new(&lhs_path[(dot_index + 1)..]);
-
-                let instance_node = moddef_node
-                    .children()
-                    .into_iter()
-                    .find(|child| {
-                        matches!(child.payload(), AstNodePayload::Module(module)
-                            if parsing.string(module.name) == instance_name)
-                    })
-                    .unwrap_or_else(|| panic!("Couldn't find instance {lhs_path}"));
-
-                let module = match instance_node.child(0).payload() {
-                    AstNodePayload::Ofness(ofness) => {
-                        let module_package = ofness
-                            .package
-                            .map(|package| PackageFqn::new(BString::from(parsing.string(package).to_vec())))
-                            .unwrap_or_else(|| location.package());
-                        let module_name = parsing.string(ofness.name);
-                        symboltable.resolve_item_in_package(module_name, module_package).unwrap()
-                    }
-                    _ => todo!(),
-                };
-
-                let module_component_analysis = builder.get_component_analysis(module.id());
-                if port_name == b"clock" {
-                    Some(Type::Clock)
-                } else {
-                    module_component_analysis.type_of(port_name)
-                }
-            } else if lhs_path == b"clock" {
-                Some(Type::Clock)
-            } else {
-                component_analysis.type_of(lhs_path)
-            }
+            component_analysis.type_of(lhs_path)
         },
         _ => todo!("Can't build expected type for: {:?}", parent_node.summary()),
     }
