@@ -254,7 +254,7 @@ impl<'d> Transpiler<'d> {
             .children()
             .into_iter()
             .skip(1)
-            .map(Self::build_command)
+            .map(|command| self.build_command(package, command, local_types, instance_types))
             .collect();
 
         On {
@@ -270,8 +270,22 @@ impl<'d> Transpiler<'d> {
         }
     }
 
-    fn build_command(node: AstNode<'_>) -> Command {
+    fn build_command(
+        &mut self,
+        package: &PackageFqn,
+        node: AstNode<'_>,
+        local_types: &HashMap<String, TypeId>,
+        instance_types: &HashMap<String, String>,
+    ) -> Command {
+        let bit_type = self.intern_type(&Type::Bit);
         match node.payload() {
+            AstNodePayload::CommandAssert => Command::Assert(Arc::new(self.build_expr(
+                package,
+                node.child(0),
+                Some(bit_type),
+                local_types,
+                instance_types,
+            ))),
             AstNodePayload::CommandDisplay => Command::Display(),
             AstNodePayload::CommandFinish => Command::Finish,
             AstNodePayload::CommandFatal => Command::Fatal,

@@ -4,11 +4,13 @@ virir {
             incoming clock : builtin::Clock;
 
             on clock {
+                assert((1 : builtin::Bit));
                 display();
                 fatal;
             }
         }
     }
 
+    type builtin::Bit;
     type builtin::Clock;
 }

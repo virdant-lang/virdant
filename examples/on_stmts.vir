@@ -2,6 +2,7 @@ export mod Top {
     incoming clock : Clock;
 
     on clock {
+        assert(true);
         display();
         finish;
     }

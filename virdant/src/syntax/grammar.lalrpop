@@ -368,6 +368,13 @@ ModDefStmtOn: AstNodeId = {
 }
 
 Command: AstNodeId = {
+    <ll:@L> "assert" "(" <e:Expr> ")" ";" <rr:@R> => {
+        let payload = AstNodePayload::CommandAssert;
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
     <ll:@L> "display" "(" ")" ";" <rr:@R> => {
         let payload = AstNodePayload::CommandDisplay;
         let span = parser.span(ll, rr);
@@ -889,6 +896,7 @@ extern {
         "if" => Token::KwIf,
         "else" => Token::KwElse,
         "match" => Token::KwMatch,
+        "assert" => Token::KwAssert,
         "display" => Token::KwDisplay,
         "finish" => Token::KwFinish,
         "fatal" => Token::KwFatal,

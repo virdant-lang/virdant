@@ -1,5 +1,5 @@
 use super::Width;
-use crate::{common::{BinOp, PortDir}, virir::Command};
+use crate::common::{BinOp, PortDir};
 
 use super::typ::Type as VirIrType;
 
@@ -80,6 +80,13 @@ pub(super) struct Driver {
 pub(super) struct On {
     pub(super) clock: Expr,
     pub(super) commands: Vec<Command>,
+}
+
+pub(super) enum Command {
+    Assert(Expr),
+    Display(),
+    Finish,
+    Fatal,
 }
 
 pub(super) enum Expr {

@@ -87,6 +87,7 @@ pub struct ModDef {
 
 #[derive(Debug)]
 pub enum Command {
+    Assert(Arc<Expr>),
     Display(),
     Finish,
     Fatal,
@@ -188,7 +189,7 @@ fn write_moddef(out: &mut String, moddef: &ModDef, virir: &VirIr) {
     if let Some(on) = &moddef.on {
         writeln!(out, "            on {} {{", expr_to_text(on.clock.as_ref(), virir)).unwrap();
         for command in &on.commands {
-            writeln!(out, "                {}", command_to_text(command)).unwrap();
+            writeln!(out, "                {}", command_to_text(command, virir)).unwrap();
         }
         writeln!(out, "            }}").unwrap();
     }
@@ -196,11 +197,12 @@ fn write_moddef(out: &mut String, moddef: &ModDef, virir: &VirIr) {
     writeln!(out, "        }}").unwrap();
 }
 
-fn command_to_text(command: &Command) -> &'static str {
+fn command_to_text(command: &Command, virir: &VirIr) -> String {
     match command {
-        Command::Display() => "display();",
-        Command::Finish => "finish;",
-        Command::Fatal => "fatal;",
+        Command::Assert(expr) => format!("assert({});", expr_to_text(expr.as_ref(), virir)),
+        Command::Display() => "display();".to_string(),
+        Command::Finish => "finish;".to_string(),
+        Command::Fatal => "fatal;".to_string(),
     }
 }
 
@@ -454,7 +456,11 @@ fn build_module(
                 &instance_types,
                 module_signatures,
             )),
-            commands: on_stmt.commands,
+            commands: on_stmt
+                .commands
+                .into_iter()
+                .map(|command| build_command(command, type_ids, &local_types, &instance_types, module_signatures))
+                .collect(),
         });
 
     ModDef {
@@ -583,6 +589,29 @@ fn build_expr(
                 else_expr,
             })
         }
+    }
+}
+
+fn build_command(
+    command: parse::Command,
+    type_ids: &HashMap<String, TypeId>,
+    local_types: &HashMap<String, TypeId>,
+    instance_types: &HashMap<String, String>,
+    module_signatures: &HashMap<String, HashMap<String, TypeId>>,
+) -> Command {
+    let bit_type = lookup_type_id(&parse::Type::Bit, type_ids);
+    match command {
+        parse::Command::Assert(expr) => Command::Assert(Arc::new(build_expr(
+            expr,
+            Some(bit_type),
+            type_ids,
+            local_types,
+            instance_types,
+            module_signatures,
+        ))),
+        parse::Command::Display() => Command::Display(),
+        parse::Command::Finish => Command::Finish,
+        parse::Command::Fatal => Command::Fatal,
     }
 }
 

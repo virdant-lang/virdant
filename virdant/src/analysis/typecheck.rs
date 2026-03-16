@@ -185,6 +185,9 @@ pub fn build_expected_type(builder: &mut Builder, location: Location) -> Option<
         AstNodePayload::ModDefStmtOn => {
             Some(Type::Clock)
         }
+        AstNodePayload::CommandAssert => {
+            Some(Type::Bit)
+        }
         _ => todo!("Can't build expected type for: {:?}", parent_node.summary()),
     }
 }

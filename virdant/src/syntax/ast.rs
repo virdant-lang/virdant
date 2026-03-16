@@ -188,6 +188,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ModDefStmtIf => format!("ModDefStmtIf"),
             AstNodePayload::ModDefStmtMatch => format!("ModDefStmtMatch"),
             AstNodePayload::Socket(socket) => format!("Socket"),
+            AstNodePayload::CommandAssert => format!("CommandAssert"),
             AstNodePayload::CommandDisplay => format!("CommandDisplay"),
             AstNodePayload::CommandFinish => format!("CommandFinish"),
             AstNodePayload::CommandFatal => format!("CommandFatal"),

@@ -1,7 +1,7 @@
 use crate::common::{BinOp as CommonBinOp, PortDir};
-use super::parse::{Driver, Expr, Instance, ModDef, ModStmt, On, Package, Port, Reg, Type, Wire};
+use super::parse::{Command, Driver, Expr, Instance, ModDef, ModStmt, On, Package, Port, Reg, Type, Wire};
 // REVIEW Inline all of these functions into grammar.lalrpop.
-use super::{Command, VirIr, build_mod_def, build_virir, join_path};
+use super::{VirIr, build_mod_def, build_virir, join_path};
 
 grammar;
 
@@ -49,6 +49,7 @@ DriverDecl: Driver = {
 }
 
 Command: Command = {
+    "assert" "(" <expr:ExprNode> ")" ";" => Command::Assert(expr),
     "display" "(" ")" ";" => Command::Display(),
     "finish" ";" => Command::Finish,
     "fatal" ";" => Command::Fatal,

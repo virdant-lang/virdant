@@ -104,6 +104,7 @@ pub enum Token {
     #[token(b"if")]        KwIf,
     #[token(b"else")]      KwElse,
     #[token(b"match")]     KwMatch,
+    #[token(b"assert")]    KwAssert,
     #[token(b"display")]   KwDisplay,
     #[token(b"finish")]    KwFinish,
     #[token(b"fatal")]     KwFatal,

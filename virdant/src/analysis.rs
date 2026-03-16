@@ -159,6 +159,11 @@ impl PackageAnalysis {
                     AstNodePayload::ModDefStmtOn => {
                         let node_id = child_node.clock().unwrap().id();
                         self.expr_roots.push(node_id);
+                        for command_node in child_node.children().into_iter().skip(1) {
+                            if matches!(command_node.payload(), AstNodePayload::CommandAssert) {
+                                self.expr_roots.push(command_node.child(0).id());
+                            }
+                        }
                     }
                     AstNodePayload::Error => (), // TODO should we even have error nodes at this point?
                     _ => unreachable!("{:?}", child_node.summary()),

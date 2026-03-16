@@ -264,12 +264,18 @@ fn convert_on(
 ) -> verilog::Element {
     verilog::Element::Always(verilog::Always {
         clock: Some(convert_expr(type_widths, on.clock.as_ref())),
-        stmts: on.commands.into_iter().map(convert_command).collect(),
+        stmts: on.commands.into_iter().map(|command| convert_command(type_widths, command)).collect(),
     })
 }
 
-fn convert_command(command: virir::Command) -> verilog::Stmt {
+fn convert_command(
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
+    command: virir::Command,
+) -> verilog::Stmt {
     match command {
+        virir::Command::Assert(expr) => verilog::Stmt::Assert(verilog::Assert {
+            exprs: vec![convert_expr(type_widths, expr.as_ref())],
+        }),
         virir::Command::Display() => verilog::Stmt::Display(verilog::Display {
             exprs: vec![verilog::Expr::StrLit(verilog::expr::StrLit {
                 value: "Display".to_string(),

@@ -267,7 +267,6 @@ fn main() {
         vir.dump_diagnostics();
 
         let virir = &transpile(&vir.db());
-        dbg!(&virir);
 
         std::fs::write(outfilepath, virir.to_text());
 

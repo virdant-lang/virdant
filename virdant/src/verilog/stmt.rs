@@ -44,13 +44,18 @@ impl Stmt {
                 verilog_writeln!(writer, ");")?;
             }
             Stmt::Assert(assert) => {
-                verilog_write!(writer, "$assert(")?;
-                for expr in &assert.exprs {
-                    writer.skip_indent();
-                    expr.write(writer)?;
-                }
+                let [expr] = assert.exprs.as_slice() else {
+                    panic!("verilog assert expects exactly one expression");
+                };
+                verilog_write!(writer, "if (!(")?;
                 writer.skip_indent();
-                verilog_writeln!(writer, ");")?;
+                expr.write(writer)?;
+                writer.skip_indent();
+                verilog_writeln!(writer, ")) begin")?;
+                writer.indent();
+                verilog_writeln!(writer, "$fatal;")?;
+                writer.dedent();
+                verilog_writeln!(writer, "end")?;
             }
             Stmt::Fatal => {
                 verilog_writeln!(writer, "$fatal;")?;
