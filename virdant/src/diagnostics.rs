@@ -157,7 +157,7 @@ pub struct WrongType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unknown {
     pub region: Region,
-    pub msg: BString,
+    pub message: BString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -245,7 +245,7 @@ impl IsDiagnostic for Unknown {
     }
 
     fn message(&self) -> BString {
-        self.msg.to_string().into()
+        self.message.to_string().into()
     }
 }
 

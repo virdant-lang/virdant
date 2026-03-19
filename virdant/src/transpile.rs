@@ -17,7 +17,12 @@ use crate::virir::{Command, Driver, Instance, Item, ModDef, On, Package, Port, R
 
 /// Lowers a checked analysis database into a `VirIr` module graph.
 pub fn transpile(db: &Db) -> VirIr {
-    db.check().unwrap();
+    if let Err(diags) = db.check() {
+        for diag in diags {
+            eprintln!("ERROR: {diag:?}");
+        }
+        panic!();
+    }
 
     let mut transpiler = Transpiler::new(db);
     transpiler.run()

@@ -21,7 +21,9 @@ use crate::analysis::typecheck::Type;
 use crate::analysis::typecheck::TypeDef;
 use crate::analysis::typecheck::{ExprRoot, Typing, TypingContext};
 use crate::common::json::ToJson;
+use crate::diagnostics;
 use crate::diagnostics::DiagnosticLevel;
+use crate::source::Region;
 use crate::syntax::ast::AstNode;
 use crate::syntax::parsing::parse;
 use crate::syntax::payload::AstNodePayload;
@@ -34,6 +36,7 @@ queries! {
     Source(package: PackageFqn) -> Source;
     Parsing(package: PackageFqn) -> Arc<Parsing>;
     SyntaxErrors() -> Vec<Diagnostic>;
+    LocationRegion(location: Location) -> Region;
     PackageAnalysis(package: PackageFqn) -> Arc<PackageAnalysis>;
     ComponentAnalysis(symbol_id: SymbolId) -> Arc<ComponentAnalysis>;
     SymbolTable() -> Arc<SymbolTable>;
@@ -81,6 +84,7 @@ impl Query {
             crate::analysis::typecheck::build_typeof : Typeof(location);
             build_typeof_all : TypeofAll();
             crate::analysis::typecheck::build_type_monomorphizations : TypeMonomorphizations();
+            build_location_region : LocationRegion(location);
             check : Check();
 
         )
@@ -106,6 +110,7 @@ db_getter!(typecheck : TypeCheck() -> Vec<Diagnostic>);
 db_getter!(get_typeof : Typeof(location: Location) -> Option<Type>);
 db_getter!(get_typeof_all : TypeofAll() -> HashMap<Location, Option<Type>>);
 db_getter!(get_type_monomorphizations : TypeMonomorphizations() -> Vec<Type>);
+db_getter!(get_location_region : LocationRegion(location: Location) -> Region);
 
 
 fn build_parsing(builder: &mut Builder<'_>, package: PackageFqn) -> Arc<Parsing> {
@@ -136,36 +141,13 @@ fn build_all_exprs(builder: &mut Builder) -> Vec<Location> {
 }
 
 fn collect_expr_locations(node: AstNode<'_>, exprs: &mut Vec<Location>) {
-    if is_expr_payload(&node.payload()) {
+    if node.is_expr() {
         exprs.push(node.location());
     }
 
     for child in node.children() {
         collect_expr_locations(child, exprs);
     }
-}
-
-fn is_expr_payload(payload: &AstNodePayload) -> bool {
-    matches!(payload,
-        AstNodePayload::ExprReference |
-        AstNodePayload::ExprParen |
-        AstNodePayload::ExprIf |
-        AstNodePayload::ExprMatch |
-        AstNodePayload::ExprBitLit(_) |
-        AstNodePayload::ExprWordLit(_) |
-        AstNodePayload::ExprBinOp(_) |
-        AstNodePayload::ExprUnOp(_) |
-        AstNodePayload::ExprMethod(_) |
-        AstNodePayload::ExprFn |
-        AstNodePayload::ExprCtor(_) |
-        AstNodePayload::ExprEnumerant(_) |
-        AstNodePayload::ExprStruct |
-        AstNodePayload::ExprIndex(_) |
-        AstNodePayload::ExprIndexRange(_) |
-        AstNodePayload::ExprWord |
-        AstNodePayload::ExprZext |
-        AstNodePayload::ExprSext
-    )
 }
 
 fn build_typeof_all(builder: &mut Builder) -> HashMap<Location, Option<Type>> {
@@ -179,13 +161,29 @@ fn build_typeof_all(builder: &mut Builder) -> HashMap<Location, Option<Type>> {
     typeof_all
 }
 
+fn build_location_region(builder: &mut Builder, location: Location) -> Region {
+    let parsing = builder.get_parsing(location.package());
+    let node = parsing.ast_node(location.ast_node_id());
+    node.region()
+}
+
 fn check(builder: &mut Builder) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
     let mut diagnostics = vec![];
 
     diagnostics.extend(builder.get_syntax_errors());
     diagnostics.extend(builder.typecheck());
 
-    builder.get_typeof_all();
+    for (location, opt_typ) in builder.get_typeof_all().iter() {
+        if opt_typ.is_none() {
+            let region = builder.get_location_region(location.clone());
+            diagnostics.push(
+                diagnostics::Unknown {
+                    region,
+                    message: "Missing type in AST".into(),
+                }.into()
+            );
+        }
+    }
 
     if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
         Err(diagnostics)

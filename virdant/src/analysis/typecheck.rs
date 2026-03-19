@@ -14,6 +14,30 @@ use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 
+macro_rules! error {
+    ($self_:expr, $node:expr, $fmt:literal) => {{
+        error!($self_, $node, $fmt,)
+    }};
+    ($self_:expr, $node:expr, $fmt:literal, $($arg:expr),*) => {{
+        $self_.diagnostics.push(diagnostics::Unknown {
+            region: $node.region(),
+            message: format!($fmt, $($arg)*).into(),
+        }.into());
+    }};
+}
+
+macro_rules! info {
+    ($self_:expr, $node:expr, $fmt:literal) => {{
+        error!($self_, $node, $fmt,)
+    }};
+    ($self_:expr, $node:expr, $fmt:literal, $($arg:expr),*) => {{
+        $self_.diagnostics.push(diagnostics::Todo {
+            region: $node.region(),
+            message: format!($fmt, $($arg)*).into(),
+        }.into());
+    }};
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TypeDef {
     fqn: BString,
@@ -227,6 +251,7 @@ fn exprroot_anscestor(builder: &mut Builder, location: Location) -> ExprRoot {
             .expect("expected node to be contained in an expr root")
             .id();
         node = parsing.ast_node(parent_id);
+        &node;
     }
 }
 
@@ -358,17 +383,17 @@ impl Typing {
         match node.payload() {
             AstNodePayload::ExprParen => self.check_paren(node, expected_typ),
             AstNodePayload::ExprIf => self.check_if(node, expected_typ),
-            AstNodePayload::ExprMatch => todo!(),
+            AstNodePayload::ExprMatch => (), // TODO
             AstNodePayload::ExprWordLit(_) => self.check_word_lit(node, expected_typ),
             AstNodePayload::ExprBinOp(expr_bin_op) => self.check_binop(node, expr_bin_op.op, expected_typ),
             AstNodePayload::ExprUnOp(expr_un_op) => self.check_unop(node, expr_un_op.op, expected_typ),
-            AstNodePayload::ExprMethod(expr_method) => todo!(),
-            AstNodePayload::ExprFn => todo!(),
-            AstNodePayload::ExprCtor(expr_ctor) => todo!(),
-            AstNodePayload::ExprEnumerant(expr_enumerant) => todo!(),
-            AstNodePayload::ExprStruct => todo!(),
+            AstNodePayload::ExprMethod(expr_method) => (), // TODO
+            AstNodePayload::ExprFn => (), // TODO
+            AstNodePayload::ExprCtor(expr_ctor) => (), // TODO
+            AstNodePayload::ExprEnumerant(expr_enumerant) => (), // TODO
+            AstNodePayload::ExprStruct => (), // TODO
             AstNodePayload::ExprIndex(expr_index) => self.check_index(node, expr_index.index, expected_typ),
-            AstNodePayload::ExprIndexRange(expr_index_range) => todo!(),
+            AstNodePayload::ExprIndexRange(expr_index_range) => (), // TODO
             AstNodePayload::ExprWord => self.check_word(node, expected_typ),
             AstNodePayload::ExprZext | AstNodePayload::ExprSext => self.check_ext(node, expected_typ),
             _ => unreachable!("Can't typecheck {:?}", node.summary()),
@@ -388,11 +413,14 @@ impl Typing {
         self.check(&children[0], &Type::Bit);
         self.check(&children[1], expected_typ);
         let mut i = 2;
-        while i + 1 < children.len() {
+        while i + 1 < children.len() - 1 {
             self.check(&children[i], &Type::Bit);
             self.check(&children[i + 1], expected_typ);
             i += 2;
         }
+
+        // TODO this all needs helpers in AstNode
+        self.check(&children[children.len() - 1], expected_typ);
 
         if children.iter().all(|child| self.typs.contains_key(&child.id())) {
             self.typs.insert(node.id(), expected_typ.clone());
@@ -433,13 +461,19 @@ impl Typing {
     fn check_binop<'p>(&mut self, node: &AstNode<'p>, op: CommonBinOp, expected_typ: &Type) {
         let lhs = node.child(0);
         let rhs = node.child(1);
-        let lhs_typ = self.infer(&lhs);
-        let rhs_typ = self.infer(&rhs);
+        let lhs_typ = self.infer(&lhs).unwrap();
+        let rhs_typ = self.infer(&rhs).unwrap();
 
-        let (Ok(Some(lhs_typ)), Ok(Some(rhs_typ))) = (lhs_typ, rhs_typ) else {
+        if matches!((&lhs_typ, &rhs_typ), (&None, &None)) {
             self.flag_cant_infer(node);
             return;
-        };
+        }
+
+        let lhs_typ = lhs_typ.unwrap();
+        let rhs_typ = rhs_typ.unwrap();
+
+        self.typs.insert(lhs.id(), lhs_typ.clone());
+        self.typs.insert(rhs.id(), rhs_typ.clone());
 
         match op {
             CommonBinOp::Add | CommonBinOp::Sub => {
@@ -528,7 +562,7 @@ impl Typing {
                 if index >= width {
                     self.diagnostics.push(diagnostics::Unknown {
                         region: node.region(),
-                        msg: format!("Index {index} out of bounds for Word[{width}]").into(),
+                        message: format!("Index {index} out of bounds for Word[{width}]").into(),
                     }.into());
                     return;
                 }

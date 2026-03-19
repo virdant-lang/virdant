@@ -111,6 +111,10 @@ pub enum Token {
     #[token(b"true")]      KwTrue,
     #[token(b"false")]     KwFalse,
 
+    // Unused
+    #[token(b"/*")]        SlashStar,
+    #[token(b"*/")]        StarSlash,
+
     Error,
 }
 

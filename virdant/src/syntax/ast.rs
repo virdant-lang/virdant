@@ -291,6 +291,29 @@ impl<'p> AstNode<'p> {
             _ => None
         }
     }
+
+    pub fn is_expr(&self) -> bool {
+        matches!(self.payload(),
+            AstNodePayload::ExprReference |
+            AstNodePayload::ExprParen |
+            AstNodePayload::ExprIf |
+            AstNodePayload::ExprMatch |
+            AstNodePayload::ExprBitLit(_) |
+            AstNodePayload::ExprWordLit(_) |
+            AstNodePayload::ExprBinOp(_) |
+            AstNodePayload::ExprUnOp(_) |
+            AstNodePayload::ExprMethod(_) |
+            AstNodePayload::ExprFn |
+            AstNodePayload::ExprCtor(_) |
+            AstNodePayload::ExprEnumerant(_) |
+            AstNodePayload::ExprStruct |
+            AstNodePayload::ExprIndex(_) |
+            AstNodePayload::ExprIndexRange(_) |
+            AstNodePayload::ExprWord |
+            AstNodePayload::ExprZext |
+            AstNodePayload::ExprSext
+        )
+    }
 }
 
 impl AstNodeId {
