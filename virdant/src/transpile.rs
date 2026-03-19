@@ -5,13 +5,13 @@ use bstr::ByteSlice;
 
 use crate::analysis::typecheck::Type;
 use crate::analysis::Location;
-use crate::common::{BinOp as CommonBinOp, ComponentKind, PortDir, Width};
+use crate::common::{BinOp as CommonBinOp, ComponentKind, PortDir, UnOp as CommonUnOp, Width};
 use crate::db::Db;
 use crate::fqn::PackageFqn;
 use crate::source::Region;
 use crate::syntax::ast::AstNode;
 use crate::syntax::payload::AstNodePayload;
-use crate::virir::expr::{BinOp, Expr, If, Reference, WordLit};
+use crate::virir::expr::{BinOp, Expr, If, Index, IndexRange, Reference, UnOp as VirIrUnOp, WordLit};
 use crate::virir::typ::Type as VirType;
 use crate::virir::{Command, Driver, Instance, Item, ModDef, On, Package, Port, Reg, TypeId, VirIr, Wire};
 
@@ -212,6 +212,7 @@ impl<'d> Transpiler<'d> {
                         let expected_type = self
                             .db
                             .get_typeof(Location::new(package.clone(), expr_node.id()))
+                            .ok()
                             .map(|typ| self.intern_type(&typ))
                             .or_else(|| self.resolve_path_type(&path, &local_types, &instance_types));
 
@@ -304,7 +305,22 @@ impl<'d> Transpiler<'d> {
                 local_types,
                 instance_types,
             ))),
-            AstNodePayload::CommandDisplay => Command::Display(),
+            AstNodePayload::CommandDisplay => {
+                let expr_node = node.child(0);
+                let expected_type = self
+                    .db
+                    .get_typeof(Location::new(package.clone(), expr_node.id()))
+                    .ok()
+                    .map(|typ| self.intern_type(&typ));
+
+                Command::Display(Arc::new(self.build_expr(
+                    package,
+                    expr_node,
+                    expected_type,
+                    local_types,
+                    instance_types,
+                )))
+            }
             AstNodePayload::CommandFinish => Command::Finish,
             AstNodePayload::CommandFatal => Command::Fatal,
             _ => panic!("expected command node, found {}", node.summary()),
@@ -393,6 +409,32 @@ impl<'d> Transpiler<'d> {
                     rhs,
                 })
             }
+            AstNodePayload::ExprUnOp(expr_un_op) => {
+                let rhs_expected_type = match expr_un_op.op {
+                    CommonUnOp::Not => Some(self.intern_type(&Type::Bit)),
+                    CommonUnOp::Neg | CommonUnOp::Inv => expected_type,
+                };
+                let expr = Arc::new(self.build_expr(
+                    package,
+                    node.child(0),
+                    rhs_expected_type,
+                    local_types,
+                    instance_types,
+                ));
+                let typ = match expr_un_op.op {
+                    CommonUnOp::Not => self.intern_type(&Type::Bit),
+                    CommonUnOp::Neg | CommonUnOp::Inv => {
+                        expected_type.unwrap_or_else(|| expr_type_id(expr.as_ref()))
+                    }
+                };
+
+                Expr::UnOp(VirIrUnOp {
+                    region: node.region(),
+                    typ,
+                    op: expr_un_op.op,
+                    expr,
+                })
+            }
             AstNodePayload::ExprIf => self.build_if_expr(
                 package,
                 node.region(),
@@ -401,6 +443,39 @@ impl<'d> Transpiler<'d> {
                 local_types,
                 instance_types,
             ),
+            AstNodePayload::ExprIndex(expr_index) => Expr::Index(Index {
+                region: node.region(),
+                typ: expected_type.unwrap_or_else(|| self.intern_type(&Type::Bit)),
+                subject: Arc::new(self.build_expr(
+                    package,
+                    node.child(0),
+                    None,
+                    local_types,
+                    instance_types,
+                )),
+                index: expr_index.index,
+            }),
+            AstNodePayload::ExprIndexRange(expr_index_range) => {
+                let width = expr_index_range
+                    .index_hi
+                    .checked_sub(expr_index_range.index_lo)
+                    .map(|delta| delta + 1)
+                    .unwrap_or_else(|| panic!("invalid expr index range in transpile: {}", node.summary()));
+
+                Expr::IndexRange(IndexRange {
+                    region: node.region(),
+                    typ: expected_type.unwrap_or_else(|| self.intern_type(&Type::Word(width))),
+                    subject: Arc::new(self.build_expr(
+                        package,
+                        node.child(0),
+                        None,
+                        local_types,
+                        instance_types,
+                    )),
+                    index_hi: expr_index_range.index_hi,
+                    index_lo: expr_index_range.index_lo,
+                })
+            }
             AstNodePayload::ExprParen => self.build_expr(
                 package,
                 node.child(0),
@@ -408,7 +483,7 @@ impl<'d> Transpiler<'d> {
                 local_types,
                 instance_types,
             ),
-            _ => todo!("unsupported expr in transpile: {}", node.summary()),
+            _ => panic!("unsupported expr in transpile: {}", node.summary()),
         }
     }
 
@@ -589,6 +664,9 @@ fn expr_type_id(expr: &Expr) -> TypeId {
         Expr::BitLit(bit_lit) => bit_lit.typ,
         Expr::WordLit(word_lit) => word_lit.typ,
         Expr::BinOp(binop) => binop.typ,
+        Expr::UnOp(unop) => unop.typ,
         Expr::If(expr_if) => expr_if.typ,
+        Expr::Index(index) => index.typ,
+        Expr::IndexRange(index_range) => index_range.typ,
     }
 }

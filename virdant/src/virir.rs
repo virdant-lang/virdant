@@ -12,12 +12,15 @@ use std::fmt::Write;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::common::PortDir;
+use crate::common::{PortDir, UnOp as CommonUnOp};
 use crate::fqn::PackageFqn;
 use crate::source::{LineCol, Span};
 use crate::source::Region;
 
-use crate::virir::expr::{BinOp as VirIrBinOp, Expr, If as VirIrIf, Reference, WordLit};
+use crate::virir::expr::{
+    BinOp as VirIrBinOp, Expr, If as VirIrIf, Index as VirIrIndex,
+    IndexRange as VirIrIndexRange, Reference, UnOp as VirIrUnOp, WordLit,
+};
 use crate::virir::typ::Type;
 
 pub use crate::common::Width;
@@ -88,7 +91,7 @@ pub struct ModDef {
 #[derive(Debug)]
 pub enum Command {
     Assert(Arc<Expr>),
-    Display(),
+    Display(Arc<Expr>),
     Finish,
     Fatal,
 }
@@ -211,7 +214,7 @@ fn write_moddef(out: &mut String, moddef: &ModDef, virir: &VirIr) {
 fn command_to_text(command: &Command, virir: &VirIr) -> String {
     match command {
         Command::Assert(expr) => format!("assert({});", expr_to_text(expr.as_ref(), virir)),
-        Command::Display() => "display();".to_string(),
+        Command::Display(expr) => format!("display({});", expr_to_text(expr.as_ref(), virir)),
         Command::Finish => "finish;".to_string(),
         Command::Fatal => "fatal;".to_string(),
     }
@@ -267,6 +270,18 @@ fn expr_to_text(expr: &Expr, virir: &VirIr) -> String {
                 type_id_to_text(binop.typ, virir),
             )
         }
+        Expr::UnOp(unop) => {
+            let op = match unop.op {
+                crate::common::UnOp::Neg => "-",
+                crate::common::UnOp::Inv => "~",
+                crate::common::UnOp::Not => "!",
+            };
+            format!(
+                "({op} {} : {})",
+                expr_to_text(unop.expr.as_ref(), virir),
+                type_id_to_text(unop.typ, virir),
+            )
+        }
         Expr::If(expr_if) => {
             format!(
                 "(if {} {{ {} }} else {{ {} }} : {})",
@@ -274,6 +289,23 @@ fn expr_to_text(expr: &Expr, virir: &VirIr) -> String {
                 expr_to_text(expr_if.then_expr.as_ref(), virir),
                 expr_to_text(expr_if.else_expr.as_ref(), virir),
                 type_id_to_text(expr_if.typ, virir),
+            )
+        }
+        Expr::Index(index) => {
+            format!(
+                "({}[{}] : {})",
+                expr_to_text(index.subject.as_ref(), virir),
+                index.index,
+                type_id_to_text(index.typ, virir),
+            )
+        }
+        Expr::IndexRange(index_range) => {
+            format!(
+                "({}[{}..{}] : {})",
+                expr_to_text(index_range.subject.as_ref(), virir),
+                index_range.index_hi,
+                index_range.index_lo,
+                type_id_to_text(index_range.typ, virir),
             )
         }
     }
@@ -564,6 +596,34 @@ fn build_expr(
                 rhs,
             })
         }
+        parse::Expr::UnOp { op, expr, typ } => {
+            let annotated_type = typ.as_ref().map(|typ| lookup_type_id(typ, type_ids));
+            let expr_expected_type = match op {
+                CommonUnOp::Not => Some(lookup_type_id(&parse::Type::Bit, type_ids)),
+                CommonUnOp::Neg | CommonUnOp::Inv => annotated_type.or(expected_type),
+            };
+            let expr = Arc::new(build_expr(
+                *expr,
+                expr_expected_type,
+                type_ids,
+                local_types,
+                instance_types,
+                module_signatures,
+            ));
+            let typ = match op {
+                CommonUnOp::Not => lookup_type_id(&parse::Type::Bit, type_ids),
+                CommonUnOp::Neg | CommonUnOp::Inv => annotated_type
+                    .or(expected_type)
+                    .unwrap_or_else(|| expr_type_id(expr.as_ref()).unwrap_or(TypeId::new(0))),
+            };
+
+            Expr::UnOp(VirIrUnOp {
+                region: dummy_region(),
+                typ,
+                op,
+                expr,
+            })
+        }
         parse::Expr::If {
             cond,
             then_expr,
@@ -608,6 +668,65 @@ fn build_expr(
                 else_expr,
             })
         }
+        parse::Expr::Index {
+            subject,
+            index,
+            typ,
+        } => {
+            let subject = Arc::new(build_expr(
+                *subject,
+                None,
+                type_ids,
+                local_types,
+                instance_types,
+                module_signatures,
+            ));
+            let typ = typ
+                .as_ref()
+                .map(|typ| lookup_type_id(typ, type_ids))
+                .or(expected_type)
+                .unwrap_or_else(|| lookup_type_id(&parse::Type::Bit, type_ids));
+
+            Expr::Index(VirIrIndex {
+                region: dummy_region(),
+                typ,
+                subject,
+                index,
+            })
+        }
+        parse::Expr::IndexRange {
+            subject,
+            index_hi,
+            index_lo,
+            typ,
+        } => {
+            let subject = Arc::new(build_expr(
+                *subject,
+                None,
+                type_ids,
+                local_types,
+                instance_types,
+                module_signatures,
+            ));
+            let width = index_hi
+                .checked_sub(index_lo)
+                .map(|delta| delta + 1)
+                .unwrap_or(0);
+            let inferred_type = lookup_type_id(&parse::Type::Word(width), type_ids);
+            let typ = typ
+                .as_ref()
+                .map(|typ| lookup_type_id(typ, type_ids))
+                .or(expected_type)
+                .unwrap_or(inferred_type);
+
+            Expr::IndexRange(VirIrIndexRange {
+                region: dummy_region(),
+                typ,
+                subject,
+                index_hi,
+                index_lo,
+            })
+        }
     }
 }
 
@@ -628,7 +747,14 @@ fn build_command(
             instance_types,
             module_signatures,
         ))),
-        parse::Command::Display() => Command::Display(),
+        parse::Command::Display(expr) => Command::Display(Arc::new(build_expr(
+            expr,
+            None,
+            type_ids,
+            local_types,
+            instance_types,
+            module_signatures,
+        ))),
         parse::Command::Finish => Command::Finish,
         parse::Command::Fatal => Command::Fatal,
     }
@@ -674,7 +800,10 @@ fn expr_type_id(expr: &Expr) -> Option<TypeId> {
         Expr::WordLit(word_lit) => Some(word_lit.typ),
         Expr::BitLit(bit_lit) => Some(bit_lit.typ),
         Expr::BinOp(binop) => Some(binop.typ),
+        Expr::UnOp(unop) => Some(unop.typ),
         Expr::If(expr_if) => Some(expr_if.typ),
+        Expr::Index(index) => Some(index.typ),
+        Expr::IndexRange(index_range) => Some(index_range.typ),
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::common::{BinOp as CommonBinOp, PortDir};
+use crate::common::{BinOp as CommonBinOp, PortDir, UnOp as CommonUnOp};
 use super::parse::{Command, Driver, Expr, Instance, ModDef, ModStmt, On, Package, Port, Reg, Type, Wire};
 // REVIEW Inline all of these functions into grammar.lalrpop.
 use super::{VirIr, build_mod_def, build_virir, join_path};
@@ -54,7 +54,7 @@ DriverDecl: Driver = {
 
 Command: Command = {
     "assert" "(" <expr:ExprNode> ")" ";" => Command::Assert(expr),
-    "display" "(" ")" ";" => Command::Display(),
+    "display" "(" <expr:ExprNode> ")" ";" => Command::Display(expr),
     "finish" ";" => Command::Finish,
     "fatal" ";" => Command::Fatal,
 }
@@ -79,6 +79,38 @@ ExprNode: Expr = {
 }
 
 ExprPrimary: Expr = {
+    "(" <op:UnOp> <expr:ExprNode> ":" <typ:VirType> ")" => Expr::UnOp {
+        op,
+        expr: Box::new(expr),
+        typ: Some(typ),
+    },
+    "(" <op:UnOp> <expr:ExprNode> ")" => Expr::UnOp {
+        op,
+        expr: Box::new(expr),
+        typ: None,
+    },
+    "(" <subject:ExprNode> "[" <index:Nat> "]" ":" <typ:VirType> ")" => Expr::Index {
+        subject: Box::new(subject),
+        index: index.try_into().unwrap(),
+        typ: Some(typ),
+    },
+    "(" <subject:ExprNode> "[" <index:Nat> "]" ")" => Expr::Index {
+        subject: Box::new(subject),
+        index: index.try_into().unwrap(),
+        typ: None,
+    },
+    "(" <subject:ExprNode> "[" <index_hi:Nat> ".." <index_lo:Nat> "]" ":" <typ:VirType> ")" => Expr::IndexRange {
+        subject: Box::new(subject),
+        index_hi: index_hi.try_into().unwrap(),
+        index_lo: index_lo.try_into().unwrap(),
+        typ: Some(typ),
+    },
+    "(" <subject:ExprNode> "[" <index_hi:Nat> ".." <index_lo:Nat> "]" ")" => Expr::IndexRange {
+        subject: Box::new(subject),
+        index_hi: index_hi.try_into().unwrap(),
+        index_lo: index_lo.try_into().unwrap(),
+        typ: None,
+    },
     "(" "if" <cond:ExprNode> "{" <then_expr:ExprNode> "}" "else" "{" <else_expr:ExprNode> "}" ":" <typ:VirType> ")" => Expr::If {
         cond: Box::new(cond),
         then_expr: Box::new(then_expr),
@@ -100,6 +132,12 @@ ExprPrimary: Expr = {
         }
     },
     <path:Path> => Expr::Reference { path, typ: None },
+}
+
+UnOp: CommonUnOp = {
+    "-" => CommonUnOp::Neg,
+    "~" => CommonUnOp::Inv,
+    "!" => CommonUnOp::Not,
 }
 
 BinOp: CommonBinOp = {

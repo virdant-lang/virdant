@@ -14,6 +14,12 @@ impl<T: ToJson> ToJson for Vec<T> {
     }
 }
 
+impl<R: ToJson, E: ToJson> ToJson for Result<R, E> {
+    fn to_json(&self) -> json::JsonValue {
+        json::array!(self.iter().map(|item| item.to_json()).collect::<Vec<_>>())
+    }
+}
+
 impl<T: ToJson> ToJson for Option<T> {
     fn to_json(&self) -> json::JsonValue {
         if let Some(self_) = self {

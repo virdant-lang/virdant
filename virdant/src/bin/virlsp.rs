@@ -491,7 +491,7 @@ impl Backend {
 
             let typof = if let Some(exprroot) = get_expr_root(&self.client, db, &parsing, node.clone()).await {
                 let typing = db.get_typing(ExprRoot { location: exprroot.location() });
-                db.get_typeof(node.location())
+                db.get_typeof(node.location()).ok() // TODO is this .ok() OK?
             } else {
                 None
             };

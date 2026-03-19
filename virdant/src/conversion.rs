@@ -347,10 +347,8 @@ fn convert_command(
         virir::Command::Assert(expr) => verilog::Stmt::Assert(verilog::Assert {
             exprs: vec![convert_expr(type_widths, expr.as_ref())],
         }),
-        virir::Command::Display() => verilog::Stmt::Display(verilog::Display {
-            exprs: vec![verilog::Expr::StrLit(verilog::expr::StrLit {
-                value: "Display".to_string(),
-            })],
+        virir::Command::Display(expr) => verilog::Stmt::Display(verilog::Display {
+            exprs: vec![convert_expr(type_widths, expr.as_ref())],
         }),
         virir::Command::Finish => verilog::Stmt::Finish,
         virir::Command::Fatal => verilog::Stmt::Fatal,
@@ -379,11 +377,27 @@ fn convert_connect_expr(
             convert_connect_binop(binop.op),
             convert_connect_expr(type_widths, binop.rhs.as_ref())
         ),
+        virir::expr::Expr::UnOp(unop) => format!(
+            "({}{})",
+            convert_connect_unop(unop.op),
+            convert_connect_expr(type_widths, unop.expr.as_ref())
+        ),
         virir::expr::Expr::If(expr_if) => format!(
             "({} ? {} : {})",
             convert_connect_expr(type_widths, expr_if.cond.as_ref()),
             convert_connect_expr(type_widths, expr_if.then_expr.as_ref()),
             convert_connect_expr(type_widths, expr_if.else_expr.as_ref())
+        ),
+        virir::expr::Expr::Index(index) => format!(
+            "{}[{}]",
+            convert_connect_expr(type_widths, index.subject.as_ref()),
+            index.index,
+        ),
+        virir::expr::Expr::IndexRange(index_range) => format!(
+            "{}[{}:{}]",
+            convert_connect_expr(type_widths, index_range.subject.as_ref()),
+            index_range.index_hi,
+            index_range.index_lo,
         ),
     }
 }
@@ -402,6 +416,14 @@ fn convert_connect_binop(op: common::BinOp) -> &'static str {
         common::BinOp::And => "&&",
         common::BinOp::Or => "||",
         common::BinOp::Xor => "^",
+    }
+}
+
+fn convert_connect_unop(op: common::UnOp) -> &'static str {
+    match op {
+        common::UnOp::Neg => "-",
+        common::UnOp::Inv => "~",
+        common::UnOp::Not => "!",
     }
 }
 
@@ -494,6 +516,22 @@ fn convert_binop(op: common::BinOp) -> verilog::BinOp {
     }
 }
 
+fn convert_unop(op: common::UnOp) -> verilog::UnOp {
+    match op {
+        common::UnOp::Neg => verilog::UnOp::Neg,
+        common::UnOp::Inv => verilog::UnOp::BitNot,
+        common::UnOp::Not => verilog::UnOp::LogNot,
+    }
+}
+
+fn constant_index_expr(index: virir::Width) -> verilog::Expr {
+    verilog::Expr::WordLit(verilog::expr::WordLit {
+        value: u128::from(index),
+        width: 32,
+        radix: Radix::Dec,
+    })
+}
+
 /// Converts a general VirIr expression into the corresponding Verilog expression node.
 fn convert_expr(
     type_widths: &HashMap<virir::TypeId, virir::Width>,
@@ -525,10 +563,25 @@ fn convert_expr(
             lhs: Box::new(convert_expr(type_widths, binop.lhs.as_ref())),
             rhs: Box::new(convert_expr(type_widths, binop.rhs.as_ref())),
         }),
+        virir::expr::Expr::UnOp(unop) => verilog::Expr::UnOp(verilog::expr::UnOp {
+            op: convert_unop(unop.op),
+            expr: Box::new(convert_expr(type_widths, unop.expr.as_ref())),
+        }),
         virir::expr::Expr::If(expr_if) => verilog::Expr::If(verilog::expr::If {
             cond: Box::new(convert_expr(type_widths, expr_if.cond.as_ref())),
             then_expr: Box::new(convert_expr(type_widths, expr_if.then_expr.as_ref())),
             else_expr: Box::new(convert_expr(type_widths, expr_if.else_expr.as_ref())),
         }),
+        virir::expr::Expr::Index(index) => verilog::Expr::Index(verilog::expr::Index {
+            subject: Box::new(convert_expr(type_widths, index.subject.as_ref())),
+            index: Box::new(constant_index_expr(index.index)),
+        }),
+        virir::expr::Expr::IndexRange(index_range) => {
+            verilog::Expr::IndexRange(verilog::expr::IndexRange {
+                subject: Box::new(convert_expr(type_widths, index_range.subject.as_ref())),
+                index_hi: Box::new(constant_index_expr(index_range.index_hi)),
+                index_lo: Box::new(constant_index_expr(index_range.index_lo)),
+            })
+        }
     }
 }

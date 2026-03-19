@@ -47,7 +47,7 @@ queries! {
     TypingContext(symbol_id: SymbolId) -> TypingContext;
     Typing(exprroot: ExprRoot) -> Arc<Typing>;
     TypeCheck() -> Vec<Diagnostic>;
-    Typeof(location: Location) -> Option<Type>;
+    Typeof(location: Location) -> Result<Type, Vec<Diagnostic>>;
     TypeofAll() -> HashMap<Location, Option<Type>>;
     Check() -> Result<Vec<Diagnostic>, Vec<Diagnostic>>;
     TypeMonomorphizations() -> Vec<Type>;
@@ -107,7 +107,7 @@ db_getter!(get_all_exprs : AllExprs() -> Vec<Location>);
 db_getter!(get_expected_type : ExpectedType(location: Location) -> Option<Type>);
 db_getter!(get_typing : Typing(expr_root: ExprRoot) -> Arc<Typing>);
 db_getter!(typecheck : TypeCheck() -> Vec<Diagnostic>);
-db_getter!(get_typeof : Typeof(location: Location) -> Option<Type>);
+db_getter!(get_typeof : Typeof(location: Location) -> Result<Type, Vec<Diagnostic>>);
 db_getter!(get_typeof_all : TypeofAll() -> HashMap<Location, Option<Type>>);
 db_getter!(get_type_monomorphizations : TypeMonomorphizations() -> Vec<Type>);
 db_getter!(get_location_region : LocationRegion(location: Location) -> Region);
@@ -154,8 +154,10 @@ fn build_typeof_all(builder: &mut Builder) -> HashMap<Location, Option<Type>> {
     let mut typeof_all = HashMap::new();
 
     for location in builder.get_all_exprs() {
-        let typ = builder.get_typeof(location.clone());
-        typeof_all.insert(location, typ);
+        // TODO Probably need thread the diagnostics through instead of discarding them here.
+        if let Ok(typ) = builder.get_typeof(location.clone()) {
+            typeof_all.insert(location, Some(typ));
+        }
     }
 
     typeof_all

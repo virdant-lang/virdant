@@ -3,7 +3,7 @@ export mod Top {
 
     on clock {
         assert(true);
-        display();
+        display(true);
         finish;
     }
 }

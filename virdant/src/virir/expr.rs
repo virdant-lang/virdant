@@ -9,7 +9,10 @@ pub enum Expr {
     BitLit(BitLit),
     WordLit(WordLit),
     BinOp(BinOp),
+    UnOp(UnOp),
     If(If),
+    Index(Index),
+    IndexRange(IndexRange),
 }
 
 #[derive(Debug)]
@@ -43,12 +46,37 @@ pub struct BinOp {
 }
 
 #[derive(Debug)]
+pub struct UnOp {
+    pub region: Region,
+    pub typ: TypeId,
+    pub op: common::UnOp,
+    pub expr: Arc<Expr>,
+}
+
+#[derive(Debug)]
 pub struct If {
     pub region: Region,
     pub typ: TypeId,
     pub cond: Arc<Expr>,
     pub then_expr: Arc<Expr>,
     pub else_expr: Arc<Expr>,
+}
+
+#[derive(Debug)]
+pub struct Index {
+    pub region: Region,
+    pub typ: TypeId,
+    pub subject: Arc<Expr>,
+    pub index: common::Width,
+}
+
+#[derive(Debug)]
+pub struct IndexRange {
+    pub region: Region,
+    pub typ: TypeId,
+    pub subject: Arc<Expr>,
+    pub index_hi: common::Width,
+    pub index_lo: common::Width,
 }
 
 impl BitLit {

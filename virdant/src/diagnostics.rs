@@ -190,6 +190,18 @@ pub struct Todo {
     pub message: BString,
 }
 
+macro_rules! diag {
+    ($node:expr, $fmt:literal) => {{
+        diag!($self_, $node, $fmt,)
+    }};
+    ($node:expr, $fmt:literal, $($arg:expr),*) => {{
+        diagnostics::Todo {
+            region: $node.region(),
+            message: format!($fmt, $($arg)*).into(),
+        }.into()
+    }};
+}
+
 #[derive(Debug, Clone)]
 pub struct Soften {
     pub inner: Diagnostic,

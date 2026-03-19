@@ -1,5 +1,5 @@
 use super::Width;
-use crate::common::{BinOp, PortDir};
+use crate::common::{BinOp, PortDir, UnOp};
 
 use super::typ::Type as VirIrType;
 
@@ -85,7 +85,7 @@ pub(super) struct On {
 
 pub(super) enum Command {
     Assert(Expr),
-    Display(),
+    Display(Expr),
     Finish,
     Fatal,
 }
@@ -104,10 +104,26 @@ pub(super) enum Expr {
         op: BinOp,
         rhs: Box<Expr>,
     },
+    UnOp {
+        op: UnOp,
+        expr: Box<Expr>,
+        typ: Option<Type>,
+    },
     If {
         cond: Box<Expr>,
         then_expr: Box<Expr>,
         else_expr: Box<Expr>,
+        typ: Option<Type>,
+    },
+    Index {
+        subject: Box<Expr>,
+        index: Width,
+        typ: Option<Type>,
+    },
+    IndexRange {
+        subject: Box<Expr>,
+        index_hi: Width,
+        index_lo: Width,
         typ: Option<Type>,
     },
 }

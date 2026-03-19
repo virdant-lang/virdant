@@ -10,6 +10,7 @@ use crate::common::json::ToJson;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
 use crate::fqn::PackageFqn;
+use crate::source::{Region, Span};
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
@@ -229,14 +230,29 @@ pub fn typecheck(builder: &mut Builder) -> Vec<Diagnostic> {
     diagnostics
 }
 
-pub fn build_typeof(builder: &mut Builder, location: Location) -> Option<Type> {
-    let exprroot = exprroot_anscestor(builder, location.clone());
-    let typing = builder.get_typing(exprroot);
-    let typ = typing.typs.get(&location.ast_node_id());
-    typ.cloned()
+pub fn build_typeof(builder: &mut Builder, location: Location) -> Result<Type, Vec<Diagnostic>> {
+    let region = builder.get_location_region(location.clone());
+
+    if let Some(exprroot) = exprroot_anscestor(builder, location.clone()) {
+        let typing = builder.get_typing(exprroot);
+        if let Some(typ) = typing.typs.get(&location.ast_node_id()) {
+            Ok(typ.clone())
+        } else {
+            Err(vec![diagnostics::Todo {
+                region,
+                message: "No expr root".into(),
+            }.into()])
+        }
+    } else {
+        Err(vec![diagnostics::Todo {
+            region,
+            message: todo!(),
+        }.into()])
+
+    }
 }
 
-fn exprroot_anscestor(builder: &mut Builder, location: Location) -> ExprRoot {
+fn exprroot_anscestor(builder: &mut Builder, location: Location) -> Option<ExprRoot> {
     let parsing = builder.get_parsing(location.package());
     let exprroot_ids: HashSet<_> = builder
         .get_exprroots()
@@ -246,15 +262,15 @@ fn exprroot_anscestor(builder: &mut Builder, location: Location) -> ExprRoot {
     let mut node = parsing.ast_node(location.ast_node_id());
     loop {
         if exprroot_ids.contains(&node.id()) {
-            return ExprRoot::new(node.location());
+            return Some(ExprRoot::new(node.location()));
         }
 
-        let parent_id = node
-            .parent()
-            .expect("expected node to be contained in an expr root")
-            .id();
-        node = parsing.ast_node(parent_id);
-        &node;
+        if let Some(parent) = node.parent() {
+            let parent_id = parent.id();
+            node = parsing.ast_node(parent_id);
+        } else {
+            return None;
+        }
     }
 }
 

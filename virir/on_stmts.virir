@@ -5,7 +5,7 @@ virir {
 
             on clock {
                 assert((1 : builtin::Bit));
-                display();
+                display((1 : builtin::Bit));
                 fatal;
             }
         }
