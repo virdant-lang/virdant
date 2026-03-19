@@ -527,6 +527,7 @@ impl Typing {
             self.flag_cant_infer(node);
             return;
         };
+        self.typs.insert(rhs.id(), rhs_typ.clone());
 
         match op {
             CommonUnOp::Neg | CommonUnOp::Inv => {
@@ -556,6 +557,8 @@ impl Typing {
             self.flag_cant_infer(node);
             return;
         };
+
+        self.typs.insert(subject.id(), subject_typ.clone());
 
         match subject_typ {
             Type::Word(width) => {
