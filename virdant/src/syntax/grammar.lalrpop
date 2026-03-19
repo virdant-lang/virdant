@@ -375,10 +375,10 @@ Command: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "display" "(" ")" ";" <rr:@R> => {
+    <ll:@L> "display" "(" <e:Expr> ")" ";" <rr:@R> => {
         let payload = AstNodePayload::CommandDisplay;
         let span = parser.span(ll, rr);
-        let num_children = 0;
+        let num_children = 1;
 
         parser.add_node(payload, span, num_children)
     },
