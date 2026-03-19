@@ -162,6 +162,8 @@ impl PackageAnalysis {
                         for command_node in child_node.children().into_iter().skip(1) {
                             if matches!(command_node.payload(), AstNodePayload::CommandAssert) {
                                 self.expr_roots.push(command_node.child(0).id());
+                            } else if matches!(command_node.payload(), AstNodePayload::CommandDisplay) {
+                                self.expr_roots.push(command_node.child(0).id());
                             }
                         }
                     }

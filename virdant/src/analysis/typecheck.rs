@@ -212,6 +212,9 @@ pub fn build_expected_type(builder: &mut Builder, location: Location) -> Option<
         AstNodePayload::CommandAssert => {
             Some(Type::Bit)
         }
+        AstNodePayload::CommandDisplay => {
+            None
+        }
         _ => todo!("Can't build expected type for: {:?}", parent_node.summary()),
     }
 }
@@ -297,10 +300,20 @@ pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typing> {
     if fallback_expected_typ.is_some() {
         typing.check(&node, &expected_typ);
     } else {
-        typing.diagnostics.push(diagnostics::Todo {
-            region: node.region(),
-            message: format!("Can't typecheck expression because we don't know what type it should have").into(),
-        }.into());
+        match typing.infer(&node) {
+            Err(diag) => {
+                typing.diagnostics.push(diag);
+            }
+            Ok(None) => {
+                typing.diagnostics.push(diagnostics::Todo {
+                    region: node.region(),
+                    message: format!("Can't typecheck expression because we don't know what type it should have").into(),
+                }.into());
+            }
+            Ok(Some(typ)) => {
+                typing.typs.insert(node.id(), typ);
+            }
+        }
     }
 
     Arc::new(typing)
