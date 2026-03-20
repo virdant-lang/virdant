@@ -196,7 +196,7 @@ TypeDecl: Type = {
 VirType: Type = {
     "builtin" "::" "Bit" => Type::Bit,
     "builtin" "::" "Clock" => Type::Clock,
-    "builtin" "::" "Word" "[" <width:Nat> "]" => Type::Word(width),
+    "builtin" "::" "Word" "[" <width:Nat> "]" => Type::Word(width.try_into().unwrap()),
 }
 
 Path: String = {
@@ -212,7 +212,7 @@ Ident: String = {
     <ident:r"[A-Za-z_][A-Za-z0-9_]*"> => ident.to_string(),
 }
 
-Nat: u16 = {
+Nat: u64 = {
     <digits:r"[0-9]+"> => digits.parse().unwrap(),
 }
 
