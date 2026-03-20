@@ -13,6 +13,7 @@ vir-lsp-bin = ["dep:serde_json"]
 [dependencies]
 bstr = "1.12.0"
 clap = { version = "4.5.46", features = ["derive"] }
+clap_derive = "4.6.0"
 hashbrown = "0.15.4"
 indexmap = "2.13.0"
 internment = { version = "0.8.6", features = ["arc"] }

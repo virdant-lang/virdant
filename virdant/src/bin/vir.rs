@@ -3,33 +3,73 @@ use clap::{Parser, Subcommand};
 
 use bstr::{BStr, BString, ByteSlice};
 use nix::unistd::execvp;
-use virdant::analysis::Location;
-use virdant::transpile::transpile;
-use std::ffi::CString;
+use std::ffi::{CString, OsString};
 use std::os::unix::ffi::OsStrExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use virdant::fqn::PackageFqn;
 use virdant::source::Source;
 use virdant::syntax::parsing::parse;
 use virdant::syntax::token::tokenize;
 use virdant::syntax::token::Token;
+use virdant::transpile::transpile;
 
 /// The Virdant Hardware Language
 #[derive(Parser, Debug)]
-#[command(author, version, about, disable_help_subcommand = true)]
+#[command(name = "vir", author, version, about, disable_help_subcommand = true, arg_required_else_help = true)]
 struct Args {
     #[command(subcommand)]
-    command: Option<Command>,
+    command: Command,
 }
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// Compile a Virdant source file
-    Compile { args: Vec<String> },
+    /// Parse and dump the AST for a Virdant source file
+    Parse { file: PathBuf },
+    /// Tokenize a Virdant source file
+    Tokenize { file: PathBuf },
+    /// Typecheck all packages in a directory
+    Check { path: PathBuf },
+    /// Dump inferred expression types
+    Types { path: PathBuf },
+    /// Dump the symbol table
+    Symbols { path: PathBuf },
+    /// Dump typedefs
+    Typedefs { path: PathBuf },
+    /// Dump expression roots
+    Exprroots { path: PathBuf },
+    /// Dump typing results
+    Typing { path: PathBuf },
+    /// Dump database state, optionally saving a Graphviz file
+    Db { path: PathBuf, outpath: Option<PathBuf> },
+    /// Dump component analysis for a module definition
+    Components { path: PathBuf, moddef_fqn: String },
+    /// Compile a Virdant package directory to VirIr
+    CompileToVirir { path: PathBuf, outfilepath: PathBuf },
+
+    #[command(external_subcommand)]
+    External(Vec<OsString>),
 }
 
-fn parse_file(path: &str) {
-    let path = Path::new(path);
+fn main() {
+    let args = Args::parse();
+
+    match args.command {
+        Command::Parse { file } => parse_file(&file),
+        Command::Tokenize { file } => tokenize_file(&file),
+        Command::Check { path } => check_path(path),
+        Command::Db { path, outpath } => dump_db(path, outpath),
+        Command::Types { path } => dump_types(path),
+        Command::Components { path, moddef_fqn } => dump_components(path, &moddef_fqn),
+        Command::Symbols { path } => dump_symbols(path),
+        Command::Typedefs { path } => dump_typedefs(path),
+        Command::Exprroots { path } => dump_exprroots(path),
+        Command::Typing { path } => dump_typing(path),
+        Command::CompileToVirir { path, outfilepath } => compile_to_virir(path, outfilepath),
+        Command::External(args) => exec_external(args),
+    }
+}
+
+fn parse_file(path: &Path) {
     let input = match std::fs::read(path) {
         Ok(input) => input,
         Err(e) => {
@@ -53,7 +93,7 @@ fn parse_file(path: &str) {
     parsing.dump();
 }
 
-fn tokenize_file(path: &str) {
+fn tokenize_file(path: &Path) {
     let input = match std::fs::read(path) {
         Ok(input) => input,
         Err(e) => {
@@ -91,195 +131,107 @@ fn tokenize_file(path: &str) {
     }
 }
 
-fn main() {
-    let args: Vec<String> = std::env::args().into_iter().skip(1).collect();
+fn check_path(path: PathBuf) {
+    virdant::Vir::check_all(path);
+}
 
-    if args.len() == 0 {
+fn dump_db(path: PathBuf, outpath: Option<PathBuf>) {
+    let mut vir = virdant::Vir::from_dir(path);
+    vir.check();
+    if let Some(outpath) = outpath {
+        println!("Saving graphviz: {}", outpath.display());
+        vir.db().save_graphviz(outpath);
+    }
+    dbg!(vir.db());
+}
+
+fn dump_types(path: PathBuf) {
+    let mut vir = virdant::Vir::from_dir(path);
+    vir.check();
+    for (location, typ) in vir.db().get_typeof_all() {
+        println!(
+            "{location:?} has type {typ:?}   {:?}  {:?}",
+            vir.spelling(location.clone()),
+            vir.region(location.clone())
+        );
+    }
+}
+
+fn dump_components(path: PathBuf, moddef_fqn: &str) {
+    let mut vir = virdant::Vir::from_dir(path);
+    vir.dump_diagnostics();
+
+    let symboltable = vir.db().get_symboltable();
+    let moddef = symboltable.resolve_item_fqn(moddef_fqn.as_bytes().as_bstr()).unwrap();
+    let component_analysis = vir.db().get_component_analysis(moddef.id());
+    dbg!(&component_analysis);
+}
+
+fn dump_symbols(path: PathBuf) {
+    let mut vir = virdant::Vir::from_dir(path);
+    vir.dump_diagnostics();
+
+    let symboltable = vir.db().get_symboltable();
+    for symbol in symboltable.symbols() {
+        println!("{:?} {:<20} {:?}", symbol.id(), symbol.fqn(), symbol.kind());
+    }
+}
+
+fn dump_typedefs(path: PathBuf) {
+    let mut vir = virdant::Vir::from_dir(path);
+    vir.dump_diagnostics();
+
+    let typedefs = vir.db().get_typedefs();
+    for typedef in typedefs {
+        println!("{typedef:?}");
+    }
+}
+
+fn dump_exprroots(path: PathBuf) {
+    let mut vir = virdant::Vir::from_dir(path);
+    vir.dump_diagnostics();
+
+    for exprroot in vir.db().get_exprroots() {
+        let package = exprroot.location().package();
+        let parsing = vir.db().get_parsing(package.clone());
+        let location = exprroot.location();
+        let typ = vir.db().get_expected_type(location.clone());
+        let node = parsing.ast_node(location.ast_node_id());
+        let region = node.region();
+        println!("{location:?} : {typ:?} at @{region}");
+    }
+}
+
+fn dump_typing(path: PathBuf) {
+    let mut vir = virdant::Vir::from_dir(path);
+    vir.dump_diagnostics();
+
+    for (location, typ) in vir.db().get_typeof_all() {
+        println!("{location:?} {typ:?}");
+    }
+}
+
+fn compile_to_virir(path: PathBuf, outfilepath: PathBuf) {
+    let mut vir = virdant::Vir::from_dir(path);
+    vir.dump_diagnostics();
+
+    let virir = &transpile(&vir.db());
+
+    std::fs::write(outfilepath, virir.to_text()).unwrap();
+}
+
+fn exec_external(args: Vec<OsString>) {
+    let Some(command) = args.first() else {
         Args::command().print_help().unwrap();
         std::process::exit(3);
-    }
-    let command = &args[0];
+    };
 
-    if command == "parse" {
-        let path = match args.get(1) {
-            Some(path) => path,
-            None => {
-                eprintln!("ERROR");
-                eprintln!("usage: vir parse <file>");
-                std::process::exit(3);
-            }
-        };
-
-        parse_file(path);
-
-        return;
-    }
-    if command == "tokenize" {
-        let path = match args.get(1) {
-            Some(path) => path,
-            None => {
-                eprintln!("ERROR");
-                eprintln!("usage: vir tokenize <file>");
-                std::process::exit(3);
-            }
-        };
-
-        tokenize_file(path);
-
-        return;
-    }
-    if command == "check" {
-        let path = match args.get(1) {
-            Some(path) => path,
-            None => {
-                eprintln!("ERROR");
-                eprintln!("usage: vir check <file>");
-                std::process::exit(3);
-            }
-        };
-
-        let path = args.get(1).unwrap();
-        virdant::Vir::check_all(path);
-
-        return;
-    }
-
-    if command == "db" {
-        let path = args.get(1).unwrap();
-        let outpath = args.get(2);
-
-        let mut vir = virdant::Vir::from_dir(path);
-        vir.check();
-        if let Some(outpath) = outpath {
-            println!("Saving graphviz: {outpath}");
-            vir.db().save_graphviz(outpath);
-        }
-        dbg!(vir.db());
-
-        return;
-    }
-
-    if command == "types" {
-        let path = args.get(1).unwrap();
-
-        let mut vir = virdant::Vir::from_dir(path);
-        vir.check();
-        for (location, typ) in vir.db().get_typeof_all() {
-            println!("{location:?} has type {typ:?}   {:?}  {:?}", vir.spelling(location.clone()), vir.region(location.clone()));
-        }
-
-        return;
-    }
-
-    if command == "components" {
-        let path = args.get(1).unwrap();
-        let moddef_fqn = args.get(2).unwrap();
-
-        let mut vir = virdant::Vir::from_dir(path);
-        vir.dump_diagnostics();
-
-        let symboltable = vir.db().get_symboltable();
-        let moddef = symboltable.resolve_item_fqn(moddef_fqn.as_bytes().as_bstr()).unwrap();
-        let component_analysis = vir.db().get_component_analysis(moddef.id());
-        dbg!(&component_analysis);
-
-        return;
-    }
-
-    if command == "symbols" {
-        let path = args.get(1).unwrap();
-
-        let mut vir = virdant::Vir::from_dir(path);
-        vir.dump_diagnostics();
-
-        let symboltable = vir.db().get_symboltable();
-        for symbol in symboltable.symbols() {
-            println!("{:?} {:<20} {:?}", symbol.id(), symbol.fqn(), symbol.kind());
-        }
-
-        return;
-    }
-
-    if command == "typedefs" {
-        let path = args.get(1).unwrap();
-
-        let mut vir = virdant::Vir::from_dir(path);
-        vir.dump_diagnostics();
-
-        let typedefs = vir.db().get_typedefs();
-        for typedef in typedefs {
-            println!("{typedef:?}");
-        }
-
-        return;
-    }
-
-    if command == "exprroots" {
-        let path = args.get(1).unwrap();
-        let mut vir = virdant::Vir::from_dir(path);
-        vir.dump_diagnostics();
-
-        for exprroot in vir.db().get_exprroots() {
-            let package = exprroot.location().package();
-            let parsing = vir.db().get_parsing(package.clone());
-            let location = exprroot.location();
-            let typ = vir.db().get_expected_type(location.clone());
-            let node = parsing.ast_node(location.ast_node_id());
-            let region = node.region();
-            println!("{location:?} : {typ:?} at @{region}");
-        }
-
-        return;
-    }
-
-    if command == "typing" {
-        let path = args.get(1).unwrap();
-
-        let mut vir = virdant::Vir::from_dir(path);
-        vir.dump_diagnostics();
-
-        for (location, typ) in vir.db().get_typeof_all() {
-            println!("{location:?} {typ:?}");
-        }
-
-        /*
-        for exprroot in vir.db().get_exprroots() {
-            if exprroot.location() == location {
-                let typing = vir.db().get_typing(exprroot.clone());
-                let package = exprroot.location().package();
-                let parsing = vir.db().get_parsing(package.clone());
-                let location = exprroot.location();
-                let typ = vir.db().get_expected_type(location.clone());
-                let node = parsing.ast_node(location.ast_node_id());
-                let region = node.region();
-                dbg!(&typing);
-                break;
-            }
-        }
-        */
-
-        return;
-    }
-
-    if command == "compile-to-virir" {
-        let path = args.get(1).unwrap();
-        let outfilepath = args.get(2).unwrap();
-
-        let mut vir = virdant::Vir::from_dir(path);
-        vir.dump_diagnostics();
-
-        let virir = &transpile(&vir.db());
-
-        std::fs::write(outfilepath, virir.to_text());
-
-        return;
-    }
-
+    let command = command.to_string_lossy();
     if let Some(bin) = find_bin(&format!("vir-{command}")) {
         let program = CString::new(bin).unwrap();
         let c_args: Vec<CString> = args
             .into_iter()
-            .map(|s| CString::new(s.as_str()).unwrap())
+            .map(|arg| CString::new(arg.as_os_str().as_bytes()).unwrap())
             .collect();
 
         let _ = execvp(&program, &c_args);
