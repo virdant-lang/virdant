@@ -10,13 +10,20 @@ pub fn convert_virir_to_verilog(virir: virir::VirIr) -> verilog::Verilog {
     let emitted_module_names = collect_emitted_module_names(&virir);
     let type_widths = collect_type_widths(&virir);
 
-    verilog::Verilog {
+    let mut verilog = verilog::Verilog {
         files: virir
             .packages
             .into_iter()
             .map(|package| convert_package(&emitted_module_names, &type_widths, package))
             .collect(),
-    }
+    };
+
+    // Lift Concat/Repeat sub-expressions that iverilog cannot handle in-place
+    // (e.g. as bit-select subjects or nested inside a concatenation) into SSA
+    // temporary wires at the module level.
+    verilog.normalize();
+
+    verilog
 }
 
 /// Converts a single VirIr package into one emitted Verilog file.
@@ -598,9 +605,12 @@ fn convert_ext_expr(
             verilog::Expr::Repeat(verilog::expr::Repeat {
                 count: Box::new(constant_index_expr(extend_by)),
                 exprs: vec![fill],
+                // fill is always 1 bit (BitLit or Index), so repeat width = extend_by * 1
+                width: extend_by,
             }),
             convert_expr(type_widths, expr),
         ],
+        width: target_width,
     })
 }
 
@@ -655,13 +665,17 @@ fn convert_expr(
                 radix: Radix::Dec,
             })
         }
-        virir::expr::Expr::Word(word) => verilog::Expr::Concat(verilog::expr::Concat {
-            exprs: word
-                .exprs
-                .iter()
-                .map(|expr| convert_expr(type_widths, expr.as_ref()))
-                .collect(),
-        }),
+        virir::expr::Expr::Word(word) => {
+            let width = type_widths[&word.typ];
+            verilog::Expr::Concat(verilog::expr::Concat {
+                exprs: word
+                    .exprs
+                    .iter()
+                    .map(|expr| convert_expr(type_widths, expr.as_ref()))
+                    .collect(),
+                width,
+            })
+        }
         virir::expr::Expr::BitLit(bit_lit) => {
             verilog::Expr::BitLit(verilog::expr::BitLit {
                 value: bit_lit.value(),

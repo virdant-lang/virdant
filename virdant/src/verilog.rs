@@ -10,6 +10,7 @@ use crate::common::{PortDir, Radix, Width};
 use self::macros::{verilog_write, verilog_writeln};
 pub use self::stmt::{Assert, AssignBlocking, AssignNonBlocking, Display, Stmt};
 
+use std::collections::HashSet;
 use std::io::Write;
 
 const DIR_WIDTH: usize = 6;
@@ -415,6 +416,243 @@ impl Submodule {
         writer.dedent();
         verilog_writeln!(writer, ");")?;
         Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Normalization pass: lift Concat/Repeat sub-expressions into SSA temp wires
+// so that the emitted Verilog is accepted by iverilog.
+//
+// Problematic patterns:
+//   1. A `Repeat` appearing directly inside a `Concat` — the nested parens
+//      confuse iverilog's parser.
+//   2. A `Concat` or `Repeat` used as the subject of `Index` / `IndexRange` —
+//      iverilog only permits bit-selects on plain identifiers.
+//
+// Temp-wire names use the prefix `__vir_tmp_` followed by a counter.  The
+// counter is incremented until an unused name is found, guaranteeing that
+// generated names never shadow any user-defined identifier from the VirIR.
+// ---------------------------------------------------------------------------
+
+/// Returns the known bit-width of an expression, or `None` when it cannot be
+/// determined without external type information.
+fn compute_expr_width(expr: &Expr) -> Option<Width> {
+    match expr {
+        Expr::BitLit(_) => Some(1),
+        Expr::WordLit(w) => Some(w.width),
+        Expr::Concat(c) if c.width > 0 => Some(c.width),
+        Expr::Repeat(r) if r.width > 0 => Some(r.width),
+        Expr::Index(_) => Some(1),
+        _ => None,
+    }
+}
+
+struct Normalizer {
+    used_names: HashSet<String>,
+    counter: usize,
+    new_elements: Vec<Element>,
+}
+
+impl Normalizer {
+    fn fresh_name(&mut self, hint: &str) -> String {
+        loop {
+            let name = format!("\\temp${hint}_{} ", self.counter);
+            self.counter += 1;
+            if !self.used_names.contains(&name) {
+                self.used_names.insert(name.clone());
+                return name;
+            }
+        }
+    }
+
+    /// Replace `expr` with a reference to a fresh temp wire, and record the
+    /// wire declaration + continuous assignment for later insertion.
+    fn extract_to_tmp(&mut self, expr: &mut Expr, width: Width, hint: &str) {
+        let name = self.fresh_name(hint);
+        let old = std::mem::replace(
+            expr,
+            Expr::Reference(expr::Reference { name: name.clone() }),
+        );
+        self.new_elements.push(Element::Wire(Wire { name: name.clone(), width, expr: None }));
+        self.new_elements.push(Element::Assign(Assign { name, expr: old }));
+    }
+
+    fn normalize_expr(&mut self, expr: &mut Expr) {
+        match expr {
+            Expr::BinOp(b) => {
+                self.normalize_expr(b.lhs.as_mut());
+                self.normalize_expr(b.rhs.as_mut());
+            }
+            Expr::UnOp(u) => {
+                self.normalize_expr(u.expr.as_mut());
+            }
+            Expr::If(i) => {
+                self.normalize_expr(i.cond.as_mut());
+                self.normalize_expr(i.then_expr.as_mut());
+                self.normalize_expr(i.else_expr.as_mut());
+            }
+            Expr::Concat(c) => {
+                for child in c.exprs.iter_mut() {
+                    self.normalize_expr(child);
+                }
+                // Extract any Repeat children so they aren't nested inside {}.
+                for child in c.exprs.iter_mut() {
+                    let width = if matches!(child, Expr::Repeat(_)) {
+                        compute_expr_width(child)
+                    } else {
+                        None
+                    };
+                    if let Some(w) = width {
+                        self.extract_to_tmp(child, w, "word");
+                    }
+                }
+            }
+            Expr::Repeat(r) => {
+                self.normalize_expr(r.count.as_mut());
+                for child in r.exprs.iter_mut() {
+                    self.normalize_expr(child);
+                }
+            }
+            Expr::Index(i) => {
+                self.normalize_expr(i.subject.as_mut());
+                self.normalize_expr(i.index.as_mut());
+                // Only a plain identifier (Reference) is a valid bit-select
+                // subject in iverilog.  Anything else — Concat, Repeat,
+                // literals, or complex expressions — must be lifted into a wire.
+                let subject_width = if !matches!(i.subject.as_ref(), Expr::Reference(_)) {
+                    compute_expr_width(i.subject.as_ref())
+                } else {
+                    None
+                };
+                if let Some(w) = subject_width {
+                    self.extract_to_tmp(i.subject.as_mut(), w, "index");
+                }
+            }
+            Expr::IndexRange(i) => {
+                self.normalize_expr(i.subject.as_mut());
+                self.normalize_expr(i.index_hi.as_mut());
+                self.normalize_expr(i.index_lo.as_mut());
+                let subject_width = if !matches!(i.subject.as_ref(), Expr::Reference(_)) {
+                    compute_expr_width(i.subject.as_ref())
+                } else {
+                    None
+                };
+                if let Some(w) = subject_width {
+                    self.extract_to_tmp(i.subject.as_mut(), w, "indexrange");
+                }
+            }
+            // Leaf nodes — nothing to do.
+            Expr::Reference(_) | Expr::BitLit(_) | Expr::WordLit(_) | Expr::StrLit(_) => {}
+        }
+    }
+
+    fn normalize_stmt(&mut self, stmt: &mut Stmt) {
+        match stmt {
+            Stmt::AssignBlocking(a) => self.normalize_expr(&mut a.expr),
+            Stmt::AssignNonBlocking(a) => self.normalize_expr(&mut a.expr),
+            Stmt::Display(d) => {
+                for e in d.exprs.iter_mut() {
+                    self.normalize_expr(e);
+                }
+            }
+            Stmt::Assert(a) => {
+                for e in a.exprs.iter_mut() {
+                    self.normalize_expr(e);
+                }
+            }
+            Stmt::Case(c) => {
+                self.normalize_expr(&mut c.subject);
+                for item in c.items.iter_mut() {
+                    for s in item.stmts.iter_mut() {
+                        self.normalize_stmt(s);
+                    }
+                }
+            }
+            Stmt::CaseZ(c) => {
+                self.normalize_expr(&mut c.subject);
+                for item in c.items.iter_mut() {
+                    for s in item.stmts.iter_mut() {
+                        self.normalize_stmt(s);
+                    }
+                }
+            }
+            Stmt::Fatal | Stmt::Finish => {}
+        }
+    }
+}
+
+impl Verilog {
+    /// Normalize every module in every file in place.
+    pub fn normalize(&mut self) {
+        for file in self.files.iter_mut() {
+            file.normalize();
+        }
+    }
+}
+
+impl VerilogFile {
+    /// Normalize every module in this file in place.
+    pub fn normalize(&mut self) {
+        for module in self.modules.iter_mut() {
+            module.normalize();
+        }
+    }
+}
+
+impl Module {
+    /// Lift `Concat`/`Repeat` sub-expressions that cannot be used directly in
+    /// certain Verilog contexts (as bit-select subjects or nested inside a
+    /// concatenation) into fresh `wire` + `assign` SSA temporaries.
+    pub fn normalize(&mut self) {
+        // Seed the used-name set with every declared port, wire, and reg so
+        // that generated names are guaranteed never to collide.
+        let used_names: HashSet<String> = self.ports.iter()
+            .map(|p| p.name.clone())
+            .chain(self.elements.iter().filter_map(|e| match e {
+                Element::Wire(w) => Some(w.name.clone()),
+                Element::Reg(r) => Some(r.name.clone()),
+                _ => None,
+            }))
+            .collect();
+
+        let mut norm = Normalizer { used_names, counter: 0, new_elements: Vec::new() };
+
+        for element in self.elements.iter_mut() {
+            match element {
+                Element::Assign(assign) => norm.normalize_expr(&mut assign.expr),
+                Element::Always(always) => {
+                    if let Some(clock) = always.clock.as_mut() {
+                        norm.normalize_expr(clock);
+                    }
+                    for stmt in always.stmts.iter_mut() {
+                        norm.normalize_stmt(stmt);
+                    }
+                }
+                Element::Initial(initial) => {
+                    for stmt in initial.stmts.iter_mut() {
+                        norm.normalize_stmt(stmt);
+                    }
+                }
+                Element::Wire(wire) => {
+                    if let Some(expr) = wire.expr.as_mut() {
+                        norm.normalize_expr(expr);
+                    }
+                }
+                Element::Reg(reg) => {
+                    if let Some(expr) = reg.expr.as_mut() {
+                        norm.normalize_expr(expr);
+                    }
+                }
+                Element::Submodule(_) => {}
+            }
+        }
+
+        if !norm.new_elements.is_empty() {
+            // Prepend the new wire declarations and assigns so they appear
+            // before any element that references them.
+            norm.new_elements.extend(std::mem::take(&mut self.elements));
+            self.elements = norm.new_elements;
+        }
     }
 }
 

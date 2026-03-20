@@ -67,6 +67,7 @@ macro_rules! concat {
     ($( $expr:expr ),+ $(,)?) => {
         Expr::Concat(expr::Concat {
             exprs: vec![$( $expr.into() ),*],
+            width: 0,
         })
     }
 }
@@ -77,12 +78,14 @@ macro_rules! repeat {
         Expr::Repeat(expr::Repeat {
             count: refr!($count).into(),
             exprs: vec![$( $expr.into() ),*],
+            width: 0,
         })
     };
     ($count:expr; $( $expr:expr ),+ $(,)?) => {
         Expr::Repeat(expr::Repeat {
             count: $count.into(),
             exprs: vec![$( $expr.into() ),*],
+            width: 0,
         })
     }
 }

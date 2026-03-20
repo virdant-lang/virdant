@@ -8,6 +8,9 @@ export mod Top {
     wire a : Bit;
     a := false;
 
+    wire b : Word[4];
+    b := 1w4 + 2w4;
+
     wire x : Word[4];
     x := 0b1010w4;
 

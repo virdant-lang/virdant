@@ -45,12 +45,16 @@ pub struct If {
 #[derive(Debug)]
 pub struct Concat {
     pub exprs: Vec<Expr>,
+    /// Total bit width of this concatenation. Set to 0 when unknown.
+    pub width: super::Width,
 }
 
 #[derive(Debug)]
 pub struct Repeat {
     pub count: Box<Expr>,
     pub exprs: Vec<Expr>,
+    /// Total bit width of the replicated result. Set to 0 when unknown.
+    pub width: super::Width,
 }
 
 #[derive(Debug)]
