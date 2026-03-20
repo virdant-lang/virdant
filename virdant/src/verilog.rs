@@ -579,17 +579,17 @@ impl Expr {
                 write!(writer.file, ")")?;
             }
             Expr::Concat(concat) => {
-                write!(writer.file, "{{")?;
+                write!(writer.file, "({{")?;
                 for (i, expr) in concat.exprs.iter().enumerate() {
                     if i > 0 {
                         write!(writer.file, ", ")?;
                     }
                     expr.write(writer)?;
                 }
-                write!(writer.file, "}}")?;
+                write!(writer.file, "}})")?;
             }
             Expr::Repeat(repeat) => {
-                write!(writer.file, "{{")?;
+                write!(writer.file, "({{")?;
                 repeat.count.write(writer)?;
                 write!(writer.file, "{{")?;
                 for (i, expr) in repeat.exprs.iter().enumerate() {
@@ -598,13 +598,14 @@ impl Expr {
                     }
                     expr.write(writer)?;
                 }
-                write!(writer.file, "}}}}")?;
+                write!(writer.file, "}}}})")?;
             }
             Expr::Index(index) => {
+                write!(writer.file, "(")?;
                 index.subject.write(writer)?;
                 write!(writer.file, "[")?;
                 index.index.write(writer)?;
-                write!(writer.file, "]")?;
+                write!(writer.file, "])")?;
             }
             Expr::IndexRange(index) => {
                 index.subject.write(writer)?;

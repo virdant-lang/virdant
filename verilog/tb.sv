@@ -6,6 +6,7 @@ module Tb();
 
     reg reset = 0;
     reg clock = 0;
+    string vcd;
 
     task tick;
         begin
@@ -23,7 +24,11 @@ module Tb();
     endtask
 
     initial begin
-        $dumpvars(0, top);
+        if ($value$plusargs("vcd=%s", vcd)) begin
+            $display("Saving VCD file: %s", vcd);
+            $dumpfile(vcd);
+            $dumpvars(0, Tb);
+        end
         initialize();
         forever begin
             tick();

@@ -1,7 +1,8 @@
 use clap::CommandFactory;
+use virdant::conversion::convert_virir_to_verilog;
 use clap::{Parser, Subcommand};
 
-use bstr::{BStr, BString, ByteSlice};
+use bstr::{BStr, BString, ByteSlice, ByteVec};
 use nix::unistd::execvp;
 use std::ffi::{CString, OsString};
 use std::os::unix::ffi::OsStrExt;
@@ -45,6 +46,8 @@ enum Command {
     Components { path: PathBuf, moddef_fqn: String },
     /// Compile a Virdant package directory to VirIr
     CompileToVirir { path: PathBuf, outfilepath: PathBuf },
+    /// Run Virdant package
+    Run { path: PathBuf, #[arg(long)] vcd: Option<String> },
 
     #[command(external_subcommand)]
     External(Vec<OsString>),
@@ -65,6 +68,7 @@ fn main() {
         Command::Exprroots { path } => dump_exprroots(path),
         Command::Typing { path } => dump_typing(path),
         Command::CompileToVirir { path, outfilepath } => compile_to_virir(path, outfilepath),
+        Command::Run { path, vcd } => run(path, vcd),
         Command::External(args) => exec_external(args),
     }
 }
@@ -218,6 +222,67 @@ fn compile_to_virir(path: PathBuf, outfilepath: PathBuf) {
     let virir = &transpile(&vir.db());
 
     std::fs::write(outfilepath, virir.to_text()).unwrap();
+}
+
+fn run(path: PathBuf, vcd: Option<String>) {
+    let project = path.file_name().unwrap().to_string_lossy().to_owned();
+    let build_dir = "build";
+
+    let mut vir = virdant::Vir::from_dir(path.clone());
+    vir.dump_diagnostics();
+
+    let virir = &transpile(&vir.db());
+    std::fs::create_dir_all("build/").unwrap();
+    let virir_filepath = PathBuf::from("build").join(format!("{project}.virir"));
+
+    std::fs::write(virir_filepath, virir.to_text()).unwrap();
+
+    let virir = virdant::virir::parse(&virir.to_text()).unwrap();
+    let verilog = convert_virir_to_verilog(virir);
+
+    let builddir = PathBuf::from(build_dir);
+    std::fs::create_dir_all(&builddir).unwrap();
+    verilog.write_in_dir(&builddir).unwrap();
+
+    let bin_name = path.file_stem().unwrap().to_string_lossy().to_string();
+    let bin = PathBuf::from("build").join(bin_name).to_string_lossy().to_string();
+
+    let mut command = std::process::Command::new("iverilog");
+    command.arg("-g2012");
+    command.arg("verilog/tb.sv");
+
+    for source in glob_sv_files(&builddir) {
+        command.arg(source);
+    }
+    let output = command
+        .arg("-o")
+        .arg(bin.clone()).output().unwrap();
+
+    if !output.status.success() {
+        use bstr::ByteSlice;
+        eprintln!("iverilog: {}", BStr::new(&output.stderr));
+        std::process::exit(1);
+    }
+
+    let program = CString::new(bin.clone()).unwrap();
+    let mut args: Vec<CString> = vec![
+        CString::new(bin).unwrap(),
+    ];
+    if let Some(vcd) = vcd {
+        args.push(CString::new(format!("+vcd={vcd}")).unwrap());
+    }
+
+    let _ = execvp(&program, &args);
+}
+
+fn glob_sv_files(dir: &Path) -> Vec<PathBuf> {
+    let mut sources: Vec<PathBuf> = std::fs::read_dir(dir)
+        .unwrap()
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| path.extension().is_some_and(|ext| ext == "sv"))
+        .collect();
+    sources.sort();
+    sources
 }
 
 fn exec_external(args: Vec<OsString>) {

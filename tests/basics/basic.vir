@@ -1,0 +1,66 @@
+export mod Top {
+    incoming clock : Clock;
+    incoming reset : Bit;
+
+    wire w : Bit;
+    w := true;
+
+    wire a : Bit;
+    a := false;
+
+    wire x : Word[4];
+    x := 0b1010w4;
+
+    wire y : Word[4];
+    y := 0b0011w4;
+
+    wire z : Word[8];
+    z := zext(0x8w4);
+
+    wire s : Word[8];
+    s := sext(0x8w4);
+
+    on clock {
+        assert(w);
+        assert(!a);
+        assert(w == true);
+        assert(a == false);
+        assert(w != a);
+
+        assert(w && (!a));
+        assert(w || a);
+        assert(w ^^ a);
+        assert(if w { true } else { false });
+        assert(if a { false } else { true });
+
+        assert(x == 0b1010w4);
+        assert(y == 0b0011w4);
+        assert(x != y);
+        assert(x > y);
+        assert(y < x);
+        assert(x >= 0b1010w4);
+        assert(y <= x);
+
+        assert(x + y == 0b1101w4);
+        assert(x - y == 0b0111w4);
+        assert(~x == 0b0101w4);
+        assert(-1w4 == 0b1111w4);
+
+        assert(word(w) == 1w1);
+        assert(word(w, y) == 0b10011w5);
+        assert(word(w, y)[4]);
+        assert(word(w, y)[3] == false);
+        assert(word(w, y)[2] == false);
+        assert(word(w, y)[1]);
+        assert(word(w, y)[0]);
+
+        assert(z == 0x08w8);
+        assert(z[7] == false);
+        assert(s == 0xf8w8);
+        assert(s[7] == true);
+
+        assert((if w { x } else { y }) == x);
+        assert((if a { x } else { y }) == y);
+        finish;
+    }
+}

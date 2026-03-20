@@ -5,6 +5,7 @@ build:
 
 test:
 	cargo test
+	cd tests && make
 
 clean:
 	cargo clean
@@ -15,4 +16,3 @@ install:
 	mkdir -p ${HOME}/.local/virdant/bin
 	cp ./target/release/vir ${HOME}/.local/virdant/bin/
 	cp ./target/release/vir-* ${HOME}/.local/virdant/bin/
-	cp ./bin/vir-* ${HOME}/.local/virdant/bin/
