@@ -99,6 +99,10 @@ pub(super) enum Expr {
         value: u64,
         typ: Type,
     },
+    Word {
+        exprs: Vec<Expr>,
+        typ: Option<Type>,
+    },
     BinOp {
         lhs: Box<Expr>,
         op: BinOp,
@@ -106,6 +110,14 @@ pub(super) enum Expr {
     },
     UnOp {
         op: UnOp,
+        expr: Box<Expr>,
+        typ: Option<Type>,
+    },
+    Zext {
+        expr: Box<Expr>,
+        typ: Option<Type>,
+    },
+    Sext {
         expr: Box<Expr>,
         typ: Option<Type>,
     },

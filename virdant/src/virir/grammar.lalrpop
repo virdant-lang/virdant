@@ -79,6 +79,14 @@ ExprNode: Expr = {
 }
 
 ExprPrimary: Expr = {
+    "(" "word" "(" <exprs:ExprList> ")" ":" <typ:VirType> ")" => Expr::Word {
+        exprs,
+        typ: Some(typ),
+    },
+    "(" "word" "(" <exprs:ExprList> ")" ")" => Expr::Word {
+        exprs,
+        typ: None,
+    },
     "(" <op:UnOp> <expr:ExprNode> ":" <typ:VirType> ")" => Expr::UnOp {
         op,
         expr: Box::new(expr),
@@ -86,6 +94,22 @@ ExprPrimary: Expr = {
     },
     "(" <op:UnOp> <expr:ExprNode> ")" => Expr::UnOp {
         op,
+        expr: Box::new(expr),
+        typ: None,
+    },
+    "(" "zext" "(" <expr:ExprNode> ")" ":" <typ:VirType> ")" => Expr::Zext {
+        expr: Box::new(expr),
+        typ: Some(typ),
+    },
+    "(" "zext" "(" <expr:ExprNode> ")" ")" => Expr::Zext {
+        expr: Box::new(expr),
+        typ: None,
+    },
+    "(" "sext" "(" <expr:ExprNode> ")" ":" <typ:VirType> ")" => Expr::Sext {
+        expr: Box::new(expr),
+        typ: Some(typ),
+    },
+    "(" "sext" "(" <expr:ExprNode> ")" ")" => Expr::Sext {
         expr: Box::new(expr),
         typ: None,
     },
@@ -132,6 +156,18 @@ ExprPrimary: Expr = {
         }
     },
     <path:Path> => Expr::Reference { path, typ: None },
+}
+
+ExprList: Vec<Expr> = {
+    <head:ExprNode> <tail:ExprListTail*> => {
+        let mut exprs = vec![head];
+        exprs.extend(tail);
+        exprs
+    },
+}
+
+ExprListTail: Expr = {
+    "," <expr:ExprNode> => expr,
 }
 
 UnOp: CommonUnOp = {

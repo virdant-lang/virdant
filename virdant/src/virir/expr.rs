@@ -8,8 +8,11 @@ pub enum Expr {
     Reference(Reference),
     BitLit(BitLit),
     WordLit(WordLit),
+    Word(Word),
     BinOp(BinOp),
     UnOp(UnOp),
+    Zext(Zext),
+    Sext(Sext),
     If(If),
     Index(Index),
     IndexRange(IndexRange),
@@ -37,6 +40,13 @@ pub struct WordLit {
 }
 
 #[derive(Debug)]
+pub struct Word {
+    pub region: Region,
+    pub typ: TypeId,
+    pub exprs: Vec<Arc<Expr>>,
+}
+
+#[derive(Debug)]
 pub struct BinOp {
     pub region: Region,
     pub typ: TypeId,
@@ -50,6 +60,20 @@ pub struct UnOp {
     pub region: Region,
     pub typ: TypeId,
     pub op: common::UnOp,
+    pub expr: Arc<Expr>,
+}
+
+#[derive(Debug)]
+pub struct Zext {
+    pub region: Region,
+    pub typ: TypeId,
+    pub expr: Arc<Expr>,
+}
+
+#[derive(Debug)]
+pub struct Sext {
+    pub region: Region,
+    pub typ: TypeId,
     pub expr: Arc<Expr>,
 }
 

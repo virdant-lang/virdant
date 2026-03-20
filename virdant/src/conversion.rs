@@ -364,10 +364,16 @@ fn convert_connect_expr(
         virir::expr::Expr::Reference(reference) => valid_verilog_name(&reference.path),
         virir::expr::Expr::WordLit(word_lit) => {
             let width = type_widths[&word_lit.typ];
-            dbg!(&type_widths);
-            panic!();
             format!("{width}'d{}", word_lit.value)
         }
+        virir::expr::Expr::Word(word) => format!(
+            "{{{}}}",
+            word.exprs
+                .iter()
+                .map(|expr| convert_connect_expr(type_widths, expr.as_ref()))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
         virir::expr::Expr::BitLit(bit_lit) => {
             if bit_lit.value() { "1'h1" } else { "1'h0" }.to_string()
         }
@@ -382,6 +388,8 @@ fn convert_connect_expr(
             convert_connect_unop(unop.op),
             convert_connect_expr(type_widths, unop.expr.as_ref())
         ),
+        virir::expr::Expr::Zext(zext) => convert_connect_ext_expr(type_widths, zext.typ, zext.expr.as_ref(), false),
+        virir::expr::Expr::Sext(sext) => convert_connect_ext_expr(type_widths, sext.typ, sext.expr.as_ref(), true),
         virir::expr::Expr::If(expr_if) => format!(
             "({} ? {} : {})",
             convert_connect_expr(type_widths, expr_if.cond.as_ref()),
@@ -524,12 +532,106 @@ fn convert_unop(op: common::UnOp) -> verilog::UnOp {
     }
 }
 
-fn constant_index_expr(index: virir::Width) -> verilog::Expr {
+fn expr_type_id(expr: &virir::expr::Expr) -> virir::TypeId {
+    match expr {
+        virir::expr::Expr::Reference(reference) => reference.typ,
+        virir::expr::Expr::BitLit(bit_lit) => bit_lit.typ,
+        virir::expr::Expr::WordLit(word_lit) => word_lit.typ,
+        virir::expr::Expr::Word(word) => word.typ,
+        virir::expr::Expr::BinOp(binop) => binop.typ,
+        virir::expr::Expr::UnOp(unop) => unop.typ,
+        virir::expr::Expr::Zext(zext) => zext.typ,
+        virir::expr::Expr::Sext(sext) => sext.typ,
+        virir::expr::Expr::If(expr_if) => expr_if.typ,
+        virir::expr::Expr::Index(index) => index.typ,
+        virir::expr::Expr::IndexRange(index_range) => index_range.typ,
+    }
+}
+
+fn expr_width(type_widths: &HashMap<virir::TypeId, virir::Width>, expr: &virir::expr::Expr) -> virir::Width {
+    type_widths[&expr_type_id(expr)]
+}
+
+fn constant_word_expr(width: virir::Width, value: u128) -> verilog::Expr {
     verilog::Expr::WordLit(verilog::expr::WordLit {
-        value: u128::from(index),
-        width: 32,
+        value,
+        width,
         radix: Radix::Dec,
     })
+}
+
+fn constant_index_expr(index: virir::Width) -> verilog::Expr {
+    constant_word_expr(32, u128::from(index))
+}
+
+fn convert_ext_expr(
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
+    target_type: virir::TypeId,
+    expr: &virir::expr::Expr,
+    signed: bool,
+) -> verilog::Expr {
+    let subject_width = expr_width(type_widths, expr);
+    let target_width = type_widths[&target_type];
+    let extend_by = target_width
+        .checked_sub(subject_width)
+        .unwrap_or_else(|| panic!("cannot extend width {subject_width} into {target_width}"));
+
+    if extend_by == 0 {
+        return convert_expr(type_widths, expr);
+    }
+
+    let fill = if signed {
+        if subject_width == 1 {
+            convert_expr(type_widths, expr)
+        } else {
+            verilog::Expr::Index(verilog::expr::Index {
+                subject: Box::new(convert_expr(type_widths, expr)),
+                index: Box::new(constant_index_expr(subject_width - 1)),
+            })
+        }
+    } else {
+        constant_word_expr(1, 0)
+    };
+
+    verilog::Expr::Concat(verilog::expr::Concat {
+        exprs: vec![
+            verilog::Expr::Repeat(verilog::expr::Repeat {
+                count: Box::new(constant_index_expr(extend_by)),
+                exprs: vec![fill],
+            }),
+            convert_expr(type_widths, expr),
+        ],
+    })
+}
+
+fn convert_connect_ext_expr(
+    type_widths: &HashMap<virir::TypeId, virir::Width>,
+    target_type: virir::TypeId,
+    expr: &virir::expr::Expr,
+    signed: bool,
+) -> String {
+    let subject_width = expr_width(type_widths, expr);
+    let target_width = type_widths[&target_type];
+    let extend_by = target_width
+        .checked_sub(subject_width)
+        .unwrap_or_else(|| panic!("cannot extend width {subject_width} into {target_width}"));
+    let subject = convert_connect_expr(type_widths, expr);
+
+    if extend_by == 0 {
+        return subject;
+    }
+
+    let fill = if signed {
+        if subject_width == 1 {
+            subject.clone()
+        } else {
+            format!("{}[{}]", subject, subject_width - 1)
+        }
+    } else {
+        "1'd0".to_string()
+    };
+    let repeated = format!("{{{}{{{}}}}}", extend_by, fill);
+    format!("{{{}, {}}}", repeated, subject)
 }
 
 /// Converts a general VirIr expression into the corresponding Verilog expression node.
@@ -553,6 +655,13 @@ fn convert_expr(
                 radix: Radix::Dec,
             })
         }
+        virir::expr::Expr::Word(word) => verilog::Expr::Concat(verilog::expr::Concat {
+            exprs: word
+                .exprs
+                .iter()
+                .map(|expr| convert_expr(type_widths, expr.as_ref()))
+                .collect(),
+        }),
         virir::expr::Expr::BitLit(bit_lit) => {
             verilog::Expr::BitLit(verilog::expr::BitLit {
                 value: bit_lit.value(),
@@ -567,6 +676,8 @@ fn convert_expr(
             op: convert_unop(unop.op),
             expr: Box::new(convert_expr(type_widths, unop.expr.as_ref())),
         }),
+        virir::expr::Expr::Zext(zext) => convert_ext_expr(type_widths, zext.typ, zext.expr.as_ref(), false),
+        virir::expr::Expr::Sext(sext) => convert_ext_expr(type_widths, sext.typ, sext.expr.as_ref(), true),
         virir::expr::Expr::If(expr_if) => verilog::Expr::If(verilog::expr::If {
             cond: Box::new(convert_expr(type_widths, expr_if.cond.as_ref())),
             then_expr: Box::new(convert_expr(type_widths, expr_if.then_expr.as_ref())),

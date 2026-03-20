@@ -234,14 +234,15 @@ fn main() {
 
     if command == "typing" {
         let path = args.get(1).unwrap();
-        let package = args.get(2).unwrap();
-        let ast_node_id: u16 = args.get(3).unwrap().parse().unwrap();
 
         let mut vir = virdant::Vir::from_dir(path);
         vir.dump_diagnostics();
 
-        let location = Location::new(PackageFqn::new(package.to_string().into()), virdant::syntax::ast::AstNodeId(ast_node_id));
+        for (location, typ) in vir.db().get_typeof_all() {
+            println!("{location:?} {typ:?}");
+        }
 
+        /*
         for exprroot in vir.db().get_exprroots() {
             if exprroot.location() == location {
                 let typing = vir.db().get_typing(exprroot.clone());
@@ -255,6 +256,7 @@ fn main() {
                 break;
             }
         }
+        */
 
         return;
     }

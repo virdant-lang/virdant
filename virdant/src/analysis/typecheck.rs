@@ -317,8 +317,8 @@ pub fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typing> {
         typing.check(&node, &expected_typ);
     } else {
         match typing.infer(&node) {
-            Err(diag) => {
-                typing.diagnostics.push(diag);
+            Err(diags) => {
+                typing.diagnostics.extend(diags);
             }
             Ok(None) => {
                 typing.diagnostics.push(diagnostics::Todo {
@@ -394,8 +394,8 @@ impl Typing {
 
     fn check<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) {
         match self.infer(node) {
-            Err(diagnostic) => {
-                self.diagnostics.push(diagnostic);
+            Err(diagnostics) => {
+                self.diagnostics.extend(diagnostics);
                 return;
             }
             Ok(Some(actual_typ)) => {
@@ -423,7 +423,6 @@ impl Typing {
             AstNodePayload::ExprStruct => (), // TODO
             AstNodePayload::ExprIndex(expr_index) => self.check_index(node, expr_index.index, expected_typ),
             AstNodePayload::ExprIndexRange(expr_index_range) => (), // TODO
-            AstNodePayload::ExprWord => self.check_word(node, expected_typ),
             AstNodePayload::ExprZext | AstNodePayload::ExprSext => self.check_ext(node, expected_typ),
             _ => unreachable!("Can't typecheck {:?}", node.summary()),
         }
@@ -493,16 +492,29 @@ impl Typing {
         let lhs_typ = self.infer(&lhs).unwrap();
         let rhs_typ = self.infer(&rhs).unwrap();
 
-        if matches!((&lhs_typ, &rhs_typ), (&None, &None)) {
-            self.flag_cant_infer(node);
-            return;
-        }
+        // TODO this is sus
+        let (lhs_typ, rhs_typ) = match (&lhs_typ, &rhs_typ) {
+            (&None, &None) => {
+                self.flag_cant_infer(node);
+                return;
+            }
+            (&None, Some(rhs_typ)) => {
+                self.typs.insert(rhs.id(), rhs_typ.clone());
+                self.check(&lhs, rhs_typ);
+                (rhs_typ.clone(), rhs_typ.clone())
+            }
+            (Some(lhs_typ), &None) => {
+                self.typs.insert(lhs.id(), lhs_typ.clone());
+                self.check(&rhs, lhs_typ);
+                (lhs_typ.clone(), lhs_typ.clone())
+            }
+            (Some(lhs_typ), Some(rhs_typ)) => {
+                self.typs.insert(lhs.id(), lhs_typ.clone());
+                self.typs.insert(rhs.id(), rhs_typ.clone());
+                (lhs_typ.clone(), rhs_typ.clone())
+            }
+        };
 
-        let lhs_typ = lhs_typ.unwrap();
-        let rhs_typ = rhs_typ.unwrap();
-
-        self.typs.insert(lhs.id(), lhs_typ.clone());
-        self.typs.insert(rhs.id(), rhs_typ.clone());
 
         match op {
             CommonBinOp::Add | CommonBinOp::Sub => {
@@ -608,31 +620,57 @@ impl Typing {
         }
     }
 
-    fn check_word<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) {
+    fn infer_word<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, Vec<Diagnostic>> {
         // We can assume we have a width-less WordLit here, since it would have been inferred earlier.
-        let mut width: Width = todo!();
-
-        let actual = Type::Word(width);
-        if actual == *expected_typ {
-            self.typs.insert(node.id(), actual);
-        } else {
-            self.flag_wrong_type(node, expected_typ, &actual);
+        let mut total_width = 0;
+        let mut diagnostics = vec![];
+        for child in node.children() {
+            match self.infer(&child) {
+                Err(diags) => {
+                    diagnostics.extend(diags);
+                }
+                Ok(None) => {
+                    self.diagnostics.push(diagnostics::CantInfer {
+                        region: node.region(),
+                    }.into());
+                }
+                Ok(Some(typ)) => {
+                    total_width += match typ {
+                        Type::Bit => 1,
+                        Type::Word(w) => w,
+                        _ => {
+                            diagnostics.push(diagnostics::Todo {
+                                region: node.region(),
+                                message: "Invalid type in word(...): {typ:?}".into(),
+                            }.into());
+                            0
+                        }
+                    };
+                    self.typs.insert(child.id(), typ);
+                }
+            }
         }
+
+        if !diagnostics.is_empty() {
+            return Err(diagnostics);
+        }
+
+        Ok(Some(Type::Word(total_width)))
     }
 
     fn check_ext<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) {
-        todo!()
-        /*
         let Type::Word(target_width) = expected_typ else {
             self.flag_not_word_type(node, expected_typ);
             return;
         };
 
         let subject = node.child(0);
-        let Some(subject_typ) = self.infer(&subject) else {
+        let Ok(Some(subject_typ)) = self.infer(&subject) else {
             self.flag_cant_infer(node);
             return;
         };
+
+        self.typs.insert(subject.id(), subject_typ.clone());
 
         let subject_width = match subject_typ {
             Type::Bit | Type::Clock => 1,
@@ -649,10 +687,9 @@ impl Typing {
         }
 
         self.typs.insert(node.id(), expected_typ.clone());
-        */
     }
 
-    fn infer<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, Diagnostic> {
+    fn infer<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, Vec<Diagnostic>> {
         match node.payload() {
             AstNodePayload::ExprParen => self.infer(&node.child(0)),
             AstNodePayload::ExprReference => {
@@ -661,10 +698,10 @@ impl Typing {
                 let path = parsing.string(node.path().unwrap());
                 let typ = self.context.get(path.to_owned()); // TODO need to walk backwards to get it.
                 if typ.is_none() {
-                    Err(diagnostics::UnresolvedComponent {
+                    Err(vec![diagnostics::UnresolvedComponent {
                         region: node.region(),
                         path: path.into(),
-                    }.into())
+                    }.into()])
                 } else {
                     Ok(typ)
                 }
@@ -684,6 +721,7 @@ impl Typing {
                     Ok(None)
                 }
             }
+            AstNodePayload::ExprWord => Ok(self.infer_word(&node)?),
             _ => Ok(None),
         }
     }

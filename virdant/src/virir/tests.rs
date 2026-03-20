@@ -82,4 +82,54 @@ fn test_virir() {
 
     println!("{transpiled_verilog:#?}");
     transpiled_verilog.write_to_stdout().unwrap();
+
+    let virir = parse(
+        r#"virir {
+            package ext {
+                mod Top {
+                    incoming hi : builtin::Word[7];
+                    incoming lo : builtin::Bit;
+                    outgoing w : builtin::Word[8];
+                    outgoing z : builtin::Word[8];
+                    outgoing s : builtin::Word[8];
+
+                    w := (word((hi : builtin::Word[7]), (lo : builtin::Bit)) : builtin::Word[8]);
+                    z := (zext((lo : builtin::Bit)) : builtin::Word[8]);
+                    s := (sext((lo : builtin::Bit)) : builtin::Word[8]);
+                }
+            }
+
+            type builtin::Bit;
+            type builtin::Word[7];
+            type builtin::Word[8];
+            type builtin::Clock;
+        }"#,
+    )
+    .unwrap();
+    let roundtrip_text = virir.to_text();
+    parse(&roundtrip_text).unwrap();
+
+    let mut vir = Vir::new();
+    vir.add_package("extensions_inline");
+    vir.set_package_text(
+        "extensions_inline",
+        r#"mod Top {
+            incoming hi : Word[7];
+            incoming lo : Bit;
+
+            outgoing w : Word[8];
+            w := word(hi, lo);
+
+            outgoing z : Word[8];
+            z := zext(lo);
+
+            outgoing s : Word[8];
+            s := sext(lo);
+        }"#,
+    );
+    let transpiled_virir = transpile(vir.db());
+    let transpiled_verilog = convert_virir_to_verilog(transpiled_virir);
+
+    println!("{transpiled_verilog:#?}");
+    transpiled_verilog.write_to_stdout().unwrap();
 }

@@ -11,7 +11,10 @@ use crate::fqn::PackageFqn;
 use crate::source::Region;
 use crate::syntax::ast::AstNode;
 use crate::syntax::payload::AstNodePayload;
-use crate::virir::expr::{BinOp, Expr, If, Index, IndexRange, Reference, UnOp as VirIrUnOp, WordLit};
+use crate::virir::expr::{
+    BinOp, Expr, If, Index, IndexRange, Reference, Sext, UnOp as VirIrUnOp, Word,
+    WordLit, Zext,
+};
 use crate::virir::typ::Type as VirType;
 use crate::virir::{Command, Driver, Instance, Item, ModDef, On, Package, Port, Reg, TypeId, VirIr, Wire};
 
@@ -378,6 +381,31 @@ impl<'d> Transpiler<'d> {
                     value,
                 })
             }
+            AstNodePayload::ExprWord => {
+                let typ = expected_type
+                    .or_else(|| self.node_type_id(package, node.clone()))
+                    .unwrap_or_else(|| panic!("word(...) needs a type: {}", node.summary()));
+                let exprs = node
+                    .children()
+                    .into_iter()
+                    .map(|child| {
+                        let child_expected_type = self.node_type_id(package, child.clone());
+                        Arc::new(self.build_expr(
+                            package,
+                            child,
+                            child_expected_type,
+                            local_types,
+                            instance_types,
+                        ))
+                    })
+                    .collect();
+
+                Expr::Word(Word {
+                    region: node.region(),
+                    typ,
+                    exprs,
+                })
+            }
             AstNodePayload::ExprBinOp(expr_bin_op) => {
                 let lhs = Arc::new(self.build_expr(
                     package,
@@ -433,6 +461,44 @@ impl<'d> Transpiler<'d> {
                     typ,
                     op: expr_un_op.op,
                     expr,
+                })
+            }
+            AstNodePayload::ExprZext => {
+                let typ = expected_type
+                    .or_else(|| self.node_type_id(package, node.clone()))
+                    .unwrap_or_else(|| panic!("zext(...) needs a type: {}", node.summary()));
+                let subject = node.child(0);
+                let subject_expected_type = self.node_type_id(package, subject.clone());
+
+                Expr::Zext(Zext {
+                    region: node.region(),
+                    typ,
+                    expr: Arc::new(self.build_expr(
+                        package,
+                        subject,
+                        subject_expected_type,
+                        local_types,
+                        instance_types,
+                    )),
+                })
+            }
+            AstNodePayload::ExprSext => {
+                let typ = expected_type
+                    .or_else(|| self.node_type_id(package, node.clone()))
+                    .unwrap_or_else(|| panic!("sext(...) needs a type: {}", node.summary()));
+                let subject = node.child(0);
+                let subject_expected_type = self.node_type_id(package, subject.clone());
+
+                Expr::Sext(Sext {
+                    region: node.region(),
+                    typ,
+                    expr: Arc::new(self.build_expr(
+                        package,
+                        subject,
+                        subject_expected_type,
+                        local_types,
+                        instance_types,
+                    )),
                 })
             }
             AstNodePayload::ExprIf => self.build_if_expr(
@@ -614,6 +680,13 @@ impl<'d> Transpiler<'d> {
         let signature = self.module_signatures.get(module_path)?;
         signature.get(port_name).copied()
     }
+
+    fn node_type_id(&mut self, package: &PackageFqn, node: AstNode<'_>) -> Option<TypeId> {
+        self.db
+            .get_typeof(Location::new(package.clone(), node.id()))
+            .ok()
+            .map(|typ| self.intern_type(&typ))
+    }
 }
 
 /// Renders an instance `of` clause as a fully qualified VirIr module path.
@@ -663,8 +736,11 @@ fn expr_type_id(expr: &Expr) -> TypeId {
         Expr::Reference(reference) => reference.typ,
         Expr::BitLit(bit_lit) => bit_lit.typ,
         Expr::WordLit(word_lit) => word_lit.typ,
+        Expr::Word(word) => word.typ,
         Expr::BinOp(binop) => binop.typ,
         Expr::UnOp(unop) => unop.typ,
+        Expr::Zext(zext) => zext.typ,
+        Expr::Sext(sext) => sext.typ,
         Expr::If(expr_if) => expr_if.typ,
         Expr::Index(index) => index.typ,
         Expr::IndexRange(index_range) => index_range.typ,
