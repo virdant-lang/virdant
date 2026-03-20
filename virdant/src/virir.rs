@@ -271,7 +271,7 @@ fn expr_to_text(expr: &Expr, virir: &VirIr) -> String {
                 crate::common::BinOp::Sub => "-",
                 crate::common::BinOp::And => "&&",
                 crate::common::BinOp::Or => "||",
-                crate::common::BinOp::Xor => "!=",
+                crate::common::BinOp::Xor => "^^",
             };
             format!(
                 "({} {op} {} : {})",
