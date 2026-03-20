@@ -15,7 +15,7 @@ Modules are declared using the `mod` keyword.
 We can see that in our example, there are two modules defined: `Top` and `Buffer`.
 The order of module definitions does not matter.
 
-Let's look at the first module definiton, `Buffer`.
+Let's look at the first module definition, `Buffer`.
 
 
 Ports
@@ -35,7 +35,7 @@ In Virdant, each port has a directionality, either `incoming` or `outgoing`, a n
    Virdant chooses the keywords it does because it makes the ports line up nicely.
    This makes the code much easier to read, without asking the designer to add extra spaces or tabs into their code.
 
-Our example has three ports: `clock` `inp` and `out`.
+Our example has three ports: `clock`, `inp`, and `out`.
 
 The first port is an incoming port named `clock`.
 It has type `Clock`.
@@ -66,13 +66,13 @@ They are declared with the keyword `reg`.
    :lines: 16
 
 Our `Buffer` module contains one register named `queue`.
-It has with type `Word[4]`.
+It has type `Word[4]`.
 
-Each register is assocaited with a clock.
+Each register is associated with a clock.
 We create this association with the `on` clause.
 The expression must be a signal of type `Clock`.
 
-The value contained in a registers is updated rising edge of its clock.
+The value contained in a register is updated on the rising edge of its clock.
 
 Like `incoming` ports, we can use the name of the register in any expression to read its current value.
 
@@ -96,7 +96,7 @@ The first driver, `queue <= inp`, will latch the value of `inp` into the registe
 The second wire, `out := queue`, will connect the register `queue` to the outgoing port `out`.
 You will notice these use different operators.
 The `<=` is used with registers, and it reminds us that we are assigning to the new value of the register.
-On the other hand, `:=` is a continuous driver, and it tells us that the right hand side is equal to the left hand side at any moment in time.
+On the other hand, `:=` is a continuous driver, and it tells us that the right-hand side is equal to the left-hand side at any moment in time.
 
 
 The Top Module
@@ -137,8 +137,8 @@ wrapping around to `0` if the value is the maximum value.
 
 Submodule Instances
 -------------------
-The power of modules is that they allow us to design our hardware heirarchically.
-This means that a module may instantiate a another module as a submodule.
+The power of modules is that they allow us to design our hardware hierarchically.
+This means that a module may instantiate another module as a submodule.
 When we do so, we set up a parent-child relationship between the two.
 
 In Virdant, this is done with the syntax:
@@ -199,7 +199,7 @@ Virdant supports the `wire` keyword for this:
 In this example, we declare a wire named `counter_is_zero`.
 It has type `Bit`, which is a 1-bit value.
 
-.. tip:
+.. tip::
 
    If you come from programming, this is similar to the `bool` type found in programming languages.
 

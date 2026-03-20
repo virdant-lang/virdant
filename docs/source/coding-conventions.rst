@@ -58,7 +58,7 @@ Use blank spaces to help separate your statements into meaningful groups.
 
 Curly Braces
 ------------
-Virdant should be written with the opening curly brace at the end of the line which needed to open it.
+Virdant should be written with the opening curly brace at the end of the line that needs to open it.
 So we write the following:
 
 .. code-block:: virdant
@@ -89,7 +89,7 @@ and
 
 Expressions
 -----------
-When writing driver statements, if the expression on the right hand side is short, you can write it on the same line:
+When writing driver statements, if the expression on the right-hand side is short, you can write it on the same line:
 
 .. code-block:: virdant
 
@@ -112,14 +112,14 @@ Or if it makes it clearer, with a newline and an extra layer of indentation:
 
 .. code-block:: virdant
 
-  counter <= 
+  counter <=
       if reset {
           0
       } else {
           counter->inc()
       };
 
-The expressions for the arm of each match expression follows a similar rule:
+The expression for each arm of a match expression follows a similar rule:
 
 Inline:
 

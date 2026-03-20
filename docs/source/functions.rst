@@ -2,7 +2,7 @@ Functions
 =========
 Virdant allows you to define functions.
 
-Functions are reusable snippets of combination logic.
+Functions are reusable snippets of combinational logic.
 They may be used anywhere in a design.
 
 Functions are declared with the `fn` keyword:
@@ -19,12 +19,12 @@ The body of the function definition is a single expression which may make use of
 To call a function, we do so as you would in math class: `max(a, b)`,
 where `a` and `b` can be any two expressions of the proper type.
 
-Even when a function is only used in one place, they still provide two key benefits.
+Even when a function is only used in one place, it still provides two key benefits.
 First, they allow you to name a piece of logic in a way that is meaningful to anyone who reads your code.
-And second, they can be used to guarantee that a given result only depends on the arguments you pass to it.
-(This is very useful when both the module definition gets large and the function body gets complicated).
+And second, it can be used to guarantee that a given result depends only on the arguments you pass to it.
+This is especially useful when both the module definition and the function body grow large and complicated.
 
-Here is a a complete example that shows a module which will always output the larger byte that it has seen as an input:
+Here is a complete example that shows a module that always outputs the larger byte it has seen on its input:
 
 .. literalinclude:: /examples/maximum.vir
     :language: virdant

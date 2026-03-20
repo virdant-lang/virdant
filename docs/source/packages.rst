@@ -10,8 +10,8 @@ One Virdant package may import another using the `import` keyword:
     :language: virdant
     :linenos:
 
-The first line, `import buffer`, will tell Virdant that it needs to import the `buffer` package.
-This will be located in another file, `buffer.vir`:
+The first line, `import buffer`, tells Virdant that it needs to import the `buffer` package.
+That package is located in another file, `buffer.vir`:
 
 .. literalinclude:: /examples/packages/buffer.vir
     :caption: buffer.vir

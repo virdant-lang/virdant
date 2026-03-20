@@ -18,7 +18,7 @@ All you are allowed to do with clocks is pass them around through ports or to as
 Bit
 ---
 A `Bit` is a 1-bit value.
-It is the analog of the boolean type found in programming langauges.
+It is the analog of the boolean type found in programming languages.
 Its values are `true` and `false`.
 
 
@@ -26,7 +26,7 @@ Word
 ----
 A `Word[n]` is an n-bit value.
 
-When used as a number, it is interpreted to be unsigned integer in 2's complement.
+When used as a number, it is interpreted as an unsigned integer in 2's complement.
 
 Note that `Word[1]` and `Bit` are distinct types.
 You can cast between them with `w[0]` (to go from `Word[1]` to `Bit`) or `word(b)` (to go from `Bit` to `Word[1]`).

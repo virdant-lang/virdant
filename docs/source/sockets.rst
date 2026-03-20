@@ -41,7 +41,7 @@ Here is a snippet showing an example of each:
 
 By declaring the socket instance, the module gets a copy of each port in the definition.
 The effective directions are easy to think about:
-`mosi` ports on a `master` socket instance acts like an output port,
+`mosi` ports on a `master` socket instance act like output ports,
 while a `mosi` port on a `slave` acts like an input port,
 and similarly for the other two combinations.
 
@@ -62,9 +62,9 @@ You access these ports using dot notation:
 (Of course, instead of assigning them to just `0`,
 a real `Core` or `Memory` would have the logic to drive actual values to the sockets).
 
-Just like with ports, module definitions are obligated to drive the ports of its sockets.
+Just like with ports, module definitions are obligated to drive the ports of their sockets.
 If the socket is a master, then the obligation is to drive all of the `mosi` ports,
-and dually, if the socket is a slave, it the module is obligated to drive all of the `miso` ports.
+and dually, if the socket is a slave, then the module is obligated to drive all of the `miso` ports.
 
 Also like with ports, module definitions may make use of the incoming signals from the sockets.
 Master sockets may use `miso` ports in expressions, and similarly, slaves may use `mosi` ports in them.
@@ -119,7 +119,7 @@ The *role* of the socket is whether it has been declared as a master or a slave.
 This is indicated by the `master` or `slave` keyword.
 
 The *perspective* is whether the socket is being viewed from the inside or the outside of the module it is declared in.
-When referring to a socket in the same module it was declared, this is an interior view of the socket.
+When referring to a socket in the same module in which it was declared, this is an interior view of the socket.
 When referring to a socket declared in a submodule, this is an exterior view of the socket.
 In the earlier example, both `memory.mem` and `core.mem` are seen from an exterior view.
 

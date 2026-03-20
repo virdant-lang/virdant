@@ -7,7 +7,7 @@ Literals
 --------
 Literals are hard-coded constants.
 
-To represent `Bit`\s, we use `true` and `false`.
+To represent values of type `Bit`, we use `true` and `false`.
 
 To represent values of type `Word[n]`, we annotate constants with their bitwidth.
 The literal `42w16` is a 16-bit integer with the value 42.
@@ -37,7 +37,7 @@ Since using a reference implies reading it, when a reference points to a compone
 it must correspond to a component which sources values.
 You can reference a `reg` or an `incoming` port, but you cannot reference an `outgoing` port.
 
-For clarity, when referencing a `reg`, it results to the *previous* value of the register, as opposed to the *next* value.
+For clarity, when referencing a `reg`, it refers to the *previous* value of the register, as opposed to the *next* value.
 This means a statement such as `counter <= counter->inc()` is taking the previous value of `counter`, incrementing it,
 and then that value gets latched to supply `counter` with its next value.
 
@@ -51,8 +51,8 @@ For example, in the match expression:
         @Valid(payload) => payload;
     }
 
-The reference `payload` on the right hand side of the `=>` references the locally-bound variable (of the same name)
-declared inside the pattern on the left hand side: `@Valid(payload)`.
+The reference `payload` on the right-hand side of the `=>` references the locally bound variable of the same name
+declared inside the pattern on the left-hand side: `@Valid(payload)`.
 
 
 Methods
@@ -61,27 +61,27 @@ A type may define methods, similar to many programming languages.
 
 The syntax is `subject->method(arg1, ..., argn)`.
 
-The type of the subject must be inferrable.
+The type of the subject must be inferable.
 
 The method supplies a type signature which gives each argument an expected type, as well as the return type.
 
 Some important methods include:
 
-* `a->inc()` increment `a`
-* `a->dec()` decrement `a`
-* `a->add(b)` add `a` and `b`
-* `a->sub(b)` subtract `b` from `a`
-* `a->not()` logical NOT `a`
-* `a->and(b)` logical AND `a` with `b`
-* `a->or(b)` logical OR `a` with `b`
-* `a->xor(b)` logical XOR `a` with `b`
-* `a->all()` logical AND of all bits of `a`
-* `a->any()` logical OR of all bits of `a`
-* `a->eq(b)` test if `a` equals `b`
-* `a->neq(b)` test if `a` does not equal `b`
-* `a->gt(b)` test if `a` is greater than `b`
-* `a->lt(b)` test if `a` is less than `b`
-* `a->get(i)` dynamically index into `a` to get bit `i`
+* `a->inc()` increments `a`
+* `a->dec()` decrements `a`
+* `a->add(b)` adds `a` and `b`
+* `a->sub(b)` subtracts `b` from `a`
+* `a->not()` computes the logical NOT of `a`
+* `a->and(b)` computes the logical AND of `a` and `b`
+* `a->or(b)` computes the logical OR of `a` and `b`
+* `a->xor(b)` computes the logical XOR of `a` and `b`
+* `a->all()` computes the logical AND of all bits of `a`
+* `a->any()` computes the logical OR of all bits of `a`
+* `a->eq(b)` tests whether `a` equals `b`
+* `a->neq(b)` tests whether `a` does not equal `b`
+* `a->gt(b)` tests whether `a` is greater than `b`
+* `a->lt(b)` tests whether `a` is less than `b`
+* `a->get(i)` dynamically indexes into `a` to get bit `i`
 
 
 Concatenation
@@ -89,8 +89,8 @@ Concatenation
 You can concatenate words with the syntax `word(a, b)`.
 
 The syntax is variadic, and so you can write things like `word(a, b, c, d)`.
-Each argument of `word` must have an inferrable type.
-The type of each one must be one of `Word`, `Bit`, or of an enum type.
+Each argument of `word` must have an inferable type.
+Each argument must have type `Word`, `Bit`, or an enum type.
 The result will have a `Word` type with its width equal to the sum of all the widths of all the arguments.
 
 The bits of the result are ordered such that early arguments are placed in the higher-order bits.
@@ -118,7 +118,7 @@ Slice Indexing
 --------------
 You can also slice a word with the syntax `w[8..6]`.
 
-The two indexes must be literal integers.
+The two indices must be literal integers.
 Both must be in the range of `0` to `n - 1`.
 Moreover, the high index comes first and must be greater than or equal to the lower index.
 
@@ -135,7 +135,7 @@ Thus, the result is `Word[2]`.
 
 If Expressions
 --------------
-`if` expressions be used to create mux trees with one or more conditions.
+`if` expressions can be used to create mux trees with one or more conditions.
 All `if` expressions must have an `else` branch.
 
 .. literalinclude:: /examples/conditions.vir
@@ -155,7 +155,7 @@ Match Expressions
 -----------------
 `match` expressions allow you to select an expression based on a result.
 
-A match statement can be used to break a value apart and then analyze the pieces.
+A match expression can be used to break a value apart and then analyze the pieces.
 Think of it as a powerful version of the `if` statement.
 It works nicely with union types and enum types.
 
@@ -178,14 +178,14 @@ Type Ascription
 ---------------
 In some cases, you may want to supply the type of a value explicitly.
 
-Type asription in Virdant is written `e[Foo]`.
+Type ascription in Virdant is written `e[Foo]`.
 This causes the expression `e` to be checked against type `Foo`.
 
 This is required in some cases where the typechecker needs to be able to infer an expression's type,
 such as when using `word` on an enumerant literal.
-For example, you cannot simply write `word(#xor)`, since the arguments of `word` must be inferrable,
+For example, you cannot simply write `word(#xor)`, since the arguments of `word` must be inferable,
 but there might be multiple enum types with an `#xor`.
-So instead, we write `word(#xor[AluOp])`
+So instead, we write `word(#xor[AluOp])`.
 
 Type ascription is also very handy when you run into a type error you don't understand,
 and you want to figure out where the source of the issue is.

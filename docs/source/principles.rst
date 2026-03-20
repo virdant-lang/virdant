@@ -1,11 +1,11 @@
 Principles
 ==========
-There are few principles Virdant adheres to in its general design.
+There are a few principles Virdant adheres to in its general design.
 
 
 Craftsmanship
 -------------
-Tools reflect the values of those who weild them.
+Tools reflect the values of those who wield them.
 Virdant was designed with the digital designer and the verification engineer in mind.
 Attention has been paid to every detail.
 And as a result, Virdant is a pleasure to work with.
@@ -23,7 +23,7 @@ Mistakes in hardware can be expensive.
 While Virdant is primarily aimed at hobbyist FPGA designs,
 it still detracts from the experience whenever a preventable error occurs.
 
-Virdant's strong type systems is designed so that if your circuit synthesizes, it works.
+Virdant's strong type system is designed so that if your circuit synthesizes, it works.
 
 Under normal operation, the expression sublanguage has many nice properties:
 

@@ -12,7 +12,7 @@ You can install it by cloning the repository and running `make install`:
   $ cd virdant
   $ make install
 
-This will build Virdant from source and then copies the binaries to `$HOME/.local/virdant/bin`.
+This will build Virdant from source and then copy the binaries to `$HOME/.local/virdant/bin`.
 Make sure that this directory is on your `$PATH`.
 
 
@@ -45,7 +45,7 @@ Here is one which will run the design for 100 cycles:
    :language: verilog
    :linenos:
 
-If you have `Icarus Verilog`_ installed, you can compile a simulator and run it with this with these commands:
+If you have `Icarus Verilog`_ installed, you can compile a simulator and run it with these commands:
 
 .. _Icarus Verilog: https://steveicarus.github.io/iverilog/
 
