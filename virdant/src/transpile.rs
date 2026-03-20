@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use bstr::ByteSlice;
 
-use crate::analysis::typecheck::Type;
+use crate::analysis::types::Type;
 use crate::analysis::Location;
 use crate::common::{BinOp as CommonBinOp, ComponentKind, PortDir, UnOp as CommonUnOp, Width};
 use crate::db::Db;

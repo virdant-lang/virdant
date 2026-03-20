@@ -11,23 +11,16 @@ use bstr::BStr;
 use bstr::BString;
 use hashbrown::{HashMap, HashSet};
 
-use crate::analysis::Location;
-use crate::analysis::PackageAnalysis;
+use crate::analysis::location::Location;
+use crate::analysis::package::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
-use crate::analysis::symboltable::SymbolId;
-use crate::analysis::symboltable::SymbolKind;
-use crate::analysis::symboltable::SymbolTable;
-use crate::analysis::typecheck::Type;
-use crate::analysis::typecheck::TypeDef;
-use crate::analysis::typecheck::{ExprRoot, Typing, TypingContext};
+use crate::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
+use crate::analysis::types::{ExprRoot, Type, TypeDef, Typing, TypingContext};
 use crate::common::json::ToJson;
-use crate::diagnostics;
-use crate::diagnostics::DiagnosticLevel;
-use crate::source::Region;
-use crate::syntax::ast::AstNode;
-use crate::syntax::parsing::parse;
-use crate::syntax::payload::AstNodePayload;
-use crate::{diagnostics::Diagnostic, fqn::PackageFqn, source::Source, syntax::parsing::Parsing};
+use crate::diagnostics::Diagnostic;
+use crate::fqn::PackageFqn;
+use crate::source::{Region, Source};
+use crate::syntax::parsing::Parsing;
 
 pub use guts::*;
 
@@ -69,23 +62,23 @@ impl Query {
         // when invoked with a Query, dispatch to the given function with the arguments:
         // $buildfn(&mut builder, arg1, ..., argN)
         dispatch_build!(_self, db;
-            build_parsing : Parsing(package);
-            build_syntax_errors : SyntaxErrors();
-            crate::analysis::build_package_analysis : PackageAnalysis(analysis);
-            crate::analysis::component::build_component_analysis : ComponentAnalysis(symbol_id);
-            crate::analysis::symboltable::build_symboltable : SymbolTable();
-            crate::analysis::typecheck::build_exprroots : ExprRoots();
-            build_all_exprs : AllExprs();
-            crate::analysis::typecheck::build_expected_type : ExpectedType(location);
-            crate::analysis::typecheck::build_typedefs : TypeDefs();
-            crate::analysis::typecheck::build_typing_context : TypingContext(symbol_id);
-            crate::analysis::typecheck::build_typing : Typing(expr_root);
-            crate::analysis::typecheck::typecheck : TypeCheck();
-            crate::analysis::typecheck::build_typeof : Typeof(location);
-            build_typeof_all : TypeofAll();
-            crate::analysis::typecheck::build_type_monomorphizations : TypeMonomorphizations();
-            build_location_region : LocationRegion(location);
-            check : Check();
+            crate::queries::build_parsing : Parsing(package);
+            crate::queries::build_syntax_errors : SyntaxErrors();
+            crate::queries::build_package_analysis : PackageAnalysis(analysis);
+            crate::queries::build_component_analysis : ComponentAnalysis(symbol_id);
+            crate::queries::build_symboltable : SymbolTable();
+            crate::queries::build_exprroots : ExprRoots();
+            crate::queries::build_all_exprs : AllExprs();
+            crate::queries::build_expected_type : ExpectedType(location);
+            crate::queries::build_typedefs : TypeDefs();
+            crate::queries::build_typing_context : TypingContext(symbol_id);
+            crate::queries::build_typing : Typing(expr_root);
+            crate::queries::typecheck : TypeCheck();
+            crate::queries::build_typeof : Typeof(location);
+            crate::queries::build_typeof_all : TypeofAll();
+            crate::queries::build_type_monomorphizations : TypeMonomorphizations();
+            crate::queries::build_location_region : LocationRegion(location);
+            crate::queries::check : Check();
 
         )
     }
@@ -113,83 +106,4 @@ db_getter!(get_type_monomorphizations : TypeMonomorphizations() -> Vec<Type>);
 db_getter!(get_location_region : LocationRegion(location: Location) -> Region);
 
 
-fn build_parsing(builder: &mut Builder<'_>, package: PackageFqn) -> Arc<Parsing> {
-    let source = cast!(builder.get(Query::Source(package)), Source);
-    let parsing = parse(&source);
-    Arc::new(parsing)
-}
 
-fn build_syntax_errors(builder: &mut Builder) -> Vec<Diagnostic> {
-    let mut diagnostics = vec![];
-    for package in builder.get_packages() {
-        let parsing = builder.get_parsing(package);
-        diagnostics.extend(parsing.diagnostics());
-    }
-
-    diagnostics
-}
-
-fn build_all_exprs(builder: &mut Builder) -> Vec<Location> {
-    let mut exprs = vec![];
-
-    for package in builder.get_packages() {
-        let parsing = builder.get_parsing(package);
-        collect_expr_locations(parsing.root(), &mut exprs);
-    }
-
-    exprs
-}
-
-fn collect_expr_locations(node: AstNode<'_>, exprs: &mut Vec<Location>) {
-    if node.is_expr() {
-        exprs.push(node.location());
-    }
-
-    for child in node.children() {
-        collect_expr_locations(child, exprs);
-    }
-}
-
-fn build_typeof_all(builder: &mut Builder) -> HashMap<Location, Option<Type>> {
-    let mut typeof_all = HashMap::new();
-
-    for location in builder.get_all_exprs() {
-        // TODO Probably need thread the diagnostics through instead of discarding them here.
-        if let Ok(typ) = builder.get_typeof(location.clone()) {
-            typeof_all.insert(location, Some(typ));
-        }
-    }
-
-    typeof_all
-}
-
-fn build_location_region(builder: &mut Builder, location: Location) -> Region {
-    let parsing = builder.get_parsing(location.package());
-    let node = parsing.ast_node(location.ast_node_id());
-    node.region()
-}
-
-fn check(builder: &mut Builder) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
-    let mut diagnostics = vec![];
-
-    diagnostics.extend(builder.get_syntax_errors());
-    diagnostics.extend(builder.typecheck());
-
-    for (location, opt_typ) in builder.get_typeof_all().iter() {
-        if opt_typ.is_none() {
-            let region = builder.get_location_region(location.clone());
-            diagnostics.push(
-                diagnostics::Unknown {
-                    region,
-                    message: "Missing type in AST".into(),
-                }.into()
-            );
-        }
-    }
-
-    if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
-        Err(diagnostics)
-    } else {
-        Ok(diagnostics)
-    }
-}

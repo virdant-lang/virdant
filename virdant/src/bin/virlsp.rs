@@ -12,7 +12,7 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 use serde_json::json;
 
 use virdant::Vir;
-use virdant::analysis::typecheck::ExprRoot;
+use virdant::analysis::types::ExprRoot;
 use virdant::db::Db;
 use virdant::fqn::PackageFqn;
 use virdant::source::{LineCol, Source, Span};

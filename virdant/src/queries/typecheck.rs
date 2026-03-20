@@ -1,0 +1,72 @@
+use hashbrown::{HashMap, HashSet};
+
+use crate::analysis::location::Location;
+use crate::analysis::types::{ExprRoot, Type};
+use crate::db::Builder;
+use crate::diagnostics::{self, Diagnostic};
+
+pub(crate) fn typecheck(builder: &mut Builder) -> Vec<Diagnostic> {
+    let mut diagnostics = vec![];
+    for exprroot in builder.get_exprroots() {
+        let typing = builder.get_typing(exprroot);
+        diagnostics.extend(typing.diagnostics());
+    }
+
+    diagnostics
+}
+
+pub(crate) fn build_typeof(builder: &mut Builder, location: Location) -> Result<Type, Vec<Diagnostic>> {
+    let region = builder.get_location_region(location.clone());
+
+    if let Some(exprroot) = exprroot_ancestor(builder, location.clone()) {
+        let typing = builder.get_typing(exprroot);
+        if let Some(typ) = typing.type_of_node(location.ast_node_id()) {
+            Ok(typ.clone())
+        } else {
+            Err(vec![diagnostics::Todo {
+                region,
+                message: "No expr root".into(),
+            }.into()])
+        }
+    } else {
+        Err(vec![diagnostics::Todo {
+            region,
+            message: todo!(),
+        }.into()])
+    }
+}
+
+pub(crate) fn build_typeof_all(builder: &mut Builder) -> HashMap<Location, Option<Type>> {
+    let mut typeof_all = HashMap::new();
+
+    for location in builder.get_all_exprs() {
+        // TODO Probably need thread the diagnostics through instead of discarding them here.
+        if let Ok(typ) = builder.get_typeof(location.clone()) {
+            typeof_all.insert(location, Some(typ));
+        }
+    }
+
+    typeof_all
+}
+
+fn exprroot_ancestor(builder: &mut Builder, location: Location) -> Option<ExprRoot> {
+    let parsing = builder.get_parsing(location.package());
+    let exprroot_ids: HashSet<_> = builder
+        .get_exprroots()
+        .into_iter()
+        .map(|exprroot| exprroot.location().ast_node_id())
+        .collect();
+    let mut node = parsing.ast_node(location.ast_node_id());
+    loop {
+        if exprroot_ids.contains(&node.id()) {
+            return Some(ExprRoot::new(node.location()));
+        }
+
+        if let Some(parent) = node.parent() {
+            let parent_id = parent.id();
+            node = parsing.ast_node(parent_id);
+        } else {
+            return None;
+        }
+    }
+}

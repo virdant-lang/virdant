@@ -5,7 +5,7 @@ pub mod fqn;
 pub mod syntax;
 pub mod db;
 pub mod analysis;
-// pub mod types;
+pub mod queries;
 pub mod diagnostics;
 pub mod virir;
 pub mod conversion;
