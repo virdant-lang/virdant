@@ -1,6 +1,9 @@
 export mod Top {
     incoming clock : Clock;
     incoming reset : Bit;
+    outgoing fin : Bit;
+
+    fin := false;
 
     wire w : Bit;
     w := true;

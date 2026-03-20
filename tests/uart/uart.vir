@@ -1,0 +1,269 @@
+/// `UartState` is used to model the state machine of `UartSender` and `UartReceiver`.
+///
+/// `Idle` - awaiting a request
+/// `Start(pulse)` - received a request and currently sending/receiving the start bit.
+///                - `pulse` is a countdown until the next state transition.
+/// `Bit(bit, pulse)` - received a request and currently sending/receiving the start bit
+///                   - `bit` is which bit is currently being sent/received
+///                   - `pulse` is a countdown until the next state transition.
+/// `Stop(pulse)` - finished a request and sending/receiving the end bit.
+///               - `pulse` is a countdown until the next state transition.
+//union type UartState {
+//    Idle();
+//    Start(pulse : Word[11]);
+//    Bit(bit : Word[3], pulse : Word[11]);
+//    Stop(pulse : Word[11]);
+//}
+
+export mod Top {
+    incoming clock      : Clock; // 12MHz
+    incoming reset      : Bit;
+    outgoing fin        : Bit;
+
+    fin := cycle == 150000w32;
+
+    mod sender of UartSender;
+    sender.clock := clock;
+    sender.reset := reset;
+
+    sender.data := 65w8;
+    sender.data_valid := true;
+
+    reg cycle : Word[32] on clock;
+    cycle <= if reset { 0w32 } else { cycle + 1w32 };
+}
+
+mod UartSender {
+    incoming clock      : Clock; // 12MHz
+    incoming reset      : Bit;
+    incoming data       : Word[8];
+    incoming data_valid : Bit;
+    outgoing ready      : Bit;
+    outgoing uart_tx    : Bit;
+
+    reg uart_tx_reg : Bit on clock;
+    uart_tx := uart_tx_reg;
+
+    reg latched_data : Word[8] on clock;
+
+//    reg state : UartState on clock;
+
+    // States:
+    //   0b00 = @Idle
+    //   0b01 = @Start
+    //   0b10 = @Bit
+    //   0b11 = @Stop
+    reg state  : Word[2] on clock;
+    reg pulse  : Word[11] on clock;
+    reg bitnum : Word[3] on clock;
+
+    ready := state == 0w2;
+
+    state <= if reset {
+        0w2 // @Idle
+    } else if state == 0w2 { // @Idle
+        if data_valid {
+            1w2 // @Start
+        } else {
+            0w2 // @Idle
+        }
+    } else if state == 1w2 { // @Start
+        if pulse == 0w11 {
+            2w2 // @Bit
+        } else {
+            1w2 // @Start
+        }
+    } else if state == 2w2 { // @Bit
+        if pulse == 0w11 {
+            if bitnum < 7w3 {
+                2w2 // @Bit
+            } else {
+                3w2 // @Stop
+            }
+        } else {
+            2w2 // @Bit
+        }
+    } else { // @Stop
+        if pulse == 0w11 {
+            0w2 // @Idle
+        } else {
+            3w2 // @Stop
+        }
+    };
+
+    pulse <= if reset {
+        0w11
+    } else if state == 0w2 { // @Idle
+        if data_valid {
+            1250w11 // loading for Start state
+        } else {
+            0w11
+        }
+    } else if state == 1w2 { // @Start
+        if pulse == 0w11 {
+            1250w11 // loading for Bit state
+        } else {
+            pulse - 1
+        }
+    } else if state == 2w2 { // @Bit
+        if pulse == 0w11 {
+            1250w11 // loading for next Bit or Stop state
+        } else {
+            pulse - 1
+        }
+    } else { // @Stop
+        if pulse == 0w11 {
+            0w11
+        } else {
+            pulse - 1
+        }
+    };
+
+    bitnum <= if reset {
+        0w3
+    } else if state == 1w2 { // @Start
+        if pulse == 0w11 {
+            0w3 // entering Bit state, start at bit 0
+        } else {
+            bitnum
+        }
+    } else if state == 2w2 { // @Bit
+        if pulse == 0w11 {
+            if bitnum < 7w3 {
+                bitnum + 1
+            } else {
+                bitnum
+            }
+        } else {
+            bitnum
+        }
+    } else {
+        bitnum
+    };
+
+    latched_data <=
+        if state == 0w2 { // @Idle
+            if data_valid {
+                data
+            } else {
+                latched_data
+            }
+        } else {
+            latched_data
+        };
+
+    uart_tx_reg <= if reset {
+        true
+    } else if state == 0w2 { // @Idle
+        true
+    } else if state == 1w2 { // @Start
+        false
+    } else if state == 2w2 { // @Bit
+        if bitnum == 0w3 {
+            latched_data[0]
+        } else if bitnum == 1w3 {
+            latched_data[1]
+        } else if bitnum == 2w3 {
+            latched_data[2]
+        } else if bitnum == 3w3 {
+            latched_data[3]
+        } else if bitnum == 4w3 {
+            latched_data[4]
+        } else if bitnum == 5w3 {
+            latched_data[5]
+        } else if bitnum == 6w3 {
+            latched_data[6]
+        } else {
+            latched_data[7]
+        }
+    } else { // @Stop
+        true
+    };
+}
+
+//mod UartReceiver {
+//    incoming clock      : Clock; // 12MHz
+//    incoming reset      : Bit;
+//    incoming uart_rx    : Bit;
+//    outgoing data       : Word[8];
+//    outgoing data_valid : Bit;
+//
+//    reg state : UartState on clock;
+//    reg data_reg : Word[8] on clock;
+//
+//    state <= if reset {
+//        @Idle()
+//    } else {
+//        match state {
+//            @Idle() =>
+//                if uart_rx == false {
+//                    @Start(625w11) // ~= 1250 * 0.5
+//                } else {
+//                    @Idle()
+//                };
+//            @Start(pulse) =>
+//                if pulse == 0 {
+//                    @Bit(0, 1250)
+//                } else {
+//                    @Start(pulse->dec())
+//                };
+//            @Bit(bit, pulse) =>
+//                if pulse == 0 {
+//                    if bit == 7 {
+//                        @Stop(1150) // fudge this one a little bit to be slightly less than 1250
+//                    } else {
+//                        @Bit(bit->inc(), 1250)
+//                    }
+//                } else {
+//                    @Bit(bit, pulse->dec())
+//                };
+//            @Stop(pulse) =>
+//                if pulse == 0 {
+//                    @Idle()
+//                } else {
+//                    @Stop(pulse->dec())
+//                };
+//        }
+//    };
+//
+//    data_reg <= if reset {
+//        0
+//    } else {
+//        match state {
+//            @Idle() => 0;
+//            @Start(pulse) => 0;
+//            @Bit(bit, pulse) =>
+//                if pulse == 0 {
+//                    if bit == 0 {
+//                        data_reg || word(0w7, uart_rx)
+//                    } else if bit == 1 {
+//                        data_reg || word(0w7, uart_rx)->sll(1)
+//                    } else if bit == 2 {
+//                        data_reg || word(0w7, uart_rx)->sll(2)
+//                    } else if bit == 3 {
+//                        data_reg || word(0w7, uart_rx)->sll(3)
+//                    } else if bit == 4 {
+//                        data_reg || word(0w7, uart_rx)->sll(4)
+//                    } else if bit == 5 {
+//                        data_reg || word(0w7, uart_rx)->sll(5)
+//                    } else if bit == 6 {
+//                        data_reg || word(0w7, uart_rx)->sll(6)
+//                    } else {
+//                        data_reg || word(0w7, uart_rx)->sll(7)
+//                    }
+//                } else {
+//                    data_reg
+//                };
+//            @Stop(pulse) => data_reg;
+//        }
+//    };
+//
+//    data := data_reg;
+//
+//    data_valid := match state {
+//        @Idle() => false;
+//        @Start(pulse) => false;
+//        @Bit(bit, pulse) => false;
+//        @Stop(pulse) => pulse == 0;
+//    };
+//}

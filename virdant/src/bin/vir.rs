@@ -226,26 +226,24 @@ fn compile_to_virir(path: PathBuf, outfilepath: PathBuf) {
 
 fn run(path: PathBuf, vcd: Option<String>) {
     let project = path.file_name().unwrap().to_string_lossy().to_owned();
-    let build_dir = "build";
+    let builddir = PathBuf::from("build").join(project.as_ref());
 
     let mut vir = virdant::Vir::from_dir(path.clone());
     vir.dump_diagnostics();
 
     let virir = &transpile(&vir.db());
-    std::fs::create_dir_all("build/").unwrap();
-    let virir_filepath = PathBuf::from("build").join(format!("{project}.virir"));
+    std::fs::create_dir_all(&builddir).unwrap();
+    let virir_filepath = builddir.join(format!("{project}.virir"));
 
     std::fs::write(virir_filepath, virir.to_text()).unwrap();
 
     let virir = virdant::virir::parse(&virir.to_text()).unwrap();
     let verilog = convert_virir_to_verilog(virir);
 
-    let builddir = PathBuf::from(build_dir);
-    std::fs::create_dir_all(&builddir).unwrap();
     verilog.write_in_dir(&builddir).unwrap();
 
     let bin_name = path.file_stem().unwrap().to_string_lossy().to_string();
-    let bin = PathBuf::from("build").join(bin_name).to_string_lossy().to_string();
+    let bin = builddir.join(&bin_name).to_string_lossy().to_string();
 
     let mut command = std::process::Command::new("iverilog");
     command.arg("-g2012");

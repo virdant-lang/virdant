@@ -1,9 +1,11 @@
 module Tb();
     Top top(
         .clock(clock),
-        .reset(reset)
+        .reset(reset),
+        .fin(fin)
     );
 
+    wire fin;
     reg reset = 0;
     reg clock = 0;
     string vcd;
@@ -31,6 +33,10 @@ module Tb();
         end
         initialize();
         forever begin
+            if (fin) begin
+                $display("FINISHED");
+                $finish;
+            end
             tick();
         end
     end

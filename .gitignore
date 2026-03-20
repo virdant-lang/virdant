@@ -1,3 +1,9 @@
 **/target
 build
+diffs
 .cargo
+conversations
+TODO.txt
+*.gtkw
+*.vcd
+*.sh
