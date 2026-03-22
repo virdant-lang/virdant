@@ -211,7 +211,7 @@ fn dump_exprroots(path: PathBuf) {
         let package = exprroot.location().package();
         let parsing = vir.db().get_parsing(package.clone());
         let location = exprroot.location();
-        let typ = vir.db().get_expected_type(location.clone());
+        let typ = vir.db().get_expected_type(exprroot);
         let node = parsing.ast_node(location.ast_node_id());
         let region = node.region();
         println!("{location:?} : {typ:?} at @{region}");

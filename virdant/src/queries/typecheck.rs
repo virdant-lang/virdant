@@ -15,23 +15,41 @@ pub(crate) fn typecheck(builder: &mut Builder) -> Vec<Diagnostic> {
     diagnostics
 }
 
-pub(crate) fn build_typeof(builder: &mut Builder, location: Location) -> Result<Type, Vec<Diagnostic>> {
-    let region = builder.get_location_region(location.clone());
+pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> ExprRoot {
+    let parsing = builder.get_parsing(location.package());
 
-    if let Some(exprroot) = exprroot_ancestor(builder, location.clone()) {
-        let typing = builder.get_typing(exprroot);
-        if let Some(typ) = typing.type_of_node(location.ast_node_id()) {
-            Ok(typ.clone())
-        } else {
-            Err(vec![diagnostics::Todo {
-                region,
-                message: "No expr root".into(),
-            }.into()])
+    let exprroot_ids: HashSet<_> = builder
+        .get_exprroots()
+        .into_iter()
+        .filter(|exprroot| exprroot.location.package() == location.package())
+        .map(|exprroot| exprroot.location().ast_node_id())
+        .collect();
+
+    let mut node = parsing.ast_node(location.ast_node_id());
+    loop {
+        if let Some(exprroot) = exprroot_ids.get(&node.id()) {
+            return ExprRoot::new(node.location());
         }
+
+        if let Some(parent) = node.parent() {
+            let parent_id = parent.id();
+            node = parsing.ast_node(parent_id);
+        } else {
+            panic!("No ExprRoot found")
+        }
+    }
+}
+
+pub(crate) fn build_typeof(builder: &mut Builder, location: Location) -> Result<Type, Vec<Diagnostic>> {
+    let exprroot = builder.get_exprroot_for(location.clone());
+    let typing = builder.get_typing(exprroot);
+    if let Some(typ) = typing.type_of_node(location.ast_node_id()) {
+        Ok(typ.clone())
     } else {
+        let region = builder.get_location_region(location.clone());
         Err(vec![diagnostics::Todo {
             region,
-            message: todo!(),
+            message: "No expr root".into(),
         }.into()])
     }
 }
@@ -47,26 +65,4 @@ pub(crate) fn build_typeof_all(builder: &mut Builder) -> HashMap<Location, Optio
     }
 
     typeof_all
-}
-
-fn exprroot_ancestor(builder: &mut Builder, location: Location) -> Option<ExprRoot> {
-    let parsing = builder.get_parsing(location.package());
-    let exprroot_ids: HashSet<_> = builder
-        .get_exprroots()
-        .into_iter()
-        .map(|exprroot| exprroot.location().ast_node_id())
-        .collect();
-    let mut node = parsing.ast_node(location.ast_node_id());
-    loop {
-        if exprroot_ids.contains(&node.id()) {
-            return Some(ExprRoot::new(node.location()));
-        }
-
-        if let Some(parent) = node.parent() {
-            let parent_id = parent.id();
-            node = parsing.ast_node(parent_id);
-        } else {
-            return None;
-        }
-    }
 }

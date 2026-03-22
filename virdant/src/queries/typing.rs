@@ -28,7 +28,8 @@ pub(crate) fn build_typing_context(builder: &mut Builder, item: SymbolId) -> Typ
     context
 }
 
-pub(crate) fn build_expected_type(builder: &mut Builder, location: Location) -> Option<Type> {
+pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> Option<Type> {
+    let location = exprroot.location();
     let parsing = builder.get_parsing(location.package());
     let symboltable = builder.get_symboltable();
 
@@ -57,12 +58,15 @@ pub(crate) fn build_expected_type(builder: &mut Builder, location: Location) -> 
         AstNodePayload::CommandDisplay => {
             None
         }
-        _ => todo!("Can't build expected type for: {:?}", parent_node.summary()),
+        _ => {
+            todo!("Can't build expected type for: {:?} at {:?} (parent node is {:?})",
+                exprroot, node.region(), parent_node.summary());
+        }
     }
 }
 
-pub(crate) fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Typing> {
-    let location = expr_root.location();
+pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typing> {
+    let location = exprroot.location();
     let parsing = builder.get_parsing(location.package());
 
     let mut current_id = location.ast_node_id();
@@ -86,11 +90,11 @@ pub(crate) fn build_typing(builder: &mut Builder, expr_root: ExprRoot) -> Arc<Ty
     let context = builder.get_typing_context(item.id());
 
     let node = parsing.ast_node(location.ast_node_id());
-    let expected_typ = builder.get_expected_type(location.clone());
+    let expected_typ = builder.get_expected_type(exprroot.clone());
 
     let diagnostics = vec![];
     let mut typing = Typing {
-        expr_root: expr_root.clone(),
+        exprroot: exprroot.clone(),
         context,
         typs: HashMap::new(),
         diagnostics,

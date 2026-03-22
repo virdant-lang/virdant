@@ -187,6 +187,7 @@ impl ToJson for Query {
             Query::TypeofAll() => json::array!("TypeofAll"),
             Query::TypeMonomorphizations() => json::array!("TypeMonomorphizations"),
             Query::LocationRegion(location) => json::array!("LocationRegion", location.to_json()),
+            Query::ExprRootFor(expr_root) => json::array!("ExprRootFor", expr_root.to_json()),
         }
     }
 }
@@ -219,6 +220,7 @@ impl ToJson for QueryResult {
             QueryResult::TypeDefs(type_defs) => type_defs.to_json(),
             QueryResult::TypeMonomorphizations(items) => items.to_json(),
             QueryResult::LocationRegion(region) => region.to_json(),
+            QueryResult::ExprRootFor(expr_root) => expr_root.to_json(),
         }
     }
 }

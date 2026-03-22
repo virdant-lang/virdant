@@ -4,11 +4,11 @@ use hashbrown::HashMap;
 use crate::common::{BinOp as CommonBinOp, UnOp as CommonUnOp, Width};
 use crate::common::json::ToJson;
 use crate::diagnostics::{self, Diagnostic};
+use crate::analysis::location::Location;
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
 
 use super::context::TypingContext;
-use super::exprroot::ExprRoot;
 use super::typ::Type;
 
 macro_rules! error {
@@ -35,9 +35,30 @@ macro_rules! info {
     }};
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ExprRoot {
+    pub location: Location,
+}
+
+impl ExprRoot {
+    pub fn new(location: Location) -> ExprRoot {
+        ExprRoot { location }
+    }
+
+    pub fn location(&self) -> Location {
+        self.location.clone()
+    }
+}
+
+impl ToJson for ExprRoot {
+    fn to_json(&self) -> json::JsonValue {
+        self.location.to_json()
+    }
+}
+
 #[derive(Debug)]
 pub struct Typing {
-    pub(crate) expr_root: ExprRoot,
+    pub(crate) exprroot: ExprRoot,
     pub(crate) expected_typ: Type,
     pub(crate) context: TypingContext,
     pub(crate) typs: HashMap<AstNodeId, Type>,
