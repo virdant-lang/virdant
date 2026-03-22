@@ -68,7 +68,7 @@ impl Query {
             crate::queries::build_package_analysis : PackageAnalysis(analysis);
             crate::queries::build_component_analysis : ComponentAnalysis(symbol_id);
             crate::queries::build_symboltable : SymbolTable();
-            crate::queries::build_exprroots : ExprRoots();
+            crate::queries::find_exprroots : ExprRoots();
             crate::queries::build_all_exprs : AllExprs();
             crate::queries::build_expected_type : ExpectedType(location);
             crate::queries::build_typedefs : TypeDefs();

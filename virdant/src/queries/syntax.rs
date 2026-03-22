@@ -4,7 +4,7 @@ use crate::db::Builder;
 use crate::diagnostics::Diagnostic;
 use crate::syntax::ast::AstNode;
 
-pub(crate) fn build_exprroots(builder: &mut Builder) -> Vec<ExprRoot> {
+pub(crate) fn find_exprroots(builder: &mut Builder) -> Vec<ExprRoot> {
     let mut exprroots = vec![];
     for package in builder.get_packages() {
         let analysis = builder.get_package_analysis(package);
