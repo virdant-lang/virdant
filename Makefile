@@ -16,3 +16,4 @@ install:
 	mkdir -p ${HOME}/.local/virdant/bin
 	cp ./target/release/vir ${HOME}/.local/virdant/bin/
 	cp ./target/release/vir-* ${HOME}/.local/virdant/bin/
+	cp -r ./lib ${HOME}/.local/virdant/lib
