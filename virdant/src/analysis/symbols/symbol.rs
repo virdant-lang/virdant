@@ -24,6 +24,7 @@ pub enum SymbolKind {
     BuiltinDef,
     FnDef,
     SocketDef,
+    Component,
 }
 
 impl Symbol {

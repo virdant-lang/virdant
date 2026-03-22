@@ -2,6 +2,7 @@ mod Ifetch {
     incoming clock : Clock;
     incoming reset : Bit;
     incoming cycle : Word[32];
+    incoming cycle : Word[32];
 
     outgoing instr : Word[32];
 
