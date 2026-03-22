@@ -375,8 +375,8 @@ Command: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "display" "(" <e:Expr> ")" ";" <rr:@R> => {
-        let payload = AstNodePayload::CommandDisplay;
+    <ll:@L> "display" "(" <s:Str> "," <e:Expr> ")" ";" <rr:@R> => {
+        let payload = AstNodePayload::CommandDisplay(s);
         let span = parser.span(ll, rr);
         let num_children = 1;
 
@@ -713,6 +713,15 @@ ExprAtom: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
+    <ll:@L> "Str" <rr:@R> => {
+        let span = parser.span(ll, rr);
+        let literal = parser.intern(span);
+        let payload = AstNodePayload::ExprStrLit(payload::ExprStrLit { literal, });
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
     <ll:@L> "#" <enumerant:Ident> <rr:@R> => {
         let payload = AstNodePayload::ExprEnumerant(payload::ExprEnumerant { enumerant });
         let span = parser.span(ll, rr);
@@ -821,6 +830,13 @@ Nat: InternedString = {
     },
 }
 
+Str: InternedString = {
+    <ll:@L> <nat:"Str"> <rr:@R> => {
+        let span = parser.span(ll, rr);
+        parser.intern(span)
+    },
+}
+
 extern {
     type Location = SourceOffset;
     type Error = TokenError;
@@ -908,6 +924,7 @@ extern {
         "fatal" => Token::KwFatal,
         "true" => Token::KwTrue,
         "false" => Token::KwFalse,
+        "Str" => Token::Str,
 
         "ERROR" => Token::Error,
     }

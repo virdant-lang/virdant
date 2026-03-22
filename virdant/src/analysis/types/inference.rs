@@ -41,6 +41,7 @@ impl Typing {
                     Ok(None)
                 }
             }
+            AstNodePayload::ExprStrLit(_expr_str_lit) => Ok(self.infer_str(&node)?),
             AstNodePayload::ExprIndex(index) => Ok(self.infer_index(&node, index)?),
             AstNodePayload::ExprIndexRange(indexrange) => Ok(self.infer_index_range(&node, indexrange)?),
             AstNodePayload::ExprWord => Ok(self.infer_word(&node)?),
@@ -97,6 +98,11 @@ impl Typing {
         }
 
         Ok(Some(Type::Word(total_width)))
+    }
+
+    fn infer_str<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, Vec<Diagnostic>> {
+        // TODO
+        Ok(None)
     }
 
     fn infer_binop<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, Vec<Diagnostic>> {

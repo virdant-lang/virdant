@@ -1,3 +1,5 @@
+use bstr::BString;
+
 use super::macros::{verilog_write, verilog_writeln};
 
 use crate::verilog::Writer;
@@ -36,6 +38,7 @@ impl Stmt {
             }
             Stmt::Display(display) => {
                 verilog_write!(writer, "$display(")?;
+                verilog_write!(writer, "{}, ", &display.message)?;
                 for expr in &display.exprs {
                     writer.skip_indent();
                     expr.write(writer)?;
@@ -84,6 +87,7 @@ pub struct AssignNonBlocking {
 
 #[derive(Debug)]
 pub struct Display {
+    pub message: BString,
     pub exprs: Vec<Expr>,
 }
 

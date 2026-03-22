@@ -313,7 +313,7 @@ impl<'d> Transpiler<'d> {
                 local_types,
                 instance_types,
             ))),
-            AstNodePayload::CommandDisplay => {
+            AstNodePayload::CommandDisplay(s) => {
                 let expr_node = node.child(0);
                 let expected_type = self
                     .db
@@ -321,7 +321,9 @@ impl<'d> Transpiler<'d> {
                     .ok()
                     .map(|typ| self.intern_type(&typ));
 
-                Command::Display(Arc::new(self.build_expr(
+                let message = node.parsing().string(s).to_string();
+
+                Command::Display(message.into(), Arc::new(self.build_expr(
                     package,
                     expr_node,
                     expected_type,

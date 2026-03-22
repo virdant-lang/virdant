@@ -1,3 +1,5 @@
+use bstr::BString;
+
 use super::Width;
 use crate::common::{BinOp, PortDir, UnOp};
 
@@ -86,7 +88,7 @@ pub(super) struct On {
 
 pub(super) enum Command {
     Assert(Expr),
-    Display(Expr),
+    Display(BString, Expr),
     Finish,
     Fatal,
 }

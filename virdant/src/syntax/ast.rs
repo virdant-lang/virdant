@@ -189,7 +189,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ModDefStmtMatch => format!("ModDefStmtMatch"),
             AstNodePayload::Socket(socket) => format!("Socket"),
             AstNodePayload::CommandAssert => format!("CommandAssert"),
-            AstNodePayload::CommandDisplay => format!("CommandDisplay"),
+            AstNodePayload::CommandDisplay(_) => format!("CommandDisplay"),
             AstNodePayload::CommandFinish => format!("CommandFinish"),
             AstNodePayload::CommandFatal => format!("CommandFatal"),
             AstNodePayload::Field(field) => format!("Field"),
@@ -207,6 +207,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprMatch => format!("ExprMatch"),
             AstNodePayload::ExprBitLit(expr_bit_lit) => format!("ExprBitLit"),
             AstNodePayload::ExprWordLit(expr_word_lit) => format!("ExprWordLit"),
+            AstNodePayload::ExprStrLit(expr_str_lit) => format!("ExprStrLit"),
             AstNodePayload::ExprBinOp(expr_bin_op) => format!("ExprBinOp"),
             AstNodePayload::ExprUnOp(expr_un_op) => format!("ExprUnOp"),
             AstNodePayload::ExprMethod(expr_method) => format!("ExprMethod"),
@@ -301,6 +302,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprMatch |
             AstNodePayload::ExprBitLit(_) |
             AstNodePayload::ExprWordLit(_) |
+            AstNodePayload::ExprStrLit(_) |
             AstNodePayload::ExprBinOp(_) |
             AstNodePayload::ExprUnOp(_) |
             AstNodePayload::ExprMethod(_) |

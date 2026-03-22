@@ -26,6 +26,7 @@ pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> E
         .collect();
 
     let mut node = parsing.ast_node(location.ast_node_id());
+    let original_node = node.clone();
     loop {
         if let Some(exprroot) = exprroot_ids.get(&node.id()) {
             return ExprRoot::new(node.location());
@@ -35,6 +36,11 @@ pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> E
             let parent_id = parent.id();
             node = parsing.ast_node(parent_id);
         } else {
+            builder.dump();
+            dbg!(&node);
+            eprintln!("{:?}", original_node.summary());
+            eprintln!("{:?}", parsing.text(original_node.span()));
+            eprintln!("{:?}", original_node.region());
             panic!("No ExprRoot found")
         }
     }

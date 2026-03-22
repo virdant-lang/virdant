@@ -12,6 +12,8 @@ use std::fmt::Write;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use bstr::BString;
+
 use crate::common::{PortDir, UnOp as CommonUnOp};
 use crate::fqn::PackageFqn;
 use crate::source::{LineCol, Span};
@@ -93,7 +95,7 @@ pub struct ModDef {
 #[derive(Debug)]
 pub enum Command {
     Assert(Arc<Expr>),
-    Display(Arc<Expr>),
+    Display(BString, Arc<Expr>),
     Finish,
     Fatal,
 }
@@ -217,7 +219,7 @@ fn write_moddef(out: &mut String, moddef: &ModDef, virir: &VirIr) {
 fn command_to_text(command: &Command, virir: &VirIr) -> String {
     match command {
         Command::Assert(expr) => format!("assert({});", expr_to_text(expr.as_ref(), virir)),
-        Command::Display(expr) => format!("display({});", expr_to_text(expr.as_ref(), virir)),
+        Command::Display(message, expr) => format!("display({message}, {});", expr_to_text(expr.as_ref(), virir)),
         Command::Finish => "finish;".to_string(),
         Command::Fatal => "fatal;".to_string(),
     }
@@ -842,7 +844,7 @@ fn build_command(
             instance_types,
             module_signatures,
         ))),
-        parse::Command::Display(expr) => Command::Display(Arc::new(build_expr(
+        parse::Command::Display(message, expr) => Command::Display(message, Arc::new(build_expr(
             expr,
             None,
             type_ids,

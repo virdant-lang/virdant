@@ -323,9 +323,13 @@ fn convert_command(
         virir::Command::Assert(expr) => verilog::Stmt::Assert(verilog::Assert {
             exprs: vec![convert_expr(type_widths, expr.as_ref())],
         }),
-        virir::Command::Display(expr) => verilog::Stmt::Display(verilog::Display {
+        virir::Command::Display(message, expr) => {
+            dbg!(&message);
+            verilog::Stmt::Display(verilog::Display {
+            message,
             exprs: vec![convert_expr(type_widths, expr.as_ref())],
-        }),
+        })
+        }
         virir::Command::Finish => verilog::Stmt::Finish,
         virir::Command::Fatal => verilog::Stmt::Fatal,
     }

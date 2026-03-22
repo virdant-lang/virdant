@@ -1,3 +1,4 @@
+use bstr::BString;
 use crate::common::{BinOp as CommonBinOp, PortDir, UnOp as CommonUnOp};
 use super::parse::{Command, Driver, Expr, Instance, ModDef, ModStmt, On, Package, Port, Reg, Type, Wire};
 // REVIEW Inline all of these functions into grammar.lalrpop.
@@ -55,7 +56,7 @@ DriverDecl: Driver = {
 
 Command: Command = {
     "assert" "(" <expr:ExprNode> ")" ";" => Command::Assert(expr),
-    "display" "(" <expr:ExprNode> ")" ";" => Command::Display(expr),
+    "display" "(" <fmt:Str> "," <expr:ExprNode> ")" ";" => Command::Display(fmt, expr),
     "finish" ";" => Command::Finish,
     "fatal" ";" => Command::Fatal,
 }
@@ -216,6 +217,10 @@ Ident: String = {
 
 Nat: u64 = {
     <digits:r"[0-9]+"> => digits.parse().unwrap(),
+}
+
+Str: BString = {
+    <s:r#""([^"\\]|\\t|\\n|\\r|\\0)*""#> => BString::from(s),
 }
 
 match {

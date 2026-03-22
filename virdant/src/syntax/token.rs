@@ -33,6 +33,9 @@ pub enum Token {
     #[regex(br"0x[0-9a-fA-Z][_0-9a-fA-Z]*[0-9a-fA-Z]w[0-9]+")]
     Word,
 
+    #[regex(br#""([^"\\]|\\t|\\n|\\r|\\0)*""#)]
+    Str,
+
     // Punctuation
     #[token(b";")]   Semi,
     #[token(b".")]   Dot,

@@ -27,7 +27,7 @@ pub enum AstNodePayload {
     ModDefStmtMatch,
     Socket(Socket),
     CommandAssert,
-    CommandDisplay,
+    CommandDisplay(InternedString),
     CommandFinish,
     CommandFatal,
 
@@ -49,6 +49,7 @@ pub enum AstNodePayload {
     ExprMatch,
     ExprBitLit(ExprBitLit),
     ExprWordLit(ExprWordLit),
+    ExprStrLit(ExprStrLit),
     ExprBinOp(ExprBinOp),
     ExprUnOp(ExprUnOp),
     ExprMethod(ExprMethod),
@@ -97,7 +98,7 @@ impl AstNodePayload {
             AstNodePayload::ModDefStmtMatch => "ModDefStmtMatch",
             AstNodePayload::Socket(socket) => "Socket",
             AstNodePayload::CommandAssert => "CommandAssert",
-            AstNodePayload::CommandDisplay => "CommandDisplay",
+            AstNodePayload::CommandDisplay(_) => "CommandDisplay",
             AstNodePayload::CommandFinish => "CommandFinish",
             AstNodePayload::CommandFatal => "CommandFatal",
             AstNodePayload::Field(field) => "Field",
@@ -115,6 +116,7 @@ impl AstNodePayload {
             AstNodePayload::ExprMatch => "ExprMatch",
             AstNodePayload::ExprBitLit(expr_bit_lit) => "ExprBitLit",
             AstNodePayload::ExprWordLit(expr_word_lit) => "ExprWordLit",
+            AstNodePayload::ExprStrLit(expr_str_lit) => "ExprStrLit",
             AstNodePayload::ExprBinOp(expr_bin_op) => "ExprBinOp",
             AstNodePayload::ExprUnOp(expr_un_op) => "ExprUnOp",
             AstNodePayload::ExprMethod(expr_method) => "ExprMethod",
@@ -257,6 +259,11 @@ pub struct ExprBitLit {
 
 #[derive(Clone, Debug)]
 pub struct ExprWordLit {
+    pub literal: InternedString,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExprStrLit {
     pub literal: InternedString,
 }
 
