@@ -55,7 +55,7 @@ export mod Top {
         assert(~x == 0b0101w4);
         assert(-1w4 == 0b1111w4);
 
-        assert(word(w) == 1w1);
+        assert(word(w : Bit) == 1w1);
         assert(word(w, y) == 0b10011w5);
         assert(word(w, y)[4]);
         assert(word(w, y)[3] == false);

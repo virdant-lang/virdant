@@ -315,6 +315,21 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprSext
         )
     }
+
+    pub fn subject(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::ExprParen => Some(self.child(0)),
+            AstNodePayload::ExprIf => Some(self.child(0)),
+            AstNodePayload::ExprMatch => Some(self.child(0)),
+            AstNodePayload::ExprUnOp(expr_un_op) => Some(self.child(0)),
+            AstNodePayload::ExprMethod(expr_method) => Some(self.child(0)),
+            AstNodePayload::ExprFn => Some(self.child(0)),
+            AstNodePayload::ExprIndex(expr_index) => Some(self.child(0)),
+            AstNodePayload::ExprIndexRange(expr_index_range) => Some(self.child(0)),
+            AstNodePayload::ExprAs => Some(self.child(0)),
+            _ => None,
+        }
+    }
 }
 
 impl AstNodeId {

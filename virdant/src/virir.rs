@@ -802,7 +802,6 @@ fn build_expr(
             ));
             let width = index_hi
                 .checked_sub(index_lo)
-                .map(|delta| delta + 1)
                 .unwrap_or(0);
             let inferred_type = lookup_type_id(&parse::Type::Word(width), type_ids);
             let typ = typ

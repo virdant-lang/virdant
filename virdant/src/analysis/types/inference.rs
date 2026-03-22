@@ -3,7 +3,7 @@ use bstr::ByteSlice;
 use crate::common::Width;
 use crate::diagnostics::{self, Diagnostic};
 use crate::syntax::ast::AstNode;
-use crate::syntax::payload::AstNodePayload;
+use crate::syntax::payload::{self, AstNodePayload};
 
 use super::typ::Type;
 use super::typing::{min_word_width, Typing};
@@ -41,6 +41,8 @@ impl Typing {
                     Ok(None)
                 }
             }
+            AstNodePayload::ExprIndex(index) => Ok(self.infer_index(&node, index)?),
+            AstNodePayload::ExprIndexRange(indexrange) => Ok(self.infer_index_range(&node, indexrange)?),
             AstNodePayload::ExprWord => Ok(self.infer_word(&node)?),
             AstNodePayload::ExprAs => {
                 let subject = node.child(0);
@@ -54,6 +56,7 @@ impl Typing {
                     Err(diag) => Err(vec![diag]),
                 }
             }
+            AstNodePayload::ExprBinOp(expr_bin_op) => self.infer_binop(node),
             _ => Ok(None),
         }
     }
@@ -94,6 +97,91 @@ impl Typing {
         }
 
         Ok(Some(Type::Word(total_width)))
+    }
+
+    fn infer_binop<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, Vec<Diagnostic>> {
+        let lhs = node.child(0);
+        let rhs = node.child(1);
+        let lhs_typ = self.infer(&lhs)?; // TODO combine the diagnostics on error for either of these two
+        let rhs_typ = self.infer(&rhs)?;
+
+        if let Some(ref typ) = lhs_typ {
+            self.typs.insert(lhs.id(), typ.clone());
+        }
+        if let Some(ref typ) = rhs_typ {
+            self.typs.insert(rhs.id(), typ.clone());
+        }
+
+        let AstNodePayload::ExprBinOp(binop) = node.payload() else { unreachable!() };
+        match binop.op {
+            crate::common::BinOp::Lt | crate::common::BinOp::Lte |
+            crate::common::BinOp::Gt | crate::common::BinOp::Gte |
+            crate::common::BinOp::Eq | crate::common::BinOp::Neq => {
+                if let (Some(lhs_typ), Some(rhs_typ)) = (lhs_typ, rhs_typ) {
+                    if lhs_typ == rhs_typ {
+                        return Ok(Some(Type::Bit));
+                    } else {
+                        return Ok(None);
+                    }
+                } else {
+                    return Ok(None);
+                }
+            }
+            _ => (),
+        }
+
+        if let (Some(lhs_typ), Some(rhs_typ)) = (lhs_typ, rhs_typ) {
+            if lhs_typ == rhs_typ {
+                Ok(Some(lhs_typ))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
+
+    }
+
+    fn infer_index<'p>(&mut self, node: &AstNode<'p>, index: payload::ExprIndex) -> Result<Option<Type>, Vec<Diagnostic>> {
+        let subject = node.subject().unwrap();
+        if let Some(subject_typ) = self.infer(&subject)? {
+            self.typs.insert(subject.id(), subject_typ.clone());
+            if let Type::Word(width) = &subject_typ {
+                // TODO check
+                if index.index < *width {
+                    Ok(Some(Type::Bit))
+                } else {
+                    todo!()
+                }
+            } else {
+                todo!()
+            }
+        } else {
+            todo!()
+        }
+    }
+
+    fn infer_index_range<'p>(
+        &mut self,
+        node: &AstNode<'p>,
+        indexrange: payload::ExprIndexRange,
+    ) -> Result<Option<Type>, Vec<Diagnostic>> {
+        let subject = node.subject().unwrap();
+        if let Some(subject_typ) = self.infer(&subject)? {
+            self.typs.insert(subject.id(), subject_typ.clone());
+            if let Type::Word(width) = &subject_typ {
+                // TODO check
+                if indexrange.index_lo <= indexrange.index_hi && indexrange.index_hi < *width {
+                    Ok(Some(Type::Word(indexrange.index_hi - indexrange.index_lo)))
+                } else {
+                    todo!()
+                }
+            } else {
+                todo!()
+            }
+        } else {
+            todo!()
+        }
     }
 }
 
