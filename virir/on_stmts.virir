@@ -3,9 +3,9 @@ virir {
         export mod Top {
             incoming clock : builtin::Clock;
 
-            on clock {
+            on (clock : builtin::Clock) {
                 assert((1 : builtin::Bit));
-                display((1 : builtin::Bit));
+                display("Test", (1 : builtin::Bit));
                 fatal;
             }
         }

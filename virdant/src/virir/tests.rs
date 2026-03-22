@@ -85,7 +85,7 @@ fn test_virir() {
 
     let virir = parse(
         r#"virir {
-            package ext {
+            package myext {
                 mod Top {
                     incoming hi : builtin::Word[7];
                     incoming lo : builtin::Bit;
