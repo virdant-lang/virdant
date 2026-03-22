@@ -61,6 +61,7 @@ pub enum AstNodePayload {
     ExprWord,
     ExprZext,
     ExprSext,
+    ExprAs,
 
     Assign(Assign),
 
@@ -133,6 +134,7 @@ impl AstNodePayload {
             AstNodePayload::Ofness(ofness) => "Ofness",
             AstNodePayload::It => "It",
             AstNodePayload::Path(path) => "Path",
+            AstNodePayload::ExprAs => "ExprAs",
         }
     }
 }

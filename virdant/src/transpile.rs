@@ -546,6 +546,13 @@ impl<'d> Transpiler<'d> {
                     index_lo: expr_index_range.index_lo,
                 })
             }
+            AstNodePayload::ExprAs => self.build_expr(
+                package,
+                node.child(0),
+                expected_type,
+                local_types,
+                instance_types,
+            ),
             AstNodePayload::ExprParen => self.build_expr(
                 package,
                 node.child(0),

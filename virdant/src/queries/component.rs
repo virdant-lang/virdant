@@ -38,7 +38,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
             AstNodePayload::Component(component) => {
                 let path = parsing.string(component.name).to_owned();
                 let typ_node = stmt.typ().unwrap();
-                match node_to_typ(typ_node, parsing.clone(), symboltable.clone()) {
+                match node_to_typ(typ_node, &parsing, &symboltable) {
                     Ok(typ) => component_analysis.components.push((path, Some(typ))),
                     Err(diag) => component_analysis.diagnostics.push(diag),
                 }
@@ -73,7 +73,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes()
                     );
                     let typ_node = submodule_stmt.typ().unwrap();
-                    match node_to_typ(typ_node, submodule_parsing.clone(), symboltable.clone()) {
+                    match node_to_typ(typ_node, &submodule_parsing, &symboltable) {
                         Ok(typ) => component_analysis.components.push((qualified_name, Some(typ))),
                         Err(diag) => component_analysis.diagnostics.push(diag),
                     }
@@ -92,7 +92,7 @@ pub(crate) fn find_item_location(builder: &mut Builder, item: SymbolId) -> Locat
     symboltable.symbol(item).location()
 }
 
-fn node_to_typ(typ_node: AstNode<'_>, parsing: Arc<Parsing>, symboltable: Arc<SymbolTable>) -> Result<Type, Diagnostic> {
+pub(crate) fn node_to_typ(typ_node: AstNode<'_>, parsing: &Parsing, symboltable: &SymbolTable) -> Result<Type, Diagnostic> {
     match typ_node.payload() {
         AstNodePayload::Type(_typ) => {
             let type_name = match typ_node.child(0).payload() {

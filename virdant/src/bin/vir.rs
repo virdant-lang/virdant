@@ -223,7 +223,10 @@ fn dump_typing(path: PathBuf) {
     vir.dump_diagnostics();
 
     for (location, typ) in vir.db().get_typeof_all() {
-        println!("{location:?} {typ:?}");
+        let region = vir.db().get_location_region(location.clone());
+        let parsing = vir.db().get_parsing(location.package());
+        let text = parsing.text(region.span());
+        println!("{region} {location:?} {typ:?} ({text:?})");
     }
 }
 

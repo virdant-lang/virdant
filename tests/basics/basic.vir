@@ -11,6 +11,9 @@ export mod Top {
     wire a : Bit;
     a := false;
 
+    wire o : Word[8];
+    o := 0w8 : Word[8];
+
     wire b : Word[4];
     b := 1w4 + 2w4;
 

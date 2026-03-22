@@ -499,19 +499,15 @@ ExprIfEnd: () = {
 }
 
 ExprMatch: AstNodeId = {
-    <ll:@L> "match" Expr <annot:ExprMatchAnnotation?> "{"
+    <ll:@L> "match" Expr "{"
         <arms:ExprMatchArm*>
     "}" <rr:@R> => {
         let payload = AstNodePayload::ExprMatch;
         let span = parser.span(ll, rr);
-        let num_children = (2 * arms.len() + 1 + annot.map(|_| 1).unwrap_or(0)).try_into().unwrap();
+        let num_children = (2 * arms.len() + 1).try_into().unwrap();
 
         parser.add_node(payload, span, num_children)
     },
-}
-
-ExprMatchAnnotation: () = {
-    ":" Type => (),
 }
 
 ExprMatchArm: () = {
@@ -608,7 +604,7 @@ ExprUnOp: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <e:ExprPrimary> => e,
+    <e:ExprAscription> => e,
 }
 
 UnOp: UnOp = {
@@ -617,6 +613,16 @@ UnOp: UnOp = {
     "!" => UnOp::Not,
 }
 
+ExprAscription: AstNodeId = {
+    <ll:@L> <e:ExprPrimary> ":" <typ:Type> <rr:@R> => {
+        let payload = AstNodePayload::ExprAs;
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <e:ExprPrimary> => e,
+}
 
 ExprPrimary: AstNodeId = {
     <ll:@L> "word" "(" <args:ArgList> ")" <rr:@R> => {

@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use bstr::ByteSlice;
 use hashbrown::HashMap;
 
+use crate::analysis::symbols::SymbolTable;
 use crate::common::{BinOp as CommonBinOp, UnOp as CommonUnOp, Width};
 use crate::common::json::ToJson;
 use crate::diagnostics::{self, Diagnostic};
@@ -63,6 +66,8 @@ pub struct Typing {
     pub(crate) context: TypingContext,
     pub(crate) typs: HashMap<AstNodeId, Type>,
     pub(crate) diagnostics: Vec<Diagnostic>,
+    // TODO Remove the symbol table and instead resolve type expressions beforehand.
+    pub(crate) symboltable: Arc<SymbolTable>,
 }
 
 impl Typing {
@@ -80,7 +85,7 @@ impl Typing {
             expected: expected.to_string().into(),
             actual: actual.to_string().into(),
         }.into();
-        self.diagnostics.push(diag.to_warning());
+        self.diagnostics.push(diag);
     }
 
     fn flag_not_word_type<'p>(&mut self, node: &AstNode<'p>, typ: &Type) {

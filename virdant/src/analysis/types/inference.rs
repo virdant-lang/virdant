@@ -7,6 +7,7 @@ use crate::syntax::payload::AstNodePayload;
 
 use super::typ::Type;
 use super::typing::{min_word_width, Typing};
+use crate::queries::component::node_to_typ;
 
 impl Typing {
     pub(crate) fn infer<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, Vec<Diagnostic>> {
@@ -41,6 +42,18 @@ impl Typing {
                 }
             }
             AstNodePayload::ExprWord => Ok(self.infer_word(&node)?),
+            AstNodePayload::ExprAs => {
+                let subject = node.child(0);
+                let typ_node = node.child(1);
+                let parsing = node.parsing();
+                match node_to_typ(typ_node, parsing, &self.symboltable) {
+                    Ok(typ) => {
+                        self.check(&subject, &typ);
+                        Ok(Some(typ))
+                    }
+                    Err(diag) => Err(vec![diag]),
+                }
+            }
             _ => Ok(None),
         }
     }
