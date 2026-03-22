@@ -4,6 +4,7 @@ use super::*;
 pub struct Db {
     pub(super) rev: usize,
     pub(super) map: Mutex<HashMap<Query, CachedVal>>,
+    pub(super) call_stack: Mutex<Vec<Query>>,
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +27,15 @@ impl<'d> Builder<'d> {
         let cached_val = self.db.get_or_build(query);
         cached_val.val
     }
+
+    pub fn dump(&self) {
+        let stack = self.db.call_stack.lock().unwrap();
+        eprintln!("=== Db build stack =====================");
+        for (i, query) in stack.iter().enumerate() {
+            eprintln!("{}{:?}", "  ".repeat(i), query);
+        }
+        eprintln!("========================================");
+    }
 }
 
 impl Db {
@@ -33,12 +43,15 @@ impl Db {
         Db {
             map: Mutex::new(HashMap::new()),
             rev: 0,
+            call_stack: Mutex::new(vec![]),
         }
     }
 
     fn get_or_build(&self, query: Query) -> CachedVal {
         if self.is_dirty(&query) {
+            self.call_stack.lock().unwrap().push(query.clone());
             let cached_val = query.clone().build(self);
+            self.call_stack.lock().unwrap().pop();
             let mut map = self.map.try_lock().unwrap();
             map.insert(query.clone(), cached_val.clone());
             cached_val
