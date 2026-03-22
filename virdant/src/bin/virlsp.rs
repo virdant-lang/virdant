@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::sync::Arc;
@@ -26,7 +25,6 @@ struct Backend {
 
 struct ServerState {
     vir: Vir,
-    sources: HashMap<Url, Source>,
     hover_mode: HoverMode,
 }
 
@@ -42,7 +40,6 @@ impl Backend {
             client,
             state: Arc::new(Mutex::new(ServerState {
                 vir: Vir::new(),
-                sources: HashMap::new(),
                 hover_mode: HoverMode::Debug,
             })),
         }
@@ -93,7 +90,7 @@ impl LanguageServer for Backend {
         })
     }
 
-    async fn initialized(&self, _: InitializedParams) {
+    async fn initialized(&self, params: InitializedParams) {
         self.client
             .log_message(MessageType::INFO, "Language server initialized")
             .await;
@@ -104,23 +101,28 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
+        let uri = params.text_document.uri;
+
         self.client
-            .log_message(MessageType::INFO, "File opened")
+            .log_message(MessageType::INFO, format!("File opened: {uri}"))
             .await;
 
-        let uri = params.text_document.uri;
+        let workspace = workspace_root(&uri);
         let package = uri_to_packagefqn(&uri);
         let text: BString = params.text_document.text.into();
-        let source = Source::new(package.clone(), text.clone());
 
         {
             let mut state = self.state.lock().await;
-            state.sources.insert(uri.clone(), source);
+            if state.vir.is_empty() {
+                let mut vir = Vir::from_dir(&workspace);
+                std::mem::swap(&mut state.vir, &mut vir);
+            }
+
+            state.vir.set_package_text(&package.to_string(), text);
             if !state.vir.packages().contains(&package.to_string()) {
                 state.vir.add_package(&package.to_string());
             }
-            state.vir.set_package_text(&package.to_string(), text);
-        }
+       }
 
         self.check_document(&uri).await;
     }
@@ -133,11 +135,14 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri;
         let package = uri_to_packagefqn(&uri);
         let text: BString = params.content_changes[0].text.clone().into();
-        let source = Source::new(package.clone(), text.clone());
 
         {
             let mut state = self.state.lock().await;
-            state.sources.insert(uri.clone(), source);
+            let workspace = workspace_root(&uri);
+            if state.vir.is_empty() {
+                let mut vir = Vir::from_dir(workspace);
+                std::mem::swap(&mut state.vir, &mut vir);
+            }
             if !state.vir.packages().contains(&package.to_string()) {
                 state.vir.add_package(&package.to_string());
             }
@@ -404,10 +409,15 @@ impl LanguageServer for Backend {
 impl Backend {
     async fn source(&self, uri: &Url) -> Option<Source> {
         let state = self.state.lock().await;
-        state.sources.get(uri).cloned()
+        let package = uri_to_packagefqn(uri);
+        Some(state.vir.db().get_source(package))
     }
 
     async fn check_document(&self, uri: &Url) {
+        self.client
+            .log_message(MessageType::ERROR, format!("check_document: {uri}"))
+            .await;
+
         let mut diagnostics = Vec::new();
 
         let mut state = self.state.lock().await;
@@ -550,11 +560,13 @@ async fn get_expr_root<'a>(client: &Client, db: &'a Db, parsing: &'a Parsing, no
     while !exprroots.contains(&current.id()) {
         let parent_id = current.parent()?.id();
         current = parsing.ast_node(parent_id);
-        client
-            .log_message(MessageType::ERROR, format!("walk up to id {:?}", current.id()))
-            .await;
     }
     Some(current)
+}
+
+fn workspace_root(uri: &Url) -> std::path::PathBuf {
+    let dirpath = std::path::PathBuf::from(uri.path()).parent().unwrap().to_path_buf();
+    dirpath
 }
 
 fn uri_to_packagefqn(uri: &Url) -> PackageFqn {
