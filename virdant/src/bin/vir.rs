@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 
 use bstr::{BStr, BString, ByteSlice, ByteVec};
 use nix::unistd::execvp;
+use virdant::diagnostics::DiagnosticLevel;
 use std::ffi::{CString, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -136,7 +137,18 @@ fn tokenize_file(path: &Path) {
 }
 
 fn check_path(path: PathBuf) {
-    virdant::Vir::check_all(path);
+    let mut vir = virdant::Vir::from_dir(path);
+    match vir.check() {
+        Err(diags) => {
+            vir.dump_diagnostics();
+            eprintln!("Check failed");
+            std::process::exit(1);
+        }
+        Ok(diags) => {
+            vir.dump_diagnostics();
+            eprintln!("Check OK");
+        }
+    };
 }
 
 fn dump_db(path: PathBuf, outpath: Option<PathBuf>) {
