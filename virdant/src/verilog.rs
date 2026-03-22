@@ -94,7 +94,7 @@ pub struct Initial {
 pub struct Submodule {
     pub name: String,
     pub submodule_name: String,
-    pub connects: Vec<(String, String)>,
+    pub ports: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -401,17 +401,18 @@ impl Submodule {
         let submodule_name = &self.submodule_name;
         let name = &self.name;
 
-        if self.connects.is_empty() {
+        if self.ports.is_empty() {
             verilog_writeln!(writer, "{submodule_name} {name}();")?;
             return Ok(());
         }
 
         verilog_writeln!(writer, "{submodule_name} {name}(")?;
         writer.indent();
-        let port_width = self.connects.iter().map(|(port, _)| port.len()).max().unwrap_or(0);
-        for (i, (port, signal)) in self.connects.iter().enumerate() {
-            let comma = if i + 1 == self.connects.len() { "" } else { "," };
-            verilog_writeln!(writer, ".{port:<port_width$}({signal}){comma}")?;
+        let port_width = self.ports.iter().map(|p| p.len()).max().unwrap_or(0);
+        for (i, port) in self.ports.iter().enumerate() {
+            let comma = if i + 1 == self.ports.len() { "" } else { "," };
+            let wire_name = valid_verilog_name(&format!("{}.{}", self.name, port));
+            verilog_writeln!(writer, ".{port:<port_width$}({wire_name}){comma}")?;
         }
         writer.dedent();
         verilog_writeln!(writer, ");")?;
@@ -862,4 +863,60 @@ fn str_escape(s: &str) -> String {
     // FIXME This should handle Verilog style escape strings
     // and should escape all quotes, etc.
     format!("\"{s}\"")
+}
+
+#[rustfmt::skip]
+const VERILOG_KEYWORDS: &[&str] = &[
+    "always", "and", "assign", "automatic", "begin", "buf", "bufif0", "bufif1", "case",
+    "casex", "casez", "cell", "cmos", "config", "deassign", "default", "defparam", "design",
+    "disable", "edge", "else", "end", "endcase", "endconfig", "endfunction", "endgenerate",
+    "endmodule", "endprimitive", "endspecify", "endtable", "endtask", "event", "for", "force",
+    "forever", "fork", "function", "generate", "genvar", "highz0", "highz1", "if", "ifnone",
+    "incdir", "include", "initial", "inout", "input", "instance", "integer", "join", "large",
+    "liblist", "library", "localparam", "macromodule", "medium", "module", "nand", "negedge",
+    "nmos", "nor", "noshowcancelled", "not", "notif0", "notif1", "or", "output", "parameter",
+    "pmos", "posedge", "primitive", "pull0", "pull1", "pulldown", "pullup", "pulsestyle_ondetect",
+    "pulsestyle_onevent", "rcmos", "real", "realtime", "reg", "release", "repeat", "rnmos",
+    "rpmos", "rtran", "rtranif0", "rtranif1", "scalared", "showcancelled", "signed", "small",
+    "specify", "specparam", "strong0", "strong1", "supply0", "supply1", "table", "task",
+    "time", "tran", "tranif0", "tranif1", "tri", "tri0", "tri1", "triand",
+    "trior", "trireg", "unsigned", "use", "uwire", "vectored", "wait", "wand",
+    "weak0", "weak1", "while", "wire", "wor", "xnor", "xor",
+];
+
+/// Takes a Virdant path and converts it to a valid Verilog identifier.
+/// For paths that are already valid Verilog identifiers, it preserves the name.
+/// If the path conflicts with a Verilog keyword, it prefixes the name with a \.
+/// If the path contains .'s, it will prefix the name with a \.
+pub fn valid_verilog_name(path: &str) -> String {
+    if is_simple_verilog_identifier(path) && !VERILOG_KEYWORDS.contains(&path) {
+        path.to_string()
+    } else {
+        format!(r"\{path} ")
+    }
+}
+
+/// Returns a Verilog identifier only if it can be emitted exactly as written.
+pub fn exact_verilog_name(name: &str) -> String {
+    let verilog_name = valid_verilog_name(name);
+    if verilog_name != name {
+        // TODO Support exported names and port names that require escaping while preserving the source spelling.
+        panic!("Name `{name}` cannot be preserved exactly in Verilog");
+    }
+    verilog_name
+}
+
+/// Returns whether a path is already a plain, unescaped Verilog identifier.
+fn is_simple_verilog_identifier(path: &str) -> bool {
+    let mut chars = path.chars();
+
+    let Some(first) = chars.next() else {
+        return false;
+    };
+
+    if !matches!(first, 'a'..='z' | 'A'..='Z' | '_') {
+        return false;
+    }
+
+    chars.all(|ch| matches!(ch, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_'))
 }
