@@ -426,7 +426,14 @@ impl Backend {
             Err(diags) => diags,
         };
 
+        let package = uri_to_packagefqn(&uri);
+
         for diag in diags {
+            // Only display diagnostics relevant to this file.
+            if diag.region().package() != package {
+                continue;
+            }
+
             let severity = match diag.level() {
                 virdant::diagnostics::DiagnosticLevel::Error => DiagnosticSeverity::ERROR,
                 virdant::diagnostics::DiagnosticLevel::Warning => DiagnosticSeverity::WARNING,
