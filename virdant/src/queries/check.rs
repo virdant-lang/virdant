@@ -1,12 +1,17 @@
 use crate::db::Builder;
-use crate::diagnostics::{self, Diagnostic, DiagnosticLevel};
+use crate::diagnostics::{self, Diagnostic};
 
-pub(crate) fn check(builder: &mut Builder) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
+pub(crate) fn check(builder: &mut Builder) -> Vec<Diagnostic> {
     let mut diagnostics = vec![];
 
     diagnostics.extend(builder.get_syntax_errors());
     diagnostics.extend(builder.typecheck());
+    check_all_exprs_have_types(builder, &mut diagnostics);
 
+    diagnostics
+}
+
+fn check_all_exprs_have_types(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
     for (location, opt_typ) in builder.get_typeof_all().iter() {
         if opt_typ.is_none() {
             let region = builder.get_location_region(location.clone());
@@ -17,11 +22,5 @@ pub(crate) fn check(builder: &mut Builder) -> Result<Vec<Diagnostic>, Vec<Diagno
                 }.into()
             );
         }
-    }
-
-    if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
-        Err(diagnostics)
-    } else {
-        Ok(diagnostics)
     }
 }

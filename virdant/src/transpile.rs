@@ -7,6 +7,7 @@ use crate::analysis::types::Type;
 use crate::analysis::Location;
 use crate::common::{BinOp as CommonBinOp, ComponentKind, PortDir, UnOp as CommonUnOp, Width};
 use crate::db::Db;
+use crate::diagnostics::DiagnosticLevel;
 use crate::fqn::PackageFqn;
 use crate::source::Region;
 use crate::syntax::ast::AstNode;
@@ -20,11 +21,14 @@ use crate::virir::{Command, Driver, Instance, Item, ModDef, On, Package, Port, R
 
 /// Lowers a checked analysis database into a `VirIr` module graph.
 pub fn transpile(db: &Db) -> VirIr {
-    if let Err(diags) = db.check() {
-        for diag in diags {
-            eprintln!("ERROR: {diag:?}");
-        }
-        panic!();
+    let diagnostics = db.check();
+    for diag in &diagnostics {
+        eprintln!("ERROR: {diag:?}");
+    }
+
+    if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
+        eprintln!("Transpilation failed");
+        std::process::exit(1);
     }
 
     let mut transpiler = Transpiler::new(db);

@@ -9,6 +9,7 @@ use crate::analysis::Location;
 use crate::db::Db;
 use crate::diagnostics;
 use crate::diagnostics::Diagnostic;
+use crate::diagnostics::DiagnosticLevel;
 use crate::source::Region;
 use crate::syntax::parsing::Parsing;
 use crate::syntax::parsing::parse;
@@ -121,7 +122,13 @@ impl Vir {
     }
 
     pub fn check(&self) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
-        self.db.check()
+        let diagnostics = self.db.check();
+
+        if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
+            Err(diagnostics)
+        } else {
+            Ok(diagnostics)
+        }
     }
 
     pub fn spelling(&self, location: Location) -> BString {

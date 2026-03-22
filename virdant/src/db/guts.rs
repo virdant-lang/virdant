@@ -36,11 +36,6 @@ impl Db {
         }
     }
 
-    pub fn check(&self) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
-        let query = Query::Check();
-        cast!(self.get(query), Check)
-    }
-
     fn get_or_build(&self, query: Query) -> CachedVal {
         if self.is_dirty(&query) {
             let cached_val = query.clone().build(self);
@@ -207,13 +202,7 @@ impl ToJson for QueryResult {
             QueryResult::TypeCheck(diagnostics) => diagnostics.to_json(),
             QueryResult::Typeof(typ) => typ.to_json(),
             QueryResult::TypeofAll(typs) => typs.to_json(),
-            QueryResult::Check(result) => {
-                if let Err(diagnostics) = &result {
-                    json::value!(["Error", diagnostics.to_json()])
-                } else {
-                    json::value!(["Ok"])
-                }
-            }
+            QueryResult::Check(diagnostics) => diagnostics.to_json(),
             QueryResult::TypeDefs(type_defs) => type_defs.to_json(),
             QueryResult::TypeMonomorphizations(items) => items.to_json(),
             QueryResult::LocationRegion(region) => region.to_json(),

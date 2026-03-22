@@ -42,7 +42,7 @@ queries! {
     TypeCheck() -> Vec<Diagnostic>;
     Typeof(location: Location) -> Result<Type, Vec<Diagnostic>>;
     TypeofAll() -> HashMap<Location, Option<Type>>;
-    Check() -> Result<Vec<Diagnostic>, Vec<Diagnostic>>;
+    Check() -> Vec<Diagnostic>;
     TypeMonomorphizations() -> Vec<Type>;
 }
 
@@ -104,6 +104,4 @@ db_getter!(get_typeof : Typeof(location: Location) -> Result<Type, Vec<Diagnosti
 db_getter!(get_typeof_all : TypeofAll() -> HashMap<Location, Option<Type>>);
 db_getter!(get_type_monomorphizations : TypeMonomorphizations() -> Vec<Type>);
 db_getter!(get_location_region : LocationRegion(location: Location) -> Region);
-
-
-
+db_getter!(check : Check() -> Vec<Diagnostic>);
