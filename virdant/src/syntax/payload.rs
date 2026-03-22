@@ -30,6 +30,7 @@ pub enum AstNodePayload {
     CommandDisplay(InternedString),
     CommandFinish,
     CommandFatal,
+    CommandIf,
 
     Field(Field),
     Ctor(Ctor),
@@ -101,6 +102,7 @@ impl AstNodePayload {
             AstNodePayload::CommandDisplay(_) => "CommandDisplay",
             AstNodePayload::CommandFinish => "CommandFinish",
             AstNodePayload::CommandFatal => "CommandFatal",
+            AstNodePayload::CommandIf => "CommandIf",
             AstNodePayload::Field(field) => "Field",
             AstNodePayload::Ctor(ctor) => "Ctor",
             AstNodePayload::Enumerant(enumerant) => "Enumerant",

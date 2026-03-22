@@ -17,6 +17,7 @@ pub enum Stmt {
     Finish,
     Case(Case),
     CaseZ(CaseZ),
+    If(If),
 }
 
 impl Stmt {
@@ -68,9 +69,28 @@ impl Stmt {
             }
             Stmt::Case(case) => case.write(writer)?,
             Stmt::CaseZ(casez) => casez.write(writer)?,
+            Stmt::If(if_stmt) => {
+                verilog_write!(writer, "if (")?;
+                writer.skip_indent();
+                if_stmt.cond.write(writer)?;
+                writer.skip_indent();
+                verilog_writeln!(writer, ") begin")?;
+                writer.indent();
+                for stmt in &if_stmt.stmts {
+                    stmt.write(writer)?;
+                }
+                writer.dedent();
+                verilog_writeln!(writer, "end")?;
+            }
         }
         Ok(())
     }
+}
+
+#[derive(Debug)]
+pub struct If {
+    pub cond: Expr,
+    pub stmts: Vec<Stmt>,
 }
 
 #[derive(Debug)]

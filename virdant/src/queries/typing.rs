@@ -55,6 +55,9 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
         AstNodePayload::CommandAssert => {
             Some(Type::Bit)
         }
+        AstNodePayload::CommandIf => {
+            Some(Type::Bit)
+        }
         AstNodePayload::CommandDisplay(_) => {
             None
         }

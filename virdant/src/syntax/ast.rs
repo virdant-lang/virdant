@@ -192,6 +192,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::CommandDisplay(_) => format!("CommandDisplay"),
             AstNodePayload::CommandFinish => format!("CommandFinish"),
             AstNodePayload::CommandFatal => format!("CommandFatal"),
+            AstNodePayload::CommandIf => format!("CommandIf"),
             AstNodePayload::Field(field) => format!("Field"),
             AstNodePayload::Ctor(ctor) => format!("Ctor"),
             AstNodePayload::Enumerant(enumerant) => format!("Enumerant"),

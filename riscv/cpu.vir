@@ -1,0 +1,52 @@
+import rf;
+import alu;
+import control;
+import extend;
+import ifetch;
+
+mod Cpu {
+    incoming clock : Clock;
+    incoming reset : Bit;
+
+    incoming cycle : Word[32];
+
+    mod ifetch of ifetch::Ifetch;
+    mod rf of rf::Rf;
+    mod alu of alu::Alu;
+    mod control of control::Control;
+    mod extend of extend::Extend;
+    mod mem of cpu::Mem;
+
+    ifetch.clock := clock;
+    rf.clock := clock;
+    mem.clock := clock;
+
+    ifetch.reset := reset;
+    ifetch.cycle := cycle;
+
+    rf.rd  := ifetch.rd;
+    rf.rs1 := ifetch.rs1;
+    rf.rs2 := ifetch.rs2;
+
+    extend.instr := ifetch.instr;
+
+    alu.a := rf.rs1_out;
+    alu.b := if true {
+        rf.rs1_out
+    } else {
+        extend.out
+    };
+
+    alu.op := 0w5;
+
+    mem.addr := alu.z;
+    mem.data_in := zext(ifetch.rs1);
+    rf.rd_data := ifetch.rs2;
+}
+
+ext mod Mem {
+    incoming clock : Clock;
+    incoming addr     : Word[32];
+    incoming data_out : Word[32];
+    incoming data_in  : Word[32];
+}

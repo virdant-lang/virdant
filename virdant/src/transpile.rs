@@ -333,6 +333,22 @@ impl<'d> Transpiler<'d> {
             }
             AstNodePayload::CommandFinish => Command::Finish,
             AstNodePayload::CommandFatal => Command::Fatal,
+            AstNodePayload::CommandIf => {
+                let cond_node = node.child(0);
+                let cond = Arc::new(self.build_expr(
+                    package,
+                    cond_node,
+                    Some(bit_type),
+                    local_types,
+                    instance_types,
+                ));
+                let cmd_nodes: Vec<_> = node.children().into_iter().skip(1).collect();
+                let mut commands = Vec::new();
+                for cmd_node in cmd_nodes {
+                    commands.push(self.build_command(package, cmd_node, local_types, instance_types));
+                }
+                Command::If { cond, commands }
+            }
             _ => panic!("expected command node, found {}", node.summary()),
         }
     }

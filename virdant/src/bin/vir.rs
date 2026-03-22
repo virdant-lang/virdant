@@ -277,9 +277,17 @@ fn run(path: PathBuf, vcd: Option<String>) {
         std::process::exit(1);
     }
 
-    let program = CString::new(bin.clone()).unwrap();
+    // Canonicalize to an absolute path before changing directory, so the
+    // binary remains findable after the chdir below.
+    let bin_abs = std::fs::canonicalize(&bin).unwrap().to_string_lossy().to_string();
+
+    // Change into the build directory so that relative paths in $readmemh
+    // (and similar Verilog system tasks) resolve against the right directory.
+    std::env::set_current_dir(&builddir).unwrap();
+
+    let program = CString::new(bin_abs.clone()).unwrap();
     let mut args: Vec<CString> = vec![
-        CString::new(bin).unwrap(),
+        CString::new(bin_abs).unwrap(),
     ];
     if let Some(vcd) = vcd {
         args.push(CString::new(format!("+vcd={vcd}")).unwrap());

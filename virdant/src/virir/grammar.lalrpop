@@ -59,6 +59,7 @@ Command: Command = {
     "display" "(" <fmt:Str> "," <expr:ExprNode> ")" ";" => Command::Display(fmt, expr),
     "finish" ";" => Command::Finish,
     "fatal" ";" => Command::Fatal,
+    "if" "(" <cond:ExprNode> ")" "{" <cmds:Command*> "}" => Command::If(cond, cmds),
 }
 
 ExprNode: Expr = {

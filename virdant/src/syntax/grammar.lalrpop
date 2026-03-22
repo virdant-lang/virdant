@@ -368,6 +368,13 @@ ModDefStmtOn: AstNodeId = {
 }
 
 Command: AstNodeId = {
+    <ll:@L> "if" <e:Expr> "{" <cmds:Command*> "}" <rr:@R> => {
+        let payload = AstNodePayload::CommandIf;
+        let span = parser.span(ll, rr);
+        let num_children = 1 + u16::try_from(cmds.len()).unwrap();
+
+        parser.add_node(payload, span, num_children)
+    },
     <ll:@L> "assert" "(" <e:Expr> ")" ";" <rr:@R> => {
         let payload = AstNodePayload::CommandAssert;
         let span = parser.span(ll, rr);

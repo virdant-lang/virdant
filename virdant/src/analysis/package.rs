@@ -139,11 +139,7 @@ impl PackageAnalysis {
                         let node_id = child_node.clock().unwrap().id();
                         self.expr_roots.push(node_id);
                         for command_node in child_node.children().into_iter().skip(1) {
-                            if matches!(command_node.payload(), AstNodePayload::CommandAssert) {
-                                self.expr_roots.push(command_node.child(0).id());
-                            } else if matches!(command_node.payload(), AstNodePayload::CommandDisplay(_)) {
-                                self.expr_roots.push(command_node.child(0).id());
-                            }
+                            self.add_command_expr_roots(command_node);
                         }
                     }
                     AstNodePayload::Error => (), // TODO should we even have error nodes at this point?
@@ -152,6 +148,25 @@ impl PackageAnalysis {
             }
         } else {
             // TODO handle FnDefs
+        }
+    }
+
+    fn add_command_expr_roots(&mut self, command_node: AstNode<'_>) {
+        match command_node.payload() {
+            AstNodePayload::CommandAssert => {
+                self.expr_roots.push(command_node.child(0).id());
+            }
+            AstNodePayload::CommandDisplay(_) => {
+                self.expr_roots.push(command_node.child(0).id());
+            }
+            AstNodePayload::CommandIf => {
+                self.expr_roots.push(command_node.child(0).id());
+                for nested_cmd in command_node.children().into_iter().skip(1) {
+                    self.add_command_expr_roots(nested_cmd);
+                }
+            }
+            AstNodePayload::CommandFinish | AstNodePayload::CommandFatal => {}
+            _ => {}
         }
     }
 }

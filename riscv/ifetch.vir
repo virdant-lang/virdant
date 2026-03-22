@@ -1,0 +1,50 @@
+mod Ifetch {
+    incoming clock : Clock;
+    incoming reset : Bit;
+    incoming cycle : Word[32];
+
+    outgoing instr : Word[32];
+
+    outgoing opcode : Word[7];
+
+    outgoing rd : Word[5];
+    outgoing rs1 : Word[5];
+    outgoing rs2 : Word[5];
+
+    outgoing funct5 : Word[5];
+    outgoing funct7 : Word[7];
+
+    reg pc : Word[32] on clock;
+
+    mod instr_mem of Rom;
+    instr_mem.addr := pc;
+    instr := instr_mem.instr;
+
+    pc <= if reset {
+        0w32
+    } else {
+        pc + 4w32
+    };
+
+    on clock {
+        display("Cycle", cycle);
+        display("PC", pc);
+        display("Instr", instr);
+        display("rd", rd);
+        display("rs1", rs1);
+        display("rs2", rs2);
+        if cycle == 4w32 {
+            finish;
+        }
+    }
+
+    opcode := instr[7..0];
+    rd  := instr[12..7];
+    rs1 := instr[20..15];
+    rs2 := instr[25..20];
+}
+
+ext mod Rom {
+    incoming addr : Word[32];
+    outgoing instr : Word[32];
+}

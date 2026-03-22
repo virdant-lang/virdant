@@ -1,0 +1,3 @@
+mod Control {
+    incoming instr : Word[32];
+}

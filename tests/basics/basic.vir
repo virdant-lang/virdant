@@ -70,6 +70,10 @@ export mod Top {
 
         assert((if w { x } else { y }) == x);
         assert((if a { x } else { y }) == y);
+
+        if true {
+            display("Hello", true);
+        }
         finish;
     }
 }

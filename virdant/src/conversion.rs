@@ -324,7 +324,6 @@ fn convert_command(
             exprs: vec![convert_expr(type_widths, expr.as_ref())],
         }),
         virir::Command::Display(message, expr) => {
-            dbg!(&message);
             verilog::Stmt::Display(verilog::Display {
             message,
             exprs: vec![convert_expr(type_widths, expr.as_ref())],
@@ -332,6 +331,10 @@ fn convert_command(
         }
         virir::Command::Finish => verilog::Stmt::Finish,
         virir::Command::Fatal => verilog::Stmt::Fatal,
+        virir::Command::If { cond, commands } => verilog::Stmt::If(verilog::If {
+            cond: convert_expr(type_widths, cond.as_ref()),
+            stmts: commands.into_iter().map(|cmd| convert_command(type_widths, cmd)).collect(),
+        }),
     }
 }
 

@@ -8,7 +8,7 @@ mod tests;
 use crate::common::{PortDir, Radix, Width};
 
 use self::macros::{verilog_write, verilog_writeln};
-pub use self::stmt::{Assert, AssignBlocking, AssignNonBlocking, Display, Stmt};
+pub use self::stmt::{Assert, AssignBlocking, AssignNonBlocking, Display, If, Stmt};
 
 use std::collections::HashSet;
 use std::io::Write;
@@ -579,6 +579,12 @@ impl Normalizer {
                     for s in item.stmts.iter_mut() {
                         self.normalize_stmt(s);
                     }
+                }
+            }
+            Stmt::If(if_stmt) => {
+                self.normalize_expr(&mut if_stmt.cond);
+                for s in if_stmt.stmts.iter_mut() {
+                    self.normalize_stmt(s);
                 }
             }
             Stmt::Fatal | Stmt::Finish => {}

@@ -1,0 +1,3 @@
+mod Extend {
+    outgoing out : Word[32];
+}

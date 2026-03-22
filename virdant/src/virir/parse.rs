@@ -91,6 +91,7 @@ pub(super) enum Command {
     Display(BString, Expr),
     Finish,
     Fatal,
+    If(Expr, Vec<Command>),
 }
 
 pub(super) enum Expr {

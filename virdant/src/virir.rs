@@ -98,6 +98,10 @@ pub enum Command {
     Display(BString, Arc<Expr>),
     Finish,
     Fatal,
+    If {
+        cond: Arc<Expr>,
+        commands: Vec<Command>,
+    },
 }
 
 #[derive(Debug)]
@@ -208,7 +212,7 @@ fn write_moddef(out: &mut String, moddef: &ModDef, virir: &VirIr) {
     if let Some(on) = &moddef.on {
         writeln!(out, "            on {} {{", expr_to_text(on.clock.as_ref(), virir)).unwrap();
         for command in &on.commands {
-            writeln!(out, "                {}", command_to_text(command, virir)).unwrap();
+            writeln!(out, "                {}", command_to_text(command, virir, "                ")).unwrap();
         }
         writeln!(out, "            }}").unwrap();
     }
@@ -216,12 +220,21 @@ fn write_moddef(out: &mut String, moddef: &ModDef, virir: &VirIr) {
     writeln!(out, "        }}").unwrap();
 }
 
-fn command_to_text(command: &Command, virir: &VirIr) -> String {
+fn command_to_text(command: &Command, virir: &VirIr, indent: &str) -> String {
     match command {
         Command::Assert(expr) => format!("assert({});", expr_to_text(expr.as_ref(), virir)),
         Command::Display(message, expr) => format!("display({message}, {});", expr_to_text(expr.as_ref(), virir)),
         Command::Finish => "finish;".to_string(),
         Command::Fatal => "fatal;".to_string(),
+        Command::If { cond, commands } => {
+            let nested_indent = format!("{}    ", indent);
+            let mut s = format!("if ({}) {{", expr_to_text(cond.as_ref(), virir));
+            for cmd in commands {
+                s.push_str(&format!("\n{}{}", nested_indent, command_to_text(cmd, virir, &nested_indent)));
+            }
+            s.push_str(&format!("\n{}}}", indent));
+            s
+        }
     }
 }
 
@@ -854,6 +867,20 @@ fn build_command(
         ))),
         parse::Command::Finish => Command::Finish,
         parse::Command::Fatal => Command::Fatal,
+        parse::Command::If(cond, cmds) => Command::If {
+            cond: Arc::new(build_expr(
+                cond,
+                Some(bit_type),
+                type_ids,
+                local_types,
+                instance_types,
+                module_signatures,
+            )),
+            commands: cmds
+                .into_iter()
+                .map(|cmd| build_command(cmd, type_ids, local_types, instance_types, module_signatures))
+                .collect(),
+        },
     }
 }
 
