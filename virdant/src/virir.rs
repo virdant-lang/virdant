@@ -80,6 +80,7 @@ pub enum Item {
 pub struct ModDef {
     pub region: Region,
     pub is_export: bool,
+    pub is_ext: bool,
     pub name: String,
     pub ports: Vec<Port>,
     pub wires: Vec<Wire>,
@@ -161,10 +162,11 @@ fn write_package(out: &mut String, package: &Package, virir: &VirIr) {
 }
 
 fn write_moddef(out: &mut String, moddef: &ModDef, virir: &VirIr) {
+    let ext = if moddef.is_ext { "ext " } else { "" };
     if moddef.is_export {
-        writeln!(out, "        export mod {} {{", moddef.name).unwrap();
+        writeln!(out, "        export {ext}mod {} {{", moddef.name).unwrap();
     } else {
-        writeln!(out, "        mod {} {{", moddef.name).unwrap();
+        writeln!(out, "        {ext}mod {} {{", moddef.name).unwrap();
     }
 
     for port in &moddef.ports {
@@ -335,7 +337,7 @@ fn expr_to_text(expr: &Expr, virir: &VirIr) -> String {
     }
 }
 
-fn build_mod_def(is_export: bool, name: String, stmts: Vec<parse::ModStmt>) -> parse::ModDef {
+fn build_mod_def(is_export: bool, is_ext: bool, name: String, stmts: Vec<parse::ModStmt>) -> parse::ModDef {
     let mut ports = vec![];
     let mut wires = vec![];
     let mut regs = vec![];
@@ -359,6 +361,7 @@ fn build_mod_def(is_export: bool, name: String, stmts: Vec<parse::ModStmt>) -> p
 
     parse::ModDef {
         is_export,
+        is_ext,
         name,
         ports,
         wires,
@@ -541,6 +544,7 @@ fn build_module(
     ModDef {
         region: dummy_region(),
         is_export: mod_def.is_export,
+        is_ext: mod_def.is_ext,
         name: mod_def.name,
         ports: mod_def
             .ports

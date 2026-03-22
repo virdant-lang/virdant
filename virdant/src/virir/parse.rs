@@ -42,6 +42,7 @@ pub(super) struct Package {
 
 pub(super) struct ModDef {
     pub(super) is_export: bool,
+    pub(super) is_ext: bool,
     pub(super) name: String,
     pub(super) ports: Vec<Port>,
     pub(super) wires: Vec<Wire>,

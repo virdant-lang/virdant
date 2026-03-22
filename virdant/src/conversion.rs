@@ -133,7 +133,7 @@ fn convert_mod_def(
         elements.push(convert_on(type_widths, on));
     }
 
-    verilog::Module { name: module_name, ports, elements }
+    verilog::Module { name: module_name, is_ext: mod_def.is_ext, ports, elements }
 }
 
 /// Collects the emitted Verilog name for each package-qualified VirIr module path.

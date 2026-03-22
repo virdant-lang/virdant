@@ -14,7 +14,8 @@ PackageDecl: Package = {
 }
 
 ModuleDecl: ModDef = {
-    <export:"export"?> "mod" <name:Ident> "{" <stmts:ModStmt*> "}" => build_mod_def(export.is_some(), name, stmts),
+    <export:"export"?> "mod" <name:Ident> "{" <stmts:ModStmt*> "}" => build_mod_def(export.is_some(), false, name, stmts),
+    <export:"export"?> "ext" "mod" <name:Ident> "{" <stmts:ModStmt*> "}" => build_mod_def(export.is_some(), true, name, stmts),
 }
 
 ModStmt: ModStmt = {

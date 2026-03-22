@@ -37,6 +37,7 @@ pub struct VerilogFile {
 #[derive(Debug)]
 pub struct Module {
     pub name: String,
+    pub is_ext: bool,
     pub ports: Vec<Port>,
     pub elements: Vec<Element>,
 }
@@ -226,6 +227,9 @@ impl VerilogFile {
 
     fn write_to_file(&self, writer: &mut Writer) -> std::io::Result<()> {
         for module in &self.modules {
+            if module.is_ext {
+                continue;
+            }
             module.write(writer)?;
         }
         Ok(())

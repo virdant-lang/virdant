@@ -251,6 +251,7 @@ impl<'d> Transpiler<'d> {
             items.push(Item::ModDef(ModDef {
                 region: item_ast.region(),
                 is_export: moddef.is_export,
+                is_ext: moddef.is_ext,
                 name: moddef_name.to_str_lossy().into_owned(),
                 ports,
                 wires,
