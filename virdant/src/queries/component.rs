@@ -6,9 +6,10 @@ use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::location::Location;
 use crate::analysis::symbols::{SymbolId, SymbolTable};
 use crate::analysis::types::Type;
-use crate::common::Width;
+use crate::common::{ComponentKind, Width};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
+use crate::fqn::PackageFqn;
 use crate::syntax::ast::AstNode;
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
@@ -25,6 +26,13 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     let parsing = builder.get_parsing(location.package());
     let item_ast = parsing.ast_node(location.ast_node_id());
 
+    // ensure all dependent packages have been created
+    // TODO this doesn't recurse though?
+    let package_analysis = builder.get_package_analysis(location.package());
+    for import in package_analysis.imports() {
+        builder.get_package_analysis(import);
+    }
+
     for stmt in item_ast.children() {
         match stmt.payload() {
             AstNodePayload::Component(component) => {
@@ -33,6 +41,42 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 match node_to_typ(typ_node, parsing.clone(), symboltable.clone()) {
                     Ok(typ) => component_analysis.components.push((path, Some(typ))),
                     Err(diag) => component_analysis.diagnostics.push(diag),
+                }
+            }
+            AstNodePayload::Module(module) => {
+                let instance_name = parsing.string(module.name);
+                let ofness_node = stmt.child(0);
+                let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
+                    continue;
+                };
+                let submodule_package = ofness
+                    .package
+                    .map(|pkg| PackageFqn::new(bstr::BString::from(parsing.string(pkg).to_vec())))
+                    .unwrap_or_else(|| location.package());
+                let submodule_name = parsing.string(ofness.name);
+                let submodule_symbol = match symboltable.resolve_item_in_package(submodule_name, submodule_package) {
+                    Some(symbol) => symbol.clone(),
+                    None => continue,
+                };
+                let submodule_location = submodule_symbol.location();
+                let submodule_parsing = builder.get_parsing(submodule_location.package());
+                let submodule_ast = submodule_parsing.ast_node(submodule_location.ast_node_id());
+                for submodule_stmt in submodule_ast.children() {
+                    let AstNodePayload::Component(component) = submodule_stmt.payload() else {
+                        continue;
+                    };
+                    if !matches!(component.kind, ComponentKind::Incoming | ComponentKind::Outgoing) {
+                        continue;
+                    }
+                    let port_name = submodule_parsing.string(component.name);
+                    let qualified_name = bstr::BString::from(
+                        format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes()
+                    );
+                    let typ_node = submodule_stmt.typ().unwrap();
+                    match node_to_typ(typ_node, submodule_parsing.clone(), symboltable.clone()) {
+                        Ok(typ) => component_analysis.components.push((qualified_name, Some(typ))),
+                        Err(diag) => component_analysis.diagnostics.push(diag),
+                    }
                 }
             }
             _ => (),

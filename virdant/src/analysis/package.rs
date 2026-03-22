@@ -46,6 +46,10 @@ impl PackageAnalysis {
         self.package.clone()
     }
 
+    pub fn imports(&self) -> Vec<PackageFqn> {
+        self.imports.iter().cloned().collect()
+    }
+
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         self.diagnostics.clone()
     }
