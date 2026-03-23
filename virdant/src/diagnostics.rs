@@ -129,7 +129,7 @@ pub struct MultipleDrivers {
 
 /// Incoming signal has a driver.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IncomingDriver {
+pub struct DriverForSink {
     pub region: Region,
     pub target: BString,
 }
@@ -370,13 +370,13 @@ impl IsDiagnostic for MultipleDrivers {
     }
 }
 
-impl IsDiagnostic for IncomingDriver {
+impl IsDiagnostic for DriverForSink {
     fn region(&self) -> Region {
         self.region.clone()
     }
 
     fn message(&self) -> BString {
-        format!("Driver for incoming signal {}", &self.target).into()
+        format!("Driver for sink {}", &self.target).into()
     }
 }
 

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use bstr::ByteSlice;
+use bstr::{BString, ByteSlice};
+use hashbrown::HashSet;
 
 use crate::analysis::component::{Component, ComponentAnalysis};
 use crate::analysis::location::Location;
@@ -25,6 +26,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     let location = find_item_location(builder, moddef);
     let parsing = builder.get_parsing(location.package());
     let item_ast = parsing.ast_node(location.ast_node_id());
+    let mut components_seen: HashSet<BString> = HashSet::new();
 
     // ensure all dependent packages have been created
     // TODO this doesn't recurse though?
@@ -48,10 +50,14 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         };
                         let component = Component {
                             path: path.clone(),
+                            location: stmt.location(),
                             typ: Some(typ),
                             flow,
                         };
-                        component_analysis.components.push((path.clone(), component));
+                        if !components_seen.contains(&path) {
+                            components_seen.insert(path.clone());
+                            component_analysis.components.push((path.clone(), component));
+                        }
                     }
                     Err(diag) => component_analysis.diagnostics.push(diag),
                 }
@@ -82,25 +88,28 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         continue;
                     }
                     let port_name = submodule_parsing.string(component.name);
-                    let qualified_name = bstr::BString::from(
+                    let path = bstr::BString::from(
                         format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes()
                     );
                     let typ_node = submodule_stmt.typ().unwrap();
                     match node_to_typ(typ_node, &submodule_parsing, &symboltable) {
                         Ok(typ) => {
-                            let path = qualified_name.to_owned();
                             let flow = match component.kind {
-                                ComponentKind::Incoming => Flow::Source,
-                                ComponentKind::Outgoing => Flow::Sink,
+                                ComponentKind::Incoming => Flow::Sink,
+                                ComponentKind::Outgoing => Flow::Source,
                                 ComponentKind::Reg => Flow::Duplex,
                                 ComponentKind::Wire => Flow::Duplex,
                             };
                             let component = Component {
-                                path,
+                                path: path.clone(),
+                                location: stmt.location(),
                                 typ: Some(typ),
                                 flow,
                             };
-                            component_analysis.components.push((qualified_name, component))
+                            if !components_seen.contains(&path) {
+                                components_seen.insert(path.clone());
+                                component_analysis.components.push((path, component))
+                            }
                         }
                         Err(diag) => component_analysis.diagnostics.push(diag),
                     }
