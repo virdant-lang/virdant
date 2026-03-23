@@ -505,7 +505,7 @@ fn convert_expr(
         virir::expr::Expr::IndexRange(index_range) => {
             verilog::Expr::IndexRange(verilog::expr::IndexRange {
                 subject: Box::new(convert_expr(type_widths, index_range.subject.as_ref())),
-                index_hi: Box::new(constant_index_expr(index_range.index_hi)),
+                index_hi: Box::new(constant_index_expr(index_range.index_hi - 1)),
                 index_lo: Box::new(constant_index_expr(index_range.index_lo)),
             })
         }

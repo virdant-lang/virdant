@@ -1,3 +1,13 @@
 mod Control {
-    incoming instr : Word[32];
+    incoming opcode : Word[7];
+
+    outgoing rf_write : Bit;
+
+    rf_write := if opcode == 19 { // OP-IMM
+        true
+    } else if opcode == 52 { // OP
+        true
+    } else {
+        false
+    };
 }

@@ -29,7 +29,7 @@ mod Cpu {
     rf.rs2 := ifetch.rs2;
 
     extend.instr   := ifetch.instr;
-    control.instr  := ifetch.instr;
+    control.opcode  := ifetch.opcode;
 
     alu.a := rf.rs1_out;
     alu.b := if true {
@@ -42,8 +42,8 @@ mod Cpu {
 
     mem.addr := alu.z;
     mem.data_in := zext(ifetch.rs1);
-    rf.rd_in   := 0w32;
-    rf.write   := false;
+    rf.rd_in   := alu.z;
+    rf.write   := control.rf_write;
 }
 
 ext mod Mem {

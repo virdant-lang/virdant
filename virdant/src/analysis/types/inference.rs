@@ -188,7 +188,7 @@ impl Typing {
             self.typs.insert(subject.id(), subject_typ.clone());
             if let Type::Word(width) = &subject_typ {
                 // TODO check
-                if indexrange.index_lo <= indexrange.index_hi && indexrange.index_hi < *width {
+                if indexrange.index_lo <= indexrange.index_hi && indexrange.index_hi <= *width {
                     Ok(Some(Type::Word(indexrange.index_hi - indexrange.index_lo)))
                 } else {
                     Err(vec![diagnostics::Todo {

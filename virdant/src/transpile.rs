@@ -548,7 +548,6 @@ impl<'d> Transpiler<'d> {
                 let width = expr_index_range
                     .index_hi
                     .checked_sub(expr_index_range.index_lo)
-                    .map(|delta| delta + 1)
                     .unwrap_or_else(|| panic!("invalid expr index range in transpile: {}", node.summary()));
 
                 Expr::IndexRange(IndexRange {
