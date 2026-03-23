@@ -1,20 +1,25 @@
 use bstr::BString;
+use hashbrown::HashSet;
 
 use crate::common::json::ToJson;
 
 use super::typ::Type;
 
 #[derive(Debug, Clone)]
-pub struct TypingContext(pub(crate) Vec<(BString, Type)>);
+pub struct TypingContext {
+    pub(crate) context: Vec<(BString, Type)>,
+    pub(crate) used: HashSet<BString>,
+}
 
 impl TypingContext {
     pub fn bindings(&self) -> &[(BString, Type)] {
-        self.0.as_slice()
+        self.context.as_slice()
     }
 
-    pub fn get(&self, name: BString) -> Option<Type> {
-        for (name_, typ) in self.bindings().iter().rev() {
+    pub fn get(&mut self, name: BString) -> Option<Type> {
+        for (name_, typ) in self.context.iter().rev() {
             if name == *name_ {
+                self.used.insert(name);
                 return Some(typ.clone());
             }
         }
@@ -24,7 +29,7 @@ impl TypingContext {
 
 impl ToJson for TypingContext {
     fn to_json(&self) -> json::JsonValue {
-        self.0.to_json()
+        self.context.to_json()
     }
 }
 

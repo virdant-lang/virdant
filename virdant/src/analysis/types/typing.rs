@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use bstr::ByteSlice;
-use hashbrown::HashMap;
+use bstr::{BString, ByteSlice};
+use hashbrown::{HashMap, HashSet};
 
 use crate::analysis::symbols::SymbolTable;
 use crate::common::{BinOp as CommonBinOp, UnOp as CommonUnOp, Width};
@@ -78,6 +78,10 @@ pub struct Typing {
 impl Typing {
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         self.diagnostics.clone()
+    }
+
+    pub fn used(&self) -> HashSet<BString> {
+        self.context.used.clone()
     }
 
     pub(crate) fn type_of_node(&self, id: AstNodeId) -> Option<&Type> {

@@ -33,6 +33,10 @@ impl Component {
         self.typ.clone()
     }
 
+    pub fn flow(&self) -> Flow {
+        self.flow.clone()
+    }
+
     pub fn location(&self) -> Location {
         self.location.clone()
     }

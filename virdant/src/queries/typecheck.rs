@@ -1,8 +1,10 @@
+use bstr::BString;
 use hashbrown::{HashMap, HashSet};
 
 use crate::analysis::location::Location;
 use crate::analysis::symbols::{Symbol, SymbolId};
 use crate::analysis::types::{ExprRoot, Type};
+use crate::common::Flow;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
 use crate::syntax::ast::AstNode;
@@ -14,21 +16,47 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Vec<Diagn
     let exprroots = builder.get_exprroots();
     let item = symboltable.symbol(symbol_id);
 
+    let mut used: HashSet<BString> = HashSet::new();
+
     let parsing = builder.get_parsing(item.package());
     let node: AstNode = parsing.ast_node(item.location().ast_node_id());
     if !node.contains_errors() {
-        diagnostics.extend(typecheck_item(builder, item, &exprroots));
+        diagnostics.extend(typecheck_item(builder, item, &exprroots, &mut used));
+    }
+
+    let component_analysis = builder.get_component_analysis(symbol_id);
+    for (path, component) in component_analysis.components() {
+        if component.can_source() && !used.contains(&path) {
+            let region = builder.get_location_region(component.location());
+            diagnostics.push(diagnostics::UnusedSource {
+                region,
+                path: path.into(),
+            }.into());
+        } else if component.flow() == Flow::Sink && used.contains(&path) {
+            let region = builder.get_location_region(component.location());
+            diagnostics.push(diagnostics::ReadFromSink {
+                region,
+                path: path.into(),
+            }.into());
+        }
     }
 
     diagnostics
 }
 
-fn typecheck_item(builder: &mut Builder, item: Symbol, exprroots: &[ExprRoot]) -> Vec<Diagnostic> {
+fn typecheck_item(
+    builder: &mut Builder,
+    item: Symbol,
+    exprroots: &[ExprRoot],
+    used: &mut HashSet<BString>,
+) -> Vec<Diagnostic> {
     let mut diagnostics = vec![];
     for exprroot in exprroots {
         if exprroot.package() == item.package() {
             let typing = builder.get_typing(exprroot.clone());
             diagnostics.extend(typing.diagnostics());
+
+            used.extend(typing.used());
         }
     }
     diagnostics

@@ -22,9 +22,6 @@ use crate::virir::{Command, Driver, Instance, Item, ModDef, On, Package, Port, R
 /// Lowers a checked analysis database into a `VirIr` module graph.
 pub fn transpile(db: &Db) -> VirIr {
     let diagnostics = db.check();
-    for diag in &diagnostics {
-        eprintln!("ERROR: {diag:?}");
-    }
 
     if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
         eprintln!("Transpilation failed");

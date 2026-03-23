@@ -141,10 +141,20 @@ pub struct UnresolvedComponent {
     pub path: BString,
 }
 
+/// A component could not be resolved.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnusedSource {
+    pub region: Region,
+    pub path: BString,
+}
+
 /// Read from a component which is a sink.
 /// Eg, a read from an `outgoing` port.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReadFromSink;
+pub struct ReadFromSink {
+    pub region: Region,
+    pub path: BString,
+}
 
 /// Failed to resolve a method.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -388,6 +398,30 @@ impl IsDiagnostic for UnresolvedComponent {
     fn message(&self) -> BString {
         format!("Unresolved component {}", &self.path).into()
     }
+}
+
+impl IsDiagnostic for UnusedSource {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Unused signal {}", &self.path).into()
+    }
+
+    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }
+}
+
+impl IsDiagnostic for ReadFromSink {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Read from sink {}", &self.path).into()
+    }
+
+    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }
 }
 
 impl IsDiagnostic for UnresolvedItem {

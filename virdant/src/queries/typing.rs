@@ -10,7 +10,7 @@ use crate::db::Builder;
 use crate::diagnostics;
 use crate::syntax::ast::AstNodeId;
 use crate::syntax::payload::AstNodePayload;
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 
 pub(crate) fn build_typing_context(builder: &mut Builder, item: SymbolId) -> TypingContext {
     let component_analysis = builder.get_component_analysis(item);
@@ -18,10 +18,13 @@ pub(crate) fn build_typing_context(builder: &mut Builder, item: SymbolId) -> Typ
     // TODO How does this need to get used?
     let _typedefs = builder.get_typedefs();
 
-    let mut context = TypingContext(vec![]);
+    let mut context = TypingContext {
+        context: vec![],
+        used: HashSet::new(),
+    };
     for (path, component) in component_analysis.components() {
         if let Some(typ) = component.typ() {
-            context.0.push((path, typ));
+            context.context.push((path, typ));
         }
     }
 
