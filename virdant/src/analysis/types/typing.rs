@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use bstr::{BString, ByteSlice};
+use bstr::{BStr, BString, ByteSlice};
 use hashbrown::{HashMap, HashSet};
 
 use crate::analysis::symbols::SymbolTable;
@@ -73,6 +73,7 @@ pub struct Typing {
     pub(crate) diagnostics: Vec<Diagnostic>,
     // TODO Remove the symbol table and instead resolve type expressions beforehand.
     pub(crate) symboltable: Arc<SymbolTable>,
+    pub(crate) use_locations: HashMap<BString, Vec<Location>>,
 }
 
 impl Typing {
@@ -80,8 +81,15 @@ impl Typing {
         self.diagnostics.clone()
     }
 
-    pub fn used(&self) -> HashSet<BString> {
-        self.context.used.clone()
+    pub fn reference_use_locations(&self) -> &HashMap<BString, Vec<Location>> {
+        &self.use_locations
+    }
+
+    pub fn use_component(&mut self, path: &BStr, location: Location) {
+        if !self.use_locations.contains_key(path) {
+            self.use_locations.insert(path.to_owned(), vec![]);
+        }
+        self.use_locations.get_mut(path).unwrap().push(location);
     }
 
     pub(crate) fn type_of_node(&self, id: AstNodeId) -> Option<&Type> {

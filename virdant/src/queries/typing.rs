@@ -20,7 +20,6 @@ pub(crate) fn build_typing_context(builder: &mut Builder, item: SymbolId) -> Typ
 
     let mut context = TypingContext {
         context: vec![],
-        used: HashSet::new(),
     };
     for (path, component) in component_analysis.components() {
         if let Some(typ) = component.typ() {
@@ -106,6 +105,7 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
         diagnostics,
         expected_typ: expected_typ.clone().unwrap_or_else(|| builtin_bit_type()),
         symboltable: symboltable.clone(),
+        use_locations: HashMap::new(),
     };
 
     // if there is no expected type, you can't type check the expression.

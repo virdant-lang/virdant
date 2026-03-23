@@ -1,14 +1,13 @@
 use bstr::BString;
-use hashbrown::HashSet;
+use hashbrown::{HashMap, HashSet};
 
-use crate::common::json::ToJson;
+use crate::{analysis::Location, common::json::ToJson};
 
 use super::typ::Type;
 
 #[derive(Debug, Clone)]
 pub struct TypingContext {
     pub(crate) context: Vec<(BString, Type)>,
-    pub(crate) used: HashSet<BString>,
 }
 
 impl TypingContext {
@@ -16,10 +15,9 @@ impl TypingContext {
         self.context.as_slice()
     }
 
-    pub fn get(&mut self, name: BString) -> Option<Type> {
+    pub fn get(&self, name: BString) -> Option<Type> {
         for (name_, typ) in self.context.iter().rev() {
             if name == *name_ {
-                self.used.insert(name);
                 return Some(typ.clone());
             }
         }

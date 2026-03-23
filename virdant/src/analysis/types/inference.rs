@@ -18,6 +18,7 @@ impl Typing {
                 let parsing = node.parsing();
                 let path = parsing.string(node.path().unwrap());
                 let typ = self.context.get(path.to_owned()); // TODO need to walk backwards to get it.
+                self.use_component(path, node.location());
                 if typ.is_none() {
                     Err(vec![diagnostics::UnresolvedComponent {
                         region: node.region(),
