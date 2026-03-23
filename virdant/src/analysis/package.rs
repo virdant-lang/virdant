@@ -108,7 +108,12 @@ impl PackageAnalysis {
                 let mut items = self.items.get_mut(&name).unwrap();
                 items.push(child_node.id());
 
-                self.add_item_expr_roots(parsing.clone(), child_node);
+                // Skip adding exprroots for items which contain syntax errors
+                // This suppresses typechecking for the item.
+                let has_syntax_errors = child_node.contains_errors();
+                if !has_syntax_errors {
+                    self.add_item_expr_roots(parsing.clone(), child_node);
+                }
             }
         }
     }

@@ -20,6 +20,7 @@ use crate::common::json::ToJson;
 use crate::diagnostics::Diagnostic;
 use crate::fqn::PackageFqn;
 use crate::source::{Region, Source};
+use crate::syntax::ast::AstNodeId;
 use crate::syntax::parsing::Parsing;
 
 pub use guts::*;
@@ -33,6 +34,7 @@ queries! {
     PackageAnalysis(package: PackageFqn) -> Arc<PackageAnalysis>;
     ComponentAnalysis(symbol_id: SymbolId) -> Arc<ComponentAnalysis>;
     SymbolTable() -> Arc<SymbolTable>;
+    SymbolAst(symbol_id: SymbolId) -> AstNodeId;
     TypeDefs() -> Vec<TypeDef>;
     ExprRoots() -> Vec<ExprRoot>;
     AllExprs() -> Vec<Location>;
@@ -68,6 +70,7 @@ impl Query {
             crate::queries::build_package_analysis : PackageAnalysis(analysis);
             crate::queries::build_component_analysis : ComponentAnalysis(symbol_id);
             crate::queries::build_symboltable : SymbolTable();
+            crate::queries::build_symbol_ast : SymbolAst(symbol_id);
             crate::queries::find_exprroots : ExprRoots();
             crate::queries::build_all_exprs : AllExprs();
             crate::queries::build_expected_type : ExpectedType(location);
@@ -95,6 +98,7 @@ db_getter!(get_syntax_errors : SyntaxErrors() -> Vec<Diagnostic>);
 db_getter!(get_package_analysis : PackageAnalysis(package: PackageFqn) -> Arc<PackageAnalysis>);
 db_getter!(get_component_analysis : ComponentAnalysis(moddef: SymbolId) -> Arc<ComponentAnalysis>);
 db_getter!(get_symboltable : SymbolTable() -> Arc<SymbolTable>);
+db_getter!(get_symbol_ast : SymbolAst(symbol_id: SymbolId) -> AstNodeId);
 db_getter!(get_typing_context : TypingContext(item: SymbolId) -> TypingContext);
 db_getter!(get_typedefs : TypeDefs() -> Vec<TypeDef>);
 db_getter!(get_exprroots : ExprRoots() -> Vec<ExprRoot>);

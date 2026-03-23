@@ -8,6 +8,7 @@ use crate::common::{BinOp as CommonBinOp, UnOp as CommonUnOp, Width};
 use crate::common::json::ToJson;
 use crate::diagnostics::{self, Diagnostic};
 use crate::analysis::location::Location;
+use crate::fqn::PackageFqn;
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
 
@@ -50,6 +51,10 @@ impl ExprRoot {
 
     pub fn location(&self) -> Location {
         self.location.clone()
+    }
+
+    pub fn package(&self) -> PackageFqn {
+        self.location.package()
     }
 }
 

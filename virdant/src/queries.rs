@@ -14,7 +14,7 @@ pub(crate) use component::build_component_analysis;
 pub(crate) use location::build_location_region;
 pub(crate) use package::build_package_analysis;
 pub(crate) use parsing::build_parsing;
-pub(crate) use symbols::build_symboltable;
+pub(crate) use symbols::{build_symbol_ast, build_symboltable};
 pub(crate) use syntax::{build_all_exprs, find_exprroots, build_syntax_errors};
 pub(crate) use typecheck::{build_typeof, build_typeof_all, typecheck};
 pub(crate) use types::{build_type_monomorphizations, build_typedefs};

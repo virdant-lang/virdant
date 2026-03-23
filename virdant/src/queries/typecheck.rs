@@ -1,17 +1,36 @@
 use hashbrown::{HashMap, HashSet};
 
 use crate::analysis::location::Location;
+use crate::analysis::symbols::Symbol;
 use crate::analysis::types::{ExprRoot, Type};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
+use crate::syntax::ast::AstNode;
 
 pub(crate) fn typecheck(builder: &mut Builder) -> Vec<Diagnostic> {
     let mut diagnostics = vec![];
-    for exprroot in builder.get_exprroots() {
-        let typing = builder.get_typing(exprroot);
-        diagnostics.extend(typing.diagnostics());
-    }
+    let symboltable = builder.get_symboltable();
 
+    let exprroots = builder.get_exprroots();
+
+    for item in symboltable.items () {
+        let parsing = builder.get_parsing(item.package());
+        let node: AstNode = parsing.ast_node(item.location().ast_node_id());
+        if !node.contains_errors() {
+            diagnostics.extend(typecheck_item(builder, item, &exprroots));
+        }
+    }
+    diagnostics
+}
+
+fn typecheck_item(builder: &mut Builder, item: Symbol, exprroots: &[ExprRoot]) -> Vec<Diagnostic> {
+    let mut diagnostics = vec![];
+    for exprroot in exprroots {
+        if exprroot.package() == item.package() {
+            let typing = builder.get_typing(exprroot.clone());
+            diagnostics.extend(typing.diagnostics());
+        }
+    }
     diagnostics
 }
 
@@ -46,6 +65,29 @@ pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> E
     }
 }
 
+fn item_for(builder: &mut Builder, location: Location) -> Symbol {
+    let symboltable = builder.get_symboltable();
+    let parsing = builder.get_parsing(location.package());
+
+    let mut node = parsing.ast_node(location.ast_node_id());
+    loop {
+        if node.is_item() {
+            let name = node.name().unwrap();
+            let name_str = parsing.string(name);
+            return symboltable
+                .resolve_item_in_package(name_str, location.package())
+                .unwrap()
+                .clone();
+        }
+
+        if let Some(parent) = node.parent() {
+            node = parsing.ast_node(parent.id());
+        } else {
+            panic!("No containing item found for location {:?}", location);
+        }
+    }
+}
+
 pub(crate) fn build_typeof(builder: &mut Builder, location: Location) -> Result<Type, Vec<Diagnostic>> {
     let exprroot = builder.get_exprroot_for(location.clone());
     let typing = builder.get_typing(exprroot);
@@ -64,9 +106,14 @@ pub(crate) fn build_typeof_all(builder: &mut Builder) -> HashMap<Location, Optio
     let mut typeof_all = HashMap::new();
 
     for location in builder.get_all_exprs() {
-        // TODO Probably need thread the diagnostics through instead of discarding them here.
-        if let Ok(typ) = builder.get_typeof(location.clone()) {
-            typeof_all.insert(location, Some(typ));
+        let item = item_for(builder, location.clone());
+        let parsing = builder.get_parsing(item.package());
+        let item_node = parsing.ast_node(item.location().ast_node_id());
+        if !item_node.contains_errors() {
+            // TODO Probably need thread the diagnostics through instead of discarding them here.
+            if let Ok(typ) = builder.get_typeof(location.clone()) {
+                typeof_all.insert(location, Some(typ));
+            }
         }
     }
 

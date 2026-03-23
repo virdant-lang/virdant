@@ -9,6 +9,7 @@ use crate::analysis::symbols::{Symbol, SymbolId, SymbolKind, SymbolTable};
 use crate::db::Builder;
 use crate::diagnostics;
 use crate::source::Region;
+use crate::syntax::ast::AstNodeId;
 use crate::syntax::payload::AstNodePayload;
 
 pub(crate) fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
@@ -111,4 +112,10 @@ pub(crate) fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
         diagnostics: diagnostics_vec,
         builtin_names: builtin_names.into_iter().collect(),
     })
+}
+
+pub(crate) fn build_symbol_ast(builder: &mut Builder, symbol_id: SymbolId) -> AstNodeId {
+    let symboltable = builder.get_symboltable();
+    let symbol = symboltable.symbol(symbol_id);
+    symbol.location().ast_node_id()
 }

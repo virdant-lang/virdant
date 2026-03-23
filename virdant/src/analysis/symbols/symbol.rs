@@ -3,6 +3,7 @@ use bstr::BString;
 
 use crate::analysis::location::Location;
 use crate::common::json::ToJson;
+use crate::fqn::PackageFqn;
 
 #[derive(Debug, Clone)]
 pub struct Symbol {
@@ -39,6 +40,10 @@ impl Symbol {
 
     pub fn location(&self) -> Location {
         self.location.clone()
+    }
+
+    pub fn package(&self) -> PackageFqn {
+        self.location.package()
     }
 
     pub fn kind(&self) -> SymbolKind {
