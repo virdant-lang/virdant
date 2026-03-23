@@ -150,6 +150,7 @@ impl Typing {
 
     fn infer_index<'p>(&mut self, node: &AstNode<'p>, index: payload::ExprIndex) -> Result<Option<Type>, Vec<Diagnostic>> {
         let subject = node.subject().unwrap();
+        let region = node.region();
         if let Some(subject_typ) = self.infer(&subject)? {
             self.typs.insert(subject.id(), subject_typ.clone());
             if let Type::Word(width) = &subject_typ {
@@ -157,13 +158,22 @@ impl Typing {
                 if index.index < *width {
                     Ok(Some(Type::Bit))
                 } else {
-                    todo!()
+                    Err(vec![diagnostics::Todo {
+                        region,
+                        message: "infer_index out of range".into(),
+                    }.into()])
                 }
             } else {
-                todo!()
+                Err(vec![diagnostics::Todo {
+                    region,
+                    message: "infer_index subject not a Word type".into(),
+                }.into()])
             }
         } else {
-            todo!()
+            Err(vec![diagnostics::Todo {
+                region,
+                message: "infer_index can't infer subject".into(),
+            }.into()])
         }
     }
 
@@ -173,6 +183,7 @@ impl Typing {
         indexrange: payload::ExprIndexRange,
     ) -> Result<Option<Type>, Vec<Diagnostic>> {
         let subject = node.subject().unwrap();
+        let region = node.region();
         if let Some(subject_typ) = self.infer(&subject)? {
             self.typs.insert(subject.id(), subject_typ.clone());
             if let Type::Word(width) = &subject_typ {
@@ -180,13 +191,22 @@ impl Typing {
                 if indexrange.index_lo <= indexrange.index_hi && indexrange.index_hi < *width {
                     Ok(Some(Type::Word(indexrange.index_hi - indexrange.index_lo)))
                 } else {
-                    todo!()
+                    Err(vec![diagnostics::Todo {
+                        region,
+                        message: "infer_index_range out of range".into(),
+                    }.into()])
                 }
             } else {
-                todo!()
+                Err(vec![diagnostics::Todo {
+                    region,
+                    message: "infer_index_range subject not a Word type".into(),
+                }.into()])
             }
         } else {
-            todo!()
+            Err(vec![diagnostics::Todo {
+                region,
+                message: "infer_index_range can't infer subject".into(),
+            }.into()])
         }
     }
 }
