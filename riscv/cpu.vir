@@ -28,7 +28,8 @@ mod Cpu {
     rf.rs1 := ifetch.rs1;
     rf.rs2 := ifetch.rs2;
 
-    extend.instr := ifetch.instr;
+    extend.instr   := ifetch.instr;
+    control.instr  := ifetch.instr;
 
     alu.a := rf.rs1_out;
     alu.b := if true {
@@ -41,12 +42,13 @@ mod Cpu {
 
     mem.addr := alu.z;
     mem.data_in := zext(ifetch.rs1);
-    rf.rd_data := ifetch.rs2;
+    rf.rd_in   := 0w32;
+    rf.write   := false;
 }
 
 ext mod Mem {
     incoming clock : Clock;
     incoming addr     : Word[32];
-    incoming data_out : Word[32];
+    outgoing data_out : Word[32];
     incoming data_in  : Word[32];
 }

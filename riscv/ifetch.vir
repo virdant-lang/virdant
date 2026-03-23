@@ -2,7 +2,6 @@ mod Ifetch {
     incoming clock : Clock;
     incoming reset : Bit;
     incoming cycle : Word[32];
-    incoming cycle : Word[32];
 
     outgoing instr : Word[32];
 
@@ -20,9 +19,6 @@ mod Ifetch {
     mod instr_mem of Rom;
     instr_mem.addr := pc;
     instr := instr_mem.instr;
-    instr := instr_mem.instr;
-
-    wire w : Bit;
 
     pc <= if reset {
         0w32
@@ -45,7 +41,9 @@ mod Ifetch {
     opcode := instr[7..0];
     rd  := instr[12..7];
     rs1 := instr[20..15];
-    rs2 := instr[25..20];
+    rs2    := instr[25..20];
+    funct5 := instr[31..26];
+    funct7 := instr[31..24];
 }
 
 ext mod Rom {

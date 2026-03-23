@@ -19,6 +19,12 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<D
     let parsing = builder.get_parsing(symbol.package());
     let moddef_node = parsing.ast_node(moddef_node_id);
 
+    if let AstNodePayload::ModDef(mod_def) = moddef_node.payload() {
+        if mod_def.is_ext {
+            return diagnostics;
+        }
+    }
+
     let mut driver_locations = get_all_driver_locations(builder, symbol_id);
 
     for child in moddef_node.children() {

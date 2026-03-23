@@ -1,3 +1,5 @@
 mod Extend {
+    incoming instr : Word[32];
     outgoing out : Word[32];
+    out := zext(instr[31..19]);
 }
