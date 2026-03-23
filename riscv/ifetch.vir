@@ -20,6 +20,9 @@ mod Ifetch {
     mod instr_mem of Rom;
     instr_mem.addr := pc;
     instr := instr_mem.instr;
+    instr := instr_mem.instr;
+
+    wire w : Bit;
 
     pc <= if reset {
         0w32

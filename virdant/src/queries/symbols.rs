@@ -59,18 +59,18 @@ pub(crate) fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
                 let mut seen: HashMap<BString, Region> = HashMap::new();
 
                 for child in node.children() {
-                    let (component_name, component_ast_node_id) = match child.payload() {
+                    let (component_name, component_ast_node_id, kind) = match child.payload() {
                         AstNodePayload::Component(component) => {
                             let name: BString = parsing.string(component.name).to_owned();
-                            (name, child.id())
+                            (name, child.id(), SymbolKind::Component)
                         }
                         AstNodePayload::Module(module) => {
                             let name: BString = parsing.string(module.name).to_owned();
-                            (name, child.id())
+                            (name, child.id(), SymbolKind::Submodule)
                         }
                         AstNodePayload::Socket(socket) => {
                             let name: BString = parsing.string(socket.name).to_owned();
-                            (name, child.id())
+                            (name, child.id(), SymbolKind::Socket)
                         }
                         _ => continue,
                     };
@@ -99,7 +99,7 @@ pub(crate) fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
                             id: component_id,
                             fqn: component_fqn,
                             location: component_location,
-                            kind: SymbolKind::Component,
+                            kind,
                         },
                     ));
                 }

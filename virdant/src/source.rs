@@ -25,12 +25,6 @@ pub struct LineCol(usize, usize);
 pub struct Span(LineCol, LineCol);
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
-pub struct Location {
-    package: PackageFqn,
-    linecol: LineCol,
-}
-
-#[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct Region {
     package: PackageFqn,
     span: Span,
@@ -242,28 +236,6 @@ impl Span {
     /// neither contains the other.
     pub fn contains_span(&self, span: Span) -> bool {
         self.start() <= span.start() && span.end() <= self.end()
-    }
-}
-
-impl Location {
-    pub fn new(package: PackageFqn, linecol: LineCol) -> Self {
-        Location { package, linecol }
-    }
-
-    pub fn package(&self) -> PackageFqn {
-        self.package.clone()
-    }
-
-    pub fn linecol(&self) -> LineCol {
-        self.linecol
-    }
-
-    pub fn line(&self) -> usize {
-        self.linecol.line()
-    }
-
-    pub fn col(&self) -> usize {
-        self.linecol.col()
     }
 }
 

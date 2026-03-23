@@ -127,6 +127,13 @@ pub struct MultipleDrivers {
     pub target: BString,
 }
 
+/// Incoming signal has a driver.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncomingDriver {
+    pub region: Region,
+    pub target: BString,
+}
+
 /// A component could not be resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedComponent {
@@ -363,6 +370,16 @@ impl IsDiagnostic for MultipleDrivers {
     }
 }
 
+impl IsDiagnostic for IncomingDriver {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Driver for incoming signal {}", &self.target).into()
+    }
+}
+
 impl IsDiagnostic for UnresolvedComponent {
     fn region(&self) -> Region {
         self.region.clone()
@@ -505,7 +522,7 @@ impl Diagnostic {
         }).into()
     }
 
-    fn to_info(self) -> Diagnostic {
+    pub fn to_info(self) -> Diagnostic {
         (Soften {
             inner: self,
             level: DiagnosticLevel::Info,

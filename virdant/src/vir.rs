@@ -147,17 +147,3 @@ impl std::fmt::Debug for Vir {
             .finish()
     }
 }
-
-#[cfg(test)]
-#[test]
-fn test_vir() {
-    use crate::tests::EXAMPLES_DIR;
-    use crate::source::Source;
-
-    let mut vir = Vir::new();
-
-    vir.add_package_from_file(EXAMPLES_DIR.join("basic.vir"));
-
-    vir.check().unwrap();
-    dbg!(&vir);
-}

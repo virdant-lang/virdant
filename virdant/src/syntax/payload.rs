@@ -20,7 +20,7 @@ pub enum AstNodePayload {
     Component(Component),
     Driver(Driver),
     BidirectionalDriver,
-    Module(Module),
+    Module(Module), // TODO rename Submodule
     ModDefStmtBlock(ModDefStmtBlock),
     ModDefStmtOn,
     ModDefStmtIf,

@@ -5,7 +5,14 @@ pub(crate) fn check(builder: &mut Builder) -> Vec<Diagnostic> {
     let mut diagnostics = vec![];
 
     diagnostics.extend(builder.get_syntax_errors());
-    diagnostics.extend(builder.get_symboltable().diagnostics.clone());
+
+    let symboltable = builder.get_symboltable();
+    diagnostics.extend(symboltable.diagnostics.clone());
+
+    for item in symboltable.items() {
+        diagnostics.extend(builder.check_drivers(item.id()));
+    }
+
     diagnostics.extend(builder.typecheck());
     check_all_exprs_have_types(builder, &mut diagnostics);
 

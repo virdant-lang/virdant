@@ -189,6 +189,7 @@ impl ToJson for Query {
             Query::LocationRegion(location) => json::array!("LocationRegion", location.to_json()),
             Query::ExprRootFor(expr_root) => json::array!("ExprRootFor", expr_root.to_json()),
             Query::SymbolAst(symbol_id) => json::array!("SymbolAst", symbol_id.to_json()),
+            Query::CheckDrivers(symbol_id) => json::array!("CheckDrivers", symbol_id.to_json()),
         }
     }
 }
@@ -223,6 +224,7 @@ impl ToJson for QueryResult {
             QueryResult::LocationRegion(region) => region.to_json(),
             QueryResult::ExprRootFor(expr_root) => expr_root.to_json(),
             QueryResult::SymbolAst(ast_node_id) => ast_node_id.to_json(),
+            QueryResult::CheckDrivers(diagnostics) => diagnostics.to_json(),
         }
     }
 }

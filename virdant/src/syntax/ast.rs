@@ -4,7 +4,7 @@ use bstr::{BStr, ByteSlice};
 //pub use parser_lalrpop as parser;
 
 use crate::analysis::Location;
-use crate::common::ComponentKind;
+use crate::common::{ComponentKind, DriverType};
 use crate::common::json::ToJson;
 use crate::fqn::PackageFqn;
 use crate::source::{Region, Span};
@@ -275,6 +275,23 @@ impl<'p> AstNode<'p> {
     pub fn import_package(&self) -> Option<InternedString> {
         match &self.payload {
             AstNodePayload::Import(import) => Some(import.package),
+            _ => None
+        }
+    }
+
+    pub fn target(&self) -> Option<InternedString> {
+        match &self.payload {
+            AstNodePayload::Driver(_driver) => {
+                let target_node = self.child(0);
+                target_node.path()
+            }
+            _ => None
+        }
+    }
+
+    pub fn driver_type(&self) -> Option<DriverType> {
+        match &self.payload {
+            AstNodePayload::Driver(driver) => Some(driver.driver_type),
             _ => None
         }
     }

@@ -35,6 +35,7 @@ queries! {
     ComponentAnalysis(symbol_id: SymbolId) -> Arc<ComponentAnalysis>;
     SymbolTable() -> Arc<SymbolTable>;
     SymbolAst(symbol_id: SymbolId) -> AstNodeId;
+    CheckDrivers(symbol_id: SymbolId) -> Vec<Diagnostic>;
     TypeDefs() -> Vec<TypeDef>;
     ExprRoots() -> Vec<ExprRoot>;
     AllExprs() -> Vec<Location>;
@@ -71,6 +72,7 @@ impl Query {
             crate::queries::build_component_analysis : ComponentAnalysis(symbol_id);
             crate::queries::build_symboltable : SymbolTable();
             crate::queries::build_symbol_ast : SymbolAst(symbol_id);
+            crate::queries::check_drivers : CheckDrivers(symbol_id);
             crate::queries::find_exprroots : ExprRoots();
             crate::queries::build_all_exprs : AllExprs();
             crate::queries::build_expected_type : ExpectedType(location);
@@ -99,6 +101,7 @@ db_getter!(get_package_analysis : PackageAnalysis(package: PackageFqn) -> Arc<Pa
 db_getter!(get_component_analysis : ComponentAnalysis(moddef: SymbolId) -> Arc<ComponentAnalysis>);
 db_getter!(get_symboltable : SymbolTable() -> Arc<SymbolTable>);
 db_getter!(get_symbol_ast : SymbolAst(symbol_id: SymbolId) -> AstNodeId);
+db_getter!(check_drivers : CheckDrivers(symbol_id: SymbolId) -> Vec<Diagnostic>);
 db_getter!(get_typing_context : TypingContext(item: SymbolId) -> TypingContext);
 db_getter!(get_typedefs : TypeDefs() -> Vec<TypeDef>);
 db_getter!(get_exprroots : ExprRoots() -> Vec<ExprRoot>);

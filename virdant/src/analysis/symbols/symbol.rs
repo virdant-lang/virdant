@@ -7,7 +7,7 @@ use crate::fqn::PackageFqn;
 
 #[derive(Debug, Clone)]
 pub struct Symbol {
-    pub(crate) id: SymbolId,
+    pub(crate) id: SymbolId, // TODO these should be private
     pub(crate) fqn: BString,
     pub(crate) location: Location,
     pub(crate) kind: SymbolKind,
@@ -26,6 +26,8 @@ pub enum SymbolKind {
     FnDef,
     SocketDef,
     Component,
+    Submodule,
+    Socket,
 }
 
 impl Symbol {

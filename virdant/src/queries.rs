@@ -1,4 +1,5 @@
 pub mod check;
+pub mod check_drivers;
 pub mod component;
 pub mod location;
 pub mod package;
@@ -10,6 +11,7 @@ pub mod types;
 pub mod typing;
 
 pub(crate) use check::check;
+pub(crate) use check_drivers::check_drivers;
 pub(crate) use component::build_component_analysis;
 pub(crate) use location::build_location_region;
 pub(crate) use package::build_package_analysis;
