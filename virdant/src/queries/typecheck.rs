@@ -83,7 +83,8 @@ fn item_for(builder: &mut Builder, location: Location) -> Symbol {
         if let Some(parent) = node.parent() {
             node = parsing.ast_node(parent.id());
         } else {
-            panic!("No containing item found for location {:?}", location);
+            let region = builder.get_location_region(location.clone());
+            panic!("No containing item found for location {location:?} at {region:?}");
         }
     }
 }

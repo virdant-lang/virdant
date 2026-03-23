@@ -25,7 +25,6 @@ PackageStmt: AstNodeId = {
     <item:Item> => item,
     <ll:@L> ! <rr:@R> => {
         let span = parser.span(ll, rr);
-
         parser.add_error_node(span)
     },
 }
@@ -234,7 +233,6 @@ ModDefStmt: AstNodeId = {
     <m:ModDefStmtMatch> => m,
     <ll:@L> ! <rr:@R> => {
         let span = parser.span(ll, rr);
-
         parser.add_error_node(span)
     },
 }
