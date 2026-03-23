@@ -43,7 +43,7 @@ queries! {
     ExprRootFor(location: Location) -> ExprRoot;
     TypingContext(symbol_id: SymbolId) -> TypingContext;
     Typing(exprroot: ExprRoot) -> Arc<Typing>;
-    TypeCheck() -> Vec<Diagnostic>;
+    TypeCheck(symbol_id: SymbolId) -> Vec<Diagnostic>;
     Typeof(location: Location) -> Result<Type, Vec<Diagnostic>>;
     TypeofAll() -> HashMap<Location, Option<Type>>;
     Check() -> Vec<Diagnostic>;
@@ -79,7 +79,7 @@ impl Query {
             crate::queries::build_typedefs : TypeDefs();
             crate::queries::build_typing_context : TypingContext(symbol_id);
             crate::queries::build_typing : Typing(expr_root);
-            crate::queries::typecheck : TypeCheck();
+            crate::queries::typecheck : TypeCheck(symbol_id);
             crate::queries::typecheck::build_exprroot_for : ExprRootFor(location);
             crate::queries::build_typeof : Typeof(location);
             crate::queries::build_typeof_all : TypeofAll();
@@ -109,7 +109,7 @@ db_getter!(get_all_exprs : AllExprs() -> Vec<Location>);
 db_getter!(get_expected_type : ExpectedType(exprroot: ExprRoot) -> Option<Type>);
 db_getter!(get_exprroot_for : ExprRootFor(location: Location) -> ExprRoot);
 db_getter!(get_typing : Typing(expr_root: ExprRoot) -> Arc<Typing>);
-db_getter!(typecheck : TypeCheck() -> Vec<Diagnostic>);
+db_getter!(typecheck : TypeCheck(symbol_id: SymbolId) -> Vec<Diagnostic>);
 db_getter!(get_typeof : Typeof(location: Location) -> Result<Type, Vec<Diagnostic>>);
 db_getter!(get_typeof_all : TypeofAll() -> HashMap<Location, Option<Type>>);
 db_getter!(get_type_monomorphizations : TypeMonomorphizations() -> Vec<Type>);

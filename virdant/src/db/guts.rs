@@ -180,7 +180,7 @@ impl ToJson for Query {
             Query::ExpectedType(location) => json::array!("ExpectedType", location.to_json()),
             Query::TypingContext(item_fqn) => json::array!("TypingContext", item_fqn.to_json()),
             Query::Typing(expr_root) => json::array!("Typecheck", expr_root.to_json()),
-            Query::TypeCheck() => json::array!("TypeCheck"),
+            Query::TypeCheck(symbol_id) => json::array!("TypeCheck", symbol_id.to_json()),
             Query::Check() => json::array!("Check"),
             Query::TypeDefs() => json::array!("TypeDefs"),
             Query::Typeof(location) => json::array!("Typeof", location.to_json()),

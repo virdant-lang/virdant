@@ -28,7 +28,10 @@ pub(crate) fn build_type_monomorphizations(builder: &mut Builder) -> Vec<crate::
 
     let mut typs = HashSet::new();
 
-    builder.typecheck();
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        builder.typecheck(item.id());
+    }
 
     for exprroot in builder.get_exprroots() {
         let typing = builder.get_typing(exprroot);

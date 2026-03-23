@@ -1,25 +1,25 @@
 use hashbrown::{HashMap, HashSet};
 
 use crate::analysis::location::Location;
-use crate::analysis::symbols::Symbol;
+use crate::analysis::symbols::{Symbol, SymbolId};
 use crate::analysis::types::{ExprRoot, Type};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
 use crate::syntax::ast::AstNode;
 
-pub(crate) fn typecheck(builder: &mut Builder) -> Vec<Diagnostic> {
+pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Vec<Diagnostic> {
     let mut diagnostics = vec![];
     let symboltable = builder.get_symboltable();
 
     let exprroots = builder.get_exprroots();
+    let item = symboltable.symbol(symbol_id);
 
-    for item in symboltable.items () {
-        let parsing = builder.get_parsing(item.package());
-        let node: AstNode = parsing.ast_node(item.location().ast_node_id());
-        if !node.contains_errors() {
-            diagnostics.extend(typecheck_item(builder, item, &exprroots));
-        }
+    let parsing = builder.get_parsing(item.package());
+    let node: AstNode = parsing.ast_node(item.location().ast_node_id());
+    if !node.contains_errors() {
+        diagnostics.extend(typecheck_item(builder, item, &exprroots));
     }
+
     diagnostics
 }
 

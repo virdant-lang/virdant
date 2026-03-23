@@ -13,7 +13,11 @@ pub(crate) fn check(builder: &mut Builder) -> Vec<Diagnostic> {
         diagnostics.extend(builder.check_drivers(item.id()));
     }
 
-    diagnostics.extend(builder.typecheck());
+    for item in symboltable.items() {
+        diagnostics.extend(builder.typecheck(item.id()));
+    }
+
+
     check_all_exprs_have_types(builder, &mut diagnostics);
 
     diagnostics
