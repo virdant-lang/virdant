@@ -2,5 +2,12 @@ mod Extend {
     incoming instr : Word[32];
     outgoing out : Word[32];
 
-    out := zext(instr[32..20]);
+    wire opcode : Word[7];
+    opcode := instr[7..0];
+
+    out := if opcode == 19 { // OP-IMM
+        zext(instr[32..20])
+    } else {
+        0w32
+    };
 }

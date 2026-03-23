@@ -35,7 +35,6 @@ impl PackageAnalysis {
             diagnostics: vec![],
         };
 
-        analysis.propagate_diagnostics(parsing.clone());
         analysis.add_imports(parsing.clone());
         analysis.add_items(parsing.clone());
 
@@ -69,10 +68,6 @@ impl PackageAnalysis {
         }
 
         panic!("No such item: {item_name}")
-    }
-
-    fn propagate_diagnostics(&mut self, parsing: Arc<Parsing>) {
-        self.diagnostics = parsing.diagnostics();
     }
 
     fn add_imports(&mut self, parsing: Arc<Parsing>) {

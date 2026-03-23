@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use bstr::ByteSlice;
 
-use crate::analysis::component::ComponentAnalysis;
+use crate::analysis::component::{Component, ComponentAnalysis};
 use crate::analysis::location::Location;
 use crate::analysis::symbols::{SymbolId, SymbolTable};
 use crate::analysis::types::Type;
-use crate::common::{ComponentKind, Width};
+use crate::common::{ComponentKind, Flow, Width};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
 use crate::fqn::PackageFqn;
@@ -39,7 +39,20 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 let path = parsing.string(component.name).to_owned();
                 let typ_node = stmt.typ().unwrap();
                 match node_to_typ(typ_node, &parsing, &symboltable) {
-                    Ok(typ) => component_analysis.components.push((path, Some(typ))),
+                    Ok(typ) => {
+                        let flow = match component.kind {
+                            ComponentKind::Incoming => Flow::Source,
+                            ComponentKind::Outgoing => Flow::Sink,
+                            ComponentKind::Reg => Flow::Duplex,
+                            ComponentKind::Wire => Flow::Duplex,
+                        };
+                        let component = Component {
+                            path: path.clone(),
+                            typ: Some(typ),
+                            flow,
+                        };
+                        component_analysis.components.push((path.clone(), component));
+                    }
                     Err(diag) => component_analysis.diagnostics.push(diag),
                 }
             }
@@ -74,7 +87,21 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     );
                     let typ_node = submodule_stmt.typ().unwrap();
                     match node_to_typ(typ_node, &submodule_parsing, &symboltable) {
-                        Ok(typ) => component_analysis.components.push((qualified_name, Some(typ))),
+                        Ok(typ) => {
+                            let path = qualified_name.to_owned();
+                            let flow = match component.kind {
+                                ComponentKind::Incoming => Flow::Source,
+                                ComponentKind::Outgoing => Flow::Sink,
+                                ComponentKind::Reg => Flow::Duplex,
+                                ComponentKind::Wire => Flow::Duplex,
+                            };
+                            let component = Component {
+                                path,
+                                typ: Some(typ),
+                                flow,
+                            };
+                            component_analysis.components.push((qualified_name, component))
+                        }
                         Err(diag) => component_analysis.diagnostics.push(diag),
                     }
                 }

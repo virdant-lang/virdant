@@ -19,8 +19,8 @@ pub(crate) fn build_typing_context(builder: &mut Builder, item: SymbolId) -> Typ
     let _typedefs = builder.get_typedefs();
 
     let mut context = TypingContext(vec![]);
-    for (path, opt_typ) in component_analysis.components() {
-        if let Some(typ) = opt_typ {
+    for (path, component) in component_analysis.components() {
+        if let Some(typ) = component.typ() {
             context.0.push((path, typ));
         }
     }

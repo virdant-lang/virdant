@@ -2,28 +2,51 @@ use bstr::{BStr, BString};
 
 use crate::analysis::symbols::SymbolId;
 use crate::analysis::types::Type;
+use crate::common::Flow;
 use crate::common::json::ToJson;
 use crate::diagnostics::Diagnostic;
 
 #[derive(Debug)]
 pub struct ComponentAnalysis {
-    // TODO reference to ModDef this is created for
+    // TODO Remove pub(crate)
     pub(crate) moddef: SymbolId,
-    pub(crate) components: Vec<(BString, Option<Type>)>,
+    pub(crate) components: Vec<(BString, Component)>,
     pub(crate) diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Component {
+    // TODO Remove pub(crate)
+    pub(crate)path: BString,
+    pub(crate)typ: Option<Type>,
+    pub(crate)flow: Flow,
+}
+
+impl Component {
+    pub fn path(&self) -> BString {
+        self.path.clone()
+    }
+
+    pub fn typ(&self) -> Option<Type> {
+        self.typ.clone()
+    }
+
+    pub fn flow(&self) -> Flow {
+        self.flow.clone()
+    }
 }
 
 impl ComponentAnalysis {
     pub fn type_of(&self, path: &BStr) -> Option<Type> {
-        for (path_, typ) in &self.components {
+        for (path_, component) in &self.components {
             if path == path_ {
-                return typ.clone();
+                return component.typ.clone();
             }
         }
         None
     }
 
-    pub fn components(&self) -> Vec<(BString, Option<Type>)> {
+    pub fn components(&self) -> Vec<(BString, Component)> {
         self.components.clone()
     }
 
