@@ -9,6 +9,7 @@ use crate::common::Flow;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
 use crate::syntax::ast::AstNode;
+use crate::syntax::payload::AstNodePayload;
 
 pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Vec<Diagnostic> {
     let mut diagnostics = vec![];
@@ -25,22 +26,24 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Vec<Diagn
         diagnostics.extend(typecheck_item(builder, item, &exprroots, &mut use_locations));
     }
 
-    let component_analysis = builder.get_component_analysis(symbol_id);
-    for (path, component) in component_analysis.components() {
-        if component.can_source() && !use_locations.contains_key(&path) {
-            let region = builder.get_location_region(component.location());
-            diagnostics.push(diagnostics::UnusedSource {
-                region,
-                path: path.into(),
-            }.into());
-        } else if component.flow() == Flow::Sink && use_locations.contains_key(&path) {
-            dbg!(&use_locations[&path]);
-            for location in &use_locations[&path] {
-                let region = builder.get_location_region(location.clone());
-                diagnostics.push(diagnostics::ReadFromSink {
+    if let AstNodePayload::ModDef(moddef) = node.payload() && !moddef.is_ext {
+        // Unused varibles and read from sink warnings
+        let component_analysis = builder.get_component_analysis(symbol_id);
+        for (path, component) in component_analysis.components() {
+            if component.can_source() && !use_locations.contains_key(&path) {
+                let region = builder.get_location_region(component.location());
+                diagnostics.push(diagnostics::UnusedSource {
                     region,
-                    path: path.clone(),
+                    path: path.into(),
                 }.into());
+            } else if component.flow() == Flow::Sink && use_locations.contains_key(&path) {
+                for location in &use_locations[&path] {
+                    let region = builder.get_location_region(location.clone());
+                    diagnostics.push(diagnostics::ReadFromSink {
+                        region,
+                        path: path.clone(),
+                    }.into());
+                }
             }
         }
     }

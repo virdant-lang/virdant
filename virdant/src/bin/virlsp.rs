@@ -3,6 +3,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use bstr::BString;
+use hashbrown::HashSet;
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -25,6 +26,7 @@ struct Backend {
 
 struct ServerState {
     vir: Vir,
+    uris: HashSet<Url>,
     hover_mode: HoverMode,
 }
 
@@ -41,6 +43,7 @@ impl Backend {
             state: Arc::new(Mutex::new(ServerState {
                 vir: Vir::new(),
                 hover_mode: HoverMode::Debug,
+                uris: HashSet::new(),
             })),
         }
     }
@@ -122,17 +125,19 @@ impl LanguageServer for Backend {
             if !state.vir.packages().contains(&package.to_string()) {
                 state.vir.add_package(&package.to_string());
             }
+
+            state.uris.insert(uri.clone());
        }
 
-        self.check_document(&uri).await;
+        self.check_all_documents().await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        let uri = params.text_document.uri;
         self.client
-            .log_message(MessageType::INFO, "File changed")
+            .log_message(MessageType::ERROR, format!("File changed: {uri}"))
             .await;
 
-        let uri = params.text_document.uri;
         let package = uri_to_packagefqn(&uri);
         let text: BString = params.content_changes[0].text.clone().into();
 
@@ -149,7 +154,7 @@ impl LanguageServer for Backend {
             state.vir.set_package_text(&package.to_string(), text);
         }
 
-        self.check_document(&uri).await;
+        self.check_all_documents().await;
     }
 
     async fn did_save(&self, _: DidSaveTextDocumentParams) {
@@ -330,6 +335,15 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
+    async fn workspace_diagnostic(
+        &self,
+        params: WorkspaceDiagnosticParams,
+    ) -> Result<WorkspaceDiagnosticReportResult> {
+        self.check_all_documents().await;
+        Ok(WorkspaceDiagnosticReportResult::Report(WorkspaceDiagnosticReport { items: vec![] }))
+    }
+
+
 //    async fn code_action(
 //        &self,
 //        params: CodeActionParams,
@@ -411,6 +425,17 @@ impl Backend {
         let state = self.state.lock().await;
         let package = uri_to_packagefqn(uri);
         Some(state.vir.db().get_source(package))
+    }
+
+    async fn check_all_documents(&self) {
+        let uris = {
+            let state = self.state.lock().await;
+            state.uris.clone()
+        };
+
+        for uri in &uris {
+            self.check_document(uri).await
+        }
     }
 
     async fn check_document(&self, uri: &Url) {

@@ -33,7 +33,7 @@ mod Cpu {
 
     alu.a := rf.rs1_out;
     alu.b := if true {
-        rf.rs1_out
+        rf.rs2_out
     } else {
         extend.out
     };
@@ -42,7 +42,11 @@ mod Cpu {
 
     mem.addr := alu.z;
     mem.data_in := zext(ifetch.rs1);
-    rf.rd_in   := alu.z;
+    rf.rd_in   := if control.wb_mem {
+        mem.data_out
+    } else {
+        alu.z
+    };
     rf.write   := control.rf_write;
 }
 
