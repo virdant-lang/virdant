@@ -19,6 +19,9 @@ use virdant::transpile::transpile;
 #[derive(Parser, Debug)]
 #[command(name = "vir", author, version, about, disable_help_subcommand = true, arg_required_else_help = true)]
 struct Args {
+    #[arg(short = 'C')]
+    cwd: Option<PathBuf>,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -52,7 +55,7 @@ enum Command {
     /// Build Virdant package
     Build { },
     /// Run Virdant package
-    Run { path: PathBuf, #[arg(long)] vcd: Option<String> },
+    Run { path: Option<PathBuf>, #[arg(long)] vcd: Option<String> },
 
     #[command(external_subcommand)]
     External(Vec<OsString>),
@@ -74,8 +77,8 @@ fn main() {
         Command::Typing { path } => dump_typing(path),
         Command::CompileToVirir { path, outfilepath } => compile_to_virir(path, outfilepath),
         Command::Compile { path } => compile(path),
-        Command::Build { } => build(),
-        Command::Run { path, vcd } => run(path, vcd),
+        Command::Build { } => build(&args),
+        Command::Run { ref path, ref vcd } => run(&args, path, vcd),
         Command::External(args) => exec_external(args),
     }
 }
@@ -245,19 +248,23 @@ fn compile_to_virir(path: PathBuf, outfilepath: PathBuf) {
     std::fs::write(outfilepath, virir.to_text()).unwrap();
 }
 
-fn build() {
-    let cwd = std::env::current_dir().unwrap();
+fn build(args: &Args) {
+    let cwd = if let Some(cwd) = &args.cwd {
+        std::fs::canonicalize(cwd).unwrap()
+    } else {
+        std::env::current_dir().unwrap()
+    };
 
     if !cwd.join("Virdant.toml").exists() {
         eprintln!("No Virdant.toml found");
         std::process::exit(1);
     }
 
-    let virdant_toml_text = std::fs::read_to_string("Virdant.toml").unwrap();
+    let virdant_toml_text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
     let virtant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
 
     let project = virtant_toml["project"]["name"].as_str().unwrap();
-    let builddir = PathBuf::from("build");
+    let builddir = cwd.join("build");
 
     let source_dir = cwd.join("src");
     let mut vir = virdant::Vir::from_dir(source_dir);
@@ -300,12 +307,31 @@ fn compile(path: PathBuf) {
     println!("Wrote Verilog to {}", builddir.to_string_lossy());
 }
 
-fn run(path: PathBuf, vcd: Option<String>) {
-    let project = path.file_name().unwrap().to_string_lossy().to_owned();
-    let builddir = PathBuf::from("build").join(project.as_ref());
+fn run(args: &Args, path: &Option<PathBuf>, vcd: &Option<String>) {
+    let cwd = if let Some(cwd) = &args.cwd {
+        std::fs::canonicalize(cwd).unwrap()
+    } else {
+        std::env::current_dir().unwrap()
+    };
 
-    let mut vir = virdant::Vir::from_dir(path.clone());
+    if !cwd.join("Virdant.toml").exists() {
+        eprintln!("No Virdant.toml found");
+        std::process::exit(1);
+    }
+
+    let virdant_toml_text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
+    let virtant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
+
+    let project = virtant_toml["project"]["name"].as_str().unwrap();
+    let builddir = cwd.join("build");
+
+    let source_dir = cwd.join("src");
+    let mut vir = virdant::Vir::from_dir(source_dir);
     vir.dump_diagnostics();
+    if vir.check().is_err() {
+        eprintln!("Build failed");
+        std::process::exit(1);
+    }
 
     let virir = &transpile(&vir.db());
     std::fs::create_dir_all(&builddir).unwrap();
@@ -317,8 +343,10 @@ fn run(path: PathBuf, vcd: Option<String>) {
     let verilog = convert_virir_to_verilog(virir);
 
     verilog.write_in_dir(&builddir).unwrap();
+    println!("Wrote Verilog to {}", builddir.to_string_lossy());
 
-    let bin_name = path.file_stem().unwrap().to_string_lossy().to_string();
+
+    let bin_name = project;
     let bin = builddir.join(&bin_name).to_string_lossy().to_string();
 
     let mut command = std::process::Command::new("iverilog");
@@ -336,6 +364,8 @@ fn run(path: PathBuf, vcd: Option<String>) {
         use bstr::ByteSlice;
         eprintln!("iverilog: {}", BStr::new(&output.stderr));
         std::process::exit(1);
+    } else {
+        println!("Icarus Verilog output: {bin}");
     }
 
     // Canonicalize to an absolute path before changing directory, so the
@@ -360,7 +390,7 @@ fn run(path: PathBuf, vcd: Option<String>) {
 fn glob_sv_files(dir: &Path) -> Vec<PathBuf> {
     let mut sources: Vec<PathBuf> = std::fs::read_dir(dir)
         .unwrap()
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter_map(|entry| entry.ok().map(|entry| std::fs::canonicalize(entry.path()).unwrap()))
         .filter(|path| path.extension().is_some_and(|ext| ext == "sv"))
         .collect();
     sources.sort();
