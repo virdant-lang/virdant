@@ -4,6 +4,7 @@ version = "0.3.0"
 edition = "2024"
 autobins = false
 default-run = "vir"
+rust-version = "1.88"
 
 [features]
 default = ["vir-bin"]
