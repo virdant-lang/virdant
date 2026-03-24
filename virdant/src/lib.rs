@@ -24,5 +24,8 @@ pub const EXAMPLES_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| {
 });
 
 pub const LIB_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| {
-    std::fs::canonicalize(std::path::PathBuf::from("lib")).unwrap()
+    let exe = std::env::current_exe().unwrap();
+    let root = exe.parent().unwrap().parent().unwrap();
+    let lib = root.join("lib");
+    std::fs::canonicalize(lib).unwrap()
 });
