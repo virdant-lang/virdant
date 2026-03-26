@@ -409,8 +409,8 @@ fn convert_binop(op: common::BinOp) -> verilog::BinOp {
         common::BinOp::Neq => verilog::BinOp::Ne,
         common::BinOp::Add => verilog::BinOp::Add,
         common::BinOp::Sub => verilog::BinOp::Sub,
-        common::BinOp::And => verilog::BinOp::LogAnd,
-        common::BinOp::Or => verilog::BinOp::LogOr,
+        common::BinOp::And => verilog::BinOp::BitAnd,
+        common::BinOp::Or => verilog::BinOp::BitOr,
         common::BinOp::Xor => verilog::BinOp::BitXor,
     }
 }

@@ -29,6 +29,24 @@ export mod Top {
     wire s : Word[8];
     s := sext(0x8w4);
 
+    wire and_ : Word[8];
+    and_ := 0w8 && 1w8;
+
+    wire or_ : Word[8];
+    or_ := 0w8 || 1w8;
+
+    wire xor_ : Word[8];
+    xor_ := 0w8 ^^ 1w8;
+
+//    wire bit_and_ : Bit;
+//    bit_and_ := 0w8 && 1w8;
+//
+//    wire bit_or_ : Bit;
+//    bit_or_ := 0w8 || 1w8;
+//
+//    wire bit_xor_ : Bit;
+//    bit_xor_ := 0w8 ^^ 1w8;
+
     on clock {
         assert(w);
         assert(!a);
