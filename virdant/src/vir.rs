@@ -123,15 +123,28 @@ impl Vir {
 
 impl Vir {
     pub fn dump_diagnostics(&self) {
+        use colored::*;
         let diagnostics = match self.check() {
             Ok(diags) => diags,
             Err(diags) => diags,
         };
 
-        if !diagnostics.is_empty() {
-            println!("Diagnostics:");
-            for diagnostic in diagnostics {
-                println!("  {:?}", diagnostic);
+        let longest_region = diagnostics
+            .iter()
+            .map(|diag| diag.region().to_string().len())
+            .max()
+            .unwrap_or_default();
+
+        for diagnostic in diagnostics {
+            let unpadded_region = diagnostic.region().to_string();
+            let padded_region = format!("{}{}", unpadded_region, " ".repeat(longest_region - unpadded_region.len()));
+
+            if diagnostic.level() == DiagnosticLevel::Error {
+                println!("{}   {}   {}", "ERROR  ".red(), padded_region, diagnostic.message());
+            } else if diagnostic.level() == DiagnosticLevel::Warning {
+                println!("{}   {}   {}", "WARNING".yellow(), padded_region, diagnostic.message());
+            } else {
+                println!("{}   {}   {}", "INFO   ".green(), padded_region, diagnostic.message());
             }
         }
     }
