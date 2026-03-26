@@ -741,6 +741,13 @@ ExprAtom: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
+    <ll:@L> "?" <rr:@R> => {
+        let payload = AstNodePayload::ExprHole;
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
     <ll:@L> "(" <e:Expr> ")" <rr:@R> => {
         let payload = AstNodePayload::ExprParen;
         let span = parser.span(ll, rr);
@@ -869,6 +876,7 @@ extern {
         "$" => Token::Dollar,
         "#" => Token::Hash,
         "@" => Token::At,
+        "?" => Token::Question,
 
         // Operators
         "+" => Token::Add,

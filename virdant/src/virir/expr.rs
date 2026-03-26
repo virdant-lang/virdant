@@ -16,6 +16,7 @@ pub enum Expr {
     If(If),
     Index(Index),
     IndexRange(IndexRange),
+    Hole(Hole),
 }
 
 #[derive(Debug)]
@@ -101,6 +102,13 @@ pub struct IndexRange {
     pub subject: Arc<Expr>,
     pub index_hi: common::Width,
     pub index_lo: common::Width,
+}
+
+#[derive(Debug, Clone)]
+pub struct Hole {
+    pub region_display: String,
+    pub typ: TypeId,
+    pub name: Option<String>,
 }
 
 impl BitLit {

@@ -1,4 +1,4 @@
-use bstr::BString;
+use bstr::{BStr, BString};
 use std::sync::Arc;
 
 use crate::common::json::ToJson;
@@ -154,6 +154,14 @@ pub struct UnusedSource {
 pub struct ReadFromSink {
     pub region: Region,
     pub path: BString,
+}
+
+/// A component could not be resolved.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnfilledHole {
+    pub region: Region,
+    pub name: Option<BString>,
+    pub typ: Option<BString>,
 }
 
 /// Failed to resolve a method.
@@ -419,6 +427,29 @@ impl IsDiagnostic for ReadFromSink {
 
     fn message(&self) -> BString {
         format!("Read from sink {}", &self.path).into()
+    }
+
+    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }
+}
+
+impl IsDiagnostic for UnfilledHole {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        use bstr::ByteSlice;
+        let name = if let Some(name) = &self.name {
+            name.as_bstr()
+        } else {
+            BStr::new("?")
+        };
+
+        if let Some(typ) = &self.typ {
+            format!("Unfilled hole: {name} : {typ}").into()
+        } else {
+            format!("Unfilled hole: {name}").into()
+        }
     }
 
     fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }

@@ -85,6 +85,22 @@ fn convert_mod_def(
         .map(|reg| convert_reg_reset(type_widths, reg))
         .collect();
 
+    let mut hole_displays: Vec<verilog::Element> = vec![];
+    for driver in &mod_def.drivers {
+        let mut holes = vec![];
+        collect_holes_from_expr(&driver.expr, &mut holes);
+        for hole in holes {
+            let name = hole.name.as_deref().unwrap_or("?");
+            let message = format!("\"HOLE: {} at {}\"", name, hole.region_display);
+            hole_displays.push(verilog::Element::Initial(verilog::Initial {
+                stmts: vec![verilog::Stmt::Display(verilog::Display {
+                    message: message.into(),
+                    exprs: vec![],
+                })],
+            }));
+        }
+    }
+
     let mut combinational_drivers = vec![];
     let mut sequential_driver_elements = vec![];
 
@@ -103,7 +119,11 @@ fn convert_mod_def(
         .collect();
 
     elements.extend(mod_def.regs.into_iter().map(|reg| convert_reg(type_widths, reg)));
-    elements.extend(reg_reset_elements);
+
+    const REG_RESET: bool = false;
+    if REG_RESET {
+        elements.extend(reg_reset_elements);
+    }
 
     // For each submodule instance: emit one wire per port (using the dotted
     // name, e.g. `\foo.inp `), then the instantiation element itself.
@@ -132,6 +152,8 @@ fn convert_mod_def(
     if let Some(on) = mod_def.on {
         elements.push(convert_on(type_widths, on));
     }
+
+    elements.extend(hole_displays);
 
     verilog::Module { name: module_name, is_ext: mod_def.is_ext, ports, elements }
 }
@@ -315,6 +337,36 @@ fn convert_on(
     })
 }
 
+fn collect_holes_from_expr<'a>(expr: &'a virir::expr::Expr, holes: &mut Vec<&'a virir::expr::Hole>) {
+    match expr {
+        virir::expr::Expr::Hole(hole) => holes.push(hole),
+        virir::expr::Expr::BinOp(binop) => {
+            collect_holes_from_expr(&binop.lhs, holes);
+            collect_holes_from_expr(&binop.rhs, holes);
+        }
+        virir::expr::Expr::UnOp(unop) => collect_holes_from_expr(&unop.expr, holes),
+        virir::expr::Expr::Zext(zext) => collect_holes_from_expr(&zext.expr, holes),
+        virir::expr::Expr::Sext(sext) => collect_holes_from_expr(&sext.expr, holes),
+        virir::expr::Expr::If(expr_if) => {
+            collect_holes_from_expr(&expr_if.cond, holes);
+            collect_holes_from_expr(&expr_if.then_expr, holes);
+            collect_holes_from_expr(&expr_if.else_expr, holes);
+        }
+        virir::expr::Expr::Word(word) => {
+            for sub in &word.exprs {
+                collect_holes_from_expr(sub, holes);
+            }
+        }
+        virir::expr::Expr::Index(index) => collect_holes_from_expr(&index.subject, holes),
+        virir::expr::Expr::IndexRange(index_range) => {
+            collect_holes_from_expr(&index_range.subject, holes);
+        }
+        virir::expr::Expr::Reference(_)
+        | virir::expr::Expr::BitLit(_)
+        | virir::expr::Expr::WordLit(_) => {}
+    }
+}
+
 fn convert_command(
     type_widths: &HashMap<virir::TypeId, virir::Width>,
     command: virir::Command,
@@ -384,6 +436,7 @@ fn expr_type_id(expr: &virir::expr::Expr) -> virir::TypeId {
         virir::expr::Expr::If(expr_if) => expr_if.typ,
         virir::expr::Expr::Index(index) => index.typ,
         virir::expr::Expr::IndexRange(index_range) => index_range.typ,
+        virir::expr::Expr::Hole(hole) => hole.typ,
     }
 }
 
@@ -508,6 +561,10 @@ fn convert_expr(
                 index_hi: Box::new(constant_index_expr(index_range.index_hi - 1)),
                 index_lo: Box::new(constant_index_expr(index_range.index_lo)),
             })
+        }
+        virir::expr::Expr::Hole(hole) => {
+            let width = type_widths[&hole.typ];
+            verilog::Expr::XLit(verilog::expr::XLit { width })
         }
     }
 }

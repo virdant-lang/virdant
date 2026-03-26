@@ -150,6 +150,7 @@ ExprPrimary: Expr = {
         else_expr: Box::new(else_expr),
         typ: None,
     },
+    "(" "hole" <region_display:Str> ":" <typ:VirType> ")" => Expr::Hole { region_display: region_display.to_string().trim_matches('"').to_string(), typ },
     "(" <path:Path> ":" <typ:VirType> ")" => Expr::Reference { path, typ: Some(typ) },
     "(" <expr:ExprNode> ")" => expr,
     "(" <value:Nat> ":" <typ:VirType> ")" => {

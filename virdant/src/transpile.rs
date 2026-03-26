@@ -13,7 +13,7 @@ use crate::source::Region;
 use crate::syntax::ast::AstNode;
 use crate::syntax::payload::AstNodePayload;
 use crate::virir::expr::{
-    BinOp, Expr, If, Index, IndexRange, Reference, Sext, UnOp as VirIrUnOp, Word,
+    BinOp, Expr, Hole, If, Index, IndexRange, Reference, Sext, UnOp as VirIrUnOp, Word,
     WordLit, Zext,
 };
 use crate::virir::typ::Type as VirType;
@@ -575,6 +575,14 @@ impl<'d> Transpiler<'d> {
                 local_types,
                 instance_types,
             ),
+            AstNodePayload::ExprHole => {
+                let typ = expected_type.unwrap_or_else(|| self.intern_type(&Type::Bit));
+                Expr::Hole(Hole {
+                    region_display: format!("{}", node.region()),
+                    typ,
+                    name: None,
+                })
+            }
             _ => panic!("unsupported expr in transpile: {}", node.summary()),
         }
     }
@@ -770,5 +778,6 @@ fn expr_type_id(expr: &Expr) -> TypeId {
         Expr::If(expr_if) => expr_if.typ,
         Expr::Index(index) => index.typ,
         Expr::IndexRange(index_range) => index_range.typ,
+        Expr::Hole(hole) => hole.typ,
     }
 }

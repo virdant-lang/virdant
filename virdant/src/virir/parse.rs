@@ -142,6 +142,10 @@ pub(super) enum Expr {
         index_lo: Width,
         typ: Option<Type>,
     },
+    Hole {
+        region_display: String,
+        typ: Type,
+    },
 }
 
 pub(super) enum ModStmt {

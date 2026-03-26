@@ -39,10 +39,14 @@ impl Stmt {
             }
             Stmt::Display(display) => {
                 verilog_write!(writer, "$display(")?;
-                verilog_write!(writer, "{}, ", &display.message)?;
-                for expr in &display.exprs {
-                    writer.skip_indent();
-                    expr.write(writer)?;
+                if display.exprs.is_empty() {
+                    verilog_write!(writer, "{}", &display.message)?;
+                } else {
+                    verilog_write!(writer, "{}, ", &display.message)?;
+                    for expr in &display.exprs {
+                        writer.skip_indent();
+                        expr.write(writer)?;
+                    }
                 }
                 writer.skip_indent();
                 verilog_writeln!(writer, ");")?;

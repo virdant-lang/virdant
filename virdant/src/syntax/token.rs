@@ -54,6 +54,7 @@ pub enum Token {
     #[token(b"$")]   Dollar,
     #[token(b"#")]   Hash,
     #[token(b"@")]   At,
+    #[token(b"?")]   Question,
 
     // Operators
     #[token(b"+")]   Add,

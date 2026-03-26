@@ -69,3 +69,8 @@ pub struct IndexRange {
     pub index_hi: Box<Expr>,
     pub index_lo: Box<Expr>,
 }
+
+#[derive(Debug)]
+pub struct XLit {
+    pub width: Width,
+}

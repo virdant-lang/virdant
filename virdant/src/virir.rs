@@ -349,6 +349,9 @@ fn expr_to_text(expr: &Expr, virir: &VirIr) -> String {
                 type_id_to_text(index_range.typ, virir),
             )
         }
+        Expr::Hole(hole) => {
+            format!("(hole \"{}\" : {})", hole.region_display, type_id_to_text(hole.typ, virir))
+        }
     }
 }
 
@@ -459,7 +462,7 @@ fn build_module(
     type_ids: &HashMap<String, TypeId>,
     module_signatures: &HashMap<String, HashMap<String, TypeId>>,
 ) -> ModDef {
-    let clock_type = lookup_type_id(&parse::Type::Clock, type_ids);
+    let clock_type = || lookup_type_id(&parse::Type::Clock, type_ids);
     let local_types: HashMap<String, TypeId> = mod_def
         .ports
         .iter()
@@ -502,7 +505,7 @@ fn build_module(
             name: reg.name,
             clock: reg.clock.map(|clock| Arc::new(build_expr(
                 clock,
-                Some(clock_type),
+                Some(clock_type()),
                 type_ids,
                 &local_types,
                 &instance_types,
@@ -543,7 +546,7 @@ fn build_module(
             region: dummy_region(),
             clock: Arc::new(build_expr(
                 on_stmt.clock,
-                Some(clock_type),
+                Some(clock_type()),
                 type_ids,
                 &local_types,
                 &instance_types,
@@ -837,6 +840,14 @@ fn build_expr(
                 index_lo,
             })
         }
+        parse::Expr::Hole { region_display, typ } => {
+            let typ = lookup_type_id(&typ, type_ids);
+            Expr::Hole(crate::virir::expr::Hole {
+                region_display,
+                typ,
+                name: None,
+            })
+        }
     }
 }
 
@@ -931,6 +942,7 @@ fn expr_type_id(expr: &Expr) -> Option<TypeId> {
         Expr::If(expr_if) => Some(expr_if.typ),
         Expr::Index(index) => Some(index.typ),
         Expr::IndexRange(index_range) => Some(index_range.typ),
+        Expr::Hole(hole) => Some(hole.typ),
     }
 }
 

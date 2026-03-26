@@ -157,6 +157,7 @@ impl Typing {
             AstNodePayload::ExprIndex(expr_index) => self.check_index(node, expr_index.index, expected_typ),
             AstNodePayload::ExprIndexRange(_expr_index_range) => (), // TODO
             AstNodePayload::ExprZext | AstNodePayload::ExprSext => self.check_ext(node, expected_typ),
+            AstNodePayload::ExprHole => self.check_hole(node, expected_typ),
             _ => unreachable!("Can't typecheck {:?}", node.summary()),
         }
     }
@@ -384,6 +385,15 @@ impl Typing {
         }
 
         self.typs.insert(node.id(), expected_typ.clone());
+    }
+
+    fn check_hole<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) {
+        self.typs.insert(node.id(), expected_typ.clone());
+        self.diagnostics.push(diagnostics::UnfilledHole {
+            region: node.region(),
+            name: None,
+            typ: Some(format!("{expected_typ:?}").into()),
+        }.into());
     }
 }
 
