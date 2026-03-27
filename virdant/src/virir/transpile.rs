@@ -684,7 +684,10 @@ impl<'d> Transpiler<'d> {
             | CommonBinOp::Neq
             | CommonBinOp::And
             | CommonBinOp::Or
-            | CommonBinOp::Xor => self.intern_type(&Type::Bit),
+            | CommonBinOp::Xor
+            | CommonBinOp::LogicalAnd
+            | CommonBinOp::LogicalOr
+            | CommonBinOp::LogicalXor => self.intern_type(&Type::Bit),
             CommonBinOp::Add | CommonBinOp::Sub => {
                 expected_type.unwrap_or_else(|| expr_type_id(lhs))
             }

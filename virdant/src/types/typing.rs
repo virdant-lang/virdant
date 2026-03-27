@@ -257,6 +257,7 @@ impl Typing {
                     return Err(());
                 }
             }
+            CommonBinOp::LogicalAnd | CommonBinOp::LogicalOr | CommonBinOp::LogicalXor |
             CommonBinOp::And | CommonBinOp::Or | CommonBinOp::Xor => {
                 if lhs_typ != Type::Bit {
                     self.flag_wrong_type(&lhs, &Type::Bit, &lhs_typ);

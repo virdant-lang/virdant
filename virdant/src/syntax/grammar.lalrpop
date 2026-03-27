@@ -478,7 +478,7 @@ Expr: AstNodeId = {
     <e:ExprIf> => e,
     <e:ExprMatch> => e,
     <e:ExprStruct> => e,
-    <e:ExprBinOp> => e,
+    <e:ExprBinOpLogical> => e,
 }
 
 ExprIf: AstNodeId = {
@@ -576,8 +576,53 @@ Assign: AstNodeId = {
     }
 }
 
-ExprBinOp: AstNodeId = {
-    <ll:@L> <lhs:ExprBinOp> <op:BinOp> <rhs:ExprPrimary> <rr:@R> => {
+BinOpLogical: BinOp = {
+    "&&" => BinOp::LogicalAnd,
+    "||" => BinOp::LogicalOr,
+    "^^" => BinOp::LogicalXor,
+}
+
+ExprBinOpLogical: AstNodeId = {
+    <ll:@L> <lhs:ExprBinOpLogical> <op:BinOpLogical> <rhs:ExprBinOpCompare> <rr:@R> => {
+        let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op });
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <e:ExprBinOpCompare> => e,
+}
+
+BinOpCompare: BinOp = {
+    "<" => BinOp::Lt,
+    "<=" => BinOp::Lte,
+    ">" => BinOp::Gt,
+    ">=" => BinOp::Gte,
+    "==" => BinOp::Eq,
+    "!=" => BinOp::Neq,
+}
+
+ExprBinOpCompare: AstNodeId = {
+    <ll:@L> <lhs:ExprBinOpCompare> <op:BinOpCompare> <rhs:ExprBinOpAdditive> <rr:@R>=> {
+        let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op });
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <e:ExprBinOpAdditive> => e,
+}
+
+BinOpAdditive: BinOp = {
+    "+" => BinOp::Add,
+    "-" => BinOp::Sub,
+    "&" => BinOp::And,
+    "|" => BinOp::Or,
+    "^" => BinOp::Xor,
+}
+
+ExprBinOpAdditive: AstNodeId = {
+    <ll:@L> <lhs:ExprBinOpAdditive> <op:BinOpAdditive> <rhs:ExprUnOp> <rr:@R> => {
         let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op });
         let span = parser.span(ll, rr);
         let num_children = 2;
@@ -587,18 +632,10 @@ ExprBinOp: AstNodeId = {
     <e:ExprUnOp> => e,
 }
 
-BinOp: BinOp = {
-    "<" => BinOp::Lt,
-    "<=" => BinOp::Lte,
-    ">" => BinOp::Gt,
-    ">=" => BinOp::Gte,
-    "==" => BinOp::Eq,
-    "!=" => BinOp::Neq,
-    "+" => BinOp::Add,
-    "-" => BinOp::Sub,
-    "&&" => BinOp::And,
-    "||" => BinOp::Or,
-    "^^" => BinOp::Xor,
+UnOp: UnOp = {
+    "-" => UnOp::Neg,
+    "~" => UnOp::Inv,
+    "!" => UnOp::Not,
 }
 
 ExprUnOp: AstNodeId = {
@@ -610,12 +647,6 @@ ExprUnOp: AstNodeId = {
         parser.add_node(payload, span, num_children)
     },
     <e:ExprAscription> => e,
-}
-
-UnOp: UnOp = {
-    "-" => UnOp::Neg,
-    "~" => UnOp::Inv,
-    "!" => UnOp::Not,
 }
 
 ExprAscription: AstNodeId = {

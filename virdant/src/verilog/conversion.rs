@@ -413,6 +413,9 @@ fn convert_binop(op: common::BinOp) -> verilog::BinOp {
         common::BinOp::And => verilog::BinOp::BitAnd,
         common::BinOp::Or => verilog::BinOp::BitOr,
         common::BinOp::Xor => verilog::BinOp::BitXor,
+        common::BinOp::LogicalAnd => verilog::BinOp::LogAnd,
+        common::BinOp::LogicalOr => verilog::BinOp::LogOr,
+        common::BinOp::LogicalXor => verilog::BinOp::BitXor, // TODO
     }
 }
 

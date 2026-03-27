@@ -256,6 +256,7 @@ fn type_to_text(typ: &Type) -> String {
     }
 }
 
+#[rustfmt::skip]
 fn expr_to_text(expr: &Expr, virir: &VirIr) -> String {
     match expr {
         Expr::Reference(reference) => {
@@ -279,17 +280,20 @@ fn expr_to_text(expr: &Expr, virir: &VirIr) -> String {
         }
         Expr::BinOp(binop) => {
             let op = match binop.op {
-                crate::common::BinOp::Lt => "<",
+                crate::common::BinOp::Lt  => "<",
                 crate::common::BinOp::Lte => "<=",
-                crate::common::BinOp::Gt => ">",
+                crate::common::BinOp::Gt  => ">",
                 crate::common::BinOp::Gte => ">=",
-                crate::common::BinOp::Eq => "==",
+                crate::common::BinOp::Eq  => "==",
                 crate::common::BinOp::Neq => "!=",
                 crate::common::BinOp::Add => "+",
                 crate::common::BinOp::Sub => "-",
                 crate::common::BinOp::And => "&&",
-                crate::common::BinOp::Or => "||",
+                crate::common::BinOp::Or  => "||",
                 crate::common::BinOp::Xor => "^^",
+                crate::common::BinOp::LogicalAnd => "&&",
+                crate::common::BinOp::LogicalOr => "||",
+                crate::common::BinOp::LogicalXor => "^^",
             };
             format!(
                 "({} {op} {} : {})",
@@ -913,6 +917,9 @@ fn infer_binop_type(
         | crate::common::BinOp::And
         | crate::common::BinOp::Or
         | crate::common::BinOp::Xor
+        | crate::common::BinOp::LogicalAnd
+        | crate::common::BinOp::LogicalOr
+        | crate::common::BinOp::LogicalXor
             => {
             lookup_type_id(&parse::Type::Bit, type_ids)
         }
