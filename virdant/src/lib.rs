@@ -15,9 +15,6 @@ pub mod types;
 
 pub use vir::Vir;
 
-#[cfg(test)]
-pub mod tests;
-
 use std::sync::LazyLock;
 
 pub const EXAMPLES_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| {

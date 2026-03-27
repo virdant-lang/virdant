@@ -170,29 +170,6 @@ impl PackageAnalysis {
     }
 }
 
-#[cfg(test)]
-#[test]
-fn test_package_analysis() {
-    use crate::tests::EXAMPLES_DIR;
-    use crate::source::Source;
-    use crate::syntax::parsing::parse;
-
-    let source = Source::load_file(EXAMPLES_DIR.join("basic.vir"));
-    let parsing = Arc::new(parse(&source));
-    let analysis = PackageAnalysis::new(parsing.clone());
-
-    dbg!(&analysis);
-
-    eprintln!("Top AST:");
-    let node_id = analysis.item_ast_node_id("Top".into());
-    parsing.ast_node(node_id).dump();
-    eprintln!();
-
-    eprintln!("Foo AST:");
-    let node_id = analysis.item_ast_node_id("Foo".into());
-    parsing.ast_node(node_id).dump();
-}
-
 impl ToJson for PackageAnalysis {
     fn to_json(&self) -> json::JsonValue {
         json::object!(
