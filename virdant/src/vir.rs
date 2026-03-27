@@ -5,7 +5,6 @@ use bstr::BString;
 use crate::LIB_DIR;
 use crate::analysis::Location;
 use crate::db::Db;
-use crate::diagnostics;
 use crate::diagnostics::Diagnostic;
 use crate::diagnostics::DiagnosticLevel;
 use crate::source::Region;

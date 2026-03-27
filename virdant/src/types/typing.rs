@@ -16,6 +16,7 @@ use crate::syntax::payload::AstNodePayload;
 use super::context::TypingContext;
 use super::typ::Type;
 
+#[allow(unused_macros)]
 macro_rules! error {
     ($self_:expr, $node:expr, $fmt:literal) => {{
         error!($self_, $node, $fmt,)
@@ -28,6 +29,7 @@ macro_rules! error {
     }};
 }
 
+#[allow(unused_macros)]
 macro_rules! info {
     ($self_:expr, $node:expr, $fmt:literal) => {{
         error!($self_, $node, $fmt,)
@@ -67,7 +69,9 @@ impl ToJson for ExprRoot {
 
 #[derive(Debug)]
 pub struct Typing {
+    #[allow(dead_code)]
     pub(crate) exprroot: ExprRoot,
+    #[allow(dead_code)]
     pub(crate) expected_typ: Type,
     pub(crate) context: TypingContext,
     pub(crate) typs: HashMap<AstNodeId, Type>,
@@ -119,6 +123,7 @@ impl Typing {
         }.into());
     }
 
+    #[allow(dead_code)]
     fn flag_unresolved_component<'p>(&mut self, node: &AstNode<'p>, path: &bstr::BStr) {
         self.diagnostics.push(diagnostics::UnresolvedComponent {
             region: node.region(),

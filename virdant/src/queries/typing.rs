@@ -2,15 +2,13 @@ use std::sync::Arc;
 
 use bstr::ByteSlice;
 
-use crate::analysis::location::Location;
 use crate::analysis::symbols::SymbolId;
 use crate::types::{ExprRoot, Type, Typing, TypingContext};
 use crate::common::ComponentKind;
 use crate::db::Builder;
 use crate::diagnostics;
-use crate::syntax::ast::AstNodeId;
 use crate::syntax::payload::AstNodePayload;
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 
 pub(crate) fn build_typing_context(builder: &mut Builder, item: SymbolId) -> TypingContext {
     let component_analysis = builder.get_component_analysis(item);

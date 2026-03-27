@@ -7,14 +7,12 @@ use std::fmt::Write;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use bstr::BStr;
-use bstr::BString;
 use hashbrown::{HashMap, HashSet};
 
 use crate::analysis::location::Location;
 use crate::analysis::package::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
-use crate::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
+use crate::analysis::symbols::{SymbolId, SymbolTable};
 use crate::types::{ExprRoot, Type, TypeDef, Typing, TypingContext};
 use crate::common::json::ToJson;
 use crate::diagnostics::Diagnostic;

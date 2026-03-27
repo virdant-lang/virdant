@@ -21,6 +21,7 @@ impl Type {
         }
     }
 
+    #[allow(dead_code)]
     pub(super) fn width(&self) -> Width {
         match self {
             Type::Bit | Type::Clock => 1,

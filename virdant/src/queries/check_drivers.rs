@@ -1,13 +1,10 @@
-use bstr::{BStr, BString, ByteSlice};
+use bstr::{BString, ByteSlice};
 use hashbrown::HashMap;
 
 use crate::analysis::Location;
-use crate::analysis::symbols::{Symbol, SymbolId, SymbolTable};
-use crate::common::{ComponentKind, Flow};
+use crate::analysis::symbols::SymbolId;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
-use crate::fqn::PackageFqn;
-use crate::source::Region;
 use crate::syntax::payload::AstNodePayload;
 
 pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<Diagnostic> {
@@ -27,7 +24,7 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<D
 
     let component_analysis = builder.get_component_analysis(symbol_id);
 
-    let mut driver_locations = get_all_driver_locations(builder, symbol_id, &mut diagnostics);
+    let driver_locations = get_all_driver_locations(builder, symbol_id, &mut diagnostics);
     for (path, driver_locations) in driver_locations.iter() {
         if let Some(component) = component_analysis.component(path.as_bstr()) {
             if !component.can_sink() && driver_locations.len() > 0 {
@@ -72,7 +69,7 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<D
     diagnostics
 }
 
-fn get_all_driver_locations(builder: &mut Builder, symbol_id: SymbolId, diagnostics: &mut Vec<Diagnostic>) -> HashMap<BString, Vec<Location>> {
+fn get_all_driver_locations(builder: &mut Builder, symbol_id: SymbolId, _diagnostics: &mut Vec<Diagnostic>) -> HashMap<BString, Vec<Location>> {
     let mut driver_locations: HashMap<BString, Vec<Location>> = HashMap::new();
 
     let symboltable = builder.get_symboltable();

@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::os::unix::ffi::OsStrExt;
 
 use bstr::{BStr, BString};

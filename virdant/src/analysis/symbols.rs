@@ -1,19 +1,17 @@
+use bstr::{BStr, BString};
+use hashbrown::{HashMap, HashSet};
+use indexmap::IndexMap;
 use std::sync::Arc;
 
-use hashbrown::{HashMap, HashSet};
-
 use crate::analysis::PackageAnalysis;
+use crate::common::json::ToJson;
 use crate::db::Builder;
 use crate::diagnostics;
+use crate::fqn::PackageFqn;
 use crate::source::Region;
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
-use bstr::{BStr, BString};
-use indexmap::IndexMap;
-
-use crate::common::json::ToJson;
-use crate::fqn::PackageFqn;
 use crate::{analysis::Location, diagnostics::Diagnostic};
 
 #[derive(Debug)]
@@ -238,7 +236,6 @@ fn build_symboltable_package(
 
     for item_name in analysis.item_names() {
         build_symboltable_item(
-            builder,
             symbols,
             diagnostics,
             builtin_names,
@@ -251,7 +248,6 @@ fn build_symboltable_package(
 }
 
 fn build_symboltable_item(
-    builder: &mut Builder,
     symbols: &mut Vec<(BString, Symbol)>,
     diagnostics: &mut Vec<Diagnostic>,
     builtin_names: &mut Vec<BString>,
@@ -285,12 +281,9 @@ fn build_symboltable_item(
 
     if kind == SymbolKind::ModDef {
         build_symboltable_moddef_slot(
-            builder,
             symbols,
             diagnostics,
-            builtin_names,
             package,
-            analysis,
             parsing,
             item_name,
             &node,
@@ -299,12 +292,9 @@ fn build_symboltable_item(
 }
 
 fn build_symboltable_moddef_slot(
-    builder: &mut Builder,
     symbols: &mut Vec<(BString, Symbol)>,
     diagnostics: &mut Vec<Diagnostic>,
-    builtin_names: &mut Vec<BString>,
     package: PackageFqn,
-    analysis: &PackageAnalysis,
     parsing: &Parsing,
     item_name: &BString,
     node: &AstNode<'_>,

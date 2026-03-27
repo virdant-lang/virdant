@@ -1,16 +1,10 @@
-use bstr::BString;
 use hashbrown::{HashMap, HashSet};
-use bstr::ByteSlice;
 
 use crate::analysis::location::Location;
-use crate::analysis::symbols::{Symbol, SymbolId};
 use crate::types::typing::item_for;
 use crate::types::{ExprRoot, Type};
-use crate::common::Flow;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
-use crate::syntax::ast::AstNode;
-use crate::syntax::payload::AstNodePayload;
 
 pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> ExprRoot {
     let parsing = builder.get_parsing(location.package());
@@ -25,7 +19,7 @@ pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> E
     let mut node = parsing.ast_node(location.ast_node_id());
     let original_node = node.clone();
     loop {
-        if let Some(exprroot) = exprroot_ids.get(&node.id()) {
+        if let Some(_exprroot) = exprroot_ids.get(&node.id()) {
             return ExprRoot::new(node.location());
         }
 

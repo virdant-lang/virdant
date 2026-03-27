@@ -33,7 +33,7 @@ impl Db {
             let shape = if query.is_input() { "folder" } else { "box" };
             let style = if query.is_input() { "filled" } else { "rounded" };
 
-            let label = if let Some(cached_val) = map.get(query) {
+            let label = if let Some(_cached_val) = map.get(query) {
                 /*
                 format!(
                     "{:?}\nrev={}\ndeps={}",

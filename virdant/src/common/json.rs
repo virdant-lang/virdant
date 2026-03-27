@@ -33,7 +33,7 @@ impl<T: ToJson> ToJson for Option<T> {
 impl ToJson for bstr::BStr {
     fn to_json(&self) -> json::JsonValue {
         use bstr::ByteSlice;
-        let s = self.clone().to_str_lossy();
+        let s = self.to_str_lossy();
         (*s).into()
     }
 }

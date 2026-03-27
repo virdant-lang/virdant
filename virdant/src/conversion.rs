@@ -311,6 +311,7 @@ fn convert_sequential_reg_driver(
     })
 }
 
+#[allow(dead_code)]
 fn zero_expr(width: virir::Width) -> verilog::Expr {
     verilog::Expr::WordLit(verilog::expr::WordLit {
         value: 0,

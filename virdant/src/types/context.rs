@@ -1,7 +1,6 @@
 use bstr::BString;
-use hashbrown::{HashMap, HashSet};
 
-use crate::{analysis::Location, common::json::ToJson};
+use crate::common::json::ToJson;
 
 use super::typ::Type;
 

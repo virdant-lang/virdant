@@ -1,12 +1,10 @@
-use bstr::ByteSlice;
-
 use crate::common::Width;
 use crate::diagnostics::{self, Diagnostic};
 use crate::syntax::ast::AstNode;
 use crate::syntax::payload::{self, AstNodePayload};
 
 use super::typ::Type;
-use super::typing::{min_word_width, Typing};
+use super::typing::Typing;
 use crate::queries::component::node_to_typ;
 
 impl Typing {
@@ -58,7 +56,7 @@ impl Typing {
                     Err(diag) => Err(vec![diag]),
                 }
             }
-            AstNodePayload::ExprBinOp(expr_bin_op) => self.infer_binop(node),
+            AstNodePayload::ExprBinOp(_expr_bin_op) => self.infer_binop(node),
             _ => Ok(None),
         }
     }
@@ -101,7 +99,7 @@ impl Typing {
         Ok(Some(Type::Word(total_width)))
     }
 
-    fn infer_str<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, Vec<Diagnostic>> {
+    fn infer_str<'p>(&mut self, _node: &AstNode<'p>) -> Result<Option<Type>, Vec<Diagnostic>> {
         // TODO
         Ok(None)
     }

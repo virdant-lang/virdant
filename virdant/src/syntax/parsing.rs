@@ -55,7 +55,7 @@ pub fn parse(source: &Source) -> Parsing {
 
     // Fix parents
     {
-        let root_id = AstNodeId(u16::try_from(parsing.payloads.len()).unwrap() - 1);
+        let _root_id = AstNodeId(u16::try_from(parsing.payloads.len()).unwrap() - 1);
         parsing.parents = (0..parsing.payloads.len())
             .map(|i| AstNodeId(i.try_into().unwrap()))
             .collect();
@@ -144,7 +144,7 @@ impl Parsing {
 
     pub fn ast_node(&self, ast_node_id: AstNodeId) -> AstNode<'_> {
         let payload = self.payloads[ast_node_id.index()].clone();
-        let span = self.spans[ast_node_id.index()].clone();
+        let _span = self.spans[ast_node_id.index()].clone();
 
         let parent_id = self.parents[ast_node_id.index()];
         let parent = if parent_id == ast_node_id {
@@ -206,7 +206,7 @@ impl Parsing {
         self.dump_level(root_node_id, 0);
     }
 
-    fn dump_level(&self, ast_node_id: AstNodeId, level: usize) {
+    fn dump_level(&self, ast_node_id: AstNodeId, _level: usize) {
         let node = self.ast_node(ast_node_id);
         node.dump();
     }

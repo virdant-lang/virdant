@@ -42,7 +42,7 @@ impl<'p> AstNode<'p> {
         self.parsing.source[self.span()].as_bstr()
     }
 
-    pub fn parent(&self) -> Option<AstNode> {
+    pub fn parent(&self) -> Option<AstNode<'_>> {
         if let Some(parent) = &self.parent {
             Some(self.parsing.ast_node(parent.clone()))
         } else {
@@ -50,7 +50,7 @@ impl<'p> AstNode<'p> {
         }
     }
 
-    pub fn child(&self, mut n: u16) -> AstNode {
+    pub fn child(&self, mut n: u16) -> AstNode<'_> {
         let mut ast_node_id = 0;
         loop {
             if self.parsing.parents[ast_node_id] == self.id {
@@ -66,7 +66,7 @@ impl<'p> AstNode<'p> {
         }
     }
 
-    pub fn children(&self) -> Vec<AstNode> {
+    pub fn children(&self) -> Vec<AstNode<'_>> {
         let mut result = vec![];
         let num_children = self.parsing.num_children[self.id.index()];
         for i in 0..num_children {
@@ -173,63 +173,63 @@ impl<'p> AstNode<'p> {
                 };
                 format!("ModDef {ext}{export}{}", parsing.string(mod_def.name))
             }
-            AstNodePayload::StructDef(struct_def) => format!("StructDef"),
-            AstNodePayload::UnionDef(union_def) => format!("UnionDef"),
-            AstNodePayload::EnumDef(enum_def) => format!("EnumDef"),
-            AstNodePayload::BuiltinDef(builtin_def) => format!("BuiltinDef"),
-            AstNodePayload::FnDef(fn_def) => format!("FnDef"),
-            AstNodePayload::SocketDef(socket_def) => format!("SocketDef"),
+            AstNodePayload::StructDef(_struct_def) => format!("StructDef"),
+            AstNodePayload::UnionDef(_union_def) => format!("UnionDef"),
+            AstNodePayload::EnumDef(_enum_def) => format!("EnumDef"),
+            AstNodePayload::BuiltinDef(_builtin_def) => format!("BuiltinDef"),
+            AstNodePayload::FnDef(_fn_def) => format!("FnDef"),
+            AstNodePayload::SocketDef(_socket_def) => format!("SocketDef"),
             AstNodePayload::Component(component) => format!("Component {:?} {}", component.kind, parsing.string(component.name)),
-            AstNodePayload::Driver(driver) => format!("Driver"),
+            AstNodePayload::Driver(_driver) => format!("Driver"),
             AstNodePayload::BidirectionalDriver => format!("BidirectionalDriver"),
-            AstNodePayload::Module(module) => format!("Module"),
-            AstNodePayload::ModDefStmtBlock(mod_def_stmt_block) => format!("ModDefStmtBlock"),
+            AstNodePayload::Module(_module) => format!("Module"),
+            AstNodePayload::ModDefStmtBlock(_mod_def_stmt_block) => format!("ModDefStmtBlock"),
             AstNodePayload::ModDefStmtOn => format!("ModDefStmtOn"),
             AstNodePayload::ModDefStmtIf => format!("ModDefStmtIf"),
             AstNodePayload::ModDefStmtMatch => format!("ModDefStmtMatch"),
-            AstNodePayload::Socket(socket) => format!("Socket"),
+            AstNodePayload::Socket(_socket) => format!("Socket"),
             AstNodePayload::CommandAssert => format!("CommandAssert"),
             AstNodePayload::CommandDisplay(_) => format!("CommandDisplay"),
             AstNodePayload::CommandFinish => format!("CommandFinish"),
             AstNodePayload::CommandFatal => format!("CommandFatal"),
             AstNodePayload::CommandIf => format!("CommandIf"),
-            AstNodePayload::Field(field) => format!("Field"),
-            AstNodePayload::Ctor(ctor) => format!("Ctor"),
-            AstNodePayload::Enumerant(enumerant) => format!("Enumerant"),
-            AstNodePayload::Channel(channel) => format!("Channel"),
-            AstNodePayload::Param(param) => format!("Param"),
+            AstNodePayload::Field(_field) => format!("Field"),
+            AstNodePayload::Ctor(_ctor) => format!("Ctor"),
+            AstNodePayload::Enumerant(_enumerant) => format!("Enumerant"),
+            AstNodePayload::Channel(_channel) => format!("Channel"),
+            AstNodePayload::Param(_param) => format!("Param"),
             AstNodePayload::GenericsParams(params) => format!("GenericsParams {:?}", params.value),
             AstNodePayload::Generics => format!("Generics"),
-            AstNodePayload::Kind(kind) => format!("Kind"),
+            AstNodePayload::Kind(_kind) => format!("Kind"),
             AstNodePayload::Type(_) => format!("Type"),
             AstNodePayload::ExprReference => format!("ExprReference"),
             AstNodePayload::ExprParen => format!("ExprParen"),
             AstNodePayload::ExprIf => format!("ExprIf"),
             AstNodePayload::ExprMatch => format!("ExprMatch"),
-            AstNodePayload::ExprBitLit(expr_bit_lit) => format!("ExprBitLit"),
-            AstNodePayload::ExprWordLit(expr_word_lit) => format!("ExprWordLit"),
-            AstNodePayload::ExprStrLit(expr_str_lit) => format!("ExprStrLit"),
-            AstNodePayload::ExprBinOp(expr_bin_op) => format!("ExprBinOp"),
-            AstNodePayload::ExprUnOp(expr_un_op) => format!("ExprUnOp"),
-            AstNodePayload::ExprMethod(expr_method) => format!("ExprMethod"),
+            AstNodePayload::ExprBitLit(_expr_bit_lit) => format!("ExprBitLit"),
+            AstNodePayload::ExprWordLit(_expr_word_lit) => format!("ExprWordLit"),
+            AstNodePayload::ExprStrLit(_expr_str_lit) => format!("ExprStrLit"),
+            AstNodePayload::ExprBinOp(_expr_bin_op) => format!("ExprBinOp"),
+            AstNodePayload::ExprUnOp(_expr_un_op) => format!("ExprUnOp"),
+            AstNodePayload::ExprMethod(_expr_method) => format!("ExprMethod"),
             AstNodePayload::ExprFn => format!("ExprFn"),
-            AstNodePayload::ExprCtor(expr_ctor) => format!("ExprCtor"),
-            AstNodePayload::ExprEnumerant(expr_enumerant) => format!("ExprEnumerant"),
+            AstNodePayload::ExprCtor(_expr_ctor) => format!("ExprCtor"),
+            AstNodePayload::ExprEnumerant(_expr_enumerant) => format!("ExprEnumerant"),
             AstNodePayload::ExprStruct => format!("ExprStruct"),
-            AstNodePayload::ExprIndex(expr_index) => format!("ExprIndex"),
-            AstNodePayload::ExprIndexRange(expr_index_range) => format!("ExprIndexRange"),
+            AstNodePayload::ExprIndex(_expr_index) => format!("ExprIndex"),
+            AstNodePayload::ExprIndexRange(_expr_index_range) => format!("ExprIndexRange"),
             AstNodePayload::ExprWord => format!("ExprWord"),
             AstNodePayload::ExprZext => format!("ExprZext"),
             AstNodePayload::ExprSext => format!("ExprSext"),
             AstNodePayload::ExprAs => format!("ExprAs"),
             AstNodePayload::ExprHole => format!("ExprHole"),
-            AstNodePayload::Assign(assign) => format!("Assign"),
-            AstNodePayload::PatIdent(pat_ident) => format!("PatIdent"),
-            AstNodePayload::PatEnumerant(pat_enumerant) => format!("PatEnumerant"),
+            AstNodePayload::Assign(_assign) => format!("Assign"),
+            AstNodePayload::PatIdent(_pat_ident) => format!("PatIdent"),
+            AstNodePayload::PatEnumerant(_pat_enumerant) => format!("PatEnumerant"),
             AstNodePayload::PatElse => format!("PatElse"),
-            AstNodePayload::Ofness(ofness) => format!("Ofness"),
+            AstNodePayload::Ofness(_ofness) => format!("Ofness"),
             AstNodePayload::It => format!("It"),
-            AstNodePayload::Path(path) => format!("Path"),
+            AstNodePayload::Path(_path) => format!("Path"),
         }
     }
 
@@ -342,11 +342,11 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprParen => Some(self.child(0)),
             AstNodePayload::ExprIf => Some(self.child(0)),
             AstNodePayload::ExprMatch => Some(self.child(0)),
-            AstNodePayload::ExprUnOp(expr_un_op) => Some(self.child(0)),
-            AstNodePayload::ExprMethod(expr_method) => Some(self.child(0)),
+            AstNodePayload::ExprUnOp(_expr_un_op) => Some(self.child(0)),
+            AstNodePayload::ExprMethod(_expr_method) => Some(self.child(0)),
             AstNodePayload::ExprFn => Some(self.child(0)),
-            AstNodePayload::ExprIndex(expr_index) => Some(self.child(0)),
-            AstNodePayload::ExprIndexRange(expr_index_range) => Some(self.child(0)),
+            AstNodePayload::ExprIndex(_expr_index) => Some(self.child(0)),
+            AstNodePayload::ExprIndexRange(_expr_index_range) => Some(self.child(0)),
             AstNodePayload::ExprAs => Some(self.child(0)),
             _ => None,
         }

@@ -2,9 +2,8 @@ use clap::CommandFactory;
 use virdant::conversion::convert_virir_to_verilog;
 use clap::{Parser, Subcommand};
 
-use bstr::{BStr, BString, ByteSlice, ByteVec};
+use bstr::{BStr, BString, ByteSlice};
 use nix::unistd::execvp;
-use virdant::diagnostics::DiagnosticLevel;
 use std::ffi::{CString, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -146,14 +145,14 @@ fn tokenize_file(path: &Path) {
 }
 
 fn check_path(path: PathBuf) {
-    let mut vir = virdant::Vir::from_dir(path);
+    let vir = virdant::Vir::from_dir(path);
     match vir.check() {
-        Err(diags) => {
+        Err(_diags) => {
             vir.dump_diagnostics();
             eprintln!("Check failed");
             std::process::exit(1);
         }
-        Ok(diags) => {
+        Ok(_diags) => {
             vir.dump_diagnostics();
             eprintln!("Check OK");
         }
@@ -161,8 +160,8 @@ fn check_path(path: PathBuf) {
 }
 
 fn dump_db(path: PathBuf, outpath: Option<PathBuf>) {
-    let mut vir = virdant::Vir::from_dir(path);
-    vir.check();
+    let vir = virdant::Vir::from_dir(path);
+    let _ = vir.check();
     if let Some(outpath) = outpath {
         println!("Saving graphviz: {}", outpath.display());
         vir.db().save_graphviz(outpath);
@@ -171,8 +170,8 @@ fn dump_db(path: PathBuf, outpath: Option<PathBuf>) {
 }
 
 fn dump_types(path: PathBuf) {
-    let mut vir = virdant::Vir::from_dir(path);
-    vir.check();
+    let vir = virdant::Vir::from_dir(path);
+    let _ = vir.check();
     for (location, typ) in vir.db().get_typeof_all() {
         println!(
             "{location:?} has type {typ:?}   {:?}  {:?}",
@@ -183,7 +182,7 @@ fn dump_types(path: PathBuf) {
 }
 
 fn dump_components(path: PathBuf, moddef_fqn: &str) {
-    let mut vir = virdant::Vir::from_dir(path);
+    let vir = virdant::Vir::from_dir(path);
     vir.dump_diagnostics();
 
     let symboltable = vir.db().get_symboltable();
@@ -193,7 +192,7 @@ fn dump_components(path: PathBuf, moddef_fqn: &str) {
 }
 
 fn dump_symbols(path: PathBuf) {
-    let mut vir = virdant::Vir::from_dir(path);
+    let vir = virdant::Vir::from_dir(path);
     vir.dump_diagnostics();
 
     let symboltable = vir.db().get_symboltable();
@@ -203,7 +202,7 @@ fn dump_symbols(path: PathBuf) {
 }
 
 fn dump_typedefs(path: PathBuf) {
-    let mut vir = virdant::Vir::from_dir(path);
+    let vir = virdant::Vir::from_dir(path);
     vir.dump_diagnostics();
 
     let typedefs = vir.db().get_typedefs();
@@ -213,7 +212,7 @@ fn dump_typedefs(path: PathBuf) {
 }
 
 fn dump_exprroots(path: PathBuf) {
-    let mut vir = virdant::Vir::from_dir(path);
+    let vir = virdant::Vir::from_dir(path);
     vir.dump_diagnostics();
 
     for exprroot in vir.db().get_exprroots() {
@@ -228,7 +227,7 @@ fn dump_exprroots(path: PathBuf) {
 }
 
 fn dump_typing(path: PathBuf) {
-    let mut vir = virdant::Vir::from_dir(path);
+    let vir = virdant::Vir::from_dir(path);
     vir.dump_diagnostics();
 
     for (location, typ) in vir.db().get_typeof_all() {
@@ -240,7 +239,7 @@ fn dump_typing(path: PathBuf) {
 }
 
 fn compile_to_virir(path: PathBuf, outfilepath: PathBuf) {
-    let mut vir = virdant::Vir::from_dir(path);
+    let vir = virdant::Vir::from_dir(path);
     vir.dump_diagnostics();
 
     let virir = &transpile(&vir.db());
@@ -267,7 +266,7 @@ fn build(args: &Args) {
     let builddir = cwd.join("build");
 
     let source_dir = cwd.join("src");
-    let mut vir = virdant::Vir::from_dir(source_dir);
+    let vir = virdant::Vir::from_dir(source_dir);
     vir.dump_diagnostics();
     if vir.check().is_err() {
         eprintln!("Build failed");
@@ -291,7 +290,7 @@ fn compile(path: PathBuf) {
     let project = path.file_name().unwrap().to_string_lossy().to_owned();
     let builddir = PathBuf::from("build").join(project.as_ref());
 
-    let mut vir = virdant::Vir::from_dir(path.clone());
+    let vir = virdant::Vir::from_dir(path.clone());
     vir.dump_diagnostics();
 
     let virir = &transpile(&vir.db());
@@ -307,7 +306,7 @@ fn compile(path: PathBuf) {
     println!("Wrote Verilog to {}", builddir.to_string_lossy());
 }
 
-fn run(args: &Args, path: &Option<PathBuf>, vcd: &Option<String>) {
+fn run(args: &Args, _path: &Option<PathBuf>, vcd: &Option<String>) {
     let cwd = if let Some(cwd) = &args.cwd {
         std::fs::canonicalize(cwd).unwrap()
     } else {
@@ -326,7 +325,7 @@ fn run(args: &Args, path: &Option<PathBuf>, vcd: &Option<String>) {
     let builddir = cwd.join("build");
 
     let source_dir = cwd.join("src");
-    let mut vir = virdant::Vir::from_dir(source_dir);
+    let vir = virdant::Vir::from_dir(source_dir);
     vir.dump_diagnostics();
     if vir.check().is_err() {
         eprintln!("Build failed");
@@ -361,7 +360,6 @@ fn run(args: &Args, path: &Option<PathBuf>, vcd: &Option<String>) {
         .arg(bin.clone()).output().unwrap();
 
     if !output.status.success() {
-        use bstr::ByteSlice;
         eprintln!("iverilog: {}", BStr::new(&output.stderr));
         std::process::exit(1);
     } else {

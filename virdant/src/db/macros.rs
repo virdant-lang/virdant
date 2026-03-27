@@ -13,14 +13,14 @@ macro_rules! queries {
             $query:ident($($arg:ident : $typ:path),*) -> $ret:path;)*
     ) => {
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-        enum Query {
+        pub(crate) enum Query {
             $(
                 $query($($typ),*),
             )*
         }
 
         #[derive(Clone, Debug)]
-        enum QueryResult {
+        pub(crate) enum QueryResult {
             $(
                 $query($ret),
             )*
@@ -56,6 +56,7 @@ macro_rules! db_getter {
                 cast!(self.get(query), $query)
             }
         }
+        #[allow(dead_code)]
         impl<'d> Builder<'d> {
             pub(crate) fn $getter_name(&mut self, $($arg : $argtyp),*) -> $rettyp {
                 let query = Query::$query($($arg),*);

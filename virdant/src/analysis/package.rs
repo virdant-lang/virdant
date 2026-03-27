@@ -14,7 +14,6 @@ use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 
-use super::location::Location;
 
 #[derive(Debug)]
 pub struct PackageAnalysis {
@@ -100,7 +99,7 @@ impl PackageAnalysis {
                         item,
                     }.into());
                 }
-                let mut items = self.items.get_mut(&name).unwrap();
+                let items = self.items.get_mut(&name).unwrap();
                 items.push(child_node.id());
 
                 // Skip adding exprroots for items which contain syntax errors
@@ -115,7 +114,7 @@ impl PackageAnalysis {
 
 
 
-    fn add_item_expr_roots(&mut self, parsing: Arc<Parsing>, node: AstNode<'_>) {
+    fn add_item_expr_roots(&mut self, _parsing: Arc<Parsing>, node: AstNode<'_>) {
         if matches!(node.payload(), AstNodePayload::ModDef(_)) {
             if node.contains_errors() {
                 return;
@@ -128,7 +127,7 @@ impl PackageAnalysis {
                             self.expr_roots.push(node_id);
                         }
                     }
-                    AstNodePayload::Driver(driver) => {
+                    AstNodePayload::Driver(_driver) => {
                         let node_id = child_node.driver().unwrap().id();
                         self.expr_roots.push(node_id);
                     }

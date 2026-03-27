@@ -105,7 +105,7 @@ impl Db {
         false
     }
 
-    pub fn get(&self, query: Query) -> QueryResult {
+    pub(crate) fn get(&self, query: Query) -> QueryResult {
         let cached_val = self.get_or_build(query);
         cached_val.val
     }
@@ -205,7 +205,7 @@ impl ToJson for QueryResult {
         match &self {
             QueryResult::Packages(packages) => packages.to_json(),
             QueryResult::Source(source) => source.to_json(),
-            QueryResult::Parsing(parsing) => format!("{self:?}").into(),
+            QueryResult::Parsing(_parsing) => format!("{self:?}").into(),
             QueryResult::SyntaxErrors(diagnostics) => diagnostics.to_json(),
             QueryResult::PackageAnalysis(package_analysis) => package_analysis.to_json(),
             QueryResult::ComponentAnalysis(component_analysis) => component_analysis.to_json(),
