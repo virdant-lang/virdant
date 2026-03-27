@@ -53,6 +53,8 @@ enum Command {
     Compile { path: PathBuf },
     /// Build Virdant package
     Build { },
+    /// Transpile a Virdant project to VirIr
+    Virir { },
     /// Run Virdant package
     Run { path: Option<PathBuf>, #[arg(long)] vcd: Option<String> },
 
@@ -77,6 +79,7 @@ fn main() {
         Command::CompileToVirir { path, outfilepath } => compile_to_virir(path, outfilepath),
         Command::Compile { path } => compile(path),
         Command::Build { } => build(&args),
+        Command::Virir { } => virir_project(&args),
         Command::Run { ref path, ref vcd } => run(&args, path, vcd),
         Command::External(args) => exec_external(args),
     }
@@ -284,6 +287,40 @@ fn build(args: &Args) {
 
     verilog.write_in_dir(&builddir).unwrap();
     println!("Wrote Verilog to {}", builddir.to_string_lossy());
+}
+
+fn virir_project(args: &Args) {
+    let cwd = if let Some(cwd) = &args.cwd {
+        std::fs::canonicalize(cwd).unwrap()
+    } else {
+        std::env::current_dir().unwrap()
+    };
+
+    if !cwd.join("Virdant.toml").exists() {
+        eprintln!("No Virdant.toml found");
+        std::process::exit(1);
+    }
+
+    let virdant_toml_text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
+    let virdant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
+
+    let project = virdant_toml["project"]["name"].as_str().unwrap();
+    let builddir = cwd.join("build");
+
+    let source_dir = cwd.join("src");
+    let vir = virdant::Vir::from_dir(source_dir);
+    vir.dump_diagnostics();
+    if vir.check().is_err() {
+        eprintln!("Virir failed");
+        std::process::exit(1);
+    }
+
+    let virir = transpile(&vir.db());
+    std::fs::create_dir_all(&builddir).unwrap();
+    let virir_filepath = builddir.join(format!("{project}.virir"));
+
+    std::fs::write(&virir_filepath, virir.to_text()).unwrap();
+    println!("Wrote VirIr to {}", virir_filepath.to_string_lossy());
 }
 
 fn compile(path: PathBuf) {

@@ -38,10 +38,6 @@ path = "src/bin/vir.rs"
 required-features = ["vir-bin"]
 
 [[bin]]
-name = "vir-ir"
-path = "src/bin/virir.rs"
-
-[[bin]]
 name = "vir-lsp"
 path = "src/bin/virlsp.rs"
 required-features = ["vir-lsp-bin"]
