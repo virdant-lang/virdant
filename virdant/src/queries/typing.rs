@@ -108,12 +108,9 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
 
     // if there is no expected type, you can't type check the expression.
     if let Some(expected_typ) = expected_typ {
-        typing.check(&node, &expected_typ);
+        let _ = typing.check(&node, &expected_typ);
     } else {
         match typing.infer(&node) {
-            Err(diags) => {
-                typing.diagnostics.extend(diags);
-            }
             Ok(None) => {
                 typing.diagnostics.push(diagnostics::Todo {
                     region: node.region(),
@@ -123,6 +120,7 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
             Ok(Some(typ)) => {
                 typing.typs.insert(node.id(), typ);
             }
+            _ => (),
         }
     }
 

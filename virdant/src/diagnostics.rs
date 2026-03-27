@@ -500,9 +500,7 @@ impl IsDiagnostic for NotWordType {
     }
 
     fn message(&self) -> BString {
-        // TODO
-        format!("Expected type TODO which is not a Word type").into()
-//        format!("Expected type {} which is not a Word type", self.typ)
+        format!("Expected type {} which is not a Word type", &self.typ).into()
     }
 }
 
