@@ -6,7 +6,7 @@ use hashbrown::HashSet;
 use crate::analysis::component::{Component, ComponentAnalysis};
 use crate::analysis::location::Location;
 use crate::analysis::symbols::{SymbolId, SymbolTable};
-use crate::analysis::types::Type;
+use crate::types::Type;
 use crate::common::{ComponentKind, Flow, Width};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};

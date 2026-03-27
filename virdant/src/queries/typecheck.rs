@@ -4,77 +4,13 @@ use bstr::ByteSlice;
 
 use crate::analysis::location::Location;
 use crate::analysis::symbols::{Symbol, SymbolId};
-use crate::analysis::types::{ExprRoot, Type};
+use crate::types::typing::item_for;
+use crate::types::{ExprRoot, Type};
 use crate::common::Flow;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
 use crate::syntax::ast::AstNode;
 use crate::syntax::payload::AstNodePayload;
-
-pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Vec<Diagnostic> {
-    let mut diagnostics = vec![];
-    let symboltable = builder.get_symboltable();
-
-    let exprroots = builder.get_exprroots();
-    let item = symboltable.symbol(symbol_id);
-
-    let mut use_locations: HashMap<BString, HashSet<Location>> = HashMap::new();
-
-    let parsing = builder.get_parsing(item.package());
-    let node: AstNode = parsing.ast_node(item.location().ast_node_id());
-    if !node.contains_errors() {
-        diagnostics.extend(typecheck_item(builder, item, &exprroots, &mut use_locations));
-    }
-
-    if let AstNodePayload::ModDef(moddef) = node.payload() && !moddef.is_ext {
-        // Unused varibles and read from sink warnings
-        let component_analysis = builder.get_component_analysis(symbol_id);
-        for (path, component) in component_analysis.components() {
-            if component.can_source() && !use_locations.contains_key(&path) {
-                let region = builder.get_location_region(component.location());
-                diagnostics.push(diagnostics::UnusedSource {
-                    region,
-                    path: path.into(),
-                }.into());
-            } else if component.flow() == Flow::Sink && use_locations.contains_key(&path) {
-                for location in &use_locations[&path] {
-                    let region = builder.get_location_region(location.clone());
-                    diagnostics.push(diagnostics::ReadFromSink {
-                        region,
-                        path: path.clone(),
-                    }.into());
-                }
-            }
-        }
-    }
-
-    diagnostics
-}
-
-fn typecheck_item(
-    builder: &mut Builder,
-    item: Symbol,
-    exprroots: &[ExprRoot],
-    use_locations: &mut HashMap<BString, HashSet<Location>>,
-) -> Vec<Diagnostic> {
-    let mut diagnostics = vec![];
-    for exprroot in exprroots {
-        if exprroot.package() == item.package() && item_for(builder, exprroot.location()).id() == item.id() {
-            let typing = builder.get_typing(exprroot.clone());
-            diagnostics.extend(typing.diagnostics());
-
-            let typing_use_locations = typing.reference_use_locations();
-            for (path, locations) in typing_use_locations.iter() {
-                if !use_locations.contains_key(path.as_bstr()) {
-                    use_locations.insert(path.clone(), HashSet::new());
-                }
-                let t = use_locations.get_mut(path.as_bstr()).unwrap();
-                t.extend(locations.clone());
-            }
-        }
-    }
-    diagnostics
-}
 
 pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> ExprRoot {
     let parsing = builder.get_parsing(location.package());
@@ -103,30 +39,6 @@ pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> E
             eprintln!("{:?}", parsing.text(original_node.span()));
             eprintln!("{:?}", original_node.region());
             panic!("No ExprRoot found")
-        }
-    }
-}
-
-fn item_for(builder: &mut Builder, location: Location) -> Symbol {
-    let symboltable = builder.get_symboltable();
-    let parsing = builder.get_parsing(location.package());
-
-    let mut node = parsing.ast_node(location.ast_node_id());
-    loop {
-        if node.is_item() {
-            let name = node.name().unwrap();
-            let name_str = parsing.string(name);
-            return symboltable
-                .resolve_item_in_package(name_str, location.package())
-                .unwrap()
-                .clone();
-        }
-
-        if let Some(parent) = node.parent() {
-            node = parsing.ast_node(parent.id());
-        } else {
-            let region = builder.get_location_region(location.clone());
-            panic!("No containing item found for location {location:?} at {region:?}");
         }
     }
 }

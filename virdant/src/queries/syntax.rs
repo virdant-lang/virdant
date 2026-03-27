@@ -1,5 +1,5 @@
 use crate::analysis::location::Location;
-use crate::analysis::types::ExprRoot;
+use crate::types::ExprRoot;
 use crate::db::Builder;
 use crate::diagnostics::Diagnostic;
 use crate::syntax::ast::AstNode;

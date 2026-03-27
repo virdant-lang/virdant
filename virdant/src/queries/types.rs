@@ -1,5 +1,5 @@
 use crate::analysis::symbols::SymbolKind;
-use crate::analysis::types::TypeDef;
+use crate::types::TypeDef;
 use crate::common::TypeScheme;
 use crate::db::Builder;
 
@@ -23,7 +23,7 @@ pub(crate) fn build_typedefs(builder: &mut Builder) -> Vec<TypeDef> {
     typedefs
 }
 
-pub(crate) fn build_type_monomorphizations(builder: &mut Builder) -> Vec<crate::analysis::types::Type> {
+pub(crate) fn build_type_monomorphizations(builder: &mut Builder) -> Vec<crate::types::Type> {
     use hashbrown::HashSet;
 
     let mut typs = HashSet::new();

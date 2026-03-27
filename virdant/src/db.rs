@@ -15,7 +15,7 @@ use crate::analysis::location::Location;
 use crate::analysis::package::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
-use crate::analysis::types::{ExprRoot, Type, TypeDef, Typing, TypingContext};
+use crate::types::{ExprRoot, Type, TypeDef, Typing, TypingContext};
 use crate::common::json::ToJson;
 use crate::diagnostics::Diagnostic;
 use crate::fqn::PackageFqn;
@@ -70,8 +70,8 @@ impl Query {
             crate::queries::build_syntax_errors : SyntaxErrors();
             crate::queries::build_package_analysis : PackageAnalysis(analysis);
             crate::queries::build_component_analysis : ComponentAnalysis(symbol_id);
-            crate::queries::build_symboltable : SymbolTable();
-            crate::queries::build_symbol_ast : SymbolAst(symbol_id);
+            crate::analysis::symbols::build_symboltable : SymbolTable();
+            crate::analysis::symbols::build_symbol_ast : SymbolAst(symbol_id);
             crate::queries::check_drivers : CheckDrivers(symbol_id);
             crate::queries::find_exprroots : ExprRoots();
             crate::queries::build_all_exprs : AllExprs();
@@ -79,7 +79,7 @@ impl Query {
             crate::queries::build_typedefs : TypeDefs();
             crate::queries::build_typing_context : TypingContext(symbol_id);
             crate::queries::build_typing : Typing(expr_root);
-            crate::queries::typecheck : TypeCheck(symbol_id);
+            crate::types::typing::typecheck : TypeCheck(symbol_id);
             crate::queries::typecheck::build_exprroot_for : ExprRootFor(location);
             crate::queries::build_typeof : Typeof(location);
             crate::queries::build_typeof_all : TypeofAll();

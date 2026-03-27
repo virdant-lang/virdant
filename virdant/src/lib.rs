@@ -11,6 +11,7 @@ pub mod virir;
 pub mod conversion;
 pub mod verilog;
 pub mod transpile;
+pub mod types;
 
 pub use vir::Vir;
 

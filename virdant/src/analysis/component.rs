@@ -2,26 +2,24 @@ use bstr::{BStr, BString};
 
 use crate::analysis::Location;
 use crate::analysis::symbols::SymbolId;
-use crate::analysis::types::Type;
+use crate::types::Type;
 use crate::common::Flow;
 use crate::common::json::ToJson;
 use crate::diagnostics::Diagnostic;
 
 #[derive(Debug)]
 pub struct ComponentAnalysis {
-    // TODO Remove pub(crate)
-    pub(crate) moddef: SymbolId,
-    pub(crate) components: Vec<(BString, Component)>,
-    pub(crate) diagnostics: Vec<Diagnostic>,
+    pub moddef: SymbolId,
+    pub components: Vec<(BString, Component)>,
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Component {
-    // TODO Remove pub(crate)
-    pub(crate)path: BString,
-    pub(crate)location: Location,
-    pub(crate)typ: Option<Type>,
-    pub(crate)flow: Flow,
+    pub path: BString,
+    pub location: Location,
+    pub typ: Option<Type>,
+    pub flow: Flow,
 }
 
 impl Component {

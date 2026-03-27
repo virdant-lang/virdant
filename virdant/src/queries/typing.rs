@@ -4,7 +4,7 @@ use bstr::ByteSlice;
 
 use crate::analysis::location::Location;
 use crate::analysis::symbols::SymbolId;
-use crate::analysis::types::{ExprRoot, Type, Typing, TypingContext};
+use crate::types::{ExprRoot, Type, Typing, TypingContext};
 use crate::common::ComponentKind;
 use crate::db::Builder;
 use crate::diagnostics;
@@ -134,4 +134,3 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
 fn builtin_bit_type() -> Type {
     Type::Bit
 }
-
