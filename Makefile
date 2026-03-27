@@ -2,6 +2,7 @@
 
 build:
 	cargo build --release --all-features
+	cp -r ./lib target/
 
 test:
 	cargo test
