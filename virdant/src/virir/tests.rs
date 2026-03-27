@@ -1,10 +1,39 @@
 use super::*;
 use crate::common::BinOp;
+use crate::db::Db;
+use crate::common::source::Source;
+use crate::fqn::PackageFqn;
 use crate::verilog::conversion::convert_virir_to_verilog;
 use crate::virir::transpile::transpile;
-use crate::Vir;
 
 const TEST_VIRIR: &str = include_str!("../../../virir/top.virir");
+
+fn new_db() -> Db {
+    let mut db = Db::new();
+    db.set_packages(vec![]);
+    let builtin = PackageFqn::new("builtin".into());
+    let mut packages = db.get_packages();
+    packages.push(builtin.clone());
+    db.set_packages(packages);
+    let builtin_source = Source::new(builtin.clone(), include_bytes!("../../../lib/builtin.vir").as_ref().into());
+    db.set_source(builtin, builtin_source);
+    db
+}
+
+fn db_add_package(db: &mut Db, name: &str) {
+    let package = PackageFqn::new(name.into());
+    let mut packages = db.get_packages();
+    if !packages.contains(&package) {
+        packages.push(package);
+        db.set_packages(packages);
+    }
+}
+
+fn db_set_text(db: &mut Db, name: &str, text: impl Into<bstr::BString>) {
+    let package = PackageFqn::new(name.into());
+    let source = Source::new(package.clone(), text.into());
+    db.set_source(package, source);
+}
 
 
 #[test]
@@ -59,19 +88,19 @@ fn test_virir() {
     println!("{verilog:#?}");
     verilog.write_to_stdout().unwrap();
 
-    let mut vir = Vir::new();
-    vir.add_package("on_stmts");
-    vir.set_package_text("on_stmts", include_str!("../../../examples/on_stmts.vir"));
-    let transpiled_virir = transpile(vir.db());
+    let mut db = new_db();
+    db_add_package(&mut db, "on_stmts");
+    db_set_text(&mut db, "on_stmts", include_str!("../../../examples/on_stmts.vir"));
+    let transpiled_virir = transpile(&db);
     let transpiled_verilog = convert_virir_to_verilog(transpiled_virir);
 
     println!("{transpiled_verilog:#?}");
     transpiled_verilog.write_to_stdout().unwrap();
 
-    let mut vir = Vir::new();
-    vir.add_package("basic");
-    vir.set_package_text("basic", include_str!("../../../examples/basic.vir"));
-    let transpiled_virir = transpile(vir.db());
+    let mut db = new_db();
+    db_add_package(&mut db, "basic");
+    db_set_text(&mut db, "basic", include_str!("../../../examples/basic.vir"));
+    let transpiled_virir = transpile(&db);
     let transpiled_verilog = convert_virir_to_verilog(transpiled_virir);
 
     println!("{transpiled_verilog:#?}");
@@ -103,9 +132,10 @@ fn test_virir() {
     let roundtrip_text = virir.to_text();
     parse(&roundtrip_text).unwrap();
 
-    let mut vir = Vir::new();
-    vir.add_package("extensions_inline");
-    vir.set_package_text(
+    let mut db = new_db();
+    db_add_package(&mut db, "extensions_inline");
+    db_set_text(
+        &mut db,
         "extensions_inline",
         r#"mod Top {
             incoming hi : Word[7];
@@ -121,7 +151,7 @@ fn test_virir() {
             s := sext(lo);
         }"#,
     );
-    let transpiled_virir = transpile(vir.db());
+    let transpiled_virir = transpile(&db);
     let transpiled_verilog = convert_virir_to_verilog(transpiled_virir);
 
     println!("{transpiled_verilog:#?}");

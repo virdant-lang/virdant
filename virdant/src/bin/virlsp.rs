@@ -10,7 +10,7 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 use serde_json::json;
 
-use virdant::Vir;
+use virdant::LIB_DIR;
 use virdant::types::ExprRoot;
 use virdant::db::Db;
 use virdant::fqn::PackageFqn;
@@ -24,7 +24,7 @@ struct Backend {
 }
 
 struct ServerState {
-    vir: Vir,
+    db: Db,
     uris: HashSet<Url>,
     hover_mode: HoverMode,
 }
@@ -35,12 +35,51 @@ enum HoverMode {
     Debug,
 }
 
+fn new_db() -> Db {
+    let mut db = Db::new();
+    db.set_packages(vec![]);
+    let builtin = PackageFqn::new("builtin".into());
+    let mut packages = db.get_packages();
+    packages.push(builtin.clone());
+    db.set_packages(packages);
+    let builtin_source = Source::new(builtin.clone(), include_bytes!("../../../lib/builtin.vir").as_ref().into());
+    db.set_source(builtin, builtin_source);
+    db
+}
+
+fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
+    let mut db = Db::new();
+    db.set_packages(vec![]);
+    let builtin_source = Source::load_file(LIB_DIR.join("builtin.vir"));
+    let mut sources = vec![builtin_source.clone()];
+    db.set_source(builtin_source.package(), builtin_source);
+    for filepath in std::fs::read_dir(source_dir.into()).unwrap() {
+        let filepath = match filepath {
+            Ok(filepath) => filepath.path(),
+            Err(_) => continue,
+        };
+        match filepath.extension() {
+            Some(ext) if ext.to_string_lossy() == "vir" => (),
+            _ => continue,
+        }
+        let source = Source::load_file(filepath);
+        db.set_source(source.package(), source.clone());
+        sources.push(source);
+    }
+    db.set_packages(sources.iter().map(|source| source.package()).collect());
+    db
+}
+
+fn db_is_empty(db: &Db) -> bool {
+    db.get_packages().len() < 2
+}
+
 impl Backend {
     fn new(client: Client) -> Self {
         Self {
             client,
             state: Arc::new(Mutex::new(ServerState {
-                vir: Vir::new(),
+                db: new_db(),
                 hover_mode: HoverMode::Debug,
                 uris: HashSet::new(),
             })),
@@ -115,18 +154,21 @@ impl LanguageServer for Backend {
 
         {
             let mut state = self.state.lock().await;
-            if state.vir.is_empty() {
-                let mut vir = Vir::from_dir(&workspace);
-                std::mem::swap(&mut state.vir, &mut vir);
+            if db_is_empty(&state.db) {
+                state.db = db_from_dir(&workspace);
             }
 
-            state.vir.set_package_text(&package.to_string(), text);
-            if !state.vir.packages().contains(&package.to_string()) {
-                state.vir.add_package(&package.to_string());
+            let new_source = Source::new(package.clone(), text);
+            state.db.set_source(package.clone(), new_source);
+            let packages = state.db.get_packages();
+            if !packages.contains(&package) {
+                let mut packages = packages;
+                packages.push(package.clone());
+                state.db.set_packages(packages);
             }
 
             state.uris.insert(uri.clone());
-       }
+        }
 
         self.check_all_documents().await;
     }
@@ -143,14 +185,17 @@ impl LanguageServer for Backend {
         {
             let mut state = self.state.lock().await;
             let workspace = workspace_root(&uri);
-            if state.vir.is_empty() {
-                let mut vir = Vir::from_dir(workspace);
-                std::mem::swap(&mut state.vir, &mut vir);
+            if db_is_empty(&state.db) {
+                state.db = db_from_dir(workspace);
             }
-            if !state.vir.packages().contains(&package.to_string()) {
-                state.vir.add_package(&package.to_string());
+            let packages = state.db.get_packages();
+            if !packages.contains(&package) {
+                let mut packages = packages;
+                packages.push(package.clone());
+                state.db.set_packages(packages);
             }
-            state.vir.set_package_text(&package.to_string(), text);
+            let new_source = Source::new(package.clone(), text);
+            state.db.set_source(package.clone(), new_source);
         }
 
         self.check_all_documents().await;
@@ -260,7 +305,7 @@ impl LanguageServer for Backend {
         let package = uri_to_packagefqn(&uri);
         let _parsing = {
             let state = self.state.lock().await;
-            state.vir.parsing(&package.to_string())
+            state.db.get_parsing(package.clone())
         };
 
         let mut hints = vec![];
@@ -295,7 +340,7 @@ impl LanguageServer for Backend {
         let package = uri_to_packagefqn(&uri);
         let parsing = {
             let state = self.state.lock().await;
-            state.vir.parsing(&package.to_string())
+            state.db.get_parsing(package.clone())
         };
 
         if let Some(node_id) = parsing.at(linecol) {
@@ -424,7 +469,7 @@ impl Backend {
     async fn source(&self, uri: &Url) -> Option<Source> {
         let state = self.state.lock().await;
         let package = uri_to_packagefqn(uri);
-        Some(state.vir.db().get_source(package))
+        Some(state.db.get_source(package))
     }
 
     async fn check_all_documents(&self) {
@@ -446,10 +491,7 @@ impl Backend {
         let mut diagnostics = Vec::new();
 
         let state = self.state.lock().await;
-        let diags = match state.vir.check() {
-            Ok(diags) => diags,
-            Err(diags) => diags,
-        };
+        let diags = state.db.check();
 
         let package = uri_to_packagefqn(&uri);
 
@@ -497,7 +539,7 @@ impl Backend {
 
         let (parsing, _hover_mode) = {
             let state = self.state.lock().await;
-            (state.vir.parsing(&package.to_string()), state.hover_mode)
+            (state.db.get_parsing(package.clone()), state.hover_mode)
         };
 
         if let Some(node_id) = parsing.at(linecol) {
@@ -524,7 +566,7 @@ impl Backend {
         let package = uri_to_packagefqn(&uri);
 
         let state = self.state.lock().await;
-        let db = state.vir.db();
+        let db = &state.db;
 
         let parsing = db.get_parsing(package.clone());
 

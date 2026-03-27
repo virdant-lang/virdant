@@ -3,12 +3,16 @@ use virdant::verilog::conversion::convert_virir_to_verilog;
 use clap::{Parser, Subcommand};
 
 use bstr::{BStr, BString, ByteSlice};
+use colored::Colorize;
 use nix::unistd::execvp;
 use std::ffi::{CString, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
+use virdant::LIB_DIR;
+use virdant::db::Db;
+use virdant::diagnostics::{Diagnostic, DiagnosticLevel};
 use virdant::fqn::PackageFqn;
-use virdant::common::source::Source;
+use virdant::common::source::{Region, Source};
 use virdant::syntax::parsing::parse;
 use virdant::syntax::token::tokenize;
 use virdant::syntax::token::Token;
@@ -85,6 +89,61 @@ fn main() {
     }
 }
 
+fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
+    let mut db = Db::new();
+    db.set_packages(vec![]);
+    let builtin_source = Source::load_file(LIB_DIR.join("builtin.vir"));
+    let mut sources = vec![builtin_source.clone()];
+    db.set_source(builtin_source.package(), builtin_source);
+    for filepath in std::fs::read_dir(source_dir.into()).unwrap() {
+        let filepath = match filepath {
+            Ok(filepath) => filepath.path(),
+            Err(_) => continue,
+        };
+        match filepath.extension() {
+            Some(ext) if ext.to_string_lossy() == "vir" => (),
+            _ => continue,
+        }
+        let source = Source::load_file(filepath);
+        db.set_source(source.package(), source.clone());
+        sources.push(source);
+    }
+    db.set_packages(sources.iter().map(|source| source.package()).collect());
+    db
+}
+
+fn check_db(db: &Db) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
+    let diagnostics = db.check();
+    if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
+        Err(diagnostics)
+    } else {
+        Ok(diagnostics)
+    }
+}
+
+fn dump_diagnostics(db: &Db) {
+    let diagnostics = match check_db(db) {
+        Ok(diags) => diags,
+        Err(diags) => diags,
+    };
+    let longest_region = diagnostics
+        .iter()
+        .map(|diag| diag.region().to_string().len())
+        .max()
+        .unwrap_or_default();
+    for diagnostic in diagnostics {
+        let unpadded_region = diagnostic.region().to_string();
+        let padded_region = format!("{}{}", unpadded_region, " ".repeat(longest_region - unpadded_region.len()));
+        if diagnostic.level() == DiagnosticLevel::Error {
+            println!("{}   {}   {}", "ERROR  ".red(), padded_region, diagnostic.message());
+        } else if diagnostic.level() == DiagnosticLevel::Warning {
+            println!("{}   {}   {}", "WARNING".yellow(), padded_region, diagnostic.message());
+        } else {
+            println!("{}   {}   {}", "INFO   ".green(), padded_region, diagnostic.message());
+        }
+    }
+}
+
 fn parse_file(path: &Path) {
     let input = match std::fs::read(path) {
         Ok(input) => input,
@@ -148,81 +207,86 @@ fn tokenize_file(path: &Path) {
 }
 
 fn check_path(path: PathBuf) {
-    let vir = virdant::Vir::from_dir(path);
-    match vir.check() {
+    let db = db_from_dir(path);
+    match check_db(&db) {
         Err(_diags) => {
-            vir.dump_diagnostics();
+            dump_diagnostics(&db);
             eprintln!("Check failed");
             std::process::exit(1);
         }
         Ok(_diags) => {
-            vir.dump_diagnostics();
+            dump_diagnostics(&db);
             eprintln!("Check OK");
         }
     };
 }
 
 fn dump_db(path: PathBuf, outpath: Option<PathBuf>) {
-    let vir = virdant::Vir::from_dir(path);
-    let _ = vir.check();
+    let db = db_from_dir(path);
+    let _ = db.check();
     if let Some(outpath) = outpath {
         println!("Saving graphviz: {}", outpath.display());
-        vir.db().save_graphviz(outpath);
+        db.save_graphviz(outpath);
     }
-    dbg!(vir.db());
+    dbg!(&db);
 }
 
 fn dump_types(path: PathBuf) {
-    let vir = virdant::Vir::from_dir(path);
-    let _ = vir.check();
-    for (location, typ) in vir.db().get_typeof_all() {
+    let db = db_from_dir(path);
+    let _ = db.check();
+    for (location, typ) in db.get_typeof_all() {
+        let package = location.package();
+        let parsing = db.get_parsing(package.clone());
+        let node = parsing.ast_node(location.ast_node_id());
+        let spelling = node.spelling().to_owned();
+        let region = Region::new(package, node.span());
         println!(
             "{location:?} has type {typ:?}   {:?}  {:?}",
-            vir.spelling(location.clone()),
-            vir.region(location.clone())
+            spelling,
+            region,
         );
     }
 }
 
 fn dump_components(path: PathBuf, moddef_fqn: &str) {
-    let vir = virdant::Vir::from_dir(path);
-    vir.dump_diagnostics();
+    let db = db_from_dir(path);
+    dump_diagnostics(&db);
 
-    let symboltable = vir.db().get_symboltable();
+    let symboltable = db.get_symboltable();
     let moddef = symboltable.resolve_item_fqn(moddef_fqn.as_bytes().as_bstr()).unwrap();
-    let component_analysis = vir.db().get_component_analysis(moddef.id());
+    let component_analysis = db.get_component_analysis(moddef.id());
     dbg!(&component_analysis);
 }
 
 fn dump_symbols(path: PathBuf) {
-    let vir = virdant::Vir::from_dir(path);
-    vir.dump_diagnostics();
+    let db = db_from_dir(path);
+    dump_diagnostics(&db);
 
-    let symboltable = vir.db().get_symboltable();
+    let symboltable = db.get_symboltable();
     for symbol in symboltable.symbols() {
         println!("{:?} {:<20} {:?}", symbol.id(), symbol.fqn(), symbol.kind());
     }
 }
 
 fn dump_typedefs(path: PathBuf) {
-    let vir = virdant::Vir::from_dir(path);
-    vir.dump_diagnostics();
+    let db = db_from_dir(path);
+    dump_diagnostics(&db);
 
-    let typedefs = vir.db().get_typedefs();
+    let typedefs = db.get_typedefs();
     for typedef in typedefs {
         println!("{typedef:?}");
     }
 }
 
 fn dump_exprroots(path: PathBuf) {
-    let vir = virdant::Vir::from_dir(path);
-    vir.dump_diagnostics();
+    let db = db_from_dir(path);
+    dump_diagnostics(&db);
 
-    for exprroot in vir.db().get_exprroots() {
+    for exprroot in db.get_exprroots() {
         let package = exprroot.location().package();
-        let parsing = vir.db().get_parsing(package.clone());
+        let parsing = db.get_parsing(package.clone());
         let location = exprroot.location();
-        let typ = vir.db().get_expected_type(exprroot);
+        let typ = db.get_expected_type(exprroot);
         let node = parsing.ast_node(location.ast_node_id());
         let region = node.region();
         println!("{location:?} : {typ:?} at @{region}");
@@ -230,22 +294,22 @@ fn dump_exprroots(path: PathBuf) {
 }
 
 fn dump_typing(path: PathBuf) {
-    let vir = virdant::Vir::from_dir(path);
-    vir.dump_diagnostics();
+    let db = db_from_dir(path);
+    dump_diagnostics(&db);
 
-    for (location, typ) in vir.db().get_typeof_all() {
-        let region = vir.db().get_location_region(location.clone());
-        let parsing = vir.db().get_parsing(location.package());
+    for (location, typ) in db.get_typeof_all() {
+        let region = db.get_location_region(location.clone());
+        let parsing = db.get_parsing(location.package());
         let text = parsing.text(region.span());
         println!("{region} {location:?} {typ:?} ({text:?})");
     }
 }
 
 fn compile_to_virir(path: PathBuf, outfilepath: PathBuf) {
-    let vir = virdant::Vir::from_dir(path);
-    vir.dump_diagnostics();
+    let db = db_from_dir(path);
+    dump_diagnostics(&db);
 
-    let virir = &transpile(&vir.db());
+    let virir = &transpile(&db);
 
     std::fs::write(outfilepath, virir.to_text()).unwrap();
 }
@@ -269,14 +333,14 @@ fn build(args: &Args) {
     let builddir = cwd.join("build");
 
     let source_dir = cwd.join("src");
-    let vir = virdant::Vir::from_dir(source_dir);
-    vir.dump_diagnostics();
-    if vir.check().is_err() {
+    let db = db_from_dir(source_dir);
+    dump_diagnostics(&db);
+    if check_db(&db).is_err() {
         eprintln!("Build failed");
         std::process::exit(1);
     }
 
-    let virir = &transpile(&vir.db());
+    let virir = &transpile(&db);
     std::fs::create_dir_all(&builddir).unwrap();
     let virir_filepath = builddir.join(format!("{project}.virir"));
 
@@ -308,14 +372,14 @@ fn virir_project(args: &Args) {
     let builddir = cwd.join("build");
 
     let source_dir = cwd.join("src");
-    let vir = virdant::Vir::from_dir(source_dir);
-    vir.dump_diagnostics();
-    if vir.check().is_err() {
+    let db = db_from_dir(source_dir);
+    dump_diagnostics(&db);
+    if check_db(&db).is_err() {
         eprintln!("Virir failed");
         std::process::exit(1);
     }
 
-    let virir = transpile(&vir.db());
+    let virir = transpile(&db);
     std::fs::create_dir_all(&builddir).unwrap();
     let virir_filepath = builddir.join(format!("{project}.virir"));
 
@@ -327,10 +391,10 @@ fn compile(path: PathBuf) {
     let project = path.file_name().unwrap().to_string_lossy().to_owned();
     let builddir = PathBuf::from("build").join(project.as_ref());
 
-    let vir = virdant::Vir::from_dir(path.clone());
-    vir.dump_diagnostics();
+    let db = db_from_dir(path.clone());
+    dump_diagnostics(&db);
 
-    let virir = &transpile(&vir.db());
+    let virir = &transpile(&db);
     std::fs::create_dir_all(&builddir).unwrap();
     let virir_filepath = builddir.join(format!("{project}.virir"));
 
@@ -362,14 +426,14 @@ fn run(args: &Args, _path: &Option<PathBuf>, vcd: &Option<String>) {
     let builddir = cwd.join("build");
 
     let source_dir = cwd.join("src");
-    let vir = virdant::Vir::from_dir(source_dir);
-    vir.dump_diagnostics();
-    if vir.check().is_err() {
+    let db = db_from_dir(source_dir);
+    dump_diagnostics(&db);
+    if check_db(&db).is_err() {
         eprintln!("Build failed");
         std::process::exit(1);
     }
 
-    let virir = &transpile(&vir.db());
+    let virir = &transpile(&db);
     std::fs::create_dir_all(&builddir).unwrap();
     let virir_filepath = builddir.join(format!("{project}.virir"));
 

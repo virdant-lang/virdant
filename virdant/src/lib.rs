@@ -1,4 +1,3 @@
-pub mod vir;
 pub mod common;
 pub mod fqn;
 pub mod syntax;
@@ -9,8 +8,6 @@ pub mod diagnostics;
 pub mod virir;
 pub mod verilog;
 pub mod types;
-
-pub use vir::Vir;
 
 use std::sync::LazyLock;
 
