@@ -7,17 +7,16 @@ use hashbrown::HashSet;
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
-use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 use serde_json::json;
 
 use virdant::Vir;
-use virdant::analysis::types::ExprRoot;
+use virdant::types::ExprRoot;
 use virdant::db::Db;
 use virdant::fqn::PackageFqn;
 use virdant::source::{LineCol, Source, Span};
 use virdant::syntax::ast::{AstNode, AstNodeId};
-use virdant::syntax::parsing::{Parsing, parse};
+use virdant::syntax::parsing::Parsing;
 
 struct Backend {
     client: Client,
@@ -51,7 +50,7 @@ impl Backend {
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, _params: InitializeParams) -> Result<InitializeResult> {
         self.client
             .log_message(MessageType::INFO, "Hello from Virdant")
             .await;
@@ -93,7 +92,7 @@ impl LanguageServer for Backend {
         })
     }
 
-    async fn initialized(&self, params: InitializedParams) {
+    async fn initialized(&self, _params: InitializedParams) {
         self.client
             .log_message(MessageType::INFO, "Language server initialized")
             .await;
@@ -255,12 +254,12 @@ impl LanguageServer for Backend {
         params: InlayHintParams,
     ) -> Result<Option<Vec<InlayHint>>> {
         let uri = params.text_document.uri;
-        let range = params.range;
-        let linecol = LineCol::new(1, 1);
+        let _range = params.range;
+        let _linecol = LineCol::new(1, 1);
 
         let package = uri_to_packagefqn(&uri);
-        let parsing = {
-            let mut state = self.state.lock().await;
+        let _parsing = {
+            let state = self.state.lock().await;
             state.vir.parsing(&package.to_string())
         };
 
@@ -295,7 +294,7 @@ impl LanguageServer for Backend {
         let uri = params.text_document_position_params.text_document.uri;
         let package = uri_to_packagefqn(&uri);
         let parsing = {
-            let mut state = self.state.lock().await;
+            let state = self.state.lock().await;
             state.vir.parsing(&package.to_string())
         };
 
@@ -337,7 +336,7 @@ impl LanguageServer for Backend {
 
     async fn workspace_diagnostic(
         &self,
-        params: WorkspaceDiagnosticParams,
+        _params: WorkspaceDiagnosticParams,
     ) -> Result<WorkspaceDiagnosticReportResult> {
         self.check_all_documents().await;
         Ok(WorkspaceDiagnosticReportResult::Report(WorkspaceDiagnosticReport { items: vec![] }))
@@ -421,6 +420,7 @@ impl LanguageServer for Backend {
 }
 
 impl Backend {
+    #[allow(dead_code)]
     async fn source(&self, uri: &Url) -> Option<Source> {
         let state = self.state.lock().await;
         let package = uri_to_packagefqn(uri);
@@ -445,7 +445,7 @@ impl Backend {
 
         let mut diagnostics = Vec::new();
 
-        let mut state = self.state.lock().await;
+        let state = self.state.lock().await;
         let diags = match state.vir.check() {
             Ok(diags) => diags,
             Err(diags) => diags,
@@ -495,8 +495,8 @@ impl Backend {
         let uri = params.text_document_position_params.text_document.uri;
         let package = uri_to_packagefqn(&uri);
 
-        let (parsing, hover_mode) = {
-            let mut state = self.state.lock().await;
+        let (parsing, _hover_mode) = {
+            let state = self.state.lock().await;
             (state.vir.parsing(&package.to_string()), state.hover_mode)
         };
 
@@ -523,7 +523,7 @@ impl Backend {
         let uri = params.text_document_position_params.text_document.uri;
         let package = uri_to_packagefqn(&uri);
 
-        let mut state = self.state.lock().await;
+        let state = self.state.lock().await;
         let db = state.vir.db();
 
         let parsing = db.get_parsing(package.clone());
@@ -532,7 +532,7 @@ impl Backend {
             let node = parsing.ast_node(node_id);
 
             let typof = if let Some(exprroot) = get_expr_root(&self.client, db, &parsing, node.clone()).await {
-                let typing = db.get_typing(ExprRoot { location: exprroot.location() });
+                let _typing = db.get_typing(ExprRoot { location: exprroot.location() });
                 db.get_typeof(node.location()).ok() // TODO is this .ok() OK?
             } else {
                 None
@@ -627,6 +627,7 @@ fn test_escape_markdown() {
     assert_eq!(escape_markdown("Word[8]"), "Word\\[8\\]");
 }
 
+#[allow(dead_code)]
 fn escape_markdown(text: impl AsRef<str>) -> String {
     let mut escaped = String::with_capacity(text.as_ref().len());
 

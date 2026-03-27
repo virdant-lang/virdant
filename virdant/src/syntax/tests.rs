@@ -1,11 +1,8 @@
 use paste::paste;
-use bstr::BString;
-
 use std::sync::LazyLock;
 use std::time::Instant;
 use std::io::Read;
 
-use crate::fqn::PackageFqn;
 use crate::source::Source;
 use crate::syntax::parsing::parse;
 

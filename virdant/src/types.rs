@@ -1,5 +1,4 @@
 pub mod context;
-pub mod inference;
 pub mod typedef;
 pub mod typ;
 pub mod typing;

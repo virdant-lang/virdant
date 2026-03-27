@@ -41,7 +41,7 @@ fn test_parse() {
 }
 ";
     let source = Source::new(crate::fqn::PackageFqn::new("top".into()), text.into());
-    let parsing = parse(&source);
+    let _ = parse(&source);
 }
 
 pub fn parse(source: &Source) -> Parsing {

@@ -17,13 +17,9 @@ fn test_virir() {
     assert_eq!(virir.packages[0].name, "top");
     assert_eq!(virir.packages[1].name, "passthrough");
     assert_eq!(virir.packages[2].name, "adder");
-    let Item::ModDef(top) = &virir.packages[0].items[0] else {
-        panic!("expected first item to be Top");
-    };
+    let Item::ModDef(top) = &virir.packages[0].items[0];
     assert!(top.is_export);
-    let Item::ModDef(passthrough) = &virir.packages[1].items[0] else {
-        panic!("expected passthrough package to contain Passthrough");
-    };
+    let Item::ModDef(passthrough) = &virir.packages[1].items[0];
     assert!(!passthrough.is_export);
     let Expr::If(expr_if) = passthrough.drivers[0].expr.as_ref() else {
         panic!("expected Passthrough driver expression to parse as If");
@@ -50,9 +46,7 @@ fn test_virir() {
         }"#,
     )
     .unwrap();
-    let Item::ModDef(storage) = &storage_virir.packages[0].items[0] else {
-        panic!("expected first storage item to be a module");
-    };
+    let Item::ModDef(storage) = &storage_virir.packages[0].items[0];
     let wire = &storage.wires[0];
     assert_eq!(wire.name, "ready");
     assert_eq!(wire.typ, TypeId::new(0));
