@@ -50,7 +50,8 @@ impl<'d> Transpiler<'d> {
     }
 
     fn run(&mut self) -> VirIr {
-        for typ in self.db.get_type_monomorphizations() {
+        let type_index = self.db.get_type_index();
+        for typ in type_index.typs() {
             self.intern_type(&typ);
         }
 

@@ -104,6 +104,7 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
         expected_typ: expected_typ.clone().unwrap_or_else(|| builtin_bit_type()),
         symboltable: symboltable.clone(),
         use_locations: HashMap::new(),
+        type_index: builder.get_type_index(),
     };
 
     // if there is no expected type, you can't type check the expression.

@@ -13,6 +13,7 @@ use crate::analysis::location::Location;
 use crate::analysis::package::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::symbols::{SymbolId, SymbolTable};
+use crate::queries::types::TypeIndex;
 use crate::types::{ExprRoot, Type, TypeDef, Typing, TypingContext};
 use crate::diagnostics::Diagnostic;
 use crate::fqn::PackageFqn;
@@ -34,6 +35,7 @@ queries! {
     SymbolAst(symbol_id: SymbolId) -> AstNodeId;
     CheckDrivers(symbol_id: SymbolId) -> Vec<Diagnostic>;
     TypeDefs() -> Vec<TypeDef>;
+    TypeAt(location: Location) -> Result<Type, Vec<Diagnostic>>;
     ExprRoots() -> Vec<ExprRoot>;
     AllExprs() -> Vec<Location>;
     ExpectedType(exprroot: ExprRoot) -> Option<Type>;
@@ -44,7 +46,7 @@ queries! {
     Typeof(location: Location) -> Result<Type, Vec<Diagnostic>>;
     TypeofAll() -> HashMap<Location, Option<Type>>;
     Check() -> Vec<Diagnostic>;
-    TypeMonomorphizations() -> Vec<Type>;
+    TypeIndex() -> Arc<TypeIndex>;
 }
 
 
@@ -73,6 +75,7 @@ impl Query {
             crate::queries::find_exprroots : ExprRoots();
             crate::queries::build_all_exprs : AllExprs();
             crate::queries::build_expected_type : ExpectedType(location);
+            crate::types::typing::build_type_at : TypeAt(location);
             crate::queries::build_typedefs : TypeDefs();
             crate::queries::build_typing_context : TypingContext(symbol_id);
             crate::queries::build_typing : Typing(expr_root);
@@ -80,7 +83,7 @@ impl Query {
             crate::queries::typecheck::build_exprroot_for : ExprRootFor(location);
             crate::queries::build_typeof : Typeof(location);
             crate::queries::build_typeof_all : TypeofAll();
-            crate::queries::build_type_monomorphizations : TypeMonomorphizations();
+            crate::queries::build_type_index : TypeIndex();
             crate::queries::build_location_region : LocationRegion(location);
             crate::queries::check : Check();
 
@@ -102,6 +105,7 @@ db_getter!(check_drivers : CheckDrivers(symbol_id: SymbolId) -> Vec<Diagnostic>)
 db_getter!(get_typing_context : TypingContext(item: SymbolId) -> TypingContext);
 db_getter!(get_typedefs : TypeDefs() -> Vec<TypeDef>);
 db_getter!(get_exprroots : ExprRoots() -> Vec<ExprRoot>);
+db_getter!(get_type_at : TypeAt(location: Location) -> Result<Type, Vec<Diagnostic>>);
 db_getter!(get_all_exprs : AllExprs() -> Vec<Location>);
 db_getter!(get_expected_type : ExpectedType(exprroot: ExprRoot) -> Option<Type>);
 db_getter!(get_exprroot_for : ExprRootFor(location: Location) -> ExprRoot);
@@ -109,6 +113,6 @@ db_getter!(get_typing : Typing(expr_root: ExprRoot) -> Arc<Typing>);
 db_getter!(typecheck : TypeCheck(symbol_id: SymbolId) -> Vec<Diagnostic>);
 db_getter!(get_typeof : Typeof(location: Location) -> Result<Type, Vec<Diagnostic>>);
 db_getter!(get_typeof_all : TypeofAll() -> HashMap<Location, Option<Type>>);
-db_getter!(get_type_monomorphizations : TypeMonomorphizations() -> Vec<Type>);
+db_getter!(get_type_index : TypeIndex() -> Arc<TypeIndex>);
 db_getter!(get_location_region : LocationRegion(location: Location) -> Region);
 db_getter!(check : Check() -> Vec<Diagnostic>);
