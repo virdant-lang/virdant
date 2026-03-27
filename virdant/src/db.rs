@@ -66,7 +66,7 @@ impl Query {
             crate::queries::build_parsing : Parsing(package);
             crate::queries::build_syntax_errors : SyntaxErrors();
             crate::queries::build_package_analysis : PackageAnalysis(analysis);
-            crate::queries::build_component_analysis : ComponentAnalysis(symbol_id);
+            crate::analysis::component::build_component_analysis : ComponentAnalysis(symbol_id);
             crate::analysis::symbols::build_symboltable : SymbolTable();
             crate::analysis::symbols::build_symbol_ast : SymbolAst(symbol_id);
             crate::queries::check_drivers : CheckDrivers(symbol_id);

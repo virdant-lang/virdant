@@ -9,7 +9,7 @@ use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
 use crate::analysis::location::Location;
 use crate::fqn::PackageFqn;
-use crate::queries::component::node_to_typ;
+use crate::analysis::component::node_to_typ;
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::{self, AstNodePayload};
 
