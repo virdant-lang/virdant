@@ -7,9 +7,9 @@ use crate::analysis::Location;
 use crate::db::Db;
 use crate::diagnostics::Diagnostic;
 use crate::diagnostics::DiagnosticLevel;
-use crate::source::Region;
+use crate::common::source::Region;
 use crate::syntax::parsing::Parsing;
-use crate::source::Source;
+use crate::common::source::Source;
 use crate::fqn::PackageFqn;
 
 pub struct Vir {

@@ -2,6 +2,7 @@ pub mod math;
 pub mod graph;
 pub mod union;
 pub mod json;
+pub mod source;
 
 pub type Width = u16;
 

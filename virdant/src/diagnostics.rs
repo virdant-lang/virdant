@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::common::json::ToJson;
 use crate::fqn::PackageFqn;
-use crate::source::Region;
+use crate::common::source::Region;
 
 pub type Type = BString;
 

@@ -2,7 +2,7 @@ use bstr::BStr;
 use logos::Logos;
 use logos::SpannedIter;
 
-use crate::source::SourceOffset;
+use crate::common::source::SourceOffset;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub struct TokenError;

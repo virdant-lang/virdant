@@ -8,7 +8,7 @@ use std::ffi::{CString, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use virdant::fqn::PackageFqn;
-use virdant::source::Source;
+use virdant::common::source::Source;
 use virdant::syntax::parsing::parse;
 use virdant::syntax::token::tokenize;
 use virdant::syntax::token::Token;

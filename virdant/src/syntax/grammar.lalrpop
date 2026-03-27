@@ -5,7 +5,7 @@ use crate::syntax::parsing::{InternedString, Parsing};
 use crate::syntax::token::{Token, TokenError};
 
 
-use crate::source::SourceOffset;
+use crate::common::source::SourceOffset;
 use crate::common::{DriverType, ComponentKind, BinOp, ChannelDir, SocketRole, UnOp};
 
 grammar<'a>(parser: &mut Parsing);

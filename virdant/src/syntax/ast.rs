@@ -7,7 +7,7 @@ use crate::analysis::Location;
 use crate::common::{ComponentKind, DriverType};
 use crate::common::json::ToJson;
 use crate::fqn::PackageFqn;
-use crate::source::{Region, Span};
+use crate::common::source::{Region, Span};
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::{InternedString, Parsing};
 //use crate::stringtable::{InternedString, StringTable};

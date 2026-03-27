@@ -16,8 +16,8 @@ use bstr::BString;
 
 use crate::common::{PortDir, UnOp as CommonUnOp};
 use crate::fqn::PackageFqn;
-use crate::source::{LineCol, Span};
-use crate::source::Region;
+use crate::common::source::{LineCol, Span};
+use crate::common::source::Region;
 
 use crate::virir::expr::{
     BinOp as VirIrBinOp, Expr, If as VirIrIf, Index as VirIrIndex,

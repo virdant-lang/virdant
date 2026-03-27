@@ -17,7 +17,7 @@ use crate::types::{ExprRoot, Type, TypeDef, Typing, TypingContext};
 use crate::common::json::ToJson;
 use crate::diagnostics::Diagnostic;
 use crate::fqn::PackageFqn;
-use crate::source::{Region, Source};
+use crate::common::source::{Region, Source};
 use crate::syntax::ast::AstNodeId;
 use crate::syntax::parsing::Parsing;
 

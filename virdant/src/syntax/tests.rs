@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use std::time::Instant;
 use std::io::Read;
 
-use crate::source::Source;
+use crate::common::source::Source;
 use crate::syntax::parsing::parse;
 
 const CHECK: char = '✅';

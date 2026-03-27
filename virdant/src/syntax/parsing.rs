@@ -2,7 +2,7 @@ use bstr::{BStr, BString};
 
 use crate::diagnostics::{self, Diagnostic};
 use crate::fqn::PackageFqn;
-use crate::source::{LineCol, Region, Source, SourceOffset, Span};
+use crate::common::source::{LineCol, Region, Source, SourceOffset, Span};
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::grammar::PackageParser;

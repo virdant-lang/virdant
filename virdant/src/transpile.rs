@@ -9,7 +9,7 @@ use crate::common::{BinOp as CommonBinOp, ComponentKind, PortDir, UnOp as Common
 use crate::db::Db;
 use crate::diagnostics::DiagnosticLevel;
 use crate::fqn::PackageFqn;
-use crate::source::Region;
+use crate::common::source::Region;
 use crate::syntax::ast::AstNode;
 use crate::syntax::payload::AstNodePayload;
 use crate::virir::expr::{

@@ -14,7 +14,7 @@ use virdant::Vir;
 use virdant::types::ExprRoot;
 use virdant::db::Db;
 use virdant::fqn::PackageFqn;
-use virdant::source::{LineCol, Source, Span};
+use virdant::common::source::{LineCol, Source, Span};
 use virdant::syntax::ast::{AstNode, AstNodeId};
 use virdant::syntax::parsing::Parsing;
 

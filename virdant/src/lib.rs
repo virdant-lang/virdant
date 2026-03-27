@@ -1,6 +1,5 @@
 pub mod vir;
 pub mod common;
-pub mod source;
 pub mod fqn;
 pub mod syntax;
 pub mod db;

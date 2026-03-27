@@ -8,7 +8,7 @@ use crate::common::json::ToJson;
 use crate::db::Builder;
 use crate::diagnostics;
 use crate::fqn::PackageFqn;
-use crate::source::Region;
+use crate::common::source::Region;
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;

@@ -1,6 +1,6 @@
 use crate::common;
 use crate::virir::TypeId;
-use crate::source::Region;
+use crate::common::source::Region;
 use std::sync::Arc;
 
 #[derive(Debug)]
