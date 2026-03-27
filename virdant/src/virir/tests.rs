@@ -1,7 +1,7 @@
 use super::*;
 use crate::common::BinOp;
-use crate::conversion::convert_virir_to_verilog;
-use crate::transpile::transpile;
+use crate::verilog::conversion::convert_virir_to_verilog;
+use crate::virir::transpile::transpile;
 use crate::Vir;
 
 const TEST_VIRIR: &str = include_str!("../../../virir/top.virir");

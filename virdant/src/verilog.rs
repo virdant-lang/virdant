@@ -1,5 +1,6 @@
 pub mod expr;
 mod stmt;
+pub mod conversion;
 mod macros;
 
 #[cfg(test)]

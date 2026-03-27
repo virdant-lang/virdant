@@ -1,5 +1,5 @@
 use clap::CommandFactory;
-use virdant::conversion::convert_virir_to_verilog;
+use virdant::verilog::conversion::convert_virir_to_verilog;
 use clap::{Parser, Subcommand};
 
 use bstr::{BStr, BString, ByteSlice};
@@ -12,7 +12,7 @@ use virdant::common::source::Source;
 use virdant::syntax::parsing::parse;
 use virdant::syntax::token::tokenize;
 use virdant::syntax::token::Token;
-use virdant::transpile::transpile;
+use virdant::virir::transpile::transpile;
 
 /// The Virdant Hardware Language
 #[derive(Parser, Debug)]

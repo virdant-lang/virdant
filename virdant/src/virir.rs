@@ -1,5 +1,6 @@
 pub mod expr;
 pub mod typ;
+pub mod transpile;
 
 mod parse;
 

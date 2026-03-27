@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-use virdant::conversion::convert_virir_to_verilog;
+use virdant::verilog::conversion::convert_virir_to_verilog;
 use virdant::virir;
 
 type MainResult<T> = Result<T, Box<dyn std::error::Error>>;
