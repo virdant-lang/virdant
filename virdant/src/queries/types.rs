@@ -49,6 +49,10 @@ impl TypeIndex {
             .get(&location)
             .map(|type_id| &self.typs[*type_id])
     }
+
+    pub fn diagnostics(&self) -> Vec<Diagnostic> {
+        self.diagnostics.clone()
+    }
 }
 
 pub(crate) fn build_type_index(builder: &mut Builder) -> Arc<TypeIndex> {

@@ -398,15 +398,7 @@ impl Typing {
                 let path = parsing.string(node.path().unwrap());
                 let typ = self.context.get(path.to_owned()); // TODO need to walk backwards to get it.
                 self.use_component(path, node.location());
-                if typ.is_none() {
-                    self.diagnostics.push(diagnostics::UnresolvedComponent {
-                        region: node.region(),
-                        path: path.into(),
-                    }.into());
-                    Err(())
-                } else {
-                    Ok(typ)
-                }
+                Ok(typ)
             }
             AstNodePayload::ExprBitLit(_expr_bit_lit) => {
                 Ok(Some(Type::Bit))

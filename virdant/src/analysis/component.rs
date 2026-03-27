@@ -112,26 +112,26 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
             AstNodePayload::Component(component) => {
                 let path = parsing.string(component.name).to_owned();
                 let typ_node = stmt.typ().unwrap();
-                match builder.get_type_at(typ_node.location()) {
-                    Ok(typ) => {
-                        let flow = match component.kind {
-                            ComponentKind::Incoming => Flow::Source,
-                            ComponentKind::Outgoing => Flow::Sink,
-                            ComponentKind::Reg => Flow::Duplex,
-                            ComponentKind::Wire => Flow::Duplex,
-                        };
-                        let component = Component {
-                            path: path.clone(),
-                            location: stmt.location(),
-                            typ: Some(typ),
-                            flow,
-                        };
-                        if !components_seen.contains(&path) {
-                            components_seen.insert(path.clone());
-                            component_analysis.components.push((path.clone(), component));
-                        }
-                    }
-                    Err(diags) => component_analysis.diagnostics.extend(diags),
+                let typ = match builder.get_type_at(typ_node.location()) {
+                    Ok(typ) => Some(typ),
+                    Err(_) => None,
+                };
+
+                let flow = match component.kind {
+                    ComponentKind::Incoming => Flow::Source,
+                    ComponentKind::Outgoing => Flow::Sink,
+                    ComponentKind::Reg => Flow::Duplex,
+                    ComponentKind::Wire => Flow::Duplex,
+                };
+                let component = Component {
+                    path: path.clone(),
+                    location: stmt.location(),
+                    typ,
+                    flow,
+                };
+                if !components_seen.contains(&path) {
+                    components_seen.insert(path.clone());
+                    component_analysis.components.push((path.clone(), component));
                 }
             }
             AstNodePayload::Module(module) => {
@@ -164,26 +164,25 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes()
                     );
                     let typ_node = submodule_stmt.typ().unwrap();
-                    match builder.get_type_at(typ_node.location()) {
-                        Ok(typ) => {
-                            let flow = match component.kind {
-                                ComponentKind::Incoming => Flow::Sink,
-                                ComponentKind::Outgoing => Flow::Source,
-                                ComponentKind::Reg => Flow::Duplex,
-                                ComponentKind::Wire => Flow::Duplex,
-                            };
-                            let component = Component {
-                                path: path.clone(),
-                                location: stmt.location(),
-                                typ: Some(typ),
-                                flow,
-                            };
-                            if !components_seen.contains(&path) {
-                                components_seen.insert(path.clone());
-                                component_analysis.components.push((path, component))
-                            }
-                        }
-                        Err(diags) => component_analysis.diagnostics.extend(diags),
+                    let typ = match builder.get_type_at(typ_node.location()) {
+                        Ok(typ) => Some(typ),
+                        Err(_) => None,
+                    };
+                    let flow = match component.kind {
+                        ComponentKind::Incoming => Flow::Sink,
+                        ComponentKind::Outgoing => Flow::Source,
+                        ComponentKind::Reg => Flow::Duplex,
+                        ComponentKind::Wire => Flow::Duplex,
+                    };
+                    let component = Component {
+                        path: path.clone(),
+                        location: stmt.location(),
+                        typ,
+                        flow,
+                    };
+                    if !components_seen.contains(&path) {
+                        components_seen.insert(path.clone());
+                        component_analysis.components.push((path, component))
                     }
                 }
             }

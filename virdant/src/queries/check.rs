@@ -9,6 +9,9 @@ pub(crate) fn check(builder: &mut Builder) -> Vec<Diagnostic> {
     let symboltable = builder.get_symboltable();
     diagnostics.extend(symboltable.diagnostics.clone());
 
+    let type_index = builder.get_type_index();
+    diagnostics.extend(type_index.diagnostics());
+
     for item in symboltable.items() {
         diagnostics.extend(builder.check_drivers(item.id()));
     }
