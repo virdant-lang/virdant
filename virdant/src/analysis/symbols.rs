@@ -4,7 +4,6 @@ use indexmap::IndexMap;
 use std::sync::Arc;
 
 use crate::analysis::PackageAnalysis;
-use crate::common::json::ToJson;
 use crate::db::Builder;
 use crate::diagnostics;
 use crate::fqn::PackageFqn;
@@ -133,12 +132,6 @@ fn test_try_split_qualification() {
     assert_eq!(try_split_qualification("Bar".into()), None);
 }
 
-impl ToJson for SymbolTable {
-    fn to_json(&self) -> json::JsonValue {
-        format!("{self:?}").into()
-    }
-}
-
 impl Symbol {
     pub fn id(&self) -> SymbolId {
         self.id
@@ -184,12 +177,6 @@ impl SymbolKind {
             SymbolKind::BuiltinDef => true,
             _ => false,
         }
-    }
-}
-
-impl ToJson for SymbolId {
-    fn to_json(&self) -> json::JsonValue {
-        format!("{self:?}").into()
     }
 }
 

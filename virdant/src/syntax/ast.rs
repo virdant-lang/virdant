@@ -5,7 +5,6 @@ use bstr::{BStr, ByteSlice};
 
 use crate::analysis::Location;
 use crate::common::{ComponentKind, DriverType};
-use crate::common::json::ToJson;
 use crate::fqn::PackageFqn;
 use crate::common::source::{Region, Span};
 use crate::syntax::payload::AstNodePayload;
@@ -356,12 +355,6 @@ impl<'p> AstNode<'p> {
 impl AstNodeId {
     pub fn index(&self) -> usize {
         self.0 as usize
-    }
-}
-
-impl ToJson for AstNodeId {
-    fn to_json(&self) -> json::JsonValue {
-        format!("{self:?}").into()
     }
 }
 

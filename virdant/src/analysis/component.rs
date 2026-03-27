@@ -4,7 +4,6 @@ use crate::analysis::Location;
 use crate::analysis::symbols::SymbolId;
 use crate::types::Type;
 use crate::common::Flow;
-use crate::common::json::ToJson;
 use crate::diagnostics::Diagnostic;
 
 #[derive(Debug)]
@@ -78,8 +77,3 @@ impl ComponentAnalysis {
 }
 
 
-impl ToJson for ComponentAnalysis {
-    fn to_json(&self) -> json::JsonValue {
-        format!("{self:?}").into()
-    }
-}

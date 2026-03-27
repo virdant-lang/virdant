@@ -1,19 +1,11 @@
 use crate::analysis::symbols::SymbolId;
 use crate::common::Width;
-use crate::common::json::ToJson;
-
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Bit,
     Clock,
     Word(Width),
     Usual(SymbolId), // TODO rename this
-}
-
-impl ToJson for Type {
-    fn to_json(&self) -> json::JsonValue {
-        self.to_string().into()
-    }
 }
 
 impl std::fmt::Display for Type {

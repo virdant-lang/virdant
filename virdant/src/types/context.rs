@@ -1,7 +1,5 @@
 use bstr::BString;
 
-use crate::common::json::ToJson;
-
 use super::typ::Type;
 
 #[derive(Debug, Clone)]
@@ -21,12 +19,6 @@ impl TypingContext {
             }
         }
         None
-    }
-}
-
-impl ToJson for TypingContext {
-    fn to_json(&self) -> json::JsonValue {
-        self.context.to_json()
     }
 }
 

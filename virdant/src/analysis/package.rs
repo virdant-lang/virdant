@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::common::ComponentKind;
-use crate::common::json::ToJson;
 use crate::diagnostics;
 use crate::diagnostics::Diagnostic;
 use crate::fqn::PackageFqn;
@@ -170,12 +169,3 @@ impl PackageAnalysis {
     }
 }
 
-impl ToJson for PackageAnalysis {
-    fn to_json(&self) -> json::JsonValue {
-        json::object!(
-            "imports": self.imports.to_json(),
-            "items": self.items.to_json(),
-            "diagnostics": self.diagnostics.to_json(),
-        )
-    }
-}

@@ -1,7 +1,6 @@
 use bstr::{BStr, BString};
 use std::sync::Arc;
 
-use crate::common::json::ToJson;
 use crate::fqn::PackageFqn;
 use crate::common::source::Region;
 
@@ -547,22 +546,6 @@ impl IsDiagnostic for Soften {
 
     fn level(&self) -> DiagnosticLevel {
         self.level
-    }
-}
-
-impl ToJson for Diagnostic {
-    fn to_json(&self) -> json::JsonValue {
-        json::object!(
-            "message": self.message().to_json(),
-            "region": self.region().to_json(),
-            "level": self.level().to_json(),
-        )
-    }
-}
-
-impl ToJson for DiagnosticLevel {
-    fn to_json(&self) -> json::JsonValue {
-        format!("{self:?}").into()
     }
 }
 

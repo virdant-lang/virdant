@@ -1,4 +1,3 @@
-use crate::common::json::ToJson;
 use crate::fqn::PackageFqn;
 use crate::syntax::ast::AstNodeId;
 
@@ -16,12 +15,6 @@ impl Location {
 
     pub fn ast_node_id(&self) -> AstNodeId {
         self.1.clone()
-    }
-}
-
-impl ToJson for Location {
-    fn to_json(&self) -> json::JsonValue {
-        json::array!(self.package().to_json(), self.ast_node_id().to_json())
     }
 }
 

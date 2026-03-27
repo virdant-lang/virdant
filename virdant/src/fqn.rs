@@ -1,8 +1,6 @@
 use bstr::{BStr, BString, ByteSlice};
 use internment::ArcIntern;
 
-use crate::common::json::ToJson;
-
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct PackageFqn(ArcIntern<BString>);
 
@@ -18,12 +16,6 @@ impl From<&str> for PackageFqn {
 impl From<String> for PackageFqn {
     fn from(value: String) -> Self {
         PackageFqn::new(value.into())
-    }
-}
-
-impl ToJson for PackageFqn {
-    fn to_json(&self) -> json::JsonValue {
-        self.to_string().into()
     }
 }
 

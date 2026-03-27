@@ -5,7 +5,6 @@ use hashbrown::{HashMap, HashSet};
 
 use crate::analysis::symbols::{Symbol, SymbolId, SymbolTable};
 use crate::common::{BinOp as CommonBinOp, Flow, UnOp as CommonUnOp, Width};
-use crate::common::json::ToJson;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
 use crate::analysis::location::Location;
@@ -33,12 +32,6 @@ impl ExprRoot {
 
     pub fn package(&self) -> PackageFqn {
         self.location.package()
-    }
-}
-
-impl ToJson for ExprRoot {
-    fn to_json(&self) -> json::JsonValue {
-        self.location.to_json()
     }
 }
 
@@ -628,12 +621,6 @@ pub(super) fn min_word_width(value: u64) -> u64 {
         0
     } else {
         u64::BITS as u64 - u64::leading_zeros(value) as u64
-    }
-}
-
-impl ToJson for Typing {
-    fn to_json(&self) -> json::JsonValue {
-        format!("{self:?}").into()
     }
 }
 

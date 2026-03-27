@@ -14,7 +14,6 @@ use crate::analysis::package::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::symbols::{SymbolId, SymbolTable};
 use crate::types::{ExprRoot, Type, TypeDef, Typing, TypingContext};
-use crate::common::json::ToJson;
 use crate::diagnostics::Diagnostic;
 use crate::fqn::PackageFqn;
 use crate::common::source::{Region, Source};
