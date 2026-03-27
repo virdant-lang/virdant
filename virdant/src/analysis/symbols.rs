@@ -2,17 +2,19 @@ use std::sync::Arc;
 
 use hashbrown::{HashMap, HashSet};
 
+use crate::analysis::PackageAnalysis;
 use crate::db::Builder;
 use crate::diagnostics;
 use crate::source::Region;
-use crate::syntax::ast::AstNodeId;
+use crate::syntax::ast::{AstNode, AstNodeId};
+use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 use bstr::{BStr, BString};
 use indexmap::IndexMap;
 
-use crate::{analysis::Location, diagnostics::Diagnostic};
-use crate::fqn::PackageFqn;
 use crate::common::json::ToJson;
+use crate::fqn::PackageFqn;
+use crate::{analysis::Location, diagnostics::Diagnostic};
 
 #[derive(Debug)]
 pub struct SymbolTable {
@@ -65,14 +67,16 @@ impl SymbolTable {
     }
 
     pub fn items(&self) -> Vec<Symbol> {
-        self.symbols.values()
+        self.symbols
+            .values()
             .cloned()
             .filter(|val| val.kind.is_item())
             .collect()
     }
 
     pub fn typedefs(&self) -> Vec<Symbol> {
-        self.symbols.values()
+        self.symbols
+            .values()
             .cloned()
             .filter(|val| val.kind.is_typedef())
             .collect()
@@ -124,7 +128,10 @@ fn try_split_qualification(item_fqn: &BStr) -> Option<(BString, BString)> {
 #[cfg(test)]
 #[test]
 fn test_try_split_qualification() {
-    assert_eq!(try_split_qualification("foo::Bar".into()), Some(("foo".into(), "Bar".into())));
+    assert_eq!(
+        try_split_qualification("foo::Bar".into()),
+        Some(("foo".into(), "Bar".into()))
+    );
     assert_eq!(try_split_qualification("Bar".into()), None);
 }
 
@@ -167,7 +174,7 @@ impl SymbolKind {
             SymbolKind::BuiltinDef => true,
             SymbolKind::FnDef => true,
             SymbolKind::SocketDef => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -177,7 +184,7 @@ impl SymbolKind {
             SymbolKind::StructDef => true,
             SymbolKind::EnumDef => true,
             SymbolKind::BuiltinDef => true,
-            _ => false
+            _ => false,
         }
     }
 }
@@ -196,104 +203,176 @@ impl std::fmt::Debug for SymbolId {
 
 pub(crate) fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
     let packages = builder.get_packages();
-    let mut diagnostics_vec = vec![];
+    let mut diagnostics = vec![];
     let mut symbols = vec![];
     let mut builtin_names = vec![];
 
     for package in packages {
-        let analysis = builder.get_package_analysis(package.clone());
-        diagnostics_vec.extend(analysis.diagnostics());
-        let parsing = builder.get_parsing(package.clone());
-
-        for item_name in analysis.item_names() {
-            let ast_node_id = analysis.item_ast_node_id(item_name.as_ref());
-            let node = parsing.ast_node(ast_node_id);
-            let location = Location::new(package.clone(), ast_node_id);
-            let fqn: BString = format!("{}::{}", package, item_name.clone()).into();
-            let kind = match node.payload() {
-                AstNodePayload::ModDef(_) => SymbolKind::ModDef,
-                AstNodePayload::StructDef(_) => SymbolKind::StructDef,
-                AstNodePayload::UnionDef(_) => SymbolKind::UnionDef,
-                AstNodePayload::EnumDef(_) => SymbolKind::EnumDef,
-                AstNodePayload::BuiltinDef(_) => SymbolKind::BuiltinDef,
-                AstNodePayload::FnDef(_) => SymbolKind::FnDef,
-                AstNodePayload::SocketDef(_) => SymbolKind::SocketDef,
-                _ => unreachable!(),
-            };
-
-            if kind == SymbolKind::BuiltinDef {
-                builtin_names.push(item_name.to_owned());
-            }
-
-            let id = SymbolId(symbols.len().try_into().unwrap());
-
-            symbols.push((
-                fqn.clone(),
-                Symbol {
-                    id,
-                    fqn: fqn.clone(),
-                    location,
-                    kind: kind.clone(),
-                },
-            ));
-
-            if kind == SymbolKind::ModDef {
-                let mut seen: HashMap<BString, Region> = HashMap::new();
-
-                for child in node.children() {
-                    let (component_name, component_ast_node_id, kind) = match child.payload() {
-                        AstNodePayload::Component(component) => {
-                            let name: BString = parsing.string(component.name).to_owned();
-                            (name, child.id(), SymbolKind::Component)
-                        }
-                        AstNodePayload::Module(module) => {
-                            let name: BString = parsing.string(module.name).to_owned();
-                            (name, child.id(), SymbolKind::Submodule)
-                        }
-                        AstNodePayload::Socket(socket) => {
-                            let name: BString = parsing.string(socket.name).to_owned();
-                            (name, child.id(), SymbolKind::Socket)
-                        }
-                        _ => continue,
-                    };
-
-                    let component_region = Region::new(package.clone(), child.span());
-
-                    if seen.contains_key(&component_name) {
-                        diagnostics_vec.push(diagnostics::DuplicateSlot {
-                            item: item_name.to_owned().into(),
-                            region: component_region,
-                            slot: component_name,
-                        }.into());
-                        continue;
-                    }
-
-                    seen.insert(component_name.clone(), component_region);
-
-                    let component_fqn: BString =
-                        format!("{}::{}::{}", package, item_name, component_name).into();
-                    let component_location = Location::new(package.clone(), component_ast_node_id);
-                    let component_id = SymbolId(symbols.len().try_into().unwrap());
-
-                    symbols.push((
-                        component_fqn.clone(),
-                        Symbol {
-                            id: component_id,
-                            fqn: component_fqn,
-                            location: component_location,
-                            kind,
-                        },
-                    ));
-                }
-            }
-        }
+        build_symboltable_package(
+            builder,
+            &mut symbols,
+            &mut diagnostics,
+            &mut builtin_names,
+            package,
+        );
     }
 
     Arc::new(SymbolTable {
         symbols: symbols.into_iter().collect(),
-        diagnostics: diagnostics_vec,
+        diagnostics,
         builtin_names: builtin_names.into_iter().collect(),
     })
+}
+
+fn build_symboltable_package(
+    builder: &mut Builder,
+    symbols: &mut Vec<(BString, Symbol)>,
+    diagnostics: &mut Vec<Diagnostic>,
+    builtin_names: &mut Vec<BString>,
+    package: PackageFqn,
+) {
+    let analysis = builder.get_package_analysis(package.clone());
+    let parsing = builder.get_parsing(package.clone());
+
+    diagnostics.extend(analysis.diagnostics());
+
+    for item_name in analysis.item_names() {
+        build_symboltable_item(
+            builder,
+            symbols,
+            diagnostics,
+            builtin_names,
+            package.clone(),
+            &analysis,
+            &parsing,
+            item_name,
+        );
+    }
+}
+
+fn build_symboltable_item(
+    builder: &mut Builder,
+    symbols: &mut Vec<(BString, Symbol)>,
+    diagnostics: &mut Vec<Diagnostic>,
+    builtin_names: &mut Vec<BString>,
+    package: PackageFqn,
+    analysis: &PackageAnalysis,
+    parsing: &Parsing,
+    item_name: &BString,
+
+) {
+    let ast_node_id = analysis.item_ast_node_id(item_name.as_ref());
+    let node = parsing.ast_node(ast_node_id);
+    let location = Location::new(package.clone(), ast_node_id);
+    let fqn: BString = format!("{}::{}", package, item_name.clone()).into();
+    let kind = node_to_symbol_kind(&node);
+
+    if kind == SymbolKind::BuiltinDef {
+        builtin_names.push(item_name.to_owned());
+    }
+
+    let id = SymbolId(symbols.len().try_into().unwrap());
+
+    symbols.push((
+        fqn.clone(),
+        Symbol {
+            id,
+            fqn: fqn.clone(),
+            location,
+            kind: kind.clone(),
+        },
+    ));
+
+    if kind == SymbolKind::ModDef {
+        build_symboltable_moddef_slot(
+            builder,
+            symbols,
+            diagnostics,
+            builtin_names,
+            package,
+            analysis,
+            parsing,
+            item_name,
+            &node,
+        );
+    }
+}
+
+fn build_symboltable_moddef_slot(
+    builder: &mut Builder,
+    symbols: &mut Vec<(BString, Symbol)>,
+    diagnostics: &mut Vec<Diagnostic>,
+    builtin_names: &mut Vec<BString>,
+    package: PackageFqn,
+    analysis: &PackageAnalysis,
+    parsing: &Parsing,
+    item_name: &BString,
+    node: &AstNode<'_>,
+
+) {
+    let mut seen: HashMap<BString, Region> = HashMap::new();
+
+    for child in node.children() {
+        let (component_name, component_ast_node_id, kind) = match child.payload() {
+            AstNodePayload::Component(component) => {
+                let name: BString = parsing.string(component.name).to_owned();
+                (name, child.id(), SymbolKind::Component)
+            }
+            AstNodePayload::Module(module) => {
+                let name: BString = parsing.string(module.name).to_owned();
+                (name, child.id(), SymbolKind::Submodule)
+            }
+            AstNodePayload::Socket(socket) => {
+                let name: BString = parsing.string(socket.name).to_owned();
+                (name, child.id(), SymbolKind::Socket)
+            }
+            _ => continue,
+        };
+
+        let component_region = Region::new(package.clone(), child.span());
+
+        if seen.contains_key(&component_name) {
+            diagnostics.push(
+                diagnostics::DuplicateSlot {
+                    item: item_name.to_owned().into(),
+                    region: component_region,
+                    slot: component_name,
+                }
+                .into(),
+            );
+            continue;
+        }
+
+        seen.insert(component_name.clone(), component_region);
+
+        let component_fqn: BString =
+            format!("{}::{}::{}", package, item_name, component_name).into();
+        let component_location = Location::new(package.clone(), component_ast_node_id);
+        let component_id = SymbolId(symbols.len().try_into().unwrap());
+
+        symbols.push((
+            component_fqn.clone(),
+            Symbol {
+                id: component_id,
+                fqn: component_fqn,
+                location: component_location,
+                kind,
+            },
+        ));
+    }
+}
+
+fn node_to_symbol_kind(node: &AstNode<'_>) -> SymbolKind {
+    match node.payload() {
+        AstNodePayload::ModDef(_) => SymbolKind::ModDef,
+        AstNodePayload::StructDef(_) => SymbolKind::StructDef,
+        AstNodePayload::UnionDef(_) => SymbolKind::UnionDef,
+        AstNodePayload::EnumDef(_) => SymbolKind::EnumDef,
+        AstNodePayload::BuiltinDef(_) => SymbolKind::BuiltinDef,
+        AstNodePayload::FnDef(_) => SymbolKind::FnDef,
+        AstNodePayload::SocketDef(_) => SymbolKind::SocketDef,
+        _ => unreachable!(),
+    }
 }
 
 pub(crate) fn build_symbol_ast(builder: &mut Builder, symbol_id: SymbolId) -> AstNodeId {
