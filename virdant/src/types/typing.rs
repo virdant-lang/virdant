@@ -598,6 +598,7 @@ impl Typing {
             if node.is_expr() && !self.typs.contains_key(&node.id()) {
                 self.flag_unknown(&node, "Missing annotation");
             }
+
             for child in node.children() {
                 queue.push(child.id());
             }

@@ -1,0 +1,20 @@
+enum type Opcode width 4 {
+    Add = 1;
+    Sub = 2;
+}
+
+export mod Top {
+//    incoming clock : Clock;
+
+    outgoing out : Bit;
+
+    wire opcode : Opcode;
+    opcode := #Add;
+
+    out := opcode == #Sub;
+
+//    on clock {
+//        assert(opcode == #Add);
+//        assert(opcode != #Sub);
+//    }
+}
