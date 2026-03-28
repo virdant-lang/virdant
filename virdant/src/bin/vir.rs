@@ -1,5 +1,4 @@
 use clap::CommandFactory;
-use virdant::verilog::conversion::convert_virir_to_verilog;
 use clap::{Parser, Subcommand};
 
 use bstr::{BStr, BString, ByteSlice};
@@ -16,7 +15,6 @@ use virdant::common::source::{Region, Source};
 use virdant::syntax::parsing::parse;
 use virdant::syntax::token::tokenize;
 use virdant::syntax::token::Token;
-use virdant::virir::transpile::transpile;
 
 /// The Virdant Hardware Language
 #[derive(Parser, Debug)]
@@ -51,14 +49,10 @@ enum Command {
     Db { path: PathBuf, outpath: Option<PathBuf> },
     /// Dump component analysis for a module definition
     Components { path: PathBuf, moddef_fqn: String },
-    /// Compile a Virdant package directory to VirIr
-    CompileToVirir { path: PathBuf, outfilepath: PathBuf },
     /// Compile Virdant package
     Compile { path: PathBuf },
     /// Build Virdant package
     Build { },
-    /// Transpile a Virdant project to VirIr
-    Virir { },
     /// Run Virdant package
     Run { path: Option<PathBuf>, #[arg(long)] vcd: Option<String> },
 
@@ -80,10 +74,8 @@ fn main() {
         Command::Typedefs { path } => dump_typedefs(path),
         Command::Exprroots { path } => dump_exprroots(path),
         Command::Typing { path } => dump_typing(path),
-        Command::CompileToVirir { path, outfilepath } => compile_to_virir(path, outfilepath),
         Command::Compile { path } => compile(path),
         Command::Build { } => build(&args),
-        Command::Virir { } => virir_project(&args),
         Command::Run { ref path, ref vcd } => run(&args, path, vcd),
         Command::External(args) => exec_external(args),
     }
@@ -316,15 +308,6 @@ fn dump_typing(path: PathBuf) {
     }
 }
 
-fn compile_to_virir(path: PathBuf, outfilepath: PathBuf) {
-    let db = db_from_dir(path);
-    dump_diagnostics(&db);
-
-    let virir = &transpile(&db);
-
-    std::fs::write(outfilepath, virir.to_text()).unwrap();
-}
-
 fn build(args: &Args) {
     let cwd = if let Some(cwd) = &args.cwd {
         std::fs::canonicalize(cwd).unwrap()
@@ -339,8 +322,7 @@ fn build(args: &Args) {
 
     let virdant_toml_text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
     let virtant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
-
-    let project = virtant_toml["project"]["name"].as_str().unwrap();
+    let _ = virtant_toml["project"]["name"].as_str().unwrap();
     let builddir = cwd.join("build");
 
     let source_dir = cwd.join("src");
@@ -351,51 +333,10 @@ fn build(args: &Args) {
         std::process::exit(1);
     }
 
-    let virir = &transpile(&db);
     std::fs::create_dir_all(&builddir).unwrap();
-    let virir_filepath = builddir.join(format!("{project}.virir"));
-
-    std::fs::write(virir_filepath, virir.to_text()).unwrap();
-
-    let virir = virdant::virir::parse(&virir.to_text()).unwrap();
-    let verilog = convert_virir_to_verilog(virir);
-
+    let verilog = virdant::verilog::conversion::convert_db_to_verilog(&db);
     verilog.write_in_dir(&builddir).unwrap();
     println!("Wrote Verilog to {}", builddir.to_string_lossy());
-}
-
-fn virir_project(args: &Args) {
-    let cwd = if let Some(cwd) = &args.cwd {
-        std::fs::canonicalize(cwd).unwrap()
-    } else {
-        std::env::current_dir().unwrap()
-    };
-
-    if !cwd.join("Virdant.toml").exists() {
-        eprintln!("No Virdant.toml found");
-        std::process::exit(1);
-    }
-
-    let virdant_toml_text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
-    let virdant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
-
-    let project = virdant_toml["project"]["name"].as_str().unwrap();
-    let builddir = cwd.join("build");
-
-    let source_dir = cwd.join("src");
-    let db = db_from_dir(source_dir);
-    dump_diagnostics(&db);
-    if check_db(&db).is_err() {
-        eprintln!("Virir failed");
-        std::process::exit(1);
-    }
-
-    let virir = transpile(&db);
-    std::fs::create_dir_all(&builddir).unwrap();
-    let virir_filepath = builddir.join(format!("{project}.virir"));
-
-    std::fs::write(&virir_filepath, virir.to_text()).unwrap();
-    println!("Wrote VirIr to {}", virir_filepath.to_string_lossy());
 }
 
 fn compile(path: PathBuf) {
@@ -405,15 +346,8 @@ fn compile(path: PathBuf) {
     let db = db_from_dir(path.clone());
     dump_diagnostics(&db);
 
-    let virir = &transpile(&db);
     std::fs::create_dir_all(&builddir).unwrap();
-    let virir_filepath = builddir.join(format!("{project}.virir"));
-
-    std::fs::write(virir_filepath, virir.to_text()).unwrap();
-
-    let virir = virdant::virir::parse(&virir.to_text()).unwrap();
-    let verilog = convert_virir_to_verilog(virir);
-
+    let verilog = virdant::verilog::conversion::convert_db_to_verilog(&db);
     verilog.write_in_dir(&builddir).unwrap();
     println!("Wrote Verilog to {}", builddir.to_string_lossy());
 }
@@ -444,15 +378,8 @@ fn run(args: &Args, _path: &Option<PathBuf>, vcd: &Option<String>) {
         std::process::exit(1);
     }
 
-    let virir = &transpile(&db);
     std::fs::create_dir_all(&builddir).unwrap();
-    let virir_filepath = builddir.join(format!("{project}.virir"));
-
-    std::fs::write(virir_filepath, virir.to_text()).unwrap();
-
-    let virir = virdant::virir::parse(&virir.to_text()).unwrap();
-    let verilog = convert_virir_to_verilog(virir);
-
+    let verilog = virdant::verilog::conversion::convert_db_to_verilog(&db);
     verilog.write_in_dir(&builddir).unwrap();
     println!("Wrote Verilog to {}", builddir.to_string_lossy());
 

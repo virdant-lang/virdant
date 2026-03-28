@@ -1,405 +1,504 @@
 use std::collections::HashMap;
 
-use crate::common;
-use crate::common::Radix;
-use crate::verilog;
-use crate::verilog::{exact_verilog_name, valid_verilog_name};
-use crate::virir;
+use bstr::ByteSlice;
 
-/// Converts a parsed VirIr program into its Verilog representation.
-pub fn convert_virir_to_verilog(virir: virir::VirIr) -> verilog::Verilog {
-    let emitted_module_names = collect_emitted_module_names(&virir);
-    let type_widths = collect_type_widths(&virir);
-    let module_ports = collect_module_ports(&virir, &type_widths);
+use crate::analysis::location::Location;
+use crate::common::{self, ComponentKind, Radix, Width};
+use crate::db::Db;
+use crate::diagnostics::DiagnosticLevel;
+use crate::fqn::PackageFqn;
+use crate::syntax::ast::{AstNode, AstNodeId};
+use crate::syntax::payload::AstNodePayload;
+use crate::types::Type;
+use crate::verilog::{self, exact_verilog_name, valid_verilog_name};
 
-    let mut verilog = verilog::Verilog {
-        files: virir
-            .packages
-            .into_iter()
-            .map(|package| convert_package(&emitted_module_names, &type_widths, &module_ports, package))
-            .collect(),
-    };
+/// Converts the Db (checked analysis database) directly into its Verilog representation.
+pub fn convert_db_to_verilog(db: &Db) -> verilog::Verilog {
+    let diagnostics = db.check();
+    if diagnostics.iter().any(|d| d.level() == DiagnosticLevel::Error) {
+        eprintln!("Compilation failed due to errors");
+        std::process::exit(1);
+    }
 
-    // Lift Concat/Repeat sub-expressions that iverilog cannot handle in-place
-    // (e.g. as bit-select subjects or nested inside a concatenation) into SSA
-    // temporary wires at the module level.
+    let mut converter = Converter::new(db);
+    let mut verilog = converter.run();
     verilog.normalize();
-
     verilog
 }
 
-/// Converts a single VirIr package into one emitted Verilog file.
-fn convert_package(
-    emitted_module_names: &HashMap<String, String>,
-    type_widths: &HashMap<virir::TypeId, virir::Width>,
-    module_ports: &HashMap<String, Vec<(String, virir::Width)>>,
-    package: virir::Package,
-) -> verilog::VerilogFile {
-    let file_stem = package.name;
-    let package_name = file_stem.clone();
-
-    verilog::VerilogFile {
-        name: format!("{file_stem}.sv"),
-        modules: package
-            .items
-            .into_iter()
-            .map(|item| convert_item(emitted_module_names, type_widths, module_ports, &package_name, item))
-            .collect(),
-    }
+struct Converter<'d> {
+    db: &'d Db,
+    /// "package::Module" -> list of (port_name, width)
+    module_ports: HashMap<String, Vec<(String, Width)>>,
+    /// "package::Module" -> emitted Verilog name
+    emitted_module_names: HashMap<String, String>,
 }
 
-/// Converts one VirIr item within a package into a Verilog module.
-fn convert_item(
-    emitted_module_names: &HashMap<String, String>,
-    type_widths: &HashMap<virir::TypeId, virir::Width>,
-    module_ports: &HashMap<String, Vec<(String, virir::Width)>>,
-    package_name: &str,
-    item: virir::Item,
-) -> verilog::Module {
-    match item {
-        virir::Item::ModDef(mod_def) => convert_mod_def(emitted_module_names, type_widths, module_ports, package_name, mod_def),
-    }
-}
-
-/// Converts a VirIr module definition into a Verilog module.
-fn convert_mod_def(
-    emitted_module_names: &HashMap<String, String>,
-    type_widths: &HashMap<virir::TypeId, virir::Width>,
-    module_ports: &HashMap<String, Vec<(String, virir::Width)>>,
-    package_name: &str,
-    mod_def: virir::ModDef,
-) -> verilog::Module {
-    let module_name = emitted_module_name(emitted_module_names, package_name, &mod_def);
-    let ports = mod_def.ports.iter().map(|port| convert_port(type_widths, port)).collect();
-
-    let sequential_regs: HashMap<_, _> = mod_def
-        .regs
-        .iter()
-        .filter_map(|reg| reg.clock.as_deref().map(|clock| (reg.name.as_str(), clock)))
-        .collect();
-
-    let reg_reset_elements: Vec<_> = mod_def
-        .regs
-        .iter()
-        .filter(|reg| reg.clock.is_some())
-        .map(|reg| convert_reg_reset(type_widths, reg))
-        .collect();
-
-    let mut hole_displays: Vec<verilog::Element> = vec![];
-    for driver in &mod_def.drivers {
-        let mut holes = vec![];
-        collect_holes_from_expr(&driver.expr, &mut holes);
-        for hole in holes {
-            let name = hole.name.as_deref().unwrap_or("?");
-            let message = format!("\"HOLE: {} at {}\"", name, hole.region_display);
-            hole_displays.push(verilog::Element::Initial(verilog::Initial {
-                stmts: vec![verilog::Stmt::Display(verilog::Display {
-                    message: message.into(),
-                    exprs: vec![],
-                })],
-            }));
+impl<'d> Converter<'d> {
+    fn new(db: &'d Db) -> Self {
+        Converter {
+            db,
+            module_ports: HashMap::new(),
+            emitted_module_names: HashMap::new(),
         }
     }
 
-    let mut combinational_drivers = vec![];
-    let mut sequential_driver_elements = vec![];
-
-    for driver in mod_def.drivers {
-        if let Some(clock) = sequential_regs.get(driver.path.as_str()) {
-            sequential_driver_elements.push(convert_sequential_reg_driver(type_widths, driver, clock));
-        } else {
-            combinational_drivers.push(driver);
+    fn run(&mut self) -> verilog::Verilog {
+        self.build_module_info();
+        let mut files = vec![];
+        for package in self.db.get_packages() {
+            if let Some(file) = self.convert_package(package) {
+                files.push(file);
+            }
         }
+        verilog::Verilog { files }
     }
 
-    let mut elements: Vec<verilog::Element> = mod_def
-        .wires
-        .into_iter()
-        .map(|wire| convert_wire(type_widths, wire))
-        .collect();
+    fn build_module_info(&mut self) {
+        let symboltable = self.db.get_symboltable();
+        for package in self.db.get_packages() {
+            let parsing = self.db.get_parsing(package.clone());
+            for item_ast in parsing.root().children() {
+                let AstNodePayload::ModDef(moddef) = item_ast.payload() else {
+                    continue;
+                };
+                let moddef_name = parsing.string(moddef.name).to_str_lossy().into_owned();
+                let module_path = qualified_module_name(&package.to_string(), &moddef_name);
+                let emitted_name = if moddef.is_export {
+                    exact_verilog_name(&moddef_name)
+                } else {
+                    valid_verilog_name(&module_path)
+                };
+                self.emitted_module_names.insert(module_path.clone(), emitted_name);
 
-    elements.extend(mod_def.regs.into_iter().map(|reg| convert_reg(type_widths, reg)));
-
-    const REG_RESET: bool = false;
-    if REG_RESET {
-        elements.extend(reg_reset_elements);
-    }
-
-    // For each submodule instance: emit one wire per port (using the dotted
-    // name, e.g. `\foo.inp `), then the instantiation element itself.
-    for instance in mod_def.instances {
-        let raw_name = &instance.name;
-        let ports_info = module_ports.get(&instance.module_path).cloned().unwrap_or_default();
-
-        for (port_name, width) in &ports_info {
-            elements.push(verilog::Element::Wire(verilog::Wire {
-                name: valid_verilog_name(&format!("{raw_name}.{port_name}")),
-                width: *width,
-                expr: None,
-            }));
-        }
-
-        elements.push(verilog::Element::Submodule(verilog::Submodule {
-            name: valid_verilog_name(raw_name),
-            submodule_name: emitted_module_name_for_path(emitted_module_names, &instance.module_path),
-            ports: ports_info.into_iter().map(|(name, _)| name).collect(),
-        }));
-    }
-
-    elements.extend(combinational_drivers.into_iter().map(|driver| convert_driver(type_widths, driver)));
-    elements.extend(sequential_driver_elements);
-
-    if let Some(on) = mod_def.on {
-        elements.push(convert_on(type_widths, on));
-    }
-
-    elements.extend(hole_displays);
-
-    verilog::Module { name: module_name, is_ext: mod_def.is_ext, ports, elements }
-}
-
-/// Collects the emitted Verilog name for each package-qualified VirIr module path.
-fn collect_emitted_module_names(virir: &virir::VirIr) -> HashMap<String, String> {
-    let mut emitted_module_names = HashMap::new();
-
-    for package in &virir.packages {
-        for item in &package.items {
-            match item {
-                virir::Item::ModDef(mod_def) => {
-                    let module_path = qualified_module_name(&package.name, &mod_def.name);
-                    let emitted_name = if mod_def.is_export {
-                        exact_verilog_name(&mod_def.name)
-                    } else {
-                        valid_verilog_name(&module_path)
+                let moddef_symbol = symboltable
+                    .resolve_item_in_package(parsing.string(moddef.name), package.clone())
+                    .unwrap();
+                let component_analysis = self.db.get_component_analysis(moddef_symbol.id());
+                let mut ports = vec![];
+                for stmt in item_ast.children() {
+                    let AstNodePayload::Component(component) = stmt.payload() else {
+                        continue;
                     };
-                    emitted_module_names.insert(module_path, emitted_name);
+                    if !matches!(component.kind, ComponentKind::Incoming | ComponentKind::Outgoing) {
+                        continue;
+                    }
+                    let name = parsing.string(component.name).to_str_lossy().into_owned();
+                    let typ = component_analysis.type_of(parsing.string(component.name)).unwrap();
+                    ports.push((name, type_width(&typ)));
                 }
+                self.module_ports.insert(module_path, ports);
             }
         }
     }
 
-    emitted_module_names
-}
-
-fn collect_type_widths(virir: &virir::VirIr) -> HashMap<virir::TypeId, virir::Width> {
-    virir
-        .types
-        .iter()
-        .enumerate()
-        .map(|(i, typ)| (virir::TypeId::new(i.try_into().unwrap()), typ.width()))
-        .collect()
-}
-
-/// Returns the emitted Verilog name for a package-qualified VirIr module path.
-fn emitted_module_name_for_path(
-    emitted_module_names: &HashMap<String, String>,
-    module_path: &str,
-) -> String {
-    emitted_module_names
-        .get(module_path)
-        .cloned()
-        .unwrap_or_else(|| valid_verilog_name(module_path))
-}
-
-/// Returns the emitted Verilog name for a VirIr module definition.
-fn emitted_module_name(
-    emitted_module_names: &HashMap<String, String>,
-    package_name: &str,
-    mod_def: &virir::ModDef,
-) -> String {
-    emitted_module_name_for_path(
-        emitted_module_names,
-        &qualified_module_name(package_name, &mod_def.name),
-    )
-}
-
-/// Collects the port names and widths for every module in the VirIr.
-/// Returns a map from `package::ModuleName` to a list of `(port_name, width)` pairs.
-fn collect_module_ports(
-    virir: &virir::VirIr,
-    type_widths: &HashMap<virir::TypeId, virir::Width>,
-) -> HashMap<String, Vec<(String, virir::Width)>> {
-    let mut module_ports = HashMap::new();
-    for package in &virir.packages {
-        for item in &package.items {
-            match item {
-                virir::Item::ModDef(mod_def) => {
-                    let module_path = qualified_module_name(&package.name, &mod_def.name);
-                    let ports = mod_def
-                        .ports
-                        .iter()
-                        .map(|port| (port.name.clone(), type_widths[&port.typ]))
-                        .collect();
-                    module_ports.insert(module_path, ports);
-                }
-            }
+    fn convert_package(&self, package: PackageFqn) -> Option<verilog::VerilogFile> {
+        let parsing = self.db.get_parsing(package.clone());
+        let package_name = package.to_string();
+        let mut modules = vec![];
+        for item_ast in parsing.root().children() {
+            let AstNodePayload::ModDef(_) = item_ast.payload() else {
+                continue;
+            };
+            modules.push(self.convert_moddef(&package, item_ast));
         }
-    }
-    module_ports
-}
-
-/// Converts a VirIr port declaration into its Verilog port form.
-fn convert_port(
-    type_widths: &HashMap<virir::TypeId, virir::Width>,
-    port: &virir::Port,
-) -> verilog::Port {
-    verilog::Port {
-        name: exact_verilog_name(&port.name),
-        kind: verilog::PortKind::Wire,
-        dir: port.dir,
-        width: type_widths[&port.typ],
-    }
-}
-
-fn convert_wire(
-    type_widths: &HashMap<virir::TypeId, virir::Width>,
-    wire: virir::Wire,
-) -> verilog::Element {
-    verilog::Element::Wire(verilog::Wire {
-        name: exact_verilog_name(&wire.name),
-        width: type_widths[&wire.typ],
-        expr: None,
-    })
-}
-
-fn convert_reg(
-    type_widths: &HashMap<virir::TypeId, virir::Width>,
-    reg: virir::Reg,
-) -> verilog::Element {
-    verilog::Element::Reg(verilog::Reg {
-        name: exact_verilog_name(&reg.name),
-        width: type_widths[&reg.typ],
-        expr: None,
-    })
-}
-
-fn convert_reg_reset(
-    type_widths: &HashMap<virir::TypeId, virir::Width>,
-    reg: &virir::Reg,
-) -> verilog::Element {
-    verilog::Element::Initial(verilog::Initial {
-        stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
-            name: valid_verilog_name(&reg.name),
-            expr: reg_default_expr(type_widths[&reg.typ]),
-        })],
-    })
-}
-
-/// Converts a VirIr driver into a Verilog continuous assignment.
-fn convert_driver(
-    type_widths: &HashMap<virir::TypeId, virir::Width>,
-    driver: virir::Driver,
-) -> verilog::Element {
-    let name = valid_verilog_name(&driver.path);
-    verilog::Element::Assign(verilog::Assign {
-        name,
-        expr: convert_expr(type_widths, driver.expr.as_ref()),
-    })
-}
-
-fn convert_sequential_reg_driver(
-    type_widths: &HashMap<virir::TypeId, virir::Width>,
-    driver: virir::Driver,
-    clock: &virir::expr::Expr,
-) -> verilog::Element {
-    verilog::Element::Always(verilog::Always {
-        clock: Some(convert_expr(type_widths, clock)),
-        stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
-            name: valid_verilog_name(&driver.path),
-            expr: convert_expr(type_widths, driver.expr.as_ref()),
-        })],
-    })
-}
-
-#[allow(dead_code)]
-fn zero_expr(width: virir::Width) -> verilog::Expr {
-    verilog::Expr::WordLit(verilog::expr::WordLit {
-        value: 0,
-        width,
-        radix: Radix::Dec,
-    })
-}
-
-fn reg_default_expr(width: virir::Width) -> verilog::Expr {
-    verilog::Expr::WordLit(verilog::expr::WordLit {
-        value: 0,
-        width,
-        radix: Radix::Dec,
-    })
-}
-
-fn convert_on(
-    type_widths: &HashMap<virir::TypeId, virir::Width>,
-    on: virir::On,
-) -> verilog::Element {
-    verilog::Element::Always(verilog::Always {
-        clock: Some(convert_expr(type_widths, on.clock.as_ref())),
-        stmts: on.commands.into_iter().map(|command| convert_command(type_widths, command)).collect(),
-    })
-}
-
-fn collect_holes_from_expr<'a>(expr: &'a virir::expr::Expr, holes: &mut Vec<&'a virir::expr::Hole>) {
-    match expr {
-        virir::expr::Expr::Hole(hole) => holes.push(hole),
-        virir::expr::Expr::BinOp(binop) => {
-            collect_holes_from_expr(&binop.lhs, holes);
-            collect_holes_from_expr(&binop.rhs, holes);
+        if modules.is_empty() {
+            return None;
         }
-        virir::expr::Expr::UnOp(unop) => collect_holes_from_expr(&unop.expr, holes),
-        virir::expr::Expr::Zext(zext) => collect_holes_from_expr(&zext.expr, holes),
-        virir::expr::Expr::Sext(sext) => collect_holes_from_expr(&sext.expr, holes),
-        virir::expr::Expr::If(expr_if) => {
-            collect_holes_from_expr(&expr_if.cond, holes);
-            collect_holes_from_expr(&expr_if.then_expr, holes);
-            collect_holes_from_expr(&expr_if.else_expr, holes);
-        }
-        virir::expr::Expr::Word(word) => {
-            for sub in &word.exprs {
-                collect_holes_from_expr(sub, holes);
-            }
-        }
-        virir::expr::Expr::Index(index) => collect_holes_from_expr(&index.subject, holes),
-        virir::expr::Expr::IndexRange(index_range) => {
-            collect_holes_from_expr(&index_range.subject, holes);
-        }
-        virir::expr::Expr::Reference(_)
-        | virir::expr::Expr::BitLit(_)
-        | virir::expr::Expr::WordLit(_) => {}
-    }
-}
-
-fn convert_command(
-    type_widths: &HashMap<virir::TypeId, virir::Width>,
-    command: virir::Command,
-) -> verilog::Stmt {
-    match command {
-        virir::Command::Assert(expr) => verilog::Stmt::Assert(verilog::Assert {
-            exprs: vec![convert_expr(type_widths, expr.as_ref())],
-        }),
-        virir::Command::Display(message, expr) => {
-            verilog::Stmt::Display(verilog::Display {
-            message,
-            exprs: vec![convert_expr(type_widths, expr.as_ref())],
+        Some(verilog::VerilogFile {
+            name: format!("{package_name}.sv"),
+            modules,
         })
+    }
+
+    fn convert_moddef(&self, package: &PackageFqn, item_ast: AstNode) -> verilog::Module {
+        let AstNodePayload::ModDef(moddef) = item_ast.payload() else {
+            panic!("expected ModDef");
+        };
+        let parsing = self.db.get_parsing(package.clone());
+        let moddef_name = parsing.string(moddef.name).to_str_lossy().into_owned();
+        let module_path = qualified_module_name(&package.to_string(), &moddef_name);
+        let module_name = self.emitted_module_names[&module_path].clone();
+
+        let symboltable = self.db.get_symboltable();
+        let moddef_symbol = symboltable
+            .resolve_item_in_package(parsing.string(moddef.name), package.clone())
+            .unwrap();
+        let component_analysis = self.db.get_component_analysis(moddef_symbol.id());
+
+        let mut ports: Vec<verilog::Port> = vec![];
+        let mut elements: Vec<verilog::Element> = vec![];
+        // reg name -> AstNodeId of its explicit `on clock` expression (if present)
+        let mut sequential_regs: HashMap<String, AstNodeId> = HashMap::new();
+        let mut on_block: Option<verilog::Element> = None;
+
+        // First pass: ports, wires, regs, instances, on
+        for stmt in item_ast.children() {
+            match stmt.payload() {
+                AstNodePayload::Component(component) => {
+                    let name = parsing.string(component.name).to_str_lossy().into_owned();
+                    let typ = component_analysis.type_of(parsing.string(component.name)).unwrap();
+                    let width = type_width(&typ);
+                    match component.kind {
+                        ComponentKind::Incoming => ports.push(verilog::Port {
+                            name: exact_verilog_name(&name),
+                            kind: verilog::PortKind::Wire,
+                            dir: common::PortDir::Input,
+                            width,
+                        }),
+                        ComponentKind::Outgoing => ports.push(verilog::Port {
+                            name: exact_verilog_name(&name),
+                            kind: verilog::PortKind::Wire,
+                            dir: common::PortDir::Output,
+                            width,
+                        }),
+                        ComponentKind::Wire => elements.push(verilog::Element::Wire(verilog::Wire {
+                            name: exact_verilog_name(&name),
+                            width,
+                            expr: None,
+                        })),
+                        ComponentKind::Reg => {
+                            // Regs with `on clock` have 2 children: type + clock expr
+                            let children = stmt.children();
+                            if children.len() >= 2 {
+                                sequential_regs.insert(name.clone(), children[1].id());
+                            }
+                            elements.push(verilog::Element::Reg(verilog::Reg {
+                                name: exact_verilog_name(&name),
+                                width,
+                                expr: None,
+                            }));
+                        }
+                    }
+                }
+                AstNodePayload::Module(module) => {
+                    let raw_name = parsing.string(module.name).to_str_lossy().into_owned();
+                    let mod_path = render_ofness_path(stmt.child(0), package);
+                    let ports_info = self.module_ports.get(&mod_path).cloned().unwrap_or_default();
+                    let sub_name = self.emitted_module_names.get(&mod_path)
+                        .cloned()
+                        .unwrap_or_else(|| valid_verilog_name(&mod_path));
+                    for (port_name, width) in &ports_info {
+                        elements.push(verilog::Element::Wire(verilog::Wire {
+                            name: valid_verilog_name(&format!("{raw_name}.{port_name}")),
+                            width: *width,
+                            expr: None,
+                        }));
+                    }
+                    elements.push(verilog::Element::Submodule(verilog::Submodule {
+                        name: valid_verilog_name(&raw_name),
+                        submodule_name: sub_name,
+                        ports: ports_info.into_iter().map(|(n, _)| n).collect(),
+                    }));
+                }
+                AstNodePayload::ModDefStmtOn => {
+                    let clock_expr = self.convert_expr(package, stmt.child(0), None);
+                    let stmts = stmt.children().into_iter().skip(1)
+                        .map(|cmd| self.convert_command(package, cmd))
+                        .collect();
+                    on_block = Some(verilog::Element::Always(verilog::Always {
+                        clock: Some(clock_expr),
+                        stmts,
+                    }));
+                }
+                _ => {}
+            }
         }
-        virir::Command::Finish => verilog::Stmt::Finish,
-        virir::Command::Fatal => verilog::Stmt::Fatal,
-        virir::Command::If { cond, commands } => verilog::Stmt::If(verilog::If {
-            cond: convert_expr(type_widths, cond.as_ref()),
-            stmts: commands.into_iter().map(|cmd| convert_command(type_widths, cmd)).collect(),
-        }),
+
+        // Second pass: drivers (and hole displays)
+        let mut hole_displays: Vec<verilog::Element> = vec![];
+        let mut combinational: Vec<verilog::Element> = vec![];
+        let mut sequential: Vec<verilog::Element> = vec![];
+
+        for stmt in item_ast.children() {
+            let AstNodePayload::Driver(_) = stmt.payload() else { continue; };
+            let path = parsing.string(stmt.target().unwrap()).to_str_lossy().into_owned();
+            let expr_node = stmt.driver().unwrap();
+
+            // Collect holes from this driver expression
+            let mut hole_regions: Vec<String> = vec![];
+            collect_ast_holes(expr_node.clone(), &mut hole_regions);
+            for region in hole_regions {
+                let message = format!("\"HOLE: ? at {region}\"");
+                hole_displays.push(verilog::Element::Initial(verilog::Initial {
+                    stmts: vec![verilog::Stmt::Display(verilog::Display {
+                        message: message.into(),
+                        exprs: vec![],
+                    })],
+                }));
+            }
+
+            let expected_type = component_analysis.type_of(path.as_bytes().as_bstr());
+            let expr = self.convert_expr(package, expr_node, expected_type.as_ref());
+
+            if let Some(&clock_id) = sequential_regs.get(&path) {
+                let clock_node = parsing.ast_node(clock_id);
+                let clock_expr = self.convert_expr(package, clock_node, None);
+                sequential.push(verilog::Element::Always(verilog::Always {
+                    clock: Some(clock_expr),
+                    stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                        name: valid_verilog_name(&path),
+                        expr,
+                    })],
+                }));
+            } else {
+                combinational.push(verilog::Element::Assign(verilog::Assign {
+                    name: valid_verilog_name(&path),
+                    expr,
+                }));
+            }
+        }
+
+        elements.extend(combinational);
+        elements.extend(sequential);
+        if let Some(on) = on_block {
+            elements.push(on);
+        }
+        elements.extend(hole_displays);
+
+        verilog::Module { name: module_name, is_ext: moddef.is_ext, ports, elements }
+    }
+
+    fn convert_expr(
+        &self,
+        package: &PackageFqn,
+        node: AstNode,
+        expected_type: Option<&Type>,
+    ) -> verilog::Expr {
+        match node.payload() {
+            AstNodePayload::ExprReference => {
+                let path = node.parsing.string(node.path().unwrap()).to_str_lossy().into_owned();
+                verilog::Expr::Reference(verilog::expr::Reference {
+                    name: valid_verilog_name(&path),
+                })
+            }
+            AstNodePayload::ExprBitLit(expr_bit_lit) => {
+                verilog::Expr::BitLit(verilog::expr::BitLit { value: expr_bit_lit.literal })
+            }
+            AstNodePayload::ExprWordLit(expr_word_lit) => {
+                let literal = node.parsing.string(expr_word_lit.literal).to_str_lossy().into_owned();
+                let (value, lit_width) = parse_word_literal(&literal);
+                let width = lit_width
+                    .or_else(|| expected_type.map(type_width))
+                    .or_else(|| self.node_type(package, &node).map(|t| type_width(&t)))
+                    .unwrap_or_else(|| panic!("word literal {literal} needs a type"));
+                verilog::Expr::WordLit(verilog::expr::WordLit { value: value.into(), width, radix: Radix::Dec })
+            }
+            AstNodePayload::ExprWord => {
+                let width = self.node_or_expected_width(package, &node, expected_type);
+                let exprs = node.children().into_iter()
+                    .map(|child| {
+                        let child_type = self.node_type(package, &child);
+                        self.convert_expr(package, child, child_type.as_ref())
+                    })
+                    .collect();
+                verilog::Expr::Concat(verilog::expr::Concat { exprs, width })
+            }
+            AstNodePayload::ExprBinOp(expr_bin_op) => {
+                verilog::Expr::BinOp(verilog::expr::BinOp {
+                    op: convert_binop(expr_bin_op.op),
+                    lhs: Box::new(self.convert_expr(package, node.child(0), None)),
+                    rhs: Box::new(self.convert_expr(package, node.child(1), None)),
+                })
+            }
+            AstNodePayload::ExprUnOp(expr_un_op) => {
+                verilog::Expr::UnOp(verilog::expr::UnOp {
+                    op: convert_unop(expr_un_op.op),
+                    expr: Box::new(self.convert_expr(package, node.child(0), None)),
+                })
+            }
+            AstNodePayload::ExprZext => self.convert_zext(package, node, expected_type),
+            AstNodePayload::ExprSext => self.convert_sext(package, node, expected_type),
+            AstNodePayload::ExprIf => {
+                let children = node.children();
+                self.convert_if_expr(package, &children, expected_type)
+            }
+            AstNodePayload::ExprIndex(expr_index) => verilog::Expr::Index(verilog::expr::Index {
+                subject: Box::new(self.convert_expr(package, node.child(0), None)),
+                index: Box::new(constant_index_expr(expr_index.index)),
+            }),
+            AstNodePayload::ExprIndexRange(expr_index_range) => {
+                verilog::Expr::IndexRange(verilog::expr::IndexRange {
+                    subject: Box::new(self.convert_expr(package, node.child(0), None)),
+                    index_hi: Box::new(constant_index_expr(expr_index_range.index_hi - 1)),
+                    index_lo: Box::new(constant_index_expr(expr_index_range.index_lo)),
+                })
+            }
+            AstNodePayload::ExprAs | AstNodePayload::ExprParen => {
+                self.convert_expr(package, node.child(0), expected_type)
+            }
+            AstNodePayload::ExprHole => {
+                let width = self.node_or_expected_width(package, &node, expected_type);
+                verilog::Expr::XLit(verilog::expr::XLit { width })
+            }
+            _ => panic!("unsupported expr in conversion: {}", node.summary()),
+        }
+    }
+
+    fn convert_if_expr(
+        &self,
+        package: &PackageFqn,
+        children: &[AstNode],
+        expected_type: Option<&Type>,
+    ) -> verilog::Expr {
+        let cond = self.convert_expr(package, children[0].clone(), None);
+        let then_expr = self.convert_expr(package, children[1].clone(), expected_type);
+        let else_expr = if children.len() == 3 {
+            self.convert_expr(package, children[2].clone(), expected_type)
+        } else {
+            self.convert_if_expr(package, &children[2..], expected_type)
+        };
+        verilog::Expr::If(verilog::expr::If {
+            cond: Box::new(cond),
+            then_expr: Box::new(then_expr),
+            else_expr: Box::new(else_expr),
+        })
+    }
+
+    fn convert_zext(&self, package: &PackageFqn, node: AstNode, expected_type: Option<&Type>) -> verilog::Expr {
+        let inner = node.child(0);
+        let target_width = self.node_or_expected_width(package, &node, expected_type);
+        let source_width = self.node_width(package, &inner);
+        let extend_by = target_width.checked_sub(source_width)
+            .unwrap_or_else(|| panic!("cannot zext from {source_width} to {target_width}"));
+        if extend_by == 0 {
+            return self.convert_expr(package, inner, None);
+        }
+        verilog::Expr::Concat(verilog::expr::Concat {
+            exprs: vec![
+                verilog::Expr::Repeat(verilog::expr::Repeat {
+                    count: Box::new(constant_index_expr(extend_by)),
+                    exprs: vec![constant_word_expr(1, 0)],
+                    width: extend_by,
+                }),
+                self.convert_expr(package, inner, None),
+            ],
+            width: target_width,
+        })
+    }
+
+    fn convert_sext(&self, package: &PackageFqn, node: AstNode, expected_type: Option<&Type>) -> verilog::Expr {
+        let inner = node.child(0);
+        let target_width = self.node_or_expected_width(package, &node, expected_type);
+        let source_width = self.node_width(package, &inner);
+        let extend_by = target_width.checked_sub(source_width)
+            .unwrap_or_else(|| panic!("cannot sext from {source_width} to {target_width}"));
+        if extend_by == 0 {
+            return self.convert_expr(package, inner, None);
+        }
+        let fill = if source_width == 1 {
+            self.convert_expr(package, inner.clone(), None)
+        } else {
+            verilog::Expr::Index(verilog::expr::Index {
+                subject: Box::new(self.convert_expr(package, inner.clone(), None)),
+                index: Box::new(constant_index_expr(source_width - 1)),
+            })
+        };
+        verilog::Expr::Concat(verilog::expr::Concat {
+            exprs: vec![
+                verilog::Expr::Repeat(verilog::expr::Repeat {
+                    count: Box::new(constant_index_expr(extend_by)),
+                    exprs: vec![fill],
+                    width: extend_by,
+                }),
+                self.convert_expr(package, inner, None),
+            ],
+            width: target_width,
+        })
+    }
+
+    fn convert_command(&self, package: &PackageFqn, node: AstNode) -> verilog::Stmt {
+        match node.payload() {
+            AstNodePayload::CommandAssert => verilog::Stmt::Assert(verilog::Assert {
+                exprs: vec![self.convert_expr(package, node.child(0), None)],
+            }),
+            AstNodePayload::CommandDisplay(s) => {
+                let message = node.parsing.string(s).to_owned();
+                let expr = self.convert_expr(package, node.child(0), None);
+                verilog::Stmt::Display(verilog::Display { message, exprs: vec![expr] })
+            }
+            AstNodePayload::CommandFinish => verilog::Stmt::Finish,
+            AstNodePayload::CommandFatal => verilog::Stmt::Fatal,
+            AstNodePayload::CommandIf => {
+                let children = node.children();
+                let cond = self.convert_expr(package, children[0].clone(), None);
+                let stmts = children[1..].iter()
+                    .map(|cmd| self.convert_command(package, cmd.clone()))
+                    .collect();
+                verilog::Stmt::If(verilog::If { cond, stmts })
+            }
+            _ => panic!("expected command node, found {}", node.summary()),
+        }
+    }
+
+    fn node_type(&self, package: &PackageFqn, node: &AstNode) -> Option<Type> {
+        self.db.get_typeof(Location::new(package.clone(), node.id())).ok()
+    }
+
+    fn node_width(&self, package: &PackageFqn, node: &AstNode) -> Width {
+        self.node_type(package, node).map(|t| type_width(&t)).unwrap_or(0)
+    }
+
+    fn node_or_expected_width(&self, package: &PackageFqn, node: &AstNode, expected: Option<&Type>) -> Width {
+        self.node_type(package, node)
+            .or_else(|| expected.cloned())
+            .map(|t| type_width(&t))
+            .unwrap_or(0)
     }
 }
 
 
-/// Builds a package-qualified module name in `package::Module` form.
 fn qualified_module_name(package_name: &str, module_name: &str) -> String {
     format!("{package_name}::{module_name}")
 }
 
+fn type_width(typ: &Type) -> Width {
+    match typ {
+        Type::Bit | Type::Clock => 1,
+        Type::Word(w) => *w,
+        Type::Usual(_) => panic!("cannot emit non-builtin type to Verilog"),
+    }
+}
 
-/// Converts a VirIr binary operator into the corresponding Verilog binary operator.
-/// TODO I need to add a virir-level BinOp enum, since those are distinct.
+fn render_ofness_path(ofness_node: AstNode, package: &PackageFqn) -> String {
+    let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
+        panic!("expected Ofness node");
+    };
+    let module_package = ofness
+        .package
+        .map(|pkg| ofness_node.parsing.string(pkg).to_str_lossy().into_owned())
+        .unwrap_or_else(|| package.to_string());
+    let module_name = ofness_node.parsing.string(ofness.name).to_str_lossy();
+    format!("{module_package}::{module_name}")
+}
+
+fn parse_word_literal(literal: &str) -> (u64, Option<Width>) {
+    if let Some((value, width)) = literal.split_once('w') {
+        (parse_nat_literal(value), Some(width.parse().unwrap()))
+    } else {
+        (parse_nat_literal(literal), None)
+    }
+}
+
+fn parse_nat_literal(literal: &str) -> u64 {
+    let literal = literal.replace('_', "");
+    if let Some(hex) = literal.strip_prefix("0x") {
+        u64::from_str_radix(hex, 16).unwrap()
+    } else if let Some(bin) = literal.strip_prefix("0b") {
+        u64::from_str_radix(bin, 2).unwrap()
+    } else {
+        literal.parse().unwrap()
+    }
+}
+
+fn constant_word_expr(width: Width, value: u128) -> verilog::Expr {
+    verilog::Expr::WordLit(verilog::expr::WordLit { value, width, radix: Radix::Dec })
+}
+
+fn constant_index_expr(index: Width) -> verilog::Expr {
+    constant_word_expr(32, u128::from(index))
+}
+
 fn convert_binop(op: common::BinOp) -> verilog::BinOp {
     match op {
         common::BinOp::Lt => verilog::BinOp::Lt,
@@ -413,9 +512,9 @@ fn convert_binop(op: common::BinOp) -> verilog::BinOp {
         common::BinOp::And => verilog::BinOp::BitAnd,
         common::BinOp::Or => verilog::BinOp::BitOr,
         common::BinOp::Xor => verilog::BinOp::BitXor,
-        common::BinOp::LogicalAnd => verilog::BinOp::LogAnd,
-        common::BinOp::LogicalOr => verilog::BinOp::LogOr,
-        common::BinOp::LogicalXor => verilog::BinOp::BitXor, // TODO
+        common::BinOp::LogicalAnd => verilog::BinOp::BitAnd,
+        common::BinOp::LogicalOr => verilog::BinOp::BitOr,
+        common::BinOp::LogicalXor => verilog::BinOp::BitXor,
     }
 }
 
@@ -427,148 +526,14 @@ fn convert_unop(op: common::UnOp) -> verilog::UnOp {
     }
 }
 
-fn expr_type_id(expr: &virir::expr::Expr) -> virir::TypeId {
-    match expr {
-        virir::expr::Expr::Reference(reference) => reference.typ,
-        virir::expr::Expr::BitLit(bit_lit) => bit_lit.typ,
-        virir::expr::Expr::WordLit(word_lit) => word_lit.typ,
-        virir::expr::Expr::Word(word) => word.typ,
-        virir::expr::Expr::BinOp(binop) => binop.typ,
-        virir::expr::Expr::UnOp(unop) => unop.typ,
-        virir::expr::Expr::Zext(zext) => zext.typ,
-        virir::expr::Expr::Sext(sext) => sext.typ,
-        virir::expr::Expr::If(expr_if) => expr_if.typ,
-        virir::expr::Expr::Index(index) => index.typ,
-        virir::expr::Expr::IndexRange(index_range) => index_range.typ,
-        virir::expr::Expr::Hole(hole) => hole.typ,
-    }
-}
-
-fn expr_width(type_widths: &HashMap<virir::TypeId, virir::Width>, expr: &virir::expr::Expr) -> virir::Width {
-    type_widths[&expr_type_id(expr)]
-}
-
-fn constant_word_expr(width: virir::Width, value: u128) -> verilog::Expr {
-    verilog::Expr::WordLit(verilog::expr::WordLit {
-        value,
-        width,
-        radix: Radix::Dec,
-    })
-}
-
-fn constant_index_expr(index: virir::Width) -> verilog::Expr {
-    constant_word_expr(32, u128::from(index))
-}
-
-fn convert_ext_expr(
-    type_widths: &HashMap<virir::TypeId, virir::Width>,
-    target_type: virir::TypeId,
-    expr: &virir::expr::Expr,
-    signed: bool,
-) -> verilog::Expr {
-    let subject_width = expr_width(type_widths, expr);
-    let target_width = type_widths[&target_type];
-    let extend_by = target_width
-        .checked_sub(subject_width)
-        .unwrap_or_else(|| panic!("cannot extend width {subject_width} into {target_width}"));
-
-    if extend_by == 0 {
-        return convert_expr(type_widths, expr);
-    }
-
-    let fill = if signed {
-        if subject_width == 1 {
-            convert_expr(type_widths, expr)
-        } else {
-            verilog::Expr::Index(verilog::expr::Index {
-                subject: Box::new(convert_expr(type_widths, expr)),
-                index: Box::new(constant_index_expr(subject_width - 1)),
-            })
-        }
-    } else {
-        constant_word_expr(1, 0)
-    };
-
-    verilog::Expr::Concat(verilog::expr::Concat {
-        exprs: vec![
-            verilog::Expr::Repeat(verilog::expr::Repeat {
-                count: Box::new(constant_index_expr(extend_by)),
-                exprs: vec![fill],
-                // fill is always 1 bit (BitLit or Index), so repeat width = extend_by * 1
-                width: extend_by,
-            }),
-            convert_expr(type_widths, expr),
-        ],
-        width: target_width,
-    })
-}
-
-
-/// Converts a general VirIr expression into the corresponding Verilog expression node.
-fn convert_expr(
-    type_widths: &HashMap<virir::TypeId, virir::Width>,
-    expr: &virir::expr::Expr,
-) -> verilog::Expr {
-    match expr {
-        virir::expr::Expr::Reference(reference) => {
-            verilog::Expr::Reference(verilog::expr::Reference {
-                name: valid_verilog_name(&reference.path),
-            })
-        }
-        virir::expr::Expr::WordLit(wordlit) => {
-            let width = type_widths[&wordlit.typ];
-            verilog::Expr::WordLit(verilog::expr::WordLit {
-                value: wordlit.value.into(),
-                width,
-                radix: Radix::Dec,
-            })
-        }
-        virir::expr::Expr::Word(word) => {
-            let width = type_widths[&word.typ];
-            verilog::Expr::Concat(verilog::expr::Concat {
-                exprs: word
-                    .exprs
-                    .iter()
-                    .map(|expr| convert_expr(type_widths, expr.as_ref()))
-                    .collect(),
-                width,
-            })
-        }
-        virir::expr::Expr::BitLit(bit_lit) => {
-            verilog::Expr::BitLit(verilog::expr::BitLit {
-                value: bit_lit.value(),
-            })
-        }
-        virir::expr::Expr::BinOp(binop) => verilog::Expr::BinOp(verilog::expr::BinOp {
-            op: convert_binop(binop.op),
-            lhs: Box::new(convert_expr(type_widths, binop.lhs.as_ref())),
-            rhs: Box::new(convert_expr(type_widths, binop.rhs.as_ref())),
-        }),
-        virir::expr::Expr::UnOp(unop) => verilog::Expr::UnOp(verilog::expr::UnOp {
-            op: convert_unop(unop.op),
-            expr: Box::new(convert_expr(type_widths, unop.expr.as_ref())),
-        }),
-        virir::expr::Expr::Zext(zext) => convert_ext_expr(type_widths, zext.typ, zext.expr.as_ref(), false),
-        virir::expr::Expr::Sext(sext) => convert_ext_expr(type_widths, sext.typ, sext.expr.as_ref(), true),
-        virir::expr::Expr::If(expr_if) => verilog::Expr::If(verilog::expr::If {
-            cond: Box::new(convert_expr(type_widths, expr_if.cond.as_ref())),
-            then_expr: Box::new(convert_expr(type_widths, expr_if.then_expr.as_ref())),
-            else_expr: Box::new(convert_expr(type_widths, expr_if.else_expr.as_ref())),
-        }),
-        virir::expr::Expr::Index(index) => verilog::Expr::Index(verilog::expr::Index {
-            subject: Box::new(convert_expr(type_widths, index.subject.as_ref())),
-            index: Box::new(constant_index_expr(index.index)),
-        }),
-        virir::expr::Expr::IndexRange(index_range) => {
-            verilog::Expr::IndexRange(verilog::expr::IndexRange {
-                subject: Box::new(convert_expr(type_widths, index_range.subject.as_ref())),
-                index_hi: Box::new(constant_index_expr(index_range.index_hi - 1)),
-                index_lo: Box::new(constant_index_expr(index_range.index_lo)),
-            })
-        }
-        virir::expr::Expr::Hole(hole) => {
-            let width = type_widths[&hole.typ];
-            verilog::Expr::XLit(verilog::expr::XLit { width })
+/// Recursively collects the region strings of all `?` (hole) nodes within an expression.
+fn collect_ast_holes(node: AstNode<'_>, holes: &mut Vec<String>) {
+    match node.payload() {
+        AstNodePayload::ExprHole => holes.push(format!("{}", node.region())),
+        _ => {
+            for child in node.children() {
+                collect_ast_holes(child, holes);
+            }
         }
     }
 }

@@ -5,7 +5,6 @@ pub mod db;
 pub mod analysis;
 pub mod queries;
 pub mod diagnostics;
-pub mod virir;
 pub mod verilog;
 pub mod types;
 
