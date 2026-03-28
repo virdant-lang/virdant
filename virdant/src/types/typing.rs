@@ -9,8 +9,9 @@ use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
 use crate::analysis::location::Location;
 use crate::fqn::PackageFqn;
-use crate::queries::types::TypeIndex;
+use crate::types::typedef::TypeIndex;
 use crate::syntax::ast::{AstNode, AstNodeId};
+use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::{self, AstNodePayload};
 
 use super::context::TypingContext;
@@ -41,17 +42,23 @@ pub struct Typing {
     #[allow(dead_code)]
     pub expected_typ: Type,
     pub context: TypingContext,
-    pub type_index: Arc<TypeIndex>,
     pub typs: HashMap<AstNodeId, Type>,
     pub diagnostics: Vec<Diagnostic>,
     // TODO Remove the symbol table and instead resolve type expressions beforehand.
     pub symboltable: Arc<SymbolTable>,
+    pub type_index: Arc<TypeIndex>,
+    pub parsing: Arc<Parsing>,
     pub use_locations: HashMap<BString, Vec<Location>>,
+    pub resolutions: HashMap<Location, SymbolId>,
 }
 
 impl Typing {
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         self.diagnostics.clone()
+    }
+
+    pub fn resolution(&self, location: Location) -> Option<SymbolId> {
+        self.resolutions.get(&location).copied()
     }
 
     pub fn reference_use_locations(&self) -> &HashMap<BString, Vec<Location>> {
@@ -76,6 +83,21 @@ impl Typing {
             actual: actual.to_string().into(),
         }.into();
         self.diagnostics.push(diag);
+    }
+
+    #[allow(unused)]
+    fn flag_todo<'p, S: Into<BString>>(&mut self, node: &AstNode<'p>, message: S) {
+        self.diagnostics.push(diagnostics::Todo {
+            region: node.region(),
+            message: message.into(),
+        }.into());
+    }
+
+    fn flag_unknown<'p, S: Into<BString>>(&mut self, node: &AstNode<'p>, message: S) {
+        self.diagnostics.push(diagnostics::Unknown {
+            region: node.region(),
+            message: message.into(),
+        }.into());
     }
 
     fn flag_not_word_type<'p>(&mut self, node: &AstNode<'p>, typ: &Type) {
@@ -119,9 +141,9 @@ impl Typing {
             AstNodePayload::ExprMatch                => Ok(()), // TODO
             AstNodePayload::ExprMethod(_expr_method) => Ok(()), // TODO
             AstNodePayload::ExprFn                   => Ok(()), // TODO
-            AstNodePayload::ExprCtor(_expr_ctor)     => Ok(()), // TODO
+            AstNodePayload::ExprCtor(_)              => self.check_ctor(node, expected_typ),
+            AstNodePayload::ExprEnumerant(_)         => self.check_enumerant(node, expected_typ),
             AstNodePayload::ExprStruct               => Ok(()), // TODO
-            AstNodePayload::ExprEnumerant(_expr_enumerant)    => Ok(()), // TODO
             AstNodePayload::ExprIndexRange(_expr_index_range) => Ok(()), // TODO
             _ => unreachable!("Can't typecheck {:?}", node.summary()),
         }
@@ -386,6 +408,44 @@ impl Typing {
             name: None,
             typ: Some(format!("{expected_typ:?}").into()),
         }.into());
+        Ok(())
+    }
+
+    fn check_ctor<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
+            // TODO check that it's an ctor type
+        let AstNodePayload::ExprCtor(expr_ctor) = node.payload() else { unreachable!() };
+        let Type::Usual(typedef_id) = expected_typ else {
+            self.flag_unknown(node, "Should be a typedef type");
+            return Err(());
+        };
+
+        let ctor_name = self.parsing.string(expr_ctor.ctor);
+        let Some(ctor_symbol) = self.symboltable.slot(*typedef_id, ctor_name) else {
+            self.flag_unknown(node, "Unknown ctor name: {ctor_name} in union type {expected_typ:?}");
+            return Err(());
+        };
+
+        self.resolutions.insert(node.location(), ctor_symbol.id());
+        self.annotate(node, &expected_typ);
+        Ok(())
+    }
+
+    fn check_enumerant<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
+        let AstNodePayload::ExprEnumerant(expr_enumerant) = node.payload() else { unreachable!() };
+        let Type::Usual(typedef_id) = expected_typ else {
+            // TODO check that it's an enum type
+            self.flag_unknown(node, "Should be a typedef type");
+            return Err(());
+        };
+
+        let enumerant_name = self.parsing.string(expr_enumerant.enumerant);
+        let Some(enumerant_symbol) = self.symboltable.slot(*typedef_id, enumerant_name) else {
+            self.flag_unknown(node, "Unknown enumerant name: {enumerant_name} in enum type {expected_typ:?}");
+            return Err(());
+        };
+
+        self.resolutions.insert(node.location(), enumerant_symbol.id());
+        self.annotate(node, &expected_typ);
         Ok(())
     }
 

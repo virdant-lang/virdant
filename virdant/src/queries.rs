@@ -5,7 +5,6 @@ pub mod package;
 pub mod parsing;
 pub mod syntax;
 pub mod typecheck;
-pub mod types;
 pub mod typing;
 
 pub(crate) use check::check;
@@ -15,5 +14,4 @@ pub(crate) use package::build_package_analysis;
 pub(crate) use parsing::build_parsing;
 pub(crate) use syntax::{build_all_exprs, find_exprroots, build_syntax_errors};
 pub(crate) use typecheck::{build_typeof, build_typeof_all};
-pub(crate) use types::{build_type_index, build_typedefs};
 pub(crate) use typing::{build_expected_type, build_typing, build_typing_context};

@@ -61,6 +61,11 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
         AstNodePayload::CommandDisplay(_) => {
             None
         }
+        AstNodePayload::Enumerant(_) => {
+            let enumdef_node = parent_node.parent().unwrap();
+            let AstNodePayload::EnumDef(enum_def) = enumdef_node.payload() else { unreachable!() };
+            Some(Type::Word(enum_def.width))
+        }
         _ => {
             todo!("Can't build expected type for: {:?} at {:?} (parent node is {:?})",
                 exprroot, node.region(), parent_node.summary());
@@ -105,6 +110,8 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
         symboltable: symboltable.clone(),
         use_locations: HashMap::new(),
         type_index: builder.get_type_index(),
+        parsing: parsing.clone(),
+        resolutions: HashMap::new(),
     };
 
     // if there is no expected type, you can't type check the expression.

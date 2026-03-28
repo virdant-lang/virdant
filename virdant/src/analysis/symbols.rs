@@ -24,8 +24,10 @@ pub struct SymbolTable {
 pub struct Symbol {
     pub id: SymbolId,
     pub fqn: BString,
+    pub name: BString,
     pub location: Location,
     pub kind: SymbolKind,
+    pub parent_id: Option<SymbolId>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -43,6 +45,9 @@ pub enum SymbolKind {
     Component,
     Submodule,
     Socket,
+    Field,
+    Ctor,
+    Enumerant,
 }
 
 impl SymbolTable {
@@ -77,6 +82,25 @@ impl SymbolTable {
             .cloned()
             .filter(|val| val.kind.is_typedef())
             .collect()
+    }
+
+    pub fn slots(&self, item_symbol_id: SymbolId) -> Vec<&Symbol> {
+        let mut slots = vec![];
+        for symbol in self.symbols.values() {
+            if symbol.parent_id() == Some(item_symbol_id) {
+                slots.push(symbol);
+            }
+        }
+        slots
+    }
+
+    pub fn slot(&self, item_symbol_id: SymbolId, slot_name: &BStr) -> Option<&Symbol> {
+        for symbol in self.symbols.values() {
+            if symbol.parent_id() == Some(item_symbol_id) && slot_name == symbol.name {
+                return Some(symbol);
+            }
+        }
+        None
     }
 
     pub fn resolve_item_fqn(&self, item_fqn: &BStr) -> Option<&Symbol> {
@@ -152,6 +176,10 @@ impl Symbol {
 
     pub fn kind(&self) -> SymbolKind {
         self.kind.clone()
+    }
+
+    pub fn parent_id(&self) -> Option<SymbolId> {
+        self.parent_id
     }
 }
 
@@ -261,20 +289,42 @@ fn build_symboltable_item(
         Symbol {
             id,
             fqn: fqn.clone(),
+            name: item_name.clone(),
             location,
             kind: kind.clone(),
+            parent_id: None,
         },
     ));
 
-    if kind == SymbolKind::ModDef {
-        build_symboltable_moddef_slot(
-            symbols,
-            diagnostics,
-            package,
-            parsing,
-            item_name,
-            &node,
-        );
+    match node.payload() {
+        AstNodePayload::ModDef(_) => {
+            build_symboltable_moddef_slot(
+                symbols,
+                diagnostics,
+                package,
+                parsing,
+                item_name,
+                &node,
+                id,
+            );
+        }
+        AstNodePayload::StructDef(_) |
+        AstNodePayload::UnionDef(_) |
+        AstNodePayload::EnumDef(_) |
+        AstNodePayload::BuiltinDef(_) => {
+            build_symboltable_typedef_slot(
+                symbols,
+                diagnostics,
+                package,
+                parsing,
+                item_name,
+                &node,
+                id,
+            );
+        }
+        AstNodePayload::FnDef(_) => (),
+        AstNodePayload::SocketDef(_) => (),
+        _ => unreachable!("Unexpected node: {:?}", node.summary()),
     }
 }
 
@@ -285,7 +335,7 @@ fn build_symboltable_moddef_slot(
     parsing: &Parsing,
     item_name: &BString,
     node: &AstNode<'_>,
-
+    parent_id: SymbolId,
 ) {
     let mut seen: HashMap<BString, Region> = HashMap::new();
 
@@ -332,8 +382,73 @@ fn build_symboltable_moddef_slot(
             Symbol {
                 id: component_id,
                 fqn: component_fqn,
+                name: component_name,
                 location: component_location,
                 kind,
+                parent_id: Some(parent_id),
+            },
+        ));
+    }
+}
+
+fn build_symboltable_typedef_slot(
+    symbols: &mut Vec<(BString, Symbol)>,
+    diagnostics: &mut Vec<Diagnostic>,
+    package: PackageFqn,
+    parsing: &Parsing,
+    item_name: &BString,
+    node: &AstNode<'_>,
+    parent_id: SymbolId,
+) {
+    let mut seen: HashMap<BString, Region> = HashMap::new();
+
+    for child in node.children() {
+        let (slot_name, slot_ast_node_id, kind) = match child.payload() {
+            AstNodePayload::Field(field) => {
+                let name: BString = parsing.string(field.name).to_owned();
+                (name, child.id(), SymbolKind::Field)
+            }
+            AstNodePayload::Ctor(ctor) => {
+                let name: BString = parsing.string(ctor.name).to_owned();
+                (name, child.id(), SymbolKind::Ctor)
+            }
+            AstNodePayload::Enumerant(enumerant) => {
+                let name: BString = parsing.string(enumerant.name).to_owned();
+                (name, child.id(), SymbolKind::Enumerant)
+            }
+            _ => continue,
+        };
+
+        let slot_region = Region::new(package.clone(), child.span());
+
+        if seen.contains_key(&slot_name) {
+            diagnostics.push(
+                diagnostics::DuplicateSlot {
+                    item: item_name.to_owned().into(),
+                    region: slot_region,
+                    slot: slot_name,
+                }
+                .into(),
+            );
+            continue;
+        }
+
+        seen.insert(slot_name.clone(), slot_region);
+
+        let slot_fqn: BString =
+            format!("{}::{}::{}", package, item_name, slot_name).into();
+        let slot_location = Location::new(package.clone(), slot_ast_node_id);
+        let slot_id = SymbolId(symbols.len().try_into().unwrap());
+
+        symbols.push((
+            slot_fqn.clone(),
+            Symbol {
+                id: slot_id,
+                fqn: slot_fqn,
+                name: slot_name,
+                location: slot_location,
+                kind,
+                parent_id: Some(parent_id),
             },
         ));
     }

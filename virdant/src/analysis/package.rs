@@ -144,6 +144,16 @@ impl PackageAnalysis {
                     _ => unreachable!("{:?}", child_node.summary()),
                 }
             }
+        } else if matches!(node.payload(), AstNodePayload::EnumDef(_)) {
+            if node.contains_errors() {
+                return;
+            }
+            for child_node in node.children() {
+                if let AstNodePayload::Enumerant(_) = child_node.payload() {
+                    let node_id = child_node.child(0).id();
+                    self.expr_roots.push(node_id);
+                }
+            }
         } else {
             // TODO handle FnDefs
         }

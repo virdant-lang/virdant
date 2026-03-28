@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use bstr::ByteSlice;
 
@@ -9,7 +10,7 @@ use crate::diagnostics::DiagnosticLevel;
 use crate::fqn::PackageFqn;
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
-use crate::types::Type;
+use crate::types::{Type, Typing};
 use crate::verilog::{self, exact_verilog_name, valid_verilog_name};
 
 /// Converts the Db (checked analysis database) directly into its Verilog representation.
@@ -85,7 +86,7 @@ impl<'d> Converter<'d> {
                     }
                     let name = parsing.string(component.name).to_str_lossy().into_owned();
                     let typ = component_analysis.type_of(parsing.string(component.name)).unwrap();
-                    ports.push((name, type_width(&typ)));
+                    ports.push((name, type_width(&typ, self.db)));
                 }
                 self.module_ports.insert(module_path, ports);
             }
@@ -138,7 +139,7 @@ impl<'d> Converter<'d> {
                 AstNodePayload::Component(component) => {
                     let name = parsing.string(component.name).to_str_lossy().into_owned();
                     let typ = component_analysis.type_of(parsing.string(component.name)).unwrap();
-                    let width = type_width(&typ);
+                    let width = type_width(&typ, self.db);
                     match component.kind {
                         ComponentKind::Incoming => ports.push(verilog::Port {
                             name: exact_verilog_name(&name),
@@ -192,7 +193,7 @@ impl<'d> Converter<'d> {
                     }));
                 }
                 AstNodePayload::ModDefStmtOn => {
-                    let clock_expr = self.convert_expr(package, stmt.child(0), None);
+                    let clock_expr = self.convert_expr(package, stmt.child(0), None, self.db);
                     let stmts = stmt.children().into_iter().skip(1)
                         .map(|cmd| self.convert_command(package, cmd))
                         .collect();
@@ -229,11 +230,11 @@ impl<'d> Converter<'d> {
             }
 
             let expected_type = component_analysis.type_of(path.as_bytes().as_bstr());
-            let expr = self.convert_expr(package, expr_node, expected_type.as_ref());
+            let expr = self.convert_expr(package, expr_node, expected_type.as_ref(), self.db);
 
             if let Some(&clock_id) = sequential_regs.get(&path) {
                 let clock_node = parsing.ast_node(clock_id);
-                let clock_expr = self.convert_expr(package, clock_node, None);
+                let clock_expr = self.convert_expr(package, clock_node, None, self.db);
                 sequential.push(verilog::Element::Always(verilog::Always {
                     clock: Some(clock_expr),
                     stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
@@ -264,7 +265,9 @@ impl<'d> Converter<'d> {
         package: &PackageFqn,
         node: AstNode,
         expected_type: Option<&Type>,
+        db: &Db,
     ) -> verilog::Expr {
+        let typing = self.typing_for(&node);
         match node.payload() {
             AstNodePayload::ExprReference => {
                 let path = node.parsing.string(node.path().unwrap()).to_str_lossy().into_owned();
@@ -279,8 +282,8 @@ impl<'d> Converter<'d> {
                 let literal = node.parsing.string(expr_word_lit.literal).to_str_lossy().into_owned();
                 let (value, lit_width) = parse_word_literal(&literal);
                 let width = lit_width
-                    .or_else(|| expected_type.map(type_width))
-                    .or_else(|| self.node_type(package, &node).map(|t| type_width(&t)))
+                    .or_else(|| expected_type.map(|t| type_width(t, self.db)))
+                    .or_else(|| self.node_type(package, &node).map(|t| type_width(&t, self.db)))
                     .unwrap_or_else(|| panic!("word literal {literal} needs a type"));
                 verilog::Expr::WordLit(verilog::expr::WordLit { value: value.into(), width, radix: Radix::Dec })
             }
@@ -289,7 +292,7 @@ impl<'d> Converter<'d> {
                 let exprs = node.children().into_iter()
                     .map(|child| {
                         let child_type = self.node_type(package, &child);
-                        self.convert_expr(package, child, child_type.as_ref())
+                        self.convert_expr(package, child, child_type.as_ref(), self.db)
                     })
                     .collect();
                 verilog::Expr::Concat(verilog::expr::Concat { exprs, width })
@@ -297,14 +300,14 @@ impl<'d> Converter<'d> {
             AstNodePayload::ExprBinOp(expr_bin_op) => {
                 verilog::Expr::BinOp(verilog::expr::BinOp {
                     op: convert_binop(expr_bin_op.op),
-                    lhs: Box::new(self.convert_expr(package, node.child(0), None)),
-                    rhs: Box::new(self.convert_expr(package, node.child(1), None)),
+                    lhs: Box::new(self.convert_expr(package, node.child(0), None, self.db)),
+                    rhs: Box::new(self.convert_expr(package, node.child(1), None, self.db)),
                 })
             }
             AstNodePayload::ExprUnOp(expr_un_op) => {
                 verilog::Expr::UnOp(verilog::expr::UnOp {
                     op: convert_unop(expr_un_op.op),
-                    expr: Box::new(self.convert_expr(package, node.child(0), None)),
+                    expr: Box::new(self.convert_expr(package, node.child(0), None, self.db)),
                 })
             }
             AstNodePayload::ExprZext => self.convert_zext(package, node, expected_type),
@@ -314,22 +317,47 @@ impl<'d> Converter<'d> {
                 self.convert_if_expr(package, &children, expected_type)
             }
             AstNodePayload::ExprIndex(expr_index) => verilog::Expr::Index(verilog::expr::Index {
-                subject: Box::new(self.convert_expr(package, node.child(0), None)),
+                subject: Box::new(self.convert_expr(package, node.child(0), None, self.db)),
                 index: Box::new(constant_index_expr(expr_index.index)),
             }),
             AstNodePayload::ExprIndexRange(expr_index_range) => {
                 verilog::Expr::IndexRange(verilog::expr::IndexRange {
-                    subject: Box::new(self.convert_expr(package, node.child(0), None)),
+                    subject: Box::new(self.convert_expr(package, node.child(0), None, self.db)),
                     index_hi: Box::new(constant_index_expr(expr_index_range.index_hi - 1)),
                     index_lo: Box::new(constant_index_expr(expr_index_range.index_lo)),
                 })
             }
             AstNodePayload::ExprAs | AstNodePayload::ExprParen => {
-                self.convert_expr(package, node.child(0), expected_type)
+                self.convert_expr(package, node.child(0), expected_type, db)
             }
             AstNodePayload::ExprHole => {
                 let width = self.node_or_expected_width(package, &node, expected_type);
                 verilog::Expr::XLit(verilog::expr::XLit { width })
+            }
+            AstNodePayload::ExprCtor(_ctor) => {
+                // TODO doesn't handle Ctor payloads
+                let symboltable = db.get_symboltable();
+                let Some(Type::Usual(typedef_symbol_id)) = expected_type else {
+                    unreachable!()
+                };
+                let slots = symboltable.slots(*typedef_symbol_id);
+                let ctor_symbol_id = typing.resolution(node.location()).unwrap();
+                let width: u16 = TryInto::<u16>::try_into(slots.len()).unwrap();
+                let slot_index = slots.iter().position(|slot_id| slot_id.id() == ctor_symbol_id).unwrap();
+                let value = 1 << slot_index;
+                verilog::Expr::WordLit(verilog::expr::WordLit { value: value, width, radix: Radix::Dec })
+            }
+            AstNodePayload::ExprEnumerant(_enumerant) => {
+                let symboltable = db.get_symboltable();
+                let Some(Type::Usual(typedef_symbol_id)) = expected_type else {
+                    unreachable!()
+                };
+                let typedef = db.get_typedef(*typedef_symbol_id);
+                let slots = symboltable.slots(*typedef_symbol_id);
+                let enumerant_symbol_id = typing.resolution(node.location()).unwrap();
+                let value = *typedef.enumerant_values.get(&enumerant_symbol_id).unwrap();
+                let width: u16 = TryInto::<u16>::try_into(slots.len()).unwrap();
+                verilog::Expr::WordLit(verilog::expr::WordLit { value: value, width, radix: Radix::Dec })
             }
             _ => panic!("unsupported expr in conversion: {}", node.summary()),
         }
@@ -341,10 +369,10 @@ impl<'d> Converter<'d> {
         children: &[AstNode],
         expected_type: Option<&Type>,
     ) -> verilog::Expr {
-        let cond = self.convert_expr(package, children[0].clone(), None);
-        let then_expr = self.convert_expr(package, children[1].clone(), expected_type);
+        let cond = self.convert_expr(package, children[0].clone(), None, self.db);
+        let then_expr = self.convert_expr(package, children[1].clone(), expected_type, self.db);
         let else_expr = if children.len() == 3 {
-            self.convert_expr(package, children[2].clone(), expected_type)
+            self.convert_expr(package, children[2].clone(), expected_type, self.db)
         } else {
             self.convert_if_expr(package, &children[2..], expected_type)
         };
@@ -362,7 +390,7 @@ impl<'d> Converter<'d> {
         let extend_by = target_width.checked_sub(source_width)
             .unwrap_or_else(|| panic!("cannot zext from {source_width} to {target_width}"));
         if extend_by == 0 {
-            return self.convert_expr(package, inner, None);
+            return self.convert_expr(package, inner, None, self.db);
         }
         verilog::Expr::Concat(verilog::expr::Concat {
             exprs: vec![
@@ -371,7 +399,7 @@ impl<'d> Converter<'d> {
                     exprs: vec![constant_word_expr(1, 0)],
                     width: extend_by,
                 }),
-                self.convert_expr(package, inner, None),
+                self.convert_expr(package, inner, None, self.db),
             ],
             width: target_width,
         })
@@ -384,13 +412,13 @@ impl<'d> Converter<'d> {
         let extend_by = target_width.checked_sub(source_width)
             .unwrap_or_else(|| panic!("cannot sext from {source_width} to {target_width}"));
         if extend_by == 0 {
-            return self.convert_expr(package, inner, None);
+            return self.convert_expr(package, inner, None, self.db);
         }
         let fill = if source_width == 1 {
-            self.convert_expr(package, inner.clone(), None)
+            self.convert_expr(package, inner.clone(), None, self.db)
         } else {
             verilog::Expr::Index(verilog::expr::Index {
-                subject: Box::new(self.convert_expr(package, inner.clone(), None)),
+                subject: Box::new(self.convert_expr(package, inner.clone(), None, self.db)),
                 index: Box::new(constant_index_expr(source_width - 1)),
             })
         };
@@ -401,7 +429,7 @@ impl<'d> Converter<'d> {
                     exprs: vec![fill],
                     width: extend_by,
                 }),
-                self.convert_expr(package, inner, None),
+                self.convert_expr(package, inner, None, self.db),
             ],
             width: target_width,
         })
@@ -410,18 +438,18 @@ impl<'d> Converter<'d> {
     fn convert_command(&self, package: &PackageFqn, node: AstNode) -> verilog::Stmt {
         match node.payload() {
             AstNodePayload::CommandAssert => verilog::Stmt::Assert(verilog::Assert {
-                exprs: vec![self.convert_expr(package, node.child(0), None)],
+                exprs: vec![self.convert_expr(package, node.child(0), None, self.db)],
             }),
             AstNodePayload::CommandDisplay(s) => {
                 let message = node.parsing.string(s).to_owned();
-                let expr = self.convert_expr(package, node.child(0), None);
+                let expr = self.convert_expr(package, node.child(0), None, self.db);
                 verilog::Stmt::Display(verilog::Display { message, exprs: vec![expr] })
             }
             AstNodePayload::CommandFinish => verilog::Stmt::Finish,
             AstNodePayload::CommandFatal => verilog::Stmt::Fatal,
             AstNodePayload::CommandIf => {
                 let children = node.children();
-                let cond = self.convert_expr(package, children[0].clone(), None);
+                let cond = self.convert_expr(package, children[0].clone(), None, self.db);
                 let stmts = children[1..].iter()
                     .map(|cmd| self.convert_command(package, cmd.clone()))
                     .collect();
@@ -431,18 +459,23 @@ impl<'d> Converter<'d> {
         }
     }
 
+    fn typing_for(&self, node: &AstNode) -> Arc<Typing> {
+        let exprroot = self.db.get_exprroot_for(node.location());
+        self.db.get_typing(exprroot)
+    }
+
     fn node_type(&self, package: &PackageFqn, node: &AstNode) -> Option<Type> {
         self.db.get_typeof(Location::new(package.clone(), node.id())).ok()
     }
 
     fn node_width(&self, package: &PackageFqn, node: &AstNode) -> Width {
-        self.node_type(package, node).map(|t| type_width(&t)).unwrap_or(0)
+        self.node_type(package, node).map(|t| type_width(&t, self.db)).unwrap_or(0)
     }
 
     fn node_or_expected_width(&self, package: &PackageFqn, node: &AstNode, expected: Option<&Type>) -> Width {
         self.node_type(package, node)
             .or_else(|| expected.cloned())
-            .map(|t| type_width(&t))
+            .map(|t| type_width(&t, self.db))
             .unwrap_or(0)
     }
 }
@@ -452,11 +485,15 @@ fn qualified_module_name(package_name: &str, module_name: &str) -> String {
     format!("{package_name}::{module_name}")
 }
 
-fn type_width(typ: &Type) -> Width {
+fn type_width(typ: &Type, db: &Db) -> Width {
     match typ {
         Type::Bit | Type::Clock => 1,
         Type::Word(w) => *w,
-        Type::Usual(_) => panic!("cannot emit non-builtin type to Verilog"),
+        Type::Usual(typedef_symbol_id) => {
+            let symboltable = db.get_symboltable();
+            let slots = symboltable.slots(*typedef_symbol_id);
+            slots.len().try_into().unwrap()
+        }
     }
 }
 

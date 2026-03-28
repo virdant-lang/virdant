@@ -36,19 +36,19 @@ enum Command {
     /// Typecheck a Virdant project
     Check { },
     /// Dump inferred expression types
-    Types { path: PathBuf },
+    Types { },
     /// Dump the symbol table
-    Symbols { path: PathBuf },
+    Symbols { },
     /// Dump typedefs
-    Typedefs { path: PathBuf },
+    Typedefs { },
     /// Dump expression roots
-    Exprroots { path: PathBuf },
+    Exprroots { },
     /// Dump typing results
-    Typing { path: PathBuf },
+    Typing { },
     /// Dump database state, optionally saving a Graphviz file
-    Db { path: PathBuf, outpath: Option<PathBuf> },
+    Db { outpath: Option<PathBuf> },
     /// Dump component analysis for a module definition
-    Components { path: PathBuf, moddef_fqn: String },
+    Components { moddef_fqn: String },
     /// Compile Virdant package
     Compile { path: PathBuf },
     /// Build Virdant package
@@ -67,18 +67,33 @@ fn main() {
         Command::Parse { file } => parse_file(&file),
         Command::Tokenize { file } => tokenize_file(&file),
         Command::Check { } => check(&args),
-        Command::Db { path, outpath } => dump_db(path, outpath),
-        Command::Types { path } => dump_types(path),
-        Command::Components { path, moddef_fqn } => dump_components(path, &moddef_fqn),
-        Command::Symbols { path } => dump_symbols(path),
-        Command::Typedefs { path } => dump_typedefs(path),
-        Command::Exprroots { path } => dump_exprroots(path),
-        Command::Typing { path } => dump_typing(path),
+        Command::Db { ref outpath } => dump_db(&args, outpath.clone()),
+        Command::Types { } => dump_types(&args),
+        Command::Components { ref moddef_fqn } => dump_components(&args, moddef_fqn),
+        Command::Symbols { } => dump_symbols(&args),
+        Command::Typedefs { } => dump_typedefs(&args),
+        Command::Exprroots { } => dump_exprroots(&args),
+        Command::Typing { } => dump_typing(&args),
         Command::Compile { path } => compile(path),
         Command::Build { } => build(&args),
         Command::Run { ref path, ref vcd } => run(&args, path, vcd),
         Command::External(args) => exec_external(args),
     }
+}
+
+fn project_db(args: &Args) -> Db {
+    let cwd = if let Some(cwd) = &args.cwd {
+        std::fs::canonicalize(cwd).unwrap()
+    } else {
+        std::env::current_dir().unwrap()
+    };
+
+    if !cwd.join("Virdant.toml").exists() {
+        eprintln!("No Virdant.toml found");
+        std::process::exit(1);
+    }
+
+    db_from_dir(cwd.join("src"))
 }
 
 fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
@@ -224,8 +239,8 @@ fn check(args: &Args) {
     }
 }
 
-fn dump_db(path: PathBuf, outpath: Option<PathBuf>) {
-    let db = db_from_dir(path);
+fn dump_db(args: &Args, outpath: Option<PathBuf>) {
+    let db = project_db(args);
     let _ = db.check();
     if let Some(outpath) = outpath {
         println!("Saving graphviz: {}", outpath.display());
@@ -234,8 +249,8 @@ fn dump_db(path: PathBuf, outpath: Option<PathBuf>) {
     dbg!(&db);
 }
 
-fn dump_types(path: PathBuf) {
-    let db = db_from_dir(path);
+fn dump_types(args: &Args) {
+    let db = project_db(args);
     let _ = db.check();
     for (location, typ) in db.get_typeof_all() {
         let package = location.package();
@@ -251,8 +266,8 @@ fn dump_types(path: PathBuf) {
     }
 }
 
-fn dump_components(path: PathBuf, moddef_fqn: &str) {
-    let db = db_from_dir(path);
+fn dump_components(args: &Args, moddef_fqn: &str) {
+    let db = project_db(args);
     dump_diagnostics(&db);
 
     let symboltable = db.get_symboltable();
@@ -261,18 +276,23 @@ fn dump_components(path: PathBuf, moddef_fqn: &str) {
     dbg!(&component_analysis);
 }
 
-fn dump_symbols(path: PathBuf) {
-    let db = db_from_dir(path);
+fn dump_symbols(args: &Args) {
+    let db = project_db(args);
     dump_diagnostics(&db);
 
     let symboltable = db.get_symboltable();
     for symbol in symboltable.symbols() {
-        println!("{:?} {:<20} {:?}", symbol.id(), symbol.fqn(), symbol.kind());
+        if let Some(parent_symbol_id) = symbol.parent_id() {
+            let kind_str = format!("{:?}", symbol.kind());
+            println!("{:?} {:<20} {kind_str:<20} parent {parent_symbol_id:?}", symbol.id(), symbol.fqn());
+        } else {
+            println!("{:?} {:<20} {:?}", symbol.id(), symbol.fqn(), symbol.kind());
+        }
     }
 }
 
-fn dump_typedefs(path: PathBuf) {
-    let db = db_from_dir(path);
+fn dump_typedefs(args: &Args) {
+    let db = project_db(args);
     dump_diagnostics(&db);
 
     let typedefs = db.get_typedefs();
@@ -281,8 +301,8 @@ fn dump_typedefs(path: PathBuf) {
     }
 }
 
-fn dump_exprroots(path: PathBuf) {
-    let db = db_from_dir(path);
+fn dump_exprroots(args: &Args) {
+    let db = project_db(args);
     dump_diagnostics(&db);
 
     for exprroot in db.get_exprroots() {
@@ -296,8 +316,8 @@ fn dump_exprroots(path: PathBuf) {
     }
 }
 
-fn dump_typing(path: PathBuf) {
-    let db = db_from_dir(path);
+fn dump_typing(args: &Args) {
+    let db = project_db(args);
     dump_diagnostics(&db);
 
     for (location, typ) in db.get_typeof_all() {
