@@ -35,8 +35,8 @@ enum Command {
     Parse { file: PathBuf },
     /// Tokenize a Virdant source file
     Tokenize { file: PathBuf },
-    /// Typecheck all packages in a directory
-    Check { path: PathBuf },
+    /// Typecheck a Virdant project
+    Check { },
     /// Dump inferred expression types
     Types { path: PathBuf },
     /// Dump the symbol table
@@ -72,7 +72,7 @@ fn main() {
     match args.command {
         Command::Parse { file } => parse_file(&file),
         Command::Tokenize { file } => tokenize_file(&file),
-        Command::Check { path } => check_path(path),
+        Command::Check { } => check(&args),
         Command::Db { path, outpath } => dump_db(path, outpath),
         Command::Types { path } => dump_types(path),
         Command::Components { path, moddef_fqn } => dump_components(path, &moddef_fqn),
@@ -206,19 +206,30 @@ fn tokenize_file(path: &Path) {
     }
 }
 
-fn check_path(path: PathBuf) {
-    let db = db_from_dir(path);
+fn check(args: &Args) {
+    let cwd = if let Some(cwd) = &args.cwd {
+        std::fs::canonicalize(cwd).unwrap()
+    } else {
+        std::env::current_dir().unwrap()
+    };
+
+    if !cwd.join("Virdant.toml").exists() {
+        eprintln!("No Virdant.toml found");
+        std::process::exit(1);
+    }
+
+    let source_dir = cwd.join("src");
+    let db = db_from_dir(source_dir);
+    dump_diagnostics(&db);
     match check_db(&db) {
-        Err(_diags) => {
-            dump_diagnostics(&db);
+        Err(_) => {
             eprintln!("Check failed");
             std::process::exit(1);
         }
-        Ok(_diags) => {
-            dump_diagnostics(&db);
+        Ok(_) => {
             eprintln!("Check OK");
         }
-    };
+    }
 }
 
 fn dump_db(path: PathBuf, outpath: Option<PathBuf>) {
