@@ -350,7 +350,7 @@ impl<'d> Converter<'d> {
             AstNodePayload::ExprEnumerant(_enumerant) => {
                 let symboltable = db.get_symboltable();
                 let Some(Type::Usual(typedef_symbol_id)) = expected_type else {
-                    unreachable!()
+                    unreachable!("{:?} type is {:?}", node.region(), expected_type)
                 };
                 let typedef = db.get_typedef(*typedef_symbol_id);
                 let slots = symboltable.slots(*typedef_symbol_id);

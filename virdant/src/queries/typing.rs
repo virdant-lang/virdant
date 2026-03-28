@@ -132,6 +132,8 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
         }
     }
 
+    typing.validate();
+
     Arc::new(typing)
 }
 

@@ -4,9 +4,9 @@ use bstr::{BStr, BString, ByteSlice};
 use hashbrown::{HashMap, HashSet};
 
 use crate::analysis::symbols::{Symbol, SymbolId, SymbolTable};
-use crate::common::{BinOp as CommonBinOp, Flow, UnOp as CommonUnOp, Width};
+use crate::common::{BinOp, Flow, UnOp as UnOp, Width};
 use crate::db::Builder;
-use crate::diagnostics::{self, Diagnostic};
+use crate::diagnostics::{self, Diagnostic, DiagnosticLevel};
 use crate::analysis::location::Location;
 use crate::fqn::PackageFqn;
 use crate::types::typedef::TypeIndex;
@@ -114,7 +114,10 @@ impl Typing {
     }
 
     fn annotate(&mut self, node: &AstNode<'_>, typ: &Type) {
-        self.typs.insert(node.id(), typ.clone());
+        let previous = self.typs.insert(node.id(), typ.clone());
+        if let Some(previous_typ) = previous {
+            panic!("Node is already annotated with {previous_typ:?}, can't annotate with {typ:?} at {:?}", node.region());
+        }
     }
 
     #[rustfmt::skip]
@@ -132,8 +135,6 @@ impl Typing {
             AstNodePayload::ExprParen                => self.check_paren(node, expected_typ),
             AstNodePayload::ExprIf                   => self.check_if(node, expected_typ),
             AstNodePayload::ExprWordLit(_)           => self.check_word_lit(node, expected_typ),
-            AstNodePayload::ExprBinOp(expr_bin_op)   => self.check_binop(node, expr_bin_op.op, expected_typ),
-            AstNodePayload::ExprUnOp(expr_un_op)     => self.check_unop(node, expr_un_op.op, expected_typ),
             AstNodePayload::ExprIndex(expr_index)    => self.check_index(node, expr_index.index, expected_typ),
             AstNodePayload::ExprZext                 => self.check_ext(node, expected_typ),
             AstNodePayload::ExprSext                 => self.check_ext(node, expected_typ),
@@ -219,118 +220,38 @@ impl Typing {
         Ok(())
     }
 
-    fn check_binop<'p>(&mut self, node: &AstNode<'p>, op: CommonBinOp, expected_typ: &Type) -> Result<(), ()> {
-        let lhs = node.child(0);
-        let rhs = node.child(1);
-        let lhs_typ = self.infer(&lhs).unwrap();
-        let rhs_typ = self.infer(&rhs).unwrap();
-
-        // TODO this is sus
-        let (lhs_typ, rhs_typ) = match (&lhs_typ, &rhs_typ) {
-            (&None, &None) => {
-                self.flag_cant_infer(node);
-                return Err(());
-            }
-            (&None, Some(rhs_typ)) => {
-                self.typs.insert(rhs.id(), rhs_typ.clone());
-                let _ = self.check(&lhs, rhs_typ);
-                (rhs_typ.clone(), rhs_typ.clone())
-            }
-            (Some(lhs_typ), &None) => {
-                self.typs.insert(lhs.id(), lhs_typ.clone());
-                let _ = self.check(&rhs, lhs_typ);
-                (lhs_typ.clone(), lhs_typ.clone())
-            }
-            (Some(lhs_typ), Some(rhs_typ)) => {
-                self.typs.insert(lhs.id(), lhs_typ.clone());
-                self.typs.insert(rhs.id(), rhs_typ.clone());
-                (lhs_typ.clone(), rhs_typ.clone())
-            }
-        };
+    fn infer_unop<'p>(&mut self, node: &AstNode<'p>, op: UnOp) -> Result<Option<Type>, ()> {
+        let subject = node.subject().unwrap();
 
         match op {
-            CommonBinOp::Add | CommonBinOp::Sub => {
-                if lhs_typ != rhs_typ {
-                    self.flag_wrong_type(&rhs, &lhs_typ, &rhs_typ);
+            UnOp::Inv | UnOp::Neg => {
+                let Some(subject_typ) = self.infer(&subject)? else {
+                    //self.flag_cant_infer(&subject);
+                    self.flag_todo(&subject, "OK");
                     return Err(());
-                }
-                if lhs_typ == *expected_typ {
-                    self.annotate(node, &lhs_typ);
-                    return Ok(());
+                };
+
+                if let Type::Word(width) = subject_typ {
+                    self.annotate(&node, &Type::Word(width));
+                    Ok(Some(Type::Word(width)))
                 } else {
-                    self.flag_wrong_type(node, expected_typ, &lhs_typ);
-                    return Err(());
-                }
-            }
-            CommonBinOp::Lt
-            | CommonBinOp::Lte
-            | CommonBinOp::Gt
-            | CommonBinOp::Gte
-            | CommonBinOp::Eq
-            | CommonBinOp::Neq => {
-                if lhs_typ != rhs_typ {
-                    self.flag_wrong_type(&rhs, &lhs_typ, &rhs_typ);
-                    return Err(());
-                }
-                if Type::Bit == *expected_typ {
-                    self.annotate(node, &Type::Bit);
-                    return Ok(());
-                } else {
-                    self.flag_wrong_type(node, expected_typ, &Type::Bit);
-                    return Err(());
-                }
-            }
-            CommonBinOp::LogicalAnd | CommonBinOp::LogicalOr | CommonBinOp::LogicalXor |
-            CommonBinOp::And | CommonBinOp::Or | CommonBinOp::Xor => {
-                if lhs_typ != Type::Bit {
-                    self.flag_wrong_type(&lhs, &Type::Bit, &lhs_typ);
-                    return Err(());
-                }
-                if rhs_typ != Type::Bit {
-                    self.flag_wrong_type(&rhs, &Type::Bit, &rhs_typ);
-                    return Err(());
-                }
-                if Type::Bit == *expected_typ {
-                    self.annotate(node, &Type::Bit);
-                    Ok(())
-                } else {
-                    self.flag_wrong_type(node, expected_typ, &Type::Bit);
+                    self.flag_not_word_type(&subject, &subject_typ);
                     Err(())
                 }
             }
-        }
-    }
+            UnOp::Not => {
+                let Some(subject_typ) = self.infer(&subject)? else {
+                    //self.flag_cant_infer(&subject);
+                    self.flag_todo(&subject, "OK2");
+                    return Err(());
+                };
 
-
-    fn check_unop<'p>(&mut self, node: &AstNode<'p>, op: CommonUnOp, expected_typ: &Type) -> Result<(), ()> {
-        let rhs = node.child(0);
-        let Ok(Some(rhs_typ)) = self.infer(&rhs) else {
-            self.flag_cant_infer(node);
-            return Err(());
-        };
-        self.typs.insert(rhs.id(), rhs_typ.clone());
-
-        match op {
-            CommonUnOp::Neg | CommonUnOp::Inv => {
-                if rhs_typ == *expected_typ {
-                    self.annotate(node, &rhs_typ);
-                    return Ok(());
+                if let Type::Bit = subject_typ {
+                    self.annotate(&node, &Type::Bit);
+                    Ok(Some(Type::Bit))
                 } else {
-                    self.flag_wrong_type(node, expected_typ, &rhs_typ);
-                    return Err(());
-                }
-            }
-            CommonUnOp::Not => {
-                if rhs_typ != Type::Bit {
-                    self.flag_wrong_type(&rhs, &Type::Bit, &rhs_typ);
-                    return Err(());
-                }
-                if Type::Bit == *expected_typ {
-                    self.annotate(node, &Type::Bit);
-                    return Ok(());
-                } else {
-                    self.flag_wrong_type(node, expected_typ, &Type::Bit);
-                    return Err(());
+                    self.flag_wrong_type(&subject, &Type::Bit, &subject_typ);
+                    Err(())
                 }
             }
         }
@@ -380,8 +301,6 @@ impl Typing {
             self.flag_cant_infer(node);
             return Err(());
         };
-
-        self.annotate(&subject, &subject_typ);
 
         let subject_width = match subject_typ {
             Type::Bit | Type::Clock => 1,
@@ -451,16 +370,21 @@ impl Typing {
 
     pub(crate) fn infer<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, ()> {
         match node.payload() {
-            AstNodePayload::ExprParen => self.infer(&node.child(0)),
             AstNodePayload::ExprReference => {
                 // TODO HACK
                 let parsing = node.parsing();
                 let path = parsing.string(node.path().unwrap());
-                let typ = self.context.get(path.to_owned()); // TODO need to walk backwards to get it.
-                self.use_component(path, node.location());
-                Ok(typ)
+                if let Some(typ) = self.context.get(path.to_owned()) { // TODO need to walk backwards to get it.
+                    self.use_component(path, node.location());
+                    self.annotate(&node, &typ);
+                    Ok(Some(typ))
+                } else {
+                    self.flag_unknown(node, "Unknown component");
+                    Err(())
+                }
             }
             AstNodePayload::ExprBitLit(_expr_bit_lit) => {
+                self.annotate(&node, &Type::Bit);
                 Ok(Some(Type::Bit))
             }
             AstNodePayload::ExprWordLit(_expr_word_lit) => {
@@ -469,6 +393,7 @@ impl Typing {
                 if path.contains(&b'w') {
                     let parts: Vec<_> = path.split(|ch| *ch == b'w').collect();
                     let width: Width = std::str::from_utf8(parts[1]).unwrap().parse().unwrap();
+                    self.annotate(&node, &Type::Word(width));
                     Ok(Some(Type::Word(width)))
                 } else {
                     Ok(None)
@@ -484,12 +409,22 @@ impl Typing {
                 let maybe_typ = self.type_index.type_at(typ_node.location()).cloned();
                 if let Some(typ) = maybe_typ  {
                     let _ = self.check(&subject, &typ);
+                    self.annotate(&node, &typ);
                     Ok(Some(typ))
                 } else {
                     Err(())
                 }
             }
             AstNodePayload::ExprBinOp(_expr_bin_op) => self.infer_binop(node),
+            AstNodePayload::ExprUnOp(expr_un_op)     => self.infer_unop(node, expr_un_op.op),
+            AstNodePayload::ExprParen => {
+                if let Some(typ) = self.infer(&node.subject().unwrap())? {
+                    self.annotate(&node, &typ);
+                    Ok(Some(typ))
+                } else {
+                    Ok(None)
+                }
+            }
             _ => Ok(None),
         }
     }
@@ -498,14 +433,15 @@ impl Typing {
         // We can assume we have a width-less WordLit here, since it would have been inferred earlier.
         let mut total_width = 0;
         let mut diagnostics: Vec<Diagnostic> = vec![];
+        let mut uninferred_child = false;
         for child in node.children() {
-            match self.infer(&child)? {
-                None => {
+            match self.infer(&child) {
+                Ok(None) => {
                     self.diagnostics.push(diagnostics::CantInfer {
                         region: node.region(),
                     }.into());
                 }
-                Some(typ) => {
+                Ok(Some(typ)) => {
                     total_width += match typ {
                         Type::Bit => 1,
                         Type::Word(w) => w,
@@ -517,15 +453,16 @@ impl Typing {
                             0
                         }
                     };
-                    self.typs.insert(child.id(), typ);
                 }
+                Err(_) => uninferred_child = true,
             }
         }
 
-        if !diagnostics.is_empty() {
+        if uninferred_child {
             return Err(());
         }
 
+        self.annotate(&node, &Type::Word(total_width));
         Ok(Some(Type::Word(total_width)))
     }
 
@@ -537,44 +474,43 @@ impl Typing {
     fn infer_binop<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, ()> {
         let lhs = node.child(0);
         let rhs = node.child(1);
-        let lhs_typ = self.infer(&lhs)?; // TODO combine the diagnostics on error for either of these two
-        let rhs_typ = self.infer(&rhs)?;
-
-        if let Some(ref typ) = lhs_typ {
-            self.typs.insert(lhs.id(), typ.clone());
-        }
-        if let Some(ref typ) = rhs_typ {
-            self.typs.insert(rhs.id(), typ.clone());
-        }
 
         let AstNodePayload::ExprBinOp(binop) = node.payload() else { unreachable!() };
         match binop.op {
-            crate::common::BinOp::Lt | crate::common::BinOp::Lte |
-            crate::common::BinOp::Gt | crate::common::BinOp::Gte |
-            crate::common::BinOp::Eq | crate::common::BinOp::Neq => {
-                if let (Some(lhs_typ), Some(rhs_typ)) = (lhs_typ, rhs_typ) {
-                    if lhs_typ == rhs_typ {
-                        return Ok(Some(Type::Bit));
-                    } else {
-                        return Ok(None);
-                    }
+            BinOp::Lt | BinOp::Lte |
+            BinOp::Gt | BinOp::Gte |
+            BinOp::Eq | BinOp::Neq => {
+                if let Some(lhs_typ) = self.infer(&lhs)? {
+                    self.check(&rhs, &lhs_typ)?;
+                    self.annotate(node, &Type::Bit);
+                    Ok(Some(Type::Bit))
                 } else {
-                    return Ok(None);
+                    self.flag_unknown(&node, "Can't infer LHS");
+                    Err(())
                 }
             }
-            _ => (),
-        }
-
-        if let (Some(lhs_typ), Some(rhs_typ)) = (lhs_typ, rhs_typ) {
-            if lhs_typ == rhs_typ {
-                Ok(Some(lhs_typ))
-            } else {
-                Ok(None)
+            BinOp::Add | BinOp::Sub | BinOp::And |
+            BinOp::Or | BinOp::Xor => {
+                if let Some(lhs_typ) = self.infer(&lhs)? {
+                    self.check(&rhs, &lhs_typ)?;
+                    self.annotate(node, &lhs_typ);
+                    Ok(Some(lhs_typ))
+                } else {
+                    self.flag_cant_infer(node);
+                    Err(())
+                }
             }
-        } else {
-            Ok(None)
+            BinOp::LogicalAnd | BinOp::LogicalOr | BinOp::LogicalXor => {
+                let lhs_ok = self.check(&lhs, &Type::Bit).is_ok();
+                let rhs_ok = self.check(&rhs, &Type::Bit).is_ok();
+                if lhs_ok && rhs_ok {
+                    self.annotate(node, &Type::Bit);
+                    Ok(Some(Type::Bit))
+                } else {
+                    Err(())
+                }
+            }
         }
-
     }
 
     fn infer_index<'p>(&mut self, node: &AstNode<'p>, index: payload::ExprIndex) -> Result<Option<Type>, ()> {
@@ -585,6 +521,7 @@ impl Typing {
             if let Type::Word(width) = &subject_typ {
                 // TODO check
                 if index.index < *width {
+                    self.annotate(&node, &Type::Bit);
                     Ok(Some(Type::Bit))
                 } else {
                     self.diagnostics.push(diagnostics::Todo {
@@ -621,7 +558,9 @@ impl Typing {
             if let Type::Word(width) = &subject_typ {
                 // TODO check
                 if indexrange.index_lo <= indexrange.index_hi && indexrange.index_hi <= *width {
-                    Ok(Some(Type::Word(indexrange.index_hi - indexrange.index_lo)))
+                    let typ = Type::Word(indexrange.index_hi - indexrange.index_lo);
+                    self.annotate(&node, &typ);
+                    Ok(Some(typ))
                 } else {
                     self.diagnostics.push(diagnostics::Todo {
                         region,
@@ -642,6 +581,26 @@ impl Typing {
                 message: "infer_index_range can't infer subject".into(),
             }.into());
             Err(())
+        }
+    }
+
+    // Checks that in a clean typecheck, all expressions in the tree have an annotation.
+    pub fn validate(&mut self) {
+        if self.diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
+            return;
+        }
+
+        let parsing = self.parsing.clone();
+        let root_id = self.exprroot.location().ast_node_id();
+        let mut queue = vec![root_id];
+        while let Some(node_id) = queue.pop() {
+            let node = parsing.ast_node(node_id);
+            if node.is_expr() && !self.typs.contains_key(&node.id()) {
+                self.flag_unknown(&node, "Missing annotation");
+            }
+            for child in node.children() {
+                queue.push(child.id());
+            }
         }
     }
 }

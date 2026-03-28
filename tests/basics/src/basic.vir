@@ -30,13 +30,13 @@ export mod Top {
     s := sext(0x8w4);
 
     wire and_ : Word[8];
-    and_ := 0w8 && 1w8;
+    and_ := 0w8 & 1w8;
 
     wire or_ : Word[8];
-    or_ := 0w8 || 1w8;
+    or_ := 0w8 | 1w8;
 
     wire xor_ : Word[8];
-    xor_ := 0w8 ^^ 1w8;
+    xor_ := 0w8 ^ 1w8;
 
 //    wire bit_and_ : Bit;
 //    bit_and_ := 0w8 && 1w8;
@@ -86,8 +86,8 @@ export mod Top {
         assert(s == 0xf8w8);
         assert(s[7] == true);
 
-        assert((if w { x } else { y }) == x);
-        assert((if a { x } else { y }) == y);
+        assert((if w { x } else { y }) : Word[4] == x);
+        assert((if a { x } else { y }) : Word[4] == y);
 
         if true {
             display("Hello", true);
