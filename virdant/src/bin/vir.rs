@@ -56,6 +56,8 @@ enum Command {
     Build { },
     /// Run Virdant package
     Run { path: Option<PathBuf>, #[arg(long)] vcd: Option<String> },
+    /// Create a new Virdant project
+    New { project: String },
     /// Synthesize, place-and-route, and pack a bitstream
     Bitstream { },
     /// Synthesize, place-and-route, pack, and upload a bitstream
@@ -82,6 +84,7 @@ fn main() {
         Command::Compile { path } => compile(path),
         Command::Build { } => build(&args),
         Command::Run { ref path, ref vcd } => run(&args, path, vcd),
+        Command::New { ref project } => new_project(&args, project),
         Command::Bitstream { } => bitstream(&args),
         Command::Upload { } => upload(&args),
         Command::External(args) => exec_external(args),
@@ -449,6 +452,61 @@ fn run(args: &Args, _path: &Option<PathBuf>, vcd: &Option<String>) {
     }
 
     let _ = execvp(&program, &args);
+}
+
+fn new_project(args: &Args, project: &str) {
+    let cwd = if let Some(cwd) = &args.cwd {
+        std::fs::canonicalize(cwd).unwrap()
+    } else {
+        std::env::current_dir().unwrap()
+    };
+
+    let project_dir = cwd.join(project);
+
+    if project_dir.exists() {
+        eprintln!("Error: directory '{}' already exists", project_dir.display());
+        std::process::exit(1);
+    }
+
+    std::fs::create_dir_all(project_dir.join("src")).unwrap();
+
+    let toml_content = format!(
+        "[project]\nname = \"{project}\"\n\n[prog]\nplatform = \"icesugar\"\n"
+    );
+    std::fs::write(project_dir.join("Virdant.toml"), toml_content).unwrap();
+
+    let top_vir_content = "export mod Top {\n    incoming clock : Clock;\n}\n";
+    std::fs::write(project_dir.join("src").join("top.vir"), top_vir_content).unwrap();
+
+    // Walk up from cwd looking for an existing .git directory
+    let mut search = cwd.clone();
+    let mut found_git = false;
+    loop {
+        if search.join(".git").exists() {
+            found_git = true;
+            break;
+        }
+        match search.parent() {
+            Some(parent) => search = parent.to_path_buf(),
+            None => break,
+        }
+    }
+
+    if !found_git {
+        let output = std::process::Command::new("git")
+            .arg("init")
+            .current_dir(&project_dir)
+            .output()
+            .unwrap();
+        if !output.status.success() {
+            eprintln!("git init failed");
+            eprintln!("{}", BStr::new(&output.stderr));
+            std::process::exit(1);
+        }
+        std::fs::write(project_dir.join(".gitignore"), "build\n").unwrap();
+    }
+
+    println!("Created project '{project}'");
 }
 
 fn bitstream(args: &Args) {
