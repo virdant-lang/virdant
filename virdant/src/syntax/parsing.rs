@@ -6,9 +6,11 @@ use crate::common::source::{LineCol, Region, Source, SourceOffset, Span};
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::grammar::PackageParser;
-use crate::syntax::token::tokenize;
+use crate::syntax::token::{Token, TokenError, tokenize};
 
 lalrpop_util::lalrpop_mod!(grammar, "/syntax/grammar.rs");
+
+pub type ParseError = lalrpop_util::ErrorRecovery<SourceOffset, Token, TokenError>;
 
 #[derive(Debug)]
 pub struct Parsing {
@@ -19,6 +21,7 @@ pub struct Parsing {
     pub(super) parents: Vec<AstNodeId>,
     pub(super) num_children: Vec<u16>,
     pub(super) errors: Vec<AstNodeId>,
+    pub(super) error_data: Vec<ParseError>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -86,6 +89,7 @@ impl Parsing {
             parents: vec![],
             num_children: vec![],
             errors: vec![],
+            error_data: vec![],
         }
     }
 
@@ -101,13 +105,14 @@ impl Parsing {
         ast_node_id
     }
 
-    pub fn add_error_node(&mut self, span: Span) -> AstNodeId {
+    pub fn add_error_node(&mut self, span: Span, error: ParseError) -> AstNodeId {
         let payload = AstNodePayload::Error;
         let ast_node_id = AstNodeId(self.payloads.len().try_into().unwrap());
         self.payloads.push(payload);
         self.spans.push(span);
         self.num_children.push(0);
         self.errors.push(ast_node_id.clone());
+        self.error_data.push(error);
         ast_node_id
     }
 
@@ -161,21 +166,46 @@ impl Parsing {
         }
     }
 
-    pub fn errors(&self) -> Vec<AstNode<'_>> {
+    pub fn errors(&self) -> Vec<(AstNode<'_>, ParseError)> {
         let mut errors = vec![];
 
-        for error_id in &self.errors {
-            errors.push(self.ast_node(error_id.clone()));
+        for (error_id, error_data) in self.errors.iter().zip(self.error_data.iter().cloned()) {
+            errors.push((self.ast_node(error_id.clone()), error_data));
         }
         errors
     }
 
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         let mut diagnostics = vec![];
-        for error in self.errors() {
-            let region = Region::new(self.package(), error.span());
+        for (error, error_data) in self.errors() {
+            dbg!(&error_data.dropped_tokens);
+            let (message, region) = match error_data.error {
+                lalrpop_util::ParseError::UnrecognizedToken { token, expected } => {
+                    let (start, token, end) = token;
+                    let region = self.source.to_region(start, end);
+                    let message = format!("Unexpected token: {token:?} at {region}. Expected: {expected:?}").into();
+                    (message, region)
+                }
+                lalrpop_util::ParseError::InvalidToken { location:_ } => {
+                    let region = Region::new(self.package(), error.span());
+                    let message = "Invalid token".into();
+                    (message, region)
+                }
+                lalrpop_util::ParseError::UnrecognizedEof { location:_, expected: _ } => {
+                    let region = Region::new(self.package(), error.span());
+                    let message = "Unexpected end of file".into();
+                    (message, region)
+                }
+                lalrpop_util::ParseError::ExtraToken { token: _ } => {
+                    let region = Region::new(self.package(), error.span());
+                    let message = "Expected end of file".into();
+                    (message, region)
+                }
+                lalrpop_util::ParseError::User { error: _ } => unreachable!(),
+            };
             let diagnostic = diagnostics::SyntaxError {
                 region,
+                message,
             };
             diagnostics.push(diagnostic.into());
         }

@@ -23,9 +23,9 @@ pub Package: AstNodeId = {
 PackageStmt: AstNodeId = {
     <import:PackageImport> => import,
     <item:Item> => item,
-    <ll:@L> ! <rr:@R> => {
+    <ll:@L> <error:!> <rr:@R> => {
         let span = parser.span(ll, rr);
-        parser.add_error_node(span)
+        parser.add_error_node(span, error)
     },
 }
 
@@ -231,9 +231,9 @@ ModDefStmt: AstNodeId = {
     <on:ModDefStmtOn> => on,
     <if_:ModDefStmtIf> => if_,
     <m:ModDefStmtMatch> => m,
-    <ll:@L> ! <rr:@R> => {
+    <ll:@L> <error:!> <rr:@R> => {
         let span = parser.span(ll, rr);
-        parser.add_error_node(span)
+        parser.add_error_node(span, error)
     },
 }
 

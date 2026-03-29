@@ -26,7 +26,7 @@ pub enum DiagnosticLevel {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SyntaxError {
     pub region: Region,
-    //pub error: VirParseError, // TODO
+    pub message: BString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -300,7 +300,7 @@ impl IsDiagnostic for SyntaxError {
     }
 
     fn message(&self) -> BString {
-        format!("Syntax Error").into()
+        format!("Syntax Error: {}", self.message).into()
     }
 }
 

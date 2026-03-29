@@ -112,7 +112,8 @@ fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
     let builtin_source = Source::load_file(LIB_DIR.join("builtin.vir"));
     let mut sources = vec![builtin_source.clone()];
     db.set_source(builtin_source.package(), builtin_source);
-    for filepath in std::fs::read_dir(source_dir.into()).unwrap() {
+    let source_dir: PathBuf = source_dir.into();
+    for filepath in std::fs::read_dir(&source_dir).expect(&format!("Could not open directory: {source_dir:?}")) {
         let filepath = match filepath {
             Ok(filepath) => filepath.path(),
             Err(_) => continue,
@@ -183,6 +184,24 @@ fn parse_file(path: &Path) {
     let source = Source::new(package, input.into());
     let parsing = parse(&source);
     parsing.dump();
+
+    let diagnostics = parsing.diagnostics();
+    let longest_region = diagnostics
+        .iter()
+        .map(|diag| diag.region().to_string().len())
+        .max()
+        .unwrap_or_default();
+    for diagnostic in diagnostics {
+        let unpadded_region = diagnostic.region().to_string();
+        let padded_region = format!("{}{}", unpadded_region, " ".repeat(longest_region - unpadded_region.len()));
+        if diagnostic.level() == DiagnosticLevel::Error {
+            println!("{}   {}   {}", "ERROR  ".red(), padded_region, diagnostic.message());
+        } else if diagnostic.level() == DiagnosticLevel::Warning {
+            println!("{}   {}   {}", "WARNING".yellow(), padded_region, diagnostic.message());
+        } else {
+            println!("{}   {}   {}", "INFO   ".green(), padded_region, diagnostic.message());
+        }
+    }
 }
 
 fn tokenize_file(path: &Path) {
