@@ -260,6 +260,23 @@ impl<'d> Converter<'d> {
         }
         elements.extend(hole_displays);
 
+        let init_stmts: Vec<verilog::Stmt> = elements.iter()
+            .filter_map(|e| {
+                let verilog::Element::Reg(reg) = e else { return None };
+                Some(verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
+                    name: reg.name.clone(),
+                    expr: verilog::Expr::WordLit(verilog::expr::WordLit {
+                        value: 0,
+                        width: reg.width,
+                        radix: Radix::Dec,
+                    }),
+                }))
+            })
+            .collect();
+        if !init_stmts.is_empty() {
+            elements.push(verilog::Element::Initial(verilog::Initial { stmts: init_stmts }));
+        }
+
         verilog::Module { name: module_name, is_ext: moddef.is_ext, ports, elements }
     }
 
