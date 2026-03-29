@@ -11,7 +11,8 @@ use virdant::LIB_DIR;
 use virdant::db::Db;
 use virdant::diagnostics::{Diagnostic, DiagnosticLevel};
 use virdant::fqn::PackageFqn;
-use virdant::common::source::{Region, Source};
+use virdant::common::{Flow, source::{Region, Source}};
+use virdant::analysis::symbols::SymbolKind;
 use virdant::syntax::parsing::parse;
 use virdant::syntax::token::tokenize;
 use virdant::syntax::token::Token;
@@ -55,6 +56,10 @@ enum Command {
     Build { },
     /// Run Virdant package
     Run { path: Option<PathBuf>, #[arg(long)] vcd: Option<String> },
+    /// Synthesize, place-and-route, and pack a bitstream
+    Bitstream { },
+    /// Synthesize, place-and-route, pack, and upload a bitstream
+    Upload { },
 
     #[command(external_subcommand)]
     External(Vec<OsString>),
@@ -77,6 +82,8 @@ fn main() {
         Command::Compile { path } => compile(path),
         Command::Build { } => build(&args),
         Command::Run { ref path, ref vcd } => run(&args, path, vcd),
+        Command::Bitstream { } => bitstream(&args),
+        Command::Upload { } => upload(&args),
         Command::External(args) => exec_external(args),
     }
 }
@@ -442,6 +449,211 @@ fn run(args: &Args, _path: &Option<PathBuf>, vcd: &Option<String>) {
     }
 
     let _ = execvp(&program, &args);
+}
+
+fn bitstream(args: &Args) {
+    let cwd = if let Some(cwd) = &args.cwd {
+        std::fs::canonicalize(cwd).unwrap()
+    } else {
+        std::env::current_dir().unwrap()
+    };
+
+    if !cwd.join("Virdant.toml").exists() {
+        eprintln!("No Virdant.toml found");
+        std::process::exit(1);
+    }
+
+    let virdant_toml_text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
+    let virdant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
+
+    let project = virdant_toml["project"]["name"].as_str().unwrap().to_owned();
+
+    let platform = virdant_toml
+        .get("prog")
+        .and_then(|p| p.get("platform"))
+        .and_then(|p| p.as_str())
+        .unwrap_or_else(|| {
+            eprintln!("Virdant.toml is missing [prog] platform");
+            std::process::exit(1);
+        });
+    assert_eq!(platform, "icesugar", "Only 'icesugar' platform is supported");
+
+    let builddir = cwd.join("build");
+
+    // Build Verilog
+    let source_dir = cwd.join("src");
+    let db = db_from_dir(source_dir);
+    dump_diagnostics(&db);
+    if check_db(&db).is_err() {
+        eprintln!("Build failed");
+        std::process::exit(1);
+    }
+    std::fs::create_dir_all(&builddir).unwrap();
+    let verilog = virdant::verilog::conversion::convert_db_to_verilog(&db);
+    verilog.write_in_dir(&builddir).unwrap();
+    println!("Wrote Verilog to {}", builddir.to_string_lossy());
+
+    // Write yosys script
+    let sv_files = glob_sv_files(&builddir);
+    let sv_list: Vec<String> = sv_files.iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    let project_json = builddir.join(format!("{project}.json"));
+    let script_content = format!(
+        "read_verilog -I {} {}; synth_ice40 -top Top -json {}",
+        builddir.to_string_lossy(),
+        sv_list.join(" "),
+        project_json.to_string_lossy(),
+    );
+    let script_path = builddir.join("script.ys");
+    std::fs::write(&script_path, &script_content).unwrap();
+
+    // Run yosys
+    let yosys_log = builddir.join("yosys.log");
+    let output = std::process::Command::new("yosys")
+        .arg("-l").arg(&yosys_log)
+        .arg(&script_path)
+        .output().unwrap();
+    if !output.status.success() {
+        eprintln!("{}", BStr::new(&output.stderr));
+        eprintln!("yosys failed");
+        std::process::exit(1);
+    }
+    println!("{}", BStr::new(&output.stdout));
+    println!("yosys OK");
+
+    // Run nextpnr-ice40
+    create_pcf_file(&db, "Top".into(), &builddir);
+    let pcf = builddir.join("icesugar.pcf");
+    let project_asc = builddir.join(format!("{project}.asc"));
+    let output = std::process::Command::new("nextpnr-ice40")
+        .arg("--up5k")
+        .arg("--top").arg("Top")
+        .arg("--json").arg(&project_json)
+        .arg("--pcf").arg(&pcf)
+        .arg("--asc").arg(&project_asc)
+        .arg("--package").arg("sg48")
+        .output().unwrap();
+    if !output.status.success() {
+        eprintln!("{}", BStr::new(&output.stderr));
+        eprintln!("nextpnr-ice40 failed");
+        std::process::exit(1);
+    }
+    println!("{}", BStr::new(&output.stdout));
+    println!("nextpnr-ice40 OK");
+
+    // Run icepack
+    let project_bin = builddir.join(format!("{project}.bin"));
+    let output = std::process::Command::new("icepack")
+        .arg("-s")
+        .arg(&project_asc)
+        .arg(&project_bin)
+        .output().unwrap();
+    if !output.status.success() {
+        eprintln!("{}", BStr::new(&output.stderr));
+        eprintln!("icepack failed");
+        std::process::exit(1);
+    }
+    println!("{}", BStr::new(&output.stdout));
+    println!("Bitstream written to {}", project_bin.to_string_lossy());
+}
+
+fn create_pcf_file(db: &Db, top: &BStr, builddir: &PathBuf) {
+    const ICESGUAR_PORTS: [(&'static str, usize); 45] = [
+        ("clock", 35),
+        ("led_red", 39),
+        ("led_blue", 40),
+        ("led_green", 41),
+        ("switch0", 18),
+        ("switch1", 19),
+        ("switch2", 20),
+        ("switch3", 21),
+        ("uart_rx", 4),
+        ("uart_tx", 6),
+        ("USB_DP", 10),
+        ("USB_DN", 9),
+        ("USB_PULLUP", 11),
+        ("P1_1", 10),
+        ("P1_2", 6),
+        ("P1_3", 3),
+        ("P1_4", 48),
+        ("P1_9", 47),
+        ("P1_10", 2),
+        ("P1_11", 4),
+        ("P1_12", 9),
+        ("P2_1", 46),
+        ("P2_2", 44),
+        ("P2_3", 42),
+        ("P2_4", 37),
+        ("P2_9", 36),
+        ("P2_10", 38),
+        ("P2_11", 43),
+        ("P2_12", 45),
+        ("P3_1", 34),
+        ("P3_2", 31),
+        ("P3_3", 27),
+        ("P3_4", 25),
+        ("P3_9", 23),
+        ("P3_10", 26),
+        ("P3_11", 28),
+        ("P3_12", 32),
+        ("P4_1", 21),
+        ("P4_2", 20),
+        ("P4_3", 19),
+        ("P4_4", 18),
+        ("spi_cs", 16),
+        ("spi_clk", 15),
+        ("spi_do", 14),
+        ("spi_di", 17),
+    ];
+    // Collect the port names present on the top module
+    let symboltable = db.get_symboltable();
+    let top_symbol = symboltable.items()
+        .into_iter()
+        .find(|sym| sym.name.as_bstr() == top && sym.kind == SymbolKind::ModDef)
+        .unwrap_or_else(|| panic!("module '{}' not found", top));
+    let component_analysis = db.get_component_analysis(top_symbol.id);
+    let port_names: std::collections::HashSet<String> = component_analysis.components()
+        .into_iter()
+        .filter(|(path, component)| !path.contains(&b'.') && component.flow() != Flow::Duplex)
+        .map(|(path, _)| path.to_str_lossy().into_owned())
+        .collect();
+
+    // Emit only the ICESUGAR_PORTS entries that exist on the top module
+    let mut pcf_content = String::new();
+    for (name, pin) in ICESGUAR_PORTS.iter() {
+        if port_names.contains(*name) {
+            pcf_content.push_str(&format!("set_io {name} {pin}\n"));
+        }
+    }
+    std::fs::write(builddir.join("icesugar.pcf"), pcf_content).unwrap();
+}
+
+fn upload(args: &Args) {
+    bitstream(args);
+
+    let cwd = if let Some(cwd) = &args.cwd {
+        std::fs::canonicalize(cwd).unwrap()
+    } else {
+        std::env::current_dir().unwrap()
+    };
+
+    let virdant_toml_text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
+    let virdant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
+    let project = virdant_toml["project"]["name"].as_str().unwrap().to_owned();
+
+    let builddir = cwd.join("build");
+    let project_bin = builddir.join(format!("{project}.bin"));
+
+    let output = std::process::Command::new("icesprog")
+        .arg(&project_bin)
+        .output().unwrap();
+    if !output.status.success() {
+        eprintln!("icesprog failed");
+        eprintln!("{}", BStr::new(&output.stderr));
+        std::process::exit(1);
+    }
+    println!("Uploaded {}", project_bin.to_string_lossy());
 }
 
 fn glob_sv_files(dir: &Path) -> Vec<PathBuf> {
