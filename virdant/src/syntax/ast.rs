@@ -182,7 +182,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Driver(_driver) => format!("Driver"),
             AstNodePayload::BidirectionalDriver => format!("BidirectionalDriver"),
             AstNodePayload::Module(_module) => format!("Module"),
-            AstNodePayload::ModDefStmtBlock(_mod_def_stmt_block) => format!("ModDefStmtBlock"),
+            AstNodePayload::ModDefStmtBlock => format!("ModDefStmtBlock"),
             AstNodePayload::ModDefStmtOn => format!("ModDefStmtOn"),
             AstNodePayload::ModDefStmtIf => format!("ModDefStmtIf"),
             AstNodePayload::ModDefStmtMatch => format!("ModDefStmtMatch"),

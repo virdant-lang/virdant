@@ -21,7 +21,7 @@ pub Package: AstNodeId = {
 }
 
 PackageStmt: AstNodeId = {
-    <import:PackageImport> => import,
+    <import:(PackageImport ";")> => import.0,
     <item:Item> => item,
     <ll:@L> <error:!> <rr:@R> => {
         let span = parser.span(ll, rr);
@@ -30,7 +30,7 @@ PackageStmt: AstNodeId = {
 }
 
 PackageImport: AstNodeId = {
-    <ll:@L> "import" <ident:Ident> ";" <rr:@R> => {
+    <ll:@L> "import" <ident:Ident> <rr:@R> => {
         let payload = AstNodePayload::Import(payload::Import { package: ident });
         let span = parser.span(ll, rr);
         let num_children = 0;
@@ -51,7 +51,7 @@ Item: AstNodeId = {
 
 ModDef: AstNodeId = {
     <ll:@L> <ext:"ext"?> <export:"export"?> "mod" <ident:Ident> "{"
-        <stmts:ModDefStmt*>
+        <stmts:(ModDefStmt ";")*>
     "}" <rr:@R> => {
         let payload = AstNodePayload::ModDef(payload::ModDef {
             name: ident,
@@ -231,6 +231,10 @@ ModDefStmt: AstNodeId = {
     <on:ModDefStmtOn> => on,
     <if_:ModDefStmtIf> => if_,
     <m:ModDefStmtMatch> => m,
+    <ll:@L> <error:!> <rr:@R> <stmt: ModDefStmt> => {
+        let span = parser.span(ll, rr);
+        parser.add_error_node(span, error)
+    },
     <ll:@L> <error:!> <rr:@R> => {
         let span = parser.span(ll, rr);
         parser.add_error_node(span, error)
@@ -238,7 +242,7 @@ ModDefStmt: AstNodeId = {
 }
 
 ModDefStmtComponent: AstNodeId = {
-    <ll:@L> "incoming" <ident:Ident> ":" <typ:Type> <on:OnClause?> ";" <rr:@R> => {
+    <ll:@L> "incoming" <ident:Ident> ":" <typ:Type> <on:OnClause?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Incoming,
@@ -248,7 +252,7 @@ ModDefStmtComponent: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "outgoing" <ident:Ident> ":" <typ:Type> <on:OnClause?> ";" <rr:@R> => {
+    <ll:@L> "outgoing" <ident:Ident> ":" <typ:Type> <on:OnClause?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Outgoing,
@@ -258,7 +262,7 @@ ModDefStmtComponent: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "wire" <ident:Ident> ":" <typ:Type> <on:OnClause?> ";" <rr:@R> => {
+    <ll:@L> "wire" <ident:Ident> ":" <typ:Type> <on:OnClause?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Wire,
@@ -268,7 +272,7 @@ ModDefStmtComponent: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "reg" <ident:Ident> ":" <typ:Type> <on:OnClause?> ";" <rr:@R> => {
+    <ll:@L> "reg" <ident:Ident> ":" <typ:Type> <on:OnClause?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Reg,
@@ -285,7 +289,7 @@ OnClause: AstNodeId = {
 }
 
 ModDefStmtDriver: AstNodeId = {
-    <ll:@L> <lhs:Path> ":=" <rhs:Expr> ";" <rr:@R> => {
+    <ll:@L> <lhs:Path> ":=" <rhs:Expr> <rr:@R> => {
         let payload = AstNodePayload::Driver(payload::Driver {
             driver_type: DriverType::Continuous,
         });
@@ -294,7 +298,7 @@ ModDefStmtDriver: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> <lhs:Path> "<=" <rhs:Expr> ";" <rr:@R> => {
+    <ll:@L> <lhs:Path> "<=" <rhs:Expr> <rr:@R> => {
         let payload = AstNodePayload::Driver(payload::Driver {
             driver_type: DriverType::Latched,
         });
@@ -303,7 +307,7 @@ ModDefStmtDriver: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> <lhs:Path> ":=:" <rhs:Path> ";" <rr:@R> => {
+    <ll:@L> <lhs:Path> ":=:" <rhs:Path> <rr:@R> => {
         let payload = AstNodePayload::BidirectionalDriver;
         let span = parser.span(ll, rr);
         let num_children = 2;
@@ -313,7 +317,7 @@ ModDefStmtDriver: AstNodeId = {
 }
 
 ModDefStmtInstance: AstNodeId = {
-    <ll:@L> "mod" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> ";" <rr:@R> => {
+    <ll:@L> "mod" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Module(payload::Module { name });
         let span = parser.span(ll, rr);
         let num_children = if it.is_none() {
@@ -337,14 +341,14 @@ ItBlock: AstNodeId = {
 }
 
 ModDefStmtSocket: AstNodeId = {
-    <ll:@L> "master" "socket" <name:Ident> "of" <ofness:Ofness> ";" <rr:@R> => {
+    <ll:@L> "master" "socket" <name:Ident> "of" <ofness:Ofness> <rr:@R> => {
         let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Master });
         let span = parser.span(ll, rr);
         let num_children = 1;
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "slave" "socket" <name:Ident> "of" <ofness:Ofness> ";" <rr:@R> => {
+    <ll:@L> "slave" "socket" <name:Ident> "of" <ofness:Ofness> <rr:@R> => {
         let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Slave });
         let span = parser.span(ll, rr);
         let num_children = 1;
@@ -355,7 +359,7 @@ ModDefStmtSocket: AstNodeId = {
 
 ModDefStmtOn: AstNodeId = {
     <ll:@L> "on" <clock_expr:Expr> "{"
-        <commands:Command*>
+        <commands:(Command ";")*>
     "}" <rr:@R> => {
         let payload = AstNodePayload::ModDefStmtOn;
         let span = parser.span(ll, rr);
@@ -366,35 +370,35 @@ ModDefStmtOn: AstNodeId = {
 }
 
 Command: AstNodeId = {
-    <ll:@L> "if" <e:Expr> "{" <cmds:Command*> "}" <rr:@R> => {
+    <ll:@L> "if" <e:Expr> "{" <cmds:(Command ";")*> "}" <rr:@R> => {
         let payload = AstNodePayload::CommandIf;
         let span = parser.span(ll, rr);
         let num_children = 1 + u16::try_from(cmds.len()).unwrap();
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "assert" "(" <e:Expr> ")" ";" <rr:@R> => {
+    <ll:@L> "assert" "(" <e:Expr> ")" <rr:@R> => {
         let payload = AstNodePayload::CommandAssert;
         let span = parser.span(ll, rr);
         let num_children = 1;
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "display" "(" <s:Str> "," <e:Expr> ")" ";" <rr:@R> => {
+    <ll:@L> "display" "(" <s:Str> "," <e:Expr> ")" <rr:@R> => {
         let payload = AstNodePayload::CommandDisplay(s);
         let span = parser.span(ll, rr);
         let num_children = 1;
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "finish" ";" <rr:@R> => {
+    <ll:@L> "finish" <rr:@R> => {
         let payload = AstNodePayload::CommandFinish;
         let span = parser.span(ll, rr);
         let num_children = 0;
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "fatal" ";" <rr:@R> => {
+    <ll:@L> "fatal" <rr:@R> => {
         let payload = AstNodePayload::CommandFatal;
         let span = parser.span(ll, rr);
         let num_children = 0;
@@ -444,9 +448,9 @@ ModDefStmtMatchArm: () = {
 }
 
 ModDefStmtBlock: AstNodeId = {
-    <ll:@L> "{" <stmts:ModDefStmt*> "}" <rr:@R> => {
+    <ll:@L> "{" <stmts:(ModDefStmt ";")*> "}" <rr:@R> => {
         let num_children = u16::try_from(stmts.len()).unwrap();
-        let payload = AstNodePayload::ModDefStmtBlock(payload::ModDefStmtBlock { stmts });
+        let payload = AstNodePayload::ModDefStmtBlock;
         let span = parser.span(ll, rr);
 
         parser.add_node(payload, span, num_children)
@@ -971,6 +975,8 @@ extern {
         "true" => Token::KwTrue,
         "false" => Token::KwFalse,
         "Str" => Token::Str,
+        "/*" => Token::StarSlash,
+        "*/" => Token::SlashStar,
 
         "ERROR" => Token::Error,
     }

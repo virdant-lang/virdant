@@ -8,5 +8,5 @@ mod Top {
     } else {
         w := false;
         u := false;
-    };
+    }
 }

@@ -18,5 +18,5 @@ pub const LIB_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| {
     let exe = std::env::current_exe().unwrap();
     let root = exe.parent().unwrap().parent().unwrap();
     let lib = root.join("lib");
-    std::fs::canonicalize(lib).unwrap()
+    std::fs::canonicalize(&lib).expect(&format!("Could not find {lib:?}"))
 });

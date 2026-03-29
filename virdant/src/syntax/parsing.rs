@@ -178,12 +178,13 @@ impl Parsing {
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         let mut diagnostics = vec![];
         for (error, error_data) in self.errors() {
-            dbg!(&error_data.dropped_tokens);
             let (message, region) = match error_data.error {
                 lalrpop_util::ParseError::UnrecognizedToken { token, expected } => {
-                    let (start, token, end) = token;
+                    let (start, _token, end) = token;
                     let region = self.source.to_region(start, end);
-                    let message = format!("Unexpected token: {token:?} at {region}. Expected: {expected:?}").into();
+                    let expected_tokens = expected.into_iter().map(|t| t.to_string()).collect::<Vec<_>>().join(" ");
+                    let token_str = BStr::new(&self.source[region.span()]);
+                    let message = format!("Unexpected token: \"{token_str}\". Expected: {expected_tokens}").into();
                     (message, region)
                 }
                 lalrpop_util::ParseError::InvalidToken { location:_ } => {

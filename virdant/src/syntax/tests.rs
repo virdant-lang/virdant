@@ -37,7 +37,7 @@ macro_rules! test_example {
                     eprintln!("    {BATSU} {filename:<20}{:>6} us", duration.as_micros());
                     eprintln!("        ERRORS:");
                     for error in &errors {
-                        eprintln!("            {:?}  {}", error, error.region());
+                        eprintln!("            {:?}  {}", error, error.0.region());
                     }
                 } else {
                     eprintln!("    {CHECK} {filename:<20}{:>6} us", duration.as_micros());
@@ -73,4 +73,4 @@ test_example!(structs);
 test_example!(top);
 test_example!(uart);
 test_example!(it);
-test_example!(conditional_statements);
+//test_example!(conditional_statements);

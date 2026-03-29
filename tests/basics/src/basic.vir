@@ -91,7 +91,7 @@ export mod Top {
 
         if true {
             display("Hello", true);
-        }
+        };
         finish;
-    }
+    };
 }

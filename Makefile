@@ -1,10 +1,13 @@
 .PHONY: build test clean install
 
-build:
+build: virdant/target/lib
 	cargo build --release --all-features
-	cp -r ./lib target/
 
-test:
+virdant/target/lib:
+	mkdir -p target/lib
+	cp -r ./lib/* target/lib/
+
+test: virdant/target/lib
 	cargo test
 	cd tests && make
 
