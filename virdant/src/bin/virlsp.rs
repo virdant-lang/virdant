@@ -2,6 +2,8 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::sync::Arc;
 
+use clap::{Parser, Subcommand};
+
 use bstr::BString;
 use hashbrown::HashSet;
 use tokio::sync::Mutex;
@@ -703,14 +705,78 @@ fn escape_markdown(text: impl AsRef<str>) -> String {
     escaped
 }
 
+fn dump_hover(workspace_dir: &std::path::Path, package: PackageFqn, linecol: LineCol) {
+    let db = db_from_dir(workspace_dir);
+    let parsing = db.get_parsing(package.clone());
+
+    if let Some(node_id) = parsing.at(linecol) {
+        let node = parsing.ast_node(node_id);
+        let typof = db.get_typeof(node.location()).ok();
+        println!("Spelling : {}", node.spelling());
+        println!("Summary  : {}", node.summary());
+        println!("Package  : {}", package);
+        println!("Location : {:?}", node.id());
+        println!("Typeof   : {:?}", typof);
+    } else {
+        println!("No node at {package} {linecol:?}");
+    }
+}
+
+#[derive(Parser, Debug)]
+#[command(name = "vir-lsp", author, version, about)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Dump hover information for a given location
+    Hover {
+        /// Location as <file_or_package>:<line>:<col>
+        /// e.g. temp/top.vir:10:5 or top:10:5
+        location: String,
+    },
+}
+
+fn parse_hover_location(location: &str) -> (std::path::PathBuf, PackageFqn, LineCol) {
+    let parts: Vec<&str> = location.rsplitn(3, ':').collect();
+    assert!(parts.len() == 3, "Location must be in the format <file_or_package>:<line>:<col>");
+    let col: usize = parts[0].parse().expect("Invalid column number");
+    let line: usize = parts[1].parse().expect("Invalid line number");
+    let file_or_package = parts[2];
+
+    let (workspace_dir, package) = if Path::new(file_or_package).extension().map_or(false, |ext| ext == "vir") {
+        let path = Path::new(file_or_package);
+        let workspace = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+        let pkg = path
+            .file_stem()
+            .map(|stem| PackageFqn::new(stem.as_bytes().into()))
+            .expect("Invalid file path");
+        (workspace, pkg)
+    } else {
+        let workspace = std::env::current_dir().expect("Cannot determine current directory");
+        let pkg = PackageFqn::new(file_or_package.as_bytes().into());
+        (workspace, pkg)
+    };
+
+    (workspace_dir, package, LineCol::new(line, col))
+}
+
 #[tokio::main]
 async fn main() {
-    let stdin = tokio::io::stdin();
-    let stdout = tokio::io::stdout();
+    let cli = Cli::parse();
 
-    let (service, socket) = LspService::new(|client| Backend::new(client));
-
-    Server::new(stdin, stdout, socket)
-        .serve(service)
-        .await;
+    match cli.command {
+        None => {
+            let stdin = tokio::io::stdin();
+            let stdout = tokio::io::stdout();
+            let (service, socket) = LspService::new(|client| Backend::new(client));
+            Server::new(stdin, stdout, socket).serve(service).await;
+        }
+        Some(Command::Hover { location }) => {
+            let (workspace_dir, package, linecol) = parse_hover_location(&location);
+            dump_hover(&workspace_dir, package, linecol);
+        }
+    }
 }
