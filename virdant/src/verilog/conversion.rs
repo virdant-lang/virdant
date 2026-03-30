@@ -371,7 +371,7 @@ impl<'d> Converter<'d> {
                     unreachable!()
                 };
                 let slots = symboltable.slots(*typedef_symbol_id);
-                let ctor_symbol_id = typing.resolution(node.location()).unwrap();
+                let ctor_symbol_id = typing.tag(node.location()).symbol_id().unwrap();
                 let width: u16 = TryInto::<u16>::try_into(slots.len()).unwrap();
                 let slot_index = slots.iter().position(|slot_id| slot_id.id() == ctor_symbol_id).unwrap();
                 let value = 1 << slot_index;
@@ -384,10 +384,37 @@ impl<'d> Converter<'d> {
                 };
                 let typedef = db.get_typedef(*typedef_symbol_id);
                 let slots = symboltable.slots(*typedef_symbol_id);
-                let enumerant_symbol_id = typing.resolution(node.location()).unwrap();
+                let enumerant_symbol_id = typing.tag(node.location()).symbol_id().unwrap();
                 let value = *typedef.enumerant_values.get(&enumerant_symbol_id).unwrap();
                 let width: u16 = TryInto::<u16>::try_into(slots.len()).unwrap();
                 verilog::Expr::WordLit(verilog::expr::WordLit { value: value, width, radix: Radix::Dec })
+            }
+            AstNodePayload::ExprFn => {
+                let tag = typing.tag(node.location());
+                let arg = node.child(1);
+                match tag {
+                    crate::types::typing::Tag::None => unreachable!(),
+                    crate::types::typing::Tag::SymbolResolution(_symbol_id) => todo!(),
+                    crate::types::typing::Tag::PrimitiveResolution(primitive) => {
+                        let arg_type = self.node_type(package, &arg).unwrap();
+                        let arg_expr = self.convert_expr(package, arg, &arg_type, self.db);
+                        match primitive.as_bytes() {
+                            b"any" => {
+                                verilog::Expr::UnOp(verilog::expr::UnOp {
+                                    op: verilog::UnOp::RedOr,
+                                    expr: Box::new(arg_expr),
+                                })
+                            }
+                            b"all" => {
+                                verilog::Expr::UnOp(verilog::expr::UnOp {
+                                    op: verilog::UnOp::RedAnd,
+                                    expr: Box::new(arg_expr),
+                                })
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                }
             }
             _ => panic!("unsupported expr in conversion: {}", node.summary()),
         }

@@ -36,6 +36,23 @@ impl ExprRoot {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum Tag {
+    None,
+    SymbolResolution(SymbolId),
+    PrimitiveResolution(BString),
+}
+
+impl Tag {
+    pub fn symbol_id(&self) -> Option<SymbolId> {
+        if let Tag::SymbolResolution(symbol_id) = self {
+            Some(symbol_id.clone())
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Typing {
     pub exprroot: ExprRoot,
@@ -49,7 +66,7 @@ pub struct Typing {
     pub type_index: Arc<TypeIndex>,
     pub parsing: Arc<Parsing>,
     pub use_locations: HashMap<BString, Vec<Location>>,
-    pub resolutions: HashMap<Location, SymbolId>,
+    pub tags: HashMap<Location, Tag>,
 }
 
 impl Typing {
@@ -57,8 +74,12 @@ impl Typing {
         self.diagnostics.clone()
     }
 
-    pub fn resolution(&self, location: Location) -> Option<SymbolId> {
-        self.resolutions.get(&location).copied()
+    pub fn tag(&self, location: Location) -> Tag {
+        if let Some(tag) = self.tags.get(&location).cloned() {
+            tag
+        } else {
+            Tag::None
+        }
     }
 
     pub fn reference_use_locations(&self) -> &HashMap<BString, Vec<Location>> {
@@ -257,6 +278,39 @@ impl Typing {
         }
     }
 
+    fn infer_fn<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, ()> {
+        let children = node.children();
+        let fn_ofness = node.child(0);
+        let args = &children[1..];
+
+        let AstNodePayload::Ofness(ofness) = fn_ofness.payload() else { unreachable!() };
+        let fn_name = self.parsing.string(ofness.name);
+        let fn_item = self.symboltable.resolve_item_in_package(fn_name, node.package());
+        let fn_name: &[u8] = fn_name.into();
+
+        match fn_name {
+            b"any" => {
+                if let Some(typ) = self.infer(&args[0])? {
+                    self.tags.insert(node.location(), Tag::PrimitiveResolution(b"any".into()));
+                    self.annotate(node, &Type::Bit);
+                    Ok(Some(Type::Bit))
+                } else {
+                    todo!()
+                }
+            }
+            b"all" => {
+                if let Some(typ) = self.infer(&args[0])? {
+                    self.tags.insert(node.location(), Tag::PrimitiveResolution(b"any".into()));
+                    self.annotate(node, &Type::Bit);
+                    Ok(Some(Type::Bit))
+                } else {
+                    todo!()
+                }
+            }
+            _ => Ok(None),
+        }
+    }
+
     fn check_index<'p>(&mut self, node: &AstNode<'p>, index: Width, expected_typ: &Type) -> Result<(), ()> {
         let subject = node.child(0);
         let Ok(Some(subject_typ)) = self.infer(&subject) else {
@@ -344,7 +398,7 @@ impl Typing {
             return Err(());
         };
 
-        self.resolutions.insert(node.location(), ctor_symbol.id());
+        self.tags.insert(node.location(), Tag::SymbolResolution(ctor_symbol.id()));
         self.annotate(node, &expected_typ);
         Ok(())
     }
@@ -363,7 +417,7 @@ impl Typing {
             return Err(());
         };
 
-        self.resolutions.insert(node.location(), enumerant_symbol.id());
+        self.tags.insert(node.location(), Tag::SymbolResolution(enumerant_symbol.id()));
         self.annotate(node, &expected_typ);
         Ok(())
     }
@@ -417,6 +471,7 @@ impl Typing {
             }
             AstNodePayload::ExprBinOp(_expr_bin_op) => self.infer_binop(node),
             AstNodePayload::ExprUnOp(expr_un_op)     => self.infer_unop(node, expr_un_op.op),
+            AstNodePayload::ExprFn     => self.infer_fn(node),
             AstNodePayload::ExprParen => {
                 if let Some(typ) = self.infer(&node.subject().unwrap())? {
                     self.annotate(&node, &typ);

@@ -4,6 +4,8 @@ import spi;
 export mod Top {
     incoming clock : Clock;
 
+    incoming switch0 : Bit;
+
     outgoing led_red : Bit;
 
     outgoing spi_clk : Bit;
@@ -61,7 +63,7 @@ export mod Top {
         if reset {
             1048576 // = 0x100000
         } else if spi.mem_read_data_valid && uart.ready {
-            addr + 1
+            addr + (if switch0 { 1w32 } else { -1w32 })
         } else {
             addr
         };

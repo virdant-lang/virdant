@@ -111,7 +111,7 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
         use_locations: HashMap::new(),
         type_index: builder.get_type_index(),
         parsing: parsing.clone(),
-        resolutions: HashMap::new(),
+        tags: HashMap::new(),
     };
 
     // if there is no expected type, you can't type check the expression.
