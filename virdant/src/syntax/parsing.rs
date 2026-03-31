@@ -30,6 +30,12 @@ pub struct InternedString {
     id: usize,
 }
 
+impl InternedString {
+    pub fn package(&self) -> PackageFqn {
+        self.package.clone()
+    }
+}
+
 impl std::fmt::Debug for InternedString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "InternedString {}#{}", self.package, self.id)

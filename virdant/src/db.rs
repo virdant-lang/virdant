@@ -7,14 +7,17 @@ use std::fmt::Write;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use bstr::BString;
 use hashbrown::{HashMap, HashSet};
 
+use crate::analysis::component::Component;
 use crate::analysis::component::ComponentId;
 use crate::analysis::component::Driver;
 use crate::analysis::location::Location;
 use crate::analysis::package::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::symbols::{SymbolId, SymbolTable};
+use crate::syntax::parsing::InternedString;
 use crate::types::typedef::TypeDef;
 use crate::types::typedef::TypeIndex;
 use crate::types::{ExprRoot, Type, Typing, TypingContext};
@@ -30,12 +33,14 @@ queries! {
     Packages() -> Vec<PackageFqn>;
     Source(package: PackageFqn) -> Source;
     Parsing(package: PackageFqn) -> Arc<Parsing>;
+    String(string: InternedString) -> Arc<BString>;
     SyntaxErrors() -> Vec<Diagnostic>;
     LocationRegion(location: Location) -> Region;
     PackageAnalysis(package: PackageFqn) -> Arc<PackageAnalysis>;
     ComponentAnalysis(symbol_id: SymbolId) -> Arc<ComponentAnalysis>;
     SymbolTable() -> Arc<SymbolTable>;
     SymbolAst(symbol_id: SymbolId) -> AstNodeId;
+    Component(component_id: ComponentId) -> Arc<Component>;
     DriverFor(component_id: ComponentId) -> Result<Driver, Diagnostic>;
     CheckDrivers(symbol_id: SymbolId) -> Vec<Diagnostic>;
     TypeDefs() -> Vec<TypeDef>;
@@ -70,12 +75,14 @@ impl Query {
         // when invoked with a Query, dispatch to the given function with the arguments:
         // $buildfn(&mut builder, arg1, ..., argN)
         dispatch_build!(_self, db;
+            crate::queries::parsing::build_string : String(string);
             crate::queries::build_parsing : Parsing(package);
             crate::queries::build_syntax_errors : SyntaxErrors();
             crate::queries::build_package_analysis : PackageAnalysis(analysis);
             crate::analysis::component::build_component_analysis : ComponentAnalysis(symbol_id);
             crate::analysis::symbols::build_symboltable : SymbolTable();
             crate::analysis::symbols::build_symbol_ast : SymbolAst(symbol_id);
+            crate::analysis::component::build_component : Component(component_id);
             crate::analysis::component::build_driver_for : DriverFor(component_id);
             crate::queries::check_drivers : CheckDrivers(symbol_id);
             crate::queries::find_exprroots : ExprRoots();
@@ -103,11 +110,13 @@ impl Query {
 db_getter!(get_packages : Packages() -> Vec<PackageFqn>);
 db_getter!(get_source : Source(package : PackageFqn) -> Source);
 db_getter!(get_parsing : Parsing(package: PackageFqn) -> Arc<Parsing>);
+db_getter!(string : String(string: InternedString) -> Arc<BString>);
 db_getter!(get_syntax_errors : SyntaxErrors() -> Vec<Diagnostic>);
 db_getter!(get_package_analysis : PackageAnalysis(package: PackageFqn) -> Arc<PackageAnalysis>);
 db_getter!(get_component_analysis : ComponentAnalysis(moddef: SymbolId) -> Arc<ComponentAnalysis>);
 db_getter!(get_symboltable : SymbolTable() -> Arc<SymbolTable>);
 db_getter!(get_symbol_ast : SymbolAst(symbol_id: SymbolId) -> AstNodeId);
+db_getter!(get_component : Component(component_id: ComponentId) -> Arc<Component>);
 db_getter!(get_driver_for : DriverFor(component_id: ComponentId) -> Result<Driver, Diagnostic>);
 db_getter!(check_drivers : CheckDrivers(symbol_id: SymbolId) -> Vec<Diagnostic>);
 db_getter!(get_typing_context : TypingContext(item: SymbolId) -> TypingContext);

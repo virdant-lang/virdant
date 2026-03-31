@@ -235,6 +235,14 @@ pub(crate) fn find_item_location(builder: &mut Builder, item: SymbolId) -> Locat
     symboltable.symbol(item).location()
 }
 
+pub(crate) fn build_component(
+    builder: &mut Builder,
+    component_id: ComponentId,
+) -> Arc<Component> {
+    let component_analysis = builder.get_component_analysis(component_id.item_id);
+    Arc::new(component_analysis.component(component_id).unwrap().clone())
+}
+
 pub(crate) fn build_driver_for(
     builder: &mut Builder,
     component_id: ComponentId,
