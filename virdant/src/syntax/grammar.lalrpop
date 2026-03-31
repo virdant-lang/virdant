@@ -318,7 +318,7 @@ ModDefStmtDriver: AstNodeId = {
 
 ModDefStmtInstance: AstNodeId = {
     <ll:@L> "mod" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> <rr:@R> => {
-        let payload = AstNodePayload::Module(payload::Module { name });
+        let payload = AstNodePayload::Submodule(payload::Submodule { name });
         let span = parser.span(ll, rr);
         let num_children = if it.is_none() {
             1
@@ -428,7 +428,7 @@ ModDefStmtIfMiddle: () = {
 }
 
 ModDefStmtIfEnd: u16 = {
-    "else" ModDefStmtBlock ";" => {
+    "else" ModDefStmtBlock => {
         1
     },
 }

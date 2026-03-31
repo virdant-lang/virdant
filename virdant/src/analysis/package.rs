@@ -130,7 +130,7 @@ impl PackageAnalysis {
                         let node_id = child_node.driver().unwrap().id();
                         self.expr_roots.push(node_id);
                     }
-                    AstNodePayload::Module(_module) => (),
+                    AstNodePayload::Submodule(_module) => (),
                     AstNodePayload::Socket(_socket) => (),
                     AstNodePayload::BidirectionalDriver => (),
                     AstNodePayload::ModDefStmtOn => {

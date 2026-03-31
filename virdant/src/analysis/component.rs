@@ -8,6 +8,7 @@ use crate::analysis::Location;
 use crate::analysis::symbols::SymbolId;
 use crate::db::Builder;
 use crate::fqn::PackageFqn;
+use crate::syntax::ast::AstNodeId;
 use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
 use crate::common::{ComponentKind, Flow};
@@ -20,15 +21,32 @@ pub struct ComponentAnalysis {
     diagnostics: Vec<Diagnostic>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ComponentId {
+    item_id: SymbolId,
+    index: usize,
+}
+
+
 #[derive(Debug, Clone)]
 pub struct Component {
+    id: ComponentId,
     path: BString,
     location: Location,
     typ: Option<Type>,
     flow: Flow,
 }
 
+#[derive(Debug, Clone)]
+pub enum Driver {
+    Expr(AstNodeId),
+}
+
 impl Component {
+    pub fn id(&self) -> ComponentId {
+        return self.id;
+    }
+
     pub fn path(&self) -> BString {
         self.path.clone()
     }
@@ -56,6 +74,15 @@ impl Component {
 }
 
 impl ComponentAnalysis {
+    pub fn component(&self, component_id: ComponentId) -> Option<&Component> {
+        for (_name, component) in &self.components {
+            if component.id == component_id {
+                return Some(component);
+            }
+        }
+        None
+    }
+
     pub fn moddef_symbol_id(&self) -> SymbolId {
         self.moddef.clone()
     }
@@ -73,7 +100,7 @@ impl ComponentAnalysis {
         self.components.clone()
     }
 
-    pub fn component(&self, path: &BStr) -> Option<Component> {
+    pub fn resolve(&self, path: &BStr) -> Option<Component> {
         for (path_, component) in &self.components {
             if path_ == path {
                 return Some(component.clone());
@@ -110,6 +137,10 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     for stmt in item_ast.children() {
         match stmt.payload() {
             AstNodePayload::Component(component) => {
+                let id = ComponentId {
+                    item_id: moddef,
+                    index: component_analysis.components.len(),
+                };
                 let path = parsing.string(component.name).to_owned();
                 let typ_node = stmt.typ().unwrap();
                 let typ = match builder.get_type_at(typ_node.location()) {
@@ -124,6 +155,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     ComponentKind::Wire => Flow::Duplex,
                 };
                 let component = Component {
+                    id,
                     path: path.clone(),
                     location: stmt.location(),
                     typ,
@@ -134,7 +166,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     component_analysis.components.push((path.clone(), component));
                 }
             }
-            AstNodePayload::Module(module) => {
+            AstNodePayload::Submodule(module) => {
                 let instance_name = parsing.string(module.name);
                 let ofness_node = stmt.child(0);
                 let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
@@ -153,6 +185,10 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 let submodule_parsing = builder.get_parsing(submodule_location.package());
                 let submodule_ast = submodule_parsing.ast_node(submodule_location.ast_node_id());
                 for submodule_stmt in submodule_ast.children() {
+                    let id = ComponentId {
+                        item_id: moddef,
+                        index: component_analysis.components.len(),
+                    };
                     let AstNodePayload::Component(component) = submodule_stmt.payload() else {
                         continue;
                     };
@@ -175,6 +211,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         ComponentKind::Wire => Flow::Duplex,
                     };
                     let component = Component {
+                        id,
                         path: path.clone(),
                         location: stmt.location(),
                         typ,
@@ -193,8 +230,14 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     Arc::new(component_analysis)
 }
 
-// TODO shouldn't this be private
 pub(crate) fn find_item_location(builder: &mut Builder, item: SymbolId) -> Location {
     let symboltable = builder.get_symboltable();
     symboltable.symbol(item).location()
+}
+
+pub(crate) fn build_driver_for(
+    builder: &mut Builder,
+    component_id: ComponentId,
+) -> Result<Driver, Diagnostic> {
+    todo!()
 }

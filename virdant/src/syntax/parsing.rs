@@ -14,7 +14,7 @@ pub type ParseError = lalrpop_util::ErrorRecovery<SourceOffset, Token, TokenErro
 
 #[derive(Debug)]
 pub struct Parsing {
-    pub(super) source: Source,
+    pub(super) source: Source, // TODO don't be pub(super)
     pub(super) strings: Vec<BString>,
     pub(super) payloads: Vec<AstNodePayload>,
     pub(super) spans: Vec<Span>,
@@ -24,12 +24,15 @@ pub struct Parsing {
     pub(super) error_data: Vec<ParseError>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct InternedString(usize);
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct InternedString {
+    package: PackageFqn,
+    id: usize,
+}
 
 impl std::fmt::Debug for InternedString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "InternedString #{}", self.0)
+        write!(f, "InternedString {}#{}", self.package, self.id)
     }
 }
 
@@ -124,12 +127,19 @@ impl Parsing {
 
     pub fn intern(&mut self, span: Span) -> InternedString {
         let text = self.text(span).to_owned();
+        let package = self.package();
         if let Some(string_id) = self.strings.iter().position(|string| string == &text) {
-            InternedString(string_id)
+            InternedString {
+                package,
+                id: string_id,
+            }
         } else {
             let string_id = self.strings.len();
             self.strings.push(text);
-            InternedString(string_id)
+            InternedString {
+                package,
+                id: string_id,
+            }
         }
     }
 
@@ -139,7 +149,8 @@ impl Parsing {
     }
 
     pub fn string(&self, s: InternedString) -> &BStr {
-        BStr::new(&self.strings[s.0])
+        assert_eq!(self.package(), s.package);
+        BStr::new(&self.strings[s.id])
     }
 
     pub fn root(&self) -> AstNode<'_> {

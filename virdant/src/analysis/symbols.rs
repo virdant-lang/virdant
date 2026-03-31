@@ -345,7 +345,7 @@ fn build_symboltable_moddef_slot(
                 let name: BString = parsing.string(component.name).to_owned();
                 (name, child.id(), SymbolKind::Component)
             }
-            AstNodePayload::Module(module) => {
+            AstNodePayload::Submodule(module) => {
                 let name: BString = parsing.string(module.name).to_owned();
                 (name, child.id(), SymbolKind::Submodule)
             }

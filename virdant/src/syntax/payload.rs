@@ -19,7 +19,7 @@ pub enum AstNodePayload {
     Component(Component),
     Driver(Driver),
     BidirectionalDriver,
-    Module(Module), // TODO rename Submodule
+    Submodule(Submodule),
     ModDefStmtBlock,
     ModDefStmtOn,
     ModDefStmtIf,
@@ -92,7 +92,7 @@ impl AstNodePayload {
             AstNodePayload::Component(_component) => "Component",
             AstNodePayload::Driver(_driver) => "Driver",
             AstNodePayload::BidirectionalDriver => "BidirectionalDriver",
-            AstNodePayload::Module(_module) => "Module",
+            AstNodePayload::Submodule(_module) => "Module",
             AstNodePayload::ModDefStmtBlock => "ModDefStmtBlock",
             AstNodePayload::ModDefStmtOn => "ModDefStmtOn",
             AstNodePayload::ModDefStmtIf => "ModDefStmtIf",
@@ -199,7 +199,7 @@ pub struct Driver {
 }
 
 #[derive(Clone, Debug)]
-pub struct Module {
+pub struct Submodule {
     pub name: InternedString,
 }
 

@@ -26,7 +26,7 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<D
 
     let driver_locations = get_all_driver_locations(builder, symbol_id, &mut diagnostics);
     for (path, driver_locations) in driver_locations.iter() {
-        if let Some(component) = component_analysis.component(path.as_bstr()) {
+        if let Some(component) = component_analysis.resolve(path.as_bstr()) {
             if !component.can_sink() && driver_locations.len() > 0 {
                 for location in driver_locations {
                     let region = builder.get_location_region(location.clone());

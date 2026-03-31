@@ -1,15 +1,11 @@
 use bstr::{BStr, ByteSlice};
 
-//pub mod parser_lalrpop;
-//pub use parser_lalrpop as parser;
-
 use crate::analysis::Location;
 use crate::common::{ComponentKind, DriverType};
 use crate::fqn::PackageFqn;
 use crate::common::source::{Region, Span};
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::{InternedString, Parsing};
-//use crate::stringtable::{InternedString, StringTable};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AstNodeId(pub u16);
@@ -158,7 +154,7 @@ impl<'p> AstNode<'p> {
         match &self.payload {
             AstNodePayload::Error => format!("Error"),
             AstNodePayload::Package => format!("Package"),
-            AstNodePayload::Import(import) => format!("Import {}", parsing.string(import.package)),
+            AstNodePayload::Import(import) => format!("Import {}", parsing.string(import.package.clone())),
             AstNodePayload::ModDef(mod_def) => {
                 let ext = if mod_def.is_ext {
                     "ext "
@@ -170,7 +166,7 @@ impl<'p> AstNode<'p> {
                 } else {
                     ""
                 };
-                format!("ModDef {ext}{export}{}", parsing.string(mod_def.name))
+                format!("ModDef {ext}{export}{}", parsing.string(mod_def.name.clone()))
             }
             AstNodePayload::StructDef(_struct_def) => format!("StructDef"),
             AstNodePayload::UnionDef(_union_def) => format!("UnionDef"),
@@ -178,10 +174,10 @@ impl<'p> AstNode<'p> {
             AstNodePayload::BuiltinDef(_builtin_def) => format!("BuiltinDef"),
             AstNodePayload::FnDef(_fn_def) => format!("FnDef"),
             AstNodePayload::SocketDef(_socket_def) => format!("SocketDef"),
-            AstNodePayload::Component(component) => format!("Component {:?} {}", component.kind, parsing.string(component.name)),
+            AstNodePayload::Component(component) => format!("Component {:?} {}", component.kind, parsing.string(component.name.clone())),
             AstNodePayload::Driver(_driver) => format!("Driver"),
             AstNodePayload::BidirectionalDriver => format!("BidirectionalDriver"),
-            AstNodePayload::Module(_module) => format!("Module"),
+            AstNodePayload::Submodule(_module) => format!("Module"),
             AstNodePayload::ModDefStmtBlock => format!("ModDefStmtBlock"),
             AstNodePayload::ModDefStmtOn => format!("ModDefStmtOn"),
             AstNodePayload::ModDefStmtIf => format!("ModDefStmtIf"),
@@ -246,13 +242,13 @@ impl<'p> AstNode<'p> {
 
     pub fn name(&self) -> Option<InternedString> {
         match &self.payload {
-            AstNodePayload::ModDef(mod_def) => Some(mod_def.name),
-            AstNodePayload::UnionDef(union_def) => Some(union_def.name),
-            AstNodePayload::StructDef(struct_def) => Some(struct_def.name),
-            AstNodePayload::FnDef(fn_def) => Some(fn_def.name),
-            AstNodePayload::SocketDef(socket_def) => Some(socket_def.name),
-            AstNodePayload::BuiltinDef(builtin_def) => Some(builtin_def.name),
-            AstNodePayload::EnumDef(enum_def) => Some(enum_def.name),
+            AstNodePayload::ModDef(mod_def) => Some(mod_def.name.clone()),
+            AstNodePayload::UnionDef(union_def) => Some(union_def.name.clone()),
+            AstNodePayload::StructDef(struct_def) => Some(struct_def.name.clone()),
+            AstNodePayload::FnDef(fn_def) => Some(fn_def.name.clone()),
+            AstNodePayload::SocketDef(socket_def) => Some(socket_def.name.clone()),
+            AstNodePayload::BuiltinDef(builtin_def) => Some(builtin_def.name.clone()),
+            AstNodePayload::EnumDef(enum_def) => Some(enum_def.name.clone()),
             _ => None,
         }
     }
@@ -267,14 +263,14 @@ impl<'p> AstNode<'p> {
     pub fn path(&self) -> Option<InternedString> {
         match &self.payload {
             AstNodePayload::ExprReference => self.child(0).path(),
-            AstNodePayload::Path(path) => Some(path.path),
+            AstNodePayload::Path(path) => Some(path.path.clone()),
             _ => None,
         }
     }
 
     pub fn import_package(&self) -> Option<InternedString> {
         match &self.payload {
-            AstNodePayload::Import(import) => Some(import.package),
+            AstNodePayload::Import(import) => Some(import.package.clone()),
             _ => None
         }
     }

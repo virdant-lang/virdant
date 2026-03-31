@@ -63,7 +63,7 @@ impl<'d> Converter<'d> {
                 let AstNodePayload::ModDef(moddef) = item_ast.payload() else {
                     continue;
                 };
-                let moddef_name = parsing.string(moddef.name).to_str_lossy().into_owned();
+                let moddef_name = parsing.string(moddef.name.clone()).to_str_lossy().into_owned();
                 let module_path = qualified_module_name(&package.to_string(), &moddef_name);
                 let emitted_name = if moddef.is_export {
                     exact_verilog_name(&moddef_name)
@@ -84,7 +84,7 @@ impl<'d> Converter<'d> {
                     if !matches!(component.kind, ComponentKind::Incoming | ComponentKind::Outgoing) {
                         continue;
                     }
-                    let name = parsing.string(component.name).to_str_lossy().into_owned();
+                    let name = parsing.string(component.name.clone()).to_str_lossy().into_owned();
                     let typ = component_analysis.type_of(parsing.string(component.name)).unwrap();
                     ports.push((name, type_width(&typ, self.db)));
                 }
@@ -117,7 +117,7 @@ impl<'d> Converter<'d> {
             panic!("expected ModDef");
         };
         let parsing = self.db.get_parsing(package.clone());
-        let moddef_name = parsing.string(moddef.name).to_str_lossy().into_owned();
+        let moddef_name = parsing.string(moddef.name.clone()).to_str_lossy().into_owned();
         let module_path = qualified_module_name(&package.to_string(), &moddef_name);
         let module_name = self.emitted_module_names[&module_path].clone();
 
@@ -137,7 +137,7 @@ impl<'d> Converter<'d> {
         for stmt in item_ast.children() {
             match stmt.payload() {
                 AstNodePayload::Component(component) => {
-                    let name = parsing.string(component.name).to_str_lossy().into_owned();
+                    let name = parsing.string(component.name.clone()).to_str_lossy().into_owned();
                     let typ = component_analysis.type_of(parsing.string(component.name)).unwrap();
                     let width = type_width(&typ, self.db);
                     match component.kind {
@@ -172,7 +172,7 @@ impl<'d> Converter<'d> {
                         }
                     }
                 }
-                AstNodePayload::Module(module) => {
+                AstNodePayload::Submodule(module) => {
                     let raw_name = parsing.string(module.name).to_str_lossy().into_owned();
                     let mod_path = render_ofness_path(stmt.child(0), package);
                     let ports_info = self.module_ports.get(&mod_path).cloned().unwrap_or_default();
@@ -219,8 +219,7 @@ impl<'d> Converter<'d> {
             let expr_node = stmt.driver().unwrap();
 
             // Collect holes from this driver expression
-            let mut hole_regions: Vec<String> = vec![];
-            collect_ast_holes(expr_node.clone(), &mut hole_regions);
+            let hole_regions: Vec<String> = collect_ast_holes(expr_node.clone());
             for region in hole_regions {
                 let message = format!("\"HOLE: ? at {region}\"");
                 hole_displays.push(verilog::Element::Initial(verilog::Initial {
@@ -231,8 +230,8 @@ impl<'d> Converter<'d> {
                 }));
             }
 
-            let expected_type = component_analysis.type_of(path.as_bytes().as_bstr()).unwrap();
-            let expr = self.convert_expr(package, expr_node, &expected_type, self.db);
+            let typ = component_analysis.type_of(path.as_bytes().as_bstr()).unwrap();
+            let expr = self.convert_expr(package, expr_node, &typ, self.db);
 
             if let Some(&clock_id) = sequential_regs.get(&path) {
                 let clock_node = parsing.ast_node(clock_id);
@@ -284,7 +283,7 @@ impl<'d> Converter<'d> {
         &self,
         package: &PackageFqn,
         node: AstNode,
-        expected_type: &Type,
+        typ: &Type,
         db: &Db,
     ) -> verilog::Expr {
         let typing = self.typing_for(&node);
@@ -302,11 +301,11 @@ impl<'d> Converter<'d> {
                 let literal = node.parsing.string(expr_word_lit.literal).to_str_lossy().into_owned();
                 let (value, lit_width) = parse_word_literal(&literal);
                 let width = lit_width
-                    .unwrap_or_else(|| type_width(expected_type, self.db));
+                    .unwrap_or_else(|| type_width(typ, self.db));
                 verilog::Expr::WordLit(verilog::expr::WordLit { value: value.into(), width, radix: Radix::Dec })
             }
             AstNodePayload::ExprWord => {
-                let width = self.node_or_expected_width(package, &node, expected_type);
+                let width = self.node_or_expected_width(package, &node, typ);
                 let exprs = node.children().into_iter()
                     .map(|child| {
                         let child_type = self.node_type(package, &child).unwrap();
@@ -334,11 +333,11 @@ impl<'d> Converter<'d> {
                     expr: Box::new(self.convert_expr(package, child, &child_type, self.db)),
                 })
             }
-            AstNodePayload::ExprZext => self.convert_zext(package, node, expected_type),
-            AstNodePayload::ExprSext => self.convert_sext(package, node, expected_type),
+            AstNodePayload::ExprZext => self.convert_zext(package, node, typ),
+            AstNodePayload::ExprSext => self.convert_sext(package, node, typ),
             AstNodePayload::ExprIf => {
                 let children = node.children();
-                self.convert_if_expr(package, &children, expected_type)
+                self.convert_if_expr(package, &children, typ)
             }
             AstNodePayload::ExprIndex(expr_index) => {
                 let child = node.child(0);
@@ -358,16 +357,16 @@ impl<'d> Converter<'d> {
                 })
             }
             AstNodePayload::ExprAs | AstNodePayload::ExprParen => {
-                self.convert_expr(package, node.child(0), expected_type, db)
+                self.convert_expr(package, node.child(0), typ, db)
             }
             AstNodePayload::ExprHole => {
-                let width = self.node_or_expected_width(package, &node, expected_type);
+                let width = self.node_or_expected_width(package, &node, typ);
                 verilog::Expr::XLit(verilog::expr::XLit { width })
             }
             AstNodePayload::ExprCtor(_ctor) => {
                 // TODO doesn't handle Ctor payloads
                 let symboltable = db.get_symboltable();
-                let Type::Usual(typedef_symbol_id) = expected_type else {
+                let Type::Usual(typedef_symbol_id) = typ else {
                     unreachable!()
                 };
                 let slots = symboltable.slots(*typedef_symbol_id);
@@ -379,8 +378,8 @@ impl<'d> Converter<'d> {
             }
             AstNodePayload::ExprEnumerant(_enumerant) => {
                 let symboltable = db.get_symboltable();
-                let Type::Usual(typedef_symbol_id) = expected_type else {
-                    unreachable!("{:?} type is {:?}", node.region(), expected_type)
+                let Type::Usual(typedef_symbol_id) = typ else {
+                    unreachable!("{:?} type is {:?}", node.region(), typ)
                 };
                 let typedef = db.get_typedef(*typedef_symbol_id);
                 let slots = symboltable.slots(*typedef_symbol_id);
@@ -424,15 +423,15 @@ impl<'d> Converter<'d> {
         &self,
         package: &PackageFqn,
         children: &[AstNode],
-        expected_type: &Type,
+        typ: &Type,
     ) -> verilog::Expr {
         let cond_type = self.node_type(package, &children[0]).unwrap();
         let cond = self.convert_expr(package, children[0].clone(), &cond_type, self.db);
-        let then_expr = self.convert_expr(package, children[1].clone(), expected_type, self.db);
+        let then_expr = self.convert_expr(package, children[1].clone(), typ, self.db);
         let else_expr = if children.len() == 3 {
-            self.convert_expr(package, children[2].clone(), expected_type, self.db)
+            self.convert_expr(package, children[2].clone(), typ, self.db)
         } else {
-            self.convert_if_expr(package, &children[2..], expected_type)
+            self.convert_if_expr(package, &children[2..], typ)
         };
         verilog::Expr::If(verilog::expr::If {
             cond: Box::new(cond),
@@ -441,10 +440,10 @@ impl<'d> Converter<'d> {
         })
     }
 
-    fn convert_zext(&self, package: &PackageFqn, node: AstNode, expected_type: &Type) -> verilog::Expr {
+    fn convert_zext(&self, package: &PackageFqn, node: AstNode, typ: &Type) -> verilog::Expr {
         let inner = node.child(0);
         let inner_type = self.node_type(package, &inner).unwrap();
-        let target_width = self.node_or_expected_width(package, &node, expected_type);
+        let target_width = self.node_or_expected_width(package, &node, typ);
         let source_width = self.node_width(package, &inner);
         let extend_by = target_width.checked_sub(source_width)
             .unwrap_or_else(|| panic!("cannot zext from {source_width} to {target_width}"));
@@ -464,10 +463,10 @@ impl<'d> Converter<'d> {
         })
     }
 
-    fn convert_sext(&self, package: &PackageFqn, node: AstNode, expected_type: &Type) -> verilog::Expr {
+    fn convert_sext(&self, package: &PackageFqn, node: AstNode, typ: &Type) -> verilog::Expr {
         let inner = node.child(0);
         let inner_type = self.node_type(package, &inner).unwrap();
-        let target_width = self.node_or_expected_width(package, &node, expected_type);
+        let target_width = self.node_or_expected_width(package, &node, typ);
         let source_width = self.node_width(package, &inner);
         let extend_by = target_width.checked_sub(source_width)
             .unwrap_or_else(|| panic!("cannot sext from {source_width} to {target_width}"));
@@ -630,13 +629,15 @@ fn convert_unop(op: common::UnOp) -> verilog::UnOp {
 }
 
 /// Recursively collects the region strings of all `?` (hole) nodes within an expression.
-fn collect_ast_holes(node: AstNode<'_>, holes: &mut Vec<String>) {
+fn collect_ast_holes(node: AstNode<'_>) -> Vec<String> {
+    let mut holes = vec![];
     match node.payload() {
         AstNodePayload::ExprHole => holes.push(format!("{}", node.region())),
         _ => {
             for child in node.children() {
-                collect_ast_holes(child, holes);
+                holes.extend(collect_ast_holes(child).into_iter());
             }
         }
     }
+    holes
 }
