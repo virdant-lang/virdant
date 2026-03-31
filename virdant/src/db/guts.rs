@@ -20,6 +20,7 @@ struct TraceElement {
     query: Query,
     level: usize,
     cached: bool,
+    location: std::panic::Location<'static>,
 }
 
 impl<'d> Builder<'d> {
@@ -30,9 +31,9 @@ impl<'d> Builder<'d> {
         }
     }
 
-    pub(crate) fn get(&mut self, query: Query) -> QueryResult {
+    pub(crate) fn get(&mut self, query: Query, location: std::panic::Location<'static>) -> QueryResult {
         self.deps.insert(query.clone());
-        let cached_val = self.db.get_or_build(query);
+        let cached_val = self.db.get_or_build(query, location);
         cached_val.val
     }
 
@@ -56,7 +57,7 @@ impl Db {
         }
     }
 
-    fn get_or_build(&self, query: Query) -> CachedVal {
+    pub(super) fn get_or_build(&self, query: Query, location: std::panic::Location<'static>) -> CachedVal {
         if self.is_dirty(&query) {
             let mut call_stack = self.call_stack.lock().unwrap();
             let level = call_stack.len();
@@ -65,6 +66,7 @@ impl Db {
                 query: query.clone(),
                 level,
                 cached: false,
+                location,
             });
             drop(call_stack);
             let cached_val = query.clone().build(self);
@@ -78,6 +80,7 @@ impl Db {
                 query: query.clone(),
                 level,
                 cached: true,
+                location,
             });
             let map = self.map.try_lock().unwrap();
             let cached_val = map.get(&query)
@@ -128,17 +131,18 @@ impl Db {
         false
     }
 
-    pub(crate) fn get(&self, query: Query) -> QueryResult {
-        let cached_val = self.get_or_build(query);
-        cached_val.val
-    }
-
     pub fn dump(&self) {
         use colored::Colorize;
         let trace = self.trace.lock().unwrap();
         eprintln!("=== Db trace ===========================");
         for trace in trace.iter() {
             let indent = "    ".repeat(trace.level);
+            let location = format!(
+                "{}[{}:{}]",
+                trace.location.file(),
+                trace.location.line(),
+                trace.location.column(),
+            ).dimmed();
             let text = if trace.query.is_input() {
                 format!("{:?}", trace.query).bright_blue()
             } else if trace.cached {
@@ -146,7 +150,7 @@ impl Db {
             } else {
                 format!("{:?}", trace.query).bright_yellow()
             };
-            eprintln!("{indent}{text}");
+            eprintln!("{indent}{text} {location}");
         }
         eprintln!("========================================");
     }

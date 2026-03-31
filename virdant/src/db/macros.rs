@@ -51,16 +51,21 @@ macro_rules! dispatch_build {
 macro_rules! db_getter {
     ($getter_name:ident : $query:ident($($arg:ident : $argtyp:path),*) -> $rettyp:path) => {
         impl Db {
+            #[track_caller]
             pub fn $getter_name(&self, $($arg : $argtyp),*) -> $rettyp {
+                let location = std::panic::Location::caller();
                 let query = Query::$query($($arg),*);
-                cast!(self.get(query), $query)
+                let cached_val = self.get_or_build(query, *location);
+                cast!(cached_val.val, $query)
             }
         }
         #[allow(dead_code)]
         impl<'d> Builder<'d> {
+            #[track_caller]
             pub(crate) fn $getter_name(&mut self, $($arg : $argtyp),*) -> $rettyp {
+                let location = std::panic::Location::caller();
                 let query = Query::$query($($arg),*);
-                cast!(self.get(query), $query)
+                cast!(self.get(query, *location), $query)
             }
         }
     };

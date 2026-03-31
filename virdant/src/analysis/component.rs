@@ -122,7 +122,8 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     };
 
     let symboltable = builder.get_symboltable();
-    let location = find_item_location(builder, moddef);
+    let location = symboltable.symbol(moddef).location();
+
     let parsing = builder.get_parsing(location.package());
     let item_ast = parsing.ast_node(location.ast_node_id());
     let mut components_seen: HashSet<BString> = HashSet::new();
@@ -228,11 +229,6 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     }
 
     Arc::new(component_analysis)
-}
-
-pub(crate) fn find_item_location(builder: &mut Builder, item: SymbolId) -> Location {
-    let symboltable = builder.get_symboltable();
-    symboltable.symbol(item).location()
 }
 
 pub(crate) fn build_component(
