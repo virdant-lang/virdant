@@ -285,12 +285,13 @@ impl Typing {
 
         let AstNodePayload::Ofness(ofness) = fn_ofness.payload() else { unreachable!() };
         let fn_name = self.parsing.string(ofness.name);
-        let fn_item = self.symboltable.resolve_item_in_package(fn_name, node.package());
+//        let fn_item = self.symboltable.resolve_item_in_package(fn_name, node.package());
         let fn_name: &[u8] = fn_name.into();
 
         match fn_name {
             b"any" => {
-                if let Some(typ) = self.infer(&args[0])? {
+                // TODO stricter type checking
+                if let Some(_typ) = self.infer(&args[0])? {
                     self.tags.insert(node.location(), Tag::PrimitiveResolution(b"any".into()));
                     self.annotate(node, &Type::Bit);
                     Ok(Some(Type::Bit))
@@ -299,7 +300,8 @@ impl Typing {
                 }
             }
             b"all" => {
-                if let Some(typ) = self.infer(&args[0])? {
+                // TODO stricter type checking
+                if let Some(_typ) = self.infer(&args[0])? {
                     self.tags.insert(node.location(), Tag::PrimitiveResolution(b"any".into()));
                     self.annotate(node, &Type::Bit);
                     Ok(Some(Type::Bit))

@@ -711,12 +711,16 @@ fn dump_hover(workspace_dir: &std::path::Path, package: PackageFqn, linecol: Lin
 
     if let Some(node_id) = parsing.at(linecol) {
         let node = parsing.ast_node(node_id);
-        let typof = db.get_typeof(node.location()).ok();
+
         println!("Spelling : {}", node.spelling());
         println!("Summary  : {}", node.summary());
         println!("Package  : {}", package);
         println!("Location : {:?}", node.id());
-        println!("Typeof   : {:?}", typof);
+
+        if node.is_expr() {
+            let typof = db.get_typeof(node.location()).ok();
+            println!("Typeof   : {:?}", typof);
+        }
     } else {
         println!("No node at {package} {linecol:?}");
     }
