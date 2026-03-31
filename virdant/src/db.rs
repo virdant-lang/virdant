@@ -81,7 +81,7 @@ impl Query {
             crate::types::typedef::build_typedefs : TypeDefs();
             crate::types::typedef::build_typedef : TypeDef(symbol_id);
             crate::queries::build_typing_context : TypingContext(symbol_id);
-            crate::queries::build_typing : Typing(expr_root);
+            crate::types::typing::build_typing : Typing(expr_root);
             crate::types::typing::typecheck : TypeCheck(symbol_id);
             crate::queries::typecheck::build_exprroot_for : ExprRootFor(location);
             crate::queries::build_typeof : Typeof(location);

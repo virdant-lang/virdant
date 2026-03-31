@@ -14,4 +14,4 @@ pub(crate) use package::build_package_analysis;
 pub(crate) use parsing::build_parsing;
 pub(crate) use syntax::{build_all_exprs, find_exprroots, build_syntax_errors};
 pub(crate) use typecheck::{build_typeof, build_typeof_all};
-pub(crate) use typing::{build_expected_type, build_typing, build_typing_context};
+pub(crate) use typing::{build_expected_type, build_typing_context};
