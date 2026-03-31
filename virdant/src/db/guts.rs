@@ -5,6 +5,7 @@ pub struct Db {
     pub(super) rev: usize,
     pub(super) map: Mutex<HashMap<Query, CachedVal>>,
     pub(super) call_stack: Mutex<Vec<Query>>,
+    trace: Mutex<Vec<TraceElement>>,
 }
 
 #[derive(Debug, Clone)]
@@ -12,6 +13,13 @@ pub(super) struct CachedVal {
     pub(super) val: QueryResult,
     pub(super) rev: usize,
     pub(super) deps: Vec<Query>,
+}
+
+#[derive(Debug)]
+struct TraceElement {
+    query: Query,
+    level: usize,
+    cached: bool,
 }
 
 impl<'d> Builder<'d> {
@@ -32,7 +40,7 @@ impl<'d> Builder<'d> {
         let stack = self.db.call_stack.lock().unwrap();
         eprintln!("=== Db build stack =====================");
         for (i, query) in stack.iter().enumerate() {
-            eprintln!("{}{:?}", "  ".repeat(i), query);
+            eprintln!("{}{:?}", "    ".repeat(i), query);
         }
         eprintln!("========================================");
     }
@@ -44,18 +52,33 @@ impl Db {
             map: Mutex::new(HashMap::new()),
             rev: 0,
             call_stack: Mutex::new(vec![]),
+            trace: Mutex::new(vec![]),
         }
     }
 
     fn get_or_build(&self, query: Query) -> CachedVal {
         if self.is_dirty(&query) {
-            self.call_stack.lock().unwrap().push(query.clone());
+            let mut call_stack = self.call_stack.lock().unwrap();
+            let level = call_stack.len();
+            call_stack.push(query.clone());
+            self.trace.lock().unwrap().push(TraceElement {
+                query: query.clone(),
+                level,
+                cached: false,
+            });
+            drop(call_stack);
             let cached_val = query.clone().build(self);
             self.call_stack.lock().unwrap().pop();
             let mut map = self.map.try_lock().unwrap();
             map.insert(query.clone(), cached_val.clone());
             cached_val
         } else {
+            let level = self.call_stack.lock().unwrap().len();
+            self.trace.lock().unwrap().push(TraceElement {
+                query: query.clone(),
+                level,
+                cached: true,
+            });
             let map = self.map.try_lock().unwrap();
             let cached_val = map.get(&query)
                 .unwrap_or_else(|| {
@@ -108,6 +131,24 @@ impl Db {
     pub(crate) fn get(&self, query: Query) -> QueryResult {
         let cached_val = self.get_or_build(query);
         cached_val.val
+    }
+
+    pub fn dump(&self) {
+        use colored::Colorize;
+        let trace = self.trace.lock().unwrap();
+        eprintln!("=== Db trace ===========================");
+        for trace in trace.iter() {
+            let indent = "    ".repeat(trace.level);
+            let text = if trace.query.is_input() {
+                format!("{:?}", trace.query).bright_blue()
+            } else if trace.cached {
+                format!("{:?}", trace.query).green()
+            } else {
+                format!("{:?}", trace.query).bright_yellow()
+            };
+            eprintln!("{indent}{text}");
+        }
+        eprintln!("========================================");
     }
 }
 

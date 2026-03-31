@@ -271,11 +271,12 @@ fn check(args: &Args) {
 fn dump_db(args: &Args, outpath: Option<PathBuf>) {
     let db = project_db(args);
     let _ = db.check();
+    dump_diagnostics(&db);
     if let Some(outpath) = outpath {
         println!("Saving graphviz: {}", outpath.display());
         db.save_graphviz(outpath);
     }
-    dbg!(&db);
+    db.dump();
 }
 
 fn dump_types(args: &Args) {
