@@ -84,7 +84,24 @@ impl Stmt {
                     stmt.write(writer)?;
                 }
                 writer.dedent();
-                verilog_writeln!(writer, "end")?;
+                if if_stmt.else_stmts.is_empty() {
+                    verilog_writeln!(writer, "end")?;
+                } else if if_stmt.else_stmts.len() == 1
+                    && matches!(if_stmt.else_stmts[0], Stmt::If(_))
+                {
+                    // Emit as "end else if ..." to avoid unnecessary nesting.
+                    verilog_write!(writer, "end else ")?;
+                    writer.skip_indent();
+                    if_stmt.else_stmts[0].write(writer)?;
+                } else {
+                    verilog_writeln!(writer, "end else begin")?;
+                    writer.indent();
+                    for stmt in &if_stmt.else_stmts {
+                        stmt.write(writer)?;
+                    }
+                    writer.dedent();
+                    verilog_writeln!(writer, "end")?;
+                }
             }
         }
         Ok(())
@@ -95,6 +112,7 @@ impl Stmt {
 pub struct If {
     pub cond: Expr,
     pub stmts: Vec<Stmt>,
+    pub else_stmts: Vec<Stmt>,
 }
 
 #[derive(Debug)]

@@ -5,7 +5,7 @@ use bstr::ByteSlice;
 
 use crate::analysis::drivers::{Driver, DriverIf};
 use crate::analysis::location::Location;
-use crate::common::{self, ComponentKind, Radix, Width};
+use crate::common::{self, ComponentKind, DriverType, Radix, Width};
 use crate::db::Db;
 use crate::diagnostics::DiagnosticLevel;
 use crate::fqn::PackageFqn;
@@ -232,20 +232,28 @@ impl<'d> Converter<'d> {
                     }));
                 }
 
-                let expr = self.convert_driver_to_expr(package, driver, &typ, &path);
-
                 if let Some(&clock_id) = sequential_regs.get(&path) {
                     let clock_node = parsing.ast_node(clock_id);
                     let clock_type = self.node_type(package, &clock_node).unwrap();
                     let clock_expr = self.convert_expr(package, clock_node, &clock_type, self.db);
+                    let stmts = match driver {
+                        Driver::If(driver_if) if driver_if.driver_type == DriverType::Latched => {
+                            self.convert_latched_driver_if_to_stmts(package, driver_if, &typ, &path)
+                        }
+                        _ => {
+                            let expr = self.convert_driver_to_expr(package, driver, &typ);
+                            vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                                name: valid_verilog_name(&path),
+                                expr,
+                            })]
+                        }
+                    };
                     sequential.push(verilog::Element::Always(verilog::Always {
                         clock: Some(clock_expr),
-                        stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
-                            name: valid_verilog_name(&path),
-                            expr,
-                        })],
+                        stmts,
                     }));
                 } else {
+                    let expr = self.convert_driver_to_expr(package, driver, &typ);
                     combinational.push(verilog::Element::Assign(verilog::Assign {
                         name: valid_verilog_name(&path),
                         expr,
@@ -302,15 +310,13 @@ impl<'d> Converter<'d> {
         }
     }
 
-    /// Convert a `Driver` tree to a single `verilog::Expr`.
+    /// Convert a `Driver` tree to a single `verilog::Expr` (for combinational / Continuous drivers).
     /// `Driver::If` becomes a right-associative ternary chain (`cond ? then : else`).
-    /// `path` is the raw component path (used as the self-reference for latched drivers with no else).
     fn convert_driver_to_expr(
         &self,
         package: &PackageFqn,
         driver: &Driver,
         typ: &Type,
-        path: &str,
     ) -> verilog::Expr {
         match driver {
             Driver::Expr(_, loc) => {
@@ -318,7 +324,7 @@ impl<'d> Converter<'d> {
                 let expr_node = parsing.ast_node(loc.ast_node_id());
                 self.convert_expr(package, expr_node, typ, self.db)
             }
-            Driver::If(driver_if) => self.convert_driver_if_to_expr(package, driver_if, typ, path),
+            Driver::If(driver_if) => self.convert_driver_if_to_expr(package, driver_if, typ),
         }
     }
 
@@ -327,22 +333,11 @@ impl<'d> Converter<'d> {
         package: &PackageFqn,
         driver_if: &DriverIf,
         typ: &Type,
-        path: &str,
     ) -> verilog::Expr {
-        use crate::common::DriverType;
-
-        // Base: else clause if present; for latched drivers with no else, preserve the
-        // register's current value by referencing itself; otherwise emit X-bits.
+        // Base: else clause, or X-bits when there is no else.
         let else_expr = match &driver_if.else_clause {
-            Some(else_driver) => self.convert_driver_to_expr(package, else_driver, typ, path),
-            None => match driver_if.driver_type {
-                DriverType::Latched => verilog::Expr::Reference(verilog::expr::Reference {
-                    name: valid_verilog_name(path),
-                }),
-                DriverType::Continuous => {
-                    verilog::Expr::XLit(verilog::expr::XLit { width: type_width(typ, self.db) })
-                }
-            },
+            Some(else_driver) => self.convert_driver_to_expr(package, else_driver, typ),
+            None => verilog::Expr::XLit(verilog::expr::XLit { width: type_width(typ, self.db) }),
         };
 
         // Build right-associative ternary chain from last clause to first.
@@ -351,13 +346,66 @@ impl<'d> Converter<'d> {
             let cond_node = cond_parsing.ast_node(cond_loc.ast_node_id());
             let cond_type = self.node_type(package, &cond_node).unwrap_or(Type::Bit);
             let cond_expr = self.convert_expr(package, cond_node, &cond_type, self.db);
-            let then_expr = self.convert_driver_to_expr(package, sub_driver, typ, path);
+            let then_expr = self.convert_driver_to_expr(package, sub_driver, typ);
             verilog::Expr::If(verilog::expr::If {
                 cond: Box::new(cond_expr),
                 then_expr: Box::new(then_expr),
                 else_expr: Box::new(acc),
             })
         })
+    }
+
+    /// Convert a `Latched Driver::If` tree into a chain of procedural `Stmt::If` blocks
+    /// with non-blocking assignments.  When there is no else clause, no else branch is emitted.
+    fn convert_latched_driver_if_to_stmts(
+        &self,
+        package: &PackageFqn,
+        driver_if: &DriverIf,
+        typ: &Type,
+        path: &str,
+    ) -> Vec<verilog::Stmt> {
+        // Else stmts (empty when there is no else clause).
+        let else_stmts = match &driver_if.else_clause {
+            Some(else_driver) => self.convert_latched_driver_to_stmts(package, else_driver, typ, path),
+            None => vec![],
+        };
+
+        // Build right-associative Stmt::If chain from last clause to first.
+        driver_if.clauses.iter().rev().fold(else_stmts, |acc_else, (cond_loc, sub_driver)| {
+            let cond_parsing = self.db.get_parsing(cond_loc.package());
+            let cond_node = cond_parsing.ast_node(cond_loc.ast_node_id());
+            let cond_type = self.node_type(package, &cond_node).unwrap_or(Type::Bit);
+            let cond_expr = self.convert_expr(package, cond_node, &cond_type, self.db);
+            let then_stmts = self.convert_latched_driver_to_stmts(package, sub_driver, typ, path);
+            vec![verilog::Stmt::If(verilog::If {
+                cond: cond_expr,
+                stmts: then_stmts,
+                else_stmts: acc_else,
+            })]
+        })
+    }
+
+    fn convert_latched_driver_to_stmts(
+        &self,
+        package: &PackageFqn,
+        driver: &Driver,
+        typ: &Type,
+        path: &str,
+    ) -> Vec<verilog::Stmt> {
+        match driver {
+            Driver::Expr(_, loc) => {
+                let parsing = self.db.get_parsing(loc.package());
+                let expr_node = parsing.ast_node(loc.ast_node_id());
+                let expr = self.convert_expr(package, expr_node, typ, self.db);
+                vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                    name: valid_verilog_name(path),
+                    expr,
+                })]
+            }
+            Driver::If(driver_if) => {
+                self.convert_latched_driver_if_to_stmts(package, driver_if, typ, path)
+            }
+        }
     }
 
     fn convert_expr(
@@ -600,7 +648,7 @@ impl<'d> Converter<'d> {
                 let stmts = children[1..].iter()
                     .map(|cmd| self.convert_command(package, cmd.clone()))
                     .collect();
-                verilog::Stmt::If(verilog::If { cond, stmts })
+                verilog::Stmt::If(verilog::If { cond, stmts, else_stmts: vec![] })
             }
             _ => panic!("expected command node, found {}", node.summary()),
         }
