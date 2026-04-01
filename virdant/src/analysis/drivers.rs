@@ -45,6 +45,7 @@ impl DriverAnalysis {
         &self.drivers
     }
 
+    #[allow(unused)]
     pub fn dump(&self, component_analysis: &ComponentAnalysis) {
         let mut entries: Vec<_> = self.drivers.iter().collect();
         entries.sort_by_key(|(comp_id, _)| {
@@ -98,12 +99,7 @@ pub(crate) fn build_driver_analysis(
 
     let drivers = collect_block_drivers(item_ast.children(), &component_analysis);
 
-    let driver_analysis = DriverAnalysis {
-        drivers: drivers.clone(),
-        diagnostics: vec![],
-    };
-
-    driver_analysis.dump(&component_analysis);
+//    driver_analysis.dump(&component_analysis);
 
     Arc::new(DriverAnalysis {
         drivers,
