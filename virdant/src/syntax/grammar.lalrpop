@@ -408,10 +408,10 @@ Command: AstNodeId = {
 }
 
 ModDefStmtIf: AstNodeId = {
-    <ll:@L> <start:ModDefStmtIfStart> <middles:ModDefStmtIfMiddle*> <end:ModDefStmtIfEnd> <rr:@R> => {
+    <ll:@L> <start:ModDefStmtIfStart> <middles:ModDefStmtIfMiddle*> <end:ModDefStmtIfEnd?> <rr:@R> => {
         let payload = AstNodePayload::ModDefStmtIf;
         let span = parser.span(ll, rr);
-        let num_children = start + u16::try_from(2 * middles.len()).unwrap() + 1;
+        let num_children = start + u16::try_from(2 * middles.len()).unwrap() + if end.is_some() { 1 } else { 0 };
 
         parser.add_node(payload, span, num_children)
     }

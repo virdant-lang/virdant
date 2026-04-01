@@ -46,27 +46,18 @@ export mod Top {
             data_valid
         };
 
-    reg data : Word[32] on clock;
-    data <=
-        if reset {
-            0
-        } else if spi.mem_read_data_valid {
-            spi.mem_read_data
-        } else {
-            data
-        };
-
     led_red := !false;
 
     reg addr : Word[32] on clock;
-    addr <=
-        if reset {
-            1048576 // = 0x100000
-        } else if spi.mem_read_data_valid && uart.ready {
-            addr + (if switch0 { 1w32 } else { -1w32 })
+    if reset {
+        addr <= 1048576;
+    } else if spi.mem_read_data_valid && uart.ready {
+        if switch0 {
+            addr <= addr + 1w32;
         } else {
-            addr
+            addr <= addr - 1w32;
         };
+    };
 
     spi.mem_addr := addr;
     spi.mem_read_enable := true;

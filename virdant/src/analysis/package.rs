@@ -140,6 +140,9 @@ impl PackageAnalysis {
                             self.add_command_expr_roots(command_node);
                         }
                     }
+                    AstNodePayload::ModDefStmtIf => {
+                        self.add_moddefstmtif_expr_roots(child_node);
+                    }
                     AstNodePayload::Error => (), // TODO should we even have error nodes at this point?
                     _ => unreachable!("{:?}", child_node.summary()),
                 }
@@ -156,6 +159,40 @@ impl PackageAnalysis {
             }
         } else {
             // TODO handle FnDefs
+        }
+    }
+
+    fn add_moddefstmtif_expr_roots(&mut self, if_node: AstNode<'_>) {
+        // Children: [cond_0, block_0, cond_1, block_1, ..., (else_block?)]
+        // An else block is present when the total number of children is odd.
+        let children = if_node.children();
+        let has_else = children.len() % 2 == 1;
+        let num_cond_block_pairs = children.len() / 2;
+
+        for i in 0..num_cond_block_pairs {
+            // Each condition expression is an expr root.
+            self.expr_roots.push(children[2 * i].id());
+            // Recurse into the corresponding block.
+            self.add_moddefstmt_block_expr_roots(&children[2 * i + 1]);
+        }
+
+        // Recurse into the else block only if one exists.
+        if has_else {
+            self.add_moddefstmt_block_expr_roots(children.last().unwrap());
+        }
+    }
+
+    fn add_moddefstmt_block_expr_roots(&mut self, block_node: &AstNode<'_>) {
+        for stmt in block_node.children() {
+            match stmt.payload() {
+                AstNodePayload::Driver(_) => {
+                    self.expr_roots.push(stmt.driver().unwrap().id());
+                }
+                AstNodePayload::ModDefStmtIf => {
+                    self.add_moddefstmtif_expr_roots(stmt);
+                }
+                _ => {}
+            }
         }
     }
 

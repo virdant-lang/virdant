@@ -12,7 +12,7 @@ use hashbrown::{HashMap, HashSet};
 
 use crate::analysis::component::Component;
 use crate::analysis::component::ComponentId;
-use crate::analysis::component::Driver;
+use crate::analysis::drivers::DriverAnalysis;
 use crate::analysis::location::Location;
 use crate::analysis::package::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
@@ -41,7 +41,7 @@ queries! {
     SymbolTable() -> Arc<SymbolTable>;
     SymbolAst(symbol_id: SymbolId) -> AstNodeId;
     Component(component_id: ComponentId) -> Arc<Component>;
-    DriverFor(component_id: ComponentId) -> Result<Driver, Diagnostic>;
+    DriverAnalysis(symbol_id: SymbolId) -> Arc<DriverAnalysis>;
     CheckDrivers(symbol_id: SymbolId) -> Vec<Diagnostic>;
     TypeDefs() -> Vec<TypeDef>;
     TypeDef(symbol_id: SymbolId) -> Arc<TypeDef>;
@@ -83,7 +83,7 @@ impl Query {
             crate::analysis::symbols::build_symboltable : SymbolTable();
             crate::analysis::symbols::build_symbol_ast : SymbolAst(symbol_id);
             crate::analysis::component::build_component : Component(component_id);
-            crate::analysis::component::build_driver_for : DriverFor(component_id);
+            crate::analysis::drivers::build_driver_analysis : DriverAnalysis(symbol_id);
             crate::queries::check_drivers : CheckDrivers(symbol_id);
             crate::queries::find_exprroots : ExprRoots();
             crate::queries::build_all_exprs : AllExprs();
@@ -117,7 +117,7 @@ db_getter!(get_component_analysis : ComponentAnalysis(moddef: SymbolId) -> Arc<C
 db_getter!(get_symboltable : SymbolTable() -> Arc<SymbolTable>);
 db_getter!(get_symbol_ast : SymbolAst(symbol_id: SymbolId) -> AstNodeId);
 db_getter!(get_component : Component(component_id: ComponentId) -> Arc<Component>);
-db_getter!(get_driver_for : DriverFor(component_id: ComponentId) -> Result<Driver, Diagnostic>);
+db_getter!(get_driver_analysis : DriverAnalysis(symbol_id: SymbolId) -> Arc<DriverAnalysis>);
 db_getter!(check_drivers : CheckDrivers(symbol_id: SymbolId) -> Vec<Diagnostic>);
 db_getter!(get_typing_context : TypingContext(item: SymbolId) -> TypingContext);
 db_getter!(get_typedefs : TypeDefs() -> Vec<TypeDef>);

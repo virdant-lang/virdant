@@ -8,7 +8,6 @@ use crate::analysis::Location;
 use crate::analysis::symbols::SymbolId;
 use crate::db::Builder;
 use crate::fqn::PackageFqn;
-use crate::syntax::ast::AstNodeId;
 use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
 use crate::common::{ComponentKind, Flow};
@@ -35,11 +34,6 @@ pub struct Component {
     location: Location,
     typ: Option<Type>,
     flow: Flow,
-}
-
-#[derive(Debug, Clone)]
-pub enum Driver {
-    Expr(AstNodeId),
 }
 
 impl Component {
@@ -237,11 +231,4 @@ pub(crate) fn build_component(
 ) -> Arc<Component> {
     let component_analysis = builder.get_component_analysis(component_id.item_id);
     Arc::new(component_analysis.component(component_id).unwrap().clone())
-}
-
-pub(crate) fn build_driver_for(
-    builder: &mut Builder,
-    component_id: ComponentId,
-) -> Result<Driver, Diagnostic> {
-    todo!()
 }

@@ -18,6 +18,9 @@ pub(crate) fn check(builder: &mut Builder) -> Vec<Diagnostic> {
 
     for item in symboltable.items() {
         diagnostics.extend(builder.typecheck(item.id()));
+
+        let driver_analysis = builder.get_driver_analysis(item.id());
+//        diagnostics.extend(driver_analysis); // TODO
     }
 
     diagnostics

@@ -35,13 +35,28 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
         AstNodePayload::Driver(_) => {
             let lhs_path = parsing.string(parent_node.child(0).path().unwrap());
 
-            let moddef_node = parent_node.parent().unwrap();
+            // Walk up through any enclosing ModDefStmtBlocks and ModDefStmtIfs
+            // to find the containing item (ModDef). Loop over AstNodeId (Copy)
+            // to avoid holding overlapping borrows on the AstNode.
+            let mut ancestor_id = parent_node.parent().unwrap().id();
+            loop {
+                let ancestor = parsing.ast_node(ancestor_id);
+                if ancestor.is_item() { break; }
+                ancestor_id = ancestor.parent().unwrap().id();
+            }
+            let moddef_node = parsing.ast_node(ancestor_id);
             let moddef_name = parsing.string(moddef_node.name().unwrap());
             let moddef = symboltable
                 .resolve_item_in_package(moddef_name, location.package())
                 .unwrap();
             let component_analysis = builder.get_component_analysis(moddef.id());
             component_analysis.type_of(lhs_path)
+        }
+        AstNodePayload::ModDefStmtIf => {
+            // Children of ModDefStmtIf: [cond_0, block_0, cond_1, block_1, ..., else_block]
+            // Only the condition expressions (even-indexed children) are registered as
+            // expr roots with ModDefStmtIf as their parent. Each condition must be a Bit.
+            Some(Type::Bit)
         }
         AstNodePayload::ModDefStmtOn => {
             Some(Type::Clock)

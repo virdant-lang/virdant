@@ -55,6 +55,8 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<D
         }
     }
 
+    /*
+     * TODO Make this work with ModDefStmtIf statements
     for (path, component) in component_analysis.components() {
         if component.can_sink() && !driver_locations.contains_key(&path) {
             let location = component.location();
@@ -65,6 +67,7 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<D
             }.into());
         }
     }
+    */
 
     diagnostics
 }

@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use bstr::ByteSlice;
 
+use crate::analysis::drivers::{Driver, DriverIf};
 use crate::analysis::location::Location;
 use crate::common::{self, ComponentKind, Radix, Width};
 use crate::db::Db;
@@ -208,47 +209,48 @@ impl<'d> Converter<'d> {
             }
         }
 
-        // Second pass: drivers (and hole displays)
+        // Second pass: drivers via DriverAnalysis
         let mut hole_displays: Vec<verilog::Element> = vec![];
         let mut combinational: Vec<verilog::Element> = vec![];
         let mut sequential: Vec<verilog::Element> = vec![];
 
-        for stmt in item_ast.children() {
-            let AstNodePayload::Driver(_) = stmt.payload() else { continue; };
-            let path = parsing.string(stmt.target().unwrap()).to_str_lossy().into_owned();
-            let expr_node = stmt.driver().unwrap();
+        let driver_analysis = self.db.get_driver_analysis(moddef_symbol.id());
+        for (comp_id, comp_drivers) in driver_analysis.drivers() {
+            let Some(component) = component_analysis.component(*comp_id) else { continue };
+            let path = component.path().to_str_lossy().into_owned();
+            let Some(typ) = component.typ() else { continue };
 
-            // Collect holes from this driver expression
-            let hole_regions: Vec<String> = collect_ast_holes(expr_node.clone());
-            for region in hole_regions {
-                let message = format!("\"HOLE: ? at {region}\"");
-                hole_displays.push(verilog::Element::Initial(verilog::Initial {
-                    stmts: vec![verilog::Stmt::Display(verilog::Display {
-                        message: message.into(),
-                        exprs: vec![],
-                    })],
-                }));
-            }
+            for driver in comp_drivers {
+                // Collect holes from this driver tree
+                for region in self.collect_driver_holes(driver) {
+                    let message = format!("\"HOLE: ? at {region}\"");
+                    hole_displays.push(verilog::Element::Initial(verilog::Initial {
+                        stmts: vec![verilog::Stmt::Display(verilog::Display {
+                            message: message.into(),
+                            exprs: vec![],
+                        })],
+                    }));
+                }
 
-            let typ = component_analysis.type_of(path.as_bytes().as_bstr()).unwrap();
-            let expr = self.convert_expr(package, expr_node, &typ, self.db);
+                let expr = self.convert_driver_to_expr(package, driver, &typ, &path);
 
-            if let Some(&clock_id) = sequential_regs.get(&path) {
-                let clock_node = parsing.ast_node(clock_id);
-                let clock_type = self.node_type(package, &clock_node).unwrap();
-                let clock_expr = self.convert_expr(package, clock_node, &clock_type, self.db);
-                sequential.push(verilog::Element::Always(verilog::Always {
-                    clock: Some(clock_expr),
-                    stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                if let Some(&clock_id) = sequential_regs.get(&path) {
+                    let clock_node = parsing.ast_node(clock_id);
+                    let clock_type = self.node_type(package, &clock_node).unwrap();
+                    let clock_expr = self.convert_expr(package, clock_node, &clock_type, self.db);
+                    sequential.push(verilog::Element::Always(verilog::Always {
+                        clock: Some(clock_expr),
+                        stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                            name: valid_verilog_name(&path),
+                            expr,
+                        })],
+                    }));
+                } else {
+                    combinational.push(verilog::Element::Assign(verilog::Assign {
                         name: valid_verilog_name(&path),
                         expr,
-                    })],
-                }));
-            } else {
-                combinational.push(verilog::Element::Assign(verilog::Assign {
-                    name: valid_verilog_name(&path),
-                    expr,
-                }));
+                    }));
+                }
             }
         }
 
@@ -277,6 +279,85 @@ impl<'d> Converter<'d> {
         }
 
         verilog::Module { name: module_name, is_ext: moddef.is_ext, ports, elements }
+    }
+
+    /// Recursively collects the region strings of all `?` (hole) nodes in a driver tree.
+    fn collect_driver_holes(&self, driver: &Driver) -> Vec<String> {
+        match driver {
+            Driver::Expr(_, loc) => {
+                let parsing = self.db.get_parsing(loc.package());
+                let expr_node = parsing.ast_node(loc.ast_node_id());
+                collect_ast_holes(expr_node)
+            }
+            Driver::If(driver_if) => {
+                let mut holes = vec![];
+                for (_, sub_driver) in &driver_if.clauses {
+                    holes.extend(self.collect_driver_holes(sub_driver));
+                }
+                if let Some(else_driver) = &driver_if.else_clause {
+                    holes.extend(self.collect_driver_holes(else_driver));
+                }
+                holes
+            }
+        }
+    }
+
+    /// Convert a `Driver` tree to a single `verilog::Expr`.
+    /// `Driver::If` becomes a right-associative ternary chain (`cond ? then : else`).
+    /// `path` is the raw component path (used as the self-reference for latched drivers with no else).
+    fn convert_driver_to_expr(
+        &self,
+        package: &PackageFqn,
+        driver: &Driver,
+        typ: &Type,
+        path: &str,
+    ) -> verilog::Expr {
+        match driver {
+            Driver::Expr(_, loc) => {
+                let parsing = self.db.get_parsing(loc.package());
+                let expr_node = parsing.ast_node(loc.ast_node_id());
+                self.convert_expr(package, expr_node, typ, self.db)
+            }
+            Driver::If(driver_if) => self.convert_driver_if_to_expr(package, driver_if, typ, path),
+        }
+    }
+
+    fn convert_driver_if_to_expr(
+        &self,
+        package: &PackageFqn,
+        driver_if: &DriverIf,
+        typ: &Type,
+        path: &str,
+    ) -> verilog::Expr {
+        use crate::common::DriverType;
+
+        // Base: else clause if present; for latched drivers with no else, preserve the
+        // register's current value by referencing itself; otherwise emit X-bits.
+        let else_expr = match &driver_if.else_clause {
+            Some(else_driver) => self.convert_driver_to_expr(package, else_driver, typ, path),
+            None => match driver_if.driver_type {
+                DriverType::Latched => verilog::Expr::Reference(verilog::expr::Reference {
+                    name: valid_verilog_name(path),
+                }),
+                DriverType::Continuous => {
+                    verilog::Expr::XLit(verilog::expr::XLit { width: type_width(typ, self.db) })
+                }
+            },
+        };
+
+        // Build right-associative ternary chain from last clause to first.
+        driver_if.clauses.iter().rev().fold(else_expr, |acc, (cond_loc, sub_driver)| {
+            let cond_parsing = self.db.get_parsing(cond_loc.package());
+            let cond_node = cond_parsing.ast_node(cond_loc.ast_node_id());
+            let cond_type = self.node_type(package, &cond_node).unwrap_or(Type::Bit);
+            let cond_expr = self.convert_expr(package, cond_node, &cond_type, self.db);
+            let then_expr = self.convert_driver_to_expr(package, sub_driver, typ, path);
+            verilog::Expr::If(verilog::expr::If {
+                cond: Box::new(cond_expr),
+                then_expr: Box::new(then_expr),
+                else_expr: Box::new(acc),
+            })
+        })
     }
 
     fn convert_expr(
