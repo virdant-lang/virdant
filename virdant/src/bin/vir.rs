@@ -50,6 +50,8 @@ enum Command {
     Db { outpath: Option<PathBuf> },
     /// Dump component analysis for a module definition
     Components { moddef_fqn: String },
+    /// Dump the elaborated design rooted at a top module
+    Elaborate { top: String },
     /// Compile Virdant package
     Compile { path: PathBuf },
     /// Build Virdant package
@@ -77,6 +79,7 @@ fn main() {
         Command::Db { ref outpath } => dump_db(&args, outpath.clone()),
         Command::Types { } => dump_types(&args),
         Command::Components { ref moddef_fqn } => dump_components(&args, moddef_fqn),
+        Command::Elaborate { ref top } => elaborate(&args, top),
         Command::Symbols { } => dump_symbols(&args),
         Command::Typedefs { } => dump_typedefs(&args),
         Command::Exprroots { } => dump_exprroots(&args),
@@ -304,6 +307,24 @@ fn dump_components(args: &Args, moddef_fqn: &str) {
     let moddef = symboltable.resolve_item_fqn(moddef_fqn.as_bytes().as_bstr()).unwrap();
     let component_analysis = db.get_component_analysis(moddef.id());
     dbg!(&component_analysis);
+}
+
+fn elaborate(args: &Args, top: &str) {
+    let db = project_db(args);
+    dump_diagnostics(&db);
+    if check_db(&db).is_err() {
+        std::process::exit(1);
+    }
+    let symboltable = db.get_symboltable();
+    let top_symbol = match symboltable.resolve_item_fqn(top.as_bytes().as_bstr()) {
+        Some(symbol) => symbol.clone(),
+        None => {
+            eprintln!("Error: module '{}' not found", top);
+            std::process::exit(1);
+        }
+    };
+    let elaboration = db.get_elaboration(top_symbol.id);
+    elaboration.dump();
 }
 
 fn dump_symbols(args: &Args) {

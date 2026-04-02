@@ -13,6 +13,7 @@ use hashbrown::{HashMap, HashSet};
 use crate::analysis::component::Component;
 use crate::analysis::component::ComponentId;
 use crate::analysis::drivers::DriverAnalysis;
+use crate::analysis::elaboration::Elaboration;
 use crate::analysis::location::Location;
 use crate::analysis::package::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
@@ -59,6 +60,7 @@ queries! {
     Check() -> Vec<Diagnostic>;
     TypeIndex() -> Arc<TypeIndex>;
     CtorSignature(ctor_symbol_id: SymbolId) -> Arc<Signature>;
+    Elaboration(top: SymbolId) -> Arc<Elaboration>;
 }
 
 
@@ -103,6 +105,7 @@ impl Query {
             crate::queries::build_location_region : LocationRegion(location);
             crate::queries::check : Check();
             crate::types::signature::build_ctor_signature : CtorSignature(ctor_symbol_id);
+            crate::analysis::elaboration::build_elaboration : Elaboration(top);
 
         )
     }
@@ -138,3 +141,4 @@ db_getter!(get_type_index : TypeIndex() -> Arc<TypeIndex>);
 db_getter!(get_location_region : LocationRegion(location: Location) -> Region);
 db_getter!(check : Check() -> Vec<Diagnostic>);
 db_getter!(get_ctor_signature : CtorSignature(ctor_symbol_id: SymbolId) -> Arc<Signature>);
+db_getter!(get_elaboration : Elaboration(top: SymbolId) -> Arc<Elaboration>);
