@@ -580,9 +580,27 @@ impl<'d> Converter<'d> {
 
                     let padding_width = max_payload_width - this_payload_width;
                     let mut exprs = vec![];
-                    // Padding at MSB (most significant, leftmost in concat)
+                    // Padding at MSB (most significant, leftmost in concat).
+                    // `padding_fill` controls what value fills unused payload bits.
+                    // Supported: "x" (don't-care), "z" (high-impedance), "0" (zeros), "1" (ones).
                     if padding_width > 0 {
-                        exprs.push(verilog::Expr::XLit(verilog::expr::XLit { width: padding_width }));
+                        let padding_fill = "1";
+                        let padding_expr = match padding_fill {
+                            "x" => verilog::Expr::XLit(verilog::expr::XLit { width: padding_width }),
+                            "z" => verilog::Expr::ZLit(verilog::expr::ZLit { width: padding_width }),
+                            "0" => verilog::Expr::Repeat(verilog::expr::Repeat {
+                                count: Box::new(constant_index_expr(padding_width)),
+                                exprs: vec![verilog::Expr::BitLit(verilog::expr::BitLit { value: false })],
+                                width: padding_width,
+                            }),
+                            "1" => verilog::Expr::Repeat(verilog::expr::Repeat {
+                                count: Box::new(constant_index_expr(padding_width)),
+                                exprs: vec![verilog::Expr::BitLit(verilog::expr::BitLit { value: true })],
+                                width: padding_width,
+                            }),
+                            _ => unreachable!("padding_fill must be one of: \"x\", \"z\", \"0\", \"1\""),
+                        };
+                        exprs.push(padding_expr);
                     }
                     // Arguments in order (first arg at higher bits than last arg)
                     for (arg, (_param_name, param_typ)) in arguments.iter().zip(this_sig.parameters.iter()) {
@@ -692,7 +710,7 @@ impl<'d> Converter<'d> {
                                 bit_ranges[j] = (current_lo, current_lo + w - 1);
                                 current_lo += w;
                             }
-                            // Register subst for each bound variable
+                            // Register subst for each bound variable as a direct bit-slice.
                             for (j, bound_var) in pat.children().iter().enumerate() {
                                 let var_name = bound_var.parsing.string(bound_var.path().unwrap())
                                     .to_str_lossy().into_owned();

@@ -74,3 +74,8 @@ pub struct IndexRange {
 pub struct XLit {
     pub width: Width,
 }
+
+#[derive(Debug, Clone)]
+pub struct ZLit {
+    pub width: Width,
+}

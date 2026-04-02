@@ -114,6 +114,7 @@ pub enum Expr {
     Index(expr::Index),
     IndexRange(expr::IndexRange),
     XLit(expr::XLit),
+    ZLit(expr::ZLit),
 }
 
 #[derive(Debug, Clone)]
@@ -452,6 +453,7 @@ fn compute_expr_width(expr: &Expr) -> Option<Width> {
         Expr::Repeat(r) if r.width > 0 => Some(r.width),
         Expr::Index(_) => Some(1),
         Expr::XLit(x) => Some(x.width),
+        Expr::ZLit(z) => Some(z.width),
         _ => None,
     }
 }
@@ -551,7 +553,7 @@ impl Normalizer {
                 }
             }
             // Leaf nodes — nothing to do.
-            Expr::Reference(_) | Expr::BitLit(_) | Expr::WordLit(_) | Expr::StrLit(_) | Expr::XLit(_) => {}
+            Expr::Reference(_) | Expr::BitLit(_) | Expr::WordLit(_) | Expr::StrLit(_) | Expr::XLit(_) | Expr::ZLit(_) => {}
         }
     }
 
@@ -871,6 +873,10 @@ impl Expr {
             Expr::XLit(x_lit) => {
                 let width = x_lit.width;
                 write!(writer.file, "{width}'bx")?;
+            }
+            Expr::ZLit(z_lit) => {
+                let width = z_lit.width;
+                write!(writer.file, "{width}'bz")?;
             }
         }
         Ok(())
