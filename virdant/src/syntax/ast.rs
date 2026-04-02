@@ -332,6 +332,15 @@ impl<'p> AstNode<'p> {
         )
     }
 
+    pub fn is_pat(&self) -> bool {
+        matches!(
+            self.payload(),
+            AstNodePayload::PatIdent(_) |
+            AstNodePayload::PatEnumerant(_) |
+            AstNodePayload::PatElse
+        )
+    }
+
     pub fn subject(&self) -> Option<AstNode<'_>> {
         match &self.payload {
             AstNodePayload::ExprParen => Some(self.child(0)),

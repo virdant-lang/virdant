@@ -4,10 +4,14 @@ use super::typ::Type;
 
 #[derive(Debug, Clone)]
 pub struct TypingContext {
-    pub(crate) context: Vec<(BString, Type)>,
+    context: Vec<(BString, Type)>,
 }
 
 impl TypingContext {
+    pub fn new() -> TypingContext {
+        TypingContext { context: vec![] }
+    }
+
     pub fn bindings(&self) -> &[(BString, Type)] {
         self.context.as_slice()
     }
@@ -19,6 +23,14 @@ impl TypingContext {
             }
         }
         None
+    }
+
+    pub fn extend<I>(&self, bindings: I) -> TypingContext
+        where I: IntoIterator<Item = (BString, Type)>
+    {
+        let mut new_context = self.clone();
+        new_context.context.extend(bindings.into_iter());
+        new_context
     }
 }
 

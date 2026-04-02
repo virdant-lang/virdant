@@ -10,12 +10,10 @@ pub(crate) fn build_typing_context(builder: &mut Builder, item: SymbolId) -> Typ
     // TODO How does this need to get used?
     let _typedefs = builder.get_typedefs();
 
-    let mut context = TypingContext {
-        context: vec![],
-    };
+    let mut context = TypingContext::new();
     for (path, component) in component_analysis.components() {
         if let Some(typ) = component.typ() {
-            context.context.push((path, typ));
+            context = context.extend(std::iter::once((path, typ)));
         }
     }
 
