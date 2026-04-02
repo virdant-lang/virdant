@@ -3,15 +3,13 @@ use std::sync::Arc;
 use bstr::{BStr, BString, ByteSlice};
 use hashbrown::{HashMap, HashSet};
 
-use crate::analysis::symbols::{Symbol, SymbolId, SymbolTable};
+use crate::analysis::symbols::{Symbol, SymbolId};
 use crate::common::{BinOp, Flow, UnOp as UnOp, Width};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticLevel};
 use crate::analysis::location::Location;
 use crate::fqn::PackageFqn;
-use crate::types::typedef::TypeIndex;
 use crate::syntax::ast::{AstNode, AstNodeId};
-use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::{self, AstNodePayload};
 
 use super::context::TypingContext;
@@ -59,9 +57,6 @@ pub struct Typing {
     context: TypingContext,
     typs: HashMap<AstNodeId, Type>,
     diagnostics: Vec<Diagnostic>,
-    symboltable: Arc<SymbolTable>,
-    type_index: Arc<TypeIndex>,
-    parsing: Arc<Parsing>,
     use_locations: HashMap<BString, Vec<Location>>,
     tags: HashMap<Location, Tag>,
 }
@@ -139,8 +134,8 @@ impl Typing {
     }
 
     #[rustfmt::skip]
-    pub(crate) fn check<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
-        if let Some(actual_typ) = self.infer(node)? {
+    pub(crate) fn check<'p>(&mut self, builder: &mut Builder, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
+        if let Some(actual_typ) = self.infer(builder, node)? {
             if actual_typ != *expected_typ {
                 self.flag_wrong_type(node, expected_typ, &actual_typ);
                 return Err(());
@@ -150,27 +145,27 @@ impl Typing {
         }
 
         match node.payload() {
-            AstNodePayload::ExprParen                => self.check_paren(node, expected_typ),
-            AstNodePayload::ExprIf                   => self.check_if(node, expected_typ),
+            AstNodePayload::ExprParen                => self.check_paren(builder, node, expected_typ),
+            AstNodePayload::ExprIf                   => self.check_if(builder, node, expected_typ),
             AstNodePayload::ExprWordLit(_)           => self.check_word_lit(node, expected_typ),
-            AstNodePayload::ExprIndex(expr_index)    => self.check_index(node, expr_index.index, expected_typ),
-            AstNodePayload::ExprZext                 => self.check_ext(node, expected_typ),
-            AstNodePayload::ExprSext                 => self.check_ext(node, expected_typ),
+            AstNodePayload::ExprIndex(expr_index)    => self.check_index(builder, node, expr_index.index, expected_typ),
+            AstNodePayload::ExprZext                 => self.check_ext(builder, node, expected_typ),
+            AstNodePayload::ExprSext                 => self.check_ext(builder, node, expected_typ),
             AstNodePayload::ExprHole                 => self.check_hole(node, expected_typ),
             AstNodePayload::ExprMatch                => Ok(()), // TODO
             AstNodePayload::ExprMethod(_expr_method) => Ok(()), // TODO
             AstNodePayload::ExprFn                   => Ok(()), // TODO
-            AstNodePayload::ExprCtor(_ctor)          => self.check_ctor(node, expected_typ),
-            AstNodePayload::ExprEnumerant(_)         => self.check_enumerant(node, expected_typ),
+            AstNodePayload::ExprCtor(_ctor)          => self.check_ctor(builder, node, expected_typ),
+            AstNodePayload::ExprEnumerant(_)         => self.check_enumerant(builder, node, expected_typ),
             AstNodePayload::ExprStruct               => Ok(()), // TODO
             AstNodePayload::ExprIndexRange(_expr_index_range) => Ok(()), // TODO
             _ => unreachable!("Can't typecheck {:?}", node.summary()),
         }
     }
 
-    fn check_paren<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
+    fn check_paren<'p>(&mut self, builder: &mut Builder, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
         let child = node.child(0);
-        self.check(&child, expected_typ)?;
+        self.check(builder, &child, expected_typ)?;
         if self.typs.contains_key(&child.id()) {
             self.annotate(node, expected_typ);
             Ok(())
@@ -179,20 +174,20 @@ impl Typing {
         }
     }
 
-    fn check_if<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
+    fn check_if<'p>(&mut self, builder: &mut Builder, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
         let mut err = false;
         let children = node.children();
-        err |= self.check(&children[0], &Type::Bit).is_err();
-        err |= self.check(&children[1], expected_typ).is_err();
+        err |= self.check(builder, &children[0], &Type::Bit).is_err();
+        err |= self.check(builder, &children[1], expected_typ).is_err();
         let mut i = 2;
         while i + 1 < children.len() - 1 {
-            err |= self.check(&children[i], &Type::Bit).is_err();
-            err |= self.check(&children[i + 1], expected_typ).is_err();
+            err |= self.check(builder, &children[i], &Type::Bit).is_err();
+            err |= self.check(builder, &children[i + 1], expected_typ).is_err();
             i += 2;
         }
 
         // TODO this all needs helpers in AstNode
-        err |= self.check(&children[children.len() - 1], expected_typ).is_err();
+        err |= self.check(builder, &children[children.len() - 1], expected_typ).is_err();
 
         if children.iter().all(|child| self.typs.contains_key(&child.id())) {
             self.annotate(node, expected_typ);
@@ -238,12 +233,12 @@ impl Typing {
         Ok(())
     }
 
-    fn infer_unop<'p>(&mut self, node: &AstNode<'p>, op: UnOp) -> Result<Option<Type>, ()> {
+    fn infer_unop<'p>(&mut self, builder: &mut Builder, node: &AstNode<'p>, op: UnOp) -> Result<Option<Type>, ()> {
         let subject = node.subject().unwrap();
 
         match op {
             UnOp::Inv | UnOp::Neg => {
-                let Some(subject_typ) = self.infer(&subject)? else {
+                let Some(subject_typ) = self.infer(builder, &subject)? else {
                     //self.flag_cant_infer(&subject);
                     self.flag_todo(&subject, "OK");
                     return Err(());
@@ -258,7 +253,7 @@ impl Typing {
                 }
             }
             UnOp::Not => {
-                let Some(subject_typ) = self.infer(&subject)? else {
+                let Some(subject_typ) = self.infer(builder, &subject)? else {
                     //self.flag_cant_infer(&subject);
                     self.flag_todo(&subject, "OK2");
                     return Err(());
@@ -275,20 +270,20 @@ impl Typing {
         }
     }
 
-    fn infer_fn<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, ()> {
+    fn infer_fn<'p>(&mut self, builder: &mut Builder, node: &AstNode<'p>) -> Result<Option<Type>, ()> {
         let children = node.children();
         let fn_ofness = node.child(0);
         let args = &children[1..];
 
         let AstNodePayload::Ofness(ofness) = fn_ofness.payload() else { unreachable!() };
-        let fn_name = self.parsing.string(ofness.name);
-//        let fn_item = self.symboltable.resolve_item_in_package(fn_name, node.package());
+        let fn_name = fn_ofness.parsing().string(ofness.name);
+//        let fn_item = builder.get_symboltable().resolve_item_in_package(fn_name, node.package());
         let fn_name: &[u8] = fn_name.into();
 
         match fn_name {
             b"any" => {
                 // TODO stricter type checking
-                if let Some(_typ) = self.infer(&args[0])? {
+                if let Some(_typ) = self.infer(builder, &args[0])? {
                     self.tags.insert(node.location(), Tag::PrimitiveResolution(b"any".into()));
                     self.annotate(node, &Type::Bit);
                     Ok(Some(Type::Bit))
@@ -298,7 +293,7 @@ impl Typing {
             }
             b"all" => {
                 // TODO stricter type checking
-                if let Some(_typ) = self.infer(&args[0])? {
+                if let Some(_typ) = self.infer(builder, &args[0])? {
                     self.tags.insert(node.location(), Tag::PrimitiveResolution(b"any".into()));
                     self.annotate(node, &Type::Bit);
                     Ok(Some(Type::Bit))
@@ -310,9 +305,9 @@ impl Typing {
         }
     }
 
-    fn check_index<'p>(&mut self, node: &AstNode<'p>, index: Width, expected_typ: &Type) -> Result<(), ()> {
+    fn check_index<'p>(&mut self, builder: &mut Builder, node: &AstNode<'p>, index: Width, expected_typ: &Type) -> Result<(), ()> {
         let subject = node.child(0);
-        let Ok(Some(subject_typ)) = self.infer(&subject) else {
+        let Ok(Some(subject_typ)) = self.infer(builder, &subject) else {
             self.flag_cant_infer(node);
             return Err(());
         };
@@ -343,14 +338,14 @@ impl Typing {
         }
     }
 
-    fn check_ext<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
+    fn check_ext<'p>(&mut self, builder: &mut Builder, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
         let Type::Word(target_width) = expected_typ else {
             self.flag_not_word_type(node, expected_typ);
             return Err(());
         };
 
         let subject = node.child(0);
-        let Ok(Some(subject_typ)) = self.infer(&subject) else {
+        let Ok(Some(subject_typ)) = self.infer(builder, &subject) else {
             self.flag_cant_infer(node);
             return Err(());
         };
@@ -383,7 +378,7 @@ impl Typing {
         Ok(())
     }
 
-    fn check_ctor<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
+    fn check_ctor<'p>(&mut self, builder: &mut Builder, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
         // TODO check that it's an ctor type
         let AstNodePayload::ExprCtor(expr_ctor) = node.payload() else { unreachable!() };
         let Type::Usual(typedef_id) = expected_typ else {
@@ -391,8 +386,9 @@ impl Typing {
             return Err(());
         };
 
-        let ctor_name = self.parsing.string(expr_ctor.ctor);
-        let Some(ctor_symbol) = self.symboltable.slot(*typedef_id, ctor_name) else {
+        let ctor_name = node.parsing().string(expr_ctor.ctor);
+        let symboltable = builder.get_symboltable();
+        let Some(ctor_symbol) = symboltable.slot(*typedef_id, ctor_name) else {
             self.flag_unknown(node, "Unknown ctor name: {ctor_name} in union type {expected_typ:?}");
             return Err(());
         };
@@ -402,7 +398,7 @@ impl Typing {
         Ok(())
     }
 
-    fn check_enumerant<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
+    fn check_enumerant<'p>(&mut self, builder: &mut Builder, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
         let AstNodePayload::ExprEnumerant(expr_enumerant) = node.payload() else { unreachable!() };
         let Type::Usual(typedef_id) = expected_typ else {
             // TODO check that it's an enum type
@@ -410,8 +406,9 @@ impl Typing {
             return Err(());
         };
 
-        let enumerant_name = self.parsing.string(expr_enumerant.enumerant);
-        let Some(enumerant_symbol) = self.symboltable.slot(*typedef_id, enumerant_name) else {
+        let enumerant_name = node.parsing().string(expr_enumerant.enumerant);
+        let symboltable = builder.get_symboltable();
+        let Some(enumerant_symbol) = symboltable.slot(*typedef_id, enumerant_name) else {
             self.flag_unknown(node, "Unknown enumerant name: {enumerant_name} in enum type {expected_typ:?}");
             return Err(());
         };
@@ -421,7 +418,7 @@ impl Typing {
         Ok(())
     }
 
-    pub(crate) fn infer<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, ()> {
+    pub(crate) fn infer<'p>(&mut self, builder: &mut Builder, node: &AstNode<'p>) -> Result<Option<Type>, ()> {
         match node.payload() {
             AstNodePayload::ExprReference => {
                 // TODO HACK
@@ -453,26 +450,26 @@ impl Typing {
                 }
             }
             AstNodePayload::ExprStrLit(_expr_str_lit) => Ok(self.infer_str(&node)?),
-            AstNodePayload::ExprIndex(index) => Ok(self.infer_index(&node, index)?),
-            AstNodePayload::ExprIndexRange(indexrange) => Ok(self.infer_index_range(&node, indexrange)?),
-            AstNodePayload::ExprWord => Ok(self.infer_word(&node)?),
+            AstNodePayload::ExprIndex(index) => Ok(self.infer_index(builder, &node, index)?),
+            AstNodePayload::ExprIndexRange(indexrange) => Ok(self.infer_index_range(builder, &node, indexrange)?),
+            AstNodePayload::ExprWord => Ok(self.infer_word(builder, &node)?),
             AstNodePayload::ExprAs => {
                 let subject = node.child(0);
                 let typ_node = node.child(1);
-                let maybe_typ = self.type_index.type_at(typ_node.location()).cloned();
+                let maybe_typ = builder.get_type_index().type_at(typ_node.location()).cloned();
                 if let Some(typ) = maybe_typ  {
-                    let _ = self.check(&subject, &typ);
+                    let _ = self.check(builder, &subject, &typ);
                     self.annotate(&node, &typ);
                     Ok(Some(typ))
                 } else {
                     Err(())
                 }
             }
-            AstNodePayload::ExprBinOp(_expr_bin_op) => self.infer_binop(node),
-            AstNodePayload::ExprUnOp(expr_un_op)     => self.infer_unop(node, expr_un_op.op),
-            AstNodePayload::ExprFn     => self.infer_fn(node),
+            AstNodePayload::ExprBinOp(_expr_bin_op) => self.infer_binop(builder, node),
+            AstNodePayload::ExprUnOp(expr_un_op)     => self.infer_unop(builder, node, expr_un_op.op),
+            AstNodePayload::ExprFn     => self.infer_fn(builder, node),
             AstNodePayload::ExprParen => {
-                if let Some(typ) = self.infer(&node.subject().unwrap())? {
+                if let Some(typ) = self.infer(builder, &node.subject().unwrap())? {
                     self.annotate(&node, &typ);
                     Ok(Some(typ))
                 } else {
@@ -483,13 +480,13 @@ impl Typing {
         }
     }
 
-    fn infer_word<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, ()> {
+    fn infer_word<'p>(&mut self, builder: &mut Builder, node: &AstNode<'p>) -> Result<Option<Type>, ()> {
         // We can assume we have a width-less WordLit here, since it would have been inferred earlier.
         let mut total_width = 0;
         let mut diagnostics: Vec<Diagnostic> = vec![];
         let mut uninferred_child = false;
         for child in node.children() {
-            match self.infer(&child) {
+            match self.infer(builder, &child) {
                 Ok(None) => {
                     self.diagnostics.push(diagnostics::CantInfer {
                         region: node.region(),
@@ -525,7 +522,7 @@ impl Typing {
         Ok(None)
     }
 
-    fn infer_binop<'p>(&mut self, node: &AstNode<'p>) -> Result<Option<Type>, ()> {
+    fn infer_binop<'p>(&mut self, builder: &mut Builder, node: &AstNode<'p>) -> Result<Option<Type>, ()> {
         let lhs = node.child(0);
         let rhs = node.child(1);
 
@@ -534,8 +531,8 @@ impl Typing {
             BinOp::Lt | BinOp::Lte |
             BinOp::Gt | BinOp::Gte |
             BinOp::Eq | BinOp::Neq => {
-                if let Some(lhs_typ) = self.infer(&lhs)? {
-                    self.check(&rhs, &lhs_typ)?;
+                if let Some(lhs_typ) = self.infer(builder, &lhs)? {
+                    self.check(builder, &rhs, &lhs_typ)?;
                     self.annotate(node, &Type::Bit);
                     Ok(Some(Type::Bit))
                 } else {
@@ -545,8 +542,8 @@ impl Typing {
             }
             BinOp::Add | BinOp::Sub | BinOp::And |
             BinOp::Or | BinOp::Xor => {
-                if let Some(lhs_typ) = self.infer(&lhs)? {
-                    self.check(&rhs, &lhs_typ)?;
+                if let Some(lhs_typ) = self.infer(builder, &lhs)? {
+                    self.check(builder, &rhs, &lhs_typ)?;
                     self.annotate(node, &lhs_typ);
                     Ok(Some(lhs_typ))
                 } else {
@@ -555,8 +552,8 @@ impl Typing {
                 }
             }
             BinOp::LogicalAnd | BinOp::LogicalOr | BinOp::LogicalXor => {
-                let lhs_ok = self.check(&lhs, &Type::Bit).is_ok();
-                let rhs_ok = self.check(&rhs, &Type::Bit).is_ok();
+                let lhs_ok = self.check(builder, &lhs, &Type::Bit).is_ok();
+                let rhs_ok = self.check(builder, &rhs, &Type::Bit).is_ok();
                 if lhs_ok && rhs_ok {
                     self.annotate(node, &Type::Bit);
                     Ok(Some(Type::Bit))
@@ -567,10 +564,10 @@ impl Typing {
         }
     }
 
-    fn infer_index<'p>(&mut self, node: &AstNode<'p>, index: payload::ExprIndex) -> Result<Option<Type>, ()> {
+    fn infer_index<'p>(&mut self, builder: &mut Builder, node: &AstNode<'p>, index: payload::ExprIndex) -> Result<Option<Type>, ()> {
         let subject = node.subject().unwrap();
         let region = node.region();
-        if let Some(subject_typ) = self.infer(&subject)? {
+        if let Some(subject_typ) = self.infer(builder, &subject)? {
             self.typs.insert(subject.id(), subject_typ.clone());
             if let Type::Word(width) = &subject_typ {
                 // TODO check
@@ -602,12 +599,13 @@ impl Typing {
 
     fn infer_index_range<'p>(
         &mut self,
+        builder: &mut Builder,
         node: &AstNode<'p>,
         indexrange: payload::ExprIndexRange,
     ) -> Result<Option<Type>, ()> {
         let subject = node.subject().unwrap();
         let region = node.region();
-        if let Some(subject_typ) = self.infer(&subject)? {
+        if let Some(subject_typ) = self.infer(builder, &subject)? {
             self.typs.insert(subject.id(), subject_typ.clone());
             if let Type::Word(width) = &subject_typ {
                 // TODO check
@@ -639,12 +637,12 @@ impl Typing {
     }
 
     // Checks that in a clean typecheck, all expressions in the tree have an annotation.
-    pub fn validate(&mut self) {
+    pub fn validate(&mut self, builder: &mut Builder) {
         if self.diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
             return;
         }
 
-        let parsing = self.parsing.clone();
+        let parsing = builder.get_parsing(self.exprroot.package());
         let root_id = self.exprroot.location().ast_node_id();
         let mut queue = vec![root_id];
         while let Some(node_id) = queue.pop() {
@@ -866,18 +864,15 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
         context,
         typs: HashMap::new(),
         diagnostics,
-        symboltable: symboltable.clone(),
         use_locations: HashMap::new(),
-        type_index: builder.get_type_index(),
-        parsing: parsing.clone(),
         tags: HashMap::new(),
     };
 
     // if there is no expected type, you can't type check the expression.
     if let Some(expected_typ) = expected_typ {
-        let _ = typing.check(&node, &expected_typ);
+        let _ = typing.check(builder, &node, &expected_typ);
     } else {
-        match typing.infer(&node) {
+        match typing.infer(builder, &node) {
             Ok(None) => {
                 typing.diagnostics.push(diagnostics::Todo {
                     region: node.region(),
@@ -891,7 +886,7 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
         }
     }
 
-    typing.validate();
+    typing.validate(builder);
 
     Arc::new(typing)
 }
