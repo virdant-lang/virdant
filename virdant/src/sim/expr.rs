@@ -39,6 +39,20 @@ pub(super) enum ExprPayload {
     Hole(payload::Hole),
 }
 
+impl Expr {
+    pub fn location(&self) -> Location {
+        self.location.clone()
+    }
+
+    pub fn typ(&self) -> &Type {
+        &self.typ
+    }
+
+    pub fn payload(&self) -> &ExprPayload {
+        &self.payload
+    }
+}
+
 pub(super) enum Referent {
     Component(ComponentId),
     Local(BString),
@@ -156,7 +170,8 @@ fn convert_ast_expr(builder: &mut Builder, loc: Location) -> Arc<Expr> {
         }
         AstNodePayload::ExprWordLit(lit) => {
             let s = parsing.string(lit.literal).to_str_lossy().into_owned();
-            ExprPayload::WordLit(payload::WordLit { value: parse_word_value(&s) })
+            let width = if let Type::Word(w) = &typ { *w } else { unreachable!() };
+            ExprPayload::WordLit(payload::WordLit { width, value: parse_word_value(&s) })
         }
         AstNodePayload::ExprStrLit(lit) => {
             let value = parsing.string(lit.literal).to_owned();
