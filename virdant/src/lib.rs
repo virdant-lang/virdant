@@ -7,6 +7,7 @@ pub mod queries;
 pub mod diagnostics;
 pub mod verilog;
 pub mod types;
+pub mod sim;
 
 use std::sync::LazyLock;
 
