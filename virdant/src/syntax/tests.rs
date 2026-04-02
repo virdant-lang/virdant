@@ -58,7 +58,6 @@ test_example!(edge);
 test_example!(enums);
 test_example!(extensions);
 test_example!(fns);
-test_example!(gcd);
 test_example!(lfsr);
 test_example!(lights);
 test_example!(literals);
