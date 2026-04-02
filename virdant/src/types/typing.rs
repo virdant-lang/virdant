@@ -393,6 +393,25 @@ impl Typing {
             return Err(());
         };
 
+        let sig = builder.get_ctor_signature(ctor_symbol.id());
+        let arguments = node.children();
+
+        if sig.parameters.len() != arguments.len() {
+            self.flag_unknown(
+                node,
+                format!(
+                    "Ctor was provided the wrong number of arguments: expected {}, but found {}",
+                    sig.parameters.len(),
+                    arguments.len(),
+                ),
+            );
+            return Err(());
+        }
+
+        for (arg, (_param_name, param_typ)) in arguments.into_iter().zip(sig.parameters.iter()) {
+            self.check(builder, &arg, param_typ)?;
+        }
+
         self.tags.insert(node.location(), Tag::SymbolResolution(ctor_symbol.id()));
         self.annotate(node, &expected_typ);
         Ok(())

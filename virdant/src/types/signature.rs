@@ -10,7 +10,7 @@ use crate::types::Type;
 /// The signature of a union constructor: its named arguments and return type.
 #[derive(Debug, Clone)]
 pub struct Signature {
-    pub arguments: Vec<(BString, Type)>,
+    pub parameters: Vec<(BString, Type)>,
     pub ret_typ: Type,
 }
 
@@ -48,5 +48,5 @@ pub(crate) fn build_ctor_signature(
         arguments.push((name, typ));
     }
 
-    Arc::new(Signature { arguments, ret_typ })
+    Arc::new(Signature { parameters: arguments, ret_typ })
 }
