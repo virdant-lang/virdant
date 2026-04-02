@@ -4,12 +4,12 @@ use clap::{Parser, Subcommand};
 use bstr::{BStr, BString, ByteSlice};
 use colored::Colorize;
 use nix::unistd::execvp;
+use virdant::util::{check_db, db_from_dir};
 use std::ffi::{CString, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use virdant::LIB_DIR;
 use virdant::db::Db;
-use virdant::diagnostics::{Diagnostic, DiagnosticLevel};
+use virdant::diagnostics::DiagnosticLevel;
 use virdant::fqn::PackageFqn;
 use virdant::common::{Flow, source::{Region, Source}};
 use virdant::analysis::symbols::SymbolKind;
@@ -107,39 +107,6 @@ fn project_db(args: &Args) -> Db {
     }
 
     db_from_dir(cwd.join("src"))
-}
-
-fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
-    let mut db = Db::new();
-    db.set_packages(vec![]);
-    let builtin_source = Source::load_file(LIB_DIR.join("builtin.vir"));
-    let mut sources = vec![builtin_source.clone()];
-    db.set_source(builtin_source.package(), builtin_source);
-    let source_dir: PathBuf = source_dir.into();
-    for filepath in std::fs::read_dir(&source_dir).expect(&format!("Could not open directory: {source_dir:?}")) {
-        let filepath = match filepath {
-            Ok(filepath) => filepath.path(),
-            Err(_) => continue,
-        };
-        match filepath.extension() {
-            Some(ext) if ext.to_string_lossy() == "vir" => (),
-            _ => continue,
-        }
-        let source = Source::load_file(filepath);
-        db.set_source(source.package(), source.clone());
-        sources.push(source);
-    }
-    db.set_packages(sources.iter().map(|source| source.package()).collect());
-    db
-}
-
-fn check_db(db: &Db) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
-    let diagnostics = db.check();
-    if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
-        Err(diagnostics)
-    } else {
-        Ok(diagnostics)
-    }
 }
 
 fn dump_diagnostics(db: &Db) {

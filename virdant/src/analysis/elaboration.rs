@@ -31,6 +31,16 @@ pub struct ElaboratedComponent {
 pub struct ElaboratedComponentId(usize);
 
 impl Elaboration {
+    pub fn resolve<P: Into<BString>>(&self, path: P) -> Option<&ElaboratedComponent> {
+        let path = path.into();
+        for component in &self.components {
+            if component.path == path {
+                return Some(&component);
+            }
+        }
+        None
+    }
+
     pub fn components(&self) -> &[ElaboratedComponent] {
         &self.components
     }

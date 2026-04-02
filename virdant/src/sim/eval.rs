@@ -5,6 +5,7 @@ use crate::types::Type;
 use crate::sim::expr::{Expr, Referent};
 use crate::analysis::symbols::SymbolId;
 
+#[derive(Clone, Debug)]
 pub enum Value {
     X(Type),
     Z(Type),
@@ -25,14 +26,26 @@ impl Value {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Context {
-    context: HashMap<Referent, Value>,
+    context: Vec<(Referent, Value)>,
+}
+
+impl Context {
+    pub fn get(&self, referent: &Referent) -> Value {
+        for (referent_, value) in self.context.iter().rev() {
+            if referent_ == referent {
+                return value.clone();
+            }
+        }
+        panic!("No referent found: {referent:?}")
+    }
 }
 
 impl Expr {
     pub fn eval(&self, context: Context) -> Value {
         match self.payload() {
-            super::expr::ExprPayload::Reference(reference) => todo!(),
+            super::expr::ExprPayload::Reference(reference) => context.get(&reference.referent),
             super::expr::ExprPayload::Paren(paren) => paren.subject.eval(context),
             super::expr::ExprPayload::If(_) => todo!(),
             super::expr::ExprPayload::Match(_) => todo!(),
@@ -55,4 +68,18 @@ impl Expr {
             super::expr::ExprPayload::Hole(hole) => todo!(),
         }
     }
+}
+
+#[test]
+fn test_eval() {
+    let db = crate::util::db_from_dir_with_lib("../examples/passthrough/src", "../lib");
+    crate::util::check_db(&db).unwrap();
+    let symboltable = db.get_symboltable();
+    let top = symboltable.resolve(b"passthrough::Passthrough".into()).unwrap();
+    let elab = db.get_elaboration(top.id());
+    dbg!(&elab);
+    let inp = elab.resolve(b"top.out").unwrap();
+    dbg!(&inp);
+    let expr = crate::sim::expr::driver_to_expr(&db, inp.driver().unwrap());
+    dbg!(&expr);
 }

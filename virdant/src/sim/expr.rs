@@ -3,18 +3,20 @@ use bstr::{BString, ByteSlice};
 
 use crate::analysis::component::ComponentId;
 use crate::analysis::drivers::{Driver, DriverIf};
-use crate::db::Builder;
+use crate::db::{Builder, Db};
 use crate::sim::payload;
 use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
 use crate::analysis::Location;
 
+#[derive(Debug)]
 pub(super) struct Expr {
     location: Location,
     typ: Type,
     payload: ExprPayload,
 }
 
+#[derive(Debug)]
 pub(super) enum ExprPayload {
     Reference(payload::Reference),
     Paren(payload::Paren),
@@ -53,30 +55,31 @@ impl Expr {
     }
 }
 
-pub(super) enum Referent {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Referent {
     Component(ComponentId),
     Local(BString),
 }
 
-pub fn driver_to_expr(builder: &mut Builder, driver: &Driver) -> Arc<Expr> {
+pub fn driver_to_expr(db: &Db, driver: &Driver) -> Arc<Expr> {
     match driver {
-        Driver::Expr(_, loc) => convert_ast_expr(builder, loc.clone()),
-        Driver::If(driver_if) => convert_driver_if(builder, driver_if),
+        Driver::Expr(_, loc) => convert_ast_expr(db, loc.clone()),
+        Driver::If(driver_if) => convert_driver_if(db, driver_if),
     }
 }
 
-fn convert_driver_if(builder: &mut Builder, driver_if: &DriverIf) -> Arc<Expr> {
+fn convert_driver_if(db: &Db, driver_if: &DriverIf) -> Arc<Expr> {
     let location = driver_if.clauses[0].0.clone();
 
     let mut branches: Vec<(Arc<Expr>, Arc<Expr>)> = Vec::new();
     for (cond_loc, sub_driver) in &driver_if.clauses {
-        let cond = convert_ast_expr(builder, cond_loc.clone());
-        let body = driver_to_expr(builder, sub_driver.as_ref());
+        let cond = convert_ast_expr(db, cond_loc.clone());
+        let body = driver_to_expr(db, sub_driver.as_ref());
         branches.push((cond, body));
     }
 
     let else_branch = match &driver_if.else_clause {
-        Some(else_driver) => driver_to_expr(builder, else_driver.as_ref()),
+        Some(else_driver) => driver_to_expr(db, else_driver.as_ref()),
         None => {
             let typ = Type::Bit;
             Arc::new(Expr { location: location.clone(), typ, payload: ExprPayload::Hole(payload::Hole {}) })
@@ -88,14 +91,14 @@ fn convert_driver_if(builder: &mut Builder, driver_if: &DriverIf) -> Arc<Expr> {
 }
 
 // Recursively build `If` branches from the flat [cond, then, cond, then, ..., else] child list.
-fn build_if_branches(builder: &mut Builder, locs: &[Location]) -> (Vec<(Arc<Expr>, Arc<Expr>)>, Arc<Expr>) {
-    let cond = convert_ast_expr(builder, locs[0].clone());
-    let then_expr = convert_ast_expr(builder, locs[1].clone());
+fn build_if_branches(db: &Db, locs: &[Location]) -> (Vec<(Arc<Expr>, Arc<Expr>)>, Arc<Expr>) {
+    let cond = convert_ast_expr(db, locs[0].clone());
+    let then_expr = convert_ast_expr(db, locs[1].clone());
     if locs.len() == 3 {
-        let else_expr = convert_ast_expr(builder, locs[2].clone());
+        let else_expr = convert_ast_expr(db, locs[2].clone());
         (vec![(cond, then_expr)], else_expr)
     } else {
-        let (mut rest, else_expr) = build_if_branches(builder, &locs[2..]);
+        let (mut rest, else_expr) = build_if_branches(db, &locs[2..]);
         rest.insert(0, (cond, then_expr));
         (rest, else_expr)
     }
@@ -113,9 +116,9 @@ fn parse_word_value(s: &str) -> u64 {
     }
 }
 
-fn convert_ast_expr(builder: &mut Builder, loc: Location) -> Arc<Expr> {
-    let typ = builder.get_typeof(loc.clone()).unwrap_or(Type::Bit);
-    let parsing = builder.get_parsing(loc.package());
+fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
+    let typ = db.get_typeof(loc.clone()).unwrap_or(Type::Bit);
+    let parsing = db.get_parsing(loc.package());
     let node = parsing.ast_node(loc.ast_node_id());
 
     let payload = match node.payload() {
@@ -125,20 +128,20 @@ fn convert_ast_expr(builder: &mut Builder, loc: Location) -> Arc<Expr> {
         }
         AstNodePayload::ExprParen => {
             let child_loc = node.child(0).location();
-            ExprPayload::Paren(payload::Paren { subject: convert_ast_expr(builder, child_loc) })
+            ExprPayload::Paren(payload::Paren { subject: convert_ast_expr(db, child_loc) })
         }
         AstNodePayload::ExprIf => {
             let child_locs: Vec<Location> = node.children().iter().map(|c| c.location()).collect();
-            let (branches, else_branch) = build_if_branches(builder, &child_locs);
+            let (branches, else_branch) = build_if_branches(db, &child_locs);
             ExprPayload::If(payload::If { branches, else_branch })
         }
         AstNodePayload::ExprMatch => {
             let children = node.children();
             let subject_loc = children[0].location();
             let num_arms = (children.len() - 1) / 2;
-            let exprroot = builder.get_exprroot_for(loc.clone());
-            let typing = builder.get_typing(exprroot);
-            // Collect all arm data as owned values before making recursive builder calls.
+            let exprroot = db.get_exprroot_for(loc.clone());
+            let typing = db.get_typing(exprroot);
+            // Collect all arm data as owned values before making recursive db calls.
             let arm_data: Vec<(payload::MatchPattern, Location)> = (0..num_arms).map(|i| {
                 let pat = &children[2 * i + 1];
                 let body_loc = children[2 * i + 2].location();
@@ -158,10 +161,10 @@ fn convert_ast_expr(builder: &mut Builder, loc: Location) -> Arc<Expr> {
                 };
                 (pattern, body_loc)
             }).collect();
-            let subject = convert_ast_expr(builder, subject_loc);
+            let subject = convert_ast_expr(db, subject_loc);
             let mut arms: Vec<(payload::MatchPattern, Arc<Expr>)> = Vec::new();
             for (pat, body_loc) in arm_data {
-                arms.push((pat, convert_ast_expr(builder, body_loc)));
+                arms.push((pat, convert_ast_expr(db, body_loc)));
             }
             ExprPayload::Match(payload::Match { subject, arms })
         }
@@ -181,45 +184,45 @@ fn convert_ast_expr(builder: &mut Builder, loc: Location) -> Arc<Expr> {
             let lhs_loc = node.child(0).location();
             let rhs_loc = node.child(1).location();
             let op = binop.op;
-            let lhs = convert_ast_expr(builder, lhs_loc);
-            let rhs = convert_ast_expr(builder, rhs_loc);
+            let lhs = convert_ast_expr(db, lhs_loc);
+            let rhs = convert_ast_expr(db, rhs_loc);
             ExprPayload::BinOp(payload::BinOp { lhs, op, rhs })
         }
         AstNodePayload::ExprUnOp(unop) => {
             let child_loc = node.child(0).location();
             let op = unop.op;
-            let subject = convert_ast_expr(builder, child_loc);
+            let subject = convert_ast_expr(db, child_loc);
             ExprPayload::UnOp(payload::UnOp { op, subject })
         }
         AstNodePayload::ExprMethod(method_payload) => {
             let subject_loc = node.child(0).location();
             let method = parsing.string(method_payload.method).to_owned();
             let arg_locs: Vec<Location> = node.children().iter().skip(1).map(|c| c.location()).collect();
-            let subject = convert_ast_expr(builder, subject_loc);
+            let subject = convert_ast_expr(db, subject_loc);
             let mut args: Vec<Arc<Expr>> = Vec::new();
-            for l in arg_locs { args.push(convert_ast_expr(builder, l)); }
+            for l in arg_locs { args.push(convert_ast_expr(db, l)); }
             ExprPayload::Method(payload::Method { subject, method, args })
         }
         AstNodePayload::ExprFn => {
             let subject_loc = node.child(0).location();
             let arg_locs: Vec<Location> = node.children().iter().skip(1).map(|c| c.location()).collect();
-            let subject = convert_ast_expr(builder, subject_loc);
+            let subject = convert_ast_expr(db, subject_loc);
             let mut args: Vec<Arc<Expr>> = Vec::new();
-            for l in arg_locs { args.push(convert_ast_expr(builder, l)); }
+            for l in arg_locs { args.push(convert_ast_expr(db, l)); }
             ExprPayload::Fn(payload::Fn { subject, args })
         }
         AstNodePayload::ExprCtor(_) => {
-            let exprroot = builder.get_exprroot_for(loc.clone());
-            let typing = builder.get_typing(exprroot);
+            let exprroot = db.get_exprroot_for(loc.clone());
+            let typing = db.get_typing(exprroot);
             let symbol_id = typing.tag(loc.clone()).symbol_id().unwrap();
             let arg_locs: Vec<Location> = node.children().iter().map(|c| c.location()).collect();
             let mut args: Vec<Arc<Expr>> = Vec::new();
-            for l in arg_locs { args.push(convert_ast_expr(builder, l)); }
+            for l in arg_locs { args.push(convert_ast_expr(db, l)); }
             ExprPayload::Ctor(payload::Ctor { symbol_id, args })
         }
         AstNodePayload::ExprEnumerant(_) => {
-            let exprroot = builder.get_exprroot_for(loc.clone());
-            let typing = builder.get_typing(exprroot);
+            let exprroot = db.get_exprroot_for(loc.clone());
+            let typing = db.get_typing(exprroot);
             let symbol_id = typing.tag(loc.clone()).symbol_id().unwrap();
             ExprPayload::Enumerant(payload::Enumerant { symbol_id })
         }
@@ -227,38 +230,38 @@ fn convert_ast_expr(builder: &mut Builder, loc: Location) -> Arc<Expr> {
             let field_locs: Vec<Location> = node.children().iter().map(|c| c.location()).collect();
             let mut fields: Vec<(BString, Arc<Expr>)> = Vec::new();
             for (i, l) in field_locs.into_iter().enumerate() {
-                fields.push((format!("{i}").into(), convert_ast_expr(builder, l)));
+                fields.push((format!("{i}").into(), convert_ast_expr(db, l)));
             }
             ExprPayload::Struct(payload::Struct { fields })
         }
         AstNodePayload::ExprIndex(idx) => {
             let child_loc = node.child(0).location();
             let index = idx.index;
-            let subject = convert_ast_expr(builder, child_loc);
+            let subject = convert_ast_expr(db, child_loc);
             ExprPayload::Index(payload::Index { subject, index })
         }
         AstNodePayload::ExprIndexRange(range) => {
             let child_loc = node.child(0).location();
             let (index_hi, index_lo) = (range.index_hi, range.index_lo);
-            let subject = convert_ast_expr(builder, child_loc);
+            let subject = convert_ast_expr(db, child_loc);
             ExprPayload::IndexRange(payload::IndexRange { subject, index_hi, index_lo })
         }
         AstNodePayload::ExprWord => {
             let arg_locs: Vec<Location> = node.children().iter().map(|c| c.location()).collect();
             let mut args: Vec<Arc<Expr>> = Vec::new();
-            for l in arg_locs { args.push(convert_ast_expr(builder, l)); }
+            for l in arg_locs { args.push(convert_ast_expr(db, l)); }
             ExprPayload::Word(payload::Word { args })
         }
         AstNodePayload::ExprZext => {
-            let subject = convert_ast_expr(builder, node.child(0).location());
+            let subject = convert_ast_expr(db, node.child(0).location());
             ExprPayload::Zext(payload::Zext { subject })
         }
         AstNodePayload::ExprSext => {
-            let subject = convert_ast_expr(builder, node.child(0).location());
+            let subject = convert_ast_expr(db, node.child(0).location());
             ExprPayload::Sext(payload::Sext { subject })
         }
         AstNodePayload::ExprAs => {
-            let subject = convert_ast_expr(builder, node.child(0).location());
+            let subject = convert_ast_expr(db, node.child(0).location());
             ExprPayload::As(payload::As { subject })
         }
         AstNodePayload::ExprHole => ExprPayload::Hole(payload::Hole {}),
