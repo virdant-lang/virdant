@@ -493,17 +493,54 @@ impl<'d> Converter<'d> {
                 verilog::Expr::XLit(verilog::expr::XLit { width })
             }
             AstNodePayload::ExprCtor(_ctor) => {
-                // TODO doesn't handle Ctor payloads
                 let symboltable = db.get_symboltable();
                 let Type::Usual(typedef_symbol_id) = typ else {
                     unreachable!()
                 };
                 let slots = symboltable.slots(*typedef_symbol_id);
                 let ctor_symbol_id = typing.tag(node.location()).symbol_id().unwrap();
-                let width: u16 = TryInto::<u16>::try_into(slots.len()).unwrap();
+                let tag_width: Width = TryInto::<u16>::try_into(slots.len()).unwrap();
                 let slot_index = slots.iter().position(|slot_id| slot_id.id() == ctor_symbol_id).unwrap();
-                let value = 1 << slot_index;
-                verilog::Expr::WordLit(verilog::expr::WordLit { value: value, width, radix: Radix::Dec })
+                let tag_value: u128 = 1 << slot_index;
+
+                // Compute the max payload width across all ctor variants.
+                let max_payload_width: Width = slots.iter().map(|slot| {
+                    let sig = db.get_ctor_signature(slot.id());
+                    sig.parameters.iter().map(|(_name, param_typ)| type_width(param_typ, db)).sum::<Width>()
+                }).max().unwrap_or(0);
+
+                let tag_expr = verilog::Expr::WordLit(verilog::expr::WordLit {
+                    value: tag_value,
+                    width: tag_width,
+                    radix: Radix::Bin,
+                });
+
+                if max_payload_width == 0 {
+                    // No payload at all: just return the tag word.
+                    tag_expr
+                } else {
+                    // Build the full value: {tag | arg1 | ... | argN | padding_x}
+                    let this_sig = db.get_ctor_signature(ctor_symbol_id);
+                    let arguments = node.children();
+
+                    let this_payload_width: Width = this_sig.parameters.iter()
+                        .map(|(_name, param_typ)| type_width(param_typ, db))
+                        .sum();
+
+                    let mut exprs = vec![];
+                    for (arg, (_param_name, param_typ)) in arguments.iter().zip(this_sig.parameters.iter()) {
+                        exprs.push(self.convert_expr(package, arg.clone(), param_typ, db));
+                    }
+                    exprs.push(tag_expr);
+
+                    let padding_width = max_payload_width - this_payload_width;
+                    if padding_width > 0 {
+                        exprs.push(verilog::Expr::XLit(verilog::expr::XLit { width: padding_width }));
+                    }
+
+                    let total_width = tag_width + max_payload_width;
+                    verilog::Expr::Concat(verilog::expr::Concat { exprs, width: total_width })
+                }
             }
             AstNodePayload::ExprEnumerant(_enumerant) => {
                 let symboltable = db.get_symboltable();
