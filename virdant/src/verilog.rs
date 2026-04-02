@@ -9,7 +9,8 @@ mod tests;
 use crate::common::{PortDir, Radix, Width};
 
 use self::macros::{verilog_write, verilog_writeln};
-pub use self::stmt::{Assert, AssignBlocking, AssignNonBlocking, Display, If, Stmt};
+pub use self::stmt::{Assert, AssignBlocking, AssignNonBlocking, Display, If, Stmt,
+    Case, CaseZ, CaseItem, CasePattern, PatternLit};
 
 use std::collections::HashSet;
 use std::io::Write;
@@ -99,7 +100,7 @@ pub struct Submodule {
     pub ports: Vec<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Reference(expr::Reference),
     BinOp(expr::BinOp),
@@ -115,7 +116,7 @@ pub enum Expr {
     XLit(expr::XLit),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BinOp {
     Pow,
     Mul,
@@ -143,7 +144,7 @@ pub enum BinOp {
     LogOr,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnOp {
     Pos,
     Neg,
