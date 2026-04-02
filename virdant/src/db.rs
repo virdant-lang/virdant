@@ -20,6 +20,7 @@ use crate::analysis::symbols::{SymbolId, SymbolTable};
 use crate::syntax::parsing::InternedString;
 use crate::types::typedef::TypeDef;
 use crate::types::typedef::TypeIndex;
+use crate::types::signature::Signature;
 use crate::types::{ExprRoot, Type, Typing, TypingContext};
 use crate::diagnostics::Diagnostic;
 use crate::fqn::PackageFqn;
@@ -57,6 +58,7 @@ queries! {
     TypeofAll() -> HashMap<Location, Option<Type>>;
     Check() -> Vec<Diagnostic>;
     TypeIndex() -> Arc<TypeIndex>;
+    CtorSignature(ctor_symbol_id: SymbolId) -> Arc<Signature>;
 }
 
 
@@ -100,6 +102,7 @@ impl Query {
             crate::types::typedef::build_type_index : TypeIndex();
             crate::queries::build_location_region : LocationRegion(location);
             crate::queries::check : Check();
+            crate::types::signature::build_ctor_signature : CtorSignature(ctor_symbol_id);
 
         )
     }
@@ -134,3 +137,4 @@ db_getter!(get_typeof_all : TypeofAll() -> HashMap<Location, Option<Type>>);
 db_getter!(get_type_index : TypeIndex() -> Arc<TypeIndex>);
 db_getter!(get_location_region : LocationRegion(location: Location) -> Region);
 db_getter!(check : Check() -> Vec<Diagnostic>);
+db_getter!(get_ctor_signature : CtorSignature(ctor_symbol_id: SymbolId) -> Arc<Signature>);

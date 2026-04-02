@@ -160,7 +160,7 @@ impl Typing {
             AstNodePayload::ExprMatch                => Ok(()), // TODO
             AstNodePayload::ExprMethod(_expr_method) => Ok(()), // TODO
             AstNodePayload::ExprFn                   => Ok(()), // TODO
-            AstNodePayload::ExprCtor(_)              => self.check_ctor(node, expected_typ),
+            AstNodePayload::ExprCtor(_ctor)          => self.check_ctor(node, expected_typ),
             AstNodePayload::ExprEnumerant(_)         => self.check_enumerant(node, expected_typ),
             AstNodePayload::ExprStruct               => Ok(()), // TODO
             AstNodePayload::ExprIndexRange(_expr_index_range) => Ok(()), // TODO
@@ -384,7 +384,7 @@ impl Typing {
     }
 
     fn check_ctor<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
-            // TODO check that it's an ctor type
+        // TODO check that it's an ctor type
         let AstNodePayload::ExprCtor(expr_ctor) = node.payload() else { unreachable!() };
         let Type::Usual(typedef_id) = expected_typ else {
             self.flag_unknown(node, "Should be a typedef type");
