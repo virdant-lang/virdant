@@ -795,13 +795,15 @@ pub(crate) fn build_type_at(builder: &mut Builder, location: Location) -> Result
 
     match typ_node.payload() {
         AstNodePayload::Type(_typ) => {
-            let type_name = match typ_node.child(0).payload() {
+            let type_name: BString = match typ_node.child(0).payload() {
                 AstNodePayload::Ofness(ofness) => {
-                    let _package = ofness
-                        .package
-                        .map(|package| parsing.string(package).to_owned())
-                        .unwrap_or_else(|| bstr::BString::from(b"builtin".to_vec()));
-                    parsing.string(ofness.name)
+                    if let Some(package) = ofness.package {
+                        let package_name = parsing.string(package);
+                        let typ_name = parsing.string(ofness.name);
+                        format!("{}::{}", package_name, typ_name).into()
+                    } else {
+                        parsing.string(ofness.name).to_owned()
+                    }
                 }
                 _ => {
                     let region = builder.get_location_region(location);

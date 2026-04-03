@@ -194,19 +194,21 @@ impl TypeIndex {
     fn gather_type_roots(&mut self, builder: &mut Builder, node: AstNode<'_>) {
         if let AstNodePayload::Type(_) = node.payload() {
             let parsing = node.parsing;
-            let type_name = match node.child(0).payload() {
+            let type_name: BString = match node.child(0).payload() {
                 AstNodePayload::Ofness(ofness) => {
-                    let _package = ofness
-                        .package
-                        .map(|pkg| parsing.string(pkg).to_owned())
-                        .unwrap_or_else(|| BString::from(b"builtin".to_vec()));
-                    parsing.string(ofness.name)
+                    if let Some(package) = ofness.package {
+                        let package_name = parsing.string(package);
+                        let typ_name = parsing.string(ofness.name);
+                        format!("{}::{}", package_name, typ_name).into()
+                    } else {
+                        parsing.string(ofness.name).to_owned()
+                    }
                 }
                 _ => panic!("expected Ofness inside Type node"),
             };
 
             let symboltable = builder.get_symboltable();
-            if let Some(symbol) = symboltable.resolve_item(type_name, parsing.package()) {
+            if let Some(symbol) = symboltable.resolve_item(type_name.as_bstr(), parsing.package()) {
                 let bit_symbol = symboltable.resolve(b"builtin::Bit".into()).unwrap();
                 let word_symbol = symboltable.resolve(b"builtin::Word".into()).unwrap();
                 let clock_symbol = symboltable.resolve(b"builtin::Clock".into()).unwrap();
