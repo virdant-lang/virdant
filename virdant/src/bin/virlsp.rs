@@ -18,6 +18,7 @@ use virdant::db::Db;
 use virdant::fqn::PackageFqn;
 use virdant::common::source::{LineCol, Source, Span};
 use virdant::syntax::ast::{AstNode, AstNodeId};
+use virdant::syntax::payload::AstNodePayload;
 use virdant::syntax::parsing::Parsing;
 
 struct Backend {
@@ -220,17 +221,125 @@ impl LanguageServer for Backend {
         &self,
         params: GotoDefinitionParams,
     ) -> Result<Option<GotoDefinitionResponse>> {
-        // TODO find the AstNode to jump to
-        if let Some(node) = None::<AstNode> {
-            let loc = Location {
-                uri: params.text_document_position_params.text_document.uri,
-                range: span_to_range(node.span()),
-            };
+        let position = params.text_document_position_params.position;
+        let linecol = LineCol::new((position.line + 1) as usize, (position.character + 1) as usize);
+        let uri = params.text_document_position_params.text_document.uri;
+        let package = uri_to_packagefqn(&uri);
 
-            Ok(Some(GotoDefinitionResponse::Scalar(loc)))
-        } else {
-            Ok(None)
-        }
+        self.client
+            .log_message(MessageType::INFO, &format!("GOTO DEF at {linecol:?}"))
+            .await;
+
+        let state = self.state.lock().await;
+        let db = &state.db;
+        let parsing = db.get_parsing(package.clone());
+
+        let Some(node_id) = parsing.at(linecol) else {
+            return Ok(None);
+        };
+        let node = parsing.ast_node(node_id);
+
+        self.client
+            .log_message(MessageType::INFO, &format!("NODE: {:?}", node.summary()))
+            .await;
+
+        let target_loc = match node.payload() {
+            AstNodePayload::Ofness(ofness) => {
+                // Resolve the item this Ofness names (e.g. `Gcd` in `mod gcd of Gcd`).
+                let symboltable = db.get_symboltable();
+                let item_pkg = ofness.package
+                    .map(|pkg| PackageFqn::new(parsing.string(pkg).to_owned()))
+                    .unwrap_or_else(|| package.clone());
+                let item_name = parsing.string(ofness.name);
+                self.client
+                    .log_message(MessageType::INFO, &format!("item_name: {item_name:?}"))
+                    .await;
+                symboltable.resolve_item(item_name, item_pkg)
+                    .map(|sym| sym.location())
+            }
+            AstNodePayload::Path(path_payload) => {
+                // Walk up the AST to find the module that contains this path.
+                let mut current_id = node_id;
+                loop {
+                    let n = parsing.ast_node(current_id);
+                    if n.is_item() { break; }
+                    match n.parent().map(|p| p.id()) {
+                        Some(id) => current_id = id,
+                        None => return Ok(None),
+                    }
+                }
+                let current = parsing.ast_node(current_id);
+                let item_name = parsing.string(current.name().unwrap());
+                let symboltable = db.get_symboltable();
+                let Some(item_symbol) = symboltable.resolve_item_in_package(item_name, package.clone()) else {
+                    return Ok(None);
+                };
+                // Resolve the path string to a component in that module's analysis.
+                let component_analysis = db.get_component_analysis(item_symbol.id);
+                let path_str = parsing.string(path_payload.path);
+                component_analysis.resolve(path_str)
+                    .map(|comp| comp.location())
+            }
+            AstNodePayload::ExprReference => {
+                // ExprReference wraps a Path child; node.path() extracts its interned string.
+                let Some(path_interned) = node.path() else { return Ok(None); };
+                // Walk up to the enclosing module item.
+                let mut current_id = node_id;
+                loop {
+                    let n = parsing.ast_node(current_id);
+                    if n.is_item() { break; }
+                    match n.parent().map(|p| p.id()) {
+                        Some(id) => current_id = id,
+                        None => return Ok(None),
+                    }
+                }
+                let current = parsing.ast_node(current_id);
+                let item_name = parsing.string(current.name().unwrap());
+                let symboltable = db.get_symboltable();
+                let Some(item_symbol) = symboltable.resolve_item_in_package(item_name, package.clone()) else {
+                    return Ok(None);
+                };
+                let component_analysis = db.get_component_analysis(item_symbol.id);
+                let path_str = parsing.string(path_interned);
+                component_analysis.resolve(path_str)
+                    .map(|comp| comp.location())
+            }
+            AstNodePayload::Type(_) => {
+                // A Type node's first child is always an Ofness carrying the type name.
+                let ofness_node = node.child(0);
+                self.client
+                    .log_message(MessageType::INFO, &format!("ofness_node = {:?}", ofness_node.summary()))
+                    .await;
+                let AstNodePayload::Ofness(ofness) = ofness_node.payload() else { return Ok(None); };
+                let symboltable = db.get_symboltable();
+                let item_pkg = ofness.package
+                    .map(|pkg| PackageFqn::new(parsing.string(pkg).to_owned()))
+                    .unwrap_or_else(|| package.clone());
+                let item_name = parsing.string(ofness.name);
+                symboltable.resolve_item(item_name, item_pkg)
+                    .map(|sym| sym.location())
+            }
+            _ => None,
+        };
+
+        let Some(target_loc) = target_loc else {
+            return Ok(None);
+        };
+
+        // Convert the Virdant Location to an LSP Location.
+        let target_parsing = db.get_parsing(target_loc.package());
+        let target_node = target_parsing.ast_node(target_loc.ast_node_id());
+        let target_uri = packagefqn_to_uri(target_loc.package(), &uri);
+
+        let package = target_loc.package();
+        self.client
+            .log_message(MessageType::INFO, &format!("GOing TO (package: {package}) {target_uri} {}", target_node.span()))
+            .await;
+
+        Ok(Some(GotoDefinitionResponse::Scalar(Location {
+            uri: target_uri,
+            range: span_to_range(target_node.span()),
+        })))
     }
 
     async fn completion(&self, _: CompletionParams) -> Result<Option<CompletionResponse>> {
@@ -575,9 +684,13 @@ impl Backend {
         if let Some(node_id) = parsing.at(linecol) {
             let node = parsing.ast_node(node_id);
 
-            let typof = if let Some(exprroot) = get_expr_root(&self.client, db, &parsing, node.clone()).await {
-                let _typing = db.get_typing(ExprRoot { location: exprroot.location() });
-                db.get_typeof(node.location()).ok() // TODO is this .ok() OK?
+            let typof = if node.is_expr() {
+                if let Some(exprroot) = get_expr_root(&self.client, db, &parsing, node.clone()).await {
+                    let _typing = db.get_typing(ExprRoot { location: exprroot.location() });
+                    db.get_typeof(node.location()).ok() // TODO is this .ok() OK?
+                } else {
+                    None
+                }
             } else {
                 None
             };
@@ -650,6 +763,19 @@ fn uri_to_packagefqn(uri: &Url) -> PackageFqn {
         .file_stem()
         .map(|stem| PackageFqn::new(stem.as_bytes().into()))
         .unwrap_or_else(|| PackageFqn::new(uri.path().as_bytes().into()))
+}
+
+fn packagefqn_to_uri(package: PackageFqn, sibling: &Url) -> Url {
+    if package == PackageFqn::new("builtin".into()) {
+        let path = LIB_DIR.join("builtin.vir");
+        Url::from_file_path(&path).unwrap()
+    } else {
+        let path = Path::new(sibling.path())
+            .parent()
+            .unwrap()
+            .join(format!("{package}.vir"));
+        Url::from_file_path(&path).unwrap()
+    }
 }
 
 fn span_to_range(span: Span) -> Range {
