@@ -21,6 +21,11 @@ struct ExprScheduler {
     extra_elements: Vec<verilog::Element>,
     /// Substitution map: bound pattern-variable names → their Verilog extraction expressions.
     subst: IndexMap<String, verilog::Expr>,
+    /// Statements to be prepended into the current sequential always block (collected from
+    /// match expressions encountered while `in_sequential` is true).
+    sequential_stmts: Vec<verilog::Stmt>,
+    /// Whether we are currently scheduling within a sequential (clocked) context.
+    in_sequential: bool,
 }
 
 impl ExprScheduler {
@@ -29,6 +34,8 @@ impl ExprScheduler {
             counter: 0,
             extra_elements: vec![],
             subst: IndexMap::new(),
+            sequential_stmts: vec![],
+            in_sequential: false,
         }
     }
 
@@ -47,6 +54,11 @@ impl ExprScheduler {
     /// Drain all scheduled elements for insertion into the module.
     fn drain(&mut self) -> Vec<verilog::Element> {
         std::mem::take(&mut self.extra_elements)
+    }
+
+    /// Drain all statements scheduled for the current sequential always block.
+    fn drain_sequential_stmts(&mut self) -> Vec<verilog::Stmt> {
+        std::mem::take(&mut self.sequential_stmts)
     }
 }
 
@@ -311,21 +323,25 @@ impl<'d> Converter<'d> {
                     let clock_node = parsing.ast_node(clock_id);
                     let clock_type = self.node_type(package, &clock_node).unwrap();
                     let clock_expr = self.convert_expr(package, clock_node, &clock_type, self.db, &mut scheduler);
+                    scheduler.in_sequential = true;
                     let stmts = match driver {
                         Driver::If(driver_if) if driver_if.driver_type == DriverType::Latched => {
                             self.convert_latched_driver_if_to_stmts(package, driver_if, &typ, &path, &mut scheduler)
                         }
                         _ => {
                             let expr = self.convert_driver_to_expr(package, driver, &typ, &mut scheduler);
-                            vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                            vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
                                 name: valid_verilog_name(&path),
                                 expr,
                             })]
                         }
                     };
+                    scheduler.in_sequential = false;
+                    let mut all_stmts = scheduler.drain_sequential_stmts();
+                    all_stmts.extend(stmts);
                     sequential.push(verilog::Element::Always(verilog::Always {
                         clock: Some(clock_expr),
-                        stmts,
+                        stmts: all_stmts,
                     }));
                 } else {
                     let expr = self.convert_driver_to_expr(package, driver, &typ, &mut scheduler);
@@ -480,12 +496,12 @@ impl<'d> Converter<'d> {
                 // Inline match expressions as casez statements directly — no temp reg needed
                 // inside a sequential (always @(posedge clock)) context.
                 if matches!(expr_node.payload(), AstNodePayload::ExprMatch) {
-                    return self.convert_match_expr_to_nonblocking_stmts(
+                    return self.convert_match_expr_to_blocking_stmts(
                         package, expr_node, typ, path, scheduler,
                     );
                 }
                 let expr = self.convert_expr(package, expr_node, typ, self.db, scheduler);
-                vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
                     name: valid_verilog_name(path),
                     expr,
                 })]
@@ -496,11 +512,11 @@ impl<'d> Converter<'d> {
         }
     }
 
-    /// Converts an `ExprMatch` node directly into a `casez` statement that non-blockingly
+    /// Converts an `ExprMatch` node directly into a `casez` statement that blockingly
     /// assigns each arm's result to `target_name`.  This avoids creating a temporary reg +
     /// `always @(*)` block, which would be incorrect inside a sequential
     /// `always @(posedge clock)` context.
-    fn convert_match_expr_to_nonblocking_stmts(
+    fn convert_match_expr_to_blocking_stmts(
         &self,
         package: &PackageFqn,
         node: AstNode,
@@ -585,7 +601,7 @@ impl<'d> Converter<'d> {
             for key in &bound_keys { scheduler.subst.remove(key); }
             case_items.push(verilog::CaseItem {
                 pattern,
-                stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
                     name: assigned_name.clone(),
                     expr: body_expr,
                 })],
@@ -594,7 +610,7 @@ impl<'d> Converter<'d> {
         // Default arm: drive X
         case_items.push(verilog::CaseItem {
             pattern: verilog::CasePattern::Default,
-            stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+            stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
                 name: assigned_name.clone(),
                 expr: verilog::Expr::XLit(verilog::expr::XLit { width: result_width }),
             })],
@@ -895,7 +911,7 @@ impl<'d> Converter<'d> {
                     }
                     case_items.push(verilog::CaseItem {
                         pattern,
-                        stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                        stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
                             name: temp_name.clone(),
                             expr: body_expr,
                         })],
@@ -904,24 +920,30 @@ impl<'d> Converter<'d> {
                 // Default case: drive X
                 case_items.push(verilog::CaseItem {
                     pattern: verilog::CasePattern::Default,
-                    stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                    stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
                         name: temp_name.clone(),
                         expr: verilog::Expr::XLit(verilog::expr::XLit { width: result_width }),
                     })],
                 });
-                // Schedule: reg + always @(*) casez block
+                // Schedule: always push the temp reg; in a sequential context, inline the casez
+                // into the parent always block instead of emitting a separate always @(*).
                 scheduler.push(verilog::Element::Reg(verilog::Reg {
                     name: temp_name.clone(),
                     width: result_width,
                     expr: None,
                 }));
-                scheduler.push(verilog::Element::Always(verilog::Always {
-                    clock: None,
-                    stmts: vec![verilog::Stmt::CaseZ(verilog::CaseZ {
-                        subject: subject_expr,
-                        items: case_items,
-                    })],
-                }));
+                let casez_stmt = verilog::Stmt::CaseZ(verilog::CaseZ {
+                    subject: subject_expr,
+                    items: case_items,
+                });
+                if scheduler.in_sequential {
+                    scheduler.sequential_stmts.push(casez_stmt);
+                } else {
+                    scheduler.push(verilog::Element::Always(verilog::Always {
+                        clock: None,
+                        stmts: vec![casez_stmt],
+                    }));
+                }
                 verilog::Expr::Reference(verilog::expr::Reference { name: temp_name })
             }
             _ => panic!("unsupported expr in conversion: {}", node.summary()),
