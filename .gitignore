@@ -1,10 +1,12 @@
 **/target
-w
 build
-diffs
 .cargo
-conversations
-TODO.txt
 *.gtkw
 *.vcd
 *.sh
+
+w
+notes
+diffs
+conversations
+TODO.txt
