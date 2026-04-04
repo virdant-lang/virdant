@@ -103,6 +103,10 @@ impl ElaboratedComponent {
     pub fn clock(&self) -> Option<ElaboratedComponentId> {
         self.clock
     }
+
+    pub fn component_kind(&self) -> ComponentKind {
+        self.component_kind
+    }
 }
 
 /// Context supplied by the parent module when recursing into a submodule.
