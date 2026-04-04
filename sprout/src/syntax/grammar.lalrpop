@@ -1,0 +1,983 @@
+use crate::syntax::ast::AstNodeId;
+use crate::syntax::payload;
+use crate::syntax::payload::AstNodePayload;
+use crate::syntax::parsing::{InternedString, Parsing};
+use crate::syntax::token::{Token, TokenError};
+
+
+use crate::common::source::SourceOffset;
+use crate::common::{DriverType, ComponentKind, BinOp, ChannelDir, SocketRole, UnOp};
+
+grammar<'a>(parser: &mut Parsing);
+
+pub Package: AstNodeId = {
+    <ll:@L> <stmts:PackageStmt*> <rr:@R> => {
+        let payload = AstNodePayload::Package;
+        let span = parser.span(ll, rr);
+        let num_children: u16 = stmts.len().try_into().unwrap();
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+PackageStmt: AstNodeId = {
+    <import:(PackageImport ";")> => import.0,
+    <item:Item> => item,
+    <ll:@L> <error:!> <rr:@R> => {
+        let span = parser.span(ll, rr);
+        parser.add_error_node(span, error)
+    },
+}
+
+PackageImport: AstNodeId = {
+    <ll:@L> "import" <ident:Ident> <rr:@R> => {
+        let payload = AstNodePayload::Import(payload::Import { package: ident });
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+Item: AstNodeId = {
+    <moddef:ModDef> => moddef,
+    <structdef:StructDef> => structdef,
+    <uniondef:UnionDef> => uniondef,
+    <enumdef:EnumDef> => enumdef,
+    <builtindef:BuiltinDef> => builtindef,
+    <socketdef:SocketDef> => socketdef,
+    <fndef:FnDef> => fndef,
+}
+
+ModDef: AstNodeId = {
+    <ll:@L> <ext:"ext"?> <export:"export"?> "mod" <ident:Ident> "{"
+        <stmts:(ModDefStmt ";")*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::ModDef(payload::ModDef {
+            name: ident,
+            is_ext: ext.is_some(),
+            is_export: export.is_some(),
+        });
+        let span = parser.span(ll, rr);
+        let num_children = stmts.len().try_into().unwrap();
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+StructDef: AstNodeId = {
+    <ll:@L> "struct" "type" <name:Ident> "{"
+        <stmts:StructDefStmt*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::StructDef(payload::StructDef { name });
+        let span = parser.span(ll, rr);
+        let num_children = stmts.len().try_into().unwrap();
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+StructDefStmt: AstNodeId = {
+    <ll:@L> <name:Ident> ":" Type ";" <rr:@R> => {
+        let payload = AstNodePayload::Field(payload::Field { name });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+UnionDef: AstNodeId = {
+    <ll:@L> "union" "type" <name:Ident> "{"
+        <stmts:UnionDefStmt*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::UnionDef(payload::UnionDef { name });
+        let span = parser.span(ll, rr);
+        let num_children = stmts.len().try_into().unwrap();
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+UnionDefStmt: AstNodeId = {
+    <ll:@L> <name:Ident> <paramlist:ParamList?> ";" <rr:@R> => {
+        let payload = AstNodePayload::Ctor(payload::Ctor { name });
+        let span = parser.span(ll, rr);
+        let num_children = paramlist.unwrap_or(0);
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+ParamList: u16 = {
+    "(" <params:Params?> ")" => params.unwrap_or(0),
+}
+
+Params: u16 = {
+    <param:Param> => 1,
+    <params:Params> "," <param:Param> => params + 1,
+}
+
+Param: AstNodeId = {
+    <ll:@L> <name:Ident> ":" Type <rr:@R> => {
+        let payload = AstNodePayload::Param(payload::Param { name });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+GenericsParams: AstNodeId = {
+    <ll:@L> "[" <n: Nat> "]" <rr:@R> => {
+        let payload = AstNodePayload::GenericsParams(payload::GenericsParams { value: n } );
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    }
+}
+
+Generics: AstNodeId = {
+    <ll:@L> "[" Ident ":" Kind "]" <rr:@R> => {
+        let payload = AstNodePayload::Generics;
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    }
+
+}
+
+EnumDef: AstNodeId = {
+    <ll:@L> "enum" "type" <name:Ident> "width" <width:Width> "{"
+        <stmts:EnumDefStmt*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::EnumDef(payload::EnumDef { name, width });
+        let span = parser.span(ll, rr);
+        let num_children = stmts.len().try_into().unwrap();
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+EnumDefStmt: AstNodeId = {
+    <ll:@L> <name:Ident> "=" Expr ";" <rr:@R> => {
+        let payload = AstNodePayload::Enumerant(payload::Enumerant { name });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+BuiltinDef: AstNodeId = {
+    <ll:@L> "builtin" "type" <name:Ident> <generics:Generics?> "{"
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::BuiltinDef(payload::BuiltinDef { name });
+        let span = parser.span(ll, rr);
+        let num_children = if generics.is_some() { 1 } else { 0 };
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+SocketDef: AstNodeId = {
+    <ll:@L> "socket" <name:Ident> "{"
+        <stmts:SocketDefStmt*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::SocketDef(payload::SocketDef { name });
+        let span = parser.span(ll, rr);
+        let num_children = stmts.len().try_into().unwrap();
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+SocketDefStmt: AstNodeId = {
+    <ll:@L> "mosi" <name:Ident> ":" Type ";" <rr:@R> => {
+        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Mosi });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "miso" <name:Ident> ":" Type ";" <rr:@R> => {
+        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Miso });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+FnDef: AstNodeId = {
+    <ll:@L> "fn" <name:Ident> <paramlist:ParamList> "->" Type "{"
+        Expr
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::FnDef(payload::FnDef { name });
+        let span = parser.span(ll, rr);
+        let num_children = paramlist + 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+ModDefStmt: AstNodeId = {
+    <component:ModDefStmtComponent> => component,
+    <driver:ModDefStmtDriver> => driver,
+    <instance:ModDefStmtInstance> => instance,
+    <socket:ModDefStmtSocket> => socket,
+    <on:ModDefStmtOn> => on,
+    <if_:ModDefStmtIf> => if_,
+    <m:ModDefStmtMatch> => m,
+    <ll:@L> <error:!> <rr:@R> <stmt: ModDefStmt> => {
+        let span = parser.span(ll, rr);
+        parser.add_error_node(span, error)
+    },
+    <ll:@L> <error:!> <rr:@R> => {
+        let span = parser.span(ll, rr);
+        parser.add_error_node(span, error)
+    },
+}
+
+ModDefStmtComponent: AstNodeId = {
+    <ll:@L> "incoming" <ident:Ident> ":" <typ:Type> <on:OnClause?> <rr:@R> => {
+        let payload = AstNodePayload::Component(payload::Component {
+            name: ident,
+            kind: ComponentKind::Incoming,
+        });
+        let span = parser.span(ll, rr);
+        let num_children = 1 + if on.is_none() { 0 } else { 1 };
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "outgoing" <ident:Ident> ":" <typ:Type> <on:OnClause?> <rr:@R> => {
+        let payload = AstNodePayload::Component(payload::Component {
+            name: ident,
+            kind: ComponentKind::Outgoing,
+        });
+        let span = parser.span(ll, rr);
+        let num_children = 1 + if on.is_none() { 0 } else { 1 };
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "wire" <ident:Ident> ":" <typ:Type> <on:OnClause?> <rr:@R> => {
+        let payload = AstNodePayload::Component(payload::Component {
+            name: ident,
+            kind: ComponentKind::Wire,
+        });
+        let span = parser.span(ll, rr);
+        let num_children = 1 + if on.is_none() { 0 } else { 1 };
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "reg" <ident:Ident> ":" <typ:Type> <on:OnClause?> <rr:@R> => {
+        let payload = AstNodePayload::Component(payload::Component {
+            name: ident,
+            kind: ComponentKind::Reg,
+        });
+        let span = parser.span(ll, rr);
+        let num_children = 1 + if on.is_none() { 0 } else { 1 };
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+OnClause: AstNodeId = {
+    "on" <expr:Expr> => expr,
+}
+
+ModDefStmtDriver: AstNodeId = {
+    <ll:@L> <lhs:Path> ":=" <rhs:Expr> <rr:@R> => {
+        let payload = AstNodePayload::Driver(payload::Driver {
+            driver_type: DriverType::Continuous,
+        });
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <lhs:Path> "<=" <rhs:Expr> <rr:@R> => {
+        let payload = AstNodePayload::Driver(payload::Driver {
+            driver_type: DriverType::Latched,
+        });
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <lhs:Path> ":=:" <rhs:Path> <rr:@R> => {
+        let payload = AstNodePayload::BidirectionalDriver;
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+ModDefStmtInstance: AstNodeId = {
+    <ll:@L> "mod" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> <rr:@R> => {
+        let payload = AstNodePayload::Submodule(payload::Submodule { name });
+        let span = parser.span(ll, rr);
+        let num_children = if it.is_none() {
+            1
+        } else {
+            2
+        };
+
+        parser.add_node(payload, span, num_children)
+    }
+}
+
+ItBlock: AstNodeId = {
+    <ll:@L> <block: ModDefStmtBlock> <rr:@R> => {
+        let payload = AstNodePayload::It;
+        let span = parser.span(ll, rr);
+        let num_children: u16 = 1;
+
+        parser.add_node(payload, span, num_children)
+    }
+}
+
+ModDefStmtSocket: AstNodeId = {
+    <ll:@L> "master" "socket" <name:Ident> "of" <ofness:Ofness> <rr:@R> => {
+        let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Master });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "slave" "socket" <name:Ident> "of" <ofness:Ofness> <rr:@R> => {
+        let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Slave });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+ModDefStmtOn: AstNodeId = {
+    <ll:@L> "on" <clock_expr:Expr> "{"
+        <commands:(Command ";")*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::ModDefStmtOn;
+        let span = parser.span(ll, rr);
+        let num_children = 1 + u16::try_from(commands.len()).unwrap();
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+Command: AstNodeId = {
+    <ll:@L> "if" <e:Expr> "{" <cmds:(Command ";")*> "}" <rr:@R> => {
+        let payload = AstNodePayload::CommandIf;
+        let span = parser.span(ll, rr);
+        let num_children = 1 + u16::try_from(cmds.len()).unwrap();
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "assert" "(" <e:Expr> ")" <rr:@R> => {
+        let payload = AstNodePayload::CommandAssert;
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "display" "(" <s:Str> "," <e:Expr> ")" <rr:@R> => {
+        let payload = AstNodePayload::CommandDisplay(s);
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "finish" <rr:@R> => {
+        let payload = AstNodePayload::CommandFinish;
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "fatal" <rr:@R> => {
+        let payload = AstNodePayload::CommandFatal;
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+ModDefStmtIf: AstNodeId = {
+    <ll:@L> <start:ModDefStmtIfStart> <middles:ModDefStmtIfMiddle*> <end:ModDefStmtIfEnd?> <rr:@R> => {
+        let payload = AstNodePayload::ModDefStmtIf;
+        let span = parser.span(ll, rr);
+        let num_children = start + u16::try_from(2 * middles.len()).unwrap() + if end.is_some() { 1 } else { 0 };
+
+        parser.add_node(payload, span, num_children)
+    }
+}
+
+ModDefStmtIfStart: u16 = {
+    "if" Expr ModDefStmtBlock => {
+        2
+    },
+}
+
+ModDefStmtIfMiddle: () = {
+    "else" "if" Expr ModDefStmtBlock => (),
+}
+
+ModDefStmtIfEnd: u16 = {
+    "else" ModDefStmtBlock => {
+        1
+    },
+}
+
+ModDefStmtMatch: AstNodeId = {
+    <ll:@L> "match" Expr "{" <arms:ModDefStmtMatchArm*> "}" <rr:@R> => {
+        let payload = AstNodePayload::ModDefStmtMatch;
+        let span = parser.span(ll, rr);
+        let num_children = 1 + u16::try_from(2 * arms.len()).unwrap();
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+ModDefStmtMatchArm: () = {
+    Pat "=>" ModDefStmtBlock ";" => (),
+}
+
+ModDefStmtBlock: AstNodeId = {
+    <ll:@L> "{" <stmts:(ModDefStmt ";")*> "}" <rr:@R> => {
+        let num_children = u16::try_from(stmts.len()).unwrap();
+        let payload = AstNodePayload::ModDefStmtBlock;
+        let span = parser.span(ll, rr);
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+Kind: AstNodeId = {
+    <ll:@L> <name:Ident> <rr:@R> => {
+        let payload = AstNodePayload::Kind(payload::Kind { name } );
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+Type: AstNodeId = {
+    <ll:@L> <ofness:Ofness> <generics:GenericsParams?> <rr:@R> => {
+        let num_generics = if generics.is_some() { 1 } else { 0 };
+        let payload = AstNodePayload::Type(payload::Type { num_generics } );
+        let span = parser.span(ll, rr);
+        let num_children = 1 + num_generics;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+Expr: AstNodeId = {
+    <e:ExprIf> => e,
+    <e:ExprMatch> => e,
+    <e:ExprStruct> => e,
+    <e:ExprBinOpLogical> => e,
+}
+
+ExprIf: AstNodeId = {
+    <ll:@L> ExprIfStart <middles:ExprIfMiddle?> ExprIfEnd <rr:@R> => {
+        let payload = AstNodePayload::ExprIf;
+        let span = parser.span(ll, rr);
+        let num_children = 3 + middles.unwrap_or(0);
+
+        parser.add_node(payload, span, num_children)
+    }
+}
+
+ExprIfStart: () = {
+    "if" Expr "{" Expr "}" => (),
+}
+
+ExprIfMiddle: u16 = {
+    <another:ExprIfMiddle?> "else" "if" Expr "{" Expr "}" => another.unwrap_or(0) + 2,
+}
+
+ExprIfEnd: () = {
+    "else" "{" Expr "}" => (),
+}
+
+ExprMatch: AstNodeId = {
+    <ll:@L> "match" Expr "{"
+        <arms:ExprMatchArm*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::ExprMatch;
+        let span = parser.span(ll, rr);
+        let num_children = (2 * arms.len() + 1).try_into().unwrap();
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+ExprMatchArm: () = {
+    Pat "=>" Expr ";" => (),
+}
+
+Pat: () = {
+    <ll:@L> "#" <name:Ident> <rr:@R> => {
+        let payload = AstNodePayload::PatEnumerant(payload::PatEnumerant { name });
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children);
+    },
+    <ll:@L> "@" <name:Ident> <rr:@R> => {
+        let payload = AstNodePayload::PatIdent(payload::PatIdent { name });
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children);
+    },
+    <ll:@L> "@" <name:Ident> "(" <args: ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::PatIdent(payload::PatIdent { name });
+        let span = parser.span(ll, rr);
+        let num_children = args;
+
+        parser.add_node(payload, span, num_children);
+    },
+    <ll:@L> "else" <rr:@R> => {
+        let payload = AstNodePayload::PatElse;
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children);
+    },
+}
+
+ExprStruct: AstNodeId = {
+    <ll:@L> "$" <ofness:Ofness> "{" <assigns:AssignList> "}" <rr:@R> => {
+        let payload = AstNodePayload::ExprStruct;
+        let span = parser.span(ll, rr);
+        let num_children = 1 + assigns;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+AssignList: u16 = {
+    <start:(Assign ",")*> Assign ","? => u16::try_from(start.len()).unwrap() + 1,
+    Expr ","? => 1,
+    => 0,
+}
+
+Assign: AstNodeId = {
+    <ll:@L> <name:Ident> "=" Expr <rr:@R> => {
+        let payload = AstNodePayload::Assign(payload::Assign { name });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    }
+}
+
+BinOpLogical: BinOp = {
+    "&&" => BinOp::LogicalAnd,
+    "||" => BinOp::LogicalOr,
+    "^^" => BinOp::LogicalXor,
+}
+
+ExprBinOpLogical: AstNodeId = {
+    <ll:@L> <lhs:ExprBinOpLogical> <op:BinOpLogical> <rhs:ExprBinOpCompare> <rr:@R> => {
+        let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op });
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <e:ExprBinOpCompare> => e,
+}
+
+BinOpCompare: BinOp = {
+    "<" => BinOp::Lt,
+    "<=" => BinOp::Lte,
+    ">" => BinOp::Gt,
+    ">=" => BinOp::Gte,
+    "==" => BinOp::Eq,
+    "!=" => BinOp::Neq,
+}
+
+ExprBinOpCompare: AstNodeId = {
+    <ll:@L> <lhs:ExprBinOpCompare> <op:BinOpCompare> <rhs:ExprBinOpAdditive> <rr:@R>=> {
+        let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op });
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <e:ExprBinOpAdditive> => e,
+}
+
+BinOpAdditive: BinOp = {
+    "+" => BinOp::Add,
+    "-" => BinOp::Sub,
+    "&" => BinOp::And,
+    "|" => BinOp::Or,
+    "^" => BinOp::Xor,
+}
+
+ExprBinOpAdditive: AstNodeId = {
+    <ll:@L> <lhs:ExprBinOpAdditive> <op:BinOpAdditive> <rhs:ExprUnOp> <rr:@R> => {
+        let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op });
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <e:ExprUnOp> => e,
+}
+
+UnOp: UnOp = {
+    "-" => UnOp::Neg,
+    "~" => UnOp::Inv,
+    "!" => UnOp::Not,
+}
+
+ExprUnOp: AstNodeId = {
+    <ll:@L> <op:UnOp> <rhs:ExprUnOp> <rr:@R> => {
+        let payload = AstNodePayload::ExprUnOp(payload::ExprUnOp { op });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <e:ExprAscription> => e,
+}
+
+ExprAscription: AstNodeId = {
+    <ll:@L> <e:ExprPrimary> ":" <typ:Type> <rr:@R> => {
+        let payload = AstNodePayload::ExprAs;
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <e:ExprPrimary> => e,
+}
+
+ExprPrimary: AstNodeId = {
+    <ll:@L> "word" "(" <args:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprWord;
+        let span = parser.span(ll, rr);
+        let num_children = args;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "sext" "(" <args:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprSext;
+        let span = parser.span(ll, rr);
+        let num_children = args;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "zext" "(" <args:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprZext;
+        let span = parser.span(ll, rr);
+        let num_children = args;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <ofness:Ofness> "(" <args:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprFn;
+        let span = parser.span(ll, rr);
+        let num_children = 1 + args;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <e:ExprPrimary> "->" <method:Ident> "(" <arglist:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprMethod(payload::ExprMethod { method });
+        let span = parser.span(ll, rr);
+        let num_children = 1 + arglist;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <e:ExprPrimary> "[" <index:Index> "]" <rr:@R> => {
+        let payload = AstNodePayload::ExprIndex(payload::ExprIndex { index });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <e:ExprPrimary> "[" <index_hi:Index> ".." <index_lo:Index> "]" <rr:@R> => {
+        let payload = AstNodePayload::ExprIndexRange(payload::ExprIndexRange { index_hi, index_lo });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "@" <ctor:Ident> "(" <args:ArgList> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprCtor(payload::ExprCtor { ctor });
+        let span = parser.span(ll, rr);
+        let num_children = args;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <e:ExprAtom> => e,
+}
+
+ExprAtom: AstNodeId = {
+    <ll:@L> <path:Path> <rr:@R> => {
+        let payload = AstNodePayload::ExprReference;
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <lit:WordLit> <rr:@R> => {
+        let payload = AstNodePayload::ExprWordLit(payload::ExprWordLit { literal: lit });
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "true" <rr:@R> => {
+        let payload = AstNodePayload::ExprBitLit(payload::ExprBitLit { literal: true });
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "false" <rr:@R> => {
+        let payload = AstNodePayload::ExprBitLit(payload::ExprBitLit { literal: false });
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "Str" <rr:@R> => {
+        let span = parser.span(ll, rr);
+        let literal = parser.intern(span);
+        let payload = AstNodePayload::ExprStrLit(payload::ExprStrLit { literal, });
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "#" <enumerant:Ident> <rr:@R> => {
+        let payload = AstNodePayload::ExprEnumerant(payload::ExprEnumerant { enumerant });
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "@" <ctor:Ident> <rr:@R> => {
+        let payload = AstNodePayload::ExprCtor(payload::ExprCtor { ctor });
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "?" <rr:@R> => {
+        let payload = AstNodePayload::ExprHole;
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "(" <e:Expr> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprParen;
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+ArgList: u16 = {
+    <start:(Expr ",")+> Expr ","? => u16::try_from(start.len()).unwrap() + 1,
+    Expr ","? => 1,
+    => 0,
+}
+
+Ofness: AstNodeId = {
+    <ll:@L> <name:Ident> <rr:@R> => {
+        let payload = AstNodePayload::Ofness(payload::Ofness {
+            package: None,
+            name,
+        });
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <package:Ident> "::" <name:Ident> <rr:@R> => {
+        let payload = AstNodePayload::Ofness(payload::Ofness {
+            package: Some(package),
+            name,
+        });
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+Path: AstNodeId = {
+    <ll:@L> <_start:(Ident ".")*> <_end:Ident> <rr:@R> => {
+        let span = parser.span(ll, rr);
+        let path = parser.intern(span);
+        let payload = AstNodePayload::Path(payload::Path { path });
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+Index: u16 = {
+    <ll:@L> "Nat" <rr:@R> => {
+        let span = parser.span(ll, rr);
+        let text = parser.text(span);
+        std::str::from_utf8(text).unwrap().parse().unwrap()
+    },
+}
+
+Width: u16 = {
+    <ll:@L> "Nat" <rr:@R> => {
+        let span = parser.span(ll, rr);
+        let text = parser.text(span);
+        std::str::from_utf8(text).unwrap().parse().unwrap()
+    }
+}
+
+WordLit: InternedString = {
+    <ll:@L> "Nat" <rr:@R> => {
+        let span = parser.span(ll, rr);
+        parser.intern(span)
+    },
+
+    <ll:@L> "Word" <rr:@R> => {
+        let span = parser.span(ll, rr);
+        parser.intern(span)
+    },
+
+//    <nat:WORD_HEX> => stringtable.intern(nat.as_bytes().as_bstr()),
+//    <nat:WORD_BIN> => stringtable.intern(nat.as_bytes().as_bstr()),
+}
+
+Ident: InternedString = {
+    <ll:@L> <ident:"Ident"> <rr:@R> => {
+        let span = parser.span(ll, rr);
+        parser.intern(span)
+    },
+}
+
+Nat: InternedString = {
+    <ll:@L> <nat:"Nat"> <rr:@R> => {
+        let span = parser.span(ll, rr);
+        parser.intern(span)
+    },
+}
+
+Str: InternedString = {
+    <ll:@L> <nat:"Str"> <rr:@R> => {
+        let span = parser.span(ll, rr);
+        parser.intern(span)
+    },
+}
+
+extern {
+    type Location = SourceOffset;
+    type Error = TokenError;
+
+    enum Token {
+        "Ident" => Token::Ident,
+        "Nat" => Token::Nat,
+        "Word" => Token::Word,
+
+        // Punctuation
+        ";"   => Token::Semi,
+        "."   => Token::Dot,
+        ".."  => Token::DotDot,
+        "::"  => Token::ColonColon,
+        "="   => Token::Eq,
+        "=="  => Token::EqEq,
+        "!="  => Token::BangEq,
+        ":="  => Token::EqColon,
+        ":=:" => Token::EqColoneq,
+        "<="  => Token::LtEq,
+        "=>"  => Token::FatArrow,
+        "->"  => Token::Arrow,
+        ":"   => Token::Colon,
+        ","   => Token::Comma,
+        "$"   => Token::Dollar,
+        "#"   => Token::Hash,
+        "@"   => Token::At,
+        "?"   => Token::Question,
+
+        // Operators
+        "+"  => Token::Add,
+        "-"  => Token::Sub,
+        "<"  => Token::Lt,
+        "<=" => Token::LtEq,
+        ">"  => Token::Gt,
+        ">=" => Token::GtEq,
+        "&&" => Token::AndAnd,
+        "&"  => Token::And,
+        "||" => Token::PipePipe,
+        "|"  => Token::Pipe,
+        "!"  => Token::Bang,
+        "~"  => Token::Tilde,
+        "^"  => Token::Hat,
+        "^^" => Token::HatHat,
+
+        // Groupings
+        "(" => Token::ParenLeft,
+        ")" => Token::ParenRight,
+        "{" => Token::CurlyLeft,
+        "}" => Token::CurlyRight,
+        "[" => Token::BracketLeft,
+        "]" => Token::BracketRight,
+
+        // Keywords
+        "pub" => Token::KwPub,
+        "export" => Token::KwExport,
+        "import" => Token::KwImport,
+        "mod" => Token::KwMod,
+        "ext" => Token::KwExt,
+        "builtin" => Token::KwBuiltin,
+        "type" => Token::KwType,
+        "union" => Token::KwUnion,
+        "struct" => Token::KwStruct,
+        "enum" => Token::KwEnum,
+        "fn" => Token::KwFn,
+        "width" => Token::KwWidth,
+        "incoming" => Token::KwIncoming,
+        "outgoing" => Token::KwOutgoing,
+        "reg" => Token::KwReg,
+        "wire" => Token::KwWire,
+        "submod" => Token::KwSubmod,
+        "on" => Token::KwOn,
+        "of" => Token::KwOf,
+        "socket" => Token::KwSocket,
+        "master" => Token::KwMaster,
+        "slave" => Token::KwSlave,
+        "mosi" => Token::KwMosi,
+        "miso" => Token::KwMiso,
+        "word" => Token::KwWord,
+        "sext" => Token::KwSext,
+        "zext" => Token::KwZext,
+        "if" => Token::KwIf,
+        "else" => Token::KwElse,
+        "match" => Token::KwMatch,
+        "assert" => Token::KwAssert,
+        "display" => Token::KwDisplay,
+        "finish" => Token::KwFinish,
+        "fatal" => Token::KwFatal,
+        "true" => Token::KwTrue,
+        "false" => Token::KwFalse,
+        "Str" => Token::Str,
+        "/*" => Token::StarSlash,
+        "*/" => Token::SlashStar,
+
+        "ERROR" => Token::Error,
+    }
+}

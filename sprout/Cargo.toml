@@ -1,0 +1,37 @@
+[package]
+name = "sprout"
+version = "0.3.0"
+edition = "2024"
+autobins = false
+default-run = "sprout"
+rust-version = "1.88"
+
+[dependencies]
+bstr = "1.12.0"
+clap = { version = "4.5.46", features = ["derive"] }
+clap_derive = "4.6.0"
+colored = "3.1.1"
+indexmap = "2.13.0"
+internment = { version = "0.8.6", features = ["arc"] }
+json = "0.12.4"
+lalrpop-util = { version = "0.22.2", features = ["lexer"] }
+logos = "0.15.1"
+nix = { version = "0.31.2", features = ["process"], optional = true }
+paste = "1.0.15"
+#serde_json = { version = "1.0.149", optional = true }
+#tokio = { version = "=1.49.0", features = ["macros", "rt-multi-thread", "io-std", "sync"] }
+toml = { version = "1.1.0" }
+#tower-lsp = "0.20.0"
+
+[build-dependencies]
+lalrpop = { version = "0.22.2" }
+
+[[bin]]
+name = "sprout"
+path = "src/bin/sprout.rs"
+required-features = ["sprout-bin"]
+
+#[[bin]]
+#name = "sprout-lsp"
+#path = "src/bin/virlsp.rs"
+#required-features = ["sprout-lsp-bin"]
