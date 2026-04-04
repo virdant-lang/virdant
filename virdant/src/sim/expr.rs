@@ -58,7 +58,6 @@ impl Expr {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Referent {
     Component(ComponentId),
-    Local(BString),
 }
 
 pub fn driver_to_expr(db: &Db, driver: &Driver) -> Arc<Expr> {
@@ -124,7 +123,26 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
     let payload = match node.payload() {
         AstNodePayload::ExprReference => {
             let name = parsing.string(node.path().unwrap()).to_owned();
-            ExprPayload::Reference(payload::Reference { referent: Referent::Local(name.into()) })
+            let mut current_id = loc.ast_node_id();
+            loop {
+                let current = parsing.ast_node(current_id);
+                if current.is_item() { break; }
+                current_id = current.parent()
+                    .map(|p| p.id())
+                    .expect("ExprReference not contained in any item");
+            }
+            let item_node = parsing.ast_node(current_id);
+            let item_name = parsing.string(item_node.name().unwrap()).to_owned();
+            let symboltable = db.get_symboltable();
+            let item_symbol = symboltable
+                .resolve_item_in_package(item_name.as_bstr(), loc.package())
+                .unwrap();
+            let component_analysis = db.get_component_analysis(item_symbol.id());
+            if let Some(component) = component_analysis.resolve(name.as_bstr()) {
+                ExprPayload::Reference(payload::Reference { referent: Referent::Component(component.id()) })
+            } else {
+                todo!("ExprReference {:?} does not resolve to a component — it may be a pattern-bound variable introduced by a match arm, which is not yet supported", name)
+            }
         }
         AstNodePayload::ExprParen => {
             let child_loc = node.child(0).location();

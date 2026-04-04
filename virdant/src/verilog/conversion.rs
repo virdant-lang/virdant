@@ -191,11 +191,24 @@ impl<'d> Converter<'d> {
                             dir: common::PortDir::Output,
                             width,
                         }),
-                        ComponentKind::Wire => elements.push(verilog::Element::Wire(verilog::Wire {
-                            name: exact_verilog_name(&name),
-                            width,
-                            expr: None,
-                        })),
+                        ComponentKind::Wire => {
+                            let children = stmt.children();
+                            if children.len() >= 2 {
+                                // Wire with explicit `on clock` — treat exactly like a Reg.
+                                sequential_regs.insert(name.clone(), children[1].id());
+                                elements.push(verilog::Element::Reg(verilog::Reg {
+                                    name: exact_verilog_name(&name),
+                                    width,
+                                    expr: None,
+                                }));
+                            } else {
+                                elements.push(verilog::Element::Wire(verilog::Wire {
+                                    name: exact_verilog_name(&name),
+                                    width,
+                                    expr: None,
+                                }));
+                            }
+                        }
                         ComponentKind::Reg => {
                             // Regs with `on clock` have 2 children: type + clock expr
                             let children = stmt.children();
@@ -269,7 +282,32 @@ impl<'d> Converter<'d> {
                     }));
                 }
 
-                if let Some(&clock_id) = sequential_regs.get(&path) {
+                // For latched-driver wires without an explicit `on clock`, infer the clock
+                // from any sequential reg already found in this module.
+                let latched = driver.driver_type() == DriverType::Latched;
+                let clock_id_opt = sequential_regs.get(&path).copied().or_else(|| {
+                    if latched { sequential_regs.values().copied().next() } else { None }
+                });
+
+                if let Some(clock_id) = clock_id_opt {
+                    // If this is a latched-driver wire not yet in sequential_regs, upgrade
+                    // its Wire element to a Reg element so the Verilog declaration is correct.
+                    if !sequential_regs.contains_key(&path) {
+                        let reg_name = exact_verilog_name(&path);
+                        let reg_width = type_width(&typ, self.db);
+                        for elem in elements.iter_mut() {
+                            if let verilog::Element::Wire(w) = elem {
+                                if w.name == reg_name {
+                                    *elem = verilog::Element::Reg(verilog::Reg {
+                                        name: reg_name.clone(),
+                                        width: reg_width,
+                                        expr: None,
+                                    });
+                                    break;
+                                }
+                            }
+                        }
+                    }
                     let clock_node = parsing.ast_node(clock_id);
                     let clock_type = self.node_type(package, &clock_node).unwrap();
                     let clock_expr = self.convert_expr(package, clock_node, &clock_type, self.db, &mut scheduler);
@@ -439,6 +477,13 @@ impl<'d> Converter<'d> {
             Driver::Expr(_, loc) => {
                 let parsing = self.db.get_parsing(loc.package());
                 let expr_node = parsing.ast_node(loc.ast_node_id());
+                // Inline match expressions as casez statements directly — no temp reg needed
+                // inside a sequential (always @(posedge clock)) context.
+                if matches!(expr_node.payload(), AstNodePayload::ExprMatch) {
+                    return self.convert_match_expr_to_nonblocking_stmts(
+                        package, expr_node, typ, path, scheduler,
+                    );
+                }
                 let expr = self.convert_expr(package, expr_node, typ, self.db, scheduler);
                 vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
                     name: valid_verilog_name(path),
@@ -449,6 +494,112 @@ impl<'d> Converter<'d> {
                 self.convert_latched_driver_if_to_stmts(package, driver_if, typ, path, scheduler)
             }
         }
+    }
+
+    /// Converts an `ExprMatch` node directly into a `casez` statement that non-blockingly
+    /// assigns each arm's result to `target_name`.  This avoids creating a temporary reg +
+    /// `always @(*)` block, which would be incorrect inside a sequential
+    /// `always @(posedge clock)` context.
+    fn convert_match_expr_to_nonblocking_stmts(
+        &self,
+        package: &PackageFqn,
+        node: AstNode,
+        typ: &Type,
+        target_name: &str,
+        scheduler: &mut ExprScheduler,
+    ) -> Vec<verilog::Stmt> {
+        let db = self.db;
+        let children = node.children();
+        let subject = children[0].clone();
+        let subject_typ = self.node_type(package, &subject).unwrap();
+        let subject_expr = self.convert_expr(package, subject, &subject_typ, db, scheduler);
+        let result_width = type_width(typ, db);
+        let num_arms = (children.len() - 1) / 2;
+        let assigned_name = valid_verilog_name(target_name);
+        let mut case_items: Vec<verilog::CaseItem> = vec![];
+        for i in 0..num_arms {
+            let pat = children[2 * i + 1].clone();
+            let body = children[2 * i + 2].clone();
+            let mut bound_keys: Vec<String> = vec![];
+            let pattern = match pat.payload() {
+                AstNodePayload::PatElse => verilog::CasePattern::Default,
+                AstNodePayload::PatEnumerant(pat_enumerant) => {
+                    let enumerant_name = pat.parsing.string(pat_enumerant.name);
+                    let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
+                    let symboltable = db.get_symboltable();
+                    let typedef = db.get_typedef(*typedef_symbol_id);
+                    let enumerant_sym = symboltable.slot(*typedef_symbol_id, enumerant_name).unwrap();
+                    let value = *typedef.enumerant_values.get(&enumerant_sym.id()).unwrap();
+                    let width = type_width(&subject_typ, db);
+                    let pat_str = format!("{:0>width$b}", value, width = width as usize);
+                    verilog::CasePattern::PatternLit(verilog::PatternLit { width, radix: Radix::Bin, pattern: pat_str })
+                }
+                AstNodePayload::PatIdent(pat_ident) => {
+                    let ctor_name = pat.parsing.string(pat_ident.name);
+                    let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
+                    let symboltable = db.get_symboltable();
+                    let slots = symboltable.slots(*typedef_symbol_id);
+                    let ctor_slot = symboltable.slot(*typedef_symbol_id, ctor_name).unwrap();
+                    let ctor_sym_id = ctor_slot.id();
+                    let slot_index = slots.iter().position(|s| s.id() == ctor_sym_id).unwrap();
+                    let tag_width: Width = slots.len().try_into().unwrap();
+                    let tag_value: u64 = 1u64 << slot_index;
+                    let max_payload_width: Width = slots.iter().map(|slot| {
+                        let sig = db.get_ctor_signature(slot.id());
+                        sig.parameters.iter().map(|(_n, pt)| type_width(pt, db)).sum::<Width>()
+                    }).max().unwrap_or(0);
+                    let this_sig = db.get_ctor_signature(ctor_sym_id);
+                    let arg_widths: Vec<Width> = this_sig.parameters.iter()
+                        .map(|(_n, pt)| type_width(pt, db)).collect();
+                    let mut bit_ranges = vec![(0u16, 0u16); arg_widths.len()];
+                    let mut current_lo = tag_width;
+                    for j in (0..arg_widths.len()).rev() {
+                        let w = arg_widths[j];
+                        bit_ranges[j] = (current_lo, current_lo + w - 1);
+                        current_lo += w;
+                    }
+                    for (j, bound_var) in pat.children().iter().enumerate() {
+                        let var_name = bound_var.parsing.string(bound_var.path().unwrap())
+                            .to_str_lossy().into_owned();
+                        let (lo, hi) = bit_ranges[j];
+                        let slice_expr = verilog::Expr::IndexRange(verilog::expr::IndexRange {
+                            subject: Box::new(subject_expr.clone()),
+                            index_hi: Box::new(constant_index_expr(hi)),
+                            index_lo: Box::new(constant_index_expr(lo)),
+                        });
+                        scheduler.subst.insert(var_name.clone(), slice_expr);
+                        bound_keys.push(var_name);
+                    }
+                    let tag_bin = format!("{:0>width$b}", tag_value, width = tag_width as usize);
+                    let question_marks = "?".repeat(max_payload_width as usize);
+                    let pattern_str = format!("{}{}", question_marks, tag_bin);
+                    verilog::CasePattern::PatternLit(verilog::PatternLit {
+                        width: tag_width + max_payload_width,
+                        radix: Radix::Bin,
+                        pattern: pattern_str,
+                    })
+                }
+                _ => unreachable!("expected pattern node"),
+            };
+            let body_expr = self.convert_expr(package, body, typ, db, scheduler);
+            for key in &bound_keys { scheduler.subst.remove(key); }
+            case_items.push(verilog::CaseItem {
+                pattern,
+                stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                    name: assigned_name.clone(),
+                    expr: body_expr,
+                })],
+            });
+        }
+        // Default arm: drive X
+        case_items.push(verilog::CaseItem {
+            pattern: verilog::CasePattern::Default,
+            stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                name: assigned_name.clone(),
+                expr: verilog::Expr::XLit(verilog::expr::XLit { width: result_width }),
+            })],
+        });
+        vec![verilog::Stmt::CaseZ(verilog::CaseZ { subject: subject_expr, items: case_items })]
     }
 
     fn convert_expr(
