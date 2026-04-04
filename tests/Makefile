@@ -1,11 +1,11 @@
 test_all:
-	cargo run -- -C basics build
+	cargo run --bin vir -- -C basics build
 	verilator --lint-only basics/build/*.sv
 
-	cargo run -- -C uart build
+	cargo run --bin vir -- -C uart build
 	verilator --lint-only uart/build/*.sv
 
-	cargo run -- -C typedefs build
+	cargo run --bin vir -- -C typedefs build
 	verilator --lint-only typedefs/build/*.sv
 
 .PHONY: sim
