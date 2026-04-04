@@ -30,6 +30,7 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<D
             if !component.can_sink() && driver_locations.len() > 0 {
                 for location in driver_locations {
                     let region = builder.get_location_region(location.clone());
+                    // TODO is this error properly named?
                     diagnostics.push(diagnostics::DriverForSink {
                         region,
                         target: path.clone(),

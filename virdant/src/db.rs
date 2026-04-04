@@ -36,34 +36,34 @@ queries! {
     Packages() -> Vec<PackageFqn>;
     Source(package: PackageFqn) -> Source;
     Parsing(package: PackageFqn) -> Arc<Parsing>;
-    String(string: InternedString) -> Arc<BString>;
-    SyntaxErrors() -> Vec<Diagnostic>;
+    String(string: InternedString) -> Arc<BString>; // TODO is this used anywhere?
+    SyntaxErrors() -> Vec<Diagnostic>; // TODO is this even useful?
     LocationRegion(location: Location) -> Region;
     PackageAnalysis(package: PackageFqn) -> Arc<PackageAnalysis>;
     ComponentAnalysis(symbol_id: SymbolId) -> Arc<ComponentAnalysis>;
     SymbolTable() -> Arc<SymbolTable>;
-    SymbolAst(symbol_id: SymbolId) -> AstNodeId;
+    SymbolAst(symbol_id: SymbolId) -> AstNodeId; // TODO Should return Location. Also, is this used?
+                                                 // TODO Or should this just be Symbol(symbol_id: SymbolId) -> Arc<Symbol>
     Component(component_id: ComponentId) -> Arc<Component>;
     DriverAnalysis(symbol_id: SymbolId) -> Arc<DriverAnalysis>;
     CheckDrivers(symbol_id: SymbolId) -> Vec<Diagnostic>;
     TypeDefs() -> Vec<TypeDef>;
     TypeDef(symbol_id: SymbolId) -> Arc<TypeDef>;
     TypeAt(location: Location) -> Result<Type, Vec<Diagnostic>>;
-    ExprRoots() -> Vec<ExprRoot>;
-    AllExprs() -> Vec<Location>;
+    ExprRoots() -> Vec<ExprRoot>; // TODO Make this run per item?
+    AllExprs() -> Vec<Location>; // TODO remove if possible
     ExpectedType(exprroot: ExprRoot) -> Option<Type>;
     ExprRootFor(location: Location) -> ExprRoot;
+    CtorSignature(ctor_symbol_id: SymbolId) -> Arc<Signature>;
     TypingContext(symbol_id: SymbolId) -> TypingContext;
     Typing(exprroot: ExprRoot) -> Arc<Typing>;
     TypeCheck(symbol_id: SymbolId) -> Vec<Diagnostic>;
     Typeof(location: Location) -> Result<Type, Vec<Diagnostic>>;
     TypeofAll() -> IndexMap<Location, Option<Type>>;
     Check() -> Vec<Diagnostic>;
-    TypeIndex() -> Arc<TypeIndex>;
-    CtorSignature(ctor_symbol_id: SymbolId) -> Arc<Signature>;
+    TypeIndex() -> Arc<TypeIndex>; // TODO What is this for?
     Elaboration(top: SymbolId) -> Arc<Elaboration>;
 }
-
 
 impl Query {
     fn is_input(&self) -> bool {
@@ -107,7 +107,6 @@ impl Query {
             crate::queries::check : Check();
             crate::types::signature::build_ctor_signature : CtorSignature(ctor_symbol_id);
             crate::analysis::elaboration::build_elaboration : Elaboration(top);
-
         )
     }
 }

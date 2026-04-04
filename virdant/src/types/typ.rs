@@ -1,5 +1,6 @@
 use crate::analysis::symbols::SymbolId;
 use crate::common::Width;
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Bit,

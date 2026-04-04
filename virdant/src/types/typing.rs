@@ -40,7 +40,7 @@ impl ExprRoot {
 pub enum Tag {
     None,
     SymbolResolution(SymbolId),
-    PrimitiveResolution(BString),
+    PrimitiveResolution(BString), // TODO add an enum for primitives
     ComponentResolution(ComponentId),
 }
 
@@ -60,7 +60,7 @@ pub struct Typing {
     exprroot: ExprRoot,
     typs: IndexMap<AstNodeId, Type>,
     diagnostics: Vec<Diagnostic>,
-    use_locations: IndexMap<BString, Vec<Location>>,
+    use_locations: IndexMap<BString, Vec<Location>>, // TODO should be use for Referents
     tags: IndexMap<Location, Tag>,
 }
 

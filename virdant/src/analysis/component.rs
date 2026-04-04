@@ -32,7 +32,7 @@ pub struct Component {
     id: ComponentId,
     path: BString,
     location: Location,
-    typ: Option<Type>,
+    typ: Option<Type>, // TODO Why is this optional?
     flow: Flow,
 }
 

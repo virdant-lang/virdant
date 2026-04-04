@@ -8,7 +8,7 @@ use crate::fqn::PackageFqn;
 #[derive(Clone, Debug)]
 pub struct Source {
     package: PackageFqn,
-    text: BString,
+    text: BString, // TODO Make this an Arc
 }
 
 /// A byte offset in a `Source`.
