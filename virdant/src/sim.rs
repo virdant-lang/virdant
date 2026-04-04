@@ -86,6 +86,27 @@ impl Sim {
             }
         }
 
+        // Evaluate all components whose expression has no dependencies (empty deps set).
+        // These are constant-valued nodes — their driver reads nothing from the simulation
+        // state, so their value is fixed and can be determined immediately.  Collect the
+        // IDs first to satisfy the borrow checker, then evaluate and set each one.
+        let constant_ids: Vec<ElaboratedComponentId> = sim
+            .deps
+            .iter()
+            .filter(|(id, dep_set)| dep_set.is_empty() && sim.exprs.contains_key(*id))
+            .map(|(id, _)| *id)
+            .collect();
+
+        for id in constant_ids {
+            let expr = sim.exprs[&id].clone();
+            let context = sim.build_context(id, &expr);
+            let value = expr.eval(context);
+            sim.set(id, value);
+        }
+
+        // Propagate constant values to all transitively-dependent components.
+        sim.flow();
+
         sim
     }
 
@@ -114,8 +135,6 @@ impl Sim {
     }
 
     fn tick_prop(&mut self, component_id: ElaboratedComponentId) {
-        let path = self.component_paths.get(&component_id).unwrap();
-        println!("TICK: {:?}", path);
         if let Some(sensitivities) = self.sensitivities.get(&component_id) {
             for component_id in sensitivities.clone() {
                 self.tick(component_id);
@@ -201,6 +220,10 @@ impl Sim {
         let value_ref = self.values.get_mut(&Node::val(component_id)).unwrap();
         *value_ref = new_value;
         self.dirty.insert(component_id);
+    }
+
+    pub fn get(&self, component_id: ElaboratedComponentId) -> Value {
+        self.values.get(&Node::val(component_id)).unwrap().clone()
     }
 }
 
@@ -419,29 +442,52 @@ fn collect_referents_inner(expr: &Expr, out: &mut Vec<Referent>) {
 }
 
 #[test]
+#[rustfmt::skip]
 fn test_sim() {
-    let db = crate::util::db_from_dir_with_lib("../examples/arithmetic/src", "../lib");
+    let db = crate::util::db_from_file_with_lib("../examples/lfsr.vir", "../lib");
     crate::util::check_db(&db).unwrap();
     let symboltable = db.get_symboltable();
-    let top = symboltable.resolve(b"top::Top".into()).unwrap();
+    let top = symboltable.resolve(b"lfsr::Lfsr".into()).unwrap();
 
     let mut sim = Sim::new(Arc::new(db), top.id());
     let clock_id = sim.resolve(BStr::new(b"top.clock"));
-//    let reset_id = sim.resolve(BStr::new(b"top.reset"));
-    let inp_id = sim.resolve(BStr::new(b"top.inp"));
-    let r_id = sim.resolve(BStr::new(b"top.r"));
+    let reset_id = sim.resolve(BStr::new(b"top.reset"));
+    let out_id = sim.resolve(BStr::new(b"top.out"));
 
     println!("--------------------------------------------------------------------------------");
-    println!("sim.set(inp_id, Value::Word(4, 2))");
-    sim.set(inp_id, Value::Word(4, 2));
-    println!("sim.set(r_id, Value::Word(4, 0))");
-    sim.set(r_id, Value::Word(4, 0));
+    println!("Set reset = true and flow");
+    sim.set(reset_id, Value::Bit(true));
     sim.flow();
     sim.dump();
+    println!("--------------------------------------------------------------------------------");
+    println!("tick clock");
+    sim.tick(clock_id);
+    sim.dump();
+    println!("--------------------------------------------------------------------------------");
+    println!("set reset to false and flow");
+    sim.set(reset_id, Value::Bit(false));
+    sim.flow();
 
-    for _ in 0..20 {
-        println!("--------------------------------------------------------------------------------");
+    /*
+     This is a classic 8-bit LFSR with:
+       - State r initialized to 255 (0xFF)
+       - Feedback bit = MSB (r[7])
+       - Shift left by 1 (dropping MSB, inserting 0 at LSB)
+       - If MSB was 1, XOR with taps = 29 = 0x1D = 0b00011101
+    */
+    const VALUES: &[u64] = &[
+        255, 227, 219, 171, 75, 150, 49, 98, 196, 149, 55, 110, 220, 165, 87, 174, 65, 130,
+        25, 50, 100, 200, 141, 7, 14, 28, 56, 112, 224, 221, 167, 83, 166, 81, 162, 89, 178,
+        121, 242, 249, 239, 195, 155, 43, 86, 172, 69, 138, 9, 18, 36, 72, 144, 61, 122, 244,
+        245, 247, 243, 251, 235, 203, 139, 11, 22, 44, 88, 176, 125, 250, 233, 207, 131, 27,
+        54, 108, 216, 173, 71, 142, 1, 2, 4, 8, 16, 32, 64, 128, 29, 58, 116, 232, 205, 135,
+        19, 38, 76, 152, 45, 90,
+    ];
+
+    for (cycle, expected) in VALUES.into_iter().enumerate() {
+        let expected = Value::Word(8, *expected);
+        let actual = sim.get(out_id);
+        assert_eq!(expected, actual, "top.out had incorrect value on cycle {cycle}");
         sim.tick(clock_id);
-        sim.dump();
     }
 }

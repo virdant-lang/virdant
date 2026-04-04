@@ -55,6 +55,27 @@ where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
     db
 }
 
+pub fn db_from_file_with_lib<P, Q>(source_file: P, lib_dir: Q) -> Db
+where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
+    let mut db = Db::new();
+    db.set_packages(vec![]);
+
+    let lib_dir = lib_dir.into();
+    let lib_dir = std::fs::canonicalize(&lib_dir).expect(&format!("Could not find {lib_dir:?}"));
+
+    let builtin_source = Source::load_file(lib_dir.join("builtin.vir"));
+    let file_source = Source::load_file(source_file.into());
+
+    let builtin_package = builtin_source.package();
+    let file_package = file_source.package();
+
+    db.set_source(builtin_package.clone(), builtin_source);
+    db.set_source(file_package.clone(), file_source);
+    db.set_packages(vec![builtin_package, file_package]);
+
+    db
+}
+
 pub fn check_db(db: &Db) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
     let diagnostics = db.check();
     if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {

@@ -6,7 +6,7 @@ use crate::types::Type;
 use crate::sim::expr::{Expr, Referent};
 use crate::analysis::symbols::SymbolId;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     X(Type),
     Z(Type),
