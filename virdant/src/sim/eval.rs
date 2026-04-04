@@ -1,3 +1,4 @@
+use bstr::BStr;
 use indexmap::IndexMap;
 
 use crate::common::Width;
@@ -78,7 +79,7 @@ fn test_eval() {
     let top = symboltable.resolve(b"passthrough::Passthrough".into()).unwrap();
     let elab = db.get_elaboration(top.id());
     dbg!(&elab);
-    let inp = elab.resolve(b"top.out").unwrap();
+    let inp = elab.resolve(BStr::new(b"top.out")).unwrap();
     dbg!(&inp);
     let expr = crate::sim::expr::driver_to_expr(&db, inp.driver().unwrap());
     dbg!(&expr);

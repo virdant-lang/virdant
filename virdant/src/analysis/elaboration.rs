@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use bstr::{BString, ByteSlice};
+use bstr::{BStr, BString, ByteSlice};
 use indexmap::IndexMap;
 
 use crate::analysis::component::ComponentAnalysis;
@@ -19,6 +19,7 @@ pub struct Elaboration {
 
 #[derive(Debug)]
 pub struct ElaboratedComponent {
+    id: ElaboratedComponentId,
     path: BString,
     typ: Type,
     component_kind: ComponentKind,
@@ -27,12 +28,12 @@ pub struct ElaboratedComponent {
     alias: Option<ElaboratedComponentId>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ElaboratedComponentId(usize);
 
 impl Elaboration {
-    pub fn resolve<P: Into<BString>>(&self, path: P) -> Option<&ElaboratedComponent> {
-        let path = path.into();
+    pub fn resolve<P: AsRef<BStr>>(&self, path: P) -> Option<&ElaboratedComponent> {
+        let path = path.as_ref();
         for component in &self.components {
             if component.path == path {
                 return Some(&component);
@@ -45,7 +46,10 @@ impl Elaboration {
         &self.components
     }
 
-    pub fn component(&self, elaborated_component_id: ElaboratedComponentId) -> &ElaboratedComponent {
+    pub fn component(
+        &self,
+        elaborated_component_id: ElaboratedComponentId,
+    ) -> &ElaboratedComponent {
         &self.components[elaborated_component_id.0]
     }
 
@@ -53,7 +57,10 @@ impl Elaboration {
         for component in &self.components {
             if let Some(alias_id) = &component.alias {
                 let alias = &self.components[alias_id.0];
-                println!("{} : {:?} (alias: {})", component.path, component.typ, &alias.path);
+                println!(
+                    "{} : {:?} (alias: {})",
+                    component.path, component.typ, &alias.path
+                );
             } else {
                 println!("{} : {:?}", component.path, component.typ);
             }
@@ -62,6 +69,10 @@ impl Elaboration {
 }
 
 impl ElaboratedComponent {
+    pub fn id(&self) -> ElaboratedComponentId {
+        self.id
+    }
+
     pub fn path(&self) -> &BString {
         &self.path
     }
@@ -76,6 +87,10 @@ impl ElaboratedComponent {
 
     pub fn driver(&self) -> Option<&Driver> {
         self.driver.as_ref()
+    }
+
+    pub fn is_reg(&self) -> bool {
+        self.driver_type == DriverType::Latched
     }
 }
 
@@ -127,14 +142,28 @@ fn elaborate_module(
                         let sub_port_path: BString =
                             format!("{}.{}", ctx.instance_name, name.to_str_lossy()).into();
                         let comp = ctx.component_analysis.resolve(sub_port_path.as_ref())?;
-                        ctx.driver_analysis.drivers().get(&comp.id())?.first().cloned()
+                        ctx.driver_analysis
+                            .drivers()
+                            .get(&comp.id())?
+                            .first()
+                            .cloned()
                     })
                 } else {
-                    component_analysis.resolve(name)
+                    component_analysis
+                        .resolve(name)
                         .and_then(|c| driver_analysis.drivers().get(&c.id())?.first().cloned())
                 };
 
-                components.push(ElaboratedComponent { path, typ, component_kind: component.kind, driver_type, driver, alias: None });
+                let id = ElaboratedComponentId(components.len());
+                components.push(ElaboratedComponent {
+                    id,
+                    path,
+                    typ,
+                    component_kind: component.kind,
+                    driver_type,
+                    driver,
+                    alias: None,
+                });
             }
             AstNodePayload::Submodule(module) => {
                 let instance_name = parsing.string(module.name).to_str_lossy().into_owned();
@@ -148,17 +177,24 @@ fn elaborate_module(
                     .unwrap_or_else(|| location.package());
                 let submodule_name = parsing.string(ofness.name);
                 let symboltable = builder.get_symboltable();
-                let submodule_symbol = match symboltable.resolve_item_in_package(submodule_name, submodule_package) {
-                    Some(symbol) => symbol.clone(),
-                    None => continue,
-                };
+                let submodule_symbol =
+                    match symboltable.resolve_item_in_package(submodule_name, submodule_package) {
+                        Some(symbol) => symbol.clone(),
+                        None => continue,
+                    };
                 let child_prefix = format!("{prefix}.{instance_name}");
                 let ctx = ParentCtx {
                     component_analysis: component_analysis.clone(),
                     driver_analysis: driver_analysis.clone(),
                     instance_name: instance_name.clone(),
                 };
-                elaborate_module(builder, submodule_symbol.id, &child_prefix, components, Some(ctx));
+                elaborate_module(
+                    builder,
+                    submodule_symbol.id,
+                    &child_prefix,
+                    components,
+                    Some(ctx),
+                );
             }
             _ => {}
         }
@@ -198,7 +234,9 @@ fn resolve_alias(
     builder: &mut Builder,
 ) -> Option<ElaboratedComponentId> {
     // Only `Driver::Expr` can be a bare reference; `Driver::If` cannot.
-    let Driver::Expr(_, loc) = component.driver.as_ref()? else { return None; };
+    let Driver::Expr(_, loc) = component.driver.as_ref()? else {
+        return None;
+    };
 
     let parsing = builder.get_parsing(loc.package());
     let node = parsing.ast_node(loc.ast_node_id());
@@ -218,8 +256,12 @@ fn resolve_alias(
     //     e.g. `top.gcd.result` -> driver scope prefix is `top.gcd`
     let last_dot = component.path.iter().rposition(|&b| b == b'.')?;
     let module_prefix = if component.component_kind == ComponentKind::Incoming {
-        let second_last_dot = component.path[..last_dot].iter().rposition(|&b| b == b'.')?;
-        component.path[..second_last_dot].to_str_lossy().into_owned()
+        let second_last_dot = component.path[..last_dot]
+            .iter()
+            .rposition(|&b| b == b'.')?;
+        component.path[..second_last_dot]
+            .to_str_lossy()
+            .into_owned()
     } else {
         component.path[..last_dot].to_str_lossy().into_owned()
     };
