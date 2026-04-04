@@ -3,7 +3,7 @@ use super::*;
 #[derive(Debug)]
 pub struct Db {
     pub(super) rev: usize,
-    pub(super) map: Mutex<HashMap<Query, CachedVal>>,
+    pub(super) map: Mutex<IndexMap<Query, CachedVal>>,
     pub(super) call_stack: Mutex<Vec<Query>>,
     trace: Mutex<Vec<TraceElement>>,
 }
@@ -27,7 +27,7 @@ impl<'d> Builder<'d> {
     pub(crate) fn new(db: &'d Db) -> Builder<'d> {
         Builder {
             db,
-            deps: HashSet::new(),
+            deps: IndexSet::new(),
         }
     }
 
@@ -50,7 +50,7 @@ impl<'d> Builder<'d> {
 impl Db {
     pub fn new() -> Self {
         Db {
-            map: Mutex::new(HashMap::new()),
+            map: Mutex::new(IndexMap::new()),
             rev: 0,
             call_stack: Mutex::new(vec![]),
             trace: Mutex::new(vec![]),
@@ -196,5 +196,5 @@ impl Db {
 
 pub struct Builder<'d> {
     pub(super) db: &'d Db,
-    pub(super) deps: HashSet<Query>,
+    pub(super) deps: IndexSet<Query>,
 }

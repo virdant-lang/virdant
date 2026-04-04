@@ -679,7 +679,7 @@ fn create_pcf_file(db: &Db, top: &BStr, builddir: &PathBuf) {
         .find(|sym| sym.name.as_bstr() == top && sym.kind == SymbolKind::ModDef)
         .unwrap_or_else(|| panic!("module '{}' not found", top));
     let component_analysis = db.get_component_analysis(top_symbol.id);
-    let port_names: std::collections::HashSet<String> = component_analysis.components()
+    let port_names: indexmap::IndexSet<String> = component_analysis.components()
         .into_iter()
         .filter(|(path, component)| !path.contains(&b'.') && component.flow() != Flow::Duplex)
         .map(|(path, _)| path.to_str_lossy().into_owned())

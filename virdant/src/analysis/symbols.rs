@@ -1,5 +1,5 @@
 use bstr::{BStr, BString};
-use hashbrown::{HashMap, HashSet};
+use indexmap::IndexSet;
 use indexmap::IndexMap;
 use std::sync::Arc;
 
@@ -17,7 +17,7 @@ use crate::{analysis::Location, diagnostics::Diagnostic};
 pub struct SymbolTable {
     pub symbols: IndexMap<BString, Symbol>,
     pub diagnostics: Vec<Diagnostic>,
-    pub builtin_names: HashSet<BString>,
+    pub builtin_names: IndexSet<BString>,
 }
 
 #[derive(Debug, Clone)]
@@ -337,7 +337,7 @@ fn build_symboltable_moddef_slot(
     node: &AstNode<'_>,
     parent_id: SymbolId,
 ) {
-    let mut seen: HashMap<BString, Region> = HashMap::new();
+    let mut seen: IndexMap<BString, Region> = IndexMap::new();
 
     for child in node.children() {
         let (component_name, component_ast_node_id, kind) = match child.payload() {
@@ -400,7 +400,7 @@ fn build_symboltable_typedef_slot(
     node: &AstNode<'_>,
     parent_id: SymbolId,
 ) {
-    let mut seen: HashMap<BString, Region> = HashMap::new();
+    let mut seen: IndexMap<BString, Region> = IndexMap::new();
 
     for child in node.children() {
         let (slot_name, slot_ast_node_id, kind) = match child.payload() {

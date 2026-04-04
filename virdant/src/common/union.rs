@@ -1,4 +1,4 @@
-use hashbrown::HashMap;
+use indexmap::IndexMap;
 
 #[derive(Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct UnionIndex(usize);
@@ -73,7 +73,7 @@ impl<T> Union<T> {
 
     pub fn into_iter(mut self) -> Vec<Vec<T>> {
         self.normalize();
-        let mut group_for = HashMap::new();
+        let mut group_for = IndexMap::new();
 
         for (parent, item) in self.parents.into_iter().zip(self.items.into_iter()) {
             if !group_for.contains_key(&parent) {

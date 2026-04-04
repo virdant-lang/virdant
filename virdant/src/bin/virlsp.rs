@@ -5,7 +5,7 @@ use std::sync::Arc;
 use clap::{Parser, Subcommand};
 
 use bstr::BString;
-use hashbrown::HashSet;
+use indexmap::IndexSet;
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -28,7 +28,7 @@ struct Backend {
 
 struct ServerState {
     db: Db,
-    uris: HashSet<Url>,
+    uris: IndexSet<Url>,
     hover_mode: HoverMode,
 }
 
@@ -84,7 +84,7 @@ impl Backend {
             state: Arc::new(Mutex::new(ServerState {
                 db: new_db(),
                 hover_mode: HoverMode::Debug,
-                uris: HashSet::new(),
+                uris: IndexSet::new(),
             })),
         }
     }

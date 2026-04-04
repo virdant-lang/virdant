@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use std::sync::Arc;
 
 use bstr::ByteSlice;
@@ -20,7 +20,7 @@ struct ExprScheduler {
     counter: usize,
     extra_elements: Vec<verilog::Element>,
     /// Substitution map: bound pattern-variable names → their Verilog extraction expressions.
-    subst: HashMap<String, verilog::Expr>,
+    subst: IndexMap<String, verilog::Expr>,
 }
 
 impl ExprScheduler {
@@ -28,7 +28,7 @@ impl ExprScheduler {
         ExprScheduler {
             counter: 0,
             extra_elements: vec![],
-            subst: HashMap::new(),
+            subst: IndexMap::new(),
         }
     }
 
@@ -67,17 +67,17 @@ pub fn convert_db_to_verilog(db: &Db) -> verilog::Verilog {
 struct Converter<'d> {
     db: &'d Db,
     /// "package::Module" -> list of (port_name, width)
-    module_ports: HashMap<String, Vec<(String, Width)>>,
+    module_ports: IndexMap<String, Vec<(String, Width)>>,
     /// "package::Module" -> emitted Verilog name
-    emitted_module_names: HashMap<String, String>,
+    emitted_module_names: IndexMap<String, String>,
 }
 
 impl<'d> Converter<'d> {
     fn new(db: &'d Db) -> Self {
         Converter {
             db,
-            module_ports: HashMap::new(),
-            emitted_module_names: HashMap::new(),
+            module_ports: IndexMap::new(),
+            emitted_module_names: IndexMap::new(),
         }
     }
 
@@ -168,7 +168,7 @@ impl<'d> Converter<'d> {
         let mut ports: Vec<verilog::Port> = vec![];
         let mut elements: Vec<verilog::Element> = vec![];
         // reg name -> AstNodeId of its explicit `on clock` expression (if present)
-        let mut sequential_regs: HashMap<String, AstNodeId> = HashMap::new();
+        let mut sequential_regs: IndexMap<String, AstNodeId> = IndexMap::new();
         let mut on_block: Option<verilog::Element> = None;
 
         // First pass: ports, wires, regs, instances, on

@@ -1,4 +1,4 @@
-use hashbrown::HashMap;
+use indexmap::IndexMap;
 
 use crate::common::Width;
 use crate::types::Type;

@@ -1,4 +1,4 @@
-use hashbrown::HashMap;
+use indexmap::IndexMap;
 use std::hash::Hash;
 
 #[derive(Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd, Debug)]
@@ -14,7 +14,7 @@ pub struct CycleError(pub Vec<VertIndex>);
 
 struct TopoSortContext<'g, V> {
     graph: &'g Graph<V>,
-    state: HashMap<VertIndex, SortState>,
+    state: IndexMap<VertIndex, SortState>,
     stack: Vec<VertIndex>,
     rev_sorting: Vec<VertIndex>,
     cycle: Option<Vec<VertIndex>>,
@@ -68,7 +68,7 @@ impl<V: Eq> Graph<V> {
 
 impl<'g, V> TopoSortContext<'g, V> {
     fn new(graph: &'g Graph<V>) -> Self {
-        let state: HashMap<VertIndex, SortState> = (0..graph.verts.len()).map(|i| (VertIndex(i), SortState::Unvisited)).collect();
+        let state: IndexMap<VertIndex, SortState> = (0..graph.verts.len()).map(|i| (VertIndex(i), SortState::Unvisited)).collect();
 
         TopoSortContext {
             graph,

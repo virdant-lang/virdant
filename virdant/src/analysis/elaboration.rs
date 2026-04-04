@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bstr::{BString, ByteSlice};
-use hashbrown::HashMap;
+use indexmap::IndexMap;
 
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::drivers::{Driver, DriverAnalysis};
@@ -170,7 +170,7 @@ pub(crate) fn build_elaboration(builder: &mut Builder, top: SymbolId) -> Arc<Ela
     elaborate_module(builder, top, "top", &mut components, None);
 
     // Build a reverse index: fully-elaborated path -> ElaboratedComponentId.
-    let path_to_id: HashMap<BString, ElaboratedComponentId> = components
+    let path_to_id: IndexMap<BString, ElaboratedComponentId> = components
         .iter()
         .enumerate()
         .map(|(i, c)| (c.path.clone(), ElaboratedComponentId(i)))
@@ -194,7 +194,7 @@ pub(crate) fn build_elaboration(builder: &mut Builder, top: SymbolId) -> Arc<Ela
 /// the driver is a simple `ExprReference` to another elaborated component.
 fn resolve_alias(
     component: &ElaboratedComponent,
-    path_to_id: &HashMap<BString, ElaboratedComponentId>,
+    path_to_id: &IndexMap<BString, ElaboratedComponentId>,
     builder: &mut Builder,
 ) -> Option<ElaboratedComponentId> {
     // Only `Driver::Expr` can be a bare reference; `Driver::If` cannot.

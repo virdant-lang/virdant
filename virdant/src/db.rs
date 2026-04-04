@@ -8,7 +8,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use bstr::BString;
-use hashbrown::{HashMap, HashSet};
+use indexmap::IndexSet;
+use indexmap::IndexMap;
 
 use crate::analysis::component::Component;
 use crate::analysis::component::ComponentId;
@@ -56,7 +57,7 @@ queries! {
     Typing(exprroot: ExprRoot) -> Arc<Typing>;
     TypeCheck(symbol_id: SymbolId) -> Vec<Diagnostic>;
     Typeof(location: Location) -> Result<Type, Vec<Diagnostic>>;
-    TypeofAll() -> HashMap<Location, Option<Type>>;
+    TypeofAll() -> IndexMap<Location, Option<Type>>;
     Check() -> Vec<Diagnostic>;
     TypeIndex() -> Arc<TypeIndex>;
     CtorSignature(ctor_symbol_id: SymbolId) -> Arc<Signature>;
@@ -136,7 +137,7 @@ db_getter!(get_exprroot_for : ExprRootFor(location: Location) -> ExprRoot);
 db_getter!(get_typing : Typing(expr_root: ExprRoot) -> Arc<Typing>);
 db_getter!(typecheck : TypeCheck(symbol_id: SymbolId) -> Vec<Diagnostic>);
 db_getter!(get_typeof : Typeof(location: Location) -> Result<Type, Vec<Diagnostic>>);
-db_getter!(get_typeof_all : TypeofAll() -> HashMap<Location, Option<Type>>);
+db_getter!(get_typeof_all : TypeofAll() -> IndexMap<Location, Option<Type>>);
 db_getter!(get_type_index : TypeIndex() -> Arc<TypeIndex>);
 db_getter!(get_location_region : LocationRegion(location: Location) -> Region);
 db_getter!(check : Check() -> Vec<Diagnostic>);

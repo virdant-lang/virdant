@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bstr::{BStr, BString};
 use bstr::ByteSlice;
-use hashbrown::HashSet;
+use indexmap::IndexSet;
 
 use crate::analysis::Location;
 use crate::analysis::symbols::SymbolId;
@@ -120,7 +120,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
 
     let parsing = builder.get_parsing(location.package());
     let item_ast = parsing.ast_node(location.ast_node_id());
-    let mut components_seen: HashSet<BString> = HashSet::new();
+    let mut components_seen: IndexSet<BString> = IndexSet::new();
 
     // ensure all dependent packages have been created
     // TODO this doesn't recurse though?

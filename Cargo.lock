@@ -1355,7 +1355,6 @@ dependencies = [
  "clap",
  "clap_derive",
  "colored",
- "hashbrown 0.15.5",
  "indexmap",
  "internment",
  "json",

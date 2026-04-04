@@ -1,7 +1,7 @@
 use bstr::BStr;
 use bstr::BString;
-use hashbrown::HashSet;
-use std::collections::HashMap;
+use indexmap::IndexSet;
+use indexmap::IndexMap;
 use std::sync::Arc;
 
 use crate::common::ComponentKind;
@@ -17,8 +17,8 @@ use crate::syntax::payload::AstNodePayload;
 #[derive(Debug)]
 pub struct PackageAnalysis {
     package: PackageFqn,
-    imports: HashSet<PackageFqn>,
-    items: HashMap<BString, Vec<AstNodeId>>,
+    imports: IndexSet<PackageFqn>,
+    items: IndexMap<BString, Vec<AstNodeId>>,
     expr_roots: Vec<AstNodeId>,
     diagnostics: Vec<Diagnostic>,
 }
@@ -28,7 +28,7 @@ impl PackageAnalysis {
         let mut analysis = PackageAnalysis {
             package: parsing.package(),
             imports: vec![PackageFqn::new("builtin".into())].into_iter().collect(),
-            items: HashMap::new(),
+            items: IndexMap::new(),
             expr_roots: vec![],
             diagnostics: vec![],
         };

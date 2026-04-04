@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use hashbrown::{HashMap, HashSet};
+use indexmap::IndexSet;
+use indexmap::IndexMap;
 
 use crate::analysis::Location;
 use crate::analysis::component::{ComponentAnalysis, ComponentId};
@@ -14,7 +15,7 @@ use crate::syntax::payload::AstNodePayload;
 
 #[derive(Debug)]
 pub struct DriverAnalysis {
-    drivers: HashMap<ComponentId, Vec<Driver>>,
+    drivers: IndexMap<ComponentId, Vec<Driver>>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -41,7 +42,7 @@ pub struct DriverIf {
 }
 
 impl DriverAnalysis {
-    pub fn drivers(&self) -> &HashMap<ComponentId, Vec<Driver>> {
+    pub fn drivers(&self) -> &IndexMap<ComponentId, Vec<Driver>> {
         &self.drivers
     }
 
@@ -110,8 +111,8 @@ pub(crate) fn build_driver_analysis(
 fn collect_block_drivers(
     stmts: Vec<AstNode<'_>>,
     component_analysis: &ComponentAnalysis,
-) -> HashMap<ComponentId, Vec<Driver>> {
-    let mut result: HashMap<ComponentId, Vec<Driver>> = HashMap::new();
+) -> IndexMap<ComponentId, Vec<Driver>> {
+    let mut result: IndexMap<ComponentId, Vec<Driver>> = IndexMap::new();
 
     for stmt in stmts {
         match stmt.payload() {
@@ -131,7 +132,7 @@ fn collect_block_drivers(
                 let num_cond_block_pairs = children.len() / 2;
 
                 // Recursively collect drivers from each if/elif clause.
-                let clause_drivers: Vec<(Location, HashMap<ComponentId, Vec<Driver>>)> =
+                let clause_drivers: Vec<(Location, IndexMap<ComponentId, Vec<Driver>>)> =
                     (0..num_cond_block_pairs)
                         .map(|i| {
                             let cond = &children[2 * i];
@@ -145,11 +146,11 @@ fn collect_block_drivers(
                 let else_drivers = if has_else {
                     collect_block_drivers(children.last().unwrap().children(), component_analysis)
                 } else {
-                    HashMap::new()
+                    IndexMap::new()
                 };
 
                 // Gather all component IDs driven in any clause or the else block.
-                let mut all_components: HashSet<ComponentId> = HashSet::new();
+                let mut all_components: IndexSet<ComponentId> = IndexSet::new();
                 for (_, cd) in &clause_drivers {
                     all_components.extend(cd.keys().copied());
                 }

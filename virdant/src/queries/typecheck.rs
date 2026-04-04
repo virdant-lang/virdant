@@ -1,4 +1,5 @@
-use hashbrown::{HashMap, HashSet};
+use indexmap::IndexSet;
+use indexmap::IndexMap;
 
 use crate::analysis::location::Location;
 use crate::types::typing::item_for;
@@ -9,7 +10,7 @@ use crate::diagnostics::{self, Diagnostic};
 pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> ExprRoot {
     let parsing = builder.get_parsing(location.package());
 
-    let exprroot_ids: HashSet<_> = builder
+    let exprroot_ids: IndexSet<_> = builder
         .get_exprroots()
         .into_iter()
         .filter(|exprroot| exprroot.location.package() == location.package())
@@ -51,8 +52,8 @@ pub(crate) fn build_typeof(builder: &mut Builder, location: Location) -> Result<
     }
 }
 
-pub(crate) fn build_typeof_all(builder: &mut Builder) -> HashMap<Location, Option<Type>> {
-    let mut typeof_all = HashMap::new();
+pub(crate) fn build_typeof_all(builder: &mut Builder) -> IndexMap<Location, Option<Type>> {
+    let mut typeof_all = IndexMap::new();
 
     for location in builder.get_all_exprs() {
         let item = item_for(builder, location.clone());

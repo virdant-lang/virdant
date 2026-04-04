@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use bstr::{BStr, BString, ByteSlice};
-use hashbrown::{HashMap, HashSet};
+use indexmap::IndexSet;
+use indexmap::IndexMap;
 
 use crate::analysis::symbols::{Symbol, SymbolId};
 use crate::common::{BinOp, Flow, UnOp as UnOp, Width};
@@ -54,10 +55,10 @@ impl Tag {
 #[derive(Debug)]
 pub struct Typing {
     exprroot: ExprRoot,
-    typs: HashMap<AstNodeId, Type>,
+    typs: IndexMap<AstNodeId, Type>,
     diagnostics: Vec<Diagnostic>,
-    use_locations: HashMap<BString, Vec<Location>>,
-    tags: HashMap<Location, Tag>,
+    use_locations: IndexMap<BString, Vec<Location>>,
+    tags: IndexMap<Location, Tag>,
 }
 
 impl Typing {
@@ -73,7 +74,7 @@ impl Typing {
         }
     }
 
-    pub fn reference_use_locations(&self) -> &HashMap<BString, Vec<Location>> {
+    pub fn reference_use_locations(&self) -> &IndexMap<BString, Vec<Location>> {
         &self.use_locations
     }
 
@@ -853,7 +854,7 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Vec<Diagn
     let exprroots = builder.get_exprroots();
     let item = symboltable.symbol(symbol_id);
 
-    let mut use_locations: HashMap<BString, HashSet<Location>> = HashMap::new();
+    let mut use_locations: IndexMap<BString, IndexSet<Location>> = IndexMap::new();
 
     let parsing = builder.get_parsing(item.package());
     let node: AstNode = parsing.ast_node(item.location().ast_node_id());
@@ -890,7 +891,7 @@ fn typecheck_item(
     builder: &mut Builder,
     item: Symbol,
     exprroots: &[ExprRoot],
-    use_locations: &mut HashMap<BString, HashSet<Location>>,
+    use_locations: &mut IndexMap<BString, IndexSet<Location>>,
 ) -> Vec<Diagnostic> {
     let mut diagnostics = vec![];
     for exprroot in exprroots {
@@ -901,7 +902,7 @@ fn typecheck_item(
             let typing_use_locations = typing.reference_use_locations();
             for (path, locations) in typing_use_locations.iter() {
                 if !use_locations.contains_key(path.as_bstr()) {
-                    use_locations.insert(path.clone(), HashSet::new());
+                    use_locations.insert(path.clone(), IndexSet::new());
                 }
                 let t = use_locations.get_mut(path.as_bstr()).unwrap();
                 t.extend(locations.clone());
@@ -965,10 +966,10 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
     let diagnostics = vec![];
     let mut typing = Typing {
         exprroot: exprroot.clone(),
-        typs: HashMap::new(),
+        typs: IndexMap::new(),
         diagnostics,
-        use_locations: HashMap::new(),
-        tags: HashMap::new(),
+        use_locations: IndexMap::new(),
+        tags: IndexMap::new(),
     };
 
     // if there is no expected type, you can't type check the expression.

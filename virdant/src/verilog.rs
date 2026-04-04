@@ -12,7 +12,7 @@ use self::macros::{verilog_write, verilog_writeln};
 pub use self::stmt::{Assert, AssignBlocking, AssignNonBlocking, Display, If, Stmt,
     Case, CaseZ, CaseItem, CasePattern, PatternLit};
 
-use std::collections::HashSet;
+use indexmap::IndexSet;
 use std::io::Write;
 
 const DIR_WIDTH: usize = 6;
@@ -459,7 +459,7 @@ fn compute_expr_width(expr: &Expr) -> Option<Width> {
 }
 
 struct Normalizer {
-    used_names: HashSet<String>,
+    used_names: IndexSet<String>,
     counter: usize,
     new_elements: Vec<Element>,
 }
@@ -623,7 +623,7 @@ impl Module {
     pub fn normalize(&mut self) {
         // Seed the used-name set with every declared port, wire, and reg so
         // that generated names are guaranteed never to collide.
-        let used_names: HashSet<String> = self.ports.iter()
+        let used_names: IndexSet<String> = self.ports.iter()
             .map(|p| p.name.clone())
             .chain(self.elements.iter().filter_map(|e| match e {
                 Element::Wire(w) => Some(w.name.clone()),

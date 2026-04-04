@@ -8,12 +8,12 @@ impl Db {
             .keys()
             .cloned()
             .chain(map.values().flat_map(|cached_val| cached_val.deps.iter().cloned()))
-            .collect::<HashSet<_>>()
+            .collect::<IndexSet<_>>()
             .into_iter()
             .collect();
         queries.sort_by_key(|query| format!("{query:?}"));
 
-        let query_indices: HashMap<Query, usize> = queries
+        let query_indices: IndexMap<Query, usize> = queries
             .iter()
             .cloned()
             .enumerate()

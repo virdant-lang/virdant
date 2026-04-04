@@ -1,5 +1,5 @@
 use bstr::{BString, ByteSlice};
-use hashbrown::HashMap;
+use indexmap::IndexMap;
 
 use crate::analysis::Location;
 use crate::analysis::symbols::SymbolId;
@@ -72,8 +72,8 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<D
     diagnostics
 }
 
-fn get_all_driver_locations(builder: &mut Builder, symbol_id: SymbolId, _diagnostics: &mut Vec<Diagnostic>) -> HashMap<BString, Vec<Location>> {
-    let mut driver_locations: HashMap<BString, Vec<Location>> = HashMap::new();
+fn get_all_driver_locations(builder: &mut Builder, symbol_id: SymbolId, _diagnostics: &mut Vec<Diagnostic>) -> IndexMap<BString, Vec<Location>> {
+    let mut driver_locations: IndexMap<BString, Vec<Location>> = IndexMap::new();
 
     let symboltable = builder.get_symboltable();
     let symbol = symboltable.symbol(symbol_id);

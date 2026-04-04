@@ -1,4 +1,4 @@
-use hashbrown::HashMap;
+use indexmap::IndexMap;
 
 use crate::analysis::location::Location;
 use crate::analysis::symbols::SymbolId;
@@ -22,7 +22,7 @@ pub struct TypeDef {
     pub kind: TypeScheme,
 
     pub width: Option<Width>,
-    pub enumerant_values: HashMap<SymbolId, u128>, // TODO use a Value struct instead
+    pub enumerant_values: IndexMap<SymbolId, u128>, // TODO use a Value struct instead
 }
 
 pub(crate) fn build_typedefs(builder: &mut Builder) -> Vec<TypeDef> {
@@ -46,7 +46,7 @@ pub(crate) fn build_typedefs(builder: &mut Builder) -> Vec<TypeDef> {
             let enumdef_node = parsing.ast_node(location.ast_node_id());
             let AstNodePayload::EnumDef(enum_def) = enumdef_node.payload() else { unreachable!() };
 
-            let mut enumerant_values = HashMap::new();
+            let mut enumerant_values = IndexMap::new();
             for enumerant_node in enumdef_node.children() {
                 let AstNodePayload::Enumerant(enumerant) = enumerant_node.payload() else { continue; };
                 let enumerant_name = parsing.string(enumerant.name);
@@ -61,7 +61,7 @@ pub(crate) fn build_typedefs(builder: &mut Builder) -> Vec<TypeDef> {
 
             (Some(enum_def.width), enumerant_values)
         } else {
-            (None, HashMap::new())
+            (None, IndexMap::new())
         };
 
         typedefs.push(TypeDef {
@@ -93,7 +93,7 @@ pub(crate) fn build_typedef(builder: &mut Builder, symbol_id: SymbolId) -> Arc<T
         let enumdef_node = parsing.ast_node(location.ast_node_id());
         let AstNodePayload::EnumDef(enum_def) = enumdef_node.payload() else { unreachable!() };
 
-        let mut enumerant_values = HashMap::new();
+        let mut enumerant_values = IndexMap::new();
         for enumerant_node in enumdef_node.children() {
             let AstNodePayload::Enumerant(enumerant) = enumerant_node.payload() else { continue; };
             let enumerant_name = parsing.string(enumerant.name);
@@ -108,7 +108,7 @@ pub(crate) fn build_typedef(builder: &mut Builder, symbol_id: SymbolId) -> Arc<T
 
         (Some(enum_def.width), enumerant_values)
     } else {
-        (None, HashMap::new())
+        (None, IndexMap::new())
     };
 
     Arc::new(TypeDef {
@@ -154,7 +154,7 @@ fn parse_nat_literal(literal: &str) -> u128 {
 #[derive(Debug)]
 pub struct TypeIndex {
     typs: Vec<Type>,
-    typ_at_location: HashMap<Location, usize>, // index into typs
+    typ_at_location: IndexMap<Location, usize>, // index into typs
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -177,7 +177,7 @@ impl TypeIndex {
 pub(crate) fn build_type_index(builder: &mut Builder) -> Arc<TypeIndex> {
     let mut type_index = TypeIndex {
         typs: vec![],
-        typ_at_location: HashMap::new(),
+        typ_at_location: IndexMap::new(),
         diagnostics: vec![],
     };
 
