@@ -7,11 +7,18 @@ union type State {
 export mod Top {
     incoming clock : Clock;
     incoming reset : Bit;
+
+    outgoing result : Word[8];
+    outgoing valid  : Bit;
+
     mod gcd of Gcd;
     gcd.reset := reset;
     gcd.clock := clock;
     gcd.x := 75;
     gcd.y := 145;
+
+    result := gcd.result;
+    valid := gcd.valid;
 
     on clock {
         if gcd.valid {

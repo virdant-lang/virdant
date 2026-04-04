@@ -9,7 +9,8 @@ use crate::analysis::drivers::Driver;
 use crate::analysis::elaboration::{ElaboratedComponent, ElaboratedComponentId, Elaboration};
 use crate::common::ComponentKind;
 use crate::db::Db;
-use crate::sim::eval::Value;
+use crate::sim::eval::{Context, Value};
+use crate::sim::expr::{Expr, ExprPayload, Referent, driver_to_expr};
 use crate::syntax::ast::AstNodeId;
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
@@ -34,6 +35,8 @@ pub struct Sim {
     sensitivities: IndexMap<ElaboratedComponentId, IndexSet<ElaboratedComponentId>>,
     clock_sensitivities: IndexMap<ElaboratedComponentId, IndexSet<ElaboratedComponentId>>,
     dirty: IndexSet<ElaboratedComponentId>,
+    registers: IndexSet<ElaboratedComponentId>,
+    exprs: IndexMap<ElaboratedComponentId, Arc<Expr>>,
 }
 
 impl Sim {
@@ -44,6 +47,13 @@ impl Sim {
         let sensitivities = build_sensitivities(&deps);
         let clock_sensitivities = build_clock_sensitivities(&elaboration);
 
+        let mut exprs: IndexMap<ElaboratedComponentId, Arc<Expr>> = IndexMap::new();
+        for elab_component in elaboration.components() {
+            if let Some(driver) = elab_component.driver() {
+                exprs.insert(elab_component.id(), driver_to_expr(&db, driver));
+            }
+        }
+
         let mut sim = Sim {
             values: IndexMap::new(),
             component_paths: IndexMap::new(),
@@ -53,6 +63,8 @@ impl Sim {
             sensitivities,
             clock_sensitivities,
             dirty: IndexSet::new(),
+            registers: IndexSet::new(),
+            exprs,
         };
 
         for elab_component in elaboration.components() {
@@ -69,6 +81,8 @@ impl Sim {
                 let node = Node::set(elab_component_id);
                 let value = Value::X(typ);
                 sim.values.insert(node, value);
+
+                sim.registers.insert(elab_component_id);
             }
         }
 
@@ -117,13 +131,56 @@ impl Sim {
     }
 
     pub fn flow(&mut self) {
-
-        self.dirty.clear();
+        while let Some(component_id) = self.dirty.pop() {
+            if let Some(sensitivities) = self.sensitivities.get(&component_id) {
+                for update_component_id in sensitivities.clone() {
+                    let expr = self.exprs.get(&update_component_id).unwrap().clone();
+                    let context = self.build_context(update_component_id, &expr);
+                    let new_value = expr.eval(context);
+                    if self.registers.contains(&update_component_id) {
+                        self.set_reg(update_component_id, new_value);
+                    } else {
+                        self.set(update_component_id, new_value);
+                    }
+                }
+            }
+        }
     }
 
     pub fn resolve<S: AsRef<BStr>>(&mut self, path: S) -> ElaboratedComponentId {
         let elaboration = self.elaboration();
         elaboration.resolve(path).unwrap().id()
+    }
+
+    /// Build an eval `Context` for `component_id`'s driver expression.
+    ///
+    /// Each `Referent::Component(component_id)` in `expr` refers to a component by
+    /// its pre-elaboration `ComponentId`.  We resolve it to an `ElaboratedComponentId`
+    /// (and thus a current `Value`) by:
+    ///   1. Looking up the component's relative path via its module's `ComponentAnalysis`.
+    ///   2. Prepending the scope prefix of the elaborated component (the module instance
+    ///      path from which references are resolved) to get the full elaborated path.
+    ///   3. Resolving that path in the `Elaboration` to get the `ElaboratedComponentId`.
+    ///   4. Reading the current value from `self.values`.
+    fn build_context(&self, component_id: ElaboratedComponentId, expr: &Expr) -> Context {
+        let elaboration = self.elaboration();
+        let ec = elaboration.component(component_id);
+        let prefix = scope_prefix(ec);
+
+        let mut entries: Vec<(Referent, Value)> = Vec::new();
+        for referent in collect_referents(expr) {
+            if let Referent::Component(comp_id) = &referent {
+                let comp_analysis = self.db.get_component_analysis(comp_id.item_id());
+                if let Some(comp) = comp_analysis.component(*comp_id) {
+                    let full_path: BString = format!("{prefix}.{}", comp.path()).into();
+                    if let Some(elab_comp) = elaboration.resolve(&full_path) {
+                        let value = self.values[&Node::val(elab_comp.id())].clone();
+                        entries.push((referent, value));
+                    }
+                }
+            }
+        }
+        Context::new(entries)
     }
 
     pub fn set(&mut self, component_id: ElaboratedComponentId, value: Value) {
@@ -301,29 +358,90 @@ fn walk_expr_refs(parsing: &Parsing, root_id: AstNodeId) -> Vec<BString> {
     result
 }
 
+/// DFS-walk an `Expr` tree and collect every `Referent` found in a
+/// `Reference` node.  Duplicate referents are included as-is; the `Context`
+/// lookup handles them by searching in reverse insertion order.
+fn collect_referents(expr: &Expr) -> Vec<Referent> {
+    let mut result = Vec::new();
+    collect_referents_inner(expr, &mut result);
+    result
+}
+
+fn collect_referents_inner(expr: &Expr, out: &mut Vec<Referent>) {
+    match expr.payload() {
+        ExprPayload::Reference(r)       => out.push(r.referent.clone()),
+        ExprPayload::Paren(p)           => collect_referents_inner(&p.subject, out),
+        ExprPayload::If(i)              => {
+            for (cond, body) in &i.branches {
+                collect_referents_inner(cond, out);
+                collect_referents_inner(body, out);
+            }
+            collect_referents_inner(&i.else_branch, out);
+        }
+        ExprPayload::Match(m)           => {
+            collect_referents_inner(&m.subject, out);
+            for (_, body) in &m.arms { collect_referents_inner(body, out); }
+        }
+        ExprPayload::BinOp(b)          => {
+            collect_referents_inner(&b.lhs, out);
+            collect_referents_inner(&b.rhs, out);
+        }
+        ExprPayload::UnOp(u)           => collect_referents_inner(&u.subject, out),
+        ExprPayload::Method(m)         => {
+            collect_referents_inner(&m.subject, out);
+            for arg in &m.args { collect_referents_inner(arg, out); }
+        }
+        ExprPayload::Fn(f)             => {
+            collect_referents_inner(&f.subject, out);
+            for arg in &f.args { collect_referents_inner(arg, out); }
+        }
+        ExprPayload::Ctor(c)           => {
+            for arg in &c.args { collect_referents_inner(arg, out); }
+        }
+        ExprPayload::Struct(s)         => {
+            for (_, field) in &s.fields { collect_referents_inner(field, out); }
+        }
+        ExprPayload::Index(i)          => collect_referents_inner(&i.subject, out),
+        ExprPayload::IndexRange(i)     => collect_referents_inner(&i.subject, out),
+        ExprPayload::Word(w)           => {
+            for arg in &w.args { collect_referents_inner(arg, out); }
+        }
+        ExprPayload::Zext(z)           => collect_referents_inner(&z.subject, out),
+        ExprPayload::Sext(s)           => collect_referents_inner(&s.subject, out),
+        ExprPayload::As(a)             => collect_referents_inner(&a.subject, out),
+        // Leaves — no sub-expressions to recurse into.
+        ExprPayload::BitLit(_)
+        | ExprPayload::WordLit(_)
+        | ExprPayload::StrLit(_)
+        | ExprPayload::Enumerant(_)
+        | ExprPayload::Hole(_)         => {}
+    }
+}
+
 #[test]
 fn test_sim() {
-    let db = crate::util::db_from_dir_with_lib("../examples/gcd/src", "../lib");
+    let db = crate::util::db_from_dir_with_lib("../examples/arithmetic/src", "../lib");
     crate::util::check_db(&db).unwrap();
     let symboltable = db.get_symboltable();
     let top = symboltable.resolve(b"top::Top".into()).unwrap();
 
     let mut sim = Sim::new(Arc::new(db), top.id());
     let clock_id = sim.resolve(BStr::new(b"top.clock"));
-    let reset_id = sim.resolve(BStr::new(b"top.reset"));
+//    let reset_id = sim.resolve(BStr::new(b"top.reset"));
+    let inp_id = sim.resolve(BStr::new(b"top.inp"));
+    let r_id = sim.resolve(BStr::new(b"top.r"));
 
     println!("--------------------------------------------------------------------------------");
+    println!("sim.set(inp_id, Value::Word(4, 2))");
+    sim.set(inp_id, Value::Word(4, 2));
+    println!("sim.set(r_id, Value::Word(4, 0))");
+    sim.set(r_id, Value::Word(4, 0));
+    sim.flow();
     sim.dump();
 
-    println!("--------------------------------------------------------------------------------");
-    sim.set(reset_id, Value::Bit(true));
-    sim.dump();
-
-
-    println!("--------------------------------------------------------------------------------");
-    sim.dump();
-    let clock_id = sim.resolve(BStr::new(b"top.clock"));
-    sim.tick(clock_id);
-    println!("--------------------------------------------------------------------------------");
-    sim.dump();
+    for _ in 0..20 {
+        println!("--------------------------------------------------------------------------------");
+        sim.tick(clock_id);
+        sim.dump();
+    }
 }

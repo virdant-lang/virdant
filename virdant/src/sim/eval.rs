@@ -2,6 +2,7 @@ use bstr::BStr;
 use indexmap::IndexMap;
 
 use crate::common::Width;
+use crate::sim::{ExprPayload, payload};
 use crate::types::Type;
 use crate::sim::expr::{Expr, Referent};
 use crate::analysis::symbols::SymbolId;
@@ -25,6 +26,10 @@ impl Value {
             Value::Ctor(typ, _symbol_id, _values) => typ.clone(),
         }
     }
+
+    pub fn is_x(&self) -> bool {
+        matches!(self, Value::X(_))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -33,6 +38,10 @@ pub struct Context {
 }
 
 impl Context {
+    pub fn new(entries: Vec<(Referent, Value)>) -> Context {
+        Context { context: entries }
+    }
+
     pub fn get(&self, referent: &Referent) -> Value {
         for (referent_, value) in self.context.iter().rev() {
             if referent_ == referent {
@@ -45,28 +54,58 @@ impl Context {
 
 impl Expr {
     pub fn eval(&self, context: Context) -> Value {
-        match self.payload() {
-            super::expr::ExprPayload::Reference(reference) => context.get(&reference.referent),
-            super::expr::ExprPayload::Paren(paren) => paren.subject.eval(context),
-            super::expr::ExprPayload::If(_) => todo!(),
-            super::expr::ExprPayload::Match(_) => todo!(),
-            super::expr::ExprPayload::BitLit(bit_lit) => Value::Bit(bit_lit.value),
-            super::expr::ExprPayload::WordLit(word_lit) => Value::Word(word_lit.width, word_lit.value),
-            super::expr::ExprPayload::StrLit(str_lit) => todo!(),
-            super::expr::ExprPayload::BinOp(bin_op) => todo!(),
-            super::expr::ExprPayload::UnOp(un_op) => todo!(),
-            super::expr::ExprPayload::Method(method) => todo!(),
-            super::expr::ExprPayload::Fn(_) => todo!(),
-            super::expr::ExprPayload::Ctor(ctor) => todo!(),
-            super::expr::ExprPayload::Enumerant(enumerant) => todo!(),
-            super::expr::ExprPayload::Struct(_) => todo!(),
-            super::expr::ExprPayload::Index(index) => todo!(),
-            super::expr::ExprPayload::IndexRange(index_range) => todo!(),
-            super::expr::ExprPayload::Word(word) => todo!(),
-            super::expr::ExprPayload::Zext(zext) => todo!(),
-            super::expr::ExprPayload::Sext(sext) => todo!(),
-            super::expr::ExprPayload::As(as_) => as_.subject.eval(context),
-            super::expr::ExprPayload::Hole(hole) => todo!(),
+        let result = match self.payload() {
+            ExprPayload::Reference(reference) => context.get(&reference.referent),
+            ExprPayload::Paren(paren) => paren.subject.eval(context),
+            ExprPayload::If(_) => todo!(),
+            ExprPayload::Match(_) => todo!(),
+            ExprPayload::BitLit(bit_lit) => Value::Bit(bit_lit.value),
+            ExprPayload::WordLit(word_lit) => Value::Word(word_lit.width, word_lit.value),
+            ExprPayload::StrLit(str_lit) => todo!(),
+            ExprPayload::BinOp(binop) => self.eval_binop(context, binop),
+            ExprPayload::UnOp(un_op) => todo!(),
+            ExprPayload::Method(method) => todo!(),
+            ExprPayload::Fn(_) => todo!(),
+            ExprPayload::Ctor(ctor) => todo!(),
+            ExprPayload::Enumerant(enumerant) => todo!(),
+            ExprPayload::Struct(_) => todo!(),
+            ExprPayload::Index(index) => todo!(),
+            ExprPayload::IndexRange(index_range) => todo!(),
+            ExprPayload::Word(word) => todo!(),
+            ExprPayload::Zext(zext) => todo!(),
+            ExprPayload::Sext(sext) => todo!(),
+            ExprPayload::As(as_) => as_.subject.eval(context),
+            ExprPayload::Hole(hole) => todo!(),
+        };
+
+        result
+    }
+
+    fn eval_binop(&self, context: Context, binop: &payload::BinOp) -> Value {
+        let lhs_val = binop.lhs.eval(context.clone());
+        let rhs_val = binop.rhs.eval(context);
+        if lhs_val.is_x() { return Value::X(binop.lhs.typ().clone()); }
+        if rhs_val.is_x() { return Value::X(binop.rhs.typ().clone()); }
+
+        match binop.op {
+            crate::common::BinOp::LogicalAnd => todo!(),
+            crate::common::BinOp::LogicalOr => todo!(),
+            crate::common::BinOp::LogicalXor => todo!(),
+            crate::common::BinOp::Lt => todo!(),
+            crate::common::BinOp::Lte => todo!(),
+            crate::common::BinOp::Gt => todo!(),
+            crate::common::BinOp::Gte => todo!(),
+            crate::common::BinOp::Eq => todo!(),
+            crate::common::BinOp::Neq => todo!(),
+            crate::common::BinOp::Add => {
+                let Value::Word(width0,  val0) = lhs_val else { unreachable!() };
+                let Value::Word(_width1, val1) = rhs_val else { unreachable!() };
+                Value::Word(width0, (val0 + val1) % (1 << width0) as u64)
+            }
+            crate::common::BinOp::Sub => todo!(),
+            crate::common::BinOp::And => todo!(),
+            crate::common::BinOp::Or => todo!(),
+            crate::common::BinOp::Xor => todo!(),
         }
     }
 }

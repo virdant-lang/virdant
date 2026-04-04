@@ -36,6 +36,12 @@ pub struct Component {
     flow: Flow,
 }
 
+impl ComponentId {
+    pub fn item_id(&self) -> SymbolId {
+        self.item_id
+    }
+}
+
 impl Component {
     pub fn id(&self) -> ComponentId {
         return self.id;
