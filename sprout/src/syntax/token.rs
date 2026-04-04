@@ -116,6 +116,11 @@ pub enum Token {
     #[token(b"fatal")]     KwFatal,
     #[token(b"true")]      KwTrue,
     #[token(b"false")]     KwFalse,
+    #[token(b"test")]      KwTest,
+    #[token(b"dut")]       KwDut,
+    #[token(b"set")]       KwSet,
+    #[token(b"tick")]      KwTick,
+    #[token(b"print")]     KwPrint,
 
     // Unused
     #[token(b"/*")]        SlashStar,

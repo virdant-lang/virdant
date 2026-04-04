@@ -8,6 +8,12 @@ pub enum AstNodePayload {
     Package,
 
     Import(Import),
+    TestDef(TestDef),
+    StmtDut,
+    StmtSet,
+    StmtTick,
+    StmtPrint,
+    StmtAssign,
     ModDef(ModDef),
     StructDef(StructDef),
     UnionDef(UnionDef),
@@ -82,6 +88,12 @@ impl AstNodePayload {
             AstNodePayload::Error => "Error",
             AstNodePayload::Package => "Package",
             AstNodePayload::Import(_import) => "Import",
+            AstNodePayload::TestDef(_) => "TestDef",
+            AstNodePayload::StmtDut => "StmtDut",
+            AstNodePayload::StmtSet => "StmtSet",
+            AstNodePayload::StmtTick => "StmtTick",
+            AstNodePayload::StmtPrint => "StmtPrint",
+            AstNodePayload::StmtAssign => "StmtAssign",
             AstNodePayload::ModDef(_mod_def) => "ModDef",
             AstNodePayload::StructDef(_struct_def) => "StructDef",
             AstNodePayload::UnionDef(_union_def) => "UnionDef",
@@ -147,6 +159,11 @@ impl AstNodePayload {
 #[derive(Clone, Debug)]
 pub struct Import {
     pub package: InternedString,
+}
+
+#[derive(Clone, Debug)]
+pub struct TestDef {
+    pub name: InternedString,
 }
 
 #[derive(Clone, Debug)]

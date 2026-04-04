@@ -155,6 +155,12 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Error => format!("Error"),
             AstNodePayload::Package => format!("Package"),
             AstNodePayload::Import(import) => format!("Import {}", parsing.string(import.package.clone())),
+            AstNodePayload::TestDef(testdef) => format!("TestDef {}", parsing.string(testdef.name.clone())),
+            AstNodePayload::StmtDut => format!("StmtDut"),
+            AstNodePayload::StmtSet => format!("StmtSet"),
+            AstNodePayload::StmtTick => format!("StmtTick"),
+            AstNodePayload::StmtPrint => format!("StmtPrint"),
+            AstNodePayload::StmtAssign => format!("StmtAssign"),
             AstNodePayload::ModDef(mod_def) => {
                 let ext = if mod_def.is_ext {
                     "ext "
