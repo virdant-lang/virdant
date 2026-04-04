@@ -4,6 +4,7 @@ use bstr::{BStr, BString, ByteSlice};
 use indexmap::IndexSet;
 use indexmap::IndexMap;
 
+use crate::analysis::component::ComponentId;
 use crate::analysis::symbols::{Symbol, SymbolId};
 use crate::common::{BinOp, Flow, UnOp as UnOp, Width};
 use crate::db::Builder;
@@ -40,6 +41,7 @@ pub enum Tag {
     None,
     SymbolResolution(SymbolId),
     PrimitiveResolution(BString),
+    ComponentResolution(ComponentId),
 }
 
 impl Tag {
@@ -54,6 +56,7 @@ impl Tag {
 
 #[derive(Debug)]
 pub struct Typing {
+    item: Symbol,
     exprroot: ExprRoot,
     typs: IndexMap<AstNodeId, Type>,
     diagnostics: Vec<Diagnostic>,
@@ -527,6 +530,14 @@ impl Typing {
                 let parsing = node.parsing();
                 let path = parsing.string(node.path().unwrap());
                 if let Some(typ) = context.get(path.to_owned()) {
+                    let component_analysis = builder.get_component_analysis(self.item.id());
+
+                    if let Some(component) = component_analysis.resolve(path) {
+                        self.tags.insert(node.location(), Tag::ComponentResolution(component.id()));
+                    } else {
+                        // This case is where we are referencing a local.
+                    }
+
                     self.use_component(path, node.location());
                     self.annotate(&node, &typ);
                     Ok(Some(typ))
@@ -965,6 +976,7 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
 
     let diagnostics = vec![];
     let mut typing = Typing {
+        item: item.clone(),
         exprroot: exprroot.clone(),
         typs: IndexMap::new(),
         diagnostics,

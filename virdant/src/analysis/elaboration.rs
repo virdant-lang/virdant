@@ -26,6 +26,7 @@ pub struct ElaboratedComponent {
     driver_type: DriverType,
     driver: Option<Driver>,
     alias: Option<ElaboratedComponentId>,
+    clock: Option<ElaboratedComponentId>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -55,15 +56,21 @@ impl Elaboration {
 
     pub fn dump(&self) {
         for component in &self.components {
-            if let Some(alias_id) = &component.alias {
+            let alias_str = if let Some(alias_id) = &component.alias {
                 let alias = &self.components[alias_id.0];
-                println!(
-                    "{} : {:?} (alias: {})",
-                    component.path, component.typ, &alias.path
-                );
+                format!(" (alias: {})", &alias.path)
             } else {
-                println!("{} : {:?}", component.path, component.typ);
-            }
+                String::new()
+            };
+
+            let clock_str = if let Some(clock_id) = &component.clock {
+                let clock = &self.components[clock_id.0];
+                format!(" (on: {})", &clock.path)
+            } else {
+                String::new()
+            };
+
+            println!("{} : {:?}{alias_str}{clock_str}", component.path, component.typ);
         }
     }
 }
@@ -91,6 +98,10 @@ impl ElaboratedComponent {
 
     pub fn is_reg(&self) -> bool {
         self.driver_type == DriverType::Latched
+    }
+
+    pub fn clock(&self) -> Option<ElaboratedComponentId> {
+        self.clock
     }
 }
 
@@ -155,6 +166,22 @@ fn elaborate_module(
                 };
 
                 let id = ElaboratedComponentId(components.len());
+                let clock = if let Some(clock_node) = stmt.clock() {
+                    // Resolve the clock reference (e.g. `clock` in `reg x : T on clock`)
+                    // to the ElaboratedComponentId of the already-accumulated clock component
+                    // (e.g. `top.clock`).  The incoming clock port is always declared before
+                    // any reg in the source, so it is guaranteed to be in `components` already.
+                    clock_node.path().and_then(|interned| {
+                        let clock_name = parsing.string(interned).to_str_lossy().into_owned();
+                        let full_path: BString = format!("{prefix}.{clock_name}").into();
+                        components
+                            .iter()
+                            .position(|c| c.path == full_path)
+                            .map(ElaboratedComponentId)
+                    })
+                } else {
+                    None
+                };
                 components.push(ElaboratedComponent {
                     id,
                     path,
@@ -163,6 +190,7 @@ fn elaborate_module(
                     driver_type,
                     driver,
                     alias: None,
+                    clock,
                 });
             }
             AstNodePayload::Submodule(module) => {

@@ -780,7 +780,6 @@ impl<'d> Converter<'d> {
                 let tag = typing.tag(node.location());
                 let arg = node.child(1);
                 match tag {
-                    crate::types::typing::Tag::None => unreachable!(),
                     crate::types::typing::Tag::SymbolResolution(_symbol_id) => todo!(),
                     crate::types::typing::Tag::PrimitiveResolution(primitive) => {
                         let arg_type = self.node_type(package, &arg).unwrap();
@@ -801,6 +800,8 @@ impl<'d> Converter<'d> {
                             _ => unreachable!(),
                         }
                     }
+                    crate::types::typing::Tag::ComponentResolution(_component_id) => unreachable!(),
+                    crate::types::typing::Tag::None => unreachable!(),
                 }
             }
             AstNodePayload::ExprMatch => {

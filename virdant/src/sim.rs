@@ -63,7 +63,10 @@ impl Sim {
         for (node, value) in &self.values {
             let path = &self.component_paths.get(&node.component_id).unwrap();
             if node.is_reg_set {
-                println!("{path} <= {value:?}");
+                let elaboration = self.elaboration();
+                let clock_id = elaboration.component(node.component_id).clock().unwrap();
+                let clock = elaboration.component(clock_id);
+                println!("{path} <= {value:?} on {:?}", clock.path());
             } else {
                 println!("{path} := {value:?}");
             }
@@ -91,7 +94,7 @@ impl Node {
     fn val(elab_component_id: ElaboratedComponentId) -> Node {
         Node {
             component_id: elab_component_id,
-            is_reg_set: true,
+            is_reg_set: false,
         }
     }
 
