@@ -64,6 +64,9 @@ pub fn driver_to_expr(db: &Db, driver: &Driver) -> Arc<Expr> {
     match driver {
         Driver::Expr(_, loc) => convert_ast_expr(db, loc.clone()),
         Driver::If(driver_if) => convert_driver_if(db, driver_if),
+        Driver::Match(_driver_match) => {
+            todo!("simulation of ModDefStmtMatch is not yet supported")
+        }
     }
 }
 

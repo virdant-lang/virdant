@@ -56,6 +56,12 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
             // expr roots with ModDefStmtIf as their parent. Each condition must be a Bit.
             Some(Type::Bit)
         }
+        AstNodePayload::ModDefStmtMatch => {
+            // The only expr root whose parent is ModDefStmtMatch is the subject expression
+            // (child[0]).  Its expected type is unconstrained; let the expression itself
+            // determine its own type.
+            None
+        }
         AstNodePayload::ModDefStmtOn => {
             Some(Type::Clock)
         }

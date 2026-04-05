@@ -359,6 +359,16 @@ fn collect_locations_inner(driver: &Driver, locs: &mut Vec<Location>) {
                 collect_locations_inner(else_driver, locs);
             }
         }
+        Driver::Match(driver_match) => {
+            locs.push(driver_match.subject.clone());
+            for (pat_loc, sub_driver) in &driver_match.arms {
+                locs.push(pat_loc.clone());
+                collect_locations_inner(sub_driver, locs);
+            }
+            if let Some(else_driver) = &driver_match.else_clause {
+                collect_locations_inner(else_driver, locs);
+            }
+        }
     }
 }
 

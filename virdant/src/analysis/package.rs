@@ -143,6 +143,9 @@ impl PackageAnalysis {
                     AstNodePayload::ModDefStmtIf => {
                         self.add_moddefstmtif_expr_roots(child_node);
                     }
+                    AstNodePayload::ModDefStmtMatch => {
+                        self.add_moddefstmtmatch_expr_roots(child_node);
+                    }
                     AstNodePayload::Error => (), // TODO should we even have error nodes at this point?
                     _ => unreachable!("{:?}", child_node.summary()),
                 }
@@ -182,6 +185,18 @@ impl PackageAnalysis {
         }
     }
 
+    fn add_moddefstmtmatch_expr_roots(&mut self, match_node: AstNode<'_>) {
+        // Children: [subject, pat_0, block_0, pat_1, block_1, ..., pat_N, block_N]
+        let children = match_node.children();
+        let num_arms = (children.len() - 1) / 2;
+        // The subject expression is an expr root.
+        self.expr_roots.push(children[0].id());
+        // Recurse into each arm's block.
+        for i in 0..num_arms {
+            self.add_moddefstmt_block_expr_roots(&children[2 * i + 2]);
+        }
+    }
+
     fn add_moddefstmt_block_expr_roots(&mut self, block_node: &AstNode<'_>) {
         for stmt in block_node.children() {
             match stmt.payload() {
@@ -190,6 +205,9 @@ impl PackageAnalysis {
                 }
                 AstNodePayload::ModDefStmtIf => {
                     self.add_moddefstmtif_expr_roots(stmt);
+                }
+                AstNodePayload::ModDefStmtMatch => {
+                    self.add_moddefstmtmatch_expr_roots(stmt);
                 }
                 _ => {}
             }

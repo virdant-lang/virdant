@@ -23,6 +23,7 @@ pub struct DriverAnalysis {
 pub enum Driver {
     Expr(DriverType, Location),
     If(DriverIf),
+    Match(DriverMatch),
 }
 
 impl Driver {
@@ -30,6 +31,7 @@ impl Driver {
         match self {
             Driver::Expr(dt, _) => *dt,
             Driver::If(driver_if) => driver_if.driver_type,
+            Driver::Match(driver_match) => driver_match.driver_type,
         }
     }
 }
@@ -38,6 +40,14 @@ impl Driver {
 pub struct DriverIf {
     pub driver_type: DriverType,
     pub clauses: Vec<(Location, Box<Driver>)>,
+    pub else_clause: Option<Box<Driver>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DriverMatch {
+    pub driver_type: DriverType,
+    pub subject: Location,
+    pub arms: Vec<(Location, Box<Driver>)>,
     pub else_clause: Option<Box<Driver>>,
 }
 
@@ -82,6 +92,17 @@ fn dump_driver(driver: &Driver, level: usize) {
             }
             if let Some(else_driver) = &driver_if.else_clause {
                 eprintln!("{pad}else:");
+                dump_driver(else_driver, level + 1);
+            }
+        }
+        Driver::Match(driver_match) => {
+            eprintln!("{pad}match {:?}:", driver_match.subject);
+            for (pat_loc, sub_driver) in &driver_match.arms {
+                eprintln!("{pad}  arm {pat_loc:?}:");
+                dump_driver(sub_driver, level + 1);
+            }
+            if let Some(else_driver) = &driver_match.else_clause {
+                eprintln!("{pad}  else:");
                 dump_driver(else_driver, level + 1);
             }
         }
@@ -182,7 +203,47 @@ fn collect_block_drivers(
                 }
             }
             AstNodePayload::ModDefStmtMatch => {
-                todo!()
+                // Children: [subject, pat_0, block_0, pat_1, block_1, ..., pat_N, block_N]
+                let children = stmt.children();
+                let subject = &children[0];
+                let num_arms = (children.len() - 1) / 2;
+
+                // Recursively collect drivers from each arm's block.
+                let arm_drivers: Vec<(Location, IndexMap<ComponentId, Vec<Driver>>)> =
+                    (0..num_arms)
+                        .map(|i| {
+                            let pat = &children[2 * i + 1];
+                            let block = &children[2 * i + 2];
+                            let block_drivers = collect_block_drivers(block.children(), component_analysis);
+                            (pat.location(), block_drivers)
+                        })
+                        .collect();
+
+                // Gather all component IDs driven in any arm.
+                let mut all_components: IndexSet<ComponentId> = IndexSet::new();
+                for (_, ad) in &arm_drivers {
+                    all_components.extend(ad.keys().copied());
+                }
+
+                // Build a Driver::Match for each driven component and merge into the result.
+                for comp_id in all_components {
+                    let arms: Vec<(Location, Box<Driver>)> = arm_drivers.iter()
+                        .filter_map(|(pat_loc, ad)| {
+                            ad.get(&comp_id)?.first().map(|d| (pat_loc.clone(), Box::new(d.clone())))
+                        })
+                        .collect();
+
+                    let driver_type = arms.first()
+                        .map(|(_, d)| d.driver_type())
+                        .unwrap_or(DriverType::Continuous);
+
+                    result.entry(comp_id).or_default().push(Driver::Match(DriverMatch {
+                        driver_type,
+                        subject: subject.location(),
+                        arms,
+                        else_clause: None,
+                    }));
+                }
             }
             _ => {}
         }
