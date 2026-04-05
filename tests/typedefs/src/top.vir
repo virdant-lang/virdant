@@ -1,20 +1,24 @@
 enum type Opcode width 4 {
     Add = 1;
     Sub = 2;
+    And = 4;
+    Or  = 8;
 }
 
 export mod Top {
-//    incoming clock : Clock;
+    incoming opcode_bits : Word[4];
+    incoming x : Word[8];
+    incoming y : Word[8];
 
-    outgoing out : Bit;
+    outgoing out : Word[8];
 
     wire opcode : Opcode;
-    opcode := #Add;
+    opcode := cast(opcode_bits);
 
-    out := opcode == #Sub;
-
-//    on clock {
-//        assert(opcode == #Add);
-//        assert(opcode != #Sub);
-//    }
+    out := match opcode {
+        #Add => x + y;
+        #Sub => x - y;
+        #And => x & y;
+        #Or  => x | y;
+    };
 }

@@ -11,6 +11,7 @@ use crate::diagnostics::DiagnosticLevel;
 use crate::fqn::PackageFqn;
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
+use crate::types::typing::Primitive;
 use crate::types::{Type, Typing};
 use crate::verilog::{self, exact_verilog_name, valid_verilog_name};
 
@@ -1001,20 +1002,22 @@ impl<'d> Converter<'d> {
                     crate::types::typing::Tag::PrimitiveResolution(primitive) => {
                         let arg_type = self.node_type(package, &arg).unwrap();
                         let arg_expr = self.convert_expr(package, arg, &arg_type, self.db, scheduler);
-                        match primitive.as_bytes() {
-                            b"any" => {
+                        match primitive {
+                            Primitive::Any => {
                                 verilog::Expr::UnOp(verilog::expr::UnOp {
                                     op: verilog::UnOp::RedOr,
                                     expr: Box::new(arg_expr),
                                 })
                             }
-                            b"all" => {
+                            Primitive::All => {
                                 verilog::Expr::UnOp(verilog::expr::UnOp {
                                     op: verilog::UnOp::RedAnd,
                                     expr: Box::new(arg_expr),
                                 })
                             }
-                            _ => unreachable!(),
+                            Primitive::Cast => {
+                                arg_expr
+                            }
                         }
                     }
                     crate::types::typing::Tag::ComponentResolution(_component_id) => unreachable!(),

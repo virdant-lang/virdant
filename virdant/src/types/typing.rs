@@ -37,10 +37,18 @@ impl ExprRoot {
 }
 
 #[derive(Debug, Clone)]
+pub enum Primitive {
+    Any,
+    All,
+    Cast,
+}
+
+
+#[derive(Debug, Clone)]
 pub enum Tag {
     None,
     SymbolResolution(SymbolId),
-    PrimitiveResolution(BString), // TODO add an enum for primitives
+    PrimitiveResolution(Primitive), // TODO add an enum for primitives
     ComponentResolution(ComponentId),
 }
 
@@ -157,7 +165,7 @@ impl Typing {
             AstNodePayload::ExprHole                 => self.check_hole(node, expected_typ),
             AstNodePayload::ExprMatch                => self.check_match(builder, context, node, expected_typ),
             AstNodePayload::ExprMethod(_expr_method) => Ok(()), // TODO
-            AstNodePayload::ExprFn                   => Ok(()), // TODO
+            AstNodePayload::ExprFn                   => self.check_fn(builder, context, node, expected_typ),
             AstNodePayload::ExprCtor(_ctor)          => self.check_ctor(builder, context, node, expected_typ),
             AstNodePayload::ExprEnumerant(_)         => self.check_enumerant(builder, node, expected_typ),
             AstNodePayload::ExprStruct               => Ok(()), // TODO
@@ -236,6 +244,31 @@ impl Typing {
         Ok(())
     }
 
+    fn check_fn<'p>(&mut self, builder: &mut Builder<'_>, context: TypingContext, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
+        let children = node.children();
+        let fn_ofness = node.child(0);
+        let args = &children[1..];
+
+        let AstNodePayload::Ofness(ofness) = fn_ofness.payload() else { unreachable!() };
+        let fn_name = fn_ofness.parsing().string(ofness.name);
+//        let fn_item = builder.get_symboltable().resolve_item_in_package(fn_name, node.package());
+        let fn_name: &[u8] = fn_name.into();
+
+        match fn_name {
+            b"cast" => {
+                // TODO stricter type checking
+                if let Some(_typ) = self.infer(builder, context, &args[0])? {
+                    self.tags.insert(node.location(), Tag::PrimitiveResolution(Primitive::Cast));
+                    self.annotate(node, expected_typ);
+                    Ok(())
+                } else {
+                    todo!()
+                }
+            }
+            _ => todo!(),
+        }
+    }
+
     fn infer_unop<'p>(&mut self, builder: &mut Builder, context: TypingContext, node: &AstNode<'p>, op: UnOp) -> Result<Option<Type>, ()> {
         let subject = node.subject().unwrap();
 
@@ -287,7 +320,7 @@ impl Typing {
             b"any" => {
                 // TODO stricter type checking
                 if let Some(_typ) = self.infer(builder, context, &args[0])? {
-                    self.tags.insert(node.location(), Tag::PrimitiveResolution(b"any".into()));
+                    self.tags.insert(node.location(), Tag::PrimitiveResolution(Primitive::Any));
                     self.annotate(node, &Type::Bit);
                     Ok(Some(Type::Bit))
                 } else {
@@ -297,7 +330,7 @@ impl Typing {
             b"all" => {
                 // TODO stricter type checking
                 if let Some(_typ) = self.infer(builder, context, &args[0])? {
-                    self.tags.insert(node.location(), Tag::PrimitiveResolution(b"any".into()));
+                    self.tags.insert(node.location(), Tag::PrimitiveResolution(Primitive::All));
                     self.annotate(node, &Type::Bit);
                     Ok(Some(Type::Bit))
                 } else {

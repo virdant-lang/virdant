@@ -1,3 +1,4 @@
 test:
 	cargo run -- build
-	verilator --lint-only build/*.sv
+	iverilog build/*.sv tb.sv -o build/run
+	./build/run
