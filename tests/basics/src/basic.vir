@@ -88,10 +88,5 @@ export mod Top {
 
         assert((if w { x } else { y }) : Word[4] == x);
         assert((if a { x } else { y }) : Word[4] == y);
-
-        if true {
-            display("Hello", true);
-        };
-        finish;
     };
 }
