@@ -533,12 +533,13 @@ impl<'d> Converter<'d> {
         let num_arms = (children.len() - 1) / 2;
         let assigned_name = valid_verilog_name(target_name);
         let mut case_items: Vec<verilog::CaseItem> = vec![];
+        let mut has_else = false;
         for i in 0..num_arms {
             let pat = children[2 * i + 1].clone();
             let body = children[2 * i + 2].clone();
             let mut bound_keys: Vec<String> = vec![];
             let pattern = match pat.payload() {
-                AstNodePayload::PatElse => verilog::CasePattern::Default,
+                AstNodePayload::PatElse => { has_else = true; verilog::CasePattern::Default },
                 AstNodePayload::PatEnumerant(pat_enumerant) => {
                     let enumerant_name = pat.parsing.string(pat_enumerant.name);
                     let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
@@ -607,14 +608,16 @@ impl<'d> Converter<'d> {
                 })],
             });
         }
-        // Default arm: drive X
-        case_items.push(verilog::CaseItem {
-            pattern: verilog::CasePattern::Default,
-            stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
-                name: assigned_name.clone(),
-                expr: verilog::Expr::XLit(verilog::expr::XLit { width: result_width }),
-            })],
-        });
+        // Default arm: drive X — only when the match has no `else` arm of its own.
+        if !has_else {
+            case_items.push(verilog::CaseItem {
+                pattern: verilog::CasePattern::Default,
+                stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
+                    name: assigned_name.clone(),
+                    expr: verilog::Expr::XLit(verilog::expr::XLit { width: result_width }),
+                })],
+            });
+        }
         vec![verilog::Stmt::CaseZ(verilog::CaseZ { subject: subject_expr, items: case_items })]
     }
 
@@ -829,12 +832,13 @@ impl<'d> Converter<'d> {
                 let result_width = type_width(typ, db);
                 let num_arms = (children.len() - 1) / 2;
                 let mut case_items: Vec<verilog::CaseItem> = vec![];
+                let mut has_else = false;
                 for i in 0..num_arms {
                     let pat = children[2 * i + 1].clone();
                     let body = children[2 * i + 2].clone();
                     let mut bound_keys: Vec<String> = vec![];
                     let pattern = match pat.payload() {
-                        AstNodePayload::PatElse => verilog::CasePattern::Default,
+                        AstNodePayload::PatElse => { has_else = true; verilog::CasePattern::Default },
                         AstNodePayload::PatEnumerant(pat_enumerant) => {
                             let enumerant_name = pat.parsing.string(pat_enumerant.name);
                             let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
@@ -917,14 +921,16 @@ impl<'d> Converter<'d> {
                         })],
                     });
                 }
-                // Default case: drive X
-                case_items.push(verilog::CaseItem {
-                    pattern: verilog::CasePattern::Default,
-                    stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
-                        name: temp_name.clone(),
-                        expr: verilog::Expr::XLit(verilog::expr::XLit { width: result_width }),
-                    })],
-                });
+                // Default case: drive X — only when the match has no `else` arm of its own.
+                if !has_else {
+                    case_items.push(verilog::CaseItem {
+                        pattern: verilog::CasePattern::Default,
+                        stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
+                            name: temp_name.clone(),
+                            expr: verilog::Expr::XLit(verilog::expr::XLit { width: result_width }),
+                        })],
+                    });
+                }
                 // Schedule: always push the temp reg; in a sequential context, inline the casez
                 // into the parent always block instead of emitting a separate always @(*).
                 scheduler.push(verilog::Element::Reg(verilog::Reg {
