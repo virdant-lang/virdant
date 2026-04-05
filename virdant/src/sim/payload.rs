@@ -7,124 +7,124 @@ use crate::analysis::symbols::SymbolId;
 use crate::sim::expr::{Expr, Referent};
 
 #[derive(Debug)]
-pub(super) struct Reference {
-    pub(super) referent: Referent,
+pub struct Reference {
+    pub referent: Referent,
 }
 
 #[derive(Debug)]
-pub(super) struct Paren {
-    pub(super) subject: Arc<Expr>,
+pub struct Paren {
+    pub subject: Arc<Expr>,
 }
 
 #[derive(Debug)]
-pub(super) struct If {
-    pub(super) branches: Vec<(Arc<Expr>, Arc<Expr>)>,
-    pub(super) else_branch: Arc<Expr>,
+pub struct If {
+    pub branches: Vec<(Arc<Expr>, Arc<Expr>)>,
+    pub else_branch: Arc<Expr>,
 }
 
 #[derive(Debug)]
-pub(super) enum MatchPattern {
+pub enum MatchPattern {
     Ctor { symbol_id: SymbolId, bound_vars: Vec<BString> },
     Else,
 }
 
 #[derive(Debug)]
-pub(super) struct Match {
-    pub(super) subject: Arc<Expr>,
-    pub(super) arms: Vec<(MatchPattern, Arc<Expr>)>,
+pub struct Match {
+    pub subject: Arc<Expr>,
+    pub arms: Vec<(MatchPattern, Arc<Expr>)>,
 }
 
 #[derive(Debug)]
-pub(super) struct BitLit {
-    pub(super) value: bool,
+pub struct BitLit {
+    pub value: bool,
 }
 
 #[derive(Debug)]
-pub(super) struct WordLit {
-    pub(super) width: Width,
-    pub(super) value: u64, // TODO make this a common Value
+pub struct WordLit {
+    pub width: Width,
+    pub value: u64, // TODO make this a common Value
 }
 
 #[derive(Debug)]
-pub(super) struct StrLit {
-    pub(super) value: BString,
+pub struct StrLit {
+    pub value: BString,
 }
 
 #[derive(Debug)]
-pub(super) struct BinOp {
-    pub(super) lhs: Arc<Expr>,
-    pub(super) op: common::BinOp,
-    pub(super) rhs: Arc<Expr>,
+pub struct BinOp {
+    pub lhs: Arc<Expr>,
+    pub op: common::BinOp,
+    pub rhs: Arc<Expr>,
 }
 
 #[derive(Debug)]
-pub(super) struct UnOp {
-    pub(super) op: common::UnOp,
-    pub(super) subject: Arc<Expr>,
+pub struct UnOp {
+    pub op: common::UnOp,
+    pub subject: Arc<Expr>,
 }
 
 #[derive(Debug)]
-pub(super) struct Method {
-    pub(super) subject: Arc<Expr>,
-    pub(super) method: BString,
-    pub(super) args: Vec<Arc<Expr>>,
+pub struct Method {
+    pub subject: Arc<Expr>,
+    pub method: BString,
+    pub args: Vec<Arc<Expr>>,
 }
 
 #[derive(Debug)]
-pub(super) struct Fn {
-    pub(super) subject: Arc<Expr>,
-    pub(super) args: Vec<Arc<Expr>>,
+pub struct Fn {
+    pub subject: Arc<Expr>,
+    pub args: Vec<Arc<Expr>>,
 }
 
 #[derive(Debug)]
-pub(super) struct Ctor {
-    pub(super) symbol_id: SymbolId,
-    pub(super) args: Vec<Arc<Expr>>,
+pub struct Ctor {
+    pub symbol_id: SymbolId,
+    pub args: Vec<Arc<Expr>>,
 }
 
 #[derive(Debug)]
-pub(super) struct Enumerant {
-    pub(super) symbol_id: SymbolId,
+pub struct Enumerant {
+    pub symbol_id: SymbolId,
 }
 
 #[derive(Debug)]
-pub(super) struct Struct {
-    pub(super) fields: Vec<(BString, Arc<Expr>)>,
+pub struct Struct {
+    pub fields: Vec<(BString, Arc<Expr>)>,
 }
 
 #[derive(Debug)]
-pub(super) struct Index {
-    pub(super) subject: Arc<Expr>,
-    pub(super) index: u16,
+pub struct Index {
+    pub subject: Arc<Expr>,
+    pub index: u16,
 }
 
 #[derive(Debug)]
-pub(super) struct IndexRange {
-    pub(super) subject: Arc<Expr>,
-    pub(super) index_hi: u16,
-    pub(super) index_lo: u16,
+pub struct IndexRange {
+    pub subject: Arc<Expr>,
+    pub index_hi: u16,
+    pub index_lo: u16,
 }
 
 #[derive(Debug)]
-pub(super) struct Word {
-    pub(super) args: Vec<Arc<Expr>>,
+pub struct Word {
+    pub args: Vec<Arc<Expr>>,
 }
 
 #[derive(Debug)]
-pub(super) struct Zext {
-    pub(super) subject: Arc<Expr>,
+pub struct Zext {
+    pub subject: Arc<Expr>,
 }
 
 #[derive(Debug)]
-pub(super) struct Sext {
-    pub(super) subject: Arc<Expr>,
+pub struct Sext {
+    pub subject: Arc<Expr>,
 }
 
 #[derive(Debug)]
-pub(super) struct As {
-    pub(super) subject: Arc<Expr>,
+pub struct As {
+    pub subject: Arc<Expr>,
 }
 
 #[derive(Debug)]
-pub(super) struct Hole {
+pub struct Hole {
 }

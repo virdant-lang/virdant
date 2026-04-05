@@ -348,7 +348,13 @@ fn dump_typing(args: &Args) {
 
 fn build(args: &Args) {
     let cwd = if let Some(cwd) = &args.cwd {
-        std::fs::canonicalize(cwd).unwrap()
+        match std::fs::canonicalize(cwd) {
+            Ok(path) => path,
+            Err(_) => {
+                eprintln!("Directory not found: {}", cwd.display());
+                std::process::exit(1);
+            }
+        }
     } else {
         std::env::current_dir().unwrap()
     };

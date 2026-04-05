@@ -1,5 +1,3 @@
-use bstr::BStr;
-
 use crate::common::Width;
 use crate::sim::{ExprPayload, payload};
 use crate::types::Type;
@@ -430,6 +428,7 @@ impl Expr {
 
 #[test]
 fn test_eval() {
+    use bstr::BStr;
     let db = crate::util::db_from_dir_with_lib("../examples/passthrough/src", "../lib");
     crate::util::check_db(&db).unwrap();
     let symboltable = db.get_symboltable();

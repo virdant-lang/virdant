@@ -1,23 +1,24 @@
+#![allow(dead_code)]
 use std::sync::Arc;
 use bstr::{BString, ByteSlice};
 
 use crate::analysis::component::ComponentId;
 use crate::analysis::drivers::{Driver, DriverIf};
-use crate::db::{Builder, Db};
+use crate::db::Db;
 use crate::sim::payload;
 use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
 use crate::analysis::Location;
 
 #[derive(Debug)]
-pub(super) struct Expr {
+pub struct Expr {
     location: Location,
     typ: Type,
     payload: ExprPayload,
 }
 
 #[derive(Debug)]
-pub(super) enum ExprPayload {
+pub enum ExprPayload {
     Reference(payload::Reference),
     Paren(payload::Paren),
     If(payload::If),

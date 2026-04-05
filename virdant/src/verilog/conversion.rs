@@ -522,7 +522,7 @@ impl<'d> Converter<'d> {
             let mut bound_keys: Vec<String> = vec![];
             let pattern = self.build_case_pattern(&pat_node, &subject_expr, &subject_typ, scheduler, &mut bound_keys, &mut has_else);
             let arm_stmts = self.convert_latched_driver_to_stmts(package, sub_driver, typ, path, scheduler);
-            for key in &bound_keys { scheduler.subst.remove(key); }
+            for key in &bound_keys { scheduler.subst.shift_remove(key); }
             case_items.push(verilog::CaseItem { pattern, stmts: arm_stmts });
         }
 
@@ -569,7 +569,7 @@ impl<'d> Converter<'d> {
             let mut bound_keys: Vec<String> = vec![];
             let pattern = self.build_case_pattern(&pat_node, &subject_expr, &subject_typ, scheduler, &mut bound_keys, &mut has_else);
             let arm_expr = self.convert_driver_to_expr(package, sub_driver, typ, scheduler);
-            for key in &bound_keys { scheduler.subst.remove(key); }
+            for key in &bound_keys { scheduler.subst.shift_remove(key); }
             case_items.push(verilog::CaseItem {
                 pattern,
                 stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
@@ -720,7 +720,7 @@ impl<'d> Converter<'d> {
                 _ => unreachable!("expected pattern node"),
             };
             let body_expr = self.convert_expr(package, body, typ, db, scheduler);
-            for key in &bound_keys { scheduler.subst.remove(key); }
+            for key in &bound_keys { scheduler.subst.shift_remove(key); }
             case_items.push(verilog::CaseItem {
                 pattern,
                 stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
@@ -1112,7 +1112,7 @@ impl<'d> Converter<'d> {
                     let body_expr = self.convert_expr(package, body, typ, db, scheduler);
                     // Remove pattern-variable substitutions
                     for key in &bound_keys {
-                        scheduler.subst.remove(key);
+                        scheduler.subst.shift_remove(key);
                     }
                     case_items.push(verilog::CaseItem {
                         pattern,
