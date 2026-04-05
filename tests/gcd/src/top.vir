@@ -1,0 +1,71 @@
+union type State {
+    Idle();
+    Running(x : Word[8], y : Word[8]);
+    Done(result : Word[8]);
+}
+
+export mod Top {
+    incoming clock : Clock;
+    incoming reset : Bit;
+
+    incoming x : Word[8];
+    incoming y : Word[8];
+    incoming fire : Bit;
+
+    outgoing result : Word[8];
+    outgoing valid  : Bit;
+
+    mod gcd of Gcd;
+    gcd.reset := reset;
+    gcd.clock := clock;
+    gcd.x := x;
+    gcd.y := y;
+    gcd.fire := fire;
+
+    result := gcd.result;
+    valid := gcd.valid;
+}
+
+mod Gcd {
+    incoming clock : Clock;
+    incoming reset : Bit;
+    incoming x : Word[8];
+    incoming y : Word[8];
+    incoming fire : Bit;
+    outgoing result : Word[8];
+    outgoing valid: Bit;
+
+    reg state : State on clock;
+
+    if reset {
+        state <= @Idle();
+    } else {
+        state <= match state : State {
+            @Idle() => if fire {
+                @Running(x, y)
+            } else {
+                @Idle()
+            };
+            @Running(x, y) =>
+                if y == 0 {
+                    @Done(x)
+                } else if x < y {
+                    @Running(y - x, x)
+                } else {
+                    @Running(x - y, y)
+                };
+            @Done(result) => @Idle();
+        };
+    };
+
+    result := match state {
+        @Idle() => 0;
+        @Running(x, y) => 0;
+        @Done(r) => r;
+    };
+
+    valid := match state {
+        @Done(result) => true;
+        else => false;
+    };
+}
