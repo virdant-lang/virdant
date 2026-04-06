@@ -38,6 +38,9 @@ export mod Top {
     wire xor_ : Word[8];
     xor_ := 0w8 ^ 1w8;
 
+    wire ascription : Word[4];
+    ascription := 15 : Word[4];
+
 //    wire bit_and_ : Bit;
 //    bit_and_ := 0w8 && 1w8;
 //
