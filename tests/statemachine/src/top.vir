@@ -1,0 +1,80 @@
+// Traffic light state machine demonstrating enum types.
+//
+// Four one-hot phases drive individual output lights.  A countdown timer
+// controls how long the controller stays in each phase.
+//
+// Timing (in clock cycles):
+//   Green  : 10 cycles
+//   Yellow :  3 cycles
+//   Red    :  8 cycles
+//   Walk   :  5 cycles  (entered from Red when walk_req is high)
+//
+// next_phase and next_timer are computed as combinational wires so that
+// both registers see consistent, race-free values at the clock edge.
+
+enum type Phase width 4 {
+    Green  = 1w4;
+    Yellow = 2w4;
+    Red    = 4w4;
+    Walk   = 8w4;
+}
+
+export mod Top {
+    incoming clock    : Clock;
+    incoming reset    : Bit;
+    incoming walk_req : Bit;    // pedestrian crossing button
+
+    outgoing green       : Bit; // green  vehicle light
+    outgoing yellow      : Bit; // yellow vehicle light
+    outgoing red         : Bit; // red    vehicle light
+    outgoing walk_signal : Bit; // walk   pedestrian signal
+
+    reg phase : Phase   on clock;
+    reg timer : Word[8] on clock;
+
+    // -- Output decode ----------------------------------------------------
+    // Each output is true exactly when the controller is in the matching
+    // phase; the one-hot encoding makes these single-bit mask operations.
+    green       := match phase { #Green  => true; else => false; };
+    yellow      := match phase { #Yellow => true; else => false; };
+    red         := match phase { #Red    => true; else => false; };
+    walk_signal := match phase { #Walk   => true; else => false; };
+
+    // -- Next-state logic (combinational) ---------------------------------
+    // Compute the successor phase from the current phase and walk_req.
+    // Using a wire here ensures that both register always-blocks see the
+    // same stable value at the clock edge, avoiding simulation race
+    // conditions that arise when two clocked blocks read each other.
+    wire next_phase : Phase;
+    next_phase := match phase {
+        #Green  => #Yellow;
+        #Yellow => #Red;
+        #Red    => if walk_req { #Walk } else { #Green };
+        #Walk   => #Red;
+    };
+
+    // Map the incoming phase to its countdown duration.
+    wire next_timer : Word[8];
+    next_timer := match next_phase {
+        #Green  => 10;
+        #Yellow => 3;
+        #Red    => 8;
+        #Walk   => 5;
+    };
+
+    // -- Register update logic ---------------------------------------------
+    if reset {
+        // Start in Red so vehicles halt immediately on power-up.
+        phase <= #Red;
+        timer <= 8;
+    } else {
+        if timer == 0 {
+            // Timer expired — latch the pre-computed successor values.
+            phase <= next_phase;
+            timer <= next_timer;
+        } else {
+            // Still counting down; hold the current phase.
+            timer <= timer - 1;
+        };
+    };
+}
