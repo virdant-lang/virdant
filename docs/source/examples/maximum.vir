@@ -1,5 +1,5 @@
 fn max(x : Word[8], y : Word[8]) -> Word[8] {
-    if x->lt(y) {
+    if x < y {
         x
     } else {
         y

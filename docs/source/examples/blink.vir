@@ -1,9 +1,10 @@
 mod Top {
     incoming clock : Clock;
+
     outgoing led : Bit;
 
-    reg led_on : Bit on clock;
-    led_on <= led_on->not();
+    reg counter : Word[32] on clock;
+    counter <= counter + 1;
 
-    led := led_on;
+    led := counter[21];
 }

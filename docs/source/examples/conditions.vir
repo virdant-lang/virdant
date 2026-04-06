@@ -6,6 +6,6 @@ mod Top {
     counter <= if reset {
         0
     } else {
-        counter->inc()
+        counter + 1
     };
 }

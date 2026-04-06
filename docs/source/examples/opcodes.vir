@@ -13,10 +13,10 @@ mod Alu {
     outgoing r : Word[8];
 
     r := match op {
-        #and => a->and(b);
-        #or  => a->or(b);
-        #xor => a->xor(b);
-        #add => a->add(b);
-        #sub => a->sub(b);
+        #and => a & b;
+        #or  => a | b;
+        #xor => a ^ b;
+        #add => a + b;
+        #sub => a - b;
     };
 }

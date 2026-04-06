@@ -12,17 +12,17 @@ mod Gcd {
 
     reg state : State on clock;
 
-    state <= 
+    state <=
         match state {
             @Idle() => @Running(a, b);
             @Running(x, y) =>
-                if y->eq(0) {
+                if y == 0 {
                     @Done(x)
                 } else {
-                    if x->lt(y) {
-                        @Running(y->sub(x), x)
+                    if x < y {
+                        @Running(y - x, x)
                     } else {
-                        @Running(x->sub(y), y)
+                        @Running(x - y, y)
                     }
                 };
             @Done(result) => @Idle();

@@ -1,22 +1,17 @@
 module Testbench();
-  initial begin
-    $dumpfile("build/out.vcd");
-    $dumpvars(0, top);
-  end
+    \top::Top top(
+        .clock(clock)
+    );
 
-  reg clock = 1'b0;
-  always #(5) clock = !clock;
+    reg clock = 1'b0;
+    always #(5) clock = !clock;
 
-  Top top(
-    .clock(clock)
-  );
+    initial begin
+        $dumpfile("build/out.vcd");
+        $dumpvars(0, top);
 
-  reg [31:0] cycles = 100;
+        repeat(32) @(posedge clock);
 
-  always @(posedge clock) begin
-    cycles <= cycles - 1;
-    if (cycles == 0) begin
         $finish;
     end
-  end
 endmodule

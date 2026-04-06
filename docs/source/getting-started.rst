@@ -19,10 +19,20 @@ Make sure that this directory is on your `$PATH`.
 Blinky
 ------
 Tradition dictates that the first program that is written in any programming language should be Hello, World!
-In that same spirit, here is a small design which blinks an LED on and off:
+In hardware projects, the equivalent of Hello, World! is to get an LED to blink on and off.
+
+Create a new Virdant project by running:
+
+.. code-block:: console
+
+  $ vir new blink
+  $ cd blink
+
+This will create a new project in a subdirectory named `blink`.
+If we look at the `src/top.vir` file, we will see our blinking LED design:
 
 .. literalinclude:: /examples/blink.vir
-   :caption: blink.vir
+   :caption: top.vir
    :language: virdant
    :linenos:
 
@@ -33,15 +43,15 @@ We can compile this design to Verilog with the following:
 
 .. code-block:: console
 
-  $ vir compile blink.vir
+  $ vir build
 
-The result will be a new file called `build/blink.v`.
+The result will be a new file called `build/top.sv`.
 
 To simulate the design, you need a Verilog testbench.
 Here is one which will run the design for 100 cycles:
 
-.. literalinclude:: /examples/testbench.v
-   :caption: testbench.v
+.. literalinclude:: /examples/testbench.sv
+   :caption: testbench.sv
    :language: verilog
    :linenos:
 
@@ -51,7 +61,7 @@ If you have `Icarus Verilog`_ installed, you can compile a simulator and run it 
 
 .. code-block:: console
 
-  $ iverilog testbench.v build/blink.v -o build/blink
+  $ iverilog testbench.sv build/top.sv -o build/blink
   $ ./build/blink
   VCD info: dumpfile build/out.vcd opened for output.
 
