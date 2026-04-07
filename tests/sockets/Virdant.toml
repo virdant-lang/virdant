@@ -1,0 +1,5 @@
+[project]
+name = "sockets"
+
+[prog]
+platform = "icesugar"

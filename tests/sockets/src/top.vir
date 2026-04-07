@@ -1,0 +1,24 @@
+mod Top {
+    incoming clock : Clock;
+
+    mod core of Core;
+    mod memory of Memory;
+
+    memory.mem :=: core.mem;
+}
+
+mod Core {
+    master socket mem of Mem;
+    mem.addr := 8;
+}
+
+mod Memory {
+    slave socket mem of Mem;
+
+    mem.data := 10;
+}
+
+socket Mem {
+    mosi addr : Word[16];
+    miso data : Word[8];
+}
