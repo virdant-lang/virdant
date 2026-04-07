@@ -953,6 +953,10 @@ pub(crate) fn build_type_at(builder: &mut Builder, location: Location) -> Result
     let symboltable = builder.get_symboltable();
     let typ_node = parsing.ast_node(location.ast_node_id());
 
+    let bit_symbol = symboltable.resolve(b"builtin::Bit".into()).unwrap();
+    let word_symbol = symboltable.resolve(b"builtin::Word".into()).unwrap();
+    let clock_symbol = symboltable.resolve(b"builtin::Clock".into()).unwrap();
+
     match typ_node.payload() {
         AstNodePayload::Type(_typ) => {
             let type_name: BString = match typ_node.child(0).payload() {
@@ -974,33 +978,29 @@ pub(crate) fn build_type_at(builder: &mut Builder, location: Location) -> Result
                 }
             };
 
-            if let Some(symbol) = symboltable.resolve_item(type_name.as_bstr(), parsing.package()) {
-                let bit_symbol = symboltable.resolve(b"builtin::Bit".into()).unwrap();
-                let word_symbol = symboltable.resolve(b"builtin::Word".into()).unwrap();
-                let clock_symbol = symboltable.resolve(b"builtin::Clock".into()).unwrap();
-
-                let typ = if symbol.id() == bit_symbol.id() {
-                    Type::Bit
-                } else if symbol.id() == clock_symbol.id() {
-                    Type::Clock
-                } else if symbol.id() == word_symbol.id() {
-                    let generics_node = typ_node.child(1);
-                    let AstNodePayload::GenericsParams(generics_params) = generics_node.payload() else {
-                        unreachable!()
-                    };
-                    let spelling = parsing.string(generics_params.value).to_str_lossy().into_owned();
-                    let width = spelling.parse::<Width>().unwrap();
-                    Type::Word(width)
-                } else {
-                    Type::Usual(symbol.id())
-                };
-                Ok(typ)
-            } else {
-                Err(vec![diagnostics::UnresolvedType {
+            let Some(symbol) = symboltable.resolve_item(type_name.as_bstr(), parsing.package()) else {
+                return Err(vec![diagnostics::UnresolvedType {
                     region: typ_node.region(),
                     typ: type_name.into(),
-                }.into()])
-            }
+                }.into()]);
+            };
+
+            let typ = if symbol.id() == bit_symbol.id() {
+                Type::Bit
+            } else if symbol.id() == clock_symbol.id() {
+                Type::Clock
+            } else if symbol.id() == word_symbol.id() {
+                let generics_node = typ_node.child(1);
+                let AstNodePayload::GenericsParams(generics_params) = generics_node.payload() else {
+                    unreachable!()
+                };
+                let spelling = parsing.string(generics_params.value).to_str_lossy().into_owned();
+                let width = spelling.parse::<Width>().unwrap();
+                Type::Word(width)
+            } else {
+                Type::Usual(symbol.id())
+            };
+            Ok(typ)
         }
         _ => panic!(),
     }
