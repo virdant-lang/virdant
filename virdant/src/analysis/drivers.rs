@@ -144,6 +144,11 @@ fn collect_block_drivers(
                 let expr = stmt.driver().unwrap().location();
                 result.entry(component.id()).or_default().push(Driver::Expr(driver.driver_type, expr));
             }
+            AstNodePayload::BidirectionalDriver => {
+                // Bidirectional drivers are handled separately in the conversion stage
+                // because they need special handling to connect socket channels
+                // Skip them here
+            }
             AstNodePayload::ModDefStmtIf => {
                 // Children: [cond_0, block_0, cond_1, block_1, ..., (else_block?)]
                 // An else block is present when the total number of children is odd;

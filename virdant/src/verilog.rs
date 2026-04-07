@@ -416,11 +416,12 @@ impl Submodule {
 
         verilog_writeln!(writer, "{submodule_name} {name}(")?;
         writer.indent();
-        let port_width = self.ports.iter().map(|p| p.len()).max().unwrap_or(0);
+        let port_width = self.ports.iter().map(|p| valid_verilog_name(p).len()).max().unwrap_or(0);
         for (i, port) in self.ports.iter().enumerate() {
             let comma = if i + 1 == self.ports.len() { "" } else { "," };
+            let port_name = valid_verilog_name(port);
             let wire_name = valid_verilog_name(&format!("{}.{}", self.name, port));
-            verilog_writeln!(writer, ".{port:<port_width$}({wire_name}){comma}")?;
+            verilog_writeln!(writer, ".{port_name:<port_width$}({wire_name}){comma}")?;
         }
         writer.dedent();
         verilog_writeln!(writer, ");")?;

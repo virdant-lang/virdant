@@ -10,7 +10,7 @@ use crate::db::Builder;
 use crate::fqn::PackageFqn;
 use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
-use crate::common::{ComponentKind, Flow};
+use crate::common::{ChannelDir, ComponentKind, Flow, SocketRole};
 use crate::diagnostics::Diagnostic;
 
 #[derive(Debug)]
@@ -186,30 +186,149 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 let submodule_parsing = builder.get_parsing(submodule_location.package());
                 let submodule_ast = submodule_parsing.ast_node(submodule_location.ast_node_id());
                 for submodule_stmt in submodule_ast.children() {
+                    match submodule_stmt.payload() {
+                        AstNodePayload::Component(component) => {
+                            if !matches!(component.kind, ComponentKind::Incoming | ComponentKind::Outgoing) {
+                                continue;
+                            }
+                            let id = ComponentId {
+                                item_id: moddef,
+                                index: component_analysis.components.len(),
+                            };
+                            let port_name = submodule_parsing.string(component.name);
+                            let path = bstr::BString::from(
+                                format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes()
+                            );
+                            let typ_node = submodule_stmt.typ().unwrap();
+                            let typ = match builder.get_type_at(typ_node.location()) {
+                                Ok(typ) => Some(typ),
+                                Err(_) => None,
+                            };
+                            let flow = match component.kind {
+                                ComponentKind::Incoming => Flow::Sink,
+                                ComponentKind::Outgoing => Flow::Source,
+                                ComponentKind::Reg => Flow::Duplex,
+                                ComponentKind::Wire => Flow::Duplex,
+                            };
+                            let component = Component {
+                                id,
+                                path: path.clone(),
+                                location: stmt.location(),
+                                typ,
+                                flow,
+                            };
+                            if !components_seen.contains(&path) {
+                                components_seen.insert(path.clone());
+                                component_analysis.components.push((path, component))
+                            }
+                        }
+                        AstNodePayload::Socket(submodule_socket) => {
+                            // Handle sockets in submodules - treat each channel as a component
+                            let socket_instance_name = submodule_parsing.string(submodule_socket.name);
+                            let socket_ofness_node = submodule_stmt.child(0);
+                            let AstNodePayload::Ofness(socket_ofness) = socket_ofness_node.payload() else {
+                                continue;
+                            };
+                            let socket_package = socket_ofness
+                                .package
+                                .map(|pkg| PackageFqn::new(bstr::BString::from(submodule_parsing.string(pkg).to_vec())))
+                                .unwrap_or_else(|| submodule_location.package());
+                            let socket_name = submodule_parsing.string(socket_ofness.name);
+                            let socket_symbol = match symboltable.resolve_item_in_package(socket_name, socket_package) {
+                                Some(symbol) => symbol.clone(),
+                                None => continue,
+                            };
+
+                            let socket_def_location = socket_symbol.location();
+                            let socket_def_parsing = builder.get_parsing(socket_def_location.package());
+                            let socket_def_ast = socket_def_parsing.ast_node(socket_def_location.ast_node_id());
+
+                            for channel_stmt in socket_def_ast.children() {
+                                let id = ComponentId {
+                                    item_id: moddef,
+                                    index: component_analysis.components.len(),
+                                };
+                                let AstNodePayload::Channel(channel) = channel_stmt.payload() else {
+                                    continue;
+                                };
+
+                                let channel_name = socket_def_parsing.string(channel.name);
+                                let path = bstr::BString::from(
+                                    format!("{}.{}.{}",
+                                        instance_name.to_str_lossy(),
+                                        socket_instance_name.to_str_lossy(),
+                                        channel_name.to_str_lossy()).into_bytes()
+                                );
+                                let typ_node = channel_stmt.typ().unwrap();
+                                let typ = match builder.get_type_at(typ_node.location()) {
+                                    Ok(typ) => Some(typ),
+                                    Err(_) => None,
+                                };
+                                let flow = match (submodule_socket.role, channel.dir) {
+                                    (SocketRole::Master, ChannelDir::Mosi) => Flow::Source,
+                                    (SocketRole::Master, ChannelDir::Miso) => Flow::Sink,
+                                    (SocketRole::Slave, ChannelDir::Mosi) => Flow::Sink,
+                                    (SocketRole::Slave, ChannelDir::Miso) => Flow::Source,
+                                };
+                                let component = Component {
+                                    id,
+                                    path: path.clone(),
+                                    location: stmt.location(),
+                                    typ,
+                                    flow,
+                                };
+                                if !components_seen.contains(&path) {
+                                    components_seen.insert(path.clone());
+                                    component_analysis.components.push((path, component))
+                                }
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+            }
+            AstNodePayload::Socket(socket) => {
+                let instance_name = parsing.string(socket.name);
+                let ofness_node = stmt.child(0);
+                let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
+                    continue;
+                };
+                let socket_package = ofness
+                    .package
+                    .map(|pkg| PackageFqn::new(bstr::BString::from(parsing.string(pkg).to_vec())))
+                    .unwrap_or_else(|| location.package());
+                let socket_name = parsing.string(ofness.name);
+                let socket_symbol = match symboltable.resolve_item_in_package(socket_name, socket_package) {
+                    Some(symbol) => symbol.clone(),
+                    None => continue,
+                };
+
+                let socket_location = socket_symbol.location();
+                let socket_parsing = builder.get_parsing(socket_location.package());
+                let socket_ast = socket_parsing.ast_node(socket_location.ast_node_id());
+                for socket_stmt in socket_ast.children() {
                     let id = ComponentId {
                         item_id: moddef,
                         index: component_analysis.components.len(),
                     };
-                    let AstNodePayload::Component(component) = submodule_stmt.payload() else {
+                    let AstNodePayload::Channel(channel) = socket_stmt.payload() else {
                         continue;
                     };
-                    if !matches!(component.kind, ComponentKind::Incoming | ComponentKind::Outgoing) {
-                        continue;
-                    }
-                    let port_name = submodule_parsing.string(component.name);
+
+                    let port_name = socket_parsing.string(channel.name);
                     let path = bstr::BString::from(
                         format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes()
                     );
-                    let typ_node = submodule_stmt.typ().unwrap();
+                    let typ_node = socket_stmt.typ().unwrap();
                     let typ = match builder.get_type_at(typ_node.location()) {
                         Ok(typ) => Some(typ),
                         Err(_) => None,
                     };
-                    let flow = match component.kind {
-                        ComponentKind::Incoming => Flow::Sink,
-                        ComponentKind::Outgoing => Flow::Source,
-                        ComponentKind::Reg => Flow::Duplex,
-                        ComponentKind::Wire => Flow::Duplex,
+                    let flow = match (socket.role, channel.dir) {
+                        (SocketRole::Master, ChannelDir::Mosi) => Flow::Sink,
+                        (SocketRole::Master, ChannelDir::Miso) => Flow::Source,
+                        (SocketRole::Slave, ChannelDir::Mosi) => Flow::Source,
+                        (SocketRole::Slave, ChannelDir::Miso) => Flow::Sink,
                     };
                     let component = Component {
                         id,

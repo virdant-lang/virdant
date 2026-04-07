@@ -125,18 +125,13 @@ impl<'d> Converter<'d> {
                 let moddef_symbol = symboltable
                     .resolve_item_in_package(parsing.string(moddef.name), package.clone())
                     .unwrap();
-                let component_analysis = self.db.get_component_analysis(moddef_symbol.id());
+                let ports_of = self.db.get_ports_of(moddef_symbol.id());
                 let mut ports = vec![];
-                for stmt in item_ast.children() {
-                    let AstNodePayload::Component(component) = stmt.payload() else {
-                        continue;
-                    };
-                    if !matches!(component.kind, ComponentKind::Incoming | ComponentKind::Outgoing) {
-                        continue;
-                    }
-                    let name = parsing.string(component.name.clone()).to_str_lossy().into_owned();
-                    let typ = component_analysis.type_of(parsing.string(component.name)).unwrap();
-                    ports.push((name, type_width(&typ, self.db)));
+                for port in ports_of {
+                    use bstr::ByteSlice;
+                    let name = port.path.to_str_lossy().into_owned();
+                    let width = port.typ.map(|t| type_width(&t, self.db)).unwrap_or(0);
+                    ports.push((name, width));
                 }
                 self.module_ports.insert(module_path, ports);
             }
@@ -178,13 +173,27 @@ impl<'d> Converter<'d> {
         let component_analysis = self.db.get_component_analysis(moddef_symbol.id());
 
         let mut scheduler = ExprScheduler::new();
-        let mut ports: Vec<verilog::Port> = vec![];
         let mut elements: Vec<verilog::Element> = vec![];
         // reg name -> AstNodeId of its explicit `on clock` expression (if present)
         let mut sequential_regs: IndexMap<String, AstNodeId> = IndexMap::new();
         let mut on_block: Option<verilog::Element> = None;
 
-        // First pass: ports, wires, regs, instances, on
+        // Gather ports using get_ports_of
+        let ports_of = self.db.get_ports_of(moddef_symbol.id());
+        let mut ports: Vec<verilog::Port> = vec![];
+        for port in ports_of {
+            use bstr::ByteSlice;
+            let name = port.path.to_str_lossy().into_owned();
+            let width = port.typ.map(|t| type_width(&t, self.db)).unwrap_or(0);
+            ports.push(verilog::Port {
+                name: valid_verilog_name(&name),
+                kind: verilog::PortKind::Wire,
+                dir: port.dir,
+                width,
+            });
+        }
+
+        // First pass: wires, regs, instances, on
         for stmt in item_ast.children() {
             match stmt.payload() {
                 AstNodePayload::Component(component) => {
@@ -192,18 +201,9 @@ impl<'d> Converter<'d> {
                     let typ = component_analysis.type_of(parsing.string(component.name)).unwrap();
                     let width = type_width(&typ, self.db);
                     match component.kind {
-                        ComponentKind::Incoming => ports.push(verilog::Port {
-                            name: exact_verilog_name(&name),
-                            kind: verilog::PortKind::Wire,
-                            dir: common::PortDir::Input,
-                            width,
-                        }),
-                        ComponentKind::Outgoing => ports.push(verilog::Port {
-                            name: exact_verilog_name(&name),
-                            kind: verilog::PortKind::Wire,
-                            dir: common::PortDir::Output,
-                            width,
-                        }),
+                        ComponentKind::Incoming | ComponentKind::Outgoing => {
+                            // Ports are now handled by get_ports_of above
+                        }
                         ComponentKind::Wire => {
                             let children = stmt.children();
                             if children.len() >= 2 {
@@ -354,6 +354,71 @@ impl<'d> Converter<'d> {
                         expr,
                     }));
                 }
+            }
+        }
+
+        // Handle bidirectional drivers (socket connections)
+        for stmt in item_ast.children() {
+            if !matches!(stmt.payload(), AstNodePayload::BidirectionalDriver) {
+                continue;
+            }
+
+            // Bidirectional driver: lhs :=: rhs
+            // For each matching pair of components under lhs and rhs,
+            // create an assignment from the Source component to the Sink component
+            let lhs_node = stmt.child(0);
+            let rhs_node = stmt.child(1);
+            let Some(lhs_path) = lhs_node.path() else { continue };
+            let Some(rhs_path) = rhs_node.path() else { continue };
+            let lhs_str = parsing.string(lhs_path);
+            let rhs_str = parsing.string(rhs_path);
+
+            // Find all components that match the lhs and rhs prefixes
+            let lhs_prefix = format!("{}.", lhs_str.to_str_lossy());
+            let rhs_prefix = format!("{}.", rhs_str.to_str_lossy());
+
+            for (lhs_full_path, lhs_component) in component_analysis.components() {
+                let lhs_path_str = lhs_full_path.to_str_lossy();
+                if !lhs_path_str.starts_with(&lhs_prefix) {
+                    continue;
+                }
+
+                // Extract the suffix after the prefix (e.g., "addr" from "core.mem.addr")
+                let suffix = &lhs_path_str[lhs_prefix.len()..];
+
+                // Look for the matching component on the other side
+                let rhs_full_path_str = format!("{}{}", rhs_prefix, suffix);
+                let rhs_full_path = bstr::BString::from(rhs_full_path_str.as_bytes());
+
+                let Some(rhs_component) = component_analysis.resolve(rhs_full_path.as_bstr()) else {
+                    continue;
+                };
+
+                // Determine which component drives which based on Flow
+                // Source components provide values, Sink components receive values
+                use crate::common::Flow;
+                let (target_path, source_path) = match (lhs_component.flow(), rhs_component.flow()) {
+                    (Flow::Source, Flow::Sink) => {
+                        // lhs is source, rhs is sink: rhs := lhs
+                        (rhs_full_path.to_str_lossy().into_owned(), lhs_full_path.to_str_lossy().into_owned())
+                    }
+                    (Flow::Sink, Flow::Source) => {
+                        // lhs is sink, rhs is source: lhs := rhs
+                        (lhs_full_path.to_str_lossy().into_owned(), rhs_full_path.to_str_lossy().into_owned())
+                    }
+                    _ => {
+                        // Both same flow or one is duplex - shouldn't happen for sockets
+                        continue;
+                    }
+                };
+
+                // Create a wire assignment
+                elements.push(verilog::Element::Assign(verilog::Assign {
+                    name: valid_verilog_name(&target_path),
+                    expr: verilog::Expr::Reference(verilog::expr::Reference {
+                        name: valid_verilog_name(&source_path),
+                    }),
+                }));
             }
         }
 

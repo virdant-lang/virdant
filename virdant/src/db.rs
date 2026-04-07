@@ -19,6 +19,7 @@ use crate::analysis::location::Location;
 use crate::analysis::package::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::symbols::{SymbolId, SymbolTable};
+use crate::analysis::ports::Port;
 use crate::syntax::parsing::InternedString;
 use crate::types::typedef::TypeDef;
 use crate::types::typedef::TypeIndex;
@@ -63,6 +64,7 @@ queries! {
     Check() -> Vec<Diagnostic>;
     TypeIndex() -> Arc<TypeIndex>; // TODO What is this for?
     Elaboration(top: SymbolId) -> Arc<Elaboration>;
+    PortsOf(symbol_id: SymbolId) -> Vec<Port>;
 }
 
 impl Query {
@@ -107,6 +109,7 @@ impl Query {
             crate::queries::check : Check();
             crate::types::signature::build_ctor_signature : CtorSignature(ctor_symbol_id);
             crate::analysis::elaboration::build_elaboration : Elaboration(top);
+            crate::analysis::ports::build_ports_of : PortsOf(symbol_id);
         )
     }
 }
@@ -142,3 +145,4 @@ db_getter!(get_location_region : LocationRegion(location: Location) -> Region);
 db_getter!(check : Check() -> Vec<Diagnostic>);
 db_getter!(get_ctor_signature : CtorSignature(ctor_symbol_id: SymbolId) -> Arc<Signature>);
 db_getter!(get_elaboration : Elaboration(top: SymbolId) -> Arc<Elaboration>);
+db_getter!(get_ports_of : PortsOf(symbol_id: SymbolId) -> Vec<Port>);

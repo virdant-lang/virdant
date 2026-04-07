@@ -50,6 +50,8 @@ enum Command {
     Db { outpath: Option<PathBuf> },
     /// Dump component analysis for a module definition
     Components { moddef_fqn: String },
+    /// List ports for a module definition
+    Ports { moddef_fqn: String },
     /// Dump the elaborated design rooted at a top module
     Elaborate { top: String },
     /// Compile Virdant package
@@ -79,6 +81,7 @@ fn main() {
         Command::Db { ref outpath } => dump_db(&args, outpath.clone()),
         Command::Types { } => dump_types(&args),
         Command::Components { ref moddef_fqn } => dump_components(&args, moddef_fqn),
+        Command::Ports { ref moddef_fqn } => dump_ports(&args, moddef_fqn),
         Command::Elaborate { ref top } => elaborate(&args, top),
         Command::Symbols { } => dump_symbols(&args),
         Command::Typedefs { } => dump_typedefs(&args),
@@ -274,6 +277,29 @@ fn dump_components(args: &Args, moddef_fqn: &str) {
     let moddef = symboltable.resolve_item_fqn(moddef_fqn.as_bytes().as_bstr()).unwrap();
     let component_analysis = db.get_component_analysis(moddef.id());
     dbg!(&component_analysis);
+}
+
+fn dump_ports(args: &Args, moddef_fqn: &str) {
+    use bstr::ByteSlice;
+    let db = project_db(args);
+    dump_diagnostics(&db);
+
+    let symboltable = db.get_symboltable();
+    let moddef = symboltable.resolve_item_fqn(moddef_fqn.as_bytes().as_bstr()).unwrap();
+    let ports = db.get_ports_of(moddef.id());
+
+    println!("Ports for {}:", moddef_fqn);
+    for port in ports {
+        let path = port.path.to_str_lossy();
+        let dir = match port.dir {
+            virdant::common::PortDir::Input => "input",
+            virdant::common::PortDir::Output => "output",
+        };
+        let typ = port.typ
+            .map(|t| format!("{:?}", t))
+            .unwrap_or_else(|| "<unknown>".to_string());
+        println!("  {} {} : {}", dir, path, typ);
+    }
 }
 
 fn elaborate(args: &Args, top: &str) {
