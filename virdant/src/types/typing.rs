@@ -168,7 +168,7 @@ impl Typing {
             AstNodePayload::ExprFn                   => self.check_fn(builder, context, node, expected_typ),
             AstNodePayload::ExprCtor(_ctor)          => self.check_ctor(builder, context, node, expected_typ),
             AstNodePayload::ExprEnumerant(_)         => self.check_enumerant(builder, node, expected_typ),
-            AstNodePayload::ExprStruct               => Ok(()), // TODO
+            AstNodePayload::ExprStruct               => self.check_struct(builder, context, node, expected_typ),
             AstNodePayload::ExprIndexRange(_expr_index_range) => Ok(()), // TODO
             _ => unreachable!("Can't typecheck {:?}", node.summary()),
         }
@@ -554,6 +554,85 @@ impl Typing {
         self.tags.insert(node.location(), Tag::SymbolResolution(enumerant_symbol.id()));
         self.annotate(node, &expected_typ);
         Ok(())
+    }
+
+    fn check_struct<'p>(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        node: &AstNode<'p>,
+        expected_typ: &Type,
+    ) -> Result<(), ()> {
+        let AstNodePayload::ExprStruct = node.payload() else { unreachable!() };
+        let Type::Usual(typedef_id) = expected_typ else {
+            // TODO check that it's a struct type
+            self.flag_unknown(node, "Should be a typedef type");
+            return Err(());
+        };
+
+        let symboltable = builder.get_symboltable();
+        let struct_fields = builder.get_struct_fields(*typedef_id);
+
+        // Track which fields have been assigned to check for duplicates and completeness
+        use std::collections::HashSet;
+        use bstr::ByteSlice;
+        let mut assigned_fields: HashSet<bstr::BString> = HashSet::new();
+        let mut has_errors = false;
+
+        for child in node.children() {
+            let AstNodePayload::Assign(assign) = child.payload() else { unreachable!() };
+            let field_name = node.parsing().string(assign.name);
+            let Some(field_symbol) = symboltable.slot(*typedef_id, field_name) else {
+                self.flag_unknown(node, format!("Unknown field {field_name}"));
+                has_errors = true;
+                continue;
+            };
+
+            // Check for duplicate field assignments
+            if assigned_fields.contains(field_name) {
+                self.flag_unknown(&child, format!("Duplicate field assignment: {field_name}"));
+                has_errors = true;
+                continue;
+            }
+            assigned_fields.insert(field_name.to_owned());
+
+            let expr = child.child(0);
+
+            // Get the actual field type from the struct definition
+            let expected_field_typ = struct_fields.iter()
+                .find(|f| f.field_symbol_id == field_symbol.id())
+                .and_then(|f| f.typ.clone());
+
+            let Some(expected_field_typ) = expected_field_typ else {
+                self.flag_unknown(&child, format!("Cannot determine type for field {field_name}"));
+                has_errors = true;
+                continue;
+            };
+
+            // Check the field expression, accumulating errors
+            if self.check(builder, context.clone(), &expr, &expected_field_typ).is_err() {
+                has_errors = true;
+            }
+        }
+
+        // Check completeness: all struct fields must be assigned
+        for field in &struct_fields {
+            if !assigned_fields.contains(&field.name) {
+                self.flag_unknown(node, format!("Missing field assignment: {}", field.name.to_str_lossy()));
+                has_errors = true;
+            }
+        }
+
+        node.dump();
+
+//        self.tags.insert(node.location(), Tag::SymbolResolution(enumerant_symbol.id()));
+        self.annotate(node, &expected_typ);
+
+        if has_errors {
+            Err(())
+        } else {
+            Ok(())
+        }
     }
 
     pub(crate) fn infer<'p>(&mut self, builder: &mut Builder, context: TypingContext, node: &AstNode<'p>) -> Result<Option<Type>, ()> {

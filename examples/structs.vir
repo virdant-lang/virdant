@@ -10,8 +10,8 @@ mod Top {
 
     wire foo : Foo;
     foo :=
-        $Foo {
-            bar = 0w1,
+        ${
+            bar = 0w3,
             baz = 1w1,
         };
 }

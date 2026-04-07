@@ -20,6 +20,7 @@ use crate::analysis::package::PackageAnalysis;
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::symbols::{SymbolId, SymbolTable};
 use crate::analysis::ports::Port;
+use crate::analysis::structs::StructField;
 use crate::syntax::parsing::InternedString;
 use crate::types::typedef::TypeDef;
 use crate::types::typedef::TypeIndex;
@@ -65,6 +66,7 @@ queries! {
     TypeIndex() -> Arc<TypeIndex>; // TODO What is this for?
     Elaboration(top: SymbolId) -> Arc<Elaboration>;
     PortsOf(symbol_id: SymbolId) -> Vec<Port>;
+    StructFields(symbol_id: SymbolId) -> Vec<StructField>;
 }
 
 impl Query {
@@ -110,6 +112,7 @@ impl Query {
             crate::types::signature::build_ctor_signature : CtorSignature(ctor_symbol_id);
             crate::analysis::elaboration::build_elaboration : Elaboration(top);
             crate::analysis::ports::build_ports_of : PortsOf(symbol_id);
+            crate::analysis::structs::build_struct_fields : StructFields(symbol_id);
         )
     }
 }
@@ -146,3 +149,4 @@ db_getter!(check : Check() -> Vec<Diagnostic>);
 db_getter!(get_ctor_signature : CtorSignature(ctor_symbol_id: SymbolId) -> Arc<Signature>);
 db_getter!(get_elaboration : Elaboration(top: SymbolId) -> Arc<Elaboration>);
 db_getter!(get_ports_of : PortsOf(symbol_id: SymbolId) -> Vec<Port>);
+db_getter!(get_struct_fields : StructFields(symbol_id: SymbolId) -> Vec<StructField>);

@@ -1218,6 +1218,64 @@ impl<'d> Converter<'d> {
                 }
                 verilog::Expr::Reference(verilog::expr::Reference { name: temp_name })
             }
+            AstNodePayload::ExprStruct => {
+                // Get the struct type to determine field order
+                let Type::Usual(typedef_symbol_id) = typ else {
+                    panic!("ExprStruct must have a struct type, got {:?}", typ);
+                };
+
+                // Get the struct fields in their definition order
+                let struct_fields = self.db.get_struct_fields(*typedef_symbol_id);
+
+                // Build a map from field name to expression value
+                use std::collections::HashMap;
+                use bstr::ByteSlice;
+                let mut field_exprs: HashMap<String, verilog::Expr> = HashMap::new();
+                let parsing = self.db.get_parsing(package.clone());
+
+                for assign_node in node.children() {
+                    let AstNodePayload::Assign(assign) = assign_node.payload() else {
+                        continue;
+                    };
+                    let field_name = parsing.string(assign.name).to_str_lossy().into_owned();
+                    let expr_node = assign_node.child(0);
+
+                    // Get the field type to convert the expression correctly
+                    let field_type = struct_fields.iter()
+                        .find(|f| f.name.to_str_lossy() == field_name)
+                        .and_then(|f| f.typ.clone())
+                        .unwrap_or_else(|| Type::Word(8)); // fallback
+
+                    let field_expr = self.convert_expr(package, expr_node, &field_type, self.db, scheduler);
+                    field_exprs.insert(field_name, field_expr);
+                }
+
+                // Pack fields in order: first field in lower bits, last field in higher bits
+                let mut packed_exprs = vec![];
+                for field in &struct_fields {
+                    let field_name = field.name.to_str_lossy().into_owned();
+                    if let Some(field_expr) = field_exprs.get(&field_name) {
+                        packed_exprs.push(field_expr.clone());
+                    } else {
+                        // Field not provided - this should have been caught by type checking
+                        // Use a zero value as fallback
+                        let field_width = field.typ.as_ref()
+                            .map(|t| type_width(t, self.db))
+                            .unwrap_or(0);
+                        packed_exprs.push(verilog::Expr::WordLit(verilog::expr::WordLit {
+                            value: 0u128,
+                            width: field_width,
+                            radix: Radix::Dec,
+                        }));
+                    }
+                }
+
+                let total_width = type_width(typ, self.db);
+                verilog::Expr::Concat(verilog::expr::Concat {
+                    exprs: packed_exprs,
+                    width: total_width,
+                })
+            }
             _ => panic!("unsupported expr in conversion: {}", node.summary()),
         }
     }
@@ -1371,9 +1429,15 @@ fn type_width(typ: &Type, db: &Db) -> Width {
                     sig.parameters.iter().map(|(_n, pt)| type_width(pt, db)).sum::<Width>()
                 }).max().unwrap_or(0);
                 tag_width + max_payload_width
+            } else if typedef.kind == TypeScheme::StructDef {
+                // For struct types: sum of all field widths.
+                let struct_fields = db.get_struct_fields(*typedef_symbol_id);
+                struct_fields.iter().map(|field| {
+                    field.typ.as_ref().map(|t| type_width(t, db)).unwrap_or(0)
+                }).sum::<Width>()
             } else {
-                // For enum and other types: use number of slots (existing behavior).
-                slots.len().try_into().unwrap()
+                // For enum and other types: use typedef width or number of slots.
+                typedef.width.unwrap_or_else(|| slots.len().try_into().unwrap())
             }
         }
     }

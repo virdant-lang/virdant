@@ -555,17 +555,19 @@ Pat: () = {
 }
 
 ExprStruct: AstNodeId = {
-    <ll:@L> "$" <ofness:Ofness> "{" <assigns:AssignList> "}" <rr:@R> => {
+    <ll:@L> "$" "{" <assigns:AssignList> "}" <rr:@R> => {
         let payload = AstNodePayload::ExprStruct;
         let span = parser.span(ll, rr);
-        let num_children = 1 + assigns;
+        let num_children = assigns;
 
         parser.add_node(payload, span, num_children)
     },
 }
 
 AssignList: u16 = {
-    <start:(Assign ",")*> Assign ","? => u16::try_from(start.len()).unwrap() + 1,
+    <start:(Assign ",")*> Assign ","? => {
+        u16::try_from(start.len()).unwrap() + 1
+    },
     Expr ","? => 1,
     => 0,
 }

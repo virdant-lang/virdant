@@ -161,6 +161,11 @@ impl Symbol {
         self.id
     }
 
+    pub fn name(&self) -> &BStr {
+        use bstr::ByteSlice;
+        self.name.as_bstr()
+    }
+
     pub fn fqn(&self) -> &BStr {
         use bstr::ByteSlice;
         self.fqn.as_bstr()

@@ -5,12 +5,19 @@ enum type Opcode width 4 {
     Or  = 8;
 }
 
+struct type Color {
+    red : Word[8];
+    green : Word[8];
+    blue : Word[8];
+}
+
 export mod Top {
     incoming opcode_bits : Word[4];
     incoming x : Word[8];
     incoming y : Word[8];
 
     outgoing out : Word[8];
+    outgoing color : Color;
 
     wire opcode : Opcode;
     opcode := cast(opcode_bits);
@@ -20,5 +27,11 @@ export mod Top {
         #Sub => x - y;
         #And => x & y;
         #Or  => x | y;
+    };
+
+    color := ${
+        red = 0,
+        green = 128,
+        blue = 255,
     };
 }
