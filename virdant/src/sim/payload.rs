@@ -121,6 +121,21 @@ pub struct Sext {
 }
 
 #[derive(Debug)]
+pub struct Cast {
+    pub subject: Arc<Expr>,
+}
+
+#[derive(Debug)]
+pub struct Any {
+    pub subject: Arc<Expr>,
+}
+
+#[derive(Debug)]
+pub struct All {
+    pub subject: Arc<Expr>,
+}
+
+#[derive(Debug)]
 pub struct As {
     pub subject: Arc<Expr>,
 }

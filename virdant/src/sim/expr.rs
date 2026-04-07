@@ -39,6 +39,9 @@ pub enum ExprPayload {
     Word(payload::Word),
     Zext(payload::Zext),
     Sext(payload::Sext),
+    Cast(payload::Cast),
+    Any(payload::Any),
+    All(payload::All),
     As(payload::As),
     Hole(payload::Hole),
 }
@@ -227,12 +230,50 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
             ExprPayload::Method(payload::Method { subject, method, args })
         }
         AstNodePayload::ExprFn => {
-            let subject_loc = node.child(0).location();
-            let arg_locs: Vec<Location> = node.children().iter().skip(1).map(|c| c.location()).collect();
-            let subject = convert_ast_expr(db, subject_loc);
-            let mut args: Vec<Arc<Expr>> = Vec::new();
-            for l in arg_locs { args.push(convert_ast_expr(db, l)); }
-            ExprPayload::Fn(payload::Fn { subject, args })
+            // Check if typing tagged this Fn as a primitive and dispatch accordingly
+            let exprroot = db.get_exprroot_for(loc.clone());
+            let typing = db.get_typing(exprroot);
+            let tag = typing.tag(loc.clone());
+
+            if let Some(primitive) = tag.primitive() {
+                // Dispatch based on primitive type
+                use crate::types::typing::Primitive;
+                let arg_locs: Vec<Location> = node.args().unwrap().into_iter().map(|c| c.location()).collect();
+                let mut args: Vec<Arc<Expr>> = Vec::new();
+                for l in arg_locs { args.push(convert_ast_expr(db, l)); }
+
+                match primitive {
+                    Primitive::Word => ExprPayload::Word(payload::Word { args }),
+                    Primitive::Zext => {
+                        assert!(args.len() == 1, "zext expects exactly 1 argument");
+                        ExprPayload::Zext(payload::Zext { subject: args[0].clone() })
+                    }
+                    Primitive::Sext => {
+                        assert!(args.len() == 1, "sext expects exactly 1 argument");
+                        ExprPayload::Sext(payload::Sext { subject: args[0].clone() })
+                    }
+                    Primitive::Cast => {
+                        assert!(args.len() == 1, "cast expects exactly 1 argument");
+                        ExprPayload::Cast(payload::Cast { subject: args[0].clone() })
+                    }
+                    Primitive::Any => {
+                        assert!(args.len() == 1, "any expects exactly 1 argument");
+                        ExprPayload::Any(payload::Any { subject: args[0].clone() })
+                    }
+                    Primitive::All => {
+                        assert!(args.len() == 1, "all expects exactly 1 argument");
+                        ExprPayload::All(payload::All { subject: args[0].clone() })
+                    }
+                }
+            } else {
+                // Not a primitive, treat as regular function call
+                let subject_loc = node.child(0).location();
+                let arg_locs: Vec<Location> = node.args().unwrap().into_iter().map(|c| c.location()).collect();
+                let subject = convert_ast_expr(db, subject_loc);
+                let mut args: Vec<Arc<Expr>> = Vec::new();
+                for l in arg_locs { args.push(convert_ast_expr(db, l)); }
+                ExprPayload::Fn(payload::Fn { subject, args })
+            }
         }
         AstNodePayload::ExprCtor(_) => {
             let exprroot = db.get_exprroot_for(loc.clone());
@@ -268,20 +309,6 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
             let (index_hi, index_lo) = (range.index_hi, range.index_lo);
             let subject = convert_ast_expr(db, child_loc);
             ExprPayload::IndexRange(payload::IndexRange { subject, index_hi, index_lo })
-        }
-        AstNodePayload::ExprWord => {
-            let arg_locs: Vec<Location> = node.children().iter().map(|c| c.location()).collect();
-            let mut args: Vec<Arc<Expr>> = Vec::new();
-            for l in arg_locs { args.push(convert_ast_expr(db, l)); }
-            ExprPayload::Word(payload::Word { args })
-        }
-        AstNodePayload::ExprZext => {
-            let subject = convert_ast_expr(db, node.child(0).location());
-            ExprPayload::Zext(payload::Zext { subject })
-        }
-        AstNodePayload::ExprSext => {
-            let subject = convert_ast_expr(db, node.child(0).location());
-            ExprPayload::Sext(payload::Sext { subject })
         }
         AstNodePayload::ExprAs => {
             let subject = convert_ast_expr(db, node.child(0).location());

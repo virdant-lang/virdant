@@ -441,6 +441,9 @@ fn collect_referents_inner(expr: &Expr, out: &mut Vec<Referent>) {
         }
         ExprPayload::Zext(z)           => collect_referents_inner(&z.subject, out),
         ExprPayload::Sext(s)           => collect_referents_inner(&s.subject, out),
+        ExprPayload::Cast(c)           => collect_referents_inner(&c.subject, out),
+        ExprPayload::Any(a)            => collect_referents_inner(&a.subject, out),
+        ExprPayload::All(a)            => collect_referents_inner(&a.subject, out),
         ExprPayload::As(a)             => collect_referents_inner(&a.subject, out),
         // Leaves — no sub-expressions to recurse into.
         ExprPayload::BitLit(_)
@@ -455,7 +458,12 @@ fn collect_referents_inner(expr: &Expr, out: &mut Vec<Referent>) {
 #[rustfmt::skip]
 fn test_sim() {
     let db = crate::util::db_from_file_with_lib("../examples/lfsr.vir", "../lib");
-    crate::util::check_db(&db).unwrap();
+    if let Err(diagnostics) = crate::util::check_db(&db) {
+        for diag in diagnostics {
+            eprintln!("{diag:?}");
+        }
+        assert!(false);
+    }
     let symboltable = db.get_symboltable();
     let top = symboltable.resolve(b"lfsr::Lfsr".into()).unwrap();
 

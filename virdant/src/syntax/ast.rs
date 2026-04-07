@@ -358,6 +358,17 @@ impl<'p> AstNode<'p> {
             _ => None,
         }
     }
+
+    pub fn args(&self) -> Option<Vec<AstNode<'_>>> {
+        match &self.payload {
+            AstNodePayload::ExprMethod(_expr_method) => todo!(),
+            AstNodePayload::ExprFn => {
+                let args = self.children().into_iter().skip(1).collect();
+                Some(args)
+            }
+            _ => None,
+        }
+    }
 }
 
 impl AstNodeId {

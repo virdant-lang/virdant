@@ -915,16 +915,6 @@ impl<'d> Converter<'d> {
                     .unwrap_or_else(|| type_width(typ, self.db));
                 verilog::Expr::WordLit(verilog::expr::WordLit { value: value.into(), width, radix: Radix::Dec })
             }
-            AstNodePayload::ExprWord => {
-                let width = self.node_or_expected_width(package, &node, typ);
-                let exprs = node.children().into_iter()
-                    .map(|child| {
-                        let child_type = self.node_type(package, &child).unwrap();
-                        self.convert_expr(package, child, &child_type, self.db, scheduler)
-                    })
-                    .collect();
-                verilog::Expr::Concat(verilog::expr::Concat { exprs, width })
-            }
             AstNodePayload::ExprBinOp(expr_bin_op) => {
                 let lhs = node.child(0);
                 let rhs = node.child(1);
@@ -944,8 +934,6 @@ impl<'d> Converter<'d> {
                     expr: Box::new(self.convert_expr(package, child, &child_type, self.db, scheduler)),
                 })
             }
-            AstNodePayload::ExprZext => self.convert_zext(package, node, typ, scheduler),
-            AstNodePayload::ExprSext => self.convert_sext(package, node, typ, scheduler),
             AstNodePayload::ExprIf => {
                 let children = node.children();
                 self.convert_if_expr(package, &children, typ, scheduler)
@@ -1080,8 +1068,21 @@ impl<'d> Converter<'d> {
                                     expr: Box::new(arg_expr),
                                 })
                             }
-                            Primitive::Cast => {
-                                arg_expr
+                            Primitive::Cast => arg_expr,
+                            Primitive::Zext => self.convert_zext(package, node, typ, scheduler),
+                            Primitive::Sext => self.convert_sext(package, node, typ, scheduler),
+                            Primitive::Word => {
+                                let width = self.node_or_expected_width(package, &node, typ);
+                                // children[0] is the function name, children[1..] are the arguments
+                                let children = node.children();
+                                let args = &children[1..];
+                                let mut exprs = Vec::new();
+                                for i in 0..args.len() {
+                                    let child = node.child(1 + i as u16);
+                                    let child_type = self.node_type(package, &child).unwrap();
+                                    exprs.push(self.convert_expr(package, child, &child_type, self.db, scheduler));
+                                }
+                                verilog::Expr::Concat(verilog::expr::Concat { exprs, width })
                             }
                         }
                     }
@@ -1378,7 +1379,8 @@ impl<'d> Converter<'d> {
     }
 
     fn convert_zext(&self, package: &PackageFqn, node: AstNode, typ: &Type, scheduler: &mut ExprScheduler) -> verilog::Expr {
-        let inner = node.child(0);
+        // child(0) is function name, child(1) is the argument
+        let inner = node.child(1);
         let inner_type = self.node_type(package, &inner).unwrap();
         let target_width = self.node_or_expected_width(package, &node, typ);
         let source_width = self.node_width(package, &inner);
@@ -1401,7 +1403,8 @@ impl<'d> Converter<'d> {
     }
 
     fn convert_sext(&self, package: &PackageFqn, node: AstNode, typ: &Type, scheduler: &mut ExprScheduler) -> verilog::Expr {
-        let inner = node.child(0);
+        // child(0) is function name, child(1) is the argument
+        let inner = node.child(1);
         let inner_type = self.node_type(package, &inner).unwrap();
         let target_width = self.node_or_expected_width(package, &node, typ);
         let source_width = self.node_width(package, &inner);

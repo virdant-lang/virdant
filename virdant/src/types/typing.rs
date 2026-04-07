@@ -42,6 +42,9 @@ pub enum Primitive {
     Any,
     All,
     Cast,
+    Word,
+    Sext,
+    Zext,
 }
 
 
@@ -57,6 +60,14 @@ impl Tag {
     pub fn symbol_id(&self) -> Option<SymbolId> {
         if let Tag::SymbolResolution(symbol_id) = self {
             Some(symbol_id.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn primitive(&self) -> Option<Primitive> {
+        if let Tag::PrimitiveResolution(primitive) = self {
+            Some(primitive.clone())
         } else {
             None
         }
@@ -161,8 +172,6 @@ impl Typing {
             AstNodePayload::ExprIf                   => self.check_if(builder, context, node, expected_typ),
             AstNodePayload::ExprWordLit(_)           => self.check_word_lit(node, expected_typ),
             AstNodePayload::ExprIndex(expr_index)    => self.check_index(builder, context, node, expr_index.index, expected_typ),
-            AstNodePayload::ExprZext                 => self.check_ext(builder, context, node, expected_typ),
-            AstNodePayload::ExprSext                 => self.check_ext(builder, context, node, expected_typ),
             AstNodePayload::ExprHole                 => self.check_hole(node, expected_typ),
             AstNodePayload::ExprMatch                => self.check_match(builder, context, node, expected_typ),
             AstNodePayload::ExprFn                   => self.check_fn(builder, context, node, expected_typ),
@@ -266,6 +275,14 @@ impl Typing {
                     todo!()
                 }
             }
+            b"zext" => {
+                self.tags.insert(node.location(), Tag::PrimitiveResolution(Primitive::Zext));
+                self.check_ext(builder, context, node, expected_typ)
+            }
+            b"sext" => {
+                self.tags.insert(node.location(), Tag::PrimitiveResolution(Primitive::Sext));
+                self.check_ext(builder, context, node, expected_typ)
+            }
             _ => todo!(),
         }
     }
@@ -338,6 +355,10 @@ impl Typing {
                     todo!()
                 }
             }
+            b"word" => {
+                self.tags.insert(node.location(), Tag::PrimitiveResolution(Primitive::Word));
+                self.infer_word(builder, context, &node)
+            }
             _ => Ok(None),
         }
     }
@@ -375,16 +396,35 @@ impl Typing {
         }
     }
 
-    fn check_ext<'p>(&mut self, builder: &mut Builder, context: TypingContext, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
+    fn check_ext<'p>(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        node: &AstNode<'p>,
+        expected_typ: &Type,
+    ) -> Result<(), ()> {
         let Type::Word(target_width) = expected_typ else {
             self.flag_not_word_type(node, expected_typ);
             return Err(());
         };
 
-        let subject = node.child(0);
-        let Ok(Some(subject_typ)) = self.infer(builder, context, &subject) else {
-            self.flag_cant_infer(node);
-            return Err(());
+        // For ExprFn node: child(0) is function name, child(1) is the argument
+        let subject = node.child(1);
+
+        // Try to infer the subject type first
+        let subject_typ = if let Ok(Some(typ)) = self.infer(builder, context.clone(), &subject) {
+            typ
+        } else {
+            // If inference fails, try checking against an arbitrary Word type
+            // This handles literals like 0x8w4 which have explicit width
+            // We use a large width to allow any word literal
+            let _ = self.check(builder, context, &subject, &Type::Word(128));
+            if let Some(typ) = self.typs.get(&subject.id()) {
+                typ.clone()
+            } else {
+                self.flag_cant_infer(node);
+                return Err(());
+            }
         };
 
         let subject_width = match subject_typ {
@@ -746,7 +786,9 @@ impl Typing {
         let mut total_width = 0;
         let mut diagnostics: Vec<Diagnostic> = vec![];
         let mut uninferred_child = false;
-        for child in node.children() {
+        let args = node.args().unwrap();
+
+        for child in args {
             match self.infer(builder, context.clone(), &child) {
                 Ok(None) => {
                     self.diagnostics.push(diagnostics::CantInfer {

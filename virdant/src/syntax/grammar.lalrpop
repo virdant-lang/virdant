@@ -667,27 +667,6 @@ ExprAscription: AstNodeId = {
 }
 
 ExprPrimary: AstNodeId = {
-    <ll:@L> "word" "(" <args:ArgList> ")" <rr:@R> => {
-        let payload = AstNodePayload::ExprWord;
-        let span = parser.span(ll, rr);
-        let num_children = args;
-
-        parser.add_node(payload, span, num_children)
-    },
-    <ll:@L> "sext" "(" <args:ArgList> ")" <rr:@R> => {
-        let payload = AstNodePayload::ExprSext;
-        let span = parser.span(ll, rr);
-        let num_children = args;
-
-        parser.add_node(payload, span, num_children)
-    },
-    <ll:@L> "zext" "(" <args:ArgList> ")" <rr:@R> => {
-        let payload = AstNodePayload::ExprZext;
-        let span = parser.span(ll, rr);
-        let num_children = args;
-
-        parser.add_node(payload, span, num_children)
-    },
     <ll:@L> <ofness:Ofness> "(" <args:ArgList> ")" <rr:@R> => {
         let payload = AstNodePayload::ExprFn;
         let span = parser.span(ll, rr);
@@ -971,9 +950,6 @@ extern {
         "slave" => Token::KwSlave,
         "mosi" => Token::KwMosi,
         "miso" => Token::KwMiso,
-        "word" => Token::KwWord,
-        "sext" => Token::KwSext,
-        "zext" => Token::KwZext,
         "if" => Token::KwIf,
         "else" => Token::KwElse,
         "match" => Token::KwMatch,

@@ -98,6 +98,9 @@ impl Expr {
             ExprPayload::Word(word) => self.eval_word(context, word),
             ExprPayload::Zext(zext) => self.eval_zext(context, zext),
             ExprPayload::Sext(sext) => self.eval_sext(context, sext),
+            ExprPayload::Cast(cast) => cast.subject.eval(context),
+            ExprPayload::Any(any) => self.eval_any(context, any),
+            ExprPayload::All(all) => self.eval_all(context, all),
             ExprPayload::As(as_) => as_.subject.eval(context),
             // Hole is an unfilled expression placeholder — treat as X of the appropriate type.
             ExprPayload::Hole(_) => Value::X(self.typ().clone()),
@@ -423,6 +426,29 @@ impl Expr {
                 }
             }
             _ => unreachable!("sext subject must be Bit or Word"),
+        }
+    }
+
+    fn eval_any(&self, context: Context, any: &payload::Any) -> Value {
+        let subject_value = any.subject.eval(context);
+        match subject_value {
+            Value::Word(_, val) => Value::Bit(val != 0),
+            Value::Bit(b) => Value::Bit(b),
+            Value::X(_) | Value::Z(_) => Value::X(Type::Bit),
+            Value::Ctor(_, _, _) => Value::X(Type::Bit), // Not applicable for constructors
+        }
+    }
+
+    fn eval_all(&self, context: Context, all: &payload::All) -> Value {
+        let subject_value = all.subject.eval(context);
+        match subject_value {
+            Value::Word(width, val) => {
+                let all_ones = (1u64 << width) - 1;
+                Value::Bit(val == all_ones)
+            }
+            Value::Bit(b) => Value::Bit(b),
+            Value::X(_) | Value::Z(_) => Value::X(Type::Bit),
+            Value::Ctor(_, _, _) => Value::X(Type::Bit), // Not applicable for constructors
         }
     }
 }
