@@ -1,6 +1,7 @@
 use bstr::{BStr, BString};
 use std::sync::Arc;
 
+use crate::common::{Width, WordValue};
 use crate::fqn::PackageFqn;
 use crate::common::source::Region;
 
@@ -187,9 +188,9 @@ pub struct Unknown {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DoesntFit {
     pub region: Region,
-    pub value: u64,
-    pub width: u64,
-    pub minwidth: u64,
+    pub value: WordValue,
+    pub width: Width,
+    pub minwidth: Width,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

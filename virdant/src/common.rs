@@ -4,6 +4,7 @@ pub mod union;
 pub mod source;
 
 pub type Width = u16;
+pub type WordValue = u64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ComponentClass {

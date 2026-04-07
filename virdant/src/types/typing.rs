@@ -6,6 +6,7 @@ use indexmap::IndexMap;
 
 use crate::analysis::component::ComponentId;
 use crate::analysis::symbols::{Symbol, SymbolId};
+use crate::common::WordValue;
 use crate::common::{BinOp, Flow, UnOp as UnOp, Width};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticLevel};
@@ -230,11 +231,11 @@ impl Typing {
         }
 
         let minwidth = min_word_width(value);
-        if minwidth > u64::from(*width) {
+        if minwidth > *width {
             self.diagnostics.push(diagnostics::DoesntFit {
                 region: node.region(),
                 value,
-                width: u64::from(*width),
+                width: *width,
                 minwidth,
             }.into());
             return Err(());
@@ -920,7 +921,7 @@ impl Typing {
 }
 
 
-fn parse_word_literal(literal: &str) -> (u64, Option<Width>) {
+fn parse_word_literal(literal: &str) -> (WordValue, Option<Width>) {
     if let Some((value, width)) = literal.split_once('w') {
         (parse_nat_literal(value), Some(width.parse().unwrap()))
     } else {
@@ -928,7 +929,7 @@ fn parse_word_literal(literal: &str) -> (u64, Option<Width>) {
     }
 }
 
-fn parse_nat_literal(literal: &str) -> u64 {
+fn parse_nat_literal(literal: &str) -> WordValue {
     let literal = literal.replace('_', "");
     if let Some(hex) = literal.strip_prefix("0x") {
         u64::from_str_radix(hex, 16).unwrap()
@@ -939,11 +940,11 @@ fn parse_nat_literal(literal: &str) -> u64 {
     }
 }
 
-pub(super) fn min_word_width(value: u64) -> u64 {
+pub(super) fn min_word_width(value: WordValue) -> Width {
     if value == 0 {
         0
     } else {
-        u64::BITS as u64 - u64::leading_zeros(value) as u64
+        u64::BITS as Width - u64::leading_zeros(value) as Width
     }
 }
 

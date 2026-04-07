@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bstr::BString;
 
-use crate::common::{self, Width};
+use crate::common::{self, Width, WordValue};
 use crate::analysis::symbols::SymbolId;
 use crate::sim::expr::{Expr, Referent};
 
@@ -42,7 +42,7 @@ pub struct BitLit {
 #[derive(Debug)]
 pub struct WordLit {
     pub width: Width,
-    pub value: u64, // TODO make this a common Value
+    pub value: WordValue,
 }
 
 #[derive(Debug)]

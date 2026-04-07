@@ -1,4 +1,5 @@
-use crate::common::Width;
+use crate::common;
+use crate::common::{Width, WordValue};
 use crate::sim::{ExprPayload, payload};
 use crate::types::Type;
 use crate::sim::expr::{Expr, Referent};
@@ -9,7 +10,7 @@ pub enum Value {
     X(Type),
     Z(Type),
     Bit(bool),
-    Word(Width, u64), // Should be Value from common
+    Word(Width, WordValue),
     Ctor(Type, SymbolId, Vec<Value>),
 }
 
@@ -184,64 +185,64 @@ impl Expr {
             return Value::X(self.typ().clone());
         }
         match binop.op {
-            crate::common::BinOp::LogicalAnd => {
+            common::BinOp::LogicalAnd => {
                 let Value::Bit(l) = lhs_val else { unreachable!() };
                 let Value::Bit(r) = rhs_val else { unreachable!() };
                 Value::Bit(l & r)
             }
-            crate::common::BinOp::LogicalOr => {
+            common::BinOp::LogicalOr => {
                 let Value::Bit(l) = lhs_val else { unreachable!() };
                 let Value::Bit(r) = rhs_val else { unreachable!() };
                 Value::Bit(l | r)
             }
-            crate::common::BinOp::LogicalXor => {
+            common::BinOp::LogicalXor => {
                 let Value::Bit(l) = lhs_val else { unreachable!() };
                 let Value::Bit(r) = rhs_val else { unreachable!() };
                 Value::Bit(l ^ r)
             }
-            crate::common::BinOp::Lt => {
+            common::BinOp::Lt => {
                 let Value::Word(_, l) = lhs_val else { unreachable!() };
                 let Value::Word(_, r) = rhs_val else { unreachable!() };
                 Value::Bit(l < r)
             }
-            crate::common::BinOp::Lte => {
+            common::BinOp::Lte => {
                 let Value::Word(_, l) = lhs_val else { unreachable!() };
                 let Value::Word(_, r) = rhs_val else { unreachable!() };
                 Value::Bit(l <= r)
             }
-            crate::common::BinOp::Gt => {
+            common::BinOp::Gt => {
                 let Value::Word(_, l) = lhs_val else { unreachable!() };
                 let Value::Word(_, r) = rhs_val else { unreachable!() };
                 Value::Bit(l > r)
             }
-            crate::common::BinOp::Gte => {
+            common::BinOp::Gte => {
                 let Value::Word(_, l) = lhs_val else { unreachable!() };
                 let Value::Word(_, r) = rhs_val else { unreachable!() };
                 Value::Bit(l >= r)
             }
-            crate::common::BinOp::Eq => Value::Bit(values_equal(&lhs_val, &rhs_val)),
-            crate::common::BinOp::Neq => Value::Bit(!values_equal(&lhs_val, &rhs_val)),
-            crate::common::BinOp::Add => {
+            common::BinOp::Eq => Value::Bit(values_equal(&lhs_val, &rhs_val)),
+            common::BinOp::Neq => Value::Bit(!values_equal(&lhs_val, &rhs_val)),
+            common::BinOp::Add => {
                 let Value::Word(width, l) = lhs_val else { unreachable!() };
                 let Value::Word(_, r) = rhs_val else { unreachable!() };
                 Value::Word(width, l.wrapping_add(r) & word_mask(width))
             }
-            crate::common::BinOp::Sub => {
+            common::BinOp::Sub => {
                 let Value::Word(width, l) = lhs_val else { unreachable!() };
                 let Value::Word(_, r) = rhs_val else { unreachable!() };
                 Value::Word(width, l.wrapping_sub(r) & word_mask(width))
             }
-            crate::common::BinOp::And => {
+            common::BinOp::And => {
                 let Value::Word(width, l) = lhs_val else { unreachable!() };
                 let Value::Word(_, r) = rhs_val else { unreachable!() };
                 Value::Word(width, l & r)
             }
-            crate::common::BinOp::Or => {
+            common::BinOp::Or => {
                 let Value::Word(width, l) = lhs_val else { unreachable!() };
                 let Value::Word(_, r) = rhs_val else { unreachable!() };
                 Value::Word(width, l | r)
             }
-            crate::common::BinOp::Xor => {
+            common::BinOp::Xor => {
                 let Value::Word(width, l) = lhs_val else { unreachable!() };
                 let Value::Word(_, r) = rhs_val else { unreachable!() };
                 Value::Word(width, l ^ r)
@@ -261,18 +262,18 @@ impl Expr {
             return Value::X(self.typ().clone());
         }
         match un_op.op {
-            crate::common::UnOp::Neg => {
+            common::UnOp::Neg => {
                 let Value::Word(width, v) = val else { unreachable!() };
                 Value::Word(width, v.wrapping_neg() & word_mask(width))
             }
-            crate::common::UnOp::Inv => {
+            common::UnOp::Inv => {
                 match val {
                     Value::Bit(b) => Value::Bit(!b),
                     Value::Word(width, v) => Value::Word(width, (!v) & word_mask(width)),
                     _ => unreachable!(),
                 }
             }
-            crate::common::UnOp::Not => {
+            common::UnOp::Not => {
                 match val {
                     Value::Bit(b) => Value::Bit(!b),
                     Value::Word(_, v) => Value::Bit(v == 0),

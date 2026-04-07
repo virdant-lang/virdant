@@ -4,6 +4,7 @@ use bstr::{BString, ByteSlice};
 
 use crate::analysis::component::ComponentId;
 use crate::analysis::drivers::{Driver, DriverIf};
+use crate::common::WordValue;
 use crate::db::Db;
 use crate::sim::payload;
 use crate::syntax::payload::AstNodePayload;
@@ -107,7 +108,7 @@ fn build_if_branches(db: &Db, locs: &[Location]) -> (Vec<(Arc<Expr>, Arc<Expr>)>
     }
 }
 
-fn parse_word_value(s: &str) -> u64 {
+fn parse_word_value(s: &str) -> WordValue {
     let s = if let Some((val, _)) = s.split_once('w') { val } else { s };
     let s = s.replace('_', "");
     if let Some(hex) = s.strip_prefix("0x") {
