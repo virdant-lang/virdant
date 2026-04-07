@@ -1276,6 +1276,81 @@ impl<'d> Converter<'d> {
                     width: total_width,
                 })
             }
+            AstNodePayload::ExprField(field) => {
+                // Field projection: extract a field from a packed struct
+                // The subject expression should have a struct type
+                let subject_node = node.child(0);
+                let subject_typ = typing.type_of_node(subject_node.id())
+                    .cloned()
+                    .unwrap_or_else(|| Type::Word(8));
+
+                let Type::Usual(typedef_symbol_id) = subject_typ else {
+                    panic!("ExprField subject must have a struct type, got {:?}", subject_typ);
+                };
+
+                // Get the struct fields to determine bit positions
+                let struct_fields = self.db.get_struct_fields(typedef_symbol_id);
+                let parsing = self.db.get_parsing(package.clone());
+                let field_name = parsing.string(field.field);
+
+                // Find the field and calculate its bit range
+                // Fields are packed: first field in lower bits, last field in higher bits
+                use bstr::ByteSlice;
+                let mut bit_offset = 0;
+                let mut field_width = 0;
+                let mut found = false;
+
+                for struct_field in &struct_fields {
+                    let current_field_width = struct_field.typ.as_ref()
+                        .map(|t| type_width(t, self.db))
+                        .unwrap_or(0);
+
+                    if struct_field.name == field_name {
+                        field_width = current_field_width;
+                        found = true;
+                        break;
+                    }
+
+                    bit_offset += current_field_width;
+                }
+
+                if !found {
+                    panic!("Field {} not found in struct", field_name.to_str_lossy());
+                }
+
+                // Convert the subject expression
+                let subject_expr = self.convert_expr(package, subject_node, &subject_typ, self.db, scheduler);
+
+                // Extract the field using bit slicing
+                if field_width == 0 {
+                    // Zero-width field (shouldn't happen in practice)
+                    verilog::Expr::WordLit(verilog::expr::WordLit {
+                        value: 0u128,
+                        width: 0,
+                        radix: Radix::Dec,
+                    })
+                } else if bit_offset == 0 && field_width == type_width(&subject_typ, self.db) {
+                    // Field is the entire struct (only field)
+                    subject_expr
+                } else {
+                    // Extract bits [bit_offset + field_width - 1 : bit_offset]
+                    let hi = bit_offset + field_width - 1;
+                    let lo = bit_offset;
+                    verilog::Expr::IndexRange(verilog::expr::IndexRange {
+                        subject: Box::new(subject_expr),
+                        index_hi: Box::new(verilog::Expr::WordLit(verilog::expr::WordLit {
+                            value: hi as u128,
+                            width: 32,
+                            radix: Radix::Dec,
+                        })),
+                        index_lo: Box::new(verilog::Expr::WordLit(verilog::expr::WordLit {
+                            value: lo as u128,
+                            width: 32,
+                            radix: Radix::Dec,
+                        })),
+                    })
+                }
+            }
             _ => panic!("unsupported expr in conversion: {}", node.summary()),
         }
     }

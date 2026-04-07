@@ -17,7 +17,9 @@ export mod Top {
     incoming y : Word[8];
 
     outgoing out : Word[8];
-    outgoing color : Color;
+    outgoing red : Word[8];
+
+    wire color : Color;
 
     wire opcode : Opcode;
     opcode := cast(opcode_bits);
@@ -34,4 +36,6 @@ export mod Top {
         green = 128,
         blue = 255,
     };
+
+    red := color->green;
 }

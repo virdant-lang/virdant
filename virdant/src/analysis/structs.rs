@@ -1,4 +1,5 @@
-use bstr::BString;
+use bstr::{BStr, BString};
+use bstr::ByteSlice;
 
 use crate::analysis::symbols::SymbolId;
 use crate::db::Builder;
@@ -6,9 +7,23 @@ use crate::types::Type;
 
 #[derive(Debug, Clone)]
 pub struct StructField {
-    pub field_symbol_id: SymbolId,
+    pub field_symbol_id: SymbolId, // TODO make these not pub
     pub name: BString,
     pub typ: Option<Type>,
+}
+
+impl StructField {
+    pub fn name(&self) -> &BStr {
+        self.name.as_bstr()
+    }
+
+    pub fn typ(&self) -> Option<&Type> {
+        self.typ.as_ref()
+    }
+
+    pub fn symbol_id(&self) -> SymbolId {
+        self.field_symbol_id
+    }
 }
 
 pub(crate) fn build_struct_fields(builder: &mut Builder, symbol_id: SymbolId) -> Vec<StructField> {

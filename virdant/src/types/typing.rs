@@ -164,8 +164,8 @@ impl Typing {
             AstNodePayload::ExprSext                 => self.check_ext(builder, context, node, expected_typ),
             AstNodePayload::ExprHole                 => self.check_hole(node, expected_typ),
             AstNodePayload::ExprMatch                => self.check_match(builder, context, node, expected_typ),
-            AstNodePayload::ExprMethod(_expr_method) => Ok(()), // TODO
             AstNodePayload::ExprFn                   => self.check_fn(builder, context, node, expected_typ),
+            AstNodePayload::ExprField(field)         => self.check_field(builder, context, node, expected_typ, field),
             AstNodePayload::ExprCtor(_ctor)          => self.check_ctor(builder, context, node, expected_typ),
             AstNodePayload::ExprEnumerant(_)         => self.check_enumerant(builder, node, expected_typ),
             AstNodePayload::ExprStruct               => self.check_struct(builder, context, node, expected_typ),
@@ -437,6 +437,42 @@ impl Typing {
         Ok(())
     }
 
+    fn check_field<'p>(&mut self, builder: &mut Builder, context: TypingContext, node: &AstNode<'p>, expected_typ: &Type, field: payload::ExprField) -> Result<(), ()> {
+        let subject = node.subject().unwrap();
+        let Some(subject_typ) = self.infer(builder, context.clone(), &subject)? else {
+            self.flag_unknown(node, "Could not infer subject");
+            return Err(());
+        };
+
+        let Type::Usual(typedef_id) = subject_typ else {
+            // TODO check that it's a struct type
+            self.flag_unknown(node, "Should be a typedef type");
+            return Err(());
+        };
+
+        let struct_fields = builder.get_struct_fields(typedef_id);
+        let field_name = node.parsing().string(field.field);
+
+        let Some(struct_field) = struct_fields.into_iter().filter(|field_| field_.name() == field_name).next() else {
+            self.flag_unknown(node, format!("Unknown field {field_name}"));
+            return Err(());
+        };
+
+        let Some(field_typ) = struct_field.typ() else {
+            self.flag_todo(&subject, "Field missing type");
+            return Err(());
+        };
+
+        if field_typ == expected_typ {
+            self.annotate(node, &expected_typ);
+        } else {
+            self.flag_unknown(node, format!("Unknown field {field_name}"));
+            self.flag_wrong_type(node, expected_typ, field_typ);
+        }
+
+        Ok(())
+    }
+
     fn check_pat<'p>(
         &mut self,
         builder: &mut Builder,
@@ -623,8 +659,7 @@ impl Typing {
             }
         }
 
-        node.dump();
-
+        // TODO tag the fields
 //        self.tags.insert(node.location(), Tag::SymbolResolution(enumerant_symbol.id()));
         self.annotate(node, &expected_typ);
 

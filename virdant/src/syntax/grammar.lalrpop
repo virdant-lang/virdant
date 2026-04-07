@@ -702,6 +702,13 @@ ExprPrimary: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
+    <ll:@L> <e:ExprPrimary> "->" <field:Ident> <rr:@R> => {
+        let payload = AstNodePayload::ExprField(payload::ExprField { field });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
     <ll:@L> <e:ExprPrimary> "[" <index:Index> "]" <rr:@R> => {
         let payload = AstNodePayload::ExprIndex(payload::ExprIndex { index });
         let span = parser.span(ll, rr);
