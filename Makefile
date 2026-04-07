@@ -9,7 +9,7 @@ virdant/target/lib:
 
 test: virdant/target/lib
 	cargo test
-	cd tests && make
+	$(MAKE) -C tests test_all
 
 clean:
 	cargo clean
