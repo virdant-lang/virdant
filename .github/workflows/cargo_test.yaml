@@ -19,10 +19,17 @@ jobs:
         rustup toolchain install 1.88.0
         rustup default 1.88.0
 
-    - name: Install Verilator
+    - name: Update Apt
       run: |
         sudo apt-get update
+
+    - name: Install Verilator
+      run: |
         sudo apt-get install -y verilator
+
+    - name: Install Icarus Verilog
+      run: |
+        sudo apt-get install -y iverilog
 
     - name: Install
       run: make build
