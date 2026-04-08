@@ -161,7 +161,13 @@ impl Typing {
     }
 
     #[rustfmt::skip]
-    pub(crate) fn check<'p>(&mut self, builder: &mut Builder, context: TypingContext, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
+    fn check<'p>(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        node: &AstNode<'p>,
+        expected_typ: &Type,
+    ) -> Result<(), ()> {
         if let Some(actual_typ) = self.infer(builder, context.clone(), node)? {
             if actual_typ != *expected_typ {
                 self.flag_wrong_type(node, expected_typ, &actual_typ);
@@ -715,7 +721,12 @@ impl Typing {
         }
     }
 
-    pub(crate) fn infer<'p>(&mut self, builder: &mut Builder, context: TypingContext, node: &AstNode<'p>) -> Result<Option<Type>, ()> {
+    fn infer<'p>(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        node: &AstNode<'p>,
+    ) -> Result<Option<Type>, ()> {
         match node.payload() {
             AstNodePayload::ExprReference => {
                 // TODO HACK
