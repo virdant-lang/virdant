@@ -34,6 +34,7 @@ pub struct Component {
     location: Location,
     typ: Option<Type>, // TODO Why is this optional?
     flow: Flow,
+    kind: Option<ComponentKind>,
 }
 
 impl ComponentId {
@@ -57,6 +58,10 @@ impl Component {
 
     pub fn flow(&self) -> Flow {
         self.flow.clone()
+    }
+
+    pub fn kind(&self) -> Option<ComponentKind> {
+        self.kind
     }
 
     pub fn location(&self) -> Location {
@@ -155,12 +160,14 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     ComponentKind::Reg => Flow::Duplex,
                     ComponentKind::Wire => Flow::Duplex,
                 };
+                let component_kind = component.kind;
                 let component = Component {
                     id,
                     path: path.clone(),
                     location: stmt.location(),
                     typ,
                     flow,
+                    kind: Some(component_kind),
                 };
                 if !components_seen.contains(&path) {
                     components_seen.insert(path.clone());
@@ -218,12 +225,14 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 ComponentKind::Reg => Flow::Duplex,
                                 ComponentKind::Wire => Flow::Duplex,
                             };
+                            let component_kind = component.kind;
                             let component = Component {
                                 id,
                                 path: path.clone(),
                                 location: stmt.location(),
                                 typ,
                                 flow,
+                                kind: Some(component_kind),
                             };
                             if !components_seen.contains(&path) {
                                 components_seen.insert(path.clone());
@@ -284,6 +293,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                     location: stmt.location(),
                                     typ,
                                     flow,
+                                    kind: None,
                                 };
                                 if !components_seen.contains(&path) {
                                     components_seen.insert(path.clone());
@@ -344,6 +354,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         location: stmt.location(),
                         typ,
                         flow,
+                        kind: None,
                     };
                     if !components_seen.contains(&path) {
                         components_seen.insert(path.clone());

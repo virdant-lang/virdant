@@ -1,7 +1,7 @@
 use bstr::{BStr, BString};
 use std::sync::Arc;
 
-use crate::common::{Width, WordValue};
+use crate::common::{DriverType, Width, WordValue};
 use crate::fqn::PackageFqn;
 use crate::common::source::Region;
 
@@ -111,7 +111,11 @@ pub struct UnexpectedOnClause {
 /// A `driver` statement used the wrong driver type.
 /// Eg, a `reg` used `:=` or a `wire` used `<=`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WrongDriverType;
+pub struct WrongDriverType {
+    pub region: Region,
+    pub target: BString,
+    pub expected_driver_type: DriverType,
+}
 
 /// Component has no drivers.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -361,6 +365,20 @@ impl IsDiagnostic for DuplicateSlot {
 
     fn message(&self) -> BString {
         format!("Duplicate slot").into()
+    }
+}
+
+impl IsDiagnostic for WrongDriverType {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        let driver_type_str = match self.expected_driver_type {
+            DriverType::Continuous => ":=",
+            DriverType::Latched => "<=",
+        };
+        format!("Wrong driver type for {}, expected {driver_type_str}", &self.target).into()
     }
 }
 

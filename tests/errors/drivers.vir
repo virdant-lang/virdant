@@ -42,4 +42,34 @@ mod SingleDriver {
     b := false;
 }
 
+mod DriverTypes {
+    incoming clock : Clock;
+
+    wire a : Bit;
+    // CHECK-NOT: Wrong driver type for a
+    a := true;
+
+    reg b : Bit on clock;
+    // CHECK-NOT: Wrong driver type for b
+    b <= true;
+
+    wire c : Bit;
+    // CHECK: Wrong driver type for c
+    c <= true;
+
+    // CHECK: Wrong driver type for d
+    reg d : Bit on clock;
+    d := true;
+
+    reg e : Bit on clock;
+    if true {
+        // CHECK-NOT: Wrong driver type for e
+        e <= true;
+    } else {
+        // CHECK: Wrong driver type for e
+        e := true;
+    };
+
+}
+
 // CHECK: Check failed
