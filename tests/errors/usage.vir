@@ -1,0 +1,14 @@
+mod Usage {
+    // CHECK: Unused signal clock
+    incoming clock : Clock;
+
+    // CHECK-NOT: Unused signal clock2
+    incoming clock2 : Clock;
+
+    // CHECK: Unused signal foo
+    reg foo : Bit on clock2;
+
+    // CHECK-NOT: Unused signal foo
+    reg bar : Bit on clock2;
+    foo <= bar;
+}

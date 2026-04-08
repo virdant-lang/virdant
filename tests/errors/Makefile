@@ -1,9 +1,19 @@
 VIR_FILES := $(wildcard *.vir)
 
-test:
+BASEDIR = $(abspath ../..)
+VIR := $(BASEDIR)/target/release/vir
+FILECHECK := $(BASEDIR)/target/release/filecheck
+
+test: $(VIR) $(FILECHECK)
 	mkdir -p build
 	for f in $(VIR_FILES); do \
 		name=$$(basename $$f .vir); \
-		cargo run -- -F $$f check > build/$$name.out 2>&1 || true; \
-		cat build/$$name.out | cargo run --bin filecheck -- $$(realpath $$f) || exit 1; \
+		$(VIR) -F $$f check > build/$$name.out 2>&1 || true; \
+		cat build/$$name.out | $(FILECHECK) $$(realpath $$f) || exit 1; \
 	done
+
+target/release/vir:
+	cargo build --release
+
+target/release/filecheck:
+	cargo build --release

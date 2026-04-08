@@ -1,3 +1,6 @@
+BASEDIR = $(abspath ../..)
+VIR := $(BASEDIR)/target/release/vir
+
 test:
-	cargo run -- build
-	verilator --lint-only build/*.sv
+	$(VIR) build
+	verilator --lint-only build/*.sv > /dev/null

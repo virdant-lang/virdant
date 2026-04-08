@@ -1,4 +1,7 @@
+BASEDIR = $(abspath ../..)
+VIR := $(BASEDIR)/target/release/vir
+
 test:
-	cargo run -- build
+	$(VIR) build
 	iverilog build/*.sv tb.sv -o build/run
-	./build/run
+	./build/run > /dev/null

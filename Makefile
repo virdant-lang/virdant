@@ -10,6 +10,10 @@ virdant/target/lib:
 test: virdant/target/lib
 	cargo test
 	$(MAKE) -C tests test_all
+	@echo
+	@printf '%*s\n' "$$(tput cols)" '' | tr ' ' '#'
+	@echo "  All Tests Pass  "
+	@printf '%*s\n' "$$(tput cols)" '' | tr ' ' '#'
 
 clean:
 	cargo clean
