@@ -287,13 +287,18 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                     (SocketRole::Slave, ChannelDir::Mosi) => Flow::Sink,
                                     (SocketRole::Slave, ChannelDir::Miso) => Flow::Source,
                                 };
+                                let kind = match flow {
+                                    Flow::Sink => Some(ComponentKind::Incoming),
+                                    Flow::Source => Some(ComponentKind::Outgoing),
+                                    Flow::Duplex => None,
+                                };
                                 let component = Component {
                                     id,
                                     path: path.clone(),
                                     location: stmt.location(),
                                     typ,
                                     flow,
-                                    kind: None,
+                                    kind,
                                 };
                                 if !components_seen.contains(&path) {
                                     components_seen.insert(path.clone());

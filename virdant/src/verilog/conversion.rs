@@ -1041,15 +1041,13 @@ impl<'d> Converter<'d> {
                 }
             }
             AstNodePayload::ExprEnumerant(_enumerant) => {
-                let symboltable = db.get_symboltable();
                 let Type::Usual(typedef_symbol_id) = typ else {
                     unreachable!("{:?} type is {:?}", node.region(), typ)
                 };
                 let typedef = db.get_typedef(*typedef_symbol_id);
-                let slots = symboltable.slots(*typedef_symbol_id);
                 let enumerant_symbol_id = typing.tag(node.location()).symbol_id().unwrap();
                 let value = *typedef.enumerant_values.get(&enumerant_symbol_id).unwrap();
-                let width: u16 = TryInto::<u16>::try_into(slots.len()).unwrap();
+                let width: u16 = type_width(typ, db);
                 verilog::Expr::WordLit(verilog::expr::WordLit { value: value, width, radix: Radix::Dec })
             }
             AstNodePayload::ExprFn => {
