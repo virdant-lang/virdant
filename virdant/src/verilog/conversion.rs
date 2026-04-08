@@ -185,8 +185,13 @@ impl<'d> Converter<'d> {
             use bstr::ByteSlice;
             let name = port.path.to_str_lossy().into_owned();
             let width = port.typ.map(|t| type_width(&t, self.db)).unwrap_or(0);
+            let port_name = if moddef.is_export {
+                exact_verilog_name(&name)
+            } else {
+                valid_verilog_name(&name)
+            };
             ports.push(verilog::Port {
-                name: valid_verilog_name(&name),
+                name: port_name,
                 kind: verilog::PortKind::Wire,
                 dir: port.dir,
                 width,
@@ -210,13 +215,13 @@ impl<'d> Converter<'d> {
                                 // Wire with explicit `on clock` — treat exactly like a Reg.
                                 sequential_regs.insert(name.clone(), children[1].id());
                                 elements.push(verilog::Element::Reg(verilog::Reg {
-                                    name: exact_verilog_name(&name),
+                                    name: valid_verilog_name(&name),
                                     width,
                                     expr: None,
                                 }));
                             } else {
                                 elements.push(verilog::Element::Wire(verilog::Wire {
-                                    name: exact_verilog_name(&name),
+                                    name: valid_verilog_name(&name),
                                     width,
                                     expr: None,
                                 }));
@@ -229,7 +234,7 @@ impl<'d> Converter<'d> {
                                 sequential_regs.insert(name.clone(), children[1].id());
                             }
                             elements.push(verilog::Element::Reg(verilog::Reg {
-                                name: exact_verilog_name(&name),
+                                name: valid_verilog_name(&name),
                                 width,
                                 expr: None,
                             }));
@@ -306,7 +311,7 @@ impl<'d> Converter<'d> {
                     // If this is a latched-driver wire not yet in sequential_regs, upgrade
                     // its Wire element to a Reg element so the Verilog declaration is correct.
                     if !sequential_regs.contains_key(&path) {
-                        let reg_name = exact_verilog_name(&path);
+                        let reg_name = valid_verilog_name(&path);
                         let reg_width = type_width(&typ, self.db);
                         for elem in elements.iter_mut() {
                             if let verilog::Element::Wire(w) = elem {

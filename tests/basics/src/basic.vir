@@ -29,26 +29,26 @@ export mod Top {
     wire s : Word[8];
     s := sext(0x8w4);
 
-    wire and_ : Word[8];
-    and_ := 0w8 & 1w8;
+    wire and : Word[8];
+    and := 3w8 & 1w8;
 
-    wire or_ : Word[8];
-    or_ := 0w8 | 1w8;
+    wire or : Word[8];
+    or := 0w8 | 1w8;
 
-    wire xor_ : Word[8];
-    xor_ := 0w8 ^ 1w8;
+    wire xor : Word[8];
+    xor := 0w8 ^ 1w8;
 
     wire ascription : Word[4];
     ascription := 15 : Word[4];
 
-//    wire bit_and_ : Bit;
-//    bit_and_ := 0w8 && 1w8;
-//
-//    wire bit_or_ : Bit;
-//    bit_or_ := 0w8 || 1w8;
-//
-//    wire bit_xor_ : Bit;
-//    bit_xor_ := 0w8 ^^ 1w8;
+    wire bit_and : Bit;
+    bit_and := true && false;
+
+    wire bit_or : Bit;
+    bit_or := true || false;
+
+    wire bit_xor : Bit;
+    bit_xor := true ^^ false;
 
     on clock {
         assert(w);
@@ -91,5 +91,15 @@ export mod Top {
 
         assert((if w { x } else { y }) : Word[4] == x);
         assert((if a { x } else { y }) : Word[4] == y);
+
+        assert(!bit_and);
+        assert(bit_or);
+        assert(bit_xor);
+
+        assert(or == 1);
+        assert(and == 1);
+        assert(xor == 1);
+
+        assert(ascription == 15);
     };
 }
