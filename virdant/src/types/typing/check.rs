@@ -359,11 +359,14 @@ impl Typing {
         match node.payload() {
             AstNodePayload::PatElse => Ok(context),
             AstNodePayload::PatCtor(pat_ident) => {
+                let ctor_name = node.parsing().string(pat_ident.name);
                 let Type::Usual(typedef_id) = expected_typ else {
-                    self.flag_unknown(node, "PatCtor expects a union type");
+                    self.diagnostics.push(diagnostics::UnresolvedCtor {
+                        region: node.region(),
+                        ctor: ctor_name.to_owned(),
+                    }.into());
                     return Err(());
                 };
-                let ctor_name = node.parsing().string(pat_ident.name);
                 let symboltable = builder.get_symboltable();
                 let Some(ctor_symbol) = symboltable.slot(*typedef_id, ctor_name) else {
                     self.flag_unknown(node, "Unknown ctor name in pattern");

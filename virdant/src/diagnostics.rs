@@ -143,6 +143,13 @@ pub struct UnresolvedComponent {
 
 /// A component could not be resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnresolvedCtor {
+    pub region: Region,
+    pub ctor: BString,
+}
+
+/// A component could not be resolved.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnusedSource {
     pub region: Region,
     pub path: BString,
@@ -394,6 +401,16 @@ impl IsDiagnostic for UnresolvedComponent {
 
     fn message(&self) -> BString {
         format!("Unresolved component {}", &self.path).into()
+    }
+}
+
+impl IsDiagnostic for UnresolvedCtor {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Unresolved constructor {}", &self.ctor).into()
     }
 }
 
