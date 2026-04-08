@@ -14,6 +14,7 @@ use crate::analysis::location::Location;
 use crate::fqn::PackageFqn;
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::{self, AstNodePayload};
+use crate::types::context::Referent;
 
 use super::context::TypingContext;
 use super::typ::Type;
@@ -52,8 +53,8 @@ pub enum Primitive {
 pub enum Tag {
     None,
     SymbolResolution(SymbolId),
-    PrimitiveResolution(Primitive), // TODO add an enum for primitives
-    ComponentResolution(ComponentId),
+    PrimitiveResolution(Primitive),
+    ReferentResolution(Referent),
 }
 
 impl Tag {
@@ -552,7 +553,7 @@ impl Typing {
                     self.annotate(child, param_typ);
                     if let Some(var_name_interned) = child.path() {
                         let var_name = child.parsing().string(var_name_interned).to_owned();
-                        arm_context = arm_context.extend(std::iter::once((var_name, param_typ.clone())));
+                        arm_context = arm_context.push_local(var_name, child.location(), param_typ.clone());
                     }
                 }
                 Ok(arm_context)
@@ -717,15 +718,8 @@ impl Typing {
                 // TODO HACK
                 let parsing = node.parsing();
                 let path = parsing.string(node.path().unwrap());
-                if let Some(typ) = context.get(path.to_owned()) {
-                    let component_analysis = builder.get_component_analysis(self.item.id());
-
-                    if let Some(component) = component_analysis.resolve(path) {
-                        self.tags.insert(node.location(), Tag::ComponentResolution(component.id()));
-                    } else {
-                        // This case is where we are referencing a local.
-                    }
-
+                if let Some((referent, typ)) = context.get(path.to_owned()) {
+                    self.tags.insert(node.location(), Tag::ReferentResolution(referent));
                     self.use_component(path, node.location());
                     self.annotate(&node, &typ);
                     Ok(Some(typ))

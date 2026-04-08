@@ -1086,7 +1086,7 @@ impl<'d> Converter<'d> {
                             }
                         }
                     }
-                    crate::types::typing::Tag::ComponentResolution(_component_id) => unreachable!(),
+                    crate::types::typing::Tag::ReferentResolution(_) => unreachable!(),
                     crate::types::typing::Tag::None => unreachable!(),
                 }
             }

@@ -63,6 +63,7 @@ impl Expr {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Referent {
     Component(ComponentId),
+    Location(Location),
 }
 
 pub fn driver_to_expr(db: &Db, driver: &Driver) -> Arc<Expr> {
