@@ -985,60 +985,11 @@ pub(super) fn min_word_width(value: WordValue) -> Width {
 }
 
 pub(crate) fn build_type_at(builder: &mut Builder, location: Location) -> Result<Type, Vec<Diagnostic>> {
-    let parsing = builder.get_parsing(location.package());
-    let symboltable = builder.get_symboltable();
-    let typ_node = parsing.ast_node(location.ast_node_id());
-
-    let bit_symbol = symboltable.resolve(b"builtin::Bit".into()).unwrap();
-    let word_symbol = symboltable.resolve(b"builtin::Word".into()).unwrap();
-    let clock_symbol = symboltable.resolve(b"builtin::Clock".into()).unwrap();
-
-    match typ_node.payload() {
-        AstNodePayload::Type(_typ) => {
-            let type_name: BString = match typ_node.child(0).payload() {
-                AstNodePayload::Ofness(ofness) => {
-                    if let Some(package) = ofness.package {
-                        let package_name = parsing.string(package);
-                        let typ_name = parsing.string(ofness.name);
-                        format!("{}::{}", package_name, typ_name).into()
-                    } else {
-                        parsing.string(ofness.name).to_owned()
-                    }
-                }
-                _ => {
-                    let region = builder.get_location_region(location);
-                    return Err(vec![diagnostics::Unknown {
-                        region,
-                        message: format!("Expected Ofness, but found {:?}", typ_node.payload()).into()
-                    }.into()])
-                }
-            };
-
-            let Some(symbol) = symboltable.resolve_item(type_name.as_bstr(), parsing.package()) else {
-                return Err(vec![diagnostics::UnresolvedType {
-                    region: typ_node.region(),
-                    typ: type_name.into(),
-                }.into()]);
-            };
-
-            let typ = if symbol.id() == bit_symbol.id() {
-                Type::Bit
-            } else if symbol.id() == clock_symbol.id() {
-                Type::Clock
-            } else if symbol.id() == word_symbol.id() {
-                let generics_node = typ_node.child(1);
-                let AstNodePayload::GenericsParams(generics_params) = generics_node.payload() else {
-                    unreachable!()
-                };
-                let spelling = parsing.string(generics_params.value).to_str_lossy().into_owned();
-                let width = spelling.parse::<Width>().unwrap();
-                Type::Word(width)
-            } else {
-                Type::Usual(symbol.id())
-            };
-            Ok(typ)
-        }
-        _ => panic!(),
+    let type_index = builder.get_type_index();
+    if let Some(typ) = type_index.type_at(location) {
+        Ok(typ.clone())
+    } else {
+        Err(vec![]) // TODO do I actually need diagnostics here?
     }
 }
 
