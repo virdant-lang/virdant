@@ -25,6 +25,16 @@ pub struct TypeDef {
     pub enumerant_values: IndexMap<SymbolId, WordValue>,
 }
 
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct TypeId(usize);
+
+#[derive(Debug)]
+pub struct TypeIndex {
+    typs: IndexSet<Type>,
+    typ_at_location: IndexMap<Location, TypeId>,
+    diagnostics: Vec<Diagnostic>,
+}
+
 pub(crate) fn build_typedefs(builder: &mut Builder) -> Vec<TypeDef> {
     let mut typedefs = vec![];
     let symboltable = builder.get_symboltable();
@@ -151,16 +161,6 @@ fn parse_nat_literal(literal: &str) -> WordValue {
     }
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct TypeId(usize);
-
-#[derive(Debug)]
-pub struct TypeIndex {
-    typs: IndexSet<Type>,
-    typ_at_location: IndexMap<Location, TypeId>,
-    diagnostics: Vec<Diagnostic>,
-}
-
 impl TypeIndex {
     pub fn typs(&self) -> &IndexSet<Type> {
         &self.typs
@@ -170,6 +170,12 @@ impl TypeIndex {
         self.typ_at_location
             .get(&location)
             .map(|type_id| &self.typs[type_id.0])
+    }
+
+    pub fn type_id_at(&self, location: Location) -> Option<TypeId> {
+        self.typ_at_location
+            .get(&location)
+            .copied()
     }
 
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
