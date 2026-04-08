@@ -68,7 +68,7 @@ pub enum AstNodePayload {
 
     Assign(Assign),
 
-    PatIdent(PatIdent),
+    PatCtor(PatCtor),
     PatEnumerant(PatEnumerant),
     PatElse,
 
@@ -134,7 +134,7 @@ impl AstNodePayload {
             AstNodePayload::ExprZext => "ExprZext",
             AstNodePayload::ExprSext => "ExprSext",
             AstNodePayload::Assign(_assign) => "Assign",
-            AstNodePayload::PatIdent(_pat_ident) => "PatIdent",
+            AstNodePayload::PatCtor(_pat_ident) => "PatCtor",
             AstNodePayload::PatEnumerant(_pat_enumerant) => "PatEnumerant",
             AstNodePayload::PatElse => "PatElse",
             AstNodePayload::Ofness(_ofness) => "Ofness",
@@ -317,7 +317,7 @@ pub struct Assign {
 }
 
 #[derive(Clone, Debug)]
-pub struct PatIdent {
+pub struct PatCtor {
     pub name: InternedString,
 }
 

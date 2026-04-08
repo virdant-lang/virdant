@@ -742,7 +742,7 @@ impl<'d> Converter<'d> {
                     let pat_str = format!("{:0>width$b}", value, width = width as usize);
                     verilog::CasePattern::PatternLit(verilog::PatternLit { width, radix: Radix::Bin, pattern: pat_str })
                 }
-                AstNodePayload::PatIdent(pat_ident) => {
+                AstNodePayload::PatCtor(pat_ident) => {
                     let ctor_name = pat.parsing.string(pat_ident.name);
                     let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
                     let symboltable = db.get_symboltable();
@@ -841,7 +841,7 @@ impl<'d> Converter<'d> {
                 let pat_str = format!("{:0>width$b}", value, width = width as usize);
                 verilog::CasePattern::PatternLit(verilog::PatternLit { width, radix: Radix::Bin, pattern: pat_str })
             }
-            AstNodePayload::PatIdent(pat_ident) => {
+            AstNodePayload::PatCtor(pat_ident) => {
                 let ctor_name = pat_node.parsing.string(pat_ident.name);
                 let Type::Usual(typedef_symbol_id) = subject_typ else { unreachable!() };
                 let symboltable = db.get_symboltable();
@@ -1126,7 +1126,7 @@ impl<'d> Converter<'d> {
                                 pattern: pat_str,
                             })
                         }
-                        AstNodePayload::PatIdent(pat_ident) => {
+                        AstNodePayload::PatCtor(pat_ident) => {
                             let ctor_name = pat.parsing.string(pat_ident.name);
                             let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
                             let symboltable = db.get_symboltable();

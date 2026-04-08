@@ -220,7 +220,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprAs => format!("ExprAs"),
             AstNodePayload::ExprHole => format!("ExprHole"),
             AstNodePayload::Assign(_assign) => format!("Assign"),
-            AstNodePayload::PatIdent(_pat_ident) => format!("PatIdent"),
+            AstNodePayload::PatCtor(_pat_ident) => format!("PatCtor"),
             AstNodePayload::PatEnumerant(_pat_enumerant) => format!("PatEnumerant"),
             AstNodePayload::PatElse => format!("PatElse"),
             AstNodePayload::Ofness(_ofness) => format!("Ofness"),
@@ -337,7 +337,7 @@ impl<'p> AstNode<'p> {
     pub fn is_pat(&self) -> bool {
         matches!(
             self.payload(),
-            AstNodePayload::PatIdent(_) |
+            AstNodePayload::PatCtor(_) |
             AstNodePayload::PatEnumerant(_) |
             AstNodePayload::PatElse
         )

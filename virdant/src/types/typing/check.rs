@@ -282,7 +282,7 @@ impl Typing {
     ) -> Result<(), ()> {
         let subject = node.subject().unwrap();
         let Some(subject_typ) = self.infer(builder, context.clone(), &subject)? else {
-            self.flag_unknown(node, "Could not infer subject");
+            self.flag_cant_infer(&subject);
             return Err(());
         };
 
@@ -312,7 +312,7 @@ impl Typing {
     ) -> Result<(), ()> {
         let subject = node.subject().unwrap();
         let Some(subject_typ) = self.infer(builder, context.clone(), &subject)? else {
-            self.flag_unknown(node, "Could not infer subject");
+            self.flag_cant_infer(&subject);
             return Err(());
         };
 
@@ -358,9 +358,9 @@ impl Typing {
     ) -> Result<TypingContext, ()> {
         match node.payload() {
             AstNodePayload::PatElse => Ok(context),
-            AstNodePayload::PatIdent(pat_ident) => {
+            AstNodePayload::PatCtor(pat_ident) => {
                 let Type::Usual(typedef_id) = expected_typ else {
-                    self.flag_unknown(node, "PatIdent expects a union type");
+                    self.flag_unknown(node, "PatCtor expects a union type");
                     return Err(());
                 };
                 let ctor_name = node.parsing().string(pat_ident.name);

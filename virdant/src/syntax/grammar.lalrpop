@@ -532,14 +532,14 @@ Pat: () = {
         parser.add_node(payload, span, num_children);
     },
     <ll:@L> "@" <name:Ident> <rr:@R> => {
-        let payload = AstNodePayload::PatIdent(payload::PatIdent { name });
+        let payload = AstNodePayload::PatCtor(payload::PatCtor { name });
         let span = parser.span(ll, rr);
         let num_children = 0;
 
         parser.add_node(payload, span, num_children);
     },
     <ll:@L> "@" <name:Ident> "(" <args: ArgList> ")" <rr:@R> => {
-        let payload = AstNodePayload::PatIdent(payload::PatIdent { name });
+        let payload = AstNodePayload::PatCtor(payload::PatCtor { name });
         let span = parser.span(ll, rr);
         let num_children = args;
 

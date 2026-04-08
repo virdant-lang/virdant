@@ -177,7 +177,7 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
                         let symbol_id = typing.tag(pat.location()).symbol_id().unwrap();
                         let bound_vars: Vec<BString> = pat.children().iter()
                             .filter_map(|c| match c.payload() {
-                                AstNodePayload::PatIdent(ident) =>
+                                AstNodePayload::PatCtor(ident) =>
                                     Some(parsing.string(ident.name).to_owned()),
                                 _ => None,
                             })
