@@ -113,7 +113,7 @@ impl PackageAnalysis {
 
 
 
-    fn add_item_expr_roots(&mut self, _parsing: Arc<Parsing>, node: AstNode<'_>) {
+    fn add_item_expr_roots(&mut self, parsing: Arc<Parsing>, node: AstNode<'_>) {
         if matches!(node.payload(), AstNodePayload::ModDef(_)) {
             if node.contains_errors() {
                 return;
@@ -122,8 +122,16 @@ impl PackageAnalysis {
                 match child_node.payload() {
                     AstNodePayload::Component(component) => {
                         if component.kind == ComponentKind::Reg {
-                            let node_id = child_node.clock().unwrap().id();
-                            self.expr_roots.push(node_id);
+                            if let Some(node) = child_node.clock() {
+                                self.expr_roots.push(node.id());
+                            } else {
+                                self.diagnostics.push(
+                                    diagnostics::MissingOnClause {
+                                        region: node.region(),
+                                        component: parsing.string(component.name).into(),
+                                    }.into()
+                                );
+                            }
                         }
                     }
                     AstNodePayload::Driver(_driver) => {

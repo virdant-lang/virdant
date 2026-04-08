@@ -26,4 +26,11 @@ mod ValidNeighbor {
     out := data;
 }
 
+mod RegMissingOn {
+    incoming clock : Clock;
+
+    reg not_missing : Bit on clock;
+    reg missing : Bit;
+}
+
 // CHECK: Check failed

@@ -481,6 +481,26 @@ impl IsDiagnostic for UnresolvedType {
     }
 }
 
+impl IsDiagnostic for MissingOnClause {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Missing on clause for reg {}", &self.component).into()
+    }
+}
+
+impl IsDiagnostic for UnexpectedOnClause {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Unexpected on clause {}", &self.component).into()
+    }
+}
+
 impl IsDiagnostic for UnresolvedPackage {
     fn region(&self) -> Region {
         self.region.clone()

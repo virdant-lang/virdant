@@ -303,8 +303,13 @@ impl<'p> AstNode<'p> {
 
     pub fn clock(&self) -> Option<AstNode<'_>> {
         match &self.payload {
-            AstNodePayload::Component(component)
-                if component.kind == ComponentKind::Reg => Some(self.child(1)),
+            AstNodePayload::Component(component) => {
+                if component.kind == ComponentKind::Reg && self.children().len() > 1 {
+                    Some(self.child(1))
+                } else {
+                    None
+                }
+            }
             AstNodePayload::ModDefStmtOn => Some(self.child(0)),
             _ => None
         }
