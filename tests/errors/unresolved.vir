@@ -34,4 +34,14 @@ mod GoodTypes {
     out := flag;
 }
 
+mod Foo {}
+
+mod UnresolvedModDefs {
+    // CHECK-NOT: Unknown component
+    mod foo of Foo;
+
+    // CHECK: Unresolved item Bar
+    mod bar of Bar;
+}
+
 // CHECK: Check failed

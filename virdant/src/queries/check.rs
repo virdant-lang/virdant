@@ -1,3 +1,4 @@
+use crate::analysis::symbols::SymbolKind;
 use crate::db::Builder;
 use crate::diagnostics::Diagnostic;
 
@@ -17,6 +18,10 @@ pub(crate) fn check(builder: &mut Builder) -> Vec<Diagnostic> {
     }
 
     for item in symboltable.items() {
+        if item.kind == SymbolKind::ModDef {
+            let component_analysis = builder.get_component_analysis(item.id());
+            diagnostics.extend(component_analysis.diagnostics());
+        }
         diagnostics.extend(builder.typecheck(item.id()));
 
 //        let driver_analysis = builder.get_driver_analysis(item.id());

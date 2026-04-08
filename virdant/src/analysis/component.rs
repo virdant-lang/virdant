@@ -11,7 +11,7 @@ use crate::fqn::PackageFqn;
 use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
 use crate::common::{ChannelDir, ComponentKind, Flow, SocketRole};
-use crate::diagnostics::Diagnostic;
+use crate::diagnostics::{self, Diagnostic};
 
 #[derive(Debug)]
 pub struct ComponentAnalysis {
@@ -180,7 +180,15 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 let submodule_name = parsing.string(ofness.name);
                 let submodule_symbol = match symboltable.resolve_item_in_package(submodule_name, submodule_package) {
                     Some(symbol) => symbol.clone(),
-                    None => continue,
+                    None => {
+                        component_analysis.diagnostics.push(
+                            diagnostics::UnresolvedItem {
+                                region: ofness_node.region(),
+                                item: submodule_name.to_owned(),
+                            }.into()
+                        );
+                        continue;
+                    }
                 };
                 let submodule_location = submodule_symbol.location();
                 let submodule_parsing = builder.get_parsing(submodule_location.package());
