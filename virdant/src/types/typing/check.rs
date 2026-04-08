@@ -435,7 +435,7 @@ impl Typing {
         let Some(ctor_symbol) = symboltable.slot(*typedef_id, ctor_name) else {
             self.flag_unknown(
                 node,
-                "Unknown ctor name: {ctor_name} in union type {expected_typ:?}",
+                format!("Unknown ctor name: {ctor_name} in union type {expected_typ:?}"),
             );
             return Err(());
         };

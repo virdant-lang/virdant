@@ -7,7 +7,7 @@ virdant/target/lib:
 	mkdir -p target/lib
 	cp -r ./lib/* target/lib/
 
-test: virdant/target/lib
+test: virdant/target/lib build
 	cargo test
 	$(MAKE) -C tests test_all
 	@echo
