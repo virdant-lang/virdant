@@ -1,0 +1,29 @@
+// Tests for SyntaxError.  The parser emits these for tokens or token
+// sequences that do not match the grammar.
+
+// An @ sign is not a valid token anywhere in a type annotation.
+mod BadTypeToken {
+    // CHECK: Syntax Error
+    incoming inp : @;
+    outgoing out : Bit;
+    out := true;
+}
+
+// A bare integer cannot begin a type name.
+mod BadTypeName {
+    outgoing out : Bit;
+    // CHECK: Syntax Error
+    incoming inp : 123bad;
+    out := true;
+}
+
+// A perfectly valid module sitting next to broken ones — it must not
+// contribute any additional syntax errors of its own.
+mod ValidNeighbor {
+    incoming data : Word[8];
+    outgoing out  : Word[8];
+    // CHECK-NOT: Unresolved type
+    out := data;
+}
+
+// CHECK: Check failed

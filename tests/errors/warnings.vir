@@ -1,0 +1,44 @@
+// Tests for Warning-level diagnostics: UnusedSource, ReadFromSink,
+// and UnfilledHole.  None of these are errors, so the run ends with
+// "Check OK" rather than "Check failed".
+
+// An incoming port that is never read in any expression.
+mod HasUnusedPort {
+    incoming unused : Word[8];
+    outgoing out : Bit;
+    // CHECK: Unused signal unused
+    out := true;
+}
+
+// Reading from an outgoing port — outgoing is a sink and cannot be read.
+mod ReadFromOutgoing {
+    outgoing a : Bit;
+    outgoing b : Bit;
+    a := true;
+    // CHECK: Read from sink a
+    b := a;
+}
+
+// Using the hole expression "?" fills the type but leaves it unimplemented.
+mod WithHole {
+    outgoing out : Word[4];
+    // CHECK: Unfilled hole: ? : Word[4]
+    out := ?;
+}
+
+// An incoming port that IS read should produce no Unused signal warning.
+mod UsedPort {
+    incoming data : Word[8];
+    outgoing out  : Word[8];
+    // CHECK-NOT: Unused signal data
+    out := data;
+}
+
+// Driving an outgoing without reading it back produces no ReadFromSink warning.
+mod NoReadFromSink {
+    outgoing out : Bit;
+    // CHECK-NOT: Read from sink
+    out := true;
+}
+
+// CHECK: Check OK

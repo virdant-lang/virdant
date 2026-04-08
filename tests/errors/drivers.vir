@@ -1,0 +1,45 @@
+// Tests for MultipleDrivers and DriverForSink.
+
+// Driving the same outgoing port twice in the same module.
+mod TwoDrivers {
+    outgoing out : Bit;
+    // CHECK: Multiple drivers for out
+    out := true;
+    // CHECK: Multiple drivers for out
+    out := false;
+}
+
+// Socket used to test DriverForSink from both sides.
+socket Chan {
+    mosi req : Word[8];
+    miso ack : Bit;
+}
+
+// A master drives mosi (req) — that is correct.
+// But it also drives miso (ack) — miso is a source for the master, not a sink.
+mod BadMaster {
+    master socket ch of Chan;
+    ch.req := 0;
+    // CHECK: Driver for sink ch.ack
+    ch.ack := true;
+}
+
+// A slave drives miso (ack) — that is correct.
+// But it also drives mosi (req) — mosi is a source for the slave, not a sink.
+mod BadSlave {
+    slave socket ch of Chan;
+    ch.ack := true;
+    // CHECK: Driver for sink ch.req
+    ch.req := 0;
+}
+
+// A module with exactly one driver per outgoing port — no MultipleDrivers.
+mod SingleDriver {
+    outgoing a : Bit;
+    outgoing b : Bit;
+    // CHECK-NOT: Multiple drivers
+    a := true;
+    b := false;
+}
+
+// CHECK: Check failed

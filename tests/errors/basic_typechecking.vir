@@ -16,9 +16,13 @@ mod Foo {
     // CHECK: Wrong type: Expected Bit but found Word[7]
     out2 := 0w7;
 
-    // This is ok
+    // 0 is an untyped word literal; Word[7] context makes it fit with no error
+    // CHECK-NOT: doesn't fit
     out3 := 0;
 
-    // Expected type Bit which is not a Word type
+    // An untyped word literal (0) cannot be used where Bit is expected
+    // CHECK: Expected type Bit which is not a Word type
     out4 := 0;
 }
+
+// CHECK: Check failed
