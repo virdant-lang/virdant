@@ -55,6 +55,10 @@ where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
     db
 }
 
+pub fn db_from_file<P: Into<std::path::PathBuf>>(source_file: P) -> Db {
+    db_from_file_with_lib(source_file, LIB_DIR.as_path())
+}
+
 pub fn db_from_file_with_lib<P, Q>(source_file: P, lib_dir: Q) -> Db
 where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
     let mut db = Db::new();

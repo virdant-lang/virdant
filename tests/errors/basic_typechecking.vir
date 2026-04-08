@@ -1,0 +1,24 @@
+mod Foo {
+    incoming inp0 : Word[8];
+
+    outgoing out0 : Word[7];
+    outgoing out1 : Word[7];
+    outgoing out2 : Bit;
+    outgoing out3 : Word[7];
+    outgoing out4 : Bit;
+
+    // CHECK: Wrong type: Expected Word[7] but found Word[8]
+    out0 := inp0;
+
+    // CHECK: Wrong type: Expected Word[7] but found Bit
+    out1 := false;
+
+    // CHECK: Wrong type: Expected Bit but found Word[7]
+    out2 := 0w7;
+
+    // This is ok
+    out3 := 0;
+
+    // Expected type Bit which is not a Word type
+    out4 := 0;
+}

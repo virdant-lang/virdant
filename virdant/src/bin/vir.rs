@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 use bstr::{BStr, BString, ByteSlice};
 use colored::Colorize;
 use nix::unistd::execvp;
-use virdant::util::{check_db, db_from_dir};
+use virdant::util::{check_db, db_from_dir, db_from_file};
 use std::ffi::{CString, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -21,8 +21,12 @@ use virdant::syntax::token::Token;
 #[derive(Parser, Debug)]
 #[command(name = "vir", author, version, about, disable_help_subcommand = true, arg_required_else_help = true)]
 struct Args {
-    #[arg(short = 'C')]
+    #[arg(short = 'C', conflicts_with = "virfile")]
     cwd: Option<PathBuf>,
+
+    /// Load a single .vir file as a self-contained project (exclusive with -C)
+    #[arg(short = 'F', conflicts_with = "cwd")]
+    virfile: Option<PathBuf>,
 
     #[command(subcommand)]
     command: Command,
@@ -98,6 +102,10 @@ fn main() {
 }
 
 fn project_db(args: &Args) -> Db {
+    if let Some(virfile) = &args.virfile {
+        return db_from_file(virfile);
+    }
+
     let cwd = if let Some(cwd) = &args.cwd {
         std::fs::canonicalize(cwd).unwrap()
     } else {
@@ -216,19 +224,7 @@ fn tokenize_file(path: &Path) {
 }
 
 fn check(args: &Args) {
-    let cwd = if let Some(cwd) = &args.cwd {
-        std::fs::canonicalize(cwd).unwrap()
-    } else {
-        std::env::current_dir().unwrap()
-    };
-
-    if !cwd.join("Virdant.toml").exists() {
-        eprintln!("No Virdant.toml found");
-        std::process::exit(1);
-    }
-
-    let source_dir = cwd.join("src");
-    let db = db_from_dir(source_dir);
+    let db = project_db(args);
     dump_diagnostics(&db);
     match check_db(&db) {
         Err(_) => {
@@ -374,30 +370,37 @@ fn dump_typing(args: &Args) {
 }
 
 fn build(args: &Args) {
-    let cwd = if let Some(cwd) = &args.cwd {
-        match std::fs::canonicalize(cwd) {
-            Ok(path) => path,
-            Err(_) => {
-                eprintln!("Directory not found: {}", cwd.display());
-                std::process::exit(1);
-            }
-        }
+    let (db, builddir) = if let Some(virfile) = &args.virfile {
+        let db = db_from_file(virfile);
+        let builddir = std::env::current_dir().unwrap().join("build");
+        (db, builddir)
     } else {
-        std::env::current_dir().unwrap()
+        let cwd = if let Some(cwd) = &args.cwd {
+            match std::fs::canonicalize(cwd) {
+                Ok(path) => path,
+                Err(_) => {
+                    eprintln!("Directory not found: {}", cwd.display());
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            std::env::current_dir().unwrap()
+        };
+
+        if !cwd.join("Virdant.toml").exists() {
+            eprintln!("No Virdant.toml found");
+            std::process::exit(1);
+        }
+
+        let virdant_toml_text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
+        let virtant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
+        let _ = virtant_toml["project"]["name"].as_str().unwrap();
+        let builddir = cwd.join("build");
+        let source_dir = cwd.join("src");
+        let db = db_from_dir(source_dir);
+        (db, builddir)
     };
 
-    if !cwd.join("Virdant.toml").exists() {
-        eprintln!("No Virdant.toml found");
-        std::process::exit(1);
-    }
-
-    let virdant_toml_text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
-    let virtant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
-    let _ = virtant_toml["project"]["name"].as_str().unwrap();
-    let builddir = cwd.join("build");
-
-    let source_dir = cwd.join("src");
-    let db = db_from_dir(source_dir);
     dump_diagnostics(&db);
     if check_db(&db).is_err() {
         eprintln!("Build failed");

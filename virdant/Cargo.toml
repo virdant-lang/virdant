@@ -40,3 +40,7 @@ required-features = ["vir-bin"]
 name = "vir-lsp"
 path = "src/bin/virlsp.rs"
 required-features = ["vir-lsp-bin"]
+
+[[bin]]
+name = "filecheck"
+path = "src/bin/filecheck.rs"
