@@ -4,7 +4,6 @@ use bstr::{BStr, BString, ByteSlice};
 use indexmap::IndexSet;
 use indexmap::IndexMap;
 
-use crate::analysis::component::ComponentId;
 use crate::analysis::symbols::{Symbol, SymbolId};
 use crate::common::WordValue;
 use crate::common::{BinOp, Flow, UnOp as UnOp, Width};
@@ -86,6 +85,10 @@ pub struct Typing {
 }
 
 impl Typing {
+    pub fn item(&self) -> &Symbol {
+        &self.item
+    }
+
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         self.diagnostics.clone()
     }

@@ -63,9 +63,9 @@ queries! {
     Typeof(location: Location) -> Result<Type, Vec<Diagnostic>>;
     TypeofAll() -> IndexMap<Location, Option<Type>>;
     Check() -> Vec<Diagnostic>;
-    TypeIndex() -> Arc<TypeIndex>; // TODO What is this for?
+    TypeIndex() -> Arc<TypeIndex>;
     Elaboration(top: SymbolId) -> Arc<Elaboration>;
-    PortsOf(symbol_id: SymbolId) -> Vec<Port>;
+    PortsOf(symbol_id: SymbolId) -> Arc<Vec<Port>>;
     StructFields(symbol_id: SymbolId) -> Vec<StructField>;
 }
 
@@ -148,5 +148,5 @@ db_getter!(get_location_region : LocationRegion(location: Location) -> Region);
 db_getter!(check : Check() -> Vec<Diagnostic>);
 db_getter!(get_ctor_signature : CtorSignature(ctor_symbol_id: SymbolId) -> Arc<Signature>);
 db_getter!(get_elaboration : Elaboration(top: SymbolId) -> Arc<Elaboration>);
-db_getter!(get_ports_of : PortsOf(symbol_id: SymbolId) -> Vec<Port>);
+db_getter!(get_ports_of : PortsOf(symbol_id: SymbolId) -> Arc<Vec<Port>>);
 db_getter!(get_struct_fields : StructFields(symbol_id: SymbolId) -> Vec<StructField>);

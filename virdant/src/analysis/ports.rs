@@ -1,9 +1,13 @@
+use std::sync::Arc;
+
 use bstr::BString;
 
-use crate::analysis::symbols::SymbolId;
+use crate::analysis::symbols::{SymbolId, SymbolKind};
 use crate::common::PortDir;
 use crate::db::Builder;
 use crate::types::Type;
+use crate::common::Flow;
+use crate::syntax::payload::AstNodePayload;
 
 #[derive(Debug, Clone)]
 pub struct Port {
@@ -12,22 +16,20 @@ pub struct Port {
     pub typ: Option<Type>,
 }
 
-pub(crate) fn build_ports_of(builder: &mut Builder, symbol_id: SymbolId) -> Vec<Port> {
+pub(crate) fn build_ports_of(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<Port>> {
     let mut ports = vec![];
 
     let symboltable = builder.get_symboltable();
     let symbol = symboltable.symbol(symbol_id);
-    
+
     // Only ModDef items have ports
-    if !matches!(symbol.kind(), crate::analysis::symbols::SymbolKind::ModDef) {
-        return ports;
+    if !matches!(symbol.kind(), SymbolKind::ModDef) {
+        return Arc::new(ports);
     }
 
     let component_analysis = builder.get_component_analysis(symbol_id);
-    
+
     for (path, component) in component_analysis.components() {
-        use crate::common::Flow;
-        use crate::syntax::payload::AstNodePayload;
 
         // Skip submodule ports by checking the AST node payload
         let location = component.location();
@@ -55,5 +57,5 @@ pub(crate) fn build_ports_of(builder: &mut Builder, symbol_id: SymbolId) -> Vec<
         });
     }
 
-    ports
+    Arc::new(ports)
 }

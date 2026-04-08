@@ -127,10 +127,10 @@ impl<'d> Converter<'d> {
                     .unwrap();
                 let ports_of = self.db.get_ports_of(moddef_symbol.id());
                 let mut ports = vec![];
-                for port in ports_of {
+                for port in ports_of.iter() {
                     use bstr::ByteSlice;
                     let name = port.path.to_str_lossy().into_owned();
-                    let width = port.typ.map(|t| type_width(&t, self.db)).unwrap_or(0);
+                    let width = port.clone().typ.map(|t| type_width(&t, self.db)).unwrap_or(0);
                     ports.push((name, width));
                 }
                 self.module_ports.insert(module_path, ports);
@@ -181,10 +181,10 @@ impl<'d> Converter<'d> {
         // Gather ports using get_ports_of
         let ports_of = self.db.get_ports_of(moddef_symbol.id());
         let mut ports: Vec<verilog::Port> = vec![];
-        for port in ports_of {
+        for port in ports_of.iter() {
             use bstr::ByteSlice;
             let name = port.path.to_str_lossy().into_owned();
-            let width = port.typ.map(|t| type_width(&t, self.db)).unwrap_or(0);
+            let width = port.typ.clone().map(|t| type_width(&t, self.db)).unwrap_or(0);
             let port_name = if moddef.is_export {
                 exact_verilog_name(&name)
             } else {

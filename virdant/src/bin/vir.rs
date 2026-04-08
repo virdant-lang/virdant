@@ -289,13 +289,14 @@ fn dump_ports(args: &Args, moddef_fqn: &str) {
     let ports = db.get_ports_of(moddef.id());
 
     println!("Ports for {}:", moddef_fqn);
-    for port in ports {
+    for port in ports.iter() {
         let path = port.path.to_str_lossy();
         let dir = match port.dir {
             virdant::common::PortDir::Input => "input",
             virdant::common::PortDir::Output => "output",
         };
         let typ = port.typ
+            .clone()
             .map(|t| format!("{:?}", t))
             .unwrap_or_else(|| "<unknown>".to_string());
         println!("  {} {} : {}", dir, path, typ);
