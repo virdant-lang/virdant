@@ -213,10 +213,31 @@ impl TypeIndex {
                 let clock_symbol = symboltable.resolve(b"builtin::Clock".into()).unwrap();
 
                 let typ = if symbol.id() == bit_symbol.id() {
+                    if node.children().len() >= 2 {
+                        self.diagnostics.push(diagnostics::Unknown {
+                            region: node.region(),
+                            message: "Type Bit takes no parameters.".into(),
+                        }.into());
+                        return;
+                    }
                     Type::Bit
                 } else if symbol.id() == clock_symbol.id() {
+                    if node.children().len() >= 2 {
+                        self.diagnostics.push(diagnostics::Unknown {
+                            region: node.region(),
+                            message: "Type Clock takes no parameters.".into(),
+                        }.into());
+                        return;
+                    }
                     Type::Clock
                 } else if symbol.id() == word_symbol.id() {
+                    if node.children().len() < 2 {
+                        self.diagnostics.push(diagnostics::Unknown {
+                            region: node.region(),
+                            message: "Word type requires a width parameter.".into(),
+                        }.into());
+                        return;
+                    }
                     let generics_node = node.child(1);
                     let AstNodePayload::GenericsParams(generics_params) = generics_node.payload() else {
                         unreachable!()

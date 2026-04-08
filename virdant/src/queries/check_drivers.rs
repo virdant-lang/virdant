@@ -61,19 +61,17 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<D
         }
     }
 
-    /*
-     * TODO Make this work with ModDefStmtIf statements
+    let driver_analysis = builder.get_driver_analysis(symbol_id);
     for (path, component) in component_analysis.components() {
-        if component.can_sink() && !driver_locations.contains_key(&path) {
+        if component.can_sink() && !driver_analysis.drivers().contains_key(&component.id()) {
             let location = component.location();
-            let region = builder.get_location_region(location.clone());
+            let region = builder.get_location_region(location);
             diagnostics.push(diagnostics::NoDrivers {
                 region,
                 target: path.clone(),
             }.into());
         }
     }
-    */
 
     diagnostics
 }
@@ -117,6 +115,7 @@ fn collect_wrong_driver_type_errors(
                 }.into());
             }
         }
+        Driver::Bidirectional(_) => {}
         Driver::If(driver_if) => {
             for (_, sub_driver) in &driver_if.clauses {
                 collect_wrong_driver_type_errors(builder, sub_driver, expected, path, diagnostics);

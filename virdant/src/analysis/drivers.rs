@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 use crate::analysis::Location;
 use crate::analysis::component::{ComponentAnalysis, ComponentId};
 use crate::analysis::symbols::SymbolId;
-use crate::common::DriverType;
+use crate::common::{DriverType, Flow};
 use crate::db::Builder;
 use crate::diagnostics::Diagnostic;
 use bstr::ByteSlice;
@@ -22,6 +22,7 @@ pub struct DriverAnalysis {
 #[derive(Debug, Clone)]
 pub enum Driver {
     Expr(DriverType, Location),
+    Bidirectional(Location),
     If(DriverIf),
     Match(DriverMatch),
 }
@@ -30,6 +31,7 @@ impl Driver {
     pub fn driver_type(&self) -> DriverType {
         match self {
             Driver::Expr(dt, _) => *dt,
+            Driver::Bidirectional(_) => DriverType::Continuous,
             Driver::If(driver_if) => driver_if.driver_type,
             Driver::Match(driver_match) => driver_match.driver_type,
         }
@@ -84,6 +86,7 @@ fn dump_driver(driver: &Driver, level: usize) {
     let pad = "    ".repeat(level);
     match driver {
         Driver::Expr(driver_type, loc) => eprintln!("{pad} {driver_type:?}{loc:?}"),
+        Driver::Bidirectional(loc) => eprintln!("{pad} Bidirectional{loc:?}"),
         Driver::If(driver_if) => {
             for (i, (cond_loc, sub_driver)) in driver_if.clauses.iter().enumerate() {
                 let keyword = if i == 0 { "if" } else { "else if" };
@@ -145,9 +148,43 @@ fn collect_block_drivers(
                 result.entry(component.id()).or_default().push(Driver::Expr(driver.driver_type, expr));
             }
             AstNodePayload::BidirectionalDriver => {
-                // Bidirectional drivers are handled separately in the conversion stage
-                // because they need special handling to connect socket channels
-                // Skip them here
+                let parsing = stmt.parsing;
+                let lhs_node = stmt.child(0);
+                let rhs_node = stmt.child(1);
+                let Some(lhs_path) = lhs_node.path() else { continue };
+                let Some(rhs_path) = rhs_node.path() else { continue };
+                let lhs_str = parsing.string(lhs_path);
+                let rhs_str = parsing.string(rhs_path);
+
+                let lhs_prefix = format!("{}.", lhs_str.to_str_lossy());
+                let rhs_prefix = format!("{}.", rhs_str.to_str_lossy());
+
+                for (lhs_full_path, lhs_component) in component_analysis.components() {
+                    let lhs_path_str = lhs_full_path.to_str_lossy();
+                    if !lhs_path_str.starts_with(&lhs_prefix) {
+                        continue;
+                    }
+
+                    let suffix = &lhs_path_str[lhs_prefix.len()..];
+                    let rhs_full_path = bstr::BString::from(format!("{}{}", rhs_prefix, suffix).into_bytes());
+
+                    let Some(rhs_component) = component_analysis.resolve(rhs_full_path.as_bstr()) else {
+                        continue;
+                    };
+
+                    let location = stmt.location();
+                    match (lhs_component.flow(), rhs_component.flow()) {
+                        (Flow::Source, Flow::Sink) => {
+                            result.entry(rhs_component.id()).or_default()
+                                .push(Driver::Bidirectional(location));
+                        }
+                        (Flow::Sink, Flow::Source) => {
+                            result.entry(lhs_component.id()).or_default()
+                                .push(Driver::Bidirectional(location));
+                        }
+                        _ => {}
+                    }
+                }
             }
             AstNodePayload::ModDefStmtIf => {
                 // Children: [cond_0, block_0, cond_1, block_1, ..., (else_block?)]

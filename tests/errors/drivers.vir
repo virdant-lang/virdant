@@ -9,6 +9,11 @@ mod TwoDrivers {
     out := false;
 }
 
+mod NoDrivers {
+    // CHECK: No drivers for out
+    outgoing out : Bit;
+}
+
 // Socket used to test DriverForSink from both sides.
 socket Chan {
     mosi req : Word[8];
@@ -70,6 +75,45 @@ mod DriverTypes {
         e := true;
     };
 
+}
+
+mod DriversForInternalPorts {
+    // CHECK: No drivers for e.inp
+    mod e of Ext;
+
+    // CHECK: No drivers for i.inp
+    mod i of Int;
+}
+
+ext mod Ext {
+    incoming inp : Bit;
+    outgoing out : Bit;
+}
+
+mod Int {
+    incoming inp : Bit;
+    outgoing out : Bit;
+
+    out := inp;
+}
+
+// A properly-wired master and slave, used to test socket NoDrivers below.
+mod GoodMaster {
+    master socket ch of Chan;
+    ch.req := 0;
+}
+
+mod GoodSlave {
+    slave socket ch of Chan;
+    ch.ack := true;
+}
+
+// Without :=:, the sink channels of each socket are left undriven.
+mod MissingSocketConnect {
+    mod p of GoodMaster;
+    mod q of GoodSlave;
+    // CHECK: No drivers for p.ch.ack
+    // CHECK: No drivers for q.ch.req
 }
 
 // CHECK: Check failed

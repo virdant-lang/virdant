@@ -289,6 +289,11 @@ impl<'d> Converter<'d> {
             let Some(typ) = component.typ() else { continue };
 
             for driver in comp_drivers {
+                // Bidirectional drivers are emitted by the dedicated pass below.
+                if matches!(driver, Driver::Bidirectional(_)) {
+                    continue;
+                }
+
                 // Collect holes from this driver tree
                 for region in self.collect_driver_holes(driver) {
                     let message = format!("\"HOLE: ? at {region}\"");
@@ -464,6 +469,7 @@ impl<'d> Converter<'d> {
                 let expr_node = parsing.ast_node(loc.ast_node_id());
                 collect_ast_holes(expr_node)
             }
+            Driver::Bidirectional(_) => vec![],
             Driver::If(driver_if) => {
                 let mut holes = vec![];
                 for (_, sub_driver) in &driver_if.clauses {
@@ -502,6 +508,7 @@ impl<'d> Converter<'d> {
                 let expr_node = parsing.ast_node(loc.ast_node_id());
                 self.convert_expr(package, expr_node, typ, self.db, scheduler)
             }
+            Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are emitted directly, not via convert_driver_to_expr"),
             Driver::If(driver_if) => self.convert_driver_if_to_expr(package, driver_if, typ, scheduler),
             Driver::Match(driver_match) => self.convert_driver_match_to_expr(package, driver_match, typ, scheduler),
         }
@@ -694,6 +701,7 @@ impl<'d> Converter<'d> {
                     expr,
                 })]
             }
+            Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are emitted directly, not via convert_latched_driver_to_stmts"),
             Driver::If(driver_if) => {
                 self.convert_latched_driver_if_to_stmts(package, driver_if, typ, path, scheduler)
             }

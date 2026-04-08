@@ -1,0 +1,10 @@
+mod WordNoWidth {
+    // CHECK: Word type requires a width parameter
+    wire w0 : Word;
+
+    // CHECK: Type Bit takes no parameters
+    wire w1 : Bit[8];
+
+    // CHECK: Type Clock takes no parameters
+    wire w2 : Clock[8];
+}

@@ -350,6 +350,7 @@ fn collect_locations(driver: &Driver) -> Vec<Location> {
 fn collect_locations_inner(driver: &Driver, locs: &mut Vec<Location>) {
     match driver {
         Driver::Expr(_, loc) => locs.push(loc.clone()),
+        Driver::Bidirectional(_) => {}
         Driver::If(driver_if) => {
             for (cond_loc, sub_driver) in &driver_if.clauses {
                 locs.push(cond_loc.clone());
