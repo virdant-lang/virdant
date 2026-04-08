@@ -88,14 +88,12 @@ impl Typing {
             )
             .is_err();
 
-        if children
-            .iter()
-            .all(|child| self.typs.contains_key(&child.id()))
-        {
+        if !err {
             self.annotate(node, expected_typ);
+            Ok(())
+        } else {
+            Err(())
         }
-
-        if err { Err(()) } else { Ok(()) }
     }
 
     fn check_word_lit<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
@@ -234,23 +232,14 @@ impl Typing {
             return Err(());
         };
 
-        // For ExprFn node: child(0) is function name, child(1) is the argument
-        let subject = node.child(1);
+        let subject = node.subject().unwrap();
 
         // Try to infer the subject type first
         let subject_typ = if let Ok(Some(typ)) = self.infer(builder, context.clone(), &subject) {
             typ
         } else {
-            // If inference fails, try checking against an arbitrary Word type
-            // This handles literals like 0x8w4 which have explicit width
-            // We use a large width to allow any word literal
-            let _ = self.check(builder, context, &subject, &Type::Word(128));
-            if let Some(typ) = self.typs.get(&subject.id()) {
-                typ.clone()
-            } else {
-                self.flag_cant_infer(node);
-                return Err(());
-            }
+            self.flag_cant_infer(node);
+            return Err(());
         };
 
         let subject_width = match subject_typ {
@@ -310,12 +299,6 @@ impl Typing {
         }
 
         self.annotate(node, &expected_typ);
-
-        //        self.diagnostics.push(diagnostics::UnfilledHole {
-        //            region: node.region(),
-        //            name: None,
-        //            typ: Some(format!("{expected_typ:?}").into()),
-        //        }.into());
         Ok(())
     }
 
@@ -598,5 +581,32 @@ impl Typing {
         self.annotate(node, &expected_typ);
 
         if has_errors { Err(()) } else { Ok(()) }
+    }
+}
+
+fn min_word_width(value: WordValue) -> Width {
+    if value == 0 {
+        0
+    } else {
+        u64::BITS as Width - u64::leading_zeros(value) as Width
+    }
+}
+
+fn parse_word_literal(literal: &str) -> (WordValue, Option<Width>) {
+    if let Some((value, width)) = literal.split_once('w') {
+        (parse_nat_literal(value), Some(width.parse().unwrap()))
+    } else {
+        (parse_nat_literal(literal), None)
+    }
+}
+
+fn parse_nat_literal(literal: &str) -> WordValue {
+    let literal = literal.replace('_', "");
+    if let Some(hex) = literal.strip_prefix("0x") {
+        u64::from_str_radix(hex, 16).unwrap()
+    } else if let Some(bin) = literal.strip_prefix("0b") {
+        u64::from_str_radix(bin, 2).unwrap()
+    } else {
+        literal.parse().unwrap()
     }
 }

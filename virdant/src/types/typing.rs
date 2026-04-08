@@ -185,34 +185,6 @@ impl Typing {
     }
 }
 
-
-fn parse_word_literal(literal: &str) -> (WordValue, Option<Width>) {
-    if let Some((value, width)) = literal.split_once('w') {
-        (parse_nat_literal(value), Some(width.parse().unwrap()))
-    } else {
-        (parse_nat_literal(literal), None)
-    }
-}
-
-fn parse_nat_literal(literal: &str) -> WordValue {
-    let literal = literal.replace('_', "");
-    if let Some(hex) = literal.strip_prefix("0x") {
-        u64::from_str_radix(hex, 16).unwrap()
-    } else if let Some(bin) = literal.strip_prefix("0b") {
-        u64::from_str_radix(bin, 2).unwrap()
-    } else {
-        literal.parse().unwrap()
-    }
-}
-
-pub(super) fn min_word_width(value: WordValue) -> Width {
-    if value == 0 {
-        0
-    } else {
-        u64::BITS as Width - u64::leading_zeros(value) as Width
-    }
-}
-
 pub(crate) fn build_type_at(builder: &mut Builder, location: Location) -> Result<Type, Vec<Diagnostic>> {
     let type_index = builder.get_type_index();
     if let Some(typ) = type_index.type_at(location) {

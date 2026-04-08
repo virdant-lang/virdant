@@ -351,7 +351,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprUnOp(_expr_un_op) => Some(self.child(0)),
             AstNodePayload::ExprMethod(_expr_method) => Some(self.child(0)),
             AstNodePayload::ExprField(_) => Some(self.child(0)),
-            AstNodePayload::ExprFn => Some(self.child(0)),
+            AstNodePayload::ExprFn => Some(self.child(1)), // skips over the Ofness
             AstNodePayload::ExprIndex(_expr_index) => Some(self.child(0)),
             AstNodePayload::ExprIndexRange(_expr_index_range) => Some(self.child(0)),
             AstNodePayload::ExprAs => Some(self.child(0)),
