@@ -5,7 +5,7 @@ use bstr::ByteSlice;
 
 use crate::analysis::drivers::{Driver, DriverIf, DriverMatch};
 use crate::analysis::location::Location;
-use crate::common::{self, ComponentKind, DriverType, Radix, TypeScheme, Width};
+use crate::common::{self, ComponentKind, DriverType, Radix, TypeScheme, Width, WordValue};
 use crate::db::Db;
 use crate::diagnostics::DiagnosticLevel;
 use crate::fqn::PackageFqn;
@@ -971,7 +971,7 @@ impl<'d> Converter<'d> {
                 let ctor_symbol_id = typing.tag(node.location()).symbol_id().unwrap();
                 let tag_width: Width = TryInto::<u16>::try_into(slots.len()).unwrap();
                 let slot_index = slots.iter().position(|slot_id| slot_id.id() == ctor_symbol_id).unwrap();
-                let tag_value: u128 = 1 << slot_index;
+                let tag_value: WordValue = 1 << slot_index;
 
                 // Compute the max payload width across all ctor variants.
                 let max_payload_width: Width = slots.iter().map(|slot| {
@@ -1264,7 +1264,7 @@ impl<'d> Converter<'d> {
                             .map(|t| type_width(t, self.db))
                             .unwrap_or(0);
                         packed_exprs.push(verilog::Expr::WordLit(verilog::expr::WordLit {
-                            value: 0u128,
+                            value: 0,
                             width: field_width,
                             radix: Radix::Dec,
                         }));
@@ -1326,7 +1326,7 @@ impl<'d> Converter<'d> {
                 if field_width == 0 {
                     // Zero-width field (shouldn't happen in practice)
                     verilog::Expr::WordLit(verilog::expr::WordLit {
-                        value: 0u128,
+                        value: 0,
                         width: 0,
                         radix: Radix::Dec,
                     })
@@ -1340,12 +1340,12 @@ impl<'d> Converter<'d> {
                     verilog::Expr::IndexRange(verilog::expr::IndexRange {
                         subject: Box::new(subject_expr),
                         index_hi: Box::new(verilog::Expr::WordLit(verilog::expr::WordLit {
-                            value: hi as u128,
+                            value: hi as WordValue,
                             width: 32,
                             radix: Radix::Dec,
                         })),
                         index_lo: Box::new(verilog::Expr::WordLit(verilog::expr::WordLit {
-                            value: lo as u128,
+                            value: lo as WordValue,
                             width: 32,
                             radix: Radix::Dec,
                         })),
@@ -1552,12 +1552,12 @@ fn parse_nat_literal(literal: &str) -> u64 {
     }
 }
 
-fn constant_word_expr(width: Width, value: u128) -> verilog::Expr {
+fn constant_word_expr(width: Width, value: WordValue) -> verilog::Expr {
     verilog::Expr::WordLit(verilog::expr::WordLit { value, width, radix: Radix::Dec })
 }
 
 fn constant_index_expr(index: Width) -> verilog::Expr {
-    constant_word_expr(32, u128::from(index))
+    constant_word_expr(32, u64::from(index))
 }
 
 fn convert_binop(op: common::BinOp) -> verilog::BinOp {

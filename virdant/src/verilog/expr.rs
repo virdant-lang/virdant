@@ -1,3 +1,5 @@
+use crate::common::WordValue;
+
 use super::*;
 
 #[derive(Debug, Clone)]
@@ -25,7 +27,7 @@ pub struct BitLit {
 
 #[derive(Debug, Clone)]
 pub struct WordLit {
-    pub value: u128,
+    pub value: WordValue,
     pub width: Width,
     pub radix: Radix,
 }

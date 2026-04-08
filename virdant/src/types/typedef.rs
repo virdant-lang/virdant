@@ -1,8 +1,8 @@
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::location::Location;
-use crate::analysis::symbols::SymbolId;
-use crate::common::{TypeScheme, Width};
+use crate::analysis::symbols::{SymbolId, SymbolTable};
+use crate::common::{TypeScheme, Width, WordValue};
 
 use std::sync::Arc;
 
@@ -22,7 +22,7 @@ pub struct TypeDef {
     pub kind: TypeScheme,
 
     pub width: Option<Width>,
-    pub enumerant_values: IndexMap<SymbolId, u128>, // TODO use a Value struct instead
+    pub enumerant_values: IndexMap<SymbolId, WordValue>,
 }
 
 pub(crate) fn build_typedefs(builder: &mut Builder) -> Vec<TypeDef> {
@@ -119,7 +119,7 @@ pub(crate) fn build_typedef(builder: &mut Builder, symbol_id: SymbolId) -> Arc<T
     })
 }
 
-fn eval_const_expr(node: &AstNode<'_>) -> u128 {
+fn eval_const_expr(node: &AstNode<'_>) -> WordValue {
     let parsing = node.parsing;
     match node.payload() {
         AstNodePayload::ExprWordLit(expr_word_lit) => {
@@ -132,7 +132,7 @@ fn eval_const_expr(node: &AstNode<'_>) -> u128 {
     }
 }
 
-fn parse_word_literal(literal: &str) -> (u128, Option<Width>) {
+fn parse_word_literal(literal: &str) -> (WordValue, Option<Width>) {
     if let Some((value, width)) = literal.split_once('w') {
         (parse_nat_literal(value), Some(width.parse().unwrap()))
     } else {
@@ -140,58 +140,52 @@ fn parse_word_literal(literal: &str) -> (u128, Option<Width>) {
     }
 }
 
-fn parse_nat_literal(literal: &str) -> u128 {
+fn parse_nat_literal(literal: &str) -> WordValue {
     let literal = literal.replace('_', "");
     if let Some(hex) = literal.strip_prefix("0x") {
-        u128::from_str_radix(hex, 16).unwrap()
+        u64::from_str_radix(hex, 16).unwrap()
     } else if let Some(bin) = literal.strip_prefix("0b") {
-        u128::from_str_radix(bin, 2).unwrap()
+        u64::from_str_radix(bin, 2).unwrap()
     } else {
         literal.parse().unwrap()
     }
 }
 
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct TypeId(usize);
+
 #[derive(Debug)]
 pub struct TypeIndex {
-    typs: Vec<Type>,
-    typ_at_location: IndexMap<Location, usize>, // index into typs
+    typs: IndexSet<Type>,
+    typ_at_location: IndexMap<Location, TypeId>,
     diagnostics: Vec<Diagnostic>,
 }
 
 impl TypeIndex {
-    pub fn typs(&self) -> &Vec<Type> {
+    pub fn typs(&self) -> &IndexSet<Type> {
         &self.typs
     }
 
     pub fn type_at(&self, location: Location) -> Option<&Type> {
         self.typ_at_location
             .get(&location)
-            .map(|type_id| &self.typs[*type_id])
+            .map(|type_id| &self.typs[type_id.0])
     }
 
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         self.diagnostics.clone()
     }
-}
 
-pub(crate) fn build_type_index(builder: &mut Builder) -> Arc<TypeIndex> {
-    let mut type_index = TypeIndex {
-        typs: vec![],
-        typ_at_location: IndexMap::new(),
-        diagnostics: vec![],
-    };
-
-    for package in builder.get_packages() {
-        let parsing = builder.get_parsing(package);
-        type_index.gather_type_roots(builder, parsing.root());
+    fn typ_to_index(&self, typ: &Type) -> Option<usize> {
+        for (idx, typ_) in self.typs.iter().enumerate() {
+            if typ == typ_ {
+                return Some(idx);
+            }
+        }
+        None
     }
 
-    Arc::new(type_index)
-}
-
-
-impl TypeIndex {
-    fn gather_type_roots(&mut self, builder: &mut Builder, node: AstNode<'_>) {
+    fn gather_type_roots(&mut self, builder: &mut Builder, node: AstNode<'_>, symboltable: &SymbolTable) {
         if let AstNodePayload::Type(_) = node.payload() {
             let parsing = node.parsing;
             let type_name: BString = match node.child(0).payload() {
@@ -207,7 +201,6 @@ impl TypeIndex {
                 _ => panic!("expected Ofness inside Type node"),
             };
 
-            let symboltable = builder.get_symboltable();
             if let Some(symbol) = symboltable.resolve_item(type_name.as_bstr(), parsing.package()) {
                 let bit_symbol = symboltable.resolve(b"builtin::Bit".into()).unwrap();
                 let word_symbol = symboltable.resolve(b"builtin::Word".into()).unwrap();
@@ -229,10 +222,15 @@ impl TypeIndex {
                     Type::Usual(symbol.id())
                 };
 
-                let idx = self.typs.len();
-                self.typs.push(typ);
+                let idx = if let Some(idx) = self.typ_to_index(&typ) {
+                    idx
+                } else {
+                    self.typs.len()
+                };
 
-                self.typ_at_location.insert(node.location(), idx);
+                self.typs.insert(typ);
+
+                self.typ_at_location.insert(node.location(), TypeId(idx));
             } else {
                 self.diagnostics.push(diagnostics::UnresolvedType {
                     region: node.region(),
@@ -245,7 +243,24 @@ impl TypeIndex {
         }
 
         for child in node.children() {
-            self.gather_type_roots(builder, child);
+            self.gather_type_roots(builder, child, symboltable);
         }
     }
+}
+
+pub(crate) fn build_type_index(builder: &mut Builder) -> Arc<TypeIndex> {
+    let mut type_index = TypeIndex {
+        typs: IndexSet::new(),
+        typ_at_location: IndexMap::new(),
+        diagnostics: vec![],
+    };
+
+    let symboltable = builder.get_symboltable();
+
+    for package in builder.get_packages() {
+        let parsing = builder.get_parsing(package);
+        type_index.gather_type_roots(builder, parsing.root(), &symboltable);
+    }
+
+    Arc::new(type_index)
 }
