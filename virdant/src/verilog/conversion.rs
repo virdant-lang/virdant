@@ -609,13 +609,13 @@ impl<'d> Converter<'d> {
             has_else = true;
         }
 
+        // In the latched case, an absent else clause emits an empty default arm so that the
+        // register holds its current value (no assignment = hold in a clocked always block).
         if !has_else {
+            let _ = (result_width, assigned_name);
             case_items.push(verilog::CaseItem {
                 pattern: verilog::CasePattern::Default,
-                stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
-                    name: assigned_name.clone(),
-                    expr: verilog::Expr::XLit(verilog::expr::XLit { width: result_width }),
-                })],
+                stmts: vec![],
             });
         }
 

@@ -45,9 +45,12 @@ module Tb;
         $dumpvars(0, Tb);
 
         do_reset;
-        @(posedge clock);
-        @(posedge clock);
-        @(posedge clock);
+        repeat(10) begin
+            @(posedge clock);
+            if (dut.r !== 1'b1) begin
+                $fatal;
+            end
+        end
 
         $display("DONE");
         $finish;

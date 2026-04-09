@@ -26,4 +26,16 @@ export mod Top {
             out := false;
         };
     };
+
+    reg r : Bit on clock;
+
+    if reset {
+        r <= true;
+    } else {
+        match #Off : State {
+            #On => {
+                r <= false;
+            };
+        };
+    };
 }
