@@ -1,0 +1,5 @@
+[project]
+name = "drivers"
+
+[prog]
+platform = "icesugar"

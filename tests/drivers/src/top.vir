@@ -1,0 +1,29 @@
+enum type State width 2 {
+    On  = 1w2;
+    Off = 2w2;
+}
+
+export mod Top {
+    incoming clock : Clock;
+    incoming reset : Bit;
+
+    outgoing out : Bit;
+
+    reg state : State on clock;
+    if reset {
+        state <= #Off;
+    } else if state == #Off {
+        state <= #On;
+    } else {
+        state <= #Off;
+    };
+
+    match state {
+        #On => {
+            out := true;
+        };
+        #Off => {
+            out := false;
+        };
+    };
+}
