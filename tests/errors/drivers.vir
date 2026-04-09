@@ -137,6 +137,38 @@ mod TwoDriversAcrossSections {
         // CHECK: Multiple drivers for r
         r <= false;
     };
+
+    // CHECK: Multiple drivers for s
+    reg s : Bit on clock;
+    s <= true;
+
+    if reset {
+        s <= false;
+    };
+
+    // CHECK: Multiple drivers for t
+    wire t : Bit;
+    t := true;
+
+    if reset {
+        t := false;
+    };
+
+    wire u : Bit;
+    u := false;
+
+    match #On : Status {
+        #On => {
+        };
+        else => {
+            u := true;
+        };
+    };
+}
+
+enum type Status width 2 {
+    On = 1;
+    Off = 2;
 }
 
 // CHECK: Check failed
