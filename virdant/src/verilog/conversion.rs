@@ -344,7 +344,7 @@ impl<'d> Converter<'d> {
                         }
                         _ => {
                             let expr = self.convert_driver_to_expr(package, driver, &typ, &mut scheduler);
-                            vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
+                            vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
                                 name: valid_verilog_name(&path),
                                 expr,
                             })]
@@ -691,12 +691,12 @@ impl<'d> Converter<'d> {
                 // Inline match expressions as casez statements directly — no temp reg needed
                 // inside a sequential (always @(posedge clock)) context.
                 if matches!(expr_node.payload(), AstNodePayload::ExprMatch) {
-                    return self.convert_match_expr_to_blocking_stmts(
+                    return self.convert_match_expr_to_nonblocking_stmts(
                         package, expr_node, typ, path, scheduler,
                     );
                 }
                 let expr = self.convert_expr(package, expr_node, typ, self.db, scheduler);
-                vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
+                vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
                     name: valid_verilog_name(path),
                     expr,
                 })]
@@ -711,11 +711,11 @@ impl<'d> Converter<'d> {
         }
     }
 
-    /// Converts an `ExprMatch` node directly into a `casez` statement that blockingly
+    /// Converts an `ExprMatch` node directly into a `casez` statement that non-blockingly
     /// assigns each arm's result to `target_name`.  This avoids creating a temporary reg +
     /// `always @(*)` block, which would be incorrect inside a sequential
     /// `always @(posedge clock)` context.
-    fn convert_match_expr_to_blocking_stmts(
+    fn convert_match_expr_to_nonblocking_stmts(
         &self,
         package: &PackageFqn,
         node: AstNode,
@@ -801,7 +801,7 @@ impl<'d> Converter<'d> {
             for key in &bound_keys { scheduler.subst.shift_remove(key); }
             case_items.push(verilog::CaseItem {
                 pattern,
-                stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
+                stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
                     name: assigned_name.clone(),
                     expr: body_expr,
                 })],
@@ -811,7 +811,7 @@ impl<'d> Converter<'d> {
         if !has_else {
             case_items.push(verilog::CaseItem {
                 pattern: verilog::CasePattern::Default,
-                stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
+                stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
                     name: assigned_name.clone(),
                     expr: verilog::Expr::XLit(verilog::expr::XLit { width: result_width }),
                 })],
