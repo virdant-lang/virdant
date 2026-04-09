@@ -41,14 +41,6 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<D
                         target: path.clone(),
                     }.into());
                 }
-            } else if component.can_sink() && driver_entries.len() > 1 {
-                for (_driver_type, location) in driver_entries {
-                    let region = builder.get_location_region(location.clone());
-                    diagnostics.push(diagnostics::MultipleDrivers {
-                        region,
-                        target: path.clone(),
-                    }.into());
-                }
             }
         } else {
             for (_driver_type, location) in driver_entries {
@@ -63,13 +55,29 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<D
 
     let driver_analysis = builder.get_driver_analysis(symbol_id);
     for (path, component) in component_analysis.components() {
-        if component.can_sink() && !driver_analysis.drivers().contains_key(&component.id()) {
-            let location = component.location();
-            let region = builder.get_location_region(location);
-            diagnostics.push(diagnostics::NoDrivers {
-                region,
-                target: path.clone(),
-            }.into());
+        let drivers = driver_analysis.drivers().get(&component.id());
+        if component.can_sink() {
+            match drivers {
+                None => {
+                    let region = builder.get_location_region(component.location());
+                    diagnostics.push(diagnostics::NoDrivers {
+                        region,
+                        target: path.clone(),
+                    }.into());
+                }
+                Some(drivers) if drivers.len() > 1 => {
+                    for driver in drivers {
+                        if let Some(location) = driver.location() {
+                            let region = builder.get_location_region(location);
+                            diagnostics.push(diagnostics::MultipleDrivers {
+                                region,
+                                target: path.clone(),
+                            }.into());
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
     }
 

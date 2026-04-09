@@ -116,4 +116,27 @@ mod MissingSocketConnect {
     // CHECK: No drivers for q.ch.req
 }
 
+mod TwoDriversAcrossSections {
+    incoming clock : Clock;
+    incoming reset : Bit;
+    outgoing out  : Bit;
+
+    if reset {
+        out := true;
+    } else {
+        out := false;
+    };
+
+    reg r : Bit on clock;
+
+    if reset {
+        r <= true;
+    };
+
+    if !reset {
+        // CHECK: Multiple drivers for r
+        r <= false;
+    };
+}
+
 // CHECK: Check failed

@@ -36,6 +36,15 @@ impl Driver {
             Driver::Match(driver_match) => driver_match.driver_type,
         }
     }
+
+    pub fn location(&self) -> Option<Location> {
+        match self {
+            Driver::Expr(_, loc) => Some(loc.clone()),
+            Driver::Bidirectional(loc) => Some(loc.clone()),
+            Driver::If(driver_if) => driver_if.clauses.first().map(|(loc, _)| loc.clone()),
+            Driver::Match(driver_match) => Some(driver_match.subject.clone()),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
