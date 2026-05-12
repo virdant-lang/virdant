@@ -22,12 +22,12 @@ mod Queue {
         @Invalid()
     } else {
         match queue {
-            @Invalid() => data_in;
-            @Valid(data) => if ready_out {
+            case @Invalid() => data_in
+            case @Valid(data) => if ready_out {
                 data_in
             } else {
                 queue
-            };
+            }
         }
     };
 
@@ -35,8 +35,8 @@ mod Queue {
         0
     } else {
         match queue {
-            @Invalid() => true;
-            @Valid(data) => false;
+            case @Invalid() => true
+            case @Valid(data) => false
         }
     };
 

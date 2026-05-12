@@ -150,14 +150,14 @@ mod LedController {
         @SpinCCW(8, 0)
     } else if change {
         match state {
-            @Idle(round, next) => if round->lt(3) {
+            case @Idle(round, next) => if round->lt(3) {
                 @Idle(round->inc(), next)
             } else if next {
                 @SpinCCW(8, 0)
             } else {
                 @SpinCW(1, 0)
-            };
-            @SpinCW(x, round) => if x->eq(8) {
+            }
+            case @SpinCW(x, round) => if x->eq(8) {
                 if round->lt(3) {
                     @SpinCW(1, round->inc())
                 } else {
@@ -165,8 +165,8 @@ mod LedController {
                 }
             } else {
                 @SpinCW(x->sll(1), round)
-            };
-            @SpinCCW(x, round) => if x->eq(1) {
+            }
+            case @SpinCCW(x, round) => if x->eq(1) {
                 if round->lt(3) {
                     @SpinCCW(8, round->inc())
                 } else {
@@ -174,13 +174,13 @@ mod LedController {
                 }
             } else {
                 @SpinCCW(x->srl(1), round)
-            };
-            @Random(leds) => @Random(lfsr.out[5..0]);
-            @Memory(addr) => if addr->lt(16) {
+            }
+            case @Random(leds) => @Random(lfsr.out[5..0])
+            case @Memory(addr) => if addr->lt(16) {
                 @Memory(addr->inc())
             } else {
                 @Memory(0)
-            };
+            }
         }
     } else {
         state
@@ -191,21 +191,21 @@ mod LedController {
     lfsr.reset := reset;
 
     leds := match state {
-        @Idle(round, next) => 0;
-        @SpinCW(leds, round) => leds;
-        @SpinCCW(leds, round) => leds;
-        @Random(leds) => leds;
-        @Memory(addr) => mem.read_data[5..0];
+        case @Idle(round, next) => 0
+        case @SpinCW(leds, round) => leds
+        case @SpinCCW(leds, round) => leds
+        case @Random(leds) => leds
+        case @Memory(addr) => mem.read_data[5..0]
     };
 
     mod mem of Memory;
     mem.clock := clock;
     mem.read_addr := match state {
-        @Idle(x, y) => 0;
-        @SpinCW(x, y) => 0;
-        @SpinCCW(x, y) => 0;
-        @Random(leds) => 0;
-        @Memory(addr) => addr;
+        case @Idle(x, y) => 0
+        case @SpinCW(x, y) => 0
+        case @SpinCCW(x, y) => 0
+        case @Random(leds) => 0
+        case @Memory(addr) => addr
     };
 }
 

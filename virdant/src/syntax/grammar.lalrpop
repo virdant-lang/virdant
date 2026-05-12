@@ -386,14 +386,15 @@ ModDefStmtMatch: AstNodeId = {
     <ll:@L> "match" Expr "{" <arms:ModDefStmtMatchArm*> "}" <rr:@R> => {
         let payload = AstNodePayload::ModDefStmtMatch;
         let span = parser.span(ll, rr);
-        let num_children = 1 + u16::try_from(2 * arms.len()).unwrap();
+        let num_children = 1 + arms.into_iter().sum::<u16>();
 
         parser.add_node(payload, span, num_children)
     },
 }
 
-ModDefStmtMatchArm: () = {
-    Pat "=>" ModDefStmtBlock ";" => (),
+ModDefStmtMatchArm: u16 = {
+    "case" Pat "=>" ModDefStmtBlock => 2,
+    "else" "=>" ModDefStmtBlock => 1,
 }
 
 ModDefStmtBlock: AstNodeId = {
@@ -462,14 +463,15 @@ ExprMatch: AstNodeId = {
     "}" <rr:@R> => {
         let payload = AstNodePayload::ExprMatch;
         let span = parser.span(ll, rr);
-        let num_children = (2 * arms.len() + 1).try_into().unwrap();
+        let num_children = 1 + arms.into_iter().sum::<u16>();
 
         parser.add_node(payload, span, num_children)
     },
 }
 
-ExprMatchArm: () = {
-    Pat "=>" Expr ";" => (),
+ExprMatchArm: u16 = {
+    "case" Pat "=>" Expr => 2,
+    "else" "=>" Expr => 1,
 }
 
 Pat: () = {
@@ -491,13 +493,6 @@ Pat: () = {
         let payload = AstNodePayload::PatCtor(payload::PatCtor { name });
         let span = parser.span(ll, rr);
         let num_children = args;
-
-        parser.add_node(payload, span, num_children);
-    },
-    <ll:@L> "else" <rr:@R> => {
-        let payload = AstNodePayload::PatElse;
-        let span = parser.span(ll, rr);
-        let num_children = 0;
 
         parser.add_node(payload, span, num_children);
     },
@@ -902,6 +897,14 @@ extern {
         "if" => Token::KwIf,
         "else" => Token::KwElse,
         "match" => Token::KwMatch,
+<<<<<<< HEAD
+=======
+        "case" => Token::KwCase,
+        "assert" => Token::KwAssert,
+        "display" => Token::KwDisplay,
+        "finish" => Token::KwFinish,
+        "fatal" => Token::KwFatal,
+>>>>>>> 0173033 (Update match arm syntax to use `case` keyword)
         "true" => Token::KwTrue,
         "false" => Token::KwFalse,
         "Str" => Token::Str,

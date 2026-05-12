@@ -286,16 +286,21 @@ impl Typing {
             return Err(());
         };
 
-        for chunks in node
-            .children()
-            .into_iter()
-            .skip(1)
-            .collect::<Vec<_>>()
-            .chunks(2)
-        {
-            let [pat, expr] = chunks else { unreachable!() };
-            let arm_context = self.check_pat(builder, context.clone(), pat, &subject_typ)?;
-            self.check(builder, arm_context, expr, expected_typ)?;
+        let children = node.children();
+        let mut idx = 1;
+        while idx < children.len() {
+            let child = &children[idx];
+            if child.is_pat() {
+                let pat = child;
+                let expr = &children[idx + 1];
+                let arm_context = self.check_pat(builder, context.clone(), pat, &subject_typ)?;
+                self.check(builder, arm_context, expr, expected_typ)?;
+                idx += 2;
+            } else {
+                let expr = child;
+                self.check(builder, context.clone(), expr, expected_typ)?;
+                idx += 1;
+            }
         }
 
         self.annotate(node, &expected_typ);
@@ -357,7 +362,6 @@ impl Typing {
         expected_typ: &Type,
     ) -> Result<TypingContext, ()> {
         match node.payload() {
-            AstNodePayload::PatElse => Ok(context),
             AstNodePayload::PatCtor(pat_ident) => {
                 let ctor_name = node.parsing().string(pat_ident.name);
                 let Type::Usual(typedef_id) = expected_typ else {

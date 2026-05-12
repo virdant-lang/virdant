@@ -216,7 +216,6 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Assign(_assign) => format!("Assign"),
             AstNodePayload::PatCtor(_pat_ident) => format!("PatCtor"),
             AstNodePayload::PatEnumerant(_pat_enumerant) => format!("PatEnumerant"),
-            AstNodePayload::PatElse => format!("PatElse"),
             AstNodePayload::Ofness(_ofness) => format!("Ofness"),
             AstNodePayload::It => format!("It"),
             AstNodePayload::Path(_path) => format!("Path"),
@@ -336,8 +335,7 @@ impl<'p> AstNode<'p> {
         matches!(
             self.payload(),
             AstNodePayload::PatCtor(_) |
-            AstNodePayload::PatEnumerant(_) |
-            AstNodePayload::PatElse
+            AstNodePayload::PatEnumerant(_)
         )
     }
 

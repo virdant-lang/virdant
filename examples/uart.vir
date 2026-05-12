@@ -30,29 +30,29 @@ mod UartSender {
     reg state : UartState on clock;
 
     ready := match state {
-        @Idle() => true;
-        @Start(pulse) => false;
-        @Bit(bit, pulse) => false;
-        @Stop(pulse) => false;
+        case @Idle() => true
+        case @Start(pulse) => false
+        case @Bit(bit, pulse) => false
+        case @Stop(pulse) => false
     };
 
     state <= if reset {
         @Idle()
     } else {
         match state {
-            @Idle() =>
+            case @Idle() =>
                 if data_valid {
                     @Start(1250w11)
                 } else {
                     @Idle()
-                };
-            @Start(pulse) =>
+                }
+            case @Start(pulse) =>
                 if pulse->eq(0) {
                     @Bit(0, 1250w11)
                 } else {
                     @Start(pulse->dec())
-                };
-            @Bit(bit, pulse) =>
+                }
+            case @Bit(bit, pulse) =>
                 if pulse->eq(0) {
                     if bit->lt(7) {
                         @Bit(bit->inc(), 1250w11)
@@ -61,35 +61,35 @@ mod UartSender {
                     }
                 } else {
                     @Bit(bit, pulse->dec())
-                };
-            @Stop(pulse) =>
+                }
+            case @Stop(pulse) =>
                 if pulse->eq(0) {
                     @Idle()
                 } else {
                     @Stop(pulse->dec())
-                };
+                }
         }
     };
 
     latched_data <= match state {
-        @Idle() =>
+        case @Idle() =>
             if data_valid {
                 data
             } else {
                 latched_data
-            };
-        @Start(pulse) => latched_data;
-        @Bit(bit, pulse) => latched_data;
-        @Stop(pulse) => latched_data;
+            }
+        case @Start(pulse) => latched_data
+        case @Bit(bit, pulse) => latched_data
+        case @Stop(pulse) => latched_data
     };
 
     uart_tx_reg <= if reset {
         true
     } else {
         match state {
-            @Idle() => true;
-            @Start(pulse) => false;
-            @Bit(bit, pulse) =>
+            case @Idle() => true
+            case @Start(pulse) => false
+            case @Bit(bit, pulse) =>
                 if bit->eq(0) {
                     latched_data[0]
                 } else if bit->eq(1) {
@@ -106,8 +106,8 @@ mod UartSender {
                     latched_data[6]
                 } else {
                     latched_data[7]
-                };
-            @Stop(pulse) => true;
+                }
+            case @Stop(pulse) => true
         }
     };
 }
@@ -126,19 +126,19 @@ mod UartReceiver {
         @Idle()
     } else {
         match state {
-            @Idle() =>
+            case @Idle() =>
                 if uart_rx->eq(false) {
                     @Start(625w11) // ~= 1250 * 0.5
                 } else {
                     @Idle()
-                };
-            @Start(pulse) =>
+                }
+            case @Start(pulse) =>
                 if pulse->eq(0) {
                     @Bit(0, 1250)
                 } else {
                     @Start(pulse->dec())
-                };
-            @Bit(bit, pulse) =>
+                }
+            case @Bit(bit, pulse) =>
                 if pulse->eq(0) {
                     if bit->eq(7) {
                         @Stop(1150) // fudge this one a little bit to be slightly less than 1250
@@ -147,13 +147,13 @@ mod UartReceiver {
                     }
                 } else {
                     @Bit(bit, pulse->dec())
-                };
-            @Stop(pulse) =>
+                }
+            case @Stop(pulse) =>
                 if pulse->eq(0) {
                     @Idle()
                 } else {
                     @Stop(pulse->dec())
-                };
+                }
         }
     };
 
@@ -161,9 +161,9 @@ mod UartReceiver {
         0
     } else {
         match state {
-            @Idle() => 0;
-            @Start(pulse) => 0;
-            @Bit(bit, pulse) =>
+            case @Idle() => 0
+            case @Start(pulse) => 0
+            case @Bit(bit, pulse) =>
                 if pulse->eq(0) {
                     if bit->eq(0) {
                         data_reg->or(word(0w7, uart_rx))
@@ -184,17 +184,17 @@ mod UartReceiver {
                     }
                 } else {
                     data_reg
-                };
-            @Stop(pulse) => data_reg;
+                }
+            case @Stop(pulse) => data_reg
         }
     };
 
     data := data_reg;
 
     data_valid := match state {
-        @Idle() => false;
-        @Start(pulse) => false;
-        @Bit(bit, pulse) => false;
-        @Stop(pulse) => pulse->eq(0);
+        case @Idle() => false
+        case @Start(pulse) => false
+        case @Bit(bit, pulse) => false
+        case @Stop(pulse) => pulse->eq(0)
     };
 }

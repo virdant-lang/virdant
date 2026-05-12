@@ -585,7 +585,7 @@ impl<'d> Converter<'d> {
             let pat_parsing = db.get_parsing(pat_loc.package());
             let pat_node = pat_parsing.ast_node(pat_loc.ast_node_id());
             let mut bound_keys: Vec<String> = vec![];
-            let pattern = self.build_case_pattern(&pat_node, &subject_expr, &subject_typ, scheduler, &mut bound_keys, &mut has_else);
+            let pattern = self.build_case_pattern(&pat_node, &subject_expr, &subject_typ, scheduler, &mut bound_keys);
             let arm_stmts = self.convert_latched_driver_to_stmts(package, sub_driver, typ, path, scheduler);
             for key in &bound_keys { scheduler.subst.shift_remove(key); }
             case_items.push(verilog::CaseItem { pattern, stmts: arm_stmts });
@@ -632,7 +632,7 @@ impl<'d> Converter<'d> {
             let pat_parsing = db.get_parsing(pat_loc.package());
             let pat_node = pat_parsing.ast_node(pat_loc.ast_node_id());
             let mut bound_keys: Vec<String> = vec![];
-            let pattern = self.build_case_pattern(&pat_node, &subject_expr, &subject_typ, scheduler, &mut bound_keys, &mut has_else);
+            let pattern = self.build_case_pattern(&pat_node, &subject_expr, &subject_typ, scheduler, &mut bound_keys);
             let arm_expr = self.convert_driver_to_expr(package, sub_driver, typ, scheduler);
             for key in &bound_keys { scheduler.subst.shift_remove(key); }
             case_items.push(verilog::CaseItem {
@@ -717,17 +717,27 @@ impl<'d> Converter<'d> {
         let subject_typ = self.node_type(package, &subject).unwrap();
         let subject_expr = self.convert_expr(package, subject, &subject_typ, db, scheduler);
         let result_width = type_width(typ, db);
-        let num_arms = (children.len() - 1) / 2;
         let assigned_name = valid_verilog_name(target_name);
         let mut case_items: Vec<verilog::CaseItem> = vec![];
         let mut has_else = false;
-        for i in 0..num_arms {
-            let pat = children[2 * i + 1].clone();
-            let body = children[2 * i + 2].clone();
+        let mut idx = 1;
+        while idx < children.len() {
+            let (pat, body) = if children[idx].is_pat() {
+                let pat = children[idx].clone();
+                let body = children[idx + 1].clone();
+                idx += 2;
+                (Some(pat), body)
+            } else {
+                let body = children[idx].clone();
+                idx += 1;
+                (None, body)
+            };
+
             let mut bound_keys: Vec<String> = vec![];
-            let pattern = match pat.payload() {
-                AstNodePayload::PatElse => { has_else = true; verilog::CasePattern::Default },
-                AstNodePayload::PatEnumerant(pat_enumerant) => {
+            let pattern = match pat.as_ref().map(|p| p.payload()) {
+                None => { has_else = true; verilog::CasePattern::Default },
+                Some(AstNodePayload::PatEnumerant(pat_enumerant)) => {
+                    let pat = pat.unwrap();
                     let enumerant_name = pat.parsing.string(pat_enumerant.name);
                     let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
                     let symboltable = db.get_symboltable();
@@ -738,7 +748,8 @@ impl<'d> Converter<'d> {
                     let pat_str = format!("{:0>width$b}", value, width = width as usize);
                     verilog::CasePattern::PatternLit(verilog::PatternLit { width, radix: Radix::Bin, pattern: pat_str })
                 }
-                AstNodePayload::PatCtor(pat_ident) => {
+                Some(AstNodePayload::PatCtor(pat_ident)) => {
+                    let pat = pat.unwrap();
                     let ctor_name = pat.parsing.string(pat_ident.name);
                     let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
                     let symboltable = db.get_symboltable();
@@ -810,7 +821,6 @@ impl<'d> Converter<'d> {
 
     /// Convert a pattern AST node into a `verilog::CasePattern`, registering any bound
     /// variable substitutions into `scheduler.subst` and recording their keys in `bound_keys`.
-    /// Sets `*has_else = true` if the pattern is a catch-all (`PatElse`).
     fn build_case_pattern(
         &self,
         pat_node: &AstNode,
@@ -818,14 +828,9 @@ impl<'d> Converter<'d> {
         subject_typ: &Type,
         scheduler: &mut ExprScheduler,
         bound_keys: &mut Vec<String>,
-        has_else: &mut bool,
     ) -> verilog::CasePattern {
         let db = self.db;
         match pat_node.payload() {
-            AstNodePayload::PatElse => {
-                *has_else = true;
-                verilog::CasePattern::Default
-            }
             AstNodePayload::PatEnumerant(pat_enumerant) => {
                 let enumerant_name = pat_node.parsing.string(pat_enumerant.name);
                 let Type::Usual(typedef_symbol_id) = subject_typ else { unreachable!() };
@@ -1096,16 +1101,26 @@ impl<'d> Converter<'d> {
                 let subject_expr = self.convert_expr(package, subject, &subject_typ, db, scheduler);
                 let temp_name = scheduler.fresh_temp_name("match");
                 let result_width = type_width(typ, db);
-                let num_arms = (children.len() - 1) / 2;
                 let mut case_items: Vec<verilog::CaseItem> = vec![];
                 let mut has_else = false;
-                for i in 0..num_arms {
-                    let pat = children[2 * i + 1].clone();
-                    let body = children[2 * i + 2].clone();
+                let mut idx = 1;
+                while idx < children.len() {
+                    let (pat, body) = if children[idx].is_pat() {
+                        let pat = children[idx].clone();
+                        let body = children[idx + 1].clone();
+                        idx += 2;
+                        (Some(pat), body)
+                    } else {
+                        let body = children[idx].clone();
+                        idx += 1;
+                        (None, body)
+                    };
+
                     let mut bound_keys: Vec<String> = vec![];
-                    let pattern = match pat.payload() {
-                        AstNodePayload::PatElse => { has_else = true; verilog::CasePattern::Default },
-                        AstNodePayload::PatEnumerant(pat_enumerant) => {
+                    let pattern = match pat.as_ref().map(|p| p.payload()) {
+                        None => { has_else = true; verilog::CasePattern::Default },
+                        Some(AstNodePayload::PatEnumerant(pat_enumerant)) => {
+                            let pat = pat.unwrap();
                             let enumerant_name = pat.parsing.string(pat_enumerant.name);
                             let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
                             let symboltable = db.get_symboltable();
@@ -1120,7 +1135,8 @@ impl<'d> Converter<'d> {
                                 pattern: pat_str,
                             })
                         }
-                        AstNodePayload::PatCtor(pat_ident) => {
+                        Some(AstNodePayload::PatCtor(pat_ident)) => {
+                            let pat = pat.unwrap();
                             let ctor_name = pat.parsing.string(pat_ident.name);
                             let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
                             let symboltable = db.get_symboltable();

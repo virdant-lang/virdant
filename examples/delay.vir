@@ -55,20 +55,20 @@ mod Delay {
 
     reg state : DelayState on clock;
     state <= match state {
-        @Idle() => if start {
+        case @Idle() => if start {
             @Delay(amount)
         } else {
             @Idle()
-        };
-        @Delay(countdown) => if countdown->eq(0) {
+        }
+        case @Delay(countdown) => if countdown->eq(0) {
             @Idle()
         } else {
             @Delay(countdown->dec())
-        };
+        }
     };
 
     end_pulse := match state {
-        @Idle() => false;
-        @Delay(countdown) => countdown->eq(0);
+        case @Idle() => false
+        case @Delay(countdown) => countdown->eq(0)
     };
 }

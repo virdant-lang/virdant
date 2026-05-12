@@ -107,6 +107,14 @@ pub enum Token {
     #[token(b"if")]        KwIf,
     #[token(b"else")]      KwElse,
     #[token(b"match")]     KwMatch,
+<<<<<<< HEAD
+=======
+    #[token(b"case")]      KwCase,
+    #[token(b"assert")]    KwAssert,
+    #[token(b"display")]   KwDisplay,
+    #[token(b"finish")]    KwFinish,
+    #[token(b"fatal")]     KwFatal,
+>>>>>>> 0173033 (Update match arm syntax to use `case` keyword)
     #[token(b"true")]      KwTrue,
     #[token(b"false")]     KwFalse,
 

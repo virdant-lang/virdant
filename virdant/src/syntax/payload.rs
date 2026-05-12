@@ -64,7 +64,6 @@ pub enum AstNodePayload {
 
     PatCtor(PatCtor),
     PatEnumerant(PatEnumerant),
-    PatElse,
 
     Ofness(Ofness),
     It,
@@ -124,7 +123,6 @@ impl AstNodePayload {
             AstNodePayload::Assign(_assign) => "Assign",
             AstNodePayload::PatCtor(_pat_ident) => "PatCtor",
             AstNodePayload::PatEnumerant(_pat_enumerant) => "PatEnumerant",
-            AstNodePayload::PatElse => "PatElse",
             AstNodePayload::Ofness(_ofness) => "Ofness",
             AstNodePayload::It => "It",
             AstNodePayload::Path(_path) => "Path",

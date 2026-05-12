@@ -19,12 +19,12 @@ export mod Top {
     };
 
     match state {
-        #On => {
+        case #On => {
             out := true;
-        };
-        #Off => {
+        }
+        case #Off => {
             out := false;
-        };
+        }
     };
 
     reg r : Bit on clock;
@@ -33,9 +33,9 @@ export mod Top {
         r <= true;
     } else {
         match #Off : State {
-            #On => {
+            case #On => {
                 r <= false;
-            };
+            }
         };
     };
 }

@@ -90,7 +90,9 @@ ModDefStmtIfEnd := "else" ModDefStmtBlock
 
 ModDefStmtMatch := "match" Expr "{" ModDefStmtMatchArm* "}"
 
-ModDefStmtMatchArm := Pat "=>" ModDefStmtBlock ";"
+ModDefStmtMatchArm :=
+      "case" Pat "=>" ModDefStmtBlock
+    | "else" "=>" ModDefStmtBlock
 
 ModDefStmtBlock := "{" (ModDefStmt ";")* "}"
 
@@ -114,13 +116,14 @@ ExprIfEnd := "else" "{" Expr "}"
 
 ExprMatch := "match" Expr "{" ExprMatchArm* "}"
 
-ExprMatchArm := Pat "=>" Expr ";"
+ExprMatchArm :=
+      "case" Pat "=>" Expr
+    | "else" "=>" Expr
 
 Pat :=
       "#" Ident
     | "@" Ident
     | "@" Ident "(" ArgList ")"
-    | "else"
 
 ExprStruct := "$" "{" AssignList "}"
 
@@ -259,6 +262,11 @@ Tokens:
   "^"
   "^^"
   "builtin"
+<<<<<<< HEAD
+=======
+  "case"
+  "display"
+>>>>>>> 0173033 (Update match arm syntax to use `case` keyword)
   "else"
   "enum"
   "export"

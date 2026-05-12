@@ -25,10 +25,10 @@ export mod Top {
     opcode := cast(opcode_bits);
 
     out := match opcode {
-        #Add => x + y;
-        #Sub => x - y;
-        #And => x & y;
-        #Or  => x | y;
+        case #Add => x + y
+        case #Sub => x - y
+        case #And => x & y
+        case #Or  => x | y
     };
 
     color := ${

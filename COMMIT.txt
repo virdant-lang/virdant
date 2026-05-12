@@ -1,0 +1,7 @@
+Update match arm syntax to use `case` keyword
+
+* Add `KwCase` token to the Lexer (`token.rs`) and update the Parser (`grammar.lalrpop`) to use it for match arms.
+* Remove `PatElse` from AST definitions (`payload.rs`, `ast.rs`).
+* Update type-checking (`check.rs`) and Verilog conversion (`conversion.rs`) logic to handle the new match arm AST layout.
+* Update all `.vir` examples and tests to use the new `case Pat =>` syntax and remove invalid trailing semicolons.
+* Update `GRAMMAR.txt`
