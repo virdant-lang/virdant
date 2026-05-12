@@ -26,18 +26,6 @@ mod Ifetch {
         pc + 4w32
     };
 
-    on clock {
-        display("Cycle", cycle);
-        display("PC", pc);
-        display("Instr", instr);
-        display("rd", rd);
-        display("rs1", rs1);
-        display("rs2", rs2);
-        if cycle == 4w32 {
-            finish;
-        }
-    }
-
     opcode := instr[7..0];
     rd  := instr[12..7];
     rs1 := instr[20..15];

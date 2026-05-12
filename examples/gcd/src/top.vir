@@ -19,13 +19,6 @@ export mod Top {
 
     result := gcd.result;
     valid := gcd.valid;
-
-    on clock {
-        if gcd.valid {
-            display("gcd", gcd.result);
-            finish;
-        };
-    };
 }
 
 mod Gcd {

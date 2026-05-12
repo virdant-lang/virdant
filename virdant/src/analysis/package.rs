@@ -141,13 +141,6 @@ impl PackageAnalysis {
                     AstNodePayload::Submodule(_module) => (),
                     AstNodePayload::Socket(_socket) => (),
                     AstNodePayload::BidirectionalDriver => (),
-                    AstNodePayload::ModDefStmtOn => {
-                        let node_id = child_node.clock().unwrap().id();
-                        self.expr_roots.push(node_id);
-                        for command_node in child_node.children().into_iter().skip(1) {
-                            self.add_command_expr_roots(command_node);
-                        }
-                    }
                     AstNodePayload::ModDefStmtIf => {
                         self.add_moddefstmtif_expr_roots(child_node);
                     }
@@ -222,23 +215,5 @@ impl PackageAnalysis {
         }
     }
 
-    fn add_command_expr_roots(&mut self, command_node: AstNode<'_>) {
-        match command_node.payload() {
-            AstNodePayload::CommandAssert => {
-                self.expr_roots.push(command_node.child(0).id());
-            }
-            AstNodePayload::CommandDisplay(_) => {
-                self.expr_roots.push(command_node.child(0).id());
-            }
-            AstNodePayload::CommandIf => {
-                self.expr_roots.push(command_node.child(0).id());
-                for nested_cmd in command_node.children().into_iter().skip(1) {
-                    self.add_command_expr_roots(nested_cmd);
-                }
-            }
-            AstNodePayload::CommandFinish | AstNodePayload::CommandFatal => {}
-            _ => {}
-        }
-    }
 }
 

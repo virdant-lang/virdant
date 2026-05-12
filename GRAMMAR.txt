@@ -56,7 +56,6 @@ ModDefStmt :=
     | ModDefStmtDriver
     | ModDefStmtInstance
     | ModDefStmtSocket
-    | ModDefStmtOn
     | ModDefStmtIf
     | ModDefStmtMatch
 
@@ -80,15 +79,6 @@ ItBlock := ModDefStmtBlock
 ModDefStmtSocket :=
       "master" "socket" Ident "of" Ofness
     | "slave" "socket" Ident "of" Ofness
-
-ModDefStmtOn := "on" Expr "{" (Command ";")* "}"
-
-Command :=
-      "if" Expr "{" (Command ";")* "}"
-    | "assert" "(" Expr ")"
-    | "display" "(" Str "," Expr ")"
-    | "finish"
-    | "fatal"
 
 ModDefStmtIf := ModDefStmtIfStart ModDefStmtIfMiddle* ModDefStmtIfEnd?
 
@@ -268,16 +258,12 @@ Tokens:
   "]"
   "^"
   "^^"
-  "assert"
   "builtin"
-  "display"
   "else"
   "enum"
   "export"
   "ext"
   "false"
-  "fatal"
-  "finish"
   "fn"
   "if"
   "import"

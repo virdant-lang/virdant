@@ -261,18 +261,6 @@ impl<'d> Converter<'d> {
                         ports: ports_info.into_iter().map(|(n, _)| n).collect(),
                     }));
                 }
-                AstNodePayload::ModDefStmtOn => {
-                    let clock_child = stmt.child(0);
-                    let clock_type = self.node_type(package, &clock_child).unwrap();
-                    let clock_expr = self.convert_expr(package, clock_child, &clock_type, self.db, &mut scheduler);
-                    let stmts = stmt.children().into_iter().skip(1)
-                        .map(|cmd| self.convert_command(package, cmd, &mut scheduler))
-                        .collect();
-                    on_block = Some(verilog::Element::Always(verilog::Always {
-                        clock: Some(clock_expr),
-                        stmts,
-                    }));
-                }
                 _ => {}
             }
         }
@@ -1443,37 +1431,6 @@ impl<'d> Converter<'d> {
             ],
             width: target_width,
         })
-    }
-
-    fn convert_command(&self, package: &PackageFqn, node: AstNode, scheduler: &mut ExprScheduler) -> verilog::Stmt {
-        match node.payload() {
-            AstNodePayload::CommandAssert => {
-                let child = node.child(0);
-                let child_type = self.node_type(package, &child).unwrap();
-                verilog::Stmt::Assert(verilog::Assert {
-                    exprs: vec![self.convert_expr(package, child, &child_type, self.db, scheduler)],
-                })
-            }
-            AstNodePayload::CommandDisplay(s) => {
-                let message = node.parsing.string(s).to_owned();
-                let child = node.child(0);
-                let child_type = self.node_type(package, &child).unwrap();
-                let expr = self.convert_expr(package, child, &child_type, self.db, scheduler);
-                verilog::Stmt::Display(verilog::Display { message, exprs: vec![expr] })
-            }
-            AstNodePayload::CommandFinish => verilog::Stmt::Finish,
-            AstNodePayload::CommandFatal => verilog::Stmt::Fatal,
-            AstNodePayload::CommandIf => {
-                let children = node.children();
-                let cond_type = self.node_type(package, &children[0]).unwrap();
-                let cond = self.convert_expr(package, children[0].clone(), &cond_type, self.db, scheduler);
-                let stmts = children[1..].iter()
-                    .map(|cmd| self.convert_command(package, cmd.clone(), scheduler))
-                    .collect();
-                verilog::Stmt::If(verilog::If { cond, stmts, else_stmts: vec![] })
-            }
-            _ => panic!("expected command node, found {}", node.summary()),
-        }
     }
 
     fn typing_for(&self, node: &AstNode) -> Arc<Typing> {

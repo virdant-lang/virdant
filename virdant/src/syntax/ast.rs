@@ -179,15 +179,9 @@ impl<'p> AstNode<'p> {
             AstNodePayload::BidirectionalDriver => format!("BidirectionalDriver"),
             AstNodePayload::Submodule(_module) => format!("Module"),
             AstNodePayload::ModDefStmtBlock => format!("ModDefStmtBlock"),
-            AstNodePayload::ModDefStmtOn => format!("ModDefStmtOn"),
             AstNodePayload::ModDefStmtIf => format!("ModDefStmtIf"),
             AstNodePayload::ModDefStmtMatch => format!("ModDefStmtMatch"),
             AstNodePayload::Socket(_socket) => format!("Socket"),
-            AstNodePayload::CommandAssert => format!("CommandAssert"),
-            AstNodePayload::CommandDisplay(_) => format!("CommandDisplay"),
-            AstNodePayload::CommandFinish => format!("CommandFinish"),
-            AstNodePayload::CommandFatal => format!("CommandFatal"),
-            AstNodePayload::CommandIf => format!("CommandIf"),
             AstNodePayload::Field(_field) => format!("Field"),
             AstNodePayload::Ctor(_ctor) => format!("Ctor"),
             AstNodePayload::Enumerant(_enumerant) => format!("Enumerant"),
@@ -310,7 +304,6 @@ impl<'p> AstNode<'p> {
                     None
                 }
             }
-            AstNodePayload::ModDefStmtOn => Some(self.child(0)),
             _ => None
         }
     }

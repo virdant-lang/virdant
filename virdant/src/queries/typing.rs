@@ -62,18 +62,6 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
             // determine its own type.
             None
         }
-        AstNodePayload::ModDefStmtOn => {
-            Some(Type::Clock)
-        }
-        AstNodePayload::CommandAssert => {
-            Some(Type::Bit)
-        }
-        AstNodePayload::CommandIf => {
-            Some(Type::Bit)
-        }
-        AstNodePayload::CommandDisplay(_) => {
-            None
-        }
         AstNodePayload::Enumerant(_) => {
             let enumdef_node = parent_node.parent().unwrap();
             let AstNodePayload::EnumDef(enum_def) = enumdef_node.payload() else { unreachable!() };

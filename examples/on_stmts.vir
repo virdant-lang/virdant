@@ -1,9 +1,0 @@
-export mod Top {
-    incoming clock : Clock;
-
-    on clock {
-        assert(true);
-        display("Test", true);
-        finish;
-    }
-}
