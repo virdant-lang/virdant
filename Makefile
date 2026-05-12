@@ -1,7 +1,14 @@
-.PHONY: build test clean install docs
+.PHONY: build test clean install grammar docs
 
 build: virdant/target/lib
 	cargo build --release --all-features
+
+# Cargo's build script places generated artifacts in OUT_DIR, which has the
+# concrete form: target/<profile>/build/<crate>-<hash>/out/foo.grammar
+# (for example: target/debug/build/virdant-5ca77787fdbb9ef7/out/syntax/grammar.grammar).
+grammar:
+	cargo build -p virdant
+	cp $$(ls -t target/debug/build/virdant-*/out/syntax/grammar.grammar | head -n1) GRAMMAR.txt
 
 virdant/target/lib:
 	mkdir -p target/lib

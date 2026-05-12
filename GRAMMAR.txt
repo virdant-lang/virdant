@@ -1,0 +1,306 @@
+Package := PackageStmt*
+
+PackageStmt :=
+      (PackageImport ";")
+    | Item
+
+PackageImport := "import" Ident
+
+Item :=
+      ModDef
+    | StructDef
+    | UnionDef
+    | EnumDef
+    | BuiltinDef
+    | SocketDef
+    | FnDef
+
+ModDef := "ext"? "export"? "mod" Ident "{" (ModDefStmt ";")* "}"
+
+StructDef := "struct" "type" Ident "{" StructDefStmt* "}"
+
+StructDefStmt := Ident ":" Type ";"
+
+UnionDef := "union" "type" Ident "{" UnionDefStmt* "}"
+
+UnionDefStmt := Ident ParamList? ";"
+
+ParamList := "(" Params? ")"
+
+Params :=
+      Param
+    | Params "," Param
+
+Param := Ident ":" Type
+
+GenericsParams := "[" Nat "]"
+
+Generics := "[" Ident ":" Kind "]"
+
+EnumDef := "enum" "type" Ident "width" Width "{" EnumDefStmt* "}"
+
+EnumDefStmt := Ident "=" Expr ";"
+
+BuiltinDef := "builtin" "type" Ident Generics? "{" "}"
+
+SocketDef := "socket" Ident "{" SocketDefStmt* "}"
+
+SocketDefStmt :=
+      "mosi" Ident ":" Type ";"
+    | "miso" Ident ":" Type ";"
+
+FnDef := "fn" Ident ParamList "->" Type "{" Expr "}"
+
+ModDefStmt :=
+      ModDefStmtComponent
+    | ModDefStmtDriver
+    | ModDefStmtInstance
+    | ModDefStmtSocket
+    | ModDefStmtOn
+    | ModDefStmtIf
+    | ModDefStmtMatch
+
+ModDefStmtComponent :=
+      "incoming" Ident ":" Type OnClause?
+    | "outgoing" Ident ":" Type OnClause?
+    | "wire" Ident ":" Type OnClause?
+    | "reg" Ident ":" Type OnClause?
+
+OnClause := "on" Expr
+
+ModDefStmtDriver :=
+      Path ":=" Expr
+    | Path "<=" Expr
+    | Path ":=:" Path
+
+ModDefStmtInstance := "mod" Ident "of" Ofness ItBlock?
+
+ItBlock := ModDefStmtBlock
+
+ModDefStmtSocket :=
+      "master" "socket" Ident "of" Ofness
+    | "slave" "socket" Ident "of" Ofness
+
+ModDefStmtOn := "on" Expr "{" (Command ";")* "}"
+
+Command :=
+      "if" Expr "{" (Command ";")* "}"
+    | "assert" "(" Expr ")"
+    | "display" "(" Str "," Expr ")"
+    | "finish"
+    | "fatal"
+
+ModDefStmtIf := ModDefStmtIfStart ModDefStmtIfMiddle* ModDefStmtIfEnd?
+
+ModDefStmtIfStart := "if" Expr ModDefStmtBlock
+
+ModDefStmtIfMiddle := "else" "if" Expr ModDefStmtBlock
+
+ModDefStmtIfEnd := "else" ModDefStmtBlock
+
+ModDefStmtMatch := "match" Expr "{" ModDefStmtMatchArm* "}"
+
+ModDefStmtMatchArm := Pat "=>" ModDefStmtBlock ";"
+
+ModDefStmtBlock := "{" (ModDefStmt ";")* "}"
+
+Kind := Ident
+
+Type := Ofness GenericsParams?
+
+Expr :=
+      ExprIf
+    | ExprMatch
+    | ExprStruct
+    | ExprBinOpLogical
+
+ExprIf := ExprIfStart ExprIfMiddle? ExprIfEnd
+
+ExprIfStart := "if" Expr "{" Expr "}"
+
+ExprIfMiddle := ExprIfMiddle? "else" "if" Expr "{" Expr "}"
+
+ExprIfEnd := "else" "{" Expr "}"
+
+ExprMatch := "match" Expr "{" ExprMatchArm* "}"
+
+ExprMatchArm := Pat "=>" Expr ";"
+
+Pat :=
+      "#" Ident
+    | "@" Ident
+    | "@" Ident "(" ArgList ")"
+    | "else"
+
+ExprStruct := "$" "{" AssignList "}"
+
+AssignList :=
+      (Assign ",")* Assign ","?
+    | Expr ","?
+    |
+
+Assign := Ident "=" Expr
+
+BinOpLogical :=
+      "&&"
+    | "||"
+    | "^^"
+
+ExprBinOpLogical :=
+      ExprBinOpLogical BinOpLogical ExprBinOpCompare
+    | ExprBinOpCompare
+
+BinOpCompare :=
+      "<"
+    | "<="
+    | ">"
+    | ">="
+    | "=="
+    | "!="
+
+ExprBinOpCompare :=
+      ExprBinOpCompare BinOpCompare ExprBinOpAdditive
+    | ExprBinOpAdditive
+
+BinOpAdditive :=
+      "+"
+    | "-"
+    | "&"
+    | "|"
+    | "^"
+
+ExprBinOpAdditive :=
+      ExprBinOpAdditive BinOpAdditive ExprUnOp
+    | ExprUnOp
+
+UnOp :=
+      "-"
+    | "~"
+    | "!"
+
+ExprUnOp :=
+      UnOp ExprUnOp
+    | ExprAscription
+
+ExprAscription :=
+      ExprPrimary ":" Type
+    | ExprPrimary
+
+ExprPrimary :=
+      Ofness "(" ArgList ")"
+    | ExprPrimary "->" Ident "(" ArgList ")"
+    | ExprPrimary "->" Ident
+    | ExprPrimary "[" Index "]"
+    | ExprPrimary "[" Index ".." Index "]"
+    | "@" Ident "(" ArgList ")"
+    | ExprAtom
+
+ExprAtom :=
+      Path
+    | WordLit
+    | "true"
+    | "false"
+    | "Str"
+    | "#" Ident
+    | "@" Ident
+    | "?"
+    | "(" Expr ")"
+
+ArgList :=
+      (Expr ",")+ Expr ","?
+    | Expr ","?
+    |
+
+Ofness :=
+      Ident
+    | Ident "::" Ident
+
+Path := (Ident ".")* Ident
+
+Index := "Nat"
+
+Width := "Nat"
+
+WordLit :=
+      "Nat"
+    | "Word"
+
+Ident := "Ident"
+
+Nat := "Nat"
+
+Str := "Str"
+
+Tokens:
+  "!"
+  "!="
+  "#"
+  "$"
+  "&"
+  "&&"
+  "("
+  ")"
+  "+"
+  ","
+  "-"
+  "->"
+  "."
+  ".."
+  ":"
+  "::"
+  ":="
+  ":=:"
+  ";"
+  "<"
+  "<="
+  "="
+  "=="
+  "=>"
+  ">"
+  ">="
+  "?"
+  "@"
+  "Ident"
+  "Nat"
+  "Str"
+  "Word"
+  "["
+  "]"
+  "^"
+  "^^"
+  "assert"
+  "builtin"
+  "display"
+  "else"
+  "enum"
+  "export"
+  "ext"
+  "false"
+  "fatal"
+  "finish"
+  "fn"
+  "if"
+  "import"
+  "incoming"
+  "master"
+  "match"
+  "miso"
+  "mod"
+  "mosi"
+  "of"
+  "on"
+  "outgoing"
+  "reg"
+  "slave"
+  "socket"
+  "struct"
+  "true"
+  "type"
+  "union"
+  "width"
+  "wire"
+  "{"
+  "|"
+  "||"
+  "}"
+  "~"

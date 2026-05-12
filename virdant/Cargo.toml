@@ -19,7 +19,7 @@ colored = "3.1.1"
 indexmap = "2.13.0"
 internment = { version = "0.8.6", features = ["arc"] }
 json = "0.12.4"
-lalrpop-util = { version = "0.22.2", features = ["lexer"] }
+lalrpop-util = { version = "0.23.1", features = ["lexer"], git = "https://github.com/virdant-lang/lalrpop" }
 logos = "0.15.1"
 nix = { version = "0.31.2", features = ["process"], optional = true }
 paste = "1.0.15"
@@ -29,7 +29,7 @@ toml = { version = "1.1.0" }
 tower-lsp = "0.20.0"
 
 [build-dependencies]
-lalrpop = { version = "0.22.2" }
+lalrpop = { version = "0.23.1", git = "https://github.com/virdant-lang/lalrpop" }
 
 [[bin]]
 name = "vir"
