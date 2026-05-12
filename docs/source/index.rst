@@ -11,7 +11,6 @@ The Virdant Hardware Language
   types/index
   expressions/index
   packages
-  functions
   sockets
   principles
   coding-conventions
