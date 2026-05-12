@@ -20,7 +20,7 @@ Instead, Virdant allows you to define a new struct type `Color` as:
     :dedent:
     :lines: 1-5
 
-You can construct values of a struct type with the syntax `$Color { red = 0, green = 0, blue = 0 }`.
+You can construct values of a struct type with the syntax `${ red = 0, green = 0, blue = 0 }`.
 
 If you are given a value of type `Color`, you can project out each field using the syntax `color->red`, etc.
 
@@ -58,9 +58,9 @@ Here, the subject of the match, `state`, has type `State`.
 The body of the match statement consists of three match arms.
 Each one starts with a pattern:
 
-* `@Idle() => ...`
-* `@Running(x, y) => ...`
-* `@Done(result) => ...`
+* `case @Idle() => ...`
+* `case @Running(x, y) => ...`
+* `case @Done(result) => ...`
 
 And each ends with an expression.
 

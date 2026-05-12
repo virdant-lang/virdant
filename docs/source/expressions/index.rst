@@ -17,8 +17,8 @@ For example, if we define a register:
 
 .. code-block:: virdant
 
-    reg counter : Word[4] on clock;
-    counter <= 0;
+    reg counter : Word[4] on clock
+    counter <= 0
 
 The value of `counter` is written `0`, but is inferred as if we had written `0w4`.
 
@@ -47,8 +47,8 @@ For example, in the match expression:
 .. code-block:: virdant
 
     match maybe_data {
-        @Invalid => 0;
-        @Valid(payload) => payload;
+        case @Invalid => 0
+        case @Valid(payload) => payload
     }
 
 The reference `payload` on the right-hand side of the `=>` references the locally bound variable of the same name

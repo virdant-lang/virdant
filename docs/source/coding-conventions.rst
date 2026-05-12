@@ -82,8 +82,8 @@ and
 .. code-block:: virdant
 
   match maybe_data {
-      @Invalid() => 0;
-      @Valid(payload) => payload;
+      case @Invalid() => 0
+      case @Valid(payload) => payload
   }
 
 
@@ -93,7 +93,7 @@ When writing driver statements, if the expression on the right-hand side is shor
 
 .. code-block:: virdant
 
-   out := is_valid->and(counter[3]);
+   out := is_valid->and(counter[3])
 
 If an expression is longer, especially if it contains an `if` or `match` expression, it may be written in one of two ways.
 
@@ -105,7 +105,7 @@ The first is to write it inline, as if the driver is part of the expression:
       0
   } else {
       counter->inc()
-  };
+  }
 
 
 Or if it makes it clearer, with a newline and an extra layer of indentation:
@@ -117,7 +117,7 @@ Or if it makes it clearer, with a newline and an extra layer of indentation:
           0
       } else {
           counter->inc()
-      };
+      }
 
 The expression for each arm of a match expression follows a similar rule:
 
@@ -126,8 +126,8 @@ Inline:
 .. code-block:: virdant
 
   match maybe_data {
-      @Invalid() => 0;
-      @Valid(payload) => payload;
+      case @Invalid() => 0
+      case @Valid(payload) => payload
   }
 
 
@@ -136,11 +136,11 @@ Newline and extra indentation:
 .. code-block:: virdant
 
   match maybe_data {
-      @Invalid() => 
+      case @Invalid() =>
           if default_payload {
               default_payload
           } else {
               0
-          };
-      @Valid(payload) => payload;
+          }
+      case @Valid(payload) => payload
   }

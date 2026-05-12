@@ -63,7 +63,7 @@ They are declared with the keyword `reg`.
 .. literalinclude:: /examples/buffer.vir
    :language: virdant
    :dedent:
-   :lines: 16
+   :lines: 6
 
 Our `Buffer` module contains one register named `queue`.
 It has type `Word[4]`.

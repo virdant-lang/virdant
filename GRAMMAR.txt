@@ -19,11 +19,11 @@ ModDef := "ext"? "export"? "mod" Ident "{" ModDefStmt* "}"
 
 StructDef := "struct" "type" Ident "{" StructDefStmt* "}"
 
-StructDefStmt := Ident ":" Type ";"
+StructDefStmt := Ident ":" Type
 
 UnionDef := "union" "type" Ident "{" UnionDefStmt* "}"
 
-UnionDefStmt := Ident ParamList? ";"
+UnionDefStmt := Ident ParamList?
 
 ParamList := "(" Params? ")"
 
@@ -39,15 +39,15 @@ Generics := "[" Ident ":" Kind "]"
 
 EnumDef := "enum" "type" Ident "width" Width "{" EnumDefStmt* "}"
 
-EnumDefStmt := Ident "=" Expr ";"
+EnumDefStmt := Ident "=" Expr
 
 BuiltinDef := "builtin" "type" Ident Generics? "{" "}"
 
 SocketDef := "socket" Ident "{" SocketDefStmt* "}"
 
 SocketDefStmt :=
-      "mosi" Ident ":" Type ";"
-    | "miso" Ident ":" Type ";"
+      "mosi" Ident ":" Type
+    | "miso" Ident ":" Type
 
 FnDef := "fn" Ident ParamList "->" Type "{" Expr "}"
 
@@ -243,7 +243,6 @@ Tokens:
   "::"
   ":="
   ":=:"
-  ";"
   "<"
   "<="
   "="

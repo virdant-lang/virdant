@@ -16,8 +16,8 @@ mod NoDrivers {
 
 // Socket used to test DriverForSink from both sides.
 socket Chan {
-    mosi req : Word[8];
-    miso ack : Bit;
+    mosi req : Word[8]
+    miso ack : Bit
 }
 
 // A master drives mosi (req) — that is correct.
@@ -74,7 +74,6 @@ mod DriverTypes {
         // CHECK: Wrong driver type for e
         e := true
     }
-
 }
 
 mod DriversForInternalPorts {
@@ -167,8 +166,8 @@ mod TwoDriversAcrossSections {
 }
 
 enum type Status width 2 {
-    On = 1;
-    Off = 2;
+    On = 1
+    Off = 2
 }
 
 // CHECK: Check failed

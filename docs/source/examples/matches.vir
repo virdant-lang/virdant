@@ -17,6 +17,6 @@ mod Top {
 }
 
 union type Valid {
-    Invalid();
-    Valid(payload : Word[8]);
+    Invalid()
+    Valid(payload : Word[8])
 }

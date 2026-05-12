@@ -1,12 +1,12 @@
 enum type MyEnum width 2 {
-    Foo = 0;
-    Baz = 1;
-    Qux = 2;
+    Foo = 0
+    Baz = 1
+    Qux = 2
 }
 
 union type MyUnion {
-    Foo();
-    Bar(x : MyEnum);
+    Foo()
+    Bar(x : MyEnum)
 }
 
 mod Top {
@@ -19,10 +19,8 @@ mod Top {
             case @Foo() => #Baz
             case @Bar(x) => x
         }
-
     wire my_enum : MyEnum
     my_enum := #Foo
-
     wire enum_match : Word[8]
     enum_match :=
         match my_enum {

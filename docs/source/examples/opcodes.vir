@@ -1,9 +1,9 @@
 enum type AluOp width 3 {
-    and = 1;
-    or  = 2;
-    xor = 3;
-    add = 4;
-    sub = 5;
+    and = 1
+    or  = 2
+    xor = 3
+    add = 4
+    sub = 5
 }
 
 mod Alu {

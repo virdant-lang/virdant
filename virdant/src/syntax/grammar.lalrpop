@@ -78,7 +78,7 @@ StructDef: AstNodeId = {
 }
 
 StructDefStmt: AstNodeId = {
-    <ll:@L> <name:Ident> ":" Type ";" <rr:@R> => {
+    <ll:@L> <name:Ident> ":" Type <rr:@R> => {
         let payload = AstNodePayload::Field(payload::Field { name });
         let span = parser.span(ll, rr);
         let num_children = 1;
@@ -100,7 +100,7 @@ UnionDef: AstNodeId = {
 }
 
 UnionDefStmt: AstNodeId = {
-    <ll:@L> <name:Ident> <paramlist:ParamList?> ";" <rr:@R> => {
+    <ll:@L> <name:Ident> <paramlist:ParamList?> <rr:@R> => {
         let payload = AstNodePayload::Ctor(payload::Ctor { name });
         let span = parser.span(ll, rr);
         let num_children = paramlist.unwrap_or(0);
@@ -162,7 +162,7 @@ EnumDef: AstNodeId = {
 }
 
 EnumDefStmt: AstNodeId = {
-    <ll:@L> <name:Ident> "=" Expr ";" <rr:@R> => {
+    <ll:@L> <name:Ident> "=" Expr <rr:@R> => {
         let payload = AstNodePayload::Enumerant(payload::Enumerant { name });
         let span = parser.span(ll, rr);
         let num_children = 1;
@@ -195,14 +195,14 @@ SocketDef: AstNodeId = {
 }
 
 SocketDefStmt: AstNodeId = {
-    <ll:@L> "mosi" <name:Ident> ":" Type ";" <rr:@R> => {
+    <ll:@L> "mosi" <name:Ident> ":" Type <rr:@R> => {
         let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Mosi });
         let span = parser.span(ll, rr);
         let num_children = 1;
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "miso" <name:Ident> ":" Type ";" <rr:@R> => {
+    <ll:@L> "miso" <name:Ident> ":" Type <rr:@R> => {
         let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Miso });
         let span = parser.span(ll, rr);
         let num_children = 1;

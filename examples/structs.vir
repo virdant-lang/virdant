@@ -1,8 +1,8 @@
 import top
 
 struct type Foo {
-    bar : Word[1];
-    baz : Word[1];
+    bar : Word[1]
+    baz : Word[1]
 }
 
 mod Top {

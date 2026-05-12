@@ -30,12 +30,12 @@ Here is a snippet showing an example of each:
 .. code-block:: virdant
 
     mod Core {
-        master socket mem of Mem;
+        master socket mem of Mem
         // ...
     }
 
     mod Memory {
-        slave socket mem of Mem;
+        slave socket mem of Mem
         // ...
     }
 
@@ -50,13 +50,13 @@ You access these ports using dot notation:
 .. code-block:: virdant
 
     mod Core {
-        master socket mem of Mem;
-        mem.addr := 0;
+        master socket mem of Mem
+        mem.addr := 0
     }
 
     mod Memory {
-        slave socket mem of Mem;
-        mem.data := 0;
+        slave socket mem of Mem
+        mem.data := 0
     }
 
 (Of course, instead of assigning them to just `0`,
@@ -84,18 +84,18 @@ and then connects their sockets like this:
 .. literalinclude:: /examples/sockets.vir
     :language: virdant
     :dedent:
-    :lines: 20-25
+    :lines: 19-24
 
 This is essentially equivalent to the following:
 
 .. code-block:: virdant
 
     mod Top {
-        mod core of Core;
-        mod memory of Memory;
+        mod core of Core
+        mod memory of Memory
 
-        memory.mem.addr := core.mem.addr;
-        core.mem.data := memory.mem.data;
+        memory.mem.addr := core.mem.addr
+        core.mem.data := memory.mem.data
     }
 
 

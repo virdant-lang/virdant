@@ -20,10 +20,10 @@ import uart
 //}
 
 enum type State width 2 {
-    H = 0;
-    I = 1;
-    Nl = 2;
-    Cr = 3;
+    H = 0
+    I = 1
+    Nl = 2
+    Cr = 3
 }
 
 export mod Top {

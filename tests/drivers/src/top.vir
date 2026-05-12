@@ -1,6 +1,6 @@
 enum type State width 2 {
-    On  = 1w2;
-    Off = 2w2;
+    On  = 1w2
+    Off = 2w2
 }
 
 export mod Top {

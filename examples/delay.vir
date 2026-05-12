@@ -42,9 +42,9 @@ mod Top {
 }
 
 union type DelayState {
-    Idle();
-    Delay(countdown : Word[24]);
-    Extra();
+    Idle()
+    Delay(countdown : Word[24])
+    Extra()
 }
 
 mod Delay {

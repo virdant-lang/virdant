@@ -1,14 +1,14 @@
 enum type Opcode width 4 {
-    Add = 1;
-    Sub = 2;
-    And = 4;
-    Or  = 8;
+    Add = 1
+    Sub = 2
+    And = 4
+    Or  = 8
 }
 
 struct type Color {
-    red : Word[8];
-    green : Word[8];
-    blue : Word[8];
+    red : Word[8]
+    green : Word[8]
+    blue : Word[8]
 }
 
 export mod Top {

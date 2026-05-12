@@ -1,7 +1,7 @@
 union type State {
-    Idle();
-    Running(x : Word[8], y : Word[8]);
-    Done(result : Word[8]);
+    Idle()
+    Running(x : Word[8], y : Word[8])
+    Done(result : Word[8])
 }
 
 mod Gcd {

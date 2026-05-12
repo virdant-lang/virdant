@@ -2,8 +2,8 @@ import resetter
 import lfsr
 
 union type ValidData {
-    Invalid();
-    Valid(data : Word[8]);
+    Invalid()
+    Valid(data : Word[8])
 }
 
 mod Queue {

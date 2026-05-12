@@ -14,21 +14,16 @@
 //    Bit(bit : Word[3], pulse : Word[11])
 //    Stop(pulse : Word[11])
 //}
-
 export mod Top {
     incoming clock      : Clock // 12MHz
     incoming reset      : Bit
     outgoing fin        : Bit
-
     fin := cycle == 150000w32
-
     mod sender of UartSender
     sender.clock := clock
     sender.reset := reset
-
     sender.data := 65w8
     sender.data_valid := true
-
     reg cycle : Word[32] on clock
     cycle <= if reset { 0w32 } else { cycle + 1w32 }
 }

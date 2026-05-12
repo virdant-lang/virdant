@@ -13,10 +13,10 @@
 // both registers see consistent, race-free values at the clock edge.
 
 enum type Phase width 4 {
-    Green  = 1w4;
-    Yellow = 2w4;
-    Red    = 4w4;
-    Walk   = 8w4;
+    Green  = 1w4
+    Yellow = 2w4
+    Red    = 4w4
+    Walk   = 8w4
 }
 
 export mod Top {

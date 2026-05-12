@@ -14,11 +14,10 @@ mod Core {
 
 mod Memory {
     slave socket mem of Mem
-
     mem.data := 10
 }
 
 socket Mem {
-    mosi addr : Word[16];
-    miso data : Word[8];
+    mosi addr : Word[16]
+    miso data : Word[8]
 }

@@ -1,7 +1,7 @@
 struct type Color {
-    red   : Word[8];
-    green : Word[8];
-    blue  : Word[8];
+    red   : Word[8]
+    green : Word[8]
+    blue  : Word[8]
 }
 
 mod Top {
