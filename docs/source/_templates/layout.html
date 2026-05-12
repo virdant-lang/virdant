@@ -1,5 +1,24 @@
 {% extends "!layout.html" %}
 
+{% block sidebartitle %}
+  {%- set _logo_url = logo_url|default(pathto('_static/' + (logo or ""), 1)) %}
+  {%- set _root_doc = root_doc|default(master_doc) %}
+  <a href="{{ pathto(_root_doc) }}">
+    {%- if logo or logo_url %}
+      <img src="{{ _logo_url }}" class="logo" alt="{{ _('Logo') }}"/>
+    {%- endif %}
+  </a>
+  {%- if 'singlehtml' not in builder %}
+  <div role="search">
+    <form id="rtd-search-form" class="wy-form" action="{{ pathto('search') }}" method="get">
+      <input type="text" name="q" placeholder="search" aria-label="search" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+  </div>
+  {%- endif %}
+{% endblock %}
+
 {% block extrahead %}
 
 <link rel="preconnect" href="https://fonts.googleapis.com">

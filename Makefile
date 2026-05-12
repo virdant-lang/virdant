@@ -1,4 +1,4 @@
-.PHONY: build test clean install
+.PHONY: build test clean install docs
 
 build: virdant/target/lib
 	cargo build --release --all-features
@@ -27,3 +27,6 @@ install:
 	cp -r ./lib ${HOME}/.local/virdant/lib
 
 	cp ./target/release/filecheck ${HOME}/.local/virdant/bin/
+
+docs:
+	$(MAKE) -C docs

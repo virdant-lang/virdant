@@ -16,8 +16,8 @@ from sphinx.highlighting import lexers
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'The Virdant Hardware Language'
-copyright = '2023, Michael Maloney'
-author = 'Michael Maloney'
+copyright = '2026'
+
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -50,4 +50,5 @@ lexers['virdant'] = virdant_ext.VirdantLexer()
 # Set the default lexer for your language
 primary_domain = 'virdant'
 highlight_language = 'virdant'
-html_favicon = '_static/virdant-logo.png'
+html_favicon = '_static/virdant-logo.svg'
+html_logo = '_static/virdant-logo-white-transparent.svg'
