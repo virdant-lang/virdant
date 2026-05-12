@@ -5,58 +5,57 @@ union type State {
 }
 
 export mod Top {
-    incoming clock : Clock;
-    incoming reset : Bit;
+    incoming clock : Clock
+    incoming reset : Bit
 
-    outgoing result : Word[8];
-    outgoing valid  : Bit;
+    outgoing result : Word[8]
+    outgoing valid  : Bit
 
-    mod gcd of Gcd;
-    gcd.reset := reset;
-    gcd.clock := clock;
-    gcd.x := 75;
-    gcd.y := 145;
+    mod gcd of Gcd
+    gcd.reset := reset
+    gcd.clock := clock
+    gcd.x := 75
+    gcd.y := 145
 
-    result := gcd.result;
-    valid := gcd.valid;
-
+    result := gcd.result
+    valid := gcd.valid
 }
 
 mod Gcd {
-    incoming clock : Clock;
-    incoming reset : Bit;
-    incoming x : Word[8];
-    incoming y : Word[8];
-    outgoing result : Word[8];
-    outgoing valid: Bit;
+    incoming clock : Clock
+    incoming reset : Bit
+    incoming x : Word[8]
+    incoming y : Word[8]
+    outgoing result : Word[8]
+    outgoing valid: Bit
 
-    reg state : State on clock;
+    reg state : State on clock
 
     if reset {
-        state <= @Idle();
+        state <= @Idle()
     } else {
         state <= match state : State {
-            @Idle() => @Running(x, y);
-            @Running(x, y) =>
+            case @Idle() => @Running(x, y)
+            case @Running(x, y) =>
                 if y == 0 {
                     @Done(x)
                 } else if x < y {
                     @Running(y - x, x)
                 } else {
                     @Running(x - y, y)
-                };
-            @Done(result) => @Idle();
-        };
-    };
+                }
+            case @Done(result) => @Idle()
+        }
+    }
 
     result := match state {
-        @Idle() => 0;
-        @Running(x, y) => 0;
-        @Done(r) => r;
-    };
+        case @Idle() => 0
+        case @Running(x, y) => 0
+        case @Done(r) => r
+    }
 
     valid := match state {
-        @Done(result) => true;
-        else => false;
-    };
+        case @Done(result) => true
+        else => false
+    }
 }

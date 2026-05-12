@@ -16,25 +16,25 @@ union type UartState {
 }
 
 mod UartSender {
-    incoming clock      : Clock; // 12MHz
-    incoming reset      : Bit;
-    incoming data       : Word[8];
-    incoming data_valid : Bit;
-    outgoing ready      : Bit;
-    outgoing uart_tx    : Bit;
+    incoming clock      : Clock // 12MHz
+    incoming reset      : Bit
+    incoming data       : Word[8]
+    incoming data_valid : Bit
+    outgoing ready      : Bit
+    outgoing uart_tx    : Bit
 
-    reg uart_tx_reg : Bit on clock;
-    uart_tx := uart_tx_reg;
+    reg uart_tx_reg : Bit on clock
+    uart_tx := uart_tx_reg
 
-    reg latched_data : Word[8] on clock;
-    reg state : UartState on clock;
+    reg latched_data : Word[8] on clock
+    reg state : UartState on clock
 
     ready := match state {
         case @Idle() => true
         case @Start(pulse) => false
         case @Bit(bit, pulse) => false
         case @Stop(pulse) => false
-    };
+    }
 
     state <= if reset {
         @Idle()
@@ -69,7 +69,7 @@ mod UartSender {
                     @Stop(pulse->dec())
                 }
         }
-    };
+    }
 
     latched_data <= match state {
         case @Idle() =>
@@ -81,7 +81,7 @@ mod UartSender {
         case @Start(pulse) => latched_data
         case @Bit(bit, pulse) => latched_data
         case @Stop(pulse) => latched_data
-    };
+    }
 
     uart_tx_reg <= if reset {
         true
@@ -109,18 +109,18 @@ mod UartSender {
                 }
             case @Stop(pulse) => true
         }
-    };
+    }
 }
 
 mod UartReceiver {
-    incoming clock      : Clock; // 12MHz
-    incoming reset      : Bit;
-    incoming uart_rx    : Bit;
-    outgoing data       : Word[8];
-    outgoing data_valid : Bit;
+    incoming clock      : Clock // 12MHz
+    incoming reset      : Bit
+    incoming uart_rx    : Bit
+    outgoing data       : Word[8]
+    outgoing data_valid : Bit
 
-    reg state : UartState on clock;
-    reg data_reg : Word[8] on clock;
+    reg state : UartState on clock
+    reg data_reg : Word[8] on clock
 
     state <= if reset {
         @Idle()
@@ -155,7 +155,7 @@ mod UartReceiver {
                     @Stop(pulse->dec())
                 }
         }
-    };
+    }
 
     data_reg <= if reset {
         0
@@ -187,14 +187,14 @@ mod UartReceiver {
                 }
             case @Stop(pulse) => data_reg
         }
-    };
+    }
 
-    data := data_reg;
+    data := data_reg
 
     data_valid := match state {
         case @Idle() => false
         case @Start(pulse) => false
         case @Bit(bit, pulse) => false
         case @Stop(pulse) => pulse->eq(0)
-    };
+    }
 }

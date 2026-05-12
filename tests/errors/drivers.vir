@@ -2,16 +2,16 @@
 
 // Driving the same outgoing port twice in the same module.
 mod TwoDrivers {
-    outgoing out : Bit;
+    outgoing out : Bit
     // CHECK: Multiple drivers for out
-    out := true;
+    out := true
     // CHECK: Multiple drivers for out
-    out := false;
+    out := false
 }
 
 mod NoDrivers {
     // CHECK: No drivers for out
-    outgoing out : Bit;
+    outgoing out : Bit
 }
 
 // Socket used to test DriverForSink from both sides.
@@ -23,147 +23,147 @@ socket Chan {
 // A master drives mosi (req) — that is correct.
 // But it also drives miso (ack) — miso is a source for the master, not a sink.
 mod BadMaster {
-    master socket ch of Chan;
-    ch.req := 0;
+    master socket ch of Chan
+    ch.req := 0
     // CHECK: Driver for sink ch.ack
-    ch.ack := true;
+    ch.ack := true
 }
 
 // A slave drives miso (ack) — that is correct.
 // But it also drives mosi (req) — mosi is a source for the slave, not a sink.
 mod BadSlave {
-    slave socket ch of Chan;
-    ch.ack := true;
+    slave socket ch of Chan
+    ch.ack := true
     // CHECK: Driver for sink ch.req
-    ch.req := 0;
+    ch.req := 0
 }
 
 // A module with exactly one driver per outgoing port — no MultipleDrivers.
 mod SingleDriver {
-    outgoing a : Bit;
-    outgoing b : Bit;
+    outgoing a : Bit
+    outgoing b : Bit
     // CHECK-NOT: Multiple drivers
-    a := true;
-    b := false;
+    a := true
+    b := false
 }
 
 mod DriverTypes {
-    incoming clock : Clock;
+    incoming clock : Clock
 
-    wire a : Bit;
+    wire a : Bit
     // CHECK-NOT: Wrong driver type for a
-    a := true;
+    a := true
 
-    reg b : Bit on clock;
+    reg b : Bit on clock
     // CHECK-NOT: Wrong driver type for b
-    b <= true;
+    b <= true
 
-    wire c : Bit;
+    wire c : Bit
     // CHECK: Wrong driver type for c
-    c <= true;
+    c <= true
 
     // CHECK: Wrong driver type for d
-    reg d : Bit on clock;
-    d := true;
+    reg d : Bit on clock
+    d := true
 
-    reg e : Bit on clock;
+    reg e : Bit on clock
     if true {
         // CHECK-NOT: Wrong driver type for e
-        e <= true;
+        e <= true
     } else {
         // CHECK: Wrong driver type for e
-        e := true;
-    };
+        e := true
+    }
 
 }
 
 mod DriversForInternalPorts {
     // CHECK: No drivers for e.inp
-    mod e of Ext;
+    mod e of Ext
 
     // CHECK: No drivers for i.inp
-    mod i of Int;
+    mod i of Int
 }
 
 ext mod Ext {
-    incoming inp : Bit;
-    outgoing out : Bit;
+    incoming inp : Bit
+    outgoing out : Bit
 }
 
 mod Int {
-    incoming inp : Bit;
-    outgoing out : Bit;
+    incoming inp : Bit
+    outgoing out : Bit
 
-    out := inp;
+    out := inp
 }
 
 // A properly-wired master and slave, used to test socket NoDrivers below.
 mod GoodMaster {
-    master socket ch of Chan;
-    ch.req := 0;
+    master socket ch of Chan
+    ch.req := 0
 }
 
 mod GoodSlave {
-    slave socket ch of Chan;
-    ch.ack := true;
+    slave socket ch of Chan
+    ch.ack := true
 }
 
 // Without :=:, the sink channels of each socket are left undriven.
 mod MissingSocketConnect {
-    mod p of GoodMaster;
-    mod q of GoodSlave;
+    mod p of GoodMaster
+    mod q of GoodSlave
     // CHECK: No drivers for p.ch.ack
     // CHECK: No drivers for q.ch.req
 }
 
 mod TwoDriversAcrossSections {
-    incoming clock : Clock;
-    incoming reset : Bit;
-    outgoing out  : Bit;
+    incoming clock : Clock
+    incoming reset : Bit
+    outgoing out  : Bit
 
     if reset {
-        out := true;
+        out := true
     } else {
-        out := false;
-    };
+        out := false
+    }
 
-    reg r : Bit on clock;
+    reg r : Bit on clock
 
     if reset {
-        r <= true;
-    };
+        r <= true
+    }
 
     if !reset {
         // CHECK: Multiple drivers for r
-        r <= false;
-    };
+        r <= false
+    }
 
     // CHECK: Multiple drivers for s
-    reg s : Bit on clock;
-    s <= true;
+    reg s : Bit on clock
+    s <= true
 
     if reset {
-        s <= false;
-    };
+        s <= false
+    }
 
     // CHECK: Multiple drivers for t
-    wire t : Bit;
-    t := true;
+    wire t : Bit
+    t := true
 
     if reset {
-        t := false;
-    };
+        t := false
+    }
 
-    wire u : Bit;
-    u := false;
+    wire u : Bit
+    u := false
 
     match #On : Status {
         case #On => {
         }
         else => {
-            u := true;
+            u := true
         }
-    };
+    }
 }
 
 enum type Status width 2 {

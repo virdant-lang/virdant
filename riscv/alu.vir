@@ -1,9 +1,9 @@
 mod Alu {
-    incoming a : Word[32];
-    incoming b : Word[32];
-    outgoing z : Word[32];
+    incoming a : Word[32]
+    incoming b : Word[32]
+    outgoing z : Word[32]
 
-    incoming op : Word[5];
+    incoming op : Word[5]
 
-    z := a + b;
+    z := a + b
 }

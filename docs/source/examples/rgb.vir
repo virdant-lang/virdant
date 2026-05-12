@@ -5,26 +5,26 @@ struct type Color {
 }
 
 mod Top {
-    incoming clock : Clock;
-    outgoing redness : Word[8];
-    outgoing blueness : Word[8];
-    outgoing greenness : Word[8];
+    incoming clock : Clock
+    outgoing redness : Word[8]
+    outgoing blueness : Word[8]
+    outgoing greenness : Word[8]
 
-    reg counter : Word[2] on clock;
+    reg counter : Word[2] on clock
 
-    reg color : Color on clock;
+    reg color : Color on clock
     color <=
         if counter == 0 {
-            $Color { red = 0, green = 0, blue = 0 }
+            ${ red = 0, green = 0, blue = 0 }
         } else if counter == 1 {
-            $Color { red = 255, green = 0, blue = 0 }
+            ${ red = 255, green = 0, blue = 0 }
         } else if counter == 2 {
-            $Color { red = 0, green = 255, blue = 0 }
+            ${ red = 0, green = 255, blue = 0 }
         } else {
-            $Color { red = 0, green = 0, blue = 255 }
-        };
+            ${ red = 0, green = 0, blue = 255 }
+        }
 
-    redness := color->red;
-    blueness := color->blue;
-    greenness := color->green;
+    redness := color->red
+    blueness := color->blue
+    greenness := color->green
 }

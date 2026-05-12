@@ -3,14 +3,14 @@
 // Two modules with the same name in the same file = DuplicateItem.
 // Only the second (re-)declaration is flagged.
 mod Alpha {
-    outgoing out : Bit;
-    out := true;
+    outgoing out : Bit
+    out := true
 }
 
 // CHECK: Duplicate Item
 mod Alpha {
-    outgoing out : Bit;
-    out := false;
+    outgoing out : Bit
+    out := false
 }
 
 // An enum whose second definition repeats an enumerant name = DuplicateSlot.
@@ -24,8 +24,8 @@ enum type Color width 2 {
 // A module with a unique name — no DuplicateItem.
 // CHECK-NOT: Duplicate Item
 mod Beta {
-    outgoing out : Bit;
-    out := true;
+    outgoing out : Bit
+    out := true
 }
 
 // An enum with all unique enumerants — no DuplicateSlot.

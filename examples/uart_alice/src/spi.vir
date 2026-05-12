@@ -7,21 +7,21 @@ enum type State width 4 {
 }
 
 mod SpiFlash {
-    incoming clock : Clock;
-    incoming reset : Bit;
+    incoming clock : Clock
+    incoming reset : Bit
 
-    outgoing spi_cs : Bit;
-    outgoing spi_clk : Bit;
-    outgoing spi_do : Bit;
-    incoming spi_di : Bit;
+    outgoing spi_cs : Bit
+    outgoing spi_clk : Bit
+    outgoing spi_do : Bit
+    incoming spi_di : Bit
 
-    incoming mem_addr : Word[32];
-    incoming mem_read_enable : Bit;
+    incoming mem_addr : Word[32]
+    incoming mem_read_enable : Bit
 
-    outgoing mem_read_data : Word[32];
-    outgoing mem_read_data_valid : Bit;
+    outgoing mem_read_data : Word[32]
+    outgoing mem_read_data_valid : Bit
 
-    reg state : State on clock;
+    reg state : State on clock
 
     state <=
         if reset {
@@ -50,30 +50,30 @@ mod SpiFlash {
             }
         } else {
             state
-        };
+        }
 
-    wire last_cycle : Bit;
+    wire last_cycle : Bit
     last_cycle :=
         (state == #Idle && mem_read_enable) ||
         (state == #Done) ||
         (state == #Send && bits_sent == 31) ||
-        (state == #Recv && bits_read == 31);
+        (state == #Recv && bits_read == 31)
 
-    reg send_buffer : Word[32] on clock;
-    reg recv_buffer : Word[32] on clock;
+    reg send_buffer : Word[32] on clock
+    reg recv_buffer : Word[32] on clock
 
-    reg bits_sent : Word[6] on clock;
-    reg bits_read : Word[6] on clock;
+    reg bits_sent : Word[6] on clock
+    reg bits_read : Word[6] on clock
 
-    reg half_clock : Bit on clock;
+    reg half_clock : Bit on clock
 
     half_clock <= if reset {
         true
     } else {
         !half_clock
-    };
+    }
 
-    spi_clk := half_clock;
+    spi_clk := half_clock
 
     send_buffer <=
         if state == #Idle && last_cycle {
@@ -86,7 +86,7 @@ mod SpiFlash {
             }
         } else {
             send_buffer
-        };
+        }
 
     recv_buffer <=
         if half_clock {
@@ -99,7 +99,7 @@ mod SpiFlash {
             }
         } else {
             recv_buffer
-        };
+        }
 
     bits_sent <=
         if half_clock {
@@ -112,7 +112,7 @@ mod SpiFlash {
             }
         } else {
             bits_sent
-        };
+        }
 
     bits_read <=
         if half_clock {
@@ -125,9 +125,9 @@ mod SpiFlash {
             }
         } else {
             bits_read
-        };
+        }
 
-    spi_cs := !(state == #Send || state == #Recv);
+    spi_cs := !(state == #Send || state == #Recv)
 
     spi_do :=
         if reset {
@@ -138,14 +138,14 @@ mod SpiFlash {
             } else {
                 true
             }
-        };
+        }
 
     mem_read_data :=
         if state == #Done {
             word(recv_buffer[8..0], recv_buffer[16..8], recv_buffer[24..16], recv_buffer[32..24])
         } else {
             0xffffffffw32
-        };
+        }
 
-    mem_read_data_valid := state == #Done;
+    mem_read_data_valid := state == #Done
 }

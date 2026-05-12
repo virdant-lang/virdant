@@ -7,16 +7,16 @@ enum type AluOp width 3 {
 }
 
 mod Alu {
-    incoming a : Word[8];
-    incoming b : Word[8];
-    incoming op : AluOp;
-    outgoing r : Word[8];
+    incoming a : Word[8]
+    incoming b : Word[8]
+    incoming op : AluOp
+    outgoing r : Word[8]
 
     r := match op {
-        #and => a & b;
-        #or  => a | b;
-        #xor => a ^ b;
-        #add => a + b;
-        #sub => a - b;
-    };
+        case #and => a & b
+        case #or  => a | b
+        case #xor => a ^ b
+        case #add => a + b
+        case #sub => a - b
+    }
 }

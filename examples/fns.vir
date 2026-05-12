@@ -3,11 +3,11 @@ fn foo(x : Word[8], y : Word[8]) -> Word[8] {
 }
 
 mod Top {
-    incoming clock : Clock;
+    incoming clock : Clock
 
-    outgoing out : Word[8];
-    reg counter : Word[8] on clock;
-    counter <= counter->inc();
+    outgoing out : Word[8]
+    reg counter : Word[8] on clock
+    counter <= counter->inc()
 
-    out := foo(counter, counter);
+    out := foo(counter, counter)
 }

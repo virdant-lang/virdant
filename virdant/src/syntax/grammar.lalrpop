@@ -21,7 +21,7 @@ pub Package: AstNodeId = {
 }
 
 PackageStmt: AstNodeId = {
-    <import:(PackageImport ";")> => import.0,
+    <import:PackageImport> => import,
     <item:Item> => item,
     <ll:@L> <error:!> <rr:@R> => {
         let span = parser.span(ll, rr);
@@ -51,7 +51,7 @@ Item: AstNodeId = {
 
 ModDef: AstNodeId = {
     <ll:@L> <ext:"ext"?> <export:"export"?> "mod" <ident:Ident> "{"
-        <stmts:(ModDefStmt ";")*>
+        <stmts:ModDefStmt*>
     "}" <rr:@R> => {
         let payload = AstNodePayload::ModDef(payload::ModDef {
             name: ident,
@@ -230,10 +230,6 @@ ModDefStmt: AstNodeId = {
     <socket:ModDefStmtSocket> => socket,
     <if_:ModDefStmtIf> => if_,
     <m:ModDefStmtMatch> => m,
-    <ll:@L> <error:!> <rr:@R> <stmt: ModDefStmt> => {
-        let span = parser.span(ll, rr);
-        parser.add_error_node(span, error)
-    },
     <ll:@L> <error:!> <rr:@R> => {
         let span = parser.span(ll, rr);
         parser.add_error_node(span, error)
@@ -398,7 +394,7 @@ ModDefStmtMatchArm: u16 = {
 }
 
 ModDefStmtBlock: AstNodeId = {
-    <ll:@L> "{" <stmts:(ModDefStmt ";")*> "}" <rr:@R> => {
+    <ll:@L> "{" <stmts:ModDefStmt*> "}" <rr:@R> => {
         let num_children = u16::try_from(stmts.len()).unwrap();
         let payload = AstNodePayload::ModDefStmtBlock;
         let span = parser.span(ll, rr);

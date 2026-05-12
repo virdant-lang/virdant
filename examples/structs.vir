@@ -1,4 +1,4 @@
-import top;
+import top
 
 struct type Foo {
     bar : Word[1];
@@ -6,12 +6,12 @@ struct type Foo {
 }
 
 mod Top {
-    incoming clk : Clock;
+    incoming clk : Clock
 
-    wire foo : Foo;
+    wire foo : Foo
     foo :=
         ${
             bar = 0w3,
             baz = 1w1,
-        };
+        }
 }

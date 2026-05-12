@@ -20,61 +20,61 @@ enum type Phase width 4 {
 }
 
 export mod Top {
-    incoming clock    : Clock;
-    incoming reset    : Bit;
-    incoming walk_req : Bit;    // pedestrian crossing button
+    incoming clock    : Clock
+    incoming reset    : Bit
+    incoming walk_req : Bit    // pedestrian crossing button
 
-    outgoing green       : Bit; // green  vehicle light
-    outgoing yellow      : Bit; // yellow vehicle light
-    outgoing red         : Bit; // red    vehicle light
-    outgoing walk_signal : Bit; // walk   pedestrian signal
+    outgoing green       : Bit // green  vehicle light
+    outgoing yellow      : Bit // yellow vehicle light
+    outgoing red         : Bit // red    vehicle light
+    outgoing walk_signal : Bit // walk   pedestrian signal
 
-    reg phase : Phase   on clock;
-    reg timer : Word[8] on clock;
+    reg phase : Phase   on clock
+    reg timer : Word[8] on clock
 
     // -- Output decode ----------------------------------------------------
     // Each output is true exactly when the controller is in the matching
     // phase; the one-hot encoding makes these single-bit mask operations.
-    green       := match phase { case #Green  => true else => false };
-    yellow      := match phase { case #Yellow => true else => false };
-    red         := match phase { case #Red    => true else => false };
-    walk_signal := match phase { case #Walk   => true else => false };
+    green       := match phase { case #Green  => true else => false }
+    yellow      := match phase { case #Yellow => true else => false }
+    red         := match phase { case #Red    => true else => false }
+    walk_signal := match phase { case #Walk   => true else => false }
 
     // -- Next-state logic (combinational) ---------------------------------
     // Compute the successor phase from the current phase and walk_req.
     // Using a wire here ensures that both register always-blocks see the
     // same stable value at the clock edge, avoiding simulation race
     // conditions that arise when two clocked blocks read each other.
-    wire next_phase : Phase;
+    wire next_phase : Phase
     next_phase := match phase {
         case #Green  => #Yellow
         case #Yellow => #Red
         case #Red    => if walk_req { #Walk } else { #Green }
         case #Walk   => #Red
-    };
+    }
 
     // Map the incoming phase to its countdown duration.
-    wire next_timer : Word[8];
+    wire next_timer : Word[8]
     next_timer := match next_phase {
         case #Green  => 10
         case #Yellow => 3
         case #Red    => 8
         case #Walk   => 5
-    };
+    }
 
     // -- Register update logic ---------------------------------------------
     if reset {
         // Start in Red so vehicles halt immediately on power-up.
-        phase <= #Red;
-        timer <= 8;
+        phase <= #Red
+        timer <= 8
     } else {
         if timer == 0 {
             // Timer expired — latch the pre-computed successor values.
-            phase <= next_phase;
-            timer <= next_timer;
+            phase <= next_phase
+            timer <= next_timer
         } else {
             // Still counting down; hold the current phase.
-            timer <= timer - 1;
-        };
-    };
+            timer <= timer - 1
+        }
+    }
 }

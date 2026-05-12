@@ -1,27 +1,27 @@
 mod Lfsr {
-    incoming clock : Clock;
-    incoming reset : Bit;
-    outgoing out : Word[8];
+    incoming clock : Clock
+    incoming reset : Bit
+    outgoing out : Word[8]
 
-    wire taps : Word[8];
-    taps := 29w8;
+    wire taps : Word[8]
+    taps := 29w8
 
-    reg r : Word[8] on clock;
+    reg r : Word[8] on clock
     r <= if reset {
         255w8
     } else {
         word(r[7..0], 0w1) ^ (if feedback { taps }  else { 0w8 })
-    };
+    }
 
-    out := r;
+    out := r
 
-    wire feedback : Bit;
-    feedback := r[7];
+    wire feedback : Bit
+    feedback := r[7]
 
-    reg s : Word[4] on clock;
+    reg s : Word[4] on clock
     s <= if reset {
         1
     } else {
         word(s[3..0], s[3])
-    };
+    }
 }

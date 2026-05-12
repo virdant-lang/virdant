@@ -13,10 +13,10 @@ enum type Opcode width 7 {
 }
 
 mod Top {
-    outgoing out : Word[7];
+    outgoing out : Word[7]
 
-    wire n : Opcode;
-    n := #OP;
+    wire n : Opcode
+    n := #OP
 
-    out := n->value();
+    out := n->value()
 }

@@ -8,23 +8,23 @@ enum type UartState width 4 {
 }
 
 mod UartSender {
-    incoming clock      : Clock; // 12MHz
-    incoming reset      : Bit;
-    incoming data       : Word[8];
-    incoming data_valid : Bit;
-    outgoing ready      : Bit;
-    outgoing uart_tx    : Bit;
+    incoming clock      : Clock // 12MHz
+    incoming reset      : Bit
+    incoming data       : Word[8]
+    incoming data_valid : Bit
+    outgoing ready      : Bit
+    outgoing uart_tx    : Bit
 
-    reg uart_tx_reg : Bit on clock;
-    uart_tx := uart_tx_reg;
+    reg uart_tx_reg : Bit on clock
+    uart_tx := uart_tx_reg
 
-    reg latched_data : Word[8] on clock;
+    reg latched_data : Word[8] on clock
 
-    reg state  : UartState on clock;
-    reg pulse  : Word[11] on clock;
-    reg bitnum : Word[3] on clock;
+    reg state  : UartState on clock
+    reg pulse  : Word[11] on clock
+    reg bitnum : Word[3] on clock
 
-    ready := state == #Idle;
+    ready := state == #Idle
 
     state <= if reset {
         #Idle
@@ -56,7 +56,7 @@ mod UartSender {
         } else {
             #Stop // @Stop
         }
-    };
+    }
 
     pulse <= if reset {
         0w11
@@ -84,7 +84,7 @@ mod UartSender {
         } else {
             pulse - 1
         }
-    };
+    }
 
     bitnum <= if reset {
         0w3
@@ -106,7 +106,7 @@ mod UartSender {
         }
     } else {
         bitnum
-    };
+    }
 
     latched_data <=
         if state == #Idle { // @Idle
@@ -117,7 +117,7 @@ mod UartSender {
             }
         } else {
             latched_data
-        };
+        }
 
     uart_tx_reg <= if reset {
         true
@@ -145,5 +145,5 @@ mod UartSender {
         }
     } else { // @Stop
         true
-    };
+    }
 }

@@ -1,31 +1,31 @@
 mod Buffer {
-    incoming clock : Clock;
-    incoming inp : Word[4];
-    outgoing out : Word[4];
+    incoming clock : Clock
+    incoming inp : Word[4]
+    outgoing out : Word[4]
 
-    reg queue : Word[4] on clock;
-    queue <= inp;
+    reg queue : Word[4] on clock
+    queue <= inp
 
-    out := queue;
+    out := queue
 }
 
 mod Top {
-    incoming clock : Clock;
-    outgoing out : Word[4];
+    incoming clock : Clock
+    outgoing out : Word[4]
 
-    reg counter : Word[4] on clock;
-    counter <= counter + 1;
+    reg counter : Word[4] on clock
+    counter <= counter + 1
 
-    mod buffer of Buffer;
-    buffer.clock := clock;
-    buffer.inp := counter;
+    mod buffer of Buffer
+    buffer.clock := clock
+    buffer.inp := counter
 
-    wire counter_is_zero : Bit;
-    counter_is_zero := counter == 0;
+    wire counter_is_zero : Bit
+    counter_is_zero := counter == 0
 
     out := if counter_is_zero {
         0
     } else {
         buffer.out
-    };
+    }
 }

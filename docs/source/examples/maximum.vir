@@ -7,18 +7,18 @@ fn max(x : Word[8], y : Word[8]) -> Word[8] {
 }
 
 mod Top {
-    incoming clock : Clock;
-    incoming reset : Bit;
-    incoming inp : Word[8];
-    outgoing max_seen : Word[8];
+    incoming clock : Clock
+    incoming reset : Bit
+    incoming inp : Word[8]
+    outgoing max_seen : Word[8]
 
-    reg max_seen_reg : Word[8] on clock;
+    reg max_seen_reg : Word[8] on clock
 
     max_seen_reg <= if reset {
         0
     } else {
         max(max_seen_reg, inp)
-    };
+    }
 
-    max_seen := max_seen_reg;
+    max_seen := max_seen_reg
 }

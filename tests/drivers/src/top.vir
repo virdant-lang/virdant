@@ -4,38 +4,38 @@ enum type State width 2 {
 }
 
 export mod Top {
-    incoming clock : Clock;
-    incoming reset : Bit;
+    incoming clock : Clock
+    incoming reset : Bit
 
-    outgoing out : Bit;
+    outgoing out : Bit
 
-    reg state : State on clock;
+    reg state : State on clock
     if reset {
-        state <= #Off;
+        state <= #Off
     } else if state == #Off {
-        state <= #On;
+        state <= #On
     } else {
-        state <= #Off;
-    };
+        state <= #Off
+    }
 
     match state {
         case #On => {
-            out := true;
+            out := true
         }
         case #Off => {
-            out := false;
+            out := false
         }
-    };
+    }
 
-    reg r : Bit on clock;
+    reg r : Bit on clock
 
     if reset {
-        r <= true;
+        r <= true
     } else {
         match #Off : State {
             case #On => {
-                r <= false;
+                r <= false
             }
-        };
-    };
+        }
+    }
 }

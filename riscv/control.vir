@@ -1,8 +1,8 @@
 mod Control {
-    incoming opcode : Word[7];
+    incoming opcode : Word[7]
 
-    outgoing rf_write : Bit;
-    outgoing wb_mem : Bit;
+    outgoing rf_write : Bit
+    outgoing wb_mem : Bit
 
     rf_write := if opcode == 19 { // OP-IMM
         true
@@ -10,11 +10,11 @@ mod Control {
         true
     } else {
         false
-    };
+    }
 
     wb_mem := if opcode == 3 { // LOAD
         true
     } else {
         false
-    };
+    }
 }

@@ -1,21 +1,21 @@
 mod Top {
-    incoming clock : Clock;
+    incoming clock : Clock
 
-    mod core of Core;
-    mod memory of Memory;
+    mod core of Core
+    mod memory of Memory
 
-    memory.mem :=: core.mem;
+    memory.mem :=: core.mem
 }
 
 mod Core {
-    master socket mem of Mem;
-    mem.addr := 0;
+    master socket mem of Mem
+    mem.addr := 0
 }
 
 mod Memory {
-    slave socket mem of Mem;
+    slave socket mem of Mem
 
-    mem.data := 10;
+    mem.data := 10
 }
 
 socket Mem {

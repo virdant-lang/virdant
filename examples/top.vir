@@ -1,6 +1,6 @@
 mod Top {
-    incoming clock : Clock;
+    incoming clock : Clock
 
-    reg r : Word[1] on clock;
-    r <= r->inc();
+    reg r : Word[1] on clock
+    r <= r->inc()
 }

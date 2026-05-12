@@ -4,22 +4,22 @@ socket Mem {
 }
 
 mod Core {
-    master socket mem of Mem;
+    master socket mem of Mem
     // mem.addr := ...
 
-    mem.addr := 0;
+    mem.addr := 0
 }
 
 mod Memory {
-    slave socket mem of Mem;
+    slave socket mem of Mem
     // mem.data := ...
 
-    mem.data := 0;
+    mem.data := 0
 }
 
 mod Top {
-    mod core of Core;
-    mod memory of Memory;
+    mod core of Core
+    mod memory of Memory
 
-    memory.mem :=: core.mem;
+    memory.mem :=: core.mem
 }

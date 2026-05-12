@@ -1,21 +1,21 @@
-import uart;
+import uart
 
 //export mod Top {
-//    incoming clock : Clock;
-//    incoming reset : Bit;
-//    outgoing fin : Bit;
+//    incoming clock : Clock
+//    incoming reset : Bit
+//    outgoing fin : Bit
 //
-//    mod resetter of Resetter;
-//    resetter.clock := clock;
+//    mod resetter of Resetter
+//    resetter.clock := clock
 //
-//    reg cycle : Word[23] on clock;
+//    reg cycle : Word[23] on clock
 //    cycle <= if reset {
 //        0
 //    } else {
 //        cycle + 1
-//    };
+//    }
 //
-//    fin := cycle > 30;
+//    fin := cycle > 30
 //
 //}
 
@@ -27,37 +27,37 @@ enum type State width 2 {
 }
 
 export mod Top {
-    incoming clock : Clock;
+    incoming clock : Clock
 
-    outgoing led_red : Bit;
-    outgoing led_green : Bit;
-    outgoing led_blue : Bit;
+    outgoing led_red : Bit
+    outgoing led_green : Bit
+    outgoing led_blue : Bit
 
-    outgoing uart_tx : Bit;
+    outgoing uart_tx : Bit
 
-    reg counter : Word[32] on clock;
-    counter <= counter + 1;
+    reg counter : Word[32] on clock
+    counter <= counter + 1
 
-    led_red   := !false;
-    led_green := !(reset_counter < 16777216);
-    led_blue  := !false;
+    led_red   := !false
+    led_green := !(reset_counter < 16777216)
+    led_blue  := !false
 
-    reg reset_counter : Word[32] on clock;
+    reg reset_counter : Word[32] on clock
     reset_counter <=
         if reset_counter == -1w32 {
             reset_counter
         } else {
             reset_counter + 1
-        };
+        }
 
-    wire reset : Bit;
-    reset := reset_counter == 0;
+    wire reset : Bit
+    reset := reset_counter == 0
 
-    mod uart of uart::UartSender;
-    uart.clock := clock;
-    uart.reset := reset;
+    mod uart of uart::UartSender
+    uart.clock := clock
+    uart.reset := reset
 
-    reg state : State on clock;
+    reg state : State on clock
     state <=
         if reset {
             #H
@@ -73,9 +73,9 @@ export mod Top {
             }
         } else {
             state
-        };
+        }
 
-    uart.data_valid := true;
+    uart.data_valid := true
     uart.data := if state == #H {
         72
     } else if state == #I {
@@ -84,6 +84,6 @@ export mod Top {
         10
     } else {
         13
-    };
-    uart_tx := uart.uart_tx;
+    }
+    uart_tx := uart.uart_tx
 }

@@ -1,10 +1,10 @@
 mod Edge {
-    incoming clock : Clock;
-    incoming inp   : Bit;
-    outgoing out   : Bit;
+    incoming clock : Clock
+    incoming inp   : Bit
+    outgoing out   : Bit
 
-    reg last : Bit on clock;
-    last <= inp;
+    reg last : Bit on clock
+    last <= inp
 
-    out := last->not()->and(inp);
+    out := last->not()->and(inp)
 }

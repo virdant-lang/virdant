@@ -1,21 +1,21 @@
 export mod Top {
-    incoming clock : Clock;
-    incoming inp : Bit;
-    outgoing out : Bit;
+    incoming clock : Clock
+    incoming inp : Bit
+    outgoing out : Bit
 
-    mod foo of Foo;
-    foo.clock := clock;
-    foo.inp := inp;
-    out <= foo.inp;
+    mod foo of Foo
+    foo.clock := clock
+    foo.inp := inp
+    out <= foo.inp
 }
 
 mod Foo {
-    incoming clock : Clock;
-    incoming inp : Bit;
-    outgoing out : Bit;
+    incoming clock : Clock
+    incoming inp : Bit
+    outgoing out : Bit
 
-    reg r : Bit on clock;
+    reg r : Bit on clock
 
-    out := r;
-    r <= r;
+    out := r
+    r <= r
 }

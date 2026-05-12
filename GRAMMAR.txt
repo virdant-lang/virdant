@@ -1,7 +1,7 @@
 Package := PackageStmt*
 
 PackageStmt :=
-      (PackageImport ";")
+      PackageImport
     | Item
 
 PackageImport := "import" Ident
@@ -15,7 +15,7 @@ Item :=
     | SocketDef
     | FnDef
 
-ModDef := "ext"? "export"? "mod" Ident "{" (ModDefStmt ";")* "}"
+ModDef := "ext"? "export"? "mod" Ident "{" ModDefStmt* "}"
 
 StructDef := "struct" "type" Ident "{" StructDefStmt* "}"
 
@@ -94,7 +94,7 @@ ModDefStmtMatchArm :=
       "case" Pat "=>" ModDefStmtBlock
     | "else" "=>" ModDefStmtBlock
 
-ModDefStmtBlock := "{" (ModDefStmt ";")* "}"
+ModDefStmtBlock := "{" ModDefStmt* "}"
 
 Kind := Ident
 

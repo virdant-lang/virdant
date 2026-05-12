@@ -1,10 +1,10 @@
 mod Top {
-    incoming clock : Clock;
+    incoming clock : Clock
 
-    outgoing led : Bit;
+    outgoing led : Bit
 
-    reg counter : Word[32] on clock;
-    counter <= counter + 1;
+    reg counter : Word[32] on clock
+    counter <= counter + 1
 
-    led := counter[21];
+    led := counter[21]
 }
