@@ -324,6 +324,10 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
     if let Some(expected_typ) = expected_typ {
         let _ = typing.check(builder, context, &node, &expected_typ);
     } else {
+        if matches!(node.parent().unwrap().payload(), AstNodePayload::Driver(_)) {
+            return Arc::new(typing);
+        }
+
         match typing.infer(builder, context, &node) {
             Ok(None) => {
                 typing.diagnostics.push(diagnostics::Todo {
