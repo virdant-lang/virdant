@@ -50,5 +50,5 @@ lexers['virdant'] = virdant_ext.VirdantLexer()
 # Set the default lexer for your language
 primary_domain = 'virdant'
 highlight_language = 'virdant'
-html_favicon = '_static/virdant-logo.svg'
+html_favicon = '_static/virdant-logo-white-transparent.svg'
 html_logo = '_static/virdant-logo-white-transparent.svg'
