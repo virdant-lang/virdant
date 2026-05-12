@@ -750,7 +750,15 @@ Ofness: AstNodeId = {
 }
 
 Path: AstNodeId = {
-    <ll:@L> <_start:(Ident ".")*> <_end:Ident> <rr:@R> => {
+    <ll:@L> <_start:Ident> <_end:("." Ident)*> <rr:@R> => {
+        let span = parser.span(ll, rr);
+        let path = parser.intern(span);
+        let payload = AstNodePayload::Path(payload::Path { path });
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "it" <_end:("." Ident)*> <rr:@R> => {
         let span = parser.span(ll, rr);
         let path = parser.intern(span);
         let payload = AstNodePayload::Path(payload::Path { path });
@@ -891,6 +899,7 @@ extern {
         "mosi" => Token::KwMosi,
         "miso" => Token::KwMiso,
         "if" => Token::KwIf,
+        "it" => Token::KwIt,
         "else" => Token::KwElse,
         "match" => Token::KwMatch,
         "case" => Token::KwCase,

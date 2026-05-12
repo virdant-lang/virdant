@@ -208,7 +208,9 @@ Ofness :=
       Ident
     | Ident "::" Ident
 
-Path := (Ident ".")* Ident
+Path :=
+      Ident ("." Ident)*
+    | "it" ("." Ident)*
 
 Index := "Nat"
 
@@ -271,6 +273,7 @@ Tokens:
   "if"
   "import"
   "incoming"
+  "it"
   "master"
   "match"
   "miso"

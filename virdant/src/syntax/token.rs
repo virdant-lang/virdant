@@ -105,6 +105,7 @@ pub enum Token {
     #[token(b"mosi")]      KwMosi,
     #[token(b"miso")]      KwMiso,
     #[token(b"if")]        KwIf,
+    #[token(b"it")]        KwIt,
     #[token(b"else")]      KwElse,
     #[token(b"match")]     KwMatch,
     #[token(b"case")]      KwCase,
