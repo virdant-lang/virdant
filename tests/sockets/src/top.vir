@@ -8,13 +8,15 @@ mod Top {
 }
 
 mod Core {
-    master socket mem of Mem
-    mem.addr := 8
+    master socket mem of Mem {
+        it.addr := 8
+    }
 }
 
 mod Memory {
-    slave socket mem of Mem
-    mem.data := 10
+    slave socket mem of Mem {
+        it.data := 10
+    }
 }
 
 socket Mem {

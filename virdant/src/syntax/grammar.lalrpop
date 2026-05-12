@@ -237,43 +237,43 @@ ModDefStmt: AstNodeId = {
 }
 
 ModDefStmtComponent: AstNodeId = {
-    <ll:@L> "incoming" <ident:Ident> ":" <typ:Type> <on:OnClause?> <rr:@R> => {
+    <ll:@L> "incoming" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Incoming,
         });
         let span = parser.span(ll, rr);
-        let num_children = 1 + if on.is_none() { 0 } else { 1 };
+        let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "outgoing" <ident:Ident> ":" <typ:Type> <on:OnClause?> <rr:@R> => {
+    <ll:@L> "outgoing" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Outgoing,
         });
         let span = parser.span(ll, rr);
-        let num_children = 1 + if on.is_none() { 0 } else { 1 };
+        let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "wire" <ident:Ident> ":" <typ:Type> <on:OnClause?> <rr:@R> => {
+    <ll:@L> "wire" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Wire,
         });
         let span = parser.span(ll, rr);
-        let num_children = 1 + if on.is_none() { 0 } else { 1 };
+        let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "reg" <ident:Ident> ":" <typ:Type> <on:OnClause?> <rr:@R> => {
+    <ll:@L> "reg" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Reg,
         });
         let span = parser.span(ll, rr);
-        let num_children = 1 + if on.is_none() { 0 } else { 1 };
+        let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
@@ -336,17 +336,17 @@ ItBlock: AstNodeId = {
 }
 
 ModDefStmtSocket: AstNodeId = {
-    <ll:@L> "master" "socket" <name:Ident> "of" <ofness:Ofness> <rr:@R> => {
+    <ll:@L> "master" "socket" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Master });
         let span = parser.span(ll, rr);
-        let num_children = 1;
+        let num_children = 1 + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "slave" "socket" <name:Ident> "of" <ofness:Ofness> <rr:@R> => {
+    <ll:@L> "slave" "socket" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Slave });
         let span = parser.span(ll, rr);
-        let num_children = 1;
+        let num_children = 1 + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },

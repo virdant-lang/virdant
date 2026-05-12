@@ -60,10 +60,10 @@ ModDefStmt :=
     | ModDefStmtMatch
 
 ModDefStmtComponent :=
-      "incoming" Ident ":" Type OnClause?
-    | "outgoing" Ident ":" Type OnClause?
-    | "wire" Ident ":" Type OnClause?
-    | "reg" Ident ":" Type OnClause?
+      "incoming" Ident ":" Type OnClause? ItBlock?
+    | "outgoing" Ident ":" Type OnClause? ItBlock?
+    | "wire" Ident ":" Type OnClause? ItBlock?
+    | "reg" Ident ":" Type OnClause? ItBlock?
 
 OnClause := "on" Expr
 
@@ -77,8 +77,8 @@ ModDefStmtInstance := "mod" Ident "of" Ofness ItBlock?
 ItBlock := ModDefStmtBlock
 
 ModDefStmtSocket :=
-      "master" "socket" Ident "of" Ofness
-    | "slave" "socket" Ident "of" Ofness
+      "master" "socket" Ident "of" Ofness ItBlock?
+    | "slave" "socket" Ident "of" Ofness ItBlock?
 
 ModDefStmtIf := ModDefStmtIfStart ModDefStmtIfMiddle* ModDefStmtIfEnd?
 

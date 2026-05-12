@@ -13,17 +13,18 @@ export mod Top {
     incoming fire : Bit
 
     outgoing result : Word[8]
-    outgoing valid  : Bit
+    outgoing valid  : Bit {
+        it := gcd.valid
+    }
 
-    mod gcd of Gcd
-    gcd.reset := reset
-    gcd.clock := clock
-    gcd.x := x
-    gcd.y := y
-    gcd.fire := fire
-
-    result := gcd.result
-    valid := gcd.valid
+    mod gcd of Gcd {
+        it.reset := reset
+        it.clock := clock
+        it.x := x
+        it.y := y
+        it.fire := fire
+        result := it.result
+    }
 }
 
 mod Gcd {

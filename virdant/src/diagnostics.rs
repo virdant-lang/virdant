@@ -145,6 +145,12 @@ pub struct UnresolvedComponent {
     pub path: BString,
 }
 
+/// `it` keyword used outside of an `ItBlock`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ItNotInItBlock {
+    pub region: Region,
+}
+
 /// A component could not be resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedCtor {
@@ -421,6 +427,16 @@ impl IsDiagnostic for UnresolvedComponent {
         format!("Unresolved component {}", &self.path).into()
     }
 }
+impl IsDiagnostic for ItNotInItBlock {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("'it' used outside of an it block").into()
+    }
+}
+
 
 impl IsDiagnostic for UnresolvedCtor {
     fn region(&self) -> Region {

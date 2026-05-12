@@ -20,7 +20,7 @@ mod BadDriverTarget {
 // An expression that references a name that is not a declared component.
 mod BadExprRef {
     outgoing out : Bit
-    // CHECK: Unknown component
+    // CHECK: Unknown component doesnt_exist
     out := doesnt_exist
 }
 

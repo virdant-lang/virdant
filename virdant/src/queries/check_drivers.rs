@@ -42,7 +42,7 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<D
                     }.into());
                 }
             }
-        } else {
+        } else if !path.starts_with(b"it.") && path != b"it" {
             for (_driver_type, location) in driver_entries {
                 let region = builder.get_location_region(location.clone());
                 diagnostics.push(diagnostics::UnresolvedComponent {
@@ -91,6 +91,7 @@ fn check_wrong_driver_types(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let driver_analysis = builder.get_driver_analysis(symbol_id);
+    diagnostics.extend_from_slice(driver_analysis.diagnostics());
     for (comp_id, drivers) in driver_analysis.drivers() {
         let Some(component) = component_analysis.component(*comp_id) else { continue };
         let expected = match component.kind() {

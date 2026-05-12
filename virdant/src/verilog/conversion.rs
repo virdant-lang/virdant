@@ -900,12 +900,37 @@ impl<'d> Converter<'d> {
         match node.payload() {
             AstNodePayload::ExprReference => {
                 let path = node.parsing.string(node.path().unwrap()).to_str_lossy().into_owned();
+                let mut path_str = path.clone();
+                if path_str.starts_with("it.") || path_str == "it" {
+                    let mut current_id = node.id();
+                    while let Some(parent_id) = node.parsing.ast_node(current_id).parent {
+                        let parent = node.parsing.ast_node(parent_id);
+                        let mut resolved_name = None;
+                        if let AstNodePayload::Submodule(module) = parent.payload() {
+                            resolved_name = Some(node.parsing.string(module.name).to_str_lossy().into_owned());
+                        } else if let AstNodePayload::Component(component) = parent.payload() {
+                            resolved_name = Some(node.parsing.string(component.name).to_str_lossy().into_owned());
+                        } else if let AstNodePayload::Socket(socket) = parent.payload() {
+                            resolved_name = Some(node.parsing.string(socket.name).to_str_lossy().into_owned());
+                        }
+
+                        if let Some(name) = resolved_name {
+                            if path_str.starts_with("it.") {
+                                path_str = format!("{}.{}", name, &path_str[3..]);
+                            } else {
+                                path_str = name;
+                            }
+                            break;
+                        }
+                        current_id = parent_id;
+                    }
+                }
                 // Check if this reference is a pattern-bound variable substitution.
-                if let Some(subst_expr) = scheduler.subst.get(&path) {
+                if let Some(subst_expr) = scheduler.subst.get(&path_str) {
                     return subst_expr.clone();
                 }
                 verilog::Expr::Reference(verilog::expr::Reference {
-                    name: valid_verilog_name(&path),
+                    name: valid_verilog_name(&path_str),
                 })
             }
             AstNodePayload::ExprBitLit(expr_bit_lit) => {

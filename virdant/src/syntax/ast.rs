@@ -297,11 +297,14 @@ impl<'p> AstNode<'p> {
     pub fn clock(&self) -> Option<AstNode<'_>> {
         match &self.payload {
             AstNodePayload::Component(component) => {
-                if component.kind == ComponentKind::Reg && self.children().len() > 1 {
-                    Some(self.child(1))
-                } else {
-                    None
+                if component.kind == ComponentKind::Reg {
+                    for child in self.children().into_iter().skip(1) {
+                        if !matches!(child.payload(), AstNodePayload::It) {
+                            return Some(child);
+                        }
+                    }
                 }
+                None
             }
             _ => None
         }

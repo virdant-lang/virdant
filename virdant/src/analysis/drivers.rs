@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use bstr::BStr;
+use bstr::BString;
+use bstr::ByteSlice;
 use indexmap::IndexSet;
 use indexmap::IndexMap;
 
@@ -9,7 +12,6 @@ use crate::analysis::symbols::SymbolId;
 use crate::common::{DriverType, Flow};
 use crate::db::Builder;
 use crate::diagnostics::Diagnostic;
-use bstr::ByteSlice;
 use crate::syntax::ast::AstNode;
 use crate::syntax::payload::AstNodePayload;
 
@@ -65,6 +67,10 @@ pub struct DriverMatch {
 impl DriverAnalysis {
     pub fn drivers(&self) -> &IndexMap<ComponentId, Vec<Driver>> {
         &self.drivers
+    }
+
+    pub fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
     }
 
     #[allow(unused)]
@@ -131,28 +137,45 @@ pub(crate) fn build_driver_analysis(
     let item_ast = parsing.ast_node(location.ast_node_id());
     let component_analysis = builder.get_component_analysis(symbol_id);
 
-    let drivers = collect_block_drivers(item_ast.children(), &component_analysis);
+    let (drivers, diagnostics) = collect_block_drivers(item_ast.children(), &component_analysis, None);
 
 //    driver_analysis.dump(&component_analysis);
 
     Arc::new(DriverAnalysis {
         drivers,
-        diagnostics: vec![],
+        diagnostics,
     })
 }
 
 fn collect_block_drivers(
     stmts: Vec<AstNode<'_>>,
     component_analysis: &ComponentAnalysis,
-) -> IndexMap<ComponentId, Vec<Driver>> {
+    it_context: Option<&BStr>,
+) -> (IndexMap<ComponentId, Vec<Driver>>, Vec<Diagnostic>) {
     let mut result: IndexMap<ComponentId, Vec<Driver>> = IndexMap::new();
+    let mut diagnostics: Vec<Diagnostic> = vec![];
 
     for stmt in stmts {
         match stmt.payload() {
             AstNodePayload::Driver(driver) => {
                 let Some(target) = stmt.target() else { continue };
-                let target_str = stmt.parsing.string(target);
-                let Some(component) = component_analysis.resolve(target_str) else { continue };
+                let mut target_str = stmt.parsing.string(target).to_owned();
+                if let Some(ctx) = it_context {
+                    if target_str.starts_with(b"it.") {
+                        let suffix = target_str[3..].to_owned();
+                        target_str.clear();
+                        target_str.extend_from_slice(ctx);
+                        target_str.push(b'.');
+                        target_str.extend_from_slice(&suffix);
+                    } else if target_str == b"it" {
+                        target_str = ctx.to_owned();
+                    }
+                } else if target_str.starts_with(b"it.") || target_str == b"it" {
+                    diagnostics.push(crate::diagnostics::ItNotInItBlock {
+                        region: stmt.region(),
+                    }.into());
+                }
+                let Some(component) = component_analysis.resolve(target_str.as_bstr()) else { continue };
                 let expr = stmt.driver().unwrap().location();
                 result.entry(component.id()).or_default().push(Driver::Expr(driver.driver_type, expr));
             }
@@ -162,8 +185,40 @@ fn collect_block_drivers(
                 let rhs_node = stmt.child(1);
                 let Some(lhs_path) = lhs_node.path() else { continue };
                 let Some(rhs_path) = rhs_node.path() else { continue };
-                let lhs_str = parsing.string(lhs_path);
-                let rhs_str = parsing.string(rhs_path);
+                let mut lhs_str = parsing.string(lhs_path).to_owned();
+                let mut rhs_str = parsing.string(rhs_path).to_owned();
+
+                if let Some(ctx) = it_context {
+                    if lhs_str.starts_with(b"it.") {
+                        let suffix = lhs_str[3..].to_owned();
+                        lhs_str.clear();
+                        lhs_str.extend_from_slice(ctx);
+                        lhs_str.push(b'.');
+                        lhs_str.extend_from_slice(&suffix);
+                    } else if lhs_str == b"it" {
+                        lhs_str = ctx.to_owned();
+                    }
+                    if rhs_str.starts_with(b"it.") {
+                        let suffix = rhs_str[3..].to_owned();
+                        rhs_str.clear();
+                        rhs_str.extend_from_slice(ctx);
+                        rhs_str.push(b'.');
+                        rhs_str.extend_from_slice(&suffix);
+                    } else if rhs_str == b"it" {
+                        rhs_str = ctx.to_owned();
+                    }
+                } else {
+                    if lhs_str.starts_with(b"it.") || lhs_str == b"it" {
+                        diagnostics.push(crate::diagnostics::ItNotInItBlock {
+                            region: lhs_node.region(),
+                        }.into());
+                    }
+                    if rhs_str.starts_with(b"it.") || rhs_str == b"it" {
+                        diagnostics.push(crate::diagnostics::ItNotInItBlock {
+                            region: rhs_node.region(),
+                        }.into());
+                    }
+                }
 
                 let lhs_prefix = format!("{}.", lhs_str.to_str_lossy());
                 let rhs_prefix = format!("{}.", rhs_str.to_str_lossy());
@@ -175,7 +230,7 @@ fn collect_block_drivers(
                     }
 
                     let suffix = &lhs_path_str[lhs_prefix.len()..];
-                    let rhs_full_path = bstr::BString::from(format!("{}{}", rhs_prefix, suffix).into_bytes());
+                    let rhs_full_path = BString::from(format!("{}{}", rhs_prefix, suffix).into_bytes());
 
                     let Some(rhs_component) = component_analysis.resolve(rhs_full_path.as_bstr()) else {
                         continue;
@@ -195,6 +250,77 @@ fn collect_block_drivers(
                     }
                 }
             }
+            AstNodePayload::Submodule(submodule) => {
+                let name = stmt.parsing.string(submodule.name);
+                let children = stmt.children();
+                if children.len() == 2 {
+                    let it_block = &children[1];
+                    if matches!(it_block.payload(), AstNodePayload::It) {
+                        let block = &it_block.children()[0];
+
+                        let name_with_context = if let Some(ctx) = it_context {
+                            let mut new_name = BString::from(ctx);
+                            new_name.push(b'.');
+                            new_name.extend_from_slice(name);
+                            new_name
+                        } else {
+                            BString::from(name)
+                        };
+
+                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, Some(name_with_context.as_bstr()));
+                        for (comp_id, mut drivers) in block_drivers {
+                            result.entry(comp_id).or_default().append(&mut drivers);
+                        }
+                        diagnostics.append(&mut block_diags);
+                    }
+                }
+            }
+            AstNodePayload::Socket(socket) => {
+                let name = stmt.parsing.string(socket.name);
+                for child in stmt.children() {
+                    if matches!(child.payload(), AstNodePayload::It) {
+                        let block = &child.children()[0];
+
+                        let name_with_context = if let Some(ctx) = it_context {
+                            let mut new_name = BString::from(ctx);
+                            new_name.push(b'.');
+                            new_name.extend_from_slice(name);
+                            new_name
+                        } else {
+                            BString::from(name)
+                        };
+
+                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, Some(name_with_context.as_bstr()));
+                        for (comp_id, mut drivers) in block_drivers {
+                            result.entry(comp_id).or_default().append(&mut drivers);
+                        }
+                        diagnostics.append(&mut block_diags);
+                    }
+                }
+            }
+            AstNodePayload::Component(component) => {
+                let name = stmt.parsing.string(component.name);
+                for child in stmt.children() {
+                    if matches!(child.payload(), AstNodePayload::It) {
+                        let block = &child.children()[0];
+
+                        let name_with_context = if let Some(ctx) = it_context {
+                            let mut new_name = BString::from(ctx);
+                            new_name.push(b'.');
+                            new_name.extend_from_slice(name);
+                            new_name
+                        } else {
+                            BString::from(name)
+                        };
+
+                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, Some(name_with_context.as_bstr()));
+                        for (comp_id, mut drivers) in block_drivers {
+                            result.entry(comp_id).or_default().append(&mut drivers);
+                        }
+                        diagnostics.append(&mut block_diags);
+                    }
+                }
+            }
             AstNodePayload::ModDefStmtIf => {
                 // Children: [cond_0, block_0, cond_1, block_1, ..., (else_block?)]
                 // An else block is present when the total number of children is odd;
@@ -209,14 +335,17 @@ fn collect_block_drivers(
                         .map(|i| {
                             let cond = &children[2 * i];
                             let block = &children[2 * i + 1];
-                            let block_drivers = collect_block_drivers(block.children(), component_analysis);
+                            let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, it_context);
+                            diagnostics.append(&mut block_diags);
                             (cond.location(), block_drivers)
                         })
                         .collect();
 
                 // Recursively collect drivers from the else block (if present).
                 let else_drivers = if has_else {
-                    collect_block_drivers(children.last().unwrap().children(), component_analysis)
+                    let (else_drivers, mut else_diags) = collect_block_drivers(children.last().unwrap().children(), component_analysis, it_context);
+                    diagnostics.append(&mut else_diags);
+                    else_drivers
                 } else {
                     IndexMap::new()
                 };
@@ -265,7 +394,8 @@ fn collect_block_drivers(
                         .map(|i| {
                             let pat = &children[2 * i + 1];
                             let block = &children[2 * i + 2];
-                            let block_drivers = collect_block_drivers(block.children(), component_analysis);
+                            let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, it_context);
+                            diagnostics.append(&mut block_diags);
                             (pat.location(), block_drivers)
                         })
                         .collect();
@@ -300,5 +430,5 @@ fn collect_block_drivers(
         }
     }
 
-    result
+    (result, diagnostics)
 }

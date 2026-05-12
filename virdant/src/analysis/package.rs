@@ -133,13 +133,35 @@ impl PackageAnalysis {
                                 );
                             }
                         }
+                        for child in child_node.children() {
+                            if matches!(child.payload(), AstNodePayload::It) {
+                                let block = &child.children()[0];
+                                self.add_moddefstmt_block_expr_roots(block);
+                            }
+                        }
                     }
                     AstNodePayload::Driver(_driver) => {
                         let node_id = child_node.driver().unwrap().id();
                         self.expr_roots.push(node_id);
                     }
-                    AstNodePayload::Submodule(_module) => (),
-                    AstNodePayload::Socket(_socket) => (),
+                    AstNodePayload::Submodule(_module) => {
+                        let children = child_node.children();
+                        if children.len() == 2 {
+                            let it_block = &children[1];
+                            if matches!(it_block.payload(), AstNodePayload::It) {
+                                let block = &it_block.children()[0];
+                                self.add_moddefstmt_block_expr_roots(block);
+                            }
+                        }
+                    }
+                    AstNodePayload::Socket(_socket) => {
+                        for child in child_node.children() {
+                            if matches!(child.payload(), AstNodePayload::It) {
+                                let block = &child.children()[0];
+                                self.add_moddefstmt_block_expr_roots(block);
+                            }
+                        }
+                    }
                     AstNodePayload::BidirectionalDriver => (),
 
                     AstNodePayload::ModDefStmtIf => {
