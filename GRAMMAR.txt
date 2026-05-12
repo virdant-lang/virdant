@@ -106,11 +106,11 @@ Expr :=
     | ExprStruct
     | ExprBinOpLogical
 
-ExprIf := ExprIfStart ExprIfMiddle? ExprIfEnd
+ExprIf := ExprIfStart ExprIfMiddle* ExprIfEnd
 
 ExprIfStart := "if" Expr "{" Expr "}"
 
-ExprIfMiddle := ExprIfMiddle? "else" "if" Expr "{" Expr "}"
+ExprIfMiddle := "else" "if" Expr "{" Expr "}"
 
 ExprIfEnd := "else" "{" Expr "}"
 

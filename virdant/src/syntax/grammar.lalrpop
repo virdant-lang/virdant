@@ -432,25 +432,25 @@ Expr: AstNodeId = {
 }
 
 ExprIf: AstNodeId = {
-    <ll:@L> ExprIfStart <middles:ExprIfMiddle?> ExprIfEnd <rr:@R> => {
+    <ll:@L> <start:ExprIfStart> <middles:ExprIfMiddle*> <end:ExprIfEnd> <rr:@R> => {
         let payload = AstNodePayload::ExprIf;
         let span = parser.span(ll, rr);
-        let num_children = 3 + middles.unwrap_or(0);
+        let num_children = start + u16::try_from(2 * middles.len()).unwrap() + end;
 
         parser.add_node(payload, span, num_children)
     }
 }
 
-ExprIfStart: () = {
-    "if" Expr "{" Expr "}" => (),
+ExprIfStart: u16 = {
+    "if" Expr "{" Expr "}" => 2,
 }
 
-ExprIfMiddle: u16 = {
-    <another:ExprIfMiddle?> "else" "if" Expr "{" Expr "}" => another.unwrap_or(0) + 2,
+ExprIfMiddle: () = {
+    "else" "if" Expr "{" Expr "}" => (),
 }
 
-ExprIfEnd: () = {
-    "else" "{" Expr "}" => (),
+ExprIfEnd: u16 = {
+    "else" "{" Expr "}" => 1,
 }
 
 ExprMatch: AstNodeId = {
