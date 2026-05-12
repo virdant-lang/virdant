@@ -38,6 +38,56 @@ module Tb;
         do_reset;
         repeat (10) @(posedge clock);
 
+
+        if (dut.w !== 1'b1) $fatal(1, "assert failed");
+        if (dut.a !== 1'b0) $fatal(1, "assert failed");
+        if (dut.w !== 1'b1) $fatal(1, "assert failed");
+        if (dut.a !== 1'b0) $fatal(1, "assert failed");
+        if (dut.w == dut.a) $fatal(1, "assert failed");
+
+        if (!(dut.w && !dut.a)) $fatal(1, "assert failed");
+        if (!(dut.w || dut.a)) $fatal(1, "assert failed");
+        if (!(dut.w ^ dut.a)) $fatal(1, "assert failed");
+        if (!(dut.w ? 1'b1 : 1'b0)) $fatal(1, "assert failed");
+        if (!(dut.a ? 1'b0 : 1'b1)) $fatal(1, "assert failed");
+
+        if (dut.x !== 4'b1010) $fatal(1, "assert failed");
+        if (dut.y !== 4'b0011) $fatal(1, "assert failed");
+        if (dut.x == dut.y) $fatal(1, "assert failed");
+        if (!(dut.x > dut.y)) $fatal(1, "assert failed");
+        if (!(dut.y < dut.x)) $fatal(1, "assert failed");
+        if (!(dut.x >= 4'b1010)) $fatal(1, "assert failed");
+        if (!(dut.y <= dut.x)) $fatal(1, "assert failed");
+
+        if (dut.x + dut.y !== 4'b1101) $fatal(1, "assert failed");
+        if (dut.x - dut.y !== 4'b0111) $fatal(1, "assert failed");
+        if (~dut.x !== 4'b0101) $fatal(1, "assert failed");
+
+        if ({dut.w} !== 1'b1) $fatal(1, "assert failed");
+        if ({dut.w, dut.y} !== 5'b10011) $fatal(1, "assert failed");
+        if (({dut.w, dut.y} & 5'b10000) === 5'b0) $fatal(1, "assert failed");
+        if (({dut.w, dut.y} & 5'b01000) !== 5'b0) $fatal(1, "assert failed");
+        if (({dut.w, dut.y} & 5'b00100) !== 5'b0) $fatal(1, "assert failed");
+        if (({dut.w, dut.y} & 5'b00010) === 5'b0) $fatal(1, "assert failed");
+        if (({dut.w, dut.y} & 5'b00001) === 5'b0) $fatal(1, "assert failed");
+
+        if (dut.z !== 8'h08) $fatal(1, "assert failed");
+        if (dut.z[7] !== 1'b0) $fatal(1, "assert failed");
+        if (dut.s !== 8'hf8) $fatal(1, "assert failed");
+        if (dut.s[7] !== 1'b1) $fatal(1, "assert failed");
+
+        if ((dut.w ? dut.x : dut.y) !== dut.x) $fatal(1, "assert failed");
+        if ((dut.a ? dut.x : dut.y) !== dut.y) $fatal(1, "assert failed");
+
+        if (dut.bit_and !== 1'b0) $fatal(1, "assert failed");
+        if (dut.bit_or !== 1'b1) $fatal(1, "assert failed");
+        if (dut.bit_xor !== 1'b1) $fatal(1, "assert failed");
+
+        if (dut.\or !== 1'b1) $fatal(1, "assert failed");
+        if (dut.\and !== 1'b1) $fatal(1, "assert failed");
+        if (dut.\xor !== 1'b1) $fatal(1, "assert failed");
+
+        if (dut.ascription !== 15) $fatal(1, "assert failed");
         $display("DONE");
         $finish;
     end

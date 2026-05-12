@@ -26,6 +26,7 @@ mod Ifetch {
         pc + 4w32
     };
 
+
     opcode := instr[7..0];
     rd  := instr[12..7];
     rs1 := instr[20..15];

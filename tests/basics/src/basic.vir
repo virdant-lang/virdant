@@ -50,5 +50,4 @@ export mod Top {
     wire bit_xor : Bit;
     bit_xor := true ^^ false;
 
-
 }

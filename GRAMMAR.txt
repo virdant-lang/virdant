@@ -262,11 +262,7 @@ Tokens:
   "^"
   "^^"
   "builtin"
-<<<<<<< HEAD
-=======
   "case"
-  "display"
->>>>>>> 0173033 (Update match arm syntax to use `case` keyword)
   "else"
   "enum"
   "export"

@@ -141,6 +141,7 @@ impl PackageAnalysis {
                     AstNodePayload::Submodule(_module) => (),
                     AstNodePayload::Socket(_socket) => (),
                     AstNodePayload::BidirectionalDriver => (),
+
                     AstNodePayload::ModDefStmtIf => {
                         self.add_moddefstmtif_expr_roots(child_node);
                     }
@@ -214,6 +215,7 @@ impl PackageAnalysis {
             }
         }
     }
+
 
 }
 

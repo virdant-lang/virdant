@@ -897,14 +897,7 @@ extern {
         "if" => Token::KwIf,
         "else" => Token::KwElse,
         "match" => Token::KwMatch,
-<<<<<<< HEAD
-=======
         "case" => Token::KwCase,
-        "assert" => Token::KwAssert,
-        "display" => Token::KwDisplay,
-        "finish" => Token::KwFinish,
-        "fatal" => Token::KwFatal,
->>>>>>> 0173033 (Update match arm syntax to use `case` keyword)
         "true" => Token::KwTrue,
         "false" => Token::KwFalse,
         "Str" => Token::Str,
