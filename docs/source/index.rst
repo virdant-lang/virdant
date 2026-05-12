@@ -1,3 +1,5 @@
+:og:description: Virdant is a modern, strongly-typed hardware description language designed for predictability and developer productivity.
+
 The Virdant Hardware Language
 =============================
 
@@ -15,18 +17,22 @@ The Virdant Hardware Language
   coding-conventions
   Repository <https://github.com/virdant-lang/virdant>
 
-Virdant is a modern hardware description language.
+Virdant is a modern, strongly-typed hardware description language designed for predictability and developer productivity.
 
-It was created in response to a simple ask:
-If my design typechecks, it should do what I expect.
+It was created in response to a simple philosophy: Hardware should be beautiful.
 
-The industry-standard Verilog fails this by having very loose rules for when designs are malformed.
-Some notable pain points include:
+The industry standard Verilog suffers from loose typing rules that allow malformed designs to quietly pass as valid hardware.
+This leads to frustrating, hard-to-debug issues.
 
-* automatic truncation of data
-* flop inference from incomplete case coverage
-* tool-dependent rules for invalid wire connections
+Virdant eliminates entire classes of bugs at compile time.
+By enforcing strict type safety, explicit semantics, and modern language ergonomics,
+Virdant allows hardware engineers to design complex digital systems with confidence.
 
-The other industry standard, VHDL, suffers from the fact that the author of Virdant doesn't know it and doesn't want to know it.
+Ready to get started?
+---------------------
+* :doc:`Getting Started <getting-started>`: Learn how to set up the Virdant compiler and write your first design.
+* :doc:`Core Principles <principles>`: Understand the philosophy behind Virdant's design.
 
-Repository: `https://github.com/virdant-lang/virdant <https://github.com/virdant-lang/virdant>`_
+Get the Code
+------------
+* `https://github.com/virdant-lang/virdant <https://github.com/virdant-lang/virdant>`_

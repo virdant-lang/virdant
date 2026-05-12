@@ -31,7 +31,7 @@ code, pre {
 }
 
 .literal-block-wrapper {
-    background: #e6ffe6 !important;
+    background: #e9f3d3 !important;
     border: 1px solid #000;
     border-radius: 25px 25px 0 0 !important;
     margin-bottom: 24px !important;
@@ -57,7 +57,7 @@ code, pre {
 }
 
 div.code-block-caption {
-    background: #e6ffe6 !important;
+    background: #e9f3d3 !important;
     border-radius: 25px 25px 0 0 !important;
     display: flex;
     justify-content: center;

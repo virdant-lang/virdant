@@ -25,6 +25,7 @@ copyright = '2026'
 extensions = [
     "sphinx_rtd_theme",
     "virdant_ext",
+    "sphinxext.opengraph",
 ]
 
 templates_path = ['_templates']
@@ -52,3 +53,8 @@ primary_domain = 'virdant'
 highlight_language = 'virdant'
 html_favicon = '_static/virdant-logo-white-transparent.svg'
 html_logo = '_static/virdant-logo-white-transparent.svg'
+
+# Open Graph configuration
+ogp_site_url = "https://virdant.org"
+ogp_image = "https://virdant.org/_static/virdant-logo-og.png"
+ogp_site_name = "The Virdant Hardware Language"
