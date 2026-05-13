@@ -47,7 +47,6 @@ pub enum AstNodePayload {
     ExprStrLit(ExprStrLit),
     ExprBinOp(ExprBinOp),
     ExprUnOp(ExprUnOp),
-    ExprMethod(ExprMethod),
     ExprField(ExprField),
     ExprFn,
     ExprCtor(ExprCtor),
@@ -111,7 +110,6 @@ impl AstNodePayload {
             AstNodePayload::ExprStrLit(_expr_str_lit) => "ExprStrLit",
             AstNodePayload::ExprBinOp(_expr_bin_op) => "ExprBinOp",
             AstNodePayload::ExprUnOp(_expr_un_op) => "ExprUnOp",
-            AstNodePayload::ExprMethod(_expr_method) => "ExprMethod",
             AstNodePayload::ExprField(_expr_field) => "ExprField",
             AstNodePayload::ExprFn => "ExprFn",
             AstNodePayload::ExprCtor(_expr_ctor) => "ExprCtor",
@@ -266,11 +264,6 @@ pub struct ExprBinOp {
 #[derive(Clone, Debug)]
 pub struct ExprUnOp {
     pub op: UnOp,
-}
-
-#[derive(Clone, Debug)]
-pub struct ExprMethod {
-    pub method: InternedString,
 }
 
 #[derive(Clone, Debug)]

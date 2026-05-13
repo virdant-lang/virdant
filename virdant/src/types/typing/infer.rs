@@ -123,20 +123,6 @@ impl Typing {
                 self.infer_unop(builder, context, node, expr_un_op.op)
             }
             AstNodePayload::ExprFn => self.infer_fn(builder, context, node),
-            AstNodePayload::ExprMethod(_) => {
-                // TODO: proper method typing. For now, infer the subject type and
-                // propagate it as the method's return type (handles ->inc(), ->dec(),
-                // ->not(), ->and(), ->or(), ->sll(), ->srl() etc. which preserve width).
-                // Methods that return Bit (->eq(), ->lt(), ->gt(), ->le(), ->ge()) will
-                // be handled by check() when the expected type is known.
-                let subject = node.subject().unwrap();
-                if let Ok(Some(subject_typ)) = self.infer(builder, context, &subject) {
-                    self.annotate(node, &subject_typ);
-                    Ok(Some(subject_typ))
-                } else {
-                    Ok(None)
-                }
-            }
             AstNodePayload::ExprParen => {
                 if let Some(typ) = self.infer(builder, context, &node.subject().unwrap())? {
                     self.annotate(&node, &typ);

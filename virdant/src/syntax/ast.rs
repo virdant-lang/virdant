@@ -201,7 +201,6 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprStrLit(_expr_str_lit) => format!("ExprStrLit"),
             AstNodePayload::ExprBinOp(_expr_bin_op) => format!("ExprBinOp"),
             AstNodePayload::ExprUnOp(_expr_un_op) => format!("ExprUnOp"),
-            AstNodePayload::ExprMethod(_expr_method) => format!("ExprMethod"),
             AstNodePayload::ExprField(_expr_field) => format!("ExprField"),
             AstNodePayload::ExprFn => format!("ExprFn"),
             AstNodePayload::ExprCtor(_expr_ctor) => format!("ExprCtor"),
@@ -322,7 +321,6 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprStrLit(_) |
             AstNodePayload::ExprBinOp(_) |
             AstNodePayload::ExprUnOp(_) |
-            AstNodePayload::ExprMethod(_) |
             AstNodePayload::ExprFn |
             AstNodePayload::ExprCtor(_) |
             AstNodePayload::ExprEnumerant(_) |
@@ -349,7 +347,6 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprIf => Some(self.child(0)),
             AstNodePayload::ExprMatch => Some(self.child(0)),
             AstNodePayload::ExprUnOp(_expr_un_op) => Some(self.child(0)),
-            AstNodePayload::ExprMethod(_expr_method) => Some(self.child(0)),
             AstNodePayload::ExprField(_) => Some(self.child(0)),
             AstNodePayload::ExprFn => Some(self.child(1)), // skips over the Ofness
             AstNodePayload::ExprIndex(_expr_index) => Some(self.child(0)),
@@ -361,7 +358,6 @@ impl<'p> AstNode<'p> {
 
     pub fn args(&self) -> Option<Vec<AstNode<'_>>> {
         match &self.payload {
-            AstNodePayload::ExprMethod(_expr_method) => todo!(),
             AstNodePayload::ExprFn => {
                 let args = self.children().into_iter().skip(1).collect();
                 Some(args)

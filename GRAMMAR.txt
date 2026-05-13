@@ -184,7 +184,6 @@ ExprAscription :=
 
 ExprPrimary :=
       Ofness "(" ArgList ")"
-    | ExprPrimary "->" Ident "(" ArgList ")"
     | ExprPrimary "->" Ident
     | ExprPrimary "[" Index "]"
     | ExprPrimary "[" Index ".." Index "]"
