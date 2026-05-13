@@ -210,9 +210,10 @@ impl<'d> Converter<'d> {
                         }
                         ComponentKind::Wire => {
                             let children = stmt.children();
-                            if children.len() >= 2 {
+                            let clock_child = children.iter().skip(1).find(|c| !matches!(c.payload(), AstNodePayload::It));
+                            if let Some(clock_node) = clock_child {
                                 // Wire with explicit `on clock` — treat exactly like a Reg.
-                                sequential_regs.insert(name.clone(), children[1].id());
+                                sequential_regs.insert(name.clone(), clock_node.id());
                                 elements.push(verilog::Element::Reg(verilog::Reg {
                                     name: valid_verilog_name(&name),
                                     width,
@@ -227,10 +228,11 @@ impl<'d> Converter<'d> {
                             }
                         }
                         ComponentKind::Reg => {
-                            // Regs with `on clock` have 2 children: type + clock expr
+                            // Regs with `on clock` have a non-ItBlock child after the type.
                             let children = stmt.children();
-                            if children.len() >= 2 {
-                                sequential_regs.insert(name.clone(), children[1].id());
+                            let clock_child = children.iter().skip(1).find(|c| !matches!(c.payload(), AstNodePayload::It));
+                            if let Some(clock_node) = clock_child {
+                                sequential_regs.insert(name.clone(), clock_node.id());
                             }
                             elements.push(verilog::Element::Reg(verilog::Reg {
                                 name: valid_verilog_name(&name),
