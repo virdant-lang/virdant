@@ -15,6 +15,7 @@ use crate::diagnostics::{self, Diagnostic, DiagnosticLevel};
 use crate::analysis::location::Location;
 use crate::fqn::PackageFqn;
 use crate::syntax::ast::{AstNode, AstNodeId};
+use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::{self, AstNodePayload};
 use crate::types::context::Referent;
 
@@ -430,6 +431,7 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
         .resolve_item_in_package(item_name.as_bstr(), location.package())
         .unwrap();
     let context = builder.get_typing_context(item.id());
+    let context = extend_context_for_enclosing_stmt_matches(builder, &parsing, location.ast_node_id(), context);
 
     let node = parsing.ast_node(location.ast_node_id());
     let expected_typ = builder.get_expected_type(exprroot.clone());
@@ -469,4 +471,95 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
     typing.validate(builder);
 
     Arc::new(typing)
+}
+
+
+/// Walk up from `start_id` through the AST, collecting pattern-bound variable bindings
+/// from any enclosing `ModDefStmtMatch` arms, and push them onto `context`.
+/// This allows pattern-bound variables (e.g. `r` in `case @Done(r) => { result := r }`)
+/// to be resolved when type-checking driver expressions inside statement-level match arms.
+fn extend_context_for_enclosing_stmt_matches(
+    builder: &mut Builder,
+    parsing: &Parsing,
+    start_id: AstNodeId,
+    mut context: TypingContext,
+) -> TypingContext {
+    // Collect all ancestor IDs walking upward from start_id, stopping at item boundaries.
+    // The vec is innermost-first (closest ancestor at index 0).
+    let mut ancestor_ids: Vec<AstNodeId> = vec![];
+    let mut current_id = start_id;
+    loop {
+        let node = parsing.ast_node(current_id);
+        if node.is_item() {
+            break;
+        }
+        match node.parent {
+            Some(parent_id) => {
+                ancestor_ids.push(parent_id);
+                current_id = parent_id;
+            }
+            None => break,
+        }
+    }
+
+    // For each enclosing ModDefStmtMatch ancestor, determine which arm contains start_id
+    // by checking which arm block is itself an ancestor of start_id.
+    // Collect (subject_location, pat_node_id) pairs; ancestors are innermost-first.
+    let mut arm_pats: Vec<(Location, AstNodeId)> = vec![];
+    for &ancestor_id in &ancestor_ids {
+        let ancestor = parsing.ast_node(ancestor_id);
+        if let AstNodePayload::ModDefStmtMatch = ancestor.payload() {
+            // Children: [subject, pat_0, block_0, pat_1, block_1, ...]
+            let children = ancestor.children();
+            let num_arms = (children.len() - 1) / 2;
+            for i in 0..num_arms {
+                let block = &children[2 * i + 2];
+                if ancestor_ids.contains(&block.id()) {
+                    arm_pats.push((children[0].location(), children[2 * i + 1].id()));
+                    break;
+                }
+            }
+        }
+    }
+
+    // ancestor_ids are innermost-first, so arm_pats are innermost-first too.
+    // Reverse so outermost bindings are pushed first (innermost can shadow outermost).
+    arm_pats.reverse();
+    for (subject_location, pat_id) in arm_pats {
+        let subject_typ = match builder.get_typeof(subject_location) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        let pat_node = parsing.ast_node(pat_id);
+        context = extend_context_with_stmt_match_pat(builder, &pat_node, &subject_typ, context);
+    }
+
+    context
+}
+
+/// Given a `ModDefStmtMatch` arm pattern node and the expected (subject) type, extend the
+/// typing context with any variables bound by the pattern.  Only `PatCtor` patterns with
+/// named payload variables contribute bindings; `PatEnumerant` and `else` arms do not.
+fn extend_context_with_stmt_match_pat(
+    builder: &mut Builder,
+    pat_node: &AstNode<'_>,
+    expected_typ: &Type,
+    mut context: TypingContext,
+) -> TypingContext {
+    if let AstNodePayload::PatCtor(pat_ident) = pat_node.payload() {
+        let ctor_name = pat_node.parsing().string(pat_ident.name);
+        let Type::Usual(typedef_id) = expected_typ else { return context; };
+        let symboltable = builder.get_symboltable();
+        let Some(ctor_symbol) = symboltable.slot(*typedef_id, ctor_name) else { return context; };
+        let ctor_symbol_id = ctor_symbol.id();
+        let sig = builder.get_ctor_signature(ctor_symbol_id);
+        let children = pat_node.children();
+        for (child, (_param_name, param_typ)) in children.iter().zip(sig.parameters.iter()) {
+            if let Some(var_name_interned) = child.path() {
+                let var_name = child.parsing().string(var_name_interned).to_owned();
+                context = context.push_local(var_name, child.location(), param_typ.clone());
+            }
+        }
+    }
+    context
 }
