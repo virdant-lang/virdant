@@ -8,16 +8,16 @@ mod Top {
 }
 
 mod Core {
-    master socket mem of Mem
+    client socket mem of Mem
     mem.addr := 0
 }
 
 mod Memory {
-    slave socket mem of Mem
+    server socket mem of Mem
     mem.data := 10
 }
 
 socket Mem {
-    mosi addr : Word[16]
-    miso data : Word[8]
+    cosi addr : Word[16]
+    ciso data : Word[8]
 }

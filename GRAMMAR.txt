@@ -46,8 +46,8 @@ BuiltinDef := "builtin" "type" Ident Generics? "{" "}"
 SocketDef := "socket" Ident "{" SocketDefStmt* "}"
 
 SocketDefStmt :=
-      "mosi" Ident ":" Type
-    | "miso" Ident ":" Type
+      "cosi" Ident ":" Type
+    | "ciso" Ident ":" Type
 
 FnDef := "fn" Ident ParamList "->" Type "{" Expr "}"
 
@@ -78,8 +78,8 @@ ModDefStmtInstance := "mod" Ident "of" Ofness ItBlock?
 ItBlock := ModDefStmtBlock
 
 ModDefStmtSocket :=
-      "master" "socket" Ident "of" Ofness ItBlock?
-    | "slave" "socket" Ident "of" Ofness ItBlock?
+      "client" "socket" Ident "of" Ofness ItBlock?
+    | "server" "socket" Ident "of" Ofness ItBlock?
 
 ModDefStmtIf := ModDefStmtIfStart ModDefStmtIfMiddle* ModDefStmtIfEnd?
 
@@ -266,6 +266,9 @@ Tokens:
   "^^"
   "builtin"
   "case"
+  "ciso"
+  "client"
+  "cosi"
   "drop"
   "else"
   "enum"
@@ -277,16 +280,13 @@ Tokens:
   "import"
   "incoming"
   "it"
-  "master"
   "match"
-  "miso"
   "mod"
-  "mosi"
   "of"
   "on"
   "outgoing"
   "reg"
-  "slave"
+  "server"
   "socket"
   "struct"
   "true"

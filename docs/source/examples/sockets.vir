@@ -1,17 +1,17 @@
 socket Mem {
-    mosi addr : Word[16]
-    miso data : Word[8]
+    cosi addr : Word[16]
+    ciso data : Word[8]
 }
 
 mod Core {
-    master socket mem of Mem
+    client socket mem of Mem
     // mem.addr := ...
 
     mem.addr := 0
 }
 
 mod Memory {
-    slave socket mem of Mem
+    server socket mem of Mem
     // mem.data := ...
     mem.data := 0
 }

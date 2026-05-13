@@ -282,10 +282,10 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                     Err(_) => None,
                                 };
                                 let flow = match (submodule_socket.role, channel.dir) {
-                                    (SocketRole::Master, ChannelDir::Mosi) => Flow::Source,
-                                    (SocketRole::Master, ChannelDir::Miso) => Flow::Sink,
-                                    (SocketRole::Slave, ChannelDir::Mosi) => Flow::Sink,
-                                    (SocketRole::Slave, ChannelDir::Miso) => Flow::Source,
+                                    (SocketRole::Client, ChannelDir::Cosi) => Flow::Source,
+                                    (SocketRole::Client, ChannelDir::Ciso) => Flow::Sink,
+                                    (SocketRole::Server, ChannelDir::Cosi) => Flow::Sink,
+                                    (SocketRole::Server, ChannelDir::Ciso) => Flow::Source,
                                 };
                                 let kind = match flow {
                                     Flow::Sink => Some(ComponentKind::Incoming),
@@ -348,10 +348,10 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         Err(_) => None,
                     };
                     let flow = match (socket.role, channel.dir) {
-                        (SocketRole::Master, ChannelDir::Mosi) => Flow::Sink,
-                        (SocketRole::Master, ChannelDir::Miso) => Flow::Source,
-                        (SocketRole::Slave, ChannelDir::Mosi) => Flow::Source,
-                        (SocketRole::Slave, ChannelDir::Miso) => Flow::Sink,
+                        (SocketRole::Client, ChannelDir::Cosi) => Flow::Sink,
+                        (SocketRole::Client, ChannelDir::Ciso) => Flow::Source,
+                        (SocketRole::Server, ChannelDir::Cosi) => Flow::Source,
+                        (SocketRole::Server, ChannelDir::Ciso) => Flow::Sink,
                     };
                     let component = Component {
                         id,

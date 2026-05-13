@@ -16,23 +16,23 @@ mod NoDrivers {
 
 // Socket used to test DriverForSink from both sides.
 socket Chan {
-    mosi req : Word[8]
-    miso ack : Bit
+    cosi req : Word[8]
+    ciso ack : Bit
 }
 
-// A master drives mosi (req) — that is correct.
-// But it also drives miso (ack) — miso is a source for the master, not a sink.
-mod BadMaster {
-    master socket ch of Chan
+// A client drives cosi (req) — that is correct.
+// But it also drives ciso (ack) — ciso is a source for the client, not a sink.
+mod BadClient {
+    client socket ch of Chan
     ch.req := 0
     // CHECK: Driver for sink ch.ack
     ch.ack := true
 }
 
-// A slave drives miso (ack) — that is correct.
-// But it also drives mosi (req) — mosi is a source for the slave, not a sink.
-mod BadSlave {
-    slave socket ch of Chan
+// A server drives ciso (ack) — that is correct.
+// But it also drives cosi (req) — cosi is a source for the server, not a sink.
+mod BadServer {
+    server socket ch of Chan
     ch.ack := true
     // CHECK: Driver for sink ch.req
     ch.req := 0
@@ -96,21 +96,21 @@ mod Int {
     out := inp
 }
 
-// A properly-wired master and slave, used to test socket NoDrivers below.
-mod GoodMaster {
-    master socket ch of Chan
+// A properly-wired client and server, used to test socket NoDrivers below.
+mod GoodClient {
+    client socket ch of Chan
     ch.req := 0
 }
 
-mod GoodSlave {
-    slave socket ch of Chan
+mod GoodServer {
+    server socket ch of Chan
     ch.ack := true
 }
 
 // Without :=:, the sink channels of each socket are left undriven.
 mod MissingSocketConnect {
-    mod p of GoodMaster
-    mod q of GoodSlave
+    mod p of GoodClient
+    mod q of GoodServer
     // CHECK: No drivers for p.ch.ack
     // CHECK: No drivers for q.ch.req
 }

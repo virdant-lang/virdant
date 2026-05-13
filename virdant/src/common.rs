@@ -29,8 +29,8 @@ pub enum DriverType {
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum ChannelDir {
-    Mosi,
-    Miso,
+    Cosi,
+    Ciso,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -41,8 +41,8 @@ pub enum PortDir {
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum SocketRole {
-    Master,
-    Slave,
+    Client,
+    Server,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]

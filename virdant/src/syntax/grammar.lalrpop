@@ -195,15 +195,15 @@ SocketDef: AstNodeId = {
 }
 
 SocketDefStmt: AstNodeId = {
-    <ll:@L> "mosi" <name:Ident> ":" Type <rr:@R> => {
-        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Mosi });
+    <ll:@L> "cosi" <name:Ident> ":" Type <rr:@R> => {
+        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Cosi });
         let span = parser.span(ll, rr);
         let num_children = 1;
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "miso" <name:Ident> ":" Type <rr:@R> => {
-        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Miso });
+    <ll:@L> "ciso" <name:Ident> ":" Type <rr:@R> => {
+        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Ciso });
         let span = parser.span(ll, rr);
         let num_children = 1;
 
@@ -337,15 +337,15 @@ ItBlock: AstNodeId = {
 }
 
 ModDefStmtSocket: AstNodeId = {
-    <ll:@L> "master" "socket" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> <rr:@R> => {
-        let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Master });
+    <ll:@L> "client" "socket" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> <rr:@R> => {
+        let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Client });
         let span = parser.span(ll, rr);
         let num_children = 1 + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "slave" "socket" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> <rr:@R> => {
-        let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Slave });
+    <ll:@L> "server" "socket" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> <rr:@R> => {
+        let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Server });
         let span = parser.span(ll, rr);
         let num_children = 1 + if it.is_none() { 0 } else { 1 };
 
@@ -898,10 +898,10 @@ extern {
         "on" => Token::KwOn,
         "of" => Token::KwOf,
         "socket" => Token::KwSocket,
-        "master" => Token::KwMaster,
-        "slave" => Token::KwSlave,
-        "mosi" => Token::KwMosi,
-        "miso" => Token::KwMiso,
+        "client" => Token::KwClient,
+        "server" => Token::KwServer,
+        "cosi" => Token::KwCosi,
+        "ciso" => Token::KwCiso,
         "if" => Token::KwIf,
         "it" => Token::KwIt,
         "else" => Token::KwElse,
