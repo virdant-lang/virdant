@@ -58,6 +58,7 @@ ModDefStmt :=
     | ModDefStmtSocket
     | ModDefStmtIf
     | ModDefStmtMatch
+    | ModDefStmtDrop
 
 ModDefStmtComponent :=
       "incoming" Ident ":" Type OnClause? ItBlock?
@@ -93,6 +94,8 @@ ModDefStmtMatch := "match" Expr "{" ModDefStmtMatchArm* "}"
 ModDefStmtMatchArm :=
       "case" Pat "=>" ModDefStmtBlock
     | "else" "=>" ModDefStmtBlock
+
+ModDefStmtDrop := "drop" Path
 
 ModDefStmtBlock := "{" ModDefStmt* "}"
 
@@ -264,6 +267,7 @@ Tokens:
   "^^"
   "builtin"
   "case"
+  "drop"
   "else"
   "enum"
   "export"

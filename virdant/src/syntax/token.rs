@@ -109,6 +109,7 @@ pub enum Token {
     #[token(b"else")]      KwElse,
     #[token(b"match")]     KwMatch,
     #[token(b"case")]      KwCase,
+    #[token(b"drop")]      KwDrop,
     #[token(b"true")]      KwTrue,
     #[token(b"false")]     KwFalse,
 

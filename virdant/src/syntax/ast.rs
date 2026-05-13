@@ -181,6 +181,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ModDefStmtBlock => format!("ModDefStmtBlock"),
             AstNodePayload::ModDefStmtIf => format!("ModDefStmtIf"),
             AstNodePayload::ModDefStmtMatch => format!("ModDefStmtMatch"),
+            AstNodePayload::ModDefStmtDrop => format!("ModDefStmtDrop"),
             AstNodePayload::Socket(_socket) => format!("Socket"),
             AstNodePayload::Field(_field) => format!("Field"),
             AstNodePayload::Ctor(_ctor) => format!("Ctor"),

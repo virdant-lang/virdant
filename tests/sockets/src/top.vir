@@ -1,6 +1,4 @@
 mod Top {
-    incoming clock : Clock
-
     mod core of Core
     mod memory of Memory
 
@@ -10,6 +8,7 @@ mod Top {
 mod Core {
     master socket mem of Mem {
         it.addr := 8
+        drop it.data
     }
 }
 
@@ -17,6 +16,7 @@ mod Memory {
     slave socket mem of Mem {
         it.data := 10
     }
+    drop mem.addr
 }
 
 socket Mem {

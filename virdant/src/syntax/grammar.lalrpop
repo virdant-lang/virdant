@@ -230,6 +230,7 @@ ModDefStmt: AstNodeId = {
     <socket:ModDefStmtSocket> => socket,
     <if_:ModDefStmtIf> => if_,
     <m:ModDefStmtMatch> => m,
+    <drop_:ModDefStmtDrop> => drop_,
     <ll:@L> <error:!> <rr:@R> => {
         let span = parser.span(ll, rr);
         parser.add_error_node(span, error)
@@ -391,6 +392,16 @@ ModDefStmtMatch: AstNodeId = {
 ModDefStmtMatchArm: u16 = {
     "case" Pat "=>" ModDefStmtBlock => 2,
     "else" "=>" ModDefStmtBlock => 1,
+}
+
+ModDefStmtDrop: AstNodeId = {
+    <ll:@L> "drop" <path:Path> <rr:@R> => {
+        let payload = AstNodePayload::ModDefStmtDrop;
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
 }
 
 ModDefStmtBlock: AstNodeId = {
@@ -903,6 +914,7 @@ extern {
         "else" => Token::KwElse,
         "match" => Token::KwMatch,
         "case" => Token::KwCase,
+        "drop" => Token::KwDrop,
         "true" => Token::KwTrue,
         "false" => Token::KwFalse,
         "Str" => Token::Str,

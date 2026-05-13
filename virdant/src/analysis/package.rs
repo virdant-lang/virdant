@@ -170,6 +170,7 @@ impl PackageAnalysis {
                     AstNodePayload::ModDefStmtMatch => {
                         self.add_moddefstmtmatch_expr_roots(child_node);
                     }
+                    AstNodePayload::ModDefStmtDrop => (),
                     AstNodePayload::Error => (), // TODO should we even have error nodes at this point?
                     _ => unreachable!("{:?}", child_node.summary()),
                 }

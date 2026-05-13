@@ -207,6 +207,10 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Vec<Diagn
     let node: AstNode = parsing.ast_node(item.location().ast_node_id());
     if !node.contains_errors() {
         diagnostics.extend(typecheck_item(builder, item, &exprroots, &mut use_locations));
+        collect_drops(node.clone(), &mut use_locations);
+        let component_analysis = builder.get_component_analysis(symbol_id);
+        collect_bidirectional_drivers(node.clone(), &mut use_locations, &component_analysis);
+
     }
 
     if let AstNodePayload::ModDef(moddef) = node.payload() && !moddef.is_ext {
@@ -258,6 +262,126 @@ fn typecheck_item(
     }
     diagnostics
 }
+
+fn collect_drops(
+    node: AstNode<'_>,
+    use_locations: &mut IndexMap<BString, IndexSet<Location>>,
+) {
+    if let AstNodePayload::ModDefStmtDrop = node.payload() {
+        let path_node = node.child(0);
+        if let Some(path) = path_node.path() {
+            let parsing = node.parsing();
+            let path_str = parsing.string(path);
+            let mut resolved_path = path_str.to_owned();
+
+            if resolved_path.starts_with(b"it.") || resolved_path == b"it" {
+                let mut current_id = node.id();
+                while let Some(parent_id) = parsing.ast_node(current_id).parent {
+                    let parent = parsing.ast_node(parent_id);
+                    let mut resolved_name = None;
+                    if let AstNodePayload::Submodule(module) = parent.payload() {
+                        resolved_name = Some(parsing.string(module.name));
+                    } else if let AstNodePayload::Component(component) = parent.payload() {
+                        resolved_name = Some(parsing.string(component.name));
+                    } else if let AstNodePayload::Socket(socket) = parent.payload() {
+                        resolved_name = Some(parsing.string(socket.name));
+                    }
+
+                    if let Some(name) = resolved_name {
+                        if resolved_path.starts_with(b"it.") {
+                            let suffix = resolved_path[3..].to_owned();
+                            resolved_path.clear();
+                            resolved_path.extend_from_slice(name);
+                            resolved_path.push(b'.');
+                            resolved_path.extend_from_slice(&suffix);
+                        } else {
+                            resolved_path = name.to_owned();
+                        }
+                        break;
+                    }
+                    current_id = parent_id;
+                }
+            }
+
+            use_locations.entry(resolved_path).or_default().insert(path_node.location());
+        }
+    }
+    for child in node.children() {
+        collect_drops(child, use_locations);
+    }
+}
+
+
+fn collect_bidirectional_drivers(
+    node: AstNode<'_>,
+    use_locations: &mut IndexMap<BString, IndexSet<Location>>,
+    component_analysis: &crate::analysis::component::ComponentAnalysis,
+) {
+    if let AstNodePayload::BidirectionalDriver = node.payload() {
+        let parsing = node.parsing();
+
+        for child_idx in 0..2 {
+            let path_node = node.child(child_idx);
+            if let Some(path) = path_node.path() {
+                let path_str = parsing.string(path);
+                let mut resolved_path = path_str.to_owned();
+
+                if resolved_path.starts_with(b"it.") || resolved_path == b"it" {
+                    let mut current_id = node.id();
+                    while let Some(parent_id) = parsing.ast_node(current_id).parent {
+                        let parent = parsing.ast_node(parent_id);
+                        let mut resolved_name = None;
+                        if let AstNodePayload::Submodule(module) = parent.payload() {
+                            resolved_name = Some(parsing.string(module.name));
+                        } else if let AstNodePayload::Component(component) = parent.payload() {
+                            resolved_name = Some(parsing.string(component.name));
+                        } else if let AstNodePayload::Socket(socket) = parent.payload() {
+                            resolved_name = Some(parsing.string(socket.name));
+                        }
+
+                        if let Some(name) = resolved_name {
+                            if resolved_path.starts_with(b"it.") {
+                                let suffix = resolved_path[3..].to_owned();
+                                resolved_path.clear();
+                                resolved_path.extend_from_slice(name);
+                                resolved_path.push(b'.');
+                                resolved_path.extend_from_slice(&suffix);
+                            } else {
+                                resolved_path = name.to_owned();
+                            }
+                            break;
+                        }
+                        current_id = parent_id;
+                    }
+                }
+
+                if let Some(comp) = component_analysis.resolve(resolved_path.as_slice().into()) {
+                    if comp.can_source() {
+                        use_locations.entry(resolved_path.clone()).or_default().insert(path_node.location());
+                    }
+                }
+
+                let mut prefix = String::new();
+                prefix.push_str(resolved_path.to_str_lossy().as_ref());
+                prefix.push('.');
+
+                for (comp_path, comp) in component_analysis.components() {
+                    let comp_path_str = comp_path.to_str_lossy();
+                    if comp_path_str.starts_with(&prefix) {
+                        if comp.can_source() {
+                            use_locations.entry(comp_path).or_default().insert(path_node.location());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for child in node.children() {
+        collect_bidirectional_drivers(child, use_locations, component_analysis);
+    }
+}
+
 
 pub(crate) fn item_for(builder: &mut Builder, location: Location) -> Symbol {
     let symboltable = builder.get_symboltable();
