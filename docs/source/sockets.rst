@@ -15,12 +15,12 @@ The socket definition gives a name to the group of ports we wish to use together
     :lines: 1-4
 
 Inside a socket definition, we give the name and type of each port, as well as a direction.
-We declare the direction of each port using the `mosi` and `miso` keywords.
-A `mosi` port is master-out, slave-in, while `miso` is the reverse.
+We declare the direction of each port using the `cosi` and `ciso` keywords.
+A `cosi` port is client-out, server-in, while `ciso` is the reverse.
 
 Inside of a module definition, we can declare instances of this socket.
 Such instances are declared by giving their name and the name of the socket definition,
-as well as their role: either `master` or `slave`.
+as well as their role: either `client` or `server`.
 
 
 Declaring Instances of a Socket
@@ -30,19 +30,19 @@ Here is a snippet showing an example of each:
 .. code-block:: virdant
 
     mod Core {
-        master socket mem of Mem
+        client socket mem of Mem
         // ...
     }
 
     mod Memory {
-        slave socket mem of Mem
+        server socket mem of Mem
         // ...
     }
 
 By declaring the socket instance, the module gets a copy of each port in the definition.
 The effective directions are easy to think about:
-`mosi` ports on a `master` socket instance act like output ports,
-while a `mosi` port on a `slave` acts like an input port,
+`cosi` ports on a `client` socket instance act like output ports,
+while a `cosi` port on a `server` acts like an input port,
 and similarly for the other two combinations.
 
 You access these ports using dot notation:
@@ -50,12 +50,12 @@ You access these ports using dot notation:
 .. code-block:: virdant
 
     mod Core {
-        master socket mem of Mem
+        client socket mem of Mem
         mem.addr := 0
     }
 
     mod Memory {
-        slave socket mem of Mem
+        server socket mem of Mem
         mem.data := 0
     }
 
@@ -63,11 +63,11 @@ You access these ports using dot notation:
 a real `Core` or `Memory` would have the logic to drive actual values to the sockets).
 
 Just like with ports, module definitions are obligated to drive the ports of their sockets.
-If the socket is a master, then the obligation is to drive all of the `mosi` ports,
-and dually, if the socket is a slave, then the module is obligated to drive all of the `miso` ports.
+If the socket is a client, then the obligation is to drive all of the `cosi` ports,
+and dually, if the socket is a server, then the module is obligated to drive all of the `ciso` ports.
 
 Also like with ports, module definitions may make use of the incoming signals from the sockets.
-Master sockets may use `miso` ports in expressions, and similarly, slaves may use `mosi` ports in them.
+Client sockets may use `ciso` ports in expressions, and similarly, servers may use `cosi` ports in them.
 
 
 Bulk Connect
@@ -109,14 +109,14 @@ This is exceedingly useful for larger interfaces, such as `Wishbone`_ or `AHB Li
 
 Rules of Socket Connectivity
 ----------------------------
-As mentioned, the most common configuration is for a parent to connect the master socket of a child module
-to the slave socket of another child module.
+As mentioned, the most common configuration is for a parent to connect the client socket of a child module
+to the server socket of another child module.
 However, this is not the only possible configuration.
 
 The rules for socket connectivity depend on two properties of both sockets involved:
 
-The *role* of the socket is whether it has been declared as a master or a slave.
-This is indicated by the `master` or `slave` keyword.
+The *role* of the socket is whether it has been declared as a client or a server.
+This is indicated by the `client` or `server` keyword.
 
 The *perspective* is whether the socket is being viewed from the inside or the outside of the module it is declared in.
 When referring to a socket in the same module in which it was declared, this is an interior view of the socket.
@@ -134,22 +134,22 @@ Given these definitions, the following connections are legal:
     - Right hand
     - Explanation
 
-  * - exterior slave
+  * - exterior server
     - `:=:`
-    - exterior master
+    - exterior client
     - the common configuration
 
-  * - interior master
+  * - interior client
     - `:=:`
-    - exterior master
-    - forwarding a master up to its parent
+    - exterior client
+    - forwarding a client up to its parent
 
-  * - exterior slave
+  * - exterior server
     - `:=:`
-    - interior slave
-    - forwarding a slave up from its child
+    - interior server
+    - forwarding a server up from its child
 
-  * - interior master
+  * - interior client
     - `:=:`
-    - interior slave
+    - interior server
     - loopback configuration (rarely used)
