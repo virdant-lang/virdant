@@ -39,32 +39,32 @@ mod Top {
     uart_tx := uart_sender.uart_tx
 
     reg counter : Word[32] on clock
-    counter <= counter->inc()
+    counter <= counter + 1
 
     mod led_controller of LedController
     led_controller.clock := clock
     led_controller.reset := reset
-    led_controller.set_random := uart_receiver.data_valid->and(uart_receiver.data->eq(114))
-    led_controller.set_idle := uart_receiver.data_valid->and(uart_receiver.data->eq(105))
-    led_controller.set_cw := uart_receiver.data_valid->and(uart_receiver.data->eq(99))
-    led_controller.set_ccw := uart_receiver.data_valid->and(uart_receiver.data->eq(119))
-    led_controller.set_rate := rate->eq(0)->not()
+    led_controller.set_random := uart_receiver.data_valid && uart_receiver.data == 114
+    led_controller.set_idle := uart_receiver.data_valid && uart_receiver.data == 105
+    led_controller.set_cw := uart_receiver.data_valid && uart_receiver.data == 99
+    led_controller.set_ccw := uart_receiver.data_valid && uart_receiver.data == 119
+    led_controller.set_rate := !(rate == 0)
 
     wire rate : Word[3]
     rate :=
-        if uart_receiver.data->eq(49) {
+        if uart_receiver.data == 49 {
             1
-        } else if uart_receiver.data->eq(50) {
+        } else if uart_receiver.data == 50 {
             2
-        } else if uart_receiver.data->eq(51) {
+        } else if uart_receiver.data == 51 {
             3
-        } else if uart_receiver.data->eq(52) {
+        } else if uart_receiver.data == 52 {
             4
-        } else if uart_receiver.data->eq(53) {
+        } else if uart_receiver.data == 53 {
             5
-        } else if uart_receiver.data->eq(54) {
+        } else if uart_receiver.data == 54 {
             6
-        } else if uart_receiver.data->eq(55) {
+        } else if uart_receiver.data == 55 {
             7
         } else {
             0
@@ -99,7 +99,7 @@ mod LedController {
     incoming rate       : Word[3]
 
     reg counter : Word[32] on clock
-    counter <= counter->inc()
+    counter <= counter + 1
 
 
     reg rate_reg : Word[3] on clock
@@ -112,21 +112,21 @@ mod LedController {
     mod edge_detector of edge::Edge
     edge_detector.clock := clock
     edge_detector.inp   :=
-        if rate_reg->eq(0) {
+        if rate_reg == 0 {
             counter[25]
-        } else if rate_reg->eq(1) {
+        } else if rate_reg == 1 {
             counter[24]
-        } else if rate_reg->eq(2) {
+        } else if rate_reg == 2 {
             counter[23]
-        } else if rate_reg->eq(3) {
+        } else if rate_reg == 3 {
             counter[22]
-        } else if rate_reg->eq(4) {
+        } else if rate_reg == 4 {
             counter[21]
-        } else if rate_reg->eq(5) {
+        } else if rate_reg == 5 {
             counter[20]
-        } else if rate_reg->eq(6) {
+        } else if rate_reg == 6 {
             counter[19]
-        } else if rate_reg->eq(7) {
+        } else if rate_reg == 7 {
             counter[18]
         } else {
             counter[17]
@@ -150,34 +150,34 @@ mod LedController {
         @SpinCCW(8, 0)
     } else if change {
         match state {
-            case @Idle(round, next) => if round->lt(3) {
-                @Idle(round->inc(), next)
+            case @Idle(round, next) => if round < 3 {
+                @Idle(round + 1, next)
             } else if next {
                 @SpinCCW(8, 0)
             } else {
                 @SpinCW(1, 0)
             }
-            case @SpinCW(x, round) => if x->eq(8) {
-                if round->lt(3) {
-                    @SpinCW(1, round->inc())
+            case @SpinCW(x, round) => if x == 8 {
+                if round < 3 {
+                    @SpinCW(1, round + 1)
                 } else {
                     @Idle(0, true)
                 }
             } else {
-                @SpinCW(x->sll(1), round)
+                @SpinCW(word(x, 0w1), round)
             }
-            case @SpinCCW(x, round) => if x->eq(1) {
-                if round->lt(3) {
-                    @SpinCCW(8, round->inc())
+            case @SpinCCW(x, round) => if x == 1 {
+                if round < 3 {
+                    @SpinCCW(8, round + 1)
                 } else {
                     @Idle(0, false)
                 }
             } else {
-                @SpinCCW(x->srl(1), round)
+                @SpinCCW(x[4..0], round)
             }
             case @Random(leds) => @Random(lfsr.out[5..0])
-            case @Memory(addr) => if addr->lt(16) {
-                @Memory(addr->inc())
+            case @Memory(addr) => if addr < 16 {
+                @Memory(addr + 1)
             } else {
                 @Memory(0)
             }

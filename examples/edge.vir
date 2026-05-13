@@ -6,5 +6,5 @@ mod Edge {
     reg last : Bit on clock
     last <= inp
 
-    out := last->not()->and(inp)
+    out := !last && inp
 }

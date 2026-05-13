@@ -1,5 +1,5 @@
 fn foo(x : Word[8], y : Word[8]) -> Word[8] {
-    x->add(y)
+    x + y
 }
 
 mod Top {
@@ -7,7 +7,7 @@ mod Top {
 
     outgoing out : Word[8]
     reg counter : Word[8] on clock
-    counter <= counter->inc()
+    counter <= counter + 1
 
     out := foo(counter, counter)
 }

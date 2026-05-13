@@ -28,6 +28,7 @@ export mod Top {
     }
 
     reg r : Bit on clock
+    drop r
 
     if reset {
         r <= true

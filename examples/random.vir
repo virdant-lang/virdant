@@ -22,7 +22,7 @@ mod Top {
     lfsr.reset := resetter.out
 
     reg counter : Word[32] on clock
-    counter <= counter->inc()
+    counter <= counter + 1
 
     reg leds : Word[5] on clock
     leds <= if edge_detector.out {

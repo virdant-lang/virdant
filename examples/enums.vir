@@ -18,5 +18,5 @@ mod Top {
     wire n : Opcode
     n := #OP
 
-    out := n->value()
+    out := word(n)
 }

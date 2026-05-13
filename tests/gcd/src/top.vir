@@ -13,9 +13,7 @@ export mod Top {
     incoming fire : Bit
 
     outgoing result : Word[8]
-    outgoing valid  : Bit {
-        it := gcd.valid
-    }
+    outgoing valid  : Bit
 
     mod gcd of Gcd {
         it.reset := reset
@@ -24,6 +22,7 @@ export mod Top {
         it.y := y
         it.fire := fire
         result := it.result
+        valid := it.valid
     }
 }
 
@@ -59,14 +58,14 @@ mod Gcd {
         }
     }
 
-    result := match state {
-        case @Idle() => 0
-        case @Running(x, y) => 0
-        case @Done(r) => r
-    }
-
-    valid := match state {
-        case @Done(result) => true
-        else => false
+    match state {
+        case @Done(r) => {
+            result := r
+            valid := true
+        }
+        else => {
+            result := 0
+            valid := false
+        }
     }
 }
