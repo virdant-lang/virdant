@@ -1,0 +1,6 @@
+mod Top {
+    // CHECK: Unresolved type Foo
+    incoming foo : Foo
+    outgoing out : Word[8]
+    out := foo->bar
+}

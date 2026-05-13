@@ -66,8 +66,12 @@ impl Typing {
                     self.tags
                         .insert(node.location(), Tag::ReferentResolution(referent));
                     self.use_component(path_str.as_bstr(), node.location());
-                    self.annotate(&node, &typ);
-                    Ok(Some(typ))
+                    if let Some(typ) = typ {
+                        self.annotate(&node, &typ);
+                        Ok(Some(typ))
+                    } else {
+                        Err(())
+                    }
                 } else if original_was_it {
                     Err(())
                 } else {

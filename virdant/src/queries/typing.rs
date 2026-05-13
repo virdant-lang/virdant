@@ -13,9 +13,7 @@ pub(crate) fn build_typing_context(builder: &mut Builder, item: SymbolId) -> Typ
 
     let mut context = TypingContext::new();
     for (path, component) in component_analysis.components() {
-        if let Some(typ) = component.typ() {
-            context = context.push_component(path, component.id(), typ);
-        }
+        context = context.push_component(path, component.id(), component.typ());
     }
 
     context

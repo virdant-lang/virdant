@@ -164,9 +164,27 @@ impl Typing {
         }
     }
 
+    // True when any expression resolved to a referent whose type couldn't be determined
+    // upstream (e.g. a component whose type annotation failed to resolve). In that case
+    // the cascade is already explained by an upstream diagnostic, and any missing
+    // annotations downstream are expected.
+    fn has_unresolved_referent(&self, builder: &mut Builder) -> bool {
+        for tag in self.tags.values() {
+            if let Tag::ReferentResolution(Referent::Component(component_id)) = tag {
+                if builder.get_component(*component_id).typ().is_none() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     // Checks that in a clean typecheck, all expressions in the tree have an annotation.
     pub fn validate(&mut self, builder: &mut Builder) {
         if self.diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
+            return;
+        }
+        if self.has_unresolved_referent(builder) {
             return;
         }
 

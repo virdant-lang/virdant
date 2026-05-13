@@ -160,7 +160,8 @@ impl Typing {
                     self.annotate(node, expected_typ);
                     Ok(())
                 } else {
-                    todo!()
+                    self.flag_cant_infer(&args[0]);
+                    Err(())
                 }
             }
             b"zext" => {
@@ -173,7 +174,10 @@ impl Typing {
                     .insert(node.location(), Tag::PrimitiveResolution(Primitive::Sext));
                 self.check_ext(builder, context, node, expected_typ)
             }
-            _ => todo!(),
+            _ => {
+                self.flag_unknown(node, format!("Unknown function: {}", BStr::new(fn_name)));
+                Err(())
+            }
         }
     }
 
