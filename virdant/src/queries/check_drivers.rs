@@ -47,14 +47,6 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<V
                     }.into());
                 }
             }
-        } else if !path.starts_with(b"it.") && path != b"it" {
-            for (_driver_type, location) in driver_entries {
-                let region = builder.get_location_region(location.clone());
-                diagnostics.push(diagnostics::UnresolvedComponent {
-                    region,
-                    path: path.clone(),
-                }.into());
-            }
         }
     }
 

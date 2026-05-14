@@ -30,5 +30,12 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
 //        diagnostics.extend(driver_analysis); // TODO
     }
 
+    diagnostics.sort_by_key(|d| {
+        let region = d.region();
+        let start = region.start();
+        let end = region.end();
+        (region.package(), start.line(), start.col(), end.line(), end.col())
+    });
+
     Arc::new(diagnostics)
 }

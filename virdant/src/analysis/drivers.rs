@@ -175,7 +175,15 @@ fn collect_block_drivers(
                         region: stmt.region(),
                     }.into());
                 }
-                let Some(component) = component_analysis.resolve(target_str.as_bstr()) else { continue };
+                let Some(component) = component_analysis.resolve(target_str.as_bstr()) else {
+                    if !target_str.starts_with(b"it.") && target_str != b"it" {
+                        diagnostics.push(crate::diagnostics::UnresolvedComponent {
+                            region: stmt.region(),
+                            path: target_str,
+                        }.into());
+                    }
+                    continue;
+                };
                 let expr = stmt.driver().unwrap().location();
                 result.entry(component.id()).or_default().push(Driver::Expr(driver.driver_type, expr));
             }

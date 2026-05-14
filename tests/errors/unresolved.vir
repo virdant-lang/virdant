@@ -34,6 +34,33 @@ mod GoodTypes {
     out := flag
 }
 
+enum type Val width 1 {
+    zero = 0
+    one = 1
+}
+
+mod UnresolvedComponent {
+    // CHECK: Unresolved component a
+    a <= 0
+
+    // CHECK: Unresolved component b
+    if true {
+        b := 0
+    } else {
+        b := 1
+    }
+
+    // CHECK: Unresolved component c
+    match #zero : Val {
+        case #zero => {
+            c := 0
+        }
+        case #one => {
+            c := 1
+        }
+    }
+}
+
 mod Foo {}
 
 mod UnresolvedModDefs {
