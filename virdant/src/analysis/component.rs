@@ -137,6 +137,9 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     // TODO this doesn't recurse though?
     let package_analysis = builder.get_package_analysis(location.package());
     for import in package_analysis.imports() {
+        if import == location.package() {
+            continue;
+        }
         builder.get_package_analysis(import);
     }
 

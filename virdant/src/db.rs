@@ -35,11 +35,11 @@ use crate::syntax::parsing::Parsing;
 pub use guts::*;
 
 queries! {
-    Packages() -> Vec<PackageFqn>;
+    Packages() -> Arc<Vec<PackageFqn>>;
     Source(package: PackageFqn) -> Source;
     Parsing(package: PackageFqn) -> Arc<Parsing>;
     String(string: InternedString) -> Arc<BString>; // TODO is this used anywhere?
-    SyntaxErrors() -> Vec<Diagnostic>; // TODO is this even useful?
+    SyntaxErrors() -> Arc<Vec<Diagnostic>>; // TODO is this even useful?
     LocationRegion(location: Location) -> Region;
     PackageAnalysis(package: PackageFqn) -> Arc<PackageAnalysis>;
     ComponentAnalysis(symbol_id: SymbolId) -> Arc<ComponentAnalysis>;
@@ -48,21 +48,21 @@ queries! {
                                                  // TODO Or should this just be Symbol(symbol_id: SymbolId) -> Arc<Symbol>
     Component(component_id: ComponentId) -> Arc<Component>;
     DriverAnalysis(symbol_id: SymbolId) -> Arc<DriverAnalysis>;
-    CheckDrivers(symbol_id: SymbolId) -> Vec<Diagnostic>;
-    TypeDefs() -> Vec<TypeDef>;
+    CheckDrivers(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>;
+    TypeDefs() -> Arc<Vec<TypeDef>>;
     TypeDef(symbol_id: SymbolId) -> Arc<TypeDef>;
     TypeAt(location: Location) -> Result<Type, Vec<Diagnostic>>;
-    ExprRoots() -> Vec<ExprRoot>; // TODO Make this run per item?
-    AllExprs() -> Vec<Location>; // TODO remove if possible
+    ExprRoots() -> Arc<Vec<ExprRoot>>; // TODO Make this run per item?
+    AllExprs() -> Arc<Vec<Location>>; // TODO remove if possible
     ExpectedType(exprroot: ExprRoot) -> Option<Type>;
     ExprRootFor(location: Location) -> ExprRoot;
     CtorSignature(ctor_symbol_id: SymbolId) -> Arc<Signature>;
     TypingContext(symbol_id: SymbolId) -> TypingContext;
     Typing(exprroot: ExprRoot) -> Arc<Typing>;
-    TypeCheck(symbol_id: SymbolId) -> Vec<Diagnostic>;
+    TypeCheck(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>;
     Typeof(location: Location) -> Result<Type, Vec<Diagnostic>>;
     TypeofAll() -> IndexMap<Location, Option<Type>>;
-    Check() -> Vec<Diagnostic>;
+    Check() -> Arc<Vec<Diagnostic>>;
     TypeIndex() -> Arc<TypeIndex>;
     Elaboration(top: SymbolId) -> Arc<Elaboration>;
     PortsOf(symbol_id: SymbolId) -> Arc<Vec<Port>>;
@@ -119,33 +119,33 @@ impl Query {
 
 // These methods are all defined on BOTH Db and on Builder.
 // And service the given queries.
-db_getter!(get_packages : Packages() -> Vec<PackageFqn>);
+db_getter!(get_packages : Packages() -> Arc<Vec<PackageFqn>>);
 db_getter!(get_source : Source(package : PackageFqn) -> Source);
 db_getter!(get_parsing : Parsing(package: PackageFqn) -> Arc<Parsing>);
 db_getter!(string : String(string: InternedString) -> Arc<BString>);
-db_getter!(get_syntax_errors : SyntaxErrors() -> Vec<Diagnostic>);
+db_getter!(get_syntax_errors : SyntaxErrors() -> Arc<Vec<Diagnostic>>);
 db_getter!(get_package_analysis : PackageAnalysis(package: PackageFqn) -> Arc<PackageAnalysis>);
 db_getter!(get_component_analysis : ComponentAnalysis(moddef: SymbolId) -> Arc<ComponentAnalysis>);
 db_getter!(get_symboltable : SymbolTable() -> Arc<SymbolTable>);
 db_getter!(get_symbol_ast : SymbolAst(symbol_id: SymbolId) -> AstNodeId);
 db_getter!(get_component : Component(component_id: ComponentId) -> Arc<Component>);
 db_getter!(get_driver_analysis : DriverAnalysis(symbol_id: SymbolId) -> Arc<DriverAnalysis>);
-db_getter!(check_drivers : CheckDrivers(symbol_id: SymbolId) -> Vec<Diagnostic>);
+db_getter!(check_drivers : CheckDrivers(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>);
 db_getter!(get_typing_context : TypingContext(item: SymbolId) -> TypingContext);
-db_getter!(get_typedefs : TypeDefs() -> Vec<TypeDef>);
+db_getter!(get_typedefs : TypeDefs() -> Arc<Vec<TypeDef>>);
 db_getter!(get_typedef : TypeDef(symbol_id: SymbolId) -> Arc<TypeDef>);
-db_getter!(get_exprroots : ExprRoots() -> Vec<ExprRoot>);
+db_getter!(get_exprroots : ExprRoots() -> Arc<Vec<ExprRoot>>);
 db_getter!(get_type_at : TypeAt(location: Location) -> Result<Type, Vec<Diagnostic>>);
-db_getter!(get_all_exprs : AllExprs() -> Vec<Location>);
+db_getter!(get_all_exprs : AllExprs() -> Arc<Vec<Location>>);
 db_getter!(get_expected_type : ExpectedType(exprroot: ExprRoot) -> Option<Type>);
 db_getter!(get_exprroot_for : ExprRootFor(location: Location) -> ExprRoot);
 db_getter!(get_typing : Typing(expr_root: ExprRoot) -> Arc<Typing>);
-db_getter!(typecheck : TypeCheck(symbol_id: SymbolId) -> Vec<Diagnostic>);
+db_getter!(typecheck : TypeCheck(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>);
 db_getter!(get_typeof : Typeof(location: Location) -> Result<Type, Vec<Diagnostic>>);
 db_getter!(get_typeof_all : TypeofAll() -> IndexMap<Location, Option<Type>>);
 db_getter!(get_type_index : TypeIndex() -> Arc<TypeIndex>);
 db_getter!(get_location_region : LocationRegion(location: Location) -> Region);
-db_getter!(check : Check() -> Vec<Diagnostic>);
+db_getter!(check : Check() -> Arc<Vec<Diagnostic>>);
 db_getter!(get_ctor_signature : CtorSignature(ctor_symbol_id: SymbolId) -> Arc<Signature>);
 db_getter!(get_elaboration : Elaboration(top: SymbolId) -> Arc<Elaboration>);
 db_getter!(get_ports_of : PortsOf(symbol_id: SymbolId) -> Arc<Vec<Port>>);

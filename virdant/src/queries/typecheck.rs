@@ -12,7 +12,7 @@ pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> E
 
     let exprroot_ids: IndexSet<_> = builder
         .get_exprroots()
-        .into_iter()
+        .iter()
         .filter(|exprroot| exprroot.location.package() == location.package())
         .map(|exprroot| exprroot.location().ast_node_id())
         .collect();
@@ -55,14 +55,15 @@ pub(crate) fn build_typeof(builder: &mut Builder, location: Location) -> Result<
 pub(crate) fn build_typeof_all(builder: &mut Builder) -> IndexMap<Location, Option<Type>> {
     let mut typeof_all = IndexMap::new();
 
-    for location in builder.get_all_exprs() {
+    let all_exprs = builder.get_all_exprs();
+    for location in all_exprs.iter() {
         let item = item_for(builder, location.clone());
         let parsing = builder.get_parsing(item.package());
         let item_node = parsing.ast_node(item.location().ast_node_id());
         if !item_node.contains_errors() {
             // TODO Probably need thread the diagnostics through instead of discarding them here.
             if let Ok(typ) = builder.get_typeof(location.clone()) {
-                typeof_all.insert(location, Some(typ));
+                typeof_all.insert(location.clone(), Some(typ));
             }
         }
     }

@@ -180,7 +180,7 @@ impl Typing {
     }
 
     // Checks that in a clean typecheck, all expressions in the tree have an annotation.
-    pub fn validate(&mut self, builder: &mut Builder) {
+    pub fn validate(&mut self, builder: &mut Builder, parsing: &Parsing) {
         if self.diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
             return;
         }
@@ -188,7 +188,6 @@ impl Typing {
             return;
         }
 
-        let parsing = builder.get_parsing(self.exprroot.package());
         let root_id = self.exprroot.location().ast_node_id();
         let mut queue = vec![root_id];
         while let Some(node_id) = queue.pop() {
@@ -213,7 +212,7 @@ pub(crate) fn build_type_at(builder: &mut Builder, location: Location) -> Result
     }
 }
 
-pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Vec<Diagnostic> {
+pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<Diagnostic>> {
     let mut diagnostics = vec![];
     let symboltable = builder.get_symboltable();
 
@@ -224,17 +223,23 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Vec<Diagn
 
     let parsing = builder.get_parsing(item.package());
     let node: AstNode = parsing.ast_node(item.location().ast_node_id());
+    let is_moddef = matches!(node.payload(), AstNodePayload::ModDef(_));
+    let component_analysis = if is_moddef {
+        Some(builder.get_component_analysis(symbol_id))
+    } else {
+        None
+    };
     if !node.contains_errors() {
         diagnostics.extend(typecheck_item(builder, item, &exprroots, &mut use_locations));
         collect_drops(node.clone(), &mut use_locations);
-        let component_analysis = builder.get_component_analysis(symbol_id);
-        collect_bidirectional_drivers(node.clone(), &mut use_locations, &component_analysis);
-
+        if let Some(component_analysis) = &component_analysis {
+            collect_bidirectional_drivers(node.clone(), &mut use_locations, component_analysis);
+        }
     }
 
     if let AstNodePayload::ModDef(moddef) = node.payload() && !moddef.is_ext {
         // Unused varibles and read from sink warnings
-        let component_analysis = builder.get_component_analysis(symbol_id);
+        let component_analysis = component_analysis.as_ref().unwrap();
         for (path, component) in component_analysis.components() {
             if component.can_source() && !use_locations.contains_key(&path) {
                 let region = builder.get_location_region(component.location());
@@ -254,7 +259,7 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Vec<Diagn
         }
     }
 
-    diagnostics
+    Arc::new(diagnostics)
 }
 
 fn typecheck_item(
@@ -486,7 +491,7 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
         }
     }
 
-    typing.validate(builder);
+    typing.validate(builder, &parsing);
 
     Arc::new(typing)
 }

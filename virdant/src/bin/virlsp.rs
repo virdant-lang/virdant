@@ -42,7 +42,7 @@ fn new_db() -> Db {
     let mut db = Db::new();
     db.set_packages(vec![]);
     let builtin = PackageFqn::new("builtin".into());
-    let mut packages = db.get_packages();
+    let mut packages = db.get_packages().as_ref().clone();
     packages.push(builtin.clone());
     db.set_packages(packages);
     let builtin_source = Source::new(builtin.clone(), include_bytes!("../../../lib/builtin.vir").as_ref().into());
@@ -165,7 +165,7 @@ impl LanguageServer for Backend {
             state.db.set_source(package.clone(), new_source);
             let packages = state.db.get_packages();
             if !packages.contains(&package) {
-                let mut packages = packages;
+                let mut packages = packages.as_ref().clone();
                 packages.push(package.clone());
                 state.db.set_packages(packages);
             }
@@ -193,7 +193,7 @@ impl LanguageServer for Backend {
             }
             let packages = state.db.get_packages();
             if !packages.contains(&package) {
-                let mut packages = packages;
+                let mut packages = packages.as_ref().clone();
                 packages.push(package.clone());
                 state.db.set_packages(packages);
             }
@@ -606,7 +606,7 @@ impl Backend {
 
         let package = uri_to_packagefqn(&uri);
 
-        for diag in diags {
+        for diag in diags.iter() {
             // Only display diagnostics relevant to this file.
             if diag.region().package() != package {
                 continue;
@@ -735,7 +735,7 @@ impl Backend {
 }
 
 async fn get_expr_root<'a>(client: &Client, db: &'a Db, parsing: &'a Parsing, node: AstNode<'a>) -> Option<AstNode<'a>> {
-    let exprroots: Vec<AstNodeId> = db.get_exprroots().into_iter().map(|exprroot| exprroot.location().ast_node_id()).collect();
+    let exprroots: Vec<AstNodeId> = db.get_exprroots().iter().map(|exprroot| exprroot.location().ast_node_id()).collect();
 
         client
             .log_message(MessageType::ERROR, format!("get_expr_root({:?})", node.id()))

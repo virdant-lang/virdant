@@ -97,8 +97,9 @@ impl<'d> Converter<'d> {
     fn run(&mut self) -> verilog::Verilog {
         self.build_module_info();
         let mut files = vec![];
-        for package in self.db.get_packages() {
-            if let Some(file) = self.convert_package(package) {
+        let packages = self.db.get_packages();
+        for package in packages.iter() {
+            if let Some(file) = self.convert_package(package.clone()) {
                 files.push(file);
             }
         }
@@ -107,7 +108,8 @@ impl<'d> Converter<'d> {
 
     fn build_module_info(&mut self) {
         let symboltable = self.db.get_symboltable();
-        for package in self.db.get_packages() {
+        let packages = self.db.get_packages();
+        for package in packages.iter() {
             let parsing = self.db.get_parsing(package.clone());
             for item_ast in parsing.root().children() {
                 let AstNodePayload::ModDef(moddef) = item_ast.payload() else {

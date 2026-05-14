@@ -225,13 +225,13 @@ pub(crate) fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
     let mut symbols = vec![];
     let mut builtin_names = vec![];
 
-    for package in packages {
+    for package in packages.iter() {
         build_symboltable_package(
             builder,
             &mut symbols,
             &mut diagnostics,
             &mut builtin_names,
-            package,
+            package.clone(),
         );
     }
 

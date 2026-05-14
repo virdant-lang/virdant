@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::common::source::Source;
 use crate::db::Db;
 use crate::diagnostics::{Diagnostic, DiagnosticLevel};
@@ -80,7 +82,7 @@ where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
     db
 }
 
-pub fn check_db(db: &Db) -> Result<Vec<Diagnostic>, Vec<Diagnostic>> {
+pub fn check_db(db: &Db) -> Result<Arc<Vec<Diagnostic>>, Arc<Vec<Diagnostic>>> {
     let diagnostics = db.check();
     if diagnostics.iter().any(|diag| diag.level() == DiagnosticLevel::Error) {
         Err(diagnostics)

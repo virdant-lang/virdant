@@ -130,7 +130,7 @@ fn dump_diagnostics(db: &Db) {
         .map(|diag| diag.region().to_string().len())
         .max()
         .unwrap_or_default();
-    for diagnostic in diagnostics {
+    for diagnostic in diagnostics.iter() {
         let unpadded_region = diagnostic.region().to_string();
         let padded_region = format!("{}{}", unpadded_region, " ".repeat(longest_region - unpadded_region.len()));
         if diagnostic.level() == DiagnosticLevel::Error {
@@ -337,7 +337,7 @@ fn dump_typedefs(args: &Args) {
     dump_diagnostics(&db);
 
     let typedefs = db.get_typedefs();
-    for typedef in typedefs {
+    for typedef in typedefs.iter() {
         println!("{typedef:?}");
     }
 }
@@ -346,11 +346,12 @@ fn dump_exprroots(args: &Args) {
     let db = project_db(args);
     dump_diagnostics(&db);
 
-    for exprroot in db.get_exprroots() {
+    let exprroots = db.get_exprroots();
+    for exprroot in exprroots.iter() {
         let package = exprroot.location().package();
         let parsing = db.get_parsing(package.clone());
         let location = exprroot.location();
-        let typ = db.get_expected_type(exprroot);
+        let typ = db.get_expected_type(exprroot.clone());
         let node = parsing.ast_node(location.ast_node_id());
         let region = node.region();
         println!("{location:?} : {typ:?} at @{region}");

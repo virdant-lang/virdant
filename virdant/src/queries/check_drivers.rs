@@ -1,16 +1,20 @@
+use std::sync::Arc;
+
 use bstr::{BString, ByteSlice};
 use indexmap::IndexMap;
 
 use crate::analysis::Location;
 use crate::analysis::component::ComponentAnalysis;
-use crate::analysis::drivers::Driver;
+use crate::analysis::drivers::{Driver, DriverAnalysis};
 use crate::analysis::symbols::SymbolId;
 use crate::common::{ComponentKind, DriverType};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
+use crate::syntax::ast::AstNode;
+use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 
-pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<Diagnostic> {
+pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<Diagnostic>> {
     let mut diagnostics = vec![];
     let symboltable = builder.get_symboltable();
 
@@ -21,15 +25,16 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<D
 
     if let AstNodePayload::ModDef(mod_def) = moddef_node.payload() {
         if mod_def.is_ext {
-            return diagnostics;
+            return Arc::new(diagnostics);
         }
     }
 
     let component_analysis = builder.get_component_analysis(symbol_id);
+    let driver_analysis = builder.get_driver_analysis(symbol_id);
 
-    check_wrong_driver_types(builder, symbol_id, &component_analysis, &mut diagnostics);
+    check_wrong_driver_types(builder, &driver_analysis, &component_analysis, &mut diagnostics);
 
-    let driver_locations = get_all_driver_locations(builder, symbol_id, &mut diagnostics);
+    let driver_locations = get_all_driver_locations(&parsing, &moddef_node);
     for (path, driver_entries) in driver_locations.iter() {
         if let Some(component) = component_analysis.resolve(path.as_bstr()) {
             if !component.can_sink() && driver_entries.len() > 0 {
@@ -53,7 +58,6 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<D
         }
     }
 
-    let driver_analysis = builder.get_driver_analysis(symbol_id);
     for (path, component) in component_analysis.components() {
         let drivers = driver_analysis.drivers().get(&component.id());
         if component.can_sink() {
@@ -81,16 +85,15 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Vec<D
         }
     }
 
-    diagnostics
+    Arc::new(diagnostics)
 }
 
 fn check_wrong_driver_types(
     builder: &mut Builder,
-    symbol_id: SymbolId,
+    driver_analysis: &Arc<DriverAnalysis>,
     component_analysis: &ComponentAnalysis,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let driver_analysis = builder.get_driver_analysis(symbol_id);
     diagnostics.extend_from_slice(driver_analysis.diagnostics());
     for (comp_id, drivers) in driver_analysis.drivers() {
         let Some(component) = component_analysis.component(*comp_id) else { continue };
@@ -144,14 +147,11 @@ fn collect_wrong_driver_type_errors(
     }
 }
 
-fn get_all_driver_locations(builder: &mut Builder, symbol_id: SymbolId, _diagnostics: &mut Vec<Diagnostic>) -> IndexMap<BString, Vec<(DriverType, Location)>> {
+fn get_all_driver_locations(
+    parsing: &Parsing,
+    moddef_node: &AstNode<'_>,
+) -> IndexMap<BString, Vec<(DriverType, Location)>> {
     let mut driver_locations: IndexMap<BString, Vec<(DriverType, Location)>> = IndexMap::new();
-
-    let symboltable = builder.get_symboltable();
-    let symbol = symboltable.symbol(symbol_id);
-    let item_node_id = builder.get_symbol_ast(symbol.id());
-    let parsing = builder.get_parsing(symbol.package());
-    let moddef_node = parsing.ast_node(item_node_id);
 
     for child in moddef_node.children() {
         if let AstNodePayload::Driver(driver) = child.payload() {

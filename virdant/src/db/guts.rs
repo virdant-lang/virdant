@@ -1,9 +1,14 @@
+use std::collections::HashMap;
+
 use super::*;
 
 #[derive(Debug)]
 pub struct Db {
     pub(super) rev: usize,
     pub(super) map: Mutex<IndexMap<Query, CachedVal>>,
+    // Memoizes `is_dirty(query)` results for the current `rev`. Cleared whenever
+    // an input changes (set_packages / set_source).
+    pub(super) dirty_cache: Mutex<HashMap<Query, bool>>,
     pub(super) call_stack: Mutex<Vec<Query>>,
     trace: Mutex<Vec<TraceElement>>,
 }
@@ -52,6 +57,7 @@ impl Db {
     pub fn new() -> Self {
         Db {
             map: Mutex::new(IndexMap::new()),
+            dirty_cache: Mutex::new(HashMap::new()),
             rev: 0,
             call_stack: Mutex::new(vec![]),
             trace: Mutex::new(vec![]),
@@ -76,8 +82,12 @@ impl Db {
             let duration = start.elapsed();
             cached_val.duration = duration;
             self.call_stack.lock().unwrap().pop();
-            let mut map = self.map.try_lock().unwrap();
-            map.insert(query.clone(), cached_val.clone());
+            {
+                let mut map = self.map.try_lock().unwrap();
+                map.insert(query.clone(), cached_val.clone());
+            }
+            // The query has just been rebuilt at the current rev; it's now clean.
+            self.dirty_cache.lock().unwrap().insert(query.clone(), false);
             cached_val
         } else {
             let level = self.call_stack.lock().unwrap().len();
@@ -101,39 +111,41 @@ impl Db {
         if query.is_input() {
             return false;
         }
+        let mut dirty_cache = self.dirty_cache.lock().unwrap();
+        let map = self.map.try_lock().unwrap();
+        Self::is_dirty_inner(query, &map, &mut dirty_cache)
+    }
 
-        // Get the last revision and deps list
-        // A query which has never been built is dirty
-        let (cached_rev, cached_deps) = {
-            let map = self.map.try_lock().unwrap();
-
-            if !map.contains_key(query) {
-                return true;
-            }
-
-            let cached_val = &map[query];
-            (cached_val.rev, cached_val.deps.clone())
-        };
-
-        for dep_query in &cached_deps {
-            // If any dependency is dirty, the query itself is dirty
-            if self.is_dirty(dep_query) {
-                return true;
-            }
-
-            let dep_rev = {
-                let map = self.map.try_lock().unwrap();
-                let dep_cached_val = &map[dep_query];
-                dep_cached_val.rev
-            };
-
-            // If the dependency value is newer than the current value, the query is dirty
-            if dep_rev > cached_rev {
-                return true;
-            }
+    fn is_dirty_inner(
+        query: &Query,
+        map: &IndexMap<Query, CachedVal>,
+        dirty_cache: &mut HashMap<Query, bool>,
+    ) -> bool {
+        if let Some(&result) = dirty_cache.get(query) {
+            return result;
         }
 
-        false
+        let result = 'result: {
+            let Some(cached_val) = map.get(query) else {
+                // Never built ⇒ dirty.
+                break 'result true;
+            };
+            let cached_rev = cached_val.rev;
+            for dep_query in &cached_val.deps {
+                if Self::is_dirty_inner(dep_query, map, dirty_cache) {
+                    break 'result true;
+                }
+                if let Some(dep_cached_val) = map.get(dep_query) {
+                    if dep_cached_val.rev > cached_rev {
+                        break 'result true;
+                    }
+                }
+            }
+            false
+        };
+
+        dirty_cache.insert(query.clone(), result);
+        result
     }
 
     pub fn dump(&self) {
@@ -173,10 +185,11 @@ impl Db {
 impl Db {
     pub fn set_packages(&mut self, packages: Vec<PackageFqn>) {
         self.rev += 1;
+        self.dirty_cache.lock().unwrap().clear();
 
         let query = Query::Packages();
         let val = CachedVal {
-            val: QueryResult::Packages(packages).into(),
+            val: QueryResult::Packages(Arc::new(packages)).into(),
             rev: self.rev,
             deps: vec![],
             duration: std::time::Duration::ZERO,
@@ -192,6 +205,7 @@ impl Db {
 
     pub fn set_source(&mut self, package: PackageFqn, source: Source) {
         self.rev += 1;
+        self.dirty_cache.lock().unwrap().clear();
 
         let query = Query::Source(package);
         let val = CachedVal {

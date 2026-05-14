@@ -35,7 +35,7 @@ pub struct TypeIndex {
     diagnostics: Vec<Diagnostic>,
 }
 
-pub(crate) fn build_typedefs(builder: &mut Builder) -> Vec<TypeDef> {
+pub(crate) fn build_typedefs(builder: &mut Builder) -> Arc<Vec<TypeDef>> {
     let mut typedefs = vec![];
     let symboltable = builder.get_symboltable();
     let item_symbols: Vec<_> = symboltable.typedefs();
@@ -81,7 +81,7 @@ pub(crate) fn build_typedefs(builder: &mut Builder) -> Vec<TypeDef> {
             enumerant_values,
         });
     }
-    typedefs
+    Arc::new(typedefs)
 }
 
 pub(crate) fn build_typedef(builder: &mut Builder, symbol_id: SymbolId) -> Arc<TypeDef> {
@@ -284,8 +284,9 @@ pub(crate) fn build_type_index(builder: &mut Builder) -> Arc<TypeIndex> {
 
     let symboltable = builder.get_symboltable();
 
-    for package in builder.get_packages() {
-        let parsing = builder.get_parsing(package);
+    let packages = builder.get_packages();
+    for package in packages.iter() {
+        let parsing = builder.get_parsing(package.clone());
         type_index.gather_type_roots(builder, parsing.root(), &symboltable);
     }
 
