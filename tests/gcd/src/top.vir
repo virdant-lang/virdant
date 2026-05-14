@@ -35,26 +35,26 @@ mod Gcd {
     outgoing result : Word[8]
     outgoing valid: Bit
 
-    reg state : State on clock
-
-    if reset {
-        state <= @Idle()
-    } else {
-        state <= match state : State {
-            case @Idle() => if fire {
-                @Running(x, y)
-            } else {
-                @Idle()
-            }
-            case @Running(x, y) =>
-                if y == 0 {
-                    @Done(x)
-                } else if x < y {
-                    @Running(y - x, x)
+    reg state : State on clock {
+        if reset {
+            it <= @Idle()
+        } else {
+            it <= match it : State {
+                case @Idle() => if fire {
+                    @Running(x, y)
                 } else {
-                    @Running(x - y, y)
+                    @Idle()
                 }
-            case @Done(result) => @Idle()
+                case @Running(x, y) =>
+                    if y == 0 {
+                        @Done(x)
+                    } else if x < y {
+                        @Running(y - x, x)
+                    } else {
+                        @Running(x - y, y)
+                    }
+                case @Done(result) => @Idle()
+            }
         }
     }
 

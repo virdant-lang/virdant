@@ -5,48 +5,78 @@ export mod Top {
 
     fin := false
 
-    wire w : Bit
-    w := true
+    wire w : Bit {
+        it := true
+        drop it
+    }
 
-    wire a : Bit
-    a := false
+    wire a : Bit {
+        it := false
+        drop it
+    }
 
-    wire o : Word[8]
-    o := 0w8 : Word[8]
+    wire o : Word[8] {
+        it := 0w8 : Word[8]
+        drop it
+    }
 
-    wire b : Word[4]
-    b := 1w4 + 2w4
+    wire b : Word[4] {
+        it := 1w4 + 2w4
+        drop it
+    }
 
-    wire x : Word[4]
-    x := 0b1010w4
+    wire x : Word[4] {
+        it := 0b1010w4
+        drop it
+    }
 
-    wire y : Word[4]
-    y := 0b0011w4
+    wire y : Word[4] {
+        it := 0b0011w4
+        drop it
+    }
 
-    wire z : Word[8]
-    z := zext(0x8w4)
+    wire z : Word[8] {
+        it := zext(0x8w4)
+        drop it
+    }
 
-    wire s : Word[8]
-    s := sext(0x8w4)
+    wire s : Word[8] {
+        it := sext(0x8w4)
+        drop it
+    }
 
-    wire and : Word[8]
-    and := 3w8 & 1w8
+    wire and : Word[8] {
+        it := 3w8 & 1w8
+        drop it
+    }
 
-    wire or : Word[8]
-    or := 0w8 | 1w8
+    wire or : Word[8] {
+        it := 0w8 | 1w8
+        drop it
+    }
 
-    wire xor : Word[8]
-    xor := 0w8 ^ 1w8
+    wire xor : Word[8] {
+        it := 0w8 ^ 1w8
+        drop it
+    }
 
-    wire ascription : Word[4]
-    ascription := 15 : Word[4]
+    wire ascription : Word[4] {
+        it := 15 : Word[4]
+        drop it
+    }
 
-    wire bit_and : Bit
-    bit_and := true && false
+    wire bit_and : Bit {
+        it := true && false
+        drop it
+    }
 
-    wire bit_or : Bit
-    bit_or := true || false
+    wire bit_or : Bit {
+        it := true || false
+        drop it
+    }
 
-    wire bit_xor : Bit
-    bit_xor := true ^^ false
+    wire bit_xor : Bit {
+        it := true ^^ false
+        drop it
+    }
 }
