@@ -13,6 +13,7 @@ pub(super) struct CachedVal {
     pub(super) val: QueryResult,
     pub(super) rev: usize,
     pub(super) deps: Vec<Query>,
+    pub(super) duration: std::time::Duration, // How long the query took to build
 }
 
 #[derive(Debug)]
@@ -69,7 +70,11 @@ impl Db {
                 location,
             });
             drop(call_stack);
-            let cached_val = query.clone().build(self);
+            let start = std::time::Instant::now();
+            let mut cached_val = query.clone().build(self);
+            // Time elapsed building the query
+            let duration = start.elapsed();
+            cached_val.duration = duration;
             self.call_stack.lock().unwrap().pop();
             let mut map = self.map.try_lock().unwrap();
             map.insert(query.clone(), cached_val.clone());
@@ -150,7 +155,16 @@ impl Db {
             } else {
                 format!("{:?}", trace.query).bright_yellow()
             };
-            eprintln!("{indent}{text} {location}");
+            if trace.cached || trace.query.is_input() {
+                eprintln!("{indent}{text} {location}");
+            } else {
+                let duration = {
+                    let map = self.map.try_lock().unwrap();
+                    map.get(&trace.query).map(|cv| cv.duration).unwrap_or_default()
+                };
+                let duration_text = format!("({duration:?})").dimmed();
+                eprintln!("{indent}{text} {duration_text} {location}");
+            }
         }
         eprintln!("========================================");
     }
@@ -165,6 +179,7 @@ impl Db {
             val: QueryResult::Packages(packages).into(),
             rev: self.rev,
             deps: vec![],
+            duration: std::time::Duration::ZERO,
         };
 
         let mut map = self.map.lock().unwrap();
@@ -183,6 +198,7 @@ impl Db {
             val: QueryResult::Source(source).into(),
             rev: self.rev,
             deps: vec![],
+            duration: std::time::Duration::ZERO,
         };
 
         let mut map = self.map.lock().unwrap();

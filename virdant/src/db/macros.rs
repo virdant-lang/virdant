@@ -40,6 +40,7 @@ macro_rules! dispatch_build {
                         val,
                         rev: builder.db.rev,
                         deps: builder.deps.into_iter().collect(),
+                        duration: std::time::Duration::ZERO,
                     }
                 }
             )*
