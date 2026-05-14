@@ -57,7 +57,7 @@ impl Component {
     }
 
     pub fn flow(&self) -> Flow {
-        self.flow.clone()
+        self.flow
     }
 
     pub fn kind(&self) -> Option<ComponentKind> {
@@ -89,7 +89,7 @@ impl ComponentAnalysis {
     }
 
     pub fn moddef_symbol_id(&self) -> SymbolId {
-        self.moddef.clone()
+        self.moddef
     }
 
     pub fn type_of(&self, path: &BStr) -> Option<Type> {

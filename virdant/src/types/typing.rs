@@ -73,7 +73,7 @@ pub enum Tag {
 impl Tag {
     pub fn symbol_id(&self) -> Option<SymbolId> {
         if let Tag::SymbolResolution(symbol_id) = self {
-            Some(symbol_id.clone())
+            Some(*symbol_id)
         } else {
             None
         }

@@ -14,7 +14,7 @@ impl Location {
     }
 
     pub fn ast_node_id(&self) -> AstNodeId {
-        self.1.clone()
+        self.1
     }
 }
 

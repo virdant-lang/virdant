@@ -26,7 +26,7 @@ impl<'p> std::fmt::Debug for AstNode<'p> {
 
 impl<'p> AstNode<'p> {
     pub fn id(&self) -> AstNodeId {
-        self.id.clone()
+        self.id
     }
 
     pub fn parsing(&self) -> &Parsing {
@@ -39,7 +39,7 @@ impl<'p> AstNode<'p> {
 
     pub fn parent(&self) -> Option<AstNode<'_>> {
         if let Some(parent) = &self.parent {
-            Some(self.parsing.ast_node(parent.clone()))
+            Some(self.parsing.ast_node(*parent))
         } else {
             None
         }
@@ -107,7 +107,7 @@ impl<'p> AstNode<'p> {
     }
 
     pub fn span(&self) -> Span {
-        self.parsing.spans[self.id.index()].clone()
+        self.parsing.spans[self.id.index()]
     }
 
     pub fn location(&self) -> Location {

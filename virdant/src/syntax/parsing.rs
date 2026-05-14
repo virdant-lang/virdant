@@ -78,7 +78,7 @@ pub fn parse(source: &Source) -> Parsing {
             let num_children = parsing.num_children[i];
             for _ in 0..num_children {
                 let child_ast_node_id = stack.pop().unwrap();
-                parsing.parents[child_ast_node_id.index()] = ast_node_id.clone();
+                parsing.parents[child_ast_node_id.index()] = ast_node_id;
             }
 
             stack.push(ast_node_id);
@@ -120,7 +120,7 @@ impl Parsing {
         self.payloads.push(payload);
         self.spans.push(span);
         self.num_children.push(0);
-        self.errors.push(ast_node_id.clone());
+        self.errors.push(ast_node_id);
         self.error_data.push(error);
         ast_node_id
     }
@@ -167,7 +167,7 @@ impl Parsing {
 
     pub fn ast_node(&self, ast_node_id: AstNodeId) -> AstNode<'_> {
         let payload = self.payloads[ast_node_id.index()].clone();
-        let _span = self.spans[ast_node_id.index()].clone();
+        let _span = self.spans[ast_node_id.index()];
 
         let parent_id = self.parents[ast_node_id.index()];
         let parent = if parent_id == ast_node_id {
@@ -188,7 +188,7 @@ impl Parsing {
         let mut errors = vec![];
 
         for (error_id, error_data) in self.errors.iter().zip(self.error_data.iter().cloned()) {
-            errors.push((self.ast_node(error_id.clone()), error_data));
+            errors.push((self.ast_node(*error_id), error_data));
         }
         errors
     }
