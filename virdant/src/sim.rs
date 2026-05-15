@@ -7,5 +7,5 @@ mod sim;
 #[cfg(test)]
 mod test;
 
-pub use crate::sim::sim::{Event, Sim, SimError};
+pub use crate::sim::sim::{Callback, Event, EventCallback, Sim, SimError};
 pub use crate::sim::eval::Value;

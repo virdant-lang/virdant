@@ -1,7 +1,6 @@
-use std::cmp::Reverse;
-use std::collections::BinaryHeap;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
 
 use bstr::{BStr, BString, ByteSlice};
 use indexmap::{IndexMap, IndexSet};
@@ -26,7 +25,6 @@ pub struct Node {
     is_reg_set: bool,
 }
 
-#[derive(Debug)]
 pub struct Sim {
     db: Arc<Db>,
     values: IndexMap<Node, Value>,
@@ -41,94 +39,65 @@ pub struct Sim {
 
     sim_time_ps: u64,
     shutdown_requested: bool,
-    queue: BinaryHeap<Reverse<ScheduledEvent>>,
     next_seq: u64,
-    // TODO(callback-api): Callback / CallbackFn live below as dead code
-    // until iteration 2, when we design the real callback API against
-    // ergonomics feedback from playing with iteration 1's print-only
-    // event loop. See SIM_DESIGN.md (Q3 / D5).
-    #[allow(dead_code)]
-    callbacks: Vec<Callback>,
+    /// Unified one-shot callback queue.  Every registration — timed,
+    /// lifecycle, or value-change — pushes one entry; every fire removes
+    /// one.  See `Event` for the trigger conditions.
+    queue: Vec<QueueEntry>,
 }
 
+/// A user-supplied callback.  Receives `&mut Sim` so it can read signals,
+/// drive new values, register more callbacks, or call `finish()`.
+pub type Callback = Box<dyn FnMut(&mut Sim) + 'static>;
 
-#[derive(Debug, Eq, PartialEq)]
+/// Trigger condition for a queued callback.  Mirrors a subset of the VPI
+/// callback reasons (see `VPI_CALLBACKS.md`); the run loop and the
+/// callback API agree on this vocabulary so users always know *why* their
+/// callback is being invoked.
+#[derive(Debug, Clone)]
 pub enum Event {
-//    ValueChange(ElaboratedComponentId), // Signal value changed
-//    Stmt, // Statement execution
-//    Force, // Force operation on signal
-//    Release, // Release operation on signal
-//    AtStartOfSimTime, // At start of simulation time
-//    ReadWriteSync, // Read/write synchronization
-//    ReadOnlySync, // Read-only synchronization
-//    NextSimTime, // Next simulation time
-//    AfterDelayInPs(u64), // After specified delay
-//    EndOfCompile, // End of compilation
-    StartOfSimulation, // Start of simulation
-    EndOfSimulation, // End of simulation
-//    Error, // Simulator error
-//    TchkViolation, // Timing check violation
-//    StartOfSave, // Start of save operation
-//    EndOfSave, // End of save operation
-//    StartOfRestart, // Start of restart
-//    EndOfRestart, // End of restart
-//    StartOfReset, // Start of reset
-//    EndOfReset, // End of reset
-//    EnterInteractive, // Enter interactive mode
-//    ExitInteractive, // Exit interactive mode
-//    InteractiveScopeChange, // Interactive scope changed
-//    UnresolvedSystf, // Unresolved system function
+    /// Fire once when `run()` begins, before any timed entries dispatch.
+    /// Counterpart of VPI `cbStartOfSimulation` (#11).
+    StartOfSimulation,
+    /// Fire once when `run()` is about to return (queue drained or
+    /// `finish()` called).  Counterpart of VPI `cbEndOfSimulation` (#12).
+    EndOfSimulation,
+    /// Fire at absolute simulation time `at_ps`.  Counterpart of VPI
+    /// `cbAfterDelay` (#9) / `cbAtStartOfSimTime` (#5).
+    AfterDelay { at_ps: u64 },
+    /// Fire when `signal`'s value changes.  Counterpart of VPI
+    /// `cbValueChange` (#1).
+    ValueChange { signal: ElaboratedComponentId },
 }
 
-/// One scheduled event in the time queue.  Ordered by ascending `at_ps`,
-/// then ascending `seq` so same-time events fire in registration (FIFO)
-/// order.  `seq` is globally unique per `Sim`, so equality reduces to
-/// equality of `seq`.
-#[derive(Debug, Eq, PartialEq)]
-struct ScheduledEvent {
-    at_ps: u64,
-    seq:   u64,
-    event: Event,
+/// One queueable (event, callback) pair.  Public so users can build
+/// entries directly via `sim.register(...)` if they prefer the uniform
+/// API to the convenience methods (`at`, `after`, `at_start`, …).  The
+/// callback is `Option`-wrapped so the dispatcher can `take` it out and
+/// invoke it with `&mut Sim` without holding a borrow into the entry.
+pub struct EventCallback {
+    pub event: Event,
+    pub callback: Option<Callback>,
 }
 
-impl Ord for ScheduledEvent {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.at_ps.cmp(&other.at_ps).then(self.seq.cmp(&other.seq))
-    }
-}
-impl PartialOrd for ScheduledEvent {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
+/// Internal queue slot: an `EventCallback` plus a monotonic sequence
+/// number used for FIFO tie-breaking among same-trigger entries.
+struct QueueEntry {
+    seq: u64,
+    cb: EventCallback,
 }
 
 #[derive(Debug)]
 pub enum SimError {}
 
-pub enum CallbackFn {
-    Safe(Box<dyn Fn()>),
-//    Unsafe(
-}
-
-impl std::fmt::Debug for CallbackFn {
+impl std::fmt::Debug for Sim {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "(CallbackFn)")
+        f.debug_struct("Sim")
+            .field("sim_time_ps", &self.sim_time_ps)
+            .field("values", &self.values)
+            .field("queue_len", &self.queue.len())
+            .finish_non_exhaustive()
     }
-}
-
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct Callback {
-    pub event:    Event,
-    pub cb_rtn:    Option<CallbackFn>,
-//    pub user_data: *mut PliByte8,
-// True once `cb_rtn` has been invoked at least once.  `cbValueChange` is
-// persistent (we clear this on every fire); other reasons are one-shot.
-//    pub fired:     bool,
-// True once `vpi_remove_cb` has been called; the entry stays in the
-// table but is skipped when firing / draining a queue.
-//    pub removed:   bool,
-// Absolute simulation time at which a `cbAfterDelay` should fire.
-// Meaningful only when `reason == cbAfterDelay`.
-//    pub deadline_ps: u64,
 }
 
 impl Sim {
@@ -159,9 +128,8 @@ impl Sim {
             exprs,
             sim_time_ps: 0,
             shutdown_requested: false,
-            queue: BinaryHeap::new(),
             next_seq: 0,
-            callbacks: vec![],
+            queue: Vec::new(),
         };
 
         for elab_component in elaboration.components() {
@@ -198,7 +166,7 @@ impl Sim {
             let expr = sim.exprs[&id].clone();
             let context = sim.build_context(id, &expr);
             let value = expr.eval(context);
-            sim.set(id, value);
+            sim.write_value(id, value);
         }
 
         // Propagate constant values to all transitively-dependent components.
@@ -256,7 +224,10 @@ impl Sim {
                     if self.registers.contains(&update_component_id) {
                         self.set_reg(update_component_id, new_value);
                     } else {
-                        self.set(update_component_id, new_value);
+                        // Use write_value, not set: `set` is the user-facing
+                        // orchestrator (flow + edge transfers + watchers) and
+                        // would recurse re-entrantly into the loop we're in.
+                        self.write_value(update_component_id, new_value);
                     }
                 }
             }
@@ -348,7 +319,56 @@ impl Sim {
         Context::new(entries)
     }
 
+    /// Write `value` to `component_id` and settle the circuit before
+    /// returning (D4: synchronous set).  Concretely:
+    ///   1. Store the value and mark `component_id` dirty.
+    ///   2. If this was a 0→1 transition on a clock signal, transfer every
+    ///      register listed in `clock_sensitivities[component_id]`.
+    ///   3. Run `flow()` to convergence.
+    ///   4. Fire value-change notifications for any watched signals whose
+    ///      value differs from their last recorded snapshot.
     pub fn set(&mut self, component_id: ElaboratedComponentId, value: Value) {
+        // Snapshot every signal that has a pending Event::ValueChange entry
+        // so we can detect transitions after the write + flow settles.
+        let watched: Vec<ElaboratedComponentId> = self.queue.iter()
+            .filter_map(|q| match q.cb.event {
+                Event::ValueChange { signal } => Some(signal),
+                _ => None,
+            })
+            .collect();
+        let snapshots: IndexMap<ElaboratedComponentId, Value> = watched
+            .into_iter()
+            .map(|id| { let v = self.get(id); (id, v) })
+            .collect();
+
+        let old = self.get(component_id);
+        let rising = is_rising(&old, &value);
+        self.write_value(component_id, value);
+        if rising {
+            if let Some(regs) = self.clock_sensitivities.get(&component_id).cloned() {
+                for reg_id in regs {
+                    self.transfer(reg_id);
+                }
+            }
+        }
+        self.flow();
+
+        let mut changed: IndexSet<ElaboratedComponentId> = IndexSet::new();
+        for (id, prev) in snapshots {
+            if self.get(id) != prev {
+                changed.insert(id);
+            }
+        }
+        if !changed.is_empty() {
+            self.fire_value_changes(&changed);
+        }
+    }
+
+    /// Internal write: store `value` at `component_id`'s val node and mark
+    /// it dirty.  Does not flow, does not fire watchers, does not handle
+    /// clock edges.  Called by `set` (the orchestrator) and by `flow`
+    /// (during propagation, to avoid re-entrant orchestration).
+    fn write_value(&mut self, component_id: ElaboratedComponentId, value: Value) {
         let node = Node::val(component_id);
         let value_ref = self.values.get_mut(&node).unwrap();
         *value_ref = value;
@@ -377,34 +397,200 @@ impl Sim {
         self.sim_time_ps
     }
 
-    /// Queue `event` to fire `delay_ps` after the current simulation time.
-    /// Same-time events fire in registration (FIFO) order.
-    pub fn schedule_after(&mut self, delay_ps: u64, event: Event) {
-        let at_ps = self.sim_time_ps.saturating_add(delay_ps);
+    /// Push `event_cb` onto the queue.  The single primitive on which
+    /// `at`, `after`, `at_start`, `at_end`, and `on_change` are built;
+    /// expose `Event` and `EventCallback` directly when you want to skip
+    /// the sugar.  Same-trigger entries fire in registration (FIFO) order.
+    pub fn register(&mut self, event_cb: EventCallback) {
         let seq = self.next_seq;
         self.next_seq += 1;
-        self.queue.push(Reverse(ScheduledEvent { at_ps, seq, event }));
+        self.queue.push(QueueEntry { seq, cb: event_cb });
     }
 
-    /// Shorthand for `schedule_after(0, event)`: queue `event` to fire at
-    /// the current simulation time, after any same-time events already
-    /// in the queue (FIFO).  Defined in terms of `schedule_after` so the
-    /// meaning stays stable when richer same-time semantics (Verilog
-    /// regions) are added later.
-    pub fn schedule(&mut self, event: Event) {
-        self.schedule_after(0, event);
+    /// Register `cb` to fire at absolute simulation time `t_ps`.  If
+    /// `t_ps` is in the past, the callback fires at the next dispatch
+    /// step.  Same-time callbacks fire in registration (FIFO) order.
+    pub fn at(&mut self, t_ps: u64, cb: Callback) {
+        self.register(EventCallback {
+            event: Event::AfterDelay { at_ps: t_ps },
+            callback: Some(cb),
+        });
     }
 
-    /// Drain the time queue.  Pops events in (time, seq) order, advances
-    /// `sim_time_ps` to each event's deadline, and prints the event.
-    /// Returns when the queue is empty.
+    /// Register `cb` to fire `delay_ps` after the current simulation time.
+    pub fn after(&mut self, delay_ps: u64, cb: Callback) {
+        let t_ps = self.sim_time_ps.saturating_add(delay_ps);
+        self.at(t_ps, cb);
+    }
+
+    /// Register `cb` to fire when `run()` begins, before any timed entries
+    /// dispatch.  Multiple registrations fire in order.
+    pub fn at_start(&mut self, cb: Callback) {
+        self.register(EventCallback {
+            event: Event::StartOfSimulation,
+            callback: Some(cb),
+        });
+    }
+
+    /// Register `cb` to fire when `run()` is about to return — either
+    /// because the queue drained or because a callback called `finish()`.
+    /// Multiple registrations fire in order.
+    pub fn at_end(&mut self, cb: Callback) {
+        self.register(EventCallback {
+            event: Event::EndOfSimulation,
+            callback: Some(cb),
+        });
+    }
+
+    /// Register `cb` to fire every time `signal`'s value changes.
+    /// Implemented as a one-shot `Event::ValueChange` entry whose closure
+    /// re-registers itself after invoking `cb`, so from the user's side
+    /// the callback is persistent until they stop re-arming it.
+    pub fn on_change(&mut self, signal: ElaboratedComponentId, cb: Callback) {
+        let cell: Rc<RefCell<Callback>> = Rc::new(RefCell::new(cb));
+        Self::arm_value_change(self, signal, cell);
+    }
+
+    fn arm_value_change(
+        sim: &mut Sim,
+        signal: ElaboratedComponentId,
+        cell: Rc<RefCell<Callback>>,
+    ) {
+        let cell_for_closure = cell.clone();
+        sim.register(EventCallback {
+            event: Event::ValueChange { signal },
+            callback: Some(Box::new(move |s| {
+                (cell_for_closure.borrow_mut())(s);
+                Sim::arm_value_change(s, signal, cell_for_closure.clone());
+            })),
+        });
+    }
+
+    /// Request that the run loop stop dispatching after the current
+    /// callback returns.  Safe to call from inside a callback.
+    pub fn finish(&mut self) {
+        self.shutdown_requested = true;
+    }
+
+    /// Drive `clock` as a free-running square wave with full period
+    /// `period_ps`.  The signal is initialised low immediately and the
+    /// first toggle is scheduled `period_ps / 2` from now, so the first
+    /// rising edge happens at `now + period_ps / 2`.
+    pub fn add_clock(&mut self, clock: ElaboratedComponentId, period_ps: u64) {
+        let half = period_ps / 2;
+        self.set(clock, Value::Bit(false));
+        self.schedule_clock_toggle(clock, half);
+    }
+
+    /// Internal: schedule one half-period toggle for `clock`.  The callback
+    /// toggles the signal and re-arms itself for `half_period_ps` later.
+    fn schedule_clock_toggle(&mut self, clock: ElaboratedComponentId, half_period_ps: u64) {
+        self.after(half_period_ps, Box::new(move |sim| {
+            let next = match sim.get(clock) {
+                Value::Bit(b) => Value::Bit(!b),
+                Value::X(_)   => Value::Bit(true),
+                other => panic!("clock signal {clock:?} has non-Bit value: {other:?}"),
+            };
+            sim.set(clock, next);
+            sim.schedule_clock_toggle(clock, half_period_ps);
+        }));
+    }
+
+    /// Drain the queue.  Order:
+    ///   1. All `Event::StartOfSimulation` entries fire, in FIFO order.
+    ///   2. While the queue contains an `Event::AfterDelay` entry and
+    ///      `finish()` has not been requested: pop the soonest one (FIFO
+    ///      tiebreak), advance `sim_time_ps` to its deadline, and fire it.
+    ///      Each callback may itself register more entries and trigger
+    ///      `set()`s, which fire matching `Event::ValueChange` entries
+    ///      inline.
+    ///   3. All `Event::EndOfSimulation` entries fire, in FIFO order.
+    /// `Event::ValueChange` entries that remain unfired (no signal
+    /// change after registration) are dropped on the next `run()`.
     pub fn run(&mut self) -> Result<(), SimError> {
-        while let Some(Reverse(s)) = self.queue.pop() {
-            self.sim_time_ps = s.at_ps;
-            println!("[t={}ps] event={:?}", s.at_ps, s.event);
+        self.shutdown_requested = false;
+        self.fire_lifecycle(|e| matches!(e, Event::StartOfSimulation));
+
+        while !self.shutdown_requested {
+            let next = self.queue
+                .iter()
+                .enumerate()
+                .filter_map(|(i, q)| match q.cb.event {
+                    Event::AfterDelay { at_ps } => Some((i, at_ps, q.seq)),
+                    _ => None,
+                })
+                .min_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)))
+                .map(|(i, _, _)| i);
+            let Some(idx) = next else { break };
+
+            let mut entry = self.queue.remove(idx);
+            if let Event::AfterDelay { at_ps } = entry.cb.event {
+                self.sim_time_ps = at_ps;
+            }
+            if let Some(mut cb) = entry.cb.callback.take() {
+                cb(self);
+            }
         }
+
+        self.fire_lifecycle(|e| matches!(e, Event::EndOfSimulation));
         Ok(())
     }
+
+    /// Fire and remove every queue entry whose event matches `pred`, in
+    /// registration (FIFO) order.  Snapshots the matching set up-front so
+    /// callbacks that re-register during dispatch don't fire in the same
+    /// pass.  Used for `StartOfSimulation` / `EndOfSimulation`.
+    fn fire_lifecycle<F: Fn(&Event) -> bool>(&mut self, pred: F) {
+        let mut to_fire: Vec<QueueEntry> = Vec::new();
+        let mut i = 0;
+        while i < self.queue.len() {
+            if pred(&self.queue[i].cb.event) {
+                to_fire.push(self.queue.remove(i));
+            } else {
+                i += 1;
+            }
+        }
+        to_fire.sort_by_key(|q| q.seq);
+        for mut entry in to_fire {
+            if let Some(mut cb) = entry.cb.callback.take() {
+                cb(self);
+            }
+        }
+    }
+
+    /// Fire and remove every `Event::ValueChange { signal }` entry whose
+    /// signal is in `changed`.  Snapshots the matching set up-front so
+    /// `on_change`'s self-rearming wrapper, which queues a fresh
+    /// `ValueChange` after invoking the user closure, doesn't re-fire in
+    /// the same pass; the new entry waits for the next change.
+    fn fire_value_changes(&mut self, changed: &IndexSet<ElaboratedComponentId>) {
+        let mut to_fire: Vec<QueueEntry> = Vec::new();
+        let mut i = 0;
+        while i < self.queue.len() {
+            let matches = match self.queue[i].cb.event {
+                Event::ValueChange { signal } => changed.contains(&signal),
+                _ => false,
+            };
+            if matches {
+                to_fire.push(self.queue.remove(i));
+            } else {
+                i += 1;
+            }
+        }
+        to_fire.sort_by_key(|q| q.seq);
+        for mut entry in to_fire {
+            if let Some(mut cb) = entry.cb.callback.take() {
+                cb(self);
+            }
+        }
+    }
+}
+
+/// 0→1 transition on a `Bit` signal.  Any other old/new pair (including
+/// X→Bit(true)) is not a rising edge — keeps `set()`'s edge
+/// detection safe on non-clock signals.
+fn is_rising(old: &Value, new: &Value) -> bool {
+    matches!((old, new), (Value::Bit(false), Value::Bit(true)))
 }
 
 impl Node {
