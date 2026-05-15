@@ -2,6 +2,7 @@ pub mod expr;
 pub mod payload;
 pub mod eval;
 
+mod circuit;
 mod sim;
 
 #[cfg(test)]

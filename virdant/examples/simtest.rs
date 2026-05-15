@@ -4,6 +4,8 @@
 //! each loads a real Virdant design, builds a `Sim`, and exercises
 //! whatever simulator capability is being prototyped.
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use virdant::sim::{Sim, Value};
@@ -66,16 +68,70 @@ fn lfsr_run() {
     sim.run().unwrap();
 }
 
+/// Same stimulus as `lfsr_run`, but record every `out` transition and
+/// assert against the known Galois-LFSR sequence (polynomial 0x1D,
+/// reset value 0xFF).  Rising edges fall on t = 5_000 + k * 10_000;
+/// reset deasserts at t=10_000, so the t=5_000 edge latches the reset
+/// value 255 and subsequent edges advance the LFSR.
+fn lfsr_check() {
+    let mut sim = lfsr_sim();
+
+    let expected: Vec<(u64, Value)> = [
+        (5_000,  255u64),
+        (15_000, 227),
+        (25_000, 219),
+        (35_000, 171),
+        (45_000,  75),
+        (55_000, 150),
+        (65_000,  49),
+        (75_000,  98),
+        (85_000, 196),
+        (95_000, 149),
+    ].into_iter().map(|(t, v)| (t, Value::Word(8, v))).collect();
+    let expected_len = expected.len();
+
+    let clock = sim.resolve("top.clock");
+    let reset = sim.resolve("top.reset");
+    let out   = sim.resolve("top.out");
+
+    sim.add_clock(clock, 10_000);
+
+    let observed: Rc<RefCell<Vec<(u64, Value)>>> = Rc::new(RefCell::new(Vec::new()));
+    let observed_cb = observed.clone();
+    sim.on_change(out, Box::new(move |sim| {
+        println!("[t={}ps] out = {:?}", sim.now(), sim.get(out));
+        let mut observed_list = observed_cb.borrow_mut();
+        observed_list.push((sim.now(), sim.get(out)));
+        if observed_list.len() == expected_len {
+            sim.finish();
+        }
+    }));
+
+    sim.set(reset, Value::Bit(true));
+    sim.after(10_000, Box::new(move |sim| {
+        sim.set(reset, Value::Bit(false));
+    }));
+    sim.after(100_000, Box::new(|sim| sim.finish()));
+
+    sim.run().unwrap();
+
+    let actual = observed.borrow().clone();
+    assert_eq!(actual, expected, "LFSR output sequence mismatch");
+    println!("lfsr_check: {} transitions matched expected sequence", actual.len());
+}
+
 fn main() {
-    let arg = std::env::args().nth(1).unwrap_or_else(|| "lfsr_run".into());
+    let arg = std::env::args().nth(1).unwrap_or_else(|| "lfsr_check".into());
     match arg.as_str() {
         "lfsr_trace" => lfsr_trace(),
         "lfsr_run"   => lfsr_run(),
+        "lfsr_check" => lfsr_check(),
         other => {
             eprintln!("unknown testbench: {other}");
             eprintln!("known testbenches:");
             eprintln!("  lfsr_trace");
             eprintln!("  lfsr_run");
+            eprintln!("  lfsr_check");
             std::process::exit(2);
         }
     }
