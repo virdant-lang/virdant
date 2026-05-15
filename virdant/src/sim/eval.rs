@@ -1,8 +1,8 @@
 use crate::common;
 use crate::common::{Width, WordValue};
-use crate::sim::{ExprPayload, payload};
+use crate::sim::payload;
 use crate::types::Type;
-use crate::sim::expr::{Expr, Referent};
+use crate::sim::expr::{Expr, ExprPayload, Referent};
 use crate::analysis::symbols::SymbolId;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
