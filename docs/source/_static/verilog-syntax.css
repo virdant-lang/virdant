@@ -1,0 +1,52 @@
+/* Verilog Syntax Highlighting Colors */
+
+/* Keywords: module, always, initial, begin, end, etc. */
+.highlight-verilog .k {
+    color: #6c9bd1;
+    font-weight: 400;
+}
+
+/* System tasks: $display, $finish, etc. */
+.highlight-verilog .nb {
+    color: #d4914a;
+    font-weight: 400;
+}
+
+/* Number literals */
+.highlight-verilog .m,
+.highlight-verilog .mh {
+    color: #27ae60;
+}
+
+/* Comments */
+.highlight-verilog .c1,
+.highlight-verilog .cm {
+    color: #52b788;
+    font-style: italic;
+}
+
+/* Strings */
+.highlight-verilog .s {
+    color: #c7254e;
+}
+
+/* Operators */
+.highlight-verilog .o {
+    color: #2c3e50;
+}
+
+/* Punctuation */
+.highlight-verilog .p {
+    color: #2c3e50;
+}
+
+/* Identifiers and names */
+.highlight-verilog .n {
+    color: #333;
+}
+
+/* Compiler directives */
+.highlight-verilog .cp {
+    color: #999;
+    font-style: italic;
+}

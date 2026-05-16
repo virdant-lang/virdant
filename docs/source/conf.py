@@ -41,7 +41,11 @@ html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 html_static_path = ['_static']
 
 
-html_css_files = ['custom.css']
+html_css_files = [
+    'custom.css',
+    'virdant-syntax.css',
+    'verilog-syntax.css',
+]
 
 default_role = 'code'
 

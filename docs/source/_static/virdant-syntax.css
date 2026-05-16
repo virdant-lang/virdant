@@ -1,0 +1,49 @@
+/* Virdant Syntax Highlighting Colors */
+
+/* Keywords: mod, ext, if, else, match, etc. .k */
+.highlight-virdant .k {
+    color: #6b9b76;
+    font-weight: normal;
+}
+
+/* Comments .c1, .cm */
+.highlight-virdant .c1,
+.highlight-virdant .cm {
+    color: #52b788;
+    font-style: italic;
+}
+
+/* Punctuation/Operators .p */
+.highlight-virdant .p {
+    color: #2c3e50;
+}
+
+/* Special 'it' keyword .kp */
+/* Regular identifiers .nv */
+.highlight-virdant .kp,
+.highlight-virdant .nv {
+    color: #2874a6;
+}
+
+/* Special 'it' keyword .kp */
+.highlight-virdant .kp {
+    font-weight: bold;
+}
+
+/* Enum variants and constants: #variant .no */
+/* Number literals .mi */
+/* Union constructors: @Constructor .nd */
+.highlight-virdant .nd,
+.highlight-virdant .no,
+.highlight-virdant .mi {
+    color: #16a085;
+}
+
+/* Type names: Bit, Word, Vec, etc. .nc */
+/* Built-in types: Nat, Shape, tuple, etc. .nb */
+/* Boolean literals: true, false .kc */
+.highlight-virdant .kc,
+.highlight-virdant .nc,
+.highlight-virdant .nb {
+    color: #c77a3a;
+}
