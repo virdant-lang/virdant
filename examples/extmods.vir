@@ -1,0 +1,22 @@
+mod Top {
+    incoming clock : Clock
+    incoming reset : Bit
+    outgoing out : Bit
+
+    reg val : Bit on clock {
+        it <= if reset { false } else { !it }
+    }
+
+    mod led of LedDriver {
+        it.clock := clock
+        it.inp := val
+        out := it.out
+    }
+}
+
+ext mod LedDriver {
+    incoming clock : Clock
+    incoming inp : Bit
+
+    outgoing out : Bit
+}
