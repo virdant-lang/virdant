@@ -33,6 +33,14 @@ pub struct ElaboratedComponent {
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct SignalId(usize);
 
+impl SignalId {
+    /// Dense 0-based index assigned by `build_elaboration`.  Suitable for
+    /// indexing into a `Vec` sized to `Elaboration::components().len()`.
+    pub fn index(self) -> usize {
+        self.0
+    }
+}
+
 impl Elaboration {
     pub fn resolve<P: AsRef<BStr>>(&self, path: P) -> Option<&ElaboratedComponent> {
         self.path_to_id

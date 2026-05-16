@@ -15,12 +15,6 @@ use crate::sim::eval::{Context, Value};
 use crate::sim::expr::Expr;
 use crate::types::Type;
 
-#[derive(Eq, Hash, PartialEq, Debug)]
-pub struct Node {
-    component_id: SignalId,
-    is_reg_set: bool,
-}
-
 /// Live circuit values and the propagation worklist.  Everything
 /// mutated by combinational propagation, register transfers, and
 /// direct `set` writes lives here.
@@ -30,7 +24,8 @@ pub struct Node {
 /// of deep-copying every live signal value (a `Value::Ctor` carries
 /// an owned `Vec<Value>`).
 struct State {
-    values: IndexMap<Node, Arc<Value>>,
+    vals: Vec<Arc<Value>>,
+    set_vals: IndexMap<SignalId, Arc<Value>>,
     dirty: IndexSet<SignalId>,
 }
 
@@ -102,7 +97,8 @@ impl std::fmt::Debug for Sim {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Sim")
             .field("time_ps", &self.sched.time_ps)
-            .field("values", &self.state.values)
+            .field("vals", &self.state.vals)
+            .field("set_vals", &self.state.set_vals)
             .field("queue_len", &self.sched.queue.len())
             .finish_non_exhaustive()
     }
@@ -112,26 +108,27 @@ impl Sim {
     pub fn new(db: Arc<Db>, top: SymbolId) -> Sim {
         let circuit = Circuit::new(db, top);
 
-        let mut values: IndexMap<Node, Arc<Value>> = IndexMap::new();
+        let n_components = circuit.elaboration.components().len();
+        let mut vals: Vec<Arc<Value>> = Vec::with_capacity(n_components);
+        let mut set_vals: IndexMap<SignalId, Arc<Value>> = IndexMap::new();
         for elab_component in circuit.elaboration.components() {
             let elab_component_id = elab_component.id();
             let typ = elab_component.typ();
 
-            let node = Node::val(elab_component_id);
-            let value = Arc::new(Value::X(typ.clone()));
-            values.insert(node, value);
+            // SignalIds are assigned consecutively from 0 by build_elaboration,
+            // so pushing in elaboration.components() order matches index().
+            vals.push(Arc::new(Value::X(typ.clone())));
 
             if elab_component.is_reg() {
-                let node = Node::set(elab_component_id);
-                let value = Arc::new(Value::X(typ));
-                values.insert(node, value);
+                set_vals.insert(elab_component_id, Arc::new(Value::X(typ)));
             }
         }
 
         let mut sim = Sim {
             circuit,
             state: State {
-                values,
+                vals,
+                set_vals,
                 dirty: IndexSet::new(),
             },
             sched: Scheduler {
@@ -188,14 +185,16 @@ impl Sim {
     pub fn dump(&self) {
         let elaboration = self.elaboration();
 
-        for (node, value) in &self.state.values {
-            let path = &self.circuit.component_paths.get(&node.component_id).unwrap();
-            if node.is_reg_set {
-                let clock_id = elaboration.component(node.component_id).clock().unwrap();
+        for elab_component in elaboration.components() {
+            let id = elab_component.id();
+            let path = &self.circuit.component_paths.get(&id).unwrap();
+            let value = &self.state.vals[id.index()];
+            println!("{path} := {value:?}");
+            if elab_component.is_reg() {
+                let set_value = &self.state.set_vals[&id];
+                let clock_id = elab_component.clock().unwrap();
                 let clock = elaboration.component(clock_id);
-                println!("{path} <= {value:?} on {:?}", clock.path());
-            } else {
-                println!("{path} := {value:?}");
+                println!("{path} <= {set_value:?} on {:?}", clock.path());
             }
         }
     }
@@ -322,7 +321,7 @@ impl Sim {
         let entries = self.circuit
             .referents(component_id)
             .iter()
-            .map(|(r, id)| (r.clone(), Arc::clone(&self.state.values[&Node::val(*id)])))
+            .map(|(r, id)| (r.clone(), Arc::clone(&self.state.vals[id.index()])))
             .collect();
         Context::new(entries)
     }
@@ -381,27 +380,23 @@ impl Sim {
     /// clock edges.  Called by `set` (the orchestrator) and by `flow`
     /// (during propagation, to avoid re-entrant orchestration).
     fn write_value(&mut self, component_id: SignalId, value: Value) {
-        let node = Node::val(component_id);
-        let value_ref = self.state.values.get_mut(&node).unwrap();
-        *value_ref = Arc::new(value);
+        self.state.vals[component_id.index()] = Arc::new(value);
         self.state.dirty.insert(component_id);
     }
 
     fn set_reg(&mut self, component_id: SignalId, value: Value) {
-        let node = Node::set(component_id);
-        let value_ref = self.state.values.get_mut(&node).unwrap();
+        let value_ref = self.state.set_vals.get_mut(&component_id).unwrap();
         *value_ref = Arc::new(value);
     }
 
     fn transfer(&mut self, component_id: SignalId) {
-        let new_value = Arc::clone(self.state.values.get(&Node::set(component_id)).unwrap());
-        let value_ref = self.state.values.get_mut(&Node::val(component_id)).unwrap();
-        *value_ref = new_value;
+        let new_value = Arc::clone(self.state.set_vals.get(&component_id).unwrap());
+        self.state.vals[component_id.index()] = new_value;
         self.state.dirty.insert(component_id);
     }
 
     pub fn get(&self, component_id: SignalId) -> Value {
-        self.state.values.get(&Node::val(component_id)).unwrap().as_ref().clone()
+        self.state.vals[component_id.index()].as_ref().clone()
     }
 
     /// Current simulation time, in picoseconds.
@@ -676,20 +671,4 @@ impl Sim {
 /// detection safe on non-clock signals.
 fn is_rising(old: &Value, new: &Value) -> bool {
     matches!((old, new), (Value::Bit(false), Value::Bit(true)))
-}
-
-impl Node {
-    fn val(elab_component_id: SignalId) -> Node {
-        Node {
-            component_id: elab_component_id,
-            is_reg_set: false,
-        }
-    }
-
-    fn set(elab_component_id: SignalId) -> Node {
-        Node {
-            component_id: elab_component_id,
-            is_reg_set: true,
-        }
-    }
 }
