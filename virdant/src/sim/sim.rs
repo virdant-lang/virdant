@@ -24,8 +24,13 @@ pub struct Node {
 /// Live circuit values and the propagation worklist.  Everything
 /// mutated by combinational propagation, register transfers, and
 /// direct `set` writes lives here.
+///
+/// Values are wrapped in `Arc` so that `Sim::build_context` can hand
+/// the eval `Context` a refcount-bumped clone of each binding instead
+/// of deep-copying every live signal value (a `Value::Ctor` carries
+/// an owned `Vec<Value>`).
 struct State {
-    values: IndexMap<Node, Value>,
+    values: IndexMap<Node, Arc<Value>>,
     dirty: IndexSet<SignalId>,
 }
 
@@ -107,18 +112,18 @@ impl Sim {
     pub fn new(db: Arc<Db>, top: SymbolId) -> Sim {
         let circuit = Circuit::new(db, top);
 
-        let mut values: IndexMap<Node, Value> = IndexMap::new();
+        let mut values: IndexMap<Node, Arc<Value>> = IndexMap::new();
         for elab_component in circuit.elaboration.components() {
             let elab_component_id = elab_component.id();
             let typ = elab_component.typ();
 
             let node = Node::val(elab_component_id);
-            let value = Value::X(typ.clone());
+            let value = Arc::new(Value::X(typ.clone()));
             values.insert(node, value);
 
             if elab_component.is_reg() {
                 let node = Node::set(elab_component_id);
-                let value = Value::X(typ);
+                let value = Arc::new(Value::X(typ));
                 values.insert(node, value);
             }
         }
@@ -153,7 +158,7 @@ impl Sim {
         for id in constant_ids {
             let expr = sim.circuit.exprs[&id].clone();
             let context = sim.build_context(id, &expr);
-            let value = expr.eval(context);
+            let value = expr.eval(&context);
             sim.write_value(id, value);
         }
 
@@ -224,7 +229,7 @@ impl Sim {
                 let update_component_id = self.circuit.sensitivity_at(component_id, i);
                 let expr = self.circuit.exprs.get(&update_component_id).unwrap().clone();
                 let context = self.build_context(update_component_id, &expr);
-                let new_value = expr.eval(context);
+                let new_value = expr.eval(&context);
                 if self.circuit.registers.contains(&update_component_id) {
                     self.set_reg(update_component_id, new_value);
                 } else {
@@ -309,14 +314,15 @@ impl Sim {
     /// `Circuit::resolved_referents` holds the precomputed `(Referent,
     /// SignalId)` list for every component with a driver — built once in
     /// `Circuit::new` instead of re-walking `expr` on every propagation.
-    /// This method zips each resolved id with the live `Value` from
-    /// `self.state.values`.  The `_expr` parameter is kept for symmetry
+    /// This method zips each resolved id with the live `Arc<Value>` from
+    /// `self.state.values`; the binding clones are refcount bumps, not
+    /// deep `Value` copies.  The `_expr` parameter is kept for symmetry
     /// with the eval call site but is not consulted.
     fn build_context(&self, component_id: SignalId, _expr: &Expr) -> Context {
         let entries = self.circuit
             .referents(component_id)
             .iter()
-            .map(|(r, id)| (r.clone(), self.state.values[&Node::val(*id)].clone()))
+            .map(|(r, id)| (r.clone(), Arc::clone(&self.state.values[&Node::val(*id)])))
             .collect();
         Context::new(entries)
     }
@@ -377,25 +383,25 @@ impl Sim {
     fn write_value(&mut self, component_id: SignalId, value: Value) {
         let node = Node::val(component_id);
         let value_ref = self.state.values.get_mut(&node).unwrap();
-        *value_ref = value;
+        *value_ref = Arc::new(value);
         self.state.dirty.insert(component_id);
     }
 
     fn set_reg(&mut self, component_id: SignalId, value: Value) {
         let node = Node::set(component_id);
         let value_ref = self.state.values.get_mut(&node).unwrap();
-        *value_ref = value;
+        *value_ref = Arc::new(value);
     }
 
     fn transfer(&mut self, component_id: SignalId) {
-        let new_value = self.state.values.get_mut(&Node::set(component_id)).unwrap().clone();
+        let new_value = Arc::clone(self.state.values.get(&Node::set(component_id)).unwrap());
         let value_ref = self.state.values.get_mut(&Node::val(component_id)).unwrap();
         *value_ref = new_value;
         self.state.dirty.insert(component_id);
     }
 
     pub fn get(&self, component_id: SignalId) -> Value {
-        self.state.values.get(&Node::val(component_id)).unwrap().clone()
+        self.state.values.get(&Node::val(component_id)).unwrap().as_ref().clone()
     }
 
     /// Current simulation time, in picoseconds.

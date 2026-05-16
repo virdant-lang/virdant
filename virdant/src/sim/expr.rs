@@ -62,7 +62,7 @@ impl Expr {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Referent {
     Component(ComponentId),
     Location(Location),

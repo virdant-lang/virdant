@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use indexmap::IndexMap;
+
 use crate::common;
 use crate::common::{Width, WordValue};
 use crate::sim::payload;
@@ -30,23 +34,46 @@ impl Value {
     }
 }
 
+/// Per-eval binding environment.
+///
+/// Holds `Arc<Value>` rather than `Value` so that `Sim::build_context`
+/// can populate it with refcount bumps instead of deep-cloning every
+/// live signal.  `IndexMap` gives `get` an `O(1)` lookup; insertion
+/// order also matches the original `Vec`-based semantics, where a
+/// later insert shadowed an earlier one (the original `get` walked
+/// `iter().rev()`; `IndexMap::insert` is last-write-wins).
 #[derive(Clone, Debug)]
 pub struct Context {
-    context: Vec<(Referent, Value)>,
+    context: IndexMap<Referent, Arc<Value>>,
 }
 
 impl Context {
-    pub fn new(entries: Vec<(Referent, Value)>) -> Context {
-        Context { context: entries }
+    pub fn new(entries: Vec<(Referent, Arc<Value>)>) -> Context {
+        let mut context: IndexMap<Referent, Arc<Value>> =
+            IndexMap::with_capacity(entries.len());
+        for (r, v) in entries {
+            context.insert(r, v);
+        }
+        Context { context }
     }
 
     pub fn get(&self, referent: &Referent) -> Value {
-        for (referent_, value) in self.context.iter().rev() {
-            if referent_ == referent {
-                return value.clone();
-            }
+        match self.context.get(referent) {
+            Some(arc) => arc.as_ref().clone(),
+            None => panic!("No referent found: {referent:?}"),
         }
-        panic!("No referent found: {referent:?}")
+    }
+
+    /// Build a new `Context` with `extra` bindings appended.  Bindings in
+    /// `extra` shadow any matching binding already in `self` (matches the
+    /// original `iter().rev()` lookup order).  Used by `eval_match` to add
+    /// arm-bound pattern variables without mutating the parent context.
+    fn extend(&self, extra: Vec<(Referent, Arc<Value>)>) -> Context {
+        let mut context = self.context.clone();
+        for (r, v) in extra {
+            context.insert(r, v);
+        }
+        Context { context }
     }
 }
 
@@ -73,7 +100,7 @@ fn values_equal(a: &Value, b: &Value) -> bool {
 }
 
 impl Expr {
-    pub fn eval(&self, context: Context) -> Value {
+    pub fn eval(&self, context: &Context) -> Value {
         match self.payload() {
             ExprPayload::Reference(reference) => context.get(&reference.referent),
             ExprPayload::Paren(paren) => paren.subject.eval(context),
@@ -110,9 +137,9 @@ impl Expr {
     /// Evaluate an `if`/`else if`/`else` chain.
     /// Matches Verilog ternary semantics: the first truthy branch wins.
     /// X in any condition poisons the whole result.
-    fn eval_if(&self, context: Context, if_: &payload::If) -> Value {
+    fn eval_if(&self, context: &Context, if_: &payload::If) -> Value {
         for (cond, body) in &if_.branches {
-            let cond_val = cond.eval(context.clone());
+            let cond_val = cond.eval(context);
             if cond_val.is_x() {
                 return Value::X(self.typ().clone());
             }
@@ -138,8 +165,8 @@ impl Expr {
     /// Works at the semantic level: `Value::Ctor` (produced by `eval_ctor` /
     /// `eval_enumerant`) is matched by comparing `SymbolId`s rather than
     /// inspecting bit-packed tags.
-    fn eval_match(&self, context: Context, match_: &payload::Match) -> Value {
-        let subject = match_.subject.eval(context.clone());
+    fn eval_match(&self, context: &Context, match_: &payload::Match) -> Value {
+        let subject = match_.subject.eval(context);
         if subject.is_x() {
             return Value::X(self.typ().clone());
         }
@@ -156,13 +183,18 @@ impl Expr {
                         )
                     };
                     if subject_sym == symbol_id {
-                        let mut arm_entries = context.context.clone();
-                        for ((_var_name, var_loc), arg_value) in
-                            bound_vars.iter().zip(subject_args.iter())
-                        {
-                            arm_entries.push((Referent::Location(var_loc.clone()), arg_value.clone()));
-                        }
-                        return body.eval(Context::new(arm_entries));
+                        let extra: Vec<(Referent, Arc<Value>)> = bound_vars
+                            .iter()
+                            .zip(subject_args.iter())
+                            .map(|((_var_name, var_loc), arg_value)| {
+                                (
+                                    Referent::Location(var_loc.clone()),
+                                    Arc::new(arg_value.clone()),
+                                )
+                            })
+                            .collect();
+                        let arm_context = context.extend(extra);
+                        return body.eval(&arm_context);
                     }
                 }
             }
@@ -179,8 +211,8 @@ impl Expr {
     /// - Comparison operators (`Lt`, `Lte`, `Gt`, `Gte`, `Eq`, `Neq`) return `Bit`.
     /// - `Add` / `Sub` wrap modulo 2^width, matching Verilog unsigned arithmetic.
     /// X in either operand poisons the result to `X` of the **result** type.
-    fn eval_binop(&self, context: Context, binop: &payload::BinOp) -> Value {
-        let lhs_val = binop.lhs.eval(context.clone());
+    fn eval_binop(&self, context: &Context, binop: &payload::BinOp) -> Value {
+        let lhs_val = binop.lhs.eval(context);
         let rhs_val = binop.rhs.eval(context);
         // X poisons the result; use the result type (self.typ()), not operand types.
         if lhs_val.is_x() || rhs_val.is_x() {
@@ -258,7 +290,7 @@ impl Expr {
     /// - `Neg` → arithmetic negation (two's complement, wrapping), matches Verilog unary `-`.
     /// - `Inv` → bitwise NOT (`~`), flips all bits within the word width.
     /// - `Not` → logical NOT (`!`), returns `Bit`; zero maps to true, nonzero to false.
-    fn eval_unop(&self, context: Context, un_op: &payload::UnOp) -> Value {
+    fn eval_unop(&self, context: &Context, un_op: &payload::UnOp) -> Value {
         let val = un_op.subject.eval(context);
         if val.is_x() {
             return Value::X(self.typ().clone());
@@ -289,10 +321,10 @@ impl Expr {
     ///
     /// Works at the semantic level — does not bit-pack like the Verilog backend.
     /// X in any argument poisons the whole result.
-    fn eval_ctor(&self, context: Context, ctor: &payload::Ctor) -> Value {
+    fn eval_ctor(&self, context: &Context, ctor: &payload::Ctor) -> Value {
         let mut arg_values = Vec::with_capacity(ctor.args.len());
         for arg in &ctor.args {
-            let v = arg.eval(context.clone());
+            let v = arg.eval(context);
             if v.is_x() {
                 return Value::X(self.typ().clone());
             }
@@ -312,7 +344,7 @@ impl Expr {
 
     /// Evaluate a single-bit index expression: `subject[index]`.
     /// Matches Verilog bit-select semantics.
-    fn eval_index(&self, context: Context, index: &payload::Index) -> Value {
+    fn eval_index(&self, context: &Context, index: &payload::Index) -> Value {
         let val = index.subject.eval(context);
         if val.is_x() {
             return Value::X(Type::Bit);
@@ -332,7 +364,7 @@ impl Expr {
     /// `index_hi` is **exclusive** (one past the MSB), matching the source language
     /// semantics.  This is confirmed by `convert_expr` using `index_hi - 1` as the
     /// inclusive upper bound for the Verilog `[hi:lo]` range.
-    fn eval_index_range(&self, context: Context, index_range: &payload::IndexRange) -> Value {
+    fn eval_index_range(&self, context: &Context, index_range: &payload::IndexRange) -> Value {
         let lo = index_range.index_lo;
         let hi = index_range.index_hi; // exclusive
         let width = hi - lo;
@@ -351,10 +383,10 @@ impl Expr {
     /// First child is the MSB (leftmost in `{}`), last child is the LSB,
     /// matching Verilog `Concat` semantics and `ExprWord` in `convert_expr`.
     /// X in any part poisons the whole result.
-    fn eval_word(&self, context: Context, word: &payload::Word) -> Value {
+    fn eval_word(&self, context: &Context, word: &payload::Word) -> Value {
         let mut values = Vec::with_capacity(word.args.len());
         for arg in &word.args {
-            let v = arg.eval(context.clone());
+            let v = arg.eval(context);
             if v.is_x() {
                 return Value::X(self.typ().clone());
             }
@@ -378,7 +410,7 @@ impl Expr {
     ///
     /// Matches Verilog `{repeat(extend_by, 1'b0), inner}` from `convert_zext`.
     /// Upper bits are filled with zeros; the low bits are taken from the subject value.
-    fn eval_zext(&self, context: Context, zext: &payload::Zext) -> Value {
+    fn eval_zext(&self, context: &Context, zext: &payload::Zext) -> Value {
         let Type::Word(target_width) = self.typ() else {
             unreachable!("eval_zext result must be Word")
         };
@@ -397,7 +429,7 @@ impl Expr {
     ///
     /// Matches Verilog `{repeat(extend_by, inner[msb]), inner}` from `convert_sext`.
     /// The MSB of the subject is replicated into all upper bits.
-    fn eval_sext(&self, context: Context, sext: &payload::Sext) -> Value {
+    fn eval_sext(&self, context: &Context, sext: &payload::Sext) -> Value {
         let Type::Word(target_width) = self.typ() else {
             unreachable!("eval_sext result must be Word")
         };
@@ -428,7 +460,7 @@ impl Expr {
         }
     }
 
-    fn eval_any(&self, context: Context, any: &payload::Any) -> Value {
+    fn eval_any(&self, context: &Context, any: &payload::Any) -> Value {
         let subject_value = any.subject.eval(context);
         match subject_value {
             Value::Word(_, val) => Value::Bit(val != 0),
@@ -438,7 +470,7 @@ impl Expr {
         }
     }
 
-    fn eval_all(&self, context: Context, all: &payload::All) -> Value {
+    fn eval_all(&self, context: &Context, all: &payload::All) -> Value {
         let subject_value = all.subject.eval(context);
         match subject_value {
             Value::Word(width, val) => {
