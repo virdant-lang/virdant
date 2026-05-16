@@ -32,6 +32,12 @@ pub(super) struct Circuit {
     pub(super) clock_sensitivities: IndexMap<SignalId, IndexSet<SignalId>>,
     pub(super) registers: IndexSet<SignalId>,
     pub(super) exprs: IndexMap<SignalId, Arc<Expr>>,
+    /// Pre-resolved referents for every component that has a driver expression.
+    /// Keyed by the owning component; each value is the DFS-ordered list of
+    /// `(referent, target_id)` pairs that `Sim::build_context` zips with live
+    /// values to produce an eval `Context`.  Computed once in `Circuit::new`;
+    /// the runtime never re-walks the `Expr` tree to find referents.
+    pub(super) resolved_referents: IndexMap<SignalId, Vec<(Referent, SignalId)>>,
 }
 
 impl Circuit {
@@ -61,6 +67,13 @@ impl Circuit {
             }
         }
 
+        let mut resolved_referents: IndexMap<SignalId, Vec<(Referent, SignalId)>> =
+            IndexMap::new();
+        for (signal_id, expr) in &exprs {
+            let entries = compute_resolved_referents(&db, &elaboration, *signal_id, expr);
+            resolved_referents.insert(*signal_id, entries);
+        }
+
         Circuit {
             db,
             elaboration,
@@ -70,41 +83,74 @@ impl Circuit {
             clock_sensitivities,
             registers,
             exprs,
+            resolved_referents,
         }
     }
 
-    /// Resolve every `Referent::Component` inside `expr` to the
-    /// `ElaboratedComponentId` it points at, given that `expr` lives on
-    /// `owner_id` (so references are evaluated in `owner_id`'s scope).
-    ///
-    /// Returns the resolved entries in expression-DFS order, preserving any
-    /// duplicate referents \u2014 the eval `Context` walks them in reverse
-    /// insertion order, so order matters.  `Referent::Location` entries
-    /// (pattern-bound variables) carry no `ElaboratedComponentId` and are
-    /// dropped here; callers wanting the live `Value` for them must look
-    /// them up by `Location` separately.
-    pub(super) fn resolve_expr_referents(
-        &self,
-        owner_id: SignalId,
-        expr: &Expr,
-    ) -> Vec<(Referent, SignalId)> {
-        let ec = self.elaboration.component(owner_id);
-        let prefix = scope_prefix(ec);
+    /// Pre-resolved referents for `owner_id`'s driver expression, in
+    /// expression-DFS order.  Returns an empty slice for components without
+    /// a driver expression.  See `Circuit::resolved_referents`.
+    pub(super) fn referents(&self, owner_id: SignalId) -> &[(Referent, SignalId)] {
+        self.resolved_referents
+            .get(&owner_id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+    }
 
-        let mut out = Vec::new();
-        for referent in collect_referents(expr) {
-            if let Referent::Component(comp_id) = &referent {
-                let comp_analysis = self.db.get_component_analysis(comp_id.item_id());
-                if let Some(comp) = comp_analysis.component(*comp_id) {
-                    let full_path: BString = format!("{prefix}.{}", comp.path()).into();
-                    if let Some(elab_comp) = self.elaboration.resolve(&full_path) {
-                        out.push((referent, elab_comp.id()));
-                    }
+    /// Number of components whose driver reads `signal`.
+    pub(super) fn sensitivity_count(&self, signal: SignalId) -> usize {
+        self.sensitivities.get(&signal).map(|s| s.len()).unwrap_or(0)
+    }
+
+    /// The `i`-th component (in insertion order) whose driver reads `signal`.
+    /// Caller must ensure `i < sensitivity_count(signal)`.
+    pub(super) fn sensitivity_at(&self, signal: SignalId, i: usize) -> SignalId {
+        *self.sensitivities[&signal].get_index(i).unwrap()
+    }
+
+    /// Number of registers clocked by `clock`.
+    pub(super) fn clock_sensitivity_count(&self, clock: SignalId) -> usize {
+        self.clock_sensitivities.get(&clock).map(|s| s.len()).unwrap_or(0)
+    }
+
+    /// The `i`-th register (in insertion order) clocked by `clock`.
+    /// Caller must ensure `i < clock_sensitivity_count(clock)`.
+    pub(super) fn clock_sensitivity_at(&self, clock: SignalId, i: usize) -> SignalId {
+        *self.clock_sensitivities[&clock].get_index(i).unwrap()
+    }
+}
+
+/// Resolve every `Referent::Component` inside `expr` to the
+/// `ElaboratedComponentId` it names, given that `expr` lives on `owner_id`
+/// (so references are evaluated in `owner_id`'s scope).
+///
+/// Returns entries in expression-DFS order, preserving duplicates — the eval
+/// `Context` walks them in reverse insertion order, so order matters.
+/// `Referent::Location` entries (pattern-bound variables) carry no
+/// `ElaboratedComponentId` and are dropped here; they are bound at runtime
+/// inside `eval_match` instead.
+fn compute_resolved_referents(
+    db: &Db,
+    elaboration: &Elaboration,
+    owner_id: SignalId,
+    expr: &Expr,
+) -> Vec<(Referent, SignalId)> {
+    let ec = elaboration.component(owner_id);
+    let prefix = scope_prefix(ec);
+
+    let mut out = Vec::new();
+    for referent in collect_referents(expr) {
+        if let Referent::Component(comp_id) = &referent {
+            let comp_analysis = db.get_component_analysis(comp_id.item_id());
+            if let Some(comp) = comp_analysis.component(*comp_id) {
+                let full_path: BString = format!("{prefix}.{}", comp.path()).into();
+                if let Some(elab_comp) = elaboration.resolve(&full_path) {
+                    out.push((referent, elab_comp.id()));
                 }
             }
         }
-        out
     }
+    out
 }
 
 /// Build the data-flow dependency map for all elaborated components.

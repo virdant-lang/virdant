@@ -201,46 +201,48 @@ impl Sim {
     }
 
     fn tick_prop(&mut self, component_id: SignalId) {
-        if let Some(sensitivities) = self.circuit.sensitivities.get(&component_id) {
-            for component_id in sensitivities.clone() {
-                self.tick(component_id);
-            }
+        // Iterate by index against the immutable Circuit so we can recurse
+        // mutably into `self.tick` / `self.transfer` without cloning the
+        // sensitivity IndexSet on every step.
+        let n = self.circuit.sensitivity_count(component_id);
+        for i in 0..n {
+            let inner = self.circuit.sensitivity_at(component_id, i);
+            self.tick(inner);
         }
 
-        if let Some(clock_sensitivities) = self.circuit.clock_sensitivities.get(&component_id) {
-            let clock_sensitivities = clock_sensitivities.clone();
-            for reg_component_id in clock_sensitivities {
-                self.transfer(reg_component_id);
-            }
+        let m = self.circuit.clock_sensitivity_count(component_id);
+        for i in 0..m {
+            let reg_component_id = self.circuit.clock_sensitivity_at(component_id, i);
+            self.transfer(reg_component_id);
         }
     }
 
     pub fn flow(&mut self) {
         while let Some(component_id) = self.state.dirty.pop() {
-            if let Some(sensitivities) = self.circuit.sensitivities.get(&component_id) {
-                for update_component_id in sensitivities.clone() {
-                    let expr = self.circuit.exprs.get(&update_component_id).unwrap().clone();
-                    let context = self.build_context(update_component_id, &expr);
-                    let new_value = expr.eval(context);
-                    if self.circuit.registers.contains(&update_component_id) {
-                        self.set_reg(update_component_id, new_value);
-                    } else {
-                        // Use write_value, not set: `set` is the user-facing
-                        // orchestrator (flow + edge transfers + watchers) and
-                        // would recurse re-entrantly into the loop we're in.
-                        let old = self.get(update_component_id);
-                        let rising = is_rising(&old, &new_value);
-                        self.write_value(update_component_id, new_value);
-                        // If this component is a clock wire that just had a
-                        // rising edge (e.g. a submodule port driven by `clk`),
-                        // transfer the registers it clocks — the same thing
-                        // `set()` does for the top-level clock.
-                        if rising {
-                            if let Some(regs) = self.circuit.clock_sensitivities.get(&update_component_id).cloned() {
-                                for reg_id in regs {
-                                    self.transfer(reg_id);
-                                }
-                            }
+            let n = self.circuit.sensitivity_count(component_id);
+            for i in 0..n {
+                let update_component_id = self.circuit.sensitivity_at(component_id, i);
+                let expr = self.circuit.exprs.get(&update_component_id).unwrap().clone();
+                let context = self.build_context(update_component_id, &expr);
+                let new_value = expr.eval(context);
+                if self.circuit.registers.contains(&update_component_id) {
+                    self.set_reg(update_component_id, new_value);
+                } else {
+                    // Use write_value, not set: `set` is the user-facing
+                    // orchestrator (flow + edge transfers + watchers) and
+                    // would recurse re-entrantly into the loop we're in.
+                    let old = self.get(update_component_id);
+                    let rising = is_rising(&old, &new_value);
+                    self.write_value(update_component_id, new_value);
+                    // If this component is a clock wire that just had a
+                    // rising edge (e.g. a submodule port driven by `clk`),
+                    // transfer the registers it clocks — the same thing
+                    // `set()` does for the top-level clock.
+                    if rising {
+                        let m = self.circuit.clock_sensitivity_count(update_component_id);
+                        for j in 0..m {
+                            let reg_id = self.circuit.clock_sensitivity_at(update_component_id, j);
+                            self.transfer(reg_id);
                         }
                     }
                 }
@@ -304,15 +306,17 @@ impl Sim {
 
     /// Build an eval `Context` for `component_id`'s driver expression.
     ///
-    /// `Circuit::resolve_expr_referents` does the static work \u2014 mapping
-    /// each `Referent::Component` in `expr` to the `ElaboratedComponentId`
-    /// it names from `component_id`'s scope.  This method zips each
-    /// resolved id with the live `Value` from `self.state.values`.
-    fn build_context(&self, component_id: SignalId, expr: &Expr) -> Context {
+    /// `Circuit::resolved_referents` holds the precomputed `(Referent,
+    /// SignalId)` list for every component with a driver — built once in
+    /// `Circuit::new` instead of re-walking `expr` on every propagation.
+    /// This method zips each resolved id with the live `Value` from
+    /// `self.state.values`.  The `_expr` parameter is kept for symmetry
+    /// with the eval call site but is not consulted.
+    fn build_context(&self, component_id: SignalId, _expr: &Expr) -> Context {
         let entries = self.circuit
-            .resolve_expr_referents(component_id, expr)
-            .into_iter()
-            .map(|(r, id)| (r, self.state.values[&Node::val(id)].clone()))
+            .referents(component_id)
+            .iter()
+            .map(|(r, id)| (r.clone(), self.state.values[&Node::val(*id)].clone()))
             .collect();
         Context::new(entries)
     }
@@ -347,10 +351,10 @@ impl Sim {
         let rising = is_rising(&old, &value);
         self.write_value(component_id, value);
         if rising {
-            if let Some(regs) = self.circuit.clock_sensitivities.get(&component_id).cloned() {
-                for reg_id in regs {
-                    self.transfer(reg_id);
-                }
+            let n = self.circuit.clock_sensitivity_count(component_id);
+            for i in 0..n {
+                let reg_id = self.circuit.clock_sensitivity_at(component_id, i);
+                self.transfer(reg_id);
             }
         }
         self.flow();
