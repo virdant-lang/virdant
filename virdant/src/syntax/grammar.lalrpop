@@ -230,7 +230,7 @@ ModDefStmt: AstNodeId = {
     <socket:ModDefStmtSocket> => socket,
     <if_:ModDefStmtIf> => if_,
     <m:ModDefStmtMatch> => m,
-    <drop_:ModDefStmtDrop> => drop_,
+    <unused_:ModDefStmtUnused> => unused_,
     <ll:@L> <error:!> <rr:@R> => {
         let span = parser.span(ll, rr);
         parser.add_error_node(span, error)
@@ -394,9 +394,9 @@ ModDefStmtMatchArm: u16 = {
     "else" "=>" ModDefStmtBlock => 1,
 }
 
-ModDefStmtDrop: AstNodeId = {
-    <ll:@L> "drop" <path:Path> <rr:@R> => {
-        let payload = AstNodePayload::ModDefStmtDrop;
+ModDefStmtUnused: AstNodeId = {
+    <ll:@L> "unused" <path:Path> <rr:@R> => {
+        let payload = AstNodePayload::ModDefStmtUnused;
         let span = parser.span(ll, rr);
         let num_children = 1;
 
@@ -907,7 +907,7 @@ extern {
         "else" => Token::KwElse,
         "match" => Token::KwMatch,
         "case" => Token::KwCase,
-        "drop" => Token::KwDrop,
+        "unused" => Token::KwUnused,
         "true" => Token::KwTrue,
         "false" => Token::KwFalse,
         "Str" => Token::Str,

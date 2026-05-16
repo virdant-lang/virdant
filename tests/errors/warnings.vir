@@ -4,9 +4,9 @@
 
 // An incoming port that is never read in any expression.
 mod HasUnusedPort {
-    incoming unused : Word[8]
+    incoming unused_val : Word[8]
     outgoing out : Bit
-    // CHECK: Unused signal unused
+    // CHECK: Unused signal unused_val
     out := true
 }
 

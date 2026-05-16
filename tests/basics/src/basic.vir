@@ -7,76 +7,76 @@ export mod Top {
 
     wire w : Bit {
         it := true
-        drop it
+        unused it
     }
 
     wire a : Bit {
         it := false
-        drop it
+        unused it
     }
 
     wire o : Word[8] {
         it := 0w8 : Word[8]
-        drop it
+        unused it
     }
 
     wire b : Word[4] {
         it := 1w4 + 2w4
-        drop it
+        unused it
     }
 
     wire x : Word[4] {
         it := 0b1010w4
-        drop it
+        unused it
     }
 
     wire y : Word[4] {
         it := 0b0011w4
-        drop it
+        unused it
     }
 
     wire z : Word[8] {
         it := zext(0x8w4)
-        drop it
+        unused it
     }
 
     wire s : Word[8] {
         it := sext(0x8w4)
-        drop it
+        unused it
     }
 
     wire and : Word[8] {
         it := 3w8 & 1w8
-        drop it
+        unused it
     }
 
     wire or : Word[8] {
         it := 0w8 | 1w8
-        drop it
+        unused it
     }
 
     wire xor : Word[8] {
         it := 0w8 ^ 1w8
-        drop it
+        unused it
     }
 
     wire ascription : Word[4] {
         it := 15 : Word[4]
-        drop it
+        unused it
     }
 
     wire bit_and : Bit {
         it := true && false
-        drop it
+        unused it
     }
 
     wire bit_or : Bit {
         it := true || false
-        drop it
+        unused it
     }
 
     wire bit_xor : Bit {
         it := true ^^ false
-        drop it
+        unused it
     }
 }

@@ -231,7 +231,7 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
     };
     if !node.contains_errors() {
         diagnostics.extend(typecheck_item(builder, item, &exprroots, &mut use_locations));
-        collect_drops(node.clone(), &mut use_locations);
+        collect_unused(node.clone(), &mut use_locations);
         if let Some(component_analysis) = &component_analysis {
             collect_bidirectional_drivers(node.clone(), &mut use_locations, component_analysis);
         }
@@ -287,11 +287,11 @@ fn typecheck_item(
     diagnostics
 }
 
-fn collect_drops(
+fn collect_unused(
     node: AstNode<'_>,
     use_locations: &mut IndexMap<BString, IndexSet<Location>>,
 ) {
-    if let AstNodePayload::ModDefStmtDrop = node.payload() {
+    if let AstNodePayload::ModDefStmtUnused = node.payload() {
         let path_node = node.child(0);
         if let Some(path) = path_node.path() {
             let parsing = node.parsing();
@@ -331,7 +331,7 @@ fn collect_drops(
         }
     }
     for child in node.children() {
-        collect_drops(child, use_locations);
+        collect_unused(child, use_locations);
     }
 }
 

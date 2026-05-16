@@ -20,8 +20,8 @@ export mod Top {
     outgoing fin        : Bit
     fin := cycle == 150000w32
     mod sender of UartSender {
-        drop it.ready
-        drop it.uart_tx
+        unused it.ready
+        unused it.uart_tx
     }
     sender.clock := clock
     sender.reset := reset

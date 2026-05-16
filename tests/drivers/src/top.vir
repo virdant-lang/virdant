@@ -28,7 +28,7 @@ export mod Top {
     }
 
     reg r : Bit on clock
-    drop r
+    unused r
 
     if reset {
         r <= true

@@ -58,7 +58,7 @@ ModDefStmt :=
     | ModDefStmtSocket
     | ModDefStmtIf
     | ModDefStmtMatch
-    | ModDefStmtDrop
+    | ModDefStmtUnused
 
 ModDefStmtComponent :=
       "incoming" Ident ":" Type OnClause? ItBlock?
@@ -95,7 +95,7 @@ ModDefStmtMatchArm :=
       "case" Pat "=>" ModDefStmtBlock
     | "else" "=>" ModDefStmtBlock
 
-ModDefStmtDrop := "drop" Path
+ModDefStmtUnused := "unused" Path
 
 ModDefStmtBlock := "{" ModDefStmt* "}"
 
@@ -269,7 +269,6 @@ Tokens:
   "ciso"
   "client"
   "cosi"
-  "drop"
   "else"
   "enum"
   "export"
@@ -292,6 +291,7 @@ Tokens:
   "true"
   "type"
   "union"
+  "unused"
   "width"
   "wire"
   "{"

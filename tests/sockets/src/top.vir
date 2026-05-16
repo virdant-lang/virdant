@@ -8,7 +8,7 @@ mod Top {
 mod Core {
     client socket mem of Mem {
         it.addr := 8
-        drop it.data
+        unused it.data
     }
 }
 
@@ -16,7 +16,7 @@ mod Memory {
     server socket mem of Mem {
         it.data := 10
     }
-    drop mem.addr
+    unused mem.addr
 }
 
 socket Mem {

@@ -23,7 +23,7 @@ pub enum AstNodePayload {
     ModDefStmtBlock,
     ModDefStmtIf,
     ModDefStmtMatch,
-    ModDefStmtDrop,
+    ModDefStmtUnused,
     Socket(Socket),
 
     Field(Field),
@@ -90,7 +90,7 @@ impl AstNodePayload {
             AstNodePayload::ModDefStmtBlock => "ModDefStmtBlock",
             AstNodePayload::ModDefStmtIf => "ModDefStmtIf",
             AstNodePayload::ModDefStmtMatch => "ModDefStmtMatch",
-            AstNodePayload::ModDefStmtDrop => "ModDefStmtDrop",
+            AstNodePayload::ModDefStmtUnused => "ModDefStmtUnused",
             AstNodePayload::Socket(_socket) => "Socket",
             AstNodePayload::Field(_field) => "Field",
             AstNodePayload::Ctor(_ctor) => "Ctor",
