@@ -4,6 +4,7 @@ pub mod eval;
 
 mod circuit;
 mod sim;
+mod vcd;
 
 #[cfg(test)]
 mod test;

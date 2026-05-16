@@ -9,7 +9,7 @@ use crate::diagnostics;
 use crate::diagnostics::Diagnostic;
 use crate::fqn::PackageFqn;
 use crate::common::source::Region;
-use crate::syntax::ast::{AstNode, AstNodeId};
+use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 
@@ -211,14 +211,14 @@ impl PackageAnalysis {
     }
 
     fn add_moddefstmtmatch_expr_roots(&mut self, match_node: AstNode<'_>) {
-        // Children: [subject, pat_0, block_0, pat_1, block_1, ..., pat_N, block_N]
+        // Children: [subject, arm_0, arm_1, ...] where each `case` arm contributes
+        // (pattern, block) and each `else` arm contributes (block) only.
         let children = match_node.children();
-        let num_arms = (children.len() - 1) / 2;
         // The subject expression is an expr root.
         self.expr_roots.push(children[0].id());
-        // Recurse into each arm's block.
-        for i in 0..num_arms {
-            self.add_moddefstmt_block_expr_roots(&children[2 * i + 2]);
+        // Recurse into each arm's block (case or else).
+        for (_pat_opt, block) in match_arm_children(&children) {
+            self.add_moddefstmt_block_expr_roots(block);
         }
     }
 

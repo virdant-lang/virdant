@@ -12,7 +12,7 @@ use crate::analysis::symbols::SymbolId;
 use crate::common::{DriverType, Flow};
 use crate::db::Builder;
 use crate::diagnostics::Diagnostic;
-use crate::syntax::ast::AstNode;
+use crate::syntax::ast::{AstNode, match_arm_children};
 use crate::syntax::payload::AstNodePayload;
 
 #[derive(Debug)]
@@ -391,46 +391,57 @@ fn collect_block_drivers(
                 }
             }
             AstNodePayload::ModDefStmtMatch => {
-                // Children: [subject, pat_0, block_0, pat_1, block_1, ..., pat_N, block_N]
+                // Children: [subject, arm_0, arm_1, ...] where each `case` arm contributes
+                // (pattern, block) and each `else` arm contributes (block) only.
                 let children = stmt.children();
                 let subject = &children[0];
-                let num_arms = (children.len() - 1) / 2;
 
-                // Recursively collect drivers from each arm's block.
-                let arm_drivers: Vec<(Location, IndexMap<ComponentId, Vec<Driver>>)> =
-                    (0..num_arms)
-                        .map(|i| {
-                            let pat = &children[2 * i + 1];
-                            let block = &children[2 * i + 2];
-                            let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, it_context);
-                            diagnostics.append(&mut block_diags);
-                            (pat.location(), block_drivers)
-                        })
-                        .collect();
+                // Recursively collect drivers from each arm's block.  `case_arm_drivers`
+                // holds the per-case (pat_loc, drivers) pairs; `else_arm_drivers` holds
+                // the drivers from a trailing `else => { ... }` arm, if any.
+                let mut case_arm_drivers: Vec<(Location, IndexMap<ComponentId, Vec<Driver>>)> = vec![];
+                let mut else_arm_drivers: Option<IndexMap<ComponentId, Vec<Driver>>> = None;
+                for (pat_opt, block) in match_arm_children(&children) {
+                    let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, it_context);
+                    diagnostics.append(&mut block_diags);
+                    match pat_opt {
+                        Some(pat) => case_arm_drivers.push((pat.location(), block_drivers)),
+                        None => { else_arm_drivers = Some(block_drivers); }
+                    }
+                }
 
-                // Gather all component IDs driven in any arm.
+                // Gather all component IDs driven in any arm (case or else).
                 let mut all_components: IndexSet<ComponentId> = IndexSet::new();
-                for (_, ad) in &arm_drivers {
+                for (_, ad) in &case_arm_drivers {
                     all_components.extend(ad.keys().copied());
+                }
+                if let Some(else_ad) = &else_arm_drivers {
+                    all_components.extend(else_ad.keys().copied());
                 }
 
                 // Build a Driver::Match for each driven component and merge into the result.
                 for comp_id in all_components {
-                    let arms: Vec<(Location, Box<Driver>)> = arm_drivers.iter()
+                    let arms: Vec<(Location, Box<Driver>)> = case_arm_drivers.iter()
                         .filter_map(|(pat_loc, ad)| {
                             ad.get(&comp_id)?.first().map(|d| (pat_loc.clone(), Box::new(d.clone())))
                         })
                         .collect();
 
+                    let else_clause = else_arm_drivers.as_ref()
+                        .and_then(|ad| ad.get(&comp_id))
+                        .and_then(|ds| ds.first())
+                        .map(|d| Box::new(d.clone()));
+
                     let driver_type = arms.first()
                         .map(|(_, d)| d.driver_type())
+                        .or_else(|| else_clause.as_ref().map(|d| d.driver_type()))
                         .unwrap_or(DriverType::Continuous);
 
                     result.entry(comp_id).or_default().push(Driver::Match(DriverMatch {
                         driver_type,
                         subject: subject.location(),
                         arms,
-                        else_clause: None,
+                        else_clause,
                     }));
                 }
             }

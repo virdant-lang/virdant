@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::io::Write;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -13,7 +14,6 @@ use crate::sim::circuit::Circuit;
 use crate::sim::eval::{Context, Value};
 use crate::sim::expr::Expr;
 use crate::types::Type;
-
 
 #[derive(Eq, Hash, PartialEq, Debug)]
 pub struct Node {
@@ -163,8 +163,21 @@ impl Sim {
         sim
     }
 
-    fn elaboration(&self) -> Arc<Elaboration> {
+    pub(super) fn elaboration(&self) -> Arc<Elaboration> {
         self.circuit.elaboration.clone()
+    }
+
+    pub(super) fn db(&self) -> Arc<Db> {
+        self.circuit.db.clone()
+    }
+
+    /// Stream a VCD trace of every dumpable signal to `writer`.  The header
+    /// and an initial `$dumpvars` snapshot are written synchronously; per-
+    /// signal `on_change` watchers are registered to write subsequent value
+    /// changes.  A final `flush()` is registered to fire from `Sim::run`'s
+    /// end-of-simulation hook.  See `vcd.rs` for the bit-layout seam.
+    pub fn attach_vcd<W: Write + 'static>(&mut self, writer: W) {
+        crate::sim::vcd::attach(self, writer);
     }
 
     pub fn dump(&self) {

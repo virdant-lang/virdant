@@ -7,7 +7,7 @@ use crate::analysis::drivers::{Driver, DriverIf, DriverMatch};
 use crate::common::WordValue;
 use crate::db::Db;
 use crate::sim::payload;
-use crate::syntax::ast::AstNode;
+use crate::syntax::ast::{AstNode, match_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
@@ -194,18 +194,18 @@ fn resolve_pattern_binding(
         let parent = parsing.ast_node(parent_id);
         match parent.payload() {
             AstNodePayload::ModDefStmtMatch | AstNodePayload::ExprMatch => {
-                // Children: [subject, pat_0, body_0, pat_1, body_1, ...]
+                // Children: [subject, arm_0, arm_1, ...] where each `case` arm contributes
+                // (pattern, body) and each `else` arm contributes (body) only.
                 let children = parent.children();
-                let num_arms = (children.len() - 1) / 2;
-                for i in 0..num_arms {
-                    let pat = &children[2 * i + 1];
-                    let body = &children[2 * i + 2];
+                for (pat_opt, body) in match_arm_children(&children) {
                     if body.id() == child_id {
-                        if let AstNodePayload::PatCtor(_) = pat.payload() {
-                            for var in pat.children() {
-                                if let Some(interned) = var.path() {
-                                    if parsing.string(interned) == name {
-                                        return Some(var.location());
+                        if let Some(pat) = pat_opt {
+                            if let AstNodePayload::PatCtor(_) = pat.payload() {
+                                for var in pat.children() {
+                                    if let Some(interned) = var.path() {
+                                        if parsing.string(interned) == name {
+                                            return Some(var.location());
+                                        }
                                     }
                                 }
                             }
@@ -302,13 +302,16 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
             let children = node.children();
             let subject_loc = children[0].location();
             let subject_typ = db.get_typeof(subject_loc.clone()).unwrap_or(Type::Bit);
-            let num_arms = (children.len() - 1) / 2;
-            let arm_data: Vec<(payload::MatchPattern, Location)> = (0..num_arms).map(|i| {
-                let pat = &children[2 * i + 1];
-                let body_loc = children[2 * i + 2].location();
-                let pattern = convert_pattern(db, &parsing, pat, &subject_typ);
-                (pattern, body_loc)
-            }).collect();
+            let arm_data: Vec<(payload::MatchPattern, Location)> = match_arm_children(&children)
+                .into_iter()
+                .map(|(pat_opt, body)| {
+                    let pattern = match pat_opt {
+                        Some(pat) => convert_pattern(db, &parsing, pat, &subject_typ),
+                        None => payload::MatchPattern::Else,
+                    };
+                    (pattern, body.location())
+                })
+                .collect();
             let subject = convert_ast_expr(db, subject_loc);
             let mut arms: Vec<(payload::MatchPattern, Arc<Expr>)> = Vec::new();
             for (pat, body_loc) in arm_data {

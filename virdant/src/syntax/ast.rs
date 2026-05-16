@@ -378,3 +378,34 @@ impl std::fmt::Debug for AstNodeId {
         write!(f, "AstNodeId({})", self.0)
     }
 }
+
+/// Iterate the arms of a `match` node (either `ModDefStmtMatch` or `ExprMatch`).
+///
+/// `children` must be the children slice of a match node: index 0 is the subject,
+/// and the remainder consists of arms.  Each `case Pat => body` arm contributes
+/// two consecutive children (pattern, body); each `else => body` arm contributes
+/// a single child (body) because the grammar omits the pattern node.
+///
+/// Yields `(Some(pat_node), body_node)` for `case` arms and `(None, body_node)` for
+/// `else` arms, in source order.
+pub fn match_arm_children<'a, 'p>(
+    children: &'a [AstNode<'p>],
+) -> Vec<(Option<&'a AstNode<'p>>, &'a AstNode<'p>)> {
+    let arm_children = if children.is_empty() { &[][..] } else { &children[1..] };
+    let mut out = Vec::new();
+    let mut idx = 0;
+    while let Some(first) = arm_children.get(idx) {
+        match first.payload() {
+            AstNodePayload::PatCtor(_) | AstNodePayload::PatEnumerant(_) => {
+                let Some(body) = arm_children.get(idx + 1) else { break };
+                out.push((Some(first), body));
+                idx += 2;
+            }
+            _ => {
+                out.push((None, first));
+                idx += 1;
+            }
+        }
+    }
+    out
+}

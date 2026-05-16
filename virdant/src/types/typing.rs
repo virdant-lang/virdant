@@ -14,7 +14,7 @@ use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticLevel};
 use crate::analysis::location::Location;
 use crate::fqn::PackageFqn;
-use crate::syntax::ast::{AstNode, AstNodeId};
+use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::{self, AstNodePayload};
 use crate::types::context::Referent;
@@ -527,18 +527,16 @@ fn extend_context_for_enclosing_stmt_matches(
 
     // For each enclosing ModDefStmtMatch ancestor, determine which arm contains start_id
     // by checking which arm block is itself an ancestor of start_id.
-    // Collect (subject_location, pat_node_id) pairs; ancestors are innermost-first.
-    let mut arm_pats: Vec<(Location, AstNodeId)> = vec![];
+    // Collect (subject_location, Option<pat_node_id>) pairs; ancestors are innermost-first.
+    // `else` arms contribute no pattern bindings, so the pat id is None.
+    let mut arm_pats: Vec<(Location, Option<AstNodeId>)> = vec![];
     for &ancestor_id in &ancestor_ids {
         let ancestor = parsing.ast_node(ancestor_id);
         if let AstNodePayload::ModDefStmtMatch = ancestor.payload() {
-            // Children: [subject, pat_0, block_0, pat_1, block_1, ...]
             let children = ancestor.children();
-            let num_arms = (children.len() - 1) / 2;
-            for i in 0..num_arms {
-                let block = &children[2 * i + 2];
+            for (pat_opt, block) in match_arm_children(&children) {
                 if ancestor_ids.contains(&block.id()) {
-                    arm_pats.push((children[0].location(), children[2 * i + 1].id()));
+                    arm_pats.push((children[0].location(), pat_opt.map(|p| p.id())));
                     break;
                 }
             }
@@ -548,7 +546,8 @@ fn extend_context_for_enclosing_stmt_matches(
     // ancestor_ids are innermost-first, so arm_pats are innermost-first too.
     // Reverse so outermost bindings are pushed first (innermost can shadow outermost).
     arm_pats.reverse();
-    for (subject_location, pat_id) in arm_pats {
+    for (subject_location, pat_id_opt) in arm_pats {
+        let Some(pat_id) = pat_id_opt else { continue };
         let subject_typ = match builder.get_typeof(subject_location) {
             Ok(t) => t,
             Err(_) => continue,

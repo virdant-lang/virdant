@@ -1,4 +1,6 @@
 use std::cell::RefCell;
+use std::fs::File;
+use std::io::BufWriter;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -47,6 +49,11 @@ fn main() {
 
     sim.add_clock(clock, 10_000);
 
+    let vcd_path = "build/gcd.vcd";
+    std::fs::create_dir_all("build").unwrap();
+    sim.attach_vcd(BufWriter::new(File::create(vcd_path).unwrap()));
+    println!("Dumping VCD to {vcd_path}");
+
     // started becomes true once reset is released so the on_clock
     // callback can ignore the first cycle where state is still unknown.
     let started: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
@@ -64,7 +71,7 @@ fn main() {
         sim.set(fire,  Value::Bit(false));
     }));
 
-    sim.after(10_000, Box::new(move |sim| {
+    sim.after(15_000, Box::new(move |sim| {
         sim.set(reset, Value::Bit(false));
         *started_init.borrow_mut() = true;
     }));

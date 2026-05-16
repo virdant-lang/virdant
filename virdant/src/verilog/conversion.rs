@@ -627,7 +627,7 @@ impl<'d> Converter<'d> {
         let temp_name = scheduler.fresh_temp_name("match");
         let result_width = type_width(typ, db);
         let mut case_items: Vec<verilog::CaseItem> = vec![];
-        let has_else = false;
+        let mut has_else = false;
 
         for (pat_loc, sub_driver) in &driver_match.arms {
             let pat_parsing = db.get_parsing(pat_loc.package());
@@ -643,6 +643,18 @@ impl<'d> Converter<'d> {
                     expr: arm_expr,
                 })],
             });
+        }
+
+        if let Some(else_driver) = &driver_match.else_clause {
+            let else_expr = self.convert_driver_to_expr(package, else_driver, typ, scheduler);
+            case_items.push(verilog::CaseItem {
+                pattern: verilog::CasePattern::Default,
+                stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
+                    name: temp_name.clone(),
+                    expr: else_expr,
+                })],
+            });
+            has_else = true;
         }
 
         if !has_else {
