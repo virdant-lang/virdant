@@ -1,0 +1,111 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::Arc;
+
+use virdant::sim::{Sim, Value};
+use virdant::util::{check_db, db_from_dir_with_lib};
+
+/// (a, b, expected_gcd)
+const CASES: &[(u64, u64, u64)] = &[
+    // Usual cases
+    (75,  145,   5),
+    (12,    8,   4),
+    (100,  75,  25),
+    (48,   18,   6),
+    // Corner cases
+    (1,    1,    1),   // equal, minimum
+    (255,  255, 255),  // equal, maximum
+    (5,    0,    5),   // y = 0: Done after one Running cycle
+    (0,    7,    7),   // x = 0
+    (7,   11,    1),   // coprime primes
+];
+
+fn sim() -> Sim {
+    let db = db_from_dir_with_lib("tests/gcd/src", "lib");
+    if let Err(diagnostics) = check_db(&db) {
+        for diag in diagnostics.iter() {
+            eprintln!("{diag:?}");
+        }
+        std::process::exit(1);
+    }
+
+    let symboltable = db.get_symboltable();
+    let top = symboltable.resolve(b"top::Top".into()).unwrap();
+    Sim::new(Arc::new(db), top.id())
+}
+
+fn main() {
+    let mut sim = sim();
+
+    let clock  = sim.resolve("top.clock");
+    let reset  = sim.resolve("top.reset");
+    let x      = sim.resolve("top.x");
+    let y      = sim.resolve("top.y");
+    let fire   = sim.resolve("top.fire");
+    let result = sim.resolve("top.result");
+    let valid  = sim.resolve("top.valid");
+
+    sim.add_clock(clock, 10_000);
+
+    // started becomes true once reset is released so the on_clock
+    // callback can ignore the first cycle where state is still unknown.
+    let started: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
+    let started_init = started.clone();
+    let started_cb   = started.clone();
+
+    // (test_idx, fired)
+    //   fired=false  next on_clock should assert x/y/fire and move to fired=true
+    //   fired=true   waiting for valid to go high
+    let state: Rc<RefCell<(usize, bool)>> = Rc::new(RefCell::new((0, false)));
+    let state_cb = state.clone();
+
+    sim.at_start(Box::new(move |sim| {
+        sim.set(reset, Value::Bit(true));
+        sim.set(fire,  Value::Bit(false));
+    }));
+
+    sim.after(10_000, Box::new(move |sim| {
+        sim.set(reset, Value::Bit(false));
+        *started_init.borrow_mut() = true;
+    }));
+
+    sim.on_clock(clock, Box::new(move |sim| {
+        if !*started_cb.borrow() {
+            return;
+        }
+
+        let (idx, fired) = *state_cb.borrow();
+
+        if !fired {
+            let (a, b, _) = CASES[idx];
+            sim.set(x,    Value::Word(8, a));
+            sim.set(y,    Value::Word(8, b));
+            sim.set(fire, Value::Bit(true));
+            *state_cb.borrow_mut() = (idx, true);
+        } else {
+            // Deassert fire after the one cycle it was high.
+            sim.set(fire, Value::Bit(false));
+
+            if sim.get(valid) == Value::Bit(true) {
+                let (a, b, expected) = CASES[idx];
+                let actual = match sim.get(result) {
+                    Value::Word(_, v) => v,
+                    other => panic!("unexpected result value: {other:?}"),
+                };
+                assert_eq!(actual, expected,
+                    "gcd({a}, {b}): expected {expected}, got {actual}");
+                println!("gcd({a:3}, {b:3}) = {actual:3}  ✓");
+
+                let next = idx + 1;
+                if next >= CASES.len() {
+                    sim.finish();
+                } else {
+                    *state_cb.borrow_mut() = (next, false);
+                }
+            }
+        }
+    }));
+
+    sim.run().unwrap();
+    println!("All {} GCD assertions passed.", CASES.len());
+}
