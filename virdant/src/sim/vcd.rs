@@ -220,7 +220,7 @@ fn encode_ctor(typ: &Type, ctor_sym: SymbolId, args: &[Value], db: &Db) -> Strin
             let payload_width = payload.len() as Width;
             let padding = max_payload.saturating_sub(payload_width);
             let mut out = String::with_capacity((tag_width + max_payload) as usize);
-            for _ in 0..padding { out.push('x'); }
+            for _ in 0..padding { out.push('0'); }
             out.push_str(&payload);
             out.push_str(&format_word(1u64 << slot_index, tag_width));
             out
