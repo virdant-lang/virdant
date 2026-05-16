@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Instant;
 
 use virdant::sim::{Sim, Value};
 use virdant::util::{check_db, db_from_dir_with_lib};
@@ -101,5 +102,15 @@ fn main() {
         }
     }));
 
+    let wall_start = Instant::now();
     sim.run().unwrap();
+    let wall_elapsed = wall_start.elapsed();
+
+    let sim_elapsed_ps = sim.now();
+    let sim_elapsed_s = sim_elapsed_ps as f64 / 1e12;
+    let wall_elapsed_s = wall_elapsed.as_secs_f64();
+    let ratio = sim_elapsed_s / wall_elapsed_s;
+    eprintln!(
+        "Simulated {sim_elapsed_s:.6}s in {wall_elapsed_s:.6}s wallclock (ratio {ratio:.5})",
+    );
 }

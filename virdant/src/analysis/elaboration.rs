@@ -15,6 +15,7 @@ use crate::types::Type;
 #[derive(Debug)]
 pub struct Elaboration {
     components: Vec<ElaboratedComponent>,
+    path_to_id: IndexMap<BString, SignalId>,
 }
 
 #[derive(Debug)]
@@ -34,13 +35,9 @@ pub struct SignalId(usize);
 
 impl Elaboration {
     pub fn resolve<P: AsRef<BStr>>(&self, path: P) -> Option<&ElaboratedComponent> {
-        let path = path.as_ref();
-        for component in &self.components {
-            if component.path == path {
-                return Some(&component);
-            }
-        }
-        None
+        self.path_to_id
+            .get(path.as_ref())
+            .map(|id| &self.components[id.0])
     }
 
     pub fn components(&self) -> &[ElaboratedComponent] {
@@ -255,7 +252,7 @@ pub(crate) fn build_elaboration(builder: &mut Builder, top: SymbolId) -> Arc<Ela
         component.alias = alias;
     }
 
-    Arc::new(Elaboration { components })
+    Arc::new(Elaboration { components, path_to_id })
 }
 
 /// Returns the `ElaboratedComponentId` that `component`'s driver references, if

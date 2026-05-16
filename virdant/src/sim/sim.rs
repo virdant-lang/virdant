@@ -612,15 +612,17 @@ impl Sim {
     /// callbacks that re-register during dispatch don't fire in the same
     /// pass.  Used for `StartOfSimulation` / `EndOfSimulation`.
     fn fire_lifecycle<F: Fn(&Event) -> bool>(&mut self, pred: F) {
+        let queue = std::mem::take(&mut self.sched.queue);
+        let mut keep: Vec<QueueEntry> = Vec::with_capacity(queue.len());
         let mut to_fire: Vec<QueueEntry> = Vec::new();
-        let mut i = 0;
-        while i < self.sched.queue.len() {
-            if pred(&self.sched.queue[i].cb.event) {
-                to_fire.push(self.sched.queue.remove(i));
+        for entry in queue {
+            if pred(&entry.cb.event) {
+                to_fire.push(entry);
             } else {
-                i += 1;
+                keep.push(entry);
             }
         }
+        self.sched.queue = keep;
         to_fire.sort_by_key(|q| q.seq);
         for mut entry in to_fire {
             if let Some(mut cb) = entry.cb.callback.take() {
@@ -635,19 +637,21 @@ impl Sim {
     /// `ValueChange` after invoking the user closure, doesn't re-fire in
     /// the same pass; the new entry waits for the next change.
     fn fire_value_changes(&mut self, changed: &IndexSet<SignalId>) {
+        let queue = std::mem::take(&mut self.sched.queue);
+        let mut keep: Vec<QueueEntry> = Vec::with_capacity(queue.len());
         let mut to_fire: Vec<QueueEntry> = Vec::new();
-        let mut i = 0;
-        while i < self.sched.queue.len() {
-            let matches = match self.sched.queue[i].cb.event {
+        for entry in queue {
+            let matches = match entry.cb.event {
                 Event::ValueChange { signal } => changed.contains(&signal),
                 _ => false,
             };
             if matches {
-                to_fire.push(self.sched.queue.remove(i));
+                to_fire.push(entry);
             } else {
-                i += 1;
+                keep.push(entry);
             }
         }
+        self.sched.queue = keep;
         to_fire.sort_by_key(|q| q.seq);
         for mut entry in to_fire {
             if let Some(mut cb) = entry.cb.callback.take() {
