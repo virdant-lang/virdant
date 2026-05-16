@@ -2,51 +2,51 @@
 
 /* Keywords: module, always, initial, begin, end, etc. */
 .highlight-verilog .k {
-    color: #6c9bd1;
-    font-weight: 400;
+    color: #556B2F;
+    font-weight: normal;
 }
 
 /* System tasks: $display, $finish, etc. */
 .highlight-verilog .nb {
-    color: #d4914a;
+    color: #B8851A;
     font-weight: 400;
 }
 
 /* Number literals */
 .highlight-verilog .m,
 .highlight-verilog .mh {
-    color: #27ae60;
+    color: #C65D3B;
 }
 
 /* Comments */
 .highlight-verilog .c1,
 .highlight-verilog .cm {
-    color: #52b788;
+    color: #9CA892;
     font-style: italic;
 }
 
 /* Strings */
 .highlight-verilog .s {
-    color: #c7254e;
+    color: #C65D3B;
 }
 
 /* Operators */
 .highlight-verilog .o {
-    color: #2c3e50;
+    color: #8B6E47;
 }
 
 /* Punctuation */
 .highlight-verilog .p {
-    color: #2c3e50;
+    color: #8B6E47;
 }
 
 /* Identifiers and names */
 .highlight-verilog .n {
-    color: #333;
+    color: #AE604F;
 }
 
 /* Compiler directives */
 .highlight-verilog .cp {
-    color: #999;
+    color: #9CA892;
     font-style: italic;
 }

@@ -1,0 +1,39 @@
+/* Console/Shell Syntax Highlighting Colors */
+
+/* Generic Prompt (.gp) - the $ or # prompt indicator */
+.highlight-console .gp {
+    color: #8B6E47;
+    font-weight: bold;
+}
+
+/* Generic Output (.go) - standard output from commands */
+.highlight-console .go {
+    color: #9CA892;
+}
+
+/* Generic Error (.ge) - error output */
+.highlight-console .ge {
+    color: #C65D3B;
+    font-weight: bold;
+}
+
+/* Generic Traceback (.gt) - traceback/stack trace lines */
+.highlight-console .gt {
+    color: #C65D3B;
+}
+
+/* Whitespace (.w) - spaces and tabs */
+.highlight-console .w {
+    color: inherit;
+}
+
+/* Name.Builtin (.nb) - built-in commands like cd, echo */
+.highlight-console .nb {
+    color: #556B2F;
+    font-weight: normal;
+}
+
+/* Error (.err) - syntax errors or invalid input */
+.highlight-console .err {
+    color: #C65D3B;
+}
