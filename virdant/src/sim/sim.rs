@@ -46,6 +46,7 @@ pub struct Sim {
     circuit: Circuit,
     state: State,
     sched: Scheduler,
+    clock_last_values: IndexMap<ElaboratedComponentId, Value>,
 }
 
 /// A user-supplied callback.  Receives `&mut Sim` so it can read signals,
@@ -134,6 +135,7 @@ impl Sim {
                 shutdown_requested: false,
                 queue: Vec::new(),
             },
+            clock_last_values: IndexMap::new(),
         };
 
         // Evaluate all components whose expression has no dependencies (empty deps set).
@@ -213,7 +215,20 @@ impl Sim {
                         // Use write_value, not set: `set` is the user-facing
                         // orchestrator (flow + edge transfers + watchers) and
                         // would recurse re-entrantly into the loop we're in.
+                        let old = self.get(update_component_id);
+                        let rising = is_rising(&old, &new_value);
                         self.write_value(update_component_id, new_value);
+                        // If this component is a clock wire that just had a
+                        // rising edge (e.g. a submodule port driven by `clk`),
+                        // transfer the registers it clocks — the same thing
+                        // `set()` does for the top-level clock.
+                        if rising {
+                            if let Some(regs) = self.circuit.clock_sensitivities.get(&update_component_id).cloned() {
+                                for reg_id in regs {
+                                    self.transfer(reg_id);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -429,6 +444,20 @@ impl Sim {
         Self::arm_value_change(self, signal, cell);
     }
 
+    /// Register `cb` to fire every time `clock`'s value has a rising edge
+    /// (0→1 transition on a `Bit` signal).  Implemented as a one-shot
+    /// `Event::ValueChange` entry whose closure checks for rising edges and
+    /// re-registers itself after invoking `cb`, so from the user's side the
+    /// callback is persistent until they stop re-arming it.
+    ///
+    /// If `cb` calls `sim.finish()`, the re-arm step is skipped: no fresh
+    /// `Event::ValueChange` entry is queued, and the clock watcher does not
+    /// survive into a subsequent `run()`.
+    pub fn on_clock(&mut self, clock: ElaboratedComponentId, cb: Callback) {
+        let cell: Rc<RefCell<Callback>> = Rc::new(RefCell::new(cb));
+        Self::arm_clock(self, clock, cell);
+    }
+
     fn arm_value_change(
         sim: &mut Sim,
         signal: ElaboratedComponentId,
@@ -441,6 +470,43 @@ impl Sim {
                 (cell_for_closure.borrow_mut())(s);
                 if !s.sched.shutdown_requested {
                     Sim::arm_value_change(s, signal, cell_for_closure.clone());
+                }
+            })),
+        });
+    }
+
+    fn arm_clock(
+        sim: &mut Sim,
+        clock: ElaboratedComponentId,
+        cell: Rc<RefCell<Callback>>,
+    ) {
+        let cell_for_closure = cell.clone();
+        // Store the current value as the "last" value for this clock
+        let current = sim.get(clock);
+        sim.clock_last_values.insert(clock, current);
+
+        sim.register(EventCallback {
+            event: Event::ValueChange { signal: clock },
+            callback: Some(Box::new(move |s| {
+                let current = s.get(clock);
+                // Get the last value we saw for this clock
+                let last = s.clock_last_values.get(&clock).cloned();
+
+                // Only fire on rising edges: 0→1 or X→1
+                let is_rising_edge = if let Some(last_val) = last {
+                    is_rising(&last_val, &current)
+                } else {
+                    false
+                };
+
+                // Update the last seen value
+                s.clock_last_values.insert(clock, current);
+
+                if is_rising_edge {
+                    (cell_for_closure.borrow_mut())(s);
+                }
+                if !s.sched.shutdown_requested {
+                    Sim::arm_clock(s, clock, cell_for_closure.clone());
                 }
             })),
         });

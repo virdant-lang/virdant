@@ -1,22 +1,26 @@
 mod Top {
-    incoming clk : Clock
+    incoming clock : Clock
     incoming reset : Bit
     outgoing out : Word[8]
 
-    reg r : Word[8] on clk
-    r <= if reset { 10w8 } else { r + 1 }
+    reg r : Word[8] on clock {
+        it <= if reset { 10w8 } else { it + 1 }
+    }
 
-    mod buffer of Buffer
-    buffer.inp := r
-    out := buffer.out
+    mod buffer of Buffer {
+        it.clock := clock
+        it.inp := r
+        out := it.out
+    }
 }
 
 mod Buffer {
-    incoming clk : Clock
+    incoming clock : Clock
     incoming inp : Word[8]
     outgoing out : Word[8]
 
-    reg r : Word[8] on clk
-    r <= inp
-    out := r
+    reg r : Word[8] on clock {
+        it <= inp
+        out := it
+    }
 }

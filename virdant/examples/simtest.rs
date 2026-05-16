@@ -120,18 +120,50 @@ fn lfsr_check() {
     println!("lfsr_check: {} transitions matched expected sequence", actual.len());
 }
 
+/// Test `on_clock` callback: fires on every rising edge of the clock.
+fn lfsr_on_clock() {
+    let mut sim = lfsr_sim();
+
+    let clock = sim.resolve("top.clock");
+    let reset = sim.resolve("top.reset");
+
+    sim.add_clock(clock, 10_000);
+
+    let clock_edge_count: Rc<RefCell<u64>> = Rc::new(RefCell::new(0));
+    let count_cb = clock_edge_count.clone();
+    sim.on_clock(clock, Box::new(move |sim| {
+        let mut count = count_cb.borrow_mut();
+        *count += 1;
+        println!("[t={}ps] clock rising edge #{}", sim.now(), count);
+    }));
+
+    sim.set(reset, Value::Bit(true));
+    sim.after(10_000, Box::new(move |sim| {
+        sim.set(reset, Value::Bit(false));
+    }));
+    sim.after(100_000, Box::new(|sim| sim.finish()));
+
+    sim.run().unwrap();
+
+    let final_count = *clock_edge_count.borrow();
+    println!("lfsr_on_clock: detected {} clock rising edges", final_count);
+    assert!(final_count > 0, "on_clock should have fired at least once");
+}
+
 fn main() {
     let arg = std::env::args().nth(1).unwrap_or_else(|| "lfsr_check".into());
     match arg.as_str() {
         "lfsr_trace" => lfsr_trace(),
         "lfsr_run"   => lfsr_run(),
         "lfsr_check" => lfsr_check(),
+        "lfsr_on_clock" => lfsr_on_clock(),
         other => {
             eprintln!("unknown testbench: {other}");
             eprintln!("known testbenches:");
             eprintln!("  lfsr_trace");
             eprintln!("  lfsr_run");
             eprintln!("  lfsr_check");
+            eprintln!("  lfsr_on_clock");
             std::process::exit(2);
         }
     }
