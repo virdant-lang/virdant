@@ -164,3 +164,51 @@ div.code-block-caption {
 .rst-content div.highlight span.linenos {
     border-right: 1px solid black;
 }
+
+/* Copy button styles */
+.copy-button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid #aaa;
+    border-radius: 6px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s, background-color 0.2s;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.copy-button:hover {
+    background: rgba(255, 255, 255, 1);
+    border-color: #8FC225;
+}
+
+.copy-button.copied {
+    background: #8FC225;
+    border-color: #8FC225;
+}
+
+.copy-button svg {
+    fill: #333;
+}
+
+.copy-button.copied svg {
+    fill: #fff;
+}
+
+/* Show copy button on hover */
+div.highlight:hover .copy-button {
+    opacity: 1;
+}
+
+/* Always show on mobile/touch devices */
+@media (max-width: 768px) {
+    .copy-button {
+        opacity: 1;
+    }
+}

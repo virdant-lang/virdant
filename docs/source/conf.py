@@ -47,6 +47,10 @@ html_css_files = [
     'verilog-syntax.css',
 ]
 
+html_js_files = [
+    'copy.js',
+]
+
 # Set 'vir' as the default role for inline code with Virdant syntax highlighting
 # You can still use :code:`text` for unstyled inline code
 default_role = 'vir'
