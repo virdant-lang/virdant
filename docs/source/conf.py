@@ -3,6 +3,7 @@ import sys
 sys.path.insert(0, os.path.abspath('.'))
 
 import virdant_ext
+import verilog_ext
 import sphinx_rtd_theme
 from sphinx.highlighting import lexers
 
@@ -47,6 +48,8 @@ default_role = 'code'
 
 # Add your custom lexer to the list of supported lexers
 lexers['virdant'] = virdant_ext.VirdantLexer()
+lexers['verilog'] = verilog_ext.VerilogLexer()
+lexers['v'] = verilog_ext.VerilogLexer()
 
 # Set the default lexer for your language
 primary_domain = 'virdant'
