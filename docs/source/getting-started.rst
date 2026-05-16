@@ -7,6 +7,7 @@ For now, Virdant only works on Linux.
 You can install it by cloning the repository and running `make install`:
 
 .. code-block:: console
+  :caption: console
 
   $ git clone https://github.com/virdant-lang/virdant
   $ cd virdant
@@ -24,6 +25,7 @@ In hardware projects, the equivalent of Hello, World! is to get an LED to blink 
 Create a new Virdant project by running:
 
 .. code-block:: console
+  :caption: console
 
   $ vir new blink
   $ cd blink
@@ -42,6 +44,7 @@ Compiling to Verilog
 We can compile this design to Verilog with the following:
 
 .. code-block:: console
+  :caption: console
 
   $ vir build
 
@@ -60,6 +63,7 @@ If you have `Icarus Verilog`_ installed, you can compile a simulator and run it 
 .. _Icarus Verilog: https://steveicarus.github.io/iverilog/
 
 .. code-block:: console
+  :caption: console
 
   $ iverilog testbench.sv build/top.sv -o build/blink
   $ ./build/blink
