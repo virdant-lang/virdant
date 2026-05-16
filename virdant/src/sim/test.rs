@@ -18,9 +18,9 @@ fn test_sim() {
     let top = symboltable.resolve(b"lfsr::Lfsr".into()).unwrap();
 
     let mut sim = Sim::new(Arc::new(db), top.id());
-    let clock_id = sim.resolve(BStr::new(b"top.clock"));
-    let reset_id = sim.resolve(BStr::new(b"top.reset"));
-    let out_id = sim.resolve(BStr::new(b"top.out"));
+    let clock_id = sim.signal(BStr::new(b"top.clock"));
+    let reset_id = sim.signal(BStr::new(b"top.reset"));
+    let out_id = sim.signal(BStr::new(b"top.out"));
 
     println!("--------------------------------------------------------------------------------");
     println!("Set reset = true and flow");

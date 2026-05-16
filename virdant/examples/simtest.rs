@@ -49,9 +49,9 @@ fn lfsr_trace() {
 fn lfsr_run() {
     let mut sim = lfsr_sim();
 
-    let clock = sim.resolve("top.clock");
-    let reset = sim.resolve("top.reset");
-    let out   = sim.resolve("top.out");
+    let clock = sim.signal("top.clock");
+    let reset = sim.signal("top.reset");
+    let out   = sim.signal("top.out");
 
     sim.add_clock(clock, 10_000);
 
@@ -90,9 +90,9 @@ fn lfsr_check() {
     ].into_iter().map(|(t, v)| (t, Value::Word(8, v))).collect();
     let expected_len = expected.len();
 
-    let clock = sim.resolve("top.clock");
-    let reset = sim.resolve("top.reset");
-    let out   = sim.resolve("top.out");
+    let clock = sim.signal("top.clock");
+    let reset = sim.signal("top.reset");
+    let out   = sim.signal("top.out");
 
     sim.add_clock(clock, 10_000);
 
@@ -124,8 +124,8 @@ fn lfsr_check() {
 fn lfsr_on_clock() {
     let mut sim = lfsr_sim();
 
-    let clock = sim.resolve("top.clock");
-    let reset = sim.resolve("top.reset");
+    let clock = sim.signal("top.clock");
+    let reset = sim.signal("top.reset");
 
     sim.add_clock(clock, 10_000);
 

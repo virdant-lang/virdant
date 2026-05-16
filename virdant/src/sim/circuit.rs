@@ -15,7 +15,7 @@ use indexmap::{IndexMap, IndexSet};
 use crate::analysis::symbols::SymbolId;
 use crate::analysis::Location;
 use crate::analysis::drivers::Driver;
-use crate::analysis::elaboration::{ElaboratedComponent, ElaboratedComponentId, Elaboration};
+use crate::analysis::elaboration::{ElaboratedComponent, SignalId, Elaboration};
 use crate::common::ComponentKind;
 use crate::db::Db;
 use crate::sim::expr::{Expr, ExprPayload, Referent, driver_to_expr};
@@ -26,12 +26,12 @@ use crate::syntax::payload::AstNodePayload;
 pub(super) struct Circuit {
     pub(super) db: Arc<Db>,
     pub(super) elaboration: Arc<Elaboration>,
-    pub(super) component_paths: IndexMap<ElaboratedComponentId, BString>,
-    pub(super) deps: IndexMap<ElaboratedComponentId, IndexSet<ElaboratedComponentId>>,
-    pub(super) sensitivities: IndexMap<ElaboratedComponentId, IndexSet<ElaboratedComponentId>>,
-    pub(super) clock_sensitivities: IndexMap<ElaboratedComponentId, IndexSet<ElaboratedComponentId>>,
-    pub(super) registers: IndexSet<ElaboratedComponentId>,
-    pub(super) exprs: IndexMap<ElaboratedComponentId, Arc<Expr>>,
+    pub(super) component_paths: IndexMap<SignalId, BString>,
+    pub(super) deps: IndexMap<SignalId, IndexSet<SignalId>>,
+    pub(super) sensitivities: IndexMap<SignalId, IndexSet<SignalId>>,
+    pub(super) clock_sensitivities: IndexMap<SignalId, IndexSet<SignalId>>,
+    pub(super) registers: IndexSet<SignalId>,
+    pub(super) exprs: IndexMap<SignalId, Arc<Expr>>,
 }
 
 impl Circuit {
@@ -47,9 +47,9 @@ impl Circuit {
         let sensitivities = build_sensitivities(&deps);
         let clock_sensitivities = build_clock_sensitivities(&elaboration);
 
-        let mut exprs: IndexMap<ElaboratedComponentId, Arc<Expr>> = IndexMap::new();
-        let mut component_paths: IndexMap<ElaboratedComponentId, BString> = IndexMap::new();
-        let mut registers: IndexSet<ElaboratedComponentId> = IndexSet::new();
+        let mut exprs: IndexMap<SignalId, Arc<Expr>> = IndexMap::new();
+        let mut component_paths: IndexMap<SignalId, BString> = IndexMap::new();
+        let mut registers: IndexSet<SignalId> = IndexSet::new();
         for elab_component in elaboration.components() {
             let elab_id = elab_component.id();
             component_paths.insert(elab_id, elab_component.path().clone());
@@ -85,9 +85,9 @@ impl Circuit {
     /// them up by `Location` separately.
     pub(super) fn resolve_expr_referents(
         &self,
-        owner_id: ElaboratedComponentId,
+        owner_id: SignalId,
         expr: &Expr,
-    ) -> Vec<(Referent, ElaboratedComponentId)> {
+    ) -> Vec<(Referent, SignalId)> {
         let ec = self.elaboration.component(owner_id);
         let prefix = scope_prefix(ec);
 
@@ -116,12 +116,12 @@ impl Circuit {
 fn build_dependencies(
     db: &Db,
     elaboration: &Elaboration,
-) -> IndexMap<ElaboratedComponentId, IndexSet<ElaboratedComponentId>> {
-    let mut dep_map: IndexMap<ElaboratedComponentId, IndexSet<ElaboratedComponentId>> =
+) -> IndexMap<SignalId, IndexSet<SignalId>> {
+    let mut dep_map: IndexMap<SignalId, IndexSet<SignalId>> =
         IndexMap::new();
 
     for component in elaboration.components() {
-        let mut deps: IndexSet<ElaboratedComponentId> = IndexSet::new();
+        let mut deps: IndexSet<SignalId> = IndexSet::new();
 
         if let Some(driver) = component.driver() {
             let prefix = scope_prefix(component);
@@ -152,9 +152,9 @@ fn build_dependencies(
 ///
 /// Formally: `p ∈ sensitivities[a]  ⟺  a ∈ deps[p]`.
 fn build_sensitivities(
-    deps: &IndexMap<ElaboratedComponentId, IndexSet<ElaboratedComponentId>>,
-) -> IndexMap<ElaboratedComponentId, IndexSet<ElaboratedComponentId>> {
-    let mut sens: IndexMap<ElaboratedComponentId, IndexSet<ElaboratedComponentId>> =
+    deps: &IndexMap<SignalId, IndexSet<SignalId>>,
+) -> IndexMap<SignalId, IndexSet<SignalId>> {
+    let mut sens: IndexMap<SignalId, IndexSet<SignalId>> =
         IndexMap::new();
     for (&dependent, dep_set) in deps {
         for &dependency in dep_set {
@@ -170,8 +170,8 @@ fn build_sensitivities(
 /// resolved to an `ElaboratedComponentId` during elaboration.
 fn build_clock_sensitivities(
     elaboration: &Elaboration,
-) -> IndexMap<ElaboratedComponentId, IndexSet<ElaboratedComponentId>> {
-    let mut map: IndexMap<ElaboratedComponentId, IndexSet<ElaboratedComponentId>> =
+) -> IndexMap<SignalId, IndexSet<SignalId>> {
+    let mut map: IndexMap<SignalId, IndexSet<SignalId>> =
         IndexMap::new();
     for component in elaboration.components() {
         if let Some(clock_id) = component.clock() {

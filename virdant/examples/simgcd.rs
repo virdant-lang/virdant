@@ -37,13 +37,13 @@ fn sim() -> Sim {
 fn main() {
     let mut sim = sim();
 
-    let clock  = sim.resolve("top.clock");
-    let reset  = sim.resolve("top.reset");
-    let x      = sim.resolve("top.x");
-    let y      = sim.resolve("top.y");
-    let fire   = sim.resolve("top.fire");
-    let result = sim.resolve("top.result");
-    let valid  = sim.resolve("top.valid");
+    let clock  = sim.signal("top.clock");
+    let reset  = sim.signal("top.reset");
+    let x      = sim.signal("top.x");
+    let y      = sim.signal("top.y");
+    let fire   = sim.signal("top.fire");
+    let result = sim.signal("top.result");
+    let valid  = sim.signal("top.valid");
 
     sim.add_clock(clock, 10_000);
 

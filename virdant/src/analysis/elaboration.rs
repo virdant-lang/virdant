@@ -19,18 +19,18 @@ pub struct Elaboration {
 
 #[derive(Debug)]
 pub struct ElaboratedComponent {
-    id: ElaboratedComponentId,
+    id: SignalId,
     path: BString,
     typ: Type,
     component_kind: ComponentKind,
     driver_type: DriverType,
     driver: Option<Driver>,
-    alias: Option<ElaboratedComponentId>,
-    clock: Option<ElaboratedComponentId>,
+    alias: Option<SignalId>,
+    clock: Option<SignalId>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct ElaboratedComponentId(usize);
+pub struct SignalId(usize);
 
 impl Elaboration {
     pub fn resolve<P: AsRef<BStr>>(&self, path: P) -> Option<&ElaboratedComponent> {
@@ -49,7 +49,7 @@ impl Elaboration {
 
     pub fn component(
         &self,
-        elaborated_component_id: ElaboratedComponentId,
+        elaborated_component_id: SignalId,
     ) -> &ElaboratedComponent {
         &self.components[elaborated_component_id.0]
     }
@@ -76,7 +76,7 @@ impl Elaboration {
 }
 
 impl ElaboratedComponent {
-    pub fn id(&self) -> ElaboratedComponentId {
+    pub fn id(&self) -> SignalId {
         self.id
     }
 
@@ -100,7 +100,7 @@ impl ElaboratedComponent {
         self.driver_type == DriverType::Latched
     }
 
-    pub fn clock(&self) -> Option<ElaboratedComponentId> {
+    pub fn clock(&self) -> Option<SignalId> {
         self.clock
     }
 
@@ -169,7 +169,7 @@ fn elaborate_module(
                         .and_then(|c| driver_analysis.drivers().get(&c.id())?.first().cloned())
                 };
 
-                let id = ElaboratedComponentId(components.len());
+                let id = SignalId(components.len());
                 let clock = if let Some(clock_node) = stmt.clock() {
                     // Resolve the clock reference (e.g. `clock` in `reg x : T on clock`)
                     // to the ElaboratedComponentId of the already-accumulated clock component
@@ -181,7 +181,7 @@ fn elaborate_module(
                         components
                             .iter()
                             .position(|c| c.path == full_path)
-                            .map(ElaboratedComponentId)
+                            .map(SignalId)
                     })
                 } else {
                     None
@@ -238,15 +238,15 @@ pub(crate) fn build_elaboration(builder: &mut Builder, top: SymbolId) -> Arc<Ela
     elaborate_module(builder, top, "top", &mut components, None);
 
     // Build a reverse index: fully-elaborated path -> ElaboratedComponentId.
-    let path_to_id: IndexMap<BString, ElaboratedComponentId> = components
+    let path_to_id: IndexMap<BString, SignalId> = components
         .iter()
         .enumerate()
-        .map(|(i, c)| (c.path.clone(), ElaboratedComponentId(i)))
+        .map(|(i, c)| (c.path.clone(), SignalId(i)))
         .collect();
 
     // Resolve aliases: when a component's driver is a bare reference expression,
     // find the ElaboratedComponentId it names.
-    let aliases: Vec<Option<ElaboratedComponentId>> = components
+    let aliases: Vec<Option<SignalId>> = components
         .iter()
         .map(|c| resolve_alias(c, &path_to_id, builder))
         .collect();
@@ -262,9 +262,9 @@ pub(crate) fn build_elaboration(builder: &mut Builder, top: SymbolId) -> Arc<Ela
 /// the driver is a simple `ExprReference` to another elaborated component.
 fn resolve_alias(
     component: &ElaboratedComponent,
-    path_to_id: &IndexMap<BString, ElaboratedComponentId>,
+    path_to_id: &IndexMap<BString, SignalId>,
     builder: &mut Builder,
-) -> Option<ElaboratedComponentId> {
+) -> Option<SignalId> {
     // Only `Driver::Expr` can be a bare reference; `Driver::If` cannot.
     let Driver::Expr(_, loc) = component.driver.as_ref()? else {
         return None;

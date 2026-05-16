@@ -6,7 +6,7 @@ use bstr::{BStr, BString};
 use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::symbols::SymbolId;
-use crate::analysis::elaboration::{ElaboratedComponentId, Elaboration};
+use crate::analysis::elaboration::{SignalId, Elaboration};
 use crate::common::ComponentKind;
 use crate::db::Db;
 use crate::sim::circuit::Circuit;
@@ -17,7 +17,7 @@ use crate::types::Type;
 
 #[derive(Eq, Hash, PartialEq, Debug)]
 pub struct Node {
-    component_id: ElaboratedComponentId,
+    component_id: SignalId,
     is_reg_set: bool,
 }
 
@@ -26,7 +26,7 @@ pub struct Node {
 /// direct `set` writes lives here.
 struct State {
     values: IndexMap<Node, Value>,
-    dirty: IndexSet<ElaboratedComponentId>,
+    dirty: IndexSet<SignalId>,
 }
 
 /// Event scheduler and dispatch state.  Owns simulated time, the
@@ -46,7 +46,7 @@ pub struct Sim {
     circuit: Circuit,
     state: State,
     sched: Scheduler,
-    clock_last_values: IndexMap<ElaboratedComponentId, Value>,
+    clock_last_values: IndexMap<SignalId, Value>,
 }
 
 /// A user-supplied callback.  Receives `&mut Sim` so it can read signals,
@@ -70,7 +70,7 @@ pub enum Event {
     AfterDelay { at_ps: u64 },
     /// Fire when `signal`'s value changes.  Counterpart of VPI
     /// `cbValueChange` (#1).
-    ValueChange { signal: ElaboratedComponentId },
+    ValueChange { signal: SignalId },
 }
 
 /// One queueable (event, callback) pair.  Public so users can build
@@ -142,7 +142,7 @@ impl Sim {
         // These are constant-valued nodes — their driver reads nothing from the simulation
         // state, so their value is fixed and can be determined immediately.  Collect the
         // IDs first to satisfy the borrow checker, then evaluate and set each one.
-        let constant_ids: Vec<ElaboratedComponentId> = sim
+        let constant_ids: Vec<SignalId> = sim
             .circuit
             .deps
             .iter()
@@ -182,12 +182,12 @@ impl Sim {
         }
     }
 
-    pub fn tick(&mut self, component_id: ElaboratedComponentId) {
+    pub fn tick(&mut self, component_id: SignalId) {
         self.tick_prop(component_id);
         self.flow();
     }
 
-    fn tick_prop(&mut self, component_id: ElaboratedComponentId) {
+    fn tick_prop(&mut self, component_id: SignalId) {
         if let Some(sensitivities) = self.circuit.sensitivities.get(&component_id) {
             for component_id in sensitivities.clone() {
                 self.tick(component_id);
@@ -235,24 +235,24 @@ impl Sim {
         }
     }
 
-    pub fn resolve<S: AsRef<BStr>>(&mut self, path: S) -> ElaboratedComponentId {
+    pub fn signal<S: AsRef<BStr>>(&mut self, path: S) -> SignalId {
         let elaboration = self.elaboration();
         elaboration.resolve(path).unwrap().id()
     }
 
-    pub fn try_resolve<S: AsRef<BStr>>(&self, path: S) -> Option<ElaboratedComponentId> {
+    pub fn try_resolve<S: AsRef<BStr>>(&self, path: S) -> Option<SignalId> {
         self.elaboration().resolve(path).map(|c| c.id())
     }
 
-    pub fn component_kind(&self, component_id: ElaboratedComponentId) -> ComponentKind {
+    pub fn component_kind(&self, component_id: SignalId) -> ComponentKind {
         self.elaboration().component(component_id).component_kind()
     }
 
-    pub fn component_type(&self, component_id: ElaboratedComponentId) -> Type {
+    pub fn component_type(&self, component_id: SignalId) -> Type {
         self.elaboration().component(component_id).typ()
     }
 
-    pub fn full_name(&self, component_id: ElaboratedComponentId) -> BString {
+    pub fn full_name(&self, component_id: SignalId) -> BString {
         self.elaboration().component(component_id).path().clone()
     }
 
@@ -264,17 +264,17 @@ impl Sim {
     /// module itself is not a component in the elaboration.
     pub fn children_of(
         &self,
-        parent: ElaboratedComponentId,
-    ) -> Vec<(ElaboratedComponentId, BString)> {
+        parent: SignalId,
+    ) -> Vec<(SignalId, BString)> {
         let parent_path = self.elaboration().component(parent).path().clone();
         self.children_with_prefix(parent_path.as_slice())
     }
 
-    pub fn children_of_root(&self) -> Vec<(ElaboratedComponentId, BString)> {
+    pub fn children_of_root(&self) -> Vec<(SignalId, BString)> {
         self.children_with_prefix(b"top")
     }
 
-    fn children_with_prefix(&self, prefix: &[u8]) -> Vec<(ElaboratedComponentId, BString)> {
+    fn children_with_prefix(&self, prefix: &[u8]) -> Vec<(SignalId, BString)> {
         let elaboration = self.elaboration();
         let mut out = Vec::new();
         for comp in elaboration.components() {
@@ -295,7 +295,7 @@ impl Sim {
     /// each `Referent::Component` in `expr` to the `ElaboratedComponentId`
     /// it names from `component_id`'s scope.  This method zips each
     /// resolved id with the live `Value` from `self.state.values`.
-    fn build_context(&self, component_id: ElaboratedComponentId, expr: &Expr) -> Context {
+    fn build_context(&self, component_id: SignalId, expr: &Expr) -> Context {
         let entries = self.circuit
             .resolve_expr_referents(component_id, expr)
             .into_iter()
@@ -316,16 +316,16 @@ impl Sim {
     /// Cost note: the snapshot pass is `O(|queue|)` — each `set()` scans
     /// the entire event queue for `ValueChange` entries.  See D14 in
     /// `SIM_DESIGN.md` for the deferred watcher-index optimization.
-    pub fn set(&mut self, component_id: ElaboratedComponentId, value: Value) {
+    pub fn set(&mut self, component_id: SignalId, value: Value) {
         // Snapshot every signal that has a pending Event::ValueChange entry
         // so we can detect transitions after the write + flow settles.
-        let watched: Vec<ElaboratedComponentId> = self.sched.queue.iter()
+        let watched: Vec<SignalId> = self.sched.queue.iter()
             .filter_map(|q| match q.cb.event {
                 Event::ValueChange { signal } => Some(signal),
                 _ => None,
             })
             .collect();
-        let snapshots: IndexMap<ElaboratedComponentId, Value> = watched
+        let snapshots: IndexMap<SignalId, Value> = watched
             .into_iter()
             .map(|id| { let v = self.get(id); (id, v) })
             .collect();
@@ -342,7 +342,7 @@ impl Sim {
         }
         self.flow();
 
-        let mut changed: IndexSet<ElaboratedComponentId> = IndexSet::new();
+        let mut changed: IndexSet<SignalId> = IndexSet::new();
         for (id, prev) in snapshots {
             if self.get(id) != prev {
                 changed.insert(id);
@@ -357,27 +357,27 @@ impl Sim {
     /// it dirty.  Does not flow, does not fire watchers, does not handle
     /// clock edges.  Called by `set` (the orchestrator) and by `flow`
     /// (during propagation, to avoid re-entrant orchestration).
-    fn write_value(&mut self, component_id: ElaboratedComponentId, value: Value) {
+    fn write_value(&mut self, component_id: SignalId, value: Value) {
         let node = Node::val(component_id);
         let value_ref = self.state.values.get_mut(&node).unwrap();
         *value_ref = value;
         self.state.dirty.insert(component_id);
     }
 
-    fn set_reg(&mut self, component_id: ElaboratedComponentId, value: Value) {
+    fn set_reg(&mut self, component_id: SignalId, value: Value) {
         let node = Node::set(component_id);
         let value_ref = self.state.values.get_mut(&node).unwrap();
         *value_ref = value;
     }
 
-    fn transfer(&mut self, component_id: ElaboratedComponentId) {
+    fn transfer(&mut self, component_id: SignalId) {
         let new_value = self.state.values.get_mut(&Node::set(component_id)).unwrap().clone();
         let value_ref = self.state.values.get_mut(&Node::val(component_id)).unwrap();
         *value_ref = new_value;
         self.state.dirty.insert(component_id);
     }
 
-    pub fn get(&self, component_id: ElaboratedComponentId) -> Value {
+    pub fn get(&self, component_id: SignalId) -> Value {
         self.state.values.get(&Node::val(component_id)).unwrap().clone()
     }
 
@@ -439,7 +439,7 @@ impl Sim {
     /// If `cb` calls `sim.finish()`, the re-arm step is skipped: no fresh
     /// `Event::ValueChange` entry is queued, and the watcher does not
     /// survive into a subsequent `run()`.
-    pub fn on_change(&mut self, signal: ElaboratedComponentId, cb: Callback) {
+    pub fn on_change(&mut self, signal: SignalId, cb: Callback) {
         let cell: Rc<RefCell<Callback>> = Rc::new(RefCell::new(cb));
         Self::arm_value_change(self, signal, cell);
     }
@@ -453,14 +453,14 @@ impl Sim {
     /// If `cb` calls `sim.finish()`, the re-arm step is skipped: no fresh
     /// `Event::ValueChange` entry is queued, and the clock watcher does not
     /// survive into a subsequent `run()`.
-    pub fn on_clock(&mut self, clock: ElaboratedComponentId, cb: Callback) {
+    pub fn on_clock(&mut self, clock: SignalId, cb: Callback) {
         let cell: Rc<RefCell<Callback>> = Rc::new(RefCell::new(cb));
         Self::arm_clock(self, clock, cell);
     }
 
     fn arm_value_change(
         sim: &mut Sim,
-        signal: ElaboratedComponentId,
+        signal: SignalId,
         cell: Rc<RefCell<Callback>>,
     ) {
         let cell_for_closure = cell.clone();
@@ -477,7 +477,7 @@ impl Sim {
 
     fn arm_clock(
         sim: &mut Sim,
-        clock: ElaboratedComponentId,
+        clock: SignalId,
         cell: Rc<RefCell<Callback>>,
     ) {
         let cell_for_closure = cell.clone();
@@ -525,7 +525,7 @@ impl Sim {
     /// `period_ps`.  The signal is initialised low immediately and the
     /// first toggle is scheduled `period_ps / 2` from now, so the first
     /// rising edge happens at `now + period_ps / 2`.
-    pub fn add_clock(&mut self, clock: ElaboratedComponentId, period_ps: u64) {
+    pub fn add_clock(&mut self, clock: SignalId, period_ps: u64) {
         let half = period_ps / 2;
         self.set(clock, Value::Bit(false));
         self.schedule_clock_toggle(clock, half);
@@ -533,7 +533,7 @@ impl Sim {
 
     /// Internal: schedule one half-period toggle for `clock`.  The callback
     /// toggles the signal and re-arms itself for `half_period_ps` later.
-    fn schedule_clock_toggle(&mut self, clock: ElaboratedComponentId, half_period_ps: u64) {
+    fn schedule_clock_toggle(&mut self, clock: SignalId, half_period_ps: u64) {
         self.after(half_period_ps, Box::new(move |sim| {
             let next = match sim.get(clock) {
                 Value::Bit(b) => Value::Bit(!b),
@@ -612,7 +612,7 @@ impl Sim {
     /// `on_change`'s self-rearming wrapper, which queues a fresh
     /// `ValueChange` after invoking the user closure, doesn't re-fire in
     /// the same pass; the new entry waits for the next change.
-    fn fire_value_changes(&mut self, changed: &IndexSet<ElaboratedComponentId>) {
+    fn fire_value_changes(&mut self, changed: &IndexSet<SignalId>) {
         let mut to_fire: Vec<QueueEntry> = Vec::new();
         let mut i = 0;
         while i < self.sched.queue.len() {
@@ -643,14 +643,14 @@ fn is_rising(old: &Value, new: &Value) -> bool {
 }
 
 impl Node {
-    fn val(elab_component_id: ElaboratedComponentId) -> Node {
+    fn val(elab_component_id: SignalId) -> Node {
         Node {
             component_id: elab_component_id,
             is_reg_set: false,
         }
     }
 
-    fn set(elab_component_id: ElaboratedComponentId) -> Node {
+    fn set(elab_component_id: SignalId) -> Node {
         Node {
             component_id: elab_component_id,
             is_reg_set: true,

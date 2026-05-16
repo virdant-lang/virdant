@@ -20,9 +20,9 @@ fn sim() -> Sim {
 fn main() {
     let mut sim = sim();
 
-    let clock = sim.resolve("top.clock");
-    let reset = sim.resolve("top.reset");
-    let out   = sim.resolve("top.out");
+    let clock = sim.signal("top.clock");
+    let reset = sim.signal("top.reset");
+    let out   = sim.signal("top.out");
 
     sim.add_clock(clock, 10_000);
 
