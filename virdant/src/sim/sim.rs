@@ -544,6 +544,15 @@ impl Sim {
         self.schedule_clock_toggle(clock, half);
     }
 
+    /// Drive `clock` as a free-running square wave at frequency
+    /// `freq_hz`.  Converts to picoseconds via `1e12 / freq_hz` and
+    /// forwards to `add_clock`; the resulting period is therefore
+    /// truncated to the nearest picosecond.
+    pub fn add_clock_hz(&mut self, clock: SignalId, freq_hz: u64) {
+        let period_ps = 1_000_000_000_000u64 / freq_hz;
+        self.add_clock(clock, period_ps);
+    }
+
     /// Internal: schedule one half-period toggle for `clock`.  The callback
     /// toggles the signal and re-arms itself for `half_period_ps` later.
     fn schedule_clock_toggle(&mut self, clock: SignalId, half_period_ps: u64) {
