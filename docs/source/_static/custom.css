@@ -34,6 +34,7 @@ code, pre {
     background: #e9f3d3 !important;
     border: 1px solid #000;
     border-radius: 25px 25px 0 0 !important;
+    margin-top: 24px !important;
     margin-bottom: 24px !important;
 }
 
@@ -45,6 +46,10 @@ code, pre {
 .literal-block-wrapper .highlight-verilog {
     margin-bottom: 0 !important;
     border: 0 solid #000 !important;
+}
+
+.literal-block-wrapper div[class^=highlight] {
+    margin-bottom: 0 !important;
 }
 
 .highlight-virdant {
