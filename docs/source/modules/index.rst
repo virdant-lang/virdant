@@ -13,14 +13,15 @@ Module Definitions
 ------------------
 Here is an example of a module definition in Virdant:
 
-.. literalinclude:: /examples/buffer.vir
+.. literalinclude:: /examples/passthrough.vir
    :caption: buffer.vir
    :language: virdant
    :linenos:
-   :lines: 1-10
 
 
 Modules are declared using the `mod` keyword, followed by the name of the module.
+
+
 The order of module definitions does not matter.
 
 

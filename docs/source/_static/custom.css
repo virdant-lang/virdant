@@ -2,7 +2,7 @@ p {
     font-family: "Nunito", sans-serif !important;
     font-weight: 600;
     font-size: 17px !important;
-    line-height: 1.6 !important;
+    line-height: 1.7 !important;
 }
 
 code, pre {
@@ -22,6 +22,21 @@ code, pre {
     border: 1px solid #aaa !important;
     border-radius: 6px;
     padding: 1px 5px !important;
+}
+
+/* Inline Virdant code with syntax highlighting */
+.vir-inline {
+    background: #edf0f2 !important;
+    border: 1px solid #aaa !important;
+    border-radius: 6px;
+    padding: 1px 5px !important;
+    white-space: nowrap;
+}
+
+/* Ensure inline Virdant tokens inherit monospace font and force font-weight to 400 */
+.vir-inline * {
+    font-family: "Fira Mono", monospace !important;
+    font-weight: 400 !important;
 }
 
 .literal-block-wrapper {

@@ -4,8 +4,8 @@ mod Buffer {
     outgoing out : Word[4]
 
     reg queue : Word[4] on clock {
-        it <= true
-        out := 0w4 + 1
+        it <= inp
+        out := it
     }
 }
 

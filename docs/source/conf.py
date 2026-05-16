@@ -47,7 +47,9 @@ html_css_files = [
     'verilog-syntax.css',
 ]
 
-default_role = 'code'
+# Set 'vir' as the default role for inline code with Virdant syntax highlighting
+# You can still use :code:`text` for unstyled inline code
+default_role = 'vir'
 
 
 # Add your custom lexer to the list of supported lexers

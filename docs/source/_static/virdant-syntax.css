@@ -2,27 +2,28 @@
 
 /* Keywords: mod, ext, if, else, match, etc. .k */
 .highlight-virdant .k {
-    color: #6b9b76;
+    color: #556B2F;
     font-weight: normal;
 }
 
 /* Comments .c1, .cm */
 .highlight-virdant .c1,
 .highlight-virdant .cm {
-    color: #52b788;
+    color: #9CA892;
     font-style: italic;
 }
 
 /* Punctuation/Operators .p */
 .highlight-virdant .p {
-    color: #2c3e50;
+    color: #8B6E47;
 }
 
 /* Special 'it' keyword .kp */
 /* Regular identifiers .nv */
 .highlight-virdant .kp,
 .highlight-virdant .nv {
-    color: #2874a6;
+    color: #AE604F;
+    font-weight: 500;
 }
 
 /* Special 'it' keyword .kp */
@@ -32,18 +33,73 @@
 
 /* Enum variants and constants: #variant .no */
 /* Number literals .mi */
+/* Boolean literals: true, false .kc */
 /* Union constructors: @Constructor .nd */
+.highlight-virdant .kc,
 .highlight-virdant .nd,
 .highlight-virdant .no,
 .highlight-virdant .mi {
-    color: #16a085;
+    color: #C65D3B;
 }
 
 /* Type names: Bit, Word, Vec, etc. .nc */
 /* Built-in types: Nat, Shape, tuple, etc. .nb */
-/* Boolean literals: true, false .kc */
-.highlight-virdant .kc,
 .highlight-virdant .nc,
 .highlight-virdant .nb {
-    color: #c77a3a;
+    color: #B8851A;
+    font-weight: 500;
+}
+
+/* ========================================== */
+/* Inline Virdant Code Syntax Highlighting   */
+/* ========================================== */
+
+/* Keywords: mod, ext, if, else, match, etc. .k */
+.vir-inline .k {
+    color: #556B2F;
+    font-weight: normal;
+}
+
+/* Comments .c1, .cm */
+.vir-inline .c1,
+.vir-inline .cm {
+    color: #9CA892;
+    font-style: italic;
+}
+
+/* Punctuation/Operators .p */
+.vir-inline .p {
+    color: #8B6E47;
+}
+
+/* Special 'it' keyword .kp */
+/* Regular identifiers .nv */
+.vir-inline .kp,
+.vir-inline .nv {
+    color: #AE604F;
+    font-weight: 500;
+}
+
+/* Special 'it' keyword .kp */
+.vir-inline .kp {
+    font-weight: bold;
+}
+
+/* Enum variants and constants: #variant .no */
+/* Number literals .mi */
+/* Boolean literals: true, false .kc */
+/* Union constructors: @Constructor .nd */
+.vir-inline .kc,
+.vir-inline .nd,
+.vir-inline .no,
+.vir-inline .mi {
+    color: #C65D3B;
+}
+
+/* Type names: Bit, Word, Vec, etc. .nc */
+/* Built-in types: Nat, Shape, tuple, etc. .nb */
+.vir-inline .nc,
+.vir-inline .nb {
+    color: #B8851A;
+    font-weight: 500;
 }

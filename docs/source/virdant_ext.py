@@ -3,6 +3,8 @@ from docutils.parsers.rst import roles
 
 from pygments.lexer import RegexLexer, bygroups, words
 from pygments.token import *
+from pygments import highlight
+from pygments.formatters import HtmlFormatter
 from docutils import nodes
 
 
@@ -93,5 +95,25 @@ class VirdantDomain(Domain):
     roles = {}
 
 
+def vir_role(name, rawtext, text, lineno, inliner, options={}, content=[]):
+    """
+    Custom role for inline Virdant code with syntax highlighting.
+    Usage: :vir:`mod` or just `mod` if it's the default role.
+    """
+    lexer = VirdantLexer()
+    # Use nowrap=True to get just the span elements without the surrounding div
+    formatter = HtmlFormatter(nowrap=True, cssclass='vir-inline')
+    highlighted = highlight(text, lexer, formatter)
+    # Strip newlines to prevent awkward line breaks in inline code
+    highlighted = highlighted.replace('\n', '').strip()
+    # Create a raw HTML node
+    node = nodes.raw('', highlighted, format='html')
+    # Add the 'code' class so it gets styled like other inline code
+    node['classes'] = ['code', 'vir-inline']
+    return [node], []
+
+
 def setup(app):
     app.add_domain(VirdantDomain)
+    # Register the vir role for inline Virdant syntax highlighting
+    app.add_role('vir', vir_role)
