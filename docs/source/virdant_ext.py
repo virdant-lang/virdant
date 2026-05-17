@@ -5,6 +5,7 @@ from pygments.lexer import RegexLexer, bygroups, words
 from pygments.token import *
 from pygments import highlight
 from pygments.formatters import HtmlFormatter
+from pygments.lexers import get_lexer_by_name
 from docutils import nodes
 
 
@@ -113,7 +114,27 @@ def vir_role(name, rawtext, text, lineno, inliner, options={}, content=[]):
     return [node], []
 
 
+def verilog_role(name, rawtext, text, lineno, inliner, options={}, content=[]):
+    """
+    Custom role for inline Verilog code with syntax highlighting.
+    Usage: :verilog:`input`
+    """
+    lexer = get_lexer_by_name('verilog')
+    # Use nowrap=True to get just the span elements without the surrounding div
+    formatter = HtmlFormatter(nowrap=True, cssclass='verilog-inline')
+    highlighted = highlight(text, lexer, formatter)
+    # Strip newlines to prevent awkward line breaks in inline code
+    highlighted = highlighted.replace('\n', '').strip()
+    # Create a raw HTML node
+    node = nodes.raw('', highlighted, format='html')
+    # Add the 'code' class so it gets styled like other inline code
+    node['classes'] = ['code', 'verilog-inline']
+    return [node], []
+
+
 def setup(app):
     app.add_domain(VirdantDomain)
     # Register the vir role for inline Virdant syntax highlighting
     app.add_role('vir', vir_role)
+    # Register the verilog role for inline Verilog syntax highlighting
+    app.add_role('verilog', verilog_role)

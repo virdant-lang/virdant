@@ -50,3 +50,58 @@
     color: #9CA892;
     font-style: italic;
 }
+
+/* ========================================== */
+/* Inline Verilog Code Syntax Highlighting   */
+/* ========================================== */
+
+/* Keywords: module, always, initial, begin, end, etc. */
+.verilog-inline .k {
+    color: #556B2F;
+    font-weight: normal;
+}
+
+/* System tasks: $display, $finish, etc. */
+.verilog-inline .nb {
+    color: #B8851A;
+    font-weight: 400;
+}
+
+/* Number literals */
+.verilog-inline .m,
+.verilog-inline .mh {
+    color: #C65D3B;
+}
+
+/* Comments */
+.verilog-inline .c1,
+.verilog-inline .cm {
+    color: #9CA892;
+    font-style: italic;
+}
+
+/* Strings */
+.verilog-inline .s {
+    color: #C65D3B;
+}
+
+/* Operators */
+.verilog-inline .o {
+    color: #8B6E47;
+}
+
+/* Punctuation */
+.verilog-inline .p {
+    color: #8B6E47;
+}
+
+/* Identifiers and names */
+.verilog-inline .n {
+    color: #AE604F;
+}
+
+/* Compiler directives */
+.verilog-inline .cp {
+    color: #9CA892;
+    font-style: italic;
+}

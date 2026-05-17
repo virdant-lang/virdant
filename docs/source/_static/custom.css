@@ -39,6 +39,21 @@ code, pre {
     font-weight: 400 !important;
 }
 
+/* Inline Verilog code with syntax highlighting */
+.verilog-inline {
+    background: #edf0f2 !important;
+    border: 1px solid #aaa !important;
+    border-radius: 6px;
+    padding: 1px 5px !important;
+    white-space: nowrap;
+}
+
+/* Ensure inline Verilog tokens inherit monospace font and force font-weight to 400 */
+.verilog-inline * {
+    font-family: "Fira Mono", monospace !important;
+    font-weight: 400 !important;
+}
+
 .literal-block-wrapper {
     background: #edf0f2 !important;
     border: 1px solid #000;

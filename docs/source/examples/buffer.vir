@@ -1,34 +1,10 @@
 mod Buffer {
     incoming clock : Clock
-    incoming inp : Word[4]
-    outgoing out : Word[4]
+    incoming inp : Word[32]
+    outgoing out : Word[32]
 
-    reg queue : Word[4] on clock {
+    reg buffer : Word[32] on clock {
         it <= inp
         out := it
-    }
-}
-
-mod Top {
-    incoming clock : Clock
-    outgoing out : Word[4] {
-        if counter_is_zero {
-            it := 0
-        } else {
-            it := buffer.out
-        }
-    }
-
-    reg counter : Word[4] on clock {
-        it <= it + 1
-    }
-
-    mod buffer of Buffer {
-        it.clock := clock
-        it.inp := counter
-    }
-
-    wire counter_is_zero : Bit {
-        it := counter == 0
     }
 }

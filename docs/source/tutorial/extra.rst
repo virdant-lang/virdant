@@ -1,5 +1,5 @@
-Modules
-=======
+Extra
+=====
 Modules are the basic building block of Virdant.
 They provide encapsulation, so that the design can be reasoned about locally.
 They provide reusability, allowing a block of hardware to be stamped out multiple times.
@@ -216,7 +216,3 @@ The `eq` method asks if `counter` is equal to the value `0` (and returns `true` 
 And so concludes our example.
 
 
-.. toctree::
-  :maxdepth: 1
-
-  external-modules

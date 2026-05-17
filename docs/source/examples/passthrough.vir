@@ -1,6 +1,6 @@
 mod Passthrough {
-    incoming inp : Word[4]
-    outgoing out : Word[4] {
-        it := inp
-    }
+    incoming inp : Word[8]
+    outgoing out : Word[8]
+
+    out := inp
 }

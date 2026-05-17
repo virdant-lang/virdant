@@ -4,17 +4,14 @@ The Virdant Hardware Language
 =============================
 
 .. toctree::
-  :hidden:
+    :hidden:
 
-  getting-started
-  modules/index
-  types/index
-  expressions/index
-  packages
-  sockets
-  principles
-  coding-conventions
-  Repository <https://github.com/virdant-lang/virdant>
+    getting-started
+    tutorial/index
+    principles
+    coding-conventions
+    reference/index
+    Repository <https://github.com/virdant-lang/virdant>
 
 Virdant is a modern, strongly-typed hardware description language designed for predictability and developer productivity.
 
