@@ -1,0 +1,42 @@
+mod HalfAdder {
+    incoming a : Bit
+    incoming b : Bit
+
+    outgoing sum : Bit
+    outgoing carry_out : Bit
+
+    // sum is true when one of a and b is true (but not both)
+    sum := a ^^ b
+
+    // carry is true when a and b are both true
+    carry_out := a && b
+}
+
+mod FullAdder {
+    incoming a : Bit
+    incoming b : Bit
+    incoming carry_in : Bit
+
+    outgoing sum : Bit {
+        sum := ha1.sum
+    }
+
+    outgoing carry_out : Bit {
+        it := ha0.carry_out || ha1.carry_out
+    }
+
+
+    mod ha0 of HalfAdder {
+        it.a := a
+        it.b := b
+        // CHECK: Unknown component it.carry
+        carry1 := it.carry
+    }
+
+    mod ha1 of HalfAdder {
+        it.a := ha0.sum
+        it.b := carry_in
+        carry2 := it.carry
+    }
+}
+

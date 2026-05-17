@@ -13,6 +13,7 @@ impl Typing {
                 let parsing = node.parsing();
                 let path = parsing.string(node.path().unwrap());
                 let mut path_str = path.to_owned();
+                let original_path = path.to_owned();
 
                 let mut original_was_it = false;
                 if path_str.starts_with(b"it.") || path_str == b"it" {
@@ -72,10 +73,14 @@ impl Typing {
                     } else {
                         Err(())
                     }
-                } else if original_was_it {
-                    Err(())
                 } else {
-                    self.flag_unknown(node, format!("Unknown component {}", path_str));
+                    // Use original path (with 'it') for error message if applicable
+                    let error_path = if original_was_it {
+                        original_path
+                    } else {
+                        path_str
+                    };
+                    self.flag_unknown(node, format!("Unknown component {}", error_path));
                     Err(())
                 }
             }

@@ -473,16 +473,17 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
     if let Some(expected_typ) = expected_typ {
         let _ = typing.check(builder, context, &node, &expected_typ);
     } else {
-        if matches!(node.parent().unwrap().payload(), AstNodePayload::Driver(_)) {
-            return Arc::new(typing);
-        }
-
+        // Still run type inference to catch errors like unknown components,
+        // even if we don't have an expected type
         match typing.infer(builder, context, &node) {
             Ok(None) => {
-                typing.diagnostics.push(diagnostics::Todo {
-                    region: node.region(),
-                    message: format!("Can't typecheck expression because we don't know what type it should have").into(),
-                }.into());
+                // Only report "can't infer" if it's not a driver expression
+                if !matches!(node.parent().unwrap().payload(), AstNodePayload::Driver(_)) {
+                    typing.diagnostics.push(diagnostics::Todo {
+                        region: node.region(),
+                        message: format!("Can't typecheck expression because we don't know what type it should have").into(),
+                    }.into());
+                }
             }
             Ok(Some(typ)) => {
                 typing.typs.insert(node.id(), typ);
