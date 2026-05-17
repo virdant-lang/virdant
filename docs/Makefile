@@ -13,7 +13,10 @@ EXAMPLES      = $(wildcard sources/examples/*.vir)
 auto: Makefile $(EXAMPLES) # rustdocs
 	$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
 
-.PHONY: auto clean push rustdocs
+watch:
+	bash watch.sh
+
+.PHONY: auto clean push rustdocs watch
 
 clean:
 	rm -rf $(BUILDDIR)
