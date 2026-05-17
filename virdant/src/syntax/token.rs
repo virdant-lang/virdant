@@ -9,7 +9,7 @@ pub struct TokenError;
 
 #[rustfmt::skip]
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
-#[logos(skip br"[ \t\n\f]+", skip br"//.*\n?", error = TokenError)]
+#[logos(skip br"[ \n]+", skip br"//.*\n?", error = TokenError)]
 #[repr(u16)]
 pub enum Token {
     // Literals
