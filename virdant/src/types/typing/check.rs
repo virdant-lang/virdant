@@ -418,6 +418,39 @@ impl Typing {
                 };
                 Ok(context)
             }
+            AstNodePayload::PatWordLit(_pat_word_lit) => {
+                let Type::Word(width) = expected_typ else {
+                    self.flag_not_word_type(node, expected_typ);
+                    return Err(());
+                };
+
+                let (value, explicit_width) =
+                    parse_word_literal(node.spelling().to_str_lossy().as_ref());
+                if let Some(explicit_width) = explicit_width {
+                    let actual = Type::Word(explicit_width);
+                    if actual != *expected_typ {
+                        self.flag_wrong_type(node, expected_typ, &actual);
+                        return Err(());
+                    }
+                }
+
+                let minwidth = min_word_width(value);
+                if minwidth > *width {
+                    self.diagnostics.push(
+                        diagnostics::DoesntFit {
+                            region: node.region(),
+                            value,
+                            width: *width,
+                            minwidth,
+                        }
+                        .into(),
+                    );
+                    return Err(());
+                }
+
+                self.annotate(node, expected_typ);
+                Ok(context)
+            }
             _ => unreachable!("Expected a pattern node, found: {}", node.summary()),
         }
     }
@@ -493,7 +526,7 @@ impl Typing {
         let Some(enumerant_symbol) = symboltable.slot(*typedef_id, enumerant_name) else {
             self.flag_unknown(
                 node,
-                "Unknown enumerant name: {enumerant_name} in enum type {expected_typ:?}",
+                format!("Unknown enumerant name: {enumerant_name} in enum type {expected_typ:?}"),
             );
             return Err(());
         };
