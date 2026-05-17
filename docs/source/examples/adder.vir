@@ -1,0 +1,73 @@
+mod HalfAdder {
+    incoming a : Bit
+    incoming b : Bit
+
+    outgoing carry_out : Bit
+    outgoing sum : Bit
+
+    // carry is true when a and b are both true
+    carry_out := a && b
+
+    // sum is true when one of a and b is true (but not both)
+    sum := a ^^ b
+}
+
+mod FullAdder {
+    incoming a : Bit
+    incoming b : Bit
+    incoming carry_in : Bit
+
+    outgoing sum : Bit
+    outgoing carry_out : Bit
+
+    // first, sum a + b
+    mod ha0 of HalfAdder {
+        it.a := a
+        it.b := b
+    }
+
+    // then, sum the result with carry_in
+    mod ha1 of HalfAdder {
+        it.a := ha0.sum
+        it.b := carry_in
+    }
+
+    sum := ha1.sum
+    carry_out := ha0.carry_out || ha1.carry_out
+}
+
+mod Adder4 {
+    incoming a : Word[4]
+    incoming b : Word[4]
+    incoming carry_in : Bit
+
+    outgoing sum : Word[4]
+    outgoing carry_out : Bit
+
+    mod fa0 of FullAdder {
+        it.a := a[0]
+        it.b := b[0]
+        it.carry_in := carry_in
+    }
+
+    mod fa1 of FullAdder {
+        it.a := a[1]
+        it.b := b[1]
+        it.carry_in := fa0.carry_out
+    }
+
+    mod fa2 of FullAdder {
+        it.a := a[2]
+        it.b := b[2]
+        it.carry_in := fa1.carry_out
+    }
+
+    mod fa3 of FullAdder {
+        it.a := a[3]
+        it.b := b[3]
+        it.carry_in := fa2.carry_out
+        carry_out := it.carry_out
+    }
+
+    sum := word(fa3.sum, fa2.sum, fa1.sum, fa0.sum)
+}

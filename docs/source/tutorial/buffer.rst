@@ -7,9 +7,8 @@ In this next example, we will demonstrate how to use registers, the stateful com
 .. literalinclude:: /examples/buffer.vir
     :caption: buffer.vir
     :language: virdant
-    :linenos:
 
-In this example, we declare, four components: `clock` `inp` `out` grouped together, and also `buffer` a bit below.
+In this example, we declare four components: `clock` `inp` `out` grouped together, and also `buffer` a bit below.
 
 
 Types
@@ -52,7 +51,7 @@ This reduces the amount of typing we have to do.
 
 Latched vs Continuous Drivers
 -----------------------------
-We also notice in our driver blocks that there are two different kinds of drivers.
+We also notice in our driver blocks that there are two different kinds of drivers: `<=` and `:=`.
 
 The `<=` driver is called a **latched driver**.
 It is only used when the left hand side is a `reg`.
@@ -73,10 +72,10 @@ Using Driver Blocks
 -------------------
 Driver blocks give you a pleasant ability to express yourself in Virdant code.
 
-The example we gave above emphasizes that `buffer` is the centerpeice of our `Buffer` module.
+The example we gave above emphasizes that `buffer` is the centerpiece of our `Buffer` module.
 However, we could have written it a few different ways.
 
-Here is another way comes to mind:
+Here is another way that comes to mind:
 
 .. code-block:: virdant
     :caption: buffer.vir
@@ -111,8 +110,8 @@ Or you could do it without driver blocks like we saw with the `Passthrough` exam
         out := buffer
     }
 
-This style helps empahsizes the components themselves,
-treating their definitions as details only for thos who are curious.
+This style helps emphasizes the components themselves,
+treating their definitions as details only for those who are curious.
 
 Can you think of any other ways to group the drivers?
 Which do you like best?

@@ -5,9 +5,8 @@ In this next example, we will demonstrate how to use registers, the stateful com
 .. literalinclude:: /examples/counter.vir
     :caption: counter.vir
     :language: virdant
-    :linenos:
 
-In this example, we declare, four components: `clock` `reset` `out` grouped together, and also `counter` a bit below.
+In this example, we declare four components: `clock` `reset` `out` grouped together, and also `counter` a bit below.
 
 
 Types

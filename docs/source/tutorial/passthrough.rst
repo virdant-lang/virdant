@@ -8,7 +8,6 @@ We will start by showing how to define a module in Virdant.
 .. literalinclude:: /examples/passthrough.vir
     :caption: buffer.vir
     :language: virdant
-    :linenos:
 
 
 Modules are declared using the `mod` keyword, followed by the name of the module.
@@ -22,7 +21,6 @@ Ports
 Ports are signals that allow communication between the module and the outside world.
 
 .. literalinclude:: /examples/passthrough.vir
-    :caption: buffer.vir
     :language: virdant
     :dedent:
     :lines: 2-3
@@ -39,7 +37,7 @@ Our example has two ports: `inp` and `out`.
 
 The first port is an incoming port named `inp`.
 It has type `Word[8]`.
-This is how we say "a 8-bit value" in Virdant.
+This is how we say "an 8-bit value" in Virdant.
 The value of `inp` is given to the module from the outside world.
 
 The second port is an outgoing port named `out`.
@@ -52,7 +50,6 @@ Drivers
 The last statement in our module is a driver statement:
 
 .. literalinclude:: /examples/passthrough.vir
-    :caption: buffer.vir
     :language: virdant
     :dedent:
     :lines: 5
