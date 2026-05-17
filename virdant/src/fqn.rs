@@ -1,11 +1,14 @@
 use bstr::{BStr, BString, ByteSlice};
-use internment::ArcIntern;
+
+fn leak(s: BString) -> &'static BStr {
+    BStr::new(Box::leak(Vec::from(s).into_boxed_slice()))
+}
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct PackageFqn(ArcIntern<BString>);
+pub struct PackageFqn(&'static BStr);
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct ItemFqn(PackageFqn, ArcIntern<BString>);
+pub struct ItemFqn(PackageFqn, &'static BStr);
 
 impl From<&str> for PackageFqn {
     fn from(value: &str) -> Self {
@@ -33,7 +36,7 @@ impl std::fmt::Display for ItemFqn {
 
 impl AsRef<BStr> for PackageFqn {
     fn as_ref(&self) -> &BStr {
-        self.0.as_bstr()
+        self.0
     }
 }
 
@@ -45,7 +48,7 @@ impl AsRef<BStr> for ItemFqn {
 
 impl PackageFqn {
     pub fn new(s: BString) -> PackageFqn {
-        PackageFqn(ArcIntern::from(s))
+        PackageFqn(leak(s))
     }
 }
 
@@ -54,7 +57,7 @@ impl ItemFqn {
         let colon_index = s.iter().position(|ch| *ch == b':').unwrap();
         assert_eq!(s[colon_index + 1], b':');
         let package = PackageFqn::new(s[..colon_index].to_owned());
-        let name = ArcIntern::from_ref(BStr::new(&s[colon_index + 2..]));
+        let name = leak(s[colon_index + 2..].to_owned());
         ItemFqn(package, name)
     }
 
@@ -63,13 +66,12 @@ impl ItemFqn {
     }
 
     pub fn name(&self) -> &BStr {
-        self.1.as_bstr()
+        self.1
     }
 }
 
 impl std::fmt::Debug for PackageFqn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use bstr::ByteSlice;
         let s = self.0.to_str_lossy().to_owned();
         write!(f, "{s}")
     }

@@ -1,4 +1,4 @@
-.PHONY: build test clean install grammar docs release
+.PHONY: build build-wasm test clean install grammar docs release
 
 build: virdant/target/lib
 	cargo build --release --all-features
@@ -13,6 +13,9 @@ grammar:
 virdant/target/lib:
 	mkdir -p target/lib
 	cp -r ./lib/* target/lib/
+
+build-wasm:
+	cargo build -p virdant --lib --target wasm32-unknown-unknown --no-default-features --features "wasm,rhai"
 
 test: virdant/target/lib build
 	cargo test

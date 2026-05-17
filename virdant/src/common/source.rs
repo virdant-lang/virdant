@@ -1,5 +1,3 @@
-use std::os::unix::ffi::OsStrExt;
-
 use bstr::{BStr, BString};
 
 use crate::fqn::PackageFqn;
@@ -35,7 +33,7 @@ impl Source {
     }
 
     pub fn load_file<P: AsRef<std::path::Path>>(filepath: P) -> Source {
-        let package_name = BString::from(filepath.as_ref().file_stem().unwrap().as_bytes());
+        let package_name = BString::from(filepath.as_ref().file_stem().unwrap().as_encoded_bytes());
         let package = PackageFqn::new(package_name);
         let filepath: &std::path::Path = filepath.as_ref();
         let text = BString::new(std::fs::read(&filepath).expect(&format!("Could not read file: {filepath:?}")));
