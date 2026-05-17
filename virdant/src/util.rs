@@ -1,14 +1,16 @@
 use std::sync::Arc;
 
-use crate::common::source::Source;
 use crate::db::Db;
 use crate::diagnostics::{Diagnostic, DiagnosticLevel};
-use crate::LIB_DIR;
 
+#[cfg(not(target_arch = "wasm32"))]
+use crate::common::source::Source;
+
+#[cfg(not(target_arch = "wasm32"))]
 pub fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
     let mut db = Db::new();
     db.set_packages(vec![]);
-    let builtin_source = Source::load_file(LIB_DIR.join("builtin.vir"));
+    let builtin_source = Source::load_file(crate::LIB_DIR.join("builtin.vir"));
     let mut sources = vec![builtin_source.clone()];
     db.set_source(builtin_source.package(), builtin_source);
     let source_dir: std::path::PathBuf = source_dir.into();
@@ -29,6 +31,7 @@ pub fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
     db
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn db_from_dir_with_lib<P, Q>(source_dir: P, lib_dir: Q) -> Db
 where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
     let mut db = Db::new();
@@ -57,10 +60,12 @@ where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
     db
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn db_from_file<P: Into<std::path::PathBuf>>(source_file: P) -> Db {
-    db_from_file_with_lib(source_file, LIB_DIR.as_path())
+    db_from_file_with_lib(source_file, crate::LIB_DIR.as_path())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn db_from_file_with_lib<P, Q>(source_file: P, lib_dir: Q) -> Db
 where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
     let mut db = Db::new();

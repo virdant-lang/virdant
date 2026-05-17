@@ -6,9 +6,13 @@ autobins = false
 default-run = "vir"
 rust-version = "1.88"
 
+[lib]
+crate-type = ["rlib", "cdylib"]
+
 [features]
-default = ["vir-bin", "rhai"]
+default = ["vir-bin", "filecheck-bin", "rhai"]
 vir-bin = ["dep:nix"]
+filecheck-bin = []
 vir-lsp-bin = ["dep:serde_json", "dep:tokio", "dep:tower-lsp"]
 lua = ["dep:mlua"]
 rhai = ["dep:rhai"]
@@ -48,3 +52,4 @@ required-features = ["vir-lsp-bin"]
 [[bin]]
 name = "filecheck"
 path = "src/bin/filecheck.rs"
+required-features = ["filecheck-bin"]
