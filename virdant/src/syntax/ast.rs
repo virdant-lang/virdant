@@ -216,6 +216,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Assign(_assign) => format!("Assign"),
             AstNodePayload::PatCtor(_pat_ident) => format!("PatCtor"),
             AstNodePayload::PatEnumerant(_pat_enumerant) => format!("PatEnumerant"),
+            AstNodePayload::PatWordLit(_pat_word_lit) => format!("PatWordLit"),
             AstNodePayload::Ofness(_ofness) => format!("Ofness"),
             AstNodePayload::It => format!("It"),
             AstNodePayload::Path(_path) => format!("Path"),
@@ -337,7 +338,8 @@ impl<'p> AstNode<'p> {
         matches!(
             self.payload(),
             AstNodePayload::PatCtor(_) |
-            AstNodePayload::PatEnumerant(_)
+            AstNodePayload::PatEnumerant(_) |
+            AstNodePayload::PatWordLit(_)
         )
     }
 
@@ -395,16 +397,13 @@ pub fn match_arm_children<'a, 'p>(
     let mut out = Vec::new();
     let mut idx = 0;
     while let Some(first) = arm_children.get(idx) {
-        match first.payload() {
-            AstNodePayload::PatCtor(_) | AstNodePayload::PatEnumerant(_) => {
-                let Some(body) = arm_children.get(idx + 1) else { break };
-                out.push((Some(first), body));
-                idx += 2;
-            }
-            _ => {
-                out.push((None, first));
-                idx += 1;
-            }
+        if first.is_pat() {
+            let Some(body) = arm_children.get(idx + 1) else { break };
+            out.push((Some(first), body));
+            idx += 2;
+        } else {
+            out.push((None, first));
+            idx += 1;
         }
     }
     out

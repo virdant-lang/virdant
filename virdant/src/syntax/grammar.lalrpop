@@ -503,6 +503,13 @@ Pat: () = {
 
         parser.add_node(payload, span, num_children);
     },
+    <ll:@L> <lit:WordLit> <rr:@R> => {
+        let payload = AstNodePayload::PatWordLit(payload::PatWordLit { literal: lit });
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children);
+    },
 }
 
 ExprStruct: AstNodeId = {

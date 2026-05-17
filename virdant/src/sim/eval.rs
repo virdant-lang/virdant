@@ -171,17 +171,16 @@ impl Expr {
             return Value::X(self.typ().clone());
         }
         for (pattern, body) in &match_.arms {
-            match pattern {
-                payload::MatchPattern::Else => {
+            match (pattern, &subject) {
+                // Else arm: always matches
+                (payload::Pat::Else, _) => {
                     return body.eval(context);
                 }
-                payload::MatchPattern::Ctor { symbol_id, bound_vars } => {
-                    let Value::Ctor(_, subject_sym, subject_args) = &subject else {
-                        unreachable!(
-                            "match subject must evaluate to a Ctor value, got {:?}",
-                            subject
-                        )
-                    };
+                // Ctor pattern against Ctor value: compare symbol IDs
+                (
+                    payload::Pat::Ctor { symbol_id, bound_vars },
+                    Value::Ctor(_, subject_sym, subject_args),
+                ) => {
                     if subject_sym == symbol_id {
                         let extra: Vec<(Referent, Arc<Value>)> = bound_vars
                             .iter()
@@ -197,6 +196,21 @@ impl Expr {
                         return body.eval(&arm_context);
                     }
                 }
+                // WordLit pattern against Word value: compare numeric values
+                (
+                    payload::Pat::WordLit { width, value },
+                    Value::Word(subject_width, subject_value),
+                ) => {
+                    let mask = word_mask(*width);
+                    if (subject_value & mask) == (value & mask) && subject_width == width {
+                        return body.eval(context);
+                    }
+                }
+                // Any other combination is a type error that should have been caught
+                _ => unreachable!(
+                    "invalid pattern/subject combination: pattern={:?}, subject={:?}",
+                    pattern, subject
+                ),
             }
         }
         // No arm matched and no else arm — return X (matches Verilog casez default arm).

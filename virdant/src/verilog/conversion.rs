@@ -807,6 +807,14 @@ impl<'d> Converter<'d> {
                         pattern: pattern_str,
                     })
                 }
+                Some(AstNodePayload::PatWordLit(pat_word_lit)) => {
+                    let pat = pat.unwrap();
+                    let literal = pat.parsing.string(pat_word_lit.literal).to_str_lossy().into_owned();
+                    let (value, _lit_width) = parse_word_literal(&literal);
+                    let width = type_width(&subject_typ, db);
+                    let pat_str = format!("{:0>width$b}", value, width = width as usize);
+                    verilog::CasePattern::PatternLit(verilog::PatternLit { width, radix: Radix::Bin, pattern: pat_str })
+                }
                 _ => unreachable!("expected pattern node"),
             };
             let body_expr = self.convert_expr(package, body, typ, db, scheduler);
@@ -899,6 +907,13 @@ impl<'d> Converter<'d> {
                     radix: Radix::Bin,
                     pattern: pattern_str,
                 })
+            }
+            AstNodePayload::PatWordLit(pat_word_lit) => {
+                let literal = pat_node.parsing.string(pat_word_lit.literal).to_str_lossy().into_owned();
+                let (value, _lit_width) = parse_word_literal(&literal);
+                let width = type_width(subject_typ, db);
+                let pat_str = format!("{:0>width$b}", value, width = width as usize);
+                verilog::CasePattern::PatternLit(verilog::PatternLit { width, radix: Radix::Bin, pattern: pat_str })
             }
             _ => unreachable!("expected pattern node"),
         }
@@ -1224,6 +1239,14 @@ impl<'d> Converter<'d> {
                                 radix: Radix::Bin,
                                 pattern: pattern_str,
                             })
+                        }
+                        Some(AstNodePayload::PatWordLit(pat_word_lit)) => {
+                            let pat = pat.unwrap();
+                            let literal = pat.parsing.string(pat_word_lit.literal).to_str_lossy().into_owned();
+                            let (value, _lit_width) = parse_word_literal(&literal);
+                            let width = type_width(&subject_typ, db);
+                            let pat_str = format!("{:0>width$b}", value, width = width as usize);
+                            verilog::CasePattern::PatternLit(verilog::PatternLit { width, radix: Radix::Bin, pattern: pat_str })
                         }
                         _ => unreachable!("expected pattern node"),
                     };

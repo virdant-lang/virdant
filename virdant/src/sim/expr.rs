@@ -82,7 +82,7 @@ fn convert_driver_match(db: &Db, dm: &DriverMatch) -> Arc<Expr> {
     let subject = convert_ast_expr(db, dm.subject.clone());
     let subject_typ = db.get_typeof(dm.subject.clone()).unwrap_or(Type::Bit);
     let parsing = db.get_parsing(dm.subject.package());
-    let mut arms: Vec<(payload::MatchPattern, Arc<Expr>)> = Vec::new();
+    let mut arms: Vec<(payload::Pat, Arc<Expr>)> = Vec::new();
     for (pat_loc, sub_driver) in &dm.arms {
         let pat_node = parsing.ast_node(pat_loc.ast_node_id());
         let pattern = convert_pattern(db, &parsing, &pat_node, &subject_typ);
@@ -91,7 +91,7 @@ fn convert_driver_match(db: &Db, dm: &DriverMatch) -> Arc<Expr> {
     }
     if let Some(else_driver) = &dm.else_clause {
         let body = driver_to_expr(db, else_driver.as_ref());
-        arms.push((payload::MatchPattern::Else, body));
+        arms.push((payload::Pat::Else, body));
     }
     let typ = arms.first().map(|(_, e)| e.typ.clone()).unwrap_or(Type::Bit);
     Arc::new(Expr {
@@ -106,16 +106,16 @@ fn convert_pattern(
     parsing: &Parsing,
     pat_node: &AstNode<'_>,
     subject_typ: &Type,
-) -> payload::MatchPattern {
+) -> payload::Pat {
     match pat_node.payload() {
         AstNodePayload::PatCtor(pat_ident) => {
             let Type::Usual(typedef_id) = subject_typ else {
-                return payload::MatchPattern::Else;
+                return payload::Pat::Else;
             };
             let symboltable = db.get_symboltable();
             let ctor_name = parsing.string(pat_ident.name);
             let Some(ctor_sym) = symboltable.slot(*typedef_id, ctor_name) else {
-                return payload::MatchPattern::Else;
+                return payload::Pat::Else;
             };
             let bound_vars: Vec<(BString, Location)> = pat_node.children().iter()
                 .filter_map(|c| {
@@ -123,20 +123,28 @@ fn convert_pattern(
                     Some((parsing.string(interned).to_owned(), c.location()))
                 })
                 .collect();
-            payload::MatchPattern::Ctor { symbol_id: ctor_sym.id(), bound_vars }
+            payload::Pat::Ctor { symbol_id: ctor_sym.id(), bound_vars }
         }
         AstNodePayload::PatEnumerant(pat_enum) => {
             let Type::Usual(typedef_id) = subject_typ else {
-                return payload::MatchPattern::Else;
+                return payload::Pat::Else;
             };
             let symboltable = db.get_symboltable();
             let enum_name = parsing.string(pat_enum.name);
             let Some(sym) = symboltable.slot(*typedef_id, enum_name) else {
-                return payload::MatchPattern::Else;
+                return payload::Pat::Else;
             };
-            payload::MatchPattern::Ctor { symbol_id: sym.id(), bound_vars: vec![] }
+            payload::Pat::Ctor { symbol_id: sym.id(), bound_vars: vec![] }
         }
-        _ => payload::MatchPattern::Else,
+        AstNodePayload::PatWordLit(pat_word_lit) => {
+            let Type::Word(width) = subject_typ else {
+                return payload::Pat::Else;
+            };
+            let literal = parsing.string(pat_word_lit.literal).to_str_lossy().into_owned();
+            let value = parse_word_value(&literal);
+            payload::Pat::WordLit { width: *width, value }
+        }
+        _ => payload::Pat::Else,
     }
 }
 
@@ -302,18 +310,18 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
             let children = node.children();
             let subject_loc = children[0].location();
             let subject_typ = db.get_typeof(subject_loc.clone()).unwrap_or(Type::Bit);
-            let arm_data: Vec<(payload::MatchPattern, Location)> = match_arm_children(&children)
+            let arm_data: Vec<(payload::Pat, Location)> = match_arm_children(&children)
                 .into_iter()
                 .map(|(pat_opt, body)| {
                     let pattern = match pat_opt {
                         Some(pat) => convert_pattern(db, &parsing, pat, &subject_typ),
-                        None => payload::MatchPattern::Else,
+                        None => payload::Pat::Else,
                     };
                     (pattern, body.location())
                 })
                 .collect();
             let subject = convert_ast_expr(db, subject_loc);
-            let mut arms: Vec<(payload::MatchPattern, Arc<Expr>)> = Vec::new();
+            let mut arms: Vec<(payload::Pat, Arc<Expr>)> = Vec::new();
             for (pat, body_loc) in arm_data {
                 arms.push((pat, convert_ast_expr(db, body_loc)));
             }

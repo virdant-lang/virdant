@@ -127,6 +127,7 @@ Pat :=
       "#" Ident
     | "@" Ident
     | "@" Ident "(" ArgList ")"
+    | WordLit
 
 ExprStruct := "$" "{" AssignList "}"
 

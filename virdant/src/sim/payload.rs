@@ -24,15 +24,16 @@ pub struct If {
 }
 
 #[derive(Debug)]
-pub enum MatchPattern {
+pub enum Pat {
     Ctor { symbol_id: SymbolId, bound_vars: Vec<(BString, Location)> },
+    WordLit { width: Width, value: WordValue },
     Else,
 }
 
 #[derive(Debug)]
 pub struct Match {
     pub subject: Arc<Expr>,
-    pub arms: Vec<(MatchPattern, Arc<Expr>)>,
+    pub arms: Vec<(Pat, Arc<Expr>)>,
 }
 
 #[derive(Debug)]
