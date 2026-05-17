@@ -6,7 +6,7 @@ export mod Top {
     mod foo of Foo
     foo.clock := clock
     foo.inp := inp
-    out <= foo.inp
+    out := foo.inp
 }
 
 mod Foo {

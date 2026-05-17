@@ -63,7 +63,9 @@ enum Command {
     /// Build Virdant package
     Build { },
     /// Run Virdant package
-    Run { path: Option<PathBuf>, #[arg(long)] vcd: Option<String> },
+    Run { path: PathBuf },
+    /// Run Virdant package with Icarus Verilog
+    RunIcarus { path: Option<PathBuf>, #[arg(long)] vcd: Option<String> },
     /// Create a new Virdant project
     New { project: String },
     /// Synthesize, place-and-route, and pack a bitstream
@@ -93,7 +95,8 @@ fn main() {
         Command::Typing { } => dump_typing(&args),
         Command::Compile { path } => compile(path),
         Command::Build { } => build(&args),
-        Command::Run { ref path, ref vcd } => run(&args, path, vcd),
+        Command::Run { ref path } => run(&args, path),
+        Command::RunIcarus { ref path, ref vcd } => run_icarus(&args, path, vcd),
         Command::New { ref project } => new_project(&args, project),
         Command::Bitstream { } => bitstream(&args),
         Command::Upload { } => upload(&args),
@@ -427,7 +430,7 @@ fn compile(path: PathBuf) {
     println!("Wrote Verilog to {}", builddir.to_string_lossy());
 }
 
-fn run(args: &Args, _path: &Option<PathBuf>, vcd: &Option<String>) {
+fn run_icarus(args: &Args, _path: &Option<PathBuf>, vcd: &Option<String>) {
     let cwd = if let Some(cwd) = &args.cwd {
         std::fs::canonicalize(cwd).unwrap()
     } else {
@@ -497,6 +500,13 @@ fn run(args: &Args, _path: &Option<PathBuf>, vcd: &Option<String>) {
     }
 
     let _ = execvp(&program, &args);
+}
+
+fn run(_args: &Args, path: &PathBuf) {
+    if let Err(e) = virdant::script::run_script_file(path) {
+        eprintln!("Script error: {}", e);
+        std::process::exit(1);
+    }
 }
 
 fn new_project(args: &Args, project: &str) {

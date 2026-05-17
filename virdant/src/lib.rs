@@ -9,6 +9,7 @@ pub mod verilog;
 pub mod types;
 pub mod util;
 pub mod sim;
+pub mod script;
 
 use std::sync::LazyLock;
 
