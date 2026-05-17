@@ -31,7 +31,7 @@ sim.add_clock("top.clock", 10000)
 
 print("Running LFSR simulation with Lua coroutines...")
 
-sim.run(function(sim)
+sim.run(function()
     -- Set up initial values - reset high
     sim.set("top.reset", true)
 

@@ -15,7 +15,7 @@
 //! sim.add_clock("top.clock", 1000)  -- 1ns period
 //!
 //! -- Coroutine-based testbench
-//! sim.run(function(sim)
+//! sim.run(function()
 //!     sim.set("top.reset", 1)
 //!     sim.wait("top.clock")  -- Wait for clock edge
 //!     sim.wait("top.clock")
@@ -130,8 +130,20 @@ fn create_sim_table(lua: &Lua, sim: Sim) -> LuaResult<Table> {
         Ok(())
     })?)?;
 
+    // wait(clock) - yield the coroutine until the next rising edge of clock.
+    // Defined in Lua so it can call coroutine.yield directly.
+    let setup_wait = r#"
+        return function(sim_table)
+            sim_table.wait = function(clock)
+                coroutine.yield(clock)
+            end
+        end
+    "#;
+    let setup_wait_fn: Function = lua.load(setup_wait).eval()?;
+    setup_wait_fn.call::<()>(table.clone())?;
+
     // run(coroutine_fn) - run simulation with coroutine support
-    // The coroutine_fn receives the sim table and can call sim.wait(clock) to yield
+    // The coroutine_fn closes over the sim table and can call sim.wait(clock) to yield.
     let sim_clone = sim.clone();
     table.set("run", lua.create_function(move |lua, func: Function| {
         run_with_coroutine(lua, sim_clone.clone(), func)
@@ -148,91 +160,17 @@ struct PendingCoroutine {
 
 /// Run the simulation with a Lua coroutine.
 ///
-/// The coroutine function receives a `sim` table that includes a `wait(clock)` method.
-/// When `sim.wait(clock)` is called, the coroutine yields until the next rising edge
-/// of the specified clock signal.
+/// The coroutine function closes over the `sim` table and can call `sim.wait(clock)`
+/// to yield until the next rising edge of the specified clock signal.
 fn run_with_coroutine(lua: &Lua, sim: Rc<RefCell<Sim>>, func: Function) -> LuaResult<()> {
-    // Create a sim table for use inside the coroutine
-    let coro_sim_table = lua.create_table()?;
-
-    // now()
-    let sim_clone = sim.clone();
-    coro_sim_table.set("now", lua.create_function(move |_, ()| {
-        Ok(sim_clone.borrow().now() as i64)
-    })?)?;
-
-    // get(path)
-    let sim_clone = sim.clone();
-    coro_sim_table.set("get", lua.create_function(move |_, path: String| {
-        let mut sim = sim_clone.borrow_mut();
-        let signal_id = sim.signal(<&BStr>::from(path.as_str()));
-        let value = sim.get(signal_id);
-        Ok(value_to_lua(&value))
-    })?)?;
-
-    // set(path, value)
-    let sim_clone = sim.clone();
-    coro_sim_table.set("set", lua.create_function(move |_, (path, value): (String, LuaValue)| {
-        let mut sim = sim_clone.borrow_mut();
-        let signal_id = sim.signal(<&BStr>::from(path.as_str()));
-        let typ = sim.component_type(signal_id);
-        let val = lua_to_value(value, &typ);
-        sim.set(signal_id, val);
-        Ok(())
-    })?)?;
-
-    // add_clock(path, period_ps)
-    let sim_clone = sim.clone();
-    coro_sim_table.set("add_clock", lua.create_function(move |_, (path, period_ps): (String, i64)| {
-        let mut sim = sim_clone.borrow_mut();
-        let signal_id = sim.signal(<&BStr>::from(path.as_str()));
-        sim.add_clock(signal_id, period_ps as u64);
-        Ok(())
-    })?)?;
-
-    // add_clock_hz(path, freq_hz)
-    let sim_clone = sim.clone();
-    coro_sim_table.set("add_clock_hz", lua.create_function(move |_, (path, freq_hz): (String, i64)| {
-        let mut sim = sim_clone.borrow_mut();
-        let signal_id = sim.signal(<&BStr>::from(path.as_str()));
-        sim.add_clock_hz(signal_id, freq_hz as u64);
-        Ok(())
-    })?)?;
-
-    // finish()
-    let sim_clone = sim.clone();
-    coro_sim_table.set("finish", lua.create_function(move |_, ()| {
-        sim_clone.borrow_mut().finish();
-        Ok(())
-    })?)?;
-
-    // dump()
-    let sim_clone = sim.clone();
-    coro_sim_table.set("dump", lua.create_function(move |_, ()| {
-        sim_clone.borrow().dump();
-        Ok(())
-    })?)?;
-
-    // We need to inject a Lua-native wait function that can properly yield.
-    // The wait function is defined in Lua so it can call coroutine.yield.
-    let setup_wait = r#"
-        return function(sim_table)
-            sim_table.wait = function(clock)
-                coroutine.yield(clock)
-            end
-        end
-    "#;
-    let setup_wait_fn: Function = lua.load(setup_wait).eval()?;
-    setup_wait_fn.call::<()>(coro_sim_table.clone())?;
-
     // Create the coroutine from the user function
     let thread = lua.create_thread(func)?;
 
     // Pending coroutines list
     let pending: Rc<RefCell<Vec<PendingCoroutine>>> = Rc::new(RefCell::new(Vec::new()));
 
-    // Start the coroutine with the sim table
-    match thread.resume::<LuaValue>(coro_sim_table.clone()) {
+    // Start the coroutine; the closure closes over sim, so no argument is needed.
+    match thread.resume::<LuaValue>(()) {
         Ok(LuaValue::Nil) => {
             // Coroutine finished immediately
             return Ok(());
