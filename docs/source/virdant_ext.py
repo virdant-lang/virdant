@@ -50,10 +50,13 @@ class VirdantLexer(RegexLexer):
             (r'[-+()<>{}\[\],;]', Punctuation),
             (r'[&|^~]', Punctuation),
             (r'[@#\$\?]', Punctuation),
-            # Number literals (Word literals with width)
-            (r'[0-9][0-9_]*w[0-9][0-9]*', Number.Integer),
-            (r'[0-9]b[0-1_]*w[0-9][0-9]*', Number.Integer),
-            (r'[0-9]x[0-9a-fA-F_]*w[0-9][0-9]*', Number.Integer),
+            # Number literals with width suffix (must come before plain versions)
+            (r'0b[0-1]+w[0-9]+', Number.Integer),
+            (r'0x[0-9a-fA-F]+w[0-9]+', Number.Integer),
+            (r'[0-9]+w[0-9]+', Number.Integer),
+            # Plain binary and hex literals (must come before plain decimal)
+            (r'0b[0-1]+', Number.Integer),
+            (r'0x[0-9a-fA-F]+', Number.Integer),
             # Regular numbers
             (r'[0-9]+', Number.Integer),
             # Special 'it' keyword (context reference)

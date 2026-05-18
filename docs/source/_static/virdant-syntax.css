@@ -40,6 +40,7 @@
 .highlight-virdant .no,
 .highlight-virdant .mi {
     color: #C65D3B;
+    font-weight: normal;
 }
 
 /* Type names: Bit, Word, Vec, etc. .nc */

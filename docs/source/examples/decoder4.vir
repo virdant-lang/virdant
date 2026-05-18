@@ -1,0 +1,12 @@
+mod Decoder4 {
+    incoming inp : Word[2]
+
+    outgoing out : Word[4] {
+        it := match inp {
+            case 0 => 0b0001
+            case 1 => 0b0010
+            case 2 => 0b0100
+            case 3 => 0b1000
+        }
+    }
+}

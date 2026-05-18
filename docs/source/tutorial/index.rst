@@ -7,6 +7,6 @@ This tutorial will introduce Virdant through a series of examples.
 
     passthrough
     buffer
+    mux_decoder
+    arbiter
     adder
-    counter
-    extra

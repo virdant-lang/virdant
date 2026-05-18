@@ -11,15 +11,14 @@ In this next example, we will demonstrate how to use registers, the stateful com
 In this example, we declare four components: `clock` `inp` `out` grouped together, and also `buffer` a bit below.
 
 
-Types
------
-`Clock` is used for clock signals in Virdant.
+Clocks
+------
 All digital circuits make use of a clock.
 In a typical FPGA, clocks can run at anywhere from 10MHz to 500MHz.
-Since `Clock` signals are what synchronize the circuit, they get their own special type.
 
-`Word[32]` is a 32-bit data value.
-In general, we can make `Word` types of any fixed size.
+Since clock signals are what synchronize the circuit, they get their own special type.
+The `Clock` type is used for clock signals in Virdant.
+Unless you are working with multiple clocks, you should name your clock signal `clock`.
 
 
 Registers

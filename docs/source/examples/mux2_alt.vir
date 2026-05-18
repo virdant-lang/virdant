@@ -1,0 +1,13 @@
+mod Mux2 {
+    incoming a : Word[8]
+    incoming b : Word[8]
+    incoming select : Bit
+
+    outgoing out : Word[8] {
+        if select {
+            it := a
+        } else {
+            it := b
+        }
+    }
+}
