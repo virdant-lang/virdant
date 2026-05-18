@@ -308,7 +308,7 @@ fn value_to_dynamic(value: &Value) -> Dynamic {
 fn dynamic_to_value(value: Dynamic, typ: &crate::types::Type) -> Value {
     use crate::types::Type;
     match typ {
-        Type::Bit => {
+        Type::Bit | Type::Reset => {
             if let Some(b) = value.as_bool().ok() {
                 Value::Bit(b)
             } else if let Some(i) = value.as_int().ok() {

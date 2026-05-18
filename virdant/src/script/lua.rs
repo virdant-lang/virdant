@@ -269,7 +269,7 @@ fn value_to_lua(value: &Value) -> LuaValue {
 /// Convert a Lua value to a Virdant Value based on the expected type.
 fn lua_to_value(value: LuaValue, typ: &Type) -> Value {
     match typ {
-        Type::Bit => {
+        Type::Bit | Type::Reset => {
             match value {
                 LuaValue::Boolean(b) => Value::Bit(b),
                 LuaValue::Integer(i) => Value::Bit(i != 0),

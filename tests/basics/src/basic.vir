@@ -1,7 +1,10 @@
 export mod Top {
     incoming clock : Clock
-    incoming reset : Bit
+    incoming reset : Reset
     outgoing fin : Bit
+
+    unused clock
+    unused reset
 
     fin := false
 

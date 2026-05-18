@@ -211,6 +211,7 @@ impl TypeIndex {
                 let bit_symbol = symboltable.resolve(b"builtin::Bit".into()).unwrap();
                 let word_symbol = symboltable.resolve(b"builtin::Word".into()).unwrap();
                 let clock_symbol = symboltable.resolve(b"builtin::Clock".into()).unwrap();
+                let reset_symbol = symboltable.resolve(b"builtin::Reset".into()).unwrap();
 
                 let typ = if symbol.id() == bit_symbol.id() {
                     if node.children().len() >= 2 {
@@ -230,6 +231,15 @@ impl TypeIndex {
                         return;
                     }
                     Type::Clock
+                } else if symbol.id() == reset_symbol.id() {
+                    if node.children().len() >= 2 {
+                        self.diagnostics.push(diagnostics::Unknown {
+                            region: node.region(),
+                            message: "Type Reset takes no parameters.".into(),
+                        }.into());
+                        return;
+                    }
+                    Type::Reset
                 } else if symbol.id() == word_symbol.id() {
                     if node.children().len() < 2 {
                         self.diagnostics.push(diagnostics::Unknown {

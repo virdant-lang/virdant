@@ -1537,7 +1537,7 @@ fn qualified_module_name(package_name: &str, module_name: &str) -> String {
 
 fn type_width(typ: &Type, db: &Db) -> Width {
     match typ {
-        Type::Bit | Type::Clock => 1,
+        Type::Bit | Type::Clock | Type::Reset => 1,
         Type::Word(w) => *w,
         Type::Usual(typedef_symbol_id) => {
             let typedef = db.get_typedef(*typedef_symbol_id);

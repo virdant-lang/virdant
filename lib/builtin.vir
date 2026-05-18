@@ -1,3 +1,4 @@
 builtin type Bit {}
 builtin type Word[n : Nat] {}
 builtin type Clock {}
+builtin type Reset {}

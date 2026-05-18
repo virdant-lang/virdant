@@ -10,7 +10,12 @@ impl Typing {
         expected_typ: &Type,
     ) -> Result<(), ()> {
         if let Some(actual_typ) = self.infer(builder, context.clone(), node)? {
-            if actual_typ != *expected_typ {
+            let compatible = actual_typ == *expected_typ
+                || matches!(
+                    (&actual_typ, expected_typ),
+                    (Type::Bit, Type::Reset) | (Type::Reset, Type::Bit)
+                );
+            if !compatible {
                 self.flag_wrong_type(node, expected_typ, &actual_typ);
                 return Err(());
             } else {
@@ -247,7 +252,7 @@ impl Typing {
         };
 
         let subject_width = match subject_typ {
-            Type::Bit | Type::Clock => 1,
+            Type::Bit | Type::Clock | Type::Reset => 1,
             Type::Word(width) => width,
             other => {
                 self.flag_not_word_type(&subject, &other);

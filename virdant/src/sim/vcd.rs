@@ -86,7 +86,7 @@ impl TypeLayoutIndex {
 
     pub(super) fn type_width(&self, typ: &Type) -> Width {
         match typ {
-            Type::Bit | Type::Clock => 1,
+            Type::Bit | Type::Clock | Type::Reset => 1,
             Type::Word(w) => *w,
             Type::Usual(sym) => self.usual_width(*sym),
         }

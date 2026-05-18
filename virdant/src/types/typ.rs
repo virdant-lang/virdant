@@ -5,6 +5,7 @@ use crate::common::Width;
 pub enum Type {
     Bit,
     Clock,
+    Reset,
     Word(Width),
     Usual(SymbolId), // TODO rename this
 }
@@ -14,6 +15,7 @@ impl std::fmt::Display for Type {
         match self {
             Type::Bit => write!(f, "Bit"),
             Type::Clock => write!(f, "Clock"),
+            Type::Reset => write!(f, "Reset"),
             Type::Word(n) => write!(f, "Word[{n}]"),
             Type::Usual(_symbol_id) => write!(f, "{self:?}"),
         }
@@ -25,6 +27,7 @@ impl std::fmt::Debug for Type {
         match self {
             Type::Bit => write!(f, "Bit"),
             Type::Clock => write!(f, "Clock"),
+            Type::Reset => write!(f, "Reset"),
             Type::Word(n) => write!(f, "Word[{n}]"),
             Type::Usual(symbol_id) => write!(f, "Usual({symbol_id:?})"),
         }

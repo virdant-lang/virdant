@@ -164,7 +164,7 @@ impl Typing {
                 }
                 Ok(Some(typ)) => {
                     total_width += match typ {
-                        Type::Bit => 1,
+                        Type::Bit | Type::Reset => 1,
                         Type::Word(w) => w,
                         _ => {
                             diagnostics.push(
@@ -421,7 +421,7 @@ impl Typing {
                     return Err(());
                 };
 
-                if let Type::Bit = subject_typ {
+                if matches!(subject_typ, Type::Bit | Type::Reset) {
                     self.annotate(&node, &Type::Bit);
                     Ok(Some(Type::Bit))
                 } else {
