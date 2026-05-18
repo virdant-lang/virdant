@@ -4,7 +4,7 @@ Now, we will demonstrate how to use conditional statements through a series of s
 
 Multiplexer
 -----------
-`Mux2` is a module which takes 2-input inputs and selects between them.
+`Mux2` is a module which takes two inputs and selects between them.
 
 
 .. literalinclude:: /examples/mux2.vir

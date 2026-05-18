@@ -20,7 +20,7 @@ When the first client wants access, it asserts `client0`.
 Similarly, when the second client wants access, it asserts `client1`.
 
 The `Arbiter` asserts `grant0` to grant access to the first client,
-and it asserts asserts `grant1` to grant access to the second.
+and it asserts `grant1` to grant access to the second.
 But `Arbiter` never asserts both at the same time.
 
 
@@ -109,4 +109,4 @@ The client with priority will get it simply by asking for it.
 The other client will get it only if it both asks and if the other doesn't.
 
 The logic is symmetric.
-It's quite pleasing, isn't t?
+It's quite pleasing, isn't it?
