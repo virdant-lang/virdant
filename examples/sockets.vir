@@ -1,6 +1,4 @@
 mod Top {
-    incoming clock : Clock
-
     mod core of Core
     mod memory of Memory
 
@@ -9,11 +7,13 @@ mod Top {
 
 mod Core {
     client socket mem of Mem
+    unused mem.data
     mem.addr := 0
 }
 
 mod Memory {
     server socket mem of Mem
+    unused mem.addr
     mem.data := 10
 }
 

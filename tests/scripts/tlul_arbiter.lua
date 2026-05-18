@@ -1,0 +1,153 @@
+---- Test Lua script for the TL-UL 2-to-1 round-robin arbiter.
+---- Verifies combinational arbitration logic and the round-robin priority flip.
+--
+--local db = open_file("../../examples/tlul_arbiter.vir")
+--local sim = db:sim("tlul_arbiter::Top")
+--
+--sim.attach_clock("top.clock", Clock.with_period_ps(1000))
+--
+--sim.run(function()
+--    -- Initialize all externally-driven signals.
+--    sim.set("top.reset",          true)
+--    sim.set("top.host_0.a_valid", false)
+--    sim.set("top.host_0.a_opcode",  0)
+--    sim.set("top.host_0.a_address", 0)
+--    sim.set("top.host_0.a_data",    0)
+--    sim.set("top.host_0.a_mask",    0)
+--    sim.set("top.host_0.a_size",    0)
+--    sim.set("top.host_0.d_ready", false)
+--    sim.set("top.host_1.a_valid", false)
+--    sim.set("top.host_1.a_opcode",  0)
+--    sim.set("top.host_1.a_address", 0)
+--    sim.set("top.host_1.a_data",    0)
+--    sim.set("top.host_1.a_mask",    0)
+--    sim.set("top.host_1.a_size",    0)
+--    sim.set("top.host_1.d_ready", false)
+--    sim.set("top.device.a_ready", false)
+--    sim.set("top.device.d_valid", false)
+--    sim.set("top.device.d_opcode", 0)
+--    sim.set("top.device.d_data",   0)
+--    sim.set("top.device.d_size",   0)
+--    sim.set("top.device.d_error", false)
+--
+--    -- Clock once in reset: latches state=Idle, priority=Host0First.
+--    sim.wait("top.clock")
+--    sim.set("top.reset", false)
+--
+--    -- No requests: device should see no valid request.
+--    assert(sim.get("top.device.a_valid") == false,
+--           "device.a_valid must be false with no requests")
+--
+--    -- Only host_0 requests (priority=Host0First).
+--    sim.set("top.host_0.a_valid",   true)
+--    sim.set("top.host_0.a_address", 100)
+--    assert(sim.get("top.device.a_valid")   == true,
+--           "device.a_valid: only host_0 requests")
+--    assert(sim.get("top.device.a_address") == 100,
+--           "device.a_address: forwarded from host_0")
+--    assert(sim.get("top.host_1.a_ready")   == false,
+--           "host_1.a_ready must be false when host_0 has grant")
+--
+--    -- Only host_1 requests.
+--    sim.set("top.host_0.a_valid",   false)
+--    sim.set("top.host_1.a_valid",   true)
+--    sim.set("top.host_1.a_address", 200)
+--    assert(sim.get("top.device.a_valid")   == true,
+--           "device.a_valid: only host_1 requests")
+--    assert(sim.get("top.device.a_address") == 200,
+--           "device.a_address: forwarded from host_1")
+--    assert(sim.get("top.host_0.a_ready")   == false,
+--           "host_0.a_ready must be false when host_1 has grant")
+--
+--    -- Both request: priority=Host0First so host_0 wins.
+--    sim.set("top.host_0.a_valid",   true)
+--    sim.set("top.host_0.a_address", 100)
+--    sim.set("top.host_1.a_valid",   true)
+--    sim.set("top.host_1.a_address", 200)
+--    assert(sim.get("top.device.a_valid")   == true,
+--           "device.a_valid: both request, priority Host0First")
+--    assert(sim.get("top.device.a_address") == 100,
+--           "host_0 wins tie when priority=Host0First")
+--
+--    -- Device accepts: a_ready back-pressure flows to granted host only.
+--    sim.set("top.device.a_ready", true)
+--    assert(sim.get("top.host_0.a_ready") == true,
+--           "host_0.a_ready when device ready and host_0 has grant")
+--    assert(sim.get("top.host_1.a_ready") == false,
+--           "host_1.a_ready must be false while host_0 is granted")
+--
+--    -- Clock: state moves to ServingHost0.
+--    sim.wait("top.clock")
+--    sim.set("top.host_0.a_valid", false)
+--    sim.set("top.host_1.a_valid", false)
+--    sim.set("top.device.a_ready", false)
+--
+--    -- Device sends response; host_0 is still being served.
+--    sim.set("top.device.d_valid",  true)
+--    sim.set("top.device.d_opcode", 1)       -- AccessAckData
+--    sim.set("top.device.d_data",   0x5A5A)
+--    assert(sim.get("top.host_0.d_valid") == true,
+--           "host_0.d_valid during ServingHost0")
+--    assert(sim.get("top.host_1.d_valid") == false,
+--           "host_1.d_valid must be false during ServingHost0")
+--    assert(sim.get("top.host_0.d_data")  == 0x5A5A,
+--           "host_0.d_data must match device.d_data")
+--
+--    -- host_0 accepts the response: d_done fires.
+--    sim.set("top.host_0.d_ready", true)
+--
+--    -- Clock: d_done=1 so state returns to Idle, priority flips to Host1First.
+--    sim.wait("top.clock")
+--    sim.set("top.host_0.d_ready",  false)
+--    sim.set("top.device.d_valid",  false)
+--
+--    -- Both request again: priority=Host1First so host_1 now wins.
+--    sim.set("top.host_0.a_valid",   true)
+--    sim.set("top.host_0.a_address", 100)
+--    sim.set("top.host_1.a_valid",   true)
+--    sim.set("top.host_1.a_address", 200)
+--    assert(sim.get("top.device.a_valid")   == true,
+--           "device.a_valid: both request, priority Host1First")
+--    assert(sim.get("top.device.a_address") == 200,
+--           "host_1 wins tie when priority=Host1First")
+--
+--    -- Only host_0 still gets through when host_1 is idle.
+--    sim.set("top.host_1.a_valid", false)
+--    assert(sim.get("top.device.a_valid")   == true,
+--           "device.a_valid: only host_0, priority Host1First")
+--    assert(sim.get("top.device.a_address") == 100,
+--           "host_0 granted when alone despite Host1First priority")
+--
+--    -- Complete a transaction with host_1 to flip priority back.
+--    sim.set("top.host_0.a_valid", false)
+--    sim.set("top.host_1.a_valid",   true)
+--    sim.set("top.host_1.a_address", 200)
+--    sim.set("top.device.a_ready",  true)
+--    sim.wait("top.clock")
+--    sim.set("top.host_1.a_valid",  false)
+--    sim.set("top.device.a_ready",  false)
+--    sim.set("top.device.d_valid",  true)
+--    sim.set("top.device.d_data",   0x1234)
+--    sim.set("top.host_1.d_ready",  true)
+--    assert(sim.get("top.host_1.d_valid") == true,
+--           "host_1.d_valid during ServingHost1")
+--    assert(sim.get("top.host_1.d_data")  == 0x1234,
+--           "host_1.d_data must match device.d_data")
+--    assert(sim.get("top.host_0.d_valid") == false,
+--           "host_0.d_valid must be false during ServingHost1")
+--
+--    -- Clock: priority flips back to Host0First.
+--    sim.wait("top.clock")
+--    sim.set("top.host_1.d_ready", false)
+--    sim.set("top.device.d_valid", false)
+--
+--    -- Both request: host_0 should win again.
+--    sim.set("top.host_0.a_valid",   true)
+--    sim.set("top.host_0.a_address", 100)
+--    sim.set("top.host_1.a_valid",   true)
+--    sim.set("top.host_1.a_address", 200)
+--    assert(sim.get("top.device.a_address") == 100,
+--           "host_0 wins tie after priority reset to Host0First")
+--end)
+--
+--print("PASS")

@@ -1,0 +1,270 @@
+// TL-UL 2x2 Crossbar
+//
+// Connects two TL-UL hosts to two TL-UL devices with full
+// non-blocking crossbar connectivity.
+// Address bit 31 selects the device (0 -> dev_0, 1 -> dev_1).
+// When both hosts target the same device simultaneously,
+// a round-robin arbiter resolves the conflict.
+//
+// Internal structure:
+//
+//   host_0 --> [ mux_0 ] --dev_0--> [ arb_0 ] --> dev_0
+//                       --dev_1--> [ arb_1 ] --> dev_1
+//   host_1 --> [ mux_1 ] --dev_0--> [ arb_0 ]
+//                       --dev_1--> [ arb_1 ]
+//
+// Concepts demonstrated:
+//   - composing TlUlMux12 and TlUlArb21 into a larger fabric
+//   - all inter-module wiring done exclusively with socket bulk connect (:=:)
+//   - forwarding top-level sockets down through the hierarchy
+
+// TL-UL channel directions are from the host (master) perspective.
+// cosi = Client-Out, Server-In: the host drives these signals.
+// ciso = Client-In,  Server-Out: the device drives these signals.
+socket TlUl {
+    cosi a_valid   : Bit       // host: request is valid
+    ciso a_ready   : Bit       // device: ready to accept the request
+    cosi a_opcode  : Word[3]   // 0=Get, 1=PutFullData, 4=PutPartialData
+    cosi a_address : Word[32]  // byte address of the target
+    cosi a_data    : Word[32]  // write data (ignored for Get)
+    cosi a_mask    : Word[4]   // byte-enable mask
+    cosi a_size    : Word[2]   // log2 of transfer size in bytes
+    cosi d_ready   : Bit       // host: ready to accept a response
+    ciso d_valid   : Bit       // device: response is valid
+    ciso d_opcode  : Word[3]   // 0=AccessAck, 1=AccessAckData
+    ciso d_data    : Word[32]  // read data (valid only on AccessAckData)
+    ciso d_size    : Word[2]   // log2 of response size in bytes
+    ciso d_error   : Bit       // set when the device reports an error
+}
+
+// --- Shared building blocks --------------------------------------------------
+
+union type ArbState {
+    Idle()
+    ServingHost0()
+    ServingHost1()
+}
+
+union type Priority {
+    Host0First()
+    Host1First()
+}
+
+union type SelState {
+    Dev0()
+    Dev1()
+}
+
+// TlUlArb21 -- 2-to-1 TL-UL round-robin arbiter.
+mod TlUlArb21 {
+    incoming clock : Clock
+    incoming reset : Bit
+
+    server socket host_0 of TlUl
+    server socket host_1 of TlUl
+    client socket device  of TlUl
+
+    reg state    : ArbState on clock
+    reg priority : Priority on clock
+
+    wire idle_grant_0 : Bit
+    idle_grant_0 := match priority {
+        case @Host0First() => host_0.a_valid
+        case @Host1First() => host_0.a_valid && !host_1.a_valid
+    }
+
+    wire idle_grant_1 : Bit
+    idle_grant_1 := match priority {
+        case @Host0First() => host_1.a_valid && !host_0.a_valid
+        case @Host1First() => host_1.a_valid
+    }
+
+    wire grant_0 : Bit
+    grant_0 := match state {
+        case @Idle()         => idle_grant_0
+        case @ServingHost0() => true
+        case @ServingHost1() => false
+    }
+
+    wire grant_1 : Bit
+    grant_1 := match state {
+        case @Idle()         => idle_grant_1
+        case @ServingHost0() => false
+        case @ServingHost1() => true
+    }
+
+    device.a_valid   := (grant_0 && host_0.a_valid) || (grant_1 && host_1.a_valid)
+    device.a_opcode  := if grant_0 { host_0.a_opcode  } else { host_1.a_opcode  }
+    device.a_address := if grant_0 { host_0.a_address } else { host_1.a_address }
+    device.a_data    := if grant_0 { host_0.a_data    } else { host_1.a_data    }
+    device.a_mask    := if grant_0 { host_0.a_mask    } else { host_1.a_mask    }
+    device.a_size    := if grant_0 { host_0.a_size    } else { host_1.a_size    }
+
+    host_0.a_ready := device.a_ready && grant_0
+    host_1.a_ready := device.a_ready && grant_1
+
+    device.d_ready := (grant_0 && host_0.d_ready) || (grant_1 && host_1.d_ready)
+
+    host_0.d_valid  := device.d_valid && grant_0
+    host_1.d_valid  := device.d_valid && grant_1
+    host_0.d_opcode := device.d_opcode
+    host_1.d_opcode := device.d_opcode
+    host_0.d_data   := device.d_data
+    host_1.d_data   := device.d_data
+    host_0.d_size   := device.d_size
+    host_1.d_size   := device.d_size
+    host_0.d_error  := device.d_error
+    host_1.d_error  := device.d_error
+
+    wire d_done : Bit
+    d_done := device.d_valid && ((grant_0 && host_0.d_ready) || (grant_1 && host_1.d_ready))
+
+    state <= if reset {
+        @Idle()
+    } else {
+        match state {
+            case @Idle() =>
+                if idle_grant_0 { @ServingHost0() }
+                else if idle_grant_1 { @ServingHost1() }
+                else { @Idle() }
+            case @ServingHost0() =>
+                if d_done { @Idle() } else { @ServingHost0() }
+            case @ServingHost1() =>
+                if d_done { @Idle() } else { @ServingHost1() }
+        }
+    }
+
+    priority <= if reset {
+        @Host0First()
+    } else {
+        match state {
+            case @Idle()         => priority
+            case @ServingHost0() => if d_done { @Host1First() } else { priority }
+            case @ServingHost1() => if d_done { @Host0First() } else { priority }
+        }
+    }
+}
+
+// TlUlMux12 -- 1-to-2 TL-UL address-space multiplexer.
+mod TlUlMux12 {
+    incoming clock : Clock
+    incoming reset : Bit
+
+    server socket host  of TlUl
+    client socket dev_0 of TlUl
+    client socket dev_1 of TlUl
+
+    wire sel : Bit
+    sel := host.a_address[31]
+
+    dev_0.a_valid   := host.a_valid && !sel
+    dev_1.a_valid   := host.a_valid &&  sel
+    dev_0.a_opcode  := host.a_opcode
+    dev_1.a_opcode  := host.a_opcode
+    dev_0.a_address := host.a_address
+    dev_1.a_address := host.a_address
+    dev_0.a_data    := host.a_data
+    dev_1.a_data    := host.a_data
+    dev_0.a_mask    := host.a_mask
+    dev_1.a_mask    := host.a_mask
+    dev_0.a_size    := host.a_size
+    dev_1.a_size    := host.a_size
+
+    host.a_ready := if sel { dev_1.a_ready } else { dev_0.a_ready }
+
+    wire a_handshake : Bit
+    a_handshake := host.a_valid && (if sel { dev_1.a_ready } else { dev_0.a_ready })
+
+    reg serving : SelState on clock
+    serving <= if reset {
+        @Dev0()
+    } else if a_handshake {
+        if sel { @Dev1() } else { @Dev0() }
+    } else {
+        serving
+    }
+
+    wire serving_dev1 : Bit
+    serving_dev1 := match serving {
+        case @Dev0() => false
+        case @Dev1() => true
+    }
+
+    dev_0.d_ready := host.d_ready && !serving_dev1
+    dev_1.d_ready := host.d_ready &&  serving_dev1
+
+    host.d_valid  := if serving_dev1 { dev_1.d_valid  } else { dev_0.d_valid  }
+    host.d_opcode := if serving_dev1 { dev_1.d_opcode } else { dev_0.d_opcode }
+    host.d_data   := if serving_dev1 { dev_1.d_data   } else { dev_0.d_data   }
+    host.d_size   := if serving_dev1 { dev_1.d_size   } else { dev_0.d_size   }
+    host.d_error  := if serving_dev1 { dev_1.d_error  } else { dev_0.d_error  }
+}
+
+// --- Crossbar ----------------------------------------------------------------
+
+// TlUlXbar22 -- 2x2 TL-UL crossbar.
+//   host_0, host_1  server sockets for the two requesting hosts.
+//   dev_0,  dev_1   client sockets for the two target devices.
+//
+// Each host gets a TlUlMux12 that steers by address.
+// Each device gets a TlUlArb21 that resolves host conflicts.
+// All internal wiring is done with socket bulk connect (:=:).
+mod TlUlXbar22 {
+    incoming clock : Clock
+    incoming reset : Bit
+
+    server socket host_0 of TlUl
+    server socket host_1 of TlUl
+    client socket dev_0  of TlUl
+    client socket dev_1  of TlUl
+
+    mod mux_0 of TlUlMux12
+    mux_0.clock := clock
+    mux_0.reset := reset
+
+    mod mux_1 of TlUlMux12
+    mux_1.clock := clock
+    mux_1.reset := reset
+
+    mod arb_0 of TlUlArb21
+    arb_0.clock := clock
+    arb_0.reset := reset
+
+    mod arb_1 of TlUlArb21
+    arb_1.clock := clock
+    arb_1.reset := reset
+
+    // Forward host sockets into each host's mux.
+    mux_0.host :=: host_0
+    mux_1.host :=: host_1
+
+    // Cross-connect mux outputs to the per-device arbiters.
+    arb_0.host_0 :=: mux_0.dev_0   // host_0 -> dev_0 path
+    arb_1.host_0 :=: mux_0.dev_1   // host_0 -> dev_1 path
+    arb_0.host_1 :=: mux_1.dev_0   // host_1 -> dev_0 path
+    arb_1.host_1 :=: mux_1.dev_1   // host_1 -> dev_1 path
+
+    // Forward arbiter outputs to the external device sockets.
+    dev_0 :=: arb_0.device
+    dev_1 :=: arb_1.device
+}
+
+// Top: thin wrapper that exposes the crossbar interface to the outside world.
+export mod Top {
+    incoming clock : Clock
+    incoming reset : Bit
+
+    server socket host_0 of TlUl
+    server socket host_1 of TlUl
+    client socket dev_0  of TlUl
+    client socket dev_1  of TlUl
+
+    mod xbar of TlUlXbar22
+    xbar.clock := clock
+    xbar.reset := reset
+
+    xbar.host_0 :=: host_0
+    xbar.host_1 :=: host_1
+    dev_0       :=: xbar.dev_0
+    dev_1       :=: xbar.dev_1
+}

@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::drivers::{Driver, DriverAnalysis};
 use crate::analysis::symbols::SymbolId;
-use crate::common::{ComponentKind, DriverType};
+use crate::common::{ComponentKind, DriverType, SocketRole};
 use crate::db::Builder;
 use crate::fqn::PackageFqn;
 use crate::syntax::payload::AstNodePayload;
@@ -16,6 +16,34 @@ use crate::types::Type;
 pub struct Elaboration {
     components: Vec<ElaboratedComponent>,
     path_to_id: IndexMap<BString, SignalId>,
+    modules: Vec<ElaboratedModule>,
+    sockets: Vec<ElaboratedSocket>,
+}
+
+/// A module instance discovered during elaboration.
+///
+/// Records that a group of components under a common prefix
+/// belongs to an instantiation of a particular moddef.
+#[derive(Debug)]
+pub struct ElaboratedModule {
+    /// The module definition symbol (e.g., `Core`).
+    moddef: SymbolId,
+    /// Fully-qualified path prefix (e.g., `top.core`).
+    prefix: BString,
+}
+
+/// A socket instance discovered during elaboration.
+///
+/// Records that a group of channel components under a common
+/// prefix belongs to an instantiation of a particular socketdef.
+#[derive(Debug)]
+pub struct ElaboratedSocket {
+    /// The socket definition symbol (e.g., `Mem`).
+    socketdef: SymbolId,
+    /// Client or Server.
+    role: SocketRole,
+    /// Fully-qualified path prefix (e.g., `top.core.mem`).
+    prefix: BString,
 }
 
 #[derive(Debug)]
@@ -132,8 +160,15 @@ fn elaborate_module(
     moddef: SymbolId,
     prefix: &str,
     components: &mut Vec<ElaboratedComponent>,
+    modules: &mut Vec<ElaboratedModule>,
+    sockets: &mut Vec<ElaboratedSocket>,
     parent_ctx: Option<ParentCtx>,
 ) {
+    modules.push(ElaboratedModule {
+        moddef,
+        prefix: BString::from(prefix),
+    });
+
     let symboltable = builder.get_symboltable();
     let location = symboltable.symbol(moddef).location();
     let parsing = builder.get_parsing(location.package());
@@ -230,8 +265,48 @@ fn elaborate_module(
                     submodule_symbol.id,
                     &child_prefix,
                     components,
+                    modules,
+                    sockets,
                     Some(ctx),
                 );
+            }
+            AstNodePayload::Socket(socket) => {
+                let instance_name = parsing.string(socket.name);
+                let ofness_node = stmt.child(0);
+                let AstNodePayload::Ofness(ofness) = ofness_node.payload()
+                else {
+                    continue;
+                };
+                let socket_package = ofness
+                    .package
+                    .map(|pkg| {
+                        PackageFqn::new(
+                            bstr::BString::from(
+                                parsing.string(pkg).to_vec(),
+                            ),
+                        )
+                    })
+                    .unwrap_or_else(|| location.package());
+                let socket_name = parsing.string(ofness.name);
+                let symboltable = builder.get_symboltable();
+                let socket_symbol = match symboltable
+                    .resolve_item_in_package(socket_name, socket_package)
+                {
+                    Some(symbol) => symbol.clone(),
+                    None => continue,
+                };
+
+                let socket_prefix: BString = format!(
+                    "{prefix}.{}",
+                    instance_name.to_str_lossy()
+                )
+                .into();
+
+                sockets.push(ElaboratedSocket {
+                    socketdef: socket_symbol.id,
+                    role: socket.role,
+                    prefix: socket_prefix,
+                });
             }
             _ => {}
         }
@@ -240,7 +315,13 @@ fn elaborate_module(
 
 pub(crate) fn build_elaboration(builder: &mut Builder, top: SymbolId) -> Arc<Elaboration> {
     let mut components: Vec<ElaboratedComponent> = vec![];
-    elaborate_module(builder, top, "top", &mut components, None);
+    let mut modules: Vec<ElaboratedModule> = vec![];
+    let mut sockets: Vec<ElaboratedSocket> = vec![];
+    elaborate_module(
+        builder, top, "top",
+        &mut components, &mut modules, &mut sockets,
+        None,
+    );
 
     // Build a reverse index: fully-elaborated path -> ElaboratedComponentId.
     let path_to_id: IndexMap<BString, SignalId> = components
@@ -260,7 +341,7 @@ pub(crate) fn build_elaboration(builder: &mut Builder, top: SymbolId) -> Arc<Ela
         component.alias = alias;
     }
 
-    Arc::new(Elaboration { components, path_to_id })
+    Arc::new(Elaboration { components, path_to_id, modules, sockets })
 }
 
 /// Returns the `ElaboratedComponentId` that `component`'s driver references, if
