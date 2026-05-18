@@ -8,7 +8,8 @@ SPHINXBUILD   ?= uv run sphinx-build
 SOURCEDIR     = source
 BUILDDIR      = build
 EXAMPLES      = $(wildcard sources/examples/*.vir)
-
+TESTS         = $(wildcard source/examples/*.lua)
+FEATURES      = vir-bin,filecheck-bin,vir-lsp-bin,lua,rhai
 
 auto: Makefile $(EXAMPLES) # rustdocs
 	$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
@@ -21,12 +22,12 @@ watch:
 clean:
 	rm -rf $(BUILDDIR)
 
-%.pdf: %.tex
-	mkdir -p ./build/html
-
 push: auto
 	rsync -cazvhP $(BUILDDIR)/html/* digitalocean:/root/projects/virdant/docs/build/html
 
 rustdocs:
 	cargo doc --manifest-path ../virdant/Cargo.toml
 	cp -r ../virdant/target/doc/ $(BUILDDIR)/html/.
+
+test: $(EXAMPLES) $(TESTS)
+	for script in $(TESTS); do cargo run --bin=vir --features $(FEATURES) -- run $$script || exit 1; done

@@ -19,7 +19,8 @@ build-wasm:
 
 test: virdant/target/lib build
 	cargo test
-	$(MAKE) -C tests test_all
+	$(MAKE) -C tests test
+	$(MAKE) -C docs  test
 	@echo
 	@printf '%*s\n' "$$(tput cols)" '' | tr ' ' '#'
 	@echo "  All Tests Pass  "
@@ -28,8 +29,7 @@ test: virdant/target/lib build
 clean:
 	cargo clean
 
-install:
-	cargo build --release --all-features
+install: build
 	mkdir -p ${HOME}/.local/virdant/bin
 	cp ./target/release/vir ${HOME}/.local/virdant/bin/
 	cp ./target/release/vir-* ${HOME}/.local/virdant/bin/

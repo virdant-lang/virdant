@@ -136,7 +136,7 @@ fn create_sim_table(lua: &Lua, sim: Sim) -> LuaResult<Table> {
             end
         end
     "#;
-    let setup_wait_fn: Function = lua.load(setup_wait).eval()?;
+    let setup_wait_fn: Function = lua.load(setup_wait).set_name("=sim.wait").eval()?;
     setup_wait_fn.call::<()>(table.clone())?;
 
     // run(coroutine_fn) - run simulation with coroutine support
@@ -351,8 +351,11 @@ pub fn run_script_file(path: &std::path::Path) -> Result<(), Box<dyn std::error:
         globals.set("Clock", clock_table)?;
     }
 
-    // Execute the script
-    lua.load(&script).exec()?;
+    // Execute the script.
+    // The "@" prefix tells Lua this chunk name is a file path,
+    // so error messages show "foo.lua:5" instead of "[string \"...\"]:5".
+    let chunk_name = format!("@{}", path.display());
+    lua.load(&script).set_name(chunk_name).exec()?;
 
     Ok(())
 }
