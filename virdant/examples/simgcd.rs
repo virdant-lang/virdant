@@ -4,7 +4,7 @@ use std::io::BufWriter;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use virdant::sim::{Sim, Value};
+use virdant::sim::{Clock, Sim, Value};
 use virdant::util::{check_db, db_from_dir_with_lib};
 
 /// (a, b, expected_gcd)
@@ -47,7 +47,7 @@ fn main() {
     let result = sim.signal("top.result");
     let valid  = sim.signal("top.valid");
 
-    sim.add_clock(clock, 10_000);
+    sim.attach_clock(clock, Clock::with_period_ps(10_000));
 
     let vcd_path = "build/gcd.vcd";
     std::fs::create_dir_all("build").unwrap();

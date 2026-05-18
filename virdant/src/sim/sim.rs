@@ -50,6 +50,29 @@ pub struct Sim {
     sched: Scheduler,
 }
 
+/// A clock timing specification.  Holds only the period; the signal to
+/// drive is supplied separately when calling [`Sim::attach_clock`].
+/// Construct with [`Clock::with_period_ps`] or [`Clock::with_freq_hz`].
+#[derive(Debug, Clone, Copy)]
+pub struct Clock {
+    pub period_ps: u64,
+}
+
+impl Clock {
+    /// Specify the clock by its full period in picoseconds.
+    pub fn with_period_ps(period_ps: u64) -> Clock {
+        Clock { period_ps }
+    }
+
+    /// Specify the clock by its frequency in Hz.  Converts to picoseconds
+    /// via `1_000_000_000_000 / freq_hz`; the period is truncated to the
+    /// nearest picosecond.
+    pub fn with_freq_hz(freq_hz: u64) -> Clock {
+        let period_ps = 1_000_000_000_000u64 / freq_hz;
+        Clock { period_ps }
+    }
+}
+
 #[derive(Debug)]
 pub enum SimError {}
 
@@ -233,26 +256,17 @@ impl Sim {
         self.sched.request_shutdown();
     }
 
-    /// Drive `clock` as a free-running square wave with full period
-    /// `period_ps`.  The signal is initialised low immediately and the
-    /// first toggle is scheduled `period_ps / 2` from now, so the first
-    /// rising edge happens at `now + period_ps / 2`.
-    pub fn add_clock(&mut self, clock: SignalId, period_ps: u64) {
-        let half = period_ps / 2;
+    /// Drive `signal` as a free-running square wave described by `clock`.
+    /// The signal is initialised low immediately and the first toggle is
+    /// scheduled `period_ps / 2` from now, so the first rising edge
+    /// happens at `now + period_ps / 2`.
+    pub fn attach_clock(&mut self, signal: SignalId, clock: Clock) {
+        let half = clock.period_ps / 2;
         {
             let mut lock = self.lock();
-            lock.set(clock, Value::Bit(false));
+            lock.set(signal, Value::Bit(false));
         }
-        self.register_clock_toggle(clock, half);
-    }
-
-    /// Drive `clock` as a free-running square wave at frequency
-    /// `freq_hz`.  Converts to picoseconds via `1e12 / freq_hz` and
-    /// forwards to `add_clock`; the resulting period is therefore
-    /// truncated to the nearest picosecond.
-    pub fn add_clock_hz(&mut self, clock: SignalId, freq_hz: u64) {
-        let period_ps = 1_000_000_000_000u64 / freq_hz;
-        self.add_clock(clock, period_ps);
+        self.register_clock_toggle(signal, half);
     }
 
     /// Drain the queue.  Order:

@@ -27,7 +27,7 @@ local expected = {
 local observed = {}
 
 -- Add clock with 10ns period (10,000 ps)
-sim.add_clock("top.clock", 10000)
+sim.attach_clock("top.clock", Clock.with_period_ps(10000))
 
 print("Running LFSR simulation with Lua coroutines...")
 

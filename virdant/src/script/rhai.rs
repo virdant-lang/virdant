@@ -8,7 +8,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use bstr::BStr;
-use rhai::{Dynamic, Engine, EvalAltResult, FnPtr, AST};
+use rhai::{Dynamic, Engine, EvalAltResult, FnPtr, Module, AST};
 
 use crate::db::Db;
 use crate::sim::{Callback, Sim, Value};
@@ -44,6 +44,25 @@ struct ScriptContext {
     engine: Arc<Engine>,
     /// AST containing only functions (no global statements).
     fn_ast: Arc<AST>,
+}
+
+/// A clock timing specification exposed to Rhai scripts.
+/// Mirrors the Rust [`crate::sim::Clock`] API.
+#[derive(Clone)]
+pub struct Clock {
+    pub(crate) inner: crate::sim::Clock,
+}
+
+impl Clock {
+    /// Construct a clock with a full period in picoseconds.
+    pub fn with_period_ps(period_ps: i64) -> Clock {
+        Clock { inner: crate::sim::Clock::with_period_ps(period_ps as u64) }
+    }
+
+    /// Construct a clock from a frequency in Hz.
+    pub fn with_freq_hz(freq_hz: i64) -> Clock {
+        Clock { inner: crate::sim::Clock::with_freq_hz(freq_hz as u64) }
+    }
 }
 
 /// Wrapper around `Sim` for Rhai scripting.
@@ -115,19 +134,11 @@ impl ScriptSim {
         })
     }
 
-    /// Add a clock signal with the given period in picoseconds.
-    pub fn add_clock(&mut self, path: &str, period_ps: i64) {
+    /// Attach a clock to the given signal path.
+    pub fn attach_clock(&mut self, path: &str, clock: Clock) {
         self.with_sim(|sim| {
             let signal_id = sim.signal(path);
-            sim.add_clock(signal_id, period_ps as u64);
-        })
-    }
-
-    /// Add a clock signal at the given frequency in Hz.
-    pub fn add_clock_hz(&mut self, path: &str, freq_hz: i64) {
-        self.with_sim(|sim| {
-            let signal_id = sim.signal(path);
-            sim.add_clock_hz(signal_id, freq_hz as u64);
+            sim.attach_clock(signal_id, clock.inner);
         })
     }
 
@@ -363,8 +374,7 @@ pub fn make_engine() -> Engine {
         .register_fn("now", ScriptSim::now)
         .register_fn("get", ScriptSim::get)
         .register_fn("set", ScriptSim::set)
-        .register_fn("add_clock", ScriptSim::add_clock)
-        .register_fn("add_clock_hz", ScriptSim::add_clock_hz)
+        .register_fn("attach_clock", ScriptSim::attach_clock)
         .register_fn("at", ScriptSim::at)
         .register_fn("after", ScriptSim::after)
         .register_fn("at_start", ScriptSim::at_start)
@@ -375,6 +385,17 @@ pub fn make_engine() -> Engine {
         .register_fn("run", ScriptSim::run)
         .register_fn("assert", ScriptSim::assert_msg)
         .register_fn("assert", ScriptSim::assert_simple);
+
+    // Register Clock type and static module
+    engine.register_type_with_name::<Clock>("Clock");
+    let mut clock_module = Module::new();
+    clock_module.set_native_fn("with_period_ps", |period_ps: i64| -> Result<Clock, Box<EvalAltResult>> {
+        Ok(Clock::with_period_ps(period_ps))
+    });
+    clock_module.set_native_fn("with_freq_hz", |freq_hz: i64| -> Result<Clock, Box<EvalAltResult>> {
+        Ok(Clock::with_freq_hz(freq_hz))
+    });
+    engine.register_static_module("Clock", clock_module.into());
 
     // Register global functions
     engine

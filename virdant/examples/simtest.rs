@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use virdant::sim::{Sim, Value};
+use virdant::sim::{Clock, Sim, Value};
 use virdant::util::{check_db, db_from_file_with_lib};
 
 /// Build a `Sim` for `examples/lfsr.vir`.
@@ -53,7 +53,7 @@ fn lfsr_run() {
     let reset = sim.signal("top.reset");
     let out   = sim.signal("top.out");
 
-    sim.add_clock(clock, 10_000);
+    sim.attach_clock(clock, Clock::with_period_ps(10_000));
 
     sim.on_change(out, Box::new(move |sim| {
         println!("[t={}ps] out = {:?}", sim.now(), sim.get(out));
@@ -98,7 +98,7 @@ fn lfsr_check() {
     let reset = sim.signal("top.reset");
     let out   = sim.signal("top.out");
 
-    sim.add_clock(clock, 10_000);
+    sim.attach_clock(clock, Clock::with_period_ps(10_000));
 
     let observed: Rc<RefCell<Vec<(u64, Value)>>> = Rc::new(RefCell::new(Vec::new()));
     let observed_cb = observed.clone();
@@ -135,7 +135,7 @@ fn lfsr_on_clock() {
     let clock = sim.signal("top.clock");
     let reset = sim.signal("top.reset");
 
-    sim.add_clock(clock, 10_000);
+    sim.attach_clock(clock, Clock::with_period_ps(10_000));
 
     let clock_edge_count: Rc<RefCell<u64>> = Rc::new(RefCell::new(0));
     let count_cb = clock_edge_count.clone();

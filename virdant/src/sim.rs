@@ -13,6 +13,6 @@ use scheduler::Scheduler;
 use state::State;
 
 pub use sim::SimError;
-pub use sim::{Sim, SimLock};
+pub use sim::{Sim, SimLock, Clock};
 pub use eval::Value;
 pub use scheduler::Callback;

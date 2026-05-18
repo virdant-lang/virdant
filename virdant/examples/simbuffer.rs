@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use virdant::sim::{Sim, Value};
+use virdant::sim::{Clock, Sim, Value};
 use virdant::util::{check_db, db_from_file_with_lib};
 
 fn sim() -> Sim {
@@ -24,7 +24,7 @@ fn main() {
     let reset = sim.signal("top.reset");
     let out   = sim.signal("top.out");
 
-    sim.add_clock(clock, 10_000);
+    sim.attach_clock(clock, Clock::with_period_ps(10_000));
 
     sim.at_start(Box::new(move |sim| {
         let mut lock = sim.lock();

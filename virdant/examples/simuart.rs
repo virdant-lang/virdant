@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
-use virdant::sim::{Sim, Value};
+use virdant::sim::{Clock, Sim, Value};
 use virdant::util::{check_db, db_from_dir_with_lib};
 
 const CLOCK_HZ:  u64 = 12_000_000;
@@ -37,7 +37,7 @@ fn main() {
     let uart_tx = sim.signal("top.sender.uart_tx");
     let fin     = sim.signal("top.fin");
 
-    sim.add_clock_hz(clock, CLOCK_HZ);
+    sim.attach_clock(clock, Clock::with_freq_hz(CLOCK_HZ));
 
     let vcd_path = "build/uart.vcd";
     std::fs::create_dir_all("build").unwrap();

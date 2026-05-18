@@ -12,7 +12,7 @@
 //! local db = open_file("mydesign.vir")
 //! local sim = db:sim("pkg::Top")
 //!
-//! sim.add_clock("top.clock", 1000)  -- 1ns period
+//! sim.attach_clock("top.clock", Clock.with_period_ps(1000))  -- 1ns period
 //!
 //! -- Coroutine-based testbench
 //! sim.run(function()
@@ -37,6 +37,15 @@ use bstr::BStr;
 use mlua::{Function, Lua, Result as LuaResult, Table, ThreadStatus, UserData, UserDataMethods, Value as LuaValue};
 
 use crate::analysis::elaboration::SignalId;
+
+/// A clock timing specification exposed to Lua scripts.
+/// Mirrors the Rust [`crate::sim::Clock`] API.
+#[derive(Clone)]
+struct LuaClock {
+    inner: crate::sim::Clock,
+}
+
+impl UserData for LuaClock {}
 use crate::db::Db;
 use crate::sim::{Sim, Value};
 use crate::types::Type;
@@ -101,21 +110,13 @@ fn create_sim_table(lua: &Lua, sim: Sim) -> LuaResult<Table> {
         Ok(())
     })?)?;
 
-    // add_clock(path, period_ps) - add a clock with given period
+    // attach_clock(path, clock) - attach a Clock to a signal
     let sim_clone = sim.clone();
-    table.set("add_clock", lua.create_function(move |_, (path, period_ps): (String, i64)| {
+    table.set("attach_clock", lua.create_function(move |_, (path, clock_ud): (String, mlua::AnyUserData)| {
+        let clock = clock_ud.borrow::<LuaClock>()?;
         let mut sim = sim_clone.borrow_mut();
         let signal_id = sim.signal(<&BStr>::from(path.as_str()));
-        sim.add_clock(signal_id, period_ps as u64);
-        Ok(())
-    })?)?;
-
-    // add_clock_hz(path, freq_hz) - add a clock with given frequency
-    let sim_clone = sim.clone();
-    table.set("add_clock_hz", lua.create_function(move |_, (path, freq_hz): (String, i64)| {
-        let mut sim = sim_clone.borrow_mut();
-        let signal_id = sim.signal(<&BStr>::from(path.as_str()));
-        sim.add_clock_hz(signal_id, freq_hz as u64);
+        sim.attach_clock(signal_id, clock.inner);
         Ok(())
     })?)?;
 
@@ -338,6 +339,16 @@ pub fn run_script_file(path: &std::path::Path) -> Result<(), Box<dyn std::error:
         globals.set("open_dir", lua.create_function(|lua, path: String| {
             open_dir(lua, path)
         })?)?;
+
+        // Clock table: Clock.with_period_ps(period_ps) / Clock.with_freq_hz(freq_hz)
+        let clock_table = lua.create_table()?;
+        clock_table.set("with_period_ps", lua.create_function(|_, period_ps: i64| {
+            Ok(LuaClock { inner: crate::sim::Clock::with_period_ps(period_ps as u64) })
+        })?)?;
+        clock_table.set("with_freq_hz", lua.create_function(|_, freq_hz: i64| {
+            Ok(LuaClock { inner: crate::sim::Clock::with_freq_hz(freq_hz as u64) })
+        })?)?;
+        globals.set("Clock", clock_table)?;
     }
 
     // Execute the script
