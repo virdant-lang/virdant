@@ -13,11 +13,12 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 use serde_json::json;
 
 use virdant::LIB_DIR;
-use virdant::types::ExprRoot;
+use virdant::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
+use virdant::types::{ExprRoot, Type};
 use virdant::db::Db;
 use virdant::fqn::PackageFqn;
-use virdant::common::source::{LineCol, Source, Span};
-use virdant::syntax::ast::{AstNode, AstNodeId};
+use virdant::common::source::{LineCol, Source, SourceOffset, Span};
+use virdant::syntax::ast::{AstNode, AstNodeId, match_arm_children};
 use virdant::syntax::payload::AstNodePayload;
 use virdant::syntax::parsing::Parsing;
 
@@ -120,7 +121,7 @@ impl LanguageServer for Backend {
                 ..Default::default()
             }),
 
-//            code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+            code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
 
 //            code_lens_provider: Some(CodeLensOptions {
 //                resolve_provider: Some(false),
@@ -510,80 +511,101 @@ impl LanguageServer for Backend {
     }
 
 
-//    async fn code_action(
-//        &self,
-//        params: CodeActionParams,
-//    ) -> Result<Option<Vec<CodeActionOrCommand>>> {
-//        let mut actions = Vec::new();
-//
-//        let uri = params.text_document.uri;
-//        let package = uri_to_packagefqn(&uri);
-//        let parsing = {
-//            let mut state = self.state.lock().await;
-//            state.vir.parsing(&package.to_string())
-//        };
-//        let mut code_actions = vec![];
-//
-//        for node in parsing.root().children() {
-//            if node.is_item() {
-//                let range = span_to_range(node.span());
-//
-//                let mut changes = std::collections::HashMap::new();
-//                changes.insert(
-//                    uri.clone(),
-//                    vec![],
-//                );
-//
-//                let edit = WorkspaceEdit {
-//                    changes: Some(changes),
-//                    document_changes: None,
-//                    change_annotations: None,
-//                };
-//
-//                let command = Command {
-//                    title: "Run test".into(),
-//                    command: "VirdantRunTest".into(),
-//                    arguments: Some(vec![
-//                        json!(parsing.string(node.name().unwrap()).to_string()),
-//                    ]),
-//                };
-//
-//                let diagnostic = Diagnostic {
-//                    range: span_to_range(node.span()),
-//                    severity: Some(DiagnosticSeverity::ERROR),
-//                    code: None,
-//                    code_description: None,
-//                    source: Some("virdant".to_string()),
-//                    message: "Syntax error".to_string(),
-//                    related_information: None,
-//                    tags: None,
-//                    data: None,
-//                };
-//
-//                let action = CodeAction {
-//                    title: "Run Test".into(),
-//                    kind: None,
-//                    diagnostics: Some(vec![diagnostic]),
-//                    edit: None,
-//                    command: Some(command),
-//                    is_preferred: Some(true),
-//                    data: None,
-//                    disabled: None,
-//                };
-//
-//                code_actions.push(CodeActionOrCommand::CodeAction(action));
-//            }
-//        }
-//
-//        // Just an example: if the user selected a range called "placeholder"
-//        for diag in &params.context.diagnostics {
-//            if diag.message.contains("placeholder") {
-//                // WorkspaceEdit that replaces the placeholder text
-//            }
-//        }
-//
-//        Ok(Some(actions))
-//    }
+    async fn code_action(
+        &self,
+        params: CodeActionParams,
+    ) -> Result<Option<CodeActionResponse>> {
+        let uri = params.text_document.uri;
+        let position = params.range.start;
+        let linecol = LineCol::new((position.line + 1) as usize, (position.character + 1) as usize);
+        let package = uri_to_packagefqn(&uri);
+
+        let state = self.state.lock().await;
+        let db = &state.db;
+        let parsing = db.get_parsing(package.clone());
+
+        let Some(node_id) = parsing.at(linecol) else { return Ok(None); };
+        let Some(match_node) = find_enclosing_match(&parsing, node_id) else { return Ok(None); };
+
+        let children = match_node.children();
+        if children.is_empty() { return Ok(None); }
+        let subject = &children[0];
+        let Ok(subject_typ) = db.get_typeof(subject.location()) else { return Ok(None); };
+
+        let symboltable = db.get_symboltable();
+        let missing = missing_match_patterns(db, &parsing, &match_node, &subject_typ, &symboltable);
+        if missing.is_empty() { return Ok(None); }
+
+        let is_stmt = matches!(match_node.payload(), AstNodePayload::ModDefStmtMatch);
+        let arm_body = if is_stmt { "{ }" } else { "?" };
+
+        let arms = match_arm_children(&children);
+        let first_pat_col = arms.iter().find_map(|(p, _)| p.map(|n| n.span().start().col()));
+        let indent_col = match first_pat_col {
+            Some(col) => col.saturating_sub(5).max(1),
+            None => match_node.span().start().col().saturating_add(4),
+        };
+        let indent_str = " ".repeat(indent_col.saturating_sub(1));
+
+        // Find an insertion point immediately after the last non-whitespace byte
+        // before the closing `}` of the match, so the `}` keeps its layout.
+        let source = db.get_source(package.clone());
+        let close_col = match_node.span().end().col().saturating_sub(1).max(1);
+        let close_line = match_node.span().end().line();
+        let close_offset: usize = source.to_offset(LineCol::new(close_line, close_col)).into();
+        let text = source.text();
+        let mut insert_offset = close_offset;
+        while insert_offset > 0 {
+            let b = text[insert_offset - 1];
+            if b == b' ' || b == b'\t' || b == b'\n' || b == b'\r' {
+                insert_offset -= 1;
+            } else {
+                break;
+            }
+        }
+        let insert_lc = source.to_linecol(SourceOffset::new(insert_offset as u32));
+        let insert_position = Position {
+            line: (insert_lc.line().saturating_sub(1)) as u32,
+            character: (insert_lc.col().saturating_sub(1)) as u32,
+        };
+
+        let mut new_text = String::new();
+        for pat in &missing {
+            new_text.push('\n');
+            new_text.push_str(&indent_str);
+            new_text.push_str("case ");
+            new_text.push_str(pat);
+            new_text.push_str(" => ");
+            new_text.push_str(arm_body);
+        }
+
+        let edit = TextEdit {
+            range: Range { start: insert_position, end: insert_position },
+            new_text,
+        };
+
+        let mut changes = std::collections::HashMap::new();
+        changes.insert(uri.clone(), vec![edit]);
+
+        let workspace_edit = WorkspaceEdit {
+            changes: Some(changes),
+            document_changes: None,
+            change_annotations: None,
+        };
+
+        let action = CodeAction {
+            title: "Add missing match cases".into(),
+            kind: Some(CodeActionKind::QUICKFIX),
+            diagnostics: None,
+            edit: Some(workspace_edit),
+            command: None,
+            is_preferred: Some(true),
+            disabled: None,
+            data: None,
+        };
+
+        Ok(Some(vec![CodeActionOrCommand::CodeAction(action)]))
+    }
 }
 
 impl Backend {
@@ -762,6 +784,132 @@ async fn get_expr_root<'a>(client: &Client, db: &'a Db, parsing: &'a Parsing, no
         current = parsing.ast_node(parent_id);
     }
     Some(current)
+}
+
+fn find_enclosing_match<'p>(parsing: &'p Parsing, node_id: AstNodeId) -> Option<AstNode<'p>> {
+    let mut current_id = node_id;
+    loop {
+        let node = parsing.ast_node(current_id);
+        match node.payload() {
+            AstNodePayload::ExprMatch | AstNodePayload::ModDefStmtMatch => return Some(node),
+            _ => match node.parent().map(|p| p.id()) {
+                Some(id) => current_id = id,
+                None => return None,
+            }
+        }
+    }
+}
+
+fn missing_match_patterns(
+    db: &Db,
+    parsing: &Parsing,
+    match_node: &AstNode<'_>,
+    subject_typ: &Type,
+    symboltable: &SymbolTable,
+) -> Vec<String> {
+    use indexmap::IndexSet;
+    use bstr::ByteSlice;
+
+    let children = match_node.children();
+    let arms = match_arm_children(&children);
+
+    let mut covered_syms: IndexSet<SymbolId> = IndexSet::new();
+    let mut covered_words: IndexSet<u64> = IndexSet::new();
+    let mut covered_bits: IndexSet<bool> = IndexSet::new();
+    let mut has_else = false;
+
+    for (pat_opt, _body) in &arms {
+        let Some(pat) = pat_opt else { has_else = true; continue; };
+        match pat.payload() {
+            AstNodePayload::PatCtor(pat_ctor) => {
+                let Type::Usual(td) = subject_typ else { continue };
+                let name = parsing.string(pat_ctor.name);
+                if let Some(sym) = symboltable.slot(*td, name) {
+                    covered_syms.insert(sym.id());
+                }
+            }
+            AstNodePayload::PatEnumerant(pat_enum) => {
+                let Type::Usual(td) = subject_typ else { continue };
+                let name = parsing.string(pat_enum.name);
+                if let Some(sym) = symboltable.slot(*td, name) {
+                    covered_syms.insert(sym.id());
+                }
+            }
+            AstNodePayload::PatWordLit(pat_word) => {
+                let literal = parsing.string(pat_word.literal).to_str_lossy();
+                covered_words.insert(parse_word_literal_value(&literal));
+            }
+            AstNodePayload::PatBitLit(pat_bit) => {
+                covered_bits.insert(pat_bit.literal);
+            }
+            _ => continue,
+        }
+    }
+
+    if has_else {
+        return vec![];
+    }
+
+    match subject_typ {
+        Type::Bit | Type::Reset => {
+            let mut out = vec![];
+            for v in [false, true] {
+                if !covered_bits.contains(&v) {
+                    out.push(if v { "true".to_string() } else { "false".to_string() });
+                }
+            }
+            out
+        }
+        Type::Word(width) => {
+            if *width > 10 { return vec![]; }
+            let total: u64 = 1u64 << width;
+            (0..total)
+                .filter(|v| !covered_words.contains(v))
+                .map(|v| v.to_string())
+                .collect()
+        }
+        Type::Usual(td) => {
+            let sym = symboltable.symbol(*td);
+            match sym.kind() {
+                SymbolKind::EnumDef => symboltable
+                    .slots(*td)
+                    .iter()
+                    .filter(|s| !covered_syms.contains(&s.id()))
+                    .map(|s| format!("#{}", s.name().to_str_lossy()))
+                    .collect(),
+                SymbolKind::UnionDef => symboltable
+                    .slots(*td)
+                    .iter()
+                    .filter(|s| !covered_syms.contains(&s.id()))
+                    .map(|s| {
+                        let sig = db.get_ctor_signature(s.id());
+                        let params: Vec<String> = sig.parameters.iter()
+                            .map(|(name, _)| name.to_str_lossy().into_owned())
+                            .collect();
+                        format!("@{}({})", s.name().to_str_lossy(), params.join(", "))
+                    })
+                    .collect(),
+                _ => vec![],
+            }
+        }
+        _ => vec![],
+    }
+}
+
+fn parse_word_literal_value(literal: &str) -> u64 {
+    let trimmed = if let Some((value, _width)) = literal.split_once('w') {
+        value.to_string()
+    } else {
+        literal.to_string()
+    };
+    let trimmed = trimmed.replace('_', "");
+    if let Some(hex) = trimmed.strip_prefix("0x") {
+        u64::from_str_radix(hex, 16).unwrap_or(0)
+    } else if let Some(bin) = trimmed.strip_prefix("0b") {
+        u64::from_str_radix(bin, 2).unwrap_or(0)
+    } else {
+        trimmed.parse().unwrap_or(0)
+    }
 }
 
 fn workspace_root(uri: &Url) -> std::path::PathBuf {
