@@ -9,6 +9,7 @@ pub mod verilog;
 pub mod types;
 pub mod util;
 pub mod sim;
+#[cfg(not(feature = "wasm"))]
 pub mod script;
 
 #[cfg(not(target_arch = "wasm32"))]

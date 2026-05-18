@@ -13,8 +13,8 @@ use rhai::{Dynamic, Engine, EvalAltResult, FnPtr, AST};
 use crate::db::Db;
 use crate::sim::{Sim, Value};
 
-#[cfg(not(target_arch = "wasm32"))] use crate::util::{db_from_dir, db_from_file};
-#[cfg(not(target_arch = "wasm32"))] use crate::util::check_db;
+use crate::util::{db_from_dir, db_from_file};
+use crate::util::check_db;
 
 /// Wrapper around `Db` for Rhai scripting.
 /// Holds an Arc<Db> and provides methods to create simulators.
@@ -303,7 +303,6 @@ fn dynamic_to_value(value: Dynamic, typ: &crate::types::Type) -> Value {
 }
 
 /// Open a single .vir file and return a ScriptDb.
-#[cfg(not(target_arch = "wasm32"))]
 fn open_file(path: &str) -> Result<ScriptDb, Box<EvalAltResult>> {
     let db = db_from_file(std::path::Path::new(path));
     validate_db(&db)?;
@@ -311,7 +310,6 @@ fn open_file(path: &str) -> Result<ScriptDb, Box<EvalAltResult>> {
 }
 
 /// Open a project directory (containing src/) and return a ScriptDb.
-#[cfg(not(target_arch = "wasm32"))]
 fn open_dir(path: &str) -> Result<ScriptDb, Box<EvalAltResult>> {
     let src_dir = std::path::Path::new(path).join("src");
     if !src_dir.exists() {
@@ -323,7 +321,6 @@ fn open_dir(path: &str) -> Result<ScriptDb, Box<EvalAltResult>> {
 }
 
 /// Validate a Db and return an error if there are diagnostics.
-#[cfg(not(target_arch = "wasm32"))]
 fn validate_db(db: &Db) -> Result<(), Box<EvalAltResult>> {
     if let Err(diagnostics) = check_db(db) {
         let msg = diagnostics
@@ -366,7 +363,6 @@ pub fn make_engine() -> Engine {
         .register_fn("assert", ScriptSim::assert_simple);
 
     // Register global functions
-    #[cfg(not(target_arch = "wasm32"))]
     engine
         .register_fn("open_file", open_file)
         .register_fn("open_dir", open_dir);

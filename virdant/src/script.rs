@@ -24,7 +24,6 @@ pub use lua::run_script_file as run_lua_script_file;
 ///
 /// The working directory is changed to the script's directory before execution,
 /// so relative paths in the script are resolved relative to the script location.
-#[cfg(not(target_arch = "wasm32"))]
 pub fn run_script_file(path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
     // Canonicalize the path to get an absolute path
     let abs_path = path.canonicalize()
