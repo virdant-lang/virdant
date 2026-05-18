@@ -56,18 +56,29 @@ fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
     let builtin_source = Source::load_file(LIB_DIR.join("builtin.vir"));
     let mut sources = vec![builtin_source.clone()];
     db.set_source(builtin_source.package(), builtin_source);
-    for filepath in std::fs::read_dir(source_dir.into()).unwrap() {
-        let filepath = match filepath {
-            Ok(filepath) => filepath.path(),
-            Err(_) => continue,
-        };
-        match filepath.extension() {
-            Some(ext) if ext.to_string_lossy() == "vir" => (),
-            _ => continue,
+    let source_dir = source_dir.into();
+    match std::fs::read_dir(&source_dir) {
+        Ok(entries) => {
+            for filepath in entries {
+                let filepath = match filepath {
+                    Ok(filepath) => filepath.path(),
+                    Err(_) => continue,
+                };
+                match filepath.extension() {
+                    Some(ext) if ext.to_string_lossy() == "vir" => (),
+                    _ => continue,
+                }
+                let source = Source::load_file(filepath);
+                db.set_source(source.package(), source.clone());
+                sources.push(source);
+            }
         }
-        let source = Source::load_file(filepath);
-        db.set_source(source.package(), source.clone());
-        sources.push(source);
+        Err(e) => {
+            eprintln!(
+                "warning: cannot read source directory {}: {e}",
+                source_dir.display(),
+            );
+        }
     }
     db.set_packages(sources.iter().map(|source| source.package()).collect());
     db
@@ -833,6 +844,13 @@ fn escape_markdown(text: impl AsRef<str>) -> String {
 
 fn dump_hover(workspace_dir: &std::path::Path, package: PackageFqn, linecol: LineCol) {
     let db = db_from_dir(workspace_dir);
+    if !db.get_packages().contains(&package) {
+        eprintln!(
+            "error: package {package} not found in workspace {}",
+            workspace_dir.display(),
+        );
+        return;
+    }
     let parsing = db.get_parsing(package.clone());
 
     if let Some(node_id) = parsing.at(linecol) {
@@ -869,11 +887,19 @@ enum Command {
     },
 }
 
-fn parse_hover_location(location: &str) -> (std::path::PathBuf, PackageFqn, LineCol) {
+fn parse_hover_location(location: &str) -> std::result::Result<(std::path::PathBuf, PackageFqn, LineCol), String> {
     let parts: Vec<&str> = location.rsplitn(3, ':').collect();
-    assert!(parts.len() == 3, "Location must be in the format <file_or_package>:<line>:<col>");
-    let col: usize = parts[0].parse().expect("Invalid column number");
-    let line: usize = parts[1].parse().expect("Invalid line number");
+    if parts.len() != 3 {
+        return Err(format!(
+            "Location must be in the format <file_or_package>:<line>:<col>, got {location:?}",
+        ));
+    }
+    let col: usize = parts[0]
+        .parse()
+        .map_err(|_| format!("Invalid column number: {:?}", parts[0]))?;
+    let line: usize = parts[1]
+        .parse()
+        .map_err(|_| format!("Invalid line number: {:?}", parts[1]))?;
     let file_or_package = parts[2];
 
     let (workspace_dir, package) = if Path::new(file_or_package).extension().map_or(false, |ext| ext == "vir") {
@@ -882,15 +908,16 @@ fn parse_hover_location(location: &str) -> (std::path::PathBuf, PackageFqn, Line
         let pkg = path
             .file_stem()
             .map(|stem| PackageFqn::new(stem.as_bytes().into()))
-            .expect("Invalid file path");
+            .ok_or_else(|| format!("Invalid file path: {file_or_package:?}"))?;
         (workspace, pkg)
     } else {
-        let workspace = std::env::current_dir().expect("Cannot determine current directory");
+        let workspace = std::env::current_dir()
+            .map_err(|e| format!("Cannot determine current directory: {e}"))?;
         let pkg = PackageFqn::new(file_or_package.as_bytes().into());
         (workspace, pkg)
     };
 
-    (workspace_dir, package, LineCol::new(line, col))
+    Ok((workspace_dir, package, LineCol::new(line, col)))
 }
 
 #[tokio::main]
@@ -905,8 +932,15 @@ async fn main() {
             Server::new(stdin, stdout, socket).serve(service).await;
         }
         Some(Command::Hover { location }) => {
-            let (workspace_dir, package, linecol) = parse_hover_location(&location);
-            dump_hover(&workspace_dir, package, linecol);
+            match parse_hover_location(&location) {
+                Ok((workspace_dir, package, linecol)) => {
+                    dump_hover(&workspace_dir, package, linecol);
+                }
+                Err(msg) => {
+                    eprintln!("error: {msg}");
+                    std::process::exit(2);
+                }
+            }
         }
     }
 }

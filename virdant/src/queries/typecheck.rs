@@ -7,7 +7,7 @@ use crate::types::{ExprRoot, Type};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
 
-pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> ExprRoot {
+fn find_exprroot(builder: &mut Builder, location: Location) -> Option<ExprRoot> {
     let parsing = builder.get_parsing(location.package());
 
     let exprroot_ids: IndexSet<_> = builder
@@ -18,28 +18,43 @@ pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> E
         .collect();
 
     let mut node = parsing.ast_node(location.ast_node_id());
-    let original_node = node.clone();
     loop {
-        if let Some(_exprroot) = exprroot_ids.get(&node.id()) {
-            return ExprRoot::new(node.location());
+        if exprroot_ids.contains(&node.id()) {
+            return Some(ExprRoot::new(node.location()));
         }
 
         if let Some(parent) = node.parent() {
             let parent_id = parent.id();
             node = parsing.ast_node(parent_id);
         } else {
-            builder.dump();
-            dbg!(&node);
-            eprintln!("{:?}", original_node.summary());
-            eprintln!("{:?}", parsing.text(original_node.span()));
-            eprintln!("{:?}", original_node.region());
-            panic!("No ExprRoot found")
+            return None;
         }
     }
 }
 
+pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> ExprRoot {
+    if let Some(exprroot) = find_exprroot(builder, location.clone()) {
+        return exprroot;
+    }
+
+    let parsing = builder.get_parsing(location.package());
+    let node = parsing.ast_node(location.ast_node_id());
+    builder.dump();
+    dbg!(&node);
+    eprintln!("{:?}", node.summary());
+    eprintln!("{:?}", parsing.text(node.span()));
+    eprintln!("{:?}", node.region());
+    panic!("No ExprRoot found")
+}
+
 pub(crate) fn build_typeof(builder: &mut Builder, location: Location) -> Result<Type, Vec<Diagnostic>> {
-    let exprroot = builder.get_exprroot_for(location.clone());
+    let Some(exprroot) = find_exprroot(builder, location.clone()) else {
+        let region = builder.get_location_region(location.clone());
+        return Err(vec![diagnostics::Todo {
+            region,
+            message: "No expr root".into(),
+        }.into()]);
+    };
     let typing = builder.get_typing(exprroot);
     if let Some(typ) = typing.type_of_node(location.ast_node_id()) {
         Ok(typ.clone())

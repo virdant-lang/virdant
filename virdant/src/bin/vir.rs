@@ -106,13 +106,29 @@ fn main() {
 
 fn project_db(args: &Args) -> Db {
     if let Some(virfile) = &args.virfile {
+        if !virfile.is_file() {
+            eprintln!("ERROR: file not found: {}", virfile.display());
+            std::process::exit(1);
+        }
         return db_from_file(virfile);
     }
 
     let cwd = if let Some(cwd) = &args.cwd {
-        std::fs::canonicalize(cwd).unwrap()
+        match std::fs::canonicalize(cwd) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("ERROR: cannot resolve directory {}: {e}", cwd.display());
+                std::process::exit(1);
+            }
+        }
     } else {
-        std::env::current_dir().unwrap()
+        match std::env::current_dir() {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("ERROR: cannot determine current directory: {e}");
+                std::process::exit(1);
+            }
+        }
     };
 
     if !cwd.join("Virdant.toml").exists() {
@@ -120,7 +136,13 @@ fn project_db(args: &Args) -> Db {
         std::process::exit(1);
     }
 
-    db_from_dir(cwd.join("src"))
+    let src_dir = cwd.join("src");
+    if !src_dir.is_dir() {
+        eprintln!("ERROR: source directory not found: {}", src_dir.display());
+        std::process::exit(1);
+    }
+
+    db_from_dir(src_dir)
 }
 
 fn dump_diagnostics(db: &Db) {
@@ -375,6 +397,10 @@ fn dump_typing(args: &Args) {
 
 fn build(args: &Args) {
     let (db, builddir) = if let Some(virfile) = &args.virfile {
+        if !virfile.is_file() {
+            eprintln!("ERROR: file not found: {}", virfile.display());
+            std::process::exit(1);
+        }
         let db = db_from_file(virfile);
         let builddir = std::env::current_dir().unwrap().join("build");
         (db, builddir)

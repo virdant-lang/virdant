@@ -208,12 +208,13 @@ impl TypeIndex {
             };
 
             if let Some(symbol) = symboltable.resolve_item(type_name.as_bstr(), parsing.package()) {
-                let bit_symbol = symboltable.resolve(b"builtin::Bit".into()).unwrap();
-                let word_symbol = symboltable.resolve(b"builtin::Word".into()).unwrap();
-                let clock_symbol = symboltable.resolve(b"builtin::Clock".into()).unwrap();
-                let reset_symbol = symboltable.resolve(b"builtin::Reset".into()).unwrap();
+                let is_builtin = |name: &[u8]| {
+                    symboltable
+                        .resolve(name.into())
+                        .map_or(false, |b| b.id() == symbol.id())
+                };
 
-                let typ = if symbol.id() == bit_symbol.id() {
+                let typ = if is_builtin(b"builtin::Bit") {
                     if node.children().len() >= 2 {
                         self.diagnostics.push(diagnostics::Unknown {
                             region: node.region(),
@@ -222,7 +223,7 @@ impl TypeIndex {
                         return;
                     }
                     Type::Bit
-                } else if symbol.id() == clock_symbol.id() {
+                } else if is_builtin(b"builtin::Clock") {
                     if node.children().len() >= 2 {
                         self.diagnostics.push(diagnostics::Unknown {
                             region: node.region(),
@@ -231,7 +232,7 @@ impl TypeIndex {
                         return;
                     }
                     Type::Clock
-                } else if symbol.id() == reset_symbol.id() {
+                } else if is_builtin(b"builtin::Reset") {
                     if node.children().len() >= 2 {
                         self.diagnostics.push(diagnostics::Unknown {
                             region: node.region(),
@@ -240,7 +241,7 @@ impl TypeIndex {
                         return;
                     }
                     Type::Reset
-                } else if symbol.id() == word_symbol.id() {
+                } else if is_builtin(b"builtin::Word") {
                     if node.children().len() < 2 {
                         self.diagnostics.push(diagnostics::Unknown {
                             region: node.region(),
