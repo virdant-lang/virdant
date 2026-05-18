@@ -2,7 +2,6 @@ use std::cell::RefCell;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::rc::Rc;
-use std::sync::Arc;
 use std::time::Instant;
 
 use virdant::sim::{Clock, Sim, Value};
@@ -22,7 +21,7 @@ fn sim() -> Sim {
 
     let symboltable = db.get_symboltable();
     let top = symboltable.resolve(b"uart::Top".into()).unwrap();
-    Sim::new(Arc::new(db), top.id())
+    Sim::new(&db, top.id())
 }
 
 struct Decoder {

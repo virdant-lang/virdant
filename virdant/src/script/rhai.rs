@@ -34,7 +34,7 @@ impl ScriptDb {
         let top_symbol = symboltable
             .resolve(<&BStr>::from(top))
             .ok_or_else(|| format!("Could not resolve top module: {}", top))?;
-        let sim = Sim::new(Arc::clone(&self.db), top_symbol.id());
+        let sim = Sim::new(&self.db, top_symbol.id());
         Ok(ScriptSim::new(sim))
     }
 }

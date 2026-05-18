@@ -15,7 +15,9 @@ use crate::sim::{Scheduler, State};
 use crate::sim::circuit::Circuit;
 use crate::sim::eval::{Context, Value};
 use crate::sim::scheduler::{Callback, Event, EventCallback};
+use crate::sim::vcd::TypeLayoutIndex;
 use crate::types::Type;
+
 
 /// A lock that defers circuit settlement until dropped.
 /// While held, call `.set()` to accumulate signal changes without flowing.
@@ -85,7 +87,7 @@ impl std::fmt::Debug for Sim {
 }
 
 impl Sim {
-    pub fn new(db: Arc<Db>, top: SymbolId) -> Sim {
+    pub fn new(db: &Db, top: SymbolId) -> Sim {
         let circuit = Circuit::new(db, top);
 
         let mut sim = Sim {
@@ -98,8 +100,8 @@ impl Sim {
         sim
     }
 
-    pub(super) fn db(&self) -> Arc<Db> {
-        self.circuit.db.clone()
+    pub(super) fn type_layout_index(&self) -> &TypeLayoutIndex {
+        &self.circuit.type_layout_index
     }
 
     /// Stream a VCD trace of every dumpable signal to `writer`.  The header

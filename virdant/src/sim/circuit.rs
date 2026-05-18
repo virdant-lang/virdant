@@ -3,8 +3,9 @@
 //! `Circuit` is built once by `Circuit::new` from a `Db` and a top
 //! `SymbolId`, then handed to `Sim::new`.  After construction nothing
 //! inside `Circuit` is mutated; it owns the strong references to the
-//! database, the elaborated design, and every precomputed dataflow
-//! table the runtime relies on.
+//! elaborated design and every precomputed dataflow table the runtime
+//! relies on.  The `Db` reference is only needed during construction
+//! and is not retained afterward.
 //!
 
 use std::sync::Arc;
@@ -19,13 +20,14 @@ use crate::analysis::elaboration::{ElaboratedComponent, SignalId, Elaboration};
 use crate::common::ComponentKind;
 use crate::db::Db;
 use crate::sim::expr::{Expr, ExprPayload, Referent, driver_to_expr};
+use crate::sim::vcd::TypeLayoutIndex;
 use crate::syntax::ast::AstNodeId;
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 
 pub(super) struct Circuit {
-    pub(super) db: Arc<Db>,
     pub(super) elaboration: Arc<Elaboration>,
+    pub(super) type_layout_index: TypeLayoutIndex,
     pub(super) deps: IndexMap<SignalId, IndexSet<SignalId>>,
     pub(super) sensitivities: IndexMap<SignalId, IndexSet<SignalId>>,
     pub(super) clock_sensitivities: IndexMap<SignalId, IndexSet<SignalId>>,
@@ -44,10 +46,10 @@ impl Circuit {
     /// table the runtime needs.  Walks the elaboration once inside
     /// `build_dependencies` (per-component reference walk to derive `deps`),
     /// then collects `registers` and per-component driver `exprs`.
-    pub(super) fn new(db: Arc<Db>, top: SymbolId) -> Circuit {
+    pub(super) fn new(db: &Db, top: SymbolId) -> Circuit {
         let elaboration = db.get_elaboration(top);
 
-        let deps = build_dependencies(&db, &elaboration);
+        let deps = build_dependencies(db, &elaboration);
         let sensitivities = build_sensitivities(&deps);
         let clock_sensitivities = build_clock_sensitivities(&elaboration);
 
@@ -56,7 +58,7 @@ impl Circuit {
         for elab_component in elaboration.components() {
             let elab_id = elab_component.id();
             if let Some(driver) = elab_component.driver() {
-                exprs.insert(elab_id, driver_to_expr(&db, driver));
+                exprs.insert(elab_id, driver_to_expr(db, driver));
             }
             if elab_component.is_reg() {
                 registers.insert(elab_id);
@@ -66,13 +68,15 @@ impl Circuit {
         let mut resolved_referents: IndexMap<SignalId, Vec<(Referent, SignalId)>> =
             IndexMap::new();
         for (signal_id, expr) in &exprs {
-            let entries = compute_resolved_referents(&db, &elaboration, *signal_id, expr);
+            let entries = compute_resolved_referents(db, &elaboration, *signal_id, expr);
             resolved_referents.insert(*signal_id, entries);
         }
 
+        let type_layout_index = TypeLayoutIndex::build(db, &elaboration);
+
         Circuit {
-            db,
             elaboration,
+            type_layout_index,
             deps,
             sensitivities,
             clock_sensitivities,

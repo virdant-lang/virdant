@@ -6,7 +6,6 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use virdant::sim::{Clock, Sim, Value};
 use virdant::util::{check_db, db_from_file_with_lib};
@@ -23,7 +22,7 @@ fn lfsr_sim() -> Sim {
 
     let symboltable = db.get_symboltable();
     let top = symboltable.resolve(b"lfsr::Lfsr".into()).unwrap();
-    Sim::new(Arc::new(db), top.id())
+    Sim::new(&db, top.id())
 }
 
 /// Minimal lifecycle test: register at_start / at_end callbacks and run

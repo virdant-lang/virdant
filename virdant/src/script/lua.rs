@@ -70,7 +70,7 @@ impl UserData for LuaDb {
             let top_symbol = symboltable
                 .resolve(<&BStr>::from(top.as_str()))
                 .ok_or_else(|| mlua::Error::runtime(format!("Could not resolve top module: {}", top)))?;
-            let sim = Sim::new(Arc::clone(&this.db), top_symbol.id());
+            let sim = Sim::new(&this.db, top_symbol.id());
             create_sim_table(lua, sim)
         });
     }
