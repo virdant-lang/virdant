@@ -1,0 +1,184 @@
+// Standard combinational logic blocks from digital design
+
+// 2-to-1 Multiplexer
+mod Mux2to1 {
+    incoming a : Bit
+    incoming b : Bit
+    incoming sel : Bit
+    outgoing out : Bit
+
+    out := if sel { b } else { a }
+}
+
+// 4-to-1 Multiplexer
+mod Mux4to1 {
+    incoming a : Bit
+    incoming b : Bit
+    incoming c : Bit
+    incoming d : Bit
+    incoming sel : Word[2]
+    outgoing out : Bit
+
+    out := if sel == 0 { a } else if sel == 1 { b } else if sel == 2 { c } else { d }
+}
+
+// 2-to-4 Decoder
+mod Decoder2to4 {
+    incoming inp : Word[2]
+    incoming enable : Bit
+    outgoing out : Word[4]
+
+    out := if enable {
+        if inp == 0 { 0b0001 } else if inp == 1 { 0b0010 } else if inp == 2 { 0b0100 } else { 0b1000 }
+    } else {
+        0b0000
+    }
+}
+
+// 4-to-2 Priority Encoder
+mod PriorityEncoder4to2 {
+    incoming inp : Word[4]
+    outgoing out : Word[2]
+    outgoing valid : Bit
+
+    out := if inp[3] { 3 } else {
+        if inp[2] { 2 } else {
+            if inp[1] { 1 } else { 0 }
+        }
+    }
+    valid := inp != 0
+}
+
+// Half Adder (1-bit)
+mod HalfAdder {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing sum : Bit
+    outgoing carry : Bit
+
+    sum := a ^^ b
+    carry := a && b
+}
+
+// Full Adder (1-bit) built from two Half Adders
+mod FullAdder {
+    incoming a : Bit
+    incoming b : Bit
+    incoming cin : Bit
+    outgoing sum : Bit
+    outgoing cout : Bit
+
+    wire sum1 : Bit
+    wire carry1 : Bit
+    wire carry2 : Bit
+
+    mod ha1 of HalfAdder
+    ha1.a := a
+    ha1.b := b
+    sum1 := ha1.sum
+    carry1 := ha1.carry
+
+    mod ha2 of HalfAdder
+    ha2.a := sum1
+    ha2.b := cin
+    sum := ha2.sum
+    carry2 := ha2.carry
+
+    cout := carry1 || carry2
+}
+
+// 4-bit Ripple Carry Adder
+mod RippleCarryAdder4 {
+    incoming a : Word[4]
+    incoming b : Word[4]
+    incoming cin : Bit
+    outgoing sum : Word[4]
+    outgoing cout : Bit
+
+    wire c0 : Bit
+    wire c1 : Bit
+    wire c2 : Bit
+    wire s0 : Bit
+    wire s1 : Bit
+    wire s2 : Bit
+    wire s3 : Bit
+
+    mod fa0 of FullAdder
+    fa0.a := a[0]
+    fa0.b := b[0]
+    fa0.cin := cin
+    s0 := fa0.sum
+    c0 := fa0.cout
+
+    mod fa1 of FullAdder
+    fa1.a := a[1]
+    fa1.b := b[1]
+    fa1.cin := c0
+    s1 := fa1.sum
+    c1 := fa1.cout
+
+    mod fa2 of FullAdder
+    fa2.a := a[2]
+    fa2.b := b[2]
+    fa2.cin := c1
+    s2 := fa2.sum
+    c2 := fa2.cout
+
+    mod fa3 of FullAdder
+    fa3.a := a[3]
+    fa3.b := b[3]
+    fa3.cin := c2
+    s3 := fa3.sum
+    cout := fa3.cout
+
+    sum := word(s3, s2, s1, s0)
+}
+
+// Arithmetic Logic Unit (ALU) - Simple 4-bit
+mod ALU4 {
+    incoming a : Word[4]
+    incoming b : Word[4]
+    incoming op : Word[2]
+    outgoing result : Word[4]
+    outgoing zero : Bit
+
+    result := if op == 0 { a & b } else if op == 1 { a | b } else if op == 2 { a + b } else { a - b }
+
+    zero := !any(result)
+}
+
+// Comparator (4-bit)
+mod Comparator4 {
+    incoming a : Word[4]
+    incoming b : Word[4]
+    outgoing equal : Bit
+    outgoing less_than : Bit
+    outgoing greater_than : Bit
+
+    equal := a == b
+    less_than := a < b
+    greater_than := a > b
+}
+
+// Parity Generator (8-bit)
+mod ParityGenerator8 {
+    incoming data : Word[8]
+    outgoing even_parity : Bit
+    outgoing odd_parity : Bit
+
+    even_parity := data[0] ^^ data[1] ^^ data[2] ^^ data[3] ^^ data[4] ^^ data[5] ^^ data[6] ^^ data[7]
+    odd_parity := !even_parity
+}
+
+// Top module demonstrating all combinational blocks
+export mod Top {
+    incoming a : Word[4]
+    incoming b : Word[4]
+    outgoing result : Word[4]
+
+    mod alu of ALU4
+    alu.a := a
+    alu.b := b
+    alu.op := 2  // ADD operation
+    result := alu.result
+}

@@ -1,0 +1,155 @@
+// Standard sequential logic blocks from digital design
+
+// D Flip-Flop
+mod DFlipFlop {
+    incoming clock : Clock
+    incoming d : Bit
+    outgoing q : Bit
+
+    reg r : Bit on clock
+    r <= d
+    q := r
+}
+
+// D Flip-Flop with Reset
+mod DFlipFlopReset {
+    incoming clock : Clock
+    incoming reset : Bit
+    incoming d : Bit
+    outgoing q : Bit
+
+    reg r : Bit on clock
+    r <= if reset { false } else { d }
+    q := r
+}
+
+// D Flip-Flop with Enable
+mod DFlipFlopEnable {
+    incoming clock : Clock
+    incoming enable : Bit
+    incoming d : Bit
+    outgoing q : Bit
+
+    reg r : Bit on clock
+    r <= if enable { d } else { r }
+    q := r
+}
+
+// 4-bit Register
+mod Register4 {
+    incoming clock : Clock
+    incoming d : Word[4]
+    outgoing q : Word[4]
+
+    reg r : Word[4] on clock
+    r <= d
+    q := r
+}
+
+// 4-bit Register with Reset
+mod Register4Reset {
+    incoming clock : Clock
+    incoming reset : Bit
+    incoming d : Word[4]
+    outgoing q : Word[4]
+
+    reg r : Word[4] on clock
+    r <= if reset { 0 } else { d }
+    q := r
+}
+
+// 4-bit Register with Enable
+mod Register4Enable {
+    incoming clock : Clock
+    incoming enable : Bit
+    incoming d : Word[4]
+    outgoing q : Word[4]
+
+    reg r : Word[4] on clock
+    r <= if enable { d } else { r }
+    q := r
+}
+
+// Binary Counter (4-bit)
+mod Counter4 {
+    incoming clock : Clock
+    incoming reset : Bit
+    outgoing count : Word[4]
+
+    reg r : Word[4] on clock
+    r <= if reset { 0 } else { r + 1 }
+    count := r
+}
+
+// Up/Down Counter (4-bit)
+mod UpDownCounter4 {
+    incoming clock : Clock
+    incoming reset : Bit
+    incoming up : Bit
+    outgoing count : Word[4]
+
+    reg r : Word[4] on clock
+    r <= if reset { 0 } else if up { r + 1 } else { r - 1 }
+    count := r
+}
+
+// Loadable Counter (4-bit)
+mod LoadableCounter4 {
+    incoming clock : Clock
+    incoming reset : Bit
+    incoming load : Bit
+    incoming load_value : Word[4]
+    outgoing count : Word[4]
+
+    reg r : Word[4] on clock
+    r <= if reset { 0 } else if load { load_value } else { r + 1 }
+    count := r
+}
+
+// Shift Register (4-bit)
+mod ShiftRegister4 {
+    incoming clock : Clock
+    incoming serial_in : Bit
+    outgoing parallel_out : Word[4]
+    outgoing serial_out : Bit
+
+    reg r : Word[4] on clock
+    r <= word(r[3..0], serial_in)
+
+    parallel_out := r
+    serial_out := r[3]
+}
+
+// Ring Counter (4-bit)
+mod RingCounter4 {
+    incoming clock : Clock
+    incoming reset : Bit
+    outgoing q : Word[4]
+
+    reg r : Word[4] on clock
+    r <= if reset { 0b0001 } else { word(r[3..0], r[3]) }
+    q := r
+}
+
+// Johnson Counter (4-bit)
+mod JohnsonCounter4 {
+    incoming clock : Clock
+    incoming reset : Bit
+    outgoing q : Word[4]
+
+    reg r : Word[4] on clock
+    r <= if reset { 0 } else { word(r[3..0], !r[3]) }
+    q := r
+}
+
+// Top module demonstrating sequential blocks
+export mod Top {
+    incoming clock : Clock
+    incoming reset : Bit
+    outgoing count : Word[4]
+
+    mod counter of Counter4
+    counter.clock := clock
+    counter.reset := reset
+    count := counter.count
+}

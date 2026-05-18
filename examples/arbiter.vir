@@ -1,0 +1,130 @@
+// Arbiter: grants exclusive access to a shared resource among multiple clients.
+//
+// This example shows a 2-requester round-robin arbiter.
+// Round-robin means: if both clients request at the same time,
+// the arbiter alternates who wins each cycle -- fair access for all.
+//
+// Concepts demonstrated:
+//   - union types as a state machine
+//   - reg for stateful round-robin tracking
+//   - combinational grant logic using match
+//   - module instantiation and port wiring
+//   - if/else expressions on regs and wires
+
+// Priority encodes who has the tie-breaking advantage this cycle.
+// When both clients request simultaneously, the one with priority wins.
+// After each grant, priority flips to the other client.
+union type Priority {
+    Client0First()
+    Client1First()
+}
+
+// Arbiter: the core module.
+// Inputs:  req_0, req_1  -- each client asserts its request signal
+// Outputs: grant_0, grant_1 -- at most one grant is high at any cycle
+mod Arbiter {
+    incoming clock   : Clock
+    incoming reset   : Bit
+
+    incoming req_0   : Bit   // client 0 is requesting the resource
+    incoming req_1   : Bit   // client 1 is requesting the resource
+
+    outgoing grant_0 : Bit   // client 0 is granted the resource this cycle
+    outgoing grant_1 : Bit   // client 1 is granted the resource this cycle
+
+    // priority is a register that tracks whose turn it is.
+    // On reset, client 0 goes first.
+    reg priority : Priority on clock
+
+    // Compute grants as wires first so we can read them back into the
+    // priority update logic without reading from outgoing ports directly.
+    //
+    // Client 0 wins when:
+    //   - it has priority AND it is requesting, OR
+    //   - it is the only one requesting (client 1 is silent)
+    wire g0 : Bit
+    g0 := match priority {
+        case @Client0First() => req_0                   // client 0 wins the tie
+        case @Client1First() => req_0 && !req_1         // client 0 only if alone
+    }
+
+    // Symmetric for client 1.
+    wire g1 : Bit
+    g1 := match priority {
+        case @Client0First() => req_1 && !req_0         // client 1 only if alone
+        case @Client1First() => req_1                   // client 1 wins the tie
+    }
+
+    // Expose the grant wires on the outgoing ports.
+    grant_0 := g0
+    grant_1 := g1
+
+    priority <= if reset {
+        @Client0First()
+    } else {
+        match priority {
+            // Client 0 had priority; if it was granted, hand priority to client 1.
+            case @Client0First() =>
+                if g0 { @Client1First() } else { @Client0First() }
+            // Client 1 had priority; if it was granted, hand priority to client 0.
+            case @Client1First() =>
+                if g1 { @Client0First() } else { @Client1First() }
+        }
+    }
+}
+
+// Client: a simple module that always requests the resource.
+// It counts how many times it has been granted access.
+// In a real design a client might only request sometimes;
+// here both clients always request, so the arbiter must alternate.
+mod Client {
+    incoming clock   : Clock
+    incoming reset   : Bit
+
+    outgoing req     : Bit      // always requesting
+    incoming grant   : Bit      // high for one cycle when this client wins
+
+    outgoing count   : Word[8]  // total grants received so far
+
+    // This client always wants the bus.
+    req := true
+
+    // Accumulate grant count in a register.
+    reg n : Word[8] on clock
+    n <= if reset { 0 } else if grant { n + 1 } else { n }
+
+    count := n
+}
+
+// Top: the top-level module that wires together two clients and one arbiter.
+// After reset both clients always request, so the arbiter should alternate:
+//   cycle 0: grant_0=1, grant_1=0
+//   cycle 1: grant_0=0, grant_1=1
+//   cycle 2: grant_0=1, grant_1=0  ...
+// count_0 and count_1 should stay equal (or differ by at most 1).
+export mod Top {
+    incoming clock    : Clock
+    incoming reset    : Bit
+
+    outgoing count_0  : Word[8]  // total grants received by client 0
+    outgoing count_1  : Word[8]  // total grants received by client 1
+
+    mod arb of Arbiter
+    arb.clock := clock
+    arb.reset := reset
+
+    mod client_0 of Client
+    client_0.clock := clock
+    client_0.reset := reset
+    client_0.grant := arb.grant_0
+    arb.req_0 := client_0.req
+
+    mod client_1 of Client
+    client_1.clock := clock
+    client_1.reset := reset
+    client_1.grant := arb.grant_1
+    arb.req_1 := client_1.req
+
+    count_0 := client_0.count
+    count_1 := client_1.count
+}
