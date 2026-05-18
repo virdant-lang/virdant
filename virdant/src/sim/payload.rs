@@ -49,6 +49,7 @@ pub struct WordLit {
 
 #[derive(Debug)]
 pub struct StrLit {
+    #[allow(dead_code)]
     pub value: BString,
 }
 
@@ -68,6 +69,7 @@ pub struct UnOp {
 #[derive(Debug)]
 pub struct Method {
     pub subject: Arc<Expr>,
+    #[allow(dead_code)]
     pub method: BString,
     pub args: Vec<Arc<Expr>>,
 }

@@ -17,7 +17,7 @@ use crate::util::{db_from_dir, db_from_file};
 use crate::util::check_db;
 
 /// Wrapper around `Db` for Rhai scripting.
-/// Holds an Arc<Db> and provides methods to create simulators.
+/// Holds an `Arc<Db>` and provides methods to create simulators.
 #[derive(Clone)]
 pub struct ScriptDb {
     db: Arc<Db>,
@@ -47,7 +47,7 @@ struct ScriptContext {
 }
 
 /// Wrapper around `Sim` for Rhai scripting.
-/// Uses Rc<RefCell<Sim>> internally to allow mutable access from callbacks.
+/// Uses `Rc<RefCell<Sim>>` internally to allow mutable access from callbacks.
 #[derive(Clone)]
 pub struct ScriptSim {
     sim: Rc<RefCell<Sim>>,
