@@ -1,0 +1,14 @@
+// MatchCoverage: duplicated `case true` arm on a Bit subject.
+
+mod OverlapBit {
+    incoming b : Bit
+    outgoing out : Bit
+    // CHECK: Overlapping match arm: true
+    out := match b {
+        case true  => false
+        case false => true
+        case true  => true
+    }
+}
+
+// CHECK: Check failed

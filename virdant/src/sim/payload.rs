@@ -27,6 +27,7 @@ pub struct If {
 pub enum Pat {
     Ctor { symbol_id: SymbolId, bound_vars: Vec<(BString, Location)> },
     WordLit { width: Width, value: WordValue },
+    BitLit { value: bool },
     Else,
 }
 

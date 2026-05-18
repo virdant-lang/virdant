@@ -1,0 +1,14 @@
+// MatchCoverage: `else` arm followed by another `case`.
+
+mod ElseNotLast {
+    incoming x : Word[8]
+    outgoing out : Bit
+    // CHECK: else arm must be the last arm of the match
+    out := match x {
+        case 0 => true
+        else   => false
+        case 1 => true
+    }
+}
+
+// CHECK: Check failed

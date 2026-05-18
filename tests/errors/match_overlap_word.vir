@@ -1,0 +1,16 @@
+// MatchCoverage: duplicated word-literal arm.
+
+mod OverlapWord {
+    incoming x : Word[2]
+    outgoing out : Bit
+    // CHECK: Overlapping match arm: 0
+    out := match x {
+        case 0 => true
+        case 1 => false
+        case 2 => true
+        case 3 => false
+        case 0 => false
+    }
+}
+
+// CHECK: Check failed

@@ -41,7 +41,7 @@ mod Top {
     wire parity : Bit
     unused parity
     parity :=
-        match 2w4 {
+        match 2w2 {
             case 0 => false
             case 1 => true
             case 2 => false

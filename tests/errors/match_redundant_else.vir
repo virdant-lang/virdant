@@ -1,0 +1,24 @@
+// MatchCoverage: enum subject with every enumerant covered plus `else`.
+
+enum type Color width 2 {
+    Red   = 0
+    Green = 1
+    Blue  = 2
+}
+
+mod RedundantElse {
+    wire c : Color
+    c := #Red
+
+    wire out : Bit
+    unused out
+    // CHECK: Redundant else arm
+    out := match c {
+        case #Red   => true
+        case #Green => false
+        case #Blue  => true
+        else        => false
+    }
+}
+
+// CHECK: Check failed

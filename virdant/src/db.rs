@@ -49,6 +49,7 @@ queries! {
     Component(component_id: ComponentId) -> Arc<Component>;
     DriverAnalysis(symbol_id: SymbolId) -> Arc<DriverAnalysis>;
     CheckDrivers(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>;
+    MatchCoverage(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>;
     TypeDefs() -> Arc<Vec<TypeDef>>;
     TypeDef(symbol_id: SymbolId) -> Arc<TypeDef>;
     TypeAt(location: Location) -> Result<Type, Vec<Diagnostic>>;
@@ -94,6 +95,7 @@ impl Query {
             crate::analysis::component::build_component : Component(component_id);
             crate::analysis::drivers::build_driver_analysis : DriverAnalysis(symbol_id);
             crate::queries::check_drivers : CheckDrivers(symbol_id);
+            crate::queries::build_match_coverage : MatchCoverage(symbol_id);
             crate::queries::find_exprroots : ExprRoots();
             crate::queries::build_all_exprs : AllExprs();
             crate::queries::build_expected_type : ExpectedType(location);
@@ -131,6 +133,7 @@ db_getter!(get_symbol_ast : SymbolAst(symbol_id: SymbolId) -> AstNodeId);
 db_getter!(get_component : Component(component_id: ComponentId) -> Arc<Component>);
 db_getter!(get_driver_analysis : DriverAnalysis(symbol_id: SymbolId) -> Arc<DriverAnalysis>);
 db_getter!(check_drivers : CheckDrivers(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>);
+db_getter!(get_match_coverage : MatchCoverage(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>);
 db_getter!(get_typing_context : TypingContext(item: SymbolId) -> TypingContext);
 db_getter!(get_typedefs : TypeDefs() -> Arc<Vec<TypeDef>>);
 db_getter!(get_typedef : TypeDef(symbol_id: SymbolId) -> Arc<TypeDef>);

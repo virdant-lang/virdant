@@ -20,6 +20,10 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     }
 
     for item in symboltable.items() {
+        diagnostics.extend(builder.get_match_coverage(item.id()).iter().cloned());
+    }
+
+    for item in symboltable.items() {
         if item.kind == SymbolKind::ModDef {
             let component_analysis = builder.get_component_analysis(item.id());
             diagnostics.extend(component_analysis.diagnostics());

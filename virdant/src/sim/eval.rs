@@ -228,6 +228,15 @@ impl Expr {
                         return body.eval(context);
                     }
                 }
+                // BitLit pattern against Bit value: compare booleans
+                (
+                    payload::Pat::BitLit { value },
+                    Value::Bit(subject_value),
+                ) => {
+                    if subject_value == value {
+                        return body.eval(context);
+                    }
+                }
                 // Any other combination is a type error that should have been caught
                 _ => unreachable!(
                     "invalid pattern/subject combination: pattern={:?}, subject={:?}",

@@ -1,6 +1,7 @@
 pub mod check;
 pub mod check_drivers;
 pub mod location;
+pub mod match_coverage;
 pub mod package;
 pub mod parsing;
 pub mod syntax;
@@ -10,6 +11,7 @@ pub mod typing;
 pub(crate) use check::check;
 pub(crate) use check_drivers::check_drivers;
 pub(crate) use location::build_location_region;
+pub(crate) use match_coverage::build_match_coverage;
 pub(crate) use package::build_package_analysis;
 pub(crate) use parsing::build_parsing;
 pub(crate) use syntax::{build_all_exprs, find_exprroots, build_syntax_errors};

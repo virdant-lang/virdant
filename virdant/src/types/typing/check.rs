@@ -456,6 +456,14 @@ impl Typing {
                 self.annotate(node, expected_typ);
                 Ok(context)
             }
+            AstNodePayload::PatBitLit(_pat_bit_lit) => {
+                if !matches!(expected_typ, Type::Bit | Type::Reset) {
+                    self.flag_wrong_type(node, expected_typ, &Type::Bit);
+                    return Err(());
+                }
+                self.annotate(node, expected_typ);
+                Ok(context)
+            }
             _ => unreachable!("Expected a pattern node, found: {}", node.summary()),
         }
     }

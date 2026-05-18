@@ -510,6 +510,13 @@ Pat: () = {
 
         parser.add_node(payload, span, num_children);
     },
+    <ll:@L> <lit:BitLit> <rr:@R> => {
+        let payload = AstNodePayload::PatBitLit(payload::PatBitLit { literal: lit });
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children);
+    },
 }
 
 ExprStruct: AstNodeId = {
@@ -678,15 +685,8 @@ ExprAtom: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "true" <rr:@R> => {
-        let payload = AstNodePayload::ExprBitLit(payload::ExprBitLit { literal: true });
-        let span = parser.span(ll, rr);
-        let num_children = 0;
-
-        parser.add_node(payload, span, num_children)
-    },
-    <ll:@L> "false" <rr:@R> => {
-        let payload = AstNodePayload::ExprBitLit(payload::ExprBitLit { literal: false });
+    <ll:@L> <lit:BitLit> <rr:@R> => {
+        let payload = AstNodePayload::ExprBitLit(payload::ExprBitLit { literal: lit });
         let span = parser.span(ll, rr);
         let num_children = 0;
 
@@ -808,6 +808,11 @@ WordLit: InternedString = {
 
 //    <nat:WORD_HEX> => stringtable.intern(nat.as_bytes().as_bstr()),
 //    <nat:WORD_BIN> => stringtable.intern(nat.as_bytes().as_bstr()),
+}
+
+BitLit: bool = {
+    "true" => true,
+    "false" => false,
 }
 
 Ident: InternedString = {

@@ -815,6 +815,10 @@ impl<'d> Converter<'d> {
                     let pat_str = format!("{:0>width$b}", value, width = width as usize);
                     verilog::CasePattern::PatternLit(verilog::PatternLit { width, radix: Radix::Bin, pattern: pat_str })
                 }
+                Some(AstNodePayload::PatBitLit(pat_bit_lit)) => {
+                    let pat_str = if pat_bit_lit.literal { "1".to_string() } else { "0".to_string() };
+                    verilog::CasePattern::PatternLit(verilog::PatternLit { width: 1, radix: Radix::Bin, pattern: pat_str })
+                }
                 _ => unreachable!("expected pattern node"),
             };
             let body_expr = self.convert_expr(package, body, typ, db, scheduler);
@@ -914,6 +918,10 @@ impl<'d> Converter<'d> {
                 let width = type_width(subject_typ, db);
                 let pat_str = format!("{:0>width$b}", value, width = width as usize);
                 verilog::CasePattern::PatternLit(verilog::PatternLit { width, radix: Radix::Bin, pattern: pat_str })
+            }
+            AstNodePayload::PatBitLit(pat_bit_lit) => {
+                let pat_str = if pat_bit_lit.literal { "1".to_string() } else { "0".to_string() };
+                verilog::CasePattern::PatternLit(verilog::PatternLit { width: 1, radix: Radix::Bin, pattern: pat_str })
             }
             _ => unreachable!("expected pattern node"),
         }
@@ -1247,6 +1255,10 @@ impl<'d> Converter<'d> {
                             let width = type_width(&subject_typ, db);
                             let pat_str = format!("{:0>width$b}", value, width = width as usize);
                             verilog::CasePattern::PatternLit(verilog::PatternLit { width, radix: Radix::Bin, pattern: pat_str })
+                        }
+                        Some(AstNodePayload::PatBitLit(pat_bit_lit)) => {
+                            let pat_str = if pat_bit_lit.literal { "1".to_string() } else { "0".to_string() };
+                            verilog::CasePattern::PatternLit(verilog::PatternLit { width: 1, radix: Radix::Bin, pattern: pat_str })
                         }
                         _ => unreachable!("expected pattern node"),
                     };

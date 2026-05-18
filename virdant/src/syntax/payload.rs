@@ -65,6 +65,7 @@ pub enum AstNodePayload {
     PatCtor(PatCtor),
     PatEnumerant(PatEnumerant),
     PatWordLit(PatWordLit),
+    PatBitLit(PatBitLit),
 
     Ofness(Ofness),
     It,
@@ -125,6 +126,7 @@ impl AstNodePayload {
             AstNodePayload::PatCtor(_pat_ident) => "PatCtor",
             AstNodePayload::PatEnumerant(_pat_enumerant) => "PatEnumerant",
             AstNodePayload::PatWordLit(_pat_word_lit) => "PatWordLit",
+            AstNodePayload::PatBitLit(_pat_bit_lit) => "PatBitLit",
             AstNodePayload::Ofness(_ofness) => "Ofness",
             AstNodePayload::It => "It",
             AstNodePayload::Path(_path) => "Path",
@@ -312,6 +314,11 @@ pub struct PatEnumerant {
 #[derive(Clone, Debug)]
 pub struct PatWordLit {
     pub literal: InternedString,
+}
+
+#[derive(Clone, Debug)]
+pub struct PatBitLit {
+    pub literal: bool,
 }
 
 #[derive(Clone, Debug)]

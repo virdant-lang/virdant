@@ -1,0 +1,20 @@
+// MatchCoverage: union subject with one constructor omitted.
+
+union type MyUnion {
+    Foo()
+    Bar(x : Bit)
+}
+
+mod MissingUnionCtor {
+    wire u : MyUnion
+    u := @Foo()
+
+    wire out : Bit
+    unused out
+    // CHECK: not covered: @Bar
+    out := match u {
+        case @Foo() => true
+    }
+}
+
+// CHECK: Check failed

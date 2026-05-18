@@ -144,6 +144,12 @@ fn convert_pattern(
             let value = parse_word_value(&literal);
             payload::Pat::WordLit { width: *width, value }
         }
+        AstNodePayload::PatBitLit(pat_bit_lit) => {
+            if !matches!(subject_typ, Type::Bit | Type::Reset) {
+                return payload::Pat::Else;
+            }
+            payload::Pat::BitLit { value: pat_bit_lit.literal }
+        }
         _ => payload::Pat::Else,
     }
 }

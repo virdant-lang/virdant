@@ -1,0 +1,22 @@
+// MatchCoverage: duplicated @Foo arm in a union match.
+
+union type MyUnion {
+    Foo()
+    Bar(x : Bit)
+}
+
+mod OverlapUnion {
+    wire u : MyUnion
+    u := @Foo()
+
+    wire out : Bit
+    unused out
+    // CHECK: Overlapping match arm: @Foo
+    out := match u {
+        case @Foo() => true
+        case @Bar(x) => x
+        case @Foo() => false
+    }
+}
+
+// CHECK: Check failed

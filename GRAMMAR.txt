@@ -128,6 +128,7 @@ Pat :=
     | "@" Ident
     | "@" Ident "(" ArgList ")"
     | WordLit
+    | BitLit
 
 ExprStruct := "$" "{" AssignList "}"
 
@@ -194,8 +195,7 @@ ExprPrimary :=
 ExprAtom :=
       Path
     | WordLit
-    | "true"
-    | "false"
+    | BitLit
     | "Str"
     | "#" Ident
     | "@" Ident
@@ -222,6 +222,10 @@ Width := "Nat"
 WordLit :=
       "Nat"
     | "Word"
+
+BitLit :=
+      "true"
+    | "false"
 
 Ident := "Ident"
 

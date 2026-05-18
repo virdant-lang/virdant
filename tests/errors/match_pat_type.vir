@@ -1,0 +1,69 @@
+// Regression: arm patterns in a statement-level match must agree with the
+// subject type.  Before this was caught, `case 0 => { ... }` on an enum
+// subject was silently ignored by both the typing pass and the
+// match-coverage analysis.
+
+enum type State width 2 {
+    On  = 1w2
+    Off = 2w2
+}
+
+union type MyUnion {
+    Foo()
+}
+
+mod WordPatOnEnum {
+    incoming clock : Clock
+    reg r : Bit on clock
+    unused r
+    match #Off : State {
+        case #On  => { r <= true }
+        case #Off => { r <= false }
+        // CHECK: which is not a Word type
+        case 0    => { r <= false }
+    }
+}
+
+mod EnumPatOnWord {
+    incoming clock : Clock
+    incoming x    : Word[2]
+    reg r : Bit on clock
+    unused r
+    match x {
+        case 0 => { r <= true }
+        case 1 => { r <= false }
+        case 2 => { r <= true }
+        case 3 => { r <= false }
+        // CHECK: PatEnumerant expects an enum type
+        case #On => { r <= false }
+    }
+}
+
+mod CtorPatOnWord {
+    incoming clock : Clock
+    incoming x    : Word[2]
+    reg r : Bit on clock
+    unused r
+    match x {
+        case 0 => { r <= true }
+        case 1 => { r <= false }
+        case 2 => { r <= true }
+        case 3 => { r <= false }
+        // CHECK: Unresolved constructor Foo
+        case @Foo() => { r <= false }
+    }
+}
+
+mod BitPatOnEnum {
+    incoming clock : Clock
+    reg r : Bit on clock
+    unused r
+    match #Off : State {
+        case #On  => { r <= true }
+        case #Off => { r <= false }
+        // CHECK: Wrong type
+        case true => { r <= false }
+    }
+}
+
+// CHECK: Check failed

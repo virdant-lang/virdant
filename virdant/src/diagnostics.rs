@@ -232,6 +232,39 @@ pub struct Todo {
     pub message: BString,
 }
 
+/// A `match` does not cover every value of its subject.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchNotExhaustive {
+    pub region: Region,
+    pub subject_typ: Type,
+    pub missing: BString,
+}
+
+/// A `case` arm overlaps with an earlier `case` arm.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchOverlappingArm {
+    pub region: Region,
+    pub overlap: BString,
+}
+
+/// The `else` arm covers no values not already covered by earlier `case` arms.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchRedundantElse {
+    pub region: Region,
+}
+
+/// A `match` has more than one `else` arm.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchMultipleElse {
+    pub region: Region,
+}
+
+/// An `else` arm appears before the last position in a `match`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatchElseNotLast {
+    pub region: Region,
+}
+
 
 #[derive(Debug, Clone)]
 pub struct Soften {
@@ -618,6 +651,59 @@ impl IsDiagnostic for Soften {
 
     fn level(&self) -> DiagnosticLevel {
         self.level
+    }
+}
+
+impl IsDiagnostic for MatchNotExhaustive {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!(
+            "Non-exhaustive match on {}: not covered: {}",
+            self.subject_typ, self.missing,
+        ).into()
+    }
+}
+
+impl IsDiagnostic for MatchOverlappingArm {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Overlapping match arm: {}", self.overlap).into()
+    }
+}
+
+impl IsDiagnostic for MatchRedundantElse {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Redundant else arm: all values are already covered").into()
+    }
+}
+
+impl IsDiagnostic for MatchMultipleElse {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Multiple else arms in match").into()
+    }
+}
+
+impl IsDiagnostic for MatchElseNotLast {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("else arm must be the last arm of the match").into()
     }
 }
 
