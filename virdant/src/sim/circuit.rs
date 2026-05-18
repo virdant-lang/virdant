@@ -26,7 +26,6 @@ use crate::syntax::payload::AstNodePayload;
 pub(super) struct Circuit {
     pub(super) db: Arc<Db>,
     pub(super) elaboration: Arc<Elaboration>,
-    pub(super) component_paths: IndexMap<SignalId, BString>,
     pub(super) deps: IndexMap<SignalId, IndexSet<SignalId>>,
     pub(super) sensitivities: IndexMap<SignalId, IndexSet<SignalId>>,
     pub(super) clock_sensitivities: IndexMap<SignalId, IndexSet<SignalId>>,
@@ -42,10 +41,9 @@ pub(super) struct Circuit {
 
 impl Circuit {
     /// Elaborate `top` against `db` and precompute every dataflow
-    /// table the runtime needs.  Walks the elaboration twice — once
-    /// inside `build_dependencies` (per-component reference walk to
-    /// derive `deps`), once here to collect `component_paths`,
-    /// `registers`, and the per-component driver `exprs`.
+    /// table the runtime needs.  Walks the elaboration once inside
+    /// `build_dependencies` (per-component reference walk to derive `deps`),
+    /// then collects `registers` and per-component driver `exprs`.
     pub(super) fn new(db: Arc<Db>, top: SymbolId) -> Circuit {
         let elaboration = db.get_elaboration(top);
 
@@ -54,11 +52,9 @@ impl Circuit {
         let clock_sensitivities = build_clock_sensitivities(&elaboration);
 
         let mut exprs: IndexMap<SignalId, Arc<Expr>> = IndexMap::new();
-        let mut component_paths: IndexMap<SignalId, BString> = IndexMap::new();
         let mut registers: IndexSet<SignalId> = IndexSet::new();
         for elab_component in elaboration.components() {
             let elab_id = elab_component.id();
-            component_paths.insert(elab_id, elab_component.path().clone());
             if let Some(driver) = elab_component.driver() {
                 exprs.insert(elab_id, driver_to_expr(&db, driver));
             }
@@ -77,7 +73,6 @@ impl Circuit {
         Circuit {
             db,
             elaboration,
-            component_paths,
             deps,
             sensitivities,
             clock_sensitivities,

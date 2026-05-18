@@ -11,7 +11,7 @@ use bstr::BStr;
 use rhai::{Dynamic, Engine, EvalAltResult, FnPtr, AST};
 
 use crate::db::Db;
-use crate::sim::{Sim, Value};
+use crate::sim::{Callback, Sim, Value};
 
 use crate::util::{db_from_dir, db_from_file};
 use crate::util::check_db;
@@ -182,10 +182,12 @@ impl ScriptSim {
             .map_err(|e| format!("Simulation error: {:?}", e).into())
     }
 
+    /*
     /// Dump the current simulation state.
     pub fn dump(&mut self) {
         self.with_sim(|sim| sim.dump());
     }
+    */
 
     /// Assert a condition, failing with a message if false.
     pub fn assert_msg(&mut self, cond: bool, message: &str) -> Result<(), Box<EvalAltResult>> {
@@ -213,7 +215,7 @@ impl ScriptSim {
 fn make_callback(
     sim: Rc<RefCell<Sim>>,
     fn_ptr: FnPtr,
-) -> crate::sim::Callback {
+) -> Callback {
     Box::new(move |rust_sim: &mut Sim| {
         // Store the active sim pointer in thread-local for the duration of the callback.
         // This allows ScriptSim methods to use the direct &mut Sim instead of RefCell.
@@ -358,7 +360,7 @@ pub fn make_engine() -> Engine {
         .register_fn("on_change", ScriptSim::on_change)
         .register_fn("finish", ScriptSim::finish)
         .register_fn("run", ScriptSim::run)
-        .register_fn("dump", ScriptSim::dump)
+//        .register_fn("dump", ScriptSim::dump)
         .register_fn("assert", ScriptSim::assert_msg)
         .register_fn("assert", ScriptSim::assert_simple);
 

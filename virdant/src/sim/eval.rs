@@ -8,6 +8,7 @@ use crate::sim::payload;
 use crate::types::Type;
 use crate::sim::expr::{Expr, ExprPayload, Referent};
 use crate::analysis::symbols::SymbolId;
+use crate::analysis::elaboration::SignalId;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
@@ -74,6 +75,27 @@ impl Context {
             context.insert(r, v);
         }
         Context { context }
+    }
+
+    /// Build an eval `Context` for `signal_id`'s driver expression.
+    ///
+    /// `Circuit::resolved_referents` holds the precomputed `(Referent,
+    /// SignalId)` list for every component with a driver — built once in
+    /// `Circuit::new` instead of re-walking the expression on every propagation.
+    /// This method zips each resolved id with the live `Arc<Value>` from
+    /// `state.vals`; the binding clones are refcount bumps, not deep `Value`
+    /// copies.
+    pub(super) fn context_for_component(
+        circuit: &crate::sim::circuit::Circuit,
+        state: &crate::sim::state::State,
+        signal_id: SignalId,
+    ) -> Context {
+        let entries = circuit
+            .referents(signal_id)
+            .iter()
+            .map(|(r, id)| (r.clone(), Arc::new(state.get(*id))))
+            .collect();
+        Context::new(entries)
     }
 }
 

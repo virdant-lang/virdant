@@ -6,8 +6,12 @@ mod circuit;
 mod sim;
 mod vcd;
 
-#[cfg(test)]
-mod test;
+mod scheduler;
+mod state;
 
-pub use crate::sim::sim::{Callback, Event, EventCallback, Sim, SimError};
+pub use crate::sim::sim::{Sim, SimError};
 pub use crate::sim::eval::Value;
+pub use crate::sim::scheduler::Callback;
+
+use scheduler::Scheduler;
+use state::{State};

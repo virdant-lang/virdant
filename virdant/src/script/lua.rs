@@ -123,12 +123,12 @@ fn create_sim_table(lua: &Lua, sim: Sim) -> LuaResult<Table> {
         Ok(())
     })?)?;
 
-    // dump() - dump simulation state
-    let sim_clone = sim.clone();
-    table.set("dump", lua.create_function(move |_, ()| {
-        sim_clone.borrow().dump();
-        Ok(())
-    })?)?;
+//    // dump() - dump simulation state
+//    let sim_clone = sim.clone();
+//    table.set("dump", lua.create_function(move |_, ()| {
+//        sim_clone.borrow().dump();
+//        Ok(())
+//    })?)?;
 
     // wait(clock) - yield the coroutine until the next rising edge of clock.
     // Defined in Lua so it can call coroutine.yield directly.

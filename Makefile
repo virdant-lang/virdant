@@ -1,7 +1,7 @@
 .PHONY: build build-wasm test clean install grammar docs release
 
 build: virdant/target/lib
-	cargo build --release --all-features
+	cargo build --release --features "vir-bin,filecheck-bin,vir-lsp-bin,lua,rhai"
 
 # Cargo's build script places generated artifacts in OUT_DIR, which has the
 # concrete form: target/<profile>/build/<crate>-<hash>/out/foo.grammar

@@ -10,84 +10,16 @@ use crate::analysis::symbols::SymbolId;
 use crate::analysis::elaboration::{SignalId, Elaboration};
 use crate::common::ComponentKind;
 use crate::db::Db;
+use crate::sim::{Scheduler, State};
 use crate::sim::circuit::Circuit;
 use crate::sim::eval::{Context, Value};
-use crate::sim::expr::Expr;
+use crate::sim::scheduler::{Callback, Event, EventCallback};
 use crate::types::Type;
-
-/// Live circuit values and the propagation worklist.  Everything
-/// mutated by combinational propagation, register transfers, and
-/// direct `set` writes lives here.
-///
-/// Values are wrapped in `Arc` so that `Sim::build_context` can hand
-/// the eval `Context` a refcount-bumped clone of each binding instead
-/// of deep-copying every live signal value (a `Value::Ctor` carries
-/// an owned `Vec<Value>`).
-struct State {
-    vals: Vec<Arc<Value>>,
-    set_vals: IndexMap<SignalId, Arc<Value>>,
-    dirty: IndexSet<SignalId>,
-}
-
-/// Event scheduler and dispatch state.  Owns simulated time, the
-/// unified one-shot callback queue, the FIFO tie-breaker counter,
-/// and the early-termination flag toggled by `Sim::finish`.  Every
-/// registration — timed, lifecycle, or value-change — pushes one
-/// entry into `queue`; every fire removes one.  See `Event` for the
-/// trigger conditions.
-struct Scheduler {
-    time_ps: u64,
-    next_seq: u64,
-    shutdown_requested: bool,
-    queue: Vec<QueueEntry>,
-}
 
 pub struct Sim {
     circuit: Circuit,
     state: State,
     sched: Scheduler,
-    clock_last_values: IndexMap<SignalId, Value>,
-}
-
-/// A user-supplied callback.  Receives `&mut Sim` so it can read signals,
-/// drive new values, register more callbacks, or call `finish()`.
-pub type Callback = Box<dyn FnMut(&mut Sim) + 'static>;
-
-/// Trigger condition for a queued callback.  Mirrors a subset of the VPI
-/// callback reasons (see `VPI_CALLBACKS.md`); the run loop and the
-/// callback API agree on this vocabulary so users always know *why* their
-/// callback is being invoked.
-#[derive(Debug, Clone)]
-pub enum Event {
-    /// Fire once when `run()` begins, before any timed entries dispatch.
-    /// Counterpart of VPI `cbStartOfSimulation` (#11).
-    StartOfSimulation,
-    /// Fire once when `run()` is about to return (queue drained or
-    /// `finish()` called).  Counterpart of VPI `cbEndOfSimulation` (#12).
-    EndOfSimulation,
-    /// Fire at absolute simulation time `at_ps`.  Counterpart of VPI
-    /// `cbAfterDelay` (#9) / `cbAtStartOfSimTime` (#5).
-    AfterDelay { at_ps: u64 },
-    /// Fire when `signal`'s value changes.  Counterpart of VPI
-    /// `cbValueChange` (#1).
-    ValueChange { signal: SignalId },
-}
-
-/// One queueable (event, callback) pair.  Public so users can build
-/// entries directly via `sim.register(...)` if they prefer the uniform
-/// API to the convenience methods (`at`, `after`, `at_start`, …).  The
-/// callback is `Option`-wrapped so the dispatcher can `take` it out and
-/// invoke it with `&mut Sim` without holding a borrow into the entry.
-pub struct EventCallback {
-    pub event: Event,
-    pub callback: Option<Callback>,
-}
-
-/// Internal queue slot: an `EventCallback` plus a monotonic sequence
-/// number used for FIFO tie-breaking among same-trigger entries.
-struct QueueEntry {
-    seq: u64,
-    cb: EventCallback,
 }
 
 #[derive(Debug)]
@@ -96,10 +28,7 @@ pub enum SimError {}
 impl std::fmt::Debug for Sim {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Sim")
-            .field("time_ps", &self.sched.time_ps)
-            .field("vals", &self.state.vals)
-            .field("set_vals", &self.state.set_vals)
-            .field("queue_len", &self.sched.queue.len())
+            .field("scheduler", &self.sched)
             .finish_non_exhaustive()
     }
 }
@@ -108,65 +37,14 @@ impl Sim {
     pub fn new(db: Arc<Db>, top: SymbolId) -> Sim {
         let circuit = Circuit::new(db, top);
 
-        let n_components = circuit.elaboration.components().len();
-        let mut vals: Vec<Arc<Value>> = Vec::with_capacity(n_components);
-        let mut set_vals: IndexMap<SignalId, Arc<Value>> = IndexMap::new();
-        for elab_component in circuit.elaboration.components() {
-            let elab_component_id = elab_component.id();
-            let typ = elab_component.typ();
-
-            // SignalIds are assigned consecutively from 0 by build_elaboration,
-            // so pushing in elaboration.components() order matches index().
-            vals.push(Arc::new(Value::X(typ.clone())));
-
-            if elab_component.is_reg() {
-                set_vals.insert(elab_component_id, Arc::new(Value::X(typ)));
-            }
-        }
-
         let mut sim = Sim {
+            state: State::new(circuit.elaboration.as_ref()),
             circuit,
-            state: State {
-                vals,
-                set_vals,
-                dirty: IndexSet::new(),
-            },
-            sched: Scheduler {
-                time_ps: 0,
-                next_seq: 0,
-                shutdown_requested: false,
-                queue: Vec::new(),
-            },
-            clock_last_values: IndexMap::new(),
+            sched: Scheduler::new(),
         };
 
-        // Evaluate all components whose expression has no dependencies (empty deps set).
-        // These are constant-valued nodes — their driver reads nothing from the simulation
-        // state, so their value is fixed and can be determined immediately.  Collect the
-        // IDs first to satisfy the borrow checker, then evaluate and set each one.
-        let constant_ids: Vec<SignalId> = sim
-            .circuit
-            .deps
-            .iter()
-            .filter(|(id, dep_set)| dep_set.is_empty() && sim.circuit.exprs.contains_key(*id))
-            .map(|(id, _)| *id)
-            .collect();
-
-        for id in constant_ids {
-            let expr = sim.circuit.exprs[&id].clone();
-            let context = sim.build_context(id, &expr);
-            let value = expr.eval(&context);
-            sim.write_value(id, value);
-        }
-
-        // Propagate constant values to all transitively-dependent components.
-        sim.flow();
-
+        sim.flow_constants();
         sim
-    }
-
-    pub(super) fn elaboration(&self) -> Arc<Elaboration> {
-        self.circuit.elaboration.clone()
     }
 
     pub(super) fn db(&self) -> Arc<Db> {
@@ -182,6 +60,7 @@ impl Sim {
         crate::sim::vcd::attach(self, writer);
     }
 
+    /*
     pub fn dump(&self) {
         let elaboration = self.elaboration();
 
@@ -198,60 +77,207 @@ impl Sim {
             }
         }
     }
+    */
 
-    pub fn tick(&mut self, component_id: SignalId) {
-        self.tick_prop(component_id);
+    fn flow_constants(&mut self) {
+        // Evaluate all components whose expression has no dependencies (empty deps set).
+        // These are constant-valued nodes — their driver reads nothing from the simulation
+        // state, so their value is fixed and can be determined immediately.  Collect the
+        // IDs first to satisfy the borrow checker, then evaluate and set each one.
+        let constant_ids: Vec<SignalId> = self
+            .circuit
+            .deps
+            .iter()
+            .filter(|(id, dep_set)| dep_set.is_empty() && self.circuit.exprs.contains_key(*id))
+            .map(|(id, _)| *id)
+            .collect();
+
+        for signal_id in constant_ids {
+            let expr = self.circuit.exprs[&signal_id].clone();
+            let context = Context::context_for_component(&self.circuit, &self.state, signal_id);
+            let value = expr.eval(&context);
+            self.state.set_val(signal_id, value);
+        }
+
+        // Propagate constant values to all transitively-dependent components.
         self.flow();
     }
 
-    fn tick_prop(&mut self, component_id: SignalId) {
+    pub fn tick(&mut self, signal_id: SignalId) {
+        self.tick_prop(signal_id);
+        self.flow();
+    }
+
+    fn tick_prop(&mut self, signal_id: SignalId) {
         // Iterate by index against the immutable Circuit so we can recurse
         // mutably into `self.tick` / `self.transfer` without cloning the
         // sensitivity IndexSet on every step.
-        let n = self.circuit.sensitivity_count(component_id);
+        let n = self.circuit.sensitivity_count(signal_id);
         for i in 0..n {
-            let inner = self.circuit.sensitivity_at(component_id, i);
+            let inner = self.circuit.sensitivity_at(signal_id, i);
             self.tick(inner);
         }
 
-        let m = self.circuit.clock_sensitivity_count(component_id);
+        let m = self.circuit.clock_sensitivity_count(signal_id);
         for i in 0..m {
-            let reg_component_id = self.circuit.clock_sensitivity_at(component_id, i);
-            self.transfer(reg_component_id);
+            let reg_signal_id = self.circuit.clock_sensitivity_at(signal_id, i);
+            self.state.transfer(reg_signal_id);
         }
     }
 
-    pub fn flow(&mut self) {
-        while let Some(component_id) = self.state.dirty.pop() {
-            let n = self.circuit.sensitivity_count(component_id);
+    fn flow(&mut self) {
+        while let Some(signal_id) = self.state.pop_dirty() {
+            let n = self.circuit.sensitivity_count(signal_id);
             for i in 0..n {
-                let update_component_id = self.circuit.sensitivity_at(component_id, i);
-                let expr = self.circuit.exprs.get(&update_component_id).unwrap().clone();
-                let context = self.build_context(update_component_id, &expr);
+                let update_signal_id = self.circuit.sensitivity_at(signal_id, i);
+                let expr = self.circuit.exprs.get(&update_signal_id).unwrap().clone();
+                let context = Context::context_for_component(&self.circuit, &self.state, update_signal_id);
                 let new_value = expr.eval(&context);
-                if self.circuit.registers.contains(&update_component_id) {
-                    self.set_reg(update_component_id, new_value);
+                if self.circuit.registers.contains(&update_signal_id) {
+                    self.state.set_reg(update_signal_id, new_value);
                 } else {
-                    // Use write_value, not set: `set` is the user-facing
                     // orchestrator (flow + edge transfers + watchers) and
                     // would recurse re-entrantly into the loop we're in.
-                    let old = self.get(update_component_id);
+                    let old = self.state.get(update_signal_id);
                     let rising = is_rising(&old, &new_value);
-                    self.write_value(update_component_id, new_value);
-                    // If this component is a clock wire that just had a
+                    self.state.set_val(update_signal_id, new_value);
+                    // If this signal is a clock wire that just had a
                     // rising edge (e.g. a submodule port driven by `clk`),
                     // transfer the registers it clocks — the same thing
                     // `set()` does for the top-level clock.
                     if rising {
-                        let m = self.circuit.clock_sensitivity_count(update_component_id);
+                        let m = self.circuit.clock_sensitivity_count(update_signal_id);
                         for j in 0..m {
-                            let reg_id = self.circuit.clock_sensitivity_at(update_component_id, j);
-                            self.transfer(reg_id);
+                            let reg_id = self.circuit.clock_sensitivity_at(update_signal_id, j);
+                            self.state.transfer(reg_id);
                         }
                     }
                 }
             }
         }
+    }
+
+    /// Write `value` to `signal_id` and settle the circuit before
+    /// returning (D4: synchronous set).  Concretely:
+    ///   1. Store the value and mark `signal_id` dirty.
+    ///   2. If this was a 0→1 transition on a clock signal, transfer every
+    ///      register listed in `clock_sensitivities[signal_id]`.
+    ///   3. Run `flow()` to convergence.
+    ///   4. Fire value-change notifications for any watched signals whose
+    ///      value differs from their last recorded snapshot.
+    ///
+    /// Cost note: the snapshot pass is `O(|queue|)` — each `set()` scans
+    /// the entire event queue for `ValueChange` entries.  See D14 in
+    /// `SIM_DESIGN.md` for the deferred watcher-index optimization.
+    pub fn set(&mut self, signal_id: SignalId, value: Value) {
+        let watched: Vec<SignalId> = self.sched.collect_watched_signals();
+        let snapshots: IndexMap<SignalId, Value> = watched
+            .into_iter()
+            .map(|id| { let v = self.state.get(id); (id, v) })
+            .collect();
+
+        let old = self.state.get(signal_id);
+        let rising = is_rising(&old, &value);
+        self.state.set_val(signal_id, value);
+        if rising {
+            let n = self.circuit.clock_sensitivity_count(signal_id);
+            for i in 0..n {
+                let reg_id = self.circuit.clock_sensitivity_at(signal_id, i);
+                self.state.transfer(reg_id);
+            }
+        }
+        self.flow();
+
+        let mut changed: IndexSet<SignalId> = IndexSet::new();
+        for (id, prev) in snapshots {
+            if self.state.get(id) != prev {
+                changed.insert(id);
+            }
+        }
+        if !changed.is_empty() {
+            let callbacks = self.sched.drain_value_changes(&changed);
+            for mut cb in callbacks {
+                cb(self);
+            }
+        }
+    }
+
+    pub fn get(&self, signal_id: SignalId) -> Value {
+        self.state.get(signal_id)
+    }
+
+    pub fn now(&self) -> u64 {
+        self.sched.time_ps()
+    }
+
+    /// Request that the run loop stop dispatching after the current
+    /// callback returns.  Safe to call from inside a callback; when
+    /// called from an `on_change` closure, the self-rearming wrapper
+    /// also skips re-registration so no stale `ValueChange` entry is
+    /// left behind in the queue.
+    pub fn finish(&mut self) {
+        self.sched.request_shutdown();
+    }
+
+    /// Drive `clock` as a free-running square wave with full period
+    /// `period_ps`.  The signal is initialised low immediately and the
+    /// first toggle is scheduled `period_ps / 2` from now, so the first
+    /// rising edge happens at `now + period_ps / 2`.
+    pub fn add_clock(&mut self, clock: SignalId, period_ps: u64) {
+        let half = period_ps / 2;
+        self.set(clock, Value::Bit(false));
+        self.register_clock_toggle(clock, half);
+    }
+
+    /// Drive `clock` as a free-running square wave at frequency
+    /// `freq_hz`.  Converts to picoseconds via `1e12 / freq_hz` and
+    /// forwards to `add_clock`; the resulting period is therefore
+    /// truncated to the nearest picosecond.
+    pub fn add_clock_hz(&mut self, clock: SignalId, freq_hz: u64) {
+        let period_ps = 1_000_000_000_000u64 / freq_hz;
+        self.add_clock(clock, period_ps);
+    }
+
+    /// Drain the queue.  Order:
+    ///   1. All `Event::StartOfSimulation` entries fire, in FIFO order.
+    ///   2. While the queue contains an `Event::AfterDelay` entry and
+    ///      `finish()` has not been requested: pop the soonest one (FIFO
+    ///      tiebreak), advance simulated time to its deadline, and fire
+    ///      it.  Each callback may itself register more entries and
+    ///      trigger `set()`s, which fire matching `Event::ValueChange`
+    ///      entries inline.
+    ///   3. All `Event::EndOfSimulation` entries fire, in FIFO order.
+    /// `Event::ValueChange` entries that remain unfired (no signal
+    /// change after registration) are dropped on the next `run()`.
+    pub fn run(&mut self) -> Result<(), SimError> {
+        let start_callbacks = self.sched.drain_lifecycle(|e| matches!(e, Event::StartOfSimulation));
+        for mut cb in start_callbacks {
+            cb(self);
+        }
+
+        while !self.sched.is_shutdown_requested() {
+            if let Some(mut cb) = self.sched.next_after_delay() {
+                cb(self);
+            } else {
+                break;
+            }
+        }
+
+        let end_callbacks = self.sched.drain_lifecycle(|e| matches!(e, Event::EndOfSimulation));
+        for mut cb in end_callbacks {
+            cb(self);
+        }
+        Ok(())
+    }
+
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Elaboration functions
+////////////////////////////////////////////////////////////////////////////////
+impl Sim {
+    pub(super) fn elaboration(&self) -> Arc<Elaboration> {
+        self.circuit.elaboration.clone()
     }
 
     pub fn signal<S: AsRef<BStr>>(&mut self, path: S) -> SignalId {
@@ -263,16 +289,16 @@ impl Sim {
         self.elaboration().resolve(path).map(|c| c.id())
     }
 
-    pub fn component_kind(&self, component_id: SignalId) -> ComponentKind {
-        self.elaboration().component(component_id).component_kind()
+    pub fn component_kind(&self, signal_id: SignalId) -> ComponentKind {
+        self.elaboration().component(signal_id).component_kind()
     }
 
-    pub fn component_type(&self, component_id: SignalId) -> Type {
-        self.elaboration().component(component_id).typ()
+    pub fn component_type(&self, signal_id: SignalId) -> Type {
+        self.elaboration().component(signal_id).typ()
     }
 
-    pub fn full_name(&self, component_id: SignalId) -> BString {
-        self.elaboration().component(component_id).path().clone()
+    pub fn full_name(&self, signal_id: SignalId) -> BString {
+        self.elaboration().component(signal_id).path().clone()
     }
 
     /// Iterate over the direct children of `parent` (a path-prefix relation on the flat
@@ -307,118 +333,17 @@ impl Sim {
         }
         out
     }
+}
 
-    /// Build an eval `Context` for `component_id`'s driver expression.
-    ///
-    /// `Circuit::resolved_referents` holds the precomputed `(Referent,
-    /// SignalId)` list for every component with a driver — built once in
-    /// `Circuit::new` instead of re-walking `expr` on every propagation.
-    /// This method zips each resolved id with the live `Arc<Value>` from
-    /// `self.state.values`; the binding clones are refcount bumps, not
-    /// deep `Value` copies.  The `_expr` parameter is kept for symmetry
-    /// with the eval call site but is not consulted.
-    fn build_context(&self, component_id: SignalId, _expr: &Expr) -> Context {
-        let entries = self.circuit
-            .referents(component_id)
-            .iter()
-            .map(|(r, id)| (r.clone(), Arc::clone(&self.state.vals[id.index()])))
-            .collect();
-        Context::new(entries)
-    }
-
-    /// Write `value` to `component_id` and settle the circuit before
-    /// returning (D4: synchronous set).  Concretely:
-    ///   1. Store the value and mark `component_id` dirty.
-    ///   2. If this was a 0→1 transition on a clock signal, transfer every
-    ///      register listed in `clock_sensitivities[component_id]`.
-    ///   3. Run `flow()` to convergence.
-    ///   4. Fire value-change notifications for any watched signals whose
-    ///      value differs from their last recorded snapshot.
-    ///
-    /// Cost note: the snapshot pass is `O(|queue|)` — each `set()` scans
-    /// the entire event queue for `ValueChange` entries.  See D14 in
-    /// `SIM_DESIGN.md` for the deferred watcher-index optimization.
-    pub fn set(&mut self, component_id: SignalId, value: Value) {
-        // Snapshot every signal that has a pending Event::ValueChange entry
-        // so we can detect transitions after the write + flow settles.
-        let watched: Vec<SignalId> = self.sched.queue.iter()
-            .filter_map(|q| match q.cb.event {
-                Event::ValueChange { signal } => Some(signal),
-                _ => None,
-            })
-            .collect();
-        let snapshots: IndexMap<SignalId, Value> = watched
-            .into_iter()
-            .map(|id| { let v = self.get(id); (id, v) })
-            .collect();
-
-        let old = self.get(component_id);
-        let rising = is_rising(&old, &value);
-        self.write_value(component_id, value);
-        if rising {
-            let n = self.circuit.clock_sensitivity_count(component_id);
-            for i in 0..n {
-                let reg_id = self.circuit.clock_sensitivity_at(component_id, i);
-                self.transfer(reg_id);
-            }
-        }
-        self.flow();
-
-        let mut changed: IndexSet<SignalId> = IndexSet::new();
-        for (id, prev) in snapshots {
-            if self.get(id) != prev {
-                changed.insert(id);
-            }
-        }
-        if !changed.is_empty() {
-            self.fire_value_changes(&changed);
-        }
-    }
-
-    /// Internal write: store `value` at `component_id`'s val node and mark
-    /// it dirty.  Does not flow, does not fire watchers, does not handle
-    /// clock edges.  Called by `set` (the orchestrator) and by `flow`
-    /// (during propagation, to avoid re-entrant orchestration).
-    fn write_value(&mut self, component_id: SignalId, value: Value) {
-        self.state.vals[component_id.index()] = Arc::new(value);
-        self.state.dirty.insert(component_id);
-    }
-
-    fn set_reg(&mut self, component_id: SignalId, value: Value) {
-        let value_ref = self.state.set_vals.get_mut(&component_id).unwrap();
-        *value_ref = Arc::new(value);
-    }
-
-    fn transfer(&mut self, component_id: SignalId) {
-        let new_value = Arc::clone(self.state.set_vals.get(&component_id).unwrap());
-        self.state.vals[component_id.index()] = new_value;
-        self.state.dirty.insert(component_id);
-    }
-
-    pub fn get(&self, component_id: SignalId) -> Value {
-        self.state.vals[component_id.index()].as_ref().clone()
-    }
-
-    /// Current simulation time, in picoseconds.
-    pub fn now(&self) -> u64 {
-        self.sched.time_ps
-    }
-
-    /// Push `event_cb` onto the queue.  The single primitive on which
-    /// `at`, `after`, `at_start`, `at_end`, and `on_change` are built;
-    /// expose `Event` and `EventCallback` directly when you want to skip
-    /// the sugar.  Same-trigger entries fire in registration (FIFO) order.
-    pub fn register(&mut self, event_cb: EventCallback) {
-        let seq = self.sched.next_seq;
-        self.sched.next_seq += 1;
-        self.sched.queue.push(QueueEntry { seq, cb: event_cb });
-    }
-
+////////////////////////////////////////////////////////////////////////////////
+// Scheduler functions
+////////////////////////////////////////////////////////////////////////////////
+impl Sim {
     /// Register `cb` to fire at absolute simulation time `t_ps`.  If
     /// `t_ps` is in the past, the callback fires at the next dispatch
     /// step.  Same-time callbacks fire in registration (FIFO) order.
     pub fn at(&mut self, t_ps: u64, cb: Callback) {
-        self.register(EventCallback {
+        self.sched.register(EventCallback {
             event: Event::AfterDelay { at_ps: t_ps },
             callback: Some(cb),
         });
@@ -426,14 +351,14 @@ impl Sim {
 
     /// Register `cb` to fire `delay_ps` after the current simulation time.
     pub fn after(&mut self, delay_ps: u64, cb: Callback) {
-        let t_ps = self.sched.time_ps.saturating_add(delay_ps);
+        let t_ps = self.sched.time_ps().saturating_add(delay_ps);
         self.at(t_ps, cb);
     }
 
     /// Register `cb` to fire when `run()` begins, before any timed entries
     /// dispatch.  Multiple registrations fire in order.
     pub fn at_start(&mut self, cb: Callback) {
-        self.register(EventCallback {
+        self.sched.register(EventCallback {
             event: Event::StartOfSimulation,
             callback: Some(cb),
         });
@@ -443,7 +368,7 @@ impl Sim {
     /// because the queue drained or because a callback called `finish()`.
     /// Multiple registrations fire in order.
     pub fn at_end(&mut self, cb: Callback) {
-        self.register(EventCallback {
+        self.sched.register(EventCallback {
             event: Event::EndOfSimulation,
             callback: Some(cb),
         });
@@ -459,7 +384,7 @@ impl Sim {
     /// survive into a subsequent `run()`.
     pub fn on_change(&mut self, signal: SignalId, cb: Callback) {
         let cell: Rc<RefCell<Callback>> = Rc::new(RefCell::new(cb));
-        Self::arm_value_change(self, signal, cell);
+        Self::register_on_change_watcher(self, signal, cell);
     }
 
     /// Register `cb` to fire every time `clock`'s value has a rising edge
@@ -473,196 +398,61 @@ impl Sim {
     /// survive into a subsequent `run()`.
     pub fn on_clock(&mut self, clock: SignalId, cb: Callback) {
         let cell: Rc<RefCell<Callback>> = Rc::new(RefCell::new(cb));
-        Self::arm_clock(self, clock, cell);
+        Self::register_clock_watcher(self, clock, cell);
     }
 
-    fn arm_value_change(
+    fn register_on_change_watcher(
         sim: &mut Sim,
         signal: SignalId,
         cell: Rc<RefCell<Callback>>,
     ) {
         let cell_for_closure = cell.clone();
-        sim.register(EventCallback {
+        sim.sched.register(EventCallback {
             event: Event::ValueChange { signal },
             callback: Some(Box::new(move |s| {
                 (cell_for_closure.borrow_mut())(s);
-                if !s.sched.shutdown_requested {
-                    Sim::arm_value_change(s, signal, cell_for_closure.clone());
+                if !s.sched.is_shutdown_requested() {
+                    Sim::register_on_change_watcher(s, signal, cell_for_closure.clone());
                 }
             })),
         });
     }
 
-    fn arm_clock(
+    fn register_clock_watcher(
         sim: &mut Sim,
         clock: SignalId,
         cell: Rc<RefCell<Callback>>,
     ) {
         let cell_for_closure = cell.clone();
-        // Store the current value as the "last" value for this clock
-        let current = sim.get(clock);
-        sim.clock_last_values.insert(clock, current);
-
-        sim.register(EventCallback {
+        sim.sched.register(EventCallback {
             event: Event::ValueChange { signal: clock },
             callback: Some(Box::new(move |s| {
-                let current = s.get(clock);
-                // Get the last value we saw for this clock
-                let last = s.clock_last_values.get(&clock).cloned();
-
-                // Only fire on rising edges: 0→1 or X→1
-                let is_rising_edge = if let Some(last_val) = last {
-                    is_rising(&last_val, &current)
-                } else {
-                    false
-                };
-
-                // Update the last seen value
-                s.clock_last_values.insert(clock, current);
+                let current = s.state.get(clock);
+                let last = s.state.get_prev(clock);
+                let is_rising_edge = is_rising(&last, &current);
 
                 if is_rising_edge {
                     (cell_for_closure.borrow_mut())(s);
                 }
-                if !s.sched.shutdown_requested {
-                    Sim::arm_clock(s, clock, cell_for_closure.clone());
+                if !s.sched.is_shutdown_requested() {
+                    Sim::register_clock_watcher(s, clock, cell_for_closure.clone());
                 }
             })),
         });
     }
 
-    /// Request that the run loop stop dispatching after the current
-    /// callback returns.  Safe to call from inside a callback; when
-    /// called from an `on_change` closure, the self-rearming wrapper
-    /// also skips re-registration so no stale `ValueChange` entry is
-    /// left behind in the queue.
-    pub fn finish(&mut self) {
-        self.sched.shutdown_requested = true;
-    }
-
-    /// Drive `clock` as a free-running square wave with full period
-    /// `period_ps`.  The signal is initialised low immediately and the
-    /// first toggle is scheduled `period_ps / 2` from now, so the first
-    /// rising edge happens at `now + period_ps / 2`.
-    pub fn add_clock(&mut self, clock: SignalId, period_ps: u64) {
-        let half = period_ps / 2;
-        self.set(clock, Value::Bit(false));
-        self.schedule_clock_toggle(clock, half);
-    }
-
-    /// Drive `clock` as a free-running square wave at frequency
-    /// `freq_hz`.  Converts to picoseconds via `1e12 / freq_hz` and
-    /// forwards to `add_clock`; the resulting period is therefore
-    /// truncated to the nearest picosecond.
-    pub fn add_clock_hz(&mut self, clock: SignalId, freq_hz: u64) {
-        let period_ps = 1_000_000_000_000u64 / freq_hz;
-        self.add_clock(clock, period_ps);
-    }
-
     /// Internal: schedule one half-period toggle for `clock`.  The callback
     /// toggles the signal and re-arms itself for `half_period_ps` later.
-    fn schedule_clock_toggle(&mut self, clock: SignalId, half_period_ps: u64) {
+    fn register_clock_toggle(&mut self, clock: SignalId, half_period_ps: u64) {
         self.after(half_period_ps, Box::new(move |sim| {
-            let next = match sim.get(clock) {
+            let next = match sim.state.get(clock) {
                 Value::Bit(b) => Value::Bit(!b),
                 Value::X(_)   => Value::Bit(true),
                 other => panic!("clock signal {clock:?} has non-Bit value: {other:?}"),
             };
             sim.set(clock, next);
-            sim.schedule_clock_toggle(clock, half_period_ps);
+            sim.register_clock_toggle(clock, half_period_ps);
         }));
-    }
-
-    /// Drain the queue.  Order:
-    ///   1. All `Event::StartOfSimulation` entries fire, in FIFO order.
-    ///   2. While the queue contains an `Event::AfterDelay` entry and
-    ///      `finish()` has not been requested: pop the soonest one (FIFO
-    ///      tiebreak), advance simulated time to its deadline, and fire
-    ///      it.  Each callback may itself register more entries and
-    ///      trigger `set()`s, which fire matching `Event::ValueChange`
-    ///      entries inline.
-    ///   3. All `Event::EndOfSimulation` entries fire, in FIFO order.
-    /// `Event::ValueChange` entries that remain unfired (no signal
-    /// change after registration) are dropped on the next `run()`.
-    pub fn run(&mut self) -> Result<(), SimError> {
-        self.sched.shutdown_requested = false;
-        self.fire_lifecycle(|e| matches!(e, Event::StartOfSimulation));
-
-        while !self.sched.shutdown_requested {
-            let next = self.sched.queue
-                .iter()
-                .enumerate()
-                .filter_map(|(i, q)| match q.cb.event {
-                    Event::AfterDelay { at_ps } => Some((i, at_ps, q.seq)),
-                    _ => None,
-                })
-                .min_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)))
-                .map(|(i, _, _)| i);
-            let Some(idx) = next else { break };
-
-            let mut entry = self.sched.queue.remove(idx);
-            if let Event::AfterDelay { at_ps } = entry.cb.event {
-                self.sched.time_ps = at_ps;
-            }
-            if let Some(mut cb) = entry.cb.callback.take() {
-                cb(self);
-            }
-        }
-
-        self.fire_lifecycle(|e| matches!(e, Event::EndOfSimulation));
-        Ok(())
-    }
-
-    /// Fire and remove every queue entry whose event matches `pred`, in
-    /// registration (FIFO) order.  Snapshots the matching set up-front so
-    /// callbacks that re-register during dispatch don't fire in the same
-    /// pass.  Used for `StartOfSimulation` / `EndOfSimulation`.
-    fn fire_lifecycle<F: Fn(&Event) -> bool>(&mut self, pred: F) {
-        let queue = std::mem::take(&mut self.sched.queue);
-        let mut keep: Vec<QueueEntry> = Vec::with_capacity(queue.len());
-        let mut to_fire: Vec<QueueEntry> = Vec::new();
-        for entry in queue {
-            if pred(&entry.cb.event) {
-                to_fire.push(entry);
-            } else {
-                keep.push(entry);
-            }
-        }
-        self.sched.queue = keep;
-        to_fire.sort_by_key(|q| q.seq);
-        for mut entry in to_fire {
-            if let Some(mut cb) = entry.cb.callback.take() {
-                cb(self);
-            }
-        }
-    }
-
-    /// Fire and remove every `Event::ValueChange { signal }` entry whose
-    /// signal is in `changed`.  Snapshots the matching set up-front so
-    /// `on_change`'s self-rearming wrapper, which queues a fresh
-    /// `ValueChange` after invoking the user closure, doesn't re-fire in
-    /// the same pass; the new entry waits for the next change.
-    fn fire_value_changes(&mut self, changed: &IndexSet<SignalId>) {
-        let queue = std::mem::take(&mut self.sched.queue);
-        let mut keep: Vec<QueueEntry> = Vec::with_capacity(queue.len());
-        let mut to_fire: Vec<QueueEntry> = Vec::new();
-        for entry in queue {
-            let matches = match entry.cb.event {
-                Event::ValueChange { signal } => changed.contains(&signal),
-                _ => false,
-            };
-            if matches {
-                to_fire.push(entry);
-            } else {
-                keep.push(entry);
-            }
-        }
-        self.sched.queue = keep;
-        to_fire.sort_by_key(|q| q.seq);
-        for mut entry in to_fire {
-            if let Some(mut cb) = entry.cb.callback.take() {
-                cb(self);
-            }
-        }
     }
 }
 
