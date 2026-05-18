@@ -49,7 +49,8 @@ fn main() {
     let half_bit_ps:     u64 = bit_period_ps / 2;
 
     sim.at_start(Box::new(move |sim| {
-        sim.set(reset, Value::Bit(true));
+        let mut lock = sim.lock();
+        lock.set(reset, Value::Bit(true));
     }));
     sim.at_end(Box::new(move |_sim| {
         println!();
@@ -58,7 +59,8 @@ fn main() {
     // half_period after t=0) so the registers actually load their
     // reset values.
     sim.after(2 * clock_period_ps, Box::new(move |sim| {
-        sim.set(reset, Value::Bit(false));
+        let mut lock = sim.lock();
+        lock.set(reset, Value::Bit(false));
     }));
 
     sim.on_change(fin, Box::new(move |sim| {

@@ -59,9 +59,13 @@ fn lfsr_run() {
         println!("[t={}ps] out = {:?}", sim.now(), sim.get(out));
     }));
 
-    sim.set(reset, Value::Bit(true));
+    {
+        let mut lock = sim.lock();
+        lock.set(reset, Value::Bit(true));
+    }
     sim.after(10_000, Box::new(move |sim| {
-        sim.set(reset, Value::Bit(false));
+        let mut lock = sim.lock();
+        lock.set(reset, Value::Bit(false));
     }));
     sim.after(100_000, Box::new(|sim| sim.finish()));
 
@@ -107,9 +111,13 @@ fn lfsr_check() {
         }
     }));
 
-    sim.set(reset, Value::Bit(true));
+    {
+        let mut lock = sim.lock();
+        lock.set(reset, Value::Bit(true));
+    }
     sim.after(10_000, Box::new(move |sim| {
-        sim.set(reset, Value::Bit(false));
+        let mut lock = sim.lock();
+        lock.set(reset, Value::Bit(false));
     }));
     sim.after(100_000, Box::new(|sim| sim.finish()));
 
@@ -137,9 +145,13 @@ fn lfsr_on_clock() {
         println!("[t={}ps] clock rising edge #{}", sim.now(), count);
     }));
 
-    sim.set(reset, Value::Bit(true));
+    {
+        let mut lock = sim.lock();
+        lock.set(reset, Value::Bit(true));
+    }
     sim.after(10_000, Box::new(move |sim| {
-        sim.set(reset, Value::Bit(false));
+        let mut lock = sim.lock();
+        lock.set(reset, Value::Bit(false));
     }));
     sim.after(100_000, Box::new(|sim| sim.finish()));
 

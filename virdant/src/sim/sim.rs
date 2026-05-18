@@ -1,10 +1,11 @@
 use std::cell::RefCell;
 use std::io::Write;
+use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use bstr::{BStr, BString};
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexSet;
 
 use crate::analysis::symbols::SymbolId;
 use crate::analysis::elaboration::{SignalId, Elaboration};
@@ -15,6 +16,33 @@ use crate::sim::circuit::Circuit;
 use crate::sim::eval::{Context, Value};
 use crate::sim::scheduler::{Callback, Event, EventCallback};
 use crate::types::Type;
+
+/// A lock that defers circuit settlement until dropped.
+/// While held, call `.set()` to accumulate signal changes without flowing.
+pub struct SimLock<'a> {
+    sim: &'a mut Sim,
+}
+
+impl<'a> Deref for SimLock<'a> {
+    type Target = Sim;
+
+    fn deref(&self) -> &Self::Target {
+        self.sim
+    }
+}
+
+impl<'a> SimLock<'a> {
+    /// Write `value` to `signal_id`. Settlement is deferred until this lock is dropped.
+    pub fn set(&mut self, signal_id: SignalId, value: Value) {
+        self.sim.set_without_flow(signal_id, value);
+    }
+}
+
+impl<'a> Drop for SimLock<'a> {
+    fn drop(&mut self) {
+        self.sim.unlock();
+    }
+}
 
 pub struct Sim {
     circuit: Circuit,
@@ -59,25 +87,6 @@ impl Sim {
     pub fn attach_vcd<W: Write + 'static>(&mut self, writer: W) {
         crate::sim::vcd::attach(self, writer);
     }
-
-    /*
-    pub fn dump(&self) {
-        let elaboration = self.elaboration();
-
-        for elab_component in elaboration.components() {
-            let id = elab_component.id();
-            let path = &self.circuit.component_paths.get(&id).unwrap();
-            let value = &self.state.vals[id.index()];
-            println!("{path} := {value:?}");
-            if elab_component.is_reg() {
-                let set_value = &self.state.set_vals[&id];
-                let clock_id = elab_component.clock().unwrap();
-                let clock = elaboration.component(clock_id);
-                println!("{path} <= {set_value:?} on {:?}", clock.path());
-            }
-        }
-    }
-    */
 
     fn flow_constants(&mut self) {
         // Evaluate all components whose expression has no dependencies (empty deps set).
@@ -157,25 +166,36 @@ impl Sim {
         }
     }
 
-    /// Write `value` to `signal_id` and settle the circuit before
-    /// returning (D4: synchronous set).  Concretely:
-    ///   1. Store the value and mark `signal_id` dirty.
-    ///   2. If this was a 0→1 transition on a clock signal, transfer every
-    ///      register listed in `clock_sensitivities[signal_id]`.
-    ///   3. Run `flow()` to convergence.
-    ///   4. Fire value-change notifications for any watched signals whose
-    ///      value differs from their last recorded snapshot.
-    ///
-    /// Cost note: the snapshot pass is `O(|queue|)` — each `set()` scans
-    /// the entire event queue for `ValueChange` entries.  See D14 in
-    /// `SIM_DESIGN.md` for the deferred watcher-index optimization.
-    pub fn set(&mut self, signal_id: SignalId, value: Value) {
-        let watched: Vec<SignalId> = self.sched.collect_watched_signals();
-        let snapshots: IndexMap<SignalId, Value> = watched
-            .into_iter()
-            .map(|id| { let v = self.state.get(id); (id, v) })
-            .collect();
+    fn unlock(&mut self) {
+        self.flow();
 
+        // Fire any watchers that were triggered during flow()
+        // We check watched signals to see which ones actually changed.
+        let watched: Vec<SignalId> = self.sched.collect_watched_signals();
+        let mut changed: IndexSet<SignalId> = IndexSet::new();
+        for id in watched {
+            if self.state.get(id) != self.state.get_prev(id) {
+                changed.insert(id);
+            }
+        }
+        if !changed.is_empty() {
+            let callbacks = self.sched.drain_value_changes(&changed);
+            for mut cb in callbacks {
+                cb(self);
+            }
+            // After dispatch, sync prev_vals = vals for the signals we just
+            // fired callbacks for.  Without this, a signal that was set_val'd
+            // once (so prev_vals = old, vals = new) but is not subsequently
+            // touched would look "changed" on every later unlock() — causing
+            // spurious `on_change` re-fires triggered by unrelated signal
+            // activity.
+            for &id in &changed {
+                self.state.commit_change(id);
+            }
+        }
+    }
+
+    fn set_without_flow(&mut self, signal_id: SignalId, value: Value) {
         let old = self.state.get(signal_id);
         let rising = is_rising(&old, &value);
         self.state.set_val(signal_id, value);
@@ -186,20 +206,6 @@ impl Sim {
                 self.state.transfer(reg_id);
             }
         }
-        self.flow();
-
-        let mut changed: IndexSet<SignalId> = IndexSet::new();
-        for (id, prev) in snapshots {
-            if self.state.get(id) != prev {
-                changed.insert(id);
-            }
-        }
-        if !changed.is_empty() {
-            let callbacks = self.sched.drain_value_changes(&changed);
-            for mut cb in callbacks {
-                cb(self);
-            }
-        }
     }
 
     pub fn get(&self, signal_id: SignalId) -> Value {
@@ -208,6 +214,14 @@ impl Sim {
 
     pub fn now(&self) -> u64 {
         self.sched.time_ps()
+    }
+
+    /// Acquire a lock that defers circuit settlement.  While the lock is held,
+    /// calls to `set()` accumulate signal changes without propagating them.
+    /// When the lock is dropped, all accumulated changes are settled in a single
+    /// `flow()` pass, and any watchers that fired are invoked.
+    pub fn lock(&mut self) -> SimLock<'_> {
+        SimLock { sim: self }
     }
 
     /// Request that the run loop stop dispatching after the current
@@ -225,7 +239,10 @@ impl Sim {
     /// rising edge happens at `now + period_ps / 2`.
     pub fn add_clock(&mut self, clock: SignalId, period_ps: u64) {
         let half = period_ps / 2;
-        self.set(clock, Value::Bit(false));
+        {
+            let mut lock = self.lock();
+            lock.set(clock, Value::Bit(false));
+        }
         self.register_clock_toggle(clock, half);
     }
 
@@ -450,7 +467,10 @@ impl Sim {
                 Value::X(_)   => Value::Bit(true),
                 other => panic!("clock signal {clock:?} has non-Bit value: {other:?}"),
             };
-            sim.set(clock, next);
+            {
+                let mut lock = sim.lock();
+                lock.set(clock, next);
+            }
             sim.register_clock_toggle(clock, half_period_ps);
         }));
     }

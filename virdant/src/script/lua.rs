@@ -94,7 +94,10 @@ fn create_sim_table(lua: &Lua, sim: Sim) -> LuaResult<Table> {
         let signal_id = sim.signal(<&BStr>::from(path.as_str()));
         let typ = sim.component_type(signal_id);
         let val = lua_to_value(value, &typ);
-        sim.set(signal_id, val);
+        {
+            let mut lock = sim.lock();
+            lock.set(signal_id, val);
+        }
         Ok(())
     })?)?;
 
@@ -122,13 +125,6 @@ fn create_sim_table(lua: &Lua, sim: Sim) -> LuaResult<Table> {
         sim_clone.borrow_mut().finish();
         Ok(())
     })?)?;
-
-//    // dump() - dump simulation state
-//    let sim_clone = sim.clone();
-//    table.set("dump", lua.create_function(move |_, ()| {
-//        sim_clone.borrow().dump();
-//        Ok(())
-//    })?)?;
 
     // wait(clock) - yield the coroutine until the next rising edge of clock.
     // Defined in Lua so it can call coroutine.yield directly.

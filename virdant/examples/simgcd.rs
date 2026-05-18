@@ -67,12 +67,15 @@ fn main() {
     let state_cb = state.clone();
 
     sim.at_start(Box::new(move |sim| {
-        sim.set(reset, Value::Bit(true));
-        sim.set(fire,  Value::Bit(false));
+        let mut lock = sim.lock();
+        lock.set(reset, Value::Bit(true));
+        lock.set(fire,  Value::Bit(false));
     }));
 
     sim.after(15_000, Box::new(move |sim| {
-        sim.set(reset, Value::Bit(false));
+        let mut lock = sim.lock();
+        lock.set(reset, Value::Bit(false));
+        drop(lock);
         *started_init.borrow_mut() = true;
     }));
 
@@ -85,13 +88,19 @@ fn main() {
 
         if !fired {
             let (a, b, _) = CASES[idx];
-            sim.set(x,    Value::Word(8, a));
-            sim.set(y,    Value::Word(8, b));
-            sim.set(fire, Value::Bit(true));
+            {
+                let mut lock = sim.lock();
+                lock.set(x,    Value::Word(8, a));
+                lock.set(y,    Value::Word(8, b));
+                lock.set(fire, Value::Bit(true));
+            }
             *state_cb.borrow_mut() = (idx, true);
         } else {
             // Deassert fire after the one cycle it was high.
-            sim.set(fire, Value::Bit(false));
+            {
+                let mut lock = sim.lock();
+                lock.set(fire, Value::Bit(false));
+            }
 
             if sim.get(valid) == Value::Bit(true) {
                 let (a, b, expected) = CASES[idx];

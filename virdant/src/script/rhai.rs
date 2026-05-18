@@ -63,14 +63,27 @@ impl ScriptSim {
     /// Access the sim, using ACTIVE_SIM if in a callback or RefCell otherwise.
     fn with_sim<T, F: FnOnce(&mut Sim) -> T>(&self, f: F) -> T {
         ACTIVE_SIM.with(|active| {
-            let active_borrow = active.borrow();
-            if let Some(ptr) = *active_borrow {
+            // Try to borrow immutably. If it fails (already borrowed mutably), we know
+            // the pointer is being set, so we can safely dereference it.
+            let ptr_to_use = match active.try_borrow() {
+                Ok(borrow) => {
+                    let ptr = *borrow;
+                    drop(borrow);
+                    ptr
+                },
+                Err(_) => {
+                    // Borrow failed - someone is borrowing mutably (setting the pointer).
+                    // We can't read it safely, so fall back to RefCell.
+                    None
+                }
+            };
+
+            if let Some(ptr) = ptr_to_use {
                 // SAFETY: The pointer is valid for the duration of the callback.
                 // We're inside the callback that set this pointer.
                 let sim = unsafe { &mut *ptr };
                 f(sim)
             } else {
-                drop(active_borrow);
                 f(&mut self.sim.borrow_mut())
             }
         })
@@ -95,7 +108,10 @@ impl ScriptSim {
             let signal_id = sim.signal(path);
             let typ = sim.component_type(signal_id);
             let val = dynamic_to_value(value, &typ);
-            sim.set(signal_id, val);
+            {
+                let mut lock = sim.lock();
+                lock.set(signal_id, val);
+            }
         })
     }
 
@@ -182,13 +198,6 @@ impl ScriptSim {
             .map_err(|e| format!("Simulation error: {:?}", e).into())
     }
 
-    /*
-    /// Dump the current simulation state.
-    pub fn dump(&mut self) {
-        self.with_sim(|sim| sim.dump());
-    }
-    */
-
     /// Assert a condition, failing with a message if false.
     pub fn assert_msg(&mut self, cond: bool, message: &str) -> Result<(), Box<EvalAltResult>> {
         if !cond {
@@ -220,15 +229,19 @@ fn make_callback(
         // Store the active sim pointer in thread-local for the duration of the callback.
         // This allows ScriptSim methods to use the direct &mut Sim instead of RefCell.
         let rust_sim_ptr = rust_sim as *mut Sim;
+
         ACTIVE_SIM.with(|active| {
             *active.borrow_mut() = Some(rust_sim_ptr);
         });
 
         SCRIPT_CONTEXT.with(|ctx| {
-            let ctx_borrow = ctx.borrow();
-            let Some(script_ctx) = ctx_borrow.as_ref() else {
-                eprintln!("Rhai callback error: no script context set");
-                return;
+            let (engine, fn_ast, fn_name) = {
+                let ctx_borrow = ctx.borrow();
+                let Some(script_ctx) = ctx_borrow.as_ref() else {
+                    eprintln!("Rhai callback error: no script context set");
+                    return;
+                };
+                (script_ctx.engine.clone(), script_ctx.fn_ast.clone(), fn_ptr.fn_name().to_string())
             };
 
             // Create a fresh ScriptSim wrapper pointing to our shared Sim.
@@ -243,11 +256,11 @@ fn make_callback(
             let options = rhai::CallFnOptions::new()
                 .eval_ast(true)
                 .rewind_scope(false);
-            let result: Result<Dynamic, _> = script_ctx.engine.call_fn_with_options::<Dynamic>(
+            let result: Result<Dynamic, _> = engine.call_fn_with_options::<Dynamic>(
                 options,
                 &mut rhai::Scope::new(),
-                &script_ctx.fn_ast,
-                fn_ptr.fn_name(),
+                &fn_ast,
+                &fn_name,
                 args,
             );
             if let Err(e) = result {
@@ -360,7 +373,6 @@ pub fn make_engine() -> Engine {
         .register_fn("on_change", ScriptSim::on_change)
         .register_fn("finish", ScriptSim::finish)
         .register_fn("run", ScriptSim::run)
-//        .register_fn("dump", ScriptSim::dump)
         .register_fn("assert", ScriptSim::assert_msg)
         .register_fn("assert", ScriptSim::assert_simple);
 

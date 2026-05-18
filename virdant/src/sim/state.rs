@@ -79,4 +79,12 @@ impl State {
         let value_ref = self.set_vals.get_mut(&signal_id).unwrap();
         *value_ref = Arc::new(value);
     }
+
+    /// Acknowledge that the current value of `signal_id` has been observed
+    /// (e.g. an `on_change` watcher just fired for it).  Synchronises
+    /// `prev_vals` with `vals` so subsequent change-detection passes see
+    /// "no change" until the signal is written again.
+    pub(super) fn commit_change(&mut self, signal_id: SignalId) {
+        self.prev_vals[signal_id.index()] = Arc::clone(&self.vals[signal_id.index()]);
+    }
 }

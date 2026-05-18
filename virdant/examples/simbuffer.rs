@@ -27,10 +27,12 @@ fn main() {
     sim.add_clock(clock, 10_000);
 
     sim.at_start(Box::new(move |sim| {
-        sim.set(reset, Value::Bit(true));
+        let mut lock = sim.lock();
+        lock.set(reset, Value::Bit(true));
     }));
     sim.after(10_000, Box::new(move |sim| {
-        sim.set(reset, Value::Bit(false));
+        let mut lock = sim.lock();
+        lock.set(reset, Value::Bit(false));
     }));
     sim.after(1000_000, Box::new(|sim| sim.finish()));
 

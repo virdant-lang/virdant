@@ -31,9 +31,12 @@ fn main() {
     sim.after(100_000, Box::new(|sim| sim.finish()));
 
     sim.at_start(Box::new(move |sim| {
-        sim.set(reset, Value::Bit(true));
+        let mut lock = sim.lock();
+        lock.set(reset, Value::Bit(true));
+        drop(lock);
         sim.after(10_000, Box::new(move |sim| {
-            sim.set(reset, Value::Bit(false));
+            let mut lock = sim.lock();
+            lock.set(reset, Value::Bit(false));
         }));
     }));
 
@@ -44,7 +47,9 @@ fn main() {
     sim.on_clock(led_clock, Box::new(move |sim| {
         println!("TICK top.led.inp = {:?}", sim.get(led_inp));
         let led_out = sim.signal("top.led.out");
-        sim.set(led_out, sim.get(led_inp));
+        let inp_val = sim.get(led_inp);
+        let mut lock = sim.lock();
+        lock.set(led_out, inp_val);
     }));
 
     sim.run().unwrap();
