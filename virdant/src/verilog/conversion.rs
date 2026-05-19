@@ -13,7 +13,7 @@ use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
 use crate::types::typing::Primitive;
 use crate::types::{Type, Typing};
-use crate::verilog::{self, exact_verilog_name, valid_verilog_name};
+use crate::verilog::{self, valid_verilog_name};
 
 /// Accumulates Verilog elements (regs, always blocks) generated as side-effects of
 /// converting expressions that cannot be expressed inline (e.g., `match` → `casez`).
@@ -118,7 +118,7 @@ impl<'d> Converter<'d> {
                 let moddef_name = parsing.string(moddef.name.clone()).to_str_lossy().into_owned();
                 let module_path = qualified_module_name(&package.to_string(), &moddef_name);
                 let emitted_name = if moddef.is_export {
-                    exact_verilog_name(&moddef_name)
+                    valid_verilog_name(&moddef_name)
                 } else {
                     valid_verilog_name(&module_path)
                 };
@@ -186,11 +186,7 @@ impl<'d> Converter<'d> {
             use bstr::ByteSlice;
             let name = port.path.to_str_lossy().into_owned();
             let width = port.typ.clone().map(|t| type_width(&t, self.db)).unwrap_or(0);
-            let port_name = if moddef.is_export {
-                exact_verilog_name(&name)
-            } else {
-                valid_verilog_name(&name)
-            };
+            let port_name = valid_verilog_name(&name);
             ports.push(verilog::Port {
                 name: port_name,
                 kind: verilog::PortKind::Wire,
