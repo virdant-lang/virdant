@@ -40,3 +40,20 @@ mod FullAdder {
     }
 }
 
+mod Cpu {
+    incoming clock : Clock
+    incoming reset : Reset
+}
+
+mod UnknownSubcomponent {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    mod cpu of Cpu {
+        it.clock := clock
+        it.reset := reset
+
+        // CHECK: Unknown component it.mem
+        it.mem :=: mem.wb
+    }
+}

@@ -233,7 +233,7 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
         diagnostics.extend(typecheck_item(builder, item, &exprroots, &mut use_locations));
         collect_unused(node.clone(), &mut use_locations, &mut diagnostics);
         if let Some(component_analysis) = &component_analysis {
-            collect_bidirectional_drivers(node.clone(), &mut use_locations, component_analysis);
+            collect_bidirectional_drivers(node.clone(), &mut use_locations, component_analysis, &mut diagnostics);
         }
     }
 
@@ -361,6 +361,7 @@ fn collect_bidirectional_drivers(
     node: AstNode<'_>,
     use_locations: &mut IndexMap<BString, IndexSet<Location>>,
     component_analysis: &crate::analysis::component::ComponentAnalysis,
+    diagnostics: &mut Vec<Diagnostic>,
 ) {
     if let AstNodePayload::BidirectionalDriver = node.payload() {
         let parsing = node.parsing();
@@ -370,6 +371,7 @@ fn collect_bidirectional_drivers(
             if let Some(path) = path_node.path() {
                 let path_str = parsing.string(path);
                 let mut resolved_path = path_str.to_owned();
+                let original_path = path_str.to_owned();
 
                 if resolved_path.starts_with(b"it.") || resolved_path == b"it" {
                     let mut current_id = node.id();
@@ -404,6 +406,35 @@ fn collect_bidirectional_drivers(
                     if comp.can_source() {
                         use_locations.entry(resolved_path.clone()).or_default().insert(path_node.location());
                     }
+                } else {
+                    // If resolution fails, check if it's a socket prefix
+                    // (i.e., there are components that start with this path).
+                    let mut is_socket_prefix = false;
+                    let mut prefix = String::new();
+                    prefix.push_str(resolved_path.to_str_lossy().as_ref());
+                    prefix.push('.');
+
+                    for (comp_path, _) in component_analysis.components() {
+                        if comp_path.to_str_lossy().starts_with(&prefix) {
+                            is_socket_prefix = true;
+                            break;
+                        }
+                    }
+
+                    if !is_socket_prefix {
+                        // The resolved path is neither a direct component nor a
+                        // socket prefix; generate an error.
+                        // Use original path if it was an "it" reference
+                        let error_path = if path_str.starts_with(b"it.") || path_str == b"it" {
+                            original_path
+                        } else {
+                            resolved_path.clone()
+                        };
+                        diagnostics.push(crate::diagnostics::Unknown {
+                            region: path_node.region(),
+                            message: format!("Unknown component {}", error_path.to_str_lossy()).into(),
+                        }.into());
+                    }
                 }
 
                 let mut prefix = String::new();
@@ -423,7 +454,7 @@ fn collect_bidirectional_drivers(
     }
 
     for child in node.children() {
-        collect_bidirectional_drivers(child, use_locations, component_analysis);
+        collect_bidirectional_drivers(child, use_locations, component_analysis, diagnostics);
     }
 }
 
