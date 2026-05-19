@@ -147,6 +147,42 @@ pub(crate) fn build_driver_analysis(
     })
 }
 
+/// Walk an expression subtree and emit a `NotIt` warning for every
+/// `ExprReference` whose path starts with `ctx.` or equals `ctx` exactly.
+/// These paths should instead use the `it` keyword.
+///
+/// Uses node IDs for traversal (not owned nodes) to avoid lifetime issues.
+fn collect_not_it_in_expr(
+    expr: &AstNode<'_>,
+    ctx: &BStr,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    use crate::syntax::ast::AstNodeId;
+    let parsing = expr.parsing;
+    let mut ctx_dot = ctx.to_owned();
+    ctx_dot.push(b'.');
+    let mut stack: Vec<AstNodeId> = vec![expr.id()];
+    while let Some(node_id) = stack.pop() {
+        let node = parsing.ast_node(node_id);
+        if matches!(node.payload(), AstNodePayload::ExprReference) {
+            if let Some(path) = node.path() {
+                let path_str = parsing.string(path);
+                if path_str == ctx.as_bytes()
+                    || path_str.starts_with(ctx_dot.as_bytes())
+                {
+                    diagnostics.push(crate::diagnostics::NotIt {
+                        region: node.region(),
+                        component: ctx.to_owned(),
+                    }.into());
+                }
+            }
+        }
+        for child in node.children() {
+            stack.push(child.id());
+        }
+    }
+}
+
 fn collect_block_drivers(
     stmts: Vec<AstNode<'_>>,
     component_analysis: &ComponentAnalysis,
@@ -169,6 +205,20 @@ fn collect_block_drivers(
                         target_str.extend_from_slice(&suffix);
                     } else if target_str == b"it" {
                         target_str = ctx.to_owned();
+                    } else {
+                        let mut ctx_dot = ctx.to_owned();
+                        ctx_dot.push(b'.');
+                        if target_str == ctx.as_bytes()
+                            || target_str.starts_with(ctx_dot.as_bytes())
+                        {
+                            diagnostics.push(crate::diagnostics::NotIt {
+                                region: stmt.child(0).region(),
+                                component: ctx.to_owned(),
+                            }.into());
+                        }
+                    }
+                    if let Some(expr_node) = stmt.driver() {
+                        collect_not_it_in_expr(&expr_node, ctx, &mut diagnostics);
                     }
                 } else if target_str.starts_with(b"it.") || target_str == b"it" {
                     diagnostics.push(crate::diagnostics::ItNotInItBlock {
@@ -205,6 +255,17 @@ fn collect_block_drivers(
                         lhs_str.extend_from_slice(&suffix);
                     } else if lhs_str == b"it" {
                         lhs_str = ctx.to_owned();
+                    } else {
+                        let mut ctx_dot = ctx.to_owned();
+                        ctx_dot.push(b'.');
+                        if lhs_str == ctx.as_bytes()
+                            || lhs_str.starts_with(ctx_dot.as_bytes())
+                        {
+                            diagnostics.push(crate::diagnostics::NotIt {
+                                region: lhs_node.region(),
+                                component: ctx.to_owned(),
+                            }.into());
+                        }
                     }
                     if rhs_str.starts_with(b"it.") {
                         let suffix = rhs_str[3..].to_owned();
@@ -214,6 +275,17 @@ fn collect_block_drivers(
                         rhs_str.extend_from_slice(&suffix);
                     } else if rhs_str == b"it" {
                         rhs_str = ctx.to_owned();
+                    } else {
+                        let mut ctx_dot = ctx.to_owned();
+                        ctx_dot.push(b'.');
+                        if rhs_str == ctx.as_bytes()
+                            || rhs_str.starts_with(ctx_dot.as_bytes())
+                        {
+                            diagnostics.push(crate::diagnostics::NotIt {
+                                region: rhs_node.region(),
+                                component: ctx.to_owned(),
+                            }.into());
+                        }
                     }
                 } else {
                     if lhs_str.starts_with(b"it.") || lhs_str == b"it" {

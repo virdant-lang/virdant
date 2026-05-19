@@ -151,6 +151,13 @@ pub struct ItNotInItBlock {
     pub region: Region,
 }
 
+/// A path uses the component name instead of `it` inside a driver block.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotIt {
+    pub region: Region,
+    pub component: BString,
+}
+
 /// A component could not be resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedCtor {
@@ -468,6 +475,21 @@ impl IsDiagnostic for ItNotInItBlock {
     fn message(&self) -> BString {
         format!("'it' used outside of an it block").into()
     }
+}
+
+impl IsDiagnostic for NotIt {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!(
+            "'{}' should be written as 'it' inside of this driver block",
+            &self.component,
+        ).into()
+    }
+
+    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }
 }
 
 
