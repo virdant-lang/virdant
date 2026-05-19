@@ -16,21 +16,17 @@ pub enum Token {
     #[regex(br"[_a-zA-Z][_a-zA-Z0-9]*")]
     Ident = 1,
 
-    #[regex(br"[0-9]+")]
-    #[regex(br"0b[0-1]+")]
-    #[regex(br"0x[0-1a-fA-F]+")]
-    #[regex(br"[0-9][_0-9]*[0-9]")]
-    #[regex(br"0b[0-1][_0-1]*[0-1]")]
-    #[regex(br"0x[0-1a-fA-F][_0-1a-fA-F]*[0-1a-fA-F]")]
+    // Nat: decimal, binary, or hex literals with optional underscores
+    // Underscores can separate digits but not appear consecutively
+    #[regex(br"[0-9]([_]?[0-9])*")]
+    #[regex(br"0b[0-1]([_]?[0-1])*")]
+    #[regex(br"0x[0-9a-fA-F]([_]?[0-9a-fA-F])*")]
     Nat,
 
-    #[regex(br"[0-9]+w[0-9]+")]
-    #[regex(br"0b[0-1]+w[0-9]+")]
-    #[regex(br"0x[0-9a-fA-Z]+w[0-9]+")]
-
-    #[regex(br"[0-9][_0-9]*[0-9]w[0-9]+")]
-    #[regex(br"0b[0-1][_0-1]*[0-1]w[0-9]+")]
-    #[regex(br"0x[0-9a-fA-Z][_0-9a-fA-Z]*[0-9a-fA-Z]w[0-9]+")]
+    // Word: Nat with w<width> suffix (width does NOT allow underscores)
+    #[regex(br"[0-9]([_]?[0-9])*w[0-9]+")]
+    #[regex(br"0b[0-1]([_]?[0-1])*w[0-9]+")]
+    #[regex(br"0x[0-9a-fA-F]([_]?[0-9a-fA-F])*w[0-9]+")]
     Word,
 
     #[regex(br#""([^"\\]|\\t|\\n|\\r|\\0)*""#)]
@@ -150,5 +146,146 @@ impl<'input> Iterator for Lexer<'input> {
 pub fn tokenize<'input>(input: &'input BStr) -> Lexer<'input> {
     Lexer {
         token_stream: Token::lexer(input).spanned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tokenize_and_collect(input: &str) -> Vec<(Token, &str)> {
+        let input = BStr::new(input.as_bytes());
+        tokenize(input)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .into_iter()
+            .map(|(_, token, end)| {
+                let start_offset = 0;
+                let end_offset = usize::from(end);
+                (token, std::str::from_utf8(&input[start_offset..end_offset]).unwrap())
+            })
+            .collect()
+    }
+
+    fn get_token(input: &str) -> Token {
+        let tokens = tokenize_and_collect(input);
+        assert!(!tokens.is_empty(), "Expected at least one token");
+        tokens[0].0
+    }
+
+    // Decimal literal tests with underscores
+    #[test]
+    fn test_decimal_with_single_underscore() {
+        assert_eq!(get_token("1_000"), Token::Nat);
+    }
+
+    #[test]
+    fn test_decimal_with_multiple_underscores() {
+        assert_eq!(get_token("1_000_000"), Token::Nat);
+    }
+
+    #[test]
+    fn test_decimal_no_underscore() {
+        assert_eq!(get_token("123"), Token::Nat);
+    }
+
+    #[test]
+    fn test_decimal_single_digit() {
+        assert_eq!(get_token("5"), Token::Nat);
+    }
+
+    // Binary literal tests with underscores
+    #[test]
+    fn test_binary_with_single_underscore() {
+        assert_eq!(get_token("0b1010_0101"), Token::Nat);
+    }
+
+    #[test]
+    fn test_binary_with_multiple_underscores() {
+        assert_eq!(get_token("0b1111_0000_1100"), Token::Nat);
+    }
+
+    #[test]
+    fn test_binary_no_underscore() {
+        assert_eq!(get_token("0b1010"), Token::Nat);
+    }
+
+    #[test]
+    fn test_binary_single_digit() {
+        assert_eq!(get_token("0b1"), Token::Nat);
+    }
+
+    // Hex literal tests with underscores
+    #[test]
+    fn test_hex_with_single_underscore() {
+        assert_eq!(get_token("0xDEAD_BEEF"), Token::Nat);
+    }
+
+    #[test]
+    fn test_hex_with_multiple_underscores() {
+        assert_eq!(get_token("0xCAFE_BABE_DEAD"), Token::Nat);
+    }
+
+    #[test]
+    fn test_hex_no_underscore() {
+        assert_eq!(get_token("0xDEADbeef"), Token::Nat);
+    }
+
+    #[test]
+    fn test_hex_single_digit() {
+        assert_eq!(get_token("0xF"), Token::Nat);
+    }
+
+    // Word literal tests with underscores
+    #[test]
+    fn test_word_decimal_with_underscore() {
+        assert_eq!(get_token("1_000w32"), Token::Word);
+    }
+
+    #[test]
+    fn test_word_binary_with_underscore() {
+        assert_eq!(get_token("0b1010_0101w8"), Token::Word);
+    }
+
+    #[test]
+    fn test_word_hex_with_underscore() {
+        assert_eq!(get_token("0xDEAD_BEEFw16"), Token::Word);
+    }
+
+    #[test]
+    fn test_word_no_underscores() {
+        assert_eq!(get_token("100w32"), Token::Word);
+    }
+
+    // Consecutive underscore tests
+    #[test]
+    fn test_consecutive_underscores_rejected_decimal() {
+        let tokens = tokenize_and_collect("1__000");
+        // Should tokenize as "1" (Nat) and "__000" (Ident)
+        assert_eq!(tokens[0].0, Token::Nat);
+        assert_eq!(tokens[1].0, Token::Ident);
+    }
+
+    #[test]
+    fn test_consecutive_underscores_rejected_binary() {
+        let tokens = tokenize_and_collect("0b1010__0101");
+        // Should tokenize as "0b1010_" (Nat) and "__0101" (Ident)
+        assert_eq!(tokens[0].0, Token::Nat);
+        assert_eq!(tokens[1].0, Token::Ident);
+    }
+
+    #[test]
+    fn test_consecutive_underscores_rejected_hex() {
+        let tokens = tokenize_and_collect("0xDEAD__BEEF");
+        // Should tokenize as "0xDEAD_" (Nat) and "__BEEF" (Ident)
+        assert_eq!(tokens[0].0, Token::Nat);
+        assert_eq!(tokens[1].0, Token::Ident);
+    }
+
+    // Width suffix does NOT allow underscores
+    #[test]
+    fn test_word_width_no_underscores() {
+        assert_eq!(get_token("100w32"), Token::Word);
+        assert_eq!(get_token("0xABCDw16"), Token::Word);
     }
 }
