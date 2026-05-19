@@ -1,26 +1,26 @@
 // TL-UL 2x2 Crossbar
 //
-// Connects two TL-UL hosts to two TL-UL devices with full
+// Connects two TL-UL clients to two TL-UL servers with full
 // non-blocking crossbar connectivity.
-// Address bit 31 selects the device (0 -> dev_0, 1 -> dev_1).
-// When both hosts target the same device simultaneously,
+// Address bit 31 selects the server (0 -> server_0, 1 -> server_1).
+// When both clients target the same server simultaneously,
 // a round-robin arbiter resolves the conflict.
 //
 // Internal structure:
 //
-//   host_0 --> [ mux_0 ] --dev_0--> [ arb_0 ] --> dev_0
-//                       --dev_1--> [ arb_1 ] --> dev_1
-//   host_1 --> [ mux_1 ] --dev_0--> [ arb_0 ]
-//                       --dev_1--> [ arb_1 ]
+//   client_0 --> [ mux_0 ] --server_0--> [ arb_0 ] --> server_0
+//                        --server_1--> [ arb_1 ] --> server_1
+//   client_1 --> [ mux_1 ] --server_0--> [ arb_0 ]
+//                        --server_1--> [ arb_1 ]
 //
 // Concepts demonstrated:
 //   - composing TlUlMux12 and TlUlArb21 into a larger fabric
 //   - all inter-module wiring done exclusively with socket bulk connect (:=:)
 //   - forwarding top-level sockets down through the hierarchy
 
-// TL-UL channel directions are from the host (master) perspective.
-// cosi = Client-Out, Server-In: the host drives these signals.
-// ciso = Client-In,  Server-Out: the device drives these signals.
+// TL-UL channel directions are from the client (master) perspective.
+// cosi = Client-Out, Server-In: the client drives these signals.
+// ciso = Client-In,  Server-Out: the server drives these signals.
 socket TlUl {
     cosi a_valid   : Bit       // host: request is valid
     ciso a_ready   : Bit       // device: ready to accept the request
@@ -29,6 +29,7 @@ socket TlUl {
     cosi a_data    : Word[32]  // write data (ignored for Get)
     cosi a_mask    : Word[4]   // byte-enable mask
     cosi a_size    : Word[2]   // log2 of transfer size in bytes
+
     cosi d_ready   : Bit       // host: ready to accept a response
     ciso d_valid   : Bit       // device: response is valid
     ciso d_opcode  : Word[3]   // 0=AccessAck, 1=AccessAckData
@@ -39,20 +40,20 @@ socket TlUl {
 
 // --- Shared building blocks --------------------------------------------------
 
-union type ArbState {
+union type Serving {
     Idle()
-    ServingHost0()
-    ServingHost1()
+    ServingClient0()
+    ServingClient1()
 }
 
 union type Priority {
-    Host0First()
-    Host1First()
+    Client0First()
+    Client1First()
 }
 
 union type SelState {
-    Dev0()
-    Dev1()
+    Server0()
+    Server1()
 }
 
 // TlUlArb21 -- 2-to-1 TL-UL round-robin arbiter.
@@ -60,87 +61,108 @@ mod TlUlArb21 {
     incoming clock : Clock
     incoming reset : Bit
 
-    server socket host_0 of TlUl
-    server socket host_1 of TlUl
-    client socket device  of TlUl
+    server socket client_0 of TlUl
+    server socket client_1 of TlUl
 
-    reg state    : ArbState on clock
+    client socket server_0 of TlUl {
+        if grant_0 {
+            it.a_opcode  := client_0.a_opcode
+            it.a_address := client_0.a_address
+            it.a_data    := client_0.a_data
+            it.a_mask    := client_0.a_mask
+            it.a_size    := client_0.a_size
+        } else {
+            it.a_opcode  := client_1.a_opcode
+            it.a_address := client_1.a_address
+            it.a_data    := client_1.a_data
+            it.a_mask    := client_1.a_mask
+            it.a_size    := client_1.a_size
+        }
+
+        it.a_valid   := (grant_0 && client_0.a_valid) || (grant_1 && client_1.a_valid)
+        it.d_ready := (grant_0 && client_0.d_ready) || (grant_1 && client_1.d_ready)
+
+        client_0.d_valid  := it.d_valid && grant_0
+        client_1.d_valid  := it.d_valid && grant_1
+        client_0.d_opcode := it.d_opcode
+        client_1.d_opcode := it.d_opcode
+        client_0.d_data   := it.d_data
+        client_1.d_data   := it.d_data
+        client_0.d_size   := it.d_size
+        client_1.d_size   := it.d_size
+        client_0.d_error  := it.d_error
+        client_1.d_error  := it.d_error
+    }
+
+    reg serving : Serving on clock
     reg priority : Priority on clock
 
     wire idle_grant_0 : Bit
-    idle_grant_0 := match priority {
-        case @Host0First() => host_0.a_valid
-        case @Host1First() => host_0.a_valid && !host_1.a_valid
-    }
-
     wire idle_grant_1 : Bit
-    idle_grant_1 := match priority {
-        case @Host0First() => host_1.a_valid && !host_0.a_valid
-        case @Host1First() => host_1.a_valid
-    }
 
-    wire grant_0 : Bit
-    grant_0 := match state {
-        case @Idle()         => idle_grant_0
-        case @ServingHost0() => true
-        case @ServingHost1() => false
-    }
-
-    wire grant_1 : Bit
-    grant_1 := match state {
-        case @Idle()         => idle_grant_1
-        case @ServingHost0() => false
-        case @ServingHost1() => true
-    }
-
-    device.a_valid   := (grant_0 && host_0.a_valid) || (grant_1 && host_1.a_valid)
-    device.a_opcode  := if grant_0 { host_0.a_opcode  } else { host_1.a_opcode  }
-    device.a_address := if grant_0 { host_0.a_address } else { host_1.a_address }
-    device.a_data    := if grant_0 { host_0.a_data    } else { host_1.a_data    }
-    device.a_mask    := if grant_0 { host_0.a_mask    } else { host_1.a_mask    }
-    device.a_size    := if grant_0 { host_0.a_size    } else { host_1.a_size    }
-
-    host_0.a_ready := device.a_ready && grant_0
-    host_1.a_ready := device.a_ready && grant_1
-
-    device.d_ready := (grant_0 && host_0.d_ready) || (grant_1 && host_1.d_ready)
-
-    host_0.d_valid  := device.d_valid && grant_0
-    host_1.d_valid  := device.d_valid && grant_1
-    host_0.d_opcode := device.d_opcode
-    host_1.d_opcode := device.d_opcode
-    host_0.d_data   := device.d_data
-    host_1.d_data   := device.d_data
-    host_0.d_size   := device.d_size
-    host_1.d_size   := device.d_size
-    host_0.d_error  := device.d_error
-    host_1.d_error  := device.d_error
-
-    wire d_done : Bit
-    d_done := device.d_valid && ((grant_0 && host_0.d_ready) || (grant_1 && host_1.d_ready))
-
-    state <= if reset {
-        @Idle()
-    } else {
-        match state {
-            case @Idle() =>
-                if idle_grant_0 { @ServingHost0() }
-                else if idle_grant_1 { @ServingHost1() }
-                else { @Idle() }
-            case @ServingHost0() =>
-                if d_done { @Idle() } else { @ServingHost0() }
-            case @ServingHost1() =>
-                if d_done { @Idle() } else { @ServingHost1() }
+    match priority {
+        case @Client0First() => {
+            idle_grant_0 := client_0.a_valid
+            idle_grant_1 := client_1.a_valid && !client_0.a_valid
+        }
+        case @Client1First() => {
+            idle_grant_0 := client_0.a_valid && !client_1.a_valid
+            idle_grant_1 := client_1.a_valid
         }
     }
 
-    priority <= if reset {
-        @Host0First()
+    wire grant_0 : Bit
+    wire grant_1 : Bit
+
+    match serving {
+        case @Idle() => {
+            grant_0 := idle_grant_0
+            grant_1 := idle_grant_1
+        }
+        case @ServingClient0() => {
+            grant_0 := true
+            grant_1 := false
+        }
+        case @ServingClient1() => {
+            grant_0 := false
+            grant_1 := true
+        }
+    }
+
+    client_0.a_ready := server_0.a_ready && grant_0
+    client_1.a_ready := server_0.a_ready && grant_1
+
+    wire d_done : Bit {
+        d_done := server_0.d_valid && ((grant_0 && client_0.d_ready) || (grant_1 && client_1.d_ready))
+    }
+
+    serving <= if reset {
+        @Idle()
     } else {
-        match state {
-            case @Idle()         => priority
-            case @ServingHost0() => if d_done { @Host1First() } else { priority }
-            case @ServingHost1() => if d_done { @Host0First() } else { priority }
+        match serving {
+            case @Idle() =>
+                if idle_grant_0 { @ServingClient0() }
+                else if idle_grant_1 { @ServingClient1() }
+                else { @Idle() }
+            case @ServingClient0() =>
+                if d_done { @Idle() } else { @ServingClient0() }
+            case @ServingClient1() =>
+                if d_done { @Idle() } else { @ServingClient1() }
+        }
+    }
+
+    if reset {
+        priority <= @Client0First()
+    } else {
+        if d_done {
+            match serving {
+                case @ServingClient0() => {
+                    priority <= @Client1First()
+                }
+                case @ServingClient1() => {
+                    priority <= @Client0First()
+                }
+            }
         }
     }
 }
@@ -150,103 +172,117 @@ mod TlUlMux12 {
     incoming clock : Clock
     incoming reset : Bit
 
-    server socket host  of TlUl
-    client socket dev_0 of TlUl
-    client socket dev_1 of TlUl
+    client socket server_0 of TlUl
+    client socket server_1 of TlUl
 
-    wire sel : Bit
-    sel := host.a_address[31]
-
-    dev_0.a_valid   := host.a_valid && !sel
-    dev_1.a_valid   := host.a_valid &&  sel
-    dev_0.a_opcode  := host.a_opcode
-    dev_1.a_opcode  := host.a_opcode
-    dev_0.a_address := host.a_address
-    dev_1.a_address := host.a_address
-    dev_0.a_data    := host.a_data
-    dev_1.a_data    := host.a_data
-    dev_0.a_mask    := host.a_mask
-    dev_1.a_mask    := host.a_mask
-    dev_0.a_size    := host.a_size
-    dev_1.a_size    := host.a_size
-
-    host.a_ready := if sel { dev_1.a_ready } else { dev_0.a_ready }
-
-    wire a_handshake : Bit
-    a_handshake := host.a_valid && (if sel { dev_1.a_ready } else { dev_0.a_ready })
-
-    reg serving : SelState on clock
-    serving <= if reset {
-        @Dev0()
-    } else if a_handshake {
-        if sel { @Dev1() } else { @Dev0() }
-    } else {
-        serving
+    wire sel : Bit {
+        it := client_0.a_address[31]
     }
 
-    wire serving_dev1 : Bit
-    serving_dev1 := match serving {
-        case @Dev0() => false
-        case @Dev1() => true
+    server socket client_0  of TlUl {
+        server_0.a_valid   := it.a_valid && !sel
+        server_0.a_opcode  := it.a_opcode
+        server_0.a_address := it.a_address
+        server_0.a_data    := it.a_data
+        server_0.a_mask    := it.a_mask
+        server_0.a_size    := it.a_size
+
+        server_1.a_valid   := it.a_valid &&  sel
+        server_1.a_opcode  := it.a_opcode
+        server_1.a_address := it.a_address
+        server_1.a_data    := it.a_data
+        server_1.a_mask    := it.a_mask
+        server_1.a_size    := it.a_size
+
+        it.a_ready := if sel { server_1.a_ready } else { server_0.a_ready }
+
+        if serving_dev1 {
+            client_0.d_valid  := server_1.d_valid
+            client_0.d_opcode := server_1.d_opcode
+            client_0.d_data   := server_1.d_data
+            client_0.d_size   := server_1.d_size
+            client_0.d_error  := server_1.d_error
+        } else {
+            client_0.d_valid  := server_0.d_valid
+            client_0.d_opcode := server_0.d_opcode
+            client_0.d_data   := server_0.d_data
+            client_0.d_size   := server_0.d_size
+            client_0.d_error  := server_0.d_error
+        }
     }
 
-    dev_0.d_ready := host.d_ready && !serving_dev1
-    dev_1.d_ready := host.d_ready &&  serving_dev1
+    wire a_handshake : Bit {
+        it := client_0.a_valid && (if sel { server_1.a_ready } else { server_0.a_ready })
+    }
 
-    host.d_valid  := if serving_dev1 { dev_1.d_valid  } else { dev_0.d_valid  }
-    host.d_opcode := if serving_dev1 { dev_1.d_opcode } else { dev_0.d_opcode }
-    host.d_data   := if serving_dev1 { dev_1.d_data   } else { dev_0.d_data   }
-    host.d_size   := if serving_dev1 { dev_1.d_size   } else { dev_0.d_size   }
-    host.d_error  := if serving_dev1 { dev_1.d_error  } else { dev_0.d_error  }
+    reg serving : SelState on clock {
+        if reset {
+            serving <=@Server0()
+        } else if a_handshake {
+            if sel {
+                serving <= @Server1()
+            } else {
+                serving <= @Server0()
+            }
+        }
+    }
+
+    wire serving_dev1 : Bit {
+        it := serving == @Server1()
+    }
+
+    server_0.d_ready := client_0.d_ready && !serving_dev1
+    server_1.d_ready := client_0.d_ready &&  serving_dev1
 }
 
 // --- Crossbar ----------------------------------------------------------------
 
 // TlUlXbar22 -- 2x2 TL-UL crossbar.
-//   host_0, host_1  server sockets for the two requesting hosts.
-//   dev_0,  dev_1   client sockets for the two target devices.
+//   client_0, client_1  server sockets for the two requesting clients.
+//   server_0, server_1  client sockets for the two target servers.
 //
-// Each host gets a TlUlMux12 that steers by address.
-// Each device gets a TlUlArb21 that resolves host conflicts.
+// Each client gets a TlUlMux12 that steers by address.
+// Each server gets a TlUlArb21 that resolves client conflicts.
 // All internal wiring is done with socket bulk connect (:=:).
 mod TlUlXbar22 {
-    incoming clock : Clock
-    incoming reset : Bit
+    incoming clock : Clock {
+        mux_0.clock := it
+        mux_1.clock := it
+        arb_0.clock := it
+        arb_1.clock := it
+    }
 
-    server socket host_0 of TlUl
-    server socket host_1 of TlUl
-    client socket dev_0  of TlUl
-    client socket dev_1  of TlUl
+    incoming reset : Bit {
+        mux_0.reset := it
+        mux_1.reset := it
+        arb_0.reset := it
+        arb_1.reset := it
+    }
 
-    mod mux_0 of TlUlMux12
-    mux_0.clock := clock
-    mux_0.reset := reset
+    server socket client_0 of TlUl
+    server socket client_1 of TlUl
+    client socket server_0  of TlUl
+    client socket server_1  of TlUl
 
-    mod mux_1 of TlUlMux12
-    mux_1.clock := clock
-    mux_1.reset := reset
+    mod mux_0 of TlUlMux12 {
+        it.client_0 :=: client_0
+    }
 
-    mod arb_0 of TlUlArb21
-    arb_0.clock := clock
-    arb_0.reset := reset
+    mod mux_1 of TlUlMux12 {
+        it.client_0 :=: client_1
+    }
 
-    mod arb_1 of TlUlArb21
-    arb_1.clock := clock
-    arb_1.reset := reset
+    mod arb_0 of TlUlArb21 {
+        it.client_0 :=: mux_0.server_0   // client_0 -> server_0 path
+        it.client_1 :=: mux_1.server_0   // client_1 -> server_0 path
+        server_0 :=: it.server_0
+    }
 
-    // Forward host sockets into each host's mux.
-    mux_0.host :=: host_0
-    mux_1.host :=: host_1
-
-    // Cross-connect mux outputs to the per-device arbiters.
-    arb_0.host_0 :=: mux_0.dev_0   // host_0 -> dev_0 path
-    arb_1.host_0 :=: mux_0.dev_1   // host_0 -> dev_1 path
-    arb_0.host_1 :=: mux_1.dev_0   // host_1 -> dev_0 path
-    arb_1.host_1 :=: mux_1.dev_1   // host_1 -> dev_1 path
-
-    // Forward arbiter outputs to the external device sockets.
-    dev_0 :=: arb_0.device
-    dev_1 :=: arb_1.device
+    mod arb_1 of TlUlArb21 {
+        it.client_0 :=: mux_0.server_1   // client_0 -> server_1 path
+        it.client_1 :=: mux_1.server_1   // client_1 -> server_1 path
+        server_1 :=: arb_1.server_0
+    }
 }
 
 // Top: thin wrapper that exposes the crossbar interface to the outside world.
@@ -254,17 +290,18 @@ export mod Top {
     incoming clock : Clock
     incoming reset : Bit
 
-    server socket host_0 of TlUl
-    server socket host_1 of TlUl
-    client socket dev_0  of TlUl
-    client socket dev_1  of TlUl
+    server socket client_0 of TlUl
+    server socket client_1 of TlUl
+    client socket server_0  of TlUl
+    client socket server_1  of TlUl
 
-    mod xbar of TlUlXbar22
-    xbar.clock := clock
-    xbar.reset := reset
+    mod xbar of TlUlXbar22 {
+        it.clock := clock
+        it.reset := reset
 
-    xbar.host_0 :=: host_0
-    xbar.host_1 :=: host_1
-    dev_0       :=: xbar.dev_0
-    dev_1       :=: xbar.dev_1
+        it.client_0 :=: client_0
+        it.client_1 :=: client_1
+        server_0     :=: it.server_0
+        server_1     :=: it.server_1
+    }
 }
