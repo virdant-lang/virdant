@@ -71,13 +71,13 @@ impl UserData for LuaDb {
                 .resolve(<&BStr>::from(top.as_str()))
                 .ok_or_else(|| mlua::Error::runtime(format!("Could not resolve top module: {}", top)))?;
             let sim = Sim::new(&this.db, top_symbol.id());
-            create_sim_table(lua, sim)
+            create_sim_table(lua, sim, this.db.clone())
         });
     }
 }
 
 /// Create a Lua table representing a simulator with all methods bound.
-fn create_sim_table(lua: &Lua, sim: Sim) -> LuaResult<Table> {
+fn create_sim_table(lua: &Lua, sim: Sim, db: Arc<Db>) -> LuaResult<Table> {
     let sim = Rc::new(RefCell::new(sim));
     let table = lua.create_table()?;
 
@@ -98,11 +98,12 @@ fn create_sim_table(lua: &Lua, sim: Sim) -> LuaResult<Table> {
 
     // set(path, value) - set signal value
     let sim_clone = sim.clone();
+    let db_clone = db.clone();
     table.set("set", lua.create_function(move |_, (path, value): (String, LuaValue)| {
         let mut sim = sim_clone.borrow_mut();
         let signal_id = sim.signal(<&BStr>::from(path.as_str()));
         let typ = sim.component_type(signal_id);
-        let val = lua_to_value(value, &typ);
+        let val = lua_to_value(value, &typ, &db_clone);
         {
             let mut lock = sim.lock();
             lock.set(signal_id, val);
@@ -267,7 +268,7 @@ fn value_to_lua(value: &Value) -> LuaValue {
 }
 
 /// Convert a Lua value to a Virdant Value based on the expected type.
-fn lua_to_value(value: LuaValue, typ: &Type) -> Value {
+fn lua_to_value(value: LuaValue, typ: &Type, db: &Db) -> Value {
     match typ {
         Type::Bit | Type::Reset => {
             match value {
@@ -282,6 +283,24 @@ fn lua_to_value(value: LuaValue, typ: &Type) -> Value {
                 LuaValue::Integer(i) => Value::Word(*width, i as u64),
                 LuaValue::Number(n) => Value::Word(*width, n as u64),
                 _ => Value::X(typ.clone()),
+            }
+        }
+        Type::Usual(symbol_id) => {
+            let typedef = db.get_typedef(*symbol_id);
+            if typedef.kind == crate::common::TypeScheme::EnumDef {
+                let tag: u64 = match value {
+                    LuaValue::Integer(i) => i as u64,
+                    LuaValue::Number(n) => n as u64,
+                    _ => return Value::X(typ.clone()),
+                };
+                for (enumerant_id, enumerant_val) in &typedef.enumerant_values {
+                    if *enumerant_val == tag {
+                        return Value::Ctor(typ.clone(), *enumerant_id, vec![]);
+                    }
+                }
+                Value::X(typ.clone())
+            } else {
+                Value::X(typ.clone())
             }
         }
         _ => Value::X(typ.clone()),
