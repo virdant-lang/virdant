@@ -355,70 +355,15 @@ impl<'d> Converter<'d> {
             }
         }
 
-        // Handle bidirectional drivers (socket connections)
-        for stmt in item_ast.children() {
-            if !matches!(stmt.payload(), AstNodePayload::BidirectionalDriver) {
-                continue;
-            }
-
-            // Bidirectional driver: lhs :=: rhs
-            // For each matching pair of components under lhs and rhs,
-            // create an assignment from the Source component to the Sink component
-            let lhs_node = stmt.child(0);
-            let rhs_node = stmt.child(1);
-            let Some(lhs_path) = lhs_node.path() else { continue };
-            let Some(rhs_path) = rhs_node.path() else { continue };
-            let lhs_str = parsing.string(lhs_path);
-            let rhs_str = parsing.string(rhs_path);
-
-            // Find all components that match the lhs and rhs prefixes
-            let lhs_prefix = format!("{}.", lhs_str.to_str_lossy());
-            let rhs_prefix = format!("{}.", rhs_str.to_str_lossy());
-
-            for (lhs_full_path, lhs_component) in component_analysis.components() {
-                let lhs_path_str = lhs_full_path.to_str_lossy();
-                if !lhs_path_str.starts_with(&lhs_prefix) {
-                    continue;
-                }
-
-                // Extract the suffix after the prefix (e.g., "addr" from "core.mem.addr")
-                let suffix = &lhs_path_str[lhs_prefix.len()..];
-
-                // Look for the matching component on the other side
-                let rhs_full_path_str = format!("{}{}", rhs_prefix, suffix);
-                let rhs_full_path = bstr::BString::from(rhs_full_path_str.as_bytes());
-
-                let Some(rhs_component) = component_analysis.resolve(rhs_full_path.as_bstr()) else {
-                    continue;
-                };
-
-                // Determine which component drives which based on Flow
-                // Source components provide values, Sink components receive values
-                use crate::common::Flow;
-                let (target_path, source_path) = match (lhs_component.flow(), rhs_component.flow()) {
-                    (Flow::Source, Flow::Sink) => {
-                        // lhs is source, rhs is sink: rhs := lhs
-                        (rhs_full_path.to_str_lossy().into_owned(), lhs_full_path.to_str_lossy().into_owned())
-                    }
-                    (Flow::Sink, Flow::Source) => {
-                        // lhs is sink, rhs is source: lhs := rhs
-                        (lhs_full_path.to_str_lossy().into_owned(), rhs_full_path.to_str_lossy().into_owned())
-                    }
-                    _ => {
-                        // Both same flow or one is duplex - shouldn't happen for sockets
-                        continue;
-                    }
-                };
-
-                // Create a wire assignment
-                elements.push(verilog::Element::Assign(verilog::Assign {
-                    name: valid_verilog_name(&target_path),
-                    expr: verilog::Expr::Reference(verilog::expr::Reference {
-                        name: valid_verilog_name(&source_path),
-                    }),
-                }));
-            }
-        }
+        // Handle bidirectional drivers (socket connections).
+        // Recurse into Submodule It-blocks to find nested :=: statements,
+        // resolving `it.*` paths to the actual submodule instance name.
+        collect_bidirectional_assigns(
+            item_ast.children(),
+            &component_analysis,
+            None,
+            &mut elements,
+        );
 
         elements.extend(combinational);
         elements.extend(sequential);
@@ -1538,6 +1483,118 @@ impl<'d> Converter<'d> {
     }
 }
 
+
+/// Walk `stmts` recursively and emit `assign` elements for every `:=:` bidirectional
+/// socket connection, including those nested inside Submodule It-blocks.
+/// `it_context` holds the resolved prefix for `it.*` references
+/// (the submodule instance name, dotted for nested contexts).
+fn collect_bidirectional_assigns<'a>(
+    stmts: Vec<AstNode<'a>>,
+    component_analysis: &crate::analysis::component::ComponentAnalysis,
+    it_context: Option<&bstr::BStr>,
+    elements: &mut Vec<verilog::Element>,
+) {
+    use crate::common::Flow;
+    for stmt in stmts {
+        match stmt.payload() {
+            AstNodePayload::BidirectionalDriver => {
+                let parsing = stmt.parsing;
+                let lhs_node = stmt.child(0);
+                let rhs_node = stmt.child(1);
+                let Some(lhs_path) = lhs_node.path() else { continue };
+                let Some(rhs_path) = rhs_node.path() else { continue };
+                let mut lhs_str = parsing.string(lhs_path).to_owned();
+                let mut rhs_str = parsing.string(rhs_path).to_owned();
+
+                // Resolve `it.*` to the enclosing submodule instance name.
+                if let Some(ctx) = it_context {
+                    if lhs_str.starts_with(b"it.") {
+                        let suffix = lhs_str[3..].to_owned();
+                        lhs_str.clear();
+                        lhs_str.extend_from_slice(ctx);
+                        lhs_str.push(b'.');
+                        lhs_str.extend_from_slice(&suffix);
+                    } else if lhs_str == b"it" {
+                        lhs_str = ctx.to_owned();
+                    }
+                    if rhs_str.starts_with(b"it.") {
+                        let suffix = rhs_str[3..].to_owned();
+                        rhs_str.clear();
+                        rhs_str.extend_from_slice(ctx);
+                        rhs_str.push(b'.');
+                        rhs_str.extend_from_slice(&suffix);
+                    } else if rhs_str == b"it" {
+                        rhs_str = ctx.to_owned();
+                    }
+                }
+
+                let lhs_prefix = format!("{}.", lhs_str.to_str_lossy());
+                let rhs_prefix = format!("{}.", rhs_str.to_str_lossy());
+
+                for (lhs_full_path, lhs_component) in component_analysis.components() {
+                    let lhs_path_str = lhs_full_path.to_str_lossy();
+                    if !lhs_path_str.starts_with(&lhs_prefix) {
+                        continue;
+                    }
+                    let suffix = &lhs_path_str[lhs_prefix.len()..];
+                    let rhs_full_path_str = format!("{}{}", rhs_prefix, suffix);
+                    let rhs_full_path = bstr::BString::from(rhs_full_path_str.as_bytes());
+                    let Some(rhs_component) = component_analysis.resolve(rhs_full_path.as_bstr())
+                    else {
+                        continue;
+                    };
+                    let (target_path, source_path) =
+                        match (lhs_component.flow(), rhs_component.flow()) {
+                            (Flow::Source, Flow::Sink) => (
+                                rhs_full_path.to_str_lossy().into_owned(),
+                                lhs_full_path.to_str_lossy().into_owned(),
+                            ),
+                            (Flow::Sink, Flow::Source) => (
+                                lhs_full_path.to_str_lossy().into_owned(),
+                                rhs_full_path.to_str_lossy().into_owned(),
+                            ),
+                            _ => continue,
+                        };
+                    elements.push(verilog::Element::Assign(verilog::Assign {
+                        name: valid_verilog_name(&target_path),
+                        expr: verilog::Expr::Reference(verilog::expr::Reference {
+                            name: valid_verilog_name(&source_path),
+                        }),
+                    }));
+                }
+            }
+            AstNodePayload::Submodule(submodule) => {
+                // Recurse into the It-block body, using the submodule instance name
+                // as the new `it` context so that nested `it.*` references resolve
+                // to the correct wire prefix (e.g. `it.instr_mem` -> `cpu.instr_mem`).
+                let name = stmt.parsing.string(submodule.name);
+                let children = stmt.children();
+                // A Submodule with an It-block has [Ofness, It] as its two children.
+                if children.len() == 2 {
+                    let it_block = &children[1];
+                    if matches!(it_block.payload(), AstNodePayload::It) {
+                        let block = &it_block.children()[0];
+                        let name_bstr = if let Some(ctx) = it_context {
+                            let mut new_name = bstr::BString::from(ctx);
+                            new_name.push(b'.');
+                            new_name.extend_from_slice(name);
+                            new_name
+                        } else {
+                            bstr::BString::from(name)
+                        };
+                        collect_bidirectional_assigns(
+                            block.children(),
+                            component_analysis,
+                            Some(name_bstr.as_bstr()),
+                            elements,
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
 
 fn qualified_module_name(package_name: &str, module_name: &str) -> String {
     format!("{package_name}::{module_name}")
