@@ -1,0 +1,142 @@
+// Tests for the NotIt warning: using the component name instead of
+// 'it' inside a driver block.
+// All cases here are warnings only, so the run ends with "Check OK".
+
+mod HalfAdder {
+    incoming a : Bit
+    incoming b : Bit
+
+    outgoing sum : Bit
+    outgoing carry_out : Bit
+
+    sum := a ^^ b
+    carry_out := a && b
+}
+
+// Using the submodule's own name as a driver target (LHS) inside its
+// it block should warn.
+mod SubmoduleLhs {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing sum : Bit
+    outgoing carry_out : Bit
+
+    mod ha of HalfAdder {
+        // CHECK: 'ha' should be written as 'it' inside of this driver block
+        ha.a := a
+        // CHECK: 'ha' should be written as 'it' inside of this driver block
+        ha.b := b
+    }
+    sum := ha.sum
+    carry_out := ha.carry_out
+}
+
+// Using a reg's own name as a driver target (LHS) inside its it block
+// should warn.
+mod RegLhs {
+    incoming clk : Clock
+    outgoing out : Word[8]
+
+    reg counter : Word[8] on clk {
+        // CHECK: 'counter' should be written as 'it' inside of this driver block
+        counter <= 0w8
+    }
+    out := counter
+}
+
+// Using a reg's own name in an expression (RHS) inside its it block
+// should warn.
+mod RegRhs {
+    incoming clk : Clock
+    outgoing out : Word[8]
+
+    reg counter : Word[8] on clk {
+        // CHECK: 'counter' should be written as 'it' inside of this driver block
+        it <= counter + 1
+    }
+    out := counter
+}
+
+// Both LHS and RHS in the same statement each produce a warning.
+mod RegBothSides {
+    incoming clk : Clock
+    outgoing out : Word[8]
+
+    reg counter : Word[8] on clk {
+        // CHECK: 'counter' should be written as 'it' inside of this driver block
+        // CHECK: 'counter' should be written as 'it' inside of this driver block
+        counter <= counter + 1
+    }
+    out := counter
+}
+
+// Correct use of 'it' in both target and expression produces no warning.
+mod CorrectReg {
+    incoming clk : Clock
+    outgoing out : Word[8]
+
+    reg counter : Word[8] on clk {
+        // CHECK-NOT: 'counter' should be written as 'it'
+        it <= 0
+    }
+    out := counter
+}
+
+// Correct use of 'it.' in a submodule it block produces no warning.
+mod CorrectSubmodule {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing sum : Bit
+    outgoing carry_out : Bit
+
+    mod ha of HalfAdder {
+        // CHECK-NOT: 'ha' should be written as 'it'
+        it.a := a
+        it.b := b
+    }
+    sum := ha.sum
+    carry_out := ha.carry_out
+}
+
+// Correct use of 'it.' in a submodule it block produces no warning.
+mod IncorrectSimpleComponentLhs {
+    outgoing out : Bit {
+        // CHECK: 'out' should be written as 'it'
+        out := true
+    }
+}
+
+// Using a submodule's own name in an 'unused' statement inside its
+// it block should warn.
+mod UnusedStmt {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing sum : Bit
+    outgoing carry_out : Bit
+
+    mod ha of HalfAdder {
+        it.a := a
+        it.b := b
+        // CHECK: 'ha' should be written as 'it' inside of this driver block
+        unused ha.carry_out
+    }
+    sum := ha.sum
+    carry_out := ha.carry_out
+}
+
+// Correct 'unused it.foo' inside an it block should produce no warning.
+mod CorrectUnused {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing sum : Bit
+
+    mod ha of HalfAdder {
+        it.a := a
+        it.b := b
+        // CHECK-NOT: 'ha' should be written as 'it'
+        unused it.carry_out
+    }
+    sum := ha.sum
+}
+
+// CHECK: Check OK

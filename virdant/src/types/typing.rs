@@ -231,7 +231,7 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
     };
     if !node.contains_errors() {
         diagnostics.extend(typecheck_item(builder, item, &exprroots, &mut use_locations));
-        collect_unused(node.clone(), &mut use_locations);
+        collect_unused(node.clone(), &mut use_locations, &mut diagnostics);
         if let Some(component_analysis) = &component_analysis {
             collect_bidirectional_drivers(node.clone(), &mut use_locations, component_analysis);
         }
@@ -290,6 +290,7 @@ fn typecheck_item(
 fn collect_unused(
     node: AstNode<'_>,
     use_locations: &mut IndexMap<BString, IndexSet<Location>>,
+    diagnostics: &mut Vec<crate::diagnostics::Diagnostic>,
 ) {
     if let AstNodePayload::ModDefStmtUnused = node.payload() {
         let path_node = node.child(0);
@@ -298,32 +299,52 @@ fn collect_unused(
             let path_str = parsing.string(path);
             let mut resolved_path = path_str.to_owned();
 
-            if resolved_path.starts_with(b"it.") || resolved_path == b"it" {
-                let mut current_id = node.id();
-                while let Some(parent_id) = parsing.ast_node(current_id).parent {
-                    let parent = parsing.ast_node(parent_id);
-                    let mut resolved_name = None;
-                    if let AstNodePayload::Submodule(module) = parent.payload() {
-                        resolved_name = Some(parsing.string(module.name));
-                    } else if let AstNodePayload::Component(component) = parent.payload() {
-                        resolved_name = Some(parsing.string(component.name));
-                    } else if let AstNodePayload::Socket(socket) = parent.payload() {
-                        resolved_name = Some(parsing.string(socket.name));
-                    }
+            // Always walk up to find the nearest enclosing it-context
+            // (Submodule / Component / Socket).
+            let mut ctx_name: Option<BString> = None;
+            let mut current_id = node.id();
+            while let Some(parent_id) = parsing.ast_node(current_id).parent {
+                let parent = parsing.ast_node(parent_id);
+                let mut resolved_name = None;
+                if let AstNodePayload::Submodule(module) = parent.payload() {
+                    resolved_name = Some(parsing.string(module.name));
+                } else if let AstNodePayload::Component(component) = parent.payload() {
+                    resolved_name = Some(parsing.string(component.name));
+                } else if let AstNodePayload::Socket(socket) = parent.payload() {
+                    resolved_name = Some(parsing.string(socket.name));
+                }
+                if let Some(name) = resolved_name {
+                    ctx_name = Some(name.to_owned());
+                    break;
+                }
+                current_id = parent_id;
+            }
 
-                    if let Some(name) = resolved_name {
-                        if resolved_path.starts_with(b"it.") {
-                            let suffix = resolved_path[3..].to_owned();
-                            resolved_path.clear();
-                            resolved_path.extend_from_slice(name);
-                            resolved_path.push(b'.');
-                            resolved_path.extend_from_slice(&suffix);
-                        } else {
-                            resolved_path = name.to_owned();
-                        }
-                        break;
+            if resolved_path.starts_with(b"it.") || resolved_path == b"it" {
+                // Rewrite `it` / `it.foo` to the enclosing context name.
+                if let Some(ctx) = &ctx_name {
+                    if resolved_path.starts_with(b"it.") {
+                        let suffix = resolved_path[3..].to_owned();
+                        resolved_path.clear();
+                        resolved_path.extend_from_slice(ctx);
+                        resolved_path.push(b'.');
+                        resolved_path.extend_from_slice(&suffix);
+                    } else {
+                        resolved_path = ctx.to_owned();
                     }
-                    current_id = parent_id;
+                }
+            } else if let Some(ctx) = &ctx_name {
+                // Inside an it-block: flag paths that use the component name
+                // directly instead of 'it'.
+                let mut ctx_dot = ctx.to_owned();
+                ctx_dot.push(b'.');
+                if resolved_path == ctx.as_bytes()
+                    || resolved_path.starts_with(ctx_dot.as_bytes())
+                {
+                    diagnostics.push(crate::diagnostics::NotIt {
+                        region: path_node.region(),
+                        component: ctx.to_owned(),
+                    }.into());
                 }
             }
 
@@ -331,7 +352,7 @@ fn collect_unused(
         }
     }
     for child in node.children() {
-        collect_unused(child, use_locations);
+        collect_unused(child, use_locations, diagnostics);
     }
 }
 
