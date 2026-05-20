@@ -166,6 +166,22 @@ impl Typing {
                     total_width += match typ {
                         Type::Bit | Type::Reset => 1,
                         Type::Word(w) => w,
+                        Type::Usual(symbol_id) => {
+                            let typedef = builder.get_typedef(symbol_id);
+                            match typedef.width {
+                                Some(w) => w,
+                                None => {
+                                    diagnostics.push(
+                                        diagnostics::Todo {
+                                            region: node.region(),
+                                            message: "Type without width in word(...): {typ:?}".into(),
+                                        }
+                                        .into(),
+                                    );
+                                    0
+                                }
+                            }
+                        }
                         _ => {
                             diagnostics.push(
                                 diagnostics::Todo {
