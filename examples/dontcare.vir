@@ -1,0 +1,10 @@
+mod Top {
+    wire bit_x : Bit
+    bit_x := dontcare
+
+    wire word_x : Word[8]
+    word_x := dontcare
+
+    wire word32_x : Word[32]
+    word32_x := dontcare
+}

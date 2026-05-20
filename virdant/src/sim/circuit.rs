@@ -397,6 +397,7 @@ fn collect_referents_inner(expr: &Expr, out: &mut Vec<Referent>) {
         | ExprPayload::WordLit(_)
         | ExprPayload::StrLit(_)
         | ExprPayload::Enumerant(_)
-        | ExprPayload::Hole(_)         => {}
+        | ExprPayload::Hole(_)
+        | ExprPayload::Dontcare(_)     => {}
     }
 }

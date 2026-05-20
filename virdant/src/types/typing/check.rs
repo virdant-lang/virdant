@@ -29,6 +29,7 @@ impl Typing {
             AstNodePayload::ExprWordLit(_)           => self.check_word_lit(node, expected_typ),
             AstNodePayload::ExprIndex(expr_index)    => self.check_index(builder, context, node, expr_index.index, expected_typ),
             AstNodePayload::ExprHole                 => self.check_hole(node, expected_typ),
+            AstNodePayload::ExprDontcare             => self.check_dontcare(node, expected_typ),
             AstNodePayload::ExprMatch                => self.check_match(builder, context, node, expected_typ),
             AstNodePayload::ExprFn                   => self.check_fn(builder, context, node, expected_typ),
             AstNodePayload::ExprField(field)         => self.check_field(builder, context, node, expected_typ, field),
@@ -265,6 +266,11 @@ impl Typing {
             return Err(());
         }
 
+        self.annotate(node, &expected_typ);
+        Ok(())
+    }
+
+    fn check_dontcare<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
         self.annotate(node, &expected_typ);
         Ok(())
     }

@@ -200,6 +200,7 @@ ExprAtom :=
     | "#" Ident
     | "@" Ident
     | "?"
+    | "dontcare"
     | "(" Expr ")"
 
 ArgList :=
@@ -274,6 +275,7 @@ Tokens:
   "ciso"
   "client"
   "cosi"
+  "dontcare"
   "else"
   "enum"
   "export"

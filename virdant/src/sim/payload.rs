@@ -148,3 +148,7 @@ pub struct As {
 #[derive(Debug)]
 pub struct Hole {
 }
+
+#[derive(Debug)]
+pub struct Dontcare {
+}

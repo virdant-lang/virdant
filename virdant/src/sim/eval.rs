@@ -153,6 +153,8 @@ impl Expr {
             ExprPayload::As(as_) => as_.subject.eval(context),
             // Hole is an unfilled expression placeholder — treat as X of the appropriate type.
             ExprPayload::Hole(_) => Value::X(self.typ().clone()),
+            // Dontcare is a valid the compiler is free to replace with any well-typed constant.
+            ExprPayload::Dontcare(_) => Value::X(self.typ().clone()),
         }
     }
 

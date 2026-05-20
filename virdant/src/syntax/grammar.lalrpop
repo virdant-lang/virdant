@@ -722,6 +722,13 @@ ExprAtom: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
+    <ll:@L> "dontcare" <rr:@R> => {
+        let payload = AstNodePayload::ExprDontcare;
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
     <ll:@L> "(" <e:Expr> ")" <rr:@R> => {
         let payload = AstNodePayload::ExprParen;
         let span = parser.span(ll, rr);
@@ -922,6 +929,7 @@ extern {
         "unused" => Token::KwUnused,
         "true" => Token::KwTrue,
         "false" => Token::KwFalse,
+        "dontcare" => Token::KwDontcare,
         "Str" => Token::Str,
         "/*" => Token::StarSlash,
         "*/" => Token::SlashStar,

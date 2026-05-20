@@ -46,6 +46,7 @@ pub enum ExprPayload {
     All(payload::All),
     As(payload::As),
     Hole(payload::Hole),
+    Dontcare(payload::Dontcare),
 }
 
 impl Expr {
@@ -445,6 +446,7 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
             ExprPayload::As(payload::As { subject })
         }
         AstNodePayload::ExprHole => ExprPayload::Hole(payload::Hole {}),
+        AstNodePayload::ExprDontcare => ExprPayload::Dontcare(payload::Dontcare {}),
         other => unreachable!("expected expression node, got {:?}", other.kind()),
     };
 

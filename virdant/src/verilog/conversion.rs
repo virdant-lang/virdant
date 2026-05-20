@@ -970,6 +970,10 @@ impl<'d> Converter<'d> {
                 let width = self.node_or_expected_width(package, &node, typ);
                 verilog::Expr::XLit(verilog::expr::XLit { width })
             }
+            AstNodePayload::ExprDontcare => {
+                let width = self.node_or_expected_width(package, &node, typ);
+                verilog::Expr::XLit(verilog::expr::XLit { width })
+            }
             AstNodePayload::ExprCtor(_ctor) => {
                 let symboltable = db.get_symboltable();
                 let Type::Usual(typedef_symbol_id) = typ else {

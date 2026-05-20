@@ -213,6 +213,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprSext => format!("ExprSext"),
             AstNodePayload::ExprAs => format!("ExprAs"),
             AstNodePayload::ExprHole => format!("ExprHole"),
+            AstNodePayload::ExprDontcare => format!("ExprDontcare"),
             AstNodePayload::Assign(_assign) => format!("Assign"),
             AstNodePayload::PatCtor(_pat_ident) => format!("PatCtor"),
             AstNodePayload::PatEnumerant(_pat_enumerant) => format!("PatEnumerant"),
