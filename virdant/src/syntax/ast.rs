@@ -153,7 +153,7 @@ impl<'p> AstNode<'p> {
         let parsing = self.parsing;
         match &self.payload {
             AstNodePayload::Error => format!("Error"),
-            AstNodePayload::Package => format!("Package"),
+            AstNodePayload::Package(_) => format!("Package"),
             AstNodePayload::Import(import) => format!("Import {}", parsing.string(import.package.clone())),
             AstNodePayload::ModDef(mod_def) => {
                 let ext = if mod_def.is_ext {
@@ -235,6 +235,28 @@ impl<'p> AstNode<'p> {
             AstNodePayload::FnDef(_) |
             AstNodePayload::SocketDef(_)
         )
+    }
+
+    pub fn doc_string(&self) -> Option<&InternedString> {
+        match &self.payload {
+            AstNodePayload::Package(p) => p.doc_string.as_ref(),
+            AstNodePayload::ModDef(m) => m.doc_string.as_ref(),
+            AstNodePayload::StructDef(s) => s.doc_string.as_ref(),
+            AstNodePayload::UnionDef(u) => u.doc_string.as_ref(),
+            AstNodePayload::EnumDef(e) => e.doc_string.as_ref(),
+            AstNodePayload::BuiltinDef(b) => b.doc_string.as_ref(),
+            AstNodePayload::FnDef(f) => f.doc_string.as_ref(),
+            AstNodePayload::SocketDef(s) => s.doc_string.as_ref(),
+            AstNodePayload::Component(c) => c.doc_string.as_ref(),
+            AstNodePayload::Socket(s) => s.doc_string.as_ref(),
+            AstNodePayload::Field(f) => f.doc_string.as_ref(),
+            AstNodePayload::Ctor(c) => c.doc_string.as_ref(),
+            AstNodePayload::Enumerant(e) => e.doc_string.as_ref(),
+            AstNodePayload::Channel(c) => c.doc_string.as_ref(),
+            AstNodePayload::Param(p) => p.doc_string.as_ref(),
+            AstNodePayload::Submodule(s) => s.doc_string.as_ref(),
+            _ => None,
+        }
     }
 
     pub fn name(&self) -> Option<InternedString> {

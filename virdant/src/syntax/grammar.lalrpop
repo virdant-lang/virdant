@@ -11,8 +11,10 @@ use crate::common::{DriverType, ComponentKind, BinOp, ChannelDir, SocketRole, Un
 grammar<'a>(parser: &mut Parsing);
 
 pub Package: AstNodeId = {
-    <ll:@L> <stmts:PackageStmt*> <rr:@R> => {
-        let payload = AstNodePayload::Package;
+    <docstring:DocBang> <ll:@L> <stmts:PackageStmt*> <rr:@R> => {
+        let payload = AstNodePayload::Package(payload::PackagePayload {
+            doc_string: docstring,
+        });
         let span = parser.span(ll, rr);
         let num_children: u16 = stmts.len().try_into().unwrap();
 
@@ -39,6 +41,22 @@ PackageImport: AstNodeId = {
     },
 }
 
+DocString: Option<InternedString> = {
+    <ll:@L> <texts:("DocComment")+> <rr:@R> => {
+        let span = parser.span(ll, rr);
+        Some(parser.intern(span))
+    },
+    => None,
+}
+
+DocBang: Option<InternedString> = {
+    <ll:@L> <texts:("DocBang")+> <rr:@R> => {
+        let span = parser.span(ll, rr);
+        Some(parser.intern(span))
+    },
+    => None,
+}
+
 Item: AstNodeId = {
     <moddef:ModDef> => moddef,
     <structdef:StructDef> => structdef,
@@ -50,13 +68,14 @@ Item: AstNodeId = {
 }
 
 ModDef: AstNodeId = {
-    <ll:@L> <ext:"ext"?> <export:"export"?> "mod" <ident:Ident> "{"
+    <docstring:DocString> <ll:@L> <ext:"ext"?> <export:"export"?> "mod" <ident:Ident> "{"
         <stmts:ModDefStmt*>
     "}" <rr:@R> => {
         let payload = AstNodePayload::ModDef(payload::ModDef {
             name: ident,
             is_ext: ext.is_some(),
             is_export: export.is_some(),
+            doc_string: docstring,
         });
         let span = parser.span(ll, rr);
         let num_children = stmts.len().try_into().unwrap();
@@ -66,10 +85,10 @@ ModDef: AstNodeId = {
 }
 
 StructDef: AstNodeId = {
-    <ll:@L> "struct" "type" <name:Ident> "{"
+    <docstring:DocString> <ll:@L> "struct" "type" <name:Ident> "{"
         <stmts:StructDefStmt*>
     "}" <rr:@R> => {
-        let payload = AstNodePayload::StructDef(payload::StructDef { name });
+        let payload = AstNodePayload::StructDef(payload::StructDef { name, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = stmts.len().try_into().unwrap();
 
@@ -78,8 +97,8 @@ StructDef: AstNodeId = {
 }
 
 StructDefStmt: AstNodeId = {
-    <ll:@L> <name:Ident> ":" Type <rr:@R> => {
-        let payload = AstNodePayload::Field(payload::Field { name });
+    <docstring:DocString> <ll:@L> <name:Ident> ":" Type <rr:@R> => {
+        let payload = AstNodePayload::Field(payload::Field { name, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = 1;
 
@@ -88,10 +107,10 @@ StructDefStmt: AstNodeId = {
 }
 
 UnionDef: AstNodeId = {
-    <ll:@L> "union" "type" <name:Ident> "{"
+    <docstring:DocString> <ll:@L> "union" "type" <name:Ident> "{"
         <stmts:UnionDefStmt*>
     "}" <rr:@R> => {
-        let payload = AstNodePayload::UnionDef(payload::UnionDef { name });
+        let payload = AstNodePayload::UnionDef(payload::UnionDef { name, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = stmts.len().try_into().unwrap();
 
@@ -100,8 +119,8 @@ UnionDef: AstNodeId = {
 }
 
 UnionDefStmt: AstNodeId = {
-    <ll:@L> <name:Ident> <paramlist:ParamList?> <rr:@R> => {
-        let payload = AstNodePayload::Ctor(payload::Ctor { name });
+    <docstring:DocString> <ll:@L> <name:Ident> <paramlist:ParamList?> <rr:@R> => {
+        let payload = AstNodePayload::Ctor(payload::Ctor { name, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = paramlist.unwrap_or(0);
 
@@ -119,8 +138,8 @@ Params: u16 = {
 }
 
 Param: AstNodeId = {
-    <ll:@L> <name:Ident> ":" Type <rr:@R> => {
-        let payload = AstNodePayload::Param(payload::Param { name });
+    <docstring:DocString> <ll:@L> <name:Ident> ":" Type <rr:@R> => {
+        let payload = AstNodePayload::Param(payload::Param { name, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = 1;
 
@@ -150,10 +169,10 @@ Generics: AstNodeId = {
 }
 
 EnumDef: AstNodeId = {
-    <ll:@L> "enum" "type" <name:Ident> "width" <width:Width> "{"
+    <docstring:DocString> <ll:@L> "enum" "type" <name:Ident> "width" <width:Width> "{"
         <stmts:EnumDefStmt*>
     "}" <rr:@R> => {
-        let payload = AstNodePayload::EnumDef(payload::EnumDef { name, width });
+        let payload = AstNodePayload::EnumDef(payload::EnumDef { name, width, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = stmts.len().try_into().unwrap();
 
@@ -162,8 +181,8 @@ EnumDef: AstNodeId = {
 }
 
 EnumDefStmt: AstNodeId = {
-    <ll:@L> <name:Ident> "=" Expr <rr:@R> => {
-        let payload = AstNodePayload::Enumerant(payload::Enumerant { name });
+    <docstring:DocString> <ll:@L> <name:Ident> "=" Expr <rr:@R> => {
+        let payload = AstNodePayload::Enumerant(payload::Enumerant { name, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = 1;
 
@@ -172,9 +191,9 @@ EnumDefStmt: AstNodeId = {
 }
 
 BuiltinDef: AstNodeId = {
-    <ll:@L> "builtin" "type" <name:Ident> <generics:Generics?> "{"
+    <docstring:DocString> <ll:@L> "builtin" "type" <name:Ident> <generics:Generics?> "{"
     "}" <rr:@R> => {
-        let payload = AstNodePayload::BuiltinDef(payload::BuiltinDef { name });
+        let payload = AstNodePayload::BuiltinDef(payload::BuiltinDef { name, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = if generics.is_some() { 1 } else { 0 };
 
@@ -183,10 +202,10 @@ BuiltinDef: AstNodeId = {
 }
 
 SocketDef: AstNodeId = {
-    <ll:@L> "socket" <name:Ident> "{"
+    <docstring:DocString> <ll:@L> "socket" <name:Ident> "{"
         <stmts:SocketDefStmt*>
     "}" <rr:@R> => {
-        let payload = AstNodePayload::SocketDef(payload::SocketDef { name });
+        let payload = AstNodePayload::SocketDef(payload::SocketDef { name, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = stmts.len().try_into().unwrap();
 
@@ -195,15 +214,15 @@ SocketDef: AstNodeId = {
 }
 
 SocketDefStmt: AstNodeId = {
-    <ll:@L> "cosi" <name:Ident> ":" Type <rr:@R> => {
-        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Cosi });
+    <docstring:DocString> <ll:@L> "cosi" <name:Ident> ":" Type <rr:@R> => {
+        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Cosi, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = 1;
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "ciso" <name:Ident> ":" Type <rr:@R> => {
-        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Ciso });
+    <docstring:DocString> <ll:@L> "ciso" <name:Ident> ":" Type <rr:@R> => {
+        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Ciso, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = 1;
 
@@ -212,10 +231,10 @@ SocketDefStmt: AstNodeId = {
 }
 
 FnDef: AstNodeId = {
-    <ll:@L> "fn" <name:Ident> <paramlist:ParamList> "->" Type "{"
+    <docstring:DocString> <ll:@L> "fn" <name:Ident> <paramlist:ParamList> "->" Type "{"
         Expr
     "}" <rr:@R> => {
-        let payload = AstNodePayload::FnDef(payload::FnDef { name });
+        let payload = AstNodePayload::FnDef(payload::FnDef { name, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = paramlist + 2;
 
@@ -238,40 +257,44 @@ ModDefStmt: AstNodeId = {
 }
 
 ModDefStmtComponent: AstNodeId = {
-    <ll:@L> "incoming" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString> <ll:@L> "incoming" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Incoming,
+            doc_string: docstring,
         });
         let span = parser.span(ll, rr);
         let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "outgoing" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString> <ll:@L> "outgoing" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Outgoing,
+            doc_string: docstring,
         });
         let span = parser.span(ll, rr);
         let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "wire" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString> <ll:@L> "wire" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Wire,
+            doc_string: docstring,
         });
         let span = parser.span(ll, rr);
         let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "reg" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString> <ll:@L> "reg" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Reg,
+            doc_string: docstring,
         });
         let span = parser.span(ll, rr);
         let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
@@ -313,8 +336,8 @@ ModDefStmtDriver: AstNodeId = {
 }
 
 ModDefStmtInstance: AstNodeId = {
-    <ll:@L> "mod" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> <rr:@R> => {
-        let payload = AstNodePayload::Submodule(payload::Submodule { name });
+    <docstring:DocString> <ll:@L> "mod" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> <rr:@R> => {
+        let payload = AstNodePayload::Submodule(payload::Submodule { name, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = if it.is_none() {
             1
@@ -337,15 +360,15 @@ ItBlock: AstNodeId = {
 }
 
 ModDefStmtSocket: AstNodeId = {
-    <ll:@L> "client" "socket" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> <rr:@R> => {
-        let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Client });
+    <docstring:DocString> <ll:@L> "client" "socket" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> <rr:@R> => {
+        let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Client, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = 1 + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "server" "socket" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> <rr:@R> => {
-        let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Server });
+    <docstring:DocString> <ll:@L> "server" "socket" <name:Ident> "of" <ofness:Ofness> <it:ItBlock?> <rr:@R> => {
+        let payload = AstNodePayload::Socket(payload::Socket { name, role: SocketRole::Server, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = 1 + if it.is_none() { 0 } else { 1 };
 
@@ -931,6 +954,8 @@ extern {
         "false" => Token::KwFalse,
         "dontcare" => Token::KwDontcare,
         "Str" => Token::Str,
+        "DocComment" => Token::DocComment,
+        "DocBang" => Token::DocBang,
         "/*" => Token::StarSlash,
         "*/" => Token::SlashStar,
 

@@ -5,7 +5,7 @@ use crate::syntax::parsing::InternedString;
 pub enum AstNodePayload {
     Error,
 
-    Package,
+    Package(PackagePayload),
 
     Import(Import),
     ModDef(ModDef),
@@ -77,7 +77,7 @@ impl AstNodePayload {
     pub fn kind(&self) -> &str {
         match self {
             AstNodePayload::Error => "Error",
-            AstNodePayload::Package => "Package",
+            AstNodePayload::Package(_) => "Package",
             AstNodePayload::Import(_import) => "Import",
             AstNodePayload::ModDef(_mod_def) => "ModDef",
             AstNodePayload::StructDef(_struct_def) => "StructDef",
@@ -139,6 +139,11 @@ impl AstNodePayload {
 }
 
 #[derive(Clone, Debug)]
+pub struct PackagePayload {
+    pub doc_string: Option<InternedString>,
+}
+
+#[derive(Clone, Debug)]
 pub struct Import {
     pub package: InternedString,
 }
@@ -148,43 +153,51 @@ pub struct ModDef {
     pub name: InternedString,
     pub is_ext: bool,
     pub is_export: bool,
+    pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct StructDef {
     pub name: InternedString,
+    pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct UnionDef {
     pub name: InternedString,
+    pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct EnumDef {
     pub name: InternedString,
     pub width: Width,
+    pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct BuiltinDef {
     pub name: InternedString,
+    pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct SocketDef {
     pub name: InternedString,
+    pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct FnDef {
     pub name: InternedString,
+    pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Component {
     pub name: InternedString,
     pub kind: ComponentKind,
+    pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
@@ -195,6 +208,7 @@ pub struct Driver {
 #[derive(Clone, Debug)]
 pub struct Submodule {
     pub name: InternedString,
+    pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
@@ -204,27 +218,32 @@ pub struct ModDefStmtBlock;
 pub struct Socket {
     pub name: InternedString,
     pub role: SocketRole,
+    pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Field {
     pub name: InternedString,
+    pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Ctor {
     pub name: InternedString,
+    pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Enumerant {
     pub name: InternedString,
+    pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Channel {
     pub name: InternedString,
     pub dir: ChannelDir,
+    pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
@@ -235,6 +254,7 @@ pub struct GenericsParams {
 #[derive(Clone, Debug)]
 pub struct Param {
     pub name: InternedString,
+    pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]

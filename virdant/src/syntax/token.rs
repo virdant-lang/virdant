@@ -9,7 +9,7 @@ pub struct TokenError;
 
 #[rustfmt::skip]
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
-#[logos(skip br"[ \n]+", skip br"//.*\n?", error = TokenError)]
+#[logos(skip br"[ \n]+", skip br"//[^\n]*", error = TokenError)]
 #[repr(u16)]
 pub enum Token {
     // Literals
@@ -22,6 +22,12 @@ pub enum Token {
     #[regex(br"0b[0-1]([_]?[0-1])*")]
     #[regex(br"0x[0-9a-fA-F]([_]?[0-9a-fA-F])*")]
     Nat,
+
+    // Docstrings
+    #[regex(br"/// [^\n]*")]
+    DocComment,
+    #[regex(br"//! [^\n]*")]
+    DocBang,
 
     // Word: Nat with w<width> suffix (width does NOT allow underscores)
     #[regex(br"[0-9]([_]?[0-9])*w[0-9]+")]
