@@ -69,7 +69,6 @@ ModDefStmt :=
     | ModDefStmtUnused
 
 ModDefStmtComponent :=
-ModDefStmtComponent :=
       DocString "incoming" Ident ":" Type OnClause? ItBlock?
     | DocString "outgoing" Ident ":" Type OnClause? ItBlock?
     | DocString "outgoing" "wire" Ident ":" Type OnClause? ItBlock?
