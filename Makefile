@@ -1,5 +1,6 @@
 .PHONY: build build-wasm test clean install grammar docs release
 
+
 build: virdant/target/lib
 	cargo build --release --features "vir-bin,filecheck-bin,vir-lsp-bin,lua,rhai"
 
