@@ -73,6 +73,13 @@ enum Command {
     /// Synthesize, place-and-route, pack, and upload a bitstream
     Upload { },
 
+    /// Generate HTML documentation
+    Doc {
+        /// Open the docs in a browser after generation
+        #[arg(long)]
+        open: bool,
+    },
+
     #[command(external_subcommand)]
     External(Vec<OsString>),
 }
@@ -100,6 +107,7 @@ fn main() {
         Command::New { ref project } => new_project(&args, project),
         Command::Bitstream { } => bitstream(&args),
         Command::Upload { } => upload(&args),
+        Command::Doc { open } => doc(&args, open),
         Command::External(args) => exec_external(args),
     }
 }
@@ -392,6 +400,80 @@ fn dump_typing(args: &Args) {
         let parsing = db.get_parsing(location.package());
         let text = parsing.text(region.span());
         println!("{region} {location:?} {typ:?} ({text:?})");
+    }
+}
+
+fn doc(args: &Args, open: bool) {
+    let cwd = if let Some(cwd) = &args.cwd {
+        match std::fs::canonicalize(cwd) {
+            Ok(path) => path,
+            Err(_) => {
+                eprintln!("Directory not found: {}", cwd.display());
+                std::process::exit(1);
+            }
+        }
+    } else {
+        std::env::current_dir().unwrap()
+    };
+
+    if !cwd.join("Virdant.toml").exists() {
+        eprintln!("No Virdant.toml found");
+        std::process::exit(1);
+    }
+
+    let source_dir = cwd.join("src");
+    if !source_dir.is_dir() {
+        eprintln!("ERROR: source directory not found: {}", source_dir.display());
+        std::process::exit(1);
+    }
+
+    let db = virdant::util::db_from_dir(source_dir);
+    dump_diagnostics(&db);
+    if virdant::util::check_db(&db).is_err() {
+        eprintln!("Doc generation failed due to errors");
+        std::process::exit(1);
+    }
+
+    let out_dir = cwd.join("build").join("doc");
+    match virdant::docs::generate_docs(&db, &out_dir) {
+        Ok(()) => {
+            println!("Wrote docs to {}", out_dir.to_string_lossy());
+            if open {
+                open_in_browser(&out_dir.join("index.html"));
+            }
+        }
+        Err(e) => {
+            eprintln!("Doc generation error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Open a file or URL in the default OS browser.
+fn open_in_browser(path: &std::path::Path) {
+    let result = if cfg!(target_os = "macos") {
+        std::process::Command::new("open").arg(path).status()
+    } else if cfg!(target_os = "linux") {
+        std::process::Command::new("xdg-open").arg(path).status()
+    } else if cfg!(target_os = "windows") {
+        std::process::Command::new("cmd")
+            .arg("/c")
+            .arg("start")
+            .arg(path)
+            .status()
+    } else {
+        eprintln!("Cannot open browser on this platform");
+        return;
+    };
+
+    match result {
+        Ok(status) if status.success() => {}
+        Ok(status) => {
+            eprintln!("Failed to open browser: process exited with {}", status);
+        }
+        Err(e) => {
+            eprintln!("Failed to open browser: {e}");
+        }
     }
 }
 

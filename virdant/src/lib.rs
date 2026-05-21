@@ -7,6 +7,7 @@ pub mod queries;
 pub mod diagnostics;
 pub mod verilog;
 pub mod types;
+pub mod docs;
 pub mod util;
 pub mod sim;
 #[cfg(not(feature = "wasm"))]
