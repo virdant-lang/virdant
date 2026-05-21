@@ -47,6 +47,7 @@ html_css_files = [
     'virdant-syntax.css',
     'verilog-syntax.css',
     'console-syntax.css',
+    'grammar-syntax.css',
 ]
 
 html_js_files = [

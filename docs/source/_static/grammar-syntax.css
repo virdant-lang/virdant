@@ -1,0 +1,84 @@
+/* Grammar Syntax Highlighting Colors */
+/* Based on the Virdant color scheme */
+
+/* Comments: // ... */
+.highlight-grammar .c1 {
+    color: #9CA892;
+    font-style: italic;
+}
+
+/* String literals: "..." */
+.highlight-grammar .s {
+    color: #C65D3B;
+}
+
+/* Uppercase non-terminals: Nat, Word, Bit, etc. */
+.highlight-grammar .nc {
+    color: #B8851A;
+    font-weight: 500;
+}
+
+/* Lowercase non-terminals: ident, nat, digit, etc. */
+.highlight-grammar .n {
+    color: #AE604F;
+    font-weight: 500;
+}
+
+/* Operators: :=, | */
+.highlight-grammar .o {
+    color: #556B2F;
+    font-weight: normal;
+}
+
+/* Punctuation: :, -, (, ), *, +, ? */
+.highlight-grammar .p {
+    color: #8B6E47;
+}
+
+/* Numbers: 0-9 in character ranges */
+.highlight-grammar .m {
+    color: #C65D3B;
+}
+
+/* ========================================== */
+/* Inline Grammar Code Syntax Highlighting   */
+/* ========================================== */
+
+/* Comments: // ... */
+.grammar-inline .c1 {
+    color: #9CA892;
+    font-style: italic;
+}
+
+/* String literals: "..." */
+.grammar-inline .s {
+    color: #C65D3B;
+}
+
+/* Uppercase non-terminals: Nat, Word, Bit, etc. */
+.grammar-inline .nc {
+    color: #B8851A;
+    font-weight: 500;
+}
+
+/* Lowercase non-terminals: ident, nat, digit, etc. */
+.grammar-inline .n {
+    color: #AE604F;
+    font-weight: 500;
+}
+
+/* Operators: :=, | */
+.grammar-inline .o {
+    color: #556B2F;
+    font-weight: normal;
+}
+
+/* Punctuation: :, -, (, ), *, +, ? */
+.grammar-inline .p {
+    color: #8B6E47;
+}
+
+/* Numbers: 0-9 in character ranges */
+.grammar-inline .m {
+    color: #C65D3B;
+}
