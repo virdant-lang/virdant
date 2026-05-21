@@ -1,0 +1,19 @@
+// Nested braces: if/else and match
+mod Nested {
+   incoming cond : Bit
+    incoming data : Word[8]
+   outgoing result : Word[8]
+
+   result := if cond {
+   data
+   } else {
+    0w8
+   }
+
+outgoing chosen : Word[8]
+   chosen := match data {
+      case 0 => 1
+  case 1 => 2
+        case 2 => 3
+    }
+}

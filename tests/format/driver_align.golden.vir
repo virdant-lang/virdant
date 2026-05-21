@@ -1,0 +1,21 @@
+// Driver alignment with :=, <=, :=:
+mod Alignment {
+    incoming a   : Word[8]
+    incoming bb  : Word[8]
+    incoming ccc : Word[8]
+    outgoing x   : Word[8]
+    outgoing yy  : Word[8]
+    outgoing zzz : Word[8]
+
+    a   := 1
+    bb  := 2
+    ccc := 3
+
+    x   <= a
+    yy  <= bb
+    zzz <= ccc
+
+    a   :=: x
+    bb  :=: yy
+    ccc :=: zzz
+}

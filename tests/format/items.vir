@@ -1,0 +1,23 @@
+// Various items: struct, enum, union, fn, builtin
+struct type Foo {
+bar : Word[8]
+  baz : Bit
+}
+
+enum type Color width 2 {
+   Red = 0
+ Green = 1
+  Blue = 2
+}
+
+union type Shape {
+   Circle(r : Word[8])
+  Square(s : Word[8])
+}
+
+builtin type Ram[x : Word[8]] {
+}
+
+fn add(a : Word[8], b : Word[8]) -> Word[8] {
+  a + b
+}

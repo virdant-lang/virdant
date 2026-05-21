@@ -1,0 +1,16 @@
+// Case continuation: match arms with body on next line
+mod CaseCont {
+  incoming val : Word[2]
+ outgoing out : Word[8]
+
+   out := match val {
+   case 0 =>
+   1w8
+   case 1 =>
+      2w8
+   case 2 =>
+  3w8
+      case 3 =>
+   4w8
+ }
+}

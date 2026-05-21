@@ -1,0 +1,8 @@
+// Type annotation alignment
+mod TypeAlign {
+    incoming   aaa : Bit
+    incoming b     : Word[8]
+    outgoing  cc   : Clock
+    wire  ddd      : Word[16]
+    reg  e         : Bit on clock
+}

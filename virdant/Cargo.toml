@@ -53,3 +53,7 @@ required-features = ["vir-lsp-bin"]
 name = "filecheck"
 path = "src/bin/filecheck.rs"
 required-features = ["filecheck-bin"]
+
+[[bin]]
+name = "vir-format"
+path = "src/bin/format.rs"

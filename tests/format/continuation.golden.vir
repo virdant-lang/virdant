@@ -1,0 +1,10 @@
+// Multi-line continuation: driver with RHS on next line
+mod Continuation {
+    incoming x : Word[8]
+    incoming y : Word[8]
+
+    outgoing sum : Word[8]
+
+    sum := 
+        x + y
+}

@@ -1,0 +1,6 @@
+// Keywords: ext, export, import
+import foo
+
+export ext mod Top {
+    incoming clk : Clock
+}

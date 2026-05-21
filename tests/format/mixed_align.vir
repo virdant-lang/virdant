@@ -1,0 +1,10 @@
+// Mixed alignment of types AND drivers together
+mod Mixed {
+incoming aaa : Bit
+outgoing b : Word[8]
+reg cccc : Clock
+
+ aaa := 1
+ b  := 2
+    cccc <= 3
+}
