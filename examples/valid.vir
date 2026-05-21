@@ -1,0 +1,35 @@
+union type Inner {
+    Foo(x : Bit)
+    Bar
+}
+
+mod Top {
+    // Test @Valid(t) with a simple type
+    wire v1 : Valid[Bit]
+    v1 := @Valid(true)
+
+    // Test @Invalid()
+    wire v2 : Valid[Bit]
+    v2 := @Invalid()
+
+    // Test matching on @Valid(x)
+    wire got_it : Bit
+    got_it := match v1 {
+        case @Valid(x) => x
+        case @Invalid() => false
+    }
+
+    // Test @Valid(t) with a union type
+    wire inner : Inner
+    inner := @Bar
+
+    wire v3 : Valid[Inner]
+    v3 := @Valid(@Bar)
+
+    // Test matching on @Valid with union payload
+    wire got_bar : Bit
+    got_bar := match v3 {
+        case @Valid(@Bar) => true
+        case @Invalid() => false
+    }
+}

@@ -41,7 +41,9 @@ Params :=
 
 Param := DocString Ident ":" Type
 
-GenericsParams := "[" Nat "]"
+GenericsParams :=
+      "[" Nat "]"
+    | "[" Type "]"
 
 Generics := "[" Ident ":" Kind "]"
 

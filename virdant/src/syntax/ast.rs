@@ -189,6 +189,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Channel(_channel) => format!("Channel"),
             AstNodePayload::Param(_param) => format!("Param"),
             AstNodePayload::GenericsParams(params) => format!("GenericsParams {:?}", params.value),
+            AstNodePayload::GenericsType => format!("GenericsType"),
             AstNodePayload::Generics => format!("Generics"),
             AstNodePayload::Kind(_kind) => format!("Kind"),
             AstNodePayload::Type(_) => format!("Type"),

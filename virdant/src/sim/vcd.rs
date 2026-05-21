@@ -89,6 +89,7 @@ impl TypeLayoutIndex {
             Type::Bit | Type::Clock | Type::Reset => 1,
             Type::Word(w) => *w,
             Type::Usual(sym) => self.usual_width(*sym),
+            Type::Valid(inner) => self.type_width(inner) + 1,
         }
     }
 

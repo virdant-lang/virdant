@@ -2,3 +2,4 @@ builtin type Bit {}
 builtin type Word[n : Nat] {}
 builtin type Clock {}
 builtin type Reset {}
+builtin type Valid[T : Type] {}

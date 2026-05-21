@@ -8,6 +8,7 @@ pub enum Type {
     Reset,
     Word(Width),
     Usual(SymbolId), // TODO rename this
+    Valid(Box<Type>),
 }
 
 impl std::fmt::Display for Type {
@@ -17,6 +18,7 @@ impl std::fmt::Display for Type {
             Type::Clock => write!(f, "Clock"),
             Type::Reset => write!(f, "Reset"),
             Type::Word(n) => write!(f, "Word[{n}]"),
+            Type::Valid(inner) => write!(f, "Valid[{inner}]"),
             Type::Usual(_symbol_id) => write!(f, "{self:?}"),
         }
     }
@@ -29,6 +31,7 @@ impl std::fmt::Debug for Type {
             Type::Clock => write!(f, "Clock"),
             Type::Reset => write!(f, "Reset"),
             Type::Word(n) => write!(f, "Word[{n}]"),
+            Type::Valid(inner) => write!(f, "Valid({inner:?})"),
             Type::Usual(symbol_id) => write!(f, "Usual({symbol_id:?})"),
         }
     }

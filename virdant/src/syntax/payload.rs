@@ -32,6 +32,7 @@ pub enum AstNodePayload {
     Channel(Channel),
 
     GenericsParams(GenericsParams),
+    GenericsType,
     Generics,
     Param(Param),
 
@@ -101,6 +102,7 @@ impl AstNodePayload {
             AstNodePayload::Channel(_channel) => "Channel",
             AstNodePayload::Param(_param) => "Param",
             AstNodePayload::GenericsParams(_params) => "GenericsParams",
+            AstNodePayload::GenericsType => "GenericsType",
             AstNodePayload::Generics => "Generics",
             AstNodePayload::Kind(_kind) => "Kind",
             AstNodePayload::Type(_) => "Type",

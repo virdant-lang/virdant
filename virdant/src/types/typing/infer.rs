@@ -128,6 +128,29 @@ impl Typing {
                 self.infer_unop(builder, context, node, expr_un_op.op)
             }
             AstNodePayload::ExprFn => self.infer_fn(builder, context, node),
+            AstNodePayload::ExprCtor(expr_ctor) => {
+                let ctor_name = node.parsing().string(expr_ctor.ctor);
+                if ctor_name == b"Valid" {
+                    // @Valid(x) infers Valid[T] where T is the type of x
+                    let arguments = node.children();
+                    if arguments.len() != 1 {
+                        self.flag_unknown(node, "@Valid() requires exactly one argument.");
+                        return Err(());
+                    }
+                    if let Some(inner_typ) = self.infer(builder, context, &arguments[0])? {
+                        let valid_typ = Type::Valid(Box::new(inner_typ));
+                        self.annotate(node, &valid_typ);
+                        Ok(Some(valid_typ))
+                    } else {
+                        Ok(None)
+                    }
+                } else if ctor_name == b"Invalid" {
+                    // @Invalid() cannot infer T from context alone
+                    Ok(None)
+                } else {
+                    Ok(None)
+                }
+            }
             AstNodePayload::ExprParen => {
                 if let Some(typ) = self.infer(builder, context, &node.subject().unwrap())? {
                     self.annotate(&node, &typ);

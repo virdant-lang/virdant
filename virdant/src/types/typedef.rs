@@ -256,6 +256,36 @@ impl TypeIndex {
                     let spelling = parsing.string(generics_params.value).to_str_lossy().into_owned();
                     let width = spelling.parse::<Width>().unwrap();
                     Type::Word(width)
+                } else if is_builtin(b"builtin::Valid") {
+                    if node.children().len() < 2 {
+                        self.diagnostics.push(diagnostics::Unknown {
+                            region: node.region(),
+                            message: "Valid type requires a type parameter.".into(),
+                        }.into());
+                        return;
+                    }
+                    let generics_node = node.child(1);
+                    let AstNodePayload::GenericsType = generics_node.payload() else {
+                        self.diagnostics.push(diagnostics::Unknown {
+                            region: node.region(),
+                            message: "Valid type requires a type parameter.".into(),
+                        }.into());
+                        return;
+                    };
+                    let inner_type_node = generics_node.child(0);
+                    // Process the inner type node first so its Type gets indexed.
+                    // Normally gather_type_roots returns early for Type nodes,
+                    // so the inner Type node would never be visited otherwise.
+                    let inner_type_location = inner_type_node.location();
+                    self.gather_type_roots(builder, inner_type_node, symboltable);
+                    let Some(inner_typ) = self.type_at(inner_type_location) else {
+                        self.diagnostics.push(diagnostics::Unknown {
+                            region: node.region(),
+                            message: "Could not resolve inner type of Valid.".into(),
+                        }.into());
+                        return;
+                    };
+                    Type::Valid(Box::new(inner_typ.clone()))
                 } else {
                     Type::Usual(symbol.id())
                 };

@@ -186,7 +186,14 @@ GenericsParams: AstNodeId = {
         let num_children = 0;
 
         parser.add_node(payload, span, num_children)
-    }
+    },
+    <ll:@L> "[" <inner: Type> "]" <rr:@R> => {
+        let payload = AstNodePayload::GenericsType;
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
 }
 
 Generics: AstNodeId = {

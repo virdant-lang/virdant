@@ -428,42 +428,84 @@ impl Typing {
         match node.payload() {
             AstNodePayload::PatCtor(pat_ident) => {
                 let ctor_name = node.parsing().string(pat_ident.name);
-                let Type::Usual(typedef_id) = expected_typ else {
-                    self.diagnostics.push(diagnostics::UnresolvedCtor {
-                        region: node.region(),
-                        ctor: ctor_name.to_owned(),
-                    }.into());
-                    return Err(());
-                };
-                let symboltable = builder.get_symboltable();
-                let Some(ctor_symbol) = symboltable.slot(*typedef_id, ctor_name) else {
-                    self.flag_unknown(node, "Unknown ctor name in pattern");
-                    return Err(());
-                };
-                let sig = builder.get_ctor_signature(ctor_symbol.id());
                 let children = node.children();
-                if sig.parameters.len() != children.len() {
-                    self.flag_unknown(
-                        node,
-                        format!(
-                            "Pattern has wrong number of arguments: expected {}, but found {}",
-                            sig.parameters.len(),
-                            children.len(),
-                        ),
-                    );
-                    return Err(());
-                }
-                let mut arm_context = context;
-                for (child, (_param_name, param_typ)) in children.iter().zip(sig.parameters.iter())
-                {
-                    self.annotate(child, param_typ);
-                    if let Some(var_name_interned) = child.path() {
-                        let var_name = child.parsing().string(var_name_interned).to_owned();
-                        arm_context =
-                            arm_context.push_local(var_name, child.location(), param_typ.clone());
+
+                // Handle builtin Valid[T] pattern constructors:
+                // @Valid(t) and @Invalid()
+                if ctor_name == b"Valid" || ctor_name == b"Invalid" {
+                    let Type::Valid(inner_typ) = expected_typ else {
+                        self.diagnostics.push(diagnostics::UnresolvedCtor {
+                            region: node.region(),
+                            ctor: ctor_name.to_owned(),
+                        }.into());
+                        return Err(());
+                    };
+                    if ctor_name.as_bytes() == b"Valid" {
+                        if children.len() != 1 {
+                            self.flag_unknown(
+                                node,
+                                "Pattern @Valid(...) requires exactly one argument.",
+                            );
+                            return Err(());
+                        }
+                        let child = &children[0];
+                        self.annotate(child, inner_typ);
+                        let mut arm_context = context;
+                        if let Some(var_name_interned) = child.path() {
+                            let var_name = child.parsing().string(var_name_interned).to_owned();
+                            arm_context = arm_context.push_local(
+                                var_name, child.location(), (**inner_typ).clone(),
+                            );
+                        }
+                        Ok(arm_context)
+                    } else {
+                        // ctor_name == b"Invalid"
+                        if !children.is_empty() {
+                            self.flag_unknown(
+                                node,
+                                "Pattern @Invalid() takes no arguments.",
+                            );
+                            return Err(());
+                        }
+                        Ok(context)
                     }
+                } else {
+                    let Type::Usual(typedef_id) = expected_typ else {
+                        self.diagnostics.push(diagnostics::UnresolvedCtor {
+                            region: node.region(),
+                            ctor: ctor_name.to_owned(),
+                        }.into());
+                        return Err(());
+                    };
+                    let symboltable = builder.get_symboltable();
+                    let Some(ctor_symbol) = symboltable.slot(*typedef_id, ctor_name) else {
+                        self.flag_unknown(node, "Unknown ctor name in pattern");
+                        return Err(());
+                    };
+                    let sig = builder.get_ctor_signature(ctor_symbol.id());
+                    if sig.parameters.len() != children.len() {
+                        self.flag_unknown(
+                            node,
+                            format!(
+                                "Pattern has wrong number of arguments: expected {}, but found {}",
+                                sig.parameters.len(),
+                                children.len(),
+                            ),
+                        );
+                        return Err(());
+                    }
+                    let mut arm_context = context;
+                    for (child, (_param_name, param_typ)) in children.iter().zip(sig.parameters.iter())
+                    {
+                        self.annotate(child, param_typ);
+                        if let Some(var_name_interned) = child.path() {
+                            let var_name = child.parsing().string(var_name_interned).to_owned();
+                            arm_context =
+                                arm_context.push_local(var_name, child.location(), param_typ.clone());
+                        }
+                    }
+                    Ok(arm_context)
                 }
-                Ok(arm_context)
             }
             AstNodePayload::PatEnumerant(pat_enumerant) => {
                 let Type::Usual(typedef_id) = expected_typ else {
@@ -534,12 +576,48 @@ impl Typing {
         let AstNodePayload::ExprCtor(expr_ctor) = node.payload() else {
             unreachable!()
         };
+        let ctor_name = node.parsing().string(expr_ctor.ctor);
+        let arguments = node.children();
+
+        // Handle builtin Valid[T] constructors: @Valid(t) and @Invalid()
+        if ctor_name == b"Valid" || ctor_name == b"Invalid" {
+            let Type::Valid(inner_typ) = expected_typ else {
+                self.flag_unknown(
+                    node,
+                    format!(
+                        "Ctor @{ctor_name} requires a Valid[...] type, got {expected_typ:?}",
+                    ),
+                );
+                return Err(());
+            };
+            if ctor_name.as_bytes() == b"Valid" {
+                if arguments.len() != 1 {
+                    self.flag_unknown(
+                        node,
+                        "@Valid() requires exactly one argument.",
+                    );
+                    return Err(());
+                }
+                self.check(builder, context, &arguments[0], inner_typ)?;
+            } else {
+                // ctor_name == b"Invalid"
+                if !arguments.is_empty() {
+                    self.flag_unknown(
+                        node,
+                        "@Invalid() takes no arguments.",
+                    );
+                    return Err(());
+                }
+            }
+            self.annotate(node, expected_typ);
+            return Ok(());
+        }
+
         let Type::Usual(typedef_id) = expected_typ else {
             self.flag_unknown(node, "Should be a typedef type");
             return Err(());
         };
 
-        let ctor_name = node.parsing().string(expr_ctor.ctor);
         let symboltable = builder.get_symboltable();
         let Some(ctor_symbol) = symboltable.slot(*typedef_id, ctor_name) else {
             self.flag_unknown(
@@ -550,7 +628,6 @@ impl Typing {
         };
 
         let sig = builder.get_ctor_signature(ctor_symbol.id());
-        let arguments = node.children();
 
         if sig.parameters.len() != arguments.len() {
             self.flag_unknown(

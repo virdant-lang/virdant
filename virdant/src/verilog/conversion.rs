@@ -1671,6 +1671,7 @@ fn type_width(typ: &Type, db: &Db) -> Width {
                 typedef.width.unwrap_or_else(|| slots.len().try_into().unwrap())
             }
         }
+        Type::Valid(inner) => type_width(inner, db) + 1,
     }
 }
 
