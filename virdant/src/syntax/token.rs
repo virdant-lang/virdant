@@ -117,6 +117,20 @@ pub enum Token {
     Error,
 }
 
+/// The list of all keyword strings recognized by the lexer.
+/// Used by downstream checks (e.g. to reject a package name that
+/// collides with a keyword).
+pub const KEYWORDS: &[&str] = &[
+    "pub", "export", "import", "mod", "ext", "builtin",
+    "type", "union", "struct", "enum", "fn",
+    "width", "incoming", "outgoing",
+    "reg", "wire", "submod", "on", "of",
+    "socket", "client", "server", "cosi", "ciso",
+    "if", "it", "else",
+    "match", "case", "unused",
+    "true", "false", "dontcare",
+];
+
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{:?}", self)

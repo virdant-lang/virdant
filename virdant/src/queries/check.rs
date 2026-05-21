@@ -7,11 +7,41 @@ use crate::analysis::symbols::SymbolKind;
 use crate::common::WordValue;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
+use crate::syntax::token::KEYWORDS;
+
+fn package_name_is_keyword(name: &str) -> bool {
+    KEYWORDS.contains(&name)
+}
+
+/// Check that no package name (except `builtin`) collides with a keyword.
+fn check_package_name_not_keyword(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    for package in builder.get_packages().iter() {
+        let package_name: &str = &package.to_string();
+        if package_name == "builtin" {
+            continue;
+        }
+        if package_name_is_keyword(package_name) {
+            let parsing = builder.get_parsing(package.clone());
+            let root_node = parsing.root();
+            diagnostics.push(
+                diagnostics::Unknown {
+                    region: root_node.region(),
+                    message: format!(
+                        "Package name '{}' is a keyword",
+                        package_name,
+                    ).into(),
+                }.into(),
+            );
+        }
+    }
+}
 
 pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     let mut diagnostics = vec![];
 
     diagnostics.extend(builder.get_syntax_errors().iter().cloned());
+
+    check_package_name_not_keyword(builder, &mut diagnostics);
 
     let symboltable = builder.get_symboltable();
     diagnostics.extend(symboltable.diagnostics.clone());
