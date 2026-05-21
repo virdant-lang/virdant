@@ -561,6 +561,18 @@ impl Typing {
                 self.annotate(node, expected_typ);
                 Ok(context)
             }
+            AstNodePayload::PatIdent(pat_ident) => {
+                // Ident patterns match any type and bind the value to the name.
+                let var_name = node.parsing().string(pat_ident.name).to_owned();
+                let arm_context = context.push_local(var_name, node.location(), expected_typ.clone());
+                self.annotate(node, expected_typ);
+                Ok(arm_context)
+            }
+            AstNodePayload::PatDontcare => {
+                // Dontcare patterns match any type without binding.
+                self.annotate(node, expected_typ);
+                Ok(context)
+            }
             _ => unreachable!("Expected a pattern node, found: {}", node.summary()),
         }
     }

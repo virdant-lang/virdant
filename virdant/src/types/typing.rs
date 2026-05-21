@@ -615,27 +615,54 @@ fn extend_context_for_enclosing_stmt_matches(
 
 /// Given a `ModDefStmtMatch` arm pattern node and the expected (subject) type, extend the
 /// typing context with any variables bound by the pattern.  Only `PatCtor` patterns with
-/// named payload variables contribute bindings; `PatEnumerant` and `else` arms do not.
+/// named payload variables and `PatIdent` patterns contribute bindings;
+/// `PatEnumerant`, `PatDontcare`, and `else` arms do not.
 fn extend_context_with_stmt_match_pat(
     builder: &mut Builder,
     pat_node: &AstNode<'_>,
     expected_typ: &Type,
     mut context: TypingContext,
 ) -> TypingContext {
-    if let AstNodePayload::PatCtor(pat_ident) = pat_node.payload() {
-        let ctor_name = pat_node.parsing().string(pat_ident.name);
-        let Type::Usual(typedef_id) = expected_typ else { return context; };
-        let symboltable = builder.get_symboltable();
-        let Some(ctor_symbol) = symboltable.slot(*typedef_id, ctor_name) else { return context; };
-        let ctor_symbol_id = ctor_symbol.id();
-        let sig = builder.get_ctor_signature(ctor_symbol_id);
-        let children = pat_node.children();
-        for (child, (_param_name, param_typ)) in children.iter().zip(sig.parameters.iter()) {
-            if let Some(var_name_interned) = child.path() {
-                let var_name = child.parsing().string(var_name_interned).to_owned();
-                context = context.push_local(var_name, child.location(), param_typ.clone());
+    match pat_node.payload() {
+        AstNodePayload::PatIdent(pat_ident) => {
+            // Ident patterns bind the entire subject value to the identifier.
+            let var_name = pat_node.parsing().string(pat_ident.name).to_owned();
+            context = context.push_local(var_name, pat_node.location(), expected_typ.clone());
+        }
+        AstNodePayload::PatCtor(pat_ctor) => {
+            let ctor_name = pat_node.parsing().string(pat_ctor.name);
+            // Handle builtin Valid[T] pattern constructors: @Valid(t) and @Invalid()
+            if ctor_name.as_bytes() == b"Valid" || ctor_name.as_bytes() == b"Invalid" {
+                let Type::Valid(inner_typ) = expected_typ else { return context; };
+                if ctor_name.as_bytes() == b"Valid" {
+                    let children = pat_node.children();
+                    if children.len() == 1 {
+                        let child = &children[0];
+                        if let Some(var_name_interned) = child.path() {
+                            let var_name = child.parsing().string(var_name_interned).to_owned();
+                            context = context.push_local(
+                                var_name, child.location(), (**inner_typ).clone(),
+                            );
+                        }
+                    }
+                }
+                // @Invalid() takes no arguments, so no bindings
+            } else {
+                let Type::Usual(typedef_id) = expected_typ else { return context; };
+                let symboltable = builder.get_symboltable();
+                let Some(ctor_symbol) = symboltable.slot(*typedef_id, ctor_name) else { return context; };
+                let ctor_symbol_id = ctor_symbol.id();
+                let sig = builder.get_ctor_signature(ctor_symbol_id);
+                let children = pat_node.children();
+                for (child, (_param_name, param_typ)) in children.iter().zip(sig.parameters.iter()) {
+                    if let Some(var_name_interned) = child.path() {
+                        let var_name = child.parsing().string(var_name_interned).to_owned();
+                        context = context.push_local(var_name, child.location(), param_typ.clone());
+                    }
+                }
             }
         }
+        _ => {}
     }
     context
 }

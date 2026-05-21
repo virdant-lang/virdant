@@ -1,0 +1,21 @@
+mod OverlapIdent {
+    incoming b : Bit
+    outgoing out : Bit
+    // CHECK: Overlapping match arm: x
+    out := match b {
+        case true  => false
+        case x => true
+    }
+}
+
+mod OverlapDontcare {
+    incoming b : Bit
+    outgoing out : Bit
+    // CHECK: Overlapping match arm
+    out := match b {
+        case true  => false
+        case dontcare => true
+    }
+}
+
+// CHECK: Check failed

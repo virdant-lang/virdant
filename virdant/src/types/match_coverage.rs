@@ -54,12 +54,28 @@ pub(crate) fn check_match_coverage(
     let mut covered_syms: IndexMap<SymbolId, Region> = IndexMap::new();
     let mut covered_words: IndexMap<WordValue, Region> = IndexMap::new();
     let mut covered_bits: IndexMap<bool, Region> = IndexMap::new();
+    let mut any_pattern_seen = false;
 
     for (pat_opt, _body) in &arms {
         let Some(pat) = pat_opt else { continue };
         if overlap.is_some() { break; }
         let parsing = builder.get_parsing(pat.package());
         match pat.payload() {
+            AstNodePayload::PatIdent(pat_ident) => {
+                // Ident patterns match everything, so they overlap with any prior pattern.
+                if any_pattern_seen {
+                    let name = parsing.string(pat_ident.name).to_str_lossy().into_owned();
+                    overlap = Some((pat.region(), name.into()));
+                }
+                any_pattern_seen = true;
+            }
+            AstNodePayload::PatDontcare => {
+                // Dontcare patterns match everything, so they overlap with any prior pattern.
+                if any_pattern_seen {
+                    overlap = Some((pat.region(), "dontcare".into()));
+                }
+                any_pattern_seen = true;
+            }
             AstNodePayload::PatCtor(pat_ctor) => {
                 let Type::Usual(typedef_id) = subject_typ else {
                     if is_stmt_match {
@@ -79,6 +95,7 @@ pub(crate) fn check_match_coverage(
                 } else {
                     covered_syms.insert(sym_id, pat.region());
                 }
+                any_pattern_seen = true;
             }
             AstNodePayload::PatEnumerant(pat_enum) => {
                 let Type::Usual(typedef_id) = subject_typ else {
@@ -99,6 +116,7 @@ pub(crate) fn check_match_coverage(
                 } else {
                     covered_syms.insert(sym_id, pat.region());
                 }
+                any_pattern_seen = true;
             }
             AstNodePayload::PatWordLit(pat_word) => {
                 if !matches!(subject_typ, Type::Word(_)) {
@@ -117,6 +135,7 @@ pub(crate) fn check_match_coverage(
                 } else {
                     covered_words.insert(value, pat.region());
                 }
+                any_pattern_seen = true;
             }
             AstNodePayload::PatBitLit(pat_bit) => {
                 if !matches!(subject_typ, Type::Bit | Type::Reset) {
@@ -135,6 +154,7 @@ pub(crate) fn check_match_coverage(
                 } else {
                     covered_bits.insert(value, pat.region());
                 }
+                any_pattern_seen = true;
             }
             _ => continue,
         }
