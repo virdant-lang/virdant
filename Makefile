@@ -32,6 +32,7 @@ clean:
 
 install: build
 	mkdir -p ${HOME}/.local/virdant/bin
+	mkdir -p ${HOME}/.local/virdant/lib
 	cp ./target/release/vir ${HOME}/.local/virdant/bin/
 	cp ./target/release/vir-* ${HOME}/.local/virdant/bin/
 	cp -r ./lib/* ${HOME}/.local/virdant/lib/
