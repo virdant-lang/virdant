@@ -1,0 +1,107 @@
+export mod Top {
+    incoming clock : Clock
+    incoming reset : Reset
+    outgoing fin : Bit
+
+    unused clock
+    unused reset
+
+    fin := false
+
+    wire foo : Word[8] {
+        it := match @Valid(3) : Valid[Word[8]] {
+            case @Invalid() => 0
+            case @Valid(n)  => n
+        }
+    }
+
+    wire w : Bit {
+        it := true
+        unused it
+    }
+
+    wire a : Bit {
+        it := false
+        unused it
+    }
+
+    wire o : Word[8] {
+        it := 0w8 : Word[8]
+        unused it
+    }
+
+    wire b : Word[4] {
+        it := 1w4 + 2w4
+        unused it
+    }
+
+    wire x : Word[4] {
+        it := 0b1010w4
+        unused it
+    }
+
+    wire y : Word[4] {
+        it := 0b0011w4
+        unused it
+    }
+
+    wire z : Word[8] {
+        it := zext(0x8w4)
+        unused it
+    }
+
+    wire s : Word[8] {
+        it := sext(0x8w4)
+        unused it
+    }
+
+    wire and : Word[8] {
+        it := 3w8 & 1w8
+        unused it
+    }
+
+    wire or : Word[8] {
+        it := 0w8 | 1w8
+        unused it
+    }
+
+    wire xor : Word[8] {
+        it := 0w8 ^ 1w8
+        unused it
+    }
+
+    wire ascription : Word[4] {
+        it := 15 : Word[4]
+        unused it
+    }
+
+    wire bit_and : Bit {
+        it := true && false
+        unused it
+    }
+
+    wire bit_or : Bit {
+        it := true || false
+        unused it
+    }
+
+    wire bit_xor : Bit {
+        it := true ^^ false
+        unused it
+    }
+
+    wire tr : Word[4] {
+        it := trunc(0xabw8)
+        unused it
+    }
+
+    wire tr_same : Word[8] {
+        it := trunc(0xffw8)
+        unused it
+    }
+
+    wire tr_bit : Word[1] {
+        it := trunc(true)
+        unused it
+    }
+}

@@ -726,6 +726,38 @@ impl<'d> Converter<'d> {
                 Some(AstNodePayload::PatCtor(pat_ident)) => {
                     let pat = pat.unwrap();
                     let ctor_name = pat.parsing.string(pat_ident.name);
+                    // Handle builtin Valid[T] pattern constructors
+                    if let Type::Valid(inner_typ) = &subject_typ {
+                        let inner_width = type_width(inner_typ, db);
+                        let total_width = inner_width + 1;
+                        if ctor_name.as_bytes() == b"Valid" {
+                            for bound_var in pat.children().iter() {
+                                let var_name = bound_var.parsing.string(
+                                    bound_var.path().unwrap(),
+                                ).to_str_lossy().into_owned();
+                                let slice_expr = verilog::Expr::IndexRange(
+                                    verilog::expr::IndexRange {
+                                        subject: Box::new(subject_expr.clone()),
+                                        index_hi: Box::new(constant_index_expr(inner_width - 1)),
+                                        index_lo: Box::new(constant_index_expr(0)),
+                                    },
+                                );
+                                scheduler.subst.insert(var_name.clone(), slice_expr);
+                                bound_keys.push(var_name);
+                            }
+                            verilog::CasePattern::PatternLit(verilog::PatternLit {
+                                width: total_width,
+                                radix: Radix::Bin,
+                                pattern: format!("1{}", "?".repeat(inner_width as usize)),
+                            })
+                        } else {
+                            verilog::CasePattern::PatternLit(verilog::PatternLit {
+                                width: total_width,
+                                radix: Radix::Bin,
+                                pattern: format!("0{}", "?".repeat(inner_width as usize)),
+                            })
+                        }
+                    } else {
                     let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
                     let symboltable = db.get_symboltable();
                     let slots = symboltable.slots(*typedef_symbol_id);
@@ -768,6 +800,7 @@ impl<'d> Converter<'d> {
                         radix: Radix::Bin,
                         pattern: pattern_str,
                     })
+                }
                 }
                 Some(AstNodePayload::PatWordLit(pat_word_lit)) => {
                     let pat = pat.unwrap();
@@ -997,6 +1030,37 @@ impl<'d> Converter<'d> {
             }
             AstNodePayload::ExprCtor(_ctor) => {
                 let symboltable = db.get_symboltable();
+                // Handle builtin Valid[T] constructors: @Valid(t) and @Invalid()
+                if let Type::Valid(inner_typ) = typ {
+                    let ctor_name = node.parsing().string(_ctor.ctor);
+                    let inner_width = type_width(inner_typ, db);
+                    let total_width = inner_width + 1;
+                    if ctor_name.as_bytes() == b"Valid" {
+                        let children = node.children();
+                        let inner_expr = self.convert_expr(
+                            package, children[0].clone(), inner_typ, db, scheduler,
+                        );
+                        return verilog::Expr::Concat(verilog::expr::Concat {
+                            exprs: vec![
+                                verilog::Expr::BitLit(verilog::expr::BitLit { value: true }),
+                                inner_expr,
+                            ],
+                            width: total_width,
+                        });
+                    } else {
+                        let mut exprs = vec![
+                            verilog::Expr::BitLit(verilog::expr::BitLit { value: false }),
+                        ];
+                        if inner_width > 0 {
+                            exprs.push(
+                                verilog::Expr::XLit(verilog::expr::XLit { width: inner_width }),
+                            );
+                        }
+                        return verilog::Expr::Concat(
+                            verilog::expr::Concat { exprs, width: total_width },
+                        );
+                    }
+                }
                 let Type::Usual(typedef_symbol_id) = typ else {
                     unreachable!()
                 };
@@ -1166,6 +1230,40 @@ impl<'d> Converter<'d> {
                         Some(AstNodePayload::PatCtor(pat_ident)) => {
                             let pat = pat.unwrap();
                             let ctor_name = pat.parsing.string(pat_ident.name);
+                            // Handle builtin Valid[T] pattern constructors
+                            if let Type::Valid(inner_typ) = &subject_typ {
+                                let inner_width = type_width(inner_typ, db);
+                                let total_width = inner_width + 1;
+                                if ctor_name.as_bytes() == b"Valid" {
+                                    for bound_var in pat.children().iter() {
+                                        let var_name = bound_var.parsing.string(
+                                            bound_var.path().unwrap(),
+                                        ).to_str_lossy().into_owned();
+                                        let slice_expr = verilog::Expr::IndexRange(
+                                            verilog::expr::IndexRange {
+                                                subject: Box::new(subject_expr.clone()),
+                                                index_hi: Box::new(
+                                                    constant_index_expr(inner_width - 1),
+                                                ),
+                                                index_lo: Box::new(constant_index_expr(0)),
+                                            },
+                                        );
+                                        scheduler.subst.insert(var_name.clone(), slice_expr);
+                                        bound_keys.push(var_name);
+                                    }
+                                    verilog::CasePattern::PatternLit(verilog::PatternLit {
+                                        width: total_width,
+                                        radix: Radix::Bin,
+                                        pattern: format!("1{}", "?".repeat(inner_width as usize)),
+                                    })
+                                } else {
+                                    verilog::CasePattern::PatternLit(verilog::PatternLit {
+                                        width: total_width,
+                                        radix: Radix::Bin,
+                                        pattern: format!("0{}", "?".repeat(inner_width as usize)),
+                                    })
+                                }
+                            } else {
                             let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
                             let symboltable = db.get_symboltable();
                             let slots = symboltable.slots(*typedef_symbol_id);
@@ -1214,6 +1312,7 @@ impl<'d> Converter<'d> {
                                 radix: Radix::Bin,
                                 pattern: pattern_str,
                             })
+                        }
                         }
                         Some(AstNodePayload::PatWordLit(pat_word_lit)) => {
                             let pat = pat.unwrap();

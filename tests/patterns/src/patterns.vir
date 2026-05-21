@@ -1,0 +1,45 @@
+// Tests for the new pattern features:
+//   1. `Ident` as a pattern — variable binding
+//   2. `@ Ident ( PatList )` — constructor patterns with sub-patterns
+
+union type MyUnion {
+    Nothing()
+    Pair(a : Bit, b : Bit)
+}
+
+mod MatchVarPattern {
+    incoming clock : Clock
+    incoming x     : Word[8]
+    outgoing out   : Word[8]
+
+    unused clock
+    out := match x {
+        case y   => y
+    }
+}
+
+mod MatchCtorBitPat {
+    incoming clock : Clock
+    incoming u     : MyUnion
+    outgoing out   : Bit
+
+    unused clock
+    out := match u {
+        case @Nothing()   => false
+        case @Pair(true, false) => true
+        else              => false
+    }
+}
+
+mod MatchCtorMixPat {
+    incoming clock : Clock
+    incoming u     : MyUnion
+    outgoing out   : Bit
+
+    unused clock
+    out := match u {
+        case @Nothing()   => false
+        case @Pair(x, false) => x
+        else              => false
+    }
+}

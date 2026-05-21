@@ -580,7 +580,7 @@ Pat: () = {
 
         parser.add_node(payload, span, num_children);
     },
-    <ll:@L> "@" <name:Ident> "(" <args: ArgList> ")" <rr:@R> => {
+    <ll:@L> "@" <name:Ident> "(" <args: PatList> ")" <rr:@R> => {
         let payload = AstNodePayload::PatCtor(payload::PatCtor { name });
         let span = parser.span(ll, rr);
         let num_children = args;
@@ -601,6 +601,19 @@ Pat: () = {
 
         parser.add_node(payload, span, num_children);
     },
+    <ll:@L> <name:Ident> <rr:@R> => {
+        let payload = AstNodePayload::PatIdent(payload::PatIdent { name });
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children);
+    },
+}
+
+PatList: u16 = {
+    <start:(Pat ",")+> Pat ","? => u16::try_from(start.len()).unwrap() + 1,
+    Pat ","? => 1,
+    => 0,
 }
 
 ExprStruct: AstNodeId = {

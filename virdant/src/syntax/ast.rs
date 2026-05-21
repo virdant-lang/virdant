@@ -220,6 +220,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::PatEnumerant(_pat_enumerant) => format!("PatEnumerant"),
             AstNodePayload::PatWordLit(_pat_word_lit) => format!("PatWordLit"),
             AstNodePayload::PatBitLit(_pat_bit_lit) => format!("PatBitLit"),
+            AstNodePayload::PatIdent(_pat_ident) => format!("PatIdent"),
             AstNodePayload::Ofness(_ofness) => format!("Ofness"),
             AstNodePayload::It => format!("It"),
             AstNodePayload::Path(_path) => format!("Path"),
@@ -285,6 +286,7 @@ impl<'p> AstNode<'p> {
         match &self.payload {
             AstNodePayload::ExprReference => self.child(0).path(),
             AstNodePayload::Path(path) => Some(path.path.clone()),
+            AstNodePayload::PatIdent(pat_ident) => Some(pat_ident.name.clone()),
             _ => None,
         }
     }
@@ -365,7 +367,8 @@ impl<'p> AstNode<'p> {
             AstNodePayload::PatCtor(_) |
             AstNodePayload::PatEnumerant(_) |
             AstNodePayload::PatWordLit(_) |
-            AstNodePayload::PatBitLit(_)
+            AstNodePayload::PatBitLit(_) |
+            AstNodePayload::PatIdent(_)
         )
     }
 

@@ -138,9 +138,15 @@ ExprMatchArm :=
 Pat :=
       "#" Ident
     | "@" Ident
-    | "@" Ident "(" ArgList ")"
+    | "@" Ident "(" PatList ")"
     | WordLit
     | BitLit
+    | Ident
+
+PatList :=
+      (Pat ",")+ Pat ","?
+    | Pat ","?
+    |
 
 ExprStruct := "$" "{" AssignList "}"
 
