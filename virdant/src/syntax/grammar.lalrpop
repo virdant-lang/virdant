@@ -5,8 +5,10 @@ use crate::syntax::parsing::{InternedString, Parsing};
 use crate::syntax::token::{Token, TokenError};
 
 
-use crate::common::source::SourceOffset;
+use bstr::ByteSlice;
+use crate::common::source::{Region, SourceOffset};
 use crate::common::{DriverType, ComponentKind, BinOp, ChannelDir, SocketRole, UnOp};
+use crate::diagnostics;
 
 grammar<'a>(parser: &mut Parsing);
 
@@ -44,6 +46,21 @@ PackageImport: AstNodeId = {
 DocString: Option<InternedString> = {
     <ll:@L> <texts:("DocComment")+> <rr:@R> => {
         let span = parser.span(ll, rr);
+        // Validate: each docstring line must start with a space after `///`,
+        // or be exactly `///` (empty).
+        let raw = parser.text(span);
+        for raw_line in raw.split_str(b"\n") {
+            let line: &[u8] = raw_line;
+            if line.len() > 3 && line[3] != b' ' {
+                let region = Region::new(parser.package(), span);
+                let diag = diagnostics::InvalidDocstring {
+                    region,
+                    content: line[..4.min(line.len())].into(),
+                };
+                parser.add_docstring_diagnostic(diag.into());
+                break;
+            }
+        }
         Some(parser.intern(span))
     },
     => None,
@@ -52,6 +69,21 @@ DocString: Option<InternedString> = {
 DocBang: Option<InternedString> = {
     <ll:@L> <texts:("DocBang")+> <rr:@R> => {
         let span = parser.span(ll, rr);
+        // Validate: each docbang line must start with a space after `//!`,
+        // or be exactly `//!` (empty).
+        let raw = parser.text(span);
+        for raw_line in raw.split_str(b"\n") {
+            let line: &[u8] = raw_line;
+            if line.len() > 3 && line[3] != b' ' {
+                let region = Region::new(parser.package(), span);
+                let diag = diagnostics::InvalidDocstring {
+                    region,
+                    content: line[..4.min(line.len())].into(),
+                };
+                parser.add_docstring_diagnostic(diag.into());
+                break;
+            }
+        }
         Some(parser.intern(span))
     },
     => None,

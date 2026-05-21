@@ -1,4 +1,4 @@
-use bstr::{BStr, BString};
+use bstr::{BStr, BString, ByteSlice};
 
 use crate::diagnostics::{self, Diagnostic};
 use crate::fqn::PackageFqn;
@@ -22,6 +22,7 @@ pub struct Parsing {
     pub(super) num_children: Vec<u16>,
     pub(super) errors: Vec<AstNodeId>,
     pub(super) error_data: Vec<ParseError>,
+    pub(super) docstring_diagnostics: Vec<Diagnostic>,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -99,6 +100,7 @@ impl Parsing {
             num_children: vec![],
             errors: vec![],
             error_data: vec![],
+            docstring_diagnostics: vec![],
         }
     }
 
@@ -160,6 +162,37 @@ impl Parsing {
         BStr::new(&self.strings[s.id])
     }
 
+    /// Return the docstring body with `///` stripped from each line.
+    /// Lines that are exactly `///` (no content) become empty lines.
+    pub fn doc_string(&self, s: &InternedString) -> BString {
+        self.strip_doc_prefix(s, b"///")
+    }
+
+    /// Return the package docstring body with `//!` stripped from each line.
+    /// Lines that are exactly `//!` (no content) become empty lines.
+    pub fn doc_bang(&self, s: &InternedString) -> BString {
+        self.strip_doc_prefix(s, b"//!")
+    }
+
+    /// Strip a 3-byte prefix (`///` or `//!`) from each line of a docstring.
+    /// Lines that are exactly the prefix (no content) become empty lines.
+    fn strip_doc_prefix(&self, s: &InternedString, prefix: &[u8; 3]) -> BString {
+        use bstr::ByteSlice;
+        let raw = self.string(s.clone());
+        let mut out: Vec<u8> = Vec::new();
+        for (i, line) in raw.split_str(b"\n").enumerate() {
+            if i > 0 {
+                out.push(b'\n');
+            }
+            if line.len() > 3 && &line[..3] == prefix {
+                out.extend_from_slice(&line[3..]);
+            }
+            // else: line is exactly the prefix (/// or //!) or shorter.
+            // Emit nothing for that line (it becomes empty).
+        }
+        out.into()
+    }
+
     pub fn root(&self) -> AstNode<'_> {
         let root_node_id = AstNodeId((self.payloads.len() - 1) as u16);
         self.ast_node(root_node_id)
@@ -193,8 +226,13 @@ impl Parsing {
         errors
     }
 
+    pub fn add_docstring_diagnostic(&mut self, diagnostic: Diagnostic) {
+        self.docstring_diagnostics.push(diagnostic);
+    }
+
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         let mut diagnostics = vec![];
+        diagnostics.extend(self.docstring_diagnostics.clone());
         for (error, error_data) in self.errors() {
             let (message, region) = match error_data.error {
                 lalrpop_util::ParseError::UnrecognizedToken { token, expected } => {

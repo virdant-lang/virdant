@@ -138,9 +138,9 @@ fn extract_doc_body(node: &AstNode<'_>, parsing: &Parsing) -> BString {
         let raw = parsing.string(doc.clone());
         let mut body = BString::default();
         for line in raw.lines() {
-            // Strip leading "/// " (4 bytes) from each line
-            let stripped = if line.len() >= 4 && &line[..4] == b"/// " {
-                &line[4..]
+            // Strip leading "///" (3 bytes) from each line
+            let stripped = if line.len() >= 3 && &line[..3] == b"///" {
+                &line[3..]
             } else {
                 line
             };
@@ -165,9 +165,9 @@ fn extract_package_doc(parsing: &Parsing) -> BString {
             let raw = parsing.string(doc.clone());
             let mut body = BString::default();
             for line in raw.lines() {
-                // Strip leading "//! " (4 bytes) from each line
-                let stripped = if line.len() >= 4 && &line[..4] == b"//! " {
-                    &line[4..]
+                // Strip leading "//!" (3 bytes) from each line
+                let stripped = if line.len() >= 3 && &line[..3] == b"//!" {
+                    &line[3..]
                 } else {
                     line
                 };

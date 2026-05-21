@@ -272,6 +272,14 @@ pub struct MatchElseNotLast {
     pub region: Region,
 }
 
+/// A docstring (`///` or `//!`) whose content does not start with a space.
+/// The convention is `/// text` or `//! text`, not `///text` or `//!text`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidDocstring {
+    pub region: Region,
+    pub content: BString,
+}
+
 /// Two enumerants of the same enum type have the same value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuplicateEnumValue {
@@ -734,6 +742,16 @@ impl IsDiagnostic for MatchElseNotLast {
 
     fn message(&self) -> BString {
         format!("else arm must be the last arm of the match").into()
+    }
+}
+
+impl IsDiagnostic for InvalidDocstring {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Invalid docstring: content must start with a space, got {:?}", self.content).into()
     }
 }
 
