@@ -608,6 +608,13 @@ Pat: () = {
 
         parser.add_node(payload, span, num_children);
     },
+    <ll:@L> "dontcare" <rr:@R> => {
+        let payload = AstNodePayload::PatDontcare;
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children);
+    },
 }
 
 PatList: u16 = {

@@ -221,6 +221,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::PatWordLit(_pat_word_lit) => format!("PatWordLit"),
             AstNodePayload::PatBitLit(_pat_bit_lit) => format!("PatBitLit"),
             AstNodePayload::PatIdent(_pat_ident) => format!("PatIdent"),
+            AstNodePayload::PatDontcare => format!("PatDontcare"),
             AstNodePayload::Ofness(_ofness) => format!("Ofness"),
             AstNodePayload::It => format!("It"),
             AstNodePayload::Path(_path) => format!("Path"),
@@ -368,7 +369,8 @@ impl<'p> AstNode<'p> {
             AstNodePayload::PatEnumerant(_) |
             AstNodePayload::PatWordLit(_) |
             AstNodePayload::PatBitLit(_) |
-            AstNodePayload::PatIdent(_)
+            AstNodePayload::PatIdent(_) |
+            AstNodePayload::PatDontcare
         )
     }
 

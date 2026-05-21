@@ -69,6 +69,7 @@ pub enum AstNodePayload {
     PatWordLit(PatWordLit),
     PatBitLit(PatBitLit),
     PatIdent(PatIdent),
+    PatDontcare,
 
     Ofness(Ofness),
     It,
@@ -132,6 +133,7 @@ impl AstNodePayload {
             AstNodePayload::PatWordLit(_pat_word_lit) => "PatWordLit",
             AstNodePayload::PatBitLit(_pat_bit_lit) => "PatBitLit",
             AstNodePayload::PatIdent(_pat_ident) => "PatIdent",
+            AstNodePayload::PatDontcare => "PatDontcare",
             AstNodePayload::Ofness(_ofness) => "Ofness",
             AstNodePayload::It => "It",
             AstNodePayload::Path(_path) => "Path",

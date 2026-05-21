@@ -142,6 +142,7 @@ Pat :=
     | WordLit
     | BitLit
     | Ident
+    | "dontcare"
 
 PatList :=
       (Pat ",")+ Pat ","?
