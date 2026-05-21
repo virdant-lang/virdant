@@ -71,7 +71,6 @@ class VirdantLexer(RegexLexer):
             (r'\s+', Text),
             # Comments
             (r'//.*$', Comment.Single),
-            (r'/\*', Comment.Multiline, 'block_comment'),
             # Type names (capitalized identifiers)
             (r'\b([A-Z_][a-zA-Z_0-9]*)\b', Name.Class),
             # Enum variants with # prefix
@@ -82,10 +81,6 @@ class VirdantLexer(RegexLexer):
             (words(BUILTINS, suffix=r'\b'), Name.Builtin),
             # Regular identifiers
             (r'\b([a-zA-Z_][_a-zA-Z_0-9]*)\b', Name.Variable),
-        ],
-        'block_comment': [
-            (r'.*?\*/', Comment.Multiline, '#pop'),
-            (r'.*$', Comment.Multiline),
         ],
     }
 
