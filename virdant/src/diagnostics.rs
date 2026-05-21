@@ -272,6 +272,14 @@ pub struct MatchElseNotLast {
     pub region: Region,
 }
 
+/// Two enumerants of the same enum type have the same value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DuplicateEnumValue {
+    pub region: Region,
+    pub enum_name: BString,
+    pub value: WordValue,
+}
+
 
 #[derive(Debug, Clone)]
 pub struct Soften {
@@ -726,6 +734,16 @@ impl IsDiagnostic for MatchElseNotLast {
 
     fn message(&self) -> BString {
         format!("else arm must be the last arm of the match").into()
+    }
+}
+
+impl IsDiagnostic for DuplicateEnumValue {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Duplicate enum value: enumerants of {} share value {}", self.enum_name, self.value).into()
     }
 }
 
