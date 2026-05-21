@@ -160,6 +160,8 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 let flow = match component.kind {
                     ComponentKind::Incoming => Flow::Source,
                     ComponentKind::Outgoing => Flow::Sink,
+                    ComponentKind::OutgoingWire => Flow::Duplex,
+                    ComponentKind::OutgoingReg => Flow::Duplex,
                     ComponentKind::Reg => Flow::Duplex,
                     ComponentKind::Wire => Flow::Duplex,
                 };
@@ -206,7 +208,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 for submodule_stmt in submodule_ast.children() {
                     match submodule_stmt.payload() {
                         AstNodePayload::Component(component) => {
-                            if !matches!(component.kind, ComponentKind::Incoming | ComponentKind::Outgoing) {
+                            if !matches!(component.kind, ComponentKind::Incoming | ComponentKind::Outgoing | ComponentKind::OutgoingWire | ComponentKind::OutgoingReg) {
                                 continue;
                             }
                             let id = ComponentId {
@@ -225,6 +227,8 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                             let flow = match component.kind {
                                 ComponentKind::Incoming => Flow::Sink,
                                 ComponentKind::Outgoing => Flow::Source,
+                                ComponentKind::OutgoingWire => Flow::Source,
+                                ComponentKind::OutgoingReg => Flow::Source,
                                 ComponentKind::Reg => Flow::Duplex,
                                 ComponentKind::Wire => Flow::Duplex,
                             };

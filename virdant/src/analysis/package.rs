@@ -121,7 +121,7 @@ impl PackageAnalysis {
             for child_node in node.children() {
                 match child_node.payload() {
                     AstNodePayload::Component(component) => {
-                        if component.kind == ComponentKind::Reg {
+                        if component.kind == ComponentKind::Reg || component.kind == ComponentKind::OutgoingReg {
                             if let Some(node) = child_node.clock() {
                                 self.expr_roots.push(node.id());
                             } else {

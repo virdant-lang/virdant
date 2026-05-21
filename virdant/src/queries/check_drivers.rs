@@ -90,8 +90,9 @@ fn check_wrong_driver_types(
     for (comp_id, drivers) in driver_analysis.drivers() {
         let Some(component) = component_analysis.component(*comp_id) else { continue };
         let expected = match component.kind() {
-            Some(ComponentKind::Reg) => DriverType::Latched,
-            Some(ComponentKind::Wire) | Some(ComponentKind::Incoming) | Some(ComponentKind::Outgoing) => DriverType::Continuous,
+            Some(ComponentKind::Reg) | Some(ComponentKind::OutgoingReg) => DriverType::Latched,
+            Some(ComponentKind::Wire) | Some(ComponentKind::Incoming)
+            | Some(ComponentKind::Outgoing) | Some(ComponentKind::OutgoingWire) => DriverType::Continuous,
             None => continue,
         };
         let path = component.path();

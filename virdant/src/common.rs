@@ -74,6 +74,8 @@ pub enum TypeScheme {
 pub enum ComponentKind {
     Incoming,
     Outgoing,
+    OutgoingWire,
+    OutgoingReg,
     Reg,
     Wire,
 }

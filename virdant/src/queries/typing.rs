@@ -28,7 +28,8 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
     let parent_node = node.parent().unwrap();
 
     match parent_node.payload() {
-        AstNodePayload::Component(component) if component.kind == ComponentKind::Reg => Some(Type::Clock),
+        AstNodePayload::Component(component) if component.kind == ComponentKind::Reg
+            || component.kind == ComponentKind::OutgoingReg => Some(Type::Clock),
         AstNodePayload::Driver(_) => {
             let mut lhs_path = parsing.string(parent_node.child(0).path().unwrap()).to_owned();
 

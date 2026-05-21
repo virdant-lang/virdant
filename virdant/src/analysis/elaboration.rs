@@ -186,7 +186,7 @@ fn elaborate_module(
                 let typ = builder.get_type_at(typ_node.location()).unwrap();
 
                 let driver_type = match component.kind {
-                    ComponentKind::Reg => DriverType::Latched,
+                    ComponentKind::Reg | ComponentKind::OutgoingReg => DriverType::Latched,
                     _ => DriverType::Continuous,
                 };
 

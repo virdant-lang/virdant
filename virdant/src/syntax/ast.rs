@@ -322,7 +322,7 @@ impl<'p> AstNode<'p> {
     pub fn clock(&self) -> Option<AstNode<'_>> {
         match &self.payload {
             AstNodePayload::Component(component) => {
-                if component.kind == ComponentKind::Reg {
+                if component.kind == ComponentKind::Reg || component.kind == ComponentKind::OutgoingReg {
                     for child in self.children().into_iter().skip(1) {
                         if !matches!(child.payload(), AstNodePayload::It) {
                             return Some(child);

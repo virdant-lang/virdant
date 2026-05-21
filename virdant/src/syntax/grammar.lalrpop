@@ -311,6 +311,28 @@ ModDefStmtComponent: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
+    <docstring:DocString> <ll:@L> "outgoing" "wire" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+        let payload = AstNodePayload::Component(payload::Component {
+            name: ident,
+            kind: ComponentKind::OutgoingWire,
+            doc_string: docstring,
+        });
+        let span = parser.span(ll, rr);
+        let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
+
+        parser.add_node(payload, span, num_children)
+    },
+    <docstring:DocString> <ll:@L> "outgoing" "reg" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+        let payload = AstNodePayload::Component(payload::Component {
+            name: ident,
+            kind: ComponentKind::OutgoingReg,
+            doc_string: docstring,
+        });
+        let span = parser.span(ll, rr);
+        let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
+
+        parser.add_node(payload, span, num_children)
+    },
     <docstring:DocString> <ll:@L> "wire" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,

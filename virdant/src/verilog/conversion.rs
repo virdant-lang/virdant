@@ -187,9 +187,19 @@ impl<'d> Converter<'d> {
             let name = port.path.to_str_lossy().into_owned();
             let width = port.typ.clone().map(|t| type_width(&t, self.db)).unwrap_or(0);
             let port_name = valid_verilog_name(&name);
+            // OutgoingReg is an output reg port in Verilog.
+            // All other ports (Incoming, Outgoing, OutgoingWire) are wire ports.
+            let is_outgoing_reg = component_analysis.resolve(port.path.as_bstr())
+                .and_then(|c| c.kind())
+                .map_or(false, |k| k == ComponentKind::OutgoingReg);
+            let port_kind = if is_outgoing_reg {
+                verilog::PortKind::Reg
+            } else {
+                verilog::PortKind::Wire
+            };
             ports.push(verilog::Port {
                 name: port_name,
-                kind: verilog::PortKind::Wire,
+                kind: port_kind,
                 dir: port.dir,
                 width,
             });
@@ -203,8 +213,19 @@ impl<'d> Converter<'d> {
                     let typ = component_analysis.type_of(parsing.string(component.name)).unwrap();
                     let width = type_width(&typ, self.db);
                     match component.kind {
-                        ComponentKind::Incoming | ComponentKind::Outgoing => {
-                            // Ports are now handled by get_ports_of above
+                        ComponentKind::Incoming | ComponentKind::Outgoing
+                        | ComponentKind::OutgoingWire => {
+                            // Ports are now handled by get_ports_of above.
+                        }
+                        ComponentKind::OutgoingReg => {
+                            // Port declaration is handled by get_ports_of above (output reg).
+                            // Check for an explicit `on clock` clause.
+                            let children = stmt.children();
+                            let clock_child = children.iter().skip(1).find(|c| !matches!(c.payload(), AstNodePayload::It));
+                            if let Some(clock_node) = clock_child {
+                                sequential_regs.insert(name.clone(), clock_node.id());
+                            }
+                            // No internal reg element — the port declaration suffices.
                         }
                         ComponentKind::Wire => {
                             let children = stmt.children();
