@@ -207,26 +207,3 @@ are inputs.
 For a server socket instance, the directions are reversed.
 
 For more details on sockets, see :doc:`sockets`.
-
-
-Function Definitions
---------------------
-A function definition declares a combinational function that computes a value
-from its arguments.
-
-.. code-block:: grammar
-
-    FnDef :=
-        DocString "fn" Ident ParamList "->" Type "{" Expr "}"
-
-.. code-block:: virdant
-
-    fn add(x : Word[8], y : Word[8]) -> Word[8] {
-        x + y
-    }
-
-Functions are pure: they compute a result based only on their inputs and have
-no side effects.
-Functions are instantiated as combinational logic at every call site.
-
-For more details on functions, see :doc:`functions`.

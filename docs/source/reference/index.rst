@@ -11,7 +11,6 @@ This is the Virdant language reference.
     patterns
     expressions
     statements
-    functions
     modules
     packages
     sockets
