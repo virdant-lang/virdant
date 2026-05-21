@@ -179,6 +179,11 @@ impl Typing {
                     .insert(node.location(), Tag::PrimitiveResolution(Primitive::Sext));
                 self.check_ext(builder, context, node, expected_typ)
             }
+            b"trunc" => {
+                self.tags
+                    .insert(node.location(), Tag::PrimitiveResolution(Primitive::Trunc));
+                self.check_trunc(builder, context, node, expected_typ)
+            }
             _ => {
                 self.flag_unknown(node, format!("Unknown function: {}", BStr::new(fn_name)));
                 Err(())
@@ -263,6 +268,50 @@ impl Typing {
 
         if subject_width > *target_width {
             self.flag_wrong_type(node, &Type::Word(subject_width), expected_typ);
+            return Err(());
+        }
+
+        self.annotate(node, &expected_typ);
+        Ok(())
+    }
+
+    fn check_trunc<'p>(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        node: &AstNode<'p>,
+        expected_typ: &Type,
+    ) -> Result<(), ()> {
+        let Type::Word(target_width) = expected_typ else {
+            self.flag_not_word_type(node, expected_typ);
+            return Err(());
+        };
+
+        let subject = node.subject().unwrap();
+
+        // Try to infer the subject type first
+        let subject_typ = if let Ok(Some(typ)) = self.infer(builder, context.clone(), &subject) {
+            typ
+        } else {
+            self.flag_cant_infer(node);
+            return Err(());
+        };
+
+        let subject_width = match subject_typ {
+            Type::Bit | Type::Clock | Type::Reset => 1,
+            Type::Word(width) => width,
+            other => {
+                self.flag_not_word_type(&subject, &other);
+                return Err(());
+            }
+        };
+
+        if *target_width > subject_width {
+            self.diagnostics.push(diagnostics::CantTruncate {
+                region: node.region(),
+                source_width: subject_width,
+                target_width: *target_width,
+            }.into());
             return Err(());
         }
 

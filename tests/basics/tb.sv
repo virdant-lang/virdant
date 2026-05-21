@@ -88,6 +88,10 @@ module Tb;
         if (dut.\xor !== 1'b1) $fatal(1, "assert failed");
 
         if (dut.ascription !== 15) $fatal(1, "assert failed");
+
+        if (dut.tr !== 4'hb) $fatal(1, "assert failed: trunc(0xabw8) == 4'hb");
+        if (dut.tr_same !== 8'hff) $fatal(1, "assert failed: trunc(0xffw8) == 8'hff");
+        if (dut.tr_bit !== 1'b1) $fatal(1, "assert failed: trunc(true) == 1'b1");
         $display("DONE");
         $finish;
     end
@@ -143,6 +147,10 @@ module Tb;
             if (dut.\xor  != 8'd1) $fatal(1, "Assertion failed: xor == 1");
 
             if (dut.ascription != 4'd15) $fatal(1, "Assertion failed: ascription == 15");
+
+            if (dut.tr != 4'hb) $fatal(1, "Assertion failed: trunc(0xabw8) == 4'hb");
+            if (dut.tr_same != 8'hff) $fatal(1, "Assertion failed: trunc(0xffw8) == 8'hff");
+            if (dut.tr_bit != 1'b1) $fatal(1, "Assertion failed: trunc(true) == 1'b1");
         end
     end
 endmodule

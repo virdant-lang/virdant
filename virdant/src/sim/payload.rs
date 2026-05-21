@@ -131,6 +131,11 @@ pub struct Cast {
 }
 
 #[derive(Debug)]
+pub struct Trunc {
+    pub subject: Arc<Expr>,
+}
+
+#[derive(Debug)]
 pub struct Any {
     pub subject: Arc<Expr>,
 }

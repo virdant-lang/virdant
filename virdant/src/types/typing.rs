@@ -59,6 +59,7 @@ pub enum Primitive {
     Word,
     Sext,
     Zext,
+    Trunc,
 }
 
 

@@ -42,6 +42,7 @@ pub enum ExprPayload {
     Zext(payload::Zext),
     Sext(payload::Sext),
     Cast(payload::Cast),
+    Trunc(payload::Trunc),
     Any(payload::Any),
     All(payload::All),
     As(payload::As),
@@ -386,6 +387,10 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
                     Primitive::Cast => {
                         assert!(args.len() == 1, "cast expects exactly 1 argument");
                         ExprPayload::Cast(payload::Cast { subject: args[0].clone() })
+                    }
+                    Primitive::Trunc => {
+                        assert!(args.len() == 1, "trunc expects exactly 1 argument");
+                        ExprPayload::Trunc(payload::Trunc { subject: args[0].clone() })
                     }
                     Primitive::Any => {
                         assert!(args.len() == 1, "any expects exactly 1 argument");

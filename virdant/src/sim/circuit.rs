@@ -389,6 +389,7 @@ fn collect_referents_inner(expr: &Expr, out: &mut Vec<Referent>) {
         ExprPayload::Zext(z)           => collect_referents_inner(&z.subject, out),
         ExprPayload::Sext(s)           => collect_referents_inner(&s.subject, out),
         ExprPayload::Cast(c)           => collect_referents_inner(&c.subject, out),
+        ExprPayload::Trunc(t)          => collect_referents_inner(&t.subject, out),
         ExprPayload::Any(a)            => collect_referents_inner(&a.subject, out),
         ExprPayload::All(a)            => collect_referents_inner(&a.subject, out),
         ExprPayload::As(a)             => collect_referents_inner(&a.subject, out),

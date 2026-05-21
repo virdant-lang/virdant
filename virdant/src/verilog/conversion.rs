@@ -1081,6 +1081,7 @@ impl<'d> Converter<'d> {
                             Primitive::Cast => arg_expr,
                             Primitive::Zext => self.convert_zext(package, node, typ, scheduler),
                             Primitive::Sext => self.convert_sext(package, node, typ, scheduler),
+                            Primitive::Trunc => self.convert_trunc(package, node, typ, scheduler),
                             Primitive::Word => {
                                 let width = self.node_or_expected_width(package, &node, typ);
                                 // children[0] is the function name, children[1..] are the arguments
@@ -1432,6 +1433,23 @@ impl<'d> Converter<'d> {
                 self.convert_expr(package, inner, &inner_type, self.db, scheduler),
             ],
             width: target_width,
+        })
+    }
+
+    fn convert_trunc(&self, package: &PackageFqn, node: AstNode, typ: &Type, scheduler: &mut ExprScheduler) -> verilog::Expr {
+        // child(0) is function name, child(1) is the argument
+        let inner = node.child(1);
+        let inner_type = self.node_type(package, &inner).unwrap();
+        let target_width = self.node_or_expected_width(package, &node, typ);
+        let source_width = self.node_width(package, &inner);
+        if source_width == target_width {
+            return self.convert_expr(package, inner, &inner_type, self.db, scheduler);
+        }
+        // Truncate: take the lower `target_width` bits of the source.
+        verilog::Expr::IndexRange(verilog::expr::IndexRange {
+            subject: Box::new(self.convert_expr(package, inner, &inner_type, self.db, scheduler)),
+            index_hi: Box::new(constant_index_expr(target_width - 1)),
+            index_lo: Box::new(constant_index_expr(0)),
         })
     }
 

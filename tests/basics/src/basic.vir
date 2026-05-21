@@ -82,4 +82,19 @@ export mod Top {
         it := true ^^ false
         unused it
     }
+
+    wire tr : Word[4] {
+        it := trunc(0xabw8)
+        unused it
+    }
+
+    wire tr_same : Word[8] {
+        it := trunc(0xffw8)
+        unused it
+    }
+
+    wire tr_bit : Word[1] {
+        it := trunc(true)
+        unused it
+    }
 }

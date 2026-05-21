@@ -25,4 +25,13 @@ mod Foo {
     out4 := 0
 }
 
+mod TruncWider {
+    incoming x : Word[4]
+    outgoing out : Word[8]
+
+    // CHECK: Cannot truncate Word[4] to the larger type Word[8]
+
+    out := trunc(x)
+}
+
 // CHECK: Check failed

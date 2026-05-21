@@ -148,6 +148,7 @@ impl Expr {
             ExprPayload::Zext(zext) => self.eval_zext(context, zext),
             ExprPayload::Sext(sext) => self.eval_sext(context, sext),
             ExprPayload::Cast(cast) => cast.subject.eval(context),
+            ExprPayload::Trunc(trunc) => self.eval_trunc(context, trunc),
             ExprPayload::Any(any) => self.eval_any(context, any),
             ExprPayload::All(all) => self.eval_all(context, all),
             ExprPayload::As(as_) => as_.subject.eval(context),
@@ -476,6 +477,25 @@ impl Expr {
     ///
     /// Matches Verilog `{repeat(extend_by, inner[msb]), inner}` from `convert_sext`.
     /// The MSB of the subject is replicated into all upper bits.
+    /// Evaluate a truncation: `trunc(subject)`.
+    ///
+    /// The low `target_width` bits are taken from the subject value.
+    /// If subject is wider than target, the upper bits are discarded.
+    fn eval_trunc(&self, context: &Context, trunc: &payload::Trunc) -> Value {
+        let Type::Word(target_width) = self.typ() else {
+            unreachable!("eval_trunc result must be Word")
+        };
+        let val = trunc.subject.eval(context);
+        if val.is_x() {
+            return Value::X(Type::Word(*target_width));
+        }
+        match val {
+            Value::Bit(b) => Value::Word(*target_width, b as u64),
+            Value::Word(_, v) => Value::Word(*target_width, v & word_mask(*target_width)),
+            _ => unreachable!("trunc subject must be Bit or Word"),
+        }
+    }
+
     fn eval_sext(&self, context: &Context, sext: &payload::Sext) -> Value {
         let Type::Word(target_width) = self.typ() else {
             unreachable!("eval_sext result must be Word")

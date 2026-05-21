@@ -234,6 +234,13 @@ pub struct WrongArgCount {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CantTruncate {
+    pub region: Region,
+    pub source_width: Width,
+    pub target_width: Width,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Todo {
     pub region: Region,
     pub message: BString,
@@ -663,6 +670,16 @@ impl IsDiagnostic for WrongArgCount {
 
     fn message(&self) -> BString {
         format!("Wrong arg count").into()
+    }
+}
+
+impl IsDiagnostic for CantTruncate {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Cannot truncate Word[{}] to the larger type Word[{}]", self.source_width, self.target_width).into()
     }
 }
 
