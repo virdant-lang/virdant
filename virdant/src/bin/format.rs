@@ -354,13 +354,13 @@ fn format_line(
 ) -> String {
     let indent_str = "    ".repeat(line.indent);
 
-    match &line.kind {
+    let formatted = match &line.kind {
         LineKind::Blank => String::new(),
         LineKind::Comment => {
             // Preserve the comment as-is but with proper indentation.
             // However, if the raw line already has some indentation from the
             // original, we want to replace it with our computed indent.
-            let trimmed = line.raw.trim_start();
+            let trimmed = line.raw.trim();
             format!("{}{}", indent_str, trimmed)
         }
         LineKind::OpenBrace => {
@@ -369,7 +369,7 @@ fn format_line(
         LineKind::CloseBrace => {
             // Emit the full trimmed content at the proper indent.
             // Handles `}`, `} else {`, `} // comment`, etc.
-            let trimmed = line.raw.trim_start();
+            let trimmed = line.raw.trim();
             format!("{}{}", indent_str, trimmed)
         }
         LineKind::Driver { before, op, after } => {
@@ -399,7 +399,14 @@ fn format_line(
         LineKind::Other(s) => {
             format!("{}{}", indent_str, s)
         }
-    }
+    };
+
+    // Trim trailing whitespace so that no line ends with spaces.
+    // This is especially important when `after` is empty for Driver or
+    // TypeAnnot lines (e.g. `a :=` with RHS on next line), where the
+    // format string would otherwise leave a trailing space after the
+    // operator.
+    formatted.trim_end().to_string()
 }
 
 // ---------------------------------------------------------------------------
@@ -483,11 +490,10 @@ fn format_vir_text(input: &str) -> String {
         }
     }
 
-    // Ensure exactly one trailing newline.
+    // Ensure exactly one trailing newline (last byte must be \n,
+    // and there must not be \n\n at the end).
     let mut result = out_lines.join("\n");
-    if !result.is_empty() {
-        result.push('\n');
-    }
+    result.push('\n');
     result
 }
 
@@ -528,6 +534,36 @@ fn format_file(path: &Path, in_place: bool) -> bool {
     }
 }
 
+/// Walk up from `start` looking for a directory containing
+/// `Virdant.toml`.  Returns the path to that directory, or `None`.
+fn find_project_root(start: &Path) -> Option<PathBuf> {
+    let mut dir = Some(std::fs::canonicalize(start).unwrap_or_else(|_| start.to_path_buf()));
+    while let Some(ref d) = dir {
+        if d.join("Virdant.toml").exists() {
+            return Some(d.clone());
+        }
+        dir = d.parent().map(|p| p.to_path_buf());
+    }
+    None
+}
+
+/// Recursively collect all `.vir` files under `dir`.
+fn collect_vir_files(dir: &Path) -> Vec<PathBuf> {
+    let mut result = Vec::new();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return result;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            result.extend(collect_vir_files(&path));
+        } else if path.extension().map_or(false, |ext| ext == "vir") {
+            result.push(path);
+        }
+    }
+    result
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
@@ -542,18 +578,24 @@ fn main() {
         .collect();
 
     let files: Vec<PathBuf> = if file_args.is_empty() {
-        // Format all .vir files in the current directory.
-        match fs::read_dir(".") {
-            Ok(entries) => entries
-                .filter_map(|e| e.ok())
-                .map(|e| e.path())
-                .filter(|p| p.extension().map_or(false, |ext| ext == "vir"))
-                .collect(),
-            Err(e) => {
-                eprintln!("Error reading directory: {e}");
+        // Walk up to find the project root, then format src/*.vir.
+        let cwd = std::env::current_dir().unwrap_or_else(|e| {
+            eprintln!("Error getting current directory: {e}");
+            std::process::exit(1);
+        });
+        let project_root = match find_project_root(&cwd) {
+            Some(root) => root,
+            None => {
+                eprintln!("No Virdant.toml found in any parent directory.");
                 std::process::exit(1);
             }
+        };
+        let src_dir = project_root.join("src");
+        if !src_dir.is_dir() {
+            eprintln!("ERROR: source directory not found: {}", src_dir.display());
+            std::process::exit(1);
         }
+        collect_vir_files(&src_dir)
     } else {
         file_args
     };
