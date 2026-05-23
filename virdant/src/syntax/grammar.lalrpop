@@ -260,8 +260,8 @@ SocketDefStmt: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString> <ll:@L> "ciso" <name:Ident> ":" Type <rr:@R> => {
-        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Ciso, doc_string: docstring });
+    <docstring:DocString> <ll:@L> "soci" <name:Ident> ":" Type <rr:@R> => {
+        let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Soci, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = 1;
 
@@ -1024,7 +1024,7 @@ extern {
         "client" => Token::KwClient,
         "server" => Token::KwServer,
         "cosi" => Token::KwCosi,
-        "ciso" => Token::KwCiso,
+        "soci" => Token::KwSoci,
         "if" => Token::KwIf,
         "it" => Token::KwIt,
         "else" => Token::KwElse,

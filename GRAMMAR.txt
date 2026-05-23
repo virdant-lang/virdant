@@ -57,7 +57,7 @@ SocketDef := DocString "socket" Ident "{" SocketDefStmt* "}"
 
 SocketDefStmt :=
       DocString "cosi" Ident ":" Type
-    | DocString "ciso" Ident ":" Type
+    | DocString "soci" Ident ":" Type
 
 FnDef := DocString "fn" Ident ParamList "->" Type "{" Expr "}"
 
@@ -293,7 +293,6 @@ Tokens:
   "^^"
   "builtin"
   "case"
-  "ciso"
   "client"
   "cosi"
   "dontcare"
@@ -314,6 +313,7 @@ Tokens:
   "outgoing"
   "reg"
   "server"
+  "soci"
   "socket"
   "struct"
   "true"

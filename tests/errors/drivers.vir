@@ -17,11 +17,11 @@ mod NoDrivers {
 // Socket used to test DriverForSink from both sides.
 socket Chan {
     cosi req : Word[8]
-    ciso ack : Bit
+    soci ack : Bit
 }
 
 // A client drives cosi (req) — that is correct.
-// But it also drives ciso (ack) — ciso is a source for the client, not a sink.
+// But it also drives soci (ack) — soci is a source for the client, not a sink.
 mod BadClient {
     client socket ch of Chan
     ch.req := 0
@@ -29,7 +29,7 @@ mod BadClient {
     ch.ack := true
 }
 
-// A server drives ciso (ack) — that is correct.
+// A server drives soci (ack) — that is correct.
 // But it also drives cosi (req) — cosi is a source for the server, not a sink.
 mod BadServer {
     server socket ch of Chan

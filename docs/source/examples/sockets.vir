@@ -1,6 +1,6 @@
 socket Mem {
     cosi addr : Word[16]
-    ciso data : Word[8]
+    soci data : Word[8]
 }
 
 mod Core {

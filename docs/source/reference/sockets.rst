@@ -17,13 +17,13 @@ with their types and directions.
 
     SocketDefStmt :=
         DocString "cosi" Ident ":" Type
-        | DocString "ciso" Ident ":" Type
+        | DocString "soci" Ident ":" Type
 
 .. code-block:: virdant
 
     socket Mem {
         cosi addr : Word[16]
-        ciso data : Word[8]
+        soci data : Word[8]
     }
 
 The direction keywords have the following meanings, from the perspective of a
@@ -34,13 +34,13 @@ client socket instance:
     For a client instance, this port is an output.
     For a server instance, this port is an input.
 
-`ciso`
-    **C**\ lient-**I**\ n, **S**\ erver-**O**\ ut.
+`soci`
+    **S**\ erver-**O**\ ut, **C**\ lient-**I**\ n.
     For a client instance, this port is an input.
     For a server instance, this port is an output.
 
 Thus `cosi` ports are driven by the client and received by the server,
-while `ciso` ports are driven by the server and received by the client.
+while `soci` ports are driven by the server and received by the client.
 
 
 Socket Instances
@@ -69,7 +69,7 @@ Each instance must specify its role: `client` or `server`.
     }
 
 A client socket instance uses `cosi` ports as outputs (driven by the client)
-and `ciso` ports as inputs (received by the client).
+and `soci` ports as inputs (received by the client).
 A server socket instance reverses these directions.
 
 
@@ -135,9 +135,9 @@ socket and then instantiated by any module that speaks that protocol.
         cosi a_size     : Word[2]
         cosi a_data     : Word[32]
         cosi a_mask     : Word[4]
-        ciso d_data     : Word[32]
-        ciso d_opcode   : Word[3]
-        ciso d_size     : Word[2]
+        soci d_data     : Word[32]
+        soci d_opcode   : Word[3]
+        soci d_size     : Word[2]
     }
 
 By defining the interface as a socket, the compiler can verify that all

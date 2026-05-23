@@ -114,7 +114,7 @@ The following words are reserved as keywords and may not be used as identifiers:
 
 .. code-block::
 
-    builtin  case     ciso     client   cosi     dontcare
+    builtin  case     soci     client   cosi     dontcare
     else     enum     export   ext      false    fn
     if       import   incoming  it      match     mod
     of       on       outgoing  reg     server    socket

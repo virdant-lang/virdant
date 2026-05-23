@@ -30,7 +30,7 @@ pub enum DriverType {
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum ChannelDir {
     Cosi,
-    Ciso,
+    Soci,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]

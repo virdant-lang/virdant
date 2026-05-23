@@ -190,19 +190,19 @@ named ports with directions.
 
     SocketDefStmt :=
         DocString "cosi" Ident ":" Type
-        | DocString "ciso" Ident ":" Type
+        | DocString "soci" Ident ":" Type
 
 .. code-block:: virdant
 
     socket Mem {
         cosi addr : Word[16]
-        ciso data : Word[8]
+        soci data : Word[8]
     }
 
 `cosi` stands for "client-out, server-in".
-`ciso` stands for "client-in, server-out".
+`soci` stands for "server-out, client-in".
 
-For a client socket instance, `cosi` ports are outputs and `ciso` ports
+For a client socket instance, `cosi` ports are outputs and `soci` ports
 are inputs.
 For a server socket instance, the directions are reversed.
 

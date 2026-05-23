@@ -5,7 +5,7 @@
 // the other host gains the tie-breaking advantage.
 //
 // Concepts demonstrated:
-//   - TL-UL socket definition with cosi/ciso channels
+//   - TL-UL socket definition with cosi/soci channels
 //   - server sockets (host_0, host_1) for the two hosts
 //   - client socket (device) toward the shared device
 //   - socket bulk connect (:=:) in the top-level wrapper
@@ -14,21 +14,21 @@
 
 // TL-UL channel directions are from the host (master) perspective.
 // cosi = Client-Out, Server-In: the host drives these signals.
-// ciso = Client-In,  Server-Out: the device drives these signals.
+// soci = Server-Out, Client-In:  the device drives these signals.
 socket TlUl {
     cosi a_valid   : Bit       // host: request is valid
-    ciso a_ready   : Bit       // device: ready to accept the request
+    soci a_ready   : Bit       // device: ready to accept the request
     cosi a_opcode  : Word[3]   // 0=Get, 1=PutFullData, 4=PutPartialData
     cosi a_address : Word[32]  // byte address of the target
     cosi a_data    : Word[32]  // write data (ignored for Get)
     cosi a_mask    : Word[4]   // byte-enable mask
     cosi a_size    : Word[2]   // log2 of transfer size in bytes
     cosi d_ready   : Bit       // host: ready to accept a response
-    ciso d_valid   : Bit       // device: response is valid
-    ciso d_opcode  : Word[3]   // 0=AccessAck, 1=AccessAckData
-    ciso d_data    : Word[32]  // read data (valid only on AccessAckData)
-    ciso d_size    : Word[2]   // log2 of response size in bytes
-    ciso d_error   : Bit       // set when the device reports an error
+    soci d_valid   : Bit       // device: response is valid
+    soci d_opcode  : Word[3]   // 0=AccessAck, 1=AccessAckData
+    soci d_data    : Word[32]  // read data (valid only on AccessAckData)
+    soci d_size    : Word[2]   // log2 of response size in bytes
+    soci d_error   : Bit       // set when the device reports an error
 }
 
 // Track which host currently holds the bus.

@@ -15,7 +15,7 @@ class VirdantLexer(RegexLexer):
     filenames = ['*.vir']
 
     KEYWORDS = [
-        'builtin', 'case', 'ciso', 'client', 'cosi', 'else', 'enum',
+        'builtin', 'case', 'soci', 'client', 'cosi', 'else', 'enum',
         'export', 'ext', 'fn', 'if', 'import', 'incoming',
         'match', 'mod', 'of', 'on', 'outgoing', 'reg',
         'server', 'socket', 'struct', 'type', 'union',

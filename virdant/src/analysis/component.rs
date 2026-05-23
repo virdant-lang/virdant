@@ -290,9 +290,9 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 };
                                 let flow = match (submodule_socket.role, channel.dir) {
                                     (SocketRole::Client, ChannelDir::Cosi) => Flow::Source,
-                                    (SocketRole::Client, ChannelDir::Ciso) => Flow::Sink,
+                                    (SocketRole::Client, ChannelDir::Soci) => Flow::Sink,
                                     (SocketRole::Server, ChannelDir::Cosi) => Flow::Sink,
-                                    (SocketRole::Server, ChannelDir::Ciso) => Flow::Source,
+                                    (SocketRole::Server, ChannelDir::Soci) => Flow::Source,
                                 };
                                 let kind = match flow {
                                     Flow::Sink => Some(ComponentKind::Incoming),
@@ -356,9 +356,9 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     };
                     let flow = match (socket.role, channel.dir) {
                         (SocketRole::Client, ChannelDir::Cosi) => Flow::Sink,
-                        (SocketRole::Client, ChannelDir::Ciso) => Flow::Source,
+                        (SocketRole::Client, ChannelDir::Soci) => Flow::Source,
                         (SocketRole::Server, ChannelDir::Cosi) => Flow::Source,
-                        (SocketRole::Server, ChannelDir::Ciso) => Flow::Sink,
+                        (SocketRole::Server, ChannelDir::Soci) => Flow::Sink,
                     };
                     let component = Component {
                         id,

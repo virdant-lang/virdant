@@ -20,7 +20,7 @@
 
 // Wishbone channel directions are from the master perspective.
 // cosi = Client-Out, Server-In: the master drives these signals.
-// ciso = Client-In,  Server-Out: the slave drives these signals.
+// soci = Server-Out, Client-In:  the slave drives these signals.
 socket Wishbone {
     cosi cyc     : Bit         // master: cycle active
     cosi stb     : Bit         // master: strobe (data phase)
@@ -29,9 +29,9 @@ socket Wishbone {
     cosi dat_wr  : Word[32]    // master: write data
     cosi sel     : Word[4]     // master: byte select mask
 
-    ciso ack     : Bit         // slave: transfer acknowledgement
-    ciso err     : Bit         // slave: error response
-    ciso dat_rd  : Word[32]    // slave: read data
+    soci ack     : Bit         // slave: transfer acknowledgement
+    soci err     : Bit         // slave: error response
+    soci dat_rd  : Word[32]    // slave: read data
 }
 
 // --- Shared building blocks --------------------------------------------------
