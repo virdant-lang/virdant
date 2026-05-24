@@ -297,6 +297,7 @@ Tokens:
   "client"
   "cosi"
   "dontcare"
+  "dyn"
   "else"
   "enum"
   "export"

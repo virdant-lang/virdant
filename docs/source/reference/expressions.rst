@@ -29,6 +29,7 @@ The full expression grammar, from highest to lowest precedence:
                        | ExprPrimary "->" Ident
                        | ExprPrimary "[" Index "]"
                        | ExprPrimary "[" Index ".." Index "]"
+                       | ExprPrimary "[" "dyn" Expr "]"
                        | "@" Ident "(" ArgList ")"
                        | ExprAtom
     ExprAtom         := Path | WordLit | BitLit | "Str" | "#" Ident | "@" Ident | "?" | "dontcare" | "(" Expr ")"
@@ -165,18 +166,46 @@ Individual bits and ranges of bits may be extracted from `Word[n]` values.
     ExprPrimary :=
         ExprPrimary "[" Index "]"
         | ExprPrimary "[" Index ".." Index "]"
+        | ExprPrimary "[" "dyn" Expr "]"
 
 .. code-block:: virdant
 
-    // Bit selection
+    // Bit selection (constant index)
     bit := data[3]
 
     // Range selection (inclusive of both bounds)
     nibble := data[7..4]
 
+    // Dynamic bit selection (index by expression, prefixed with `dyn`)
+    bit := data[dyn idx]
+
 Indices are zero-based.
 `data[0]` is the least significant bit.
 `data[7..4]` extracts bits 7, 6, 5, and 4.
+
+Dynamic Indexing
+~~~~~~~~~~~~~~~~
+When the index is an expression rather than a constant literal,
+the `dyn` keyword prefixes the index expression.
+
+The array must be of type `Word[n]` and the index of type `Word[k]`,
+and the constraint `n == 2^k` must hold.
+The result type is `Bit`.
+
+.. code-block:: virdant
+
+    // n = 8, k = 3, 2^3 = 8 -- valid
+    out := arr[dyn idx]
+
+    // n = 1, k = 0, 2^0 = 1 -- valid
+    out := single_bit_arr[dyn zero_idx]
+
+If the constraint is violated, the compiler reports a type error.
+
+.. code-block:: virdant
+
+    // Error: n = 8, k = 2, 2^2 = 4 != 8
+    out := arr[dyn wrong_width]
 
 
 Union Construction
