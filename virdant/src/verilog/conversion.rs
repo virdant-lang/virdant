@@ -1063,6 +1063,16 @@ impl<'d> Converter<'d> {
                     index: Box::new(constant_index_expr(expr_index.index)),
                 })
             }
+            AstNodePayload::ExprIndexDyn => {
+                let subject = node.child(0);
+                let index_expr = node.child(1);
+                let subject_type = self.node_type(package, &subject).unwrap();
+                let index_type = self.node_type(package, &index_expr).unwrap();
+                verilog::Expr::Index(verilog::expr::Index {
+                    subject: Box::new(self.convert_expr(package, subject, &subject_type, self.db, scheduler)),
+                    index: Box::new(self.convert_expr(package, index_expr, &index_type, self.db, scheduler)),
+                })
+            }
             AstNodePayload::ExprIndexRange(expr_index_range) => {
                 let child = node.child(0);
                 let child_type = self.node_type(package, &child).unwrap();

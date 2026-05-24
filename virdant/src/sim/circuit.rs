@@ -382,6 +382,10 @@ fn collect_referents_inner(expr: &Expr, out: &mut Vec<Referent>) {
             for (_, field) in &s.fields { collect_referents_inner(field, out); }
         }
         ExprPayload::Index(i)          => collect_referents_inner(&i.subject, out),
+        ExprPayload::IndexDyn(i)       => {
+            collect_referents_inner(&i.subject, out);
+            collect_referents_inner(&i.index, out);
+        }
         ExprPayload::IndexRange(i)     => collect_referents_inner(&i.subject, out),
         ExprPayload::Word(w)           => {
             for arg in &w.args { collect_referents_inner(arg, out); }

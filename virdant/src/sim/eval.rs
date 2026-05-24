@@ -143,6 +143,7 @@ impl Expr {
             ExprPayload::Enumerant(enumerant) => self.eval_enumerant(enumerant),
             ExprPayload::Struct(_) => todo!("eval Struct: struct literal evaluation is not implemented"),
             ExprPayload::Index(index) => self.eval_index(context, index),
+            ExprPayload::IndexDyn(index_dyn) => self.eval_index_dyn(context, index_dyn),
             ExprPayload::IndexRange(index_range) => self.eval_index_range(context, index_range),
             ExprPayload::Word(word) => self.eval_word(context, word),
             ExprPayload::Zext(zext) => self.eval_zext(context, zext),
@@ -397,14 +398,29 @@ impl Expr {
         if val.is_x() {
             return Value::X(Type::Bit);
         }
-        match val {
-            Value::Word(_, v) => Value::Bit(((v >> (index.index as u32)) & 1) != 0),
-            Value::Bit(b) => {
-                debug_assert_eq!(index.index, 0, "Bit index must be 0");
-                Value::Bit(b)
-            }
-            _ => unreachable!("index subject must be Word or Bit"),
+        let Value::Word(_, v) = val else {
+            unreachable!("index subject must be Word");
+        };
+        Value::Bit(((v >> (index.index as u32)) & 1) != 0)
+    }
+
+    fn eval_index_dyn(&self, context: &Context, index: &payload::IndexDyn) -> Value {
+        let val = index.subject.eval(context);
+        if val.is_x() {
+            return Value::X(Type::Bit);
         }
+        let idx_val = index.index.eval(context);
+        if idx_val.is_x() {
+            return Value::X(Type::Bit);
+        }
+        let idx = match idx_val {
+            Value::Word(_, v) => v as u32,
+            _ => unreachable!("index expr must be a Word"),
+        };
+        let Value::Word(_, v) = val else {
+            unreachable!("index subject must be Word");
+        };
+        Value::Bit(((v >> idx) & 1) != 0)
     }
 
     /// Evaluate a bit-range index expression: `subject[index_hi..index_lo]`.

@@ -37,6 +37,7 @@ pub enum ExprPayload {
     Enumerant(payload::Enumerant),
     Struct(payload::Struct),
     Index(payload::Index),
+    IndexDyn(payload::IndexDyn),
     IndexRange(payload::IndexRange),
     Word(payload::Word),
     Zext(payload::Zext),
@@ -439,6 +440,13 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
             let index = idx.index;
             let subject = convert_ast_expr(db, child_loc);
             ExprPayload::Index(payload::Index { subject, index })
+        }
+        AstNodePayload::ExprIndexDyn => {
+            let subject_loc = node.child(0).location();
+            let index_loc = node.child(1).location();
+            let subject = convert_ast_expr(db, subject_loc);
+            let index = convert_ast_expr(db, index_loc);
+            ExprPayload::IndexDyn(payload::IndexDyn { subject, index })
         }
         AstNodePayload::ExprIndexRange(range) => {
             let child_loc = node.child(0).location();

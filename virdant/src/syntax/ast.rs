@@ -209,6 +209,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprStruct => format!("ExprStruct"),
             AstNodePayload::ExprIndex(_expr_index) => format!("ExprIndex"),
             AstNodePayload::ExprIndexRange(_expr_index_range) => format!("ExprIndexRange"),
+            AstNodePayload::ExprIndexDyn => format!("ExprIndexDyn"),
             AstNodePayload::ExprWord => format!("ExprWord"),
             AstNodePayload::ExprZext => format!("ExprZext"),
             AstNodePayload::ExprSext => format!("ExprSext"),
@@ -355,6 +356,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprEnumerant(_) |
             AstNodePayload::ExprStruct |
             AstNodePayload::ExprIndex(_) |
+            AstNodePayload::ExprIndexDyn |
             AstNodePayload::ExprIndexRange(_) |
             AstNodePayload::ExprWord |
             AstNodePayload::ExprZext |
@@ -384,7 +386,15 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprFn => Some(self.child(1)), // skips over the Ofness
             AstNodePayload::ExprIndex(_expr_index) => Some(self.child(0)),
             AstNodePayload::ExprIndexRange(_expr_index_range) => Some(self.child(0)),
+            AstNodePayload::ExprIndexDyn => Some(self.child(0)),
             AstNodePayload::ExprAs => Some(self.child(0)),
+            _ => None,
+        }
+    }
+
+    pub fn index(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::ExprIndexDyn => Some(self.child(1)),
             _ => None,
         }
     }

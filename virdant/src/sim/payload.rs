@@ -104,6 +104,12 @@ pub struct Index {
 }
 
 #[derive(Debug)]
+pub struct IndexDyn {
+    pub subject: Arc<Expr>,
+    pub index: Arc<Expr>,
+}
+
+#[derive(Debug)]
 pub struct IndexRange {
     pub subject: Arc<Expr>,
     pub index_hi: u16,

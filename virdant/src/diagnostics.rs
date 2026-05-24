@@ -295,6 +295,22 @@ pub struct DuplicateEnumValue {
     pub value: WordValue,
 }
 
+/// A dynamic word index `a[i]` where `a: Word[n]`, `i: Word[k]`,
+/// but `n != 2^k`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidWordIndexWidth {
+    pub region: Region,
+    pub array_width: Width,
+    pub index_width: Width,
+}
+
+/// A dynamic word index `a[i]` where the subject or index is not a Word type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexNotWordType {
+    pub region: Region,
+    pub typ: BString,
+}
+
 
 #[derive(Debug, Clone)]
 pub struct Soften {
@@ -779,6 +795,28 @@ impl IsDiagnostic for DuplicateEnumValue {
 
     fn message(&self) -> BString {
         format!("Duplicate enum value: enumerants of {} share value {}", self.enum_name, self.value).into()
+    }
+}
+
+impl IsDiagnostic for InvalidWordIndexWidth {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Invalid word index width: Word[{}] indexed by Word[{}] requires {} == 2^{}",
+            self.array_width, self.index_width, self.array_width, self.index_width
+        ).into()
+    }
+}
+
+impl IsDiagnostic for IndexNotWordType {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Expected a Word type: {}", self.typ).into()
     }
 }
 

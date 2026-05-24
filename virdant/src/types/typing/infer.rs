@@ -1,4 +1,5 @@
 use super::*;
+use crate::util::log2;
 
 impl Typing {
     pub(super) fn infer<'p>(
@@ -103,6 +104,9 @@ impl Typing {
             AstNodePayload::ExprStrLit(_expr_str_lit) => Ok(self.infer_str(&node)?),
             AstNodePayload::ExprIndex(index) => {
                 Ok(self.infer_index(builder, context, &node, index)?)
+            }
+            AstNodePayload::ExprIndexDyn => {
+                Ok(self.infer_index_dyn(builder, context, &node)?)
             }
             AstNodePayload::ExprIndexRange(indexrange) => {
                 Ok(self.infer_index_range(builder, context, &node, indexrange)?)
@@ -280,6 +284,54 @@ impl Typing {
                 }
             }
         }
+    }
+
+    fn infer_index_dyn<'p>(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        node: &AstNode<'p>,
+    ) -> Result<Option<Type>, ()> {
+        // Dynamic index: a[i] where a: Word[n], i: Word[k], and n == 2^k
+        let subject = node.subject().unwrap();
+        let index = node.index().unwrap();
+
+        // Infer subject type: a must be Word[n]
+        let Ok(Some(subject_typ)) = self.infer(builder, context.clone(), &subject) else {
+            self.flag_cant_infer(&subject);
+            return Err(());
+        };
+
+        let Type::Word(n) = subject_typ else {
+            self.diagnostics.push(
+                diagnostics::IndexNotWordType {
+                    region: subject.region(),
+                    typ: format!("Subject is not a Word type: {:?}", subject_typ).into(),
+                }.into(),
+            );
+            return Err(());
+        };
+
+        let k = match log2(n) {
+            Some(k) => k,
+            None => {
+                self.diagnostics.push(
+                    diagnostics::InvalidWordIndexWidth {
+                        region: node.region(),
+                        array_width: n,
+                        index_width: 0,
+                    }.into(),
+                );
+                return Err(());
+            }
+        };
+
+        let expected_index_type = Type::Word(k);
+
+        self.check(builder, context, &index, &expected_index_type)?;
+
+        self.annotate(node, &Type::Bit);
+        Ok(Some(Type::Bit))
     }
 
     fn infer_index<'p>(

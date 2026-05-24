@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use crate::common::{Width, WordValue};
 use crate::db::Db;
 use crate::diagnostics::{Diagnostic, DiagnosticLevel};
-
 #[cfg(not(target_arch = "wasm32"))]
 use crate::common::source::Source;
 
@@ -85,6 +85,42 @@ where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
     db.set_packages(vec![builtin_package, file_package]);
 
     db
+}
+
+pub fn min_word_width(value: WordValue) -> Width {
+    if value == 0 {
+        0
+    } else {
+        u64::BITS as Width - u64::leading_zeros(value) as Width
+    }
+}
+
+/// Returns `Some(k)` if `n` is a power of two (`n = 2^k`), else `None`.
+pub fn log2(n: Width) -> Option<Width> {
+    if n == 0 || (n & (n - 1)) != 0 {
+        None
+    } else {
+        Some(n.trailing_zeros() as Width)
+    }
+}
+
+pub fn parse_word_literal(literal: &str) -> (WordValue, Option<Width>) {
+    if let Some((value, width)) = literal.split_once('w') {
+        (parse_nat_literal(value), Some(width.parse().unwrap()))
+    } else {
+        (parse_nat_literal(literal), None)
+    }
+}
+
+pub fn parse_nat_literal(literal: &str) -> WordValue {
+    let literal = literal.replace('_', "");
+    if let Some(hex) = literal.strip_prefix("0x") {
+        u64::from_str_radix(hex, 16).unwrap()
+    } else if let Some(bin) = literal.strip_prefix("0b") {
+        u64::from_str_radix(bin, 2).unwrap()
+    } else {
+        literal.parse().unwrap()
+    }
 }
 
 pub fn check_db(db: &Db) -> Result<Arc<Vec<Diagnostic>>, Arc<Vec<Diagnostic>>> {

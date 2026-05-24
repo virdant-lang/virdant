@@ -750,6 +750,13 @@ ExprPrimary: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
+    <ll:@L> <e:ExprPrimary> "[" "dyn" <idx:Expr> "]" <rr:@R> => {
+        let payload = AstNodePayload::ExprIndexDyn;
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
     <ll:@L> <e:ExprPrimary> "[" <index:Index> "]" <rr:@R> => {
         let payload = AstNodePayload::ExprIndex(payload::ExprIndex { index });
         let span = parser.span(ll, rr);
@@ -1034,6 +1041,7 @@ extern {
         "true" => Token::KwTrue,
         "false" => Token::KwFalse,
         "dontcare" => Token::KwDontcare,
+        "dyn" => Token::KwDyn,
         "Str" => Token::Str,
         "DocComment" => Token::DocComment,
         "DocBang" => Token::DocBang,

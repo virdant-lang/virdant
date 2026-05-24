@@ -206,6 +206,7 @@ ExprAscription :=
 ExprPrimary :=
       Ofness "(" ArgList ")"
     | ExprPrimary "->" Ident
+    | ExprPrimary "[" "dyn" Expr "]"
     | ExprPrimary "[" Index "]"
     | ExprPrimary "[" Index ".." Index "]"
     | "@" Ident "(" ArgList ")"

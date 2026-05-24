@@ -8,10 +8,9 @@ test: $(VIR) $(FILECHECK)
 	mkdir -p build
 	for f in $(VIR_FILES); do \
 		name=$$(basename $$f .vir); \
-		$(VIR) -F $$f check > build/$$name.out 2>&1; \
-		rc=$$?; \
+		$(VIR) -F $$f check > build/$$name.out 2>&1 || true; \
 		cat build/$$name.out | $(FILECHECK) $$(realpath $$f) || exit 1; \
-		if [ $$rc -eq 0 ]; then echo "ERROR: $$f reported an unexpected 0 errors"; exit 1; fi \
+		$(VIR) -F $$f check; \
 	done
 
 target/release/vir:
