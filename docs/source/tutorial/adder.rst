@@ -213,3 +213,6 @@ The Complete Example
 .. literalinclude:: /examples/adder.vir
     :caption: adder.vir
     :language: virdant
+
+
+Isn't it lovely when you put it all together?

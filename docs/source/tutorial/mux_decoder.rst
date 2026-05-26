@@ -20,6 +20,13 @@ If Expressions
 We use `if` to select between two different values.
 The curly braces are always required.
 
+The condition in an `if` statement must have type `Bit`,
+which is the boolean type in Virdant.
+
+.. note::
+
+    The two values of `Bit` are `true` and `false`.
+
 
 If Statements
 -------------

@@ -1,0 +1,92 @@
+// WS2812B timing constants for a 100MHz clock (10ns per cycle).
+//
+//   Bit 0: high 0.4us (40 cycles), low 0.85us (85 cycles)
+//   Bit 1: high 0.8us (80 cycles), low 0.45us (45 cycles)
+//   Reset: low for at least 50us (>5000 cycles)
+//
+// Data format: 24 bits per LED, MSB first, in GRB order
+// (Green[7..0], Red[7..0], Blue[7..0]).
+
+/// Drives a chain of WS2812B addressable RGB LEDs.
+///
+/// Accepts 24-bit color values in GRB format and serialises them
+/// using the WS2812B's single-wire NRZ protocol.
+enum type WsState width 2 {
+    Idle    = 0
+    BitHigh = 1
+    BitLow  = 2
+    Finish = 3
+}
+
+mod Ws2812 {
+    incoming clock : Clock
+    incoming start : Bit
+    incoming data  : Word[24]
+
+    outgoing dout  : Bit
+    outgoing busy  : Bit
+
+    reg state    : WsState on clock
+    reg timer    : Word[13] on clock
+    reg sr       : Word[24] on clock
+    reg bitcount : Word[5] on clock
+
+    // How many high cycles for the current bit:
+    //   0 bit  ->  40 cycles,  1 bit  ->  80 cycles
+    wire high_cycles : Word[13]
+    high_cycles := if sr[23] { 80w13 } else { 40w13 }
+
+    // Serial output: high during the bit-high phase, low otherwise
+    dout := match state {
+        case #Idle    => 0w1
+        case #BitHigh => 1w1
+        case #BitLow  => 0w1
+        case #Finish  => 0w1
+    }
+
+    // Busy flag: high whenever a transmission is in progress
+    busy := state != #Idle
+
+    // Timer counts cycles within each state, resetting at transitions
+    timer <= match state {
+        case #Idle     => 0
+        case #BitHigh  => if timer == high_cycles { 0 } else { timer + 1 }
+        case #BitLow   => if timer == 124w13     { 0 } else { timer + 1 }
+        case #Finish   => if timer == 6000w13    { 0 } else { timer + 1 }
+    }
+
+    // State transitions
+    state <= match state {
+        case #Idle =>
+            if start { #BitHigh } else { #Idle }
+
+        case #BitHigh =>
+            if timer == high_cycles { #BitLow } else { #BitHigh }
+
+        case #BitLow =>
+            if timer == 124w13 {
+                if bitcount == 23w5 { #Finish } else { #BitHigh }
+            } else {
+                #BitLow
+            }
+
+        case #Finish =>
+            if timer == 6000w13 { #Idle } else { #Finish }
+    }
+
+    // Shift register: load on start, shift left after each full bit
+    sr <= match state {
+        case #Idle    => if start { data } else { sr }
+        case #BitHigh => sr
+        case #BitLow  => if timer == 124w13 { word(sr[22..0], 0w1) } else { sr }
+        case #Finish  => sr
+    }
+
+    // Bit counter: reset at idle, count each completed bit
+    bitcount <= match state {
+        case #Idle    => 0
+        case #BitHigh => bitcount
+        case #BitLow  => if timer == 124w13 { bitcount + 1 } else { bitcount }
+        case #Finish  => bitcount
+    }
+}
