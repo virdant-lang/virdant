@@ -134,7 +134,7 @@ mod test_docstrings {
         let parsing = parse(&source);
         let root = parsing.root();
         for child in root.children() {
-            if let AstNodePayload::ModDef(m) = child.payload() {
+            if let AstNodePayload::ModDef(_m) = child.payload() {
                 for stmt in child.children() {
                     if let AstNodePayload::Component(c) = stmt.payload() {
                         assert!(c.doc_string.is_some(),
@@ -213,7 +213,7 @@ mod test_docstrings {
         let parsing = parse(&source);
         let root = parsing.root();
         for child in root.children() {
-            if let AstNodePayload::StructDef(s) = child.payload() {
+            if let AstNodePayload::StructDef(_s) = child.payload() {
                 for field in child.children() {
                     if let AstNodePayload::Field(f) = field.payload() {
                         assert!(f.doc_string.is_some(),

@@ -16,7 +16,9 @@ use crate::types::Type;
 pub struct Elaboration {
     components: Vec<ElaboratedComponent>,
     path_to_id: IndexMap<BString, SignalId>,
+    #[allow(dead_code)]
     modules: Vec<ElaboratedModule>,
+    #[allow(dead_code)]
     sockets: Vec<ElaboratedSocket>,
 }
 
@@ -27,8 +29,10 @@ pub struct Elaboration {
 #[derive(Debug)]
 pub struct ElaboratedModule {
     /// The module definition symbol (e.g., `Core`).
+    #[allow(dead_code)]
     moddef: SymbolId,
     /// Fully-qualified path prefix (e.g., `top.core`).
+    #[allow(dead_code)]
     prefix: BString,
 }
 
@@ -39,10 +43,13 @@ pub struct ElaboratedModule {
 #[derive(Debug)]
 pub struct ElaboratedSocket {
     /// The socket definition symbol (e.g., `Mem`).
+    #[allow(dead_code)]
     socketdef: SymbolId,
     /// Client or Server.
+    #[allow(dead_code)]
     role: SocketRole,
     /// Fully-qualified path prefix (e.g., `top.core.mem`).
+    #[allow(dead_code)]
     prefix: BString,
 }
 

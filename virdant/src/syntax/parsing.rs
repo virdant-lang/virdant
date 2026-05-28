@@ -1,4 +1,4 @@
-use bstr::{BStr, BString, ByteSlice};
+use bstr::{BStr, BString};
 
 use crate::diagnostics::{self, Diagnostic};
 use crate::fqn::PackageFqn;
