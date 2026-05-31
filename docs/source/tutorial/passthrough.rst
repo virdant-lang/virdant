@@ -6,7 +6,7 @@ We will start by showing how to define a module in Virdant.
 `Passthrough` is a module which takes in some data and immediately sends it back out unchanged.
 
 .. literalinclude:: /examples/passthrough.vir
-    :caption: buffer.vir
+    :caption: passthrough.vir
     :language: virdant
 
 

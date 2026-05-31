@@ -17,6 +17,9 @@ auto: Makefile $(EXAMPLES) # rustdocs
 watch:
 	bash watch.sh
 
+serve: auto
+	bash serve.sh
+
 .PHONY: auto clean push rustdocs watch
 
 clean:

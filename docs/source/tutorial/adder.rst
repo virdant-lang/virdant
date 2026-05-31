@@ -64,17 +64,6 @@ In both cases, we are driving an `outgoing` port, so we use `:=` and not `<=`.
     The other logical operations in Virdant are `a || b` for logical OR and `!a` for logical NOT.
     In fact, we will use `||` a little later!
 
-Comments
-~~~~~~~~
-One of the great challenges when working with computers is bridging between
-what makes sense to the computer and what makes sense to people.
-It's easy to write code where the intention might not be clear to others (or worse, to yourself a month from now).
-In these cases, it is good to add comments to your code.
-
-Virdant uses `//` for comments.
-Since this is a tutorial, we explain what `&&` and `^^` are doing,
-in case someone is new to digital logic.
-
 
 Full Adder
 ----------

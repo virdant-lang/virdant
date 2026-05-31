@@ -9,11 +9,11 @@ mod Arbiter {
     outgoing grant1 : Bit // client 1 is granted access
 
     // When true, client 0 has priority
-    reg priority_for_client_0 : Bit on clock
+    reg priority_for_client0 : Bit on clock
 
     // while resetting, neither client gets the grant
     if reset {
-        priority_for_client_0 <= true
+        priority_for_client0 <= true
 
         grant0 := false
         grant1 := false
@@ -21,9 +21,9 @@ mod Arbiter {
         // each cycle alternate between
         // giving priority to client 0
         // and giving it to client 1
-        priority_for_client_0 <= !priority_for_client_0
+        priority_for_client0 <= !priority_for_client0
 
-        if priority_for_client_0 {
+        if priority_for_client0 {
             grant0 := req0
             grant1 := req1 && !req0
         } else {

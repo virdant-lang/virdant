@@ -55,6 +55,16 @@ This means, in the event of a tie, if `priority_for_client_0` is `true`, then cl
 Otherwise, if `priority_for_client_0` is `false` and the tie goes to client 1.
 
 
+Comments
+~~~~~~~~
+One of the great challenges when working with computers is bridging between
+what makes sense to the computer and what makes sense to people.
+It's easy to write code where the intention might not be clear to others (or worse, to yourself a month from now).
+In these cases, it is good to add comments to your code.
+
+Virdant uses `//` for comments.
+
+
 Nested If Statements
 --------------------
 The heart of `Arbiter` is this big block of code:
