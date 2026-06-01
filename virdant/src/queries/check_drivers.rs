@@ -14,6 +14,19 @@ use crate::syntax::ast::AstNode;
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 
+/// Validates all driver-related rules for the module identified by `symbol_id`.
+///
+/// Checks that driver types (continuous vs. latched) match their component kinds,
+/// that sink-incompatible components have no drivers, and that sink-capable
+/// components have exactly one driver (not zero and not multiple).
+/// Skips external modules.
+///
+/// Emits these diagnostics:
+/// - [`WrongDriverType`]: driver type does not match the component kind.
+/// - [`DriverForSink`]: a driver targets a component that cannot sink.
+/// - [`NoDrivers`]: a sink-capable component has zero drivers.
+/// - [`MultipleDrivers`]: a sink-capable component has more than one driver.
+/// Also forwards any diagnostics from [`DriverAnalysis`].
 pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<Diagnostic>> {
     let mut diagnostics = vec![];
     let symboltable = builder.get_symboltable();
@@ -40,7 +53,6 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<V
             if !component.can_sink() && driver_entries.len() > 0 {
                 for (_driver_type, location) in driver_entries {
                     let region = builder.get_location_region(location.clone());
-                    // TODO is this error properly named?
                     diagnostics.push(diagnostics::DriverForSink {
                         region,
                         target: path.clone(),

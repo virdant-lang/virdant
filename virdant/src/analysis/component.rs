@@ -32,9 +32,12 @@ pub struct Component {
     id: ComponentId,
     path: BString,
     location: Location,
-    typ: Option<Type>, // TODO Why is this optional?
     flow: Flow,
     kind: Option<ComponentKind>,
+
+    // Type may be absent when `builder.get_type_at()` fails during resolution
+    // We keep the component anyway -- path, flow, kind, and location are independently useful.
+    typ: Option<Type>,
 }
 
 impl ComponentId {

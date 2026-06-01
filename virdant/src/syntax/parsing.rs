@@ -14,8 +14,8 @@ pub type ParseError = lalrpop_util::ErrorRecovery<SourceOffset, Token, TokenErro
 
 #[derive(Debug)]
 pub struct Parsing {
-    pub(super) source: Source, // TODO Do I need the source?
-    pub(super) strings: Vec<BString>, // TODO don't be pub(super)
+    pub(super) source: Source,
+    pub(super) strings: Vec<BString>,
     pub(super) payloads: Vec<AstNodePayload>,
     pub(super) spans: Vec<Span>,
     pub(super) parents: Vec<AstNodeId>,

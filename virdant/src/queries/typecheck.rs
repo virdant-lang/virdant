@@ -76,7 +76,6 @@ pub(crate) fn build_typeof_all(builder: &mut Builder) -> IndexMap<Location, Opti
         let parsing = builder.get_parsing(item.package());
         let item_node = parsing.ast_node(item.location().ast_node_id());
         if !item_node.contains_errors() {
-            // TODO Probably need thread the diagnostics through instead of discarding them here.
             if let Ok(typ) = builder.get_typeof(location.clone()) {
                 typeof_all.insert(location.clone(), Some(typ));
             }
