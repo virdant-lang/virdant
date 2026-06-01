@@ -232,7 +232,8 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
     };
     if !node.contains_errors() {
         diagnostics.extend(typecheck_item(builder, item, &exprroots, &mut use_locations));
-        collect_unused(node.clone(), &mut use_locations, &mut diagnostics);
+        let mut already_unused: IndexSet<BString> = IndexSet::new();
+        collect_unused(node.clone(), &mut use_locations, &mut already_unused, &mut diagnostics);
         if let Some(component_analysis) = &component_analysis {
             collect_bidirectional_drivers(node.clone(), &mut use_locations, component_analysis, &mut diagnostics);
         }
@@ -291,6 +292,7 @@ fn typecheck_item(
 fn collect_unused(
     node: AstNode<'_>,
     use_locations: &mut IndexMap<BString, IndexSet<Location>>,
+    already_unused: &mut IndexSet<BString>,
     diagnostics: &mut Vec<crate::diagnostics::Diagnostic>,
 ) {
     if let AstNodePayload::ModDefStmtUnused = node.payload() {
@@ -349,11 +351,19 @@ fn collect_unused(
                 }
             }
 
+            if already_unused.contains(&resolved_path) {
+                diagnostics.push(crate::diagnostics::RedundantUnused {
+                    region: path_node.region(),
+                    path: resolved_path.clone(),
+                }.into());
+            } else {
+                already_unused.insert(resolved_path.clone());
+            }
             use_locations.entry(resolved_path).or_default().insert(path_node.location());
         }
     }
     for child in node.children() {
-        collect_unused(child, use_locations, diagnostics);
+        collect_unused(child, use_locations, already_unused, diagnostics);
     }
 }
 

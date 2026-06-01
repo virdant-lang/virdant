@@ -1,0 +1,80 @@
+// RedundantUnused: a component is marked `unused` two or more times.
+
+// A top-level incoming port marked unused twice.
+mod DupUnusedTop {
+    incoming clock : Clock
+    outgoing out : Bit
+
+    unused clock
+    // CHECK: Redundant `unused`: clock
+    unused clock
+
+    out := true
+}
+
+// A submodule port marked unused twice inside an it block.
+mod DupUnusedIt {
+    outgoing sum : Bit
+
+    mod ha of HalfAdder {
+        it.a := false
+        it.b := false
+        unused it.carry_out
+        // CHECK: Redundant `unused`: ha.carry_out
+        unused it.carry_out
+    }
+
+    sum := ha.sum
+}
+
+// Same path marked unused at top level then again.
+mod DupUnusedMixed {
+    outgoing sum : Bit
+
+    mod ha of HalfAdder {
+        it.a := false
+        it.b := false
+    }
+
+    unused ha.carry_out
+    // CHECK: Redundant `unused`: ha.carry_out
+    unused ha.carry_out
+
+    sum := ha.sum
+}
+
+// Only a single unused per path -- no redundant diagnostic.
+mod SingleUnused {
+    incoming clock : Clock
+    outgoing out : Bit
+
+    unused clock
+    // CHECK-NOT: Redundant `unused`
+
+    out := true
+}
+
+// Unused on two *different* paths -- no redundant diagnostic.
+mod TwoDifferentPaths {
+    incoming clock : Clock
+    incoming reset : Bit
+    outgoing out : Bit
+
+    unused clock
+    unused reset
+    // CHECK-NOT: Redundant `unused`
+
+    out := true
+}
+
+mod HalfAdder {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing sum : Bit
+    outgoing carry_out : Bit
+
+    sum := a ^ b
+    carry_out := a & b
+}
+
+// CHECK: Check failed

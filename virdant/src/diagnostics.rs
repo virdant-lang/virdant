@@ -317,6 +317,12 @@ pub struct EmptyDriverBlock {
     pub region: Region,
 }
 
+/// A single component is unused multiple times
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RedundantUnused {
+    pub region: Region,
+    pub path: BString,
+}
 
 #[derive(Debug, Clone)]
 pub struct Soften {
@@ -836,6 +842,16 @@ impl IsDiagnostic for EmptyDriverBlock {
     }
 
     fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }
+}
+
+impl IsDiagnostic for RedundantUnused {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Redundant `unused`: {}", self.path).into()
+    }
 }
 
 impl Diagnostic {
