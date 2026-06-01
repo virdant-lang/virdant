@@ -311,6 +311,12 @@ pub struct IndexNotWordType {
     pub typ: BString,
 }
 
+/// A driver block is empty
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmptyDriverBlock {
+    pub region: Region,
+}
+
 
 #[derive(Debug, Clone)]
 pub struct Soften {
@@ -818,6 +824,18 @@ impl IsDiagnostic for IndexNotWordType {
     fn message(&self) -> BString {
         format!("Expected a Word type: {}", self.typ).into()
     }
+}
+
+impl IsDiagnostic for EmptyDriverBlock {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Empty driver block").into()
+    }
+
+    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }
 }
 
 impl Diagnostic {

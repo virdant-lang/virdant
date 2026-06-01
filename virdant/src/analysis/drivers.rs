@@ -338,6 +338,13 @@ fn collect_block_drivers(
                     if matches!(it_block.payload(), AstNodePayload::It) {
                         let block = &it_block.children()[0];
 
+                        if block.children().is_empty() {
+                            diagnostics.push(crate::diagnostics::EmptyDriverBlock {
+                                region: it_block.region(),
+                            }.into());
+                            continue;
+                        }
+
                         let name_with_context = if let Some(ctx) = it_context {
                             let mut new_name = BString::from(ctx);
                             new_name.push(b'.');
@@ -361,6 +368,13 @@ fn collect_block_drivers(
                     if matches!(child.payload(), AstNodePayload::It) {
                         let block = &child.children()[0];
 
+                        if block.children().is_empty() {
+                            diagnostics.push(crate::diagnostics::EmptyDriverBlock {
+                                region: child.region(),
+                            }.into());
+                            continue;
+                        }
+
                         let name_with_context = if let Some(ctx) = it_context {
                             let mut new_name = BString::from(ctx);
                             new_name.push(b'.');
@@ -383,6 +397,13 @@ fn collect_block_drivers(
                 for child in stmt.children() {
                     if matches!(child.payload(), AstNodePayload::It) {
                         let block = &child.children()[0];
+
+                        if block.children().is_empty() {
+                            diagnostics.push(crate::diagnostics::EmptyDriverBlock {
+                                region: child.region(),
+                            }.into());
+                            continue;
+                        }
 
                         let name_with_context = if let Some(ctx) = it_context {
                             let mut new_name = BString::from(ctx);
