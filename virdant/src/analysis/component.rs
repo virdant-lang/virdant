@@ -2,12 +2,14 @@ use std::sync::Arc;
 
 use bstr::{BStr, BString};
 use bstr::ByteSlice;
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::Location;
 use crate::analysis::symbols::SymbolId;
 use crate::db::Builder;
 use crate::fqn::PackageFqn;
+use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
+use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
 use crate::common::{ChannelDir, ComponentKind, Flow, SocketRole};
@@ -18,6 +20,8 @@ pub struct ComponentAnalysis {
     moddef: SymbolId,
     components: Vec<(BString, Component)>,
     diagnostics: Vec<Diagnostic>,
+
+    references: IndexMap<Location, (ComponentId, ReferenceKind)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -38,6 +42,16 @@ pub struct Component {
     // Type may be absent when `builder.get_type_at()` fails during resolution
     // We keep the component anyway -- path, flow, kind, and location are independently useful.
     typ: Option<Type>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ReferenceKind {
+    /// Component used as an ExprReference
+    Expr,
+    /// Component used as the target of a Driver
+    DriverTarget,
+    /// Component marked unused with `unused` statement (ModDefStmtUnused)
+    Unused,
 }
 
 impl ComponentId {
@@ -127,6 +141,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
         moddef,
         components: vec![],
         diagnostics: vec![],
+        references: IndexMap::new(),
     };
 
     let symboltable = builder.get_symboltable();
@@ -381,6 +396,11 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
         }
     }
 
+    // Collect references after all components are registered.
+    let mut references = IndexMap::new();
+    collect_references(&item_ast.children(), &component_analysis, &mut references, None);
+    component_analysis.references = references;
+
     Arc::new(component_analysis)
 }
 
@@ -390,4 +410,354 @@ pub(crate) fn build_component(
 ) -> Arc<Component> {
     let component_analysis = builder.get_component_analysis(component_id.item_id);
     Arc::new(component_analysis.component(component_id).unwrap().clone())
+}
+
+// ---------------------------------------------------------------------------
+// Reference collection
+// ---------------------------------------------------------------------------
+
+/// Walk the enclosing match arms to determine whether `name` at `start_id` is
+/// shadowed by a pattern-bound variable (PatIdent or PatCtor sub-variable).
+fn is_shadowed_by_pattern(
+    parsing: &Parsing,
+    start_id: AstNodeId,
+    name: &BStr,
+) -> bool {
+    let mut child_id = start_id;
+    loop {
+        let child = parsing.ast_node(child_id);
+        let parent_node = match child.parent() {
+            Some(p) => p,
+            None => return false,
+        };
+        let parent_id = parent_node.id();
+        let parent = parsing.ast_node(parent_id);
+        match parent.payload() {
+            AstNodePayload::ModDefStmtMatch | AstNodePayload::ExprMatch => {
+                let children = parent.children();
+                for (pat_opt, body) in match_arm_children(&children) {
+                    if body.id() == child_id {
+                        if let Some(pat) = pat_opt {
+                            if let AstNodePayload::PatIdent(pat_ident) = pat.payload() {
+                                if parsing.string(pat_ident.name) == name {
+                                    return true;
+                                }
+                            }
+                            if let AstNodePayload::PatCtor(_) = pat.payload() {
+                                for var in pat.children() {
+                                    if let Some(interned) = var.path() {
+                                        if parsing.string(interned) == name {
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        if parent.is_item() {
+            return false;
+        }
+        child_id = parent_id;
+    }
+}
+
+/// Walk every `ExprReference` inside `expr` and insert the locations that
+/// resolve to a known component into `references`.  References that are
+/// shadowed by a match-arm pattern binding are skipped.
+fn collect_references_in_expr(
+    expr: &AstNode,
+    component_analysis: &ComponentAnalysis,
+    references: &mut IndexMap<Location, (ComponentId, ReferenceKind)>,
+    it_context: Option<&BStr>,
+) {
+    let parsing = expr.parsing;
+    let mut stack: Vec<AstNodeId> = vec![expr.id()];
+    while let Some(node_id) = stack.pop() {
+        let node = parsing.ast_node(node_id);
+        if matches!(node.payload(), AstNodePayload::ExprReference) {
+            if let Some(path) = node.path() {
+                let mut name = parsing.string(path).to_owned();
+
+                // Resolve `it` keyword.
+                if name.starts_with(b"it.") || name == b"it" {
+                    if let Some(ctx) = it_context {
+                        if name == b"it" {
+                            name = ctx.to_owned();
+                        } else {
+                            let suffix: BString = name[3..].to_owned().into();
+                            name = ctx.to_owned();
+                            name.push(b'.');
+                            name.extend_from_slice(&suffix);
+                        }
+                    } else {
+                        // `it` outside an it block is an error;
+                        // skip the reference here.
+                        continue;
+                    }
+                }
+
+                // Skip if the name is shadowed by a match-arm pattern binding.
+                if is_shadowed_by_pattern(parsing, node_id, name.as_bstr()) {
+                    continue;
+                }
+
+                if let Some(component) = component_analysis.resolve(name.as_bstr()) {
+                    references.insert(node.location(), (component.id(), ReferenceKind::Expr));
+                }
+            }
+        }
+        for child in node.children() {
+            stack.push(child.id());
+        }
+    }
+}
+
+/// Walk moddef-level statements and collect reference locations for every
+/// driver target and every `ExprReference` that resolves to a known component.
+fn collect_references(
+    stmts: &[AstNode],
+    component_analysis: &ComponentAnalysis,
+    references: &mut IndexMap<Location, (ComponentId, ReferenceKind)>,
+    it_context: Option<&BStr>,
+) {
+    for stmt in stmts {
+        match stmt.payload() {
+            AstNodePayload::Driver(_driver) => {
+                // Record the driver target.
+                let parsing = stmt.parsing;
+                if let Some(target) = stmt.target() {
+                    let mut target_str = parsing.string(target).to_owned();
+                    if let Some(ctx) = it_context {
+                        if target_str.starts_with(b"it.") {
+                            let suffix: BString = target_str[3..].to_owned().into();
+                            target_str = ctx.to_owned();
+                            target_str.push(b'.');
+                            target_str.extend_from_slice(&suffix);
+                        } else if target_str == b"it" {
+                            target_str = ctx.to_owned();
+                        }
+                    }
+                    if let Some(component) = component_analysis.resolve(target_str.as_bstr()) {
+                        let target_loc = stmt.child(0).location();
+                        references.insert(target_loc, (component.id(), ReferenceKind::DriverTarget));
+                    }
+                }
+                // Walk the driver expression.
+                if let Some(expr_node) = stmt.driver() {
+                    collect_references_in_expr(
+                        &expr_node,
+                        component_analysis,
+                        references,
+                        it_context,
+                    );
+                }
+            }
+            AstNodePayload::BidirectionalDriver => {
+                let parsing = stmt.parsing;
+                let lhs_node = stmt.child(0);
+                let rhs_node = stmt.child(1);
+                for side_node in [&lhs_node, &rhs_node] {
+                    if let Some(side_path) = side_node.path() {
+                        let mut side_str = parsing.string(side_path).to_owned();
+                        if let Some(ctx) = it_context {
+                            if side_str.starts_with(b"it.") {
+                                let suffix: BString = side_str[3..].to_owned().into();
+                                side_str = ctx.to_owned();
+                                side_str.push(b'.');
+                                side_str.extend_from_slice(&suffix);
+                            } else if side_str == b"it" {
+                                side_str = ctx.to_owned();
+                            }
+                        }
+                        if let Some(component) =
+                            component_analysis.resolve(side_str.as_bstr())
+                        {
+                            references
+                                .insert(side_node.location(), (component.id(), ReferenceKind::Expr));
+                        }
+                    }
+                }
+            }
+            AstNodePayload::Submodule(submodule) => {
+                let name = stmt.parsing.string(submodule.name);
+                let children = stmt.children();
+                if children.len() == 2 {
+                    let it_block = &children[1];
+                    if matches!(it_block.payload(), AstNodePayload::It) {
+                        let block = &it_block.children()[0];
+                        let name_with_context =
+                            if let Some(ctx) = it_context {
+                                let mut new_name = BString::from(ctx);
+                                new_name.push(b'.');
+                                new_name.extend_from_slice(name);
+                                new_name
+                            } else {
+                                BString::from(name)
+                            };
+                        collect_references(
+                            &block.children(),
+                            component_analysis,
+                            references,
+                            Some(name_with_context.as_bstr()),
+                        );
+                    }
+                }
+            }
+            AstNodePayload::Component(component) => {
+                let name = stmt.parsing.string(component.name);
+                for child in stmt.children() {
+                    if matches!(child.payload(), AstNodePayload::It) {
+                        let block = &child.children()[0];
+                        let name_with_context =
+                            if let Some(ctx) = it_context {
+                                let mut new_name = BString::from(ctx);
+                                new_name.push(b'.');
+                                new_name.extend_from_slice(name);
+                                new_name
+                            } else {
+                                BString::from(name)
+                            };
+                        collect_references(
+                            &block.children(),
+                            component_analysis,
+                            references,
+                            Some(name_with_context.as_bstr()),
+                        );
+                    }
+                }
+            }
+            AstNodePayload::Socket(socket) => {
+                let name = stmt.parsing.string(socket.name);
+                for child in stmt.children() {
+                    if matches!(child.payload(), AstNodePayload::It) {
+                        let block = &child.children()[0];
+                        let name_with_context =
+                            if let Some(ctx) = it_context {
+                                let mut new_name = BString::from(ctx);
+                                new_name.push(b'.');
+                                new_name.extend_from_slice(name);
+                                new_name
+                            } else {
+                                BString::from(name)
+                            };
+                        collect_references(
+                            &block.children(),
+                            component_analysis,
+                            references,
+                            Some(name_with_context.as_bstr()),
+                        );
+                    }
+                }
+            }
+            AstNodePayload::ModDefStmtIf => {
+                let children = stmt.children();
+                let has_else = children.len() % 2 == 1;
+                let num_pairs = children.len() / 2;
+                for i in 0..num_pairs {
+                    let block = &children[2 * i + 1];
+                    collect_references(
+                        &block.children(),
+                        component_analysis,
+                        references,
+                        it_context,
+                    );
+                }
+                if has_else {
+                    let else_block = children.last().unwrap();
+                    collect_references(
+                        &else_block.children(),
+                        component_analysis,
+                        references,
+                        it_context,
+                    );
+                }
+            }
+            AstNodePayload::ModDefStmtMatch => {
+                let children = stmt.children();
+                for (_pat_opt, body) in match_arm_children(&children) {
+                    collect_references(
+                        &body.children(),
+                        component_analysis,
+                        references,
+                        it_context,
+                    );
+                }
+            }
+            AstNodePayload::ModDefStmtUnused => {
+                let parsing = stmt.parsing;
+                let path_node = stmt.child(0);
+                if let Some(path_interned) = path_node.path() {
+                    let mut resolved =
+                        parsing.string(path_interned).to_owned();
+                    if resolved.starts_with(b"it.")
+                        || resolved == b"it"
+                    {
+                        // Walk up to find the enclosing it-context.
+                        let mut ctx_name: Option<BString> = None;
+                        let mut current_id = stmt.id();
+                        while let Some(pid) =
+                            parsing.ast_node(current_id).parent
+                        {
+                            let parent = parsing.ast_node(pid);
+                            if let AstNodePayload::Submodule(m) =
+                                parent.payload()
+                            {
+                                ctx_name = Some(
+                                    parsing.string(m.name).to_owned(),
+                                );
+                                break;
+                            } else if let AstNodePayload::Component(
+                                c,
+                            ) = parent.payload()
+                            {
+                                ctx_name = Some(
+                                    parsing.string(c.name).to_owned(),
+                                );
+                                break;
+                            } else if let AstNodePayload::Socket(
+                                s,
+                            ) = parent.payload()
+                            {
+                                ctx_name = Some(
+                                    parsing.string(s.name).to_owned(),
+                                );
+                                break;
+                            }
+                            current_id = pid;
+                        }
+                        if let Some(ctx) = ctx_name {
+                            if resolved.starts_with(b"it.") {
+                                let suffix: BString =
+                                    resolved[3..].to_owned().into();
+                                resolved = ctx;
+                                resolved.push(b'.');
+                                resolved.extend_from_slice(&suffix);
+                            } else {
+                                resolved = ctx;
+                            }
+                        }
+                    }
+                    if let Some(component) =
+                        component_analysis.resolve(resolved.as_bstr())
+                    {
+                        references
+                            .insert(path_node.location(), (component.id(), ReferenceKind::Unused));
+                    }
+                }
+            }
+            AstNodePayload::ModDefStmtBlock => {
+                collect_references(
+                    &stmt.children(),
+                    component_analysis,
+                    references,
+                    it_context,
+                );
+            }
+            _ => {}
+        }
+    }
 }
