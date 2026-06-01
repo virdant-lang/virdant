@@ -8,7 +8,7 @@ use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::grammar::PackageParser;
 use crate::syntax::token::{Token, TokenError, tokenize};
 
-lalrpop_util::lalrpop_mod!(grammar, "/syntax/grammar.rs");
+lalrpop_util::lalrpop_mod!(grammar, "/syntax/virdant.rs");
 
 pub type ParseError = lalrpop_util::ErrorRecovery<SourceOffset, Token, TokenError>;
 
