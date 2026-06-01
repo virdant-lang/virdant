@@ -1,0 +1,7 @@
+import packages
+
+// CHECK: Unresolved import: does_not_exist
+import does_not_exist
+
+mod Top {
+}

@@ -16,7 +16,9 @@ use crate::syntax::payload::AstNodePayload;
 
 pub(crate) fn build_package_analysis(builder: &mut Builder, package: PackageFqn) -> Arc<PackageAnalysis> {
     let parsing = builder.get_parsing(package);
-    Arc::new(PackageAnalysis::new(parsing))
+    let packages = builder.get_packages();
+    let analysis = PackageAnalysis::new(&packages, parsing.clone());
+    Arc::new(analysis)
 }
 
 
@@ -30,7 +32,7 @@ pub struct PackageAnalysis {
 }
 
 impl PackageAnalysis {
-    pub fn new(parsing: Arc<Parsing>) -> PackageAnalysis {
+    pub fn new(packages: &[PackageFqn], parsing: Arc<Parsing>) -> PackageAnalysis {
         let mut analysis = PackageAnalysis {
             package: parsing.package(),
             imports: vec![PackageFqn::new("builtin".into())].into_iter().collect(),
@@ -41,8 +43,23 @@ impl PackageAnalysis {
 
         analysis.add_imports(parsing.clone());
         analysis.add_items(parsing.clone());
-
+        analysis.validate_imports(packages, parsing);
         analysis
+    }
+
+    fn validate_imports(&mut self, packages: &[PackageFqn], parsing: Arc<Parsing>) {
+        let root = parsing.root();
+        for child_node in root.children() {
+            if let AstNodePayload::Import(import) = child_node.payload() {
+                let package = PackageFqn::new(parsing.string(import.package).into());
+                if !packages.contains(&package) {
+                    self.diagnostics.push(diagnostics::UnresolvedImportError {
+                        region: Region::new(self.package(), child_node.span()),
+                        imported_package: package,
+                    }.into());
+                }
+            }
+        }
     }
 
     pub fn package(&self) -> PackageFqn {

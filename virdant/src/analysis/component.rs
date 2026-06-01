@@ -159,11 +159,14 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     // ensure all dependent packages have been created
     // TODO this doesn't recurse though?
     let package_analysis = builder.get_package_analysis(location.package());
+    let packages = builder.get_packages();
     for import in package_analysis.imports() {
         if import == location.package() {
             continue;
         }
-        builder.get_package_analysis(import);
+        if packages.contains(&import) {
+            builder.get_package_analysis(import);
+        }
     }
 
     for stmt in item_ast.children() {
