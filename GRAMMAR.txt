@@ -1,4 +1,4 @@
-Package := DocBang PackageStmt*
+Package := DocBang? PackageStmt*
 
 PackageStmt :=
       PackageImport
@@ -6,13 +6,9 @@ PackageStmt :=
 
 PackageImport := "import" Ident
 
-DocString :=
-      ("DocComment")+
-    |
+DocString := ("DocComment")+
 
-DocBang :=
-      ("DocBang")+
-    |
+DocBang := ("DocBang")+
 
 Item :=
       ModDef
@@ -21,17 +17,16 @@ Item :=
     | EnumDef
     | BuiltinDef
     | SocketDef
-    | FnDef
 
-ModDef := DocString "ext"? "export"? "mod" Ident "{" ModDefStmt* "}"
+ModDef := DocString? "ext"? "export"? "mod" Ident "{" ModDefStmt* "}"
 
-StructDef := DocString "struct" "type" Ident "{" StructDefStmt* "}"
+StructDef := DocString? "struct" "type" Ident "{" StructDefStmt* "}"
 
-StructDefStmt := DocString Ident ":" Type
+StructDefStmt := DocString? Ident ":" Type
 
-UnionDef := DocString "union" "type" Ident "{" UnionDefStmt* "}"
+UnionDef := DocString? "union" "type" Ident "{" UnionDefStmt* "}"
 
-UnionDefStmt := DocString Ident ParamList?
+UnionDefStmt := DocString? Ident ParamList?
 
 ParamList := "(" Params? ")"
 
@@ -39,7 +34,7 @@ Params :=
       Param
     | Params "," Param
 
-Param := DocString Ident ":" Type
+Param := DocString? Ident ":" Type
 
 GenericsParams :=
       "[" Nat "]"
@@ -47,19 +42,17 @@ GenericsParams :=
 
 Generics := "[" Ident ":" Kind "]"
 
-EnumDef := DocString "enum" "type" Ident "width" Width "{" EnumDefStmt* "}"
+EnumDef := DocString? "enum" "type" Ident "width" Width "{" EnumDefStmt* "}"
 
-EnumDefStmt := DocString Ident "=" Expr
+EnumDefStmt := DocString? Ident "=" Expr
 
-BuiltinDef := DocString "builtin" "type" Ident Generics? "{" "}"
+BuiltinDef := DocString? "builtin" "type" Ident Generics? "{" "}"
 
-SocketDef := DocString "socket" Ident "{" SocketDefStmt* "}"
+SocketDef := DocString? "socket" Ident "{" SocketDefStmt* "}"
 
 SocketDefStmt :=
-      DocString "cosi" Ident ":" Type
-    | DocString "soci" Ident ":" Type
-
-FnDef := DocString "fn" Ident ParamList "->" Type "{" Expr "}"
+      DocString? "cosi" Ident ":" Type
+    | DocString? "soci" Ident ":" Type
 
 ModDefStmt :=
       ModDefStmtComponent
@@ -71,12 +64,12 @@ ModDefStmt :=
     | ModDefStmtUnused
 
 ModDefStmtComponent :=
-      DocString "incoming" Ident ":" Type OnClause? ItBlock?
-    | DocString "outgoing" Ident ":" Type OnClause? ItBlock?
-    | DocString "outgoing" "wire" Ident ":" Type OnClause? ItBlock?
-    | DocString "outgoing" "reg" Ident ":" Type OnClause? ItBlock?
-    | DocString "wire" Ident ":" Type OnClause? ItBlock?
-    | DocString "reg" Ident ":" Type OnClause? ItBlock?
+      DocString? "incoming" Ident ":" Type OnClause? ItBlock?
+    | DocString? "outgoing" Ident ":" Type OnClause? ItBlock?
+    | DocString? "outgoing" "wire" Ident ":" Type OnClause? ItBlock?
+    | DocString? "outgoing" "reg" Ident ":" Type OnClause? ItBlock?
+    | DocString? "wire" Ident ":" Type OnClause? ItBlock?
+    | DocString? "reg" Ident ":" Type OnClause? ItBlock?
 
 OnClause := "on" Expr
 
@@ -85,13 +78,13 @@ ModDefStmtDriver :=
     | Path "<=" Expr
     | Path ":=:" Path
 
-ModDefStmtInstance := DocString "mod" Ident "of" Ofness ItBlock?
+ModDefStmtInstance := DocString? "mod" Ident "of" Ofness ItBlock?
 
 ItBlock := ModDefStmtBlock
 
 ModDefStmtSocket :=
-      DocString "client" "socket" Ident "of" Ofness ItBlock?
-    | DocString "server" "socket" Ident "of" Ofness ItBlock?
+      DocString? "client" "socket" Ident "of" Ofness ItBlock?
+    | DocString? "server" "socket" Ident "of" Ofness ItBlock?
 
 ModDefStmtIf := ModDefStmtIfStart ModDefStmtIfMiddle* ModDefStmtIfEnd?
 
@@ -303,7 +296,6 @@ Tokens:
   "export"
   "ext"
   "false"
-  "fn"
   "if"
   "import"
   "incoming"

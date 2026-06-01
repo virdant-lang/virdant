@@ -6,10 +6,10 @@ build: virdant/target/lib
 
 # Cargo's build script places generated artifacts in OUT_DIR, which has the
 # concrete form: target/<profile>/build/<crate>-<hash>/out/foo.grammar
-# (for example: target/debug/build/virdant-5ca77787fdbb9ef7/out/syntax/grammar.grammar).
+# (for example: target/debug/build/virdant-5ca77787fdbb9ef7/out/syntax/virdant.grammar).
 grammar:
 	cargo build -p virdant
-	cp $$(ls -t target/debug/build/virdant-*/out/syntax/grammar.grammar | head -n1) GRAMMAR.txt
+	cp $$(ls -t target/debug/build/virdant-*/out/syntax/virdant.grammar | head -n1) GRAMMAR.txt
 
 virdant/target/lib:
 	mkdir -p target/lib
