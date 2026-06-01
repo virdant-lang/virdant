@@ -105,6 +105,11 @@ impl ComponentAnalysis {
         None
     }
 
+    pub fn component_at(&self, location: Location) -> Option<&Component> {
+        let (component_id, _) = self.references.get(&location)?;
+        self.component(*component_id)
+    }
+
     pub fn moddef_symbol_id(&self) -> SymbolId {
         self.moddef
     }
@@ -397,9 +402,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     }
 
     // Collect references after all components are registered.
-    let mut references = IndexMap::new();
-    collect_references(&item_ast.children(), &component_analysis, &mut references, None);
-    component_analysis.references = references;
+    collect_references(&item_ast.children(), &mut component_analysis, None);
 
     Arc::new(component_analysis)
 }
@@ -470,8 +473,7 @@ fn is_shadowed_by_pattern(
 /// shadowed by a match-arm pattern binding are skipped.
 fn collect_references_in_expr(
     expr: &AstNode,
-    component_analysis: &ComponentAnalysis,
-    references: &mut IndexMap<Location, (ComponentId, ReferenceKind)>,
+    component_analysis: &mut ComponentAnalysis,
     it_context: Option<&BStr>,
 ) {
     let parsing = expr.parsing;
@@ -494,8 +496,12 @@ fn collect_references_in_expr(
                             name.extend_from_slice(&suffix);
                         }
                     } else {
-                        // `it` outside an it block is an error;
-                        // skip the reference here.
+                        // `it` outside an it block is an error.
+                        component_analysis.diagnostics.push(
+                            crate::diagnostics::ItNotInItBlock {
+                                region: node.region(),
+                            }.into(),
+                        );
                         continue;
                     }
                 }
@@ -506,7 +512,10 @@ fn collect_references_in_expr(
                 }
 
                 if let Some(component) = component_analysis.resolve(name.as_bstr()) {
-                    references.insert(node.location(), (component.id(), ReferenceKind::Expr));
+                    component_analysis.references.insert(
+                        node.location(),
+                        (component.id(), ReferenceKind::Expr),
+                    );
                 }
             }
         }
@@ -520,8 +529,7 @@ fn collect_references_in_expr(
 /// driver target and every `ExprReference` that resolves to a known component.
 fn collect_references(
     stmts: &[AstNode],
-    component_analysis: &ComponentAnalysis,
-    references: &mut IndexMap<Location, (ComponentId, ReferenceKind)>,
+    component_analysis: &mut ComponentAnalysis,
     it_context: Option<&BStr>,
 ) {
     for stmt in stmts {
@@ -543,7 +551,7 @@ fn collect_references(
                     }
                     if let Some(component) = component_analysis.resolve(target_str.as_bstr()) {
                         let target_loc = stmt.child(0).location();
-                        references.insert(target_loc, (component.id(), ReferenceKind::DriverTarget));
+                        component_analysis.references.insert(target_loc, (component.id(), ReferenceKind::DriverTarget));
                     }
                 }
                 // Walk the driver expression.
@@ -551,7 +559,6 @@ fn collect_references(
                     collect_references_in_expr(
                         &expr_node,
                         component_analysis,
-                        references,
                         it_context,
                     );
                 }
@@ -576,7 +583,7 @@ fn collect_references(
                         if let Some(component) =
                             component_analysis.resolve(side_str.as_bstr())
                         {
-                            references
+                            component_analysis.references
                                 .insert(side_node.location(), (component.id(), ReferenceKind::Expr));
                         }
                     }
@@ -601,7 +608,6 @@ fn collect_references(
                         collect_references(
                             &block.children(),
                             component_analysis,
-                            references,
                             Some(name_with_context.as_bstr()),
                         );
                     }
@@ -609,8 +615,32 @@ fn collect_references(
             }
             AstNodePayload::Component(component) => {
                 let name = stmt.parsing.string(component.name);
+                // Walk clock/reset expressions embedded in the component
+                // declaration (e.g., `reg state : State on clock`).
                 for child in stmt.children() {
-                    if matches!(child.payload(), AstNodePayload::It) {
+                    if matches!(child.payload(), AstNodePayload::ExprReference) {
+                        if let Some(path) = child.path() {
+                            let mut ref_name = stmt.parsing.string(path).to_owned();
+                            if let Some(ctx) = it_context {
+                                if ref_name.starts_with(b"it.") {
+                                    let suffix: BString = ref_name[3..].to_owned().into();
+                                    ref_name = ctx.to_owned();
+                                    ref_name.push(b'.');
+                                    ref_name.extend_from_slice(&suffix);
+                                } else if ref_name == b"it" {
+                                    ref_name = ctx.to_owned();
+                                }
+                            }
+                            if let Some(component) =
+                                component_analysis.resolve(ref_name.as_bstr())
+                            {
+                                component_analysis.references.insert(
+                                    child.location(),
+                                    (component.id(), ReferenceKind::Expr),
+                                );
+                            }
+                        }
+                    } else if matches!(child.payload(), AstNodePayload::It) {
                         let block = &child.children()[0];
                         let name_with_context =
                             if let Some(ctx) = it_context {
@@ -624,7 +654,6 @@ fn collect_references(
                         collect_references(
                             &block.children(),
                             component_analysis,
-                            references,
                             Some(name_with_context.as_bstr()),
                         );
                     }
@@ -647,7 +676,6 @@ fn collect_references(
                         collect_references(
                             &block.children(),
                             component_analysis,
-                            references,
                             Some(name_with_context.as_bstr()),
                         );
                     }
@@ -658,11 +686,13 @@ fn collect_references(
                 let has_else = children.len() % 2 == 1;
                 let num_pairs = children.len() / 2;
                 for i in 0..num_pairs {
+                    let condition = &children[2 * i];
+                    // Walk references in the if/else-if condition expression.
+                    collect_references_in_expr(condition, component_analysis, it_context);
                     let block = &children[2 * i + 1];
                     collect_references(
                         &block.children(),
                         component_analysis,
-                        references,
                         it_context,
                     );
                 }
@@ -671,18 +701,20 @@ fn collect_references(
                     collect_references(
                         &else_block.children(),
                         component_analysis,
-                        references,
                         it_context,
                     );
                 }
             }
             AstNodePayload::ModDefStmtMatch => {
                 let children = stmt.children();
+                // Walk references in the match subject expression (first child).
+                if let Some(subject) = children.first() {
+                    collect_references_in_expr(subject, component_analysis, it_context);
+                }
                 for (_pat_opt, body) in match_arm_children(&children) {
                     collect_references(
                         &body.children(),
                         component_analysis,
-                        references,
                         it_context,
                     );
                 }
@@ -744,7 +776,7 @@ fn collect_references(
                     if let Some(component) =
                         component_analysis.resolve(resolved.as_bstr())
                     {
-                        references
+                        component_analysis.references
                             .insert(path_node.location(), (component.id(), ReferenceKind::Unused));
                     }
                 }
@@ -753,7 +785,6 @@ fn collect_references(
                 collect_references(
                     &stmt.children(),
                     component_analysis,
-                    references,
                     it_context,
                 );
             }

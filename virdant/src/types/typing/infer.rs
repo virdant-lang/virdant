@@ -9,82 +9,7 @@ impl Typing {
         node: &AstNode<'p>,
     ) -> Result<Option<Type>, ()> {
         match node.payload() {
-            AstNodePayload::ExprReference => {
-                // TODO HACK
-                let parsing = node.parsing();
-                let path = parsing.string(node.path().unwrap());
-                let mut path_str = path.to_owned();
-                let original_path = path.to_owned();
-
-                let mut original_was_it = false;
-                if path_str.starts_with(b"it.") || path_str == b"it" {
-                    original_was_it = true;
-                    let mut current_id = node.id();
-                    let mut saw_it_block = false;
-                    let mut found_parent = false;
-                    while let Some(parent_id) = parsing.ast_node(current_id).parent {
-                        let parent = parsing.ast_node(parent_id);
-                        if matches!(parent.payload(), AstNodePayload::It) {
-                            saw_it_block = true;
-                        }
-
-                        let mut resolved_name = None;
-                        if let AstNodePayload::Submodule(module) = parent.payload() {
-                            resolved_name = Some(parsing.string(module.name));
-                        } else if let AstNodePayload::Component(component) = parent.payload() {
-                            resolved_name = Some(parsing.string(component.name));
-                        } else if let AstNodePayload::Socket(socket) = parent.payload() {
-                            resolved_name = Some(parsing.string(socket.name));
-                        }
-
-                        if let Some(name) = resolved_name {
-                            found_parent = true;
-                            if !saw_it_block {
-                                self.diagnostics.push(crate::diagnostics::ItNotInItBlock {
-                                    region: node.region(),
-                                }.into());
-                            }
-                            if path_str.starts_with(b"it.") {
-                                let suffix = path_str[3..].to_owned();
-                                path_str.clear();
-                                path_str.extend_from_slice(name);
-                                path_str.push(b'.');
-                                path_str.extend_from_slice(&suffix);
-                            } else {
-                                path_str = name.to_owned();
-                            }
-                            break;
-                        }
-                        current_id = parent_id;
-                    }
-                    if !found_parent {
-                        self.diagnostics.push(crate::diagnostics::ItNotInItBlock {
-                            region: node.region(),
-                        }.into());
-                    }
-                }
-
-                if let Some((referent, typ)) = context.get(path_str.clone()) {
-                    self.tags
-                        .insert(node.location(), Tag::ReferentResolution(referent));
-                    self.use_component(path_str.as_bstr(), node.location());
-                    if let Some(typ) = typ {
-                        self.annotate(&node, &typ);
-                        Ok(Some(typ))
-                    } else {
-                        Err(())
-                    }
-                } else {
-                    // Use original path (with 'it') for error message if applicable
-                    let error_path = if original_was_it {
-                        original_path
-                    } else {
-                        path_str
-                    };
-                    self.flag_unknown(node, format!("Unknown component {}", error_path));
-                    Err(())
-                }
-            }
+            AstNodePayload::ExprReference => Ok(self.infer_reference(builder, context, &node)?),
             AstNodePayload::ExprBitLit(_expr_bit_lit) => {
                 self.annotate(&node, &Type::Bit);
                 Ok(Some(Type::Bit))
@@ -519,6 +444,49 @@ impl Typing {
                     self.flag_wrong_type(&subject, &Type::Bit, &subject_typ);
                     Err(())
                 }
+            }
+        }
+    }
+
+    fn infer_reference<'p>(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        node: &AstNode<'p>,
+    ) -> Result<Option<Type>, ()> {
+        // Use ComponentAnalysis to resolve the reference by AST location.
+        // The component analysis already resolved "it" during reference
+        // collection, so no string manipulation is needed here.
+        let component_analysis = builder.get_component_analysis(self.item.id());
+        if let Some(component) = component_analysis.component_at(node.location()) {
+            let referent = Referent::Component(component.id());
+            self.tags
+                .insert(node.location(), Tag::ReferentResolution(referent));
+            self.use_component(component.path().as_bstr(), node.location());
+            if let Some(typ) = component.typ() {
+                self.annotate(&node, &typ);
+                Ok(Some(typ))
+            } else {
+                Err(())
+            }
+        } else {
+            // Fall back to name-based context lookup, for pattern-bound
+            // locals and non-moddef items.
+            let parsing = node.parsing();
+            let path = parsing.string(node.path().unwrap());
+            let path_str = path.to_owned();
+            if let Some((referent, typ)) = context.get(path_str.clone()) {
+                self.tags
+                    .insert(node.location(), Tag::ReferentResolution(referent));
+                if let Some(typ) = typ {
+                    self.annotate(&node, &typ);
+                    Ok(Some(typ))
+                } else {
+                    Err(())
+                }
+            } else {
+                self.flag_unknown(node, format!("Unknown component {}", path));
+                Err(())
             }
         }
     }
