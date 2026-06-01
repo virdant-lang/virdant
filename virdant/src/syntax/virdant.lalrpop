@@ -94,7 +94,6 @@ Item: AstNodeId = {
     <enumdef:EnumDef> => enumdef,
     <builtindef:BuiltinDef> => builtindef,
     <socketdef:SocketDef> => socketdef,
-    <fndef:FnDef> => fndef,
 }
 
 ModDef: AstNodeId = {
@@ -262,18 +261,6 @@ SocketDefStmt: AstNodeId = {
         let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Soci, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = 1;
-
-        parser.add_node(payload, span, num_children)
-    },
-}
-
-FnDef: AstNodeId = {
-    <docstring:DocString?> <ll:@L> "fn" <name:Ident> <paramlist:ParamList> "->" Type "{"
-        Expr
-    "}" <rr:@R> => {
-        let payload = AstNodePayload::FnDef(payload::FnDef { name, doc_string: docstring });
-        let span = parser.span(ll, rr);
-        let num_children = paramlist + 2;
 
         parser.add_node(payload, span, num_children)
     },
