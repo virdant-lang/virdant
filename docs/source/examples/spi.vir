@@ -1,0 +1,79 @@
+enum type SpiState width 3 {
+    Idle = 0b001
+    Set  = 0b010
+    Tick = 0b100
+}
+
+mod SpiController {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    incoming data  : Word[8]
+    incoming valid : Bit
+
+    outgoing ready : Bit {
+        it := state == #Idle
+    }
+
+    outgoing cs : Bit {
+        it := state != #Set && state != #Tick
+    }
+
+    outgoing sck : Bit {
+        it := state == #Tick
+    }
+
+    outgoing do : Bit {
+        it := buffer[7]
+    }
+
+    reg state : SpiState on clock {
+        if reset {
+            it <= #Idle
+        } else {
+            match it {
+                case #Idle  => {
+                    if valid {
+                        it <= #Set
+                    }
+                }
+                case #Set  => {
+                    it <= #Tick
+                }
+                case #Tick => {
+                    if bits == 7 {
+                        it <= #Idle
+                    } else {
+                        it <= #Set
+                    }
+                }
+            }
+        }
+    }
+
+    // bits left to send
+    reg buffer : Word[8] on clock {
+        match state {
+            case #Idle  => {
+                if valid {
+                    it <= data
+                }
+            }
+            case #Tick => {
+                it <= word(it[7..0], 0w1)
+            }
+        }
+    }
+
+    // how many bits have been clocked out
+    reg bits  : Word[3] on clock {
+        match state {
+            case #Idle  => {
+                it <= 0
+            }
+            case #Tick => {
+                it <= it + 1
+            }
+        }
+    }
+}

@@ -10,3 +10,4 @@ This tutorial will introduce Virdant through a series of examples.
     mux_decoder
     arbiter
     adder
+    spi
