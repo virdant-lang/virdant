@@ -36,7 +36,6 @@ If we look at the `src/top.vir` file, we will see our blinking LED design:
 .. literalinclude:: /examples/blink.vir
    :caption: top.vir
    :language: virdant
-   :linenos:
 
 
 Compiling to Verilog
@@ -56,7 +55,6 @@ Here is one which will run the design for 100 cycles:
 .. literalinclude:: /examples/testbench.sv
    :caption: testbench.sv
    :language: verilog
-   :linenos:
 
 If you have `Icarus Verilog`_ installed, you can compile a simulator and run it with these commands:
 
