@@ -66,6 +66,38 @@ impl<V: Eq> Graph<V> {
     }
 }
 
+impl<V> Graph<V> {
+    /// Returns a path from `from` to `to` (exclusive of `from`, inclusive of `to`),
+    /// or None if `to` is not reachable from `from`.
+    pub fn path(&self, from: VertIndex, to: VertIndex) -> Option<Vec<VertIndex>> {
+        let mut visited = vec![false; self.verts.len()];
+        let mut stack: Vec<(VertIndex, usize)> = vec![(from, 0)];
+        visited[from.0] = true;
+
+        while let Some((current, child_idx)) = stack.last().copied() {
+            let children = &self.adj[current.0];
+            if child_idx < children.len() {
+                let next_child = children[child_idx];
+                // Bump the parent's child pointer.
+                stack.last_mut().unwrap().1 = child_idx + 1;
+                if next_child == to {
+                    // Build the path from the stack plus `to`.
+                    let mut path: Vec<VertIndex> = stack.iter().skip(1).map(|(v, _)| *v).collect();
+                    path.push(to);
+                    return Some(path);
+                }
+                if !visited[next_child.0] {
+                    visited[next_child.0] = true;
+                    stack.push((next_child, 0));
+                }
+            } else {
+                stack.pop();
+            }
+        }
+        None
+    }
+}
+
 impl<'g, V> TopoSortContext<'g, V> {
     fn new(graph: &'g Graph<V>) -> Self {
         let state: IndexMap<VertIndex, SortState> = (0..graph.verts.len()).map(|i| (VertIndex(i), SortState::Unvisited)).collect();

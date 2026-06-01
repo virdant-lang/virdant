@@ -188,6 +188,12 @@ pub struct UnfilledHole {
     pub typ: Option<BString>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModuleCycle {
+    pub region: Region,
+    pub module_cycle: Vec<BString>,
+}
+
 /// Failed to resolve a method.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedMethod {
@@ -367,6 +373,17 @@ impl std::fmt::Display for DiagnosticLevel {
 impl<E: IsDiagnostic> From<E> for Diagnostic {
     fn from(value: E) -> Self {
         Diagnostic(Arc::new(value))
+    }
+}
+
+impl IsDiagnostic for ModuleCycle  {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        let cycle = self.module_cycle.iter().map(|m| m.to_string()).collect::<Vec<_>>();
+        format!("Module cycle: {}", cycle.join(", ")).into()
     }
 }
 

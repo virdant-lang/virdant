@@ -1,0 +1,13 @@
+// Two modules that instantiate each other: A -> B -> A.
+
+// CHECK: Module cycle: mod_cycle_simple::A
+// CHECK: Module cycle: mod_cycle_simple::B
+mod A {
+    mod b of B
+}
+
+mod B {
+    mod a of A
+}
+
+// CHECK: Check failed

@@ -1,0 +1,21 @@
+// Valid module instantiation DAG: no cycles.
+// A -> B, A -> C, B -> D.  No back edges.
+
+// CHECK-NOT: Module cycle
+mod A {
+    mod b of B
+    mod c of C
+}
+
+mod B {
+    mod d of D
+}
+
+mod C {
+}
+
+mod D {
+}
+
+// CHECK-NOT: Check failed
+// CHECK: Check OK

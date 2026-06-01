@@ -1,0 +1,8 @@
+// A module that instantiates itself: A -> A.
+
+// CHECK-NEXT: Module cycle: mod_cycle_self::A
+mod A {
+    mod a of A
+}
+
+// CHECK: Check failed

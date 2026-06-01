@@ -1,0 +1,18 @@
+// Three modules forming a cycle: A -> B -> C -> A.
+
+// CHECK: Module cycle: mod_cycle_chain::A, mod_cycle_chain::C
+// CHECK: Module cycle: mod_cycle_chain::B, mod_cycle_chain::A
+// CHECK: Module cycle: mod_cycle_chain::C, mod_cycle_chain::B
+mod A {
+    mod b of B
+}
+
+mod B {
+    mod c of C
+}
+
+mod C {
+    mod a of A
+}
+
+// CHECK: Check failed
