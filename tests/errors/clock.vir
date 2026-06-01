@@ -1,0 +1,7 @@
+mod CantIfClock {
+    incoming clock : Clock
+
+    // CHECK: Expected Bit but found Clock
+    if clock {
+    }
+}
