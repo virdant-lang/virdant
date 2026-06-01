@@ -5,6 +5,7 @@ use indexmap::IndexMap;
 use std::sync::Arc;
 
 use crate::common::ComponentKind;
+use crate::db::Builder;
 use crate::diagnostics;
 use crate::diagnostics::Diagnostic;
 use crate::fqn::PackageFqn;
@@ -12,6 +13,11 @@ use crate::common::source::Region;
 use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
+
+pub(crate) fn build_package_analysis(builder: &mut Builder, package: PackageFqn) -> Arc<PackageAnalysis> {
+    let parsing = builder.get_parsing(package);
+    Arc::new(PackageAnalysis::new(parsing))
+}
 
 
 #[derive(Debug)]

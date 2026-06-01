@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::analysis::location::Location;
+use crate::common::source::Region;
 use crate::types::ExprRoot;
 use crate::db::Builder;
 use crate::diagnostics::Diagnostic;
@@ -51,4 +52,10 @@ fn collect_expr_locations(node: AstNode<'_>, exprs: &mut Vec<Location>) {
     for child in node.children() {
         collect_expr_locations(child, exprs);
     }
+}
+
+pub(crate) fn build_location_region(builder: &mut Builder, location: Location) -> Region {
+    let parsing = builder.get_parsing(location.package());
+    let node = parsing.ast_node(location.ast_node_id());
+    node.region()
 }
