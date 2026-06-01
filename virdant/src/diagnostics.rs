@@ -279,8 +279,8 @@ pub struct MatchElseNotLast {
     pub region: Region,
 }
 
-/// A docstring (`///` or `//!`) whose content does not start with a space.
-/// The convention is `/// text` or `//! text`, not `///text` or `//!text`.
+/// A docstring (`//>` or `//!`) whose content does not start with a space.
+/// The convention is `//> text` or `//! text`, not `//>text` or `//!text`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvalidDocstring {
     pub region: Region,

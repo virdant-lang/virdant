@@ -138,8 +138,8 @@ fn extract_doc_body(node: &AstNode<'_>, parsing: &Parsing) -> BString {
         let raw = parsing.string(doc.clone());
         let mut body = BString::default();
         for line in raw.lines() {
-            // Strip leading "///" (3 bytes) from each line
-            let stripped = if line.len() >= 3 && &line[..3] == b"///" {
+            // Strip leading "//>" (3 bytes) from each line
+            let stripped = if line.len() >= 3 && &line[..3] == b"//>" {
                 &line[3..]
             } else {
                 line

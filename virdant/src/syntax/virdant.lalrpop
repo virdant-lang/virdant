@@ -46,8 +46,8 @@ PackageImport: AstNodeId = {
 DocString: InternedString = {
     <ll:@L> <texts:("DocComment")+> <rr:@R> => {
         let span = parser.span(ll, rr);
-        // Validate: each docstring line must start with a space after `///`,
-        // or be exactly `///` (empty).
+        // Validate: each docstring line must start with a space after `//>`,
+        // or be exactly `//>` (empty).
         let raw = parser.text(span);
         for raw_line in raw.split_str(b"\n") {
             let line: &[u8] = raw_line;

@@ -27,7 +27,7 @@ mod test_docstrings {
 
     #[test]
     fn test_moddef_docstring() {
-        let source = test_source(b"/// A module with a docstring.\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n");
+        let source = test_source(b"//> A module with a docstring.\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n");
         let parsing = parse(&source);
         let root = parsing.root();
         // Walk children to find the ModDef
@@ -44,7 +44,7 @@ mod test_docstrings {
 
     #[test]
     fn test_component_docstring() {
-        let source = test_source(b"mod Foo {\n    /// An input signal.\n    incoming inp : Bit\n    out := inp\n}\n");
+        let source = test_source(b"mod Foo {\n    //> An input signal.\n    incoming inp : Bit\n    out := inp\n}\n");
         let parsing = parse(&source);
         let root = parsing.root();
         for child in root.children() {
@@ -94,8 +94,8 @@ mod test_docstrings {
 
     #[test]
     fn test_docstring_without_space_does_not_match() {
-        // /// without a following space should NOT match as DocComment
-        let source = test_source(b"///no space here\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n");
+        // //> without a following space should NOT match as DocComment
+        let source = test_source(b"//>no space here\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n");
         let parsing = parse(&source);
         let root = parsing.root();
         for child in root.children() {
@@ -109,7 +109,7 @@ mod test_docstrings {
 
     #[test]
     fn test_struct_field_docstring() {
-        let source = test_source(b"struct type Foo {\n    /// The foo field.\n    bar : Word[1]\n}\n");
+        let source = test_source(b"struct type Foo {\n    //> The foo field.\n    bar : Word[1]\n}\n");
         let parsing = parse(&source);
         let root = parsing.root();
         for child in root.children() {
