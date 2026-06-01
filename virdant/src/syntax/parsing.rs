@@ -108,7 +108,7 @@ impl Parsing {
         self.source.package()
     }
 
-    pub fn add_node(&mut self, payload: AstNodePayload, span: Span, num_children: u16) -> AstNodeId {
+    pub(super) fn add_node(&mut self, payload: AstNodePayload, span: Span, num_children: u16) -> AstNodeId {
         let ast_node_id = AstNodeId(self.payloads.len().try_into().unwrap());
         self.payloads.push(payload);
         self.spans.push(span);
@@ -116,7 +116,7 @@ impl Parsing {
         ast_node_id
     }
 
-    pub fn add_error_node(&mut self, span: Span, error: ParseError) -> AstNodeId {
+    pub(super) fn add_error_node(&mut self, span: Span, error: ParseError) -> AstNodeId {
         let payload = AstNodePayload::Error;
         let ast_node_id = AstNodeId(self.payloads.len().try_into().unwrap());
         self.payloads.push(payload);
@@ -133,7 +133,7 @@ impl Parsing {
         Span::new(start, end)
     }
 
-    pub fn intern(&mut self, span: Span) -> InternedString {
+    pub(super) fn intern(&mut self, span: Span) -> InternedString {
         let text = self.text(span).to_owned();
         let package = self.package();
         if let Some(string_id) = self.strings.iter().position(|string| string == &text) {
@@ -160,37 +160,6 @@ impl Parsing {
     pub fn string(&self, s: InternedString) -> &BStr {
         assert_eq!(self.package(), s.package);
         BStr::new(&self.strings[s.id])
-    }
-
-    /// Return the docstring body with `//>` stripped from each line.
-    /// Lines that are exactly `//>` (no content) become empty lines.
-    pub fn doc_string(&self, s: &InternedString) -> BString {
-        self.strip_doc_prefix(s, b"//>")
-    }
-
-    /// Return the package docstring body with `//!` stripped from each line.
-    /// Lines that are exactly `//!` (no content) become empty lines.
-    pub fn doc_bang(&self, s: &InternedString) -> BString {
-        self.strip_doc_prefix(s, b"//!")
-    }
-
-    /// Strip a 3-byte prefix (`//>` or `//!`) from each line of a docstring.
-    /// Lines that are exactly the prefix (no content) become empty lines.
-    fn strip_doc_prefix(&self, s: &InternedString, prefix: &[u8; 3]) -> BString {
-        use bstr::ByteSlice;
-        let raw = self.string(s.clone());
-        let mut out: Vec<u8> = Vec::new();
-        for (i, line) in raw.split_str(b"\n").enumerate() {
-            if i > 0 {
-                out.push(b'\n');
-            }
-            if line.len() > 3 && &line[..3] == prefix {
-                out.extend_from_slice(&line[3..]);
-            }
-            // else: line is exactly the prefix (/// or //!) or shorter.
-            // Emit nothing for that line (it becomes empty).
-        }
-        out.into()
     }
 
     pub fn root(&self) -> AstNode<'_> {
@@ -226,7 +195,7 @@ impl Parsing {
         errors
     }
 
-    pub fn add_docstring_diagnostic(&mut self, diagnostic: Diagnostic) {
+    pub(super) fn add_docstring_diagnostic(&mut self, diagnostic: Diagnostic) {
         self.docstring_diagnostics.push(diagnostic);
     }
 

@@ -84,20 +84,6 @@ impl<'p> AstNode<'p> {
         false
     }
 
-/*
-    pub fn walk(&self) -> Vec<AstNode> {
-        let mut result = vec![];
-        let mut queue = vec![self.clone()];
-        while let Some(node) = queue.pop() {
-            result.push(node.clone());
-            for child in node.children() {
-                queue.push(child);
-            }
-        }
-        result
-    }
-*/
-
     pub fn payload(&self) -> AstNodePayload {
         self.payload.clone()
     }
