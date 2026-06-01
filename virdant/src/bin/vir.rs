@@ -153,6 +153,13 @@ fn project_db(args: &Args) -> Db {
     db_from_dir(src_dir)
 }
 
+fn region_string(region: Region) -> String {
+    let package = region.package().to_string();
+    let span = region.span().to_string();
+
+    format!("{package}.vir {span}")
+}
+
 fn dump_diagnostics(db: &Db) {
     let diagnostics = match check_db(db) {
         Ok(diags) => diags,
@@ -160,18 +167,42 @@ fn dump_diagnostics(db: &Db) {
     };
     let longest_region = diagnostics
         .iter()
-        .map(|diag| diag.region().to_string().len())
+        .map(|diag| region_string(diag.region()).len())
         .max()
         .unwrap_or_default();
+
+    let mut warning_count = 0;
+    let mut error_count = 0;
+
     for diagnostic in diagnostics.iter() {
-        let unpadded_region = diagnostic.region().to_string();
+        let unpadded_region = region_string(diagnostic.region());
         let padded_region = format!("{}{}", unpadded_region, " ".repeat(longest_region - unpadded_region.len()));
         if diagnostic.level() == DiagnosticLevel::Error {
             println!("{}   {}   {}", "ERROR  ".red(), padded_region, diagnostic.message());
+            error_count += 1;
         } else if diagnostic.level() == DiagnosticLevel::Warning {
             println!("{}   {}   {}", "WARNING".yellow(), padded_region, diagnostic.message());
+            warning_count += 1;
         } else {
             println!("{}   {}   {}", "INFO   ".green(), padded_region, diagnostic.message());
+        }
+    }
+
+    let failed = error_count > 0;
+
+    if error_count > 0 || warning_count > 0 {
+        println!();
+        if failed {
+            println!("{} with:", "FAILED".red());
+        } else {
+            println!("{} with:", "PASSED".green());
+        }
+        if error_count > 0 {
+            println!("{error_count:>4} {}", "ERROR".red());
+        }
+
+        if warning_count > 0 {
+            println!("{warning_count:>4} {}", "WARNING".yellow());
         }
     }
 }
