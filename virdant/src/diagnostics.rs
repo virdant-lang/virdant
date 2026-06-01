@@ -324,6 +324,13 @@ pub struct RedundantUnused {
     pub path: BString,
 }
 
+/// Latched driver from a component to itself
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RedundantDriver {
+    pub region: Region,
+    pub path: BString,
+}
+
 #[derive(Debug, Clone)]
 pub struct Soften {
     pub inner: Diagnostic,
@@ -852,6 +859,18 @@ impl IsDiagnostic for RedundantUnused {
     fn message(&self) -> BString {
         format!("Redundant `unused`: {}", self.path).into()
     }
+}
+
+impl IsDiagnostic for RedundantDriver {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Redundant driver: {}", self.path).into()
+    }
+
+    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }
 }
 
 impl Diagnostic {

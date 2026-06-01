@@ -234,6 +234,36 @@ fn collect_block_drivers(
                     }
                     continue;
                 };
+
+                // For latched drivers, flag reg <= reg as redundant.
+                if driver.driver_type == DriverType::Latched {
+                    if let Some(rhs_node) = stmt.driver() {
+                        if let Some(rhs_path) = rhs_node.path() {
+                            let mut rhs_str = stmt.parsing.string(rhs_path).to_owned();
+                            if let Some(ctx) = it_context {
+                                if rhs_str.starts_with(b"it.") {
+                                    let suffix = rhs_str[3..].to_owned();
+                                    rhs_str.clear();
+                                    rhs_str.extend_from_slice(ctx);
+                                    rhs_str.push(b'.');
+                                    rhs_str.extend_from_slice(&suffix);
+                                } else if rhs_str == b"it" {
+                                    rhs_str = ctx.to_owned();
+                                }
+                            }
+                            if rhs_str == target_str {
+                                diagnostics.push(
+                                    crate::diagnostics::RedundantDriver {
+                                        region: stmt.region(),
+                                        path: target_str.clone(),
+                                    }
+                                    .into(),
+                                );
+                            }
+                        }
+                    }
+                }
+
                 let expr = stmt.driver().unwrap().location();
                 result.entry(component.id()).or_default().push(Driver::Expr(driver.driver_type, expr));
             }

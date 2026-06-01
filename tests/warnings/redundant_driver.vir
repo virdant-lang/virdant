@@ -1,0 +1,43 @@
+// RedundantDriver: a latched driver (<=) where the source and target
+// refer to the same component path.
+
+// Same explicit path.
+mod SameExplicitPath {
+    incoming clock : Clock
+    outgoing out : Word[8]
+
+    reg r : Word[8] on clock
+    // CHECK: Redundant driver: r
+    r <= r
+
+    out := r
+}
+
+// Both sides use `it` inside an it block.
+mod BothUseIt {
+    incoming clock : Clock
+    outgoing out : Word[8]
+
+    reg r : Word[8] on clock {
+        // CHECK: Redundant driver: r
+        it <= it
+    }
+
+    out := r
+}
+
+// One side uses `it`, the other uses the explicit path, inside an it
+// block on a submodule. Both resolve to the same component.
+mod MixedItExplicit {
+    incoming clock : Clock
+
+    reg r : Word[8] on clock {
+        // CHECK: Redundant driver: r
+        it <= r
+    }
+
+    reg s : Word[8] on clock {
+        // CHECK: Redundant driver: s
+        s <= it
+    }
+}
