@@ -109,7 +109,7 @@ mod test_docstrings {
     #[test]
     fn test_moddef_docstring() {
         let source = test_source(
-            b"/// A module with a docstring.\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n"
+            b"//> A module with a docstring.\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n"
         );
         let parsing = parse(&source);
         let root = parsing.root();
@@ -129,7 +129,7 @@ mod test_docstrings {
     #[test]
     fn test_component_docstring() {
         let source = test_source(
-            b"mod Foo {\n    /// An input signal.\n    incoming inp : Bit\n    out := inp\n}\n"
+            b"mod Foo {\n    //> An input signal.\n    incoming inp : Bit\n    out := inp\n}\n"
         );
         let parsing = parse(&source);
         let root = parsing.root();
@@ -186,9 +186,9 @@ mod test_docstrings {
 
     #[test]
     fn test_docstring_without_space_matches() {
-        // Space after /// is NOT required -- ///anything is a valid docstring.
+        // Space after //> is NOT required -- //>anything is a valid docstring.
         let source = test_source(
-            b"///no space here\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n"
+            b"//>no space here\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n"
         );
         let parsing = parse(&source);
         let root = parsing.root();
@@ -208,7 +208,7 @@ mod test_docstrings {
     #[test]
     fn test_struct_field_docstring() {
         let source = test_source(
-            b"struct type Foo {\n    /// The foo field.\n    bar : Word[1]\n}\n"
+            b"struct type Foo {\n    //> The foo field.\n    bar : Word[1]\n}\n"
         );
         let parsing = parse(&source);
         let root = parsing.root();
@@ -232,7 +232,7 @@ mod test_docstrings {
     #[test]
     fn test_ast_node_doc_string_accessor() {
         let source = test_source(
-            b"/// Documented mod.\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n"
+            b"//> Documented mod.\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n"
         );
         let parsing = parse(&source);
         let root = parsing.root();
@@ -248,7 +248,7 @@ mod test_docstrings {
     #[test]
     fn test_multiple_docstrings() {
         let source = test_source(
-            b"//! Package doc.\n\n/// Module doc.\nmod Foo {\n    /// Incoming doc.\n    incoming inp : Bit\n    out := inp\n}\n"
+            b"//! Package doc.\n\n//> Module doc.\nmod Foo {\n    //> Incoming doc.\n    incoming inp : Bit\n    out := inp\n}\n"
         );
         let parsing = parse(&source);
         let root = parsing.root();
@@ -311,19 +311,19 @@ mod test_docstrings {
 
     #[test]
     fn test_docstring_strip_prefix() {
-        // Verify the docstring includes the `///` prefix (3 bytes).
+        // Verify the docstring includes the `//>` prefix (3 bytes).
         // Callers strip it.
         let source = test_source(
-            b"/// hello\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n"
+            b"//> hello\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n"
         );
         let parsing = parse(&source);
         let root = parsing.root();
         for child in root.children() {
             if let AstNodePayload::ModDef(m) = child.payload() {
                 let doc = parsing.string(m.doc_string.unwrap());
-                // doc includes the "///" prefix
-                assert_eq!(&doc[..3], b"///",
-                    "Docstring should start with '///', got: {:?}", &doc[..3]);
+                // doc includes the "//> prefix
+                assert_eq!(&doc[..3], b"//>" ,
+                    "Docstring should start with '//>',  got: {:?}", &doc[..3]);
                 // the rest is the content (with optional leading space)
                 assert!(doc.find("hello").is_some(),
                     "Docstring should contain 'hello', got: {:?}", doc);
@@ -335,9 +335,9 @@ mod test_docstrings {
 
     #[test]
     fn test_invalid_docstring_diagnostic() {
-        // `///foo` (no space) should produce an InvalidDocstring diagnostic.
+        // `//>foo` (no space) should produce an InvalidDocstring diagnostic.
         let source = test_source(
-            b"///foo\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n"
+            b"//>foo\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n"
         );
         let parsing = parse(&source);
         let diags = parsing.diagnostics();
@@ -369,9 +369,9 @@ mod test_docstrings {
 
     #[test]
     fn test_valid_docstring_no_diagnostic() {
-        // `/// foo` (with space) should produce NO InvalidDocstring diagnostic.
+        // `//> foo` (with space) should produce NO InvalidDocstring diagnostic.
         let source = test_source(
-            b"/// foo\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n"
+            b"//> foo\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n"
         );
         let parsing = parse(&source);
         let diags = parsing.diagnostics();
@@ -386,9 +386,9 @@ mod test_docstrings {
 
     #[test]
     fn test_multiline_strips_prefix_from_each_line() {
-        // Multi-line docstring with an empty `///` line in the middle.
+        // Multi-line docstring with an empty `//>` line in the middle.
         let source = test_source(
-            b"/// A RISC-V CPU core\n///\n/// This implements RV32I.\nmod Cpu {\n    incoming clock : Clock\n}\n"
+            b"//> A RISC-V CPU core\n//>\n//> This implements RV32I.\nmod Cpu {\n    incoming clock : Clock\n}\n"
         );
         let parsing = parse(&source);
         let root = parsing.root();
@@ -456,9 +456,9 @@ mod test_docstrings {
 
     #[test]
     fn test_docstring_exact_cpu_scenario() {
-        // Same but with /// for a ModDef: middle line is bare `///`.
+        // Same but with //> for a ModDef: middle line is bare `//>` .
         let source = test_source(
-            b"/// A RISC-V CPU core\n///\n/// This implements RV32I and passes all rv32iu tests in riscv-tests.\nmod Cpu {\n    incoming clock : Clock\n}\n"
+            b"//> A RISC-V CPU core\n//>\n//> This implements RV32I and passes all rv32iu tests in riscv-tests.\nmod Cpu {\n    incoming clock : Clock\n}\n"
         );
         let parsing = parse(&source);
         let root = parsing.root();
@@ -466,9 +466,9 @@ mod test_docstrings {
             if let AstNodePayload::ModDef(m) = child.payload() {
                 let doc = m.doc_string.unwrap();
                 let raw = parsing.string(doc.clone());
-                // Raw interned text should include the middle bare `///` line
-                assert!(raw.find(b"///").is_some(),
-                    "Raw docstring should contain '///', got: {:?}", raw);
+                // Raw interned text should include the middle bare `//>` line
+                assert!(raw.find(b"//>" ).is_some(),
+                    "Raw docstring should contain '//>',  got: {:?}", raw);
 
                 let stripped = parsing.doc_string(&doc);
                 eprintln!("RAW:       {:?}", raw);

@@ -1,26 +1,26 @@
-/// ALU and barrel shifter modules.
-///
-/// This package provides the main arithmetic-logic unit (Alu) that
-/// executes all RV32I ALU operations, and a 32-bit barrel shifter (Shifter)
-/// that handles SLL, SRL, and SRA in a single cycle.
+//! ALU and barrel shifter modules.
+//!
+//! This package provides the main arithmetic-logic unit (Alu) that
+//! executes all RV32I ALU operations, and a 32-bit barrel shifter (Shifter)
+//! that handles SLL, SRL, and SRA in a single cycle.
 
-/// ALU module.
-///
-/// Performs arithmetic (add, sub), logical (and, or, xor, clear),
-/// comparison (eq, neq, lt, gte, ltu, gteu), zero, pass-through,
-/// and shift operations as directed by `AluOpcode`.
+//> ALU module.
+//>
+//> Performs arithmetic (add, sub), logical (and, or, xor, clear),
+//> comparison (eq, neq, lt, gte, ltu, gteu), zero, pass-through,
+//> and shift operations as directed by `AluOpcode`.
 mod Alu {
-    /// First ALU operand (typically rs1, PC, or CSR data).
+    //> First ALU operand (typically rs1, PC, or CSR data).
     incoming a : Word[32]
-    /// Second ALU operand (typically rs2 or immediate).
+    //> Second ALU operand (typically rs2 or immediate).
     incoming b : Word[32]
-    /// ALU result.
+    //> ALU result.
     outgoing z : Word[32]
 
-    /// ALU operation selector (see `opcode::AluOpcode`).
+    //> ALU operation selector (see `opcode::AluOpcode`).
     incoming op : AluOpcode
 
-    /// Barrel shifter sub-module used for SLL, SRL, and SRA.
+    //> Barrel shifter sub-module used for SLL, SRL, and SRA.
     mod shifter of Shifter {
         it.a      := a
         it.amount := b[5..0]
@@ -62,91 +62,91 @@ mod Alu {
     }
 }
 
-/// Barrel-shift direction selector.
-///
-/// Specifies the direction for the Shifter module.
+//> Barrel-shift direction selector.
+//>
+//> Specifies the direction for the Shifter module.
 enum type ShiftDirection width 3 {
-    /// Shift left logical (SLL).
+    //> Shift left logical (SLL).
     ShiftLeftLogical     = 0b001
-    /// Shift right logical (SRL).
+    //> Shift right logical (SRL).
     ShiftRightLogical    = 0b010
-    /// Shift right arithmetic (SRA, sign-extending).
+    //> Shift right arithmetic (SRA, sign-extending).
     ShiftRightArithmetic = 0b100
 }
 
-/// 32-bit barrel shifter.
-///
-/// Implements SLL, SRL, and SRA in a single cycle using a logarithmic
-/// shift network (five stages: 1, 2, 4, 8, 16).
+//> 32-bit barrel shifter.
+//>
+//> Implements SLL, SRL, and SRA in a single cycle using a logarithmic
+//> shift network (five stages: 1, 2, 4, 8, 16).
 mod Shifter {
-    /// Shift direction (left logical, right logical, right arithmetic).
+    //> Shift direction (left logical, right logical, right arithmetic).
     incoming dir : ShiftDirection
-    /// Value to shift.
+    //> Value to shift.
     incoming a : Word[32]
-    /// Shift amount (0–31).
+    //> Shift amount (0–31).
     incoming amount : Word[5]
-    /// Shifted result.
+    //> Shifted result.
     outgoing z : Word[32]
 
     // TODO; This could be written with let blocks.
 
-    /// Stage 1: shift left by 1.
+    //> Stage 1: shift left by 1.
     wire sll_1 : Word[32]
     sll_1 := if amount[0] { word(a[31..0], 0w1) } else { a }
 
-    /// Stage 2: shift left by 2.
+    //> Stage 2: shift left by 2.
     wire sll_2 : Word[32]
     sll_2 := if amount[1] { word(sll_1[30..0], 0w2) } else { sll_1 }
 
-    /// Stage 4: shift left by 4.
+    //> Stage 4: shift left by 4.
     wire sll_4 : Word[32]
     sll_4 := if amount[2] { word(sll_2[28..0], 0w4) } else { sll_2 }
 
-    /// Stage 8: shift left by 8.
+    //> Stage 8: shift left by 8.
     wire sll_8 : Word[32]
     sll_8 := if amount[3] { word(sll_4[24..0], 0w8) } else { sll_4 }
 
-    /// Stage 16: shift left by 16.
+    //> Stage 16: shift left by 16.
     wire sll_16 : Word[32]
     sll_16 := if amount[4] { word(sll_8[16..0], 0w16) } else { sll_8 }
 
-    /// Stage 1: shift right logical by 1.
+    //> Stage 1: shift right logical by 1.
     wire srl_1 : Word[32]
     srl_1 := if amount[0] { zext(a[32..1]) } else { a }
 
-    /// Stage 2: shift right logical by 2.
+    //> Stage 2: shift right logical by 2.
     wire srl_2 : Word[32]
     srl_2 := if amount[1] { zext(srl_1[32..2]) } else { srl_1 }
 
-    /// Stage 4: shift right logical by 4.
+    //> Stage 4: shift right logical by 4.
     wire srl_4 : Word[32]
     srl_4 := if amount[2] { zext(srl_2[32..4]) } else { srl_2 }
 
-    /// Stage 8: shift right logical by 8.
+    //> Stage 8: shift right logical by 8.
     wire srl_8 : Word[32]
     srl_8 := if amount[3] { zext(srl_4[32..8]) } else { srl_4 }
 
-    /// Stage 16: shift right logical by 16.
+    //> Stage 16: shift right logical by 16.
     wire srl_16 : Word[32]
     srl_16 := if amount[4] { zext(srl_8[32..16]) } else { srl_8 }
 
-    /// Stage 1: shift right arithmetic by 1 (sign-extending).
+    //> Stage 1: shift right arithmetic by 1 (sign-extending).
     wire sra_1 : Word[32]
     sra_1 := if amount[0] { sext(a[32..1]) } else { a }
 
-    /// Stage 2: shift right arithmetic by 2.
+    //> Stage 2: shift right arithmetic by 2.
     wire sra_2 : Word[32]
     sra_2 := if amount[1] { sext(sra_1[32..2]) } else { sra_1 }
 
-    /// Stage 4: shift right arithmetic by 4.
+    //> Stage 4: shift right arithmetic by 4.
     wire sra_4 : Word[32]
     sra_4 := if amount[2] { sext(sra_2[32..4]) } else { sra_2 }
 
-    /// Stage 8: shift right arithmetic by 8.
+    //> Stage 8: shift right arithmetic by 8.
     wire sra_8 : Word[32]
     sra_8 := if amount[3] { sext(sra_4[32..8]) } else { sra_4 }
 
-    /// Stage 16: shift right arithmetic by 16.
+    //> Stage 16: shift right arithmetic by 16.
     wire sra_16 : Word[32]
     sra_16 := if amount[4] { sext(sra_8[32..16]) } else { sra_8 }
 
@@ -159,39 +159,39 @@ mod Shifter {
 }
 
 enum type AluOpcode width 8 {
-    /// Zero result (used for JAL/JALR address generation).
+    //> Zero result (used for JAL/JALR address generation).
     Zero  = 0
-    /// Addition (ADD, ADDI, AUIPC, LOAD/STORE address).
+    //> Addition (ADD, ADDI, AUIPC, LOAD/STORE address).
     Add   = 1
-    /// Subtraction (SUB).
+    //> Subtraction (SUB).
     Sub   = 2
-    /// Bitwise AND (AND, ANDI).
+    //> Bitwise AND (AND, ANDI).
     And   = 3
-    /// Bitwise OR (OR, ORI).
+    //> Bitwise OR (OR, ORI).
     Or    = 4
-    /// Bitwise XOR (XOR, XORI).
+    //> Bitwise XOR (XOR, XORI).
     Xor   = 5
-    /// Signed equal-to-zero test (BEQ).
+    //> Signed equal-to-zero test (BEQ).
     Eq    = 6
-    /// Signed not-equal-to-zero test (BNE).
+    //> Signed not-equal-to-zero test (BNE).
     Neq   = 7
-    /// Signed less-than (SLT, BLT).
+    //> Signed less-than (SLT, BLT).
     Lt    = 8
-    /// Signed greater-than-or-equal (BGE).
+    //> Signed greater-than-or-equal (BGE).
     Gte   = 9
-    /// Unsigned less-than (SLTU, BLTU).
+    //> Unsigned less-than (SLTU, BLTU).
     Ltu   = 10
-    /// Unsigned greater-than-or-equal (BGEU).
+    //> Unsigned greater-than-or-equal (BGEU).
     Gteu  = 11
-    /// Shift left logical (SLL, SLLI).
+    //> Shift left logical (SLL, SLLI).
     Sll   = 12
-    /// Bit clear: a & ~b (CSRRC).
+    //> Bit clear: a & ~b (CSRRC).
     Clear = 13
-    /// Pass A through unchanged (CSRRW, CSRRWI).
+    //> Pass A through unchanged (CSRRW, CSRRWI).
     PassA = 14
-    /// Shift right logical (SRL, SRLI).
+    //> Shift right logical (SRL, SRLI).
     Srl   = 15
-    /// Shift right arithmetic (SRA, SRAI).
+    //> Shift right arithmetic (SRA, SRAI).
     Sra   = 16
 }
 // CHECK-NOT: Check failed

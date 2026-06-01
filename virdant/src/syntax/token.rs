@@ -24,7 +24,7 @@ pub enum Token {
     Nat,
 
     // Docstrings
-    #[regex(br"///[^\n]*")]
+    #[regex(br"//>[^\n]*")]
     DocComment,
     #[regex(br"//![^\n]*")]
     DocBang,

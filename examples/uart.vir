@@ -1,13 +1,13 @@
-/// `UartState` is used to model the state machine of `UartSender` and `UartReceiver`.
-///
-/// `Idle` - awaiting a request
-/// `Start(pulse)` - received a request and currently sending/receiving the start bit.
-///                - `pulse` is a countdown until the next state transition.
-/// `Bit(bit, pulse)` - received a request and currently sending/receiving the start bit
-///                   - `bit` is which bit is currently being sent/received
-///                   - `pulse` is a countdown until the next state transition.
-/// `Stop(pulse)` - finished a request and sending/receiving the end bit.
-///               - `pulse` is a countdown until the next state transition.
+//> `UartState` is used to model the state machine of `UartSender` and `UartReceiver`.
+//>
+//> `Idle` - awaiting a request
+//> `Start(pulse)` - received a request and currently sending/receiving the start bit.
+//>                - `pulse` is a countdown until the next state transition.
+//> `Bit(bit, pulse)` - received a request and currently sending/receiving the start bit
+//>                   - `bit` is which bit is currently being sent/received
+//>                   - `pulse` is a countdown until the next state transition.
+//> `Stop(pulse)` - finished a request and sending/receiving the end bit.
+//>               - `pulse` is a countdown until the next state transition.
 union type UartState {
     Idle()
     Start(pulse : Word[11])

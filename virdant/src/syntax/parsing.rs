@@ -162,10 +162,10 @@ impl Parsing {
         BStr::new(&self.strings[s.id])
     }
 
-    /// Return the docstring body with `///` stripped from each line.
-    /// Lines that are exactly `///` (no content) become empty lines.
+    /// Return the docstring body with `//>` stripped from each line.
+    /// Lines that are exactly `//>` (no content) become empty lines.
     pub fn doc_string(&self, s: &InternedString) -> BString {
-        self.strip_doc_prefix(s, b"///")
+        self.strip_doc_prefix(s, b"//>")
     }
 
     /// Return the package docstring body with `//!` stripped from each line.
@@ -174,7 +174,7 @@ impl Parsing {
         self.strip_doc_prefix(s, b"//!")
     }
 
-    /// Strip a 3-byte prefix (`///` or `//!`) from each line of a docstring.
+    /// Strip a 3-byte prefix (`//>` or `//!`) from each line of a docstring.
     /// Lines that are exactly the prefix (no content) become empty lines.
     fn strip_doc_prefix(&self, s: &InternedString, prefix: &[u8; 3]) -> BString {
         use bstr::ByteSlice;

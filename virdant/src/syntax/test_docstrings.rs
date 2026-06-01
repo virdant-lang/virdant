@@ -129,7 +129,7 @@ mod test_docstrings {
 
     #[test]
     fn test_ast_node_doc_string_accessor() {
-        let source = test_source(b"/// Documented mod.\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n");
+        let source = test_source(b"//> Documented mod.\nmod Foo {\n    incoming inp : Bit\n    out := inp\n}\n");
         let parsing = parse(&source);
         let root = parsing.root();
         for child in root.children() {
