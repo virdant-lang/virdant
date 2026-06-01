@@ -14,7 +14,7 @@ In this example, we declare four components: `clock` `inp` `out` grouped togethe
 Clocks
 ------
 All digital circuits make use of a clock.
-In a typical FPGA, clocks can run at anywhere from 10MHz to 500MHz.
+In a typical :tip:`FPGA (Field-Programmable Gate Array)`, clocks can run at anywhere from 10MHz to 500MHz.
 
 Since clock signals are what synchronize the circuit, they get their own special type.
 The `Clock` type is used for clock signals in Virdant.

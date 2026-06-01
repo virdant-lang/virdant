@@ -27,6 +27,7 @@ copyright = '2026'
 extensions = [
     "sphinx_rtd_theme",
     "virdant_ext",
+    "tooltip_ext",
     "sphinxext.opengraph",
 ]
 
