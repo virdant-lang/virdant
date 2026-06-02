@@ -15,6 +15,7 @@ pub struct Port {
     pub typ: Option<Type>,
 }
 
+#[virdant_db::query(get = get_ports_of)]
 pub(crate) fn build_ports_of(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<Port>> {
     let mut ports = vec![];
 

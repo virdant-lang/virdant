@@ -320,6 +320,7 @@ fn elaborate_module(
     }
 }
 
+#[virdant_db::query(get = get_elaboration)]
 pub(crate) fn build_elaboration(builder: &mut Builder, top: SymbolId) -> Arc<Elaboration> {
     let mut components: Vec<ElaboratedComponent> = vec![];
     let mut modules: Vec<ElaboratedModule> = vec![];

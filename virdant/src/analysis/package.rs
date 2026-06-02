@@ -14,6 +14,7 @@ use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 
+#[virdant_db::query(get = get_package_analysis)]
 pub(crate) fn build_package_analysis(builder: &mut Builder, package: PackageFqn) -> Arc<PackageAnalysis> {
     let parsing = builder.get_parsing(package);
     let packages = builder.get_packages();

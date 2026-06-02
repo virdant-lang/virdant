@@ -127,6 +127,7 @@ fn dump_driver(driver: &Driver, level: usize) {
     }
 }
 
+#[virdant_db::query(get = get_driver_analysis)]
 pub(crate) fn build_driver_analysis(
     builder: &mut Builder,
     symbol_id: SymbolId,

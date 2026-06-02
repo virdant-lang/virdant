@@ -26,6 +26,7 @@ use crate::syntax::payload::AstNodePayload;
 /// - [`DriverForSink`]: a driver targets a component that cannot sink.
 /// - [`NoDrivers`]: a sink-capable component has zero drivers.
 /// - [`MultipleDrivers`]: a sink-capable component has more than one driver.
+#[virdant_db::query(get = check_drivers)]
 /// Also forwards any diagnostics from [`DriverAnalysis`].
 pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<Diagnostic>> {
     let mut diagnostics = vec![];

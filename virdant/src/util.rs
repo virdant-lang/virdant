@@ -9,7 +9,7 @@ use crate::common::source::Source;
 #[cfg(not(target_arch = "wasm32"))]
 pub fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
     let mut db = Db::new();
-    db.set_packages(vec![]);
+    db.set_packages(Arc::new(vec![]));
     let builtin_source = Source::load_file(crate::LIB_DIR.join("builtin.vir"));
     let mut sources = vec![builtin_source.clone()];
     db.set_source(builtin_source.package(), builtin_source);
@@ -27,7 +27,7 @@ pub fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
         db.set_source(source.package(), source.clone());
         sources.push(source);
     }
-    db.set_packages(sources.iter().map(|source| source.package()).collect());
+    db.set_packages(Arc::new(sources.iter().map(|source| source.package()).collect()));
     db
 }
 
@@ -35,7 +35,7 @@ pub fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
 pub fn db_from_dir_with_lib<P, Q>(source_dir: P, lib_dir: Q) -> Db
 where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
     let mut db = Db::new();
-    db.set_packages(vec![]);
+    db.set_packages(Arc::new(vec![]));
 
     let lib_dir = lib_dir.into();
     let lib_dir = std::fs::canonicalize(&lib_dir).expect(&format!("Could not find {lib_dir:?}"));
@@ -56,7 +56,7 @@ where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
         db.set_source(source.package(), source.clone());
         sources.push(source);
     }
-    db.set_packages(sources.iter().map(|source| source.package()).collect());
+    db.set_packages(Arc::new(sources.iter().map(|source| source.package()).collect()));
     db
 }
 
@@ -69,7 +69,7 @@ pub fn db_from_file<P: Into<std::path::PathBuf>>(source_file: P) -> Db {
 pub fn db_from_file_with_lib<P, Q>(source_file: P, lib_dir: Q) -> Db
 where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
     let mut db = Db::new();
-    db.set_packages(vec![]);
+    db.set_packages(Arc::new(vec![]));
 
     let lib_dir = lib_dir.into();
     let lib_dir = std::fs::canonicalize(&lib_dir).expect(&format!("Could not find {lib_dir:?}"));
@@ -82,7 +82,7 @@ where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
 
     db.set_source(builtin_package.clone(), builtin_source);
     db.set_source(file_package.clone(), file_source);
-    db.set_packages(vec![builtin_package, file_package]);
+    db.set_packages(Arc::new(vec![builtin_package, file_package]));
 
     db
 }

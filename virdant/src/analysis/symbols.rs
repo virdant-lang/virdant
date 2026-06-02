@@ -2,6 +2,7 @@ use bstr::{BStr, BString};
 use indexmap::IndexSet;
 use indexmap::IndexMap;
 use std::sync::Arc;
+use virdant_db::query;
 
 use crate::analysis::PackageAnalysis;
 use crate::db::Builder;
@@ -220,6 +221,7 @@ impl std::fmt::Debug for SymbolId {
     }
 }
 
+#[query(get = get_symboltable)]
 pub(crate) fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
     let packages = builder.get_packages();
     let mut diagnostics = vec![];
@@ -476,6 +478,7 @@ fn node_to_symbol_kind(node: &AstNode<'_>) -> SymbolKind {
     }
 }
 
+#[virdant_db::query(get = get_symbol_ast)]
 pub(crate) fn build_symbol_ast(builder: &mut Builder, symbol_id: SymbolId) -> AstNodeId {
     let symboltable = builder.get_symboltable();
     let symbol = symboltable.symbol(symbol_id);

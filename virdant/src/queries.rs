@@ -1,5 +1,6 @@
 pub mod check;
 pub mod check_drivers;
+pub mod inputs;
 pub mod match_coverage;
 pub mod parsing;
 pub mod syntax;

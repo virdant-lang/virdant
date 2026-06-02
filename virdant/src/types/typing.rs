@@ -204,6 +204,7 @@ impl Typing {
     }
 }
 
+#[virdant_db::query(get = get_type_at)]
 pub(crate) fn build_type_at(builder: &mut Builder, location: Location) -> Result<Type, Vec<Diagnostic>> {
     let type_index = builder.get_type_index();
     if let Some(typ) = type_index.type_at(location) {
@@ -213,6 +214,7 @@ pub(crate) fn build_type_at(builder: &mut Builder, location: Location) -> Result
     }
 }
 
+#[virdant_db::query(get = typecheck)]
 pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<Diagnostic>> {
     let mut diagnostics = vec![];
     let symboltable = builder.get_symboltable();
@@ -494,6 +496,7 @@ pub(crate) fn item_for(builder: &mut Builder, location: Location) -> Symbol {
     }
 }
 
+#[virdant_db::query(get = get_typing)]
 pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typing> {
     let location = exprroot.location();
     let parsing = builder.get_parsing(location.package());

@@ -26,6 +26,7 @@ impl StructField {
     }
 }
 
+#[virdant_db::query(get = get_struct_fields)]
 pub(crate) fn build_struct_fields(builder: &mut Builder, symbol_id: SymbolId) -> Vec<StructField> {
     let mut fields = vec![];
 

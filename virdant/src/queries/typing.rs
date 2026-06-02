@@ -5,6 +5,7 @@ use crate::common::ComponentKind;
 use crate::db::Builder;
 use crate::syntax::payload::AstNodePayload;
 
+#[virdant_db::query(get = get_typing_context)]
 pub(crate) fn build_typing_context(builder: &mut Builder, item: SymbolId) -> TypingContext {
     let component_analysis = builder.get_component_analysis(item);
 
@@ -19,6 +20,7 @@ pub(crate) fn build_typing_context(builder: &mut Builder, item: SymbolId) -> Typ
     context
 }
 
+#[virdant_db::query(get = get_expected_type)]
 pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> Option<Type> {
     let location = exprroot.location();
     let parsing = builder.get_parsing(location.package());

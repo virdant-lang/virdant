@@ -14,6 +14,7 @@ pub struct Signature {
     pub ret_typ: Type,
 }
 
+#[virdant_db::query(get = get_ctor_signature)]
 pub(crate) fn build_ctor_signature(
     builder: &mut Builder,
     ctor_symbol_id: SymbolId,

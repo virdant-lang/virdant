@@ -141,6 +141,7 @@ impl ComponentAnalysis {
     }
 }
 
+#[virdant_db::query(get = get_component_analysis)]
 pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) -> Arc<ComponentAnalysis> {
     let mut component_analysis = ComponentAnalysis {
         moddef,
@@ -410,6 +411,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     Arc::new(component_analysis)
 }
 
+#[virdant_db::query(get = get_component)]
 pub(crate) fn build_component(
     builder: &mut Builder,
     component_id: ComponentId,

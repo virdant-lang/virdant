@@ -8,6 +8,7 @@ use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
 use crate::types::match_coverage::check_match_coverage;
 
+#[virdant_db::query(get = get_match_coverage)]
 pub(crate) fn build_match_coverage(
     builder: &mut Builder,
     symbol_id: SymbolId,

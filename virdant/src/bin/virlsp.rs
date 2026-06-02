@@ -41,11 +41,11 @@ enum HoverMode {
 
 fn new_db() -> Db {
     let mut db = Db::new();
-    db.set_packages(vec![]);
+    db.set_packages(vec![].into());
     let builtin = PackageFqn::new("builtin".into());
     let mut packages = db.get_packages().as_ref().clone();
     packages.push(builtin.clone());
-    db.set_packages(packages);
+    db.set_packages(packages.into());
     let builtin_source = Source::new(builtin.clone(), include_bytes!("../../../lib/builtin.vir").as_ref().into());
     db.set_source(builtin, builtin_source);
     db
@@ -53,7 +53,7 @@ fn new_db() -> Db {
 
 fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
     let mut db = Db::new();
-    db.set_packages(vec![]);
+    db.set_packages(vec![].into());
     let builtin_source = Source::load_file(LIB_DIR.join("builtin.vir"));
     let mut sources = vec![builtin_source.clone()];
     db.set_source(builtin_source.package(), builtin_source);
@@ -81,7 +81,7 @@ fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
             );
         }
     }
-    db.set_packages(sources.iter().map(|source| source.package()).collect());
+    db.set_packages(Arc::new(sources.iter().map(|source| source.package()).collect()));
     db
 }
 
@@ -179,7 +179,7 @@ impl LanguageServer for Backend {
             if !packages.contains(&package) {
                 let mut packages = packages.as_ref().clone();
                 packages.push(package.clone());
-                state.db.set_packages(packages);
+                state.db.set_packages(packages.into());
             }
 
             state.uris.insert(uri.clone());
@@ -207,7 +207,7 @@ impl LanguageServer for Backend {
             if !packages.contains(&package) {
                 let mut packages = packages.as_ref().clone();
                 packages.push(package.clone());
-                state.db.set_packages(packages);
+                state.db.set_packages(packages.into());
             }
             let new_source = Source::new(package.clone(), text);
             state.db.set_source(package.clone(), new_source);

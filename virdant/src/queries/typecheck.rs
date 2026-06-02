@@ -32,6 +32,7 @@ fn find_exprroot(builder: &mut Builder, location: Location) -> Option<ExprRoot> 
     }
 }
 
+#[virdant_db::query(get = get_exprroot_for)]
 pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> ExprRoot {
     if let Some(exprroot) = find_exprroot(builder, location.clone()) {
         return exprroot;
@@ -39,14 +40,10 @@ pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> E
 
     let parsing = builder.get_parsing(location.package());
     let node = parsing.ast_node(location.ast_node_id());
-    builder.dump();
-    dbg!(&node);
-    eprintln!("{:?}", node.summary());
-    eprintln!("{:?}", parsing.text(node.span()));
-    eprintln!("{:?}", node.region());
     panic!("No ExprRoot found")
 }
 
+#[virdant_db::query(get = get_typeof)]
 pub(crate) fn build_typeof(builder: &mut Builder, location: Location) -> Result<Type, Vec<Diagnostic>> {
     let Some(exprroot) = find_exprroot(builder, location.clone()) else {
         let region = builder.get_location_region(location.clone());
@@ -67,6 +64,7 @@ pub(crate) fn build_typeof(builder: &mut Builder, location: Location) -> Result<
     }
 }
 
+#[virdant_db::query(get = get_typeof_all)]
 pub(crate) fn build_typeof_all(builder: &mut Builder) -> IndexMap<Location, Option<Type>> {
     let mut typeof_all = IndexMap::new();
 

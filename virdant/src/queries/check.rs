@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use virdant_db::query;
 
 use bstr::BString;
 use indexmap::IndexMap;
@@ -49,7 +50,8 @@ fn check_package_name_not_keyword(builder: &mut Builder, diagnostics: &mut Vec<D
     }
 }
 
-pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
+#[query(get = check)]
+pub fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     let mut diagnostics = vec![];
 
     diagnostics.extend(builder.get_syntax_errors().iter().cloned());

@@ -35,6 +35,7 @@ pub struct TypeIndex {
     diagnostics: Vec<Diagnostic>,
 }
 
+#[virdant_db::query(get = get_typedefs)]
 pub(crate) fn build_typedefs(builder: &mut Builder) -> Arc<Vec<TypeDef>> {
     let mut typedefs = vec![];
     let symboltable = builder.get_symboltable();
@@ -84,6 +85,7 @@ pub(crate) fn build_typedefs(builder: &mut Builder) -> Arc<Vec<TypeDef>> {
     Arc::new(typedefs)
 }
 
+#[virdant_db::query(get = get_typedef)]
 pub(crate) fn build_typedef(builder: &mut Builder, symbol_id: SymbolId) -> Arc<TypeDef> {
     let symboltable = builder.get_symboltable();
     let item_symbol = symboltable.symbol(symbol_id);
@@ -316,6 +318,7 @@ impl TypeIndex {
     }
 }
 
+#[virdant_db::query(get = get_type_index)]
 pub(crate) fn build_type_index(builder: &mut Builder) -> Arc<TypeIndex> {
     let mut type_index = TypeIndex {
         typs: IndexSet::new(),

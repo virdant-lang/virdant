@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use virdant_db::query;
 
 use crate::analysis::location::Location;
 use crate::common::source::Region;
@@ -7,7 +8,8 @@ use crate::db::Builder;
 use crate::diagnostics::Diagnostic;
 use crate::syntax::ast::AstNode;
 
-pub(crate) fn find_exprroots(builder: &mut Builder) -> Arc<Vec<ExprRoot>> {
+#[query(get = get_exprroots)]
+pub fn find_exprroots(builder: &mut Builder) -> Arc<Vec<ExprRoot>> {
     let mut exprroots = vec![];
     let packages = builder.get_packages();
     for package in packages.iter() {
@@ -21,7 +23,8 @@ pub(crate) fn find_exprroots(builder: &mut Builder) -> Arc<Vec<ExprRoot>> {
     Arc::new(exprroots)
 }
 
-pub(crate) fn build_syntax_errors(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
+#[query(get = get_syntax_errors)]
+pub fn build_syntax_errors(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     let mut diagnostics = vec![];
     let packages = builder.get_packages();
     for package in packages.iter() {
@@ -32,7 +35,8 @@ pub(crate) fn build_syntax_errors(builder: &mut Builder) -> Arc<Vec<Diagnostic>>
     Arc::new(diagnostics)
 }
 
-pub(crate) fn build_all_exprs(builder: &mut Builder) -> Arc<Vec<Location>> {
+#[query(get = get_all_exprs)]
+pub fn build_all_exprs(builder: &mut Builder) -> Arc<Vec<Location>> {
     let mut exprs = vec![];
 
     let packages = builder.get_packages();
@@ -54,7 +58,8 @@ fn collect_expr_locations(node: AstNode<'_>, exprs: &mut Vec<Location>) {
     }
 }
 
-pub(crate) fn build_location_region(builder: &mut Builder, location: Location) -> Region {
+#[query(get = get_location_region)]
+pub fn build_location_region(builder: &mut Builder, location: Location) -> Region {
     let parsing = builder.get_parsing(location.package());
     let node = parsing.ast_node(location.ast_node_id());
     node.region()
