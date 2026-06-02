@@ -16,6 +16,7 @@ use crate::{analysis::Location, diagnostics::Diagnostic};
 #[derive(Debug)]
 pub struct SymbolTable {
     pub symbols: IndexMap<BString, Symbol>,
+    symbols_by_id: Vec<Symbol>,
     pub diagnostics: Vec<Diagnostic>,
     pub builtin_names: IndexSet<BString>,
 }
@@ -52,7 +53,7 @@ pub enum SymbolKind {
 
 impl SymbolTable {
     pub fn symbol(&self, symbol_id: SymbolId) -> Symbol {
-        self.symbols[symbol_id.0 as usize].clone()
+        self.symbols_by_id[symbol_id.0 as usize].clone()
     }
 
     pub fn resolve(&self, fqn: &BStr) -> Option<&Symbol> {
@@ -235,8 +236,11 @@ pub(crate) fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
         );
     }
 
+    let symbols_by_id: Vec<Symbol> = symbols.iter().map(|(_key, val)| val.clone()).collect();
+
     Arc::new(SymbolTable {
         symbols: symbols.into_iter().collect(),
+        symbols_by_id,
         diagnostics,
         builtin_names: builtin_names.into_iter().collect(),
     })
