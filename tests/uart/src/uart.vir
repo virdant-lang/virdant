@@ -12,7 +12,7 @@ export mod Top {
     sender.data := 65w8
     sender.data_valid := true
     reg cycle : Word[32] on clock
-    cycle <= when { case reset => 0w32  else => cycle + 1w32 }
+    cycle <= mux(reset, 0w32, cycle + 1w32)
 }
 
 mod UartSender {
@@ -41,124 +41,36 @@ mod UartSender {
 
     ready := state == 0w2
 
-    state <= if reset {
-        0w2 // @Idle
-    } else if state == 0w2 { // @Idle
-        if data_valid {
-            1w2 // @Start
-        } else {
-            0w2 // @Idle
-        }
-    } else if state == 1w2 { // @Start
-        if pulse == 0w11 {
-            2w2 // @Bit
-        } else {
-            1w2 // @Start
-        }
-    } else if state == 2w2 { // @Bit
-        if pulse == 0w11 {
-            if bitnum < 7w3 {
-                2w2 // @Bit
-            } else {
-                3w2 // @Stop
-            }
-        } else {
-            2w2 // @Bit
-        }
-    } else { // @Stop
-        if pulse == 0w11 {
-            0w2 // @Idle
-        } else {
-            3w2 // @Stop
-        }
-    }
+    state <= mux(reset, 0w2, // @Idle
+        mux(state == 0w2, mux(data_valid, 1w2, 0w2), // @Idle
+        mux(state == 1w2, mux(pulse == 0w11, 2w2, 1w2), // @Start
+        mux(state == 2w2, mux(pulse == 0w11, mux(bitnum < 7w3, 2w2, 3w2), 2w2), // @Bit
+        mux(pulse == 0w11, 0w2, 3w2))))) // @Stop
 
-    pulse <= if reset {
-        0w11
-    } else if state == 0w2 { // @Idle
-        if data_valid {
-            1250w11 // loading for Start state
-        } else {
-            0w11
-        }
-    } else if state == 1w2 { // @Start
-        if pulse == 0w11 {
-            1250w11 // loading for Bit state
-        } else {
-            pulse - 1
-        }
-    } else if state == 2w2 { // @Bit
-        if pulse == 0w11 {
-            1250w11 // loading for next Bit or Stop state
-        } else {
-            pulse - 1
-        }
-    } else { // @Stop
-        if pulse == 0w11 {
-            0w11
-        } else {
-            pulse - 1
-        }
-    }
+    pulse <= mux(reset, 0w11,
+        mux(state == 0w2, mux(data_valid, 1250w11, 0w11), // @Idle
+        mux(state == 1w2, mux(pulse == 0w11, 1250w11, pulse - 1), // @Start
+        mux(state == 2w2, mux(pulse == 0w11, 1250w11, pulse - 1), // @Bit
+        mux(pulse == 0w11, 0w11, pulse - 1))))) // @Stop
 
-    bitnum <= if reset {
-        0w3
-    } else if state == 1w2 { // @Start
-        if pulse == 0w11 {
-            0w3 // entering Bit state, start at bit 0
-        } else {
-            bitnum
-        }
-    } else if state == 2w2 { // @Bit
-        if pulse == 0w11 {
-            if bitnum < 7w3 {
-                bitnum + 1
-            } else {
-                bitnum
-            }
-        } else {
-            bitnum
-        }
-    } else {
-        bitnum
-    }
+    bitnum <= mux(reset, 0w3,
+        mux(state == 1w2, mux(pulse == 0w11, 0w3, bitnum), // @Start
+        mux(state == 2w2, mux(pulse == 0w11, mux(bitnum < 7w3, bitnum + 1, bitnum), bitnum), // @Bit
+        bitnum)))
 
-    latched_data <=
-        if state == 0w2 { // @Idle
-            if data_valid {
-                data
-            } else {
-                latched_data
-            }
-        } else {
-            latched_data
-        }
+    latched_data <= mux(state == 0w2, mux(data_valid, data, latched_data), latched_data)
 
-    uart_tx_reg <= if reset {
-        true
-    } else if state == 0w2 { // @Idle
-        true
-    } else if state == 1w2 { // @Start
-        false
-    } else if state == 2w2 { // @Bit
-        if bitnum == 0w3 {
-            latched_data[0]
-        } else if bitnum == 1w3 {
-            latched_data[1]
-        } else if bitnum == 2w3 {
-            latched_data[2]
-        } else if bitnum == 3w3 {
-            latched_data[3]
-        } else if bitnum == 4w3 {
-            latched_data[4]
-        } else if bitnum == 5w3 {
-            latched_data[5]
-        } else if bitnum == 6w3 {
-            latched_data[6]
-        } else {
-            latched_data[7]
-        }
-    } else { // @Stop
-        true
-    }
+    uart_tx_reg <= mux(reset, true,
+        mux(state == 0w2, true, // @Idle
+        mux(state == 1w2, false, // @Start
+        mux(state == 2w2, // @Bit
+            mux(bitnum == 0w3, latched_data[0],
+            mux(bitnum == 1w3, latched_data[1],
+            mux(bitnum == 2w3, latched_data[2],
+            mux(bitnum == 3w3, latched_data[3],
+            mux(bitnum == 4w3, latched_data[4],
+            mux(bitnum == 5w3, latched_data[5],
+            mux(bitnum == 6w3, latched_data[6],
+            latched_data[7]))))))),
+        true)))) // @Stop
 }

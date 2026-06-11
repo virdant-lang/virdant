@@ -451,11 +451,13 @@ pub fn when_arm_children<'a, 'p>(
     let mut out = Vec::new();
     let mut idx = 0;
     while let Some(first) = children.get(idx) {
-        if first.is_expr() {
-            let Some(body) = children.get(idx + 1) else { break };
+        // Check if there's a next child
+        if let Some(body) = children.get(idx + 1) {
+            // There is a next child, so this is a case arm (guard + body)
             out.push((Some(first), body));
             idx += 2;
         } else {
+            // No next child, so this must be the else arm (body only)
             out.push((None, first));
             idx += 1;
         }
