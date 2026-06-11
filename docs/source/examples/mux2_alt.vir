@@ -4,10 +4,9 @@ mod Mux2 {
     incoming select : Bit
 
     outgoing out : Word[8] {
-        if select {
-            it := a
-        } else {
-            it := b
+        it := when {
+            case select => a
+            else => b
         }
     }
 }

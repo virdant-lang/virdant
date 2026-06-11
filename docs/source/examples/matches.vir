@@ -1,22 +1,15 @@
+union type MaybeWord {
+    Nothing()
+    Something(payload : Word[8])
+}
+
 mod Top {
-    incoming inp : Valid
+    incoming inp : MaybeWord
     outgoing out : Word[8]
 
     out :=
         match inp {
-            case @Invalid() => 0
-            case @Valid(payload) => payload
+            case @Nothing() => 0
+            case @Something(payload) => payload
         }
-
-    wire another : Word[8]
-    another :=
-        match inp : Valid {
-            case @Invalid() => 0
-            case @Valid(payload) => payload
-        }
-}
-
-union type Valid {
-    Invalid()
-    Valid(payload : Word[8])
 }

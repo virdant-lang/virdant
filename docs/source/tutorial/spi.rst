@@ -143,32 +143,29 @@ And as you might expect, we use `!=` to test that two values are *not* equal:
 State Machines
 --------------
 The `SpiController` also defines how `state` changes over time.
-This is done with a driver block:
+This is done with a driver that uses `when` and `match` expressions:
 
 .. literalinclude:: /examples/spi.vir
     :language: virdant
     :dedent:
-    :lines: 30-52
+    :lines: 32-39
 
-We see an `if` statement at the top which handles the reset logic.
+We see a `when` expression at the top which handles the reset logic.
 Resetting the controller puts it into `#Idle` mode.
 
-Next, we see a `match` statement which looks at `state`.
-Inside, we see several `case`\s, some with nested `if` statements.
-Finally, in each of these, we have a driver statement that begins with `it <= ...`.
-(Note that `it` here refers to `state`).
+Next, inside the `else` branch, we see a `match` expression which looks at `state`.
+Inside, we see several `case`\s, some with `mux` expressions.
 
-So in total, this block of code simply says:
+So in total, this code says:
 
-  "Look at the current `state` and then, on the next cycle, `it` becomes `...`"
+  "Look at the current `state` and then, on the next cycle, transition to the appropriate next state."
 
 
-Notice, by the way, that not all situations were fully covered.
-If `state` is `#Idle`, but `valid` is not `true`, the code doesn't say what happens!
+Notice how each case uses `mux` expressions to decide the next state.
+For example, in the `#Idle` case, we transition to `#Set` if `valid` is true, otherwise stay in `#Idle`.
 
-Virdant will interpret this to mean that *nothing* happens:
-`state` just keeps whatever value it had before.
-(In this case, it stays `#Idle`).
+This pattern of using expressions to describe state transitions is cleaner than
+using imperative statement blocks.
 
 Note that this behavior *only* works for `<=` (latched drivers).
 When using `:=` (continuous drivers), we must *always* have full case coverage.
@@ -199,14 +196,15 @@ The definition of `buffer` itself comes a bit later:
 .. literalinclude:: /examples/spi.vir
     :language: virdant
     :dedent:
-    :lines: 55-66
+    :lines: 44-48
 
 
 We see that it latches the value of `data` when a transaction begins.
+If we're not in `#Idle` state or `valid` is false, the buffer retains its current value.
 
-On the next cycle after each tick of `sck`, we shift it over 1 bit.
-We do this using bit slicing: `it[7..0]`.
-This returns the lower 7-bits of `it` (`buffer`).
+On each `#Tick`, we shift it over 1 bit.
+We do this using bit slicing: `buffer[7..0]`.
+This returns the lower 7-bits of `buffer`.
 
 The first index (`7`) is exclusive, while the second index (`0`) is inclusive.
 This makes it easy to calculate at a glance the result is `7` - `0` = 7 bits, or `Word[7]`.

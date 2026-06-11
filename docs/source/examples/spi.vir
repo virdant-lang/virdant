@@ -27,53 +27,32 @@ mod SpiController {
         it := buffer[7]
     }
 
-    reg state : SpiState on clock {
-        if reset {
-            it <= #Idle
-        } else {
-            match it {
-                case #Idle  => {
-                    if valid {
-                        it <= #Set
-                    }
-                }
-                case #Set  => {
-                    it <= #Tick
-                }
-                case #Tick => {
-                    if bits == 7 {
-                        it <= #Idle
-                    } else {
-                        it <= #Set
-                    }
-                }
-            }
+    reg state : SpiState on clock
+
+    state <= when {
+        case reset => #Idle
+        else match state {
+            case #Idle  => mux(valid, #Set, #Idle)
+            case #Set   => #Tick
+            case #Tick  => mux(bits == 7, #Idle, #Set)
         }
     }
 
     // bits left to send
-    reg buffer : Word[8] on clock {
-        match state {
-            case #Idle  => {
-                if valid {
-                    it <= data
-                }
-            }
-            case #Tick => {
-                it <= word(it[7..0], 0w1)
-            }
-        }
+    reg buffer : Word[8] on clock
+
+    buffer <= match state {
+        case #Idle => mux(valid, data, buffer)
+        case #Tick => word(buffer[7..0], 0w1)
+        else => buffer
     }
 
     // how many bits have been clocked out
-    reg bits  : Word[3] on clock {
-        match state {
-            case #Idle  => {
-                it <= 0
-            }
-            case #Tick => {
-                it <= it + 1
-            }
-        }
+    reg bits  : Word[3] on clock
+
+    bits <= match state {
+        case #Idle => 0
+        case #Tick => bits + 1
+        else => bits
     }
 }

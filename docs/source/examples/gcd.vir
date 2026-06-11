@@ -16,15 +16,11 @@ mod Gcd {
         match state {
             case @Idle() => @Running(a, b)
             case @Running(x, y) =>
-                if y == 0 {
-                    @Done(x)
-                } else {
-                    if x < y {
-                        @Running(y - x, x)
-                    } else {
-                        @Running(x - y, y)
-                    }
-                }
+                mux(y == 0,
+                    @Done(x),
+                    mux(x < y,
+                        @Running(y - x, x),
+                        @Running(x - y, y)))
             case @Done(result) => @Idle()
         }
 
@@ -37,8 +33,11 @@ mod Gcd {
 
 mod Top {
     incoming clock : Clock
+    outgoing result : Word[8]
+
     mod gcd of Gcd
     gcd.clock := clock
     gcd.a := 89
     gcd.b := 144
+    result := gcd.result
 }

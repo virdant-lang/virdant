@@ -11,17 +11,15 @@ mod Top {
     outgoing greenness : Word[8]
 
     reg counter : Word[2] on clock
+    counter <= counter + 1
 
     reg color : Color on clock
     color <=
-        if counter == 0 {
-            ${ red = 0, green = 0, blue = 0 }
-        } else if counter == 1 {
-            ${ red = 255, green = 0, blue = 0 }
-        } else if counter == 2 {
-            ${ red = 0, green = 255, blue = 0 }
-        } else {
-            ${ red = 0, green = 0, blue = 255 }
+        match counter {
+            case 0 => ${ red = 0, green = 0, blue = 0 }
+            case 1 => ${ red = 255, green = 0, blue = 0 }
+            case 2 => ${ red = 0, green = 255, blue = 0 }
+            case 3 => ${ red = 0, green = 0, blue = 255 }
         }
 
     redness := color->red

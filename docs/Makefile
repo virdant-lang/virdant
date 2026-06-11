@@ -7,7 +7,7 @@ SPHINXOPTS    ?=
 SPHINXBUILD   ?= uv run sphinx-build
 SOURCEDIR     = source
 BUILDDIR      = build
-EXAMPLES      = $(wildcard sources/examples/*.vir)
+EXAMPLES      = $(wildcard source/examples/*.vir)
 TESTS         = $(wildcard source/examples/*.lua)
 FEATURES      = vir-bin,filecheck-bin,vir-lsp-bin,lua,rhai
 
@@ -33,4 +33,5 @@ rustdocs:
 	cp -r ../virdant/target/doc/ $(BUILDDIR)/html/.
 
 test: $(EXAMPLES) $(TESTS)
+	for example in $(EXAMPLES); do cargo run --bin=vir -- -F $$example check  || exit 1; done
 	for script in $(TESTS); do cargo run --bin=vir --features $(FEATURES) -- run $$script || exit 1; done

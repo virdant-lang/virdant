@@ -19,7 +19,7 @@ class VirdantLexer(RegexLexer):
         'export', 'ext', 'fn', 'if', 'import', 'incoming',
         'match', 'mod', 'of', 'on', 'outgoing', 'reg',
         'server', 'socket', 'struct', 'type', 'union',
-        'unused', 'width', 'wire',
+        'unused', 'when', 'width', 'wire',
     ]
 
     BUILTINS = ['Bit', 'Word', 'Vec', 'tuple', 'Nat', 'Shape', 'io']

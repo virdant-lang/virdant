@@ -1,6 +1,6 @@
 Muxes and Decoders
 ==================
-Now, we will demonstrate how to use conditional statements through a series of small, related examples.
+Now, we will demonstrate how to use conditional expressions through a series of small, related examples.
 
 Multiplexer
 -----------
@@ -15,19 +15,18 @@ Multiplexer
 It outputs `a` if `select` is asserted and `b` otherwise.
 
 
-If Expressions
---------------
-We use `if` to select between two different values.
-The curly braces are always required.
+When Expressions
+----------------
+We use `when` to select between two different values based on conditions.
+The syntax uses `case` for each condition and `else` for the default.
 
 
-If Statements
--------------
-You may have felt it was a little weird to read `if` *expressions*.
-We're used to hearing the phrase `if` *statement*.
-Virdant has both.
+It Blocks
+---------
+You can also use `it` blocks to assign to the implicit `it` variable
+within an outgoing port declaration.
 
-Here is an alternative version that showcases `if` expressions:
+Here is an alternative version:
 
 .. literalinclude:: /examples/mux2_alt.vir
     :caption: mux2_alt.vir
@@ -39,7 +38,7 @@ Which do you find more natural?
 
     Verilog uses the syntax `select ? a : b` borrowed from C.
 
-    Virdant, on the other hand, prefers that the two variants look the same.
+    Virdant uses `when` expressions which can handle multiple conditions cleanly.
 
 
 Decoder
@@ -57,13 +56,13 @@ It's output, `out`, is a 4-bit number whose bits are all zero
 
 Match Expressions
 -----------------
-Because we are selecting between multiple alternatives, we use `match`.
+Because we are selecting between multiple alternatives based on a value, we use `match`.
 
-A `match` expression is a *fancy* `if` statement.
-It looks at the value you give and tries to match it against all of the different `case`\s.
+A `match` expression looks at the value you give
+and tries to match it against all of the different `case`\s.
 When it finds one that matches, the result becomes the value given on the right hand side of the `=>`.
 
-One really nice thing about match statements is that they prevent you from "forgetting" to cover every case.
+One really nice thing about match expressions is that they prevent you from "forgetting" to cover every case.
 
 
 Literals
@@ -72,10 +71,10 @@ Since we are outputting a binary value,
 it felt like it would make a lot of sense to use Virdant's syntax for binary numbers: `0b0001`.
 
 
-Match Statements
-----------------
-Just as there are both `if` expressions and `if` statements,
-Virdant has both `match` expressions and `match` statements.
+Match with It Blocks
+--------------------
+Just as you can use `when` inside an `it` block,
+you can also use `match` expressions inside `it` blocks.
 
 .. literalinclude:: /examples/decoder4_alt.vir
     :caption: decoder4_alt.vir

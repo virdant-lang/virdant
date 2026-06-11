@@ -1,6 +1,6 @@
 Arbiter
 =======
-In this next example, we will demonstrate a more interesting use of `if` statements.
+In this next example, we will demonstrate a more interesting use of `when` expressions.
 We will also see the pattern for resetting a register.
 
 `Arbiter` is a circuit which allows two clients to ask for access to a device,
@@ -65,32 +65,32 @@ In these cases, it is good to add comments to your code.
 Virdant uses `//` for comments.
 
 
-Nested If Statements
---------------------
-The heart of `Arbiter` is this big block of code:
+When Expressions
+----------------
+The heart of `Arbiter` is composed of `when` expressions.
+
+First, let's look at how the priority register is updated:
 
 .. literalinclude:: /examples/arbiter.vir
     :language: virdant
     :dedent:
-    :lines: 14-33
+    :lines: 14-17
 
-We see at the top that this is an `if` statement.
-We are asking, "Is the circuit currently being reset?"
-
-If we are resetting the circuit, we see that `priority_for_client_0` will latch `true` on the next cycle.
-On the current cycle, both clients are *denied* access.
+This `when` expression checks if we are resetting the circuit.
+If so, `priority_for_client_0` will latch `true` on the next cycle.
+Otherwise, it flips to the opposite value.
 
 What happens after a reset?
 
 
 Round Robin
 -----------
-This line looks a little funny:
+The `else` case in the priority update looks interesting:
 
 .. literalinclude:: /examples/arbiter.vir
     :language: virdant
     :dedent:
-    :lines: 21-24
+    :lines: 16
 
 The `!` operator is logical NOT.
 This driver has the effect of *flipping* `priority_for_client_0` from `true` to `false`
@@ -108,12 +108,23 @@ or from `false` to `true` each cycle.
 
 Granting Access
 ---------------
-The remaining lines give the logic for actually granting access.
+The grant signals use `when` expressions to select the appropriate logic:
 
 .. literalinclude:: /examples/arbiter.vir
     :language: virdant
     :dedent:
-    :lines: 26-32
+    :lines: 19-23
+
+During reset, grants are always false.
+When `priority_for_client0` is true, `grant0` gets the full request signal.
+Otherwise, client 0 only gets access if client 1 isn't requesting.
+
+The logic for `grant1` is symmetric:
+
+.. literalinclude:: /examples/arbiter.vir
+    :language: virdant
+    :dedent:
+    :lines: 25-29
 
 The client with priority will get it simply by asking for it.
 The other client will get it only if it both asks and if the other doesn't.

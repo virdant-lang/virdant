@@ -1,11 +1,3 @@
-fn max(x : Word[8], y : Word[8]) -> Word[8] {
-    if x < y {
-        x
-    } else {
-        y
-    }
-}
-
 mod Top {
     incoming clock : Clock
     incoming reset : Bit
@@ -14,10 +6,13 @@ mod Top {
 
     reg max_seen_reg : Word[8] on clock
 
-    max_seen_reg <= if reset {
-        0
-    } else {
-        max(max_seen_reg, inp)
+    // Compute the maximum of the current register value and the input
+    wire current_max : Word[8]
+    current_max := mux(max_seen_reg < inp, inp, max_seen_reg)
+
+    max_seen_reg <= when {
+        case reset => 0
+        else => current_max
     }
 
     max_seen := max_seen_reg
