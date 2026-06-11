@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use bstr::ByteSlice;
 
-use crate::analysis::drivers::{Driver, DriverIf, DriverMatch};
+use crate::analysis::drivers::{Driver, DriverWhen, DriverMatch};
 use crate::analysis::location::Location;
 use crate::common::{self, ComponentKind, DriverType, Radix, TypeScheme, Width, WordValue};
 use crate::db::Db;
@@ -345,8 +345,8 @@ impl<'d> Converter<'d> {
                     let clock_expr = self.convert_expr(package, clock_node, &clock_type, self.db, &mut scheduler);
                     scheduler.in_sequential = true;
                     let stmts = match driver {
-                        Driver::If(driver_if) if driver_if.driver_type == DriverType::Latched => {
-                            self.convert_latched_driver_if_to_stmts(package, driver_if, &typ, &path, &mut scheduler)
+                        Driver::When(driver_when) if driver_when.driver_type == DriverType::Latched => {
+                            self.convert_latched_driver_when_to_stmts(package, driver_when, &typ, &path, &mut scheduler)
                         }
                         Driver::Match(driver_match) if driver_match.driver_type == DriverType::Latched => {
                             self.convert_driver_match_to_stmts(package, driver_match, &typ, &path, &mut scheduler)
@@ -421,12 +421,12 @@ impl<'d> Converter<'d> {
                 collect_ast_holes(expr_node)
             }
             Driver::Bidirectional(_) => vec![],
-            Driver::If(driver_if) => {
+            Driver::When(driver_when) => {
                 let mut holes = vec![];
-                for (_, sub_driver) in &driver_if.clauses {
+                for (_, sub_driver) in &driver_when.clauses {
                     holes.extend(self.collect_driver_holes(sub_driver));
                 }
-                if let Some(else_driver) = &driver_if.else_clause {
+                if let Some(else_driver) = &driver_when.else_clause {
                     holes.extend(self.collect_driver_holes(else_driver));
                 }
                 holes
@@ -445,7 +445,7 @@ impl<'d> Converter<'d> {
     }
 
     /// Convert a `Driver` tree to a single `verilog::Expr` (for combinational / Continuous drivers).
-    /// `Driver::If` becomes a right-associative ternary chain (`cond ? then : else`).
+    /// `Driver::When` becomes a right-associative ternary chain (`cond ? then : else`).
     fn convert_driver_to_expr(
         &self,
         package: &PackageFqn,
@@ -460,26 +460,26 @@ impl<'d> Converter<'d> {
                 self.convert_expr(package, expr_node, typ, self.db, scheduler)
             }
             Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are emitted directly, not via convert_driver_to_expr"),
-            Driver::If(driver_if) => self.convert_driver_if_to_expr(package, driver_if, typ, scheduler),
+            Driver::When(driver_when) => self.convert_driver_when_to_expr(package, driver_when, typ, scheduler),
             Driver::Match(driver_match) => self.convert_driver_match_to_expr(package, driver_match, typ, scheduler),
         }
     }
 
-    fn convert_driver_if_to_expr(
+    fn convert_driver_when_to_expr(
         &self,
         package: &PackageFqn,
-        driver_if: &DriverIf,
+        driver_when: &DriverWhen,
         typ: &Type,
         scheduler: &mut ExprScheduler,
     ) -> verilog::Expr {
         // Base: else clause, or X-bits when there is no else.
-        let else_expr = match &driver_if.else_clause {
+        let else_expr = match &driver_when.else_clause {
             Some(else_driver) => self.convert_driver_to_expr(package, else_driver, typ, scheduler),
             None => verilog::Expr::XLit(verilog::expr::XLit { width: type_width(typ, self.db) }),
         };
 
         // Build right-associative ternary chain from last clause to first.
-        driver_if.clauses.iter().rev().fold(else_expr, |acc, (cond_loc, sub_driver)| {
+        driver_when.clauses.iter().rev().fold(else_expr, |acc, (cond_loc, sub_driver)| {
             let cond_parsing = self.db.get_parsing(cond_loc.package());
             let cond_node = cond_parsing.ast_node(cond_loc.ast_node_id());
             let cond_type = self.node_type(package, &cond_node).unwrap_or(Type::Bit);
@@ -493,24 +493,24 @@ impl<'d> Converter<'d> {
         })
     }
 
-    /// Convert a `Latched Driver::If` tree into a chain of procedural `Stmt::If` blocks
+    /// Convert a `Latched Driver::When` tree into a chain of procedural `Stmt::If` blocks
     /// with non-blocking assignments.  When there is no else clause, no else branch is emitted.
-    fn convert_latched_driver_if_to_stmts(
+    fn convert_latched_driver_when_to_stmts(
         &self,
         package: &PackageFqn,
-        driver_if: &DriverIf,
+        driver_when: &DriverWhen,
         typ: &Type,
         path: &str,
         scheduler: &mut ExprScheduler,
     ) -> Vec<verilog::Stmt> {
         // Else stmts (empty when there is no else clause).
-        let else_stmts = match &driver_if.else_clause {
+        let else_stmts = match &driver_when.else_clause {
             Some(else_driver) => self.convert_latched_driver_to_stmts(package, else_driver, typ, path, scheduler),
             None => vec![],
         };
 
         // Build right-associative Stmt::If chain from last clause to first.
-        driver_if.clauses.iter().rev().fold(else_stmts, |acc_else, (cond_loc, sub_driver)| {
+        driver_when.clauses.iter().rev().fold(else_stmts, |acc_else, (cond_loc, sub_driver)| {
             let cond_parsing = self.db.get_parsing(cond_loc.package());
             let cond_node = cond_parsing.ast_node(cond_loc.ast_node_id());
             let cond_type = self.node_type(package, &cond_node).unwrap_or(Type::Bit);
@@ -665,8 +665,8 @@ impl<'d> Converter<'d> {
                 })]
             }
             Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are emitted directly, not via convert_latched_driver_to_stmts"),
-            Driver::If(driver_if) => {
-                self.convert_latched_driver_if_to_stmts(package, driver_if, typ, path, scheduler)
+            Driver::When(driver_when) => {
+                self.convert_latched_driver_when_to_stmts(package, driver_when, typ, path, scheduler)
             }
             Driver::Match(driver_match) => {
                 self.convert_driver_match_to_stmts(package, driver_match, typ, path, scheduler)
@@ -1244,6 +1244,23 @@ impl<'d> Converter<'d> {
                                     exprs.push(self.convert_expr(package, child, &child_type, self.db, scheduler));
                                 }
                                 verilog::Expr::Concat(verilog::expr::Concat { exprs, width })
+                            }
+                            Primitive::Mux => {
+                                // mux(cond, a, b) -> cond ? a : b
+                                let cond_node = node.child(1);
+                                let a_node = node.child(2);
+                                let b_node = node.child(3);
+                                let cond_type = self.node_type(package, &cond_node).unwrap();
+                                let a_type = self.node_type(package, &a_node).unwrap();
+                                let b_type = self.node_type(package, &b_node).unwrap();
+                                let cond_expr = self.convert_expr(package, cond_node, &cond_type, self.db, scheduler);
+                                let a_expr = self.convert_expr(package, a_node, &a_type, self.db, scheduler);
+                                let b_expr = self.convert_expr(package, b_node, &b_type, self.db, scheduler);
+                                verilog::Expr::If(verilog::expr::If {
+                                    cond: Box::new(cond_expr),
+                                    then_expr: Box::new(a_expr),
+                                    else_expr: Box::new(b_expr),
+                                })
                             }
                         }
                     }

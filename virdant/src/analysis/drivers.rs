@@ -25,7 +25,7 @@ pub struct DriverAnalysis {
 pub enum Driver {
     Expr(DriverType, Location),
     Bidirectional(Location),
-    If(DriverIf),
+    When(DriverWhen),
     Match(DriverMatch),
 }
 
@@ -34,7 +34,7 @@ impl Driver {
         match self {
             Driver::Expr(dt, _) => *dt,
             Driver::Bidirectional(_) => DriverType::Continuous,
-            Driver::If(driver_if) => driver_if.driver_type,
+            Driver::When(driver_when) => driver_when.driver_type,
             Driver::Match(driver_match) => driver_match.driver_type,
         }
     }
@@ -43,14 +43,14 @@ impl Driver {
         match self {
             Driver::Expr(_, loc) => Some(loc.clone()),
             Driver::Bidirectional(loc) => Some(loc.clone()),
-            Driver::If(driver_if) => driver_if.clauses.first().map(|(loc, _)| loc.clone()),
+            Driver::When(driver_when) => driver_when.clauses.first().map(|(loc, _)| loc.clone()),
             Driver::Match(driver_match) => Some(driver_match.subject.clone()),
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct DriverIf {
+pub struct DriverWhen {
     pub driver_type: DriverType,
     pub clauses: Vec<(Location, Box<Driver>)>,
     pub else_clause: Option<Box<Driver>>,
@@ -102,14 +102,14 @@ fn dump_driver(driver: &Driver, level: usize) {
     match driver {
         Driver::Expr(driver_type, loc) => eprintln!("{pad} {driver_type:?}{loc:?}"),
         Driver::Bidirectional(loc) => eprintln!("{pad} Bidirectional{loc:?}"),
-        Driver::If(driver_if) => {
-            for (i, (cond_loc, sub_driver)) in driver_if.clauses.iter().enumerate() {
-                let keyword = if i == 0 { "if" } else { "else if" };
+        Driver::When(driver_when) => {
+            for (i, (cond_loc, sub_driver)) in driver_when.clauses.iter().enumerate() {
+                let keyword = if i == 0 { "when case" } else { "when case" };
                 eprintln!("{pad}{keyword} {cond_loc:?}:");
                 dump_driver(sub_driver, level + 1);
             }
-            if let Some(else_driver) = &driver_if.else_clause {
-                eprintln!("{pad}else:");
+            if let Some(else_driver) = &driver_when.else_clause {
+                eprintln!("{pad}when else:");
                 dump_driver(else_driver, level + 1);
             }
         }
@@ -496,7 +496,7 @@ fn collect_block_drivers(
                 }
                 all_components.extend(else_drivers.keys().copied());
 
-                // Build a Driver::If for each driven component and merge into the result.
+                // Build a Driver::When for each driven component and merge into the result.
                 for comp_id in all_components {
                     let clauses: Vec<(Location, Box<Driver>)> = clause_drivers.iter()
                         .filter_map(|(cond_loc, cd)| {
@@ -514,7 +514,7 @@ fn collect_block_drivers(
                         .or_else(|| else_clause.as_ref().map(|d| d.driver_type()))
                         .unwrap_or(DriverType::Continuous);
 
-                    result.entry(comp_id).or_default().push(Driver::If(DriverIf {
+                    result.entry(comp_id).or_default().push(Driver::When(DriverWhen {
                         driver_type,
                         clauses,
                         else_clause,
@@ -532,12 +532,17 @@ fn collect_block_drivers(
                 // the drivers from a trailing `else => { ... }` arm, if any.
                 let mut case_arm_drivers: Vec<(Location, IndexMap<ComponentId, Vec<Driver>>)> = vec![];
                 let mut else_arm_drivers: Option<IndexMap<ComponentId, Vec<Driver>>> = None;
-                for (pat_opt, block) in match_arm_children(&children) {
-                    let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, it_context);
-                    diagnostics.append(&mut block_diags);
+                for (pat_opt, body) in match_arm_children(&children) {
+                    let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ModDefStmtBlock) {
+                        collect_block_drivers(body.children(), component_analysis, it_context)
+                    } else {
+                        // nested when/match or bare expr - recurse as single stmt
+                        collect_block_drivers(vec![body.clone()], component_analysis, it_context)
+                    };
+                    diagnostics.append(&mut body_diags);
                     match pat_opt {
-                        Some(pat) => case_arm_drivers.push((pat.location(), block_drivers)),
-                        None => { else_arm_drivers = Some(block_drivers); }
+                        Some(pat) => case_arm_drivers.push((pat.location(), body_drivers)),
+                        None => { else_arm_drivers = Some(body_drivers); }
                     }
                 }
 

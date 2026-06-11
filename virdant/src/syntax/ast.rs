@@ -435,3 +435,30 @@ pub fn match_arm_children<'a, 'p>(
     }
     out
 }
+
+/// Iterate the arms of a `when` node (either `ModDefStmtWhen` or `ExprWhen`).
+///
+/// `children` must be the children slice of a when node (no subject, just arms).
+/// Each `case Expr => body` arm contributes two consecutive children (guard, body);
+/// each `else => body` arm contributes a single child (body) because the grammar
+/// omits the guard node.
+///
+/// Yields `(Some(guard_node), body_node)` for `case` arms and `(None, body_node)` for
+/// `else` arms, in source order.
+pub fn when_arm_children<'a, 'p>(
+    children: &'a [AstNode<'p>],
+) -> Vec<(Option<&'a AstNode<'p>>, &'a AstNode<'p>)> {
+    let mut out = Vec::new();
+    let mut idx = 0;
+    while let Some(first) = children.get(idx) {
+        if first.is_expr() {
+            let Some(body) = children.get(idx + 1) else { break };
+            out.push((Some(first), body));
+            idx += 2;
+        } else {
+            out.push((None, first));
+            idx += 1;
+        }
+    }
+    out
+}

@@ -60,6 +60,7 @@ pub enum Primitive {
     Sext,
     Zext,
     Trunc,
+    Mux,
 }
 
 

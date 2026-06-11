@@ -133,11 +133,11 @@ fn collect_wrong_driver_type_errors(
             }
         }
         Driver::Bidirectional(_) => {}
-        Driver::If(driver_if) => {
-            for (_, sub_driver) in &driver_if.clauses {
+        Driver::When(driver_when) => {
+            for (_, sub_driver) in &driver_when.clauses {
                 collect_wrong_driver_type_errors(builder, sub_driver, expected, path, diagnostics);
             }
-            if let Some(else_driver) = &driver_if.else_clause {
+            if let Some(else_driver) = &driver_when.else_clause {
                 collect_wrong_driver_type_errors(builder, else_driver, expected, path, diagnostics);
             }
         }

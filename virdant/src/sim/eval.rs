@@ -126,7 +126,7 @@ impl Expr {
         match self.payload() {
             ExprPayload::Reference(reference) => context.get(&reference.referent),
             ExprPayload::Paren(paren) => paren.subject.eval(context),
-            ExprPayload::If(if_) => self.eval_if(context, if_),
+            ExprPayload::When(when) => self.eval_when(context, when),
             ExprPayload::Match(match_) => self.eval_match(context, match_),
             ExprPayload::BitLit(bit_lit) => Value::Bit(bit_lit.value),
             ExprPayload::WordLit(word_lit) => Value::Word(word_lit.width, word_lit.value),
@@ -160,11 +160,11 @@ impl Expr {
         }
     }
 
-    /// Evaluate an `if`/`else if`/`else` chain.
+    /// Evaluate a `when` chain.
     /// Matches Verilog ternary semantics: the first truthy branch wins.
     /// X in any condition poisons the whole result.
-    fn eval_if(&self, context: &Context, if_: &payload::If) -> Value {
-        for (cond, body) in &if_.branches {
+    fn eval_when(&self, context: &Context, when: &payload::When) -> Value {
+        for (cond, body) in &when.branches {
             let cond_val = cond.eval(context);
             if cond_val.is_x() {
                 return Value::X(self.typ().clone());
@@ -172,13 +172,13 @@ impl Expr {
             let taken = match cond_val {
                 Value::Bit(b) => b,
                 Value::Word(_, v) => v != 0,
-                _ => unreachable!("if condition must be Bit or Word"),
+                _ => unreachable!("when condition must be Bit or Word"),
             };
             if taken {
                 return body.eval(context);
             }
         }
-        if_.else_branch.eval(context)
+        when.else_branch.eval(context)
     }
 
     /// Evaluate a `match` expression.

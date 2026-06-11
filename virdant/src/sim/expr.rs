@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bstr::{BString, ByteSlice};
 
 use crate::analysis::component::ComponentId;
-use crate::analysis::drivers::{Driver, DriverIf, DriverMatch};
+use crate::analysis::drivers::{Driver, DriverWhen, DriverMatch};
 use crate::common::WordValue;
 use crate::db::Db;
 use crate::sim::payload;
@@ -24,7 +24,7 @@ pub struct Expr {
 pub enum ExprPayload {
     Reference(payload::Reference),
     Paren(payload::Paren),
-    If(payload::If),
+    When(payload::When),
     Match(payload::Match),
     BitLit(payload::BitLit),
     WordLit(payload::WordLit),
@@ -75,7 +75,7 @@ pub fn driver_to_expr(db: &Db, driver: &Driver) -> Arc<Expr> {
     match driver {
         Driver::Expr(_, loc) => convert_ast_expr(db, loc.clone()),
         Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are resolved in conversion, not simulation"),
-        Driver::If(driver_if) => convert_driver_if(db, driver_if),
+        Driver::When(driver_when) => convert_driver_when(db, driver_when),
         Driver::Match(driver_match) => convert_driver_match(db, driver_match),
     }
 }
@@ -157,17 +157,17 @@ fn convert_pattern(
     }
 }
 
-fn convert_driver_if(db: &Db, driver_if: &DriverIf) -> Arc<Expr> {
-    let location = driver_if.clauses[0].0.clone();
+fn convert_driver_when(db: &Db, driver_when: &DriverWhen) -> Arc<Expr> {
+    let location = driver_when.clauses[0].0.clone();
 
     let mut branches: Vec<(Arc<Expr>, Arc<Expr>)> = Vec::new();
-    for (cond_loc, sub_driver) in &driver_if.clauses {
+    for (cond_loc, sub_driver) in &driver_when.clauses {
         let cond = convert_ast_expr(db, cond_loc.clone());
         let body = driver_to_expr(db, sub_driver.as_ref());
         branches.push((cond, body));
     }
 
-    let else_branch = match &driver_if.else_clause {
+    let else_branch = match &driver_when.else_clause {
         Some(else_driver) => driver_to_expr(db, else_driver.as_ref()),
         None => {
             let typ = Type::Bit;
@@ -176,7 +176,7 @@ fn convert_driver_if(db: &Db, driver_if: &DriverIf) -> Arc<Expr> {
     };
 
     let typ = else_branch.typ.clone();
-    Arc::new(Expr { location, typ, payload: ExprPayload::If(payload::If { branches, else_branch }) })
+    Arc::new(Expr { location, typ, payload: ExprPayload::When(payload::When { branches, else_branch }) })
 }
 
 // Recursively build `If` branches from the flat [cond, then, cond, then, ..., else] child list.
@@ -311,10 +311,24 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
             ExprPayload::Paren(payload::Paren { subject: convert_ast_expr(db, child_loc) })
         }
         AstNodePayload::ExprWhen => {
-            // TODO: Implement ExprWhen conversion for simulator
-            // Should walk children using when_arm_children helper
-            // Build branches from guard/body pairs
-            todo!("ExprWhen sim conversion not yet implemented")
+            use crate::syntax::ast::when_arm_children;
+            let children = node.children();
+            let arms = when_arm_children(&children);
+            let mut branches: Vec<(Arc<Expr>, Arc<Expr>)> = Vec::new();
+            let mut else_branch_opt: Option<Arc<Expr>> = None;
+
+            for (guard_opt, body) in arms {
+                if let Some(guard) = guard_opt {
+                    let guard_expr = convert_ast_expr(db, guard.location());
+                    let body_expr = convert_ast_expr(db, body.location());
+                    branches.push((guard_expr, body_expr));
+                } else {
+                    else_branch_opt = Some(convert_ast_expr(db, body.location()));
+                }
+            }
+
+            let else_branch = else_branch_opt.expect("when must have else arm");
+            ExprPayload::When(payload::When { branches, else_branch })
         }
         AstNodePayload::ExprMatch => {
             let children = node.children();
@@ -401,6 +415,15 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
                     Primitive::All => {
                         assert!(args.len() == 1, "all expects exactly 1 argument");
                         ExprPayload::All(payload::All { subject: args[0].clone() })
+                    }
+                    Primitive::Mux => {
+                        assert!(args.len() == 3, "mux expects exactly 3 arguments");
+                        // mux(cond, a, b) -> when { case cond => a; else => b }
+                        let branches = vec![(args[0].clone(), args[1].clone())];
+                        ExprPayload::When(payload::When {
+                            branches,
+                            else_branch: args[2].clone(),
+                        })
                     }
                 }
             } else {

@@ -60,16 +60,71 @@ impl Typing {
 
     fn check_when<'p>(
         &mut self,
-        _builder: &mut Builder,
-        _context: TypingContext,
-        _node: &AstNode<'p>,
-        _expected_typ: &Type,
+        builder: &mut Builder,
+        context: TypingContext,
+        node: &AstNode<'p>,
+        expected_typ: &Type,
     ) -> Result<(), ()> {
-        // TODO: Implement check_when with new arm structure
-        // Should walk children using when_arm_children helper
-        // Check guards as Type::Bit, bodies as expected_typ
-        // Handle bare expr, block, and nested when/match arms
-        todo!("check_when not yet implemented")
+        use crate::syntax::ast::when_arm_children;
+
+        let children = node.children();
+        let arms = when_arm_children(&children);
+
+        let mut has_else = false;
+        let mut err = false;
+
+        for (guard_opt, body) in arms {
+            // Check guard expression (must be Bit)
+            if let Some(guard) = guard_opt {
+                err |= self.check(builder, context.clone(), guard, &Type::Bit).is_err();
+            } else {
+                has_else = true;
+            }
+
+            // Check body based on its type
+            match body.payload() {
+                AstNodePayload::ModDefStmtBlock => {
+                    // Block body - check if it's valid in expression context
+                    let block_children = body.children();
+                    if block_children.is_empty() {
+                        self.flag_unknown(body, "Empty block not allowed in expression position");
+                        err = true;
+                    } else if block_children.len() == 1 && block_children[0].is_expr() {
+                        // Single expression block - unwrap and check
+                        err |= self.check(builder, context.clone(), &block_children[0], expected_typ).is_err();
+                    } else {
+                        // Multi-statement block or non-expression
+                        self.flag_unknown(body, "Block with statements not allowed in expression position");
+                        err = true;
+                    }
+                }
+                AstNodePayload::ExprWhen | AstNodePayload::ExprMatch => {
+                    // Nested conditional - recurse
+                    err |= self.check(builder, context.clone(), body, expected_typ).is_err();
+                }
+                _ if body.is_expr() => {
+                    // Bare expression body
+                    err |= self.check(builder, context.clone(), body, expected_typ).is_err();
+                }
+                _ => {
+                    self.flag_unknown(body, "Invalid arm body type");
+                    err = true;
+                }
+            }
+        }
+
+        // In expression context, require else arm
+        if !has_else {
+            self.flag_unknown(node, "when expression requires else arm");
+            err = true;
+        }
+
+        if !err {
+            self.annotate(node, expected_typ);
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 
     fn check_word_lit<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
@@ -153,6 +208,11 @@ impl Typing {
                 self.tags
                     .insert(node.location(), Tag::PrimitiveResolution(Primitive::Trunc));
                 self.check_trunc(builder, context, node, expected_typ)
+            }
+            b"mux" => {
+                self.tags
+                    .insert(node.location(), Tag::PrimitiveResolution(Primitive::Mux));
+                self.check_mux(builder, context, node, expected_typ)
             }
             _ => {
                 self.flag_unknown(node, format!("Unknown function: {}", BStr::new(fn_name)));
@@ -287,6 +347,42 @@ impl Typing {
 
         self.annotate(node, &expected_typ);
         Ok(())
+    }
+
+    fn check_mux<'p>(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        node: &AstNode<'p>,
+        expected_typ: &Type,
+    ) -> Result<(), ()> {
+        let children = node.children();
+        let args = &children[1..];
+
+        // mux(cond, a, b) requires exactly 3 arguments
+        if args.len() != 3 {
+            self.flag_unknown(node, format!("mux requires exactly 3 arguments, got {}", args.len()));
+            return Err(());
+        }
+
+        let cond = &args[0];
+        let a = &args[1];
+        let b = &args[2];
+
+        // Check condition is Bit
+        let mut err = false;
+        err |= self.check(builder, context.clone(), cond, &Type::Bit).is_err();
+
+        // Check a and b match expected_typ
+        err |= self.check(builder, context.clone(), a, expected_typ).is_err();
+        err |= self.check(builder, context.clone(), b, expected_typ).is_err();
+
+        if !err {
+            self.annotate(node, expected_typ);
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 
     fn check_dontcare<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {

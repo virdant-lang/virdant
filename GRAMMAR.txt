@@ -59,7 +59,7 @@ ModDefStmt :=
     | ModDefStmtDriver
     | ModDefStmtInstance
     | ModDefStmtSocket
-    | ModDefStmtIf
+    | ModDefStmtWhen
     | ModDefStmtMatch
     | ModDefStmtUnused
 
@@ -86,19 +86,29 @@ ModDefStmtSocket :=
       DocString? "client" "socket" Ident "of" Ofness ItBlock?
     | DocString? "server" "socket" Ident "of" Ofness ItBlock?
 
-ModDefStmtIf := ModDefStmtIfStart ModDefStmtIfMiddle* ModDefStmtIfEnd?
+ModDefStmtWhen := "when" "{" ModDefStmtWhenArm* "}"
 
-ModDefStmtIfStart := "if" Expr ModDefStmtBlock
-
-ModDefStmtIfMiddle := "else" "if" Expr ModDefStmtBlock
-
-ModDefStmtIfEnd := "else" ModDefStmtBlock
+ModDefStmtWhenArm :=
+      "case" Expr "=>" Expr
+    | "case" Expr ModDefStmtBlock
+    | "case" Expr ModDefStmtWhen
+    | "case" Expr ModDefStmtMatch
+    | "else" "=>" Expr
+    | "else" ModDefStmtBlock
+    | "else" ModDefStmtWhen
+    | "else" ModDefStmtMatch
 
 ModDefStmtMatch := "match" Expr "{" ModDefStmtMatchArm* "}"
 
 ModDefStmtMatchArm :=
-      "case" Pat "=>" ModDefStmtBlock
-    | "else" "=>" ModDefStmtBlock
+      "case" Pat "=>" Expr
+    | "case" Pat ModDefStmtBlock
+    | "case" Pat ModDefStmtWhen
+    | "case" Pat ModDefStmtMatch
+    | "else" "=>" Expr
+    | "else" ModDefStmtBlock
+    | "else" ModDefStmtWhen
+    | "else" ModDefStmtMatch
 
 ModDefStmtUnused := "unused" Path
 
@@ -109,24 +119,34 @@ Kind := Ident
 Type := Ofness GenericsParams?
 
 Expr :=
-      ExprIf
+      ExprWhen
     | ExprMatch
     | ExprStruct
     | ExprBinOpLogical
 
-ExprIf := ExprIfStart ExprIfMiddle* ExprIfEnd
+ExprWhen := "when" "{" ExprWhenArm* "}"
 
-ExprIfStart := "if" Expr "{" Expr "}"
-
-ExprIfMiddle := "else" "if" Expr "{" Expr "}"
-
-ExprIfEnd := "else" "{" Expr "}"
+ExprWhenArm :=
+      "case" Expr "=>" Expr
+    | "case" Expr ModDefStmtBlock
+    | "case" Expr ExprWhen
+    | "case" Expr ExprMatch
+    | "else" "=>" Expr
+    | "else" ModDefStmtBlock
+    | "else" ExprWhen
+    | "else" ExprMatch
 
 ExprMatch := "match" Expr "{" ExprMatchArm* "}"
 
 ExprMatchArm :=
       "case" Pat "=>" Expr
+    | "case" Pat ModDefStmtBlock
+    | "case" Pat ExprWhen
+    | "case" Pat ExprMatch
     | "else" "=>" Expr
+    | "else" ModDefStmtBlock
+    | "else" ExprWhen
+    | "else" ExprMatch
 
 Pat :=
       "#" Ident
@@ -296,7 +316,6 @@ Tokens:
   "export"
   "ext"
   "false"
-  "if"
   "import"
   "incoming"
   "it"
@@ -314,6 +333,7 @@ Tokens:
   "type"
   "union"
   "unused"
+  "when"
   "width"
   "wire"
   "{"
