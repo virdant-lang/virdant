@@ -114,11 +114,11 @@ The following words are reserved as keywords and may not be used as identifiers:
 
 .. code-block::
 
-    builtin  case     soci     client   cosi     dontcare   dyn
-    else     enum     export   ext      false    fn
-    if       import   incoming  it      match     mod
-    of       on       outgoing  reg     server    socket
-    struct   true     type     union    unused    width
+    builtin  case     client   cosi     dontcare   dyn
+    else     enum     export   ext      false    import
+    incoming it       match    mod      of         on
+    outgoing reg      server   soci     socket     struct
+    true     type     union    unused   when       width
     wire
 
 

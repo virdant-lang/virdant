@@ -10,7 +10,7 @@ The full set of module body statements includes:
 * Driver statements (assignments)
 * Instance declarations
 * Socket instance declarations
-* Conditional statements (if/else)
+* Conditional statements (when)
 * Match statements
 * Unused declarations
 
@@ -155,36 +155,57 @@ For details on sockets, see :doc:`sockets`.
 Conditional Statements
 ----------------------
 Conditional statements allow a module body to contain different sets of
-statements depending on a condition.
+statements depending on conditions.
 
 .. code-block:: grammar
 
-    ModDefStmtIf := ModDefStmtIfStart ModDefStmtIfMiddle* ModDefStmtIfEnd?
+    ModDefStmtWhen := "when" "{" ModDefStmtWhenArm* "}"
 
-    ModDefStmtIfStart := "if" Expr ModDefStmtBlock
-
-    ModDefStmtIfMiddle := "else" "if" Expr ModDefStmtBlock
-
-    ModDefStmtIfEnd := "else" ModDefStmtBlock
+    ModDefStmtWhenArm :=
+        "case" Expr "=>" Expr
+        | "case" Expr ModDefStmtBlock
+        | "case" Expr ModDefStmtWhen
+        | "case" Expr ModDefStmtMatch
+        | "else" "=>" Expr
+        | "else" ModDefStmtBlock
+        | "else" ModDefStmtWhen
+        | "else" ModDefStmtMatch
 
 .. code-block:: virdant
 
-    if reset {
-        r <= 0
-        state := Idle
-    } else if enable {
-        r <= r + 1
-        state := Active
-    } else {
-        r <= r
-        state := Idle
+    when {
+        case reset {
+            r <= 0
+            state := #Idle
+        }
+        case enable {
+            r <= r + 1
+            state := #Active
+        }
+        else {
+            r <= r
+            state := #Idle
+        }
     }
 
-The condition must be of type `Bit`.
+Each condition must be of type `Bit`.
+The `else` arm is optional in statement context,
+though it is recommended for completeness.
 
-Conditional statements are different from `if` expressions:
+Arm Syntax
+~~~~~~~~~~
+Each arm may use one of four forms:
+
+1. Bare expression: `case cond => expr` (rarely used in statement context)
+2. Block: `case cond { stmts }`
+3. Nested `when`: `case cond when { ... }`
+4. Nested `match`: `case cond match expr { ... }`
+
+The same forms apply to the `else` arm.
+
+Conditional statements are different from `when` expressions:
 statements can contain declarations, assignments, instances, and other
-module body constructs, while `if` expressions only compute values.
+module body constructs, while `when` expressions only compute values.
 
 
 Match Statements
@@ -197,8 +218,14 @@ Match statements perform pattern-based dispatch in the module body.
         "match" Expr "{" ModDefStmtMatchArm* "}"
 
     ModDefStmtMatchArm :=
-        "case" Pat "=>" ModDefStmtBlock
-        | "else" "=>" ModDefStmtBlock
+        "case" Pat "=>" Expr
+        | "case" Pat ModDefStmtBlock
+        | "case" Pat ModDefStmtWhen
+        | "case" Pat ModDefStmtMatch
+        | "else" "=>" Expr
+        | "else" ModDefStmtBlock
+        | "else" ModDefStmtWhen
+        | "else" ModDefStmtMatch
 
 .. code-block:: virdant
 
@@ -217,10 +244,20 @@ Match statements perform pattern-based dispatch in the module body.
         }
     }
 
-Each arm contains a block of module body statements.
+Arm Syntax
+~~~~~~~~~~
+Each arm may use one of four forms:
+
+1. Bare expression: `case pat => expr` (rarely used in statement context)
+2. Block: `case pat { stmts }`
+3. Nested `when`: `case pat when { ... }`
+4. Nested `match`: `case pat match expr { ... }`
+
+The same forms apply to the `else` arm.
+
 The `else` arm is optional but recommended for catch-all behavior.
-If no `else` arm is present and the match is not exhaustive, the compiler
-will report an error.
+If no `else` arm is present and the match is not exhaustive,
+the compiler will report an error.
 
 For more details on patterns, see :doc:`patterns`.
 

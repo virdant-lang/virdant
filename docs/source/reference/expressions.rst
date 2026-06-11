@@ -15,10 +15,26 @@ The full expression grammar, from highest to lowest precedence:
 .. code-block:: grammar
 
     Expr :=
-        ExprIf | ExprMatch | ExprStruct | ExprBinOpLogical
+        ExprWhen | ExprMatch | ExprStruct | ExprBinOpLogical
 
-    ExprIf           := "if" Expr "{" Expr "}" ("else" "if" Expr "{" Expr "}")* ("else" "{" Expr "}")?
+    ExprWhen         := "when" "{" ExprWhenArm* "}"
+    ExprWhenArm      := "case" Expr "=>" Expr
+                        | "case" Expr ModDefStmtBlock
+                        | "case" Expr ExprWhen
+                        | "case" Expr ExprMatch
+                        | "else" "=>" Expr
+                        | "else" ModDefStmtBlock
+                        | "else" ExprWhen
+                        | "else" ExprMatch
     ExprMatch        := "match" Expr "{" ExprMatchArm* "}"
+    ExprMatchArm     := "case" Pat "=>" Expr
+                        | "case" Pat ModDefStmtBlock
+                        | "case" Pat ExprWhen
+                        | "case" Pat ExprMatch
+                        | "else" "=>" Expr
+                        | "else" ModDefStmtBlock
+                        | "else" ExprWhen
+                        | "else" ExprMatch
     ExprStruct       := "$" "{" AssignList "}"
     ExprBinOpLogical := ExprBinOpLogical ( "&&" | "||" | "^^" ) ExprBinOpCompare | ExprBinOpCompare
     ExprBinOpCompare := ExprBinOpCompare ( "<" | "<=" | ">" | ">=" | "==" | "!=" ) ExprBinOpAdditive | ExprBinOpAdditive
@@ -247,33 +263,57 @@ The builtin Valid type also uses the `@` constructor syntax:
 For more details, see the :doc:`types` chapter on Valid[T].
 
 
-If Expressions
---------------
-If expressions select between two or more branches based on a condition.
+When Expressions
+----------------
+When expressions select between two or more branches based on conditions.
 
 .. code-block:: grammar
 
-    ExprIf :=
-        "if" Expr "{" Expr "}"
-        ("else" "if" Expr "{" Expr "}")*
-        ("else" "{" Expr "}")?
+    ExprWhen :=
+        "when" "{" ExprWhenArm* "}"
+
+    ExprWhenArm :=
+        "case" Expr "=>" Expr
+        | "case" Expr ModDefStmtBlock
+        | "case" Expr ExprWhen
+        | "case" Expr ExprMatch
+        | "else" "=>" Expr
+        | "else" ModDefStmtBlock
+        | "else" ExprWhen
+        | "else" ExprMatch
 
 .. code-block:: virdant
 
     wire max : Word[8]
-    max := if a > b { a } else { b }
+    max := when {
+        case a > b => a
+        else => b
+    }
 
-    // Multi-branch if
+    // Multi-branch when
     wire sel : Word[8]
-    sel := if op == 0 { a & b }
-           else if op == 1 { a | b }
-           else if op == 2 { a + b }
-           else { a - b }
+    sel := when {
+        case op == 0 => a & b
+        case op == 1 => a | b
+        case op == 2 => a + b
+        else => a - b
+    }
 
 All branches must have the same type.
-The condition must be of type `Bit`.
-Curly braces are required around each branch expression, even for single
-expressions.
+Each condition must be of type `Bit`.
+The `when` expression requires an `else` arm.
+
+Arm Syntax
+~~~~~~~~~~
+Each arm may use one of four forms:
+
+1. Bare expression: `case cond => expr`
+2. Block: `case cond { stmts }`
+   (blocks must contain a single expression to be valid in expression context)
+3. Nested `when`: `case cond when { ... }`
+4. Nested `match`: `case cond match expr { ... }`
+
+The same forms apply to the `else` arm.
 
 
 Match Expressions
@@ -287,7 +327,13 @@ Match expressions perform pattern matching on a value.
 
     ExprMatchArm :=
         "case" Pat "=>" Expr
+        | "case" Pat ModDefStmtBlock
+        | "case" Pat ExprWhen
+        | "case" Pat ExprMatch
         | "else" "=>" Expr
+        | "else" ModDefStmtBlock
+        | "else" ExprWhen
+        | "else" ExprMatch
 
 .. code-block:: virdant
 
@@ -304,6 +350,18 @@ in order, and returns the expression from the first matching arm.
 
 The `else` arm matches any value not covered by the preceding arms.
 If no `else` arm is present, the match must be exhaustive.
+
+Arm Syntax
+~~~~~~~~~~
+Each arm may use one of four forms:
+
+1. Bare expression: `case pat => expr`
+2. Block: `case pat { stmts }`
+   (blocks must contain a single expression to be valid in expression context)
+3. Nested `when`: `case pat when { ... }`
+4. Nested `match`: `case pat match expr { ... }`
+
+The same forms apply to the `else` arm.
 
 For more details on patterns, see :doc:`patterns`.
 
@@ -326,6 +384,37 @@ function call syntax.
 
 The function name may be a simple identifier or a fully-qualified name.
 The arguments must match the function's parameter list in number and type.
+
+Builtin Functions
+~~~~~~~~~~~~~~~~~
+Virdant provides several builtin functions,
+including type conversion and reduction operators.
+
+**mux(cond, a, b)** - Multiplexer
+
+Selects between two values based on a condition.
+Returns `a` if `cond` is true, otherwise returns `b`.
+
+.. code-block:: virdant
+
+    // Basic usage
+    out := mux(enable, data, 0)
+
+    // Equivalent to:
+    out := when {
+        case enable => data
+        else => 0
+    }
+
+The `mux` function is desugared to a `when` expression during compilation.
+All three arguments must be provided:
+
+- `cond` must be of type `Bit`
+- `a` and `b` must have the same type
+- The result type matches the type of `a` and `b`
+
+For other builtin functions such as `any`, `all`, `sext`, `zext`, and `trunc`,
+see the language reference or examples.
 
 
 Unary Operators
