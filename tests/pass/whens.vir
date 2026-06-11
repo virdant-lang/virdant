@@ -1,0 +1,35 @@
+// CHECK: Check OK
+mod When {
+    incoming clock : Clock
+    incoming inp1 : Bit
+
+    outgoing out1 : Bit {
+        when {
+            case inp1 {
+                it := true
+            }
+            else {
+                it := false
+            }
+        }
+    }
+
+    reg r : Bit on clock {
+        when {
+            case inp1 {
+                it <= true
+            }
+        }
+
+        unused it
+    }
+
+    incoming inp2 : Bit
+
+    outgoing out2 : Bit {
+        it := when {
+            case inp2 => false
+            else => true
+        }
+    }
+}

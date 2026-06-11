@@ -726,11 +726,25 @@ fn collect_references(
                     collect_references_in_expr(subject, component_analysis, it_context);
                 }
                 for (_pat_opt, body) in match_arm_children(&children) {
-                    collect_references(
-                        &body.children(),
-                        component_analysis,
-                        it_context,
-                    );
+                    match body.payload() {
+                        AstNodePayload::ModDefStmtBlock => {
+                            collect_references(
+                                &body.children(),
+                                component_analysis,
+                                it_context,
+                            );
+                        }
+                        _ => {
+                            // For ModDefStmtWhen, ModDefStmtMatch and other
+                            // non-block bodies, pass the body node itself so
+                            // the appropriate handler processes guards etc.
+                            collect_references(
+                                &[body.clone()],
+                                component_analysis,
+                                it_context,
+                            );
+                        }
+                    }
                 }
             }
             AstNodePayload::ModDefStmtUnused => {

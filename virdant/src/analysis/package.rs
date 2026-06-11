@@ -252,13 +252,25 @@ impl PackageAnalysis {
 
     fn add_moddefstmtmatch_expr_roots(&mut self, match_node: AstNode<'_>) {
         // Children: [subject, arm_0, arm_1, ...] where each `case` arm contributes
-        // (pattern, block) and each `else` arm contributes (block) only.
+        // (pattern, body) and each `else` arm contributes (body) only.
+        // Body can be a block, a when, or a match.
         let children = match_node.children();
         // The subject expression is an expr root.
         self.expr_roots.push(children[0].id());
-        // Recurse into each arm's block (case or else).
-        for (_pat_opt, block) in match_arm_children(&children) {
-            self.add_moddefstmt_block_expr_roots(block);
+        // Recurse into each arm's body (case or else).
+        for (_pat_opt, body) in match_arm_children(&children) {
+            match body.payload() {
+                AstNodePayload::ModDefStmtBlock => {
+                    self.add_moddefstmt_block_expr_roots(body);
+                }
+                AstNodePayload::ModDefStmtWhen => {
+                    self.add_moddefstmtwhen_expr_roots(body.clone());
+                }
+                AstNodePayload::ModDefStmtMatch => {
+                    self.add_moddefstmtmatch_expr_roots(body.clone());
+                }
+                _ => {}
+            }
         }
     }
 
@@ -266,7 +278,10 @@ impl PackageAnalysis {
         for stmt in block_node.children() {
             match stmt.payload() {
                 AstNodePayload::Driver(_) => {
-                    self.expr_roots.push(stmt.driver().unwrap().id());
+                    let driver_expr = stmt.driver().unwrap();
+                    self.expr_roots.push(driver_expr.id());
+                    // Trace into ExprWhen/ExprMatch nodes inside the driver expression
+                    self.add_expr_when_match_roots(driver_expr);
                 }
                 AstNodePayload::ModDefStmtWhen => {
                     self.add_moddefstmtwhen_expr_roots(stmt);
@@ -275,6 +290,56 @@ impl PackageAnalysis {
                     self.add_moddefstmtmatch_expr_roots(stmt);
                 }
                 _ => {}
+            }
+        }
+    }
+
+    fn add_expr_when_match_roots(&mut self, expr_node: AstNode<'_>) {
+        match expr_node.payload() {
+            AstNodePayload::ExprWhen => {
+                // ExprWhen children: [guard_0?, body_0, guard_1?, body_1, ...]
+                let children = expr_node.children();
+                let mut idx = 0;
+                while let Some(first) = children.get(idx) {
+                    if first.is_expr() {
+                        // case arm: guard + body
+                        self.expr_roots.push(first.id());
+                        self.add_expr_when_match_roots(first.clone());
+                        if let Some(body) = children.get(idx + 1) {
+                            if body.is_expr() {
+                                self.add_expr_when_match_roots(body.clone());
+                            }
+                        }
+                        idx += 2;
+                    } else {
+                        // else arm: body only
+                        if first.is_expr() {
+                            self.add_expr_when_match_roots(first.clone());
+                        }
+                        idx += 1;
+                    }
+                }
+            }
+            AstNodePayload::ExprMatch => {
+                // ExprMatch children: [subject, arm_0, arm_1, ...]
+                let children = expr_node.children();
+                // The subject expression is an expr root
+                self.expr_roots.push(children[0].id());
+                self.add_expr_when_match_roots(children[0].clone());
+                // Each arm is either (pattern, body) or (body) for else
+                for (_pat_opt, body) in match_arm_children(&children) {
+                    if body.is_expr() {
+                        self.add_expr_when_match_roots(body.clone());
+                    }
+                }
+            }
+            _ => {
+                // Recurse into all children to find nested ExprWhen/ExprMatch
+                for child in expr_node.children() {
+                    if child.is_expr() {
+                        self.add_expr_when_match_roots(child);
+                    }
+                }
             }
         }
     }

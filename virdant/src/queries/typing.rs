@@ -86,6 +86,54 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
             None
         }
 
+        AstNodePayload::ExprWhen => {
+            // Children of ExprWhen: [guard_0?, body_0, guard_1?, body_1, ...]
+            // case arms: guard at even index, body at odd index
+            // else arms: body only at even index (no preceding guard)
+            // Guard expressions must be Bit.
+            // Body expressions inherit the expected type from the ExprWhen itself.
+            let children = parent_node.children();
+            for (i, child) in children.iter().enumerate() {
+                if child.id() == node.id() {
+                    // Check if this is a guard or a body
+                    let is_guard = if i > 0 && i % 2 == 0 {
+                        // Even index > 0: could be a guard or an else body
+                        // It's a guard if the previous child (i-1) is also a guard or body
+                        // Actually, simpler: it's a guard if this node is followed by another expr
+                        i + 1 < children.len() && children[i + 1].is_expr()
+                    } else if i == 0 {
+                        // First child: must be a guard (case arms start with guard)
+                        true
+                    } else {
+                        // Odd index: this is a body (follows a guard)
+                        false
+                    };
+
+                    if is_guard {
+                        return Some(Type::Bit);
+                    } else {
+                        // Body expression - inherit expected type from parent ExprWhen
+                        return build_expected_type(builder,
+                            ExprRoot::new(parent_node.location()));
+                    }
+                }
+            }
+            None
+        }
+
+        AstNodePayload::ExprMatch => {
+            // The subject expression (child[0]) has unconstrained expected type.
+            // Body expressions inherit the expected type from the ExprMatch itself.
+            let children = parent_node.children();
+            if children[0].id() == node.id() {
+                // This is the subject expression
+                None
+            } else {
+                // This is a body expression - inherit expected type from parent ExprMatch
+                build_expected_type(builder, ExprRoot::new(parent_node.location()))
+            }
+        }
+
         AstNodePayload::Enumerant(_) => {
             let enumdef_node = parent_node.parent().unwrap();
             let AstNodePayload::EnumDef(enum_def) = enumdef_node.payload() else { unreachable!() };

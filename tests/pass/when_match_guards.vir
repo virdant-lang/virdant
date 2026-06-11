@@ -1,0 +1,57 @@
+// CHECK: Check OK
+// Ensure that references in when/match guard expressions are
+// properly tracked as "used", so no false "Unused signal" warnings.
+//
+// Test 1: submodule port reference in a when guard inside a match arm
+mod SubMod {
+    outgoing flag : Bit {
+        it := true
+    }
+}
+
+mod TestSubmoduleWhen {
+    incoming clock : Clock
+    incoming sel : Word[2]
+
+    mod sub of SubMod {}
+
+    reg r : Word[2] on clock {
+        match sel {
+            case 0w2 {
+                it <= 0w2
+            }
+            case 1w2 when {
+                case sub.flag {
+                    it <= 2w2
+                }
+                else {
+                    it <= 3w2
+                }
+            }
+        }
+    }
+}
+
+// Test 2: direct signal reference in a when guard inside a match arm
+mod TestMatchWhen {
+    incoming clock : Clock
+    incoming stage : Word[2]
+    incoming flag : Bit
+
+    reg r : Word[2] on clock {
+        match stage {
+            case 0w2 {
+                it <= 0w2
+            }
+            case 1w2 when {
+                case flag {
+                    it <= 2w2
+                }
+                else {
+                    it <= 3w2
+                }
+            }
+        }
+        unused it
+    }
+}

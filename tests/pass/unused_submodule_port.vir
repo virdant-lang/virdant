@@ -1,0 +1,78 @@
+// Tests for the "Unused signal" warning on sub-module outgoing ports.
+//
+// When a parent instantiates a sub-module but never reads one of its
+// outgoing ports, the compiler should warn about the unused signal.
+//
+// All cases here are warnings only, so the run ends with "Check OK".
+
+// A trivial sub-module with two outgoing ports.
+mod HalfAdder {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing sum : Bit
+    outgoing carry : Bit
+    sum := a ^^ b
+    carry := a && b
+}
+
+// Reading both outgoing ports — no warning.
+mod AllUsed {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing out : Word[2]
+
+    mod ha of HalfAdder {
+        it.a := a
+        it.b := b
+    }
+    out := word(ha.sum, ha.carry)
+    // CHECK-NOT: Unused signal ha.sum
+    // CHECK-NOT: Unused signal ha.carry
+}
+
+// Reading only one outgoing port — the other should warn.
+mod OneUnused {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing out : Bit
+
+    mod ha of HalfAdder {
+        it.a := a
+        it.b := b
+    }
+    out := ha.sum
+    // CHECK: Unused signal ha.carry
+}
+
+// Reading neither outgoing port — both should warn.
+mod BothUnused {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing out : Bit
+
+    mod ha of HalfAdder {
+        it.a := a
+        it.b := b
+    }
+    out := false
+    // CHECK: Unused signal ha.sum
+    // CHECK: Unused signal ha.carry
+}
+
+// An unused outgoing port that is explicitly marked `unused` inside
+// the mod block — should NOT warn for that port.
+mod ExplicitUnused {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing out : Bit
+
+    mod ha of HalfAdder {
+        it.a := a
+        it.b := b
+        unused it.carry
+    }
+    out := ha.sum
+    // CHECK-NOT: Unused signal ha.carry
+}
+
+// CHECK: Check OK
