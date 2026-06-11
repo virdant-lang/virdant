@@ -10,19 +10,23 @@ export mod Top {
     outgoing out : Bit
 
     reg state : State on clock
-    if reset {
-        state <= #Off
-    } else if state == #Off {
-        state <= #On
-    } else {
-        state <= #Off
+    when {
+        case reset {
+            state <= #Off
+        }
+        case state == #Off {
+            state <= #On
+        }
+        else {
+            state <= #Off
+        }
     }
 
     match state {
-        case #On => {
+        case #On {
             out := true
         }
-        case #Off => {
+        case #Off {
             out := false
         }
     }
@@ -30,12 +34,15 @@ export mod Top {
     reg r : Bit on clock
     unused r
 
-    if reset {
-        r <= true
-    } else {
-        match #Off : State {
-            case #On => {
-                r <= false
+    when {
+        case reset {
+            r <= true
+        }
+        else {
+            match #Off : State {
+                case #On {
+                    r <= false
+                }
             }
         }
     }

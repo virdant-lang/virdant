@@ -43,103 +43,105 @@ mod Rf {
     reg x31 : Word[32] on clock
 
     // skip x0
-    x1 <= if write_enable & word(rd == 1) { write_data } else { x1 }
-    x2 <= if write_enable & word(rd == 2) { write_data } else { x2 }
-    x3 <= if write_enable & word(rd == 3) { write_data } else { x3 }
-    x4 <= if write_enable & word(rd == 4) { write_data } else { x4 }
-    x5 <= if write_enable & word(rd == 5) { write_data } else { x5 }
-    x6 <= if write_enable & word(rd == 6) { write_data } else { x6 }
-    x7 <= if write_enable & word(rd == 7) { write_data } else { x7 }
-    x8 <= if write_enable & word(rd == 8) { write_data } else { x8 }
-    x9 <= if write_enable & word(rd == 9) { write_data } else { x9 }
-    x10 <= if write_enable & word(rd == 10) { write_data } else { x10 }
-    x11 <= if write_enable & word(rd == 11) { write_data } else { x11 }
-    x12 <= if write_enable & word(rd == 12) { write_data } else { x12 }
-    x13 <= if write_enable & word(rd == 13) { write_data } else { x13 }
-    x14 <= if write_enable & word(rd == 14) { write_data } else { x14 }
-    x15 <= if write_enable & word(rd == 15) { write_data } else { x15 }
-    x16 <= if write_enable & word(rd == 16) { write_data } else { x16 }
-    x17 <= if write_enable & word(rd == 17) { write_data } else { x17 }
-    x18 <= if write_enable & word(rd == 18) { write_data } else { x18 }
-    x19 <= if write_enable & word(rd == 19) { write_data } else { x19 }
-    x20 <= if write_enable & word(rd == 20) { write_data } else { x20 }
-    x21 <= if write_enable & word(rd == 21) { write_data } else { x21 }
-    x22 <= if write_enable & word(rd == 22) { write_data } else { x22 }
-    x23 <= if write_enable & word(rd == 23) { write_data } else { x23 }
-    x24 <= if write_enable & word(rd == 24) { write_data } else { x24 }
-    x25 <= if write_enable & word(rd == 25) { write_data } else { x25 }
-    x26 <= if write_enable & word(rd == 26) { write_data } else { x26 }
-    x27 <= if write_enable & word(rd == 27) { write_data } else { x27 }
-    x28 <= if write_enable & word(rd == 28) { write_data } else { x28 }
-    x29 <= if write_enable & word(rd == 29) { write_data } else { x29 }
-    x30 <= if write_enable & word(rd == 30) { write_data } else { x30 }
-    x31 <= if write_enable & word(rd == 31) { write_data } else { x31 }
+    x1 <= mux(write_enable & word(rd == 1), write_data, x1)
+    x2 <= mux(write_enable & word(rd == 2), write_data, x2)
+    x3 <= mux(write_enable & word(rd == 3), write_data, x3)
+    x4 <= mux(write_enable & word(rd == 4), write_data, x4)
+    x5 <= mux(write_enable & word(rd == 5), write_data, x5)
+    x6 <= mux(write_enable & word(rd == 6), write_data, x6)
+    x7 <= mux(write_enable & word(rd == 7), write_data, x7)
+    x8 <= mux(write_enable & word(rd == 8), write_data, x8)
+    x9 <= mux(write_enable & word(rd == 9), write_data, x9)
+    x10 <= mux(write_enable & word(rd == 10), write_data, x10)
+    x11 <= mux(write_enable & word(rd == 11), write_data, x11)
+    x12 <= mux(write_enable & word(rd == 12), write_data, x12)
+    x13 <= mux(write_enable & word(rd == 13), write_data, x13)
+    x14 <= mux(write_enable & word(rd == 14), write_data, x14)
+    x15 <= mux(write_enable & word(rd == 15), write_data, x15)
+    x16 <= mux(write_enable & word(rd == 16), write_data, x16)
+    x17 <= mux(write_enable & word(rd == 17), write_data, x17)
+    x18 <= mux(write_enable & word(rd == 18), write_data, x18)
+    x19 <= mux(write_enable & word(rd == 19), write_data, x19)
+    x20 <= mux(write_enable & word(rd == 20), write_data, x20)
+    x21 <= mux(write_enable & word(rd == 21), write_data, x21)
+    x22 <= mux(write_enable & word(rd == 22), write_data, x22)
+    x23 <= mux(write_enable & word(rd == 23), write_data, x23)
+    x24 <= mux(write_enable & word(rd == 24), write_data, x24)
+    x25 <= mux(write_enable & word(rd == 25), write_data, x25)
+    x26 <= mux(write_enable & word(rd == 26), write_data, x26)
+    x27 <= mux(write_enable & word(rd == 27), write_data, x27)
+    x28 <= mux(write_enable & word(rd == 28), write_data, x28)
+    x29 <= mux(write_enable & word(rd == 29), write_data, x29)
+    x30 <= mux(write_enable & word(rd == 30), write_data, x30)
+    x31 <= mux(write_enable & word(rd == 31), write_data, x31)
 
-    rs1_val :=
-             if rs1 == 1 { x1 }
-        else if rs1 == 2 { x2 }
-        else if rs1 == 3 { x3 }
-        else if rs1 == 4 { x4 }
-        else if rs1 == 5 { x5 }
-        else if rs1 == 6 { x6 }
-        else if rs1 == 7 { x7 }
-        else if rs1 == 8 { x8 }
-        else if rs1 == 9 { x9 }
-        else if rs1 == 10 { x10 }
-        else if rs1 == 11 { x11 }
-        else if rs1 == 12 { x12 }
-        else if rs1 == 13 { x13 }
-        else if rs1 == 14 { x14 }
-        else if rs1 == 15 { x15 }
-        else if rs1 == 16 { x16 }
-        else if rs1 == 17 { x17 }
-        else if rs1 == 18 { x18 }
-        else if rs1 == 19 { x19 }
-        else if rs1 == 20 { x20 }
-        else if rs1 == 21 { x21 }
-        else if rs1 == 22 { x22 }
-        else if rs1 == 23 { x23 }
-        else if rs1 == 24 { x24 }
-        else if rs1 == 25 { x25 }
-        else if rs1 == 26 { x26 }
-        else if rs1 == 27 { x27 }
-        else if rs1 == 28 { x28 }
-        else if rs1 == 29 { x29 }
-        else if rs1 == 30 { x30 }
-        else if rs1 == 31 { x31 }
-        else { 0w32 }
+    rs1_val := match rs1 {
+        case 1 => x1
+        case 2 => x2
+        case 3 => x3
+        case 4 => x4
+        case 5 => x5
+        case 6 => x6
+        case 7 => x7
+        case 8 => x8
+        case 9 => x9
+        case 10 => x10
+        case 11 => x11
+        case 12 => x12
+        case 13 => x13
+        case 14 => x14
+        case 15 => x15
+        case 16 => x16
+        case 17 => x17
+        case 18 => x18
+        case 19 => x19
+        case 20 => x20
+        case 21 => x21
+        case 22 => x22
+        case 23 => x23
+        case 24 => x24
+        case 25 => x25
+        case 26 => x26
+        case 27 => x27
+        case 28 => x28
+        case 29 => x29
+        case 30 => x30
+        case 31 => x31
+        else => 0w32
+    }
 
-    rs2_val :=
-             if rs2 == 1 { x1 }
-        else if rs2 == 2 { x2 }
-        else if rs2 == 3 { x3 }
-        else if rs2 == 4 { x4 }
-        else if rs2 == 5 { x5 }
-        else if rs2 == 6 { x6 }
-        else if rs2 == 7 { x7 }
-        else if rs2 == 8 { x8 }
-        else if rs2 == 9 { x9 }
-        else if rs2 == 10 { x10 }
-        else if rs2 == 11 { x11 }
-        else if rs2 == 12 { x12 }
-        else if rs2 == 13 { x13 }
-        else if rs2 == 14 { x14 }
-        else if rs2 == 15 { x15 }
-        else if rs2 == 16 { x16 }
-        else if rs2 == 17 { x17 }
-        else if rs2 == 18 { x18 }
-        else if rs2 == 19 { x19 }
-        else if rs2 == 20 { x20 }
-        else if rs2 == 21 { x21 }
-        else if rs2 == 22 { x22 }
-        else if rs2 == 23 { x23 }
-        else if rs2 == 24 { x24 }
-        else if rs2 == 25 { x25 }
-        else if rs2 == 26 { x26 }
-        else if rs2 == 27 { x27 }
-        else if rs2 == 28 { x28 }
-        else if rs2 == 29 { x29 }
-        else if rs2 == 30 { x30 }
-        else if rs2 == 31 { x31 }
-        else { 0w32 }
+    rs2_val := match rs2 {
+        case 1 => x1
+        case 2 => x2
+        case 3 => x3
+        case 4 => x4
+        case 5 => x5
+        case 6 => x6
+        case 7 => x7
+        case 8 => x8
+        case 9 => x9
+        case 10 => x10
+        case 11 => x11
+        case 12 => x12
+        case 13 => x13
+        case 14 => x14
+        case 15 => x15
+        case 16 => x16
+        case 17 => x17
+        case 18 => x18
+        case 19 => x19
+        case 20 => x20
+        case 21 => x21
+        case 22 => x22
+        case 23 => x23
+        case 24 => x24
+        case 25 => x25
+        case 26 => x26
+        case 27 => x27
+        case 28 => x28
+        case 29 => x29
+        case 30 => x30
+        case 31 => x31
+        else => 0w32
+    }
 }

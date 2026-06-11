@@ -7,7 +7,7 @@ mod Mux2to1 {
     incoming sel : Bit
     outgoing out : Bit
 
-    out := if sel { b } else { a }
+    out := mux(sel, b, a)
 }
 
 // 4-to-1 Multiplexer
@@ -19,7 +19,12 @@ mod Mux4to1 {
     incoming sel : Word[2]
     outgoing out : Bit
 
-    out := if sel == 0 { a } else if sel == 1 { b } else if sel == 2 { c } else { d }
+    out := match sel {
+        case 0 => a
+        case 1 => b
+        case 2 => c
+        else => d
+    }
 }
 
 // 2-to-4 Decoder
@@ -28,10 +33,14 @@ mod Decoder2to4 {
     incoming enable : Bit
     outgoing out : Word[4]
 
-    out := if enable {
-        if inp == 0 { 0b0001 } else if inp == 1 { 0b0010 } else if inp == 2 { 0b0100 } else { 0b1000 }
-    } else {
-        0b0000
+    out := when {
+        case enable match inp {
+            case 0 => 0b0001
+            case 1 => 0b0010
+            case 2 => 0b0100
+            else => 0b1000
+        }
+        else => 0b0000
     }
 }
 
@@ -41,10 +50,11 @@ mod PriorityEncoder4to2 {
     outgoing out : Word[2]
     outgoing valid : Bit
 
-    out := if inp[3] { 3 } else {
-        if inp[2] { 2 } else {
-            if inp[1] { 1 } else { 0 }
-        }
+    out := when {
+        case inp[3] => 3
+        case inp[2] => 2
+        case inp[1] => 1
+        else => 0
     }
     valid := inp != 0
 }
@@ -142,7 +152,12 @@ mod ALU4 {
     outgoing result : Word[4]
     outgoing zero : Bit
 
-    result := if op == 0 { a & b } else if op == 1 { a | b } else if op == 2 { a + b } else { a - b }
+    result := match op {
+        case 0 => a & b
+        case 1 => a | b
+        case 2 => a + b
+        else => a - b
+    }
 
     zero := !any(result)
 }

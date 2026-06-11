@@ -17,22 +17,15 @@ mod Top {
     resetter.clock := clock
 
     reg delay_amount : Word[24] on clock
-    delay_amount <= if resetter.out {
-        8388608
-    } else if delay_amount > 8388608 {
-        8388608
-    } else if delay.end_pulse {
-        delay_amount - 100000
-    } else {
-        delay_amount
+    delay_amount <= when {
+        case resetter.out => 8388608
+        case delay_amount > 8388608 => 8388608
+        case delay.end_pulse => delay_amount - 100000
+        else => delay_amount
     }
 
     reg leds_on : Bit on clock
-    leds_on <= if delay.end_pulse {
-        !leds_on
-    } else {
-        leds_on
-    }
+    leds_on <= mux(delay.end_pulse, !leds_on, leds_on)
 
     led_0 := !leds_on
     led_1 := leds_on
@@ -55,16 +48,8 @@ mod Delay {
 
     reg state : DelayState on clock
     state <= match state {
-        case @Idle() => if start {
-            @Delay(amount)
-        } else {
-            @Idle()
-        }
-        case @Delay(countdown) => if countdown == 0 {
-            @Idle()
-        } else {
-            @Delay(countdown - 1)
-        }
+        case @Idle() => mux(start, @Delay(amount), @Idle())
+        case @Delay(countdown) => mux(countdown == 0, @Idle(), @Delay(countdown - 1))
     }
 
     end_pulse := match state {

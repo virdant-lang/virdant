@@ -59,16 +59,13 @@ mod Arbiter {
     grant_0 := g0
     grant_1 := g1
 
-    priority <= if reset {
-        @Client0First()
-    } else {
-        match priority {
+    priority <= when {
+        case reset => @Client0First()
+        else match priority {
             // Client 0 had priority; if it was granted, hand priority to client 1.
-            case @Client0First() =>
-                if g0 { @Client1First() } else { @Client0First() }
+            case @Client0First() => mux(g0, @Client1First(), @Client0First())
             // Client 1 had priority; if it was granted, hand priority to client 0.
-            case @Client1First() =>
-                if g1 { @Client0First() } else { @Client1First() }
+            case @Client1First() => mux(g1, @Client0First(), @Client1First())
         }
     }
 }
@@ -91,7 +88,11 @@ mod Client {
 
     // Accumulate grant count in a register.
     reg n : Word[8] on clock
-    n <= if reset { 0 } else if grant { n + 1 } else { n }
+    n <= when {
+        case reset => 0
+        case grant => n + 1
+        else => n
+    }
 
     count := n
 }

@@ -64,16 +64,19 @@ mod WbArb21 {
         it.cyc  := (grant_0 && master_0.cyc) || (grant_1 && master_1.cyc)
         it.stb  := (grant_0 && master_0.stb) || (grant_1 && master_1.stb)
 
-        if grant_0 {
-            it.we     := master_0.we
-            it.adr    := master_0.adr
-            it.dat_wr := master_0.dat_wr
-            it.sel    := master_0.sel
-        } else {
-            it.we     :=  master_1.we
-            it.adr    :=  master_1.adr
-            it.dat_wr :=  master_1.dat_wr
-            it.sel    :=  master_1.sel
+        when {
+            case grant_0 {
+                it.we     := master_0.we
+                it.adr    := master_0.adr
+                it.dat_wr := master_0.dat_wr
+                it.sel    := master_0.sel
+            }
+            else {
+                it.we     := master_1.we
+                it.adr    := master_1.adr
+                it.dat_wr := master_1.dat_wr
+                it.sel    := master_1.sel
+            }
         }
 
         master_0.ack     := it.ack && grant_0
@@ -123,30 +126,29 @@ mod WbArb21 {
         cyc_done := (slave_0.ack || slave_0.err) && ((grant_0 && !master_0.cyc) || (grant_1 && !master_1.cyc))
     }
 
-    serving <= if reset {
-        @Idle()
-    } else {
-        match serving {
-            case @Idle() =>
-                if idle_grant_0 { @ServingMaster0() }
-                else if idle_grant_1 { @ServingMaster1() }
-                else { @Idle() }
-            case @ServingMaster0() =>
-                if cyc_done { @Idle() } else { @ServingMaster0() }
-            case @ServingMaster1() =>
-                if cyc_done { @Idle() } else { @ServingMaster1() }
+    serving <= when {
+        case reset => @Idle()
+        else match serving {
+            case @Idle() when {
+                case idle_grant_0 => @ServingMaster0()
+                case idle_grant_1 => @ServingMaster1()
+                else => @Idle()
+            }
+            case @ServingMaster0() => mux(cyc_done, @Idle(), @ServingMaster0())
+            case @ServingMaster1() => mux(cyc_done, @Idle(), @ServingMaster1())
         }
     }
 
-    if reset {
-        priority <= @Master0First()
-    } else {
-        if cyc_done {
+    when {
+        case reset {
+            priority <= @Master0First()
+        }
+        case cyc_done {
             match serving {
-                case @ServingMaster0() => {
+                case @ServingMaster0() {
                     priority <= @Master1First()
                 }
-                case @ServingMaster1() => {
+                case @ServingMaster1() {
                     priority <= @Master0First()
                 }
             }
@@ -181,28 +183,23 @@ mod WbMux12 {
         slave_1.dat_wr := it.dat_wr
         slave_1.sel  := it.sel
 
-        it.ack := if sel { slave_1.ack } else { slave_0.ack }
-        it.err := if sel { slave_1.err } else { slave_0.err }
+        it.ack := mux(sel, slave_1.ack, slave_0.ack)
+        it.err := mux(sel, slave_1.err, slave_0.err)
 
-        if serving_slave1 {
-            master_0.dat_rd := slave_1.dat_rd
-        } else {
-            master_0.dat_rd := slave_0.dat_rd
-        }
+        master_0.dat_rd := mux(serving_slave1, slave_1.dat_rd, slave_0.dat_rd)
     }
 
     wire a_handshake : Bit {
-        a_handshake := master_0.stb && (if sel { slave_1.ack } else { slave_0.ack })
+        a_handshake := master_0.stb && mux(sel, slave_1.ack, slave_0.ack)
     }
 
     reg serving : SelState on clock {
-        if reset {
-            serving <= @Slave0()
-        } else if a_handshake {
-            if sel {
-                serving <= @Slave1()
-            } else {
+        when {
+            case reset {
                 serving <= @Slave0()
+            }
+            case a_handshake {
+                serving <= mux(sel, @Slave1(), @Slave0())
             }
         }
     }

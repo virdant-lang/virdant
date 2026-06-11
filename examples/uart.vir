@@ -36,77 +36,41 @@ mod UartSender {
         case @Stop(pulse) => false
     }
 
-    state <= if reset {
-        @Idle()
-    } else {
-        match state {
-            case @Idle() =>
-                if data_valid {
-                    @Start(1250w11)
-                } else {
-                    @Idle()
-                }
-            case @Start(pulse) =>
-                if pulse == 0 {
-                    @Bit(0, 1250w11)
-                } else {
-                    @Start(pulse - 1)
-                }
-            case @Bit(bit, pulse) =>
-                if pulse == 0 {
-                    if bit < 7 {
-                        @Bit(bit + 1, 1250w11)
-                    } else {
-                        @Stop(1250w11)
-                    }
-                } else {
-                    @Bit(bit, pulse - 1)
-                }
-            case @Stop(pulse) =>
-                if pulse == 0 {
-                    @Idle()
-                } else {
-                    @Stop(pulse - 1)
-                }
+    state <= when {
+        case reset => @Idle()
+        else match state {
+            case @Idle() => mux(data_valid, @Start(1250w11), @Idle())
+            case @Start(pulse) => mux(pulse == 0, @Bit(0, 1250w11), @Start(pulse - 1))
+            case @Bit(bit, pulse) when {
+                case pulse == 0 => mux(bit < 7, @Bit(bit + 1, 1250w11), @Stop(1250w11))
+                else => @Bit(bit, pulse - 1)
+            }
+            case @Stop(pulse) => mux(pulse == 0, @Idle(), @Stop(pulse - 1))
         }
     }
 
     latched_data <= match state {
-        case @Idle() =>
-            if data_valid {
-                data
-            } else {
-                latched_data
-            }
+        case @Idle() => mux(data_valid, data, latched_data)
         case @Start(pulse) => latched_data
         case @Bit(bit, pulse) => latched_data
         case @Stop(pulse) => latched_data
     }
 
-    uart_tx_reg <= if reset {
-        true
-    } else {
-        match state {
+    uart_tx_reg <= when {
+        case reset => true
+        else match state {
             case @Idle() => true
             case @Start(pulse) => false
-            case @Bit(bit, pulse) =>
-                if bit == 0 {
-                    latched_data[0]
-                } else if bit == 1 {
-                    latched_data[1]
-                } else if bit == 2 {
-                    latched_data[2]
-                } else if bit == 3 {
-                    latched_data[3]
-                } else if bit == 4 {
-                    latched_data[4]
-                } else if bit == 5 {
-                    latched_data[5]
-                } else if bit == 6 {
-                    latched_data[6]
-                } else {
-                    latched_data[7]
-                }
+            case @Bit(bit, pulse) match bit {
+                case 0 => latched_data[0]
+                case 1 => latched_data[1]
+                case 2 => latched_data[2]
+                case 3 => latched_data[3]
+                case 4 => latched_data[4]
+                case 5 => latched_data[5]
+                case 6 => latched_data[6]
+                else => latched_data[7]
+            }
             case @Stop(pulse) => true
         }
     }
@@ -122,69 +86,37 @@ mod UartReceiver {
     reg state : UartState on clock
     reg data_reg : Word[8] on clock
 
-    state <= if reset {
-        @Idle()
-    } else {
-        match state {
-            case @Idle() =>
-                if uart_rx == false {
-                    @Start(625w11) // ~= 1250 * 0.5
-                } else {
-                    @Idle()
-                }
-            case @Start(pulse) =>
-                if pulse == 0 {
-                    @Bit(0, 1250)
-                } else {
-                    @Start(pulse - 1)
-                }
-            case @Bit(bit, pulse) =>
-                if pulse == 0 {
-                    if bit == 7 {
-                        @Stop(1150) // fudge this one a little bit to be slightly less than 1250
-                    } else {
-                        @Bit(bit + 1, 1250)
-                    }
-                } else {
-                    @Bit(bit, pulse - 1)
-                }
-            case @Stop(pulse) =>
-                if pulse == 0 {
-                    @Idle()
-                } else {
-                    @Stop(pulse - 1)
-                }
+    state <= when {
+        case reset => @Idle()
+        else match state {
+            case @Idle() => mux(uart_rx == false, @Start(625w11), @Idle())  // ~= 1250 * 0.5
+            case @Start(pulse) => mux(pulse == 0, @Bit(0, 1250), @Start(pulse - 1))
+            case @Bit(bit, pulse) when {
+                case pulse == 0 => mux(bit == 7, @Stop(1150), @Bit(bit + 1, 1250))  // fudge this one a little bit to be slightly less than 1250
+                else => @Bit(bit, pulse - 1)
+            }
+            case @Stop(pulse) => mux(pulse == 0, @Idle(), @Stop(pulse - 1))
         }
     }
 
-    data_reg <= if reset {
-        0
-    } else {
-        match state {
+    data_reg <= when {
+        case reset => 0
+        else match state {
             case @Idle() => 0
             case @Start(pulse) => 0
-            case @Bit(bit, pulse) =>
-                if pulse == 0 {
-                    if bit == 0 {
-                        data_reg | word(0w7, uart_rx)
-                    } else if bit == 1 {
-                        data_reg | word(word(0w7, uart_rx), 0w1)
-                    } else if bit == 2 {
-                        data_reg | word(word(0w7, uart_rx), 0w2)
-                    } else if bit == 3 {
-                        data_reg | word(word(0w7, uart_rx), 0w3)
-                    } else if bit == 4 {
-                        data_reg | word(word(0w7, uart_rx), 0w4)
-                    } else if bit == 5 {
-                        data_reg | word(word(0w7, uart_rx), 0w5)
-                    } else if bit == 6 {
-                        data_reg | word(word(0w7, uart_rx), 0w6)
-                    } else {
-                        data_reg | word(word(0w7, uart_rx), 0w7)
-                    }
-                } else {
-                    data_reg
+            case @Bit(bit, pulse) when {
+                case pulse == 0 match bit {
+                    case 0 => data_reg | word(0w7, uart_rx)
+                    case 1 => data_reg | word(word(0w7, uart_rx), 0w1)
+                    case 2 => data_reg | word(word(0w7, uart_rx), 0w2)
+                    case 3 => data_reg | word(word(0w7, uart_rx), 0w3)
+                    case 4 => data_reg | word(word(0w7, uart_rx), 0w4)
+                    case 5 => data_reg | word(word(0w7, uart_rx), 0w5)
+                    case 6 => data_reg | word(word(0w7, uart_rx), 0w6)
+                    else => data_reg | word(word(0w7, uart_rx), 0w7)
                 }
+                else => data_reg
+            }
             case @Stop(pulse) => data_reg
         }
     }

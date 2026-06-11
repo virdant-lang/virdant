@@ -4,7 +4,7 @@ mod Top {
     outgoing out : Word[8]
 
     reg r : Word[8] on clock {
-        it <= if reset { 10w8 } else { it + 1 }
+        it <= mux(reset, 10w8, it + 1)
     }
 
     mod buffer of Buffer {

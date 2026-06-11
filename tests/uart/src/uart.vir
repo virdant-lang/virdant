@@ -12,7 +12,7 @@ export mod Top {
     sender.data := 65w8
     sender.data_valid := true
     reg cycle : Word[32] on clock
-    cycle <= if reset { 0w32 } else { cycle + 1w32 }
+    cycle <= when { case reset => 0w32  else => cycle + 1w32 }
 }
 
 mod UartSender {

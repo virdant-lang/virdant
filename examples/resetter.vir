@@ -3,11 +3,7 @@ mod Resetter {
     outgoing out : Bit
 
     reg countdown : Word[32] on clock
-    countdown <= if countdown == 0 {
-        countdown
-    } else {
-        countdown - 1
-    }
+    countdown <= mux(countdown == 0, countdown, countdown - 1)
 
     out := countdown == 1
 }

@@ -18,23 +18,17 @@ mod Queue {
 
     reg queue : ValidData on clock
 
-    queue <= if reset {
-        @Invalid()
-    } else {
-        match queue {
+    queue <= when {
+        case reset => @Invalid()
+        else match queue {
             case @Invalid() => data_in
-            case @Valid(data) => if ready_out {
-                data_in
-            } else {
-                queue
-            }
+            case @Valid(data) => mux(ready_out, data_in, queue)
         }
     }
 
-    ready_in := if reset {
-        0
-    } else {
-        match queue {
+    ready_in := when {
+        case reset => 0
+        else match queue {
             case @Invalid() => true
             case @Valid(data) => false
         }

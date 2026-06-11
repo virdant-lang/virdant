@@ -7,10 +7,9 @@ mod Lfsr {
     taps := 29w8
 
     reg r : Word[8] on clock
-    r <= if reset {
-        255w8
-    } else {
-        word(r[7..0], 0w1) ^ (if feedback { taps }  else { 0w8 })
+    r <= when {
+        case reset => 255w8
+        else => word(r[7..0], 0w1) ^ mux(feedback, taps, 0w8)
     }
 
     out := r
@@ -19,9 +18,5 @@ mod Lfsr {
     feedback := r[7]
 
     reg s : Word[4] on clock
-    s <= if reset {
-        1
-    } else {
-        word(s[3..0], s[3])
-    }
+    s <= mux(reset, 1, word(s[3..0], s[3]))
 }

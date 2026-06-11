@@ -25,11 +25,7 @@ mod Top {
     counter <= counter + 1
 
     reg leds : Word[5] on clock
-    leds <= if edge_detector.out {
-        lfsr.out[5..0]
-    } else {
-        leds
-    }
+    leds <= mux(edge_detector.out, lfsr.out[5..0], leds)
 
     led_0 := leds[0]
     led_1 := leds[1]

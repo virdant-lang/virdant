@@ -4,7 +4,7 @@ mod Top {
     outgoing out : Bit
 
     reg val : Bit on clock {
-        it <= if reset { false } else { !it }
+        it <= mux(reset, false, !it)
     }
 
     mod led of LedDriver {

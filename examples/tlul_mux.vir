@@ -72,22 +72,20 @@ mod TlUlMux12 {
     dev_1.a_size    := host.a_size
 
     // Back-pressure: forward a_ready only from the selected device.
-    host.a_ready := if sel { dev_1.a_ready } else { dev_0.a_ready }
+    host.a_ready := mux(sel, dev_1.a_ready, dev_0.a_ready)
 
     // Latch the device selection when the A-channel handshake fires,
     // so we know where to route the D-channel response.
     // The handshake condition uses the device a_ready source directly
     // rather than reading back the driven host.a_ready sink.
     wire a_handshake : Bit
-    a_handshake := host.a_valid && (if sel { dev_1.a_ready } else { dev_0.a_ready })
+    a_handshake := host.a_valid && mux(sel, dev_1.a_ready, dev_0.a_ready)
 
     reg serving : SelState on clock
-    serving <= if reset {
-        @Dev0()
-    } else if a_handshake {
-        if sel { @Dev1() } else { @Dev0() }
-    } else {
-        serving
+    serving <= when {
+        case reset => @Dev0()
+        case a_handshake => mux(sel, @Dev1(), @Dev0())
+        else => serving
     }
 
     wire serving_dev1 : Bit
@@ -100,11 +98,11 @@ mod TlUlMux12 {
     dev_0.d_ready := host.d_ready && !serving_dev1
     dev_1.d_ready := host.d_ready &&  serving_dev1
 
-    host.d_valid  := if serving_dev1 { dev_1.d_valid  } else { dev_0.d_valid  }
-    host.d_opcode := if serving_dev1 { dev_1.d_opcode } else { dev_0.d_opcode }
-    host.d_data   := if serving_dev1 { dev_1.d_data   } else { dev_0.d_data   }
-    host.d_size   := if serving_dev1 { dev_1.d_size   } else { dev_0.d_size   }
-    host.d_error  := if serving_dev1 { dev_1.d_error  } else { dev_0.d_error  }
+    host.d_valid  := mux(serving_dev1, dev_1.d_valid, dev_0.d_valid)
+    host.d_opcode := mux(serving_dev1, dev_1.d_opcode, dev_0.d_opcode)
+    host.d_data   := mux(serving_dev1, dev_1.d_data, dev_0.d_data)
+    host.d_size   := mux(serving_dev1, dev_1.d_size, dev_0.d_size)
+    host.d_error  := mux(serving_dev1, dev_1.d_error, dev_0.d_error)
 }
 
 // Top: exposes one TL-UL host socket and two device sockets.

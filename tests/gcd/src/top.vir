@@ -36,34 +36,31 @@ mod Gcd {
     outgoing valid: Bit
 
     reg state : State on clock {
-        if reset {
-            it <= @Idle()
-        } else {
-            it <= match it : State {
-                case @Idle() => if fire {
-                    @Running(x, y)
-                } else {
-                    @Idle()
+        when {
+            case reset {
+                it <= @Idle()
+            }
+            else {
+                it <= match it : State {
+                    case @Idle() => mux(fire, @Running(x, y), @Idle())
+                    case @Running(x, y) =>
+                        when {
+                            case y == 0 => @Done(x)
+                            case x < y => @Running(y - x, x)
+                            else => @Running(x - y, y)
+                        }
+                    case @Done(result) => @Idle()
                 }
-                case @Running(x, y) =>
-                    if y == 0 {
-                        @Done(x)
-                    } else if x < y {
-                        @Running(y - x, x)
-                    } else {
-                        @Running(x - y, y)
-                    }
-                case @Done(result) => @Idle()
             }
         }
     }
 
     match state {
-        case @Done(r) => {
+        case @Done(r) {
             result := r
             valid := true
         }
-        else => {
+        else {
             result := 0
             valid := false
         }

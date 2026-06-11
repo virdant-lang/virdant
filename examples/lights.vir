@@ -51,24 +51,16 @@ mod Top {
     led_controller.set_rate := !(rate == 0)
 
     wire rate : Word[3]
-    rate :=
-        if uart_receiver.data == 49 {
-            1
-        } else if uart_receiver.data == 50 {
-            2
-        } else if uart_receiver.data == 51 {
-            3
-        } else if uart_receiver.data == 52 {
-            4
-        } else if uart_receiver.data == 53 {
-            5
-        } else if uart_receiver.data == 54 {
-            6
-        } else if uart_receiver.data == 55 {
-            7
-        } else {
-            0
-        }
+    rate := match uart_receiver.data {
+        case 49 => 1
+        case 50 => 2
+        case 51 => 3
+        case 52 => 4
+        case 53 => 5
+        case 54 => 6
+        case 55 => 7
+        else => 0
+    }
     led_controller.rate := rate
 
     led_0 := led_controller.leds[0]
@@ -103,87 +95,56 @@ mod LedController {
 
 
     reg rate_reg : Word[3] on clock
-    rate_reg <= if set_rate {
-        rate
-    } else {
-        rate_reg
-    }
+    rate_reg <= mux(set_rate, rate, rate_reg)
 
     mod edge_detector of edge::Edge
     edge_detector.clock := clock
-    edge_detector.inp   :=
-        if rate_reg == 0 {
-            counter[25]
-        } else if rate_reg == 1 {
-            counter[24]
-        } else if rate_reg == 2 {
-            counter[23]
-        } else if rate_reg == 3 {
-            counter[22]
-        } else if rate_reg == 4 {
-            counter[21]
-        } else if rate_reg == 5 {
-            counter[20]
-        } else if rate_reg == 6 {
-            counter[19]
-        } else if rate_reg == 7 {
-            counter[18]
-        } else {
-            counter[17]
-        }
+    edge_detector.inp := match rate_reg {
+        case 0 => counter[25]
+        case 1 => counter[24]
+        case 2 => counter[23]
+        case 3 => counter[22]
+        case 4 => counter[21]
+        case 5 => counter[20]
+        case 6 => counter[19]
+        case 7 => counter[18]
+        else => counter[17]
+    }
 
     wire change : Bit
     change := edge_detector.out
 
     reg state : LedControllerState on clock
-    state <= if reset {
-        //@Idle(0, 0)
-        @Memory(0)
-    } else if set_random {
-        //@Random(lfsr.out[5..0])
-        @Memory(0)
-    } else if set_idle {
-        @Idle(0, false)
-    } else if set_cw {
-        @SpinCW(1, 0)
-    } else if set_ccw {
-        @SpinCCW(8, 0)
-    } else if change {
-        match state {
-            case @Idle(round, next) => if round < 3 {
-                @Idle(round + 1, next)
-            } else if next {
-                @SpinCCW(8, 0)
-            } else {
-                @SpinCW(1, 0)
+    state <= when {
+        case reset => @Memory(0)  //@Idle(0, 0)
+        case set_random => @Memory(0)  //@Random(lfsr.out[5..0])
+        case set_idle => @Idle(0, false)
+        case set_cw => @SpinCW(1, 0)
+        case set_ccw => @SpinCCW(8, 0)
+        case change match state {
+            case @Idle(round, next) when {
+                case round < 3 => @Idle(round + 1, next)
+                case next => @SpinCCW(8, 0)
+                else => @SpinCW(1, 0)
             }
-            case @SpinCW(x, round) => if x == 8 {
-                if round < 3 {
-                    @SpinCW(1, round + 1)
-                } else {
-                    @Idle(0, true)
+            case @SpinCW(x, round) when {
+                case x == 8 when {
+                    case round < 3 => @SpinCW(1, round + 1)
+                    else => @Idle(0, true)
                 }
-            } else {
-                @SpinCW(word(x, 0w1), round)
+                else => @SpinCW(word(x, 0w1), round)
             }
-            case @SpinCCW(x, round) => if x == 1 {
-                if round < 3 {
-                    @SpinCCW(8, round + 1)
-                } else {
-                    @Idle(0, false)
+            case @SpinCCW(x, round) when {
+                case x == 1 when {
+                    case round < 3 => @SpinCCW(8, round + 1)
+                    else => @Idle(0, false)
                 }
-            } else {
-                @SpinCCW(x[4..0], round)
+                else => @SpinCCW(x[4..0], round)
             }
             case @Random(leds) => @Random(lfsr.out[5..0])
-            case @Memory(addr) => if addr < 16 {
-                @Memory(addr + 1)
-            } else {
-                @Memory(0)
-            }
+            case @Memory(addr) => mux(addr < 16, @Memory(addr + 1), @Memory(0))
         }
-    } else {
-        state
+        else => state
     }
 
     mod lfsr of lfsr::Lfsr

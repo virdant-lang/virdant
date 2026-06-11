@@ -4,7 +4,7 @@ mod Top {
     outgoing out : Word[8]
 
     reg r : Word[8] on clk
-    r <= if reset { 10w8 } else { r + 1 }
+    r <= mux(reset, 10w8, r + 1)
 
     mod buffer of Buffer {
         it.clk := clk

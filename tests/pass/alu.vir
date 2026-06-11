@@ -49,8 +49,8 @@ mod Alu {
         case #Xor => a ^ b
         case #Eq  => zext(a == b)
         case #Neq => zext(a != b)
-        case #Lt  => if a[31] ^ b[31] { zext(a[31]) } else { zext(a < b) }
-        case #Gte => if a[31] ^ b[31] { zext(b[31]) } else { zext(a >= b) }
+        case #Lt  => mux(a[31] ^ b[31], zext(a[31]), zext(a < b))
+        case #Gte => mux(a[31] ^ b[31], zext(b[31]), zext(a >= b))
         case #Zero => 0
         case #Ltu => zext(a < b)
         case #Gteu => zext(a >= b)
@@ -92,63 +92,63 @@ mod Shifter {
 
     //> Stage 1: shift left by 1.
     wire sll_1 : Word[32]
-    sll_1 := if amount[0] { word(a[31..0], 0w1) } else { a }
+    sll_1 := mux(amount[0], word(a[31..0], 0w1), a)
 
     //> Stage 2: shift left by 2.
     wire sll_2 : Word[32]
-    sll_2 := if amount[1] { word(sll_1[30..0], 0w2) } else { sll_1 }
+    sll_2 := mux(amount[1], word(sll_1[30..0], 0w2), sll_1)
 
     //> Stage 4: shift left by 4.
     wire sll_4 : Word[32]
-    sll_4 := if amount[2] { word(sll_2[28..0], 0w4) } else { sll_2 }
+    sll_4 := mux(amount[2], word(sll_2[28..0], 0w4), sll_2)
 
     //> Stage 8: shift left by 8.
     wire sll_8 : Word[32]
-    sll_8 := if amount[3] { word(sll_4[24..0], 0w8) } else { sll_4 }
+    sll_8 := mux(amount[3], word(sll_4[24..0], 0w8), sll_4)
 
     //> Stage 16: shift left by 16.
     wire sll_16 : Word[32]
-    sll_16 := if amount[4] { word(sll_8[16..0], 0w16) } else { sll_8 }
+    sll_16 := mux(amount[4], word(sll_8[16..0], 0w16), sll_8)
 
     //> Stage 1: shift right logical by 1.
     wire srl_1 : Word[32]
-    srl_1 := if amount[0] { zext(a[32..1]) } else { a }
+    srl_1 := mux(amount[0], zext(a[32..1]), a)
 
     //> Stage 2: shift right logical by 2.
     wire srl_2 : Word[32]
-    srl_2 := if amount[1] { zext(srl_1[32..2]) } else { srl_1 }
+    srl_2 := mux(amount[1], zext(srl_1[32..2]), srl_1)
 
     //> Stage 4: shift right logical by 4.
     wire srl_4 : Word[32]
-    srl_4 := if amount[2] { zext(srl_2[32..4]) } else { srl_2 }
+    srl_4 := mux(amount[2], zext(srl_2[32..4]), srl_2)
 
     //> Stage 8: shift right logical by 8.
     wire srl_8 : Word[32]
-    srl_8 := if amount[3] { zext(srl_4[32..8]) } else { srl_4 }
+    srl_8 := mux(amount[3], zext(srl_4[32..8]), srl_4)
 
     //> Stage 16: shift right logical by 16.
     wire srl_16 : Word[32]
-    srl_16 := if amount[4] { zext(srl_8[32..16]) } else { srl_8 }
+    srl_16 := mux(amount[4], zext(srl_8[32..16]), srl_8)
 
     //> Stage 1: shift right arithmetic by 1 (sign-extending).
     wire sra_1 : Word[32]
-    sra_1 := if amount[0] { sext(a[32..1]) } else { a }
+    sra_1 := mux(amount[0], sext(a[32..1]), a)
 
     //> Stage 2: shift right arithmetic by 2.
     wire sra_2 : Word[32]
-    sra_2 := if amount[1] { sext(sra_1[32..2]) } else { sra_1 }
+    sra_2 := mux(amount[1], sext(sra_1[32..2]), sra_1)
 
     //> Stage 4: shift right arithmetic by 4.
     wire sra_4 : Word[32]
-    sra_4 := if amount[2] { sext(sra_2[32..4]) } else { sra_2 }
+    sra_4 := mux(amount[2], sext(sra_2[32..4]), sra_2)
 
     //> Stage 8: shift right arithmetic by 8.
     wire sra_8 : Word[32]
-    sra_8 := if amount[3] { sext(sra_4[32..8]) } else { sra_4 }
+    sra_8 := mux(amount[3], sext(sra_4[32..8]), sra_4)
 
     //> Stage 16: shift right arithmetic by 16.
     wire sra_16 : Word[32]
-    sra_16 := if amount[4] { sext(sra_8[32..16]) } else { sra_8 }
+    sra_16 := mux(amount[4], sext(sra_8[32..16]), sra_8)
 
     // Final shifted output selected by `dir`.
     z := match dir {

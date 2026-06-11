@@ -65,18 +65,21 @@ mod TlUlArb21 {
     server socket client_1 of TlUl
 
     client socket server_0 of TlUl {
-        if grant_0 {
-            it.a_opcode  := client_0.a_opcode
-            it.a_address := client_0.a_address
-            it.a_data    := client_0.a_data
-            it.a_mask    := client_0.a_mask
-            it.a_size    := client_0.a_size
-        } else {
-            it.a_opcode  := client_1.a_opcode
-            it.a_address := client_1.a_address
-            it.a_data    := client_1.a_data
-            it.a_mask    := client_1.a_mask
-            it.a_size    := client_1.a_size
+        when {
+            case grant_0 {
+                it.a_opcode  := client_0.a_opcode
+                it.a_address := client_0.a_address
+                it.a_data    := client_0.a_data
+                it.a_mask    := client_0.a_mask
+                it.a_size    := client_0.a_size
+            }
+            else {
+                it.a_opcode  := client_1.a_opcode
+                it.a_address := client_1.a_address
+                it.a_data    := client_1.a_data
+                it.a_mask    := client_1.a_mask
+                it.a_size    := client_1.a_size
+            }
         }
 
         it.a_valid   := (grant_0 && client_0.a_valid) || (grant_1 && client_1.a_valid)
@@ -136,30 +139,29 @@ mod TlUlArb21 {
         d_done := server_0.d_valid && ((grant_0 && client_0.d_ready) || (grant_1 && client_1.d_ready))
     }
 
-    serving <= if reset {
-        @Idle()
-    } else {
-        match serving {
-            case @Idle() =>
-                if idle_grant_0 { @ServingClient0() }
-                else if idle_grant_1 { @ServingClient1() }
-                else { @Idle() }
-            case @ServingClient0() =>
-                if d_done { @Idle() } else { @ServingClient0() }
-            case @ServingClient1() =>
-                if d_done { @Idle() } else { @ServingClient1() }
+    serving <= when {
+        case reset => @Idle()
+        else match serving {
+            case @Idle() when {
+                case idle_grant_0 => @ServingClient0()
+                case idle_grant_1 => @ServingClient1()
+                else => @Idle()
+            }
+            case @ServingClient0() => mux(d_done, @Idle(), @ServingClient0())
+            case @ServingClient1() => mux(d_done, @Idle(), @ServingClient1())
         }
     }
 
-    if reset {
-        priority <= @Client0First()
-    } else {
-        if d_done {
+    when {
+        case reset {
+            priority <= @Client0First()
+        }
+        case d_done {
             match serving {
-                case @ServingClient0() => {
+                case @ServingClient0() {
                     priority <= @Client1First()
                 }
-                case @ServingClient1() => {
+                case @ServingClient1() {
                     priority <= @Client0First()
                 }
             }
@@ -194,35 +196,37 @@ mod TlUlMux12 {
         server_1.a_mask    := it.a_mask
         server_1.a_size    := it.a_size
 
-        it.a_ready := if sel { server_1.a_ready } else { server_0.a_ready }
+        it.a_ready := mux(sel, server_1.a_ready, server_0.a_ready)
 
-        if serving_dev1 {
-            client_0.d_valid  := server_1.d_valid
-            client_0.d_opcode := server_1.d_opcode
-            client_0.d_data   := server_1.d_data
-            client_0.d_size   := server_1.d_size
-            client_0.d_error  := server_1.d_error
-        } else {
-            client_0.d_valid  := server_0.d_valid
-            client_0.d_opcode := server_0.d_opcode
-            client_0.d_data   := server_0.d_data
-            client_0.d_size   := server_0.d_size
-            client_0.d_error  := server_0.d_error
+        when {
+            case serving_dev1 {
+                client_0.d_valid  := server_1.d_valid
+                client_0.d_opcode := server_1.d_opcode
+                client_0.d_data   := server_1.d_data
+                client_0.d_size   := server_1.d_size
+                client_0.d_error  := server_1.d_error
+            }
+            else {
+                client_0.d_valid  := server_0.d_valid
+                client_0.d_opcode := server_0.d_opcode
+                client_0.d_data   := server_0.d_data
+                client_0.d_size   := server_0.d_size
+                client_0.d_error  := server_0.d_error
+            }
         }
     }
 
     wire a_handshake : Bit {
-        it := client_0.a_valid && (if sel { server_1.a_ready } else { server_0.a_ready })
+        it := client_0.a_valid && mux(sel, server_1.a_ready, server_0.a_ready)
     }
 
     reg serving : SelState on clock {
-        if reset {
-            serving <=@Server0()
-        } else if a_handshake {
-            if sel {
-                serving <= @Server1()
-            } else {
+        when {
+            case reset {
                 serving <= @Server0()
+            }
+            case a_handshake {
+                serving <= mux(sel, @Server1(), @Server0())
             }
         }
     }

@@ -67,12 +67,15 @@ mod DriverTypes {
     d := true
 
     reg e : Bit on clock
-    if true {
-        // CHECK-NOT: Wrong driver type for e
-        e <= true
-    } else {
-        // CHECK: Wrong driver type for e
-        e := true
+    when {
+        case true {
+            // CHECK-NOT: Wrong driver type for e
+            e <= true
+        }
+        else {
+            // CHECK: Wrong driver type for e
+            e := true
+        }
     }
 }
 
@@ -120,46 +123,57 @@ mod TwoDriversAcrossSections {
     incoming reset : Bit
     outgoing out  : Bit
 
-    if reset {
-        out := true
-    } else {
-        out := false
+    when {
+        case reset {
+            out := true
+        }
+        else {
+            out := false
+        }
     }
 
     reg r : Bit on clock
 
-    if reset {
-        r <= true
+    when {
+        case reset {
+            r <= true
+        }
     }
 
-    if !reset {
-        // CHECK: Multiple drivers for r
-        r <= false
+    when {
+        case !reset {
+            // CHECK: Multiple drivers for r
+            r <= false
+        }
     }
 
     // CHECK: Multiple drivers for s
     reg s : Bit on clock
     s <= true
 
-    if reset {
-        s <= false
+    when {
+        case reset {
+            s <= false
+        }
     }
 
     // CHECK: Multiple drivers for t
     wire t : Bit
     t := true
 
-    if reset {
-        t := false
+    when {
+        case reset {
+            t := false
+        }
     }
 
     wire u : Bit
     u := false
 
     match #On : Status {
-        case #On => {
+        case #On {
         }
-        else => {
+        else {
             u := true
         }
     }

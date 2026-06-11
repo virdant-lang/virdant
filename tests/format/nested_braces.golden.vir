@@ -4,11 +4,7 @@ mod Nested {
     incoming data   : Word[8]
     outgoing result : Word[8]
 
-    result := if cond {
-        data
-    } else {
-        0w8
-    }
+    result := mux(cond, data, 0w8)
 
     outgoing chosen : Word[8]
     chosen := match data {

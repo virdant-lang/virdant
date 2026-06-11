@@ -17,10 +17,10 @@ mod WordPatOnEnum {
     reg r : Bit on clock
     unused r
     match #Off : State {
-        case #On  => { r <= true }
-        case #Off => { r <= false }
+        case #On  { r <= true }
+        case #Off { r <= false }
         // CHECK: which is not a Word type
-        case 0    => { r <= false }
+        case 0    { r <= false }
     }
 }
 
@@ -30,12 +30,12 @@ mod EnumPatOnWord {
     reg r : Bit on clock
     unused r
     match x {
-        case 0 => { r <= true }
-        case 1 => { r <= false }
-        case 2 => { r <= true }
-        case 3 => { r <= false }
+        case 0 { r <= true }
+        case 1 { r <= false }
+        case 2 { r <= true }
+        case 3 { r <= false }
         // CHECK: PatEnumerant expects an enum type
-        case #On => { r <= false }
+        case #On { r <= false }
     }
 }
 
@@ -45,12 +45,12 @@ mod CtorPatOnWord {
     reg r : Bit on clock
     unused r
     match x {
-        case 0 => { r <= true }
-        case 1 => { r <= false }
-        case 2 => { r <= true }
-        case 3 => { r <= false }
+        case 0 { r <= true }
+        case 1 { r <= false }
+        case 2 { r <= true }
+        case 3 { r <= false }
         // CHECK: Unresolved constructor Foo
-        case @Foo() => { r <= false }
+        case @Foo() { r <= false }
     }
 }
 
@@ -59,10 +59,10 @@ mod BitPatOnEnum {
     reg r : Bit on clock
     unused r
     match #Off : State {
-        case #On  => { r <= true }
-        case #Off => { r <= false }
+        case #On  { r <= true }
+        case #Off { r <= false }
         // CHECK: Wrong type
-        case true => { r <= false }
+        case true { r <= false }
     }
 }
 

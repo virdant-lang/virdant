@@ -2,11 +2,14 @@ mod Top {
     wire w : Bit
     wire u : Bit
 
-    if true {
-        w := true
-        u := true
-    } else {
-        w := false
-        u := false
+    when {
+        case true {
+            w := true
+            u := true
+        }
+        else {
+            w := false
+            u := false
+        }
     }
 }

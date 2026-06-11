@@ -49,7 +49,7 @@ export mod Top {
     next_phase := match phase {
         case #Green  => #Yellow
         case #Yellow => #Red
-        case #Red    => if walk_req { #Walk } else { #Green }
+        case #Red    => mux(walk_req, #Walk, #Green)
         case #Walk   => #Red
     }
 
@@ -63,16 +63,18 @@ export mod Top {
     }
 
     // -- Register update logic ---------------------------------------------
-    if reset {
-        // Start in Red so vehicles halt immediately on power-up.
-        phase <= #Red
-        timer <= 8
-    } else {
-        if timer == 0 {
+    when {
+        case reset {
+            // Start in Red so vehicles halt immediately on power-up.
+            phase <= #Red
+            timer <= 8
+        }
+        case timer == 0 {
             // Timer expired — latch the pre-computed successor values.
             phase <= next_phase
             timer <= next_timer
-        } else {
+        }
+        else {
             // Still counting down; hold the current phase.
             timer <= timer - 1
         }
