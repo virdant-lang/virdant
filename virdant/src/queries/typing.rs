@@ -33,7 +33,7 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
         AstNodePayload::Driver(_) => {
             let mut lhs_path = parsing.string(parent_node.child(0).path().unwrap()).to_owned();
 
-            // Walk up through any enclosing ModDefStmtBlocks and ModDefStmtIfs
+            // Walk up through any enclosing ModDefStmtBlocks and ModDefStmtWhens
             // to find the containing item (ModDef). Loop over AstNodeId (Copy)
             // to avoid holding overlapping borrows on the AstNode.
             let mut ancestor_id = parent_node.parent().unwrap().id();
@@ -73,10 +73,10 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
             let component_analysis = builder.get_component_analysis(moddef.id());
             component_analysis.type_of(lhs_path.as_bstr())
         }
-        AstNodePayload::ModDefStmtIf => {
-            // Children of ModDefStmtIf: [cond_0, block_0, cond_1, block_1, ..., else_block]
-            // Only the condition expressions (even-indexed children) are registered as
-            // expr roots with ModDefStmtIf as their parent. Each condition must be a Bit.
+        AstNodePayload::ModDefStmtWhen => {
+            // Children of ModDefStmtWhen: [guard_0?, body_0, guard_1?, body_1, ...]
+            // Only the guard expressions are registered as expr roots.
+            // Each guard must be a Bit.
             Some(Type::Bit)
         }
         AstNodePayload::ModDefStmtMatch => {

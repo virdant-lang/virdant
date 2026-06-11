@@ -25,7 +25,7 @@ impl Typing {
 
         match node.payload() {
             AstNodePayload::ExprParen                => self.check_paren(builder, context, node, expected_typ),
-            AstNodePayload::ExprIf                   => self.check_if(builder, context, node, expected_typ),
+            AstNodePayload::ExprWhen                 => self.check_when(builder, context, node, expected_typ),
             AstNodePayload::ExprWordLit(_)           => self.check_word_lit(node, expected_typ),
             AstNodePayload::ExprIndex(expr_index)    => self.check_index(builder, context, node, expr_index.index, expected_typ),
             AstNodePayload::ExprHole                 => self.check_hole(node, expected_typ),
@@ -58,48 +58,18 @@ impl Typing {
         }
     }
 
-    fn check_if<'p>(
+    fn check_when<'p>(
         &mut self,
-        builder: &mut Builder,
-        context: TypingContext,
-        node: &AstNode<'p>,
-        expected_typ: &Type,
+        _builder: &mut Builder,
+        _context: TypingContext,
+        _node: &AstNode<'p>,
+        _expected_typ: &Type,
     ) -> Result<(), ()> {
-        let mut err = false;
-        let children = node.children();
-        err |= self
-            .check(builder, context.clone(), &children[0], &Type::Bit)
-            .is_err();
-        err |= self
-            .check(builder, context.clone(), &children[1], expected_typ)
-            .is_err();
-        let mut i = 2;
-        while i + 1 < children.len() - 1 {
-            err |= self
-                .check(builder, context.clone(), &children[i], &Type::Bit)
-                .is_err();
-            err |= self
-                .check(builder, context.clone(), &children[i + 1], expected_typ)
-                .is_err();
-            i += 2;
-        }
-
-        // TODO this all needs helpers in AstNode
-        err |= self
-            .check(
-                builder,
-                context,
-                &children[children.len() - 1],
-                expected_typ,
-            )
-            .is_err();
-
-        if !err {
-            self.annotate(node, expected_typ);
-            Ok(())
-        } else {
-            Err(())
-        }
+        // TODO: Implement check_when with new arm structure
+        // Should walk children using when_arm_children helper
+        // Check guards as Type::Bit, bodies as expected_typ
+        // Handle bare expr, block, and nested when/match arms
+        todo!("check_when not yet implemented")
     }
 
     fn check_word_lit<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {

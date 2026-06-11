@@ -310,10 +310,11 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
             let child_loc = node.child(0).location();
             ExprPayload::Paren(payload::Paren { subject: convert_ast_expr(db, child_loc) })
         }
-        AstNodePayload::ExprIf => {
-            let child_locs: Vec<Location> = node.children().iter().map(|c| c.location()).collect();
-            let (branches, else_branch) = build_if_branches(db, &child_locs);
-            ExprPayload::If(payload::If { branches, else_branch })
+        AstNodePayload::ExprWhen => {
+            // TODO: Implement ExprWhen conversion for simulator
+            // Should walk children using when_arm_children helper
+            // Build branches from guard/body pairs
+            todo!("ExprWhen sim conversion not yet implemented")
         }
         AstNodePayload::ExprMatch => {
             let children = node.children();

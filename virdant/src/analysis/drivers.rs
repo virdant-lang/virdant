@@ -452,34 +452,42 @@ fn collect_block_drivers(
                     }
                 }
             }
-            AstNodePayload::ModDefStmtIf => {
-                // Children: [cond_0, block_0, cond_1, block_1, ..., (else_block?)]
-                // An else block is present when the total number of children is odd;
-                // when even, all children are cond/block pairs with no trailing else.
+            AstNodePayload::ModDefStmtWhen => {
+                // Children: [guard_0?, body_0, guard_1?, body_1, ...]
+                // case arms have guard + body (2 children), else arms have only body (1 child)
                 let children = stmt.children();
-                let has_else = children.len() % 2 == 1;
-                let num_cond_block_pairs = children.len() / 2;
+                let mut clause_drivers: Vec<(Location, IndexMap<ComponentId, Vec<Driver>>)> = vec![];
+                let mut else_drivers: IndexMap<ComponentId, Vec<Driver>> = IndexMap::new();
 
-                // Recursively collect drivers from each if/elif clause.
-                let clause_drivers: Vec<(Location, IndexMap<ComponentId, Vec<Driver>>)> =
-                    (0..num_cond_block_pairs)
-                        .map(|i| {
-                            let cond = &children[2 * i];
-                            let block = &children[2 * i + 1];
-                            let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, it_context);
-                            diagnostics.append(&mut block_diags);
-                            (cond.location(), block_drivers)
-                        })
-                        .collect();
-
-                // Recursively collect drivers from the else block (if present).
-                let else_drivers = if has_else {
-                    let (else_drivers, mut else_diags) = collect_block_drivers(children.last().unwrap().children(), component_analysis, it_context);
-                    diagnostics.append(&mut else_diags);
-                    else_drivers
-                } else {
-                    IndexMap::new()
-                };
+                let mut idx = 0;
+                while let Some(first) = children.get(idx) {
+                    if first.is_expr() {
+                        // case arm: guard + body
+                        let guard = first;
+                        if let Some(body) = children.get(idx + 1) {
+                            let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ModDefStmtBlock) {
+                                collect_block_drivers(body.children(), component_analysis, it_context)
+                            } else {
+                                // nested when/match or bare expr - recurse as single stmt
+                                collect_block_drivers(vec![body.clone()], component_analysis, it_context)
+                            };
+                            diagnostics.append(&mut body_diags);
+                            clause_drivers.push((guard.location(), body_drivers));
+                        }
+                        idx += 2;
+                    } else {
+                        // else arm: body only
+                        let body = first;
+                        let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ModDefStmtBlock) {
+                            collect_block_drivers(body.children(), component_analysis, it_context)
+                        } else {
+                            collect_block_drivers(vec![body.clone()], component_analysis, it_context)
+                        };
+                        diagnostics.append(&mut body_diags);
+                        else_drivers = body_drivers;
+                        idx += 1;
+                    }
+                }
 
                 // Gather all component IDs driven in any clause or the else block.
                 let mut all_components: IndexSet<ComponentId> = IndexSet::new();

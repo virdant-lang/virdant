@@ -187,8 +187,8 @@ impl PackageAnalysis {
                     }
                     AstNodePayload::BidirectionalDriver => (),
 
-                    AstNodePayload::ModDefStmtIf => {
-                        self.add_moddefstmtif_expr_roots(child_node);
+                    AstNodePayload::ModDefStmtWhen => {
+                        self.add_moddefstmtwhen_expr_roots(child_node);
                     }
                     AstNodePayload::ModDefStmtMatch => {
                         self.add_moddefstmtmatch_expr_roots(child_node);
@@ -213,23 +213,40 @@ impl PackageAnalysis {
         }
     }
 
-    fn add_moddefstmtif_expr_roots(&mut self, if_node: AstNode<'_>) {
-        // Children: [cond_0, block_0, cond_1, block_1, ..., (else_block?)]
-        // An else block is present when the total number of children is odd.
-        let children = if_node.children();
-        let has_else = children.len() % 2 == 1;
-        let num_cond_block_pairs = children.len() / 2;
-
-        for i in 0..num_cond_block_pairs {
-            // Each condition expression is an expr root.
-            self.expr_roots.push(children[2 * i].id());
-            // Recurse into the corresponding block.
-            self.add_moddefstmt_block_expr_roots(&children[2 * i + 1]);
-        }
-
-        // Recurse into the else block only if one exists.
-        if has_else {
-            self.add_moddefstmt_block_expr_roots(children.last().unwrap());
+    fn add_moddefstmtwhen_expr_roots(&mut self, when_node: AstNode<'_>) {
+        // Children: [guard_0?, body_0, guard_1?, body_1, ...]
+        // case arms have guard + body (2 children), else arms have only body (1 child)
+        let children = when_node.children();
+        let mut idx = 0;
+        while let Some(first) = children.get(idx) {
+            if first.is_expr() {
+                // case arm: guard + body
+                self.expr_roots.push(first.id());
+                if let Some(body) = children.get(idx + 1) {
+                    if matches!(body.payload(), AstNodePayload::ModDefStmtBlock) {
+                        self.add_moddefstmt_block_expr_roots(body);
+                    } else {
+                        // nested when/match - recurse
+                        if matches!(body.payload(), AstNodePayload::ModDefStmtWhen) {
+                            self.add_moddefstmtwhen_expr_roots(body.clone());
+                        } else if matches!(body.payload(), AstNodePayload::ModDefStmtMatch) {
+                            self.add_moddefstmtmatch_expr_roots(body.clone());
+                        }
+                        // bare expr arms don't add expr roots (they are not driver exprs)
+                    }
+                }
+                idx += 2;
+            } else {
+                // else arm: body only
+                if matches!(first.payload(), AstNodePayload::ModDefStmtBlock) {
+                    self.add_moddefstmt_block_expr_roots(first);
+                } else if matches!(first.payload(), AstNodePayload::ModDefStmtWhen) {
+                    self.add_moddefstmtwhen_expr_roots(first.clone());
+                } else if matches!(first.payload(), AstNodePayload::ModDefStmtMatch) {
+                    self.add_moddefstmtmatch_expr_roots(first.clone());
+                }
+                idx += 1;
+            }
         }
     }
 
@@ -251,8 +268,8 @@ impl PackageAnalysis {
                 AstNodePayload::Driver(_) => {
                     self.expr_roots.push(stmt.driver().unwrap().id());
                 }
-                AstNodePayload::ModDefStmtIf => {
-                    self.add_moddefstmtif_expr_roots(stmt);
+                AstNodePayload::ModDefStmtWhen => {
+                    self.add_moddefstmtwhen_expr_roots(stmt);
                 }
                 AstNodePayload::ModDefStmtMatch => {
                     self.add_moddefstmtmatch_expr_roots(stmt);

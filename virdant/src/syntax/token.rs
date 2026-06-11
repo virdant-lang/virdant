@@ -109,6 +109,7 @@ pub enum Token {
     #[token(b"if")]        KwIf,
     #[token(b"it")]        KwIt,
     #[token(b"else")]      KwElse,
+    #[token(b"when")]      KwWhen,
     #[token(b"match")]     KwMatch,
     #[token(b"case")]      KwCase,
     #[token(b"unused")]    KwUnused,
@@ -133,7 +134,7 @@ pub const KEYWORDS: &[&str] = &[
     "width", "incoming", "outgoing",
     "reg", "wire", "submod", "on", "of",
     "socket", "client", "server", "cosi", "soci",
-    "if", "it", "else",
+    "if", "it", "else", "when",
     "match", "case", "unused",
     "true", "false", "dontcare",
 ];

@@ -165,7 +165,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::BidirectionalDriver => format!("BidirectionalDriver"),
             AstNodePayload::Submodule(_module) => format!("Module"),
             AstNodePayload::ModDefStmtBlock => format!("ModDefStmtBlock"),
-            AstNodePayload::ModDefStmtIf => format!("ModDefStmtIf"),
+            AstNodePayload::ModDefStmtWhen => format!("ModDefStmtWhen"),
             AstNodePayload::ModDefStmtMatch => format!("ModDefStmtMatch"),
             AstNodePayload::ModDefStmtUnused => format!("ModDefStmtUnused"),
             AstNodePayload::Socket(_socket) => format!("Socket"),
@@ -181,7 +181,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Type(_) => format!("Type"),
             AstNodePayload::ExprReference => format!("ExprReference"),
             AstNodePayload::ExprParen => format!("ExprParen"),
-            AstNodePayload::ExprIf => format!("ExprIf"),
+            AstNodePayload::ExprWhen => format!("ExprWhen"),
             AstNodePayload::ExprMatch => format!("ExprMatch"),
             AstNodePayload::ExprBitLit(_expr_bit_lit) => format!("ExprBitLit"),
             AstNodePayload::ExprWordLit(_expr_word_lit) => format!("ExprWordLit"),
@@ -330,7 +330,7 @@ impl<'p> AstNode<'p> {
         matches!(self.payload(),
             AstNodePayload::ExprReference |
             AstNodePayload::ExprParen |
-            AstNodePayload::ExprIf |
+            AstNodePayload::ExprWhen |
             AstNodePayload::ExprMatch |
             AstNodePayload::ExprBitLit(_) |
             AstNodePayload::ExprWordLit(_) |
@@ -365,7 +365,7 @@ impl<'p> AstNode<'p> {
     pub fn subject(&self) -> Option<AstNode<'_>> {
         match &self.payload {
             AstNodePayload::ExprParen => Some(self.child(0)),
-            AstNodePayload::ExprIf => Some(self.child(0)),
+            AstNodePayload::ExprWhen => None,
             AstNodePayload::ExprMatch => Some(self.child(0)),
             AstNodePayload::ExprUnOp(_expr_un_op) => Some(self.child(0)),
             AstNodePayload::ExprField(_) => Some(self.child(0)),

@@ -271,7 +271,7 @@ ModDefStmt: AstNodeId = {
     <driver:ModDefStmtDriver> => driver,
     <instance:ModDefStmtInstance> => instance,
     <socket:ModDefStmtSocket> => socket,
-    <if_:ModDefStmtIf> => if_,
+    <w:ModDefStmtWhen> => w,
     <m:ModDefStmtMatch> => m,
     <unused_:ModDefStmtUnused> => unused_,
     <ll:@L> <error:!> <rr:@R> => {
@@ -422,30 +422,25 @@ ModDefStmtSocket: AstNodeId = {
     },
 }
 
-ModDefStmtIf: AstNodeId = {
-    <ll:@L> <start:ModDefStmtIfStart> <middles:ModDefStmtIfMiddle*> <end:ModDefStmtIfEnd?> <rr:@R> => {
-        let payload = AstNodePayload::ModDefStmtIf;
+ModDefStmtWhen: AstNodeId = {
+    <ll:@L> "when" "{" <arms:ModDefStmtWhenArm*> "}" <rr:@R> => {
+        let payload = AstNodePayload::ModDefStmtWhen;
         let span = parser.span(ll, rr);
-        let num_children = start + u16::try_from(2 * middles.len()).unwrap() + if end.is_some() { 1 } else { 0 };
+        let num_children = arms.into_iter().sum::<u16>();
 
         parser.add_node(payload, span, num_children)
-    }
-}
-
-ModDefStmtIfStart: u16 = {
-    "if" Expr ModDefStmtBlock => {
-        2
     },
 }
 
-ModDefStmtIfMiddle: () = {
-    "else" "if" Expr ModDefStmtBlock => (),
-}
-
-ModDefStmtIfEnd: u16 = {
-    "else" ModDefStmtBlock => {
-        1
-    },
+ModDefStmtWhenArm: u16 = {
+    "case" Expr "=>" Expr => 2,
+    "case" Expr ModDefStmtBlock => 2,
+    "case" Expr ModDefStmtWhen => 2,
+    "case" Expr ModDefStmtMatch => 2,
+    "else" "=>" Expr => 1,
+    "else" ModDefStmtBlock => 1,
+    "else" ModDefStmtWhen => 1,
+    "else" ModDefStmtMatch => 1,
 }
 
 ModDefStmtMatch: AstNodeId = {
@@ -459,8 +454,14 @@ ModDefStmtMatch: AstNodeId = {
 }
 
 ModDefStmtMatchArm: u16 = {
-    "case" Pat "=>" ModDefStmtBlock => 2,
-    "else" "=>" ModDefStmtBlock => 1,
+    "case" Pat "=>" Expr => 2,
+    "case" Pat ModDefStmtBlock => 2,
+    "case" Pat ModDefStmtWhen => 2,
+    "case" Pat ModDefStmtMatch => 2,
+    "else" "=>" Expr => 1,
+    "else" ModDefStmtBlock => 1,
+    "else" ModDefStmtWhen => 1,
+    "else" ModDefStmtMatch => 1,
 }
 
 ModDefStmtUnused: AstNodeId = {
@@ -505,32 +506,31 @@ Type: AstNodeId = {
 }
 
 Expr: AstNodeId = {
-    <e:ExprIf> => e,
+    <e:ExprWhen> => e,
     <e:ExprMatch> => e,
     <e:ExprStruct> => e,
     <e:ExprBinOpLogical> => e,
 }
 
-ExprIf: AstNodeId = {
-    <ll:@L> <start:ExprIfStart> <middles:ExprIfMiddle*> <end:ExprIfEnd> <rr:@R> => {
-        let payload = AstNodePayload::ExprIf;
+ExprWhen: AstNodeId = {
+    <ll:@L> "when" "{" <arms:ExprWhenArm*> "}" <rr:@R> => {
+        let payload = AstNodePayload::ExprWhen;
         let span = parser.span(ll, rr);
-        let num_children = start + u16::try_from(2 * middles.len()).unwrap() + end;
+        let num_children = arms.into_iter().sum::<u16>();
 
         parser.add_node(payload, span, num_children)
-    }
+    },
 }
 
-ExprIfStart: u16 = {
-    "if" Expr "{" Expr "}" => 2,
-}
-
-ExprIfMiddle: () = {
-    "else" "if" Expr "{" Expr "}" => (),
-}
-
-ExprIfEnd: u16 = {
-    "else" "{" Expr "}" => 1,
+ExprWhenArm: u16 = {
+    "case" Expr "=>" Expr => 2,
+    "case" Expr ModDefStmtBlock => 2,
+    "case" Expr ExprWhen => 2,
+    "case" Expr ExprMatch => 2,
+    "else" "=>" Expr => 1,
+    "else" ModDefStmtBlock => 1,
+    "else" ExprWhen => 1,
+    "else" ExprMatch => 1,
 }
 
 ExprMatch: AstNodeId = {
@@ -547,7 +547,13 @@ ExprMatch: AstNodeId = {
 
 ExprMatchArm: u16 = {
     "case" Pat "=>" Expr => 2,
+    "case" Pat ModDefStmtBlock => 2,
+    "case" Pat ExprWhen => 2,
+    "case" Pat ExprMatch => 2,
     "else" "=>" Expr => 1,
+    "else" ModDefStmtBlock => 1,
+    "else" ExprWhen => 1,
+    "else" ExprMatch => 1,
 }
 
 Pat: () = {
@@ -1020,6 +1026,7 @@ extern {
         "if" => Token::KwIf,
         "it" => Token::KwIt,
         "else" => Token::KwElse,
+        "when" => Token::KwWhen,
         "match" => Token::KwMatch,
         "case" => Token::KwCase,
         "unused" => Token::KwUnused,

@@ -684,28 +684,39 @@ fn collect_references(
                     }
                 }
             }
-            AstNodePayload::ModDefStmtIf => {
+            AstNodePayload::ModDefStmtWhen => {
                 let children = stmt.children();
-                let has_else = children.len() % 2 == 1;
-                let num_pairs = children.len() / 2;
-                for i in 0..num_pairs {
-                    let condition = &children[2 * i];
-                    // Walk references in the if/else-if condition expression.
-                    collect_references_in_expr(condition, component_analysis, it_context);
-                    let block = &children[2 * i + 1];
-                    collect_references(
-                        &block.children(),
-                        component_analysis,
-                        it_context,
-                    );
-                }
-                if has_else {
-                    let else_block = children.last().unwrap();
-                    collect_references(
-                        &else_block.children(),
-                        component_analysis,
-                        it_context,
-                    );
+                let mut idx = 0;
+                while let Some(first) = children.get(idx) {
+                    if first.is_expr() {
+                        // case arm: guard + body
+                        collect_references_in_expr(first, component_analysis, it_context);
+                        if let Some(body) = children.get(idx + 1) {
+                            if matches!(body.payload(), AstNodePayload::ModDefStmtBlock) {
+                                collect_references(
+                                    &body.children(),
+                                    component_analysis,
+                                    it_context,
+                                );
+                            } else {
+                                // nested when/match or bare expr - recurse as single stmt
+                                collect_references(&[body.clone()], component_analysis, it_context);
+                            }
+                        }
+                        idx += 2;
+                    } else {
+                        // else arm: body only
+                        if matches!(first.payload(), AstNodePayload::ModDefStmtBlock) {
+                            collect_references(
+                                &first.children(),
+                                component_analysis,
+                                it_context,
+                            );
+                        } else {
+                            collect_references(&[first.clone()], component_analysis, it_context);
+                        }
+                        idx += 1;
+                    }
                 }
             }
             AstNodePayload::ModDefStmtMatch => {
