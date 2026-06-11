@@ -1599,75 +1599,78 @@ impl<'d> Converter<'d> {
         typ: &Type,
         scheduler: &mut ExprScheduler,
     ) -> verilog::Expr {
-        // Children: [guard_0?, body_0, guard_1?, body_1, ...]
+        // Children are encoded by the parser as flat sequences:
+        //   case arm  => 2 children (guard, body)
+        //   else arm  => 1 child  (body)
+        // We process in pairs for case arms; a single remaining child is the else body.
+        //
         // Build a right-associative ternary chain
-        let mut idx = 0;
         let mut clauses: Vec<(verilog::Expr, verilog::Expr)> = vec![];
         let mut else_expr: Option<verilog::Expr> = None;
 
-        while let Some(first) = children.get(idx) {
-            if first.is_expr() {
-                // case arm: guard + body
-                let guard = first;
-                let guard_type = self.node_type(package, guard).unwrap();
-                let guard_expr = self.convert_expr(package, guard.clone(), &guard_type, self.db, scheduler);
+        // Process children in pairs: [guard, body, guard, body, ..., else_body?]
+        let mut idx = 0;
+        while idx + 1 < children.len() {
+            let guard = &children[idx];
+            let body = &children[idx + 1];
+            let guard_type = self.node_type(package, guard).unwrap();
+            let guard_expr = self.convert_expr(package, guard.clone(), &guard_type, self.db, scheduler);
 
-                if let Some(body) = children.get(idx + 1) {
-                    let body_expr = if matches!(body.payload(), AstNodePayload::ModDefStmtBlock) {
-                        // Extract single expr from block
-                        let block_children = body.children();
-                        if block_children.len() == 1 && block_children[0].is_expr() {
-                            self.convert_expr(package, block_children[0].clone(), typ, self.db, scheduler)
-                        } else {
-                            panic!("when arm body block with multiple statements in expr context")
-                        }
-                    } else if matches!(body.payload(), AstNodePayload::ExprWhen) {
-                        self.convert_when_expr(package, &body.children(), typ, scheduler)
-                    } else if matches!(body.payload(), AstNodePayload::ExprMatch) {
-                        let body_type = self.node_type(package, body).unwrap();
-                        self.convert_expr(package, body.clone(), &body_type, self.db, scheduler)
-                    } else if body.is_expr() {
-                        self.convert_expr(package, body.clone(), typ, self.db, scheduler)
-                    } else {
-                        panic!("unexpected when arm body: {:?}", body.payload())
-                    };
-                    clauses.push((guard_expr, body_expr));
-                }
-                idx += 2;
-            } else {
-                // else arm: body only
-                let body = first;
-                else_expr = Some(if matches!(body.payload(), AstNodePayload::ModDefStmtBlock) {
-                    let block_children = body.children();
-                    if block_children.len() == 1 && block_children[0].is_expr() {
-                        self.convert_expr(package, block_children[0].clone(), typ, self.db, scheduler)
-                    } else {
-                        panic!("when arm else body block with multiple statements in expr context")
-                    }
-                } else if matches!(body.payload(), AstNodePayload::ExprWhen) {
-                    self.convert_when_expr(package, &body.children(), typ, scheduler)
-                } else if matches!(body.payload(), AstNodePayload::ExprMatch) {
-                    let body_type = self.node_type(package, body).unwrap();
-                    self.convert_expr(package, body.clone(), &body_type, self.db, scheduler)
-                } else if body.is_expr() {
-                    self.convert_expr(package, body.clone(), typ, self.db, scheduler)
+            let body_expr = if matches!(body.payload(), AstNodePayload::ModDefStmtBlock) {
+                // Extract single expr from block
+                let block_children = body.children();
+                if block_children.len() == 1 && block_children[0].is_expr() {
+                    self.convert_expr(package, block_children[0].clone(), typ, self.db, scheduler)
                 } else {
-                    panic!("unexpected when else arm body: {:?}", body.payload())
-                });
-                idx += 1;
-            }
+                    panic!("when arm body block with multiple statements in expr context")
+                }
+            } else if matches!(body.payload(), AstNodePayload::ExprWhen) {
+                self.convert_when_expr(package, &body.children(), typ, scheduler)
+            } else if matches!(body.payload(), AstNodePayload::ExprMatch) {
+                let body_type = self.node_type(package, body).unwrap();
+                self.convert_expr(package, body.clone(), &body_type, self.db, scheduler)
+            } else if body.is_expr() {
+                self.convert_expr(package, body.clone(), typ, self.db, scheduler)
+            } else {
+                panic!("unexpected when arm body: {:?}", body.payload())
+            };
+            clauses.push((guard_expr, body_expr));
+            idx += 2;
         }
 
-        // Build right-associative ternary chain
-        let mut result = else_expr.expect("when expr must have else arm");
-        for (guard_expr, body_expr) in clauses.into_iter().rev() {
-            result = verilog::Expr::If(verilog::expr::If {
-                cond: Box::new(guard_expr),
-                then_expr: Box::new(body_expr),
-                else_expr: Box::new(result),
+        // If one child remains, it is the else arm body.
+        if let Some(remainder) = children.get(idx) {
+            else_expr = Some(if matches!(remainder.payload(), AstNodePayload::ModDefStmtBlock) {
+                let block_children = remainder.children();
+                if block_children.len() == 1 && block_children[0].is_expr() {
+                    self.convert_expr(package, block_children[0].clone(), typ, self.db, scheduler)
+                } else {
+                    panic!("when arm else body block with multiple statements in expr context")
+                }
+            } else if matches!(remainder.payload(), AstNodePayload::ExprWhen) {
+                self.convert_when_expr(package, &remainder.children(), typ, scheduler)
+            } else if matches!(remainder.payload(), AstNodePayload::ExprMatch) {
+                let body_type = self.node_type(package, remainder).unwrap();
+                self.convert_expr(package, remainder.clone(), &body_type, self.db, scheduler)
+            } else if remainder.is_expr() {
+                self.convert_expr(package, remainder.clone(), typ, self.db, scheduler)
+            } else {
+                panic!("unexpected when else arm body: {:?}", remainder.payload())
             });
         }
-        result
+
+        // Build right-associative ternary chain.
+        // When there is no else arm, emit X-bits (consistent with convert_driver_when_to_expr).
+        let result = else_expr.unwrap_or_else(|| {
+            verilog::Expr::XLit(verilog::expr::XLit { width: type_width(typ, self.db) })
+        });
+        clauses.into_iter().rev().fold(result, |acc, (guard_expr, body_expr)| {
+            verilog::Expr::If(verilog::expr::If {
+                cond: Box::new(guard_expr),
+                then_expr: Box::new(body_expr),
+                else_expr: Box::new(acc),
+            })
+        })
     }
 
     fn convert_zext(&self, package: &PackageFqn, node: AstNode, typ: &Type, scheduler: &mut ExprScheduler) -> verilog::Expr {
