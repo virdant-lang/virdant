@@ -33,3 +33,15 @@ mod When {
         }
     }
 }
+
+mod Fine {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    reg start : Word[3] on clock {
+        it <= when {
+            case reset => 0
+            else => ?
+        }
+    }
+}
