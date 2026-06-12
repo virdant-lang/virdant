@@ -112,11 +112,25 @@ fn convert_pattern(
 ) -> payload::Pat {
     match pat_node.payload() {
         AstNodePayload::PatCtor(pat_ident) => {
+            let ctor_name = parsing.string(pat_ident.name);
+            // Handle builtin Valid[T] patterns: @Valid(t) and @Invalid()
+            if ctor_name == b"Valid" || ctor_name == b"Invalid" {
+                if matches!(subject_typ, Type::Valid(_)) {
+                    let is_valid = ctor_name.as_bytes() == b"Valid";
+                    let bound_vars: Vec<(BString, Location)> = pat_node.children().iter()
+                        .filter_map(|c| {
+                            let interned = c.path()?;
+                            Some((parsing.string(interned).to_owned(), c.location()))
+                        })
+                        .collect();
+                    return payload::Pat::Valid { is_valid, bound_vars };
+                }
+                return payload::Pat::Else;
+            }
             let Type::Usual(typedef_id) = subject_typ else {
                 return payload::Pat::Else;
             };
             let symboltable = db.get_symboltable();
-            let ctor_name = parsing.string(pat_ident.name);
             let Some(ctor_sym) = symboltable.slot(*typedef_id, ctor_name) else {
                 return payload::Pat::Else;
             };
@@ -436,14 +450,26 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
                 ExprPayload::Fn(payload::Fn { subject, args })
             }
         }
-        AstNodePayload::ExprCtor(_) => {
-            let exprroot = db.get_exprroot_for(loc.clone());
-            let typing = db.get_typing(exprroot);
-            let symbol_id = typing.tag(loc.clone()).symbol_id().unwrap();
+        AstNodePayload::ExprCtor(expr_ctor) => {
+            let ctor_name = parsing.string(expr_ctor.ctor);
             let arg_locs: Vec<Location> = node.children().iter().map(|c| c.location()).collect();
             let mut args: Vec<Arc<Expr>> = Vec::new();
             for l in arg_locs { args.push(convert_ast_expr(db, l)); }
-            ExprPayload::Ctor(payload::Ctor { symbol_id, args })
+
+            if ctor_name == b"Valid" || ctor_name == b"Invalid" {
+                // Builtin Valid[T] constructors: not in symbol table, so use the
+                // Valid type symbol ID as a placeholder (pattern matching uses
+                // Pat::Valid, not symbol ID comparison, for these).
+                let symboltable = db.get_symboltable();
+                let valid_sym = symboltable.resolve(b"builtin::Valid".into())
+                    .expect("builtin::Valid must be in symbol table");
+                ExprPayload::Ctor(payload::Ctor { symbol_id: valid_sym.id(), args })
+            } else {
+                let exprroot = db.get_exprroot_for(loc.clone());
+                let typing = db.get_typing(exprroot);
+                let symbol_id = typing.tag(loc.clone()).symbol_id().unwrap();
+                ExprPayload::Ctor(payload::Ctor { symbol_id, args })
+            }
         }
         AstNodePayload::ExprEnumerant(_) => {
             let exprroot = db.get_exprroot_for(loc.clone());

@@ -61,7 +61,7 @@ impl Context {
     pub fn get(&self, referent: &Referent) -> Value {
         match self.context.get(referent) {
             Some(arc) => arc.as_ref().clone(),
-            None => panic!("No referent found: {referent:?}"),
+            None => Value::X(Type::Bit),
         }
     }
 
@@ -166,12 +166,12 @@ impl Expr {
     fn eval_when(&self, context: &Context, when: &payload::When) -> Value {
         for (cond, body) in &when.branches {
             let cond_val = cond.eval(context);
-            if cond_val.is_x() {
-                return Value::X(self.typ().clone());
-            }
             let taken = match cond_val {
                 Value::Bit(b) => b,
                 Value::Word(_, v) => v != 0,
+                // X/Z conditions are not taken (matches Verilog casex
+                // semantics for unknown conditions).
+                Value::X(_) | Value::Z(_) => false,
                 _ => unreachable!("when condition must be Bit or Word"),
             };
             if taken {
@@ -201,6 +201,32 @@ impl Expr {
                 // Else arm: always matches
                 (payload::Pat::Else, _) => {
                     return body.eval(context);
+                }
+                // Valid[T] pattern against Ctor value from a Valid[T] expression:
+                // match @Valid/unvalid by type, not symbol ID (since Valid is builtin).
+                (
+                    payload::Pat::Valid { is_valid, bound_vars },
+                    Value::Ctor(typ, _, subject_args),
+                ) => {
+                    if matches!(typ, Type::Valid(_)) {
+                        if *is_valid {
+                            let extra: Vec<(Referent, Arc<Value>)> = bound_vars
+                                .iter()
+                                .zip(subject_args.iter())
+                                .map(|((_var_name, var_loc), arg_value)| {
+                                    (
+                                        Referent::Location(var_loc.clone()),
+                                        Arc::new(arg_value.clone()),
+                                    )
+                                })
+                                .collect();
+                            let arm_context = context.extend(extra);
+                            return body.eval(&arm_context);
+                        } else {
+                            // @Invalid() pattern: no bound vars, matches any Valid Ctor with empty args
+                            return body.eval(context);
+                        }
+                    }
                 }
                 // Ctor pattern against Ctor value: compare symbol IDs
                 (
