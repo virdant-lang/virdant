@@ -1,0 +1,16 @@
+mod PopCount {
+    incoming inp0 : Word[8]
+    incoming inp1 : Word[4]
+
+    mod adder of Adder4 {
+        // CHECK: Driver for sink inp0
+        inp0 := it.sum
+    }
+
+    // CHECK: Driver for sink inp
+    inp1 := 0
+}
+
+mod Adder4 {
+    outgoing sum : Word[8] { it := 0 }
+}

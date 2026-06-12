@@ -10,7 +10,7 @@ use crate::analysis::symbols::SymbolId;
 use crate::common::{ComponentKind, DriverType};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
-use crate::syntax::ast::AstNode;
+use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 
@@ -157,19 +157,39 @@ fn get_all_driver_locations(
     moddef_node: &AstNode<'_>,
 ) -> IndexMap<BString, Vec<(DriverType, Location)>> {
     let mut driver_locations: IndexMap<BString, Vec<(DriverType, Location)>> = IndexMap::new();
+    let mut stack: Vec<AstNodeId> = vec![moddef_node.id()];
 
-    for child in moddef_node.children() {
-        if let AstNodePayload::Driver(driver) = child.payload() {
-            if let Some(target) = child.target() {
-                let target_str = parsing.string(target);
-                let entry = (driver.driver_type, child.location());
-                if let Some(driver_list) = driver_locations.get_mut(target_str) {
-                    driver_list.push(entry);
-                } else {
-                    driver_locations.insert(target_str.to_owned(), vec![entry]);
+    while let Some(node_id) = stack.pop() {
+        let node = parsing.ast_node(node_id);
+        for child in &node.children() {
+            match child.payload() {
+                AstNodePayload::Driver(driver) => {
+                    if let Some(target) = child.target() {
+                        let target_str = parsing.string(target);
+                        let entry = (driver.driver_type, child.location());
+                        driver_locations
+                            .entry(target_str.to_owned())
+                            .or_default()
+                            .push(entry);
+                    }
                 }
+                AstNodePayload::Submodule(_) => {
+                    let sub_children = child.children();
+                    // If the submodule has an ItBlock (child index 1),
+                    // recurse into its children.
+                    if sub_children.len() > 1 {
+                        stack.push(sub_children[1].id());
+                    }
+                }
+                AstNodePayload::ModDefStmtBlock
+                | AstNodePayload::ModDefStmtWhen
+                | AstNodePayload::ModDefStmtMatch => {
+                    stack.push(child.id());
+                }
+                _ => {}
             }
         }
     }
+
     driver_locations
 }
