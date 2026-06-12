@@ -277,9 +277,10 @@ impl Typing {
                     Ok(Some(Type::Bit))
                 } else {
                     self.diagnostics.push(
-                        diagnostics::Todo {
+                        diagnostics::IndexOutOfBounds {
                             region,
-                            message: "infer_index out of range".into(),
+                            array_width: *width,
+                            index: index.index,
                         }
                         .into(),
                     );
@@ -319,20 +320,32 @@ impl Typing {
         if let Some(subject_typ) = self.infer(builder, context, &subject)? {
             self.typs.insert(subject.id(), subject_typ.clone());
             if let Type::Word(width) = &subject_typ {
-                // TODO check
-                if indexrange.index_lo <= indexrange.index_hi && indexrange.index_hi <= *width {
-                    let typ = Type::Word(indexrange.index_hi - indexrange.index_lo);
-                    self.annotate(&node, &typ);
-                    Ok(Some(typ))
-                } else {
+                if indexrange.index_lo > indexrange.index_hi {
                     self.diagnostics.push(
-                        diagnostics::Todo {
+                        diagnostics::InvalidIndexRange {
                             region,
-                            message: "infer_index_range out of range".into(),
+                            array_width: *width,
+                            index_hi: indexrange.index_hi,
+                            index_lo: indexrange.index_lo,
                         }
                         .into(),
                     );
                     Err(())
+                } else if indexrange.index_hi > *width {
+                    self.diagnostics.push(
+                        diagnostics::IndexRangeOutOfBounds {
+                            region,
+                            array_width: *width,
+                            index_hi: indexrange.index_hi,
+                            index_lo: indexrange.index_lo,
+                        }
+                        .into(),
+                    );
+                    Err(())
+                } else {
+                    let typ = Type::Word(indexrange.index_hi - indexrange.index_lo);
+                    self.annotate(&node, &typ);
+                    Ok(Some(typ))
                 }
             } else {
                 self.diagnostics.push(

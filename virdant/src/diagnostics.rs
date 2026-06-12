@@ -301,6 +301,32 @@ pub struct DuplicateEnumValue {
     pub value: WordValue,
 }
 
+/// A single-bit index `a[i]` where `i >= width` of the subject Word[n].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexOutOfBounds {
+    pub region: Region,
+    pub array_width: Width,
+    pub index: u16,
+}
+
+/// A bit range `a[hi..lo]` where the bounds exceed the width of the subject.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexRangeOutOfBounds {
+    pub region: Region,
+    pub array_width: Width,
+    pub index_hi: u16,
+    pub index_lo: u16,
+}
+
+/// A bit range `a[hi..lo]` where `hi < lo` (empty/invalid range).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidIndexRange {
+    pub region: Region,
+    pub array_width: Width,
+    pub index_hi: u16,
+    pub index_lo: u16,
+}
+
 /// A dynamic word index `a[i]` where `a: Word[n]`, `i: Word[k]`,
 /// but `n != 2^k`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -842,6 +868,42 @@ impl IsDiagnostic for InvalidWordIndexWidth {
     fn message(&self) -> BString {
         format!("Invalid word index width: Word[{}] indexed by Word[{}] requires {} == 2^{}",
             self.array_width, self.index_width, self.array_width, self.index_width
+        ).into()
+    }
+}
+
+impl IsDiagnostic for IndexOutOfBounds {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Bit index {} out of bound for Word[{}]",
+            self.index, self.array_width
+        ).into()
+    }
+}
+
+impl IsDiagnostic for IndexRangeOutOfBounds {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Bit range {}..{} out of bounds for Word[{}]",
+            self.index_hi, self.index_lo, self.array_width
+        ).into()
+    }
+}
+
+impl IsDiagnostic for InvalidIndexRange {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Invalid bit range {}..{}: upper bound must be greater than or equal to lower bound",
+            self.index_hi, self.index_lo
         ).into()
     }
 }
