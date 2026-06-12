@@ -24,7 +24,8 @@ use crate::syntax::payload::AstNodePayload;
 /// Emits these diagnostics:
 /// - [`WrongDriverType`]: driver type does not match the component kind.
 /// - [`DriverForSink`]: a driver targets a component that cannot sink.
-/// - [`NoDrivers`]: a sink-capable component has zero drivers.
+/// - [`NoDrivers`]: a sink-capable (non-reg) component has zero drivers.
+/// - [`NoRegDrivers`]: a reg component has zero drivers.
 /// - [`MultipleDrivers`]: a sink-capable component has more than one driver.
 /// Also forwards any diagnostics from [`DriverAnalysis`].
 pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<Diagnostic>> {
@@ -68,10 +69,21 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<V
             match drivers {
                 None => {
                     let region = builder.get_location_region(component.location());
-                    diagnostics.push(diagnostics::NoDrivers {
-                        region,
-                        target: path.clone(),
-                    }.into());
+                    let is_reg = matches!(
+                        component.kind(),
+                        Some(ComponentKind::Reg) | Some(ComponentKind::OutgoingReg)
+                    );
+                    if is_reg {
+                        diagnostics.push(diagnostics::NoRegDrivers {
+                            region,
+                            target: path.clone(),
+                        }.into());
+                    } else {
+                        diagnostics.push(diagnostics::NoDrivers {
+                            region,
+                            target: path.clone(),
+                        }.into());
+                    }
                 }
                 Some(drivers) if drivers.len() > 1 => {
                     for driver in drivers {

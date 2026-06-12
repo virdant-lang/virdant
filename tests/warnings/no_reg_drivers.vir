@@ -1,0 +1,19 @@
+// Tests for undriven reg components.
+// reg and outgoing reg with no drivers produce a warning (NoRegDrivers),
+// not an error.
+
+mod RegModule {
+    incoming clock : Clock
+
+    // CHECK: No drivers for a
+    reg a : Bit on clock {
+        unused it
+    }
+
+    // CHECK: No drivers for b
+    outgoing reg b : Bit on clock {
+        unused it
+    }
+}
+
+// CHECK-NOT: Check failed

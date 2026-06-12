@@ -117,6 +117,13 @@ pub struct WrongDriverType {
     pub expected_driver_type: DriverType,
 }
 
+/// A reg component has no drivers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoRegDrivers {
+    pub region: Region,
+    pub target: BString,
+}
+
 /// Component has no drivers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoDrivers {
@@ -526,6 +533,20 @@ impl IsDiagnostic for WrongDriverType {
             DriverType::Latched => "<=",
         };
         format!("Wrong driver type for {}, expected {driver_type_str}", &self.target).into()
+    }
+}
+
+impl IsDiagnostic for NoRegDrivers {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("No drivers for {}", &self.target).into()
+    }
+
+    fn level(&self) -> DiagnosticLevel {
+        DiagnosticLevel::Warning
     }
 }
 
