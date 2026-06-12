@@ -8,9 +8,17 @@ test: $(VIR) $(FILECHECK)
 	mkdir -p build
 	for f in $(VIR_FILES); do \
 		name=$$(basename $$f .vir); \
-		$(VIR) -F $$f check > build/$$name.out 2>&1 || true; \
+		$(VIR) -F $$f check > build/$$name.out 2>&1; \
+		rc=$$?; \
+		if grep -q 'WARNING' build/$$name.out; then \
+			echo "ERROR: $$f emitted unexpected warnings"; \
+			exit 1; \
+		fi; \
 		cat build/$$name.out | $(FILECHECK) $$(realpath $$f) || exit 1; \
-		$(VIR) -F $$f check; \
+		if [ $$rc -ne 0 ]; then \
+			echo "ERROR: $$f check failed"; \
+			exit 1; \
+		fi; \
 	done
 
 target/release/vir:

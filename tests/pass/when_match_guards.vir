@@ -13,8 +13,11 @@ mod TestSubmoduleWhen {
     incoming clock : Clock
     incoming sel : Word[2]
 
-    mod sub of SubMod {}
+    mod sub of SubMod {
+        unused it.flag
+    }
 
+    outgoing r_out : Word[2]
     reg r : Word[2] on clock {
         match sel {
             case 0w2 {
@@ -30,6 +33,7 @@ mod TestSubmoduleWhen {
             }
         }
     }
+    r_out := r
 }
 
 // Test 2: direct signal reference in a when guard inside a match arm

@@ -16,4 +16,22 @@ mod RegModule {
     }
 }
 
+// Same warning, but with a bare reg declaration (no it-block).
+mod RegNoDrivers {
+    incoming clock : Clock
+
+    // CHECK: No drivers for a
+    reg a : Bit on clock
+
+    // CHECK: No drivers for b
+    outgoing reg b : Bit on clock
+}
+
+// A wire with no drivers still produces an error (NoDrivers),
+// so this file must NOT include an undriven wire in the top-level
+// module — it would fail the pass test.  Only reg variants are
+// tested here.
+
 // CHECK-NOT: Check failed
+
+// CHECK: Check OK
