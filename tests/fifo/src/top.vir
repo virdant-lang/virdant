@@ -1,0 +1,113 @@
+socket Pipe {
+    cosi data : Valid[Word[8]]
+    soci ready : Bit
+}
+
+mod Fifo {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    server socket inp of Pipe {
+        it.ready := match out_data {
+            case @Valid(dontcare) => true
+            case @Invalid() => !is_full
+        }
+
+        when {
+            case inp_fires {
+                match it.data {
+                    case @Valid(in_data) match write[2..0] {
+                        case 0 {
+                            slot0 <= in_data
+                        }
+                        case 1 {
+                            slot1 <= in_data
+                        }
+                        case 2 {
+                            slot2 <= in_data
+                        }
+                        case 3 {
+                            slot3 <= in_data
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    client socket out of Pipe {
+        it.data := out_data
+    }
+
+    wire out_data : Valid[Word[8]] {
+        it := when {
+            case is_empty match inp.data {
+                case @Valid(data) => @Valid(data)
+                case @Invalid() => @Invalid()
+            }
+            else match read[2..0] {
+                case 0 => @Valid(slot0)
+                case 1 => @Valid(slot1)
+                case 2 => @Valid(slot2)
+                case 3 => @Valid(slot3)
+            }
+        }
+    }
+
+    reg slot0 : Word[8] on clock
+    reg slot1 : Word[8] on clock
+    reg slot2 : Word[8] on clock
+    reg slot3 : Word[8] on clock
+
+    wire is_full : Bit {
+        it := read_is_write && different_lap
+    }
+
+    wire is_empty : Bit {
+        it := read_is_write && !different_lap
+    }
+
+    wire different_lap : Bit {
+        it := read[2] ^^ write[2]
+    }
+
+    wire read_is_write : Bit {
+        it := read[2..0] == write[2..0]
+    }
+
+    wire out_fires : Bit {
+        it := match out_data {
+            case @Valid(dontcare) => out.ready
+            case @Invalid() => false
+        }
+    }
+
+    wire inp_fires : Bit {
+        it := match inp.data {
+            case @Valid(dontcare) => !is_full || out_fires
+            case @Invalid() => false
+        }
+    }
+
+    reg read : Word[3] on clock {
+        when {
+            case reset {
+                it <= 0
+            }
+            case out_fires {
+                it <= it + 1
+            }
+        }
+    }
+
+    reg write : Word[3] on clock {
+        when {
+            case reset {
+                it <= 0
+            }
+            case inp_fires {
+                it <= it + 1
+            }
+        }
+    }
+}
