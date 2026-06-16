@@ -15,6 +15,9 @@ use crate::types::typing::Primitive;
 use crate::types::{Type, Typing};
 use crate::verilog::{self, valid_verilog_name};
 
+/// Must be one of: "x", "z", "0", "1".
+const PADDING_FILL: &str = "1";
+
 /// Accumulates Verilog elements (regs, always blocks) generated as side-effects of
 /// converting expressions that cannot be expressed inline (e.g., `match` → `casez`).
 struct ExprScheduler {
@@ -1121,9 +1124,22 @@ impl<'d> Converter<'d> {
                             verilog::Expr::BitLit(verilog::expr::BitLit { value: false }),
                         ];
                         if inner_width > 0 {
-                            exprs.push(
-                                verilog::Expr::XLit(verilog::expr::XLit { width: inner_width }),
-                            );
+                            let fill_expr = match PADDING_FILL {
+                                "x" => verilog::Expr::XLit(verilog::expr::XLit { width: inner_width }),
+                                "z" => verilog::Expr::ZLit(verilog::expr::ZLit { width: inner_width }),
+                                "0" => verilog::Expr::Repeat(verilog::expr::Repeat {
+                                    count: Box::new(constant_index_expr(inner_width)),
+                                    exprs: vec![verilog::Expr::BitLit(verilog::expr::BitLit { value: false })],
+                                    width: inner_width,
+                                }),
+                                "1" => verilog::Expr::Repeat(verilog::expr::Repeat {
+                                    count: Box::new(constant_index_expr(inner_width)),
+                                    exprs: vec![verilog::Expr::BitLit(verilog::expr::BitLit { value: true })],
+                                    width: inner_width,
+                                }),
+                                _ => unreachable!("PADDING_FILL must be one of: \"x\", \"z\", \"0\", \"1\""),
+                            };
+                            exprs.push(fill_expr);
                         }
                         return verilog::Expr::Concat(
                             verilog::expr::Concat { exprs, width: total_width },
@@ -1172,8 +1188,7 @@ impl<'d> Converter<'d> {
                     // `padding_fill` controls what value fills unused payload bits.
                     // Supported: "x" (don't-care), "z" (high-impedance), "0" (zeros), "1" (ones).
                     if padding_width > 0 {
-                        let padding_fill = "1";
-                        let padding_expr = match padding_fill {
+                        let padding_expr = match PADDING_FILL {
                             "x" => verilog::Expr::XLit(verilog::expr::XLit { width: padding_width }),
                             "z" => verilog::Expr::ZLit(verilog::expr::ZLit { width: padding_width }),
                             "0" => verilog::Expr::Repeat(verilog::expr::Repeat {
