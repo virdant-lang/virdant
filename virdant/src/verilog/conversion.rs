@@ -732,8 +732,9 @@ impl<'d> Converter<'d> {
                         let total_width = inner_width + 1;
                         if ctor_name.as_bytes() == b"Valid" {
                             for bound_var in pat.children().iter() {
+                                let Some(var_path) = bound_var.path() else { continue };
                                 let var_name = bound_var.parsing.string(
-                                    bound_var.path().unwrap(),
+                                    var_path,
                                 ).to_str_lossy().into_owned();
                                 let slice_expr = verilog::Expr::IndexRange(
                                     verilog::expr::IndexRange {
@@ -781,7 +782,8 @@ impl<'d> Converter<'d> {
                         current_lo += w;
                     }
                     for (j, bound_var) in pat.children().iter().enumerate() {
-                        let var_name = bound_var.parsing.string(bound_var.path().unwrap())
+                        let Some(var_path) = bound_var.path() else { continue };
+                        let var_name = bound_var.parsing.string(var_path)
                             .to_str_lossy().into_owned();
                         let (lo, hi) = bit_ranges[j];
                         let slice_expr = verilog::Expr::IndexRange(verilog::expr::IndexRange {
@@ -870,8 +872,9 @@ impl<'d> Converter<'d> {
                     let total_width = inner_width + 1;
                     if ctor_name.as_bytes() == b"Valid" {
                         for bound_var in pat_node.children().iter() {
+                            let Some(var_path) = bound_var.path() else { continue };
                             let var_name = bound_var.parsing.string(
-                                bound_var.path().unwrap(),
+                                var_path,
                             ).to_str_lossy().into_owned();
                             let slice_expr = verilog::Expr::IndexRange(
                                 verilog::expr::IndexRange {
@@ -920,7 +923,8 @@ impl<'d> Converter<'d> {
                         current_lo += w;
                     }
                     for (j, bound_var) in pat_node.children().iter().enumerate() {
-                        let var_name = bound_var.parsing.string(bound_var.path().unwrap())
+                        let Some(var_path) = bound_var.path() else { continue };
+                        let var_name = bound_var.parsing.string(var_path)
                             .to_str_lossy().into_owned();
                         let (lo, hi) = bit_ranges[j];
                         let slice_expr = verilog::Expr::IndexRange(verilog::expr::IndexRange {
@@ -1318,8 +1322,9 @@ impl<'d> Converter<'d> {
                                 let total_width = inner_width + 1;
                                 if ctor_name.as_bytes() == b"Valid" {
                                     for bound_var in pat.children().iter() {
+                                        let Some(var_path) = bound_var.path() else { continue };
                                         let var_name = bound_var.parsing.string(
-                                            bound_var.path().unwrap(),
+                                            var_path,
                                         ).to_str_lossy().into_owned();
                                         let slice_expr = verilog::Expr::IndexRange(
                                             verilog::expr::IndexRange {
@@ -1374,7 +1379,8 @@ impl<'d> Converter<'d> {
                             }
                             // Register subst for each bound variable as a direct bit-slice.
                             for (j, bound_var) in pat.children().iter().enumerate() {
-                                let var_name = bound_var.parsing.string(bound_var.path().unwrap())
+                                let Some(var_path) = bound_var.path() else { continue };
+                                let var_name = bound_var.parsing.string(var_path)
                                     .to_str_lossy().into_owned();
                                 let (lo, hi) = bit_ranges[j];
                                 let slice_expr = verilog::Expr::IndexRange(verilog::expr::IndexRange {
