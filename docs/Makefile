@@ -7,9 +7,10 @@ SPHINXOPTS    ?=
 SPHINXBUILD   ?= uv run sphinx-build
 SOURCEDIR     = source
 BUILDDIR      = build
+BASEDIR       = $(abspath ..)
+VIR          ?= $(BASEDIR)/target/release/vir
 EXAMPLES      = $(wildcard source/examples/*.vir)
 TESTS         = $(wildcard source/examples/*.lua)
-FEATURES      = vir-bin,filecheck-bin,vir-lsp-bin,lua,rhai
 
 auto: Makefile $(EXAMPLES) # rustdocs
 	$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
@@ -33,5 +34,10 @@ rustdocs:
 	cp -r ../virdant/target/doc/ $(BUILDDIR)/html/.
 
 test: $(EXAMPLES) $(TESTS)
-	for example in $(EXAMPLES); do cargo run --bin=vir -- -F $$example check  || exit 1; done
-	for script in $(TESTS); do cargo run --bin=vir --features $(FEATURES) -- run $$script || exit 1; done
+	for example in $(EXAMPLES); do $(VIR) -F $$example check  || exit 1; done
+	for script in $(TESTS); do \
+		echo "--------------------------------------------------------------------------------"; \
+		echo "TEST: docs/$$script"; \
+		echo "--------------------------------------------------------------------------------"; \
+		$(VIR) run $$script || exit 1; \
+	done

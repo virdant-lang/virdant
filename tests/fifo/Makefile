@@ -1,5 +1,5 @@
 BASEDIR = $(abspath ../..)
-VIR := $(BASEDIR)/target/release/vir
+VIR ?= $(BASEDIR)/target/release/vir
 
 test: src/top.vir fifo_tb.sv
 	$(VIR) build

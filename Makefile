@@ -1,5 +1,7 @@
 .PHONY: build build-wasm test clean install grammar docs release
 
+VIR       ?= $(CURDIR)/target/release/vir
+FILECHECK ?= $(CURDIR)/target/release/filecheck
 
 build: virdant/target/lib
 	cargo build --release --features "vir-bin,filecheck-bin,vir-lsp-bin,lua,rhai"
@@ -20,8 +22,8 @@ build-wasm:
 
 test: virdant/target/lib build
 	cargo test
-	$(MAKE) -C tests test
-	$(MAKE) -C docs  test
+	$(MAKE) -C tests test VIR=$(VIR) FILECHECK=$(FILECHECK)
+	$(MAKE) -C docs  test VIR=$(VIR)
 	@echo
 	@printf '%*s\n' "$$(tput cols)" '' | tr ' ' '#'
 	@echo "  All Tests Pass  "

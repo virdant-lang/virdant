@@ -1,5 +1,5 @@
 BASEDIR = $(abspath ../..)
-VIR := $(BASEDIR)/target/release/vir
+VIR ?= $(BASEDIR)/target/release/vir
 
 # vir format needs vir-format in PATH
 export PATH := $(BASEDIR)/target/release:$(PATH)
