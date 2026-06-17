@@ -350,6 +350,12 @@ pub struct IndexNotWordType {
     pub typ: BString,
 }
 
+/// An enum type's first enumerant does not have an inferrable width.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumUnknownWidth {
+    pub region: Region,
+}
+
 /// A driver block is empty
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmptyDriverBlock {
@@ -868,6 +874,16 @@ impl IsDiagnostic for InvalidDocstring {
 
     fn message(&self) -> BString {
         format!("Invalid docstring: content must start with a space, got {:?}", self.content).into()
+    }
+}
+
+impl IsDiagnostic for EnumUnknownWidth {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Enum type's first enumerant does not have an inferrable width. Add an explicit width, e.g. `= 0wN`.").into()
     }
 }
 

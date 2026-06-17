@@ -179,8 +179,8 @@ mod TwoDriversAcrossSections {
     }
 }
 
-enum type Status width 2 {
-    On = 1
+enum type Status {
+    On = 1w2
     Off = 2
 }
 

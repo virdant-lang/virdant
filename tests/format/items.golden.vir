@@ -4,8 +4,8 @@ struct type Foo {
     baz : Bit
 }
 
-enum type Color width 2 {
-    Red = 0
+enum type Color {
+    Red = 0w2
     Green = 1
     Blue = 2
 }

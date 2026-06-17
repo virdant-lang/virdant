@@ -1,4 +1,4 @@
-use crate::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, UnOp, Width};
+use crate::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, UnOp};
 use crate::syntax::parsing::InternedString;
 
 #[derive(Debug, Clone)]
@@ -179,7 +179,6 @@ pub struct UnionDef {
 #[derive(Clone, Debug)]
 pub struct EnumDef {
     pub name: InternedString,
-    pub width: Width,
     pub doc_string: Option<InternedString>,
 }
 

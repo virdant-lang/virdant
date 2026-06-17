@@ -54,9 +54,9 @@ pub(crate) fn build_typedefs(builder: &mut Builder) -> Arc<Vec<TypeDef>> {
             let parsing = builder.get_parsing(location.package());
             let symboltable = builder.get_symboltable();
             let enumdef_node = parsing.ast_node(location.ast_node_id());
-            let AstNodePayload::EnumDef(enum_def) = enumdef_node.payload() else { unreachable!() };
 
             let mut enumerant_values = IndexMap::new();
+            let mut width = None;
             for enumerant_node in enumdef_node.children() {
                 let AstNodePayload::Enumerant(enumerant) = enumerant_node.payload() else { continue; };
                 let enumerant_name = parsing.string(enumerant.name);
@@ -65,11 +65,14 @@ pub(crate) fn build_typedefs(builder: &mut Builder) -> Arc<Vec<TypeDef>> {
                     enumerant_symbol.id()
                 };
                 let expr_node = enumerant_node.child(0);
-                let value = eval_const_expr(&expr_node);
+                let (value, expr_width) = eval_const_expr(&expr_node);
+                if width.is_none() {
+                    width = expr_width;
+                }
                 enumerant_values.insert(enumerant_id, value);
             }
 
-            (Some(enum_def.width), enumerant_values)
+            (width, enumerant_values)
         } else {
             (None, IndexMap::new())
         };
@@ -101,9 +104,9 @@ pub(crate) fn build_typedef(builder: &mut Builder, symbol_id: SymbolId) -> Arc<T
         let parsing = builder.get_parsing(location.package());
         let symboltable = builder.get_symboltable();
         let enumdef_node = parsing.ast_node(location.ast_node_id());
-        let AstNodePayload::EnumDef(enum_def) = enumdef_node.payload() else { unreachable!() };
 
         let mut enumerant_values = IndexMap::new();
+        let mut width = None;
         for enumerant_node in enumdef_node.children() {
             let AstNodePayload::Enumerant(enumerant) = enumerant_node.payload() else { continue; };
             let enumerant_name = parsing.string(enumerant.name);
@@ -112,11 +115,14 @@ pub(crate) fn build_typedef(builder: &mut Builder, symbol_id: SymbolId) -> Arc<T
                 enumerant_symbol.id()
             };
             let expr_node = enumerant_node.child(0);
-            let value = eval_const_expr(&expr_node);
+            let (value, expr_width) = eval_const_expr(&expr_node);
+            if width.is_none() {
+                width = expr_width;
+            }
             enumerant_values.insert(enumerant_id, value);
         }
 
-        (Some(enum_def.width), enumerant_values)
+        (width, enumerant_values)
     } else {
         (None, IndexMap::new())
     };
@@ -129,13 +135,13 @@ pub(crate) fn build_typedef(builder: &mut Builder, symbol_id: SymbolId) -> Arc<T
     })
 }
 
-fn eval_const_expr(node: &AstNode<'_>) -> WordValue {
+fn eval_const_expr(node: &AstNode<'_>) -> (WordValue, Option<Width>) {
     let parsing = node.parsing;
     match node.payload() {
         AstNodePayload::ExprWordLit(expr_word_lit) => {
             let literal = parsing.string(expr_word_lit.literal).to_str_lossy().into_owned();
-            let (value, _width) = parse_word_literal(&literal);
-            value
+            let (value, width) = parse_word_literal(&literal);
+            (value, width)
         }
         AstNodePayload::ExprParen => eval_const_expr(&node.child(0)),
         _ => panic!("Unsupported expression in enumerant value: {:?}", node.summary()),

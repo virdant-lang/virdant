@@ -15,8 +15,8 @@ mod Alpha {
 
 // An enum whose second definition repeats an enumerant name = DuplicateSlot.
 // CHECK: Duplicate slot
-enum type Color width 2 {
-    Red   = 0
+enum type Color {
+    Red   = 0w2
     Green = 1
     Red   = 2
 }
@@ -30,8 +30,8 @@ mod Beta {
 
 // An enum with all unique enumerants — no DuplicateSlot.
 // CHECK-NOT: Duplicate slot
-enum type Direction width 2 {
-    North = 0
+enum type Direction {
+    North = 0w2
     South = 1
     East  = 2
     West  = 3

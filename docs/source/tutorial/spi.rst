@@ -98,8 +98,15 @@ To represent these state values, we use a feature of Virdant called enum types:
     :lines: 1-6
 
 We use `enum type` to define a new enum type.
-We specify its width in bits,
-and then list all of the values in the type, together with their numeric representations.
+Inside the definition, we list all of the values in the type,
+together with their numeric representations.
+
+The first entry for an `enum type` must also specify the width.
+Here, this is done with the syntax `0b001w3`.
+The `0b` means the number is specified in binary,
+the `001` gives the value,
+and the `w3` at the end means that this is a 3-bit value.
+(The leading `0`\s in `001` are just for visual effect and don't affect the bit width).
 
 The *values* of our new type are prefixed with a ``#``.
 They are: `#Idle` `#Set` and `#Tick`.

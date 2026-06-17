@@ -205,10 +205,10 @@ Generics: AstNodeId = {
 }
 
 EnumDef: AstNodeId = {
-    <docstring:DocString?> <ll:@L> "enum" "type" <name:Ident> "width" <width:Width> "{"
+    <docstring:DocString?> <ll:@L> "enum" "type" <name:Ident> "{"
         <stmts:EnumDefStmt*>
     "}" <rr:@R> => {
-        let payload = AstNodePayload::EnumDef(payload::EnumDef { name, width, doc_string: docstring });
+        let payload = AstNodePayload::EnumDef(payload::EnumDef { name, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children = stmts.len().try_into().unwrap();
 

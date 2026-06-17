@@ -1,5 +1,5 @@
-enum type MyEnum width 2 {
-    Foo = 0
+enum type MyEnum {
+    Foo = 0w2
     Baz = 1
     Qux = 2
 }

@@ -1,5 +1,5 @@
-enum type AluOp width 3 {
-    and = 1
+enum type AluOp {
+    and = 1w3
     or  = 2
     xor = 3
     add = 4

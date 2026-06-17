@@ -137,7 +137,12 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
         AstNodePayload::Enumerant(_) => {
             let enumdef_node = parent_node.parent().unwrap();
             let AstNodePayload::EnumDef(enum_def) = enumdef_node.payload() else { unreachable!() };
-            Some(Type::Word(enum_def.width))
+            let enum_name = parsing.string(enum_def.name);
+            let Some(enum_symbol) = symboltable.resolve_item_in_package(enum_name, location.package()) else {
+                return None;
+            };
+            let typedef = builder.get_typedef(enum_symbol.id());
+            typedef.width.map(Type::Word)
         }
         _ => {
             todo!("Can't build expected type for: {:?} at {:?} (parent node is {:?})",

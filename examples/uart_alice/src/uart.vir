@@ -1,7 +1,7 @@
 // Assumes clock is 12 MHz
 // Baud Rate: 9600
-enum type UartState width 4 {
-    Idle = 1
+enum type UartState {
+    Idle = 1w4
     Start = 2
     Bit = 4
     Stop = 8

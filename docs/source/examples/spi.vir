@@ -1,5 +1,5 @@
-enum type SpiState width 3 {
-    Idle = 0b001
+enum type SpiState {
+    Idle = 0b001w3
     Set  = 0b010
     Tick = 0b100
 }

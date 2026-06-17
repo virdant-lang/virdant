@@ -65,9 +65,9 @@ mod Alu {
 //> Barrel-shift direction selector.
 //>
 //> Specifies the direction for the Shifter module.
-enum type ShiftDirection width 3 {
+enum type ShiftDirection {
     //> Shift left logical (SLL).
-    ShiftLeftLogical     = 0b001
+    ShiftLeftLogical     = 0b001w3
     //> Shift right logical (SRL).
     ShiftRightLogical    = 0b010
     //> Shift right arithmetic (SRA, sign-extending).
@@ -158,9 +158,9 @@ mod Shifter {
     }
 }
 
-enum type AluOpcode width 8 {
+enum type AluOpcode {
     //> Zero result (used for JAL/JALR address generation).
-    Zero  = 0
+    Zero  = 0w8
     //> Addition (ADD, ADDI, AUIPC, LOAD/STORE address).
     Add   = 1
     //> Subtraction (SUB).

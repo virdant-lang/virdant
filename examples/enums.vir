@@ -1,5 +1,5 @@
-enum type Opcode width 7 {
-    OP      = 0b01_100_11
+enum type Opcode {
+    OP      = 0b01_100_11w7
     OP_IMM  = 0b00_100_11
     LOAD    = 0b00_000_11
     STORE   = 0b01_000_11

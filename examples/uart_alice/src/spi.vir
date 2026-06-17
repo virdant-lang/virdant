@@ -1,6 +1,6 @@
 // spi clock
-enum type State width 4 {
-    Idle = 1
+enum type State {
+    Idle = 1w4
     Send = 2
     Recv = 4
     Done = 8

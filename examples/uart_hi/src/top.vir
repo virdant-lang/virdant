@@ -19,8 +19,8 @@ import uart
 //
 //}
 
-enum type State width 2 {
-    H = 0
+enum type State {
+    H = 0w2
     I = 1
     Nl = 2
     Cr = 3

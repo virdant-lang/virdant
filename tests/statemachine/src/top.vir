@@ -12,7 +12,7 @@
 // next_phase and next_timer are computed as combinational wires so that
 // both registers see consistent, race-free values at the clock edge.
 
-enum type Phase width 4 {
+enum type Phase {
     Green  = 1w4
     Yellow = 2w4
     Red    = 4w4

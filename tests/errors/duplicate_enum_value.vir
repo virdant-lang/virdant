@@ -2,8 +2,8 @@
 // The first duplicate per value is an Error, subsequent ones are Info.
 
 // Two enumerants with the same value (both 1) = Error on the second.
-enum type Color width 2 {
-    Red   = 0
+enum type Color {
+    Red   = 0w2
     // CHECK: Duplicate enum value: enumerants of Color share value 1
     Green = 1
     Blue  = 1
@@ -11,9 +11,9 @@ enum type Color width 2 {
 
 // Three enumerants sharing the same value.
 // First duplicate is Error, second duplicate is Info.
-enum type Priority width 2 {
+enum type Priority {
     // CHECK: Duplicate enum value: enumerants of Priority share value 0
-    Low    = 0
+    Low    = 0w2
     Medium = 1
     High   = 0
     Urgent = 0
@@ -21,43 +21,43 @@ enum type Priority width 2 {
 
 // An enum with no duplicate values -- no DuplicateEnumValue for Direction.
 // CHECK-NOT: Duplicate enum value: enumerants of Direction
-enum type Direction width 2 {
-    North = 0
+enum type Direction {
+    North = 0w2
     South = 1
     East  = 2
     West  = 3
 }
 
 // Two different representations of the same value -- hex vs dec.
-enum type Code width 4 {
+enum type Code {
     // CHECK: Duplicate enum value: enumerants of Code share value 15
-    A = 15
+    A = 15w4
     B = 0x0F
 }
 
 // Underscores in literals: 1_0 (decimal ten) vs 10.
-enum type Ten width 4 {
+enum type Ten {
     // CHECK: Duplicate enum value: enumerants of Ten share value 10
-    X = 10
+    X = 10w4
     Y = 1_0
 }
 
 // Binary literal vs decimal.
-enum type Misc width 4 {
+enum type Misc {
     // CHECK: Duplicate enum value: enumerants of Misc share value 5
-    P = 5
+    P = 5w4
     Q = 0b0101
 }
 
 // Different enum types may validly share values -- no diagnostic across types.
-enum type First width 2 {
+enum type First {
     // CHECK-NOT: Duplicate enum value: enumerants of First
     // CHECK-NOT: Duplicate enum value: enumerants of Second
-    A = 0
+    A = 0w2
     B = 1
 }
-enum type Second width 2 {
-    X = 0
+enum type Second {
+    X = 0w2
     Y = 1
 }
 

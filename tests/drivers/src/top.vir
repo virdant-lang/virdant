@@ -1,4 +1,4 @@
-enum type State width 2 {
+enum type State {
     On  = 1w2
     Off = 2w2
 }

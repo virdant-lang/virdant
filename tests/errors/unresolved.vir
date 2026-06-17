@@ -34,8 +34,8 @@ mod GoodTypes {
     out := flag
 }
 
-enum type Val width 1 {
-    zero = 0
+enum type Val {
+    zero = 0w1
     one = 1
 }
 

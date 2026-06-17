@@ -42,7 +42,7 @@ GenericsParams :=
 
 Generics := "[" Ident ":" Kind "]"
 
-EnumDef := DocString? "enum" "type" Ident "width" Width "{" EnumDefStmt* "}"
+EnumDef := DocString? "enum" "type" Ident "{" EnumDefStmt* "}"
 
 EnumDefStmt := DocString? Ident "=" Expr
 
@@ -334,7 +334,6 @@ Tokens:
   "union"
   "unused"
   "when"
-  "width"
   "wire"
   "{"
   "|"

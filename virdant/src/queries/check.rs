@@ -85,6 +85,9 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     // Only the first duplicate per value is reported (as an Error).
     check_duplicate_enum_values(builder, &mut diagnostics);
 
+    // Check that enum types have an inferrable width from the first enumerant.
+    check_enum_unknown_width(builder, &mut diagnostics);
+
     // Check for recursive module instantiations.
     check_mod_cycles(builder, &mut diagnostics);
 
@@ -128,6 +131,28 @@ fn check_duplicate_enum_values(builder: &mut Builder, diagnostics: &mut Vec<Diag
                 let enumerant_node = parsing.ast_node(enumerant_symbol.location().ast_node_id());
                 first.insert(*value, (enumerant_symbol.name().to_owned(), enumerant_node.region()));
             }
+        }
+    }
+}
+
+/// Check that every enum type has an inferrable width from its first enumerant.
+/// When the first enumerant has no explicit width (e.g. `= 0` instead of `= 0w8`),
+/// the enum width cannot be determined and an error is reported.
+fn check_enum_unknown_width(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        if item.kind != SymbolKind::EnumDef {
+            continue;
+        }
+        let typedef = builder.get_typedef(item.id());
+        if typedef.width.is_none() {
+            let parsing = builder.get_parsing(item.package());
+            let enumdef_node = parsing.ast_node(item.location().ast_node_id());
+            diagnostics.push(
+                diagnostics::EnumUnknownWidth {
+                    region: enumdef_node.region(),
+                }.into(),
+            );
         }
     }
 }
