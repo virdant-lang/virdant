@@ -1,0 +1,24 @@
+// Tests that an outgoing reg does not emit an "Unused signal" warning
+// when it is never read inside the module (only driven).
+// It is an output port, so it is used externally.
+
+// CHECK: Check OK
+mod OutgoingRegUnused {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    incoming inp : Bit
+
+    // This outgoing reg is driven but never read inside the module.
+    // No "Unused signal" warning should be produced.
+    outgoing reg out : Word[8] on clock
+
+    when {
+        case reset {
+            out <= 0
+        }
+        case inp {
+            out <= 1
+        }
+    }
+}

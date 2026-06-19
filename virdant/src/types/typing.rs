@@ -9,7 +9,7 @@ use indexmap::IndexMap;
 
 use crate::analysis::symbols::{Symbol, SymbolId};
 use crate::common::WordValue;
-use crate::common::{BinOp, Flow, UnOp as UnOp, Width};
+use crate::common::{BinOp, ComponentKind, Flow, UnOp as UnOp, Width};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticLevel};
 use crate::analysis::location::Location;
@@ -244,7 +244,10 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
         // Unused varibles and read from sink warnings
         let component_analysis = component_analysis.as_ref().unwrap();
         for (path, component) in component_analysis.components() {
-            if component.can_source() && !use_locations.contains_key(&path) {
+            if component.can_source()
+                && !use_locations.contains_key(&path)
+                && !matches!(component.kind(), Some(ComponentKind::OutgoingReg) | Some(ComponentKind::OutgoingWire))
+            {
                 let region = builder.get_location_region(component.location());
                 diagnostics.push(diagnostics::UnusedSource {
                     region,
