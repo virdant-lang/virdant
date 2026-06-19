@@ -152,3 +152,65 @@ Newline and extra indentation:
           }
       case @Valid(payload) => payload
   }
+
+
+## Doc Comments
+Use `//>` to write documentation comments on types, ports, and modules.
+The `//>` prefix introduces a doc comment line that is extracted for
+documentation tooling.
+
+```virdant
+//> `UartState` is used to model the state machine of `UartSender`
+//> and `UartReceiver`.
+//>
+//> `Idle` - awaiting a request
+//> `Start(pulse)` - received a request, sending start bit
+union type UartState {
+    Idle()
+    Start(pulse : Word[11])
+}
+```
+
+Write one `//>` line per sentence.
+Keep line length under 100 characters.
+Put a blank `//>` line between paragraphs.
+
+Doc comments are appropriate for:
+- Module-level descriptions (purpose, ports, behavior)
+- Type definitions (what each variant or field means)
+- Top-level socket definitions
+
+For inline comments that explain a single line of logic, use `//` (two
+slashes) instead.
+
+```virdant
+// Randomize LEDs on every new UART byte
+edge_detector.clock := clock
+edge_detector.inp := uart_receiver.data_valid
+```
+
+
+## Package Docstrings
+Use `//!` at the top of a `.vir` file to document the package or
+compilation unit.
+These docstrings describe the purpose of the file as a whole.
+
+```virdant
+//! TL-UL 2x2 Crossbar
+//!
+//! Connects two TL-UL clients to two TL-UL servers with full
+//! non-blocking crossbar connectivity.
+//! Address bit 31 selects the server (0 -> server_0, 1 -> server_1).
+
+socket TlUl {
+    ...
+}
+```
+
+Write one `//!` line per sentence.
+Keep line length under 100 characters.
+Put a blank `//!` line between paragraphs.
+
+A package docstring typically appears at line 1 of the file, before any
+`import` statements or module definitions.
+It may be omitted for very small files whose purpose is obvious.

@@ -20,6 +20,11 @@ https://virdant.org/reference/
 # Techniques
 
 * `./driver-blocks.md`
+* `./control-flow.md`
+* `./sockets.md`
+* `./types-and-patterns.md`
+* `./literals-and-builtins.md`
+* `./module-system.md`
 
 # Unused variables
 
