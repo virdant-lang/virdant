@@ -523,6 +523,52 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
     let node = parsing.ast_node(location.ast_node_id());
     let expected_typ = builder.get_expected_type(exprroot.clone());
 
+    // Check if the expression is the RHS of a driver whose LHS target
+    // component does not exist in the component analysis.  If so, we still
+    // type-check the RHS to catch errors like unknown references, but we
+    // skip validate() so that cascading "Missing annotation" diagnostics
+    // (caused by the absent expected type) are suppressed.
+    let mut skip_validate = false;
+    if expected_typ.is_none() {
+        if let Some(parent) = node.parent() {
+            if matches!(parent.payload(), AstNodePayload::Driver(_)) {
+                let mut lhs_path = parsing.string(parent.child(0).path().unwrap()).to_owned();
+                // Resolve "it" references, mirroring the logic in build_expected_type.
+                let mut ancestor_id = parent.parent().unwrap().id();
+                let mut resolved_it_name = None;
+                loop {
+                    let ancestor = parsing.ast_node(ancestor_id);
+                    if ancestor.is_item() { break; }
+                    if lhs_path.starts_with(b"it.") || lhs_path == b"it" {
+                        if let AstNodePayload::Submodule(module) = ancestor.payload() {
+                            resolved_it_name = Some(parsing.string(module.name));
+                        } else if let AstNodePayload::Component(component) = ancestor.payload() {
+                            resolved_it_name = Some(parsing.string(component.name));
+                        } else if let AstNodePayload::Socket(socket) = ancestor.payload() {
+                            resolved_it_name = Some(parsing.string(socket.name));
+                        }
+                    }
+                    ancestor_id = ancestor.parent().unwrap().id();
+                }
+                if let Some(name) = resolved_it_name {
+                    if lhs_path.starts_with(b"it.") {
+                        let suffix = lhs_path[3..].to_owned();
+                        lhs_path.clear();
+                        lhs_path.extend_from_slice(name);
+                        lhs_path.push(b'.');
+                        lhs_path.extend_from_slice(&suffix);
+                    } else {
+                        lhs_path = name.to_owned();
+                    }
+                }
+                let component_analysis = builder.get_component_analysis(item.id());
+                if component_analysis.resolve(lhs_path.as_bstr()).is_none() {
+                    skip_validate = true;
+                }
+            }
+        }
+    }
+
     let diagnostics = vec![];
     let mut typing = Typing {
         item: item.clone(),
@@ -556,7 +602,9 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
         }
     }
 
-    typing.validate(builder, &parsing);
+    if !skip_validate {
+        typing.validate(builder, &parsing);
+    }
 
     Arc::new(typing)
 }
