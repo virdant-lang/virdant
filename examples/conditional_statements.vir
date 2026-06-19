@@ -1,9 +1,10 @@
 mod Top {
+    incoming cond : Bit
     wire w : Bit
     wire u : Bit
 
     when {
-        case true {
+        case cond {
             w := true
             u := true
         }

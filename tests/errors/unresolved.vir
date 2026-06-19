@@ -44,14 +44,7 @@ mod UnresolvedComponent {
     a <= 0
 
     // CHECK: Unresolved component b
-    when {
-        case true {
-            b := 0
-        }
-        else {
-            b := 1
-        }
-    }
+    b := 0
 
     // CHECK: Unresolved component c
     match #zero : Val {

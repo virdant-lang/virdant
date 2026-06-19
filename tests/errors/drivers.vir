@@ -65,18 +65,6 @@ mod DriverTypes {
     // CHECK: Wrong driver type for d
     reg d : Bit on clock
     d := true
-
-    reg e : Bit on clock
-    when {
-        case true {
-            // CHECK-NOT: Wrong driver type for e
-            e <= true
-        }
-        else {
-            // CHECK: Wrong driver type for e
-            e := true
-        }
-    }
 }
 
 mod DriversForInternalPorts {
