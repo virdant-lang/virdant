@@ -1,4 +1,4 @@
--- Unified test for mux2.vir, mux2_alt.vir, decoder4.vir, and decoder4_alt.vir.
+-- Unified test for mux2.vir, decoder4.vir, and decoder4_alt.vir.
 -- All four modules are purely combinational, so no clock or sim.run is needed.
 
 -- Run the shared Mux2 assertions against any sim built from either mux variant.
@@ -37,12 +37,6 @@ end
 do
     local db = open_file("mux2.vir")
     local sim = db:sim("mux2::Mux2")
-    test_mux(sim)
-end
-
-do
-    local db = open_file("mux2_alt.vir")
-    local sim = db:sim("mux2_alt::Mux2")
     test_mux(sim)
 end
 

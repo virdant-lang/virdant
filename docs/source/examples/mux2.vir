@@ -1,12 +1,10 @@
 mod Mux2 {
     incoming a : Word[8]
     incoming b : Word[8]
+
     incoming select : Bit
 
-    outgoing out : Word[8]
-
-    out := when {
-        case select => a
-        else => b
+    outgoing out : Word[8] {
+        it := mux(select, a, b)
     }
 }

@@ -6,6 +6,34 @@
 
 set -e
 
+BUILD_LOCK="$(dirname "$0")/.build-lock"
+
+acquire_lock() {
+    if [ -f "$BUILD_LOCK" ]; then
+        echo "Build already in progress (lockfile present). Skipping..."
+        return 1
+    fi
+    touch "$BUILD_LOCK"
+    return 0
+}
+
+release_lock() {
+    rm -f "$BUILD_LOCK"
+}
+
+build() {
+    acquire_lock || return 0
+    make clean && make auto
+    release_lock
+}
+
+cleanup() {
+    release_lock
+    exit 0
+}
+
+trap cleanup EXIT SIGINT SIGTERM
+
 echo "Starting watch mode for Sphinx documentation..."
 echo "Watching for changes in source/ directory..."
 echo "Press Ctrl+C to stop"
@@ -13,7 +41,7 @@ echo ""
 
 # Initial build
 echo "Running initial build..."
-make clean && make auto
+build
 echo ""
 echo "Initial build complete. Watching for changes..."
 echo ""
@@ -25,7 +53,7 @@ if command -v inotifywait &> /dev/null; then
         inotifywait -r -e modify,create,delete,move source/
         echo ""
         echo "Change detected! Rebuilding..."
-        make clean && make auto
+        build
         echo ""
         echo "Build complete. Watching for changes..."
         echo ""
@@ -35,7 +63,7 @@ elif command -v fswatch &> /dev/null; then
     fswatch -o source/ | while read f; do
         echo ""
         echo "Change detected! Rebuilding..."
-        make clean && make auto
+        build
         echo ""
         echo "Build complete. Watching for changes..."
         echo ""
@@ -56,7 +84,7 @@ else
         if [ "$CURRENT_CHECKSUM" != "$LAST_CHECKSUM" ]; then
             echo ""
             echo "Change detected! Rebuilding..."
-            make clean && make auto
+            build
             echo ""
             echo "Build complete. Watching for changes..."
             echo ""

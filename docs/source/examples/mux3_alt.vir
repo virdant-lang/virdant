@@ -1,0 +1,26 @@
+mod Mux3 {
+    incoming a : Word[8]
+    incoming b : Word[8]
+    incoming c : Word[8]
+
+    incoming select_a : Bit
+    incoming select_b : Bit
+    incoming select_c : Bit
+
+    outgoing out : Word[8] {
+        when {
+            case select_a {
+                it := a
+            }
+            case select_b {
+                it := b
+            }
+            case select_c {
+                it := c
+            }
+            else {
+                it := 0
+            }
+        }
+    }
+}

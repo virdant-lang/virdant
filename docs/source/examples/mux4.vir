@@ -1,0 +1,17 @@
+mod Mux4 {
+    incoming a : Word[8]
+    incoming b : Word[8]
+    incoming c : Word[8]
+    incoming d : Word[8]
+
+    incoming select : Word[2]
+
+    outgoing out : Word[8] {
+        it := match select {
+            case 0 => a
+            case 1 => b
+            case 2 => c
+            case 3 => d
+        }
+    }
+}

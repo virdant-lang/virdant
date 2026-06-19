@@ -13,7 +13,16 @@ EXAMPLES      = $(wildcard source/examples/*.vir)
 TESTS         = $(wildcard source/examples/*.lua)
 
 auto: Makefile $(EXAMPLES) # rustdocs
-	$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O)
+	retry=0; until $(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O); do \
+	  if [ $$retry -ge 5 ]; then exit 1; fi; \
+	  if grep -q "FileNotFoundError.*searchindexfn" /tmp/sphinx-err-*.log 2>/dev/null; then \
+	    echo "Sphinx race condition detected, retrying in 1s..."; \
+	    sleep 1; \
+	    retry=$$((retry + 1)); \
+	  else \
+	    exit 1; \
+	  fi; \
+	done
 
 watch:
 	bash watch.sh
