@@ -67,14 +67,13 @@ So we write the following:
       // ...
   }
 
-And similarly, the correct ways to write `if` and `match` expressions are:
+And similarly, the correct ways to write `when` and `match` expressions are:
 
 .. code-block:: virdant
 
-  if condition {
-      0
-  } else {
-      1
+  when {
+      case condition => 0
+      else => 1
   }
 
 and
@@ -95,16 +94,15 @@ When writing driver statements, if the expression on the right-hand side is shor
 
    out := is_valid->and(counter[3])
 
-If an expression is longer, especially if it contains an `if` or `match` expression, it may be written in one of two ways.
+If an expression is longer, especially if it contains a `when` or `match` expression, it may be written in one of two ways.
 
 The first is to write it inline, as if the driver is part of the expression:
 
 .. code-block:: virdant
 
-  counter <= if reset {
-      0
-  } else {
-      counter->inc()
+  counter <= when {
+      case reset => 0
+      else => counter->inc()
   }
 
 
@@ -113,10 +111,9 @@ Or if it makes it clearer, with a newline and an extra layer of indentation:
 .. code-block:: virdant
 
   counter <=
-      if reset {
-          0
-      } else {
-          counter->inc()
+      when {
+          case reset => 0
+          else => counter->inc()
       }
 
 The expression for each arm of a match expression follows a similar rule:
@@ -137,10 +134,9 @@ Newline and extra indentation:
 
   match maybe_data {
       case @Invalid() =>
-          if default_payload {
-              default_payload
-          } else {
-              0
+          when {
+              case default_payload => default_payload
+              else => 0
           }
       case @Valid(payload) => payload
   }

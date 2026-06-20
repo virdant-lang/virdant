@@ -17,7 +17,6 @@ ports, components, instances, and control flow.
         | ModDefStmtDriver
         | ModDefStmtInstance
         | ModDefStmtSocket
-        | ModDefStmtIf
         | ModDefStmtMatch
         | ModDefStmtUnused
 
@@ -92,7 +91,10 @@ A register may have an associated block for additional statements:
 .. code-block:: virdant
 
     reg counter : Word[8] on clock {
-        it <= if reset { 0 } else { it + 1 }
+        it <= when {
+            case reset => 0
+            else => it + 1
+        }
     }
 
 Inside the register's block, the special identifier `it` refers to the
@@ -186,39 +188,6 @@ The role determines the direction of the individual ports within the socket.
 For more details on sockets, see :doc:`sockets`.
 
 
-Conditional Statements
-----------------------
-Conditional statements allow a module to contain different components
-depending on a condition.
-
-.. code-block:: grammar
-
-    ModDefStmtIf :=
-        ModDefStmtIfStart ModDefStmtIfMiddle* ModDefStmtIfEnd?
-
-    ModDefStmtIfStart :=
-        "if" Expr ModDefStmtBlock
-
-    ModDefStmtIfMiddle :=
-        "else" "if" Expr ModDefStmtBlock
-
-    ModDefStmtIfEnd :=
-        "else" ModDefStmtBlock
-
-.. code-block:: virdant
-
-    if reset {
-        r <= 0
-        state := Idle
-    } else {
-        r <= r + 1
-        state := Active
-    }
-
-Conditional statements select between different sets of module body statements
-based on a condition expression.
-
-
 Match Statements
 ----------------
 Match statements enable pattern-based conditional logic in module bodies.
@@ -282,7 +251,10 @@ For an instance `it` refers to the instance.
 .. code-block:: virdant
 
     reg counter : Word[8] on clock {
-        it <= if reset { 0 } else { it + 1 }
+        it <= when {
+            case reset => 0
+            else => it + 1
+        }
     }
 
     mod fifo of Fifo {
