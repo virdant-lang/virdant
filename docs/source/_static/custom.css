@@ -258,6 +258,16 @@ div.highlight:hover .copy-button {
     visibility: visible;
 }
 
+/* Link colors — dark green (unvisited) and orange (visited) */
+/* Scoped to the main content area, excluding .btn elements */
+.wy-nav-content a:not(.btn) {
+    color: #2E7D32 !important;
+}
+
+.wy-nav-content a:not(.btn):visited {
+    color: #CC5500 !important;
+}
+
 /* Always show on mobile/touch devices */
 @media (max-width: 768px) {
     .copy-button {
