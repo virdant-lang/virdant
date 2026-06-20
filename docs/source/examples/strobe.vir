@@ -1,0 +1,29 @@
+//! Provides the `Strobe` module, which generates
+//! a single-cycle pulse at a programmable interval.
+
+//> `Strobe` asserts `pulse` for one clock cycle
+//> every `period` cycles.
+mod Strobe {
+    incoming clock  : Clock
+    incoming reset  : Reset
+
+    //> `period` is the number of cycles between pulse.
+    incoming period : Word[24]
+
+    //> `pulse` is asserted for one cycle
+    //> whenever `countdown` reaches zero.
+    outgoing pulse  : Bit {
+        it := counter == 0
+    }
+
+    //> `counter` repeatedly counts down from `period` to 0.
+    reg counter : Word[24] on clock {
+        it <= when {
+            case reset => period - 1
+            else match it {
+                case 0 => period - 1  // loop when we get to 0
+                else   => it - 1      // otherwise, decrement
+            }
+        }
+    }
+}

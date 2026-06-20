@@ -2,29 +2,31 @@ mod Arbiter {
     incoming clock   : Clock
     incoming reset   : Reset
 
-    incoming req0   : Bit // client 0 is requesting access
-    incoming req1   : Bit // client 1 is requesting access
+    incoming req0   : Bit
+    incoming req1   : Bit
 
-    outgoing grant0 : Bit // client 0 is granted access
-    outgoing grant1 : Bit // client 1 is granted access
+    outgoing grant0 : Bit
+    outgoing grant1 : Bit
 
-    // When true, client 0 has priority
-    reg priority_for_client0 : Bit on clock
-
-    priority_for_client0 <= when {
-        case reset => true
-        else => !priority_for_client0
+    reg client0_priority : Bit on clock {
+        it <= when {
+            case reset => true
+            else => !it
+        }
     }
 
-    grant0 := when {
-        case reset => false
-        case priority_for_client0 => req0
-        else => req0 && !req1
-    }
-
-    grant1 := when {
-        case reset => false
-        case priority_for_client0 => req1 && !req0
-        else => req1
+    when {
+        case reset {
+            grant0 := false
+            grant1 := false
+        }
+        case client0_priority {
+            grant0 := req0
+            grant1 := req1 && !req0
+        }
+        else {
+            grant0 := req0 && !req1
+            grant1 := req1
+        }
     }
 }

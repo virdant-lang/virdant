@@ -106,7 +106,7 @@ Here, we give the submodule the name `ha0`.
 We create a driver block to connect up the ports of `ha0`.
 The variables `a` and `b`, of course, refer to the `incoming` ports of our `FullAdder` module.
 The `it.a` and `it.b` (or equivalently, `ha0.a` and `ha0.b`) are the `incoming` ports of our `HalfAdder` submodule.
-By connecting these as show, we are passing the inputs `a` and `b` down to the `HalfAdder`.
+By connecting these as shown, we are passing the inputs `a` and `b` down to the `HalfAdder`.
 
 Once we do this, `ha0` will begin summing `a` and `b` for us.
 The sum of `a` and `b` are made available as `ha0.carry_out` and `ha0.sum`.

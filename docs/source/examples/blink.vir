@@ -1,10 +1,25 @@
-mod Top {
+//! This package defines a module `Blink`, which blinks an LED.
+
+import strobe
+
+//> `Blink` will toggle the `led` every few million cycles.
+mod Blink {
     incoming clock : Clock
+    incoming reset : Reset
 
-    outgoing led : Bit
+    //> The LED output, toggled each time the strobe fires.
+    outgoing reg led : Bit on clock {
+        when {
+            case strobe_timer.pulse {
+                it <= !it
+            }
+        }
+    }
 
-    reg counter : Word[32] on clock
-    counter <= counter + 1
-
-    led := counter[21]
+    //> A strobe that fires every 12 million cycles.
+    mod strobe_timer of strobe::Strobe {
+        it.clock  := clock
+        it.reset  := reset
+        it.period := 12_000_000
+    }
 }

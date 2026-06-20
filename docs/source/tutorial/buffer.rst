@@ -42,7 +42,7 @@ Just after `buffer` is declared, we see a block containing two drivers:
     :lines: 6-9
 
 This is called a driver block.
-This is a way to grouping our drivers to make the code easier to read.
+This is a way of grouping our drivers to make the code easier to read.
 
 Inside of a driver block, we may use the keyword `it` as a shorthand for referencing the component being declared.
 So in our example, `it` is an alias for `buffer`.
@@ -109,7 +109,7 @@ Or you could do it without driver blocks like we saw with the `Passthrough` exam
         out := buffer
     }
 
-This style helps emphasizes the components themselves,
+This style helps emphasize the components themselves,
 treating their definitions as details only for those who are curious.
 
 Can you think of any other ways to group the drivers?

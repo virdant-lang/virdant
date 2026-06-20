@@ -68,7 +68,7 @@ Otherwise, the value of the `when` block is given by the `else` clause.
 4-Way Multiplexer
 -----------------
 For our last example, we have `Mux4`,
-a 4-way multiplexer which which takes four inputs and selects between them.
+a 4-way multiplexer which takes four inputs and selects between them.
 
 .. literalinclude:: /examples/mux4.vir
     :caption: mux4.vir
