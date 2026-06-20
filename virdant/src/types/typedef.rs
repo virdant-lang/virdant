@@ -144,6 +144,7 @@ fn eval_const_expr(node: &AstNode<'_>) -> (WordValue, Option<Width>) {
             (value, width)
         }
         AstNodePayload::ExprParen => eval_const_expr(&node.child(0)),
+        AstNodePayload::ExprAs => eval_const_expr(&node.child(0)),
         _ => panic!("Unsupported expression in enumerant value: {:?}", node.summary()),
     }
 }
