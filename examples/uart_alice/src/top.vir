@@ -17,10 +17,9 @@ export mod Top {
 
     reg reset_counter : Word[32] on clock
     reset_counter <=
-        if reset_counter == 10w32 {
-            reset_counter
-        } else {
-            reset_counter + 1
+        when {
+            case reset_counter == 10w32 => reset_counter
+            else => reset_counter + 1
         }
 
     wire reset : Bit
@@ -38,24 +37,28 @@ export mod Top {
 
     reg data_valid : Bit on clock
     data_valid :=
-        if reset {
-            false
-        } else if spi.mem_read_data_valid {
-            true
-        } else {
-            data_valid
+        when {
+            case reset => false
+            case spi.mem_read_data_valid => true
+            else => data_valid
         }
 
     led_red := !false
 
     reg addr : Word[32] on clock
-    if reset {
-        addr <= 1048576
-    } else if spi.mem_read_data_valid && uart.ready {
-        if switch0 {
-            addr <= addr + 1w32
-        } else {
-            addr <= addr - 1w32
+    when {
+        case reset {
+            addr <= 1048576
+        }
+        case spi.mem_read_data_valid && uart.ready {
+            when {
+                case switch0 {
+                    addr <= addr + 1w32
+                }
+                else {
+                    addr <= addr - 1w32
+                }
+            }
         }
     }
 

@@ -91,18 +91,21 @@ mod TlUlArb21 {
     }
 
     // A-channel: mux the winning host's request onto the device port.
-    if grant_0 {
-        device.a_opcode  := host_0.a_opcode
-        device.a_address := host_0.a_address
-        device.a_data    := host_0.a_data
-        device.a_mask    := host_0.a_mask
-        device.a_size    := host_0.a_size
-    } else {
-        device.a_opcode  := host_1.a_opcode
-        device.a_address := host_1.a_address
-        device.a_data    := host_1.a_data
-        device.a_mask    := host_1.a_mask
-        device.a_size    := host_1.a_size
+    when {
+        case grant_0 {
+            device.a_opcode  := host_0.a_opcode
+            device.a_address := host_0.a_address
+            device.a_data    := host_0.a_data
+            device.a_mask    := host_0.a_mask
+            device.a_size    := host_0.a_size
+        }
+        else {
+            device.a_opcode  := host_1.a_opcode
+            device.a_address := host_1.a_address
+            device.a_data    := host_1.a_data
+            device.a_mask    := host_1.a_mask
+            device.a_size    := host_1.a_size
+        }
     }
 
     device.a_valid   := (grant_0 && host_0.a_valid) || (grant_1 && host_1.a_valid)
@@ -134,29 +137,41 @@ mod TlUlArb21 {
     d_done := device.d_valid && ((grant_0 && host_0.d_ready) || (grant_1 && host_1.d_ready))
 
     // State machine: stay in a Serving state until the response is consumed.
-    state <= if reset {
-        @Idle()
-    } else {
-        match state {
+    state <= when {
+        case reset => @Idle()
+        else => match state {
             case @Idle() =>
-                if idle_grant_0 { @ServingHost0() }
-                else if idle_grant_1 { @ServingHost1() }
-                else { @Idle() }
+                when {
+                    case idle_grant_0 => @ServingHost0()
+                    case idle_grant_1 => @ServingHost1()
+                    else => @Idle()
+                }
             case @ServingHost0() =>
-                if d_done { @Idle() } else { @ServingHost0() }
+                when {
+                    case d_done => @Idle()
+                    else => @ServingHost0()
+                }
             case @ServingHost1() =>
-                if d_done { @Idle() } else { @ServingHost1() }
+                when {
+                    case d_done => @Idle()
+                    else => @ServingHost1()
+                }
         }
     }
 
     // Priority flips after every completed transaction for fairness.
-    priority <= if reset {
-        @Host0First()
-    } else {
-        match state {
+    priority <= when {
+        case reset => @Host0First()
+        else => match state {
             case @Idle()         => priority
-            case @ServingHost0() => if d_done { @Host1First() } else { priority }
-            case @ServingHost1() => if d_done { @Host0First() } else { priority }
+            case @ServingHost0() => when {
+                case d_done => @Host1First()
+                else => priority
+            }
+            case @ServingHost1() => when {
+                case d_done => @Host0First()
+                else => priority
+            }
         }
     }
 }

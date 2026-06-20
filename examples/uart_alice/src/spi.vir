@@ -24,32 +24,24 @@ mod SpiFlash {
     reg state : State on clock
 
     state <=
-        if reset {
-            #Idle
-        } else if half_clock {
-            if state == #Idle {
-                if last_cycle {
-                    #Send
-                } else {
-                    #Idle
+        when {
+            case reset => #Idle
+            case half_clock => when {
+                case state == #Idle => when {
+                    case last_cycle => #Send
+                    else => #Idle
                 }
-            } else if state == #Send {
-                if last_cycle {
-                    #Recv
-                } else {
-                    #Send
+                case state == #Send => when {
+                    case last_cycle => #Recv
+                    else => #Send
                 }
-            } else if state == #Recv {
-                if last_cycle {
-                    #Done
-                } else {
-                    #Recv
+                case state == #Recv => when {
+                    case last_cycle => #Done
+                    else => #Recv
                 }
-            } else {
-                #Idle
+                else => #Idle
             }
-        } else {
-            state
+            else => state
         }
 
     wire last_cycle : Bit
@@ -67,84 +59,73 @@ mod SpiFlash {
 
     reg half_clock : Bit on clock
 
-    half_clock <= if reset {
-        true
-    } else {
-        !half_clock
+    half_clock <= when {
+        case reset => true
+        else => !half_clock
     }
 
     spi_clk := half_clock
 
     send_buffer <=
-        if state == #Idle && last_cycle {
-            word(0x03w8, mem_addr[24..0])
-        } else if half_clock {
-            if state == #Send {
-                word(send_buffer[31..0], 0w1)
-            } else {
-                0
+        when {
+            case state == #Idle && last_cycle =>
+                word(0x03w8, mem_addr[24..0])
+            case half_clock => when {
+                case state == #Send =>
+                    word(send_buffer[31..0], 0w1)
+                else => 0
             }
-        } else {
-            send_buffer
+            else => send_buffer
         }
 
     recv_buffer <=
-        if half_clock {
-            if state == #Send {
-                word(0w31, spi_di)
-            } else if state == #Recv {
-                word(recv_buffer[31..0], spi_di)
-            } else {
-                0
+        when {
+            case half_clock => when {
+                case state == #Send =>
+                    word(0w31, spi_di)
+                case state == #Recv =>
+                    word(recv_buffer[31..0], spi_di)
+                else => 0
             }
-        } else {
-            recv_buffer
+            else => recv_buffer
         }
 
     bits_sent <=
-        if half_clock {
-            if state == #Idle {
-                0
-            } else if state == #Send {
-                bits_sent + 1
-            } else {
-                0
+        when {
+            case half_clock => when {
+                case state == #Idle => 0
+                case state == #Send => bits_sent + 1
+                else => 0
             }
-        } else {
-            bits_sent
+            else => bits_sent
         }
 
     bits_read <=
-        if half_clock {
-            if state == #Send {
-                0
-            } else if state == #Recv {
-                bits_read + 1
-            } else {
-                0
+        when {
+            case half_clock => when {
+                case state == #Send => 0
+                case state == #Recv => bits_read + 1
+                else => 0
             }
-        } else {
-            bits_read
+            else => bits_read
         }
 
     spi_cs := !(state == #Send || state == #Recv)
 
     spi_do :=
-        if reset {
-            true
-        } else {
-            if state == #Send {
-                send_buffer[31]
-            } else {
-                true
+        when {
+            case reset => true
+            else => when {
+                case state == #Send => send_buffer[31]
+                else => true
             }
         }
 
     mem_read_data :=
-        if state == #Done {
-            word(recv_buffer[8..0], recv_buffer[16..8], recv_buffer[24..16], recv_buffer[32..24])
-        } else {
-            0xffffffffw32
+        when {
+            case state == #Done =>
+                word(recv_buffer[8..0], recv_buffer[16..8], recv_buffer[24..16], recv_buffer[32..24])
+            else => 0xffffffffw32
         }
 
     mem_read_data_valid := state == #Done

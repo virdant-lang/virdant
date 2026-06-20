@@ -9,10 +9,9 @@ import uart
 //    resetter.clock := clock
 //
 //    reg cycle : Word[23] on clock
-//    cycle <= if reset {
-//        0
-//    } else {
-//        cycle + 1
+//    cycle <= when {
+//        case reset => 0
+//        else => cycle + 1
 //    }
 //
 //    fin := cycle > 30
@@ -44,10 +43,9 @@ export mod Top {
 
     reg reset_counter : Word[32] on clock
     reset_counter <=
-        if reset_counter == -1w32 {
-            reset_counter
-        } else {
-            reset_counter + 1
+        when {
+            case reset_counter == -1w32 => reset_counter
+            else => reset_counter + 1
         }
 
     wire reset : Bit
@@ -59,31 +57,23 @@ export mod Top {
 
     reg state : State on clock
     state <=
-        if reset {
-            #H
-        } else if uart.ready {
-            if state == #H {
-                #I
-            } else if state == #I {
-                #Nl
-            } else if state == #Nl {
-                #Cr
-            } else {
-                #H
+        when {
+            case reset => #H
+            case uart.ready => when {
+                case state == #H => #I
+                case state == #I => #Nl
+                case state == #Nl => #Cr
+                else => #H
             }
-        } else {
-            state
+            else => state
         }
 
     uart.data_valid := true
-    uart.data := if state == #H {
-        72
-    } else if state == #I {
-        105
-    } else if state == #Nl {
-        10
-    } else {
-        13
+    uart.data := when {
+        case state == #H => 72
+        case state == #I => 105
+        case state == #Nl => 10
+        else => 13
     }
     uart_tx := uart.uart_tx
 }
