@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 use bstr::{BStr, BString, ByteSlice};
 use colored::Colorize;
 use nix::unistd::execvp;
-use virdant::util::{check_db, db_from_dir, db_from_file};
+use virdant::util::{check_db, db_from_dir, db_from_files};
 use std::ffi::{CString, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -24,9 +24,9 @@ struct Args {
     #[arg(short = 'C', conflicts_with = "virfile")]
     cwd: Option<PathBuf>,
 
-    /// Load a single .vir file as a self-contained project (exclusive with -C)
+    /// Load .vir file(s) as a self-contained project (comma-separated, no spaces; exclusive with -C)
     #[arg(short = 'F', conflicts_with = "cwd")]
-    virfile: Option<PathBuf>,
+    virfile: Option<String>,
 
     #[command(subcommand)]
     command: Command,
@@ -114,11 +114,17 @@ fn main() {
 
 fn project_db(args: &Args) -> Db {
     if let Some(virfile) = &args.virfile {
-        if !virfile.is_file() {
-            eprintln!("ERROR: file not found: {}", virfile.display());
-            std::process::exit(1);
+        let paths: Vec<std::path::PathBuf> = virfile
+            .split(',')
+            .map(|s| std::path::PathBuf::from(s.trim()))
+            .collect();
+        for path in &paths {
+            if !path.is_file() {
+                eprintln!("ERROR: file not found: {}", path.display());
+                std::process::exit(1);
+            }
         }
-        return db_from_file(virfile);
+        return db_from_files(paths);
     }
 
     let cwd = if let Some(cwd) = &args.cwd {
@@ -510,11 +516,17 @@ fn open_in_browser(path: &std::path::Path) {
 
 fn build(args: &Args) {
     let (db, builddir) = if let Some(virfile) = &args.virfile {
-        if !virfile.is_file() {
-            eprintln!("ERROR: file not found: {}", virfile.display());
-            std::process::exit(1);
+        let paths: Vec<std::path::PathBuf> = virfile
+            .split(',')
+            .map(|s| std::path::PathBuf::from(s.trim()))
+            .collect();
+        for path in &paths {
+            if !path.is_file() {
+                eprintln!("ERROR: file not found: {}", path.display());
+                std::process::exit(1);
+            }
         }
-        let db = db_from_file(virfile);
+        let db = db_from_files(paths);
         let builddir = std::env::current_dir().unwrap().join("build");
         (db, builddir)
     } else {

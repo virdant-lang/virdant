@@ -43,7 +43,13 @@ rustdocs:
 	cp -r ../virdant/target/doc/ $(BUILDDIR)/html/.
 
 test: $(EXAMPLES) $(TESTS)
-	for example in $(EXAMPLES); do $(VIR) -F $$example check  || exit 1; done
+	for example in $(EXAMPLES); do \
+	  if [ "$$(basename $$example)" = "blink.vir" ]; then \
+	    $(VIR) -F $$example,$$(dirname $$example)/strobe.vir check  || exit 1; \
+	  else \
+	    $(VIR) -F $$example check  || exit 1; \
+	  fi; \
+done
 	for script in $(TESTS); do \
 		echo "--------------------------------------------------------------------------------"; \
 		echo "TEST: docs/$$script"; \

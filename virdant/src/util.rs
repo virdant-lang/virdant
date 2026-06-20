@@ -62,11 +62,22 @@ where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn db_from_file<P: Into<std::path::PathBuf>>(source_file: P) -> Db {
-    db_from_file_with_lib(source_file, crate::LIB_DIR.as_path())
+    db_from_files_with_lib(vec![source_file], crate::LIB_DIR.as_path())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn db_from_file_with_lib<P, Q>(source_file: P, lib_dir: Q) -> Db
+where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
+    db_from_files_with_lib(vec![source_file], lib_dir)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn db_from_files<P: Into<std::path::PathBuf>>(source_files: Vec<P>) -> Db {
+    db_from_files_with_lib(source_files, crate::LIB_DIR.as_path())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn db_from_files_with_lib<P, Q>(source_files: Vec<P>, lib_dir: Q) -> Db
 where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
     let mut db = Db::new();
     db.set_packages(vec![]);
@@ -75,14 +86,19 @@ where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
     let lib_dir = std::fs::canonicalize(&lib_dir).expect(&format!("Could not find {lib_dir:?}"));
 
     let builtin_source = Source::load_file(lib_dir.join("builtin.vir"));
-    let file_source = Source::load_file(source_file.into());
-
     let builtin_package = builtin_source.package();
-    let file_package = file_source.package();
-
     db.set_source(builtin_package.clone(), builtin_source);
-    db.set_source(file_package.clone(), file_source);
-    db.set_packages(vec![builtin_package, file_package]);
+
+    let mut packages = vec![builtin_package];
+
+    for source_file in source_files {
+        let source = Source::load_file(source_file.into());
+        let package = source.package();
+        db.set_source(package.clone(), source);
+        packages.push(package);
+    }
+
+    db.set_packages(packages);
 
     db
 }
