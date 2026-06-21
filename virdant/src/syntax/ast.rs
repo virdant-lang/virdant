@@ -1,7 +1,7 @@
 use bstr::{BStr, ByteSlice};
 
 use crate::analysis::Location;
-use crate::common::{ComponentKind, DriverType};
+use crate::common::DriverType;
 use crate::fqn::PackageFqn;
 use crate::common::source::{Region, Span};
 use crate::syntax::payload::AstNodePayload;
@@ -202,6 +202,8 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprAs => format!("ExprAs"),
             AstNodePayload::ExprHole => format!("ExprHole"),
             AstNodePayload::ExprDontcare => format!("ExprDontcare"),
+            AstNodePayload::ExprSync => format!("ExprSync"),
+            AstNodePayload::ExprAsync => format!("ExprAsync"),
             AstNodePayload::Assign(_assign) => format!("Assign"),
             AstNodePayload::PatCtor(_pat_ident) => format!("PatCtor"),
             AstNodePayload::PatEnumerant(_pat_enumerant) => format!("PatEnumerant"),
@@ -212,6 +214,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Ofness(_ofness) => format!("Ofness"),
             AstNodePayload::It => format!("It"),
             AstNodePayload::Path(_path) => format!("Path"),
+            AstNodePayload::AsyncAnnotation => format!("AsyncAnnotation"),
         }
     }
 
@@ -312,17 +315,59 @@ impl<'p> AstNode<'p> {
 
     pub fn clock(&self) -> Option<AstNode<'_>> {
         match &self.payload {
-            AstNodePayload::Component(component) => {
-                if component.kind == ComponentKind::Reg || component.kind == ComponentKind::OutgoingReg {
-                    for child in self.children().into_iter().skip(1) {
-                        if !matches!(child.payload(), AstNodePayload::It) {
-                            return Some(child);
-                        }
+            AstNodePayload::Component(_component) => {
+                for child in self.children().into_iter().skip(1) {
+                    if matches!(child.payload(), AstNodePayload::It) {
+                        continue;
                     }
+                    // Skip the `async` marker - it is not a clock reference.
+                    if matches!(child.payload(), AstNodePayload::AsyncAnnotation) {
+                        continue;
+                    }
+                    // Any other non-It child is the `on <clock>` expression.
+                    return Some(child);
                 }
                 None
             }
             _ => None
+        }
+    }
+
+    /// Returns the `async` annotation node if this component is declared `async`.
+    /// Returns `None` for clocked or unannotated components.
+    pub fn async_annotation(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::Component(_component) => {
+                for child in self.children().into_iter().skip(1) {
+                    if matches!(child.payload(), AstNodePayload::AsyncAnnotation) {
+                        return Some(child);
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Returns the clock-domain annotation node for this component.
+    ///
+    /// This is the `on <clock>` expression (returned directly) or the
+    /// `async` marker node.  Returns `None` when the component has no
+    /// explicit clock-domain annotation.
+    pub fn clock_domain_annotation(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::Component(_component) => {
+                for child in self.children().into_iter().skip(1) {
+                    if matches!(child.payload(), AstNodePayload::It) {
+                        continue;
+                    }
+                    // The on-clause expression is stored directly as a child,
+                    // while the async marker is its own node.
+                    return Some(child);
+                }
+                None
+            }
+            _ => None,
         }
     }
 
@@ -347,7 +392,9 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprWord |
             AstNodePayload::ExprZext |
             AstNodePayload::ExprSext |
-            AstNodePayload::ExprHole
+            AstNodePayload::ExprHole |
+            AstNodePayload::ExprSync |
+            AstNodePayload::ExprAsync
         )
     }
 

@@ -508,6 +508,12 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
             let subject = convert_ast_expr(db, node.child(0).location());
             ExprPayload::As(payload::As { subject })
         }
+        // sync(x) and async(x) are type-level operations that don't
+        // change the runtime value, so we evaluate the argument directly.
+        AstNodePayload::ExprSync | AstNodePayload::ExprAsync => {
+            let subject = convert_ast_expr(db, node.child(0).location());
+            ExprPayload::As(payload::As { subject })
+        }
         AstNodePayload::ExprHole => ExprPayload::Hole(payload::Hole {}),
         AstNodePayload::ExprDontcare => ExprPayload::Dontcare(payload::Dontcare {}),
         other => unreachable!("expected expression node, got {:?}", other.kind()),

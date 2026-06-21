@@ -281,76 +281,92 @@ ModDefStmt: AstNodeId = {
 }
 
 ModDefStmtComponent: AstNodeId = {
-    <docstring:DocString?> <ll:@L> "incoming" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <ll:@L> "incoming" <ident:Ident> ":" <typ:Type> <domain:ClockDomain?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Incoming,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
+        let num_children = 1 + if domain.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <ll:@L> "outgoing" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <ll:@L> "outgoing" <ident:Ident> ":" <typ:Type> <domain:ClockDomain?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Outgoing,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
+        let num_children = 1 + if domain.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <ll:@L> "outgoing" "wire" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <ll:@L> "outgoing" "wire" <ident:Ident> ":" <typ:Type> <domain:ClockDomain?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::OutgoingWire,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
+        let num_children = 1 + if domain.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <ll:@L> "outgoing" "reg" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <ll:@L> "outgoing" "reg" <ident:Ident> ":" <typ:Type> <domain:ClockDomain?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::OutgoingReg,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
+        let num_children = 1 + if domain.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <ll:@L> "wire" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <ll:@L> "wire" <ident:Ident> ":" <typ:Type> <domain:ClockDomain?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Wire,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
+        let num_children = 1 + if domain.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <ll:@L> "reg" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <ll:@L> "reg" <ident:Ident> ":" <typ:Type> <domain:ClockDomain?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Reg,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children = 1 + if on.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
+        let num_children = 1 + if domain.is_none() { 0 } else { 1 } + if it.is_none() { 0 } else { 1 };
 
         parser.add_node(payload, span, num_children)
     },
 }
 
-OnClause: AstNodeId = {
+/// Clock-domain annotation on a component declaration.
+///
+/// `on <expr>` returns the clock expression node directly (backward
+/// compatible with the previous `OnClause` production).  `async` creates
+/// a marker node with payload `AsyncAnnotation` and no children.
+///
+/// The grammar naturally rejects `async on clock` (both specified):
+/// after matching one alternative, the next token does not fit
+/// `ItBlock?`, so the leftover tokens become a parse error.
+ClockDomain: AstNodeId = {
     "on" <expr:Expr> => expr,
+    <ll:@L> "async" <rr:@R> => {
+        let payload = AstNodePayload::AsyncAnnotation;
+        let span = parser.span(ll, rr);
+        let num_children = 0;
+
+        parser.add_node(payload, span, num_children)
+    },
 }
 
 ModDefStmtDriver: AstNodeId = {
@@ -773,6 +789,20 @@ ExprPrimary: AstNodeId = {
 }
 
 ExprAtom: AstNodeId = {
+    <ll:@L> "sync" "(" <arg:Expr> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprSync;
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "async" "(" <arg:Expr> ")" <rr:@R> => {
+        let payload = AstNodePayload::ExprAsync;
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
     <ll:@L> <path:Path> <rr:@R> => {
         let payload = AstNodePayload::ExprReference;
         let span = parser.span(ll, rr);
@@ -1018,6 +1048,8 @@ extern {
         "submod" => Token::KwSubmod,
         "on" => Token::KwOn,
         "of" => Token::KwOf,
+        "async" => Token::KwAsync,
+        "sync" => Token::KwSync,
         "socket" => Token::KwSocket,
         "client" => Token::KwClient,
         "server" => Token::KwServer,

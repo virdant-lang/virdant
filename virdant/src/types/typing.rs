@@ -1,4 +1,5 @@
 mod check;
+mod domain;
 mod infer;
 
 use std::sync::Arc;
@@ -237,6 +238,16 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
         collect_unused(node.clone(), &mut use_locations, &mut already_unused, &mut diagnostics);
         if let Some(component_analysis) = &component_analysis {
             collect_bidirectional_drivers(node.clone(), &mut use_locations, component_analysis, &mut diagnostics);
+        }
+
+        // Clock domain checking pass: verify that clock domains are
+        // consistent across drivers, binary operations, and control flow.
+        // Only run for non-ext moddefs.
+        if let AstNodePayload::ModDef(moddef) = node.payload() {
+            if !moddef.is_ext {
+                let ca = builder.get_component_analysis(symbol_id);
+                diagnostics.extend(domain::check_domains(&ca, &node));
+            }
         }
     }
 

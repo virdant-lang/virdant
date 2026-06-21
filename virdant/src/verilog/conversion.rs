@@ -224,7 +224,7 @@ impl<'d> Converter<'d> {
                             // Port declaration is handled by get_ports_of above (output reg).
                             // Check for an explicit `on clock` clause.
                             let children = stmt.children();
-                            let clock_child = children.iter().skip(1).find(|c| !matches!(c.payload(), AstNodePayload::It));
+                            let clock_child = children.iter().skip(1).find(|c| !matches!(c.payload(), AstNodePayload::It | AstNodePayload::AsyncAnnotation));
                             if let Some(clock_node) = clock_child {
                                 sequential_regs.insert(name.clone(), clock_node.id());
                             }
@@ -232,11 +232,14 @@ impl<'d> Converter<'d> {
                         }
                         ComponentKind::Wire => {
                             let children = stmt.children();
-                            let clock_child = children.iter().skip(1).find(|c| !matches!(c.payload(), AstNodePayload::It));
+                            let clock_child = children.iter().skip(1).find(|c| !matches!(c.payload(), AstNodePayload::It | AstNodePayload::AsyncAnnotation));
                             if let Some(clock_node) = clock_child {
-                                // Wire with explicit `on clock` — treat exactly like a Reg.
+                                // Wire with explicit `on clock` — record the clock
+                                // for use by latched drivers, but declare as a Wire.
+                                // The driver processing pass will upgrade it to a Reg
+                                // if it has a `<=` (latched) driver.
                                 sequential_regs.insert(name.clone(), clock_node.id());
-                                elements.push(verilog::Element::Reg(verilog::Reg {
+                                elements.push(verilog::Element::Wire(verilog::Wire {
                                     name: valid_verilog_name(&name),
                                     width,
                                     expr: None,
@@ -252,7 +255,7 @@ impl<'d> Converter<'d> {
                         ComponentKind::Reg => {
                             // Regs with `on clock` have a non-ItBlock child after the type.
                             let children = stmt.children();
-                            let clock_child = children.iter().skip(1).find(|c| !matches!(c.payload(), AstNodePayload::It));
+                            let clock_child = children.iter().skip(1).find(|c| !matches!(c.payload(), AstNodePayload::It | AstNodePayload::AsyncAnnotation));
                             if let Some(clock_node) = clock_child {
                                 sequential_regs.insert(name.clone(), clock_node.id());
                             }
@@ -319,10 +322,15 @@ impl<'d> Converter<'d> {
 
                 // For latched-driver wires without an explicit `on clock`, infer the clock
                 // from any sequential reg already found in this module.
+                // A wire with `on clock` but a `:=` (continuous) driver should
+                // remain a combinational wire (assign), not become a reg.
                 let latched = driver.driver_type() == DriverType::Latched;
-                let clock_id_opt = sequential_regs.get(&path).copied().or_else(|| {
-                    if latched { sequential_regs.values().copied().next() } else { None }
-                });
+                let clock_id_opt = if latched {
+                    sequential_regs.get(&path).copied()
+                        .or_else(|| sequential_regs.values().copied().next())
+                } else {
+                    None
+                };
 
                 if let Some(clock_id) = clock_id_opt {
                     // If this is a latched-driver wire not yet in sequential_regs, upgrade
@@ -344,7 +352,7 @@ impl<'d> Converter<'d> {
                         }
                     }
                     let clock_node = parsing.ast_node(clock_id);
-                    let clock_type = self.node_type(package, &clock_node).unwrap();
+                    let clock_type = self.node_type(package, &clock_node).unwrap_or(Type::Clock);
                     let clock_expr = self.convert_expr(package, clock_node, &clock_type, self.db, &mut scheduler);
                     scheduler.in_sequential = true;
                     let stmts = match driver {
@@ -1090,6 +1098,17 @@ impl<'d> Converter<'d> {
                 })
             }
             AstNodePayload::ExprAs | AstNodePayload::ExprParen => {
+                self.convert_expr(package, node.child(0), typ, db, scheduler)
+            }
+            // async(x) is a type-level operation: it generates no hardware,
+            // so we just convert the argument expression directly.
+            AstNodePayload::ExprAsync => {
+                self.convert_expr(package, node.child(0), typ, db, scheduler)
+            }
+            // sync(x) should allocate a double-flop synchronizer.
+            // For now, pass through the argument expression.
+            // TODO: Implement double-flop synchronizer generation (Phase 4).
+            AstNodePayload::ExprSync => {
                 self.convert_expr(package, node.child(0), typ, db, scheduler)
             }
             AstNodePayload::ExprHole => {

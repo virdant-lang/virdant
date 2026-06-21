@@ -6,5 +6,5 @@ pub mod signature;
 pub mod match_coverage;
 
 pub use context::TypingContext;
-pub use typ::Type;
+pub use typ::{ClockDomain, Type};
 pub use typing::{ExprRoot, Typing};

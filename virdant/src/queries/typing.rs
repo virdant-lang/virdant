@@ -1,7 +1,6 @@
 use bstr::ByteSlice;
 use crate::analysis::symbols::SymbolId;
 use crate::types::{ExprRoot, Type, TypingContext};
-use crate::common::ComponentKind;
 use crate::db::Builder;
 use crate::syntax::payload::AstNodePayload;
 
@@ -28,8 +27,11 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
     let parent_node = node.parent().unwrap();
 
     match parent_node.payload() {
-        AstNodePayload::Component(component) if component.kind == ComponentKind::Reg
-            || component.kind == ComponentKind::OutgoingReg => Some(Type::Clock),
+        AstNodePayload::Component(_component) => {
+            // The `on <clock>` clause expression has expected type Clock.
+            // This applies to all component kinds with an on-clause, not just regs.
+            Some(Type::Clock)
+        }
         AstNodePayload::Driver(_) => {
             let mut lhs_path = parsing.string(parent_node.child(0).path().unwrap()).to_owned();
 

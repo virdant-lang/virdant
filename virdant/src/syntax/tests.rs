@@ -400,3 +400,129 @@ mod test_docstrings {
             invalid_diags.len(), invalid_diags);
     }
 }
+
+#[cfg(test)]
+mod test_clock_domain {
+    use crate::common::source::Source;
+    use crate::fqn::PackageFqn;
+    use crate::syntax::parsing::parse;
+    use crate::syntax::payload::AstNodePayload;
+
+    fn test_source(text: &[u8]) -> Source {
+        Source::new(PackageFqn::new("test".into()), text.into())
+    }
+
+    #[test]
+    fn test_parse_async_annotation() {
+        let source = test_source(
+            b"mod Foo {\n    incoming clk : Clock\n    incoming button : Bit async\n}\n"
+        );
+        let parsing = parse(&source);
+        assert!(parsing.errors().is_empty());
+
+        // Find the 'button' component and verify it has an AsyncAnnotation child.
+        let root = parsing.root();
+        for child in root.children() {
+            if let AstNodePayload::ModDef(_) = child.payload() {
+                for stmt in child.children() {
+                    if let AstNodePayload::Component(c) = stmt.payload() {
+                        if parsing.string(c.name) == b"button" {
+                            let has_async = stmt.children().iter()
+                                .any(|ch| matches!(ch.payload(), AstNodePayload::AsyncAnnotation));
+                            assert!(has_async, "Expected AsyncAnnotation child on 'button'");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_on_clause() {
+        let source = test_source(
+            b"mod Foo {\n    incoming clk : Clock\n    wire data : Bit on clk\n}\n"
+        );
+        let parsing = parse(&source);
+        assert!(parsing.errors().is_empty());
+
+        // Verify the 'data' component has a clock reference child (ExprReference).
+        let root = parsing.root();
+        for child in root.children() {
+            if let AstNodePayload::ModDef(_) = child.payload() {
+                for stmt in child.children() {
+                    if let AstNodePayload::Component(c) = stmt.payload() {
+                        if parsing.string(c.name) == b"data" {
+                            let has_clock = stmt.children().iter().skip(1)
+                                .any(|ch| matches!(ch.payload(), AstNodePayload::ExprReference));
+                            assert!(has_clock, "Expected ExprReference clock child on 'data'");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_sync_expr() {
+        let source = test_source(
+            b"mod Foo {\n    incoming clk : Clock\n    incoming btn : Bit async\n    wire s : Bit on clk {\n        it := sync(btn)\n    }\n}\n"
+        );
+        let parsing = parse(&source);
+        assert!(parsing.errors().is_empty());
+
+        // Recursively search the AST for ExprSync.
+        fn has_payload(node: &crate::syntax::ast::AstNode<'_>, pred: &dyn Fn(&AstNodePayload) -> bool) -> bool {
+            let payload = node.payload();
+            if pred(&payload) {
+                return true;
+            }
+            node.children().iter().any(|child| has_payload(child, pred))
+        }
+
+        let root = parsing.root();
+        assert!(has_payload(&root, &|p| matches!(p, AstNodePayload::ExprSync)),
+            "Expected ExprSync node in AST");
+    }
+
+    #[test]
+    fn test_parse_async_expr() {
+        let source = test_source(
+            b"mod Foo {\n    incoming clk : Clock\n    incoming data : Bit on clk\n    wire a : Bit async {\n        it := async(data)\n    }\n}\n"
+        );
+        let parsing = parse(&source);
+        assert!(parsing.errors().is_empty());
+
+        // Recursively search the AST for ExprAsync.
+        fn has_payload(node: &crate::syntax::ast::AstNode<'_>, pred: &dyn Fn(&AstNodePayload) -> bool) -> bool {
+            let payload = node.payload();
+            if pred(&payload) {
+                return true;
+            }
+            node.children().iter().any(|child| has_payload(child, pred))
+        }
+
+        let root = parsing.root();
+        assert!(has_payload(&root, &|p| matches!(p, AstNodePayload::ExprAsync)),
+            "Expected ExprAsync node in AST");
+    }
+
+    #[test]
+    fn test_reject_async_and_on() {
+        // `async on clk` should be a parse error (mutual exclusivity).
+        let source = test_source(
+            b"mod Foo {\n    incoming clk : Clock\n    incoming x : Bit async on clk\n}\n"
+        );
+        let parsing = parse(&source);
+        assert!(!parsing.errors().is_empty(),
+            "Expected parse error for 'async on clk' (mutual exclusivity)");
+    }
+
+    #[test]
+    fn test_parse_multi_clock() {
+        let source = test_source(
+            b"mod Foo {\n    incoming clk_a : Clock\n    incoming clk_b : Clock\n    reg data_a : Bit on clk_a\n    reg data_b : Bit on clk_b\n}\n"
+        );
+        let parsing = parse(&source);
+        assert!(parsing.errors().is_empty());
+    }
+}

@@ -147,7 +147,7 @@ impl PackageAnalysis {
                         if component.kind == ComponentKind::Reg || component.kind == ComponentKind::OutgoingReg {
                             if let Some(node) = child_node.clock() {
                                 self.expr_roots.push(node.id());
-                            } else {
+                            } else if child_node.async_annotation().is_none() {
                                 self.diagnostics.push(
                                     diagnostics::MissingOnClause {
                                         region: node.region(),
@@ -155,6 +155,11 @@ impl PackageAnalysis {
                                     }.into()
                                 );
                             }
+                        } else if let Some(clock_node) = child_node.clock() {
+                            // For non-reg components with an explicit `on <clock>`
+                            // clause, add the clock reference as an expr_root so it
+                            // gets type-annotated (needed by Verilog conversion).
+                            self.expr_roots.push(clock_node.id());
                         }
                         for child in child_node.children() {
                             if matches!(child.payload(), AstNodePayload::It) {

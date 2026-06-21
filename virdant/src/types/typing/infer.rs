@@ -88,6 +88,17 @@ impl Typing {
                     Ok(None)
                 }
             }
+            // sync(x) and async(x) preserve the type of their argument.
+            // The clock-domain change is tracked separately.
+            AstNodePayload::ExprSync | AstNodePayload::ExprAsync => {
+                let arg = node.child(0);
+                if let Some(typ) = self.infer(builder, context, &arg)? {
+                    self.annotate(&node, &typ);
+                    Ok(Some(typ))
+                } else {
+                    Ok(None)
+                }
+            }
             _ => Ok(None),
         }
     }

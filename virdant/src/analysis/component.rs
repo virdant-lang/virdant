@@ -11,7 +11,7 @@ use crate::fqn::PackageFqn;
 use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
-use crate::types::Type;
+use crate::types::{ClockDomain, Type};
 use crate::common::{ChannelDir, ComponentKind, Flow, SocketRole};
 use crate::diagnostics::{self, Diagnostic};
 
@@ -22,6 +22,10 @@ pub struct ComponentAnalysis {
     diagnostics: Vec<Diagnostic>,
 
     references: IndexMap<Location, (ComponentId, ReferenceKind)>,
+
+    /// Clock components available in this module.
+    /// Maps clock name to its SymbolId for domain resolution.
+    clocks_in_scope: IndexMap<BString, SymbolId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -42,6 +46,11 @@ pub struct Component {
     // Type may be absent when `builder.get_type_at()` fails during resolution
     // We keep the component anyway -- path, flow, kind, and location are independently useful.
     typ: Option<Type>,
+
+    /// The clock domain of this component.
+    /// None if the domain couldn't be determined (error already reported)
+    /// or for Clock/Reset types which don't participate in domain tracking.
+    clock: Option<ClockDomain>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -79,6 +88,23 @@ impl Component {
 
     pub fn kind(&self) -> Option<ComponentKind> {
         self.kind
+    }
+
+    /// Returns the clock domain of this component.
+    /// Returns None for Clock/Reset types (no domain) or when
+    /// the domain couldn't be determined.
+    pub fn clock(&self) -> Option<&ClockDomain> {
+        self.clock.as_ref()
+    }
+
+    /// Returns true if this component is asynchronous.
+    pub fn is_async(&self) -> bool {
+        matches!(self.clock, Some(ClockDomain::Async))
+    }
+
+    /// Returns true if this component is synchronized to a clock.
+    pub fn is_clocked(&self) -> bool {
+        matches!(self.clock, Some(ClockDomain::OnClock(_)))
     }
 
     pub fn location(&self) -> Location {
@@ -139,6 +165,12 @@ impl ComponentAnalysis {
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         self.diagnostics.clone()
     }
+
+    /// Returns the clock components available in this module.
+    /// Maps clock name to its SymbolId.
+    pub fn clocks_in_scope(&self) -> &IndexMap<BString, SymbolId> {
+        &self.clocks_in_scope
+    }
 }
 
 pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) -> Arc<ComponentAnalysis> {
@@ -147,6 +179,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
         components: vec![],
         diagnostics: vec![],
         references: IndexMap::new(),
+        clocks_in_scope: IndexMap::new(),
     };
 
     let symboltable = builder.get_symboltable();
@@ -168,6 +201,9 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
             builder.get_package_analysis(import);
         }
     }
+
+    // First pass: discover all clock components in this module.
+    discover_clocks(builder, &item_ast.children(), moddef, &mut component_analysis);
 
     for stmt in item_ast.children() {
         match stmt.payload() {
@@ -192,6 +228,13 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     ComponentKind::Wire => Flow::Duplex,
                 };
                 let component_kind = component.kind;
+                let clock = infer_component_clock(
+                    builder,
+                    &stmt,
+                    &typ,
+                    &component_analysis.clocks_in_scope,
+                    &mut component_analysis.diagnostics,
+                );
                 let component = Component {
                     id,
                     path: path.clone(),
@@ -199,6 +242,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     typ,
                     flow,
                     kind: Some(component_kind),
+                    clock,
                 };
                 if !components_seen.contains(&path) {
                     components_seen.insert(path.clone());
@@ -266,6 +310,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 typ,
                                 flow,
                                 kind: Some(component_kind),
+                                clock: None,
                             };
                             if !components_seen.contains(&path) {
                                 components_seen.insert(path.clone());
@@ -332,6 +377,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                     typ,
                                     flow,
                                     kind,
+                                    clock: None,
                                 };
                                 if !components_seen.contains(&path) {
                                     components_seen.insert(path.clone());
@@ -393,6 +439,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         typ,
                         flow,
                         kind: None,
+                        clock: None,
                     };
                     if !components_seen.contains(&path) {
                         components_seen.insert(path.clone());
@@ -416,6 +463,126 @@ pub(crate) fn build_component(
 ) -> Arc<Component> {
     let component_analysis = builder.get_component_analysis(component_id.item_id);
     Arc::new(component_analysis.component(component_id).unwrap().clone())
+}
+
+// ---------------------------------------------------------------------------
+// Clock domain discovery and inference
+// ---------------------------------------------------------------------------
+
+/// Walk moddef-level statements and record every incoming `Clock` port
+/// in `clocks_in_scope` so that `on <clock>` clauses can be resolved.
+fn discover_clocks(
+    builder: &mut Builder,
+    stmts: &[AstNode],
+    moddef: SymbolId,
+    component_analysis: &mut ComponentAnalysis,
+) {
+    let symboltable = builder.get_symboltable();
+    for stmt in stmts {
+        let AstNodePayload::Component(component) = stmt.payload() else {
+            continue;
+        };
+        if component.kind != ComponentKind::Incoming {
+            continue;
+        }
+        let Some(typ_node) = stmt.typ() else { continue };
+        let Ok(typ) = builder.get_type_at(typ_node.location()) else {
+            continue;
+        };
+        if !matches!(typ, Type::Clock) {
+            continue;
+        }
+        let name = stmt.parsing().string(component.name).to_owned();
+        // Resolve the clock component to its SymbolId via the symbol table.
+        if let Some(symbol) = symboltable.slot(moddef, name.as_bstr()) {
+            component_analysis.clocks_in_scope.insert(name, symbol.id());
+        }
+    }
+}
+
+/// Infer the clock domain of a component from its declaration.
+///
+/// Returns `None` for Clock/Reset types (they don't participate in domain
+/// tracking) or when the domain couldn't be determined (error reported).
+/// Returns `Some(ClockDomain::Async)` for `async` annotations.
+/// Returns `Some(ClockDomain::OnClock(id))` for `on <clock>` clauses.
+/// Returns `Some(ClockDomain::Unknown)` when no annotation is present
+/// (domain will be inferred later).
+fn infer_component_clock(
+    builder: &mut Builder,
+    stmt: &AstNode,
+    typ: &Option<Type>,
+    clocks_in_scope: &IndexMap<BString, SymbolId>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ClockDomain> {
+    // Clock and Reset types don't participate in clock domain tracking.
+    if matches!(typ, Some(Type::Clock) | Some(Type::Reset)) {
+        // But it's an error to annotate them.
+        if stmt.async_annotation().is_some() || stmt.clock().is_some() {
+            let typ_str = match typ {
+                Some(Type::Clock) => "Clock",
+                Some(Type::Reset) => "Reset",
+                _ => "type",
+            };
+            diagnostics.push(diagnostics::ClockTypeDomain {
+                region: stmt.region(),
+                typ: typ_str.into(),
+            }.into());
+        }
+        return None;
+    }
+
+    // Check for `async` annotation.
+    if let Some(_async_node) = stmt.async_annotation() {
+        // `async` on a reg is an error - regs must be clocked.
+        if let AstNodePayload::Component(component) = stmt.payload() {
+            if matches!(component.kind, ComponentKind::Reg | ComponentKind::OutgoingReg) {
+                diagnostics.push(diagnostics::AsyncReg {
+                    region: stmt.region(),
+                }.into());
+                // Return Unknown so the component is still tracked.
+                return Some(ClockDomain::Unknown);
+            }
+        }
+        return Some(ClockDomain::Async);
+    }
+
+    // Check for `on <clock>` clause.
+    if let Some(clock_expr) = stmt.clock() {
+        return resolve_clock_reference(builder, &clock_expr, clocks_in_scope, diagnostics);
+    }
+
+    // No explicit annotation - domain will be inferred later.
+    Some(ClockDomain::Unknown)
+}
+
+/// Resolve a clock reference expression to a SymbolId.
+/// Reports errors for unknown clocks or non-Clock types.
+fn resolve_clock_reference(
+    _builder: &mut Builder,
+    clock_expr: &AstNode,
+    clocks_in_scope: &IndexMap<BString, SymbolId>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ClockDomain> {
+    let Some(path_interned) = clock_expr.path() else {
+        diagnostics.push(diagnostics::ComplexClockRef {
+            region: clock_expr.region(),
+        }.into());
+        return None;
+    };
+    let name = clock_expr.parsing().string(path_interned).to_owned();
+
+    // Check if it's a known clock in scope.
+    if let Some(symbol_id) = clocks_in_scope.get(name.as_bstr()) {
+        return Some(ClockDomain::OnClock(*symbol_id));
+    }
+
+    // Not found - report error.
+    diagnostics.push(diagnostics::UnknownClock {
+        region: clock_expr.region(),
+        name,
+    }.into());
+    None
 }
 
 // ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@ use bstr::BString;
 use crate::analysis::symbols::{SymbolId, SymbolKind};
 use crate::common::{ComponentKind, Flow, PortDir};
 use crate::db::Builder;
-use crate::types::Type;
+use crate::types::{ClockDomain, Type};
 use crate::syntax::payload::AstNodePayload;
 
 #[derive(Debug, Clone)]
@@ -13,6 +13,17 @@ pub struct Port {
     pub path: BString,
     pub dir: PortDir,
     pub typ: Option<Type>,
+
+    /// Clock domain of this port.
+    /// None for Clock/Reset types or when uninferrable.
+    pub clock: Option<ClockDomain>,
+}
+
+impl Port {
+    /// Create a new port with clock domain.
+    pub fn new(path: BString, dir: PortDir, typ: Option<Type>, clock: Option<ClockDomain>) -> Self {
+        Port { path, dir, typ, clock }
+    }
 }
 
 pub(crate) fn build_ports_of(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<Port>> {
@@ -73,6 +84,12 @@ pub(crate) fn build_ports_of(builder: &mut Builder, symbol_id: SymbolId) -> Arc<
             path,
             dir,
             typ: component.typ(),
+            // Clock/Reset types don't have a clock domain.
+            clock: if matches!(component.typ(), Some(Type::Clock) | Some(Type::Reset)) {
+                None
+            } else {
+                component.clock().cloned()
+            },
         });
     }
 

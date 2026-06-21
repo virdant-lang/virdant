@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::common::{DriverType, Width, WordValue};
 use crate::fqn::PackageFqn;
 use crate::common::source::Region;
+use crate::types::ClockDomain;
 
 pub type Type = BString;
 
@@ -106,6 +107,90 @@ pub struct MissingOnClause {
 pub struct UnexpectedOnClause {
     pub region: Region,
     pub component: BString,
+}
+
+// ---------------------------------------------------------------------------
+// Clock domain diagnostics (E07xx errors and W07xx warnings)
+// ---------------------------------------------------------------------------
+
+/// Clock reference in `on` clause does not exist. (E0701)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownClock {
+    pub region: Region,
+    pub name: BString,
+}
+
+/// Clock reference in `on` clause does not have Clock type. (E0702)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OnClauseNotClock {
+    pub region: Region,
+    pub name: BString,
+}
+
+/// Clock signal is not an incoming port. (E0703)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClockNotInput {
+    pub region: Region,
+    pub name: BString,
+}
+
+/// Register declared with the `async` keyword. (E0704)
+/// Registers must be clocked.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AsyncReg {
+    pub region: Region,
+}
+
+/// Clock or Reset type with a clock-domain annotation. (E0705)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClockTypeDomain {
+    pub region: Region,
+    pub typ: BString,
+}
+
+/// Complex expression used in `on` clause; expected simple identifier. (E0706)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComplexClockRef {
+    pub region: Region,
+}
+
+/// Combining values from different clock domains. (E0707)
+#[derive(Debug, Clone)]
+pub struct DomainCrossing {
+    pub region: Region,
+    pub left_region: Region,
+    pub left_domain: ClockDomain,
+    pub right_region: Region,
+    pub right_domain: ClockDomain,
+}
+
+/// Clock domain could not be inferred. (E0708)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UninferrableClock {
+    pub region: Region,
+    pub name: BString,
+}
+
+/// `sync()` called on signal already in expected clock domain. (W0751)
+#[derive(Debug, Clone)]
+pub struct NoOpSync {
+    pub region: Region,
+    pub domain: ClockDomain,
+}
+
+/// Async signal connected to clocked port without `sync()`. (W0752)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AsyncToClockedPort {
+    pub region: Region,
+    pub port_name: BString,
+    pub submod_name: BString,
+}
+
+/// `sync()` on multi-bit value is unsafe for clock domain crossing. (W0753)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MultiBitSync {
+    pub region: Region,
+    pub typ: BString,
 }
 
 /// A `driver` statement used the wrong driver type.
@@ -715,6 +800,137 @@ impl IsDiagnostic for UnexpectedOnClause {
 
     fn message(&self) -> BString {
         format!("Unexpected on clause {}", &self.component).into()
+    }
+}
+
+impl IsDiagnostic for UnknownClock {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Unknown clock '{}' in 'on' clause", &self.name).into()
+    }
+}
+
+impl IsDiagnostic for OnClauseNotClock {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("'{}' is not a Clock type; cannot use in 'on' clause", &self.name).into()
+    }
+}
+
+impl IsDiagnostic for ClockNotInput {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Clock '{}' must be an incoming port", &self.name).into()
+    }
+}
+
+impl IsDiagnostic for AsyncReg {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        "Register cannot be async; registers must be clocked".into()
+    }
+}
+
+impl IsDiagnostic for ClockTypeDomain {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("{} type cannot have clock domain annotation", &self.typ).into()
+    }
+}
+
+impl IsDiagnostic for ComplexClockRef {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        "Complex expression in 'on' clause; expected simple identifier".into()
+    }
+}
+
+impl IsDiagnostic for DomainCrossing {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        "Clock domain crossing: cannot combine values from different domains".into()
+    }
+}
+
+impl IsDiagnostic for UninferrableClock {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Cannot infer clock domain for '{}'", &self.name).into()
+    }
+}
+
+impl IsDiagnostic for NoOpSync {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!(
+            "sync() on signal already in expected clock domain ({})",
+            self.domain
+        ).into()
+    }
+
+    fn level(&self) -> DiagnosticLevel {
+        DiagnosticLevel::Warning
+    }
+}
+
+impl IsDiagnostic for AsyncToClockedPort {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!(
+            "Connecting async signal to clocked port '{}' of '{}' without sync()",
+            &self.port_name, &self.submod_name
+        ).into()
+    }
+
+    fn level(&self) -> DiagnosticLevel {
+        DiagnosticLevel::Warning
+    }
+}
+
+impl IsDiagnostic for MultiBitSync {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!(
+            "sync() on multi-bit value {} is unsafe for clock domain crossing",
+            &self.typ
+        ).into()
+    }
+
+    fn level(&self) -> DiagnosticLevel {
+        DiagnosticLevel::Warning
     }
 }
 

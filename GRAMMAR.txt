@@ -64,14 +64,16 @@ ModDefStmt :=
     | ModDefStmtUnused
 
 ModDefStmtComponent :=
-      DocString? "incoming" Ident ":" Type OnClause? ItBlock?
-    | DocString? "outgoing" Ident ":" Type OnClause? ItBlock?
-    | DocString? "outgoing" "wire" Ident ":" Type OnClause? ItBlock?
-    | DocString? "outgoing" "reg" Ident ":" Type OnClause? ItBlock?
-    | DocString? "wire" Ident ":" Type OnClause? ItBlock?
-    | DocString? "reg" Ident ":" Type OnClause? ItBlock?
+      DocString? "incoming" Ident ":" Type ClockDomain? ItBlock?
+    | DocString? "outgoing" Ident ":" Type ClockDomain? ItBlock?
+    | DocString? "outgoing" "wire" Ident ":" Type ClockDomain? ItBlock?
+    | DocString? "outgoing" "reg" Ident ":" Type ClockDomain? ItBlock?
+    | DocString? "wire" Ident ":" Type ClockDomain? ItBlock?
+    | DocString? "reg" Ident ":" Type ClockDomain? ItBlock?
 
-OnClause := "on" Expr
+ClockDomain :=
+      "on" Expr
+    | "async"
 
 ModDefStmtDriver :=
       Path ":=" Expr
@@ -226,7 +228,9 @@ ExprPrimary :=
     | ExprAtom
 
 ExprAtom :=
-      Path
+      "sync" "(" Expr ")"
+    | "async" "(" Expr ")"
+    | Path
     | WordLit
     | BitLit
     | "Str"
@@ -305,6 +309,7 @@ Tokens:
   "]"
   "^"
   "^^"
+  "async"
   "builtin"
   "case"
   "client"
@@ -329,6 +334,7 @@ Tokens:
   "soci"
   "socket"
   "struct"
+  "sync"
   "true"
   "type"
   "union"

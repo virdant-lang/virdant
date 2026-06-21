@@ -62,6 +62,8 @@ pub enum AstNodePayload {
     ExprAs,
     ExprHole,
     ExprDontcare,
+    ExprSync,
+    ExprAsync,
 
     Assign(Assign),
 
@@ -75,6 +77,11 @@ pub enum AstNodePayload {
     Ofness(Ofness),
     It,
     Path(Path),
+
+    /// `async` keyword annotation on a component declaration.
+    /// Marks a signal as asynchronous (not synchronized to any clock).
+    /// Has no children.
+    AsyncAnnotation,
 }
 
 impl AstNodePayload {
@@ -142,6 +149,9 @@ impl AstNodePayload {
             AstNodePayload::ExprAs => "ExprAs",
             AstNodePayload::ExprHole => "ExprHole",
             AstNodePayload::ExprDontcare => "ExprDontcare",
+            AstNodePayload::ExprSync => "ExprSync",
+            AstNodePayload::ExprAsync => "ExprAsync",
+            AstNodePayload::AsyncAnnotation => "AsyncAnnotation",
         }
     }
 }

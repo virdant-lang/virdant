@@ -217,19 +217,26 @@ fn elaborate_module(
                 };
 
                 let id = SignalId(components.len());
-                let clock = if let Some(clock_node) = stmt.clock() {
-                    // Resolve the clock reference (e.g. `clock` in `reg x : T on clock`)
-                    // to the ElaboratedComponentId of the already-accumulated clock component
-                    // (e.g. `top.clock`).  The incoming clock port is always declared before
-                    // any reg in the source, so it is guaranteed to be in `components` already.
-                    clock_node.path().and_then(|interned| {
-                        let clock_name = parsing.string(interned).to_str_lossy().into_owned();
-                        let full_path: BString = format!("{prefix}.{clock_name}").into();
-                        components
-                            .iter()
-                            .position(|c| c.path == full_path)
-                            .map(SignalId)
-                    })
+                // Only Regs and OutgoingRegs are clocked in the simulation.
+                // Wires with `on clock` are combinational (their domain is
+                // for type checking only, not for sequential behavior).
+                let clock = if matches!(component.kind, ComponentKind::Reg | ComponentKind::OutgoingReg) {
+                    if let Some(clock_node) = stmt.clock() {
+                        // Resolve the clock reference (e.g. `clock` in `reg x : T on clock`)
+                        // to the ElaboratedComponentId of the already-accumulated clock component
+                        // (e.g. `top.clock`).  The incoming clock port is always declared before
+                        // any reg in the source, so it is guaranteed to be in `components` already.
+                        clock_node.path().and_then(|interned| {
+                            let clock_name = parsing.string(interned).to_str_lossy().into_owned();
+                            let full_path: BString = format!("{prefix}.{clock_name}").into();
+                            components
+                                .iter()
+                                .position(|c| c.path == full_path)
+                                .map(SignalId)
+                        })
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 };
