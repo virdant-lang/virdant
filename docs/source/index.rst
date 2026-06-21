@@ -12,7 +12,7 @@ The Virdant Hardware Language
     coding-conventions
     reference/index
     Repository <https://github.com/virdant-lang/virdant>
-    Discord <https://discord.gg/YY6rssfG>
+    Discord <https://discord.gg/F9trwvHPf6>
 
 Virdant is a modern, strongly-typed hardware description language designed for predictability and developer productivity.
 
@@ -29,7 +29,7 @@ Ready to get started?
 ---------------------
 * :doc:`Getting Started <getting-started>`: Learn how to set up the Virdant compiler and write your first design.
 * :doc:`Core Principles <principles>`: Understand the philosophy behind Virdant's design.
-* `Discord <https://discord.gg/YY6rssfG>`_: Join me on Discord.
+* `Discord <https://discord.gg/F9trwvHPf6>`_: Join me on Discord.
 
 Get the Code
 ------------
