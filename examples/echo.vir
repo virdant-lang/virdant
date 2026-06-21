@@ -5,16 +5,16 @@ import resetter
 mod Top {
     incoming clock      : Clock // 12MHz
 
-    outgoing uart_tx    : Bit
-    incoming uart_rx    : Bit
+    outgoing uart_tx    : Bit on clock
+    incoming uart_rx    : Bit on clock
 
-    outgoing led_0      : Bit
-    outgoing led_1      : Bit
-    outgoing led_2      : Bit
-    outgoing led_3      : Bit
-    outgoing led_4      : Bit
+    outgoing led_0      : Bit on clock
+    outgoing led_1      : Bit on clock
+    outgoing led_2      : Bit on clock
+    outgoing led_3      : Bit on clock
+    outgoing led_4      : Bit on clock
 
-    wire reset : Bit
+    wire reset : Bit on clock
 
     mod resetter of resetter::Resetter
     resetter.clock := clock

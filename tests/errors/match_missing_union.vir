@@ -6,10 +6,12 @@ union type MyUnion {
 }
 
 mod MissingUnionCtor {
-    wire u : MyUnion
+    wire u : MyUnion async
+
     u := @Foo()
 
-    wire out : Bit
+    wire out : Bit async
+
     unused out
     // CHECK: not covered: @Bar
     out := match u {

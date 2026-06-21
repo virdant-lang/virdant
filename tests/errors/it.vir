@@ -1,9 +1,13 @@
 mod HalfAdder {
-    incoming a : Bit
-    incoming b : Bit
+    incoming a : Bit async
 
-    outgoing sum : Bit
-    outgoing carry_out : Bit
+    incoming b : Bit async
+
+
+    outgoing sum : Bit async
+
+    outgoing carry_out : Bit async
+
 
     // sum is true when one of a and b is true (but not both)
     sum := a ^^ b
@@ -13,15 +17,18 @@ mod HalfAdder {
 }
 
 mod FullAdder {
-    incoming a : Bit
-    incoming b : Bit
-    incoming carry_in : Bit
+    incoming a : Bit async
 
-    outgoing sum : Bit {
+    incoming b : Bit async
+
+    incoming carry_in : Bit async
+
+
+    outgoing sum : Bit async {
         sum := ha1.sum
     }
 
-    outgoing carry_out : Bit {
+    outgoing carry_out : Bit async {
         it := ha0.carry_out || ha1.carry_out
     }
 

@@ -1,8 +1,10 @@
 // MatchCoverage: Word[8] subject with only a few literals and no `else`.
 
 mod WordNeedsElse {
-    incoming x : Word[8]
-    outgoing out : Bit
+    incoming x : Word[8] async
+
+    outgoing out : Bit async
+
     // CHECK: Non-exhaustive match
     out := match x {
         case 0 => true

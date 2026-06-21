@@ -1,9 +1,9 @@
 // CHECK: Check OK
 mod When {
     incoming clock : Clock
-    incoming inp1 : Bit
+    incoming inp1 : Bit on clock
 
-    outgoing out1 : Bit {
+    outgoing out1 : Bit on clock {
         when {
             case inp1 {
                 it := true
@@ -24,9 +24,9 @@ mod When {
         unused it
     }
 
-    incoming inp2 : Bit
+    incoming inp2 : Bit on clock
 
-    outgoing out2 : Bit {
+    outgoing out2 : Bit on clock {
         it := when {
             case inp2 => false
             else => true
@@ -37,7 +37,7 @@ mod When {
 mod Fine {
     incoming clock : Clock
     incoming reset : Reset
-    outgoing out : Word[3]
+    outgoing out : Word[3] on clock
 
     reg start : Word[3] on clock {
         it <= when {

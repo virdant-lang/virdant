@@ -1,7 +1,7 @@
 mod Top {
     incoming clock : Clock
 
-    outgoing led : Bit
+    outgoing led : Bit on clock
 
     reg counter : Word[32] on clock
     counter <= counter + 1

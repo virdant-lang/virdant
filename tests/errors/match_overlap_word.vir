@@ -1,8 +1,10 @@
 // MatchCoverage: duplicated word-literal arm.
 
 mod OverlapWord {
-    incoming x : Word[2]
-    outgoing out : Bit
+    incoming x : Word[2] async
+
+    outgoing out : Bit async
+
     // CHECK: Overlapping match arm: 0
     out := match x {
         case 0 => true

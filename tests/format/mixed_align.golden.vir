@@ -1,7 +1,7 @@
 // Mixed alignment of types AND drivers together
 mod Mixed {
-    incoming aaa : Bit
-    outgoing b   : Word[8]
+    incoming aaa : Bit async
+    outgoing b   : Word[8] async
     reg cccc     : Clock
 
     aaa := 1

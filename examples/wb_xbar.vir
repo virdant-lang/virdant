@@ -55,7 +55,7 @@ union type SelState {
 // WbArb21 -- 2-to-1 Wishbone round-robin arbiter.
 mod WbArb21 {
     incoming clock : Clock
-    incoming reset : Bit
+    incoming reset : Bit on clock
 
     server socket master_0 of Wishbone
     server socket master_1 of Wishbone
@@ -159,7 +159,7 @@ mod WbArb21 {
 // WbMux12 -- 1-to-2 Wishbone address-space multiplexer.
 mod WbMux12 {
     incoming clock : Clock
-    incoming reset : Bit
+    incoming reset : Bit on clock
 
     client socket slave_0 of Wishbone
     client socket slave_1 of Wishbone
@@ -226,7 +226,7 @@ mod WbXbar22 {
         arb_1.clock := it
     }
 
-    incoming reset : Bit {
+    incoming reset : Bit on clock {
         mux_0.reset := it
         mux_1.reset := it
         arb_0.reset := it
@@ -262,7 +262,7 @@ mod WbXbar22 {
 // Top: thin wrapper that exposes the crossbar interface to the outside world.
 export mod Top {
     incoming clock : Clock
-    incoming reset : Bit
+    incoming reset : Bit on clock
 
     server socket master_0 of Wishbone
     server socket master_1 of Wishbone

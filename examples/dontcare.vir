@@ -1,10 +1,10 @@
 mod Top {
-    wire bit_x : Bit
+    wire bit_x : Bit async
     bit_x := dontcare
 
-    wire word_x : Word[8]
+    wire word_x : Word[8] async
     word_x := dontcare
 
-    wire word32_x : Word[32]
+    wire word32_x : Word[32] async
     word32_x := dontcare
 }

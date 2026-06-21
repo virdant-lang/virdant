@@ -1,0 +1,48 @@
+// Tests that clock domain crossing errors (E0707) are detected
+// when signals from different clock domains are combined or assigned
+// without using sync().
+
+// Assigning an async signal to a clocked target without sync().
+mod AsyncToClocked {
+    incoming clock : Clock
+    incoming async_input : Bit async
+    outgoing result : Bit on clock
+
+    // CHECK: Clock domain crossing: cannot combine values from different domains
+    result := async_input
+}
+
+// Assigning a clocked signal to an async target without async().
+mod ClockedToAsync {
+    incoming clock : Clock
+    incoming data : Bit on clock
+    outgoing result : Bit async
+
+    // CHECK: Clock domain crossing: cannot combine values from different domains
+    result := data
+}
+
+// Combining signals from two different clock domains in a binary op.
+mod TwoClockCrossing {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+    incoming data_a : Bit on clk_a
+    incoming data_b : Bit on clk_b
+
+    wire combined : Bit on clk_a
+    // CHECK: Clock domain crossing: cannot combine values from different domains
+    combined := data_a && data_b
+}
+
+// Crossing between two clock domains without sync().
+mod DomainToDomain {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+    incoming data_a : Bit on clk_a
+
+    wire data_b : Bit on clk_b
+    // CHECK: Clock domain crossing: cannot combine values from different domains
+    data_b := data_a
+}
+
+// CHECK: Check failed

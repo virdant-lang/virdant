@@ -4,24 +4,30 @@
 // An @ sign is not a valid token anywhere in a type annotation.
 mod BadTypeToken {
     // CHECK: Syntax Error
-    incoming inp : @
-    outgoing out : Bit
+    incoming inp : @ async
+
+    outgoing out : Bit async
+
     out := true
 }
 
 // A bare integer cannot begin a type name.
 mod BadTypeName {
-    outgoing out : Bit
+    outgoing out : Bit async
+
     // CHECK: Syntax Error
-    incoming inp : 123bad
+    incoming inp : 123bad async
+
     out := true
 }
 
 // A perfectly valid module sitting next to broken ones — it must not
 // contribute any additional syntax errors of its own.
 mod ValidNeighbor {
-    incoming data : Word[8]
-    outgoing out  : Word[8]
+    incoming data : Word[8] async
+
+    outgoing out  : Word[8] async
+
     // CHECK-NOT: Unresolved type
     out := data
 }

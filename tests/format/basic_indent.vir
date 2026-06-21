@@ -1,10 +1,10 @@
 // Basic 4-space indentation
 mod   Top  {
-   incoming clk   : Clock
-outgoing led  : Bit
-reg   counter   : Word[32] on clk
-  counter <= counter + 1
+    incoming clk  : Clock
+    outgoing led  : Bit on clk
+    reg   counter : Word[32] on clk
+    counter <= counter + 1
     led := counter[21]
-    }
+}
 
 // Test 4-space indentation at every level, including close braces.

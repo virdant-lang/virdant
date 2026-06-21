@@ -1,7 +1,7 @@
 // Case continuation: match arms with body on next line
 mod CaseCont {
-    incoming val : Word[2]
-    outgoing out : Word[8]
+    incoming val : Word[2] async
+    outgoing out : Word[8] async
 
     out := match val {
         case 0 =>

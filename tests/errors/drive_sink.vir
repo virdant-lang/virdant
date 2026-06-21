@@ -1,6 +1,8 @@
 mod PopCount {
-    incoming inp0 : Word[8]
-    incoming inp1 : Word[4]
+    incoming inp0 : Word[8] async
+
+    incoming inp1 : Word[4] async
+
 
     mod adder of Adder4 {
         // CHECK: Driver for sink inp0
@@ -12,5 +14,5 @@ mod PopCount {
 }
 
 mod Adder4 {
-    outgoing sum : Word[8] { it := 0 }
+    outgoing sum : Word[8] async { it := 0 }
 }

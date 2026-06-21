@@ -7,19 +7,26 @@
 
 // A trivial sub-module with two outgoing ports.
 mod HalfAdder {
-    incoming a : Bit
-    incoming b : Bit
-    outgoing sum : Bit
-    outgoing carry : Bit
+    incoming a : Bit async
+
+    incoming b : Bit async
+
+    outgoing sum : Bit async
+
+    outgoing carry : Bit async
+
     sum := a ^^ b
     carry := a && b
 }
 
 // Reading both outgoing ports — no warning.
 mod AllUsed {
-    incoming a : Bit
-    incoming b : Bit
-    outgoing out : Word[2]
+    incoming a : Bit async
+
+    incoming b : Bit async
+
+    outgoing out : Word[2] async
+
 
     mod ha of HalfAdder {
         it.a := a
@@ -32,9 +39,12 @@ mod AllUsed {
 
 // Reading only one outgoing port — the other should warn.
 mod OneUnused {
-    incoming a : Bit
-    incoming b : Bit
-    outgoing out : Bit
+    incoming a : Bit async
+
+    incoming b : Bit async
+
+    outgoing out : Bit async
+
 
     mod ha of HalfAdder {
         it.a := a
@@ -46,9 +56,12 @@ mod OneUnused {
 
 // Reading neither outgoing port — both should warn.
 mod BothUnused {
-    incoming a : Bit
-    incoming b : Bit
-    outgoing out : Bit
+    incoming a : Bit async
+
+    incoming b : Bit async
+
+    outgoing out : Bit async
+
 
     mod ha of HalfAdder {
         it.a := a
@@ -62,9 +75,12 @@ mod BothUnused {
 // An unused outgoing port that is explicitly marked `unused` inside
 // the mod block — should NOT warn for that port.
 mod ExplicitUnused {
-    incoming a : Bit
-    incoming b : Bit
-    outgoing out : Bit
+    incoming a : Bit async
+
+    incoming b : Bit async
+
+    outgoing out : Bit async
+
 
     mod ha of HalfAdder {
         it.a := a

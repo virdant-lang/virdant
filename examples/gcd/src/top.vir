@@ -6,10 +6,10 @@ union type State {
 
 export mod Top {
     incoming clock : Clock
-    incoming reset : Bit
+    incoming reset : Bit on clock
 
-    outgoing result : Word[8]
-    outgoing valid  : Bit
+    outgoing result : Word[8] on clock
+    outgoing valid  : Bit on clock
 
     mod gcd of Gcd
     gcd.reset := reset
@@ -23,11 +23,11 @@ export mod Top {
 
 mod Gcd {
     incoming clock : Clock
-    incoming reset : Bit
-    incoming x : Word[8]
-    incoming y : Word[8]
-    outgoing result : Word[8]
-    outgoing valid: Bit
+    incoming reset : Bit on clock
+    incoming x : Word[8] on clock
+    incoming y : Word[8] on clock
+    outgoing result : Word[8] on clock
+    outgoing valid: Bit on clock
 
     reg state : State on clock
 

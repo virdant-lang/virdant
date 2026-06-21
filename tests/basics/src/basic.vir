@@ -1,99 +1,99 @@
 export mod Top {
     incoming clock : Clock
     incoming reset : Reset
-    outgoing fin : Bit
+    outgoing fin : Bit on clock
 
     unused clock
     unused reset
 
     fin := false
 
-    wire w : Bit {
+    wire w : Bit on clock {
         it := true
         unused it
     }
 
-    wire a : Bit {
+    wire a : Bit on clock {
         it := false
         unused it
     }
 
-    wire o : Word[8] {
+    wire o : Word[8] on clock {
         it := 0w8 : Word[8]
         unused it
     }
 
-    wire b : Word[4] {
+    wire b : Word[4] on clock {
         it := 1w4 + 2w4
         unused it
     }
 
-    wire x : Word[4] {
+    wire x : Word[4] on clock {
         it := 0b1010w4
         unused it
     }
 
-    wire y : Word[4] {
+    wire y : Word[4] on clock {
         it := 0b0011w4
         unused it
     }
 
-    wire z : Word[8] {
+    wire z : Word[8] on clock {
         it := zext(0x8w4)
         unused it
     }
 
-    wire s : Word[8] {
+    wire s : Word[8] on clock {
         it := sext(0x8w4)
         unused it
     }
 
-    wire and : Word[8] {
+    wire and : Word[8] on clock {
         it := 3w8 & 1w8
         unused it
     }
 
-    wire or : Word[8] {
+    wire or : Word[8] on clock {
         it := 0w8 | 1w8
         unused it
     }
 
-    wire xor : Word[8] {
+    wire xor : Word[8] on clock {
         it := 0w8 ^ 1w8
         unused it
     }
 
-    wire ascription : Word[4] {
+    wire ascription : Word[4] on clock {
         it := 15 : Word[4]
         unused it
     }
 
-    wire bit_and : Bit {
+    wire bit_and : Bit on clock {
         it := true && false
         unused it
     }
 
-    wire bit_or : Bit {
+    wire bit_or : Bit on clock {
         it := true || false
         unused it
     }
 
-    wire bit_xor : Bit {
+    wire bit_xor : Bit on clock {
         it := true ^^ false
         unused it
     }
 
-    wire tr : Word[4] {
+    wire tr : Word[4] on clock {
         it := trunc(0xabw8)
         unused it
     }
 
-    wire tr_same : Word[8] {
+    wire tr_same : Word[8] on clock {
         it := trunc(0xffw8)
         unused it
     }
 
-    wire tr_bit : Word[1] {
+    wire tr_bit : Word[1] on clock {
         it := trunc(true)
         unused it
     }

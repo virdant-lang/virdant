@@ -1,6 +1,8 @@
 mod OverlapIdent {
-    incoming b : Bit
-    outgoing out : Bit
+    incoming b : Bit async
+
+    outgoing out : Bit async
+
     // CHECK: Overlapping match arm: x
     out := match b {
         case true  => false
@@ -9,8 +11,10 @@ mod OverlapIdent {
 }
 
 mod OverlapDontcare {
-    incoming b : Bit
-    outgoing out : Bit
+    incoming b : Bit async
+
+    outgoing out : Bit async
+
     // CHECK: Overlapping match arm
     out := match b {
         case true  => false

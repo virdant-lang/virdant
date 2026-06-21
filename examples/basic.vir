@@ -1,7 +1,7 @@
 export mod Top {
     incoming clock : Clock
-    incoming inp : Bit
-    outgoing out : Bit
+    incoming inp : Bit on clock
+    outgoing out : Bit on clock
 
     mod foo of Foo
     foo.clock := clock
@@ -11,8 +11,8 @@ export mod Top {
 
 mod Foo {
     incoming clock : Clock
-    incoming inp : Bit
-    outgoing out : Bit
+    incoming inp : Bit on clock
+    outgoing out : Bit on clock
 
     reg r : Bit on clock
 

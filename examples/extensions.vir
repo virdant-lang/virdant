@@ -1,8 +1,8 @@
 mod Top {
     incoming clock : Clock
-    wire z : Word[8]
+    wire z : Word[8] on clock
     z := zext(0x8w4)
 
-    wire s : Word[8]
+    wire s : Word[8] on clock
     s := sext(0x8w4)
 }

@@ -28,11 +28,11 @@ enum type State {
 export mod Top {
     incoming clock : Clock
 
-    outgoing led_red : Bit
-    outgoing led_green : Bit
-    outgoing led_blue : Bit
+    outgoing led_red : Bit on clock
+    outgoing led_green : Bit on clock
+    outgoing led_blue : Bit on clock
 
-    outgoing uart_tx : Bit
+    outgoing uart_tx : Bit on clock
 
     reg counter : Word[32] on clock
     counter <= counter + 1

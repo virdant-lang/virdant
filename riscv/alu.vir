@@ -1,9 +1,13 @@
 mod Alu {
-    incoming a : Word[32]
-    incoming b : Word[32]
-    outgoing z : Word[32]
+    incoming a : Word[32] async
 
-    incoming op : Word[5]
+    incoming b : Word[32] async
+
+    outgoing z : Word[32] async
+
+
+    incoming op : Word[5] async
+
 
     z := a + b
 }

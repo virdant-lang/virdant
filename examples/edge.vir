@@ -1,7 +1,7 @@
 mod Edge {
     incoming clock : Clock
-    incoming inp   : Bit
-    outgoing out   : Bit
+    incoming inp   : Bit on clock
+    outgoing out   : Bit on clock
 
     reg last : Bit on clock
     last <= inp

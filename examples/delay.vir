@@ -2,11 +2,11 @@ import resetter
 
 mod Top {
     incoming clock : Clock
-    outgoing led_0 : Bit
-    outgoing led_1 : Bit
-    outgoing led_2 : Bit
-    outgoing led_3 : Bit
-    outgoing led_4 : Bit
+    outgoing led_0 : Bit on clock
+    outgoing led_1 : Bit on clock
+    outgoing led_2 : Bit on clock
+    outgoing led_3 : Bit on clock
+    outgoing led_4 : Bit on clock
 
     mod delay of Delay
     delay.clock := clock
@@ -42,9 +42,9 @@ union type DelayState {
 
 mod Delay {
     incoming clock : Clock
-    incoming start : Bit
-    incoming amount : Word[24]
-    outgoing end_pulse : Bit
+    incoming start : Bit on clock
+    incoming amount : Word[24] on clock
+    outgoing end_pulse : Bit on clock
 
     reg state : DelayState on clock
     state <= match state {

@@ -1,7 +1,7 @@
 mod Top {
-    incoming cond : Bit
-    wire w : Bit
-    wire u : Bit
+    incoming cond : Bit async
+    wire w : Bit async
+    wire u : Bit async
 
     when {
         case cond {

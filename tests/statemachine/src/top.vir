@@ -21,13 +21,13 @@ enum type Phase {
 
 export mod Top {
     incoming clock    : Clock
-    incoming reset    : Bit
-    incoming walk_req : Bit    // pedestrian crossing button
+    incoming reset    : Bit on clock
+    incoming walk_req : Bit on clock    // pedestrian crossing button
 
-    outgoing green       : Bit // green  vehicle light
-    outgoing yellow      : Bit // yellow vehicle light
-    outgoing red         : Bit // red    vehicle light
-    outgoing walk_signal : Bit // walk   pedestrian signal
+    outgoing green       : Bit on clock // green  vehicle light
+    outgoing yellow      : Bit on clock // yellow vehicle light
+    outgoing red         : Bit on clock // red    vehicle light
+    outgoing walk_signal : Bit on clock // walk   pedestrian signal
 
     reg phase : Phase   on clock
     reg timer : Word[8] on clock

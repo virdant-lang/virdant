@@ -3,12 +3,12 @@
 // Each empty driver block should produce a warning.
 
 mod ComponentModule {
-    incoming a : Bit {
+    incoming a : Bit async {
         b := it
     }
 
     // CHECK: Empty driver block
-    outgoing b : Bit {
+    outgoing b : Bit async {
     }
 }
 

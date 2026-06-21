@@ -1,9 +1,9 @@
 // Comment preservation
 mod Comments {
-   // This is a comment about clock
+    // This is a comment about clock
     incoming clock : Clock
-// Another comment
-  outgoing out : Bit
-   // Final comment
-   out := clock
+    // Another comment
+    outgoing out : Bit on clock
+    // Final comment
+    out := clock
 }

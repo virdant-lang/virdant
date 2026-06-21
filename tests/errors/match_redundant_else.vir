@@ -7,10 +7,12 @@ enum type Color {
 }
 
 mod RedundantElse {
-    wire c : Color
+    wire c : Color async
+
     c := #Red
 
-    wire out : Bit
+    wire out : Bit async
+
     unused out
     // CHECK: Redundant else arm
     out := match c {

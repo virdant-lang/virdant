@@ -1,11 +1,17 @@
 mod Foo {
-    incoming inp0 : Word[8]
+    incoming inp0 : Word[8] async
 
-    outgoing out0 : Word[7]
-    outgoing out1 : Word[7]
-    outgoing out2 : Bit
-    outgoing out3 : Word[7]
-    outgoing out4 : Bit
+
+    outgoing out0 : Word[7] async
+
+    outgoing out1 : Word[7] async
+
+    outgoing out2 : Bit async
+
+    outgoing out3 : Word[7] async
+
+    outgoing out4 : Bit async
+
 
     // CHECK: Wrong type: Expected Word[7] but found Word[8]
     out0 := inp0
@@ -26,8 +32,10 @@ mod Foo {
 }
 
 mod TruncWider {
-    incoming x : Word[4]
-    outgoing out : Word[8]
+    incoming x : Word[4] async
+
+    outgoing out : Word[8] async
+
 
     // CHECK: Cannot truncate Word[4] to the larger type Word[8]
 

@@ -7,10 +7,12 @@ enum type Color {
 }
 
 mod MissingEnumVariant {
-    wire c : Color
+    wire c : Color async
+
     c := #Red
 
-    wire out : Bit
+    wire out : Bit async
+
     unused out
     // CHECK: not covered: #Blue
     out := match c {

@@ -6,16 +6,16 @@ import lfsr
 mod Top {
     incoming clock      : Clock // 12MHz
 
-    outgoing uart_tx    : Bit
-    incoming uart_rx    : Bit
+    outgoing uart_tx    : Bit on clock
+    incoming uart_rx    : Bit on clock
 
-    outgoing led_0      : Bit
-    outgoing led_1      : Bit
-    outgoing led_2      : Bit
-    outgoing led_3      : Bit
-    outgoing led_4      : Bit
+    outgoing led_0      : Bit on clock
+    outgoing led_1      : Bit on clock
+    outgoing led_2      : Bit on clock
+    outgoing led_3      : Bit on clock
+    outgoing led_4      : Bit on clock
 
-    wire reset : Bit
+    wire reset : Bit on clock
 
     mod resetter of resetter::Resetter
     resetter.clock := clock
@@ -50,7 +50,7 @@ mod Top {
     led_controller.set_ccw := uart_receiver.data_valid && uart_receiver.data == 119
     led_controller.set_rate := !(rate == 0)
 
-    wire rate : Word[3]
+    wire rate : Word[3] on clock
     rate := match uart_receiver.data {
         case 49 => 1
         case 50 => 2
@@ -80,15 +80,15 @@ union type LedControllerState {
 
 mod LedController {
     incoming clock      : Clock // 12MHz
-    incoming reset      : Bit
-    outgoing leds       : Word[5]
+    incoming reset      : Bit on clock
+    outgoing leds       : Word[5] on clock
 
-    incoming set_random : Bit
-    incoming set_cw     : Bit
-    incoming set_ccw    : Bit
-    incoming set_idle   : Bit
-    incoming set_rate   : Bit
-    incoming rate       : Word[3]
+    incoming set_random : Bit on clock
+    incoming set_cw     : Bit on clock
+    incoming set_ccw    : Bit on clock
+    incoming set_idle   : Bit on clock
+    incoming set_rate   : Bit on clock
+    incoming rate       : Word[3] on clock
 
     reg counter : Word[32] on clock
     counter <= counter + 1
@@ -111,7 +111,7 @@ mod LedController {
         else => counter[17]
     }
 
-    wire change : Bit
+    wire change : Bit on clock
     change := edge_detector.out
 
     reg state : LedControllerState on clock
@@ -172,6 +172,6 @@ mod LedController {
 
 ext mod Memory {
     incoming clock : Clock
-    incoming read_addr : Word[16]
-    outgoing read_data : Word[8]
+    incoming read_addr : Word[16] on clock
+    outgoing read_data : Word[8] on clock
 }

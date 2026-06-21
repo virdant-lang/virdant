@@ -7,7 +7,7 @@ mod OutgoingRegUnused {
     incoming clock : Clock
     incoming reset : Reset
 
-    incoming inp : Bit
+    incoming inp : Bit on clock
 
     // This outgoing reg is driven but never read inside the module.
     // No "Unused signal" warning should be produced.

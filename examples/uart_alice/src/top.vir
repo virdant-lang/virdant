@@ -4,16 +4,16 @@ import spi
 export mod Top {
     incoming clock : Clock
 
-    incoming switch0 : Bit
+    incoming switch0 : Bit on clock
 
-    outgoing led_red : Bit
+    outgoing led_red : Bit on clock
 
-    outgoing spi_clk : Bit
-    outgoing spi_cs : Bit
-    outgoing spi_do : Bit
-    incoming spi_di : Bit
+    outgoing spi_clk : Bit on clock
+    outgoing spi_cs : Bit on clock
+    outgoing spi_do : Bit on clock
+    incoming spi_di : Bit on clock
 
-    outgoing uart_tx : Bit
+    outgoing uart_tx : Bit on clock
 
     reg reset_counter : Word[32] on clock
     reset_counter <=

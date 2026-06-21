@@ -1,7 +1,7 @@
 mod Top {
     incoming clock : Clock
-    incoming reset : Bit
-    outgoing out : Bit
+    incoming reset : Bit on clock
+    outgoing out : Bit on clock
 
     reg val : Bit on clock {
         it <= mux(reset, false, !it)
@@ -16,7 +16,7 @@ mod Top {
 
 ext mod LedDriver {
     incoming clock : Clock
-    incoming inp : Bit
+    incoming inp : Bit on clock
 
-    outgoing out : Bit
+    outgoing out : Bit on clock
 }

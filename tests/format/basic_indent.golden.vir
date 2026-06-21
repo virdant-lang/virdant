@@ -1,7 +1,7 @@
 // Basic 4-space indentation
 mod   Top  {
     incoming clk  : Clock
-    outgoing led  : Bit
+    outgoing led  : Bit on clk
     reg   counter : Word[32] on clk
     counter <= counter + 1
     led := counter[21]

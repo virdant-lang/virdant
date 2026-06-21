@@ -1,8 +1,10 @@
 // MatchCoverage: duplicated `case true` arm on a Bit subject.
 
 mod OverlapBit {
-    incoming b : Bit
-    outgoing out : Bit
+    incoming b : Bit async
+
+    outgoing out : Bit async
+
     // CHECK: Overlapping match arm: true
     out := match b {
         case true  => false

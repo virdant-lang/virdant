@@ -3,7 +3,8 @@
 // A top-level incoming port marked unused twice.
 mod DupUnusedTop {
     incoming clock : Clock
-    outgoing out : Bit
+    outgoing out : Bit on clock
+
 
     unused clock
     // CHECK: Redundant `unused`: clock
@@ -14,7 +15,8 @@ mod DupUnusedTop {
 
 // A submodule port marked unused twice inside an it block.
 mod DupUnusedIt {
-    outgoing sum : Bit
+    outgoing sum : Bit async
+
 
     mod ha of HalfAdder {
         it.a := false
@@ -29,7 +31,8 @@ mod DupUnusedIt {
 
 // Same path marked unused at top level then again.
 mod DupUnusedMixed {
-    outgoing sum : Bit
+    outgoing sum : Bit async
+
 
     mod ha of HalfAdder {
         it.a := false
@@ -46,7 +49,8 @@ mod DupUnusedMixed {
 // Only a single unused per path -- no redundant diagnostic.
 mod SingleUnused {
     incoming clock : Clock
-    outgoing out : Bit
+    outgoing out : Bit on clock
+
 
     unused clock
     // CHECK-NOT: Redundant `unused`
@@ -57,8 +61,10 @@ mod SingleUnused {
 // Unused on two *different* paths -- no redundant diagnostic.
 mod TwoDifferentPaths {
     incoming clock : Clock
-    incoming reset : Bit
-    outgoing out : Bit
+    incoming reset : Bit on clock
+
+    outgoing out : Bit on clock
+
 
     unused clock
     unused reset
@@ -68,10 +74,14 @@ mod TwoDifferentPaths {
 }
 
 mod HalfAdder {
-    incoming a : Bit
-    incoming b : Bit
-    outgoing sum : Bit
-    outgoing carry_out : Bit
+    incoming a : Bit async
+
+    incoming b : Bit async
+
+    outgoing sum : Bit async
+
+    outgoing carry_out : Bit async
+
 
     sum := a ^ b
     carry_out := a & b

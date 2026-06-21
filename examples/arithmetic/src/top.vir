@@ -1,8 +1,8 @@
 export mod Top {
     incoming clock : Clock
 
-    incoming inp : Word[4]
-    outgoing out : Word[4]
+    incoming inp : Word[4] on clock
+    outgoing out : Word[4] on clock
 
     reg r : Word[4] on clock
     r <= r + 1

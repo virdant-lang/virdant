@@ -10,11 +10,11 @@ union type MyUnion {
 }
 
 mod Top {
-    wire my_union : MyUnion {
+    wire my_union : MyUnion async {
         it := @Bar(#Baz)
     }
 
-    wire union_match : MyEnum {
+    wire union_match : MyEnum async {
         unused it
         it := match my_union {
             case @Foo() => #Baz
@@ -22,15 +22,15 @@ mod Top {
         }
     }
 
-    wire union_match_is_baz : Bit {
+    wire union_match_is_baz : Bit async {
         it := union_match == #Baz
         unused it
     }
 
-    wire my_enum : MyEnum
+    wire my_enum : MyEnum async
     my_enum := #Foo
     unused enum_match
-    wire enum_match : Word[8]
+    wire enum_match : Word[8] async
     enum_match :=
         match my_enum {
             case #Foo => 0
@@ -38,7 +38,7 @@ mod Top {
             case #Qux => 2
         }
 
-    wire parity : Bit
+    wire parity : Bit async
     unused parity
     parity :=
         match 2w2 {

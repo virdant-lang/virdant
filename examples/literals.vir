@@ -1,28 +1,28 @@
 mod Top {
-    wire explicit : Word[4]
+    wire explicit : Word[4] async
     explicit := 0w4
 
-    wire inferred : Word[4]
+    wire inferred : Word[4] async
     inferred := 0
 
-    wire bin : Word[4]
+    wire bin : Word[4] async
     bin := 0b1010
 
-    wire hex : Word[8]
+    wire hex : Word[8] async
     hex := 0xfe
 
-    wire explicit_bin : Word[4]
+    wire explicit_bin : Word[4] async
     explicit_bin := 0b1010w4
 
-    wire explicit_hex : Word[8]
+    wire explicit_hex : Word[8] async
     explicit_hex := 0xfew8
 
-    wire underscore : Word[32]
+    wire underscore : Word[32] async
     underscore := 100_000
 
-    wire underscore_bin : Word[7]
+    wire underscore_bin : Word[7] async
     underscore_bin := 0b00_101_11
 
-    wire underscore_hex : Word[32]
+    wire underscore_hex : Word[32] async
     underscore_hex := 0xcafe_babe
 }

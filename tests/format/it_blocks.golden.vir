@@ -1,12 +1,12 @@
 // it blocks
 mod ItBlock {
     incoming clk : Clock
-    incoming inp : Bit
+    incoming inp : Bit on clk
 
     wire sampled : Bit on clk {
         it := inp
     }
 
-    outgoing out : Bit
+    outgoing out : Bit on clk
     out := sampled
 }

@@ -2,5 +2,5 @@
 import foo
 
 export ext mod Top {
-incoming clk : Clock
+    incoming clk : Clock
 }

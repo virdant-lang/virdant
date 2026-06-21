@@ -8,7 +8,7 @@ struct type Foo {
 mod Top {
     incoming clk : Clock
 
-    wire foo : Foo
+    wire foo : Foo on clk
     foo :=
         ${
             bar = 0w3,

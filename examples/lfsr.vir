@@ -1,7 +1,7 @@
 mod Lfsr {
     incoming clock : Clock
-    incoming reset : Bit
-    outgoing out : Word[8]
+    incoming reset : Bit on clock
+    outgoing out : Word[8] on clock
 
     wire taps : Word[8]
     taps := 29w8

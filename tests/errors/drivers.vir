@@ -2,7 +2,8 @@
 
 // Driving the same outgoing port twice in the same module.
 mod TwoDrivers {
-    outgoing out : Bit
+    outgoing out : Bit async
+
     // CHECK: Multiple drivers for out
     out := true
     // CHECK: Multiple drivers for out
@@ -11,7 +12,8 @@ mod TwoDrivers {
 
 mod NoDrivers {
     // CHECK: No drivers for out
-    outgoing out : Bit
+    outgoing out : Bit async
+
 }
 
 // Socket used to test DriverForSink from both sides.
@@ -40,8 +42,10 @@ mod BadServer {
 
 // A module with exactly one driver per outgoing port — no MultipleDrivers.
 mod SingleDriver {
-    outgoing a : Bit
-    outgoing b : Bit
+    outgoing a : Bit async
+
+    outgoing b : Bit async
+
     // CHECK-NOT: Multiple drivers
     a := true
     b := false
@@ -76,13 +80,17 @@ mod DriversForInternalPorts {
 }
 
 ext mod Ext {
-    incoming inp : Bit
-    outgoing out : Bit
+    incoming inp : Bit async
+
+    outgoing out : Bit async
+
 }
 
 mod Int {
-    incoming inp : Bit
-    outgoing out : Bit
+    incoming inp : Bit async
+
+    outgoing out : Bit async
+
 
     out := inp
 }
@@ -108,8 +116,10 @@ mod MissingSocketConnect {
 
 mod TwoDriversAcrossSections {
     incoming clock : Clock
-    incoming reset : Bit
-    outgoing out  : Bit
+    incoming reset : Bit on clock
+
+    outgoing out  : Bit on clock
+
 
     when {
         case reset {

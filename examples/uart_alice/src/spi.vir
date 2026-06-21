@@ -8,18 +8,18 @@ enum type State {
 
 mod SpiFlash {
     incoming clock : Clock
-    incoming reset : Bit
+    incoming reset : Bit on clock
 
-    outgoing spi_cs : Bit
-    outgoing spi_clk : Bit
-    outgoing spi_do : Bit
-    incoming spi_di : Bit
+    outgoing spi_cs : Bit on clock
+    outgoing spi_clk : Bit on clock
+    outgoing spi_do : Bit on clock
+    incoming spi_di : Bit on clock
 
-    incoming mem_addr : Word[32]
-    incoming mem_read_enable : Bit
+    incoming mem_addr : Word[32] on clock
+    incoming mem_read_enable : Bit on clock
 
-    outgoing mem_read_data : Word[32]
-    outgoing mem_read_data_valid : Bit
+    outgoing mem_read_data : Word[32] on clock
+    outgoing mem_read_data_valid : Bit on clock
 
     reg state : State on clock
 

@@ -47,7 +47,7 @@ union type SelState {
 // The D-channel response is routed back using that latched selection.
 mod TlUlMux12 {
     incoming clock : Clock
-    incoming reset : Bit
+    incoming reset : Bit on clock
 
     server socket host  of TlUl
     client socket dev_0 of TlUl
@@ -109,7 +109,7 @@ mod TlUlMux12 {
 // The multiplexer sits between the host and the two devices.
 export mod Top {
     incoming clock : Clock
-    incoming reset : Bit
+    incoming reset : Bit on clock
 
     server socket host  of TlUl
     client socket dev_0 of TlUl

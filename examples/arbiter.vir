@@ -29,8 +29,8 @@ mod Arbiter {
     incoming req_0   : Bit   // client 0 is requesting the resource
     incoming req_1   : Bit   // client 1 is requesting the resource
 
-    outgoing grant_0 : Bit   // client 0 is granted the resource this cycle
-    outgoing grant_1 : Bit   // client 1 is granted the resource this cycle
+    outgoing grant_0 : Bit    // client 0 is granted the resource this cycle
+    outgoing grant_1 : Bit    // client 1 is granted the resource this cycle
 
     // priority is a register that tracks whose turn it is.
     // On reset, client 0 goes first.
@@ -76,12 +76,12 @@ mod Arbiter {
 // here both clients always request, so the arbiter must alternate.
 mod Client {
     incoming clock   : Clock
-    incoming reset   : Bit
+    incoming reset   : Bit on clock
 
-    outgoing req     : Bit      // always requesting
-    incoming grant   : Bit      // high for one cycle when this client wins
+    outgoing req     : Bit on clock      // always requesting
+    incoming grant   : Bit on clock      // high for one cycle when this client wins
 
-    outgoing count   : Word[8]  // total grants received so far
+    outgoing count   : Word[8] on clock  // total grants received so far
 
     // This client always wants the bus.
     req := true
@@ -105,10 +105,10 @@ mod Client {
 // count_0 and count_1 should stay equal (or differ by at most 1).
 export mod Top {
     incoming clock    : Clock
-    incoming reset    : Bit
+    incoming reset    : Bit on clock
 
-    outgoing count_0  : Word[8]  // total grants received by client 0
-    outgoing count_1  : Word[8]  // total grants received by client 1
+    outgoing count_0  : Word[8] on clock  // total grants received by client 0
+    outgoing count_1  : Word[8] on clock  // total grants received by client 1
 
     mod arb of Arbiter
     arb.clock := clock

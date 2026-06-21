@@ -3,8 +3,8 @@
 // D Flip-Flop
 mod DFlipFlop {
     incoming clock : Clock
-    incoming d : Bit
-    outgoing q : Bit
+    incoming d : Bit on clock
+    outgoing q : Bit on clock
 
     reg r : Bit on clock
     r <= d
@@ -14,9 +14,9 @@ mod DFlipFlop {
 // D Flip-Flop with Reset
 mod DFlipFlopReset {
     incoming clock : Clock
-    incoming reset : Bit
-    incoming d : Bit
-    outgoing q : Bit
+    incoming reset : Bit on clock
+    incoming d : Bit on clock
+    outgoing q : Bit on clock
 
     reg r : Bit on clock
     r <= mux(reset, false, d)
@@ -26,9 +26,9 @@ mod DFlipFlopReset {
 // D Flip-Flop with Enable
 mod DFlipFlopEnable {
     incoming clock : Clock
-    incoming enable : Bit
-    incoming d : Bit
-    outgoing q : Bit
+    incoming enable : Bit on clock
+    incoming d : Bit on clock
+    outgoing q : Bit on clock
 
     reg r : Bit on clock
     r <= mux(enable, d, r)
@@ -38,8 +38,8 @@ mod DFlipFlopEnable {
 // 4-bit Register
 mod Register4 {
     incoming clock : Clock
-    incoming d : Word[4]
-    outgoing q : Word[4]
+    incoming d : Word[4] on clock
+    outgoing q : Word[4] on clock
 
     reg r : Word[4] on clock
     r <= d
@@ -49,9 +49,9 @@ mod Register4 {
 // 4-bit Register with Reset
 mod Register4Reset {
     incoming clock : Clock
-    incoming reset : Bit
-    incoming d : Word[4]
-    outgoing q : Word[4]
+    incoming reset : Bit on clock
+    incoming d : Word[4] on clock
+    outgoing q : Word[4] on clock
 
     reg r : Word[4] on clock
     r <= mux(reset, 0, d)
@@ -61,9 +61,9 @@ mod Register4Reset {
 // 4-bit Register with Enable
 mod Register4Enable {
     incoming clock : Clock
-    incoming enable : Bit
-    incoming d : Word[4]
-    outgoing q : Word[4]
+    incoming enable : Bit on clock
+    incoming d : Word[4] on clock
+    outgoing q : Word[4] on clock
 
     reg r : Word[4] on clock
     r <= mux(enable, d, r)
@@ -73,8 +73,8 @@ mod Register4Enable {
 // Binary Counter (4-bit)
 mod Counter4 {
     incoming clock : Clock
-    incoming reset : Bit
-    outgoing count : Word[4]
+    incoming reset : Bit on clock
+    outgoing count : Word[4] on clock
 
     reg r : Word[4] on clock
     r <= mux(reset, 0, r + 1)
@@ -84,9 +84,9 @@ mod Counter4 {
 // Up/Down Counter (4-bit)
 mod UpDownCounter4 {
     incoming clock : Clock
-    incoming reset : Bit
-    incoming up : Bit
-    outgoing count : Word[4]
+    incoming reset : Bit on clock
+    incoming up : Bit on clock
+    outgoing count : Word[4] on clock
 
     reg r : Word[4] on clock
     r <= when {
@@ -100,10 +100,10 @@ mod UpDownCounter4 {
 // Loadable Counter (4-bit)
 mod LoadableCounter4 {
     incoming clock : Clock
-    incoming reset : Bit
-    incoming load : Bit
-    incoming load_value : Word[4]
-    outgoing count : Word[4]
+    incoming reset : Bit on clock
+    incoming load : Bit on clock
+    incoming load_value : Word[4] on clock
+    outgoing count : Word[4] on clock
 
     reg r : Word[4] on clock
     r <= when {
@@ -117,9 +117,9 @@ mod LoadableCounter4 {
 // Shift Register (4-bit)
 mod ShiftRegister4 {
     incoming clock : Clock
-    incoming serial_in : Bit
-    outgoing parallel_out : Word[4]
-    outgoing serial_out : Bit
+    incoming serial_in : Bit on clock
+    outgoing parallel_out : Word[4] on clock
+    outgoing serial_out : Bit on clock
 
     reg r : Word[4] on clock
     r <= word(r[3..0], serial_in)
@@ -131,8 +131,8 @@ mod ShiftRegister4 {
 // Ring Counter (4-bit)
 mod RingCounter4 {
     incoming clock : Clock
-    incoming reset : Bit
-    outgoing q : Word[4]
+    incoming reset : Bit on clock
+    outgoing q : Word[4] on clock
 
     reg r : Word[4] on clock
     r <= mux(reset, 0b0001, word(r[3..0], r[3]))
@@ -142,8 +142,8 @@ mod RingCounter4 {
 // Johnson Counter (4-bit)
 mod JohnsonCounter4 {
     incoming clock : Clock
-    incoming reset : Bit
-    outgoing q : Word[4]
+    incoming reset : Bit on clock
+    outgoing q : Word[4] on clock
 
     reg r : Word[4] on clock
     r <= mux(reset, 0, word(r[3..0], !r[3]))
@@ -153,8 +153,8 @@ mod JohnsonCounter4 {
 // Top module demonstrating sequential blocks
 export mod Top {
     incoming clock : Clock
-    incoming reset : Bit
-    outgoing count : Word[4]
+    incoming reset : Bit on clock
+    outgoing count : Word[4] on clock
 
     mod counter of Counter4
     counter.clock := clock

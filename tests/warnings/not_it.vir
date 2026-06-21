@@ -3,11 +3,15 @@
 // All cases here are warnings only, so the run ends with "Check OK".
 
 mod HalfAdder {
-    incoming a : Bit
-    incoming b : Bit
+    incoming a : Bit async
 
-    outgoing sum : Bit
-    outgoing carry_out : Bit
+    incoming b : Bit async
+
+
+    outgoing sum : Bit async
+
+    outgoing carry_out : Bit async
+
 
     sum := a ^^ b
     carry_out := a && b
@@ -16,10 +20,14 @@ mod HalfAdder {
 // Using the submodule's own name as a driver target (LHS) inside its
 // it block should warn.
 mod SubmoduleLhs {
-    incoming a : Bit
-    incoming b : Bit
-    outgoing sum : Bit
-    outgoing carry_out : Bit
+    incoming a : Bit async
+
+    incoming b : Bit async
+
+    outgoing sum : Bit async
+
+    outgoing carry_out : Bit async
+
 
     mod ha of HalfAdder {
         // CHECK: 'ha' should be written as 'it' inside of this driver block
@@ -35,7 +43,8 @@ mod SubmoduleLhs {
 // should warn.
 mod RegLhs {
     incoming clk : Clock
-    outgoing out : Word[8]
+    outgoing out : Word[8] on clk
+
 
     reg counter : Word[8] on clk {
         // CHECK: 'counter' should be written as 'it' inside of this driver block
@@ -48,7 +57,8 @@ mod RegLhs {
 // should warn.
 mod RegRhs {
     incoming clk : Clock
-    outgoing out : Word[8]
+    outgoing out : Word[8] on clk
+
 
     reg counter : Word[8] on clk {
         // CHECK: 'counter' should be written as 'it' inside of this driver block
@@ -60,7 +70,8 @@ mod RegRhs {
 // Both LHS and RHS in the same statement each produce a warning.
 mod RegBothSides {
     incoming clk : Clock
-    outgoing out : Word[8]
+    outgoing out : Word[8] on clk
+
 
     reg counter : Word[8] on clk {
         // CHECK: 'counter' should be written as 'it' inside of this driver block
@@ -73,7 +84,8 @@ mod RegBothSides {
 // Correct use of 'it' in both target and expression produces no warning.
 mod CorrectReg {
     incoming clk : Clock
-    outgoing out : Word[8]
+    outgoing out : Word[8] on clk
+
 
     reg counter : Word[8] on clk {
         // CHECK-NOT: 'counter' should be written as 'it'
@@ -84,10 +96,14 @@ mod CorrectReg {
 
 // Correct use of 'it.' in a submodule it block produces no warning.
 mod CorrectSubmodule {
-    incoming a : Bit
-    incoming b : Bit
-    outgoing sum : Bit
-    outgoing carry_out : Bit
+    incoming a : Bit async
+
+    incoming b : Bit async
+
+    outgoing sum : Bit async
+
+    outgoing carry_out : Bit async
+
 
     mod ha of HalfAdder {
         // CHECK-NOT: 'ha' should be written as 'it'
@@ -100,7 +116,7 @@ mod CorrectSubmodule {
 
 // Correct use of 'it.' in a submodule it block produces no warning.
 mod IncorrectSimpleComponentLhs {
-    outgoing out : Bit {
+    outgoing out : Bit async {
         // CHECK: 'out' should be written as 'it'
         out := true
     }
@@ -109,10 +125,14 @@ mod IncorrectSimpleComponentLhs {
 // Using a submodule's own name in an 'unused' statement inside its
 // it block should warn.
 mod UnusedStmt {
-    incoming a : Bit
-    incoming b : Bit
-    outgoing sum : Bit
-    outgoing carry_out : Bit
+    incoming a : Bit async
+
+    incoming b : Bit async
+
+    outgoing sum : Bit async
+
+    outgoing carry_out : Bit async
+
 
     mod ha of HalfAdder {
         it.a := a
@@ -126,9 +146,12 @@ mod UnusedStmt {
 
 // Correct 'unused it.foo' inside an it block should produce no warning.
 mod CorrectUnused {
-    incoming a : Bit
-    incoming b : Bit
-    outgoing sum : Bit
+    incoming a : Bit async
+
+    incoming b : Bit async
+
+    outgoing sum : Bit async
+
 
     mod ha of HalfAdder {
         it.a := a

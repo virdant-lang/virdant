@@ -13,9 +13,9 @@ enum type Opcode {
 }
 
 mod Top {
-    outgoing out : Word[7]
+    outgoing out : Word[7] async
 
-    wire n : Opcode
+    wire n : Opcode async
     n := #OP
 
     out := word(n)

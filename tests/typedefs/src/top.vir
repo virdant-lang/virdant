@@ -12,16 +12,16 @@ struct type Color {
 }
 
 export mod Top {
-    incoming opcode_bits : Word[4]
-    incoming x : Word[8]
-    incoming y : Word[8]
+    incoming opcode_bits : Word[4] async
+    incoming x : Word[8] async
+    incoming y : Word[8] async
 
-    outgoing out : Word[8]
-    outgoing red : Word[8]
+    outgoing out : Word[8] async
+    outgoing red : Word[8] async
 
-    wire color : Color
+    wire color : Color async
 
-    wire opcode : Opcode
+    wire opcode : Opcode async
     opcode := cast(opcode_bits)
 
     out := match opcode {

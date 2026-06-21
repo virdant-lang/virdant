@@ -1,7 +1,7 @@
 mod Top {
     incoming clock : Clock
-    incoming reset : Bit
-    outgoing out : Word[8]
+    incoming reset : Bit on clock
+    outgoing out : Word[8] on clock
 
     reg r : Word[8] on clock {
         it <= mux(reset, 10w8, it + 1)
@@ -16,8 +16,8 @@ mod Top {
 
 mod Buffer {
     incoming clock : Clock
-    incoming inp : Word[8]
-    outgoing out : Word[8]
+    incoming inp : Word[8] on clock
+    outgoing out : Word[8] on clock
 
     reg r : Word[8] on clock {
         it <= inp

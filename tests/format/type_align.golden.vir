@@ -1,8 +1,8 @@
 // Type annotation alignment
 mod TypeAlign {
-    incoming   aaa : Bit
-    incoming b     : Word[8]
+    incoming   aaa : Bit on cc
+    incoming b     : Word[8] on cc
     outgoing  cc   : Clock
-    wire  ddd      : Word[16]
+    wire  ddd      : Word[16] on cc
     reg  e         : Bit on clock
 }

@@ -5,29 +5,29 @@ union type Inner {
 
 mod Top {
     // Test @Valid(t) with a simple type
-    wire v1 : Valid[Bit]
+    wire v1 : Valid[Bit] async
     v1 := @Valid(true)
 
     // Test @Invalid()
-    wire v2 : Valid[Bit]
+    wire v2 : Valid[Bit] async
     v2 := @Invalid()
 
     // Test matching on @Valid(x)
-    wire got_it : Bit
+    wire got_it : Bit async
     got_it := match v1 {
         case @Valid(x) => x
         case @Invalid() => false
     }
 
     // Test @Valid(t) with a union type
-    wire inner : Inner
+    wire inner : Inner async
     inner := @Bar
 
-    wire v3 : Valid[Inner]
+    wire v3 : Valid[Inner] async
     v3 := @Valid(@Bar)
 
     // Test matching on @Valid with union payload
-    wire got_bar : Bit
+    wire got_bar : Bit async
     got_bar := match v3 {
         case @Valid(@Bar) => true
         case @Invalid() => false

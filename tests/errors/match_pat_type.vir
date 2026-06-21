@@ -26,7 +26,8 @@ mod WordPatOnEnum {
 
 mod EnumPatOnWord {
     incoming clock : Clock
-    incoming x    : Word[2]
+    incoming x    : Word[2] on clock
+
     reg r : Bit on clock
     unused r
     match x {
@@ -41,7 +42,8 @@ mod EnumPatOnWord {
 
 mod CtorPatOnWord {
     incoming clock : Clock
-    incoming x    : Word[2]
+    incoming x    : Word[2] on clock
+
     reg r : Bit on clock
     unused r
     match x {

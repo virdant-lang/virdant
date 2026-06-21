@@ -1,6 +1,6 @@
 mod Resetter {
     incoming clock : Clock
-    outgoing out : Bit
+    outgoing out : Bit on clock
 
     reg countdown : Word[32] on clock
     countdown <= mux(countdown == 0, countdown, countdown - 1)

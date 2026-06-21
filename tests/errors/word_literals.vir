@@ -3,7 +3,8 @@
 
 // A literal whose value requires more bits than the target width.
 mod Overflow4 {
-    outgoing out : Word[4]
+    outgoing out : Word[4] async
+
     // 100 requires 7 bits, but Word[4] only has 4.
     // CHECK: Value doesn't fit: 100 is a 7-bit value, but literal is type builtin::Word[4]
     out := 100
@@ -11,7 +12,8 @@ mod Overflow4 {
 
 // A literal with an explicit width that mismatches the port width.
 mod WrongExplicitWidth {
-    outgoing out : Word[8]
+    outgoing out : Word[8] async
+
     // 0w4 declares itself as Word[4]; Word[8] is expected.
     // CHECK: Wrong type: Expected Word[8] but found Word[4]
     out := 0w4
@@ -19,28 +21,32 @@ mod WrongExplicitWidth {
 
 // Both operands of + are untyped; the type-checker cannot infer a width.
 mod CantInferAdd {
-    outgoing out : Word[8]
+    outgoing out : Word[8] async
+
     // CHECK: Can't infer
     out := 0 + 0
 }
 
 // 5 fits in Word[4] (needs 3 bits) — no DoesntFit error.
 mod FitsInWidth {
-    outgoing out : Word[4]
+    outgoing out : Word[4] async
+
     // CHECK-NOT: doesn't fit
     out := 5
 }
 
 // An explicit-width literal that exactly matches — no WrongType error.
 mod ExactWidth {
-    outgoing out : Word[4]
+    outgoing out : Word[4] async
+
     // CHECK-NOT: Wrong type
     out := 5w4
 }
 
 // 255 (0xFF) fits in Word[8] — no error.
 mod MaxByte {
-    outgoing out : Word[8]
+    outgoing out : Word[8] async
+
     // CHECK-NOT: doesn't fit
     out := 0xFF
 }

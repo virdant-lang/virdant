@@ -1,0 +1,75 @@
+//! A counter-based debouncer using `sync()` for metastability protection.
+//!
+//! Mechanical switches bounce when pressed, producing many rapid
+//! transitions.  This debouncer waits for 16 consecutive stable
+//! samples before accepting a change, filtering out the bounce.
+//!
+//! The asynchronous button input is first synchronized to the clock
+//! domain with `sync()` to prevent metastability, then a state machine
+//! counts stable samples.
+
+// CHECK: Check OK
+
+//> Debouncer state machine.
+//>
+//> `Idle` - waiting for the button to change.
+//> `Count` - counting stable samples.
+enum type DebState {
+    //> Waiting for the button to change state.
+    Idle = 0b01w2
+    //> Counting consecutive stable samples.
+    Count = 0b10
+}
+
+mod Debounce {
+    incoming clock : Clock
+    incoming reset : Bit on clock
+    // Raw button input - asynchronous, may bounce.
+    incoming button : Bit async
+    // Clean debounced output, synchronized to `clock`.
+    outgoing clean : Bit on clock
+
+    // Synchronize the asynchronous button input to prevent metastability.
+    wire btn : Bit on clock {
+        it := sync(button)
+    }
+
+    // Debounce state machine.
+    reg state : DebState on clock
+    // Stability counter (counts up to 15).
+    reg count : Word[4] on clock
+    // Internal clean register (read back for comparison).
+    reg clean_reg : Bit on clock
+
+    // State machine: transition between Idle and Count.
+    state <= when {
+        case reset => #Idle
+        else match state {
+            case #Idle => when {
+                case btn != clean_reg => #Count
+                else => #Idle
+            }
+            case #Count => when {
+                case btn == clean_reg => #Idle
+                case count >= 15 => #Idle
+                else => #Count
+            }
+        }
+    }
+
+    // Counter: increments while in Count state.
+    count <= when {
+        case reset => 0
+        case state == #Count => count + 1
+        else => 0
+    }
+
+    // Output: latches the synchronized button when stable long enough.
+    clean_reg <= when {
+        case reset => false
+        case state == #Count && count >= 15 => btn
+        else => clean_reg
+    }
+
+    clean := clean_reg
+}

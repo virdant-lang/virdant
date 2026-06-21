@@ -1,0 +1,37 @@
+// Tests that signals without a clock domain annotation produce an error
+// (E0708) when their domain cannot be inferred from context.
+//
+// All signals must have an inferrable clock domain, except those of
+// type Clock.  A domain can be:
+//   - Explicitly annotated with `async` or `on <clock>`
+//   - Inferred from a driver expression
+//   - Inferred from usage in a clocked context (e.g., a when guard)
+//
+// A signal with no annotation and no inferrable domain is an error.
+
+// A module with no Clock input: all signals must be explicitly async.
+mod NoClockNoAnnotation {
+    incoming inp : Bit
+    outgoing out : Bit {
+        // CHECK: Cannot infer clock domain for 'inp'
+        // CHECK: Cannot infer clock domain for 'out'
+        it := inp
+    }
+}
+
+// A module with a Clock but an unannotated signal that has no driver
+// and is never used in a clocked context.
+mod ClockButOrphan {
+    incoming clock : Clock
+    incoming data : Bit on clock
+    outgoing result : Bit on clock
+
+    // 'orphan' has no annotation, no driver, and is never used.
+    // Its domain cannot be inferred.
+    // CHECK: Cannot infer clock domain for 'orphan'
+    wire orphan : Bit
+
+    result := data
+}
+
+// CHECK: Check failed

@@ -1,0 +1,84 @@
+//! Multi-clock domain crossing with `async()` and `sync()`.
+//!
+//! Demonstrates safe clock-domain crossing (CDC) between two
+//! independent clocks, `clk_a` and `clk_b`:
+//!
+//!   1. Data originates in the `clk_a` domain.
+//!   2. `async()` erases the clock-domain tag (type-level only).
+//!   3. `sync()` re-synchronizes the signal into the `clk_b` domain.
+//!
+//! This is the canonical single-bit CDC pattern.  Multi-bit CDC
+//! requires additional techniques (gray coding, handshakes, FIFOs)
+//! not shown here.
+
+// CHECK: Check OK
+
+// A simple pass-through register in clock domain A.
+mod DomainA {
+    incoming clk_a : Clock
+    incoming data_in : Bit on clk_a
+    outgoing data_out : Bit on clk_a
+
+    reg r : Bit on clk_a
+    r <= data_in
+    data_out := r
+}
+
+// A simple pass-through register in clock domain B.
+mod DomainB {
+    incoming clk_b : Clock
+    incoming data_in : Bit on clk_b
+    outgoing data_out : Bit on clk_b
+
+    reg r : Bit on clk_b
+    r <= data_in
+    data_out := r
+}
+
+// The crossing module: converts from domain A to domain B.
+mod Crossing {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+    // Data originates in domain A.
+    incoming data_a : Bit on clk_a
+
+    // Step 1: erase the clock-domain tag with `async()`.
+    wire async_data : Bit async {
+        it := async(data_a)
+    }
+
+    // Step 2: synchronize into domain B with `sync()`.
+    wire data_b : Bit on clk_b {
+        it := sync(async_data)
+    }
+
+    // Output is now safe to use in domain B.
+    outgoing result : Bit on clk_b
+    result := data_b
+}
+
+// Top module wiring everything together.
+export mod Top {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+    incoming input_data : Bit on clk_a
+    outgoing final_output : Bit on clk_b
+
+    // Domain A: register the input.
+    mod domain_a of DomainA
+    domain_a.clk_a := clk_a
+    domain_a.data_in := input_data
+
+    // Crossing: A -> async -> B.
+    mod crossing of Crossing
+    crossing.clk_a := clk_a
+    crossing.clk_b := clk_b
+    crossing.data_a := domain_a.data_out
+
+    // Domain B: register the crossed signal.
+    mod domain_b of DomainB
+    domain_b.clk_b := clk_b
+    domain_b.data_in := crossing.result
+
+    final_output := domain_b.data_out
+}

@@ -4,16 +4,20 @@
 
 // An incoming port that is never read in any expression.
 mod HasUnusedPort {
-    incoming unused_val : Word[8]
-    outgoing out : Bit
+    incoming unused_val : Word[8] async
+
+    outgoing out : Bit async
+
     // CHECK: Unused signal unused_val
     out := true
 }
 
 // Reading from an outgoing port — outgoing is a sink and cannot be read.
 mod ReadFromOutgoing {
-    outgoing a : Bit
-    outgoing b : Bit
+    outgoing a : Bit async
+
+    outgoing b : Bit async
+
     a := true
     // CHECK: Read from sink a
     b := a
@@ -21,22 +25,26 @@ mod ReadFromOutgoing {
 
 // Using the hole expression "?" fills the type but leaves it unimplemented.
 mod WithHole {
-    outgoing out : Word[4]
+    outgoing out : Word[4] async
+
     // CHECK: Unfilled hole: ? : Word[4]
     out := ?
 }
 
 // An incoming port that IS read should produce no Unused signal warning.
 mod UsedPort {
-    incoming data : Word[8]
-    outgoing out  : Word[8]
+    incoming data : Word[8] async
+
+    outgoing out  : Word[8] async
+
     // CHECK-NOT: Unused signal data
     out := data
 }
 
 // Driving an outgoing without reading it back produces no ReadFromSink warning.
 mod NoReadFromSink {
-    outgoing out : Bit
+    outgoing out : Bit async
+
     // CHECK-NOT: Read from sink
     out := true
 }

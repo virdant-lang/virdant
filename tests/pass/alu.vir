@@ -11,14 +11,14 @@
 //> and shift operations as directed by `AluOpcode`.
 mod Alu {
     //> First ALU operand (typically rs1, PC, or CSR data).
-    incoming a : Word[32]
+    incoming a : Word[32] async
     //> Second ALU operand (typically rs2 or immediate).
-    incoming b : Word[32]
+    incoming b : Word[32] async
     //> ALU result.
-    outgoing z : Word[32]
+    outgoing z : Word[32] async
 
     //> ALU operation selector (see `opcode::AluOpcode`).
-    incoming op : AluOpcode
+    incoming op : AluOpcode async
 
     //> Barrel shifter sub-module used for SLL, SRL, and SRA.
     mod shifter of Shifter {
@@ -32,7 +32,7 @@ mod Alu {
         }
     }
 
-    wire adder : Word[32] {
+    wire adder : Word[32] async {
         it := a + (match op {
             case #Add => b
             case #Sub => ~b + 1
@@ -80,74 +80,74 @@ enum type ShiftDirection {
 //> shift network (five stages: 1, 2, 4, 8, 16).
 mod Shifter {
     //> Shift direction (left logical, right logical, right arithmetic).
-    incoming dir : ShiftDirection
+    incoming dir : ShiftDirection async
     //> Value to shift.
-    incoming a : Word[32]
+    incoming a : Word[32] async
     //> Shift amount (0–31).
-    incoming amount : Word[5]
+    incoming amount : Word[5] async
     //> Shifted result.
-    outgoing z : Word[32]
+    outgoing z : Word[32] async
 
     // TODO; This could be written with let blocks.
 
     //> Stage 1: shift left by 1.
-    wire sll_1 : Word[32]
+    wire sll_1 : Word[32] async
     sll_1 := mux(amount[0], word(a[31..0], 0w1), a)
 
     //> Stage 2: shift left by 2.
-    wire sll_2 : Word[32]
+    wire sll_2 : Word[32] async
     sll_2 := mux(amount[1], word(sll_1[30..0], 0w2), sll_1)
 
     //> Stage 4: shift left by 4.
-    wire sll_4 : Word[32]
+    wire sll_4 : Word[32] async
     sll_4 := mux(amount[2], word(sll_2[28..0], 0w4), sll_2)
 
     //> Stage 8: shift left by 8.
-    wire sll_8 : Word[32]
+    wire sll_8 : Word[32] async
     sll_8 := mux(amount[3], word(sll_4[24..0], 0w8), sll_4)
 
     //> Stage 16: shift left by 16.
-    wire sll_16 : Word[32]
+    wire sll_16 : Word[32] async
     sll_16 := mux(amount[4], word(sll_8[16..0], 0w16), sll_8)
 
     //> Stage 1: shift right logical by 1.
-    wire srl_1 : Word[32]
+    wire srl_1 : Word[32] async
     srl_1 := mux(amount[0], zext(a[32..1]), a)
 
     //> Stage 2: shift right logical by 2.
-    wire srl_2 : Word[32]
+    wire srl_2 : Word[32] async
     srl_2 := mux(amount[1], zext(srl_1[32..2]), srl_1)
 
     //> Stage 4: shift right logical by 4.
-    wire srl_4 : Word[32]
+    wire srl_4 : Word[32] async
     srl_4 := mux(amount[2], zext(srl_2[32..4]), srl_2)
 
     //> Stage 8: shift right logical by 8.
-    wire srl_8 : Word[32]
+    wire srl_8 : Word[32] async
     srl_8 := mux(amount[3], zext(srl_4[32..8]), srl_4)
 
     //> Stage 16: shift right logical by 16.
-    wire srl_16 : Word[32]
+    wire srl_16 : Word[32] async
     srl_16 := mux(amount[4], zext(srl_8[32..16]), srl_8)
 
     //> Stage 1: shift right arithmetic by 1 (sign-extending).
-    wire sra_1 : Word[32]
+    wire sra_1 : Word[32] async
     sra_1 := mux(amount[0], sext(a[32..1]), a)
 
     //> Stage 2: shift right arithmetic by 2.
-    wire sra_2 : Word[32]
+    wire sra_2 : Word[32] async
     sra_2 := mux(amount[1], sext(sra_1[32..2]), sra_1)
 
     //> Stage 4: shift right arithmetic by 4.
-    wire sra_4 : Word[32]
+    wire sra_4 : Word[32] async
     sra_4 := mux(amount[2], sext(sra_2[32..4]), sra_2)
 
     //> Stage 8: shift right arithmetic by 8.
-    wire sra_8 : Word[32]
+    wire sra_8 : Word[32] async
     sra_8 := mux(amount[3], sext(sra_4[32..8]), sra_4)
 
     //> Stage 16: shift right arithmetic by 16.
-    wire sra_16 : Word[32]
+    wire sra_16 : Word[32] async
     sra_16 := mux(amount[4], sext(sra_8[32..16]), sra_8)
 
     // Final shifted output selected by `dir`.

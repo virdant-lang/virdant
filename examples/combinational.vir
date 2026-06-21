@@ -2,22 +2,22 @@
 
 // 2-to-1 Multiplexer
 mod Mux2to1 {
-    incoming a : Bit
-    incoming b : Bit
-    incoming sel : Bit
-    outgoing out : Bit
+    incoming a : Bit async
+    incoming b : Bit async
+    incoming sel : Bit async
+    outgoing out : Bit async
 
     out := mux(sel, b, a)
 }
 
 // 4-to-1 Multiplexer
 mod Mux4to1 {
-    incoming a : Bit
-    incoming b : Bit
-    incoming c : Bit
-    incoming d : Bit
-    incoming sel : Word[2]
-    outgoing out : Bit
+    incoming a : Bit async
+    incoming b : Bit async
+    incoming c : Bit async
+    incoming d : Bit async
+    incoming sel : Word[2] async
+    outgoing out : Bit async
 
     out := match sel {
         case 0 => a
@@ -29,9 +29,9 @@ mod Mux4to1 {
 
 // 2-to-4 Decoder
 mod Decoder2to4 {
-    incoming inp : Word[2]
-    incoming enable : Bit
-    outgoing out : Word[4]
+    incoming inp : Word[2] async
+    incoming enable : Bit async
+    outgoing out : Word[4] async
 
     out := when {
         case enable match inp {
@@ -46,9 +46,9 @@ mod Decoder2to4 {
 
 // 4-to-2 Priority Encoder
 mod PriorityEncoder4to2 {
-    incoming inp : Word[4]
-    outgoing out : Word[2]
-    outgoing valid : Bit
+    incoming inp : Word[4] async
+    outgoing out : Word[2] async
+    outgoing valid : Bit async
 
     out := when {
         case inp[3] => 3
@@ -61,10 +61,10 @@ mod PriorityEncoder4to2 {
 
 // Half Adder (1-bit)
 mod HalfAdder {
-    incoming a : Bit
-    incoming b : Bit
-    outgoing sum : Bit
-    outgoing carry : Bit
+    incoming a : Bit async
+    incoming b : Bit async
+    outgoing sum : Bit async
+    outgoing carry : Bit async
 
     sum := a ^^ b
     carry := a && b
@@ -72,15 +72,15 @@ mod HalfAdder {
 
 // Full Adder (1-bit) built from two Half Adders
 mod FullAdder {
-    incoming a : Bit
-    incoming b : Bit
-    incoming cin : Bit
-    outgoing sum : Bit
-    outgoing cout : Bit
+    incoming a : Bit async
+    incoming b : Bit async
+    incoming cin : Bit async
+    outgoing sum : Bit async
+    outgoing cout : Bit async
 
-    wire sum1 : Bit
-    wire carry1 : Bit
-    wire carry2 : Bit
+    wire sum1 : Bit async
+    wire carry1 : Bit async
+    wire carry2 : Bit async
 
     mod ha1 of HalfAdder
     ha1.a := a
@@ -99,19 +99,19 @@ mod FullAdder {
 
 // 4-bit Ripple Carry Adder
 mod RippleCarryAdder4 {
-    incoming a : Word[4]
-    incoming b : Word[4]
-    incoming cin : Bit
-    outgoing sum : Word[4]
-    outgoing cout : Bit
+    incoming a : Word[4] async
+    incoming b : Word[4] async
+    incoming cin : Bit async
+    outgoing sum : Word[4] async
+    outgoing cout : Bit async
 
-    wire c0 : Bit
-    wire c1 : Bit
-    wire c2 : Bit
-    wire s0 : Bit
-    wire s1 : Bit
-    wire s2 : Bit
-    wire s3 : Bit
+    wire c0 : Bit async
+    wire c1 : Bit async
+    wire c2 : Bit async
+    wire s0 : Bit async
+    wire s1 : Bit async
+    wire s2 : Bit async
+    wire s3 : Bit async
 
     mod fa0 of FullAdder
     fa0.a := a[0]
@@ -146,11 +146,11 @@ mod RippleCarryAdder4 {
 
 // Arithmetic Logic Unit (ALU) - Simple 4-bit
 mod ALU4 {
-    incoming a : Word[4]
-    incoming b : Word[4]
-    incoming op : Word[2]
-    outgoing result : Word[4]
-    outgoing zero : Bit
+    incoming a : Word[4] async
+    incoming b : Word[4] async
+    incoming op : Word[2] async
+    outgoing result : Word[4] async
+    outgoing zero : Bit async
 
     result := match op {
         case 0 => a & b
@@ -164,11 +164,11 @@ mod ALU4 {
 
 // Comparator (4-bit)
 mod Comparator4 {
-    incoming a : Word[4]
-    incoming b : Word[4]
-    outgoing equal : Bit
-    outgoing less_than : Bit
-    outgoing greater_than : Bit
+    incoming a : Word[4] async
+    incoming b : Word[4] async
+    outgoing equal : Bit async
+    outgoing less_than : Bit async
+    outgoing greater_than : Bit async
 
     equal := a == b
     less_than := a < b
@@ -177,9 +177,9 @@ mod Comparator4 {
 
 // Parity Generator (8-bit)
 mod ParityGenerator8 {
-    incoming data : Word[8]
-    outgoing even_parity : Bit
-    outgoing odd_parity : Bit
+    incoming data : Word[8] async
+    outgoing even_parity : Bit async
+    outgoing odd_parity : Bit async
 
     even_parity := data[0] ^^ data[1] ^^ data[2] ^^ data[3] ^^ data[4] ^^ data[5] ^^ data[6] ^^ data[7]
     odd_parity := !even_parity
@@ -187,9 +187,9 @@ mod ParityGenerator8 {
 
 // Top module demonstrating all combinational blocks
 export mod Top {
-    incoming a : Word[4]
-    incoming b : Word[4]
-    outgoing result : Word[4]
+    incoming a : Word[4] async
+    incoming b : Word[4] async
+    outgoing result : Word[4] async
 
     mod alu of ALU4
     alu.a := a

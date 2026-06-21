@@ -1,0 +1,60 @@
+//! Basic clock domain tracking with `sync()` and `async()` primitives.
+//!
+//! Demonstrates the three core clock-domain annotations:
+//!   - `async` marks a signal as asynchronous (no clock).
+//!   - `on <clock>` marks a signal as synchronized to a clock.
+//!   - `sync(x)` synchronizes an async (or differently-clocked) signal.
+//!   - `async(x)` erases clock-domain information.
+
+// CHECK: Check OK
+
+// A simple synchronizer: an async button input is double-flop
+// synchronized to the local clock, then registered with reset.
+mod SyncButton {
+    incoming clock : Clock
+    incoming reset : Bit on clock
+    // External button input - asynchronous, may change at any time.
+    incoming button : Bit async
+    // Debounced output, synchronized to `clock`.
+    outgoing clean : Bit on clock
+
+    // Synchronize the async button to the local clock domain.
+    wire btn : Bit on clock {
+        it := sync(button)
+    }
+
+    // Hold the synchronized value in a register with reset.
+    reg clean_reg : Bit on clock
+
+    clean_reg <= when {
+        case reset => false
+        else => btn
+    }
+
+    clean := clean_reg
+}
+
+// Converting a clocked signal back to async with `async()`.
+// This discards timing information so the signal can cross
+// to a module in a different clock domain.
+mod ToAsync {
+    incoming clock : Clock
+    incoming data : Bit on clock
+    outgoing async_data : Bit async
+
+    async_data := async(data)
+}
+
+// Combining both primitives: a signal is first converted to async,
+// then re-synchronized.  Useful for clock-domain crossing.
+mod Resync {
+    incoming clock : Clock
+    incoming data : Bit on clock
+    outgoing result : Bit on clock
+
+    wire intermediate : Bit async {
+        it := async(data)
+    }
+
+    result := sync(intermediate)
+}

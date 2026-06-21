@@ -4,14 +4,17 @@
 // A port whose type annotation names a type that does not exist.
 mod BadPortType {
     // CHECK: Unresolved type NoSuchType
-    incoming inp : NoSuchType
-    outgoing out : Bit
+    incoming inp : NoSuchType async
+
+    outgoing out : Bit async
+
     out := true
 }
 
 // A driver statement that names a component that does not exist in this module.
 mod BadDriverTarget {
-    outgoing out : Bit
+    outgoing out : Bit async
+
     out := true
     // CHECK: Unresolved component ghost
     ghost := true
@@ -19,7 +22,8 @@ mod BadDriverTarget {
 
 // An expression that references a name that is not a declared component.
 mod BadExprRef {
-    outgoing out : Bit
+    outgoing out : Bit async
+
     // CHECK: Unknown component doesnt_exist
     out := doesnt_exist
 }
@@ -27,9 +31,12 @@ mod BadExprRef {
 // Builtin types (Bit, Word[n], Clock) resolve fine — no UnresolvedType.
 mod GoodTypes {
     incoming clk  : Clock
-    incoming data : Word[8]
-    incoming flag : Bit
-    outgoing out  : Bit
+    incoming data : Word[8] on clk
+
+    incoming flag : Bit on clk
+
+    outgoing out  : Bit on clk
+
     // CHECK-NOT: Unresolved type
     out := flag
 }

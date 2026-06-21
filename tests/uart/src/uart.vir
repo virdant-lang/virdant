@@ -1,7 +1,7 @@
 export mod Top {
     incoming clock      : Clock // 12MHz
-    incoming reset      : Bit
-    outgoing fin        : Bit
+    incoming reset      : Bit on clock
+    outgoing fin        : Bit on clock
     fin := cycle == 150000w32
     mod sender of UartSender {
         unused it.ready
@@ -17,11 +17,11 @@ export mod Top {
 
 mod UartSender {
     incoming clock      : Clock // 12MHz
-    incoming reset      : Bit
-    incoming data       : Word[8]
-    incoming data_valid : Bit
-    outgoing ready      : Bit
-    outgoing uart_tx    : Bit
+    incoming reset      : Bit on clock
+    incoming data       : Word[8] on clock
+    incoming data_valid : Bit on clock
+    outgoing ready      : Bit on clock
+    outgoing uart_tx    : Bit on clock
 
     reg uart_tx_reg : Bit on clock
     uart_tx := uart_tx_reg

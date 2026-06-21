@@ -1,8 +1,10 @@
 // MatchCoverage: two `else` arms in the same match.
 
 mod MultipleElse {
-    incoming x : Word[8]
-    outgoing out : Bit
+    incoming x : Word[8] async
+
+    outgoing out : Bit async
+
     // CHECK: Multiple else arms in match
     out := match x {
         case 0 => true

@@ -3,13 +3,15 @@
 // Two modules with the same name in the same file = DuplicateItem.
 // Only the second (re-)declaration is flagged.
 mod Alpha {
-    outgoing out : Bit
+    outgoing out : Bit async
+
     out := true
 }
 
 // CHECK: Duplicate Item
 mod Alpha {
-    outgoing out : Bit
+    outgoing out : Bit async
+
     out := false
 }
 
@@ -24,7 +26,8 @@ enum type Color {
 // A module with a unique name — no DuplicateItem.
 // CHECK-NOT: Duplicate Item
 mod Beta {
-    outgoing out : Bit
+    outgoing out : Bit async
+
     out := true
 }
 

@@ -4,20 +4,20 @@
 //
 // Test 1: submodule port reference in a when guard inside a match arm
 mod SubMod {
-    outgoing flag : Bit {
+    outgoing flag : Bit async {
         it := true
     }
 }
 
 mod TestSubmoduleWhen {
     incoming clock : Clock
-    incoming sel : Word[2]
+    incoming sel : Word[2] on clock
 
     mod sub of SubMod {
         unused it.flag
     }
 
-    outgoing r_out : Word[2]
+    outgoing r_out : Word[2] on clock
     reg r : Word[2] on clock {
         match sel {
             case 0w2 {
@@ -39,8 +39,8 @@ mod TestSubmoduleWhen {
 // Test 2: direct signal reference in a when guard inside a match arm
 mod TestMatchWhen {
     incoming clock : Clock
-    incoming stage : Word[2]
-    incoming flag : Bit
+    incoming stage : Word[2] on clock
+    incoming flag : Bit on clock
 
     reg r : Word[2] on clock {
         match stage {

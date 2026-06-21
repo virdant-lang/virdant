@@ -1,14 +1,14 @@
 mod Rf {
     incoming clock : Clock
-    incoming rs1 : Word[5]
-    incoming rs2 : Word[5]
-    incoming rd  : Word[5]
+    incoming rs1 : Word[5] on clock
+    incoming rs2 : Word[5] on clock
+    incoming rd  : Word[5] on clock
 
-    incoming write_enable : Word[1]
-    incoming write_data   : Word[32]
+    incoming write_enable : Word[1] on clock
+    incoming write_data   : Word[32] on clock
 
-    outgoing rs1_val : Word[32]
-    outgoing rs2_val : Word[32]
+    outgoing rs1_val : Word[32] on clock
+    outgoing rs2_val : Word[32] on clock
 
     reg x1 : Word[32] on clock
     reg x2 : Word[32] on clock

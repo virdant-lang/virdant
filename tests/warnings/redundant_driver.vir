@@ -4,7 +4,8 @@
 // Same explicit path.
 mod SameExplicitPath {
     incoming clock : Clock
-    outgoing out : Word[8]
+    outgoing out : Word[8] on clock
+
 
     reg r : Word[8] on clock
     // CHECK: Redundant driver: r
@@ -16,7 +17,8 @@ mod SameExplicitPath {
 // Both sides use `it` inside an it block.
 mod BothUseIt {
     incoming clock : Clock
-    outgoing out : Word[8]
+    outgoing out : Word[8] on clock
+
 
     reg r : Word[8] on clock {
         // CHECK: Redundant driver: r

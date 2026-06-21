@@ -5,9 +5,9 @@ enum type State {
 
 export mod Top {
     incoming clock : Clock
-    incoming reset : Bit
+    incoming reset : Bit on clock
 
-    outgoing out : Bit
+    outgoing out : Bit on clock
 
     reg state : State on clock
     when {
