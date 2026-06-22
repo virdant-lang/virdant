@@ -151,7 +151,67 @@ Virdant provides the usual operators:
 
 - `Bit`: `!` (not), `&&` (and), `||` (or), `^^` (xor)
 - `Word[n]`: `&` (and), `|` (or), `^` (xor), `+`, `-`, `==`, `!=`,
-  `<`, `>`, `<=`, `>=`, `<<`
+  `<`, `>`, `<=`, `>=`
 - `any(x)` — true if any bit in `x` is set.
   Equivalent to `x != 0`.
 - `word(...)` — concatenation (see above).
+
+## Bit shifting
+
+Virdant does **not** have `<<` or `>>` operators.
+Bit shifting must be done with `word()` and bit slicing.
+
+### Shift left by `n` bits (multiply by 2^n)
+
+Drop the top `n` bits and append `n` zero bits at the bottom.
+
+```virdant
+// x is Word[8], shift left by 3 into Word[8]
+result := word(x[8..3], 0w3)
+```
+
+The slice `x[8..3]` keeps the top 5 bits of the original word and discards
+bits 2..0.
+Then `0w3` pads the result with 3 zero bits at the bottom (the LSB side).
+
+### Shift right by `n` bits (divide by 2^n)
+
+Drop the bottom `n` bits and prepend `n` zero bits at the top.
+
+```virdant
+// x is Word[8], shift right by 2 into Word[8]
+result := word(0w2, x[8..2])
+```
+
+The slice `x[8..2]` keeps the top 6 bits (discarding bits 1..0).
+`0w2` pads the result with 2 zero bits at the top (the MSB side).
+
+### Variable-distance shifts
+
+Variable-distance shifts require a `when` or `match` expression:
+
+```virdant
+// x is Word[8], shift left by a variable amount (0..3)
+reg result : Word[8] on clock {
+    it <= match shift_amount {
+        case 0 => x
+        case 1 => word(x[8..1], 0w1)
+        case 2 => word(x[8..2], 0w2)
+        case 3 => word(x[8..3], 0w3)
+    }
+}
+```
+
+### Signed / arithmetic right shift
+
+For an arithmetic (sign-extending) right shift, replicate the MSB
+instead of zero-padding:
+
+```virdant
+// Arithmetic right shift of x (Word[8]) by 2
+result := word(x[7], x[7], x[8..2])
+```
+
+The term `x[7]` is the MSB of `x` (a `Bit`).
+Repeating it twice prepends two copies of the sign bit,
+which is the same as sign-extending 6 bits to 8.
