@@ -216,7 +216,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     .map(|pkg| PackageFqn::new(bstr::BString::from(parsing.string(pkg).to_vec())))
                     .unwrap_or_else(|| location.package());
                 let submodule_name = parsing.string(ofness.name);
-                let submodule_symbol = match symboltable.resolve_item_in_package(submodule_name, submodule_package) {
+                let submodule_symbol = match symboltable.resolve_item(submodule_name, submodule_package) {
                     Some(symbol) => symbol.clone(),
                     None => {
                         component_analysis.diagnostics.push(
@@ -284,7 +284,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 .map(|pkg| PackageFqn::new(bstr::BString::from(submodule_parsing.string(pkg).to_vec())))
                                 .unwrap_or_else(|| submodule_location.package());
                             let socket_name = submodule_parsing.string(socket_ofness.name);
-                            let socket_symbol = match symboltable.resolve_item_in_package(socket_name, socket_package) {
+                            let socket_symbol = match symboltable.resolve_item(socket_name, socket_package) {
                                 Some(symbol) => symbol.clone(),
                                 None => continue,
                             };
@@ -354,7 +354,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     .map(|pkg| PackageFqn::new(bstr::BString::from(parsing.string(pkg).to_vec())))
                     .unwrap_or_else(|| location.package());
                 let socket_name = parsing.string(ofness.name);
-                let socket_symbol = match symboltable.resolve_item_in_package(socket_name, socket_package) {
+                let socket_symbol = match symboltable.resolve_item(socket_name, socket_package) {
                     Some(symbol) => symbol.clone(),
                     None => continue,
                 };

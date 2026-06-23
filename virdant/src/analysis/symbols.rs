@@ -287,7 +287,7 @@ fn build_symboltable_item(
     let fqn: BString = format!("{}::{}", package, item_name.clone()).into();
     let kind = node_to_symbol_kind(&node);
 
-    if kind == SymbolKind::BuiltinDef {
+    if package == PackageFqn::new("builtin".into()) {
         builtin_names.push(item_name.to_owned());
     }
 

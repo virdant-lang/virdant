@@ -1,0 +1,17 @@
+export mod Top {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    incoming inp_async : Bit
+    outgoing out_sync : Bit
+
+    outgoing reg cycle_count : Word[8] on clock {
+        it <= mux(reset, 0w8, it + 1)
+    }
+
+    mod sync of Sync {
+        it.clock := clock
+        it.inp := inp_async
+        out_sync := it.out
+    }
+}

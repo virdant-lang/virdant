@@ -1,5 +1,35 @@
+//> `Bit` is a 1-bit value
 builtin type Bit {}
+
+//> `Word[n]` is an n-bit value
 builtin type Word[n : Nat] {}
+
+//> `Clock` is a 1-bit value which represents a system clock
 builtin type Clock {}
+
+//> `Reset` is a 1-bit value which represents a system reset
 builtin type Reset {}
+
+//> `Valid[T]` represents a value which can either be:
+//> * `@Invalid(), or
+//> * `@Valid(t)` for `t` of type `T`
 builtin type Valid[T : Type] {}
+
+//> `Sync` synchronizes a `Bit` input on one clock domain
+//> on another clock domain `clock`
+mod Sync {
+    //> An input `Bit` on another clock domain
+    incoming inp : Bit
+
+    //> The clock of the output
+    incoming clock: Clock
+
+    reg meta : Bit on clock {
+        it <= inp
+    }
+
+    //> The clock of the output
+    outgoing reg out: Bit  on clock {
+        it <= meta
+    }
+}

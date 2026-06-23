@@ -5,6 +5,7 @@ use bstr::ByteSlice;
 
 use crate::analysis::drivers::{Driver, DriverWhen, DriverMatch};
 use crate::analysis::location::Location;
+use crate::analysis::symbols::SymbolTable;
 use crate::common::{self, ComponentKind, DriverType, Radix, TypeScheme, Width, WordValue};
 use crate::db::Db;
 use crate::diagnostics::DiagnosticLevel;
@@ -266,7 +267,7 @@ impl<'d> Converter<'d> {
                 }
                 AstNodePayload::Submodule(module) => {
                     let raw_name = parsing.string(module.name).to_str_lossy().into_owned();
-                    let mod_path = render_ofness_path(stmt.child(0), package);
+                    let mod_path = render_ofness_path(stmt.child(0), package, &symboltable);
                     let ports_info = self.module_ports.get(&mod_path).cloned().unwrap_or_default();
                     let sub_name = self.emitted_module_names.get(&mod_path)
                         .cloned()
@@ -1936,15 +1937,24 @@ fn type_width(typ: &Type, db: &Db) -> Width {
     }
 }
 
-fn render_ofness_path(ofness_node: AstNode, package: &PackageFqn) -> String {
+fn render_ofness_path(ofness_node: AstNode, package: &PackageFqn, symboltable: &SymbolTable) -> String {
     let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
         panic!("expected Ofness node");
     };
-    let module_package = ofness
-        .package
-        .map(|pkg| ofness_node.parsing.string(pkg).to_str_lossy().into_owned())
-        .unwrap_or_else(|| package.to_string());
     let module_name = ofness_node.parsing.string(ofness.name).to_str_lossy();
+    let module_package = match ofness.package {
+        Some(pkg) => ofness_node.parsing.string(pkg).to_str_lossy().into_owned(),
+        None => {
+            // Resolve unqualified names through the symbol table, so that
+            // builtin items (e.g. Sync in the "builtin" package) are found
+            // even when no package prefix is written.
+            if symboltable.builtin_names.contains(module_name.as_bytes()) {
+                "builtin".to_string()
+            } else {
+                package.to_string()
+            }
+        }
+    };
     format!("{module_package}::{module_name}")
 }
 

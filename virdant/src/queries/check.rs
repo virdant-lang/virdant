@@ -198,7 +198,7 @@ fn check_mod_cycles(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
                 .unwrap_or_else(|| location.package());
             let target_name = parsing.string(ofness.name);
             let Some(target_symbol) =
-                symboltable.resolve_item_in_package(target_name, target_package)
+                symboltable.resolve_item(target_name, target_package)
             else {
                 continue;
             };
