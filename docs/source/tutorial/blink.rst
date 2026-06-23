@@ -76,8 +76,8 @@ Here are two ordinary comments from inside the `Strobe` module:
     :lines: 24-25
     :dedent:
 
-Match and When Block Chaining
------------------------------
+Match and When Chaining
+-----------------------
 The actual code for this package is very simple, I think.
 Hopefully you feel this way too.
 
@@ -201,8 +201,8 @@ And because `led` is a `reg`, it holds its value,
 which is the last thing we'll look at in this chapter.
 
 
-Registers Holding their Value
------------------------------
+Registers Hold their Value
+--------------------------
 Let's zoom in closely on the `when` statement for `led`:
 
 .. literalinclude:: /examples/blink.vir
