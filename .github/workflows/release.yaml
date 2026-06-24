@@ -1,9 +1,9 @@
 name: Release
 
 # Triggered by pushing a tag named like v0.3.0.
-# Produces the toolchain archives for various host targets,
-# generates .sha256 sidecars, and attaches them all to a GitHub
-# release whose tag matches the download URLs virn expects.
+# Produces the toolchain archive for the x86_64 Linux target,
+# generates a .sha256 sidecar, and attaches it to a GitHub
+# release whose tag matches the download URLs.
 
 on:
   push:
@@ -14,8 +14,6 @@ permissions:
   contents: write   # needed by `gh release create`
 
 jobs:
-  # Build the two Linux targets on an Ubuntu runner.
-  # aarch64 is cross-compiled via `cross`, which needs Docker.
   linux:
     runs-on: ubuntu-latest
     steps:
@@ -26,10 +24,7 @@ jobs:
           rustup update
           rustup toolchain install 1.88.0
           rustup default 1.88.0
-          rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
-
-      - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+          rustup target add x86_64-unknown-linux-gnu
 
       - name: Set version
         id: ver
@@ -47,38 +42,9 @@ jobs:
           path: release-assets/
           if-no-files-found: error
 
-  # Build the two macOS targets on a macOS runner.
-  macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        run: |
-          rustup update
-          rustup toolchain install 1.88.0
-          rustup default 1.88.0
-          rustup target add x86_64-apple-darwin aarch64-apple-darwin
-
-      - name: Set version
-        id: ver
-        run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-
-      - name: Build artifacts
-        env:
-          VER: ${{ steps.ver.outputs.version }}
-        run: .github/workflows/build-release.sh "$VER" macos
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-macos
-          path: release-assets/
-          if-no-files-found: error
-
   # Collect everything and publish the release.
   publish:
-    needs: [linux, macos]
+    needs: [linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -107,15 +73,3 @@ jobs:
             --verify-tag \
             release-assets/*.tar.gz \
             release-assets/*.tar.gz.sha256
-
-      - name: Publish version-substituted install.sh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VER: ${{ steps.ver.outputs.version }}
-        run: |
-          # Bake the concrete version into the placeholder, then attach
-          # the result as a release asset named install.sh so it has a
-          # stable per-release URL.
-          sed "s/^VERSION=\"<latest>\"$/VERSION=\"$VER\"/" \
-            virn/install.sh > install.sh
-          gh release upload "$VER" install.sh --clobber
