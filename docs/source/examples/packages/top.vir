@@ -14,9 +14,8 @@ mod Top {
     wire counter_is_zero : Bit
     counter_is_zero := counter == 0
 
-    out := if counter_is_zero {
-        0
-    } else {
-        buffer.out
+    out := when {
+        case counter_is_zero => 0
+        else => buffer.out
     }
 }
