@@ -101,7 +101,7 @@ When writing driver statements, if the expression on the right-hand side is shor
 
 .. code-block:: virdant
 
-   out := is_valid->and(counter[3])
+   out := is_valid && counter[3]
 
 If an expression is longer, especially if it contains an `if` or `match` expression, it may be written in one of two ways.
 
@@ -112,7 +112,7 @@ The first is to write it inline, as if the driver is part of the expression:
   counter <= if reset {
       0
   } else {
-      counter->inc()
+      counter + 1
   }
 
 
@@ -124,7 +124,7 @@ Or if it makes it clearer, with a newline and an extra layer of indentation:
       if reset {
           0
       } else {
-          counter->inc()
+          counter + 1
       }
 
 The expression for each arm of a match expression follows a similar rule:
