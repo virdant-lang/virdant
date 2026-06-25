@@ -1,9 +1,0 @@
-mod Resetter {
-    incoming clock : Clock
-    outgoing out : Bit
-
-    reg countdown : Word[32] on clock
-    countdown <= mux(countdown == 0, countdown, countdown - 1)
-
-    out := countdown == 1
-}

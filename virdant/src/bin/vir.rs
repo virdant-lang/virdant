@@ -681,7 +681,7 @@ fn new_project(args: &Args, project: &str) {
     );
     std::fs::write(project_dir.join("Virdant.toml"), toml_content).unwrap();
 
-    let top_vir_content = include_str!("../../../examples/blink.vir");
+    let top_vir_content = include_str!("../../../assets/blink.vir");
     std::fs::write(project_dir.join("src").join("top.vir"), top_vir_content).unwrap();
 
     // Walk up from cwd looking for an existing .git directory

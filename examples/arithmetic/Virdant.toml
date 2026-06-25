@@ -1,5 +1,0 @@
-[project]
-name = "arithmetic"
-
-[prog]
-platform = "icesugar"

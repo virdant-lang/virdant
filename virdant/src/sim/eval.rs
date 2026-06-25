@@ -592,18 +592,3 @@ impl Expr {
         }
     }
 }
-
-#[test]
-fn test_eval() {
-    use bstr::BStr;
-    let db = crate::util::db_from_dir_with_lib("../examples/passthrough/src", "../lib");
-    crate::util::check_db(&db).unwrap();
-    let symboltable = db.get_symboltable();
-    let top = symboltable.resolve(b"passthrough::Passthrough".into()).unwrap();
-    let elab = db.get_elaboration(top.id());
-    dbg!(&elab);
-    let inp = elab.resolve(BStr::new(b"top.out")).unwrap();
-    dbg!(&inp);
-    let expr = crate::sim::expr::driver_to_expr(&db, inp.driver().unwrap());
-    dbg!(&expr);
-}
