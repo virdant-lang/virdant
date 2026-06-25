@@ -4,7 +4,7 @@ VIR       ?= $(CURDIR)/target/release/vir
 FILECHECK ?= $(CURDIR)/target/release/filecheck
 
 build: virdant/target/lib
-	cargo build --release --features "vir-bin,filecheck-bin,vir-lsp-bin,lua,rhai"
+	cargo build --release --features "vir-bin,filecheck-bin,vir-lsp-bin,lua"
 
 # Cargo's build script places generated artifacts in OUT_DIR, which has the
 # concrete form: target/<profile>/build/<crate>-<hash>/out/foo.grammar
@@ -18,7 +18,7 @@ virdant/target/lib:
 	cp -r ./lib/* target/lib/
 
 build-wasm:
-	cargo build -p virdant --lib --target wasm32-unknown-unknown --no-default-features --features "wasm,rhai"
+	cargo build -p virdant --lib --target wasm32-unknown-unknown --no-default-features --features "wasm"
 
 test: virdant/target/lib build
 	cargo test

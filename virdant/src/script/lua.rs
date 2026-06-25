@@ -3,7 +3,7 @@
 //! Provides a Lua engine with bindings to open Virdant projects/files,
 //! create simulators, and control simulations via coroutines.
 //!
-//! The key difference from Rhai is that Lua uses coroutines for suspension.
+//! Uses coroutines for suspension.
 //! `sim.wait(clock)` yields the coroutine until the next rising edge of the clock.
 //!
 //! # Example
