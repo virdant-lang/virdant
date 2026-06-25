@@ -1,0 +1,33 @@
+export mod Top {
+    incoming clock : Clock
+    incoming reset : Bit
+    outgoing addr : Word[8]
+    outgoing data : Word[8]
+    outgoing done : Bit
+
+    reg counter : Word[8] on clock {
+        when {
+            case reset {
+                it <= 0
+            }
+            else {
+                it <= it + 1
+            }
+        }
+    }
+
+    addr := counter
+    done := counter == 255
+
+    mod rom of Rom {
+        it.clock := clock
+        it.addr := counter
+        data := it.data
+    }
+}
+
+ext mod Rom {
+    incoming clock : Clock
+    incoming addr : Word[8]
+    outgoing data : Word[8]
+}

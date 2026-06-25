@@ -1,0 +1,25 @@
+export mod Top {
+    incoming clock : Clock
+    incoming reset : Reset
+    outgoing fin : Bit
+
+    unused clock
+    unused reset
+
+    fin := false
+
+    wire bit_x : Bit {
+        it := dontcare
+        unused it
+    }
+
+    wire word_x : Word[8] {
+        it := dontcare
+        unused it
+    }
+
+    wire word32_x : Word[32] {
+        it := dontcare
+        unused it
+    }
+}

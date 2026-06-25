@@ -1,0 +1,5 @@
+[project]
+name = "extmod"
+
+[prog]
+platform = "icesugar"

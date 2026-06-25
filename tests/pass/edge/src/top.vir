@@ -1,0 +1,14 @@
+export mod Top {
+    incoming clock : Clock
+    incoming reset : Reset
+    incoming inp   : Bit
+    outgoing out   : Bit
+
+    unused reset
+
+    reg last : Bit on clock {
+        it <= inp
+    }
+
+    out := !last && inp
+}

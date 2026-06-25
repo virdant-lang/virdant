@@ -1,0 +1,5 @@
+[project]
+name = "dontcare"
+
+[prog]
+platform = "icesugar"

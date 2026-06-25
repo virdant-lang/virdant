@@ -1,0 +1,55 @@
+export mod Top {
+    incoming clock : Clock
+    incoming reset : Reset
+    outgoing fin : Bit
+
+    unused clock
+    unused reset
+
+    fin := false
+
+    wire explicit : Word[4] {
+        it := 0w4
+        unused it
+    }
+
+    wire inferred : Word[4] {
+        it := 0
+        unused it
+    }
+
+    wire bin : Word[4] {
+        it := 0b1010
+        unused it
+    }
+
+    wire hex : Word[8] {
+        it := 0xfe
+        unused it
+    }
+
+    wire explicit_bin : Word[4] {
+        it := 0b1010w4
+        unused it
+    }
+
+    wire explicit_hex : Word[8] {
+        it := 0xfew8
+        unused it
+    }
+
+    wire underscore : Word[32] {
+        it := 100_000
+        unused it
+    }
+
+    wire underscore_bin : Word[7] {
+        it := 0b00_101_11
+        unused it
+    }
+
+    wire underscore_hex : Word[32] {
+        it := 0xcafe_babe
+        unused it
+    }
+}

@@ -1,0 +1,23 @@
+export mod Top {
+    incoming clock : Clock
+    incoming reset : Bit
+    outgoing out : Word[8]
+
+    wire taps : Word[8] {
+        it := 29w8
+    }
+
+    reg r : Word[8] on clock {
+        it <= mux(reset, 255w8, word(it[7..0], 0w1) ^ mux(feedback, taps, 0w8))
+    }
+
+    out := r
+
+    wire feedback : Bit {
+        it := r[7]
+    }
+
+    reg s : Word[4] on clock {
+        it <= mux(reset, 1, word(it[3..0], it[3]))
+    }
+}
