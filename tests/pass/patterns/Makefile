@@ -1,4 +1,4 @@
-BASEDIR = $(abspath ../..)
+BASEDIR = $(abspath ../../../..)
 VIR ?= $(BASEDIR)/target/release/vir
 
 SRC := src/patterns.vir
