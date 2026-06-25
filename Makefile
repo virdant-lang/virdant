@@ -4,7 +4,7 @@ VIR       ?= $(CURDIR)/target/release/vir
 FILECHECK ?= $(CURDIR)/target/release/filecheck
 
 build: virdant/target/lib
-	cargo build --release --features "vir-bin,filecheck-bin,vir-lsp-bin,lua"
+	cargo build --release --features "vir-bin,filecheck-bin,vir-lsp-bin"
 
 # Cargo's build script places generated artifacts in OUT_DIR, which has the
 # concrete form: target/<profile>/build/<crate>-<hash>/out/foo.grammar

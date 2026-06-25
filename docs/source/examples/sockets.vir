@@ -8,12 +8,14 @@ mod Core {
     // mem.addr := ...
 
     mem.addr := 0
+    unused mem.data
 }
 
 mod Memory {
     server socket mem of Mem
     // mem.data := ...
     mem.data := 0
+    unused mem.addr
 }
 
 mod Top {

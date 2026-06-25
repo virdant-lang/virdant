@@ -10,7 +10,6 @@ BUILDDIR      = build
 BASEDIR       = $(abspath ..)
 VIR          ?= $(BASEDIR)/target/release/vir
 EXAMPLES      = $(wildcard source/examples/*.vir)
-TESTS         = $(wildcard source/examples/*.lua)
 
 auto: Makefile $(EXAMPLES) # rustdocs
 	retry=0; until $(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O); do \
@@ -42,7 +41,7 @@ rustdocs:
 	cargo doc --manifest-path ../virdant/Cargo.toml
 	cp -r ../virdant/target/doc/ $(BUILDDIR)/html/.
 
-test: $(EXAMPLES) $(TESTS)
+test: $(EXAMPLES)
 	for example in $(EXAMPLES); do \
 	  if [ "$$(basename $$example)" = "blink.vir" ]; then \
 	    $(VIR) -F $$example,$$(dirname $$example)/strobe.vir check  || exit 1; \
@@ -50,9 +49,3 @@ test: $(EXAMPLES) $(TESTS)
 	    $(VIR) -F $$example check  || exit 1; \
 	  fi; \
 done
-	for script in $(TESTS); do \
-		echo "--------------------------------------------------------------------------------"; \
-		echo "TEST: docs/$$script"; \
-		echo "--------------------------------------------------------------------------------"; \
-		$(VIR) run $$script || exit 1; \
-	done
