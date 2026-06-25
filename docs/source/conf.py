@@ -71,8 +71,8 @@ lexers['grammar'] = grammar_ext.GrammarLexer()
 # Set the default lexer for your language
 primary_domain = 'virdant'
 highlight_language = 'virdant'
-html_favicon = '_static/virdant-logo-white-transparent.svg'
-html_logo = '_static/virdant-logo-white-transparent.svg'
+html_favicon = '_static/virdant-logo-white-round.svg'
+html_logo = '_static/virdant-logo-white-round.svg'
 
 # Open Graph configuration
 ogp_site_url = "https://virdant.org"
