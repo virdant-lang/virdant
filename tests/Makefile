@@ -1,3 +1,6 @@
+VIR       ?= $(abspath ..)/target/release/vir
+FILECHECK ?= $(abspath ..)/target/release/filecheck
+
 SUBDIRS := $(wildcard */)
 
 test:
