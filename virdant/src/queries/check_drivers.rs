@@ -187,10 +187,10 @@ fn get_all_driver_locations(
                 }
                 AstNodePayload::Submodule(_) => {
                     let sub_children = child.children();
-                    // If the submodule has an ItBlock (child index 1),
+                    // If the submodule has an ItBlock (child index 2),
                     // recurse into its children.
-                    if sub_children.len() > 1 {
-                        stack.push(sub_children[1].id());
+                    if sub_children.len() > 2 {
+                        stack.push(sub_children[2].id());
                     }
                 }
                 AstNodePayload::ModDefStmtBlock

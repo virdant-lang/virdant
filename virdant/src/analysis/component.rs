@@ -207,7 +207,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
             }
             AstNodePayload::Submodule(module) => {
                 let instance_name = parsing.string(module.name);
-                let ofness_node = stmt.child(0);
+                let ofness_node = stmt.child(1);
                 let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
                     continue;
                 };
@@ -275,7 +275,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         AstNodePayload::Socket(submodule_socket) => {
                             // Handle sockets in submodules - treat each channel as a component
                             let socket_instance_name = submodule_parsing.string(submodule_socket.name);
-                            let socket_ofness_node = submodule_stmt.child(0);
+                            let socket_ofness_node = submodule_stmt.child(1);
                             let AstNodePayload::Ofness(socket_ofness) = socket_ofness_node.payload() else {
                                 continue;
                             };
@@ -345,7 +345,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
             }
             AstNodePayload::Socket(socket) => {
                 let instance_name = parsing.string(socket.name);
-                let ofness_node = stmt.child(0);
+                let ofness_node = stmt.child(1);
                 let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
                     continue;
                 };
@@ -595,8 +595,8 @@ fn collect_references(
             AstNodePayload::Submodule(submodule) => {
                 let name = stmt.parsing.string(submodule.name);
                 let children = stmt.children();
-                if children.len() == 2 {
-                    let it_block = &children[1];
+                if children.len() == 3 {
+                    let it_block = &children[2];
                     if matches!(it_block.payload(), AstNodePayload::It) {
                         let block = &it_block.children()[0];
                         let name_with_context =

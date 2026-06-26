@@ -246,7 +246,7 @@ fn elaborate_module(
             }
             AstNodePayload::Submodule(module) => {
                 let instance_name = parsing.string(module.name).to_str_lossy().into_owned();
-                let ofness_node = stmt.child(0);
+                let ofness_node = stmt.child(1);
                 let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
                     continue;
                 };
@@ -279,7 +279,7 @@ fn elaborate_module(
             }
             AstNodePayload::Socket(socket) => {
                 let instance_name = parsing.string(socket.name);
-                let ofness_node = stmt.child(0);
+                let ofness_node = stmt.child(1);
                 let AstNodePayload::Ofness(ofness) = ofness_node.payload()
                 else {
                     continue;

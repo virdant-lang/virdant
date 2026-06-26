@@ -26,6 +26,9 @@ pub enum AstNodePayload {
     ModDefStmtUnused,
     Socket(Socket),
 
+    Annotations(AnnotationsPayload),
+    Annotation(AnnotationPayload),
+
     Field(Field),
     Ctor(Ctor),
     Enumerant(Enumerant),
@@ -99,6 +102,8 @@ impl AstNodePayload {
             AstNodePayload::ModDefStmtMatch => "ModDefStmtMatch",
             AstNodePayload::ModDefStmtUnused => "ModDefStmtUnused",
             AstNodePayload::Socket(_socket) => "Socket",
+            AstNodePayload::Annotations(_) => "Annotations",
+            AstNodePayload::Annotation(_) => "Annotation",
             AstNodePayload::Field(_field) => "Field",
             AstNodePayload::Ctor(_ctor) => "Ctor",
             AstNodePayload::Enumerant(_enumerant) => "Enumerant",
@@ -149,6 +154,16 @@ impl AstNodePayload {
 #[derive(Clone, Debug)]
 pub struct PackagePayload {
     pub doc_string: Option<InternedString>,
+}
+
+#[derive(Clone, Debug)]
+pub struct AnnotationsPayload;
+
+#[derive(Clone, Debug)]
+pub struct AnnotationPayload {
+    pub name: InternedString,
+    pub str_value: Option<InternedString>,
+    pub nat_value: Option<u64>,
 }
 
 #[derive(Clone, Debug)]

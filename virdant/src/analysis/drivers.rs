@@ -363,8 +363,8 @@ fn collect_block_drivers(
             AstNodePayload::Submodule(submodule) => {
                 let name = stmt.parsing.string(submodule.name);
                 let children = stmt.children();
-                if children.len() == 2 {
-                    let it_block = &children[1];
+                if children.len() == 3 {
+                    let it_block = &children[2];
                     if matches!(it_block.payload(), AstNodePayload::It) {
                         let block = &it_block.children()[0];
 

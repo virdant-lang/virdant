@@ -1,0 +1,61 @@
+//> Test that annotations can be parsed on various items and slots
+
+// CHECK: Check OK
+
+@fpga("ice40")
+@part("up5k-sg48")
+mod Top {
+    @pin(35)
+    @period_ns("83.33")
+    incoming clock : Clock {
+        unused it
+    }
+
+    @pin("E3")
+    incoming data : Bit
+
+    @keep
+    outgoing result : Bit
+
+    result := data
+}
+
+//> Struct with annotations
+@author("Alice")
+struct type Point {
+    @range(0)
+    x : Word[16]
+
+    @range(1)
+    y : Word[16]
+}
+
+@deprecated
+union type Result {
+    @success
+    Ok(value : Word[32])
+
+    @error
+    Err(code : Word[8])
+}
+
+@experimental
+enum type State {
+    @initial
+    Idle = 0w2
+
+    @active
+    Running = 1w2
+
+    @done
+    Complete = 2w2
+}
+
+@platform("ice40")
+socket SpiSocket {
+    @master
+    cosi data_out : Bit
+
+    @slave
+    soci data_in : Bit
+}

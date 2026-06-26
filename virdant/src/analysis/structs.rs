@@ -57,7 +57,7 @@ pub(crate) fn build_struct_fields(builder: &mut Builder, symbol_id: SymbolId) ->
         };
 
         // Get the type from the type annotation (first child of Field node)
-        let typ_node = field_node.child(0);
+        let typ_node = field_node.child(1);
         let typ = match builder.get_type_at(typ_node.location()) {
             Ok(typ) => Some(typ),
             Err(_) => None,

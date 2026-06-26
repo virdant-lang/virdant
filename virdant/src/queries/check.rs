@@ -188,7 +188,7 @@ fn check_mod_cycles(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
             let AstNodePayload::Submodule(_submodule) = stmt.payload() else {
                 continue;
             };
-            let ofness_node = stmt.child(0);
+            let ofness_node = stmt.child(1);
             let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
                 continue;
             };

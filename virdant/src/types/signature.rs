@@ -40,7 +40,7 @@ pub(crate) fn build_ctor_signature(
     for param_node in ctor_node.children() {
         let AstNodePayload::Param(param) = param_node.payload() else { continue };
         let name = parsing.string(param.name).to_owned();
-        let type_node = param_node.child(0);
+        let type_node = param_node.child(1);
         let typ = type_index
             .type_at(type_node.location())
             .cloned()

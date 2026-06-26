@@ -168,6 +168,8 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ModDefStmtWhen => format!("ModDefStmtWhen"),
             AstNodePayload::ModDefStmtMatch => format!("ModDefStmtMatch"),
             AstNodePayload::ModDefStmtUnused => format!("ModDefStmtUnused"),
+            AstNodePayload::Annotations(_) => format!("Annotations"),
+            AstNodePayload::Annotation(annotation) => format!("Annotation {}", parsing.string(annotation.name.clone())),
             AstNodePayload::Socket(_socket) => format!("Socket"),
             AstNodePayload::Field(_field) => format!("Field"),
             AstNodePayload::Ctor(_ctor) => format!("Ctor"),
@@ -264,8 +266,8 @@ impl<'p> AstNode<'p> {
 
     pub fn typ(&self) -> Option<AstNode<'_>> {
         match &self.payload {
-            AstNodePayload::Component(_component) => Some(self.child(0)),
-            AstNodePayload::Channel(_channel) => Some(self.child(0)),
+            AstNodePayload::Component(_component) => Some(self.child(1)),
+            AstNodePayload::Channel(_channel) => Some(self.child(1)),
             _ => None,
         }
     }
@@ -314,7 +316,7 @@ impl<'p> AstNode<'p> {
         match &self.payload {
             AstNodePayload::Component(component) => {
                 if component.kind == ComponentKind::Reg || component.kind == ComponentKind::OutgoingReg {
-                    for child in self.children().into_iter().skip(1) {
+                    for child in self.children().into_iter().skip(2) {
                         if !matches!(child.payload(), AstNodePayload::It) {
                             return Some(child);
                         }
@@ -382,6 +384,52 @@ impl<'p> AstNode<'p> {
     pub fn index(&self) -> Option<AstNode<'_>> {
         match &self.payload {
             AstNodePayload::ExprIndexDyn => Some(self.child(1)),
+            _ => None,
+        }
+    }
+
+    /// Returns the Annotations wrapper node (always present for annotatable nodes).
+    pub fn annotations_node(&self) -> AstNode<'_> {
+        self.child(0)
+    }
+
+    /// Iterate all annotation children of this node.
+    pub fn annotations(&self) -> Vec<AstNode<'_>> {
+        let child0 = self.child(0);
+        let ann_id = child0.id;
+        let num_children = self.parsing.num_children[ann_id.index()];
+        let mut result = Vec::with_capacity(num_children as usize);
+        let mut ast_node_id = 0usize;
+        while result.len() < num_children as usize {
+            if self.parsing.parents[ast_node_id] == ann_id {
+                let child_id = AstNodeId(ast_node_id.try_into().unwrap());
+                result.push(self.parsing.ast_node(child_id));
+            }
+            ast_node_id += 1;
+        }
+        result
+    }
+
+    /// The annotation name, if this is an Annotation node.
+    pub fn annotation_name(&self) -> Option<InternedString> {
+        match &self.payload {
+            AstNodePayload::Annotation(a) => Some(a.name.clone()),
+            _ => None,
+        }
+    }
+
+    /// The string value of this annotation, if any.
+    pub fn annotation_string(&self) -> Option<InternedString> {
+        match &self.payload {
+            AstNodePayload::Annotation(a) => a.str_value.clone(),
+            _ => None,
+        }
+    }
+
+    /// The natural number value of this annotation, if any.
+    pub fn annotation_natural(&self) -> Option<u64> {
+        match &self.payload {
+            AstNodePayload::Annotation(a) => a.nat_value,
             _ => None,
         }
     }

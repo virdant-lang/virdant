@@ -64,7 +64,7 @@ pub(crate) fn build_typedefs(builder: &mut Builder) -> Arc<Vec<TypeDef>> {
                     let Some(enumerant_symbol) = symboltable.slot(item_symbol.id(), enumerant_name) else { continue; };
                     enumerant_symbol.id()
                 };
-                let expr_node = enumerant_node.child(0);
+                let expr_node = enumerant_node.child(1);
                 let (value, expr_width) = eval_const_expr(&expr_node);
                 if width.is_none() {
                     width = expr_width;
@@ -114,7 +114,7 @@ pub(crate) fn build_typedef(builder: &mut Builder, symbol_id: SymbolId) -> Arc<T
                 let Some(enumerant_symbol) = symboltable.slot(item_symbol.id(), enumerant_name) else { continue; };
                 enumerant_symbol.id()
             };
-            let expr_node = enumerant_node.child(0);
+            let expr_node = enumerant_node.child(1);
             let (value, expr_width) = eval_const_expr(&expr_node);
             if width.is_none() {
                 width = expr_width;

@@ -169,8 +169,8 @@ impl PackageAnalysis {
                     }
                     AstNodePayload::Submodule(_module) => {
                         let children = child_node.children();
-                        if children.len() == 2 {
-                            let it_block = &children[1];
+                        if children.len() == 3 {
+                            let it_block = &children[2];
                             if matches!(it_block.payload(), AstNodePayload::It) {
                                 let block = &it_block.children()[0];
                                 self.add_moddefstmt_block_expr_roots(block);
@@ -195,6 +195,7 @@ impl PackageAnalysis {
                     }
                     AstNodePayload::ModDefStmtUnused => (),
                     AstNodePayload::Error => (), // TODO should we even have error nodes at this point?
+                    AstNodePayload::Annotations(_) => (),
                     _ => unreachable!("{:?}", child_node.summary()),
                 }
             }
@@ -204,7 +205,7 @@ impl PackageAnalysis {
             }
             for child_node in node.children() {
                 if let AstNodePayload::Enumerant(_) = child_node.payload() {
-                    let node_id = child_node.child(0).id();
+                    let node_id = child_node.child(1).id();
                     self.expr_roots.push(node_id);
                 }
             }

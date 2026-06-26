@@ -426,7 +426,7 @@ fn moddef_page(
                 crate::common::SocketRole::Server => "server",
             };
             // The Ofness is the first child of the Socket node
-            let ofness_node = child.child(0);
+            let ofness_node = child.child(1);
             let ofness_str = ofness_node.spelling().to_str_lossy().to_string();
             sockets.push(SocketInfo {
                 name: parsing.string(socket.name).to_str_lossy().to_string(),
