@@ -1,0 +1,12 @@
+{% extends "base.html.tera" %}
+{% block title %}{{ kind_label }} {{ name }}{% endblock title %}
+{% block content %}
+<h1>{{ kind_label }} {{ name }}</h1>
+
+{% if doc_body %}
+<pre class="doc">{{ doc_body }}</pre>
+{% endif %}
+
+<h2>Definition</h2>
+<pre class="definition">{{ definition_text }}</pre>
+{% endblock content %}

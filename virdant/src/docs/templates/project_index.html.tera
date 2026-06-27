@@ -1,0 +1,22 @@
+{% extends "base.html.tera" %}
+{% block title %}Virdant Project{% endblock title %}
+{% block content %}
+<h1>Virdant Project</h1>
+
+<h2>Packages</h2>
+<ul class="item-list">
+{% for pkg in packages %}
+<li><a href="{{ pkg.name }}/index.html">{{ pkg.name }}</a></li>
+{% endfor %}
+</ul>
+
+<h2>Items</h2>
+<ul class="item-list">
+{% for entry in items %}
+<li><a href="{{ entry.package }}/{{ entry.filename }}">
+  <span class="kind kind-{{ entry.kind_label }}">{{ entry.kind_label }}</span>
+  {{ entry.package }}::<strong>{{ entry.name }}</strong>
+</a>{% if entry.doc_first_line %} &mdash; {{ entry.doc_first_line }}{% endif %}</li>
+{% endfor %}
+</ul>
+{% endblock content %}
