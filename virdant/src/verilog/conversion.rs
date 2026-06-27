@@ -225,7 +225,7 @@ impl<'d> Converter<'d> {
                             // Port declaration is handled by get_ports_of above (output reg).
                             // Check for an explicit `on clock` clause.
                             let children = stmt.children();
-                            let clock_child = children.iter().skip(1).find(|c| !matches!(c.payload(), AstNodePayload::It));
+                            let clock_child = children.iter().skip(2).find(|c| !matches!(c.payload(), AstNodePayload::It));
                             if let Some(clock_node) = clock_child {
                                 sequential_regs.insert(name.clone(), clock_node.id());
                             }
@@ -233,7 +233,7 @@ impl<'d> Converter<'d> {
                         }
                         ComponentKind::Wire => {
                             let children = stmt.children();
-                            let clock_child = children.iter().skip(1).find(|c| !matches!(c.payload(), AstNodePayload::It));
+                            let clock_child = children.iter().skip(2).find(|c| !matches!(c.payload(), AstNodePayload::It));
                             if let Some(clock_node) = clock_child {
                                 // Wire with explicit `on clock` — treat exactly like a Reg.
                                 sequential_regs.insert(name.clone(), clock_node.id());
@@ -253,7 +253,7 @@ impl<'d> Converter<'d> {
                         ComponentKind::Reg => {
                             // Regs with `on clock` have a non-ItBlock child after the type.
                             let children = stmt.children();
-                            let clock_child = children.iter().skip(1).find(|c| !matches!(c.payload(), AstNodePayload::It));
+                            let clock_child = children.iter().skip(2).find(|c| !matches!(c.payload(), AstNodePayload::It));
                             if let Some(clock_node) = clock_child {
                                 sequential_regs.insert(name.clone(), clock_node.id());
                             }
@@ -267,7 +267,7 @@ impl<'d> Converter<'d> {
                 }
                 AstNodePayload::Submodule(module) => {
                     let raw_name = parsing.string(module.name).to_str_lossy().into_owned();
-                    let mod_path = render_ofness_path(stmt.child(0), package, &symboltable);
+                    let mod_path = render_ofness_path(stmt.child(1), package, &symboltable);
                     let ports_info = self.module_ports.get(&mod_path).cloned().unwrap_or_default();
                     let sub_name = self.emitted_module_names.get(&mod_path)
                         .cloned()
