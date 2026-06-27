@@ -7,6 +7,7 @@ This is the Virdant language reference.
 
     grammar
     items
+    annotations
     types
     patterns
     expressions

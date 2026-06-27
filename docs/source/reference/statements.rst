@@ -26,12 +26,12 @@ Component declarations introduce named signals into a module.
 .. code-block:: grammar
 
     ModDefStmtComponent :=
-        DocString "incoming" Ident ":" Type OnClause? ItBlock?
-        | DocString "outgoing" Ident ":" Type OnClause? ItBlock?
-        | DocString "outgoing" "wire" Ident ":" Type OnClause? ItBlock?
-        | DocString "outgoing" "reg" Ident ":" Type OnClause? ItBlock?
-        | DocString "wire" Ident ":" Type OnClause? ItBlock?
-        | DocString "reg" Ident ":" Type OnClause? ItBlock?
+        DocString Annotations "incoming" Ident ":" Type OnClause? ItBlock?
+        | DocString Annotations "outgoing" Ident ":" Type OnClause? ItBlock?
+        | DocString Annotations "outgoing" "wire" Ident ":" Type OnClause? ItBlock?
+        | DocString Annotations "outgoing" "reg" Ident ":" Type OnClause? ItBlock?
+        | DocString Annotations "wire" Ident ":" Type OnClause? ItBlock?
+        | DocString Annotations "reg" Ident ":" Type OnClause? ItBlock?
 
 .. code-block:: virdant
 
@@ -109,7 +109,7 @@ Instance declarations instantiate a submodule inside the current module.
 .. code-block:: grammar
 
     ModDefStmtInstance :=
-        DocString "mod" Ident "of" Ofness ItBlock?
+        DocString Annotations "mod" Ident "of" Ofness ItBlock?
 
 The instance name must be unique within the enclosing module.
 Ports on the instance are accessed via dot notation.
@@ -140,8 +140,8 @@ Socket instances declare either a client or server role for a socket type.
 .. code-block:: grammar
 
     ModDefStmtSocket :=
-        DocString "client" "socket" Ident "of" Ofness ItBlock?
-        | DocString "server" "socket" Ident "of" Ofness ItBlock?
+        DocString Annotations "client" "socket" Ident "of" Ofness ItBlock?
+        | DocString Annotations "server" "socket" Ident "of" Ofness ItBlock?
 
 .. code-block:: virdant
 

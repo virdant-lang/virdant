@@ -27,7 +27,7 @@ Modules are the primary building block of Virdant designs.
 .. code-block:: grammar
 
     ModDef :=
-        DocString "ext"? "export"? "mod" Ident "{" ModDefStmt* "}"
+        DocString Annotations "ext"? "export"? "mod" Ident "{" ModDefStmt* "}"
 
 A module definition begins with the `mod` keyword, followed by the module name,
 and a body enclosed in curly braces.
@@ -76,10 +76,10 @@ A struct type definition declares a new nominal product type with named fields.
 .. code-block:: grammar
 
     StructDef :=
-        DocString "struct" "type" Ident "{" StructDefStmt* "}"
+        DocString Annotations "struct" "type" Ident "{" StructDefStmt* "}"
 
     StructDefStmt :=
-        DocString Ident ":" Type
+        DocString Annotations Ident ":" Type
 
 .. code-block:: virdant
 
@@ -102,10 +102,10 @@ A union type definition declares a new sum type with a set of variants.
 .. code-block:: grammar
 
     UnionDef :=
-        DocString "union" "type" Ident "{" UnionDefStmt* "}"
+        DocString Annotations "union" "type" Ident "{" UnionDefStmt* "}"
 
     UnionDefStmt :=
-        DocString Ident ParamList?
+        DocString Annotations Ident ParamList?
 
     ParamList :=
         "(" Params? ")"
@@ -114,7 +114,7 @@ A union type definition declares a new sum type with a set of variants.
         Param | Params "," Param
 
     Param :=
-        DocString Ident ":" Type
+        DocString Annotations Ident ":" Type
 
 .. code-block:: virdant
 
@@ -137,10 +137,10 @@ An enum type definition declares a set of named constants with a fixed bit width
 .. code-block:: grammar
 
     EnumDef :=
-        DocString "enum" "type" Ident "width" Width "{" EnumDefStmt* "}"
+        DocString Annotations "enum" "type" Ident "width" Width "{" EnumDefStmt* "}"
 
     EnumDefStmt :=
-        DocString Ident "=" Expr
+        DocString Annotations Ident "=" Expr
 
 .. code-block:: virdant
 
@@ -165,7 +165,7 @@ by the compiler rather than by user code.
 .. code-block:: grammar
 
     BuiltinDef :=
-        DocString "builtin" "type" Ident Generics? "{" "}"
+        DocString Annotations "builtin" "type" Ident Generics? "{" "}"
 
 .. code-block:: virdant
 
@@ -186,11 +186,11 @@ named ports with directions.
 .. code-block:: grammar
 
     SocketDef :=
-        DocString "socket" Ident "{" SocketDefStmt* "}"
+        DocString Annotations "socket" Ident "{" SocketDefStmt* "}"
 
     SocketDefStmt :=
-        DocString "cosi" Ident ":" Type
-        | DocString "soci" Ident ":" Type
+        DocString Annotations "cosi" Ident ":" Type
+        | DocString Annotations "soci" Ident ":" Type
 
 .. code-block:: virdant
 

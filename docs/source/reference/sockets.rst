@@ -13,11 +13,11 @@ with their types and directions.
 .. code-block:: grammar
 
     SocketDef :=
-        DocString "socket" Ident "{" SocketDefStmt* "}"
+        DocString Annotations "socket" Ident "{" SocketDefStmt* "}"
 
     SocketDefStmt :=
-        DocString "cosi" Ident ":" Type
-        | DocString "soci" Ident ":" Type
+        DocString Annotations "cosi" Ident ":" Type
+        | DocString Annotations "soci" Ident ":" Type
 
 .. code-block:: virdant
 
@@ -51,8 +51,8 @@ Each instance must specify its role: `client` or `server`.
 .. code-block:: grammar
 
     ModDefStmtSocket :=
-        DocString "client" "socket" Ident "of" Ofness ItBlock?
-        | DocString "server" "socket" Ident "of" Ofness ItBlock?
+        DocString Annotations "client" "socket" Ident "of" Ofness ItBlock?
+        | DocString Annotations "server" "socket" Ident "of" Ofness ItBlock?
 
 .. code-block:: virdant
 

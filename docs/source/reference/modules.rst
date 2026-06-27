@@ -33,12 +33,12 @@ They are declared with a direction, a name, and a type.
 .. code-block:: grammar
 
     ModDefStmtComponent :=
-        DocString "incoming" Ident ":" Type OnClause? ItBlock?
-        | DocString "outgoing" Ident ":" Type OnClause? ItBlock?
-        | DocString "outgoing" "wire" Ident ":" Type OnClause? ItBlock?
-        | DocString "outgoing" "reg" Ident ":" Type OnClause? ItBlock?
-        | DocString "wire" Ident ":" Type OnClause? ItBlock?
-        | DocString "reg" Ident ":" Type OnClause? ItBlock?
+        DocString Annotations "incoming" Ident ":" Type OnClause? ItBlock?
+        | DocString Annotations "outgoing" Ident ":" Type OnClause? ItBlock?
+        | DocString Annotations "outgoing" "wire" Ident ":" Type OnClause? ItBlock?
+        | DocString Annotations "outgoing" "reg" Ident ":" Type OnClause? ItBlock?
+        | DocString Annotations "wire" Ident ":" Type OnClause? ItBlock?
+        | DocString Annotations "reg" Ident ":" Type OnClause? ItBlock?
 
 .. code-block:: virdant
 
@@ -138,7 +138,7 @@ Module instances allow you to compose larger designs from smaller modules.
 .. code-block:: grammar
 
     ModDefStmtInstance :=
-        DocString "mod" Ident "of" Ofness ItBlock?
+        DocString Annotations "mod" Ident "of" Ofness ItBlock?
 
 .. code-block:: virdant
 
@@ -172,8 +172,8 @@ Sockets provide a way to group related ports and connect them as a unit.
 .. code-block:: grammar
 
     ModDefStmtSocket :=
-        DocString "client" "socket" Ident "of" Ofness ItBlock?
-        | DocString "server" "socket" Ident "of" Ofness ItBlock?
+        DocString Annotations "client" "socket" Ident "of" Ofness ItBlock?
+        | DocString Annotations "server" "socket" Ident "of" Ofness ItBlock?
 
 .. code-block:: virdant
 
