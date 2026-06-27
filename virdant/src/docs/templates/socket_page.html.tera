@@ -1,12 +1,37 @@
 {% extends "base.html.tera" %}
-{% block title %}socket {{ name }}{% endblock title %}
+{% block title %}socket {{ name }}{% endblock %}
+{% block breadcrumbs %}
+<a href="{{ style_href }}index.html">Project</a>
+<span class="sep">/</span>
+<a href="index.html">{{ package_name }}</a>
+<span class="sep">/</span>
+<span class="current">{{ name }}</span>
+{% endblock %}
 {% block content %}
-<h1>socket {{ name }}</h1>
+<h1><span class="kind kind-socket">socket</span> {{ name }}</h1>
 
 {% if doc_body %}
 <pre class="doc">{{ doc_body }}</pre>
 {% endif %}
 
 <h2>Definition</h2>
+<div class="definition-wrapper">
+<button class="copy-btn" onclick="copyDefinition(this)">&#x1F4CB;</button>
 <pre class="definition">{{ definition_text }}</pre>
-{% endblock content %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function copyDefinition(btn) {
+  var pre = btn.parentNode.querySelector('pre');
+  navigator.clipboard.writeText(pre.textContent).then(function() {
+    btn.textContent = '\u2713';
+    btn.classList.add('copied');
+    setTimeout(function() {
+      btn.textContent = '\uD83D\uDCCB';
+      btn.classList.remove('copied');
+    }, 1500);
+  });
+}
+</script>
+{% endblock %}

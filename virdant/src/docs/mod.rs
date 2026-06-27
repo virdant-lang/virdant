@@ -17,9 +17,25 @@ use crate::syntax::payload::AstNodePayload;
 // Template context structs (Serializable)
 // ---------------------------------------------------------------------------
 
+#[derive(Clone, Serialize)]
+struct SidebarPkgCtx {
+    name: String,
+    is_active: bool,
+    items: Vec<SidebarItemCtx>,
+}
+
+#[derive(Clone, Serialize)]
+struct SidebarItemCtx {
+    name: String,
+    filename: String,
+    kind_label: String,
+    is_current: bool,
+}
+
 #[derive(Serialize)]
 struct ProjectIndexCtx {
     style_href: String,
+    all_packages: Vec<SidebarPkgCtx>,
     packages: Vec<PackageEntry>,
     items: Vec<ItemEntryCtx>,
 }
@@ -27,6 +43,7 @@ struct ProjectIndexCtx {
 #[derive(Serialize)]
 struct PackageEntry {
     name: String,
+    item_count: usize,
 }
 
 #[derive(Serialize)]
@@ -41,12 +58,13 @@ struct ItemEntryCtx {
 #[derive(Serialize)]
 struct PackageIndexCtx {
     style_href: String,
+    all_packages: Vec<SidebarPkgCtx>,
     package_name: String,
     package_doc: String,
     items: Vec<PackageItemCtx>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct PackageItemCtx {
     name: String,
     kind_label: String,
@@ -54,41 +72,47 @@ struct PackageItemCtx {
     doc_first_line: String,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct ModdefPageCtx {
     style_href: String,
+    all_packages: Vec<SidebarPkgCtx>,
+    package_name: String,
     name: String,
     doc_body: String,
     ports: Vec<PortCtx>,
     sockets: Vec<SocketCtx>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct PortCtx {
     direction: String,
     name: String,
     type_str: String,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct SocketCtx {
     role: String,
     name: String,
     ofness: String,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct TypePageCtx {
     style_href: String,
+    all_packages: Vec<SidebarPkgCtx>,
+    package_name: String,
     kind_label: String,
     name: String,
     doc_body: String,
     definition_text: String,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct SimplePageCtx {
     style_href: String,
+    all_packages: Vec<SidebarPkgCtx>,
+    package_name: String,
     name: String,
     doc_body: String,
     definition_text: String,
@@ -133,15 +157,70 @@ fn make_tera() -> Result<Tera, tera::Error> {
 
 fn style_href(nesting_depth: usize) -> String {
     if nesting_depth == 0 {
-        "style.css".to_string()
+        String::new()
     } else {
         let mut s = String::new();
         for _ in 0..nesting_depth {
             s.push_str("../");
         }
-        s.push_str("style.css");
         s
     }
+}
+
+
+// ---------------------------------------------------------------------------
+// Internal data collected during first pass
+// ---------------------------------------------------------------------------
+
+struct ItemEntry {
+    package: PackageFqn,
+    name: BString,
+    kind: SymbolKind,
+    doc_body: BString,
+}
+
+struct PkgData {
+    package: PackageFqn,
+    package_doc: String,
+    pkg_items: Vec<PackageItemCtx>,
+}
+
+// ---------------------------------------------------------------------------
+// Sidebar tree builder
+// ---------------------------------------------------------------------------
+
+fn build_sidebar_tree(
+    packages: &[PackageFqn],
+    all_items: &[ItemEntry],
+    active_pkg: Option<&str>,
+    current_item: Option<&str>,
+) -> Vec<SidebarPkgCtx> {
+    let mut result: Vec<SidebarPkgCtx> = Vec::new();
+    for pkg in packages {
+        let pkg_name = pkg.as_ref().to_str_lossy().into_owned();
+        let is_active = active_pkg == Some(pkg_name.as_str());
+        let mut items: Vec<SidebarItemCtx> = Vec::new();
+        for entry in all_items {
+            let entry_pkg = entry.package.as_ref().to_str_lossy();
+            if entry_pkg != pkg_name {
+                continue;
+            }
+            let entry_name = entry.name.to_str_lossy().into_owned();
+            let is_current = current_item == Some(entry_name.as_str());
+            items.push(SidebarItemCtx {
+                name: entry_name,
+                filename: format!("{}.html", entry.name.to_str_lossy()),
+                kind_label: kind_label(&entry.kind).to_owned(),
+                is_current,
+            });
+        }
+        result.push(SidebarPkgCtx {
+            name: pkg_name,
+            is_active,
+            items,
+        });
+    }
+    result
 }
 
 // ---------------------------------------------------------------------------
@@ -168,16 +247,12 @@ pub fn generate_docs(
     let packages = db.get_packages();
     let symboltable = db.get_symboltable();
 
-    // Internal item entry (not serializable, just for collection)
-    struct ItemEntry {
-        package: PackageFqn,
-        name: BString,
-        kind: SymbolKind,
-        doc_body: BString,
-    }
+    // -------------------------------------------------------------------
+    // First pass: collect all items across all packages
+    // -------------------------------------------------------------------
     let mut all_items: Vec<ItemEntry> = Vec::new();
+    let mut pkg_datas: Vec<PkgData> = Vec::new();
 
-    // Write package pages
     for pkg in packages.iter() {
         let analysis = db.get_package_analysis(pkg.clone());
         let parsing = db.get_parsing(pkg.clone());
@@ -186,7 +261,6 @@ pub fn generate_docs(
         let pkg_dir = out_dir.join(&pkg_str);
         std::fs::create_dir_all(&pkg_dir)?;
 
-        // Collect items for this package
         let mut pkg_items: Vec<PackageItemCtx> = Vec::new();
 
         for item_name in analysis.item_names() {
@@ -195,7 +269,8 @@ pub fn generate_docs(
             let kind = node_kind(&node);
             let doc_body = extract_doc_body(&node, &parsing);
 
-            let html = match kind {
+            // Render to HTML string (without sidebar -- we fill that later)
+            let _html = match kind {
                 SymbolKind::ModDef => render_moddef_page(
                     &tera,
                     &node,
@@ -234,11 +309,6 @@ pub fn generate_docs(
                 _ => continue,
             };
 
-            let html_filename = format!("{}.html", item_name);
-            let item_path = pkg_dir.join(&html_filename);
-            let mut file = std::fs::File::create(&item_path)?;
-            file.write_all(html.as_bytes())?;
-
             all_items.push(ItemEntry {
                 package: pkg.clone(),
                 name: item_name.clone(),
@@ -249,33 +319,40 @@ pub fn generate_docs(
             pkg_items.push(PackageItemCtx {
                 name: item_name.to_str_lossy().into_owned(),
                 kind_label: kind_label(&kind).to_owned(),
-                filename: html_filename,
+                filename: format!("{}.html", item_name),
                 doc_first_line: first_line(doc_body.as_bstr()),
             });
         }
 
-        // Write package index
         let package_doc = extract_package_doc(&parsing);
-        let pkg_ctx = PackageIndexCtx {
-            style_href: style_href(1),
-            package_name: pkg_str,
+        pkg_datas.push(PkgData {
+            package: pkg.clone(),
             package_doc: package_doc.to_str_lossy().into_owned(),
-            items: pkg_items,
-        };
-        let pkg_index_html =
-            tera.render("package_index.html.tera", &tera::Context::from_serialize(&pkg_ctx)?)?;
-        let pkg_index_path = pkg_dir.join("index.html");
-        let mut file = std::fs::File::create(&pkg_index_path)?;
-        file.write_all(pkg_index_html.as_bytes())?;
+            pkg_items,
+        });
     }
 
-    // Write project index
+    // -------------------------------------------------------------------
+    // Second pass: write all pages with full sidebar
+    // -------------------------------------------------------------------
+
+    // Project index (no active package, no current item)
+    let project_sidebar = build_sidebar_tree(&packages, &all_items, None, None);
     let project_ctx = ProjectIndexCtx {
         style_href: style_href(0),
+        all_packages: project_sidebar,
         packages: packages
             .iter()
-            .map(|pkg| PackageEntry {
-                name: pkg.as_ref().to_str_lossy().into_owned(),
+            .map(|pkg| {
+                let pkg_name = pkg.as_ref().to_str_lossy();
+                let count = all_items
+                    .iter()
+                    .filter(|e| e.package.as_ref().to_str_lossy() == pkg_name)
+                    .count();
+                PackageEntry {
+                    name: pkg_name.into_owned(),
+                    item_count: count,
+                }
             })
             .collect(),
         items: all_items
@@ -295,20 +372,117 @@ pub fn generate_docs(
     let mut file = std::fs::File::create(&project_index_path)?;
     file.write_all(project_index_html.as_bytes())?;
 
+    // Per-package pages
+    for pkg_data in &pkg_datas {
+        let pkg_str: String = pkg_data.package.as_ref().to_str_lossy().into_owned();
+        let pkg_dir = out_dir.join(&pkg_str);
+
+        // Package index (active package, no current item)
+        let pkg_sidebar = build_sidebar_tree(
+            &packages, &all_items, Some(&pkg_str), None,
+        );
+        let pkg_ctx = PackageIndexCtx {
+            style_href: style_href(1),
+            all_packages: pkg_sidebar,
+            package_name: pkg_str.clone(),
+            package_doc: pkg_data.package_doc.clone(),
+            items: pkg_data.pkg_items.clone(),
+        };
+        let pkg_index_html = tera.render(
+            "package_index.html.tera",
+            &tera::Context::from_serialize(&pkg_ctx)?,
+        )?;
+        let mut file = std::fs::File::create(&pkg_dir.join("index.html"))?;
+        file.write_all(pkg_index_html.as_bytes())?;
+
+        // Item pages (active package + current item)
+        for entry in &all_items {
+            let entry_pkg = entry.package.as_ref().to_str_lossy();
+            if entry_pkg != pkg_str {
+                continue;
+            }
+            let item_name = entry.name.to_str_lossy().into_owned();
+            let item_sidebar = build_sidebar_tree(
+                &packages, &all_items, Some(&pkg_str), Some(&item_name),
+            );
+
+            // Re-render the HTML with sidebar
+            // We stored the inner HTML, now we need to inject sidebar
+            // and re-render through the template.
+            // But the render_* functions build the full page from scratch.
+            // They each call tera.render() with their own context.
+            // We need the context without sidebar first, then add sidebar.
+            //
+            // Simplest approach: rebuild the context and re-render.
+            let ast_node_id = db
+                .get_package_analysis(entry.package.clone())
+                .item_ast_node_id(entry.name.as_ref());
+            let parsing = db.get_parsing(entry.package.clone());
+            let node = parsing.ast_node(ast_node_id);
+            let kind = node_kind(&node);
+
+            let html = match kind {
+                SymbolKind::ModDef => render_moddef_page_with_sidebar(
+                    &tera,
+                    &node,
+                    &parsing,
+                    db,
+                    &symboltable,
+                    &entry.package,
+                    entry.name.as_bstr(),
+                    entry.doc_body.as_bstr(),
+                    &item_sidebar,
+                )?,
+                SymbolKind::StructDef
+                | SymbolKind::UnionDef
+                | SymbolKind::EnumDef
+                | SymbolKind::BuiltinDef => render_type_page_with_sidebar(
+                    &tera,
+                    &node,
+                    &parsing,
+                    &kind,
+                    entry.name.as_bstr(),
+                    entry.doc_body.as_bstr(),
+                    &item_sidebar,
+                    &pkg_str,
+                )?,
+                SymbolKind::SocketDef => render_socket_page_with_sidebar(
+                    &tera,
+                    &node,
+                    &parsing,
+                    entry.name.as_bstr(),
+                    entry.doc_body.as_bstr(),
+                    &item_sidebar,
+                    &pkg_str,
+                )?,
+                SymbolKind::FnDef => render_fn_page_with_sidebar(
+                    &tera,
+                    &node,
+                    &parsing,
+                    entry.name.as_bstr(),
+                    entry.doc_body.as_bstr(),
+                    &item_sidebar,
+                    &pkg_str,
+                )?,
+                _ => continue,
+            };
+
+            let html_filename = format!("{}.html", entry.name.to_str_lossy());
+            let mut file = std::fs::File::create(&pkg_dir.join(&html_filename))?;
+            file.write_all(html.as_bytes())?;
+        }
+    }
+
     Ok(())
 }
 
 // ---------------------------------------------------------------------------
-// Helper: first line of a doc body
+// Helpers
 // ---------------------------------------------------------------------------
 
 fn first_line(body: &BStr) -> String {
     body.to_str_lossy().lines().next().unwrap_or("").to_owned()
 }
-
-// ---------------------------------------------------------------------------
-// Helper: determine SymbolKind from an item AST node
-// ---------------------------------------------------------------------------
 
 fn node_kind(node: &AstNode<'_>) -> SymbolKind {
     match node.payload() {
@@ -397,64 +571,7 @@ fn kind_label(kind: &SymbolKind) -> &'static str {
 // ---------------------------------------------------------------------------
 
 fn write_css(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let css = r#"body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-                 Helvetica, Arial, sans-serif;
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 1em 2em;
-    line-height: 1.6;
-    color: #1a1a1a;
-    background: #fafafa;
-}
-h1 { border-bottom: 2px solid #ddd; padding-bottom: 0.3em; }
-h2 { border-bottom: 1px solid #eee; padding-bottom: 0.2em; }
-pre.doc {
-    background: #eef;
-    padding: 1em;
-    border-radius: 4px;
-    white-space: pre-wrap;
-}
-pre.definition {
-    background: #f4f4f4;
-    padding: 1em;
-    border-radius: 4px;
-    border: 1px solid #ddd;
-    overflow-x: auto;
-}
-table {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 1em 0;
-}
-th, td {
-    text-align: left;
-    padding: 0.5em;
-    border-bottom: 1px solid #ddd;
-}
-tr:hover { background: #f0f0f0; }
-th { background: #e8e8e8; font-weight: 600; }
-a { color: #0366d6; text-decoration: none; }
-a:hover { text-decoration: underline; }
-ul.item-list { list-style: none; padding: 0; }
-ul.item-list li { padding: 0.3em 0; }
-span.kind {
-    display: inline-block;
-    font-size: 0.8em;
-    background: #ddf;
-    padding: 0.1em 0.5em;
-    border-radius: 3px;
-    margin-right: 0.5em;
-    font-weight: 600;
-}
-span.kind-mod    { background: #cdf; }
-span.kind-struct { background: #cfc; }
-span.kind-union  { background: #fcf; }
-span.kind-enum   { background: #fdc; }
-span.kind-builtin{ background: #ddd; }
-span.kind-fn     { background: #ddf; }
-span.kind-socket { background: #fdd; }
-"#;
+    let css = include_str!("templates/style.css");
     std::fs::write(out_dir.join("style.css"), css)?;
     Ok(())
 }
@@ -463,7 +580,7 @@ span.kind-socket { background: #fdd; }
 // Template rendering helpers
 // ---------------------------------------------------------------------------
 
-fn render_moddef_page(
+fn render_moddef_page_with_sidebar(
     tera: &Tera,
     node: &AstNode<'_>,
     parsing: &Parsing,
@@ -472,6 +589,7 @@ fn render_moddef_page(
     pkg: &PackageFqn,
     item_name: &BStr,
     doc_body: &BStr,
+    all_packages: &[SidebarPkgCtx],
 ) -> Result<String, Box<dyn std::error::Error>> {
     let pkg_str = pkg.as_ref().to_str_lossy().into_owned();
     let name_str: String = item_name.to_str_lossy().into_owned();
@@ -493,7 +611,6 @@ fn render_moddef_page(
                 crate::common::SocketRole::Client => "client",
                 crate::common::SocketRole::Server => "server",
             };
-            // The Ofness is the first child of the Socket node
             let ofness_node = child.child(1);
             let ofness_str = ofness_node.spelling().to_str_lossy().into_owned();
             sockets.push(SocketCtx {
@@ -506,6 +623,8 @@ fn render_moddef_page(
 
     let ctx = ModdefPageCtx {
         style_href: style_href(1),
+        all_packages: all_packages.to_vec(),
+        package_name: pkg_str.clone(),
         name: name_str,
         doc_body: doc_body.to_str_lossy().into_owned(),
         ports: ports
@@ -532,22 +651,25 @@ fn render_moddef_page(
     Ok(tera.render("moddef_page.html.tera", &tera::Context::from_serialize(&ctx)?)?)
 }
 
-fn render_type_page(
+fn render_type_page_with_sidebar(
     tera: &Tera,
     node: &AstNode<'_>,
     parsing: &Parsing,
     kind: &SymbolKind,
     item_name: &BStr,
     doc_body: &BStr,
+    all_packages: &[SidebarPkgCtx],
+    package_name: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let name_str: String = item_name.to_str_lossy().into_owned();
 
-    // Get the full definition text from the source
     let definition_span = node.span();
     let definition_text = parsing.text(definition_span);
 
     let ctx = TypePageCtx {
         style_href: style_href(1),
+        all_packages: all_packages.to_vec(),
+        package_name: package_name.to_owned(),
         kind_label: kind_label(kind).to_owned(),
         name: name_str,
         doc_body: doc_body.to_str_lossy().into_owned(),
@@ -557,6 +679,90 @@ fn render_type_page(
     Ok(tera.render("type_page.html.tera", &tera::Context::from_serialize(&ctx)?)?)
 }
 
+fn render_socket_page_with_sidebar(
+    tera: &Tera,
+    node: &AstNode<'_>,
+    parsing: &Parsing,
+    item_name: &BStr,
+    doc_body: &BStr,
+    all_packages: &[SidebarPkgCtx],
+    package_name: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let name_str: String = item_name.to_str_lossy().into_owned();
+
+    let definition_span = node.span();
+    let definition_text = parsing.text(definition_span);
+
+    let ctx = SimplePageCtx {
+        style_href: style_href(1),
+        all_packages: all_packages.to_vec(),
+        package_name: package_name.to_owned(),
+        name: name_str,
+        doc_body: doc_body.to_str_lossy().into_owned(),
+        definition_text: definition_text.to_str_lossy().into_owned(),
+    };
+
+    Ok(tera.render("socket_page.html.tera", &tera::Context::from_serialize(&ctx)?)?)
+}
+
+fn render_fn_page_with_sidebar(
+    tera: &Tera,
+    node: &AstNode<'_>,
+    parsing: &Parsing,
+    item_name: &BStr,
+    doc_body: &BStr,
+    all_packages: &[SidebarPkgCtx],
+    package_name: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let name_str: String = item_name.to_str_lossy().into_owned();
+
+    let definition_span = node.span();
+    let definition_text = parsing.text(definition_span);
+
+    let ctx = SimplePageCtx {
+        style_href: style_href(1),
+        all_packages: all_packages.to_vec(),
+        package_name: package_name.to_owned(),
+        name: name_str,
+        doc_body: doc_body.to_str_lossy().into_owned(),
+        definition_text: definition_text.to_str_lossy().into_owned(),
+    };
+
+    Ok(tera.render("fn_page.html.tera", &tera::Context::from_serialize(&ctx)?)?)
+}
+
+// These are stubs used during the first pass (no sidebar data yet).
+// They still compile because the context defaults to empty sidebar,
+// but the output is discarded and regenerated in the second pass.
+
+fn render_moddef_page(
+    tera: &Tera,
+    node: &AstNode<'_>,
+    parsing: &Parsing,
+    db: &Db,
+    symboltable: &SymbolTable,
+    pkg: &PackageFqn,
+    item_name: &BStr,
+    doc_body: &BStr,
+) -> Result<String, Box<dyn std::error::Error>> {
+    render_moddef_page_with_sidebar(
+        tera, node, parsing, db, symboltable, pkg, item_name, doc_body, &[],
+    )
+}
+
+fn render_type_page(
+    tera: &Tera,
+    node: &AstNode<'_>,
+    parsing: &Parsing,
+    kind: &SymbolKind,
+    item_name: &BStr,
+    doc_body: &BStr,
+) -> Result<String, Box<dyn std::error::Error>> {
+    render_type_page_with_sidebar(
+        tera, node, parsing, kind, item_name, doc_body, &[], "",
+    )
+}
+
 fn render_socket_page(
     tera: &Tera,
     node: &AstNode<'_>,
@@ -564,20 +770,9 @@ fn render_socket_page(
     item_name: &BStr,
     doc_body: &BStr,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let name_str: String = item_name.to_str_lossy().into_owned();
-
-    // Get the full definition text from the source
-    let definition_span = node.span();
-    let definition_text = parsing.text(definition_span);
-
-    let ctx = SimplePageCtx {
-        style_href: style_href(1),
-        name: name_str,
-        doc_body: doc_body.to_str_lossy().into_owned(),
-        definition_text: definition_text.to_str_lossy().into_owned(),
-    };
-
-    Ok(tera.render("socket_page.html.tera", &tera::Context::from_serialize(&ctx)?)?)
+    render_socket_page_with_sidebar(
+        tera, node, parsing, item_name, doc_body, &[], "",
+    )
 }
 
 fn render_fn_page(
@@ -587,18 +782,7 @@ fn render_fn_page(
     item_name: &BStr,
     doc_body: &BStr,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let name_str: String = item_name.to_str_lossy().into_owned();
-
-    // Get the full definition text from the source
-    let definition_span = node.span();
-    let definition_text = parsing.text(definition_span);
-
-    let ctx = SimplePageCtx {
-        style_href: style_href(1),
-        name: name_str,
-        doc_body: doc_body.to_str_lossy().into_owned(),
-        definition_text: definition_text.to_str_lossy().into_owned(),
-    };
-
-    Ok(tera.render("fn_page.html.tera", &tera::Context::from_serialize(&ctx)?)?)
+    render_fn_page_with_sidebar(
+        tera, node, parsing, item_name, doc_body, &[], "",
+    )
 }

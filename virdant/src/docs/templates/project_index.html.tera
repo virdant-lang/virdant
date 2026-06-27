@@ -1,22 +1,52 @@
 {% extends "base.html.tera" %}
-{% block title %}Virdant Project{% endblock title %}
+{% block title %}Virdant Project{% endblock %}
+{% block breadcrumbs %}
+<span class="current">Project</span>
+{% endblock %}
 {% block content %}
 <h1>Virdant Project</h1>
 
 <h2>Packages</h2>
-<ul class="item-list">
-{% for pkg in packages %}
-<li><a href="{{ pkg.name }}/index.html">{{ pkg.name }}</a></li>
-{% endfor %}
-</ul>
+<div class="package-cards">
+  {% for pkg in packages %}
+  <a href="{{ pkg.name }}/index.html" class="package-card">
+    <div class="package-card-name">{{ pkg.name }}</div>
+    <div class="package-card-count">
+      {% if pkg.item_count == 1 %}
+        1 item
+      {% else %}
+        {{ pkg.item_count }} items
+      {% endif %}
+    </div>
+  </a>
+  {% endfor %}
+</div>
 
-<h2>Items</h2>
-<ul class="item-list">
-{% for entry in items %}
-<li><a href="{{ entry.package }}/{{ entry.filename }}">
-  <span class="kind kind-{{ entry.kind_label }}">{{ entry.kind_label }}</span>
-  {{ entry.package }}::<strong>{{ entry.name }}</strong>
-</a>{% if entry.doc_first_line %} &mdash; {{ entry.doc_first_line }}{% endif %}</li>
-{% endfor %}
-</ul>
-{% endblock content %}
+<h2>All Items</h2>
+{% if items %}
+<div class="table-wrapper">
+<table class="items-table">
+  <thead>
+    <tr>
+      <th>Kind</th>
+      <th>Name</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for entry in items %}
+    <tr>
+      <td><span class="kind kind-{{ entry.kind_label }}">{{ entry.kind_label }}</span></td>
+      <td><a href="{{ entry.package }}/{{ entry.filename }}">
+        {{ entry.package }}::<strong>{{ entry.name }}</strong>
+      </a></td>
+      <td>{% if entry.doc_first_line %}{{ entry.doc_first_line }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="empty-state">No items found.</p>
+{% endif %}
+{% endblock %}

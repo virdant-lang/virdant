@@ -1,5 +1,10 @@
 {% extends "base.html.tera" %}
-{% block title %}Package {{ package_name }}{% endblock title %}
+{% block title %}Package {{ package_name }}{% endblock %}
+{% block breadcrumbs %}
+<a href="{{ style_href }}index.html">Project</a>
+<span class="sep">/</span>
+<span class="current">{{ package_name }}</span>
+{% endblock %}
 {% block content %}
 <h1>Package {{ package_name }}</h1>
 
@@ -7,13 +12,28 @@
 <pre class="doc">{{ package_doc }}</pre>
 {% endif %}
 
-<h2>Items</h2>
-<ul class="item-list">
-{% for entry in items %}
-<li><a href="{{ entry.filename }}">
-  <span class="kind kind-{{ entry.kind_label }}">{{ entry.kind_label }}</span>
-  <strong>{{ entry.name }}</strong>
-</a>{% if entry.doc_first_line %} &mdash; {{ entry.doc_first_line }}{% endif %}</li>
-{% endfor %}
-</ul>
-{% endblock content %}
+{% if items %}
+<div class="table-wrapper">
+<table class="items-table">
+  <thead>
+    <tr>
+      <th>Kind</th>
+      <th>Name</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for entry in items %}
+    <tr>
+      <td><span class="kind kind-{{ entry.kind_label }}">{{ entry.kind_label }}</span></td>
+      <td><a href="{{ entry.filename }}"><strong>{{ entry.name }}</strong></a></td>
+      <td>{% if entry.doc_first_line %}{{ entry.doc_first_line }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="empty-state">No items in this package.</p>
+{% endif %}
+{% endblock %}

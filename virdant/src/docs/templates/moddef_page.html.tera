@@ -1,5 +1,12 @@
 {% extends "base.html.tera" %}
-{% block title %}mod {{ name }}{% endblock title %}
+{% block title %}mod {{ name }}{% endblock %}
+{% block breadcrumbs %}
+<a href="{{ style_href }}index.html">Project</a>
+<span class="sep">/</span>
+<a href="index.html">{{ package_name }}</a>
+<span class="sep">/</span>
+<span class="current">{{ name }}</span>
+{% endblock %}
 {% block content %}
 <h1>mod {{ name }}</h1>
 
@@ -7,31 +14,57 @@
 <pre class="doc">{{ doc_body }}</pre>
 {% endif %}
 
-<h2>Ports</h2>
 {% if ports %}
+<h2>Ports</h2>
+<div class="table-wrapper">
 <table>
-<thead><tr><th>Direction</th><th>Name</th><th>Type</th></tr></thead>
-<tbody>
-{% for port in ports %}
-<tr><td>{{ port.direction }}</td><td>{{ port.name }}</td><td>{{ port.type_str }}</td></tr>
-{% endfor %}
-</tbody>
+  <thead>
+    <tr>
+      <th>Direction</th>
+      <th>Name</th>
+      <th>Type</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for port in ports %}
+    <tr>
+      <td>
+        {% if port.direction == "incoming" %}
+          <span class="port-direction port-direction-incoming">incoming</span>
+        {% else %}
+          <span class="port-direction port-direction-outgoing">outgoing</span>
+        {% endif %}
+      </td>
+      <td><code>{{ port.name }}</code></td>
+      <td><code>{{ port.type_str }}</code></td>
+    </tr>
+    {% endfor %}
+  </tbody>
 </table>
-{% else %}
-<p><em>No ports.</em></p>
+</div>
 {% endif %}
 
-<h2>Sockets</h2>
 {% if sockets %}
+<h2>Sockets</h2>
+<div class="table-wrapper">
 <table>
-<thead><tr><th>Role</th><th>Name</th><th>Socket Type</th></tr></thead>
-<tbody>
-{% for sock in sockets %}
-<tr><td>{{ sock.role }}</td><td>{{ sock.name }}</td><td>{{ sock.ofness }}</td></tr>
-{% endfor %}
-</tbody>
+  <thead>
+    <tr>
+      <th>Role</th>
+      <th>Name</th>
+      <th>Type</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for sock in sockets %}
+    <tr>
+      <td><code>{{ sock.role }}</code></td>
+      <td><code>{{ sock.name }}</code></td>
+      <td><code>{{ sock.ofness }}</code></td>
+    </tr>
+    {% endfor %}
+  </tbody>
 </table>
-{% else %}
-<p><em>No sockets.</em></p>
+</div>
 {% endif %}
-{% endblock content %}
+{% endblock %}
