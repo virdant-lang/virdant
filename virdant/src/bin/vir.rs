@@ -470,7 +470,14 @@ fn doc(args: &Args, open: bool) {
         std::process::exit(1);
     }
 
-    let db = virdant::util::db_from_dir(source_dir);
+    let db = match virdant::util::read_platform_from_toml(&cwd) {
+        Ok(Some(platform)) => {
+            virdant::util::db_from_dir_with_platform(source_dir, &platform)
+        }
+        _ => {
+            virdant::util::db_from_dir(source_dir)
+        }
+    };
     dump_diagnostics(&db);
     if virdant::util::check_db(&db).is_err() {
         eprintln!("Doc generation failed due to errors");

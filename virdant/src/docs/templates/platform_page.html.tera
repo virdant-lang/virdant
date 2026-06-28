@@ -1,0 +1,115 @@
+{% extends "base.html.tera" %}
+{% block title %}platform {{ name }}{% endblock %}
+{% block breadcrumbs %}
+<a href="{{ style_href }}index.html">Project</a>
+<span class="sep">/</span>
+<a href="index.html">{{ package_name }}</a>
+<span class="sep">/</span>
+<span class="current">{{ name }}</span>
+{% endblock %}
+{% block content %}
+<h1><span class="kind kind-platform">platform</span> {{ name }}</h1>
+
+{% if doc_body %}
+<pre class="doc">{{ doc_body }}</pre>
+{% endif %}
+
+{% if fpga or part %}
+<h2>Target</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Property</th>
+      <th>Value</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if fpga %}
+    <tr>
+      <td>FPGA Family</td>
+      <td><code>{{ fpga }}</code></td>
+    </tr>
+    {% endif %}
+    {% if part %}
+    <tr>
+      <td>Part</td>
+      <td><code>{{ part }}</code></td>
+    </tr>
+    {% endif %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if clock %}
+<h2>Clock</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Port</th>
+      <th>Pin</th>
+      <th>Period (ns)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>{{ clock.port }}</code></td>
+      <td><code>{{ clock.pin }}</code></td>
+      <td><code>{{ clock.period_ns }}</code></td>
+    </tr>
+  </tbody>
+</table>
+{% endif %}
+
+{% if ports %}
+<h2>Ports</h2>
+<div class="table-wrapper">
+<table>
+  <thead>
+    <tr>
+      <th>Direction</th>
+      <th>Name</th>
+      <th>Pin</th>
+      <th>Type</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for port in ports %}
+    <tr>
+      <td>
+        {% if port.direction == "incoming" %}
+          <span class="port-direction port-direction-incoming">incoming</span>
+        {% else %}
+          <span class="port-direction port-direction-outgoing">outgoing</span>
+        {% endif %}
+      </td>
+      <td><code>{{ port.name }}</code></td>
+      <td><code>{{ port.pin }}</code></td>
+      <td><code>{{ port.type_str }}</code></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+<h2>Definition</h2>
+<div class="definition-wrapper">
+<button class="copy-btn" onclick="copyDefinition(this)">&#x1F4CB;</button>
+<pre class="definition">{{ definition_text }}</pre>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function copyDefinition(btn) {
+  var pre = btn.parentNode.querySelector('pre');
+  navigator.clipboard.writeText(pre.textContent).then(function() {
+    btn.textContent = '\u2713';
+    btn.classList.add('copied');
+    setTimeout(function() {
+      btn.textContent = '\uD83D\uDCCB';
+      btn.classList.remove('copied');
+    }, 1500);
+  });
+}
+</script>
+{% endblock %}

@@ -118,6 +118,35 @@ struct SimplePageCtx {
     definition_text: String,
 }
 
+#[derive(Clone, Serialize)]
+struct PlatformPageCtx {
+    style_href: String,
+    all_packages: Vec<SidebarPkgCtx>,
+    package_name: String,
+    name: String,
+    doc_body: String,
+    definition_text: String,
+    fpga: String,
+    part: String,
+    clock: Option<PlatformClockCtx>,
+    ports: Vec<PlatformPortCtx>,
+}
+
+#[derive(Clone, Serialize)]
+struct PlatformClockCtx {
+    port: String,
+    pin: String,
+    period_ns: String,
+}
+
+#[derive(Clone, Serialize)]
+struct PlatformPortCtx {
+    direction: String,
+    name: String,
+    pin: String,
+    type_str: String,
+}
+
 // ---------------------------------------------------------------------------
 // Tera engine setup
 // ---------------------------------------------------------------------------
@@ -151,6 +180,10 @@ fn make_tera() -> Result<Tera, tera::Error> {
     tera.add_raw_template(
         "fn_page.html.tera",
         include_str!("templates/fn_page.html.tera"),
+    )?;
+    tera.add_raw_template(
+        "platform_page.html.tera",
+        include_str!("templates/platform_page.html.tera"),
     )?;
     Ok(tera)
 }
@@ -300,6 +333,13 @@ pub fn generate_docs(
                     doc_body.as_bstr(),
                 )?,
                 SymbolKind::FnDef => render_fn_page(
+                    &tera,
+                    &node,
+                    &parsing,
+                    item_name.as_bstr(),
+                    doc_body.as_bstr(),
+                )?,
+                SymbolKind::Platform => render_platform_page(
                     &tera,
                     &node,
                     &parsing,
@@ -464,6 +504,15 @@ pub fn generate_docs(
                     &item_sidebar,
                     &pkg_str,
                 )?,
+                SymbolKind::Platform => render_platform_page_with_sidebar(
+                    &tera,
+                    &node,
+                    &parsing,
+                    entry.name.as_bstr(),
+                    entry.doc_body.as_bstr(),
+                    &item_sidebar,
+                    &pkg_str,
+                )?,
                 _ => continue,
             };
 
@@ -493,6 +542,7 @@ fn node_kind(node: &AstNode<'_>) -> SymbolKind {
         AstNodePayload::BuiltinDef(_) => SymbolKind::BuiltinDef,
         AstNodePayload::FnDef(_) => SymbolKind::FnDef,
         AstNodePayload::SocketDef(_) => SymbolKind::SocketDef,
+        AstNodePayload::Platform(_) => SymbolKind::Platform,
         _ => unreachable!(),
     }
 }
@@ -562,6 +612,7 @@ fn kind_label(kind: &SymbolKind) -> &'static str {
         SymbolKind::BuiltinDef => "builtin",
         SymbolKind::FnDef => "fn",
         SymbolKind::SocketDef => "socket",
+        SymbolKind::Platform => "platform",
         _ => "?",
     }
 }
@@ -731,6 +782,165 @@ fn render_fn_page_with_sidebar(
     Ok(tera.render("fn_page.html.tera", &tera::Context::from_serialize(&ctx)?)?)
 }
 
+fn render_platform_page_with_sidebar(
+    tera: &Tera,
+    node: &AstNode<'_>,
+    parsing: &Parsing,
+    item_name: &BStr,
+    doc_body: &BStr,
+    all_packages: &[SidebarPkgCtx],
+    package_name: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    use crate::common::ComponentKind;
+    use crate::syntax::ast::item_children;
+
+    let name_str: String = item_name.to_str_lossy().into_owned();
+
+    let definition_span = node.span();
+    let definition_text = parsing.text(definition_span);
+
+    // Read platform-level annotations: @fpga and @part.
+    // Strip surrounding double quotes from annotation string values.
+    let mut fpga = String::new();
+    let mut part = String::new();
+    for anno in node.annotations() {
+        let Some(an) = anno.annotation_name() else { continue };
+        let key = parsing.string(an);
+        if key == "fpga" {
+            if let Some(s) = anno.annotation_string() {
+                let raw = parsing.string(s);
+                let raw_bytes = raw.as_bytes();
+                let trimmed = if raw_bytes.len() >= 2
+                    && raw_bytes[0] == b'"' && raw_bytes[raw_bytes.len() - 1] == b'"'
+                {
+                    &raw_bytes[1..raw_bytes.len() - 1]
+                } else {
+                    raw_bytes
+                };
+                fpga = String::from_utf8_lossy(trimmed).into_owned();
+            }
+        } else if key == "part" {
+            if let Some(s) = anno.annotation_string() {
+                let raw = parsing.string(s);
+                let raw_bytes = raw.as_bytes();
+                let trimmed = if raw_bytes.len() >= 2
+                    && raw_bytes[0] == b'"' && raw_bytes[raw_bytes.len() - 1] == b'"'
+                {
+                    &raw_bytes[1..raw_bytes.len() - 1]
+                } else {
+                    raw_bytes
+                };
+                part = String::from_utf8_lossy(trimmed).into_owned();
+            }
+        }
+    }
+
+    // Walk platform ports.
+    let mut clock: Option<PlatformClockCtx> = None;
+    let mut ports: Vec<PlatformPortCtx> = Vec::new();
+
+    for child in item_children(node) {
+        let AstNodePayload::Component(comp) = child.payload() else { continue };
+        if !matches!(comp.kind, ComponentKind::Incoming | ComponentKind::Outgoing) {
+            continue;
+        }
+
+        let port_name = parsing.string(comp.name).to_str_lossy().into_owned();
+        let direction = match comp.kind {
+            ComponentKind::Incoming => "incoming",
+            ComponentKind::Outgoing => "outgoing",
+            _ => unreachable!(),
+        };
+
+        // Read @pin and @period_ns from port annotations.
+        let mut pin_str = String::new();
+        let mut period_ns: Option<String> = None;
+        for anno in child.annotations() {
+            let Some(an) = anno.annotation_name() else { continue };
+            let key = parsing.string(an);
+            if key == "pin" {
+                if let Some(s) = anno.annotation_string() {
+                    let raw = parsing.string(s);
+                    let raw_bytes = raw.as_bytes();
+                    let trimmed = if raw_bytes.len() >= 2
+                        && raw_bytes[0] == b'"' && raw_bytes[raw_bytes.len() - 1] == b'"'
+                    {
+                        &raw_bytes[1..raw_bytes.len() - 1]
+                    } else {
+                        raw_bytes
+                    };
+                    pin_str = String::from_utf8_lossy(trimmed).into_owned();
+                } else if let Some(n) = anno.annotation_natural() {
+                    pin_str = n.to_string();
+                }
+            } else if key == "period_ns" {
+                if let Some(s) = anno.annotation_string() {
+                    let raw = parsing.string(s);
+                    let raw_bytes = raw.as_bytes();
+                    let trimmed = if raw_bytes.len() >= 2
+                        && raw_bytes[0] == b'"' && raw_bytes[raw_bytes.len() - 1] == b'"'
+                    {
+                        &raw_bytes[1..raw_bytes.len() - 1]
+                    } else {
+                        raw_bytes
+                    };
+                    period_ns = Some(String::from_utf8_lossy(trimmed).into_owned());
+                } else if let Some(n) = anno.annotation_natural() {
+                    period_ns = Some(n.to_string());
+                }
+            }
+        }
+
+        // Determine the port's type string by walking the Type child.
+        let mut type_str = String::from("?");
+        for inner in item_children(&child) {
+            if let AstNodePayload::Type(_) = inner.payload() {
+                let ofness = inner.child(0);
+                if let AstNodePayload::Ofness(of) = ofness.payload() {
+                    type_str = parsing.string(of.name).to_str_lossy().into_owned();
+                }
+                break;
+            }
+        }
+
+        // Detect clock port (type name `Clock`).
+        if type_str == "Clock" {
+            if let Some(ref pn) = period_ns {
+                clock = Some(PlatformClockCtx {
+                    port: port_name.clone(),
+                    pin: pin_str.clone(),
+                    period_ns: pn.clone(),
+                });
+            }
+        }
+
+        ports.push(PlatformPortCtx {
+            direction: direction.to_owned(),
+            name: port_name,
+            pin: pin_str,
+            type_str,
+        });
+    }
+
+    let ctx = PlatformPageCtx {
+        style_href: style_href(1),
+        all_packages: all_packages.to_vec(),
+        package_name: package_name.to_owned(),
+        name: name_str,
+        doc_body: doc_body.to_str_lossy().into_owned(),
+        definition_text: definition_text.to_str_lossy().into_owned(),
+        fpga,
+        part,
+        clock,
+        ports,
+    };
+
+    Ok(tera.render(
+        "platform_page.html.tera",
+        &tera::Context::from_serialize(&ctx)?,
+    )?)
+}
+
 // These are stubs used during the first pass (no sidebar data yet).
 // They still compile because the context defaults to empty sidebar,
 // but the output is discarded and regenerated in the second pass.
@@ -783,6 +993,18 @@ fn render_fn_page(
     doc_body: &BStr,
 ) -> Result<String, Box<dyn std::error::Error>> {
     render_fn_page_with_sidebar(
+        tera, node, parsing, item_name, doc_body, &[], "",
+    )
+}
+
+fn render_platform_page(
+    tera: &Tera,
+    node: &AstNode<'_>,
+    parsing: &Parsing,
+    item_name: &BStr,
+    doc_body: &BStr,
+) -> Result<String, Box<dyn std::error::Error>> {
+    render_platform_page_with_sidebar(
         tera, node, parsing, item_name, doc_body, &[], "",
     )
 }
