@@ -572,6 +572,32 @@ div.highlight:hover .copy-button {
   background-color: var(--bg-code-block-wrapper);
 }
 
+/* Table styling - use same border and width as code blocks */
+.rst-content table.docutils {
+  border: 1px solid var(--border-code);
+  border-radius: 6px;
+  width: 100%;
+  overflow-x: auto;
+  margin: 1px 0 24px;
+}
+
+.rst-content table.docutils td,
+.rst-content table.docutils th {
+  padding: 8px 16px;
+  font-size: 90%;
+  border-bottom: 1px solid var(--border-light);
+  border-left: 1px solid var(--border-light);
+}
+
+.rst-content table.docutils td:first-child,
+.rst-content table.docutils th:first-child {
+  border-left-width: 0;
+}
+
+.rst-content table.docutils tbody>tr:last-child td {
+  border-bottom-width: 0;
+}
+
 /* Dark mode for notes/warnings/admonitions */
 [data-theme="dark"] .rst-content .admonition {
   background-color: var(--bg-code);
