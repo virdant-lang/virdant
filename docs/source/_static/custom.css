@@ -548,6 +548,30 @@ div.highlight:hover .copy-button {
   border-color: var(--border-code);
 }
 
+/* Dark mode for table row stripping - override theme.css */
+[data-theme="dark"] .rst-content table.docutils:not(.field-list) tr:nth-child(2n-1) td,
+[data-theme="dark"] .rst-content table.docutils:not(.field-list) tr.row-odd td,
+[data-theme="dark"] .rst-content table.docutils:not(.field-list) tr.row-even td,
+[data-theme="dark"] .wy-table-odd td,
+[data-theme="dark"] .wy-table-striped tr:nth-child(2n-1) td {
+  background-color: var(--bg-code);
+}
+
+[data-theme="dark"] .rst-content table.docutils:not(.field-list) tr:nth-child(2n) td,
+[data-theme="dark"] .wy-table-even td,
+[data-theme="dark"] .wy-table-striped tr:nth-child(2n) td {
+  background-color: var(--bg-code-block-wrapper);
+}
+
+/* Dark mode for table row classes directly on tr elements */
+[data-theme="dark"] .rst-content table.docutils tr.row-odd {
+  background-color: var(--bg-code);
+}
+
+[data-theme="dark"] .rst-content table.docutils tr.row-even {
+  background-color: var(--bg-code-block-wrapper);
+}
+
 /* Dark mode for notes/warnings/admonitions */
 [data-theme="dark"] .rst-content .admonition {
   background-color: var(--bg-code);
