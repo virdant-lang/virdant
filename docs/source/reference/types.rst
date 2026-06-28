@@ -258,7 +258,7 @@ A `builtin type` declaration may specify generic parameters:
 
     builtin type Word[n : Width] {}
 
-A generic type parameter has a name and a kind (such as ``Width`` for bit widths).
+A generic type parameter has a name and a kind (such as `Width` for bit widths).
 When instantiating a generic type, the parameter is provided in square brackets:
 
 .. code-block:: virdant
@@ -282,5 +282,5 @@ Kind System
 Types are classified into kinds.
 A kind describes the family of types that a generic parameter ranges over.
 
-The kind ``Width`` corresponds to natural numbers used as bit widths.
+The kind `Width` corresponds to natural numbers used as bit widths.
 Additional kinds may be introduced by builtin type declarations.

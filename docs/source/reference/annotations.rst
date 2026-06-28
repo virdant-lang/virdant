@@ -11,7 +11,7 @@ generators.
 
 Syntax
 ------
-An annotation starts with ``@`` followed by a name and an optional value.
+An annotation starts with :vir:`@` followed by a name and an optional value.
 
 .. code-block:: grammar
 
@@ -22,14 +22,14 @@ An annotation starts with ``@`` followed by a name and an optional value.
 
 Three forms are supported:
 
-* ``@name`` --- a bare annotation with no value.
-  Example: ``@keep``
+* :vir:`@name` --- a bare annotation with no value.
+  Example: :vir:`@keep`
 
-* ``@name(123)`` --- an annotation with a natural number value.
-  Example: ``@pin(35)``
+* :vir:`@name(123)` --- an annotation with a natural number value.
+  Example: :vir:`@pin(35)`
 
-* ``@name("string")`` --- an annotation with a string value.
-  Example: ``@pin("E3")``
+* :vir:`@name("string")` --- an annotation with a string value.
+  Example: :vir:`@pin("E3")`
 
 Multiple annotations may be stacked on a single declaration:
 
@@ -54,14 +54,14 @@ Annotatable declarations include:
 * Union type definitions and their variants (with params)
 * Enum type definitions and their variants
 * Builtin type definitions
-* Socket definitions and their channels (``cosi`` / ``soci``)
-* Component declarations (``incoming``, ``outgoing``, ``wire``, ``reg``)
-* Module instances (``mod ... of ...``)
-* Socket instances (``client socket`` / ``server socket``)
+* Socket definitions and their channels (:vir:`cosi` / :vir:`soci`)
+* Component declarations (:vir:`incoming`, :vir:`outgoing`, :vir:`wire`, :vir:`reg`)
+* Module instances (:vir:`mod` ... :vir:`of` ...)
+* Socket instances (:vir:`client` :vir:`socket` / :vir:`server` :vir:`socket`)
 * Struct type fields
-* Union variant parameters (``Param``)
+* Union variant parameters (:vir:`Param`)
 
-The grammar shows ``Annotations`` as a non-terminal in all of these productions:
+The grammar shows :vir:`Annotations` as a non-terminal in all of these productions:
 
 .. code-block:: grammar
 

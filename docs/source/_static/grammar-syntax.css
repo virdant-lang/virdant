@@ -82,3 +82,60 @@
 .grammar-inline .m {
     color: #C65D3B;
 }
+
+/* ----- Dark mode overrides ----- */
+[data-theme="dark"] .highlight-grammar .c1 {
+    color: #6a7a6a;
+}
+
+[data-theme="dark"] .highlight-grammar .s {
+    color: #c89070;
+}
+
+[data-theme="dark"] .highlight-grammar .nc {
+    color: #b8a060;
+}
+
+[data-theme="dark"] .highlight-grammar .n {
+    color: #b89080;
+}
+
+[data-theme="dark"] .highlight-grammar .o {
+    color: #8a9a7a;
+}
+
+[data-theme="dark"] .highlight-grammar .p {
+    color: #a09080;
+}
+
+[data-theme="dark"] .highlight-grammar .m {
+    color: #c89070;
+}
+
+[data-theme="dark"] .grammar-inline .c1 {
+    color: #6a7a6a;
+}
+
+[data-theme="dark"] .grammar-inline .s {
+    color: #c89070;
+}
+
+[data-theme="dark"] .grammar-inline .nc {
+    color: #b8a060;
+}
+
+[data-theme="dark"] .grammar-inline .n {
+    color: #b89080;
+}
+
+[data-theme="dark"] .grammar-inline .o {
+    color: #8a9a7a;
+}
+
+[data-theme="dark"] .grammar-inline .p {
+    color: #a09080;
+}
+
+[data-theme="dark"] .grammar-inline .m {
+    color: #c89070;
+}

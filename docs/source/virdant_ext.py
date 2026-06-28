@@ -49,7 +49,13 @@ class VirdantLexer(RegexLexer):
             (r'>', Punctuation),
             (r'[-+()<>{}\[\],;]', Punctuation),
             (r'[&|^~]', Punctuation),
-            (r'[@#\$\?]', Punctuation),
+            (r'[#\$\?]', Punctuation),
+            # Annotations (@name, @name(...)) must come before plain @
+            (r'@[a-zA-Z_][_a-zA-Z_0-9]*', Name.Decorator),
+            (r'@', Punctuation),
+            # String literals
+            (r'"[^"]*"', String.Double),
+            (r"'[^']*'", String.Single),
             # Number literals with width suffix (must come before plain versions)
             (r'0b[0-1][0-1_]*w[0-9][0-9_]*', Number.Integer),
             (r'0x[0-9a-fA-F][0-9a-fA-F_]*w[0-9][0-9_]*', Number.Integer),
@@ -65,8 +71,6 @@ class VirdantLexer(RegexLexer):
             (r'\b(true|false)\b', Keyword.Constant),
             # Keywords
             (words(KEYWORDS, suffix=r'\b'), Keyword),
-            # Special @ prefix (for union constructors)
-            (r'@\b([a-zA-Z_][a-zA-Z_0-9]*)\b', Name.Decorator),
             # Whitespace
             (r'\s+', Text),
             # Comments

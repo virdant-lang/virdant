@@ -37,3 +37,34 @@
 .highlight-console .err {
     color: #C65D3B;
 }
+
+/* ----- Dark mode overrides ----- */
+[data-theme="dark"] .highlight-console {
+    color: #b8b8b8;
+}
+
+[data-theme="dark"] .highlight-console .gp {
+    color: #c8b080;
+    font-weight: bold;
+}
+
+[data-theme="dark"] .highlight-console .go {
+    color: #b8b8b8;
+}
+
+[data-theme="dark"] .highlight-console .ge {
+    color: #d08070;
+    font-weight: bold;
+}
+
+[data-theme="dark"] .highlight-console .gt {
+    color: #d08070;
+}
+
+[data-theme="dark"] .highlight-console .nb {
+    color: #8aa070;
+}
+
+[data-theme="dark"] .highlight-console .err {
+    color: #d08070;
+}

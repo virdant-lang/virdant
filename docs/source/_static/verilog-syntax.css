@@ -105,3 +105,80 @@
     color: #9CA892;
     font-style: italic;
 }
+
+/* ----- Dark mode overrides ----- */
+[data-theme="dark"] .highlight-verilog .k {
+    color: #8a9a7a;
+}
+
+[data-theme="dark"] .highlight-verilog .nb {
+    color: #b8a060;
+}
+
+[data-theme="dark"] .highlight-verilog .m,
+[data-theme="dark"] .highlight-verilog .mh {
+    color: #c89070;
+}
+
+[data-theme="dark"] .highlight-verilog .c1,
+[data-theme="dark"] .highlight-verilog .cm {
+    color: #6a7a6a;
+}
+
+[data-theme="dark"] .highlight-verilog .s {
+    color: #c89070;
+}
+
+[data-theme="dark"] .highlight-verilog .o {
+    color: #a09080;
+}
+
+[data-theme="dark"] .highlight-verilog .p {
+    color: #a09080;
+}
+
+[data-theme="dark"] .highlight-verilog .n {
+    color: #b89080;
+}
+
+[data-theme="dark"] .highlight-verilog .cp {
+    color: #6a7a6a;
+}
+
+[data-theme="dark"] .verilog-inline .k {
+    color: #8a9a7a;
+}
+
+[data-theme="dark"] .verilog-inline .nb {
+    color: #b8a060;
+}
+
+[data-theme="dark"] .verilog-inline .m,
+[data-theme="dark"] .verilog-inline .mh {
+    color: #c89070;
+}
+
+[data-theme="dark"] .verilog-inline .c1,
+[data-theme="dark"] .verilog-inline .cm {
+    color: #6a7a6a;
+}
+
+[data-theme="dark"] .verilog-inline .s {
+    color: #c89070;
+}
+
+[data-theme="dark"] .verilog-inline .o {
+    color: #a09080;
+}
+
+[data-theme="dark"] .verilog-inline .p {
+    color: #a09080;
+}
+
+[data-theme="dark"] .verilog-inline .n {
+    color: #b89080;
+}
+
+[data-theme="dark"] .verilog-inline .cp {
+    color: #6a7a6a;
+}

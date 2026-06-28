@@ -89,7 +89,7 @@ direction for each instance.
         memory.mem :=: core.mem
     }
 
-The `:=:` operator connects every port in the ``Mem`` socket between
+The `:=:` operator connects every port in the `Mem` socket between
 the `core` and `memory` instances.
 The `addr` port is driven by `core` and received by `memory`.
 The `data` port is driven by `memory` and received by `core`.

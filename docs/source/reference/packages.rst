@@ -15,7 +15,7 @@ declarations across files.
         | Item
 
 A package consists of an optional package-level documentation comment
-(`//!`, called ``DocBang`` in the grammar), followed by zero or more
+(`//!`, called `DocBang` in the grammar), followed by zero or more
 import statements and item declarations.
 
 
@@ -24,11 +24,11 @@ Package Structure
 Each Virdant source file corresponds to one package.
 The package name is derived from the filename:
 
-* ``buffer.vir`` defines the `buffer` package
-* ``top.vir`` defines the `top` package
+* `buffer.vir` defines the `buffer` package
+* `top.vir` defines the `top` package
 * `uart/` would define the `uart` package
 
-The file extension is ``.vir``.
+The file extension is `.vir`.
 Filenames should begin with a lowercase letter and use snake_case for
 multi-word names.
 
@@ -60,7 +60,7 @@ current package.
         out := buf.out
     }
 
-The `import` keyword is followed by the package name (without the ``.vir``
+The `import` keyword is followed by the package name (without the `.vir`
 extension).
 All items exported by the imported package become available through their
 fully-qualified names.
@@ -85,7 +85,7 @@ name within that package.
 
     mod buf of buffer::Buffer
 
-Here, `buffer::Buffer` refers to the ``Buffer`` module defined in the
+Here, `buffer::Buffer` refers to the `Buffer` module defined in the
 `buffer` package.
 
 Fully-qualified names are used in type positions (after `of`, in `: Type`)

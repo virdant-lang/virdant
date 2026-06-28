@@ -104,3 +104,64 @@
     color: #B8851A;
     font-weight: 500;
 }
+
+/* ----- Dark mode overrides ----- */
+[data-theme="dark"] .highlight-virdant .k {
+    color: #8a9a7a;
+}
+
+[data-theme="dark"] .highlight-virdant .c1,
+[data-theme="dark"] .highlight-virdant .cm {
+    color: #6a7a6a;
+}
+
+[data-theme="dark"] .highlight-virdant .p {
+    color: #a09080;
+}
+
+[data-theme="dark"] .highlight-virdant .kp,
+[data-theme="dark"] .highlight-virdant .nv {
+    color: #b89080;
+}
+
+[data-theme="dark"] .highlight-virdant .kc,
+[data-theme="dark"] .highlight-virdant .nd,
+[data-theme="dark"] .highlight-virdant .no,
+[data-theme="dark"] .highlight-virdant .mi {
+    color: #c89070;
+}
+
+[data-theme="dark"] .highlight-virdant .nc,
+[data-theme="dark"] .highlight-virdant .nb {
+    color: #b8a060;
+}
+
+[data-theme="dark"] .vir-inline .k {
+    color: #8a9a7a;
+}
+
+[data-theme="dark"] .vir-inline .c1,
+[data-theme="dark"] .vir-inline .cm {
+    color: #6a7a6a;
+}
+
+[data-theme="dark"] .vir-inline .p {
+    color: #a09080;
+}
+
+[data-theme="dark"] .vir-inline .kp,
+[data-theme="dark"] .vir-inline .nv {
+    color: #b89080;
+}
+
+[data-theme="dark"] .vir-inline .kc,
+[data-theme="dark"] .vir-inline .nd,
+[data-theme="dark"] .vir-inline .no,
+[data-theme="dark"] .vir-inline .mi {
+    color: #c89070;
+}
+
+[data-theme="dark"] .vir-inline .nc,
+[data-theme="dark"] .vir-inline .nb {
+    color: #b8a060;
+}

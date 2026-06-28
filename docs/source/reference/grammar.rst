@@ -102,7 +102,7 @@ The following are valid identifiers:
 * `counter`
 * `Clock`
 * `_internal`
-* ``RgbColor``
+* :vir:`RgbColor`
 * `opcode3`
 
 Identifiers are case-sensitive: `myReg` and `myreg` are different names.
@@ -181,7 +181,7 @@ They are ignored by the compiler.
 
     A literal written without the `w` annotation requires a surrounding context
     that determines the type.
-    For example, if assigned to a `Word[8]` component, the literal ``42``
+    For example, if assigned to a `Word[8]` component, the literal `42`
     is inferred as `42w8`.
 
     If the context cannot determine the width, the compiler will report an error.

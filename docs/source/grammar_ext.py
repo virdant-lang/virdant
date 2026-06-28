@@ -38,6 +38,9 @@ class GrammarLexer(RegexLexer):
             # The assignment operator
             (r':=', Operator),
 
+            # Ellipsis
+            (r'\.\.\.', Punctuation),
+
             # Colon (for productions like "ident:")
             (r':', Punctuation),
 

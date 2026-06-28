@@ -34,7 +34,7 @@ The `#` syntax selects a named variant of an enum type.
         case #STORE  => 0x23
     }
 
-The pattern `#OP` matches only the ``OP`` variant of the enum type.
+The pattern `#OP` matches only the `OP` variant of the enum type.
 The scrutinee and the patterns must belong to the same enum type.
 
 
@@ -121,7 +121,7 @@ Literal patterns match a value against a specific constant.
     }
 
 Literal patterns support both `Bit` literals (`true`, `false`) and
-`Word` literals (``0``, `42w8`, `0xff`).
+`Word` literals (`0`, `42w8`, `0xff`).
 
 
 Exhaustiveness
