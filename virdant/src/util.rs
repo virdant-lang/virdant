@@ -1,8 +1,10 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use crate::common::{Width, WordValue};
 use crate::db::Db;
 use crate::diagnostics::{Diagnostic, DiagnosticLevel};
+use crate::fqn::PackageFqn;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::common::source::Source;
 
@@ -146,4 +148,125 @@ pub fn check_db(db: &Db) -> Result<Arc<Vec<Diagnostic>>, Arc<Vec<Diagnostic>>> {
     } else {
         Ok(diagnostics)
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn resolve_platform_path_in(project_root: &Path, platform: &str) -> std::path::PathBuf {
+    let local = project_root.join("platform").join(format!("{platform}.vir"));
+    if local.is_file() {
+        return std::fs::canonicalize(&local)
+            .expect(&format!("Could not canonicalize platform path: {local:?}"));
+    }
+    let global = crate::PLATFORMS_DIR.join(format!("{platform}.vir"));
+    if global.is_file() {
+        return global;
+    }
+    panic!("platform file not found for: {platform}");
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn resolve_platform_path(platform: &str) -> std::path::PathBuf {
+    resolve_platform_path_in(Path::new("."), platform)
+}
+
+pub fn read_platform_from_toml(source_dir: &Path) -> Result<Option<String>, String> {
+    let toml_path = source_dir.join("Virdant.toml");
+    if !toml_path.exists() {
+        return Ok(None);
+    }
+    let contents = std::fs::read_to_string(&toml_path)
+        .map_err(|e| format!("failed to read Virdant.toml: {e}"))?;
+    let value: toml::Value = toml::from_str(&contents)
+        .map_err(|e| format!("failed to parse Virdant.toml: {e}"))?;
+    Ok(value.get("prog").and_then(|p| p.get("platform"))
+        .and_then(|s| s.as_str()).map(|s| s.to_owned()))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn db_from_dir_with_platform<P: Into<std::path::PathBuf>>(
+    source_dir: P,
+    platform: &str,
+) -> Db {
+    db_from_dir_with_platform_and_lib(source_dir, platform, crate::LIB_DIR.as_path())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn db_from_dir_with_platform_and_lib<P, Q>(
+    source_dir: P,
+    platform: &str,
+    lib_dir: Q,
+) -> Db
+where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf>,
+{
+    let mut db = db_from_dir_with_lib(source_dir, lib_dir);
+    let path = resolve_platform_path(platform);
+    let pkg: PackageFqn = platform.to_owned().into();
+    let source = Source::load_file(path);
+    db.set_source(pkg.clone(), source);
+    let mut packages: Vec<PackageFqn> = (*db.get_packages()).clone();
+    if !packages.contains(&pkg) {
+        packages.push(pkg);
+        db.set_packages(packages);
+    }
+    db
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn db_from_dir_with_platform_in<P: Into<std::path::PathBuf>>(
+    source_dir: P,
+    project_root: &Path,
+    platform: &str,
+) -> Db {
+    db_from_dir_with_platform_and_lib_in(source_dir, project_root, platform, crate::LIB_DIR.as_path())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn db_from_dir_with_platform_and_lib_in<P, Q>(
+    source_dir: P,
+    project_root: &Path,
+    platform: &str,
+    lib_dir: Q,
+) -> Db
+where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf>,
+{
+    let mut db = db_from_dir_with_lib(source_dir, lib_dir);
+    let path = resolve_platform_path_in(project_root, platform);
+    let pkg: PackageFqn = platform.to_owned().into();
+    let source = Source::load_file(path);
+    db.set_source(pkg.clone(), source);
+    let mut packages: Vec<PackageFqn> = (*db.get_packages()).clone();
+    if !packages.contains(&pkg) {
+        packages.push(pkg);
+        db.set_packages(packages);
+    }
+    db
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn db_from_files_with_platform(
+    source_files: Vec<std::path::PathBuf>,
+    platform: &str,
+) -> Db {
+    db_from_files_with_platform_and_lib(source_files, platform, crate::LIB_DIR.as_path())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn db_from_files_with_platform_and_lib<Q>(
+    source_files: Vec<std::path::PathBuf>,
+    platform: &str,
+    lib_dir: Q,
+) -> Db
+where Q: Into<std::path::PathBuf>,
+{
+    let mut db = db_from_files_with_lib(source_files, lib_dir);
+    let path = resolve_platform_path(platform);
+    let pkg: PackageFqn = platform.to_owned().into();
+    let source = Source::load_file(path);
+    db.set_source(pkg.clone(), source);
+    let mut packages: Vec<PackageFqn> = (*db.get_packages()).clone();
+    if !packages.contains(&pkg) {
+        packages.push(pkg);
+        db.set_packages(packages);
+    }
+    db
 }

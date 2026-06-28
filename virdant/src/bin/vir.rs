@@ -4,15 +4,14 @@ use clap::{Parser, Subcommand};
 use bstr::{BStr, BString, ByteSlice};
 use colored::Colorize;
 use nix::unistd::execvp;
-use virdant::util::{check_db, db_from_dir, db_from_files};
+use virdant::util::{check_db, db_from_dir, db_from_dir_with_platform, db_from_files, read_platform_from_toml};
 use std::ffi::{CString, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use virdant::db::Db;
 use virdant::diagnostics::DiagnosticLevel;
 use virdant::fqn::PackageFqn;
-use virdant::common::{Flow, source::{Region, Source}};
-use virdant::analysis::symbols::SymbolKind;
+use virdant::common::source::{Region, Source};
 use virdant::syntax::parsing::parse;
 use virdant::syntax::token::tokenize;
 use virdant::syntax::token::Token;
@@ -156,7 +155,14 @@ fn project_db(args: &Args) -> Db {
         std::process::exit(1);
     }
 
-    db_from_dir(src_dir)
+    match read_platform_from_toml(&cwd) {
+        Ok(Some(platform)) => db_from_dir_with_platform(src_dir, &platform),
+        Ok(None) => db_from_dir(src_dir),
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    }
 }
 
 fn region_string(region: Region) -> String {
@@ -716,208 +722,180 @@ fn new_project(args: &Args, project: &str) {
 }
 
 fn bitstream(args: &Args) {
-    let cwd = if let Some(cwd) = &args.cwd {
-        std::fs::canonicalize(cwd).unwrap()
-    } else {
-        std::env::current_dir().unwrap()
-    };
+    let cwd = resolve_cwd(args);
 
     if !cwd.join("Virdant.toml").exists() {
         eprintln!("No Virdant.toml found");
         std::process::exit(1);
     }
 
-    let virdant_toml_text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
-    let virdant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
-
-    let project = virdant_toml["project"]["name"].as_str().unwrap().to_owned();
-
-    let platform = virdant_toml
-        .get("prog")
-        .and_then(|p| p.get("platform"))
-        .and_then(|p| p.as_str())
-        .unwrap_or_else(|| {
+    let platform_name = match read_platform_from_toml(&cwd) {
+        Ok(Some(p)) => p,
+        Ok(None) => {
             eprintln!("Virdant.toml is missing [prog] platform");
             std::process::exit(1);
-        });
-    assert_eq!(platform, "icesugar", "Only 'icesugar' platform is supported");
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    };
 
-    let builddir = cwd.join("build");
-
-    // Build Verilog
+    let project = read_project_name(&cwd);
+    let build_dir = cwd.join("build");
     let source_dir = cwd.join("src");
-    let db = db_from_dir(source_dir);
+
+    let db = virdant::util::db_from_dir_with_platform(source_dir, &platform_name);
     dump_diagnostics(&db);
     if check_db(&db).is_err() {
         eprintln!("Build failed");
         std::process::exit(1);
     }
-    std::fs::create_dir_all(&builddir).unwrap();
+
+    std::fs::create_dir_all(&build_dir).unwrap();
     let verilog = virdant::verilog::conversion::convert_db_to_verilog(&db);
-    verilog.write_in_dir(&builddir).unwrap();
-    println!("Wrote Verilog to {}", builddir.to_string_lossy());
+    verilog.write_in_dir(&build_dir).unwrap();
+    println!("Wrote Verilog to {}", build_dir.to_string_lossy());
 
-    // Write yosys script
-    let sv_files = glob_sv_files(&builddir);
-    let sv_list: Vec<String> = sv_files.iter()
-        .map(|p| p.to_string_lossy().into_owned())
-        .collect();
-    let project_json = builddir.join(format!("{project}.json"));
-    let script_content = format!(
-        "read_verilog -I {} {}; synth_ice40 -top Top -json {}",
-        builddir.to_string_lossy(),
-        sv_list.join(" "),
-        project_json.to_string_lossy(),
-    );
-    let script_path = builddir.join("script.ys");
-    std::fs::write(&script_path, &script_content).unwrap();
-
-    // Run yosys
-    let yosys_log = builddir.join("yosys.log");
-    let output = std::process::Command::new("yosys")
-        .arg("-l").arg(&yosys_log)
-        .arg(&script_path)
-        .output().unwrap();
-    if !output.status.success() {
-        eprintln!("{}", BStr::new(&output.stderr));
-        eprintln!("yosys failed");
+    let platform_pkg: PackageFqn = platform_name.clone().into();
+    let pa = db.get_platform_analysis(platform_pkg.clone());
+    if !pa.diagnostics.is_empty() {
+        for d in &pa.diagnostics {
+            eprintln!("{}", d.message());
+        }
+        eprintln!("platform analysis failed");
         std::process::exit(1);
     }
-    println!("{}", BStr::new(&output.stdout));
-    println!("yosys OK");
 
-    // Run nextpnr-ice40
-    create_pcf_file(&db, "Top".into(), &builddir);
-    let pcf = builddir.join("icesugar.pcf");
-    let project_asc = builddir.join(format!("{project}.asc"));
-    let output = std::process::Command::new("nextpnr-ice40")
-        .arg("--up5k")
-        .arg("--top").arg("Top")
-        .arg("--json").arg(&project_json)
-        .arg("--pcf").arg(&pcf)
-        .arg("--asc").arg(&project_asc)
-        .arg("--package").arg("sg48")
-        .output().unwrap();
-    if !output.status.success() {
-        eprintln!("{}", BStr::new(&output.stderr));
-        eprintln!("nextpnr-ice40 failed");
-        std::process::exit(1);
-    }
-    println!("{}", BStr::new(&output.stdout));
-    println!("nextpnr-ice40 OK");
-
-    // Run icepack
-    let project_bin = builddir.join(format!("{project}.bin"));
-    let output = std::process::Command::new("icepack")
-        .arg("-s")
-        .arg(&project_asc)
-        .arg(&project_bin)
-        .output().unwrap();
-    if !output.status.success() {
-        eprintln!("{}", BStr::new(&output.stderr));
-        eprintln!("icepack failed");
-        std::process::exit(1);
-    }
-    println!("{}", BStr::new(&output.stdout));
-    println!("Bitstream written to {}", project_bin.to_string_lossy());
-}
-
-fn create_pcf_file(db: &Db, top: &BStr, builddir: &PathBuf) {
-    const ICESGUAR_PORTS: [(&'static str, usize); 45] = [
-        ("clock", 35),
-        ("led_red", 39),
-        ("led_blue", 40),
-        ("led_green", 41),
-        ("switch0", 18),
-        ("switch1", 19),
-        ("switch2", 20),
-        ("switch3", 21),
-        ("uart_rx", 4),
-        ("uart_tx", 6),
-        ("usb_dp", 10),
-        ("usb_dn", 9),
-        ("usb_pullup", 11),
-        ("p1_1", 10),
-        ("p1_2", 6),
-        ("p1_3", 3),
-        ("p1_4", 48),
-        ("p1_9", 47),
-        ("p1_10", 2),
-        ("p1_11", 4),
-        ("p1_12", 9),
-        ("p2_1", 46),
-        ("p2_2", 44),
-        ("p2_3", 42),
-        ("p2_4", 37),
-        ("p2_9", 36),
-        ("p2_10", 38),
-        ("p2_11", 43),
-        ("p2_12", 45),
-        ("p3_1", 34),
-        ("p3_2", 31),
-        ("p3_3", 27),
-        ("p3_4", 25),
-        ("p3_9", 23),
-        ("p3_10", 26),
-        ("p3_11", 28),
-        ("p3_12", 32),
-        ("p4_1", 21),
-        ("p4_2", 20),
-        ("p4_3", 19),
-        ("p4_4", 18),
-        ("spi_cs", 16),
-        ("spi_clk", 15),
-        ("spi_do", 14),
-        ("spi_di", 17),
-    ];
-    // Collect the port names present on the top module
     let symboltable = db.get_symboltable();
-    let top_symbol = symboltable.items()
-        .into_iter()
-        .find(|sym| sym.name.as_bstr() == top && sym.kind == SymbolKind::ModDef)
-        .unwrap_or_else(|| panic!("module '{}' not found", top));
-    let component_analysis = db.get_component_analysis(top_symbol.id);
-    let port_names: indexmap::IndexSet<String> = component_analysis.components()
-        .into_iter()
-        .filter(|(path, component)| !path.contains(&b'.') && component.flow() != Flow::Duplex)
-        .map(|(path, _)| path.to_str_lossy().into_owned())
-        .collect();
+    let top_id = resolve_top_module(&db, &symboltable)
+        .unwrap_or_else(|e| {
+            eprintln!("{e}");
+            std::process::exit(1);
+        });
+    let top_symbol = symboltable.symbol(top_id);
+    let top_name: String = top_symbol.name.to_string();
 
-    // Emit only the ICESUGAR_PORTS entries that exist on the top module
-    let mut pcf_content = String::new();
-    for (name, pin) in ICESGUAR_PORTS.iter() {
-        if port_names.contains(*name) {
-            pcf_content.push_str(&format!("set_io {name} {pin}\n"));
+    let ports = db.get_ports_of(top_id);
+    let port_names: Vec<&BStr> = ports.iter().map(|p| p.path.as_bstr()).collect();
+
+    let fpga = pa.fpga.as_ref()
+        .map(|f| f.to_string())
+        .unwrap_or_else(|| {
+            eprintln!("platform missing @fpga");
+            std::process::exit(1);
+        });
+    let format = virdant::build::format_for(&fpga)
+        .unwrap_or_else(|| {
+            eprintln!("unknown FPGA family: {fpga}");
+            std::process::exit(1);
+        });
+    let ext = virdant::build::extension_for(format);
+
+    let constraints = virdant::build::emit_constraints(format, &pa, &port_names);
+    let cpath = build_dir.join(format!("{}{}", pa.name, ext));
+    std::fs::write(&cpath, &constraints).unwrap();
+
+    for port in &port_names {
+        if !pa.pins.iter().any(|p| p.port.as_bstr() == *port) {
+            eprintln!(
+                "warning: top port '{}' has no platform pin; left unconstrained",
+                port
+            );
         }
     }
-    std::fs::write(builddir.join("icesugar.pcf"), pcf_content).unwrap();
+
+    let toolchain = virdant::build::toolchain_for(&fpga)
+        .unwrap_or_else(|| {
+            eprintln!("unknown FPGA family: {fpga}");
+            std::process::exit(1);
+        });
+    if let Err(e) = virdant::build::run_toolchain(
+        &build_dir, &project, &top_name, &pa, toolchain, ext,
+    ) {
+        eprintln!("toolchain error: {e}");
+        std::process::exit(1);
+    }
+}
+
+fn resolve_cwd(args: &Args) -> PathBuf {
+    if let Some(cwd) = &args.cwd {
+        match std::fs::canonicalize(cwd) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("ERROR: cannot resolve directory {}: {e}", cwd.display());
+                std::process::exit(1);
+            }
+        }
+    } else {
+        match std::env::current_dir() {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("ERROR: cannot determine current directory: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+fn read_project_name(cwd: &Path) -> String {
+    let text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
+    let v: toml::Value = toml::from_str(&text).unwrap();
+    v["project"]["name"].as_str().unwrap().to_owned()
+}
+
+fn resolve_top_module(
+    db: &Db,
+    symboltable: &virdant::analysis::symbols::SymbolTable,
+) -> Result<virdant::analysis::symbols::SymbolId, String> {
+    use virdant::analysis::symbols::SymbolKind;
+    use virdant::syntax::payload::AstNodePayload;
+    let exported: Vec<_> = symboltable.items().into_iter()
+        .filter(|s| s.kind == SymbolKind::ModDef)
+        .filter(|s| {
+            let parsing = db.get_parsing(s.location.package());
+            let node = parsing.ast_node(s.location.ast_node_id());
+            matches!(node.payload(), AstNodePayload::ModDef(m) if m.is_export)
+        })
+        .collect();
+    if exported.len() != 1 {
+        return Err(format!(
+            "expected exactly one `export mod`, found {}",
+            exported.len()
+        ));
+    }
+    Ok(exported[0].id)
 }
 
 fn upload(args: &Args) {
     bitstream(args);
 
-    let cwd = if let Some(cwd) = &args.cwd {
-        std::fs::canonicalize(cwd).unwrap()
-    } else {
-        std::env::current_dir().unwrap()
-    };
-
-    let virdant_toml_text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
-    let virdant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
-    let project = virdant_toml["project"]["name"].as_str().unwrap().to_owned();
-
-    let builddir = cwd.join("build");
-    let project_bin = builddir.join(format!("{project}.bin"));
-
-    let output = std::process::Command::new("icesprog")
-        .arg(&project_bin)
-        .output().unwrap();
-    if !output.status.success() {
-        eprintln!("icesprog failed");
-        eprintln!("{}", BStr::new(&output.stderr));
+    let cwd = resolve_cwd(args);
+    let platform_name = read_platform_from_toml(&cwd)
+        .ok().flatten()
+        .unwrap_or_else(|| {
+            eprintln!("platform not set");
+            std::process::exit(1);
+        });
+    let platform_pkg: PackageFqn = platform_name.clone().into();
+    let db = virdant::util::db_from_dir_with_platform(cwd.join("src"), &platform_name);
+    let pa = db.get_platform_analysis(platform_pkg);
+    let fpga = pa.fpga.as_ref()
+        .map(|f| f.to_string())
+        .unwrap_or_else(|| {
+            eprintln!("platform missing @fpga");
+            std::process::exit(1);
+        });
+    let toolchain = virdant::build::toolchain_for(&fpga)
+        .unwrap_or_else(|| {
+            eprintln!("unknown FPGA family: {fpga}");
+            std::process::exit(1);
+        });
+    let project = read_project_name(&cwd);
+    if let Err(e) = virdant::build::flash_bitstream(&cwd.join("build"), &project, toolchain) {
+        eprintln!("flash error: {e}");
         std::process::exit(1);
     }
-    println!("Uploaded {}", project_bin.to_string_lossy());
 }
 
 fn glob_sv_files(dir: &Path) -> Vec<PathBuf> {

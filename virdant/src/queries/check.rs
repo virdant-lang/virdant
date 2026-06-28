@@ -63,10 +63,16 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     diagnostics.extend(type_index.diagnostics());
 
     for item in symboltable.items() {
+        if item.kind == SymbolKind::Platform {
+            continue;
+        }
         diagnostics.extend(builder.check_drivers(item.id()).iter().cloned());
     }
 
     for item in symboltable.items() {
+        if item.kind == SymbolKind::Platform {
+            continue;
+        }
         diagnostics.extend(builder.get_match_coverage(item.id()).iter().cloned());
     }
 
@@ -74,6 +80,11 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
         if item.kind == SymbolKind::ModDef {
             let component_analysis = builder.get_component_analysis(item.id());
             diagnostics.extend(component_analysis.diagnostics());
+        }
+        if item.kind == SymbolKind::Platform {
+            // Platforms do not participate in typechecking or driver checks.
+            // Their validation lives in PlatformAnalysis.
+            continue;
         }
         diagnostics.extend(builder.typecheck(item.id()).iter().cloned());
 
@@ -90,6 +101,15 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
 
     // Check for recursive module instantiations.
     check_mod_cycles(builder, &mut diagnostics);
+
+    // Run platform analysis for any package that declares a platform item.
+    for package in builder.get_packages().iter() {
+        let package_analysis = builder.get_package_analysis(package.clone());
+        if package_analysis.platform().is_some() {
+            let platform_analysis = builder.get_platform_analysis(package.clone());
+            diagnostics.extend(platform_analysis.diagnostics.iter().cloned());
+        }
+    }
 
     diagnostics.sort_by_key(|d| {
         let region = d.region();

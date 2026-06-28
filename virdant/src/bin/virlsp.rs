@@ -13,6 +13,7 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 use serde_json::json;
 
 use virdant::LIB_DIR;
+use virdant::util::{db_from_dir, db_from_dir_with_platform_in, read_platform_from_toml};
 use virdant::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
 use virdant::types::{ExprRoot, Type};
 use virdant::db::Db;
@@ -51,42 +52,21 @@ fn new_db() -> Db {
     db
 }
 
-fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
-    let mut db = Db::new();
-    db.set_packages(vec![]);
-    let builtin_source = Source::load_file(LIB_DIR.join("builtin.vir"));
-    let mut sources = vec![builtin_source.clone()];
-    db.set_source(builtin_source.package(), builtin_source);
-    let source_dir = source_dir.into();
-    match std::fs::read_dir(&source_dir) {
-        Ok(entries) => {
-            for filepath in entries {
-                let filepath = match filepath {
-                    Ok(filepath) => filepath.path(),
-                    Err(_) => continue,
-                };
-                match filepath.extension() {
-                    Some(ext) if ext.to_string_lossy() == "vir" => (),
-                    _ => continue,
-                }
-                let source = Source::load_file(filepath);
-                db.set_source(source.package(), source.clone());
-                sources.push(source);
-            }
-        }
-        Err(e) => {
-            eprintln!(
-                "warning: cannot read source directory {}: {e}",
-                source_dir.display(),
-            );
-        }
-    }
-    db.set_packages(sources.iter().map(|source| source.package()).collect());
-    db
-}
-
 fn db_is_empty(db: &Db) -> bool {
     db.get_packages().len() < 2
+}
+
+fn find_project_root(uri: &Url) -> Option<std::path::PathBuf> {
+    let mut dir = std::path::PathBuf::from(uri.path());
+    dir.pop();
+    loop {
+        if dir.join("Virdant.toml").is_file() {
+            return Some(dir);
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
 }
 
 impl Backend {
@@ -163,14 +143,37 @@ impl LanguageServer for Backend {
             .log_message(MessageType::INFO, format!("File opened: {uri}"))
             .await;
 
-        let workspace = workspace_root(&uri);
         let package = uri_to_packagefqn(&uri);
         let text: BString = params.text_document.text.into();
 
         {
             let mut state = self.state.lock().await;
             if db_is_empty(&state.db) {
-                state.db = db_from_dir(&workspace);
+                let workspace = workspace_root(&uri);
+                let project = find_project_root(&uri);
+                if let Some(ref project_root) = project {
+                    let src_dir = project_root.join("src");
+                    if src_dir.is_dir() {
+                        match read_platform_from_toml(project_root) {
+                            Ok(Some(platform)) => {
+                                state.db = db_from_dir_with_platform_in(&src_dir, project_root, &platform);
+                            }
+                            Ok(None) => {
+                                state.db = db_from_dir(&src_dir);
+                            }
+                            Err(e) => {
+                                self.client
+                                    .log_message(MessageType::WARNING, format!("failed to read Virdant.toml: {e}"))
+                                    .await;
+                                state.db = db_from_dir(&workspace);
+                            }
+                        }
+                    } else {
+                        state.db = db_from_dir(&workspace);
+                    }
+                } else {
+                    state.db = db_from_dir(&workspace);
+                }
             }
 
             let new_source = Source::new(package.clone(), text);
@@ -199,9 +202,32 @@ impl LanguageServer for Backend {
 
         {
             let mut state = self.state.lock().await;
-            let workspace = workspace_root(&uri);
             if db_is_empty(&state.db) {
-                state.db = db_from_dir(workspace);
+                let workspace = workspace_root(&uri);
+                let project = find_project_root(&uri);
+                if let Some(ref project_root) = project {
+                    let src_dir = project_root.join("src");
+                    if src_dir.is_dir() {
+                        match read_platform_from_toml(project_root) {
+                            Ok(Some(platform)) => {
+                                state.db = db_from_dir_with_platform_in(&src_dir, project_root, &platform);
+                            }
+                            Ok(None) => {
+                                state.db = db_from_dir(&src_dir);
+                            }
+                            Err(e) => {
+                                self.client
+                                    .log_message(MessageType::WARNING, format!("failed to read Virdant.toml: {e}"))
+                                    .await;
+                                state.db = db_from_dir(&workspace);
+                            }
+                        }
+                    } else {
+                        state.db = db_from_dir(&workspace);
+                    }
+                } else {
+                    state.db = db_from_dir(&workspace);
+                }
             }
             let packages = state.db.get_packages();
             if !packages.contains(&package) {

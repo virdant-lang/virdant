@@ -116,6 +116,7 @@ pub enum Token {
     #[token(b"true")]      KwTrue,
     #[token(b"false")]     KwFalse,
     #[token(b"dontcare")]  KwDontcare,
+    #[token(b"platform")]  KwPlatform,
     #[token(b"dyn")]       KwDyn,
 
     // Unused
@@ -136,7 +137,7 @@ pub const KEYWORDS: &[&str] = &[
     "socket", "client", "server", "cosi", "soci",
     "if", "it", "else", "when",
     "match", "case", "unused",
-    "true", "false", "dontcare",
+    "true", "false", "dontcare", "platform",
 ];
 
 impl std::fmt::Display for Token {

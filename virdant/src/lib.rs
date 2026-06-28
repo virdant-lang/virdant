@@ -10,6 +10,7 @@ pub mod types;
 pub mod docs;
 pub mod util;
 pub mod sim;
+pub mod build;
 #[cfg(not(feature = "wasm"))]
 pub mod script;
 
@@ -27,4 +28,9 @@ pub const LIB_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| {
     let root = exe.parent().unwrap().parent().unwrap();
     let lib = root.join("lib");
     std::fs::canonicalize(&lib).expect(&format!("Could not find {lib:?}"))
+});
+
+#[cfg(not(target_arch = "wasm32"))]
+pub const PLATFORMS_DIR: LazyLock<std::path::PathBuf> = LazyLock::new(|| {
+    LIB_DIR.parent().unwrap().join("platform")
 });

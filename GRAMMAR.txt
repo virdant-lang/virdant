@@ -24,6 +24,7 @@ Item :=
     | EnumDef
     | BuiltinDef
     | SocketDef
+    | PlatformDef
 
 ModDef := DocString? Annotations "ext"? "export"? "mod" Ident "{" ModDefStmt* "}"
 
@@ -60,6 +61,10 @@ SocketDef := DocString? Annotations "socket" Ident "{" SocketDefStmt* "}"
 SocketDefStmt :=
       DocString? Annotations "cosi" Ident ":" Type
     | DocString? Annotations "soci" Ident ":" Type
+
+PlatformDef := DocString? Annotations "platform" Ident "{" PlatformStmt* "}"
+
+PlatformStmt := ModDefStmtComponent
 
 ModDefStmt :=
       ModDefStmtComponent
@@ -331,6 +336,7 @@ Tokens:
   "of"
   "on"
   "outgoing"
+  "platform"
   "reg"
   "server"
   "soci"

@@ -8,7 +8,7 @@ use crate::db::Builder;
 use crate::diagnostics;
 use crate::fqn::PackageFqn;
 use crate::common::source::Region;
-use crate::syntax::ast::{AstNode, AstNodeId};
+use crate::syntax::ast::{AstNode, AstNodeId, item_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 use crate::{analysis::Location, diagnostics::Diagnostic};
@@ -43,6 +43,7 @@ pub enum SymbolKind {
     BuiltinDef,
     FnDef,
     SocketDef,
+    Platform,
     Component,
     Submodule,
     Socket,
@@ -199,6 +200,7 @@ impl SymbolKind {
             SymbolKind::BuiltinDef => true,
             SymbolKind::FnDef => true,
             SymbolKind::SocketDef => true,
+            SymbolKind::Platform => true,
             _ => false,
         }
     }
@@ -333,6 +335,17 @@ fn build_symboltable_item(
         }
         AstNodePayload::FnDef(_) => (),
         AstNodePayload::SocketDef(_) => (),
+        AstNodePayload::Platform(_) => {
+            build_symboltable_platform_slot(
+                symbols,
+                diagnostics,
+                package,
+                parsing,
+                item_name,
+                &node,
+                id,
+            );
+        }
         _ => unreachable!("Unexpected node: {:?}", node.summary()),
     }
 }
@@ -463,6 +476,50 @@ fn build_symboltable_typedef_slot(
     }
 }
 
+fn build_symboltable_platform_slot(
+    symbols: &mut Vec<(BString, Symbol)>,
+    diagnostics: &mut Vec<Diagnostic>,
+    package: PackageFqn,
+    parsing: &Parsing,
+    item_name: &BString,
+    node: &AstNode<'_>,
+    parent_id: SymbolId,
+) {
+    let mut seen: IndexMap<BString, Region> = IndexMap::new();
+
+    for child in item_children(node) {
+        let AstNodePayload::Component(component) = child.payload() else { continue };
+        if !matches!(component.kind,
+            crate::common::ComponentKind::Incoming
+            | crate::common::ComponentKind::Outgoing
+        ) { continue; }
+
+        let port_name: BString = parsing.string(component.name).to_owned();
+        let port_region = Region::new(package.clone(), child.span());
+
+        if seen.contains_key(&port_name) {
+            diagnostics.push(
+                diagnostics::DuplicateSlot {
+                    item: item_name.to_owned().into(),
+                    region: port_region,
+                    slot: port_name,
+                }.into(),
+            );
+            continue;
+        }
+        seen.insert(port_name.clone(), port_region);
+
+        let fqn: BString = format!("{}::{}::{}", package, item_name, port_name).into();
+        let location = Location::new(package.clone(), child.id());
+        let slot_id = SymbolId(symbols.len().try_into().unwrap());
+        symbols.push((fqn.clone(), Symbol {
+            id: slot_id, fqn, name: port_name, location,
+            kind: SymbolKind::Component,
+            parent_id: Some(parent_id),
+        }));
+    }
+}
+
 fn node_to_symbol_kind(node: &AstNode<'_>) -> SymbolKind {
     match node.payload() {
         AstNodePayload::ModDef(_) => SymbolKind::ModDef,
@@ -472,11 +529,10 @@ fn node_to_symbol_kind(node: &AstNode<'_>) -> SymbolKind {
         AstNodePayload::BuiltinDef(_) => SymbolKind::BuiltinDef,
         AstNodePayload::FnDef(_) => SymbolKind::FnDef,
         AstNodePayload::SocketDef(_) => SymbolKind::SocketDef,
+        AstNodePayload::Platform(_) => SymbolKind::Platform,
         _ => unreachable!(),
     }
-}
-
-pub(crate) fn build_symbol_ast(builder: &mut Builder, symbol_id: SymbolId) -> AstNodeId {
+}pub(crate) fn build_symbol_ast(builder: &mut Builder, symbol_id: SymbolId) -> AstNodeId {
     let symboltable = builder.get_symboltable();
     let symbol = symboltable.symbol(symbol_id);
     symbol.location().ast_node_id()

@@ -17,6 +17,7 @@ use crate::analysis::drivers::DriverAnalysis;
 use crate::analysis::elaboration::Elaboration;
 use crate::analysis::location::Location;
 use crate::analysis::package::PackageAnalysis;
+use crate::analysis::platform::PlatformAnalysis;
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::symbols::{SymbolId, SymbolTable};
 use crate::analysis::ports::Port;
@@ -42,6 +43,7 @@ queries! {
     SyntaxErrors() -> Arc<Vec<Diagnostic>>; // TODO is this even useful?
     LocationRegion(location: Location) -> Region;
     PackageAnalysis(package: PackageFqn) -> Arc<PackageAnalysis>;
+    PlatformAnalysis(package: PackageFqn) -> Arc<PlatformAnalysis>;
     ComponentAnalysis(symbol_id: SymbolId) -> Arc<ComponentAnalysis>;
     SymbolTable() -> Arc<SymbolTable>;
     SymbolAst(symbol_id: SymbolId) -> AstNodeId; // TODO Should return Location. Also, is this used?
@@ -89,6 +91,7 @@ impl Query {
             crate::queries::build_parsing : Parsing(package);
             crate::queries::build_syntax_errors : SyntaxErrors();
             crate::queries::build_package_analysis : PackageAnalysis(analysis);
+            crate::analysis::platform::build_platform_analysis : PlatformAnalysis(package);
             crate::analysis::component::build_component_analysis : ComponentAnalysis(symbol_id);
             crate::analysis::symbols::build_symboltable : SymbolTable();
             crate::analysis::symbols::build_symbol_ast : SymbolAst(symbol_id);
@@ -127,6 +130,7 @@ db_getter!(get_parsing : Parsing(package: PackageFqn) -> Arc<Parsing>);
 db_getter!(string : String(string: InternedString) -> Arc<BString>);
 db_getter!(get_syntax_errors : SyntaxErrors() -> Arc<Vec<Diagnostic>>);
 db_getter!(get_package_analysis : PackageAnalysis(package: PackageFqn) -> Arc<PackageAnalysis>);
+db_getter!(get_platform_analysis : PlatformAnalysis(package: PackageFqn) -> Arc<PlatformAnalysis>);
 db_getter!(get_component_analysis : ComponentAnalysis(moddef: SymbolId) -> Arc<ComponentAnalysis>);
 db_getter!(get_symboltable : SymbolTable() -> Arc<SymbolTable>);
 db_getter!(get_symbol_ast : SymbolAst(symbol_id: SymbolId) -> AstNodeId);

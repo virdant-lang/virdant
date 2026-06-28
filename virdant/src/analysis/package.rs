@@ -29,6 +29,7 @@ pub struct PackageAnalysis {
     items: IndexMap<BString, Vec<AstNodeId>>,
     expr_roots: Vec<AstNodeId>,
     diagnostics: Vec<Diagnostic>,
+    platform: Option<AstNodeId>,
 }
 
 impl PackageAnalysis {
@@ -39,6 +40,7 @@ impl PackageAnalysis {
             items: IndexMap::new(),
             expr_roots: vec![],
             diagnostics: vec![],
+            platform: None,
         };
 
         analysis.add_imports(parsing.clone());
@@ -82,6 +84,10 @@ impl PackageAnalysis {
         self.expr_roots.clone()
     }
 
+    pub fn platform(&self) -> Option<AstNodeId> {
+        self.platform
+    }
+
     pub fn item_ast_node_id(&self, item_name: &BStr) -> AstNodeId {
         if let Some(items) = self.items.get(item_name) {
             let item_ast_id = &items[0];
@@ -110,6 +116,17 @@ impl PackageAnalysis {
     fn add_items(&mut self, parsing: Arc<Parsing>) {
         let root = parsing.root();
         for child_node in root.children() {
+            if let AstNodePayload::Platform(_) = child_node.payload() {
+                if self.platform.is_some() {
+                    self.diagnostics.push(
+                        diagnostics::DuplicatePlatform {
+                            region: Region::new(self.package(), child_node.span()),
+                        }.into()
+                    );
+                } else {
+                    self.platform = Some(child_node.id());
+                }
+            }
             if child_node.is_item() {
                 let name = parsing.string(child_node.name().unwrap()).to_owned();
                 if !self.items.contains_key(&name) {

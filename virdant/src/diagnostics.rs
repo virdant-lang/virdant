@@ -382,6 +382,65 @@ pub struct Soften {
     pub level: DiagnosticLevel,
 }
 
+/// A package contains two or more `platform` items.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DuplicatePlatform {
+    pub region: Region,
+}
+
+/// A package defines no `platform` item but was loaded as a platform package.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformMissing {
+    pub package: PackageFqn,
+}
+
+/// A `platform` declares an `@fpga` that is not one of the supported families.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformUnknownFpga {
+    pub fpga: BString,
+    pub region: Region,
+}
+
+/// A platform port has no `@pin` annotation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformMissingPin {
+    pub port: BString,
+    pub region: Region,
+}
+
+/// A platform port has more than one `@pin` annotation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformMultiplePins {
+    pub port: BString,
+    pub region: Region,
+}
+
+/// A platform Clock port has no `@period_ns` annotation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformMissingPeriodNs {
+    pub port: BString,
+    pub region: Region,
+}
+
+/// A platform defines no Clock port (and thus no clock source).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformMissingClock {
+    pub region: Region,
+}
+
+/// A platform defines more than one Clock port.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformMultipleClocks {
+    pub region: Region,
+}
+
+/// A top module port has no matching platform pin.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformUnconstrainedPort {
+    pub port: BString,
+    pub region: Region,
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl Diagnostic {
@@ -1003,4 +1062,100 @@ impl Diagnostic {
             level: DiagnosticLevel::Info,
         }).into()
     }
+}
+
+impl IsDiagnostic for DuplicatePlatform {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Duplicate platform declaration").into()
+    }
+}
+
+impl IsDiagnostic for PlatformMissing {
+    fn region(&self) -> Region {
+        Region::new(self.package.clone(),
+            crate::common::source::Span::new(
+                crate::common::source::LineCol::new(0, 0),
+                crate::common::source::LineCol::new(0, 0),
+            ))
+    }
+
+    fn message(&self) -> BString {
+        format!("Package {} has no platform item", self.package).into()
+    }
+}
+
+impl IsDiagnostic for PlatformUnknownFpga {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Unknown FPGA family: {:?} (expected one of ice40, ecp5, nexus, gowin, artix7)", self.fpga).into()
+    }
+}
+
+impl IsDiagnostic for PlatformMissingPin {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Platform port {:?} has no @pin annotation", self.port).into()
+    }
+}
+
+impl IsDiagnostic for PlatformMultiplePins {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Platform port {:?} has multiple @pin annotations", self.port).into()
+    }
+}
+
+impl IsDiagnostic for PlatformMissingPeriodNs {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Platform clock port {:?} has no @period_ns annotation", self.port).into()
+    }
+}
+
+impl IsDiagnostic for PlatformMissingClock {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Platform has no Clock port").into()
+    }
+}
+
+impl IsDiagnostic for PlatformMultipleClocks {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Platform has multiple Clock ports").into()
+    }
+}
+
+impl IsDiagnostic for PlatformUnconstrainedPort {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!("Top port {:?} has no matching platform pin", self.port).into()
+    }
+
+    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }
 }

@@ -15,7 +15,8 @@ grammar:
 
 virdant/target/lib:
 	mkdir -p target/lib
-	cp -r ./lib/* target/lib/
+	cp -r ./lib/*     target/lib/
+	cp -r ./platform  target/platform
 
 build-wasm:
 	cargo build -p virdant --lib --target wasm32-unknown-unknown --no-default-features --features "wasm"
@@ -37,7 +38,8 @@ install: build
 	mkdir -p ${HOME}/.local/virdant/lib
 	cp ./target/release/vir ${HOME}/.local/virdant/bin/
 	cp ./target/release/vir-* ${HOME}/.local/virdant/bin/
-	cp -r ./lib/* ${HOME}/.local/virdant/lib/
+	cp -r ./lib/*     ${HOME}/.local/virdant/lib/
+	cp -r ./platform  ${HOME}/.local/virdant/platform
 	cp ./target/release/filecheck ${HOME}/.local/virdant/bin/
 
 docs:
@@ -51,6 +53,7 @@ release: build
 	cp -r ./target/release/vir     build/deb/virdant/usr/local/bin/
 	cp -r ./target/release/vir-lsp build/deb/virdant/usr/local/bin/
 	cp -r ./lib                    build/deb/virdant/usr/lib/virdant
+	cp -r ./platform               build/deb/virdant/usr/lib/virdant/platform
 	VERSION=$$(git branch --show-current); \
 	echo "Package: virdant"                                   > build/deb/virdant/DEBIAN/control; \
 	echo "Version: $${VERSION#v}"                             >> build/deb/virdant/DEBIAN/control; \

@@ -160,6 +160,8 @@ impl<'p> AstNode<'p> {
             AstNodePayload::BuiltinDef(_builtin_def) => format!("BuiltinDef"),
             AstNodePayload::FnDef(_fn_def) => format!("FnDef"),
             AstNodePayload::SocketDef(_socket_def) => format!("SocketDef"),
+            AstNodePayload::Platform(p) =>
+                format!("Platform {}", parsing.string(p.name.clone())),
             AstNodePayload::Component(component) => format!("Component {:?} {}", component.kind, parsing.string(component.name.clone())),
             AstNodePayload::Driver(_driver) => format!("Driver"),
             AstNodePayload::BidirectionalDriver => format!("BidirectionalDriver"),
@@ -225,7 +227,8 @@ impl<'p> AstNode<'p> {
             AstNodePayload::EnumDef(_) |
             AstNodePayload::BuiltinDef(_) |
             AstNodePayload::FnDef(_) |
-            AstNodePayload::SocketDef(_)
+            AstNodePayload::SocketDef(_) |
+            AstNodePayload::Platform(_)
         )
     }
 
@@ -239,6 +242,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::BuiltinDef(b) => b.doc_string.as_ref(),
             AstNodePayload::FnDef(f) => f.doc_string.as_ref(),
             AstNodePayload::SocketDef(s) => s.doc_string.as_ref(),
+            AstNodePayload::Platform(p) => p.doc_string.as_ref(),
             AstNodePayload::Component(c) => c.doc_string.as_ref(),
             AstNodePayload::Socket(s) => s.doc_string.as_ref(),
             AstNodePayload::Field(f) => f.doc_string.as_ref(),
@@ -258,6 +262,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::StructDef(struct_def) => Some(struct_def.name.clone()),
             AstNodePayload::FnDef(fn_def) => Some(fn_def.name.clone()),
             AstNodePayload::SocketDef(socket_def) => Some(socket_def.name.clone()),
+            AstNodePayload::Platform(p) => Some(p.name.clone()),
             AstNodePayload::BuiltinDef(builtin_def) => Some(builtin_def.name.clone()),
             AstNodePayload::EnumDef(enum_def) => Some(enum_def.name.clone()),
             _ => None,
@@ -512,4 +517,16 @@ pub fn when_arm_children<'a, 'p>(
         }
     }
     out
+}
+
+/// Returns the structural children of `node`, skipping the leading
+/// `Annotations` wrapper node and any `Annotation` children.
+/// Use this when iterating the meaningful contents of an item or slot.
+pub fn item_children<'a>(node: &'a AstNode<'a>) -> Vec<AstNode<'a>> {
+    node.children().into_iter()
+        .filter(|c| !matches!(c.payload(),
+            AstNodePayload::Annotations(_)
+            | AstNodePayload::Annotation(_)
+        ))
+        .collect()
 }

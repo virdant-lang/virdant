@@ -1,10 +1,12 @@
-mod Top {
-    incoming clock : Clock
-    outgoing led : Bit
+import icesugar
 
-    reg counter : Word[32] on clock {
+export mod Top {
+    incoming clock : Clock
+    outgoing led_red : Bit
+
+    reg counter : Word[24] on clock {
         it <= it + 1
     }
 
-    led := counter[21]
+    led_red := counter[23]
 }
