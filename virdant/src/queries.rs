@@ -1,5 +1,6 @@
 pub mod check;
 pub mod check_drivers;
+pub mod combinational_cycles;
 pub mod match_coverage;
 pub mod parsing;
 pub mod syntax;

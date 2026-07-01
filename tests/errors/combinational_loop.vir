@@ -1,0 +1,16 @@
+// Simple combinational loop: x -> y -> x via continuous assignments.
+// All edges are combinational, so this is an error.
+
+// CHECK: Combinational loop detected
+// CHECK: Check failed
+
+mod Loop {
+    incoming clk : Clock
+
+    wire x : Word[8] on clk
+    wire y : Word[8] on clk
+    wire z : Word[8] on clk
+    x := y
+    y := z
+    z := x
+}

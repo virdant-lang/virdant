@@ -69,6 +69,7 @@ ModDefStmt :=
     | ModDefStmtWhen
     | ModDefStmtMatch
     | ModDefStmtUnused
+    | ModDefStmtDependsOn
 
 ModDefStmtComponent :=
       DocString? Annotations "incoming" Ident ":" Type OnClause? ItBlock?
@@ -118,6 +119,8 @@ ModDefStmtMatchArm :=
     | "else" ModDefStmtMatch
 
 ModDefStmtUnused := "unused" Path
+
+ModDefStmtDependsOn := Path "dependson" Path
 
 ModDefStmtBlock := "{" ModDefStmt* "}"
 
@@ -316,6 +319,7 @@ Tokens:
   "case"
   "client"
   "cosi"
+  "dependson"
   "dontcare"
   "dyn"
   "else"

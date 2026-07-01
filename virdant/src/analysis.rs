@@ -3,6 +3,7 @@ pub mod location;
 pub mod package;
 pub mod symbols;
 pub mod drivers;
+pub mod dependency;
 pub mod elaboration;
 pub mod ports;
 pub mod structs;

@@ -376,6 +376,15 @@ pub struct RedundantDriver {
     pub path: BString,
 }
 
+/// A combinational loop was detected in a module's dependency graph.
+/// All edges in the cycle are combinational, which would causal, which would cause
+/// simulation to never converge.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CombinationalLoop {
+    pub region: Region,
+    pub components: Vec<BString>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Soften {
     pub inner: Diagnostic,
@@ -987,6 +996,26 @@ impl IsDiagnostic for RedundantDriver {
     }
 
     fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }
+}
+
+impl IsDiagnostic for CombinationalLoop {
+    fn region(&self) -> Region {
+        self.region.clone()
+    }
+
+    fn message(&self) -> BString {
+        format!(
+            "Combinational loop detected: {}",
+            self.components
+                .iter()
+                .map(|c| String::from_utf8_lossy(c).into_owned())
+                .collect::<Vec<_>>()
+                .join(" -> ")
+        )
+        .into()
+    }
+
+    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Error }
 }
 
 impl Diagnostic {

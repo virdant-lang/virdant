@@ -194,6 +194,7 @@ impl PackageAnalysis {
                         self.add_moddefstmtmatch_expr_roots(child_node);
                     }
                     AstNodePayload::ModDefStmtUnused => (),
+                    AstNodePayload::ModDefStmtDependsOn => (),
                     AstNodePayload::Error => (), // TODO should we even have error nodes at this point?
                     AstNodePayload::Annotations(_) => (),
                     _ => unreachable!("{:?}", child_node.summary()),

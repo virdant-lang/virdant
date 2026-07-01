@@ -1,0 +1,53 @@
+// Combinational loop via `dependson` statements.
+// a dependson b, b dependson c, c dependson a creates a cycle.
+
+// CHECK: Combinational loop detected
+mod Loop {
+    wire a : Word[8] on clk
+    wire b : Word[8] on clk
+    wire c : Word[8] on clk
+
+    unused a
+    unused b
+    unused c
+
+    // Real drivers so each signal has a value.
+    a := 1
+    b := 2
+    c := 3
+
+    // Dependson creates combinational edges a <- b <- c <- a.
+    // The driver edges (a from literal 1, etc.) are self-looping
+    // and get skipped.  The dependson edges form the cycle.
+    a dependson b
+    b dependson c
+    c dependson a
+}
+
+// CHECK: Combinational loop detected
+mod Loop2 {
+    mod loop_a of LoopA
+    mod loop_b of LoopB
+
+    loop_a.inp := loop_b.out
+    loop_b.inp := loop_a.out
+}
+
+mod LoopA {
+    incoming inp : Bit
+    outgoing out : Bit {
+        it := inp
+    }
+}
+
+mod LoopB {
+    incoming inp : Bit
+    outgoing out : Bit {
+        it := w
+    }
+    wire w : Bit {
+        it := inp
+    }
+}
+
+// CHECK: Check failed

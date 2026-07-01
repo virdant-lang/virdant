@@ -322,6 +322,7 @@ ModDefStmt: AstNodeId = {
     <w:ModDefStmtWhen> => w,
     <m:ModDefStmtMatch> => m,
     <unused_:ModDefStmtUnused> => unused_,
+    <dependson:ModDefStmtDependsOn> => dependson,
     <ll:@L> <error:!> <rr:@R> => {
         let span = parser.span(ll, rr);
         parser.add_error_node(span, error)
@@ -513,6 +514,16 @@ ModDefStmtUnused: AstNodeId = {
         let payload = AstNodePayload::ModDefStmtUnused;
         let span = parser.span(ll, rr);
         let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+ModDefStmtDependsOn: AstNodeId = {
+    <ll:@L> <lhs:Path> "dependson" <rhs:Path> <rr:@R> => {
+        let payload = AstNodePayload::ModDefStmtDependsOn;
+        let span = parser.span(ll, rr);
+        let num_children = 2;
 
         parser.add_node(payload, span, num_children)
     },
@@ -1078,6 +1089,7 @@ extern {
         "false" => Token::KwFalse,
         "dontcare" => Token::KwDontcare,
         "dyn" => Token::KwDyn,
+        "dependson" => Token::KwDependsOn,
         "Str" => Token::Str,
         "DocComment" => Token::DocComment,
         "DocBang" => Token::DocBang,

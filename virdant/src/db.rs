@@ -11,6 +11,7 @@ use bstr::BString;
 use indexmap::IndexSet;
 use indexmap::IndexMap;
 
+use crate::analysis::dependency::DependencyGraph;
 use crate::analysis::component::Component;
 use crate::analysis::component::ComponentId;
 use crate::analysis::drivers::DriverAnalysis;
@@ -49,6 +50,8 @@ queries! {
     Component(component_id: ComponentId) -> Arc<Component>;
     DriverAnalysis(symbol_id: SymbolId) -> Arc<DriverAnalysis>;
     CheckDrivers(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>;
+    DependencyGraph(symbol_id: SymbolId) -> Arc<DependencyGraph>;
+    CombinationalCycleCheck() -> Arc<Vec<Diagnostic>>;
     MatchCoverage(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>;
     TypeDefs() -> Arc<Vec<TypeDef>>;
     TypeDef(symbol_id: SymbolId) -> Arc<TypeDef>;
@@ -94,6 +97,8 @@ impl Query {
             crate::analysis::symbols::build_symbol_ast : SymbolAst(symbol_id);
             crate::analysis::component::build_component : Component(component_id);
             crate::analysis::drivers::build_driver_analysis : DriverAnalysis(symbol_id);
+            crate::analysis::dependency::build_dependency_graph : DependencyGraph(symbol_id);
+            crate::queries::combinational_cycles::build_combinational_cycle_check : CombinationalCycleCheck();
             crate::queries::check_drivers : CheckDrivers(symbol_id);
             crate::queries::build_match_coverage : MatchCoverage(symbol_id);
             crate::queries::find_exprroots : ExprRoots();
@@ -132,6 +137,8 @@ db_getter!(get_symboltable : SymbolTable() -> Arc<SymbolTable>);
 db_getter!(get_symbol_ast : SymbolAst(symbol_id: SymbolId) -> AstNodeId);
 db_getter!(get_component : Component(component_id: ComponentId) -> Arc<Component>);
 db_getter!(get_driver_analysis : DriverAnalysis(symbol_id: SymbolId) -> Arc<DriverAnalysis>);
+db_getter!(get_dependency_graph : DependencyGraph(symbol_id: SymbolId) -> Arc<DependencyGraph>);
+db_getter!(get_combinational_cycle_check : CombinationalCycleCheck() -> Arc<Vec<Diagnostic>>);
 db_getter!(check_drivers : CheckDrivers(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>);
 db_getter!(get_match_coverage : MatchCoverage(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>);
 db_getter!(get_typing_context : TypingContext(item: SymbolId) -> TypingContext);

@@ -170,6 +170,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ModDefStmtUnused => format!("ModDefStmtUnused"),
             AstNodePayload::Annotations(_) => format!("Annotations"),
             AstNodePayload::Annotation(annotation) => format!("Annotation {}", parsing.string(annotation.name.clone())),
+            AstNodePayload::ModDefStmtDependsOn => format!("ModDefStmtDependsOn"),
             AstNodePayload::Socket(_socket) => format!("Socket"),
             AstNodePayload::Field(_field) => format!("Field"),
             AstNodePayload::Ctor(_ctor) => format!("Ctor"),

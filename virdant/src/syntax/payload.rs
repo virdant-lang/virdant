@@ -24,6 +24,7 @@ pub enum AstNodePayload {
     ModDefStmtWhen,
     ModDefStmtMatch,
     ModDefStmtUnused,
+    ModDefStmtDependsOn,
     Socket(Socket),
 
     Annotations(AnnotationsPayload),
@@ -101,6 +102,7 @@ impl AstNodePayload {
             AstNodePayload::ModDefStmtWhen => "ModDefStmtWhen",
             AstNodePayload::ModDefStmtMatch => "ModDefStmtMatch",
             AstNodePayload::ModDefStmtUnused => "ModDefStmtUnused",
+            AstNodePayload::ModDefStmtDependsOn => "ModDefStmtDependsOn",
             AstNodePayload::Socket(_socket) => "Socket",
             AstNodePayload::Annotations(_) => "Annotations",
             AstNodePayload::Annotation(_) => "Annotation",

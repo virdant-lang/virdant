@@ -91,6 +91,11 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     // Check for recursive module instantiations.
     check_mod_cycles(builder, &mut diagnostics);
 
+    // Check for combinational loops in module dependency graphs.
+    // The check runs bottom-up per module in submodule-inclusion order,
+    // stitching per-module graphs along the instance tree.
+    diagnostics.extend(builder.get_combinational_cycle_check().iter().cloned());
+
     diagnostics.sort_by_key(|d| {
         let region = d.region();
         let start = region.start();
