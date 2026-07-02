@@ -267,7 +267,14 @@ impl<'d> Converter<'d> {
                 }
                 AstNodePayload::Submodule(module) => {
                     let raw_name = parsing.string(module.name).to_str_lossy().into_owned();
-                    let mod_path = render_ofness_path(stmt.child(1), package, &symboltable);
+                    // The Ofness child may sit at different indices depending on
+                    // whether an Annotations child is present, so locate it by
+                    // payload rather than by a hard-coded index.
+                    let ofness_node = stmt.children().iter()
+                        .find(|c| matches!(c.payload(), AstNodePayload::Ofness(_)))
+                        .cloned()
+                        .expect("Submodule node must have an Ofness child");
+                    let mod_path = render_ofness_path(ofness_node, package, &symboltable);
                     let ports_info = self.module_ports.get(&mod_path).cloned().unwrap_or_default();
                     let sub_name = self.emitted_module_names.get(&mod_path)
                         .cloned()
@@ -1874,26 +1881,29 @@ fn collect_bidirectional_assigns<'a>(
                 // to the correct wire prefix (e.g. `it.instr_mem` -> `cpu.instr_mem`).
                 let name = stmt.parsing.string(submodule.name);
                 let children = stmt.children();
-                // A Submodule with an It-block has [Ofness, It] as its two children.
-                if children.len() == 2 {
-                    let it_block = &children[1];
-                    if matches!(it_block.payload(), AstNodePayload::It) {
-                        let block = &it_block.children()[0];
-                        let name_bstr = if let Some(ctx) = it_context {
-                            let mut new_name = bstr::BString::from(ctx);
-                            new_name.push(b'.');
-                            new_name.extend_from_slice(name);
-                            new_name
-                        } else {
-                            bstr::BString::from(name)
-                        };
-                        collect_bidirectional_assigns(
-                            block.children(),
-                            component_analysis,
-                            Some(name_bstr.as_bstr()),
-                            elements,
-                        );
-                    }
+                // A Submodule with a body has an Ofness child, an optional
+                // Annotations child, and an It child.  Find the It-block by
+                // payload rather than by fixed index so that the optional
+                // Annotations child (added by the annotations feature) does
+                // not shift the It-block out from under us.
+                let it_block = children.iter()
+                    .find(|c| matches!(c.payload(), AstNodePayload::It));
+                if let Some(it_block) = it_block {
+                    let block = &it_block.children()[0];
+                    let name_bstr = if let Some(ctx) = it_context {
+                        let mut new_name = bstr::BString::from(ctx);
+                        new_name.push(b'.');
+                        new_name.extend_from_slice(name);
+                        new_name
+                    } else {
+                        bstr::BString::from(name)
+                    };
+                    collect_bidirectional_assigns(
+                        block.children(),
+                        component_analysis,
+                        Some(name_bstr.as_bstr()),
+                        elements,
+                    );
                 }
             }
             _ => {}

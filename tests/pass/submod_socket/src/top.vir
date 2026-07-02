@@ -1,0 +1,29 @@
+// Minimal repro of the riscv SoC socket-wiring bug.
+// Two submodules connected with `:=:` inside an instantiation block.
+socket Bus {
+    cosi req : Word[8]
+    soci rsp : Word[8]
+}
+
+mod Master {
+    client socket bus of Bus {
+        it.req := 7w8
+        unused it.rsp
+    }
+}
+
+mod Slave {
+    server socket bus of Bus {
+        it.rsp := it.req + 1w8
+    }
+}
+
+export mod Top {
+    mod m of Master
+    mod s of Slave {
+        m.bus :=: it.bus
+    }
+    outgoing out : Word[8] {
+        it := s.bus.rsp
+    }
+}
