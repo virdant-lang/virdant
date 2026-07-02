@@ -574,6 +574,10 @@ fn compile(path: PathBuf) {
 
     let db = db_from_dir(path.clone());
     dump_diagnostics(&db);
+    if check_db(&db).is_err() {
+        eprintln!("Build failed");
+        std::process::exit(1);
+    }
 
     std::fs::create_dir_all(&builddir).unwrap();
     let verilog = virdant::verilog::conversion::convert_db_to_verilog(&db);

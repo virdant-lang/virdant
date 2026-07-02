@@ -8,7 +8,6 @@ use crate::analysis::location::Location;
 use crate::analysis::symbols::SymbolTable;
 use crate::common::{self, ComponentKind, DriverType, Radix, TypeScheme, Width, WordValue};
 use crate::db::Db;
-use crate::diagnostics::DiagnosticLevel;
 use crate::fqn::PackageFqn;
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
@@ -68,13 +67,11 @@ impl ExprScheduler {
 }
 
 /// Converts the Db (checked analysis database) directly into its Verilog representation.
+///
+/// Caller must have verified that the database is free of errors (e.g. via
+/// `virdant::util::check_db`); this function performs no validation and assumes
+/// the input is well-formed.
 pub fn convert_db_to_verilog(db: &Db) -> verilog::Verilog {
-    let diagnostics = db.check();
-    if diagnostics.iter().any(|d| d.level() == DiagnosticLevel::Error) {
-        eprintln!("Compilation failed due to errors");
-        std::process::exit(1);
-    }
-
     let mut converter = Converter::new(db);
     let mut verilog = converter.run();
     verilog.normalize();
