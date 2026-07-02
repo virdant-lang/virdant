@@ -19,6 +19,7 @@ ports, components, instances, and control flow.
         | ModDefStmtSocket
         | ModDefStmtMatch
         | ModDefStmtUnused
+        | ModDefStmtDependsOn
 
 The order of statements within a module body does not matter.
 Virdant processes the module body as a set of declarations, not as a sequence
@@ -297,3 +298,123 @@ The keyword `it` inside the block refers to the enclosing declaration.
 Blocks are optional.
 When present, they provide a scoped grouping for related assignments and
 connections.
+
+
+dependson Statements
+--------------------
+The `dependson` statement declares a combinational dependency between two
+signals that the compiler cannot infer on its own.
+
+.. code-block:: grammar
+
+    ModDefStmtDependsOn :=
+        Path "dependson" Path
+
+The first path is the dependent signal and the second is the dependee:
+changes to the dependee combinationally affect the dependent.
+Virdant adds a combinational edge from the dependent to the dependee in
+the module's dependency graph.
+
+.. code-block:: virdant
+
+    ext mod PLL {
+        incoming clk_in  : Clock
+        outgoing clk_out : Clock {
+            it dependson clk_in
+        }
+    }
+
+In this example the PLL is an `ext mod`: its body is opaque to Virdant,
+so the compiler cannot see that `clk_out` is derived from `clk_in`.
+The `dependson` statement tells Virdant about that dependency.
+
+A standalone `dependson` (outside an `it` block) is also allowed:
+
+.. code-block:: virdant
+
+    ext mod ExternalMux {
+        incoming sel    : Bit
+        incoming a      : Bit
+        incoming b      : Bit
+        outgoing result : Bit
+
+        result dependson sel
+        result dependson a
+        result dependson b
+    }
+
+For internal modules, `dependson` documents a dependency chain without
+requiring the full driver expression:
+
+.. code-block:: virdant
+
+    mod Internal {
+        incoming clk : Clock
+        incoming inp : Word[8] on clk
+
+        reg stored : Word[8] on clk
+        stored <= inp
+
+        outgoing out_val : Word[8] on clk {
+            it dependson stored
+            it := stored
+        }
+    }
+
+Use `dependson` sparingly.
+It only adds edges to the dependency graph; it does not create a driver.
+The dependent signal still needs a real driver (`:=`, `<=`, or `:=:`).
+
+
+Combinational Cycle Detection
+------------------------------
+Virdant builds a dependency graph for every module and checks it for
+combinational cycles.
+Each `:=` and `:=:` driver adds combinational edges from its target to
+every signal read on the right-hand side.
+Each `dependson` statement adds a combinational edge from its dependent
+to its dependee.
+
+The checker stitches the module's own graph together with the already
+built graphs of its immediate submodule instances, prefixing each
+submodule path with the instance name.
+A cycle is reported at the module that closes it --- the lowest module
+whose own local edge completes a loop --- so each loop is reported
+exactly once.
+
+.. code-block:: virdant
+
+    mod Loop {
+        wire a : Word[8] on clk
+        wire b : Word[8] on clk
+        wire c : Word[8] on clk
+
+        a := 1
+        b := 2
+        c := 3
+
+        a dependson b
+        b dependson c
+        c dependson a
+    }
+
+The three `dependson` edges form a cycle `a -> b -> c -> a`.
+Although each wire also has a literal driver (a self-loop, which is
+skipped), the `dependson` edges alone close a combinational loop and
+the compiler reports an error.
+
+Cycles that cross module boundaries are detected the same way:
+
+.. code-block:: virdant
+
+    mod Loop2 {
+        mod loop_a of LoopA
+        mod loop_b of LoopB
+
+        loop_a.inp := loop_b.out
+        loop_b.inp := loop_a.out
+    }
+
+Here `loop_a.inp` depends on `loop_b.out`, which depends on
+`loop_b.w`, which depends on `loop_b.inp`, which depends on
+`loop_a.out` --- a stitched combinational loop reported at `Loop2`.
