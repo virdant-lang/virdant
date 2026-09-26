@@ -1,3 +1,7 @@
+//! Inline test module asserting docstring parsing: package `//!`,
+//! module `//>`, component, and struct-field docstrings attach to the
+//! correct AST node while plain/malformed comments do not.
+
 #[cfg(test)]
 mod test_docstrings {
     use crate::common::source::{Source, Span};

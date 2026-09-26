@@ -1,3 +1,7 @@
+//! Defines `TypingContext`, a scoped name-binding environment mapping
+//! identifiers to their referent (component or local) and optional
+//! type, used during inference and checking to resolve names in scope.
+
 use bstr::BString;
 
 use crate::analysis::component::ComponentId;

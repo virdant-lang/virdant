@@ -1,3 +1,7 @@
+//! HTML documentation generator that walks all packages and items in a
+//! `Db`, extracts docstrings, and renders project/package/item pages
+//! using embedded Tera templates with a shared sidebar and stylesheet.
+
 use std::io::Write;
 use std::path::Path;
 

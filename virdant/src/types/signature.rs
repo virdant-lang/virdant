@@ -1,3 +1,7 @@
+//! Defines `Signature`, the type signature of a union constructor
+//! (named parameters and return type), with `build_ctor_signature`
+//! constructing it from the constructor's AST node and the `TypeIndex`.
+
 use std::sync::Arc;
 
 use bstr::BString;

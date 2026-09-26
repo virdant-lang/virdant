@@ -1,3 +1,7 @@
+//! Extracts the fields of a `StructDef` symbol into `StructField`
+//! records (name, resolved type, field symbol id) by walking the struct
+//! AST node's direct children.
+
 use bstr::{BStr, BString};
 use bstr::ByteSlice;
 

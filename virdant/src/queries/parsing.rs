@@ -1,3 +1,7 @@
+//! Thin query implementations building the `Parsing` for a package
+//! (tokenizing + LALRPOP parsing) and resolving `InternedString` to
+//! owned `BString` text, cached so each package is parsed at most once.
+
 use std::sync::Arc;
 
 use bstr::BString;

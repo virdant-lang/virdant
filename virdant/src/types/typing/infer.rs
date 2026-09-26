@@ -1,3 +1,8 @@
+//! Implements the type-inference pass of the `Typing` engine,
+//! synthesizing a type for an expression from its structure and
+//! context, handling references, literals, indexing, binary/unary
+//! operators, function calls, constructors, and word operations.
+
 use super::*;
 use crate::util::log2;
 

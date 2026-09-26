@@ -1,3 +1,8 @@
+//! Defines `AstNodePayload` and its associated payload structs
+//! (`ModDef`, `Component`, `Driver`, `Ctor`, `Enumerant`,
+//! expression/pattern payloads) carried by AST nodes, each holding
+//! interned identifiers and flags produced by the parser.
+
 use crate::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, UnOp};
 use crate::syntax::parsing::InternedString;
 

@@ -1,3 +1,9 @@
+//! Evaluation of simulator `Expr` trees: defines `Value` (X/Z/Bit/Word/
+//! Ctor), the per-eval binding `Context`, and `Expr::eval` implementing
+//! Verilog-like semantics for `when`, `match` (casez), binary/unary
+//! operators, constructors, indexing, concatenation, and width
+//! operations with X-propagation.
+
 use std::sync::Arc;
 
 use indexmap::IndexMap;

@@ -1,3 +1,7 @@
+//! Test-helper macros (`refr!`, `lit!`, `str!`, `binop!`, `unop!`,
+//! `if_!`, `concat!`, `repeat!`) for concisely constructing Verilog IR
+//! expression trees in unit tests.
+
 #[macro_export]
 macro_rules! refr {
     ($name:ident) => {

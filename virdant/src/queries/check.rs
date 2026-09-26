@@ -1,3 +1,8 @@
+//! Top-level diagnostic aggregator running all front-end checks over the
+//! database (syntax errors, package-name keyword collisions, per-item
+//! driver/match-coverage checks, typechecking, enum checks,
+//! instantiation cycles), sorted by source region.
+
 use std::sync::Arc;
 
 use bstr::BString;

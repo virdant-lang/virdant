@@ -1,3 +1,9 @@
+//! Produces the `Elaboration`, the flat signal-level view of a module
+//! after inlining submodule and socket instantiations, with each
+//! `ElaboratedComponent` carrying its fully-qualified path, type,
+//! driver, and optional alias/clock references, indexed by dense
+//! `SignalId`s.
+
 use std::sync::Arc;
 
 use bstr::{BStr, BString, ByteSlice};

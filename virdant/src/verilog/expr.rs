@@ -1,3 +1,8 @@
+//! Defines the Verilog IR expression types (`Reference`, `BinOp`,
+//! `UnOp`, `BitLit`, `WordLit`, `StrLit`, `If`, `Concat`, `Repeat`,
+//! `Index`, `IndexRange`, `XLit`) used during Verilog generation and
+//! pretty-printing.
+
 use crate::common::WordValue;
 
 use super::*;

@@ -1,3 +1,8 @@
+//! Generic directed `Graph<V>` with dense vertex indices and an
+//! adjacency list, supporting topological sorting (returning
+//! `CycleError` on failure) and path-finding, used by analysis passes
+//! needing ordering or reachability.
+
 use indexmap::IndexMap;
 use std::hash::Hash;
 

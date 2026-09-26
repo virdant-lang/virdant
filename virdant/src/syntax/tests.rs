@@ -1,3 +1,8 @@
+//! Parser test suite using a `test_example!` macro to parse-and-
+//! assert-no-errors for each `.vir` file in `examples/`, plus submodule
+//! tests for docstrings and clock-domain features (`async`, `on`,
+//! `sync`/`async`, `dependson`).
+
 use paste::paste;
 use std::sync::LazyLock;
 use std::time::Instant;

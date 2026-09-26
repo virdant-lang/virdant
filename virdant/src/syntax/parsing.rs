@@ -1,3 +1,9 @@
+//! The `Parsing` structure owning the parsed AST (payloads, spans,
+//! parents, child counts, errors) and the interned string table, plus
+//! the `parse` entry point running the LALRPOP `PackageParser` and
+//! fixing up parent links, with diagnostics, root/`ast_node` lookup,
+//! and a positional `at` query.
+
 use bstr::{BStr, BString};
 
 use crate::diagnostics::{self, Diagnostic};

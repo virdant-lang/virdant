@@ -1,8 +1,8 @@
 //! Scripting support for Virdant simulation.
-//!
-//! Before running a script, the working directory is changed to the
-//! script's directory.
-//! This allows scripts to use relative paths to reference Virdant files.
+
+// Before running a script, the working directory is changed to the
+// script's directory.
+// This allows scripts to use relative paths to reference Virdant files.
 
 /// Run a script file.
 ///

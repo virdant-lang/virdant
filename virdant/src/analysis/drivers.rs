@@ -1,3 +1,8 @@
+//! Performs `DriverAnalysis`, extracting the driver assigned to each
+//! component (simple expressions, bidirectional assignments, `when`
+//! conditionals, `match` drivers), recording driver type/location and
+//! reporting diagnostics.
+
 use std::sync::Arc;
 
 use bstr::BStr;

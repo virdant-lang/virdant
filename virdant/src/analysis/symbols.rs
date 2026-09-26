@@ -1,3 +1,8 @@
+//! Defines the `SymbolTable`, storing all named declarations (modules,
+//! structs, enums, sockets, components, fields) keyed by FQN and
+//! indexed by dense `SymbolId`s, with lookup/resolution/filtering
+//! helpers and diagnostics collection.
+
 use bstr::{BStr, BString};
 use indexmap::IndexSet;
 use indexmap::IndexMap;

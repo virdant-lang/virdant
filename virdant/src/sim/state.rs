@@ -1,3 +1,8 @@
+//! Live circuit values and the propagation worklist: `vals`/`prev_vals`
+//! for current/previous signal values, `set_vals` for pending register
+//! inputs, and the `dirty` set driven by `flow`, with `Arc`-wrapped
+//! values shared by eval contexts.
+
 use std::sync::Arc;
 
 use indexmap::{IndexMap, IndexSet};

@@ -1,3 +1,8 @@
+//! Detects combinational loops by building, per module, a "stitched"
+//! graph of the module's combinational edges plus its submodule
+//! instances' graphs, reporting each loop once at the module whose
+//! local edge closes the cycle.
+
 use std::sync::Arc;
 
 use bstr::ByteSlice;

@@ -1,3 +1,7 @@
+//! Implements the incremental query database: `Db`.
+//! This is doen with the `queries!` macro.
+//! Also declares the full set of memoized queries and dispatching each to its builder function.
+
 #[macro_use]
 mod macros;
 mod graphviz;

@@ -1,3 +1,8 @@
+//! Builds the `DependencyGraph`, a directed graph over a module's
+//! components whose edges record combinational vs. sequential
+//! dependencies, derived from component and driver analysis by walking
+//! the AST.
+
 use std::sync::Arc;
 
 use bstr::BStr;

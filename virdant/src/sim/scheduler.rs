@@ -1,3 +1,9 @@
+//! Event scheduler owning simulated time, the one-shot callback queue,
+//! FIFO sequence counter, and shutdown flag, supporting timed
+//! (`AfterDelay`), lifecycle (`StartOfSimulation`/
+//! `EndOfSimulation`), and `ValueChange` callbacks mirroring a subset
+//! of VPI reasons.
+
 use crate::sim::Sim;
 use crate::analysis::elaboration::SignalId;
 use indexmap::IndexSet;

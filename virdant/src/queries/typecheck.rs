@@ -1,3 +1,8 @@
+//! Type queries that, for a given `Location`, walk up the AST to the
+//! enclosing `ExprRoot` and look up the node's type in the cached
+//! `TypingContext`; also `build_typeof_all` typing every expression
+//! (skipping parse-error subtrees).
+
 use indexmap::IndexSet;
 use indexmap::IndexMap;
 

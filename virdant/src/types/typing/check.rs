@@ -1,3 +1,8 @@
+//! Implements the bidirectional type-checking pass of the `Typing`
+//! engine, verifying an expression conforms to an expected type,
+//! dispatching over AST node payloads for each expression form (paren,
+//! when, match, fn, ctor, struct, etc.).
+
 use super::*;
 
 impl Typing {

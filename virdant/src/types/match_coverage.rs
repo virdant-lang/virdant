@@ -1,3 +1,8 @@
+//! Implements exhaustiveness and overlap checking for `match`
+//! expressions, validating arm patterns against the subject type and
+//! detecting unreachable arms, multiple/final `else` clauses, emitting
+//! coverage diagnostics.
+
 use bstr::{BString, ByteSlice};
 use indexmap::IndexMap;
 

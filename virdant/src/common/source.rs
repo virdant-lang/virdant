@@ -1,3 +1,8 @@
+//! Defines `Source` (an in-memory source file with its package name)
+//! plus `SourceOffset`, `LineCol`, `Span`, and `Region` types for
+//! source positions, handling file loading and bidirectional
+//! offset/line-column conversion.
+
 use bstr::{BStr, BString};
 
 use crate::fqn::PackageFqn;

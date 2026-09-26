@@ -1,3 +1,8 @@
+//! The `AstNode` handle (borrowing a `Parsing`) plus `AstNodeId`, with
+//! accessors for parent/children, payload, region/span, names, paths,
+//! docstrings, driver targets, and annotation data, plus
+//! `match_arm_children`/`when_arm_children` iterators.
+
 use bstr::{BStr, ByteSlice};
 
 use crate::analysis::Location;

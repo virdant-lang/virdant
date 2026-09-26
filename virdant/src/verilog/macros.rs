@@ -1,3 +1,7 @@
+//! Internal `verilog_write!` and `verilog_writeln!` macros for the
+//! Verilog pretty-printer, handling indentation management and
+//! formatted output to the `Writer`'s underlying file.
+
 macro_rules! verilog_write {
     ($writer:expr, $fmt:literal) => {{
         verilog_write!($writer, $fmt,)

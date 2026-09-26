@@ -1,3 +1,7 @@
+//! Implements `Union<T>`, a union-find data structure supporting
+//! insert, join, root-finding, normalization, and final grouping into
+//! disjoint `Vec<Vec<T>>` collections.
+
 use indexmap::IndexMap;
 
 #[derive(Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd, Debug)]

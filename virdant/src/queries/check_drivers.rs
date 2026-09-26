@@ -1,3 +1,9 @@
+//! Validates driver rules per module: driver type (continuous vs.
+//! latched) matches component kind, non-sinking components get no
+//! drivers, sink-capable components have exactly one driver. Emits
+//! `WrongDriverType`, `DriverForSink`, `NoDrivers`, `NoRegDrivers`,
+//! `MultipleDrivers`.
+
 use std::sync::Arc;
 
 use bstr::{BString, ByteSlice};

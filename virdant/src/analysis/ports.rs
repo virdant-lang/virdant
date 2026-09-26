@@ -1,3 +1,8 @@
+//! Computes the public port list of a module by filtering its
+//! components for inputs and outputs, mapping component kinds/flow to
+//! `PortDir` values while skipping internal wires/registers and
+//! submodule channels.
+
 use std::sync::Arc;
 
 use bstr::BString;

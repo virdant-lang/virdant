@@ -1,3 +1,8 @@
+//! Defines the Verilog IR statement types (`AssignBlocking`,
+//! `AssignNonBlocking`, `Display`, `Assert`, `Fatal`, `Finish`,
+//! `Case`, `CaseZ`, `If`) and their `write` methods for emitting
+//! formatted Verilog code.
+
 use bstr::BString;
 
 use super::macros::{verilog_write, verilog_writeln};

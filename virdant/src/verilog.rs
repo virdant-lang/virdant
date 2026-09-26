@@ -1,3 +1,9 @@
+//! The Verilog intermediate representation and emitter: defines
+//! `Verilog`/`Module`/`Element`/`Expr` types, a normalization pass that
+//! lifts sub-expressions into temp wires for iverilog compatibility,
+//! pretty-printing to files or stdout, and Verilog-identifier
+//! validation/escaping.
+
 pub mod expr;
 mod stmt;
 pub mod conversion;

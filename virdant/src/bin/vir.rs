@@ -1,3 +1,7 @@
+//! The main `vir` CLI entry point dispatching subcommands for parsing,
+//! tokenizing, type-checking, elaboration, Verilog compilation,
+//! running, documentation generation, and project scaffolding.
+
 use clap::CommandFactory;
 use clap::{Parser, Subcommand};
 

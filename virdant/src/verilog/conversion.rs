@@ -1,3 +1,8 @@
+//! Converts the checked analysis database into a Verilog AST,
+//! translating modules, ports, drivers, match expressions, and
+//! primitive operations into Verilog elements using an `ExprScheduler`
+//! to hoist non-inline expressions into temporaries.
+
 use indexmap::IndexMap;
 use std::sync::Arc;
 

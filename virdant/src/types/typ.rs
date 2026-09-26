@@ -1,3 +1,7 @@
+//! Defines the core `Type` enum representing Virdant's type system:
+//! `Bit`, `Clock`, `Reset`, `Word`, `Usual` (user-defined), and
+//! `Valid`, with `Display` and `Debug` implementations.
+
 use crate::analysis::symbols::SymbolId;
 use crate::common::Width;
 

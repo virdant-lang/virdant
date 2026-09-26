@@ -1,3 +1,7 @@
+//! Syntax-derived queries: collecting every `ExprRoot`, gathering all
+//! parse diagnostics, enumerating every expression `Location`, and
+//! mapping a `Location` to its source `Region`.
+
 use std::sync::Arc;
 
 use crate::analysis::location::Location;

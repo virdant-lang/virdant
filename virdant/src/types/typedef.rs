@@ -1,3 +1,8 @@
+//! Defines `TypeDef`, `TypeId`, and `TypeIndex` for user-defined types
+//! (unions, structs, enums, builtins) and mapping AST locations to
+//! types; `build_typedefs` populates the global list including
+//! evaluating constant expressions for enumerant values.
+
 use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::location::Location;

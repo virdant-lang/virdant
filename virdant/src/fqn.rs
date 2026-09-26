@@ -1,3 +1,5 @@
+//! Provides `PackageFqn` and `ItemFqn` types representing fully-qualified package and item names
+
 use bstr::{BStr, BString, ByteSlice};
 
 fn leak(s: BString) -> &'static BStr {

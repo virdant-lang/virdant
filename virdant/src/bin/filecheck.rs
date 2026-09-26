@@ -1,3 +1,8 @@
+//! A standalone `filecheck` binary implementing a minimal LLVM
+//! FileCheck-style pattern matcher, reading `CHECK`, `CHECK-NEXT`, and
+//! `CHECK-NOT` directives from a check file and validating them
+//! against stdin.
+
 use std::io::Read;
 use std::path::PathBuf;
 

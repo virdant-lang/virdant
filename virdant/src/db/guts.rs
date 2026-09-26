@@ -1,3 +1,8 @@
+//! Core of the incremental query database: the `Db` struct (query
+//! cache, revision counter, dirty-cache, call stack, trace) and
+//! `Builder` tracking dependencies during a query build, implementing
+//! the `get_or_build` memoization loop.
+
 use std::collections::HashMap;
 
 use super::*;

@@ -1,3 +1,7 @@
+//! Adds `Db::save_graphviz`, dumping the query-and-dependency graph of
+//! the incremental database to a Graphviz DOT file, drawing input
+//! queries as filled folders and derived queries as rounded boxes.
+
 use super::*;
 
 impl Db {

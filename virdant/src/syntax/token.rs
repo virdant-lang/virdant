@@ -1,3 +1,8 @@
+//! Logos-based lexer for Virdant: the `Token` enum (literals,
+//! punctuation, operators, groupings, keywords), the `KEYWORDS` list,
+//! and a `Lexer`/`tokenize` entry point yielding spanned tokens, with
+//! unit tests for numeric literal underscore rules.
+
 use bstr::BStr;
 use logos::Logos;
 use logos::SpannedIter;

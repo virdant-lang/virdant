@@ -1,3 +1,8 @@
+//! Per-item query collecting every `match` node, determining the
+//! subject's type, and delegating to
+//! `types::match_coverage::check_match_coverage` to report
+//! non-exhaustive or unreachable arms.
+
 use std::sync::Arc;
 
 use crate::analysis::symbols::SymbolId;

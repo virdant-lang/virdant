@@ -1,3 +1,6 @@
+//! Defines shared primitive type aliases and core enums used across the compiler
+//! and re-exports utility submodules
+
 pub mod math;
 pub mod graph;
 pub mod union;

@@ -1,3 +1,8 @@
+//! Defines the `Typing` struct, the central type-inference and checking
+//! engine annotating AST nodes with types and collecting diagnostics,
+//! plus `ExprRoot`, `Primitive`, and `Tag` types, orchestrating the
+//! `check` and `infer` submodules.
+
 mod check;
 mod infer;
 

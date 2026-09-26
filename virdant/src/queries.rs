@@ -1,3 +1,5 @@
+//! Hub module re-exporting the implementations of database query builders.
+
 pub mod check;
 pub mod check_drivers;
 pub mod combinational_cycles;

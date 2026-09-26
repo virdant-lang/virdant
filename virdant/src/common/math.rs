@@ -1,3 +1,7 @@
+//! Integer math helpers for hardware sizing: `pow`, `clog2` (ceiling of
+//! log base 2), and `is_pow2`, used by type inference and width
+//! calculations.
+
 pub fn pow(n: u64, k: u64) -> u64 {
     let mut p = 1;
     for _ in 0..k {

@@ -1,3 +1,5 @@
+//! The discrete-event simulation engine
+
 mod expr;
 mod payload;
 mod eval;

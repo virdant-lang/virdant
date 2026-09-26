@@ -1,3 +1,8 @@
+//! Plain payload structs backing each `ExprPayload` variant (references,
+//! literals, operators, constructors, patterns, indexing, width
+//! operations) and `Pat` for match arms covering `Ctor`, `Valid`,
+//! `WordLit`, `BitLit`, `Else`.
+
 use std::sync::Arc;
 
 use bstr::BString;

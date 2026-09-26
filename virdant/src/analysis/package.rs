@@ -1,3 +1,7 @@
+//! Builds `PackageAnalysis`, recording a package's imports, top-level
+//! item names, expression roots, and unresolved-import diagnostics,
+//! implicitly seeding the builtin import.
+
 use bstr::BStr;
 use bstr::BString;
 use indexmap::IndexSet;

@@ -1,3 +1,8 @@
+//! Defines `Location`, a lightweight value pairing a `PackageFqn` with
+//! an `AstNodeId` that uniquely identifies an AST node across the whole
+//! compilation, serving as the canonical reference handle in the
+//! analysis layer.
+
 use crate::fqn::PackageFqn;
 use crate::syntax::ast::AstNodeId;
 

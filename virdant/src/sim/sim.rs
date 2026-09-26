@@ -1,3 +1,9 @@
+//! The `Sim` runtime: combinational propagation (`flow`), register
+//! transfer on clock edges, a `SimLock` for batching writes, clock
+//! attachment, and the `run` loop draining the scheduler, plus
+//! elaboration lookup and callback registration helpers (`at`,
+//! `after`, `on_change`, `on_clock`).
+
 use std::cell::RefCell;
 use std::io::Write;
 use std::ops::Deref;

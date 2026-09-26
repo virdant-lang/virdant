@@ -1,3 +1,8 @@
+//! Standalone utility functions: constructing a `Db` from directories or
+//! files (loading the builtin library automatically), word/nat literal
+//! parsing, bit-width helpers (`min_word_width`, `log2`), and `check_db`
+//! to run all checks and partition diagnostics by severity.
+
 use std::sync::Arc;
 
 use crate::common::{Width, WordValue};

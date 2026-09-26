@@ -1,3 +1,6 @@
+//! Implements the Virdant LSP backend via `tower-lsp`, providing hover,
+//! go-to-definition, and diagnostics by maintaining an analysis `Db`.
+
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::sync::Arc;

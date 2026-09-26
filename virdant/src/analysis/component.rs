@@ -1,3 +1,8 @@
+//! Defines `ComponentAnalysis`, collecting every component (signal,
+//! port, register, etc.) declared in a module with its type, flow,
+//! kind, and location, plus references to components (uses, driver
+//! targets, `unused` marks) and associated diagnostics.
+
 use std::sync::Arc;
 
 use bstr::{BStr, BString};

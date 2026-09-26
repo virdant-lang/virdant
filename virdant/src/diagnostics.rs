@@ -1,3 +1,5 @@
+//! Defines every diagnostic type emitted by the compiler
+
 use bstr::{BStr, BString};
 use std::sync::Arc;
 
@@ -308,7 +310,7 @@ pub struct DuplicateEnumValue {
     pub value: WordValue,
 }
 
-/// A single-bit index `a[i]` where `i >= width` of the subject Word[n].
+/// A single-bit index `a[i]` where `i >= width` of the subject `Word[n]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexOutOfBounds {
     pub region: Region,

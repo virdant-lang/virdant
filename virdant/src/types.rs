@@ -1,3 +1,8 @@
+//! Hub module for the type system, re-exporting `Type`, `Typing`,
+//! `ExprRoot`, and `TypingContext`, and declaring submodules for typing
+//! contexts, type representations, typing inference, typedefs,
+//! signatures, and match coverage.
+
 pub mod context;
 pub mod typ;
 pub mod typing;

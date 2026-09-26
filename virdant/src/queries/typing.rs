@@ -1,3 +1,8 @@
+//! Builds the per-item `TypingContext` (component path/type bindings)
+//! and computes the expected type for an `ExprRoot` from its parent
+//! context (`Bit` for `when` guards, `Clock` for reg drivers, LHS
+//! component type for drivers, inherited through `when`/`match` arms).
+
 use bstr::ByteSlice;
 use crate::analysis::symbols::SymbolId;
 use crate::types::{ExprRoot, Type, TypingContext};

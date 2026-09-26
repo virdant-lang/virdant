@@ -1,3 +1,8 @@
+//! Declarative macros (`queries!`, `dispatch_build!`, `db_getter!`,
+//! `cast!`) that generate the `Query`/`QueryResult` enums, the
+//! build-dispatch match, and typed getter methods, forming the
+//! boilerplate layer for declaring new queries concisely.
+
 macro_rules! cast {
     ($query_result:expr, $query:ident) => {{
         if let QueryResult::$query(value) = $query_result {
