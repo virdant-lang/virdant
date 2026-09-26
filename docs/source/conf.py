@@ -20,6 +20,12 @@ from sphinx.highlighting import lexers
 project = 'The Virdant Hardware Language'
 copyright = '2026'
 
+# The commit the docs were built from, supplied by the docs Makefile.
+# Empty when sphinx-build is run outside of `make -C docs`.
+html_context = {
+    'virdant_commit': os.environ.get('VIRDANT_COMMIT', ''),
+}
+
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

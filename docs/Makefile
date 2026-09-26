@@ -11,6 +11,11 @@ BASEDIR       = $(abspath ..)
 VIR          ?= $(BASEDIR)/target/release/vir
 EXAMPLES      = $(wildcard source/examples/*.vir)
 
+# The commit the docs were built from, with -dirty if the tree has changes.
+COMMIT        = $(shell git -C $(BASEDIR) rev-parse --short HEAD 2>/dev/null)
+DIRTY         = $(shell test -n "$$(git -C $(BASEDIR) status --porcelain 2>/dev/null)" && echo "-dirty")
+export VIRDANT_COMMIT = $(COMMIT)$(DIRTY)
+
 auto: Makefile $(EXAMPLES) # rustdocs
 	retry=0; until $(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O); do \
 	  if [ $$retry -ge 5 ]; then exit 1; fi; \
