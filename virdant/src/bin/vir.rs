@@ -55,7 +55,12 @@ enum Command {
     /// Dump typing results
     Typing { },
     /// Dump database state, optionally saving a Graphviz file
-    Db { outpath: Option<PathBuf> },
+    Db {
+        outpath: Option<PathBuf>,
+        /// Render the output as JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Dump component analysis for a module definition
     Components { moddef_fqn: String },
     /// List ports for a module definition
@@ -95,7 +100,7 @@ fn main() {
         Command::Parse { file } => parse_file(&file),
         Command::Tokenize { file } => tokenize_file(&file),
         Command::Check { } => check(&args),
-        Command::Db { ref outpath } => dump_db(&args, outpath.clone()),
+        Command::Db { ref outpath, json } => dump_db(&args, outpath.clone(), json),
         Command::Types { } => dump_types(&args),
         Command::Components { ref moddef_fqn } => dump_components(&args, moddef_fqn),
         Command::Ports { ref moddef_fqn } => dump_ports(&args, moddef_fqn),
@@ -311,15 +316,47 @@ fn check(args: &Args) {
     }
 }
 
-fn dump_db(args: &Args, outpath: Option<PathBuf>) {
+fn dump_db(args: &Args, outpath: Option<PathBuf>, json: bool) {
     let db = project_db(args);
     let _ = db.check();
-    dump_diagnostics(&db);
-    if let Some(outpath) = outpath {
-        println!("Saving graphviz: {}", outpath.display());
-        db.save_graphviz(outpath);
+    if json {
+        let mut root = json::object::Object::new();
+        root.insert("diagnostics", diagnostics_json(&db));
+        if let Some(outpath) = &outpath {
+            db.save_graphviz(outpath);
+            root.insert("graphviz_path", outpath.to_string_lossy().to_string().into());
+        }
+        root.insert("trace", db.dump_json());
+        println!("{}", json::stringify_pretty(json::JsonValue::Object(root), 2));
+    } else {
+        dump_diagnostics(&db);
+        if let Some(outpath) = outpath {
+            println!("Saving graphviz: {}", outpath.display());
+            db.save_graphviz(outpath);
+        }
+        db.dump();
     }
-    db.dump();
+}
+
+fn diagnostics_json(db: &Db) -> json::JsonValue {
+    let diagnostics = match check_db(db) {
+        Ok(diags) => diags,
+        Err(diags) => diags,
+    };
+    let mut array = json::JsonValue::new_array();
+    for diagnostic in diagnostics.iter() {
+        let mut entry = json::object::Object::new();
+        let level = match diagnostic.level() {
+            DiagnosticLevel::Error => "error",
+            DiagnosticLevel::Warning => "warning",
+            DiagnosticLevel::Info => "info",
+        };
+        entry.insert("level", level.into());
+        entry.insert("region", region_string(diagnostic.region()).into());
+        entry.insert("message", diagnostic.message().to_string().into());
+        array.push(json::JsonValue::Object(entry)).unwrap();
+    }
+    array
 }
 
 fn dump_types(args: &Args) {

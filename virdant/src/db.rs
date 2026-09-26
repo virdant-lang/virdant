@@ -6,6 +6,7 @@
 mod macros;
 mod graphviz;
 mod guts;
+mod json;
 
 use std::fmt::Write;
 use std::sync::Arc;

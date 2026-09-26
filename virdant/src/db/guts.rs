@@ -15,7 +15,7 @@ pub struct Db {
     // an input changes (set_packages / set_source).
     pub(super) dirty_cache: Mutex<HashMap<Query, bool>>,
     pub(super) call_stack: Mutex<Vec<Query>>,
-    trace: Mutex<Vec<TraceElement>>,
+    pub(super) trace: Mutex<Vec<TraceElement>>,
 }
 
 #[derive(Debug, Clone)]
@@ -27,11 +27,11 @@ pub(super) struct CachedVal {
 }
 
 #[derive(Debug)]
-struct TraceElement {
-    query: Query,
-    level: usize,
-    cached: bool,
-    location: std::panic::Location<'static>,
+pub(super) struct TraceElement {
+    pub(super) query: Query,
+    pub(super) level: usize,
+    pub(super) cached: bool,
+    pub(super) location: std::panic::Location<'static>,
 }
 
 impl<'d> Builder<'d> {
