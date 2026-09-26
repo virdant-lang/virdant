@@ -115,6 +115,53 @@ The `Valid[T]` type is useful for representing handshake signals,
 optional values, or data that may not yet be ready.
 
 
+Built-in Modules
+----------------
+In addition to built-in types, Virdant ships a small library of
+built-in modules in `lib/builtin.vir`.
+These modules are available to every design without an import.
+
+
+Sync
+~~~~
+`Sync` synchronizes a single `Bit` signal from one clock domain onto another.
+It safely samples an asynchronous input, such as a button press,
+into a synchronous design.
+
+The `Sync` module exposes the following ports:
+
+`inp` (incoming `Bit`)
+    The asynchronous input signal on a foreign clock domain.
+
+`clock` (incoming `Clock`)
+    The clock of the destination domain.
+    The synchronized output is updated on this clock.
+
+`out` (outgoing `reg` of `Bit` on `clock`)
+    The synchronized output.
+
+Internally `Sync` is two back-to-back flip-flops on `clock`.
+The first register may go metastable when `inp` changes near the clock edge,
+but it has a full cycle to settle before the second register samples it.
+The output of the second register is therefore stable.
+
+.. code-block:: virdant
+
+    mod Top {
+        incoming clock  : Clock
+        incoming button : Bit
+
+        mod sync of Sync {
+            it.clock := clock
+            it.inp   := button
+        }
+
+        outgoing led    : Bit {
+            it := sync.out // `sync.out` is safe to use on `clock`.
+        }
+    }
+
+
 Struct Types
 ------------
 A struct type is a user-defined type that bundles several named fields together.
