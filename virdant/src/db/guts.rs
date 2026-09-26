@@ -156,7 +156,7 @@ impl Db {
     pub fn dump(&self) {
         use colored::Colorize;
         let trace = self.trace.lock().unwrap();
-        eprintln!("=== Db trace ===========================");
+        println!("=== Db trace ===========================");
         for trace in trace.iter() {
             let indent = "    ".repeat(trace.level);
             let location = format!(
@@ -173,17 +173,17 @@ impl Db {
                 format!("{:?}", trace.query).bright_yellow()
             };
             if trace.cached || trace.query.is_input() {
-                eprintln!("{indent}{text} {location}");
+                println!("{indent}{text} {location}");
             } else {
                 let duration = {
                     let map = self.map.try_lock().unwrap();
                     map.get(&trace.query).map(|cv| cv.duration).unwrap_or_default()
                 };
                 let duration_text = format!("({duration:?})").dimmed();
-                eprintln!("{indent}{text} {duration_text} {location}");
+                println!("{indent}{text} {duration_text} {location}");
             }
         }
-        eprintln!("========================================");
+        println!("========================================");
     }
 }
 
