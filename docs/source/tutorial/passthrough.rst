@@ -30,8 +30,9 @@ In Virdant, each port has a direction, either `incoming` or `outgoing`, a name, 
 .. note::
 
     Verilog uses the keywords :verilog:`input` and :verilog:`output` rather than `incoming` and `outgoing`.
-    Virdant chooses the keywords it does because it makes the ports line up nicely.
-    This makes the code much easier to read, without asking the designer to add extra spaces or tabs into their code.
+    Virdant chooses the keywords it does because it makes the port names line up nicely.
+    This makes the code much easier to read,
+    without asking you to add extra spaces or using tabs into your code.
 
 Our example has two ports: `inp` and `out`.
 
