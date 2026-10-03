@@ -1,9 +1,11 @@
+ignore/
 **/target
 build
 .cargo
 *.gtkw
 *.vcd
 *.sh
+*.pdf
 
 w
 notes

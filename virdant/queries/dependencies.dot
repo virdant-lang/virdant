@@ -1,0 +1,182 @@
+// Dependency graph of all Virdant queries (transitively reduced).
+// An edge A -> B means query A depends on query B (A reads B's result).
+// Redundant edges implied by a longer path have been removed for clarity,
+// so only the minimal dependency skeleton is shown.
+// Exception: Typing and Typeof depend on each other (a cycle). Edges
+// leaving the cycle are kept verbatim, because the cycle otherwise makes
+// transitive reduction unsound (it would drop genuine immediate deps).
+// Nodes are clustered by compiler front-end phase.
+// Input queries (Packages, Source) have no dependencies and are
+// supplied externally by the host.
+digraph Queries {
+    rankdir = TB;
+    compound = true;
+    splines = ortho;
+    ranksep = 1.5;
+    nodesep = 1.5;
+    pad = "0.5,0.4";
+    sep = "+50";
+    node [shape = box, style = "rounded,filled", fillcolor = "#f8f8ff", fontname = "monospace"];
+
+    subgraph cluster_input {
+        label = "Input (host-supplied)";
+        style = "rounded,filled";
+        margin = 8;
+        fillcolor = "#e8f5e9";
+        Packages;
+        Source;
+    }
+
+    subgraph cluster_parsing {
+        label = "Parsing";
+        style = "rounded,filled";
+        margin = 8;
+        fillcolor = "#fff3e0";
+        Parsing;
+        String;
+        PackageAnalysis;
+        SyntaxErrors;
+        LocationRegion;
+    }
+
+    subgraph cluster_symbols {
+        label = "Symbols";
+        style = "rounded,filled";
+        margin = 8;
+        fillcolor = "#e3f2fd";
+        SymbolTable;
+        SymbolAst;
+    }
+
+    subgraph cluster_exprroots {
+        label = "Expression Roots";
+        style = "rounded,filled";
+        margin = 8;
+        fillcolor = "#f3e5f5";
+        ExprRoots;
+        ExprRootFor;
+        AllExprs;
+    }
+
+    subgraph cluster_types {
+        label = "Types";
+        style = "rounded,filled";
+        margin = 8;
+        fillcolor = "#fce4ec";
+        TypeIndex;
+        TypeAt;
+        TypeDef;
+        TypeDefs;
+    }
+
+    subgraph cluster_components {
+        label = "Components";
+        style = "rounded,filled";
+        margin = 8;
+        fillcolor = "#f1f8e9";
+        ComponentAnalysis;
+        Component;
+        DependencyGraph;
+        DriverAnalysis;
+        TypingContext;
+    }
+
+    subgraph cluster_typing {
+        label = "Typing";
+        style = "rounded,filled";
+        margin = 8;
+        fillcolor = "#e0f7fa";
+        Typing;
+        Typeof;
+        TypeofAll;
+        ExpectedType;
+        CtorSignature;
+    }
+
+    subgraph cluster_checking {
+        label = "Checking";
+        style = "rounded,filled";
+        margin = 8;
+        fillcolor = "#ffebee";
+        CheckDrivers;
+        CombinationalCycleCheck;
+        TypeCheck;
+        MatchCoverage;
+        Check;
+    }
+
+    subgraph cluster_output {
+        label = "Output";
+        style = "rounded,filled";
+        margin = 8;
+        fillcolor = "#f5f5f5";
+        Elaboration;
+        PortsOf;
+        StructFields;
+    }
+
+    // --- Minimal dependency skeleton (transitively reduced) ---
+    AllExprs -> { Packages Parsing };
+
+    Check -> { SyntaxErrors CheckDrivers MatchCoverage TypeCheck CombinationalCycleCheck };
+
+    CheckDrivers -> { SymbolAst DriverAnalysis LocationRegion };
+
+    CombinationalCycleCheck -> { DependencyGraph SymbolAst };
+
+    Component -> { ComponentAnalysis };
+
+    ComponentAnalysis -> { TypeAt };
+
+    CtorSignature -> { TypeIndex };
+
+    DependencyGraph -> { ComponentAnalysis };
+
+    DriverAnalysis -> { ComponentAnalysis };
+
+    Elaboration -> { DriverAnalysis };
+
+    ExpectedType -> { ComponentAnalysis TypeDef };
+
+    ExprRootFor -> { ExprRoots };
+
+    ExprRoots -> { PackageAnalysis };
+
+    LocationRegion -> { Parsing };
+
+    MatchCoverage -> { SymbolAst Typeof };
+
+    PackageAnalysis -> { Parsing Packages };
+
+    Parsing -> { Source };
+
+    PortsOf -> { ComponentAnalysis };
+
+    String -> { Source };
+
+    StructFields -> { TypeAt };
+
+    SymbolAst -> { SymbolTable };
+
+    SymbolTable -> { PackageAnalysis };
+
+    SyntaxErrors -> { Packages Parsing };
+
+    TypeAt -> { TypeIndex };
+
+    TypeCheck -> { Typing };
+
+    TypeDef -> { SymbolTable };
+
+    TypeDefs -> { SymbolTable };
+
+    TypeIndex -> { SymbolTable };
+
+    Typeof -> { Parsing ExprRoots Typing LocationRegion };
+
+    TypeofAll -> { AllExprs Typeof };
+
+    Typing -> { Parsing SymbolTable TypingContext Typeof CtorSignature ExpectedType ComponentAnalysis Component StructFields TypeIndex TypeDef };
+
+    TypingContext -> { ComponentAnalysis TypeDefs };
+}
