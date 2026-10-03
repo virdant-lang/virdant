@@ -225,10 +225,12 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     Some(symbol) => symbol.clone(),
                     None => {
                         component_analysis.diagnostics.push(
-                            diagnostics::UnresolvedItem {
-                                region: ofness_node.region(),
-                                item: submodule_name.to_owned(),
-                            }.into()
+                            Diagnostic::new(
+                                ofness_node.region(),
+                                diagnostics::UnresolvedItem {
+                                    item: submodule_name.to_owned(),
+                                },
+                            )
                         );
                         continue;
                     }
@@ -506,9 +508,10 @@ fn collect_references_in_expr(
                     } else {
                         // `it` outside an it block is an error.
                         component_analysis.diagnostics.push(
-                            crate::diagnostics::ItNotInItBlock {
-                                region: node.region(),
-                            }.into(),
+                            Diagnostic::new(
+                                node.region(),
+                                diagnostics::DiagnosticPayload::ItNotInItBlock,
+                            ),
                         );
                         continue;
                     }

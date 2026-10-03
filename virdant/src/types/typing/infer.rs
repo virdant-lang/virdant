@@ -112,12 +112,10 @@ impl Typing {
         for child in args {
             match self.infer(builder, context.clone(), &child) {
                 Ok(None) => {
-                    self.diagnostics.push(
-                        diagnostics::CantInfer {
-                            region: node.region(),
-                        }
-                        .into(),
-                    );
+                    self.diagnostics.push(Diagnostic::new(
+                        node.region(),
+                        DiagnosticPayload::CantInfer,
+                    ));
                 }
                 Ok(Some(typ)) => {
                     total_width += match typ {
@@ -128,25 +126,23 @@ impl Typing {
                             match typedef.width {
                                 Some(w) => w,
                                 None => {
-                                    diagnostics.push(
+                                    diagnostics.push(Diagnostic::new(
+                                        node.region(),
                                         diagnostics::Todo {
-                                            region: node.region(),
                                             message: "Type without width in word(...): {typ:?}".into(),
-                                        }
-                                        .into(),
-                                    );
+                                        },
+                                    ));
                                     0
                                 }
                             }
                         }
                         _ => {
-                            diagnostics.push(
+                            diagnostics.push(Diagnostic::new(
+                                node.region(),
                                 diagnostics::Todo {
-                                    region: node.region(),
                                     message: "Invalid type in word(...): {typ:?}".into(),
-                                }
-                                .into(),
-                            );
+                                },
+                            ));
                             0
                         }
                     };
@@ -233,25 +229,25 @@ impl Typing {
         };
 
         let Type::Word(n) = subject_typ else {
-            self.diagnostics.push(
+            self.diagnostics.push(Diagnostic::new(
+                subject.region(),
                 diagnostics::IndexNotWordType {
-                    region: subject.region(),
                     typ: format!("Subject is not a Word type: {:?}", subject_typ).into(),
-                }.into(),
-            );
+                },
+            ));
             return Err(());
         };
 
         let k = match log2(n) {
             Some(k) => k,
             None => {
-                self.diagnostics.push(
+                self.diagnostics.push(Diagnostic::new(
+                    node.region(),
                     diagnostics::InvalidWordIndexWidth {
-                        region: node.region(),
                         array_width: n,
                         index_width: 0,
-                    }.into(),
-                );
+                    },
+                ));
                 return Err(());
             }
         };
@@ -281,34 +277,31 @@ impl Typing {
                     self.annotate(&node, &Type::Bit);
                     Ok(Some(Type::Bit))
                 } else {
-                    self.diagnostics.push(
+                    self.diagnostics.push(Diagnostic::new(
+                        region,
                         diagnostics::IndexOutOfBounds {
-                            region,
                             array_width: *width,
                             index: index.index,
-                        }
-                        .into(),
-                    );
+                        },
+                    ));
                     Err(())
                 }
             } else {
-                self.diagnostics.push(
-                    diagnostics::Todo {
+                    self.diagnostics.push(Diagnostic::new(
                         region,
-                        message: "infer_index subject not a Word type".into(),
-                    }
-                    .into(),
-                );
+                        diagnostics::Todo {
+                            message: "infer_index subject not a Word type".into(),
+                        },
+                    ));
                 Err(())
             }
         } else {
-            self.diagnostics.push(
+            self.diagnostics.push(Diagnostic::new(
+                region,
                 diagnostics::Todo {
-                    region,
                     message: "infer_index can't infer subject".into(),
-                }
-                .into(),
-            );
+                },
+            ));
             Err(())
         }
     }
@@ -326,26 +319,24 @@ impl Typing {
             self.typs.insert(subject.id(), subject_typ.clone());
             if let Type::Word(width) = &subject_typ {
                 if indexrange.index_lo > indexrange.index_hi {
-                    self.diagnostics.push(
+                    self.diagnostics.push(Diagnostic::new(
+                        region,
                         diagnostics::InvalidIndexRange {
-                            region,
                             array_width: *width,
                             index_hi: indexrange.index_hi,
                             index_lo: indexrange.index_lo,
-                        }
-                        .into(),
-                    );
+                        },
+                    ));
                     Err(())
                 } else if indexrange.index_hi > *width {
-                    self.diagnostics.push(
+                    self.diagnostics.push(Diagnostic::new(
+                        region,
                         diagnostics::IndexRangeOutOfBounds {
-                            region,
                             array_width: *width,
                             index_hi: indexrange.index_hi,
                             index_lo: indexrange.index_lo,
-                        }
-                        .into(),
-                    );
+                        },
+                    ));
                     Err(())
                 } else {
                     let typ = Type::Word(indexrange.index_hi - indexrange.index_lo);
@@ -353,23 +344,21 @@ impl Typing {
                     Ok(Some(typ))
                 }
             } else {
-                self.diagnostics.push(
+                self.diagnostics.push(Diagnostic::new(
+                    region,
                     diagnostics::Todo {
-                        region,
                         message: "infer_index_range subject not a Word type".into(),
-                    }
-                    .into(),
-                );
+                    },
+                ));
                 Err(())
             }
         } else {
-            self.diagnostics.push(
+            self.diagnostics.push(Diagnostic::new(
+                region,
                 diagnostics::Todo {
-                    region,
                     message: "infer_index_range can't infer subject".into(),
-                }
-                .into(),
-            );
+                },
+            ));
             Err(())
         }
     }

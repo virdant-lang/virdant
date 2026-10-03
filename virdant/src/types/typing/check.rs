@@ -152,15 +152,14 @@ impl Typing {
 
         let minwidth = min_word_width(value);
         if minwidth > *width {
-            self.diagnostics.push(
+            self.diagnostics.push(Diagnostic::new(
+                node.region(),
                 diagnostics::DoesntFit {
-                    region: node.region(),
                     value,
                     width: *width,
                     minwidth,
-                }
-                .into(),
-            );
+                },
+            ));
             return Err(());
         }
 
@@ -245,14 +244,13 @@ impl Typing {
         match subject_typ {
             Type::Word(width) => {
                 if index >= width {
-                    self.diagnostics.push(
+                    self.diagnostics.push(Diagnostic::new(
+                        node.region(),
                         diagnostics::Unknown {
-                            region: node.region(),
                             message: format!("Index {index} out of bounds for Word[{width}]")
                                 .into(),
-                        }
-                        .into(),
-                    );
+                        },
+                    ));
                     return Err(());
                 }
                 if Type::Bit == *expected_typ {
@@ -342,11 +340,13 @@ impl Typing {
         };
 
         if *target_width > subject_width {
-            self.diagnostics.push(diagnostics::CantTruncate {
-                region: node.region(),
-                source_width: subject_width,
-                target_width: *target_width,
-            }.into());
+            self.diagnostics.push(Diagnostic::new(
+                node.region(),
+                diagnostics::CantTruncate {
+                    source_width: subject_width,
+                    target_width: *target_width,
+                },
+            ));
             return Err(());
         }
 
@@ -397,14 +397,13 @@ impl Typing {
 
     fn check_hole<'p>(&mut self, node: &AstNode<'p>, expected_typ: &Type) -> Result<(), ()> {
         self.annotate(node, &expected_typ);
-        self.diagnostics.push(
+        self.diagnostics.push(Diagnostic::new(
+            node.region(),
             diagnostics::UnfilledHole {
-                region: node.region(),
                 name: None,
                 typ: Some(format!("{expected_typ:?}").into()),
-            }
-            .into(),
-        );
+            },
+        ));
         Ok(())
     }
 
@@ -505,10 +504,12 @@ impl Typing {
                 // @Valid(t) and @Invalid()
                 if ctor_name == b"Valid" || ctor_name == b"Invalid" {
                     let Type::Valid(inner_typ) = expected_typ else {
-                        self.diagnostics.push(diagnostics::UnresolvedCtor {
-                            region: node.region(),
-                            ctor: ctor_name.to_owned(),
-                        }.into());
+                        self.diagnostics.push(Diagnostic::new(
+                            node.region(),
+                            diagnostics::UnresolvedCtor {
+                                ctor: ctor_name.to_owned(),
+                            },
+                        ));
                         return Err(());
                     };
                     if ctor_name.as_bytes() == b"Valid" {
@@ -542,10 +543,12 @@ impl Typing {
                     }
                 } else {
                     let Type::Usual(typedef_id) = expected_typ else {
-                        self.diagnostics.push(diagnostics::UnresolvedCtor {
-                            region: node.region(),
-                            ctor: ctor_name.to_owned(),
-                        }.into());
+                        self.diagnostics.push(Diagnostic::new(
+                            node.region(),
+                            diagnostics::UnresolvedCtor {
+                                ctor: ctor_name.to_owned(),
+                            },
+                        ));
                         return Err(());
                     };
                     let symboltable = builder.get_symboltable();
@@ -609,15 +612,14 @@ impl Typing {
 
                 let minwidth = min_word_width(value);
                 if minwidth > *width {
-                    self.diagnostics.push(
+                    self.diagnostics.push(Diagnostic::new(
+                        node.region(),
                         diagnostics::DoesntFit {
-                            region: node.region(),
                             value,
                             width: *width,
                             minwidth,
-                        }
-                        .into(),
-                    );
+                        },
+                    ));
                     return Err(());
                 }
 

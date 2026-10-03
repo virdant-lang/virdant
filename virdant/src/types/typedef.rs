@@ -228,37 +228,45 @@ impl TypeIndex {
 
                 let typ = if is_builtin(b"builtin::Bit") {
                     if node.children().len() >= 2 {
-                        self.diagnostics.push(diagnostics::Unknown {
-                            region: node.region(),
-                            message: "Type Bit takes no parameters.".into(),
-                        }.into());
+                        self.diagnostics.push(Diagnostic::new(
+                            node.region(),
+                            diagnostics::Unknown {
+                                message: "Type Bit takes no parameters.".into(),
+                            },
+                        ));
                         return;
                     }
                     Type::Bit
                 } else if is_builtin(b"builtin::Clock") {
                     if node.children().len() >= 2 {
-                        self.diagnostics.push(diagnostics::Unknown {
-                            region: node.region(),
-                            message: "Type Clock takes no parameters.".into(),
-                        }.into());
+                        self.diagnostics.push(Diagnostic::new(
+                            node.region(),
+                            diagnostics::Unknown {
+                                message: "Type Clock takes no parameters.".into(),
+                            },
+                        ));
                         return;
                     }
                     Type::Clock
                 } else if is_builtin(b"builtin::Reset") {
                     if node.children().len() >= 2 {
-                        self.diagnostics.push(diagnostics::Unknown {
-                            region: node.region(),
-                            message: "Type Reset takes no parameters.".into(),
-                        }.into());
+                        self.diagnostics.push(Diagnostic::new(
+                            node.region(),
+                            diagnostics::Unknown {
+                                message: "Type Reset takes no parameters.".into(),
+                            },
+                        ));
                         return;
                     }
                     Type::Reset
                 } else if is_builtin(b"builtin::Word") {
                     if node.children().len() < 2 {
-                        self.diagnostics.push(diagnostics::Unknown {
-                            region: node.region(),
-                            message: "Word type requires a width parameter.".into(),
-                        }.into());
+                        self.diagnostics.push(Diagnostic::new(
+                            node.region(),
+                            diagnostics::Unknown {
+                                message: "Word type requires a width parameter.".into(),
+                            },
+                        ));
                         return;
                     }
                     let generics_node = node.child(1);
@@ -270,18 +278,22 @@ impl TypeIndex {
                     Type::Word(width)
                 } else if is_builtin(b"builtin::Valid") {
                     if node.children().len() < 2 {
-                        self.diagnostics.push(diagnostics::Unknown {
-                            region: node.region(),
-                            message: "Valid type requires a type parameter.".into(),
-                        }.into());
+                        self.diagnostics.push(Diagnostic::new(
+                            node.region(),
+                            diagnostics::Unknown {
+                                message: "Valid type requires a type parameter.".into(),
+                            },
+                        ));
                         return;
                     }
                     let generics_node = node.child(1);
                     let AstNodePayload::GenericsType = generics_node.payload() else {
-                        self.diagnostics.push(diagnostics::Unknown {
-                            region: node.region(),
-                            message: "Valid type requires a type parameter.".into(),
-                        }.into());
+                        self.diagnostics.push(Diagnostic::new(
+                            node.region(),
+                            diagnostics::Unknown {
+                                message: "Valid type requires a type parameter.".into(),
+                            },
+                        ));
                         return;
                     };
                     let inner_type_node = generics_node.child(0);
@@ -291,10 +303,12 @@ impl TypeIndex {
                     let inner_type_location = inner_type_node.location();
                     self.gather_type_roots(builder, inner_type_node, symboltable);
                     let Some(inner_typ) = self.type_at(inner_type_location) else {
-                        self.diagnostics.push(diagnostics::Unknown {
-                            region: node.region(),
-                            message: "Could not resolve inner type of Valid.".into(),
-                        }.into());
+                        self.diagnostics.push(Diagnostic::new(
+                            node.region(),
+                            diagnostics::Unknown {
+                                message: "Could not resolve inner type of Valid.".into(),
+                            },
+                        ));
                         return;
                     };
                     Type::Valid(Box::new(inner_typ.clone()))
@@ -312,10 +326,12 @@ impl TypeIndex {
 
                 self.typ_at_location.insert(node.location(), TypeId(idx));
             } else {
-                self.diagnostics.push(diagnostics::UnresolvedType {
-                    region: node.region(),
-                    typ: type_name.into(),
-                }.into());
+                self.diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::UnresolvedType {
+                        typ: type_name.into(),
+                    },
+                ));
             }
 
             // Don't recurse into the children of a Type node (Ofness, GenericsParams, etc.)

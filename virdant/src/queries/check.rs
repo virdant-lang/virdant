@@ -13,7 +13,7 @@ use crate::common::graph::{Graph, VertIndex};
 use crate::common::source::Region;
 use crate::common::WordValue;
 use crate::db::Builder;
-use crate::diagnostics::{self, Diagnostic};
+use crate::diagnostics::{self, Diagnostic, DiagnosticPayload};
 use crate::fqn::PackageFqn;
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::token::KEYWORDS;
@@ -41,15 +41,15 @@ fn check_package_name_not_keyword(builder: &mut Builder, diagnostics: &mut Vec<D
         if package_name_is_keyword(package_name) {
             let parsing = builder.get_parsing(package.clone());
             let root_node = parsing.root();
-            diagnostics.push(
+            diagnostics.push(Diagnostic::new(
+                root_node.region(),
                 diagnostics::Unknown {
-                    region: root_node.region(),
                     message: format!(
                         "Package name '{}' is a keyword",
                         package_name,
                     ).into(),
-                }.into(),
-            );
+                },
+            ));
         }
     }
 }
@@ -128,13 +128,13 @@ fn check_duplicate_enum_values(builder: &mut Builder, diagnostics: &mut Vec<Diag
             let enumerant_symbol = symboltable.symbol(*enumerant_id);
             if let Some((_prev_name, prev_region)) = first.get(value) {
                 if already_reported.insert(*value) {
-                    diagnostics.push(
+                    diagnostics.push(Diagnostic::new(
+                        prev_region.clone(),
                         diagnostics::DuplicateEnumValue {
-                            region: prev_region.clone(),
                             enum_name: item.name().to_owned(),
                             value: *value,
-                        }.into(),
-                    );
+                        },
+                    ));
                 }
             } else {
                 let parsing = builder.get_parsing(enumerant_symbol.package());
@@ -158,11 +158,10 @@ fn check_enum_unknown_width(builder: &mut Builder, diagnostics: &mut Vec<Diagnos
         if typedef.width.is_none() {
             let parsing = builder.get_parsing(item.package());
             let enumdef_node = parsing.ast_node(item.location().ast_node_id());
-            diagnostics.push(
-                diagnostics::EnumUnknownWidth {
-                    region: enumdef_node.region(),
-                }.into(),
-            );
+            diagnostics.push(Diagnostic::new(
+                enumdef_node.region(),
+                DiagnosticPayload::EnumUnknownWidth,
+            ));
         }
     }
 }
@@ -245,11 +244,11 @@ fn check_mod_cycles(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
             .map(|id| symboltable.symbol(*id).fqn().to_owned().into())
             .collect();
 
-        diagnostics.push(
+        diagnostics.push(Diagnostic::new(
+            edge.region.clone(),
             diagnostics::ModuleCycle {
-                region: edge.region.clone(),
                 module_cycle: cycle_fqns,
-            }.into(),
-        );
+            },
+        ));
     }
 }

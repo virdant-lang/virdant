@@ -16,7 +16,7 @@ use crate::analysis::symbols::{Symbol, SymbolId};
 use crate::common::WordValue;
 use crate::common::{BinOp, ComponentKind, Flow, UnOp as UnOp, Width};
 use crate::db::Builder;
-use crate::diagnostics::{self, Diagnostic, DiagnosticLevel};
+use crate::diagnostics::{self, Diagnostic, DiagnosticLevel, DiagnosticPayload};
 use crate::analysis::location::Location;
 use crate::fqn::PackageFqn;
 use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
@@ -128,40 +128,49 @@ impl Typing {
     }
 
     fn flag_wrong_type<'p>(&mut self, node: &AstNode<'p>, expected: &Type, actual: &Type) {
-        let diag: Diagnostic = diagnostics::WrongType {
-            region: node.region(),
-            expected: expected.to_string().into(),
-            actual: actual.to_string().into(),
-        }.into();
+        let diag: Diagnostic = Diagnostic::new(
+            node.region(),
+            diagnostics::WrongType {
+                expected: expected.to_string().into(),
+                actual: actual.to_string().into(),
+            },
+        );
         self.diagnostics.push(diag);
     }
 
     #[allow(unused)]
     fn flag_todo<'p, S: Into<BString>>(&mut self, node: &AstNode<'p>, message: S) {
-        self.diagnostics.push(diagnostics::Todo {
-            region: node.region(),
-            message: message.into(),
-        }.into());
+        self.diagnostics.push(Diagnostic::new(
+            node.region(),
+            diagnostics::Todo {
+                message: message.into(),
+            },
+        ));
     }
 
     fn flag_unknown<'p, S: Into<BString>>(&mut self, node: &AstNode<'p>, message: S) {
-        self.diagnostics.push(diagnostics::Unknown {
-            region: node.region(),
-            message: message.into(),
-        }.into());
+        self.diagnostics.push(Diagnostic::new(
+            node.region(),
+            diagnostics::Unknown {
+                message: message.into(),
+            },
+        ));
     }
 
     fn flag_not_word_type<'p>(&mut self, node: &AstNode<'p>, typ: &Type) {
-        self.diagnostics.push(diagnostics::NotWordType {
-            region: node.region(),
-            typ: typ.to_string().into(),
-        }.into());
+        self.diagnostics.push(Diagnostic::new(
+            node.region(),
+            diagnostics::NotWordType {
+                typ: typ.to_string().into(),
+            },
+        ));
     }
 
     fn flag_cant_infer<'p>(&mut self, node: &AstNode<'p>) {
-        self.diagnostics.push(diagnostics::CantInfer {
-            region: node.region(),
-        }.into());
+        self.diagnostics.push(Diagnostic::new(
+            node.region(),
+            DiagnosticPayload::CantInfer,
+        ));
     }
 
     fn annotate(&mut self, node: &AstNode<'_>, typ: &Type) {
@@ -254,17 +263,21 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
                 && !matches!(component.kind(), Some(ComponentKind::OutgoingReg) | Some(ComponentKind::OutgoingWire))
             {
                 let region = builder.get_location_region(component.location());
-                diagnostics.push(diagnostics::UnusedSource {
+                diagnostics.push(Diagnostic::new(
                     region,
-                    path: path.into(),
-                }.into());
+                    diagnostics::UnusedSource {
+                        path: path.into(),
+                    },
+                ));
             } else if component.flow() == Flow::Sink && use_locations.contains_key(&path) {
                 for location in &use_locations[&path] {
                     let region = builder.get_location_region(location.clone());
-                    diagnostics.push(diagnostics::ReadFromSink {
+                    diagnostics.push(Diagnostic::new(
                         region,
-                        path: path.clone(),
-                    }.into());
+                        diagnostics::ReadFromSink {
+                            path: path.clone(),
+                        },
+                    ));
                 }
             }
         }
@@ -353,18 +366,22 @@ fn collect_unused(
                 if resolved_path == ctx.as_bytes()
                     || resolved_path.starts_with(ctx_dot.as_bytes())
                 {
-                    diagnostics.push(crate::diagnostics::NotIt {
-                        region: path_node.region(),
-                        component: ctx.to_owned(),
-                    }.into());
+                    diagnostics.push(Diagnostic::new(
+                        path_node.region(),
+                        diagnostics::NotIt {
+                            component: ctx.to_owned(),
+                        },
+                    ));
                 }
             }
 
             if already_unused.contains(&resolved_path) {
-                diagnostics.push(crate::diagnostics::RedundantUnused {
-                    region: path_node.region(),
-                    path: resolved_path.clone(),
-                }.into());
+                diagnostics.push(Diagnostic::new(
+                    path_node.region(),
+                    diagnostics::RedundantUnused {
+                        path: resolved_path.clone(),
+                    },
+                ));
             } else {
                 already_unused.insert(resolved_path.clone());
             }
@@ -450,10 +467,12 @@ fn collect_bidirectional_drivers(
                         } else {
                             resolved_path.clone()
                         };
-                        diagnostics.push(crate::diagnostics::Unknown {
-                            region: path_node.region(),
-                            message: format!("Unknown component {}", error_path.to_str_lossy()).into(),
-                        }.into());
+                        diagnostics.push(Diagnostic::new(
+                            path_node.region(),
+                            diagnostics::Unknown {
+                                message: format!("Unknown component {}", error_path.to_str_lossy()).into(),
+                            },
+                        ));
                     }
                 }
 
@@ -597,10 +616,12 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
             Ok(None) => {
                 // Only report "can't infer" if it's not a driver expression
                 if !matches!(node.parent().unwrap().payload(), AstNodePayload::Driver(_)) {
-                    typing.diagnostics.push(diagnostics::Todo {
-                        region: node.region(),
-                        message: format!("Can't typecheck expression because we don't know what type it should have").into(),
-                    }.into());
+                    typing.diagnostics.push(Diagnostic::new(
+                        node.region(),
+                        diagnostics::Todo {
+                            message: format!("Can't typecheck expression because we don't know what type it should have").into(),
+                        },
+                    ));
                 }
             }
             Ok(Some(typ)) => {

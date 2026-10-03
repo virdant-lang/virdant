@@ -11,7 +11,7 @@ use crate::common::DriverType;
 use crate::common::{Width, WordValue};
 use crate::common::source::Region;
 use crate::db::Builder;
-use crate::diagnostics::{self, Diagnostic};
+use crate::diagnostics::{self, Diagnostic, DiagnosticPayload};
 use crate::syntax::ast::{AstNode, match_arm_children};
 use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
@@ -37,11 +37,11 @@ pub(crate) fn check_match_coverage(
         }
     }
     for region in else_regions.iter().skip(1) {
-        diagnostics.push(diagnostics::MatchMultipleElse { region: region.clone() }.into());
+        diagnostics.push(Diagnostic::new(region.clone(), DiagnosticPayload::MatchMultipleElse));
     }
     if let Some(idx) = first_else_idx {
         if idx + 1 < arms.len() {
-            diagnostics.push(diagnostics::MatchElseNotLast { region: arms[idx].1.region() }.into());
+            diagnostics.push(Diagnostic::new(arms[idx].1.region(), DiagnosticPayload::MatchElseNotLast));
         }
     }
 
@@ -84,10 +84,12 @@ pub(crate) fn check_match_coverage(
             AstNodePayload::PatCtor(pat_ctor) => {
                 let Type::Usual(typedef_id) = subject_typ else {
                     if is_stmt_match {
-                        diagnostics.push(diagnostics::UnresolvedCtor {
-                            region: pat.region(),
-                            ctor: parsing.string(pat_ctor.name).to_owned(),
-                        }.into());
+                        diagnostics.push(Diagnostic::new(
+                            pat.region(),
+                            diagnostics::UnresolvedCtor {
+                                ctor: parsing.string(pat_ctor.name).to_owned(),
+                            },
+                        ));
                     }
                     continue;
                 };
@@ -105,10 +107,12 @@ pub(crate) fn check_match_coverage(
             AstNodePayload::PatEnumerant(pat_enum) => {
                 let Type::Usual(typedef_id) = subject_typ else {
                     if is_stmt_match {
-                        diagnostics.push(diagnostics::Unknown {
-                            region: pat.region(),
-                            message: "PatEnumerant expects an enum type".into(),
-                        }.into());
+                        diagnostics.push(Diagnostic::new(
+                            pat.region(),
+                            diagnostics::Unknown {
+                                message: "PatEnumerant expects an enum type".into(),
+                            },
+                        ));
                     }
                     continue;
                 };
@@ -126,10 +130,12 @@ pub(crate) fn check_match_coverage(
             AstNodePayload::PatWordLit(pat_word) => {
                 if !matches!(subject_typ, Type::Word(_)) {
                     if is_stmt_match {
-                        diagnostics.push(diagnostics::NotWordType {
-                            region: pat.region(),
-                            typ: subject_typ.to_string().into(),
-                        }.into());
+                        diagnostics.push(Diagnostic::new(
+                            pat.region(),
+                            diagnostics::NotWordType {
+                                typ: subject_typ.to_string().into(),
+                            },
+                        ));
                     }
                     continue;
                 }
@@ -145,11 +151,13 @@ pub(crate) fn check_match_coverage(
             AstNodePayload::PatBitLit(pat_bit) => {
                 if !matches!(subject_typ, Type::Bit | Type::Reset) {
                     if is_stmt_match {
-                        diagnostics.push(diagnostics::WrongType {
-                            region: pat.region(),
-                            expected: subject_typ.to_string().into(),
-                            actual: Type::Bit.to_string().into(),
-                        }.into());
+                        diagnostics.push(Diagnostic::new(
+                            pat.region(),
+                            diagnostics::WrongType {
+                                expected: subject_typ.to_string().into(),
+                                actual: Type::Bit.to_string().into(),
+                            },
+                        ));
                     }
                     continue;
                 }
@@ -166,7 +174,10 @@ pub(crate) fn check_match_coverage(
     }
 
     if let Some((region, witness)) = overlap {
-        diagnostics.push(diagnostics::MatchOverlappingArm { region, overlap: witness }.into());
+        diagnostics.push(Diagnostic::new(
+            region,
+            diagnostics::MatchOverlappingArm { overlap: witness },
+        ));
         return;
     }
 
@@ -187,16 +198,19 @@ pub(crate) fn check_match_coverage(
 
     if has_else {
         if exhausted {
-            diagnostics.push(diagnostics::MatchRedundantElse {
-                region: match_node.region(),
-            }.into());
+            diagnostics.push(Diagnostic::new(
+                match_node.region(),
+                DiagnosticPayload::MatchRedundantElse,
+            ));
         }
     } else if !missing.is_empty() {
-        diagnostics.push(diagnostics::MatchNotExhaustive {
-            region: match_node.region(),
-            subject_typ: subject_typ.to_string().into(),
-            missing: format_missing(&missing),
-        }.into());
+        diagnostics.push(Diagnostic::new(
+            match_node.region(),
+            diagnostics::MatchNotExhaustive {
+                subject_typ: subject_typ.to_string().into(),
+                missing: format_missing(&missing),
+            },
+        ));
     }
 }
 

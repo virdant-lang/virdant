@@ -16,7 +16,7 @@ use crate::analysis::component::{ComponentAnalysis, ComponentId};
 use crate::analysis::symbols::SymbolId;
 use crate::common::{DriverType, Flow};
 use crate::db::Builder;
-use crate::diagnostics::Diagnostic;
+use crate::diagnostics::{self, Diagnostic, DiagnosticPayload};
 use crate::syntax::ast::{AstNode, match_arm_children};
 use crate::syntax::payload::AstNodePayload;
 
@@ -175,10 +175,12 @@ fn collect_not_it_in_expr(
                 if path_str == ctx.as_bytes()
                     || path_str.starts_with(ctx_dot.as_bytes())
                 {
-                    diagnostics.push(crate::diagnostics::NotIt {
-                        region: node.region(),
-                        component: ctx.to_owned(),
-                    }.into());
+                    diagnostics.push(Diagnostic::new(
+                        node.region(),
+                        diagnostics::NotIt {
+                            component: ctx.to_owned(),
+                        },
+                    ));
                 }
             }
         }
@@ -216,26 +218,31 @@ fn collect_block_drivers(
                         if target_str == ctx.as_bytes()
                             || target_str.starts_with(ctx_dot.as_bytes())
                         {
-                            diagnostics.push(crate::diagnostics::NotIt {
-                                region: stmt.child(0).region(),
-                                component: ctx.to_owned(),
-                            }.into());
+                            diagnostics.push(Diagnostic::new(
+                                stmt.child(0).region(),
+                                diagnostics::NotIt {
+                                    component: ctx.to_owned(),
+                                },
+                            ));
                         }
                     }
                     if let Some(expr_node) = stmt.driver() {
                         collect_not_it_in_expr(&expr_node, ctx, &mut diagnostics);
                     }
                 } else if target_str.starts_with(b"it.") || target_str == b"it" {
-                    diagnostics.push(crate::diagnostics::ItNotInItBlock {
-                        region: stmt.region(),
-                    }.into());
+                    diagnostics.push(Diagnostic::new(
+                        stmt.region(),
+                        DiagnosticPayload::ItNotInItBlock,
+                    ));
                 }
                 let Some(component) = component_analysis.resolve(target_str.as_bstr()) else {
                     if !target_str.starts_with(b"it.") && target_str != b"it" {
-                        diagnostics.push(crate::diagnostics::UnresolvedComponent {
-                            region: stmt.region(),
-                            path: target_str,
-                        }.into());
+                        diagnostics.push(Diagnostic::new(
+                            stmt.region(),
+                            diagnostics::UnresolvedComponent {
+                                path: target_str,
+                            },
+                        ));
                     }
                     continue;
                 };
@@ -257,13 +264,12 @@ fn collect_block_drivers(
                                 }
                             }
                             if rhs_str == target_str {
-                                diagnostics.push(
-                                    crate::diagnostics::RedundantDriver {
-                                        region: stmt.region(),
+                                diagnostics.push(Diagnostic::new(
+                                    stmt.region(),
+                                    diagnostics::RedundantDriver {
                                         path: target_str.clone(),
-                                    }
-                                    .into(),
-                                );
+                                    },
+                                ));
                             }
                         }
                     }
@@ -296,10 +302,12 @@ fn collect_block_drivers(
                         if lhs_str == ctx.as_bytes()
                             || lhs_str.starts_with(ctx_dot.as_bytes())
                         {
-                            diagnostics.push(crate::diagnostics::NotIt {
-                                region: lhs_node.region(),
-                                component: ctx.to_owned(),
-                            }.into());
+                            diagnostics.push(Diagnostic::new(
+                                lhs_node.region(),
+                                diagnostics::NotIt {
+                                    component: ctx.to_owned(),
+                                },
+                            ));
                         }
                     }
                     if rhs_str.starts_with(b"it.") {
@@ -316,22 +324,26 @@ fn collect_block_drivers(
                         if rhs_str == ctx.as_bytes()
                             || rhs_str.starts_with(ctx_dot.as_bytes())
                         {
-                            diagnostics.push(crate::diagnostics::NotIt {
-                                region: rhs_node.region(),
-                                component: ctx.to_owned(),
-                            }.into());
+                            diagnostics.push(Diagnostic::new(
+                                rhs_node.region(),
+                                diagnostics::NotIt {
+                                    component: ctx.to_owned(),
+                                },
+                            ));
                         }
                     }
                 } else {
                     if lhs_str.starts_with(b"it.") || lhs_str == b"it" {
-                        diagnostics.push(crate::diagnostics::ItNotInItBlock {
-                            region: lhs_node.region(),
-                        }.into());
+                        diagnostics.push(Diagnostic::new(
+                            lhs_node.region(),
+                            DiagnosticPayload::ItNotInItBlock,
+                        ));
                     }
                     if rhs_str.starts_with(b"it.") || rhs_str == b"it" {
-                        diagnostics.push(crate::diagnostics::ItNotInItBlock {
-                            region: rhs_node.region(),
-                        }.into());
+                        diagnostics.push(Diagnostic::new(
+                            rhs_node.region(),
+                            DiagnosticPayload::ItNotInItBlock,
+                        ));
                     }
                 }
 
@@ -374,9 +386,10 @@ fn collect_block_drivers(
                         let block = &it_block.children()[0];
 
                         if block.children().is_empty() {
-                            diagnostics.push(crate::diagnostics::EmptyDriverBlock {
-                                region: it_block.region(),
-                            }.into());
+                            diagnostics.push(Diagnostic::new(
+                                it_block.region(),
+                                DiagnosticPayload::EmptyDriverBlock,
+                            ));
                             continue;
                         }
 
@@ -404,9 +417,10 @@ fn collect_block_drivers(
                         let block = &child.children()[0];
 
                         if block.children().is_empty() {
-                            diagnostics.push(crate::diagnostics::EmptyDriverBlock {
-                                region: child.region(),
-                            }.into());
+                            diagnostics.push(Diagnostic::new(
+                                child.region(),
+                                DiagnosticPayload::EmptyDriverBlock,
+                            ));
                             continue;
                         }
 
@@ -434,9 +448,10 @@ fn collect_block_drivers(
                         let block = &child.children()[0];
 
                         if block.children().is_empty() {
-                            diagnostics.push(crate::diagnostics::EmptyDriverBlock {
-                                region: child.region(),
-                            }.into());
+                            diagnostics.push(Diagnostic::new(
+                                child.region(),
+                                DiagnosticPayload::EmptyDriverBlock,
+                            ));
                             continue;
                         }
 

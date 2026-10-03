@@ -373,14 +373,13 @@ fn build_symboltable_moddef_slot(
         let component_region = Region::new(package.clone(), child.span());
 
         if seen.contains_key(&component_name) {
-            diagnostics.push(
+            diagnostics.push(Diagnostic::new(
+                component_region,
                 diagnostics::DuplicateSlot {
                     item: item_name.to_owned().into(),
-                    region: component_region,
                     slot: component_name,
-                }
-                .into(),
-            );
+                },
+            ));
             continue;
         }
 
@@ -436,14 +435,13 @@ fn build_symboltable_typedef_slot(
         let slot_region = Region::new(package.clone(), child.span());
 
         if seen.contains_key(&slot_name) {
-            diagnostics.push(
+            diagnostics.push(Diagnostic::new(
+                slot_region,
                 diagnostics::DuplicateSlot {
                     item: item_name.to_owned().into(),
-                    region: slot_region,
                     slot: slot_name,
-                }
-                .into(),
-            );
+                },
+            ));
             continue;
         }
 

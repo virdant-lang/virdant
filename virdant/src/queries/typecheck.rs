@@ -55,20 +55,24 @@ pub(crate) fn build_exprroot_for(builder: &mut Builder, location: Location) -> E
 pub(crate) fn build_typeof(builder: &mut Builder, location: Location) -> Result<Type, Vec<Diagnostic>> {
     let Some(exprroot) = find_exprroot(builder, location.clone()) else {
         let region = builder.get_location_region(location.clone());
-        return Err(vec![diagnostics::Todo {
+        return Err(vec![Diagnostic::new(
             region,
-            message: "No expr root".into(),
-        }.into()]);
+            diagnostics::Todo {
+                message: "No expr root".into(),
+            },
+        )]);
     };
     let typing = builder.get_typing(exprroot);
     if let Some(typ) = typing.type_of_node(location.ast_node_id()) {
         Ok(typ.clone())
     } else {
         let region = builder.get_location_region(location.clone());
-        Err(vec![diagnostics::Todo {
+        Err(vec![Diagnostic::new(
             region,
-            message: "No expr root".into(),
-        }.into()])
+            diagnostics::Todo {
+                message: "No expr root".into(),
+            },
+        )])
     }
 }
 

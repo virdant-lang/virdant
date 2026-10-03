@@ -235,11 +235,13 @@ impl Parsing {
                 }
                 lalrpop_util::ParseError::User { error: _ } => unreachable!(),
             };
-            let diagnostic = diagnostics::SyntaxError {
+            let diagnostic = Diagnostic::new(
                 region,
-                message,
-            };
-            diagnostics.push(diagnostic.into());
+                diagnostics::SyntaxError {
+                    message,
+                },
+            );
+            diagnostics.push(diagnostic);
         }
         diagnostics
     }

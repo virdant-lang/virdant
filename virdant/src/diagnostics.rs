@@ -1,22 +1,12 @@
 //! Defines every diagnostic type emitted by the compiler
 
 use bstr::{BStr, BString};
-use std::sync::Arc;
 
 use crate::common::{DriverType, Width, WordValue};
 use crate::fqn::PackageFqn;
 use crate::common::source::Region;
 
 pub type Type = BString;
-
-#[derive(Clone, Debug)]
-pub struct Diagnostic(Arc<dyn IsDiagnostic + Send + Sync>);
-
-trait IsDiagnostic: std::fmt::Debug + 'static + Send + Sync {
-    fn region(&self) -> Region;
-    fn message(&self) -> BString;
-    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Error }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiagnosticLevel {
@@ -25,208 +15,253 @@ pub enum DiagnosticLevel {
     Info,
 }
 
-/// `import` statement names a package which does not exist.
+#[derive(Clone, Debug)]
+pub struct Diagnostic {
+    pub region: Region,
+    pub payload: DiagnosticPayload,
+}
+
+#[derive(Clone, Debug)]
+pub enum DiagnosticPayload {
+    /// `import` statement names a package which does not exist.
+    SyntaxError(SyntaxError),
+    ImportCycle(ImportCycle),
+    /// `import` statement names a package which does not exist.
+    UnresolvedImportError(UnresolvedImportError),
+    /// Package contains two or more `import` statements naming the same package.
+    /// Lists regions to all such statements.
+    DuplicateImport(DuplicateImport),
+    /// Two items share the same name in the same package.
+    /// Lists regions to all such item declarations.
+    DuplicateItem(DuplicateItem),
+    /// Two items share the same name in the same package.
+    /// Lists regions to all such item declarations.
+    DuplicateSlot(DuplicateSlot),
+    /// Failed to resolve a package.
+    UnresolvedPackage(UnresolvedPackage),
+    /// Failed to resolve an item.
+    UnresolvedItem(UnresolvedItem),
+    /// Failed to resolve a type.
+    UnresolvedType(UnresolvedType),
+    /// A `reg` component is missing an `on` clause.
+    MissingOnClause(MissingOnClause),
+    /// A non-`reg` component has an unexpected `on` clause.
+    UnexpectedOnClause(UnexpectedOnClause),
+    /// A `driver` statement used the wrong driver type.
+    /// Eg, a `reg` used `:=` or a `wire` used `<=`.
+    WrongDriverType(WrongDriverType),
+    /// A reg component has no drivers.
+    NoRegDrivers(NoRegDrivers),
+    /// Component has no drivers.
+    NoDrivers(NoDrivers),
+    /// Component has multiple drivers.
+    MultipleDrivers(MultipleDrivers),
+    /// Incoming signal has a driver.
+    DriverForSink(DriverForSink),
+    /// A component could not be resolved.
+    UnresolvedComponent(UnresolvedComponent),
+    /// A path uses the component name instead of `it` inside a driver block.
+    NotIt(NotIt),
+    /// A component could not be resolved.
+    UnresolvedCtor(UnresolvedCtor),
+    /// A component could not be resolved.
+    UnusedSource(UnusedSource),
+    /// Read from a component which is a sink.
+    /// Eg, a read from an `outgoing` port.
+    ReadFromSink(ReadFromSink),
+    /// A component could not be resolved.
+    UnfilledHole(UnfilledHole),
+    ModuleCycle(ModuleCycle),
+    /// Failed to resolve a method.
+    UnresolvedMethod(UnresolvedMethod),
+    WrongType(WrongType),
+    Unknown(Unknown),
+    DoesntFit(DoesntFit),
+    NotWordType(NotWordType),
+    CantTruncate(CantTruncate),
+    Todo(Todo),
+    /// A `match` does not cover every value of its subject.
+    MatchNotExhaustive(MatchNotExhaustive),
+    /// A `case` arm overlaps with an earlier `case` arm.
+    MatchOverlappingArm(MatchOverlappingArm),
+    /// A docstring (`//>` or `//!`) whose content does not start with a space.
+    /// The convention is `//> text` or `//! text`, not `//>text` or `//!text`.
+    InvalidDocstring(InvalidDocstring),
+    /// Two enumerants of the same enum type have the same value.
+    DuplicateEnumValue(DuplicateEnumValue),
+    /// A single-bit index `a[i]` where `i >= width` of the subject `Word[n]`.
+    IndexOutOfBounds(IndexOutOfBounds),
+    /// A bit range `a[hi..lo]` where the bounds exceed the width of the subject.
+    IndexRangeOutOfBounds(IndexRangeOutOfBounds),
+    /// A bit range `a[hi..lo]` where `hi < lo` (empty/invalid range).
+    InvalidIndexRange(InvalidIndexRange),
+    /// A dynamic word index `a[i]` where `a: Word[n]`, `i: Word[k]`,
+    /// but `n != 2^k`.
+    InvalidWordIndexWidth(InvalidWordIndexWidth),
+    /// A dynamic word index `a[i]` where the subject or index is not a Word type.
+    IndexNotWordType(IndexNotWordType),
+    /// A single component is unused multiple times
+    RedundantUnused(RedundantUnused),
+    /// Latched driver from a component to itself
+    RedundantDriver(RedundantDriver),
+    /// A combinational loop was detected in a module's dependency graph.
+    /// All edges in the cycle are combinational, which would causal, which would cause
+    /// simulation to never converge.
+    CombinationalLoop(CombinationalLoop),
+    ImportNotAtTopError,
+    /// `it` keyword used outside of an `ItBlock`.
+    ItNotInItBlock,
+    CantInfer,
+    WrongArgCount,
+    /// The `else` arm covers no values not already covered by earlier `case` arms.
+    MatchRedundantElse,
+    /// A `match` has more than one `else` arm.
+    MatchMultipleElse,
+    /// An `else` arm appears before the last position in a `match`.
+    MatchElseNotLast,
+    /// An enum type's first enumerant does not have an inferrable width.
+    EnumUnknownWidth,
+    /// A driver block is empty.
+    EmptyDriverBlock,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SyntaxError {
-    pub region: Region,
     pub message: BString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ImportNotAtTopError {
-    pub region: Region,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportCycle {
-    pub region: Region,
     pub package_cycle: Vec<BString>,
 }
 
-/// `import` statement names a package which does not exist.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedImportError {
-    pub region: Region,
     pub imported_package: PackageFqn,
 }
 
-/// Package contains two or more `import` statements naming the same package.
-/// Lists regions to all such statements.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuplicateImport {
-    pub region: Region,
     pub imported_package: PackageFqn,
 }
 
-/// Two items share the same name in the same package.
-/// Lists regions to all such item declarations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuplicateItem {
-    pub region: Region,
     pub item: BString,
 }
 
-/// Two items share the same name in the same package.
-/// Lists regions to all such item declarations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuplicateSlot {
     pub item: BString,
-    pub region: Region,
     pub slot: BString,
 }
 
-/// Failed to resolve a package.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedPackage {
-    pub region: Region,
     pub package: BString,
 }
 
-/// Failed to resolve an item.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedItem {
-    pub region: Region,
     pub item: BString,
 }
 
-/// Failed to resolve a type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedType {
-    pub region: Region,
     pub typ: BString,
 }
 
-/// A `reg` component is missing an `on` clause.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MissingOnClause {
-    pub region: Region,
     pub component: BString,
 }
 
-/// A non-`reg` component has an unexpected `on` clause.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnexpectedOnClause {
-    pub region: Region,
     pub component: BString,
 }
 
-/// A `driver` statement used the wrong driver type.
-/// Eg, a `reg` used `:=` or a `wire` used `<=`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WrongDriverType {
-    pub region: Region,
     pub target: BString,
     pub expected_driver_type: DriverType,
 }
 
-/// A reg component has no drivers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoRegDrivers {
-    pub region: Region,
     pub target: BString,
 }
 
-/// Component has no drivers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoDrivers {
-    pub region: Region,
     pub target: BString,
 }
 
-/// Component has multiple drivers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultipleDrivers {
-    pub region: Region,
     pub target: BString,
 }
 
-/// Incoming signal has a driver.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DriverForSink {
-    pub region: Region,
     pub target: BString,
 }
 
-/// A component could not be resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedComponent {
-    pub region: Region,
     pub path: BString,
 }
 
-/// `it` keyword used outside of an `ItBlock`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ItNotInItBlock {
-    pub region: Region,
-}
-
-/// A path uses the component name instead of `it` inside a driver block.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NotIt {
-    pub region: Region,
     pub component: BString,
 }
 
-/// A component could not be resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedCtor {
-    pub region: Region,
     pub ctor: BString,
 }
 
-/// A component could not be resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnusedSource {
-    pub region: Region,
     pub path: BString,
 }
 
-/// Read from a component which is a sink.
-/// Eg, a read from an `outgoing` port.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReadFromSink {
-    pub region: Region,
     pub path: BString,
 }
 
-/// A component could not be resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnfilledHole {
-    pub region: Region,
     pub name: Option<BString>,
     pub typ: Option<BString>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleCycle {
-    pub region: Region,
     pub module_cycle: Vec<BString>,
 }
 
-/// Failed to resolve a method.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedMethod {
-    pub region: Region,
     pub method: BString,
     pub subject_typ: Type,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WrongType {
-    pub region: Region,
     pub expected: Type,
     pub actual: Type,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unknown {
-    pub region: Region,
     pub message: BString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DoesntFit {
-    pub region: Region,
     pub value: WordValue,
     pub width: Width,
     pub minwidth: Width,
@@ -234,178 +269,272 @@ pub struct DoesntFit {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NotWordType {
-    pub region: Region,
     pub typ: Type,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CantInfer {
-    pub region: Region,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WrongArgCount {
-    pub region: Region,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CantTruncate {
-    pub region: Region,
     pub source_width: Width,
     pub target_width: Width,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Todo {
-    pub region: Region,
     pub message: BString,
 }
 
-/// A `match` does not cover every value of its subject.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchNotExhaustive {
-    pub region: Region,
     pub subject_typ: Type,
     pub missing: BString,
 }
 
-/// A `case` arm overlaps with an earlier `case` arm.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchOverlappingArm {
-    pub region: Region,
     pub overlap: BString,
 }
 
-/// The `else` arm covers no values not already covered by earlier `case` arms.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MatchRedundantElse {
-    pub region: Region,
-}
-
-/// A `match` has more than one `else` arm.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MatchMultipleElse {
-    pub region: Region,
-}
-
-/// An `else` arm appears before the last position in a `match`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MatchElseNotLast {
-    pub region: Region,
-}
-
-/// A docstring (`//>` or `//!`) whose content does not start with a space.
-/// The convention is `//> text` or `//! text`, not `//>text` or `//!text`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvalidDocstring {
-    pub region: Region,
     pub content: BString,
 }
 
-/// Two enumerants of the same enum type have the same value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuplicateEnumValue {
-    pub region: Region,
     pub enum_name: BString,
     pub value: WordValue,
 }
 
-/// A single-bit index `a[i]` where `i >= width` of the subject `Word[n]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexOutOfBounds {
-    pub region: Region,
     pub array_width: Width,
     pub index: u16,
 }
 
-/// A bit range `a[hi..lo]` where the bounds exceed the width of the subject.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexRangeOutOfBounds {
-    pub region: Region,
     pub array_width: Width,
     pub index_hi: u16,
     pub index_lo: u16,
 }
 
-/// A bit range `a[hi..lo]` where `hi < lo` (empty/invalid range).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvalidIndexRange {
-    pub region: Region,
     pub array_width: Width,
     pub index_hi: u16,
     pub index_lo: u16,
 }
 
-/// A dynamic word index `a[i]` where `a: Word[n]`, `i: Word[k]`,
-/// but `n != 2^k`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvalidWordIndexWidth {
-    pub region: Region,
     pub array_width: Width,
     pub index_width: Width,
 }
 
-/// A dynamic word index `a[i]` where the subject or index is not a Word type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexNotWordType {
-    pub region: Region,
     pub typ: BString,
 }
 
-/// An enum type's first enumerant does not have an inferrable width.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EnumUnknownWidth {
-    pub region: Region,
-}
-
-/// A driver block is empty
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EmptyDriverBlock {
-    pub region: Region,
-}
-
-/// A single component is unused multiple times
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RedundantUnused {
-    pub region: Region,
     pub path: BString,
 }
 
-/// Latched driver from a component to itself
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RedundantDriver {
-    pub region: Region,
     pub path: BString,
 }
 
-/// A combinational loop was detected in a module's dependency graph.
-/// All edges in the cycle are combinational, which would causal, which would cause
-/// simulation to never converge.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CombinationalLoop {
-    pub region: Region,
     pub components: Vec<BString>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Soften {
-    pub inner: Diagnostic,
-    pub level: DiagnosticLevel,
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl Diagnostic {
+    pub fn new(region: Region, payload: impl Into<DiagnosticPayload>) -> Self {
+        Self { region, payload: payload.into() }
+    }
+
     pub fn region(&self) -> Region {
-        self.0.region()
+        self.region.clone()
     }
 
     pub fn message(&self) -> BString {
-        self.0.message()
+        use bstr::ByteSlice;
+        match &self.payload {
+            DiagnosticPayload::SyntaxError(d) => format!("Syntax Error: {}", d.message).into(),
+            DiagnosticPayload::ImportNotAtTopError => "Import not at top of file".into(),
+            DiagnosticPayload::ImportCycle(d) => {
+                debug_assert!(d.package_cycle.len() > 0);
+                if d.package_cycle.len() > 1 {
+                    let package_cycle = d
+                        .package_cycle
+                        .iter()
+                        .map(|package| package.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    format!("Import cycle: {package_cycle}").into()
+                } else {
+                    format!("Package imports itself: {}", &d.package_cycle[0]).into()
+                }
+            }
+            DiagnosticPayload::UnresolvedImportError(d) => format!("Unresolved import: {}", d.imported_package).into(),
+            DiagnosticPayload::DuplicateImport(_) => "Duplicate import".into(),
+            DiagnosticPayload::DuplicateItem(_) => "Duplicate Item".to_owned().into(),
+            DiagnosticPayload::DuplicateSlot(_) => "Duplicate slot".into(),
+            DiagnosticPayload::UnresolvedPackage(d) => format!("Unresolved package {}", d.package).into(),
+            DiagnosticPayload::UnresolvedItem(d) => format!("Unresolved item {}", d.item).into(),
+            DiagnosticPayload::UnresolvedType(d) => format!("Unresolved type {}", d.typ).into(),
+            DiagnosticPayload::MissingOnClause(d) => format!("Missing on clause for reg {}", d.component).into(),
+            DiagnosticPayload::UnexpectedOnClause(d) => format!("Unexpected on clause {}", d.component).into(),
+            DiagnosticPayload::WrongDriverType(d) => {
+                let driver_type_str = match d.expected_driver_type {
+                    DriverType::Continuous => ":=",
+                    DriverType::Latched => "<=",
+                };
+                format!(
+                    "Wrong driver type for {}, expected {driver_type_str}",
+                    d.target,
+                ).into()
+            }
+            DiagnosticPayload::NoRegDrivers(d) => format!("No drivers for {}", d.target).into(),
+            DiagnosticPayload::NoDrivers(d) => format!("No drivers for {}", d.target).into(),
+            DiagnosticPayload::MultipleDrivers(d) => format!("Multiple drivers for {}", d.target).into(),
+            DiagnosticPayload::DriverForSink(d) => format!("Driver for sink {}", d.target).into(),
+            DiagnosticPayload::UnresolvedComponent(d) => format!("Unresolved component {}", d.path).into(),
+            DiagnosticPayload::ItNotInItBlock => "'it' used outside of an it block".into(),
+            DiagnosticPayload::NotIt(d) => {
+                format!(
+                    "'{}' should be written as 'it' inside of this driver block",
+                    d.component,
+                ).into()
+            }
+            DiagnosticPayload::UnresolvedCtor(d) => format!("Unresolved constructor {}", d.ctor).into(),
+            DiagnosticPayload::UnusedSource(d) => format!("Unused signal {}", d.path).into(),
+            DiagnosticPayload::ReadFromSink(d) => format!("Read from sink {}", d.path).into(),
+            DiagnosticPayload::UnfilledHole(d) => {
+                let name = if let Some(name) = &d.name {
+                    name.as_bstr()
+                } else {
+                    BStr::new("?")
+                };
+                if let Some(typ) = &d.typ {
+                    format!("Unfilled hole: {name} : {typ}").into()
+                } else {
+                    format!("Unfilled hole: {name}").into()
+                }
+            }
+            DiagnosticPayload::ModuleCycle(d) => {
+                let cycle = d
+                    .module_cycle
+                    .iter()
+                    .map(|m| m.to_string())
+                    .collect::<Vec<_>>();
+                format!("Module cycle: {}", cycle.join(", ")).into()
+            }
+            DiagnosticPayload::UnresolvedMethod(d) => format!("Unresovled method: {} on type {}", d.method, d.subject_typ).into(),
+            DiagnosticPayload::WrongType(d) => {
+                format!(
+                    "Wrong type: Expected {} but found {}",
+                    d.expected, d.actual,
+                ).into()
+            }
+            DiagnosticPayload::Unknown(d) => d.message.to_string().into(),
+            DiagnosticPayload::DoesntFit(d) => {
+                format!(
+                    "Value doesn't fit: {} is a {}-bit value, but literal is type builtin::Word[{}]",
+                    d.value, d.minwidth, d.width,
+                ).into()
+            }
+            DiagnosticPayload::NotWordType(d) => format!("Expected type {} which is not a Word type", d.typ).into(),
+            DiagnosticPayload::CantInfer => "Can't infer".into(),
+            DiagnosticPayload::WrongArgCount => "Wrong arg count".into(),
+            DiagnosticPayload::CantTruncate(d) => {
+                format!(
+                    "Cannot truncate Word[{}] to the larger type Word[{}]",
+                    d.source_width, d.target_width,
+                ).into()
+            }
+            DiagnosticPayload::Todo(d) => format!("TODO: {}", d.message).into(),
+            DiagnosticPayload::MatchNotExhaustive(d) => {
+                format!(
+                    "Non-exhaustive match on {}: not covered: {}",
+                    d.subject_typ, d.missing,
+                ).into()
+            }
+            DiagnosticPayload::MatchOverlappingArm(d) => format!("Overlapping match arm: {}", d.overlap).into(),
+            DiagnosticPayload::MatchRedundantElse => "Redundant else arm: all values are already covered".into(),
+            DiagnosticPayload::MatchMultipleElse => "Multiple else arms in match".into(),
+            DiagnosticPayload::MatchElseNotLast => "else arm must be the last arm of the match".into(),
+            DiagnosticPayload::InvalidDocstring(d) => {
+                format!(
+                    "Invalid docstring: content must start with a space, got {:?}",
+                    d.content,
+                ).into()
+            }
+            DiagnosticPayload::EnumUnknownWidth => "Enum type's first enumerant does not have an inferrable width. Add an explicit width, e.g. `= 0wN`.".into(),
+            DiagnosticPayload::DuplicateEnumValue(d) => {
+                format!(
+                    "Duplicate enum value: enumerants of {} share value {}",
+                    d.enum_name, d.value,
+                ).into()
+            }
+            DiagnosticPayload::InvalidWordIndexWidth(d) => {
+                format!(
+                    "Invalid word index width: Word[{}] indexed by Word[{}] requires {} == 2^{}",
+                    d.array_width, d.index_width, d.array_width, d.index_width,
+                ).into()
+            }
+            DiagnosticPayload::IndexOutOfBounds(d) => {
+                format!(
+                    "Bit index {} out of bound for Word[{}]",
+                    d.index, d.array_width,
+                ).into()
+            }
+            DiagnosticPayload::IndexRangeOutOfBounds(d) => {
+                format!(
+                    "Bit range {}..{} out of bounds for Word[{}]",
+                    d.index_hi, d.index_lo, d.array_width,
+                ).into()
+            }
+            DiagnosticPayload::InvalidIndexRange(d) => {
+                format!(
+                    "Invalid bit range {}..{}: upper bound must be greater than or equal to lower bound",
+                    d.index_hi, d.index_lo,
+                ).into()
+            }
+            DiagnosticPayload::IndexNotWordType(d) => format!("Expected a Word type: {}", d.typ).into(),
+            DiagnosticPayload::EmptyDriverBlock => "Empty driver block".into(),
+            DiagnosticPayload::RedundantUnused(d) => format!("Redundant `unused`: {}", d.path).into(),
+            DiagnosticPayload::RedundantDriver(d) => format!("Redundant driver: {}", d.path).into(),
+            DiagnosticPayload::CombinationalLoop(d) => {
+                format!(
+                    "Combinational loop detected: {}",
+                    d.components
+                        .iter()
+                        .map(|c| String::from_utf8_lossy(c).into_owned())
+                        .collect::<Vec<_>>()
+                        .join(" -> "),
+                ).into()
+            }
+        }
     }
 
     pub fn level(&self) -> DiagnosticLevel {
-        self.0.level()
+        match self.payload {
+            DiagnosticPayload::NoRegDrivers(_)
+            | DiagnosticPayload::NotIt(_)
+            | DiagnosticPayload::UnusedSource(_)
+            | DiagnosticPayload::ReadFromSink(_)
+            | DiagnosticPayload::UnfilledHole(_)
+            | DiagnosticPayload::EmptyDriverBlock
+            | DiagnosticPayload::RedundantDriver(_) => DiagnosticLevel::Warning,
+            DiagnosticPayload::Todo(_) => DiagnosticLevel::Info,
+            _ => DiagnosticLevel::Error,
+        }
     }
 }
 
@@ -420,618 +549,26 @@ impl std::fmt::Display for DiagnosticLevel {
     }
 }
 
-impl<E: IsDiagnostic> From<E> for Diagnostic {
-    fn from(value: E) -> Self {
-        Diagnostic(Arc::new(value))
-    }
+macro_rules! from_diagnostic {
+    ($($t:ident),* $(,)?) => {
+        $(
+            impl From<$t> for DiagnosticPayload {
+                fn from(d: $t) -> Self {
+                    Self::$t(d)
+                }
+            }
+        )*
+    };
 }
 
-impl IsDiagnostic for ModuleCycle  {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        let cycle = self.module_cycle.iter().map(|m| m.to_string()).collect::<Vec<_>>();
-        format!("Module cycle: {}", cycle.join(", ")).into()
-    }
-}
-
-impl IsDiagnostic for UnresolvedMethod {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Unresovled method: {} on type {}", self.method, self.subject_typ).into()
-    }
-}
-
-impl IsDiagnostic for Unknown {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        self.message.to_string().into()
-    }
-}
-
-impl IsDiagnostic for DuplicateItem {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        "Duplicate Item".to_owned().into()
-    }
-}
-
-impl IsDiagnostic for DuplicateImport {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Duplicate import").into()
-    }
-}
-
-impl IsDiagnostic for SyntaxError {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Syntax Error: {}", self.message).into()
-    }
-}
-
-impl IsDiagnostic for ImportNotAtTopError {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Import not at top of file").into()
-    }
-}
-
-impl IsDiagnostic for ImportCycle {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        debug_assert!(self.package_cycle.len() > 0);
-
-        if self.package_cycle.len() > 1 {
-            let package_cycle = self
-                .package_cycle
-                .iter()
-                .map(|package| package.to_string())
-                .collect::<Vec<_>>()
-                .join(" ");
-            format!("Import cycle: {package_cycle}").into()
-        } else {
-            format!("Package imports itself: {}", &self.package_cycle[0]).into()
-        }
-    }
-}
-
-impl IsDiagnostic for UnresolvedImportError {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Unresolved import: {}", self.imported_package).into()
-    }
-}
-
-impl IsDiagnostic for DuplicateSlot {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Duplicate slot").into()
-    }
-}
-
-impl IsDiagnostic for WrongDriverType {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        let driver_type_str = match self.expected_driver_type {
-            DriverType::Continuous => ":=",
-            DriverType::Latched => "<=",
-        };
-        format!("Wrong driver type for {}, expected {driver_type_str}", &self.target).into()
-    }
-}
-
-impl IsDiagnostic for NoRegDrivers {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("No drivers for {}", &self.target).into()
-    }
-
-    fn level(&self) -> DiagnosticLevel {
-        DiagnosticLevel::Warning
-    }
-}
-
-impl IsDiagnostic for NoDrivers {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("No drivers for {}", &self.target).into()
-    }
-}
-
-impl IsDiagnostic for MultipleDrivers {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Multiple drivers for {}", &self.target).into()
-    }
-}
-
-impl IsDiagnostic for DriverForSink {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Driver for sink {}", &self.target).into()
-    }
-}
-
-impl IsDiagnostic for UnresolvedComponent {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Unresolved component {}", &self.path).into()
-    }
-}
-impl IsDiagnostic for ItNotInItBlock {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("'it' used outside of an it block").into()
-    }
-}
-
-impl IsDiagnostic for NotIt {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!(
-            "'{}' should be written as 'it' inside of this driver block",
-            &self.component,
-        ).into()
-    }
-
-    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }
-}
-
-
-impl IsDiagnostic for UnresolvedCtor {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Unresolved constructor {}", &self.ctor).into()
-    }
-}
-
-impl IsDiagnostic for UnusedSource {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Unused signal {}", &self.path).into()
-    }
-
-    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }
-}
-
-impl IsDiagnostic for ReadFromSink {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Read from sink {}", &self.path).into()
-    }
-
-    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }
-}
-
-impl IsDiagnostic for UnfilledHole {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        use bstr::ByteSlice;
-        let name = if let Some(name) = &self.name {
-            name.as_bstr()
-        } else {
-            BStr::new("?")
-        };
-
-        if let Some(typ) = &self.typ {
-            format!("Unfilled hole: {name} : {typ}").into()
-        } else {
-            format!("Unfilled hole: {name}").into()
-        }
-    }
-
-    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }
-}
-
-impl IsDiagnostic for UnresolvedItem {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Unresolved item {}", &self.item).into()
-    }
-}
-
-impl IsDiagnostic for UnresolvedType {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Unresolved type {}", &self.typ).into()
-    }
-}
-
-impl IsDiagnostic for MissingOnClause {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Missing on clause for reg {}", &self.component).into()
-    }
-}
-
-impl IsDiagnostic for UnexpectedOnClause {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Unexpected on clause {}", &self.component).into()
-    }
-}
-
-impl IsDiagnostic for UnresolvedPackage {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Unresolved package {}", &self.package).into()
-    }
-}
-
-impl IsDiagnostic for WrongType {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Wrong type: Expected {} but found {}", self.expected, self.actual).into()
-    }
-}
-
-impl IsDiagnostic for DoesntFit {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Value doesn't fit: {} is a {}-bit value, but literal is type builtin::Word[{}]", self.value, self.minwidth, self.width).into()
-    }
-}
-
-impl IsDiagnostic for NotWordType {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Expected type {} which is not a Word type", &self.typ).into()
-    }
-}
-
-impl IsDiagnostic for CantInfer {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Can't infer").into()
-    }
-}
-
-impl IsDiagnostic for WrongArgCount {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Wrong arg count").into()
-    }
-}
-
-impl IsDiagnostic for CantTruncate {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Cannot truncate Word[{}] to the larger type Word[{}]", self.source_width, self.target_width).into()
-    }
-}
-
-impl IsDiagnostic for Todo {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("TODO: {}", self.message).into()
-    }
-
-    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Info }
-}
-
-impl IsDiagnostic for Soften {
-    fn region(&self) -> Region {
-        self.inner.region()
-    }
-
-    fn message(&self) -> BString {
-        self.inner.message()
-    }
-
-    fn level(&self) -> DiagnosticLevel {
-        self.level
-    }
-}
-
-impl IsDiagnostic for MatchNotExhaustive {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!(
-            "Non-exhaustive match on {}: not covered: {}",
-            self.subject_typ, self.missing,
-        ).into()
-    }
-}
-
-impl IsDiagnostic for MatchOverlappingArm {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Overlapping match arm: {}", self.overlap).into()
-    }
-}
-
-impl IsDiagnostic for MatchRedundantElse {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Redundant else arm: all values are already covered").into()
-    }
-}
-
-impl IsDiagnostic for MatchMultipleElse {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Multiple else arms in match").into()
-    }
-}
-
-impl IsDiagnostic for MatchElseNotLast {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("else arm must be the last arm of the match").into()
-    }
-}
-
-impl IsDiagnostic for InvalidDocstring {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Invalid docstring: content must start with a space, got {:?}", self.content).into()
-    }
-}
-
-impl IsDiagnostic for EnumUnknownWidth {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Enum type's first enumerant does not have an inferrable width. Add an explicit width, e.g. `= 0wN`.").into()
-    }
-}
-
-impl IsDiagnostic for DuplicateEnumValue {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Duplicate enum value: enumerants of {} share value {}", self.enum_name, self.value).into()
-    }
-}
-
-impl IsDiagnostic for InvalidWordIndexWidth {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Invalid word index width: Word[{}] indexed by Word[{}] requires {} == 2^{}",
-            self.array_width, self.index_width, self.array_width, self.index_width
-        ).into()
-    }
-}
-
-impl IsDiagnostic for IndexOutOfBounds {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Bit index {} out of bound for Word[{}]",
-            self.index, self.array_width
-        ).into()
-    }
-}
-
-impl IsDiagnostic for IndexRangeOutOfBounds {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Bit range {}..{} out of bounds for Word[{}]",
-            self.index_hi, self.index_lo, self.array_width
-        ).into()
-    }
-}
-
-impl IsDiagnostic for InvalidIndexRange {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Invalid bit range {}..{}: upper bound must be greater than or equal to lower bound",
-            self.index_hi, self.index_lo
-        ).into()
-    }
-}
-
-impl IsDiagnostic for IndexNotWordType {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Expected a Word type: {}", self.typ).into()
-    }
-}
-
-impl IsDiagnostic for EmptyDriverBlock {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Empty driver block").into()
-    }
-
-    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }
-}
-
-impl IsDiagnostic for RedundantUnused {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Redundant `unused`: {}", self.path).into()
-    }
-}
-
-impl IsDiagnostic for RedundantDriver {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!("Redundant driver: {}", self.path).into()
-    }
-
-    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Warning }
-}
-
-impl IsDiagnostic for CombinationalLoop {
-    fn region(&self) -> Region {
-        self.region.clone()
-    }
-
-    fn message(&self) -> BString {
-        format!(
-            "Combinational loop detected: {}",
-            self.components
-                .iter()
-                .map(|c| String::from_utf8_lossy(c).into_owned())
-                .collect::<Vec<_>>()
-                .join(" -> ")
-        )
-        .into()
-    }
-
-    fn level(&self) -> DiagnosticLevel { DiagnosticLevel::Error }
-}
-
-impl Diagnostic {
-    pub fn to_warning(self) -> Diagnostic {
-        (Soften {
-            inner: self,
-            level: DiagnosticLevel::Warning,
-        }).into()
-    }
-
-    pub fn to_info(self) -> Diagnostic {
-        (Soften {
-            inner: self,
-            level: DiagnosticLevel::Info,
-        }).into()
-    }
+from_diagnostic! {
+    SyntaxError, ImportCycle, UnresolvedImportError, DuplicateImport, DuplicateItem,
+    DuplicateSlot, UnresolvedPackage, UnresolvedItem, UnresolvedType, MissingOnClause,
+    UnexpectedOnClause, WrongDriverType, NoRegDrivers, NoDrivers, MultipleDrivers,
+    DriverForSink, UnresolvedComponent, NotIt, UnresolvedCtor, UnusedSource, ReadFromSink,
+    UnfilledHole, ModuleCycle, UnresolvedMethod, WrongType, Unknown, DoesntFit, NotWordType,
+    CantTruncate, Todo, MatchNotExhaustive, MatchOverlappingArm, InvalidDocstring,
+    DuplicateEnumValue, IndexOutOfBounds, IndexRangeOutOfBounds, InvalidIndexRange,
+    InvalidWordIndexWidth, IndexNotWordType, RedundantUnused, RedundantDriver,
+    CombinationalLoop,
 }

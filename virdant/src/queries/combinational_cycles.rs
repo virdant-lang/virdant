@@ -194,13 +194,12 @@ fn check_module(
             }
 
             let region = moddef_region(builder, moddef);
-            diagnostics.push(
+            diagnostics.push(Diagnostic::new(
+                region,
                 diagnostics::CombinationalLoop {
-                    region,
                     components: comps,
-                }
-                .into(),
-            );
+                },
+            ));
             return;
         }
     }

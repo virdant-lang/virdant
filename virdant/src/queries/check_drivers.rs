@@ -60,10 +60,12 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<V
             if !component.can_sink() && driver_entries.len() > 0 {
                 for (_driver_type, location) in driver_entries {
                     let region = builder.get_location_region(location.clone());
-                    diagnostics.push(diagnostics::DriverForSink {
+                    diagnostics.push(Diagnostic::new(
                         region,
-                        target: path.clone(),
-                    }.into());
+                        diagnostics::DriverForSink {
+                            target: path.clone(),
+                        },
+                    ));
                 }
             }
         }
@@ -80,25 +82,31 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<V
                         Some(ComponentKind::Reg) | Some(ComponentKind::OutgoingReg)
                     );
                     if is_reg {
-                        diagnostics.push(diagnostics::NoRegDrivers {
+                        diagnostics.push(Diagnostic::new(
                             region,
-                            target: path.clone(),
-                        }.into());
+                            diagnostics::NoRegDrivers {
+                                target: path.clone(),
+                            },
+                        ));
                     } else {
-                        diagnostics.push(diagnostics::NoDrivers {
+                        diagnostics.push(Diagnostic::new(
                             region,
-                            target: path.clone(),
-                        }.into());
+                            diagnostics::NoDrivers {
+                                target: path.clone(),
+                            },
+                        ));
                     }
                 }
                 Some(drivers) if drivers.len() > 1 => {
                     for driver in drivers {
                         if let Some(location) = driver.location() {
                             let region = builder.get_location_region(location);
-                            diagnostics.push(diagnostics::MultipleDrivers {
+                            diagnostics.push(Diagnostic::new(
                                 region,
-                                target: path.clone(),
-                            }.into());
+                                diagnostics::MultipleDrivers {
+                                    target: path.clone(),
+                                },
+                            ));
                         }
                     }
                 }
@@ -143,11 +151,13 @@ fn collect_wrong_driver_type_errors(
         Driver::Expr(driver_type, location) => {
             if *driver_type != expected {
                 let region = builder.get_location_region(location.clone());
-                diagnostics.push(diagnostics::WrongDriverType {
+                diagnostics.push(Diagnostic::new(
                     region,
-                    target: path.clone(),
-                    expected_driver_type: expected,
-                }.into());
+                    diagnostics::WrongDriverType {
+                        target: path.clone(),
+                        expected_driver_type: expected,
+                    },
+                ));
             }
         }
         Driver::Bidirectional(_) => {}

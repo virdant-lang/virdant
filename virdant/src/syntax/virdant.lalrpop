@@ -8,7 +8,7 @@ use crate::syntax::token::{Token, TokenError};
 use bstr::ByteSlice;
 use crate::common::source::{Region, SourceOffset};
 use crate::common::{DriverType, ComponentKind, BinOp, ChannelDir, SocketRole, UnOp};
-use crate::diagnostics;
+use crate::diagnostics::{self, Diagnostic};
 
 grammar<'a>(parser: &mut Parsing);
 
@@ -53,11 +53,13 @@ DocString: InternedString = {
             let line: &[u8] = raw_line;
             if line.len() > 3 && line[3] != b' ' {
                 let region = Region::new(parser.package(), span);
-                let diag = diagnostics::InvalidDocstring {
+                let diag = Diagnostic::new(
                     region,
-                    content: line[..4.min(line.len())].into(),
-                };
-                parser.add_docstring_diagnostic(diag.into());
+                    diagnostics::InvalidDocstring {
+                        content: line[..4.min(line.len())].into(),
+                    },
+                );
+                parser.add_docstring_diagnostic(diag);
                 break;
             }
         }
@@ -75,11 +77,13 @@ DocBang: InternedString = {
             let line: &[u8] = raw_line;
             if line.len() > 3 && line[3] != b' ' {
                 let region = Region::new(parser.package(), span);
-                let diag = diagnostics::InvalidDocstring {
+                let diag = Diagnostic::new(
                     region,
-                    content: line[..4.min(line.len())].into(),
-                };
-                parser.add_docstring_diagnostic(diag.into());
+                    diagnostics::InvalidDocstring {
+                        content: line[..4.min(line.len())].into(),
+                    },
+                );
+                parser.add_docstring_diagnostic(diag);
                 break;
             }
         }

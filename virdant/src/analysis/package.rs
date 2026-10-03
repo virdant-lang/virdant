@@ -57,10 +57,12 @@ impl PackageAnalysis {
             if let AstNodePayload::Import(import) = child_node.payload() {
                 let package = PackageFqn::new(parsing.string(import.package).into());
                 if !packages.contains(&package) {
-                    self.diagnostics.push(diagnostics::UnresolvedImportError {
-                        region: Region::new(self.package(), child_node.span()),
-                        imported_package: package,
-                    }.into());
+                    self.diagnostics.push(Diagnostic::new(
+                        Region::new(self.package(), child_node.span()),
+                        diagnostics::UnresolvedImportError {
+                            imported_package: package,
+                        },
+                    ));
                 }
             }
         }
@@ -102,10 +104,12 @@ impl PackageAnalysis {
                 let package = PackageFqn::new(parsing.string(import.package).into());
                 if !self.imports.insert(package) {
                     let imported_package = PackageFqn::new(parsing.string(child_node.import_package().unwrap()).to_owned());
-                    self.diagnostics.push(diagnostics::DuplicateImport {
-                        region: Region::new(self.package(), child_node.span()),
-                        imported_package,
-                    }.into());
+                    self.diagnostics.push(Diagnostic::new(
+                        Region::new(self.package(), child_node.span()),
+                        diagnostics::DuplicateImport {
+                            imported_package,
+                        },
+                    ));
                 }
             }
         }
@@ -120,10 +124,12 @@ impl PackageAnalysis {
                     self.items.insert(name.clone(), vec![]);
                 } else {
                     let item = parsing.string(child_node.name().unwrap()).to_owned();
-                    self.diagnostics.push(diagnostics::DuplicateItem {
-                        region: Region::new(self.package(), child_node.span()),
-                        item,
-                    }.into());
+                    self.diagnostics.push(Diagnostic::new(
+                        Region::new(self.package(), child_node.span()),
+                        diagnostics::DuplicateItem {
+                            item,
+                        },
+                    ));
                 }
                 let items = self.items.get_mut(&name).unwrap();
                 items.push(child_node.id());
@@ -152,12 +158,12 @@ impl PackageAnalysis {
                             if let Some(node) = child_node.clock() {
                                 self.expr_roots.push(node.id());
                             } else {
-                                self.diagnostics.push(
+                                self.diagnostics.push(Diagnostic::new(
+                                    node.region(),
                                     diagnostics::MissingOnClause {
-                                        region: node.region(),
                                         component: parsing.string(component.name).into(),
-                                    }.into()
-                                );
+                                    },
+                                ));
                             }
                         }
                         for child in child_node.children() {
