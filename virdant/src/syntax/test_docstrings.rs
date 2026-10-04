@@ -5,7 +5,7 @@
 #[cfg(test)]
 mod test_docstrings {
     use crate::common::source::{Source, Span};
-    use crate::fqn::PackageFqn;
+    use crate::package::PackageFqn;
     use crate::syntax::parsing::parse;
     use crate::syntax::ast::AstNode;
     use crate::syntax::payload::AstNodePayload;

@@ -3,7 +3,7 @@
 //! compilation, serving as the canonical reference handle in the
 //! analysis layer.
 
-use crate::fqn::PackageFqn;
+use crate::package::PackageFqn;
 use crate::syntax::ast::AstNodeId;
 
 #[derive(Clone, PartialEq, Eq, Hash)]

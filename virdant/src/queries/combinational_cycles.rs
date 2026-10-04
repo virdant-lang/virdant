@@ -13,7 +13,7 @@ use crate::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
 use crate::common::graph::{Graph, VertIndex};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
-use crate::fqn::PackageFqn;
+use crate::package::PackageFqn;
 use crate::syntax::ast::AstNode;
 use crate::syntax::payload::AstNodePayload;
 

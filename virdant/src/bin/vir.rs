@@ -14,7 +14,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use virdant::db::Db;
 use virdant::diagnostics::DiagnosticLevel;
-use virdant::fqn::PackageFqn;
+use virdant::package::PackageFqn;
 use virdant::common::{Flow, source::{Region, Source}};
 use virdant::analysis::symbols::SymbolKind;
 use virdant::syntax::parsing::parse;
@@ -241,18 +241,21 @@ fn parse_file(path: &Path) {
         }
     };
 
-    let source = Source::new(package, input.into());
+    let source = Source::new(package.clone(), input.into());
     let parsing = parse(&source);
     parsing.dump();
+
+    let mut db = Db::new();
+    db.set_packages(vec![package.clone()]);
 
     let diagnostics = parsing.diagnostics();
     let longest_region = diagnostics
         .iter()
-        .map(|diag| diag.region().to_string().len())
+        .map(|diag| diag.region().display(&db).len())
         .max()
         .unwrap_or_default();
     for diagnostic in diagnostics {
-        let unpadded_region = diagnostic.region().to_string();
+        let unpadded_region = diagnostic.region().display(&db);
         let padded_region = format!("{}{}", unpadded_region, " ".repeat(longest_region - unpadded_region.len()));
         if diagnostic.level() == DiagnosticLevel::Error {
             println!("{}   {}   {}", "ERROR  ".red(), padded_region, diagnostic.message());
@@ -465,7 +468,7 @@ fn dump_exprroots(args: &Args) {
         let typ = db.get_expected_type(exprroot.clone());
         let node = parsing.ast_node(location.ast_node_id());
         let region = node.region();
-        println!("{location:?} : {typ:?} at @{region}");
+        println!("{location:?} : {typ:?} at @{}", region.display(&db));
     }
 }
 
@@ -477,7 +480,7 @@ fn dump_typing(args: &Args) {
         let region = db.get_location_region(location.clone());
         let parsing = db.get_parsing(location.package());
         let text = parsing.text(region.span());
-        println!("{region} {location:?} {typ:?} ({text:?})");
+        println!("{} {location:?} {typ:?} ({text:?})", region.display(&db));
     }
 }
 

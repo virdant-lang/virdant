@@ -7,7 +7,7 @@
 use bstr::{BStr, BString};
 
 use crate::diagnostics::{self, Diagnostic};
-use crate::fqn::PackageFqn;
+use crate::package::PackageFqn;
 use crate::common::source::{LineCol, Region, Source, SourceOffset, Span};
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
@@ -59,7 +59,7 @@ fn test_parse() {
     out := inp;
 }
 ";
-    let source = Source::new(crate::fqn::PackageFqn::new("top".into()), text.into());
+    let source = Source::new(crate::package::PackageFqn::new("top".into()), text.into());
     let _ = parse(&source);
 }
 

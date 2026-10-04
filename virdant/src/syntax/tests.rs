@@ -29,7 +29,7 @@ macro_rules! test_example {
                 let mut text = vec![];
                 file.read_to_end(&mut text).unwrap();
 
-                let source = Source::new(crate::fqn::PackageFqn::new("top".into()), text.into());
+                let source = Source::new(crate::package::PackageFqn::new("top".into()), text.into());
 
                 let start = Instant::now();
                 let parsing = parse(&source);
@@ -83,7 +83,7 @@ test_example!(valid);
 mod test_docstrings {
     use bstr::ByteSlice;
     use crate::common::source::Source;
-    use crate::fqn::PackageFqn;
+    use crate::package::PackageFqn;
     use crate::syntax::parsing::parse;
     use crate::syntax::payload::AstNodePayload;
 
@@ -409,7 +409,7 @@ mod test_docstrings {
 #[cfg(test)]
 mod test_clock_domain {
     use crate::common::source::Source;
-    use crate::fqn::PackageFqn;
+    use crate::package::PackageFqn;
     use crate::syntax::parsing::parse;
     use crate::syntax::payload::AstNodePayload;
 

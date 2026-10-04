@@ -1,5 +1,5 @@
 pub mod common;
-pub mod fqn;
+pub mod package;
 pub mod syntax;
 pub mod db;
 pub mod analysis;

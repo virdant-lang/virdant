@@ -14,7 +14,7 @@ use crate::common::source::Region;
 use crate::common::WordValue;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticPayload};
-use crate::fqn::PackageFqn;
+use crate::package::PackageFqn;
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::token::KEYWORDS;
 

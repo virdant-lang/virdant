@@ -12,7 +12,7 @@ use crate::common::ComponentKind;
 use crate::db::Builder;
 use crate::diagnostics;
 use crate::diagnostics::Diagnostic;
-use crate::fqn::PackageFqn;
+use crate::package::PackageFqn;
 use crate::common::source::Region;
 use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
 use crate::syntax::parsing::Parsing;

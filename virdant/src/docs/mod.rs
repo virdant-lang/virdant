@@ -12,7 +12,7 @@ use tera::Tera;
 use crate::analysis::symbols::{SymbolKind, SymbolTable};
 use crate::common::PortDir;
 use crate::db::Db;
-use crate::fqn::PackageFqn;
+use crate::package::PackageFqn;
 use crate::syntax::ast::AstNode;
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;

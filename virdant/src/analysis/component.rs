@@ -12,7 +12,7 @@ use indexmap::{IndexMap, IndexSet};
 use crate::analysis::Location;
 use crate::analysis::symbols::SymbolId;
 use crate::db::Builder;
-use crate::fqn::PackageFqn;
+use crate::package::PackageFqn;
 use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;

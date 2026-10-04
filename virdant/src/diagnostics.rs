@@ -3,7 +3,7 @@
 use bstr::{BStr, BString};
 
 use crate::common::{DriverType, Width, WordValue};
-use crate::fqn::PackageFqn;
+use crate::package::PackageFqn;
 use crate::common::source::Region;
 
 pub type Type = BString;

@@ -5,7 +5,7 @@
 
 use bstr::{BStr, BString};
 
-use crate::fqn::PackageFqn;
+use crate::package::PackageFqn;
 
 /// A source file loaded into memory for use by the tokenizer with a given package name.
 #[derive(Clone, Debug)]
@@ -264,22 +264,21 @@ impl Region {
     }
 }
 
-impl std::fmt::Display for Region {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Region {
+    pub fn display(&self, db: &crate::db::Db) -> String {
+        let package = self.package.to_string();
         if self.span.start().line() == self.span.end().line() {
-            write!(
-                f,
+            format!(
                 "{}[{}:{}-{}]",
-                self.package,
+                package,
                 self.span.start().line(),
                 self.span.start().col(),
                 self.span.end().col(),
             )
         } else {
-            write!(
-                f,
+            format!(
                 "{}[{}:{}-{}:{}]",
-                self.package,
+                package,
                 self.span.start().line(),
                 self.span.start().col(),
                 self.span.end().line(),

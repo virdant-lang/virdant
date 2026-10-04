@@ -18,7 +18,7 @@ use crate::common::{BinOp, ComponentKind, Flow, UnOp as UnOp, Width};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticLevel, DiagnosticPayload};
 use crate::analysis::location::Location;
-use crate::fqn::PackageFqn;
+use crate::package::PackageFqn;
 use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::{self, AstNodePayload};

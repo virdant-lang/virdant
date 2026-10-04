@@ -11,7 +11,7 @@ use std::sync::Arc;
 use crate::analysis::PackageAnalysis;
 use crate::db::Builder;
 use crate::diagnostics;
-use crate::fqn::PackageFqn;
+use crate::package::PackageFqn;
 use crate::common::source::Region;
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::parsing::Parsing;

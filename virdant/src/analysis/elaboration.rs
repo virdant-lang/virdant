@@ -14,7 +14,7 @@ use crate::analysis::drivers::{Driver, DriverAnalysis};
 use crate::analysis::symbols::SymbolId;
 use crate::common::{ComponentKind, DriverType, SocketRole};
 use crate::db::Builder;
-use crate::fqn::PackageFqn;
+use crate::package::PackageFqn;
 use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
 

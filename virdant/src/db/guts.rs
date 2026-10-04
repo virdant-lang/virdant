@@ -56,6 +56,10 @@ impl<'d> Builder<'d> {
         }
         eprintln!("========================================");
     }
+
+    pub fn db(&self) -> &'d Db {
+        self.db
+    }
 }
 
 impl Db {

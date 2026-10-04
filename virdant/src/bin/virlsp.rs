@@ -19,7 +19,7 @@ use virdant::LIB_DIR;
 use virdant::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
 use virdant::types::{ExprRoot, Type};
 use virdant::db::Db;
-use virdant::fqn::PackageFqn;
+use virdant::package::PackageFqn;
 use virdant::common::source::{LineCol, Source, SourceOffset, Span};
 use virdant::syntax::ast::{AstNode, AstNodeId, match_arm_children};
 use virdant::syntax::payload::AstNodePayload;

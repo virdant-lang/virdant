@@ -7,7 +7,7 @@ use std::sync::Arc;
 use bstr::BString;
 
 use crate::db::Builder;
-use crate::fqn::PackageFqn;
+use crate::package::PackageFqn;
 use crate::syntax::parsing::{InternedString, Parsing, parse};
 
 pub(crate) fn build_parsing(builder: &mut Builder<'_>, package: PackageFqn) -> Arc<Parsing> {

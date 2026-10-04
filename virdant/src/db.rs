@@ -33,7 +33,7 @@ use crate::types::typedef::TypeIndex;
 use crate::types::signature::Signature;
 use crate::types::{ExprRoot, Type, Typing, TypingContext};
 use crate::diagnostics::Diagnostic;
-use crate::fqn::PackageFqn;
+use crate::package::PackageFqn;
 use crate::common::source::{Region, Source};
 use crate::syntax::ast::AstNodeId;
 use crate::syntax::parsing::Parsing;

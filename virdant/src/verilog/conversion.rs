@@ -13,7 +13,7 @@ use crate::analysis::location::Location;
 use crate::analysis::symbols::SymbolTable;
 use crate::common::{self, ComponentKind, DriverType, Radix, TypeScheme, Width, WordValue};
 use crate::db::Db;
-use crate::fqn::PackageFqn;
+use crate::package::PackageFqn;
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
 use crate::types::typing::Primitive;
@@ -431,7 +431,7 @@ impl<'d> Converter<'d> {
             Driver::Expr(_, loc) => {
                 let parsing = self.db.get_parsing(loc.package());
                 let expr_node = parsing.ast_node(loc.ast_node_id());
-                collect_ast_holes(expr_node)
+                collect_ast_holes(expr_node, self.db)
             }
             Driver::Bidirectional(_) => vec![],
             Driver::When(driver_when) => {
@@ -2025,13 +2025,13 @@ fn convert_unop(op: common::UnOp) -> verilog::UnOp {
 }
 
 /// Recursively collects the region strings of all `?` (hole) nodes within an expression.
-fn collect_ast_holes(node: AstNode<'_>) -> Vec<String> {
+fn collect_ast_holes(node: AstNode<'_>, db: &crate::db::Db) -> Vec<String> {
     let mut holes = vec![];
     match node.payload() {
-        AstNodePayload::ExprHole => holes.push(format!("{}", node.region())),
+        AstNodePayload::ExprHole => holes.push(node.region().display(db)),
         _ => {
             for child in node.children() {
-                holes.extend(collect_ast_holes(child).into_iter());
+                holes.extend(collect_ast_holes(child, db).into_iter());
             }
         }
     }
