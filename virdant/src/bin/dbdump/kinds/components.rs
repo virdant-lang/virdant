@@ -2,10 +2,9 @@
 //! This covers component analyses, drivers, dependency graphs, ports,
 //! struct fields, typing contexts, and constructor signatures.
 
-use std::collections::BTreeMap;
-
 use serde_json::Value as JsonValue;
 
+use super::common::anchored_table;
 use super::common::badges;
 use super::common::escape_html;
 use super::common::location_string;
@@ -25,7 +24,7 @@ pub fn render_component(ctx: &Ctx, result: &JsonValue) -> String {
         variant_string(&result["kind"]),
         variant_string(&result["flow"]),
         type_or_dash(&result["typ"]),
-        location_string(&result["location"]),
+        ctx.location(&result["location"]),
     ]];
     let body = table(
         &["Path", "Id", "Kind", "Flow", "Type", "Location"],
@@ -36,28 +35,30 @@ pub fn render_component(ctx: &Ctx, result: &JsonValue) -> String {
 
 pub fn render_component_analysis(ctx: &Ctx, result: &JsonValue) -> String {
     let moddef = match result["moddef"].as_u64() {
-        Some(id) => escape_html(&ctx.symbol(id)),
+        Some(id) => ctx.symbol(id),
         None => "?".to_string(),
     };
     let mut body = format!("<p><strong>Moddef</strong>: {moddef}</p>\n");
 
     let empty = Vec::new();
-    let paths = component_paths(result);
     let mut rows = vec![];
     for entry in result["components"].as_array().unwrap_or(&empty) {
         let comp = &entry[1];
-        rows.push(vec![
-            escape_html(entry[0].as_str().unwrap_or("?")),
-            component_ref(ctx, &comp["id"]),
-            variant_string(&comp["kind"]),
-            variant_string(&comp["flow"]),
-            type_or_dash(&comp["typ"]),
-            location_string(&comp["location"]),
-        ]);
+        rows.push((
+            component_anchor(&comp["id"]),
+            vec![
+                escape_html(entry[0].as_str().unwrap_or("?")),
+                component_ref(ctx, &comp["id"]),
+                variant_string(&comp["kind"]),
+                variant_string(&comp["flow"]),
+                type_or_dash(&comp["typ"]),
+                location_string(&comp["location"]),
+            ],
+        ));
     }
     body.push_str(&section(
         "Components",
-        &capped_table(
+        &capped_anchored_table(
             &["Path", "Id", "Kind", "Flow", "Type", "Location"],
             &rows,
         ),
@@ -68,15 +69,16 @@ pub fn render_component_analysis(ctx: &Ctx, result: &JsonValue) -> String {
     let mut ref_rows = vec![];
     for (location, value) in references {
         let id_text = value.get(0).and_then(|v| v.as_str()).unwrap_or("");
-        let component = match paths.get(id_text) {
-            Some(path) => path.clone(),
-            None => component_ref(ctx, &value[0]),
-        };
+        let component = ctx.component(id_text);
         let kind = value
             .get(1)
             .map(variant_string)
             .unwrap_or_else(|| "-".to_string());
-        ref_rows.push(vec![escape_html(location), component, kind]);
+        ref_rows.push(vec![
+            ctx.location(&JsonValue::String(location.clone())),
+            component,
+            kind,
+        ]);
     }
     body.push_str(&section(
         "References",
@@ -114,7 +116,10 @@ pub fn render_dependency_graph(ctx: &Ctx, result: &JsonValue) -> String {
         if let Some(id) = node.as_str() {
             if let Some(edge_list) = edges.get(id).and_then(|e| e.as_array()) {
                 for edge in edge_list {
-                    let dependee = component_ref(ctx, &edge["dependee"]);
+                    let dependee = edge["dependee"]
+                        .as_str()
+                        .map(|id| ctx.component(id))
+                        .unwrap_or_else(|| "?".to_string());
                     let kind = variant_string(&edge["kind"]);
                     dependees.push(format!("{dependee} ({kind})"));
                 }
@@ -125,7 +130,11 @@ pub fn render_dependency_graph(ctx: &Ctx, result: &JsonValue) -> String {
         } else {
             dependees.join("<br>")
         };
-        rows.push(vec![component_ref(ctx, node), dependee_cell]);
+        let node_cell = node
+            .as_str()
+            .map(|id| ctx.component(id))
+            .unwrap_or_else(|| "?".to_string());
+        rows.push(vec![node_cell, dependee_cell]);
     }
     section("Dependency graph", &capped_table(&["Component", "Dependees"], &rows))
 }
@@ -141,7 +150,7 @@ pub fn render_driver_analysis(ctx: &Ctx, result: &JsonValue) -> String {
             rows.push(vec![
                 component_ref(ctx, &id_json),
                 driver_type_string(driver),
-                format!("<ul>{}</ul>", driver_html(driver)),
+                format!("<ul>{}</ul>", driver_html(ctx, driver)),
             ]);
         }
     }
@@ -171,7 +180,7 @@ pub fn render_struct_fields(ctx: &Ctx, result: &JsonValue) -> String {
     let mut rows = vec![];
     for field in result.as_array().unwrap_or(&empty) {
         let symbol = match field["field_symbol_id"].as_u64() {
-            Some(id) => escape_html(&ctx.symbol(id)),
+            Some(id) => ctx.symbol(id),
             None => "?".to_string(),
         };
         rows.push(vec![
@@ -204,13 +213,21 @@ pub fn render_typing_context(ctx: &Ctx, result: &JsonValue) -> String {
 }
 
 fn capped_table(headers: &[&str], rows: &[Vec<String>]) -> String {
+    let owned: Vec<(String, Vec<String>)> = rows
+        .iter()
+        .map(|row| (String::new(), row.clone()))
+        .collect();
+    capped_anchored_table(headers, &owned)
+}
+
+fn capped_anchored_table(headers: &[&str], rows: &[(String, Vec<String>)]) -> String {
     if rows.is_empty() {
         return muted("No entries.");
     }
     if rows.len() <= ROW_LIMIT {
-        return table(headers, rows);
+        return anchored_table(headers, rows);
     }
-    let mut out = table(headers, &rows[..ROW_LIMIT]);
+    let mut out = anchored_table(headers, &rows[..ROW_LIMIT]);
     let omitted = rows.len() - ROW_LIMIT;
     out.push_str(&muted(&format!("{omitted} more rows omitted.")));
     out
@@ -230,37 +247,24 @@ fn diagnostics_badges(result: &JsonValue) -> String {
     out
 }
 
-fn component_paths(result: &JsonValue) -> BTreeMap<String, String> {
-    let mut paths = BTreeMap::new();
-    let empty = Vec::new();
-    for entry in result["components"].as_array().unwrap_or(&empty) {
-        let id = entry[1]["id"].as_str().unwrap_or("").to_string();
-        if !id.is_empty() {
-            let path = escape_html(entry[0].as_str().unwrap_or("?"));
-            paths.insert(id, path);
-        }
-    }
-    paths
+fn component_anchor(json: &JsonValue) -> String {
+    json.as_str()
+        .and_then(|id| id.split_once('.'))
+        .map(|(item, index)| format!("comp-{item}-{index}"))
+        .unwrap_or_default()
 }
 
 fn component_ref(ctx: &Ctx, json: &JsonValue) -> String {
-    let text = json.as_str().unwrap_or("?");
-    match text.split_once('.') {
-        Some((item, index)) => {
-            let fqn = match item.parse::<u64>() {
-                Ok(id) => ctx.symbol(id),
-                Err(_) => item.to_string(),
-            };
-            escape_html(&format!("{fqn}[{index}]"))
-        }
-        None => escape_html(text),
+    match json.as_str() {
+        Some(id) => ctx.component(id),
+        None => "?".to_string(),
     }
 }
 
 fn referent_string(ctx: &Ctx, json: &JsonValue) -> String {
     match variant(json) {
         Some("Component") => component_ref(ctx, &json["Component"]),
-        Some("Local") => format!("local @ {}", location_string(&json["Local"])),
+        Some("Local") => format!("local @ {}", ctx.location(&json["Local"])),
         _ => "?".to_string(),
     }
 }
@@ -278,7 +282,7 @@ fn driver_type_string(driver: &JsonValue) -> String {
     }
 }
 
-fn driver_html(driver: &JsonValue) -> String {
+fn driver_html(ctx: &Ctx, driver: &JsonValue) -> String {
     match variant(driver) {
         Some("Expr") => {
             let parts = &driver["Expr"];
@@ -288,12 +292,12 @@ fn driver_html(driver: &JsonValue) -> String {
                 .unwrap_or_else(|| "?".to_string());
             let location = parts
                 .get(1)
-                .map(location_string)
+                .map(|loc| ctx.location(loc))
                 .unwrap_or_else(|| "?".to_string());
             format!("<li>expr {driver_type} @ {location}</li>")
         }
         Some("Bidirectional") => {
-            let location = location_string(&driver["Bidirectional"]);
+            let location = ctx.location(&driver["Bidirectional"]);
             format!("<li>bidirectional @ {location}</li>")
         }
         Some("When") => {
@@ -304,30 +308,36 @@ fn driver_html(driver: &JsonValue) -> String {
             for clause in when["clauses"].as_array().unwrap_or(&empty) {
                 let location = clause
                     .get(0)
-                    .map(location_string)
+                    .map(|loc| ctx.location(loc))
                     .unwrap_or_else(|| "?".to_string());
-                let sub = clause.get(1).map(driver_html).unwrap_or_default();
+                let sub = clause
+                    .get(1)
+                    .map(|d| driver_html(ctx, d))
+                    .unwrap_or_default();
                 items.push_str(&format!("<li>case @ {location}<ul>{sub}</ul></li>"));
             }
-            items.push_str(&else_html(&when["else_clause"]));
+            items.push_str(&else_html(ctx, &when["else_clause"]));
             items.push_str("</ul></li>");
             items
         }
         Some("Match") => {
             let m = &driver["Match"];
             let driver_type = variant_string(&m["driver_type"]);
-            let subject = location_string(&m["subject"]);
+            let subject = ctx.location(&m["subject"]);
             let mut items = format!("<li>match {subject} ({driver_type})<ul>");
             let empty = Vec::new();
             for arm in m["arms"].as_array().unwrap_or(&empty) {
                 let location = arm
                     .get(0)
-                    .map(location_string)
+                    .map(|loc| ctx.location(loc))
                     .unwrap_or_else(|| "?".to_string());
-                let sub = arm.get(1).map(driver_html).unwrap_or_default();
+                let sub = arm
+                    .get(1)
+                    .map(|d| driver_html(ctx, d))
+                    .unwrap_or_default();
                 items.push_str(&format!("<li>arm @ {location}<ul>{sub}</ul></li>"));
             }
-            items.push_str(&else_html(&m["else_clause"]));
+            items.push_str(&else_html(ctx, &m["else_clause"]));
             items.push_str("</ul></li>");
             items
         }
@@ -335,11 +345,11 @@ fn driver_html(driver: &JsonValue) -> String {
     }
 }
 
-fn else_html(else_clause: &JsonValue) -> String {
+fn else_html(ctx: &Ctx, else_clause: &JsonValue) -> String {
     if else_clause.is_null() {
         "<li>else: (none)</li>".to_string()
     } else {
-        let sub = driver_html(else_clause);
+        let sub = driver_html(ctx, else_clause);
         format!("<li>else<ul>{sub}</ul></li>")
     }
 }

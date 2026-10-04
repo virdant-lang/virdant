@@ -131,7 +131,9 @@ fn generate_site(dump: &JsonValue, builddir: &std::path::Path) -> Result<(), Str
     // Lookups for making debug keys readable.
     let packages = package_names(&entries);
     let symbols = symbol_fqns(&entries);
-    let ctx = Ctx { packages, symbols };
+    let components = component_names(&entries, &symbols);
+    let locations = location_lines(&entries);
+    let ctx = Ctx { packages, symbols, components, locations };
 
     // Write the full dump as JSON.
     let full_json = serde_json::to_string_pretty(dump).map_err(|e| e.to_string())?;
@@ -210,17 +212,169 @@ fn symbol_fqns(entries: &[&JsonValue]) -> BTreeMap<u32, String> {
     symbols
 }
 
-/// Rewrites `PackageId(N)` and `SymbolId(N)` tokens in a debug string
-/// with the corresponding package or symbol name.
-fn prettify_debug(debug: &str, packages: &[String], symbols: &BTreeMap<u32, String>) -> String {
-    let mut result = debug.to_string();
-    for (id, name) in packages.iter().enumerate() {
-        result = result.replace(&format!("PackageId({id})"), &format!("Package({name})"));
+/// Full component names (`pkg::ModDef::path`) indexed by component id
+/// (`item.index`), from the cached `ComponentAnalysis` results.
+fn component_names(
+    entries: &[&JsonValue],
+    symbols: &BTreeMap<u32, String>,
+) -> BTreeMap<String, String> {
+    let mut components: BTreeMap<String, String> = BTreeMap::new();
+    for entry in entries {
+        if entry_name(entry) == "ComponentAnalysis" {
+            if let Some(list) = entry["result"]["ComponentAnalysis"]["components"].as_array() {
+                for component in list {
+                    let path = component.get(0).and_then(|p| p.as_str());
+                    let id = component.get(1).and_then(|c| c["id"].as_str());
+                    if let (Some(path), Some(id)) = (path, id) {
+                        let full = match id.split_once('.') {
+                            Some((item, _)) => {
+                                let fqn = match item.parse::<u32>() {
+                                    Ok(symbol_id) => symbols
+                                        .get(&symbol_id)
+                                        .cloned()
+                                        .unwrap_or_else(|| format!("sym{item}")),
+                                    Err(_) => item.to_string(),
+                                };
+                                format!("{fqn}::{path}")
+                            }
+                            None => path.to_string(),
+                        };
+                        components.insert(id.to_string(), full);
+                    }
+                }
+            }
+        }
     }
-    for (id, fqn) in symbols {
-        result = result.replace(&format!("SymbolId({id})"), &format!("Symbol({fqn})"));
+    components
+}
+
+/// Line-col strings (`"12:5"`) indexed by (package, ast node), from
+/// the cached `Parsing` results.
+fn location_lines(entries: &[&JsonValue]) -> BTreeMap<(u32, u32), String> {
+    let mut map: BTreeMap<(u32, u32), String> = BTreeMap::new();
+    for entry in entries {
+        if entry_name(entry) != "Parsing" {
+            continue;
+        }
+        let Some(pkg) = entry["key"]["Parsing"].as_u64().map(|id| id as u32) else {
+            continue;
+        };
+        let Some(spans) = entry["result"]["Parsing"]["spans"].as_array() else {
+            continue;
+        };
+        for (node, span) in spans.iter().enumerate() {
+            let line = span[0][0].as_u64().unwrap_or(0);
+            let col = span[0][1].as_u64().unwrap_or(0);
+            map.entry((pkg, node as u32))
+                .or_insert_with(|| format!("{line}:{col}"));
+        }
     }
-    result
+    map
+}
+
+/// Rewrites `Location(...)`, `PackageId(N)`, and `SymbolId(N)` tokens
+/// in a debug string into readable HTML with links.
+fn prettify_debug_html(debug: &str, ctx: &Ctx) -> String {
+    let mut out = String::new();
+    let mut rest = debug;
+    loop {
+        let location_idx = rest.find("Location(PackageId(");
+        let symbol_idx = rest.find("SymbolId(");
+        let package_idx = rest.find("PackageId(");
+        let next = [location_idx, symbol_idx, package_idx]
+            .into_iter()
+            .flatten()
+            .min();
+        let Some(start) = next else {
+            out.push_str(&escape_html(rest));
+            break;
+        };
+        out.push_str(&escape_html(&rest[..start]));
+        rest = &rest[start..];
+        if rest.starts_with("Location(PackageId(") {
+            match parse_location_token(rest, ctx) {
+                Some((html, len)) => {
+                    out.push_str(&html);
+                    rest = &rest[len..];
+                }
+                None => {
+                    out.push_str(&escape_html("Location("));
+                    rest = &rest["Location(".len()..];
+                }
+            }
+        } else if rest.starts_with("SymbolId(") {
+            match parse_digits_token(rest, "SymbolId(") {
+                Some((id, len)) => {
+                    out.push_str(&ctx.symbol(id));
+                    rest = &rest[len..];
+                }
+                None => {
+                    out.push_str(&escape_html("SymbolId("));
+                    rest = &rest["SymbolId(".len()..];
+                }
+            }
+        } else {
+            match parse_digits_token(rest, "PackageId(") {
+                Some((id, len)) => {
+                    out.push_str(&escape_html(&format!("Package({})", ctx.package(id))));
+                    rest = &rest[len..];
+                }
+                None => {
+                    out.push_str(&escape_html("PackageId("));
+                    rest = &rest["PackageId(".len()..];
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Parses a `Location(PackageId(N), AstNodeId(M))` token at the start
+/// of `rest`, returning `(html, consumed_len)`.
+fn parse_location_token(rest: &str, ctx: &Ctx) -> Option<(String, usize)> {
+    let prefix = "Location(PackageId(";
+    let after = rest.strip_prefix(prefix)?;
+    let (pkg, pkg_len) = parse_digits(after)?;
+    let mid = "), AstNodeId(";
+    let after = after[pkg_len..].strip_prefix(mid)?;
+    let (node, node_len) = parse_digits(after)?;
+    let after = after[node_len..].strip_prefix("))")?;
+    let _ = after;
+    let len = prefix.len() + pkg_len + mid.len() + node_len + 2;
+    let pkg_id = u32::try_from(pkg).ok()?;
+    let node_id = u32::try_from(node).ok()?;
+    let name = ctx.package(pkg as u64);
+    let html = match ctx.locations.get(&(pkg_id, node_id)) {
+        Some(linecol) => {
+            let line = linecol.split(':').next().unwrap_or("0");
+            format!(
+                "<a href=\"Parsing.html#parsing-p{pkg_id}-L{line}\">{}[{linecol}]</a>",
+                escape_html(&name),
+            )
+        }
+        None => escape_html(&format!("{name}[node {node_id}]")),
+    };
+    Some((html, len))
+}
+
+/// Parses `(digits, consumed_len)` at the start of `rest`.
+fn parse_digits(rest: &str) -> Option<(u64, usize)> {
+    let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+    if end == 0 {
+        return None;
+    }
+    let digits = &rest[..end];
+    let value = digits.parse().ok()?;
+    Some((value, end))
+}
+
+/// Parses `prefix<digits>)` at the start of `rest`, returning
+/// `(value, consumed_len)`.
+fn parse_digits_token(rest: &str, prefix: &str) -> Option<(u64, usize)> {
+    let after = rest.strip_prefix(prefix)?;
+    let (value, digits_len) = parse_digits(after)?;
+    after[digits_len..].strip_prefix(')')?;
+    Some((value, prefix.len() + digits_len + 1))
 }
 
 const WARNING_PAYLOADS: [&str; 7] = [
@@ -270,10 +424,17 @@ fn render_index(
     ));
 
     if !packages.is_empty() {
-        out.push_str(&format!(
-            "<p class=\"muted\">Packages: {}</p>\n",
-            packages.join(", "),
-        ));
+        let links: Vec<String> = packages
+            .iter()
+            .enumerate()
+            .map(|(id, name)| {
+                format!(
+                    "<a href=\"query/Source.html#source-p{id}\">{}</a>",
+                    escape_html(name),
+                )
+            })
+            .collect();
+        out.push_str(&format!("<p class=\"muted\">Packages: {}</p>\n", links.join(", ")));
     }
 
     // Diagnostics summary from the cached `Check` result.
@@ -365,22 +526,25 @@ fn render_kind_page(
             Some(html) => html,
             None => generic_entry_body(&entry["result"], &entry["key"]),
         };
-        let deps_pretty = serde_json::to_string_pretty(&entry["deps"])
-            .unwrap_or_else(|_| "<serialization error>".to_string());
 
-        out.push_str("<div class=\"entry\">\n");
+        let anchor_attr = match entry_anchor(kind, entry) {
+            Some(anchor) => format!(" id=\"{anchor}\""),
+            None => String::new(),
+        };
+
+        out.push_str(&format!("<div class=\"entry\"{anchor_attr}>\n"));
         out.push_str(&format!(
             "<div><span class=\"key\">{}</span> \
             <span class=\"meta\">rev {} | {:.1} ms | {} deps</span></div>\n",
-            escape_html(&prettify_debug(debug, &ctx.packages, &ctx.symbols)),
+            prettify_debug_html(debug, ctx),
             rev,
             secs * 1000.0,
             num_deps,
         ));
         out.push_str(&body);
         out.push_str(&format!(
-            "<details><summary>Deps ({num_deps})</summary><pre>{}</pre></details>\n",
-            escape_html(&deps_pretty),
+            "<details><summary>Deps ({num_deps})</summary>{}</details>\n",
+            deps_html(ctx, &entry["deps"]),
         ));
         out.push_str("</div>\n");
     }
@@ -407,6 +571,77 @@ fn generic_entry_body(result: &JsonValue, key: &JsonValue) -> String {
         escape_html(&key_pretty),
     ));
     out
+}
+
+/// The HTML anchor id for an entry whose page other entries may link
+/// to, when the key is a simple id (`Parsing`, `Source`,
+/// `ComponentAnalysis`).
+fn entry_anchor(kind: &str, entry: &JsonValue) -> Option<String> {
+    let id = entry["key"].get(kind)?.as_u64()?;
+    let prefix = match kind {
+        "ComponentAnalysis" => "ca",
+        "Parsing" => "parsing-p",
+        "Source" => "source-p",
+        _ => return None,
+    };
+    Some(format!("{prefix}{id}"))
+}
+
+/// Renders the deps list as linked query names with readable
+/// arguments.
+fn deps_html(ctx: &Ctx, deps: &JsonValue) -> String {
+    let empty = Vec::new();
+    let mut out = String::from("<ul class=\"deps\">");
+    for dep in deps.as_array().unwrap_or(&empty) {
+        let (name, args) = match dep.as_object().and_then(|map| map.iter().next()) {
+            Some((name, args)) => (name.as_str(), args),
+            None => ("?", &JsonValue::Null),
+        };
+        let args_html = query_args_html(ctx, name, args);
+        let args_part = if args_html.is_empty() {
+            String::new()
+        } else {
+            format!("({args_html})")
+        };
+        out.push_str(&format!(
+            "<li><a href=\"{name}.html\">{name}</a>{args_part}</li>"
+        ));
+    }
+    out.push_str("</ul>");
+    out
+}
+
+/// Renders a query's key arguments as readable linked HTML.
+fn query_args_html(ctx: &Ctx, name: &str, args: &JsonValue) -> String {
+    // Location-keyed queries take an ExprRoot-like struct or a raw
+    // location string.
+    if let Some(location) = args.get("location") {
+        return ctx.location(location);
+    }
+    if let Some((pkg, id)) = args
+        .get("package")
+        .and_then(|p| p.as_u64())
+        .zip(args.get("id").and_then(|i| i.as_u64()))
+    {
+        return escape_html(&format!("{}#str{id}", ctx.package(pkg)));
+    }
+    if let Some(text) = args.as_str() {
+        return match name {
+            "Component" => ctx.component(text),
+            "TypeAt" | "Typeof" | "ExprRootFor" | "LocationRegion" => ctx.location(args),
+            _ => escape_html(text),
+        };
+    }
+    if let Some(id) = args.as_u64() {
+        return match name {
+            "Parsing" | "Source" => escape_html(&ctx.package(id)),
+            _ => ctx.symbol(id),
+        };
+    }
+    if args.is_null() {
+        return String::new();
+    }
+    escape_html(&format!("{args}"))
 }
 
 fn page_header(css_href: &str) -> String {
@@ -452,6 +687,8 @@ h2 { font-size: 16px; color: var(--accent); margin-top: 32px; }
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
+a { border-radius: 2px; }
+:target { outline: 2px solid var(--accent); background: rgba(88, 166, 255, 0.08); }
 
 nav { margin: 8px 0 16px; color: var(--muted); }
 

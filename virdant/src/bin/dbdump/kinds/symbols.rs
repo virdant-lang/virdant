@@ -3,9 +3,9 @@
 
 use serde_json::Value as JsonValue;
 
+use super::common::anchored_table;
 use super::common::badges;
 use super::common::escape_html;
-use super::common::location_string;
 use super::common::muted;
 use super::common::region_string;
 use super::common::section;
@@ -36,17 +36,17 @@ fn opt_u64(json: &JsonValue, key: &str) -> String {
         .unwrap_or_else(|| "?".to_string())
 }
 
-fn location_cell(json: &JsonValue) -> String {
+fn location_cell(ctx: &Ctx, json: &JsonValue) -> String {
     if json["location"].is_null() {
         "-".to_string()
     } else {
-        location_string(&json["location"])
+        ctx.location(&json["location"])
     }
 }
 
 fn ctx_symbol(ctx: &Ctx, json: &JsonValue, key: &str) -> String {
     match json[key].as_u64() {
-        Some(id) => escape_html(&ctx.symbol(id)),
+        Some(id) => ctx.symbol(id),
         None => "?".to_string(),
     }
 }
@@ -76,7 +76,13 @@ pub fn render_packages(ctx: &Ctx, result: &JsonValue) -> String {
             _ => String::new(),
         };
         let id_text = id.map(|n| n.to_string()).unwrap_or_else(|| "?".to_string());
-        rows.push(vec![id_text, format!("{name_text}{marked}")]);
+        let name_cell = match id {
+            Some(id) => {
+                format!("<a href=\"Source.html#source-p{id}\">{name_text}</a>")
+            }
+            None => name_text,
+        };
+        rows.push(vec![id_text, format!("{name_cell}{marked}")]);
     }
     let body = if rows.is_empty() {
         muted("No packages.")
@@ -140,7 +146,7 @@ pub fn render_package_analysis(ctx: &Ctx, result: &JsonValue) -> String {
 }
 
 pub fn render_symbol_table(ctx: &Ctx, result: &JsonValue) -> String {
-    let mut rows = Vec::new();
+    let mut rows: Vec<(String, Vec<String>)> = Vec::new();
     if let Some(symbols) = result["symbols"].as_object() {
         let mut entries: Vec<(&String, &JsonValue)> = symbols.iter().collect();
         entries.sort_by_key(|(_, symbol)| symbol["id"].as_u64().unwrap_or(u64::MAX));
@@ -150,23 +156,32 @@ pub fn render_symbol_table(ctx: &Ctx, result: &JsonValue) -> String {
                 None => "?".to_string(),
             };
             let parent = match symbol["parent_id"].as_u64() {
-                Some(id) => escape_html(&ctx.symbol(id)),
+                Some(id) => ctx.symbol(id),
                 None => "-".to_string(),
             };
-            rows.push(vec![
-                opt_u64(symbol, "id"),
-                fqn,
-                kind_name(symbol),
-                location_cell(symbol),
-                parent,
-            ]);
+            let anchor = match symbol["id"].as_u64() {
+                Some(id) => format!("sym-{id}"),
+                None => String::new(),
+            };
+            rows.push((
+                anchor,
+                vec![
+                    opt_u64(symbol, "id"),
+                    fqn,
+                    kind_name(symbol),
+                    location_cell(ctx, symbol),
+                    parent,
+                ],
+            ));
         }
     }
     let table_body = if rows.is_empty() {
         muted("No symbols.")
     } else {
-        table(&["Id", "Fqn", "Kind", "Location", "Parent"], &rows)
-            + &cap_note(rows.len())
+        anchored_table(
+            &["Id", "Fqn", "Kind", "Location", "Parent"],
+            &rows,
+        ) + &cap_note(rows.len())
     };
     let diagnostics = diagnostics_count(result);
     let body = format!(
@@ -215,7 +230,11 @@ fn typedef_row(ctx: &Ctx, typedef: &JsonValue) -> Vec<String> {
             let Ok(symbol_id) = key.parse::<u64>() else {
                 continue;
             };
-            let name = ctx.symbol(symbol_id);
+            let name = ctx
+                .symbols
+                .get(&(symbol_id as u32))
+                .cloned()
+                .unwrap_or_else(|| format!("sym{symbol_id}"));
             let short = name.rsplit("::").next().unwrap_or(&name);
             enumerants.push(format!(
                 "{} = {}",
@@ -228,7 +247,6 @@ fn typedef_row(ctx: &Ctx, typedef: &JsonValue) -> Vec<String> {
 }
 
 pub fn render_type_index(ctx: &Ctx, result: &JsonValue) -> String {
-    let _ = ctx;
     let typs = result["typs"].as_array().cloned().unwrap_or_default();
     let typ_strings: Vec<String> = typs.iter().map(type_string).collect();
     let mut body = if typ_strings.is_empty() {
@@ -252,7 +270,8 @@ pub fn render_type_index(ctx: &Ctx, result: &JsonValue) -> String {
                 .unwrap_or_else(|| format!("typ{id}")),
             None => "?".to_string(),
         };
-        rows.push(vec![escape_html(location), escape_html(&type_text)]);
+        let location_json = JsonValue::String((*location).clone());
+        rows.push(vec![ctx.location(&location_json), escape_html(&type_text)]);
     }
     body.push_str(&if rows.is_empty() {
         muted("No typed locations.")
@@ -266,11 +285,11 @@ pub fn render_type_index(ctx: &Ctx, result: &JsonValue) -> String {
     section("Type index", &body)
 }
 
-pub fn render_expr_roots(_ctx: &Ctx, result: &JsonValue) -> String {
+pub fn render_expr_roots(ctx: &Ctx, result: &JsonValue) -> String {
     let roots = result.as_array().cloned().unwrap_or_default();
     let mut rows = Vec::new();
     for root in &roots {
-        rows.push(vec![location_string(&root["location"])]);
+        rows.push(vec![ctx.location(&root["location"])]);
     }
     let body = if rows.is_empty() {
         muted("No expr roots.")
@@ -280,11 +299,11 @@ pub fn render_expr_roots(_ctx: &Ctx, result: &JsonValue) -> String {
     section("Expr roots", &body)
 }
 
-pub fn render_all_exprs(_ctx: &Ctx, result: &JsonValue) -> String {
+pub fn render_all_exprs(ctx: &Ctx, result: &JsonValue) -> String {
     let exprs = result.as_array().cloned().unwrap_or_default();
     let mut rows = Vec::new();
     for expr in &exprs {
-        rows.push(vec![location_string(expr)]);
+        rows.push(vec![ctx.location(expr)]);
     }
     let body = if rows.is_empty() {
         muted("No exprs.")
@@ -294,8 +313,8 @@ pub fn render_all_exprs(_ctx: &Ctx, result: &JsonValue) -> String {
     section("All exprs", &body)
 }
 
-pub fn render_expr_root_for(_ctx: &Ctx, result: &JsonValue) -> String {
-    let body = format!("<p>{}</p>\n", location_string(&result["location"]));
+pub fn render_expr_root_for(ctx: &Ctx, result: &JsonValue) -> String {
+    let body = format!("<p>{}</p>\n", ctx.location(&result["location"]));
     section("Expr root", &body)
 }
 

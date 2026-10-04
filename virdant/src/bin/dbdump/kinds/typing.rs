@@ -94,7 +94,7 @@ fn cap_note_at(total: usize, limit: usize) -> String {
     }
 }
 
-fn listing(text: &str) -> String {
+fn listing(text: &str, pkg: Option<u64>) -> String {
     let mut lines: Vec<&str> = text.split('\n').collect();
     if lines.last().map(|line| line.is_empty()).unwrap_or(false) {
         lines.pop();
@@ -103,16 +103,23 @@ fn listing(text: &str) -> String {
     let width = total.to_string().len();
     let mut out = String::from("<pre>");
     for (i, line) in lines.iter().take(LISTING_LIMIT).enumerate() {
-        out.push_str(&format!("{i:>width$} | {}\n", escape_html(line)));
+        let line_html = match pkg {
+            Some(pkg) => {
+                let n = i + 1;
+                format!("<span id=\"parsing-p{pkg}-L{n}\">{}</span>", escape_html(line))
+            }
+            None => escape_html(line),
+        };
+        out.push_str(&format!("{:>width$} | {line_html}\n", i + 1));
     }
     out.push_str("</pre>\n");
     out.push_str(&cap_note_at(total, LISTING_LIMIT));
     out
 }
 
-fn source_listing(json: &JsonValue) -> String {
+fn source_listing(json: &JsonValue, pkg: Option<u64>) -> String {
     match json["text"].as_str() {
-        Some(text) => listing(text),
+        Some(text) => listing(text, pkg),
         None => muted("Source text unavailable."),
     }
 }
@@ -126,7 +133,7 @@ fn tag_string(ctx: &Ctx, tag: &JsonValue) -> String {
     match variant.as_str() {
         "None" => "-".to_string(),
         "SymbolResolution" => match value.as_u64() {
-            Some(id) => format!("Symbol: {}", escape_html(&ctx.symbol(id))),
+            Some(id) => format!("Symbol: {}", ctx.symbol(id)),
             None => "Symbol: ?".to_string(),
         },
         "PrimitiveResolution" => format!("Primitive: {}", escape_html(&variant_name(value))),
@@ -136,12 +143,12 @@ fn tag_string(ctx: &Ctx, tag: &JsonValue) -> String {
                 match kind.as_str() {
                     "Component" => format!(
                         "Referent: component {}",
-                        escape_html(&match referent.as_str() {
-                            Some(referent) => referent.to_string(),
-                            None => format!("{referent}"),
-                        })
+                        match referent.as_str() {
+                            Some(referent) => ctx.component(referent),
+                            None => escape_html(&format!("{referent}")),
+                        }
                     ),
-                    "Local" => format!("Referent: local {}", location_string(referent)),
+                    "Local" => format!("Referent: local {}", ctx.location(referent)),
                     _ => format!("Referent: {}", escape_html(kind)),
                 }
             }
@@ -186,10 +193,10 @@ pub fn render_expected_type(_ctx: &Ctx, result: &JsonValue) -> String {
 
 pub fn render_typing(ctx: &Ctx, result: &JsonValue) -> String {
     let item = match result["item"]["id"].as_u64() {
-        Some(id) => escape_html(&ctx.symbol(id)),
+        Some(id) => ctx.symbol(id),
         None => "?".to_string(),
     };
-    let exprroot = location_string(&result["exprroot"]["location"]);
+    let exprroot = ctx.location(&result["exprroot"]["location"]);
     let mut body = format!("<p class=\"key\">Item: {item}</p>\n<p>Expr root: {exprroot}</p>\n");
 
     let diags = result["diagnostics"].as_array().cloned().unwrap_or_default();
@@ -229,7 +236,10 @@ pub fn render_typing(ctx: &Ctx, result: &JsonValue) -> String {
     let total = tag_entries.len();
     let mut rows = Vec::new();
     for (location, tag) in tag_entries.iter().take(ROW_LIMIT) {
-        rows.push(vec![escape_html(location), tag_string(ctx, tag)]);
+        rows.push(vec![
+            ctx.location(&JsonValue::String(location.to_string())),
+            tag_string(ctx, tag),
+        ]);
     }
     body.push_str(&section(
         "Tags",
@@ -252,7 +262,7 @@ pub fn render_typing(ctx: &Ctx, result: &JsonValue) -> String {
             .map(|locations| {
                 locations
                     .iter()
-                    .map(location_string)
+                    .map(|location| ctx.location(location))
                     .collect::<Vec<_>>()
                     .join(", ")
             })
@@ -271,7 +281,7 @@ pub fn render_typing(ctx: &Ctx, result: &JsonValue) -> String {
     section("Typing", &body)
 }
 
-pub fn render_typeof_all(_ctx: &Ctx, result: &JsonValue) -> String {
+pub fn render_typeof_all(ctx: &Ctx, result: &JsonValue) -> String {
     let mut entries: Vec<(&String, &JsonValue)> = match result.as_object() {
         Some(map) => map.iter().collect(),
         None => Vec::new(),
@@ -285,7 +295,10 @@ pub fn render_typeof_all(_ctx: &Ctx, result: &JsonValue) -> String {
         } else {
             escape_html(&type_string(typ))
         };
-        rows.push(vec![escape_html(location), typ_text]);
+        rows.push(vec![
+            ctx.location(&JsonValue::String(location.to_string())),
+            typ_text,
+        ]);
     }
     let body = if rows.is_empty() {
         muted("No typed locations.")
@@ -412,7 +425,7 @@ pub fn render_source(ctx: &Ctx, result: &JsonValue) -> String {
         None => "?".to_string(),
     };
     let mut body = format!("<p>Package: {package}</p>\n");
-    body.push_str(&source_listing(result));
+    body.push_str(&source_listing(result, None));
     section("Source", &body)
 }
 
@@ -424,7 +437,8 @@ pub fn render_parsing(ctx: &Ctx, result: &JsonValue) -> String {
         "<p>{num_nodes} ast nodes, {num_errors} error nodes, {num_strings} strings interned.</p>\n"
     );
 
-    body.push_str(&section("Source", &source_listing(&result["source"])));
+    let pkg = result["source"]["package"].as_u64().unwrap_or(0);
+    body.push_str(&section("Source", &source_listing(&result["source"], Some(pkg))));
 
     let error_ids = result["errors"].as_array().cloned().unwrap_or_default();
     let mut rows = Vec::new();
