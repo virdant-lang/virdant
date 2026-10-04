@@ -220,13 +220,12 @@ impl serde::Serializer for ValueSerializer {
 
     fn serialize_tuple_variant(
         self,
-        name: &'static str,
+        _name: &'static str,
         _variant_index: u32,
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
         Ok(ValueTupleVariant {
-            name,
             variant,
             elements: vec![],
         })
@@ -251,13 +250,12 @@ impl serde::Serializer for ValueSerializer {
 
     fn serialize_struct_variant(
         self,
-        name: &'static str,
+        _name: &'static str,
         _variant_index: u32,
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         Ok(ValueStructVariant {
-            name,
             variant,
             fields: serde_json::Map::new(),
         })
@@ -322,7 +320,6 @@ impl serde::ser::SerializeTupleStruct for ValueSeq {
 
 /// Accumulates tuple-variant elements into `{ name: { variant: [...] } }`.
 struct ValueTupleVariant {
-    name: &'static str,
     variant: &'static str,
     elements: Vec<JsonValue>,
 }
@@ -340,7 +337,7 @@ impl serde::ser::SerializeTupleVariant for ValueTupleVariant {
     }
 
     fn end(self) -> Result<JsonValue, Self::Error> {
-        Ok(serde_json::json!({ self.name: { self.variant: self.elements } }))
+        Ok(serde_json::json!({ self.variant: self.elements }))
     }
 }
 
@@ -422,7 +419,6 @@ impl serde::ser::SerializeStruct for ValueStruct {
 
 /// Accumulates struct-variant fields into `{ name: { variant: {...} } }`.
 struct ValueStructVariant {
-    name: &'static str,
     variant: &'static str,
     fields: serde_json::Map<String, JsonValue>,
 }
@@ -442,10 +438,8 @@ impl serde::ser::SerializeStructVariant for ValueStructVariant {
     }
 
     fn end(self) -> Result<JsonValue, Self::Error> {
-        let mut variant_object = serde_json::Map::new();
-        variant_object.insert(self.variant.to_string(), JsonValue::Object(self.fields));
         let mut object = serde_json::Map::new();
-        object.insert(self.name.to_string(), JsonValue::Object(variant_object));
+        object.insert(self.variant.to_string(), JsonValue::Object(self.fields));
         Ok(JsonValue::Object(object))
     }
 }

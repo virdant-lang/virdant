@@ -15,6 +15,10 @@ use virdant::db::Db;
 use virdant::util::{db_from_dir, db_from_files};
 use virdant::diagnostics::DiagnosticLevel;
 
+mod kinds;
+
+use kinds::common::{escape_html, Ctx};
+
 /// Dump the Virdant compiler database as a static HTML site
 #[derive(Parser, Debug)]
 #[command(name = "virdb", author, version, about)]
@@ -127,6 +131,7 @@ fn generate_site(dump: &JsonValue, builddir: &std::path::Path) -> Result<(), Str
     // Lookups for making debug keys readable.
     let packages = package_names(&entries);
     let symbols = symbol_fqns(&entries);
+    let ctx = Ctx { packages, symbols };
 
     // Write the full dump as JSON.
     let full_json = serde_json::to_string_pretty(dump).map_err(|e| e.to_string())?;
@@ -151,12 +156,12 @@ fn generate_site(dump: &JsonValue, builddir: &std::path::Path) -> Result<(), Str
             .sum();
         kind_rows.push((kind.to_string(), kind_entries.len(), total_secs));
 
-        let page = render_kind_page(kind, kind_entries, &packages, &symbols);
+        let page = render_kind_page(kind, kind_entries, &ctx);
         std::fs::write(query_dir.join(format!("{kind}.html")), page)
             .map_err(|e| e.to_string())?;
     }
 
-    let index = render_index(&kind_rows, &entries, &packages);
+    let index = render_index(&kind_rows, &entries, &ctx.packages);
     std::fs::write(builddir.join("index.html"), index).map_err(|e| e.to_string())?;
 
     std::fs::write(builddir.join("style.css"), STYLE_CSS).map_err(|e| e.to_string())?;
@@ -326,8 +331,7 @@ fn render_index(
 fn render_kind_page(
     kind: &str,
     entries: &[&JsonValue],
-    packages: &[String],
-    symbols: &BTreeMap<u32, String>,
+    ctx: &Ctx,
 ) -> String {
     let mut out = String::new();
     out.push_str(&page_header("../style.css"));
@@ -357,32 +361,23 @@ fn render_kind_page(
             .map(|deps| deps.len())
             .unwrap_or(0);
 
-        let result_pretty = serde_json::to_string_pretty(&entry["result"])
-            .unwrap_or_else(|_| "<serialization error>".to_string());
-        let key_pretty = serde_json::to_string_pretty(&entry["key"])
-            .unwrap_or_else(|_| "<serialization error>".to_string());
+        let body = match kinds::render_result(ctx, kind, &entry["result"]) {
+            Some(html) => html,
+            None => generic_entry_body(&entry["result"], &entry["key"]),
+        };
         let deps_pretty = serde_json::to_string_pretty(&entry["deps"])
             .unwrap_or_else(|_| "<serialization error>".to_string());
-
-        let open = if result_pretty.len() < 2000 { " open" } else { "" };
 
         out.push_str("<div class=\"entry\">\n");
         out.push_str(&format!(
             "<div><span class=\"key\">{}</span> \
             <span class=\"meta\">rev {} | {:.1} ms | {} deps</span></div>\n",
-            escape_html(&prettify_debug(debug, packages, symbols)),
+            escape_html(&prettify_debug(debug, &ctx.packages, &ctx.symbols)),
             rev,
             secs * 1000.0,
             num_deps,
         ));
-        out.push_str(&format!(
-            "<details{open}><summary>Result</summary><pre>{}</pre></details>\n",
-            escape_html(&result_pretty),
-        ));
-        out.push_str(&format!(
-            "<details><summary>Key</summary><pre>{}</pre></details>\n",
-            escape_html(&key_pretty),
-        ));
+        out.push_str(&body);
         out.push_str(&format!(
             "<details><summary>Deps ({num_deps})</summary><pre>{}</pre></details>\n",
             escape_html(&deps_pretty),
@@ -391,6 +386,26 @@ fn render_kind_page(
     }
 
     out.push_str(&page_footer());
+    out
+}
+
+/// The raw-JSON fallback used for query kinds without a smart
+/// renderer.
+fn generic_entry_body(result: &JsonValue, key: &JsonValue) -> String {
+    let mut out = String::new();
+    let result_pretty = serde_json::to_string_pretty(result)
+        .unwrap_or_else(|_| "<serialization error>".to_string());
+    let key_pretty = serde_json::to_string_pretty(key)
+        .unwrap_or_else(|_| "<serialization error>".to_string());
+    let open = if result_pretty.len() < 2000 { " open" } else { "" };
+    out.push_str(&format!(
+        "<details{open}><summary>Result</summary><pre>{}</pre></details>\n",
+        escape_html(&result_pretty),
+    ));
+    out.push_str(&format!(
+        "<details><summary>Key</summary><pre>{}</pre></details>\n",
+        escape_html(&key_pretty),
+    ));
     out
 }
 
@@ -405,13 +420,6 @@ fn page_header(css_href: &str) -> String {
 
 fn page_footer() -> String {
     "</main>\n</body>\n</html>\n".to_string()
-}
-
-fn escape_html(text: &str) -> String {
-    text.replace('&', "\u{26}amp;")
-        .replace('<', "\u{26}lt;")
-        .replace('>', "\u{26}gt;")
-        .replace('"', "\u{26}quot;")
 }
 
 const STYLE_CSS: &str = r#":root {

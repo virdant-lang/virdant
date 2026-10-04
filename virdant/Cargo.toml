@@ -55,7 +55,7 @@ required-features = ["filecheck-bin"]
 
 [[bin]]
 name = "virdb"
-path = "src/bin/dbdump.rs"
+path = "src/bin/dbdump/main.rs"
 required-features = ["virdb-bin"]
 
 [[bin]]
