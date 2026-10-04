@@ -20,13 +20,13 @@ use crate::diagnostics::{self, Diagnostic, DiagnosticPayload};
 use crate::syntax::ast::{AstNode, match_arm_children};
 use crate::syntax::payload::AstNodePayload;
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct DriverAnalysis {
     drivers: IndexMap<ComponentId, Vec<Driver>>,
     diagnostics: Vec<Diagnostic>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub enum Driver {
     Expr(DriverType, Location),
     Bidirectional(Location),
@@ -54,14 +54,14 @@ impl Driver {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct DriverWhen {
     pub driver_type: DriverType,
     pub clauses: Vec<(Location, Box<Driver>)>,
     pub else_clause: Option<Box<Driver>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct DriverMatch {
     pub driver_type: DriverType,
     pub subject: Location,

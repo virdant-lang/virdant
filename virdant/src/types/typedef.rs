@@ -21,7 +21,7 @@ use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
 use crate::db::Builder;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct TypeDef {
     pub symbol_id: SymbolId,
     pub kind: TypeScheme,
@@ -33,7 +33,13 @@ pub struct TypeDef {
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct TypeId(usize);
 
-#[derive(Debug)]
+impl serde::Serialize for TypeId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_u64(self.0 as u64)
+    }
+}
+
+#[derive(Debug, serde::Serialize)]
 pub struct TypeIndex {
     typs: IndexSet<Type>,
     typ_at_location: IndexMap<Location, TypeId>,

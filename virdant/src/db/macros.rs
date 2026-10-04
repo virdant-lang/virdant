@@ -17,14 +17,14 @@ macro_rules! queries {
     ($(
             $query:ident($($arg:ident : $typ:path),*) -> $ret:path;)*
     ) => {
-        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize)]
         pub(crate) enum Query {
             $(
                 $query($($typ),*),
             )*
         }
 
-        #[derive(Clone, Debug)]
+        #[derive(Clone, Debug, serde::Serialize)]
         pub(crate) enum QueryResult {
             $(
                 $query($ret),

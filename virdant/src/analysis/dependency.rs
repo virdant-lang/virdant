@@ -25,7 +25,7 @@ use crate::syntax::payload::AstNodePayload;
 // ---------------------------------------------------------------------------
 
 /// A dependency graph over the signals of a single module.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct DependencyGraph {
     /// All components in the module.
     nodes: IndexSet<ComponentId>,
@@ -34,13 +34,13 @@ pub struct DependencyGraph {
     edges: IndexMap<ComponentId, Vec<DependencyEdge>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize)]
 pub struct DependencyEdge {
     pub dependee: ComponentId,
     pub kind: EdgeKind,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
 pub enum EdgeKind {
     /// Combinational: source changes in the same cycle when dependee
     /// changes.

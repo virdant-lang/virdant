@@ -8,12 +8,12 @@ use crate::analysis::component::ComponentId;
 use crate::analysis::Location;
 use crate::types::Type;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct TypingContext {
     context: Vec<(BString, (Referent, Option<Type>))>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub enum Referent {
     Component(ComponentId),
     Local(Location),

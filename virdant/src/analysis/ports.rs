@@ -13,7 +13,7 @@ use crate::db::Builder;
 use crate::types::Type;
 use crate::syntax::payload::AstNodePayload;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Port {
     pub path: BString,
     pub dir: PortDir,

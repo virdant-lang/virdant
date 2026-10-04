@@ -9,7 +9,7 @@ use crate::analysis::symbols::SymbolId;
 use crate::db::Builder;
 use crate::types::Type;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct StructField {
     pub field_symbol_id: SymbolId, // TODO make these not pub
     pub name: BString,

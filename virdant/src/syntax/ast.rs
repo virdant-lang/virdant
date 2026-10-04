@@ -15,6 +15,12 @@ use crate::syntax::parsing::{InternedString, Parsing};
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AstNodeId(pub u16);
 
+impl serde::Serialize for AstNodeId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_u16(self.0)
+    }
+}
+
 #[derive(Clone)]
 pub struct AstNode<'a> {
     pub parsing: &'a Parsing,

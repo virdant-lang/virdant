@@ -6,13 +6,25 @@ use indexmap::IndexMap;
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
 pub struct PackageId(u16);
 
+impl serde::Serialize for PackageId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_u16(self.0)
+    }
+}
+
 impl std::fmt::Debug for PackageId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "PackageId({})", self.0)
     }
 }
 
-#[derive(Debug, Clone)]
+impl PackageId {
+    pub fn id(&self) -> u16 {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct PackageTable {
     names: Vec<BString>,
     by_name: IndexMap<BString, PackageId>,

@@ -20,7 +20,7 @@ use crate::types::Type;
 use crate::common::{ChannelDir, ComponentKind, Flow, SocketRole};
 use crate::diagnostics::{self, Diagnostic};
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct ComponentAnalysis {
     moddef: SymbolId,
     components: Vec<(BString, Component)>,
@@ -35,8 +35,16 @@ pub struct ComponentId {
     index: usize,
 }
 
+// Serializes as the string "{item_id}.{index}",
+// so that `ComponentId` can be used as a JSON map key.
+impl serde::Serialize for ComponentId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&format!("{}.{}", self.item_id.0, self.index))
+    }
+}
 
-#[derive(Debug, Clone)]
+
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Component {
     id: ComponentId,
     path: BString,
@@ -49,7 +57,7 @@ pub struct Component {
     typ: Option<Type>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
 pub enum ReferenceKind {
     /// Component used as an ExprReference
     Expr,

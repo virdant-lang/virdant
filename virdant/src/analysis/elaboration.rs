@@ -18,7 +18,7 @@ use crate::package::PackageId;
 use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct Elaboration {
     components: Vec<ElaboratedComponent>,
     path_to_id: IndexMap<BString, SignalId>,
@@ -32,7 +32,7 @@ pub struct Elaboration {
 ///
 /// Records that a group of components under a common prefix
 /// belongs to an instantiation of a particular moddef.
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct ElaboratedModule {
     /// The module definition symbol (e.g., `Core`).
     #[allow(dead_code)]
@@ -46,7 +46,7 @@ pub struct ElaboratedModule {
 ///
 /// Records that a group of channel components under a common
 /// prefix belongs to an instantiation of a particular socketdef.
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct ElaboratedSocket {
     /// The socket definition symbol (e.g., `Mem`).
     #[allow(dead_code)]
@@ -59,7 +59,7 @@ pub struct ElaboratedSocket {
     prefix: BString,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct ElaboratedComponent {
     id: SignalId,
     path: BString,
@@ -73,6 +73,12 @@ pub struct ElaboratedComponent {
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct SignalId(usize);
+
+impl serde::Serialize for SignalId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_u64(self.0 as u64)
+    }
+}
 
 impl SignalId {
     /// Dense 0-based index assigned by `build_elaboration`.  Suitable for

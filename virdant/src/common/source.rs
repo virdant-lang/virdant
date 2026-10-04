@@ -8,25 +8,25 @@ use bstr::{BStr, BString};
 use crate::package::PackageId;
 
 /// A source file loaded into memory for use by the tokenizer with a given package name.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Source {
     package: PackageId,
     text: BString, // TODO Make this an Arc
 }
 
 /// A byte offset in a `Source`.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize)]
 pub struct SourceOffset(pub u32);
 
 /// A line-col pair (1-indexed)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
 pub struct LineCol(usize, usize);
 
 /// A start-end line-col pair
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
 pub struct Span(LineCol, LineCol);
 
-#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq, serde::Serialize)]
 pub struct Region {
     package: PackageId,
     span: Span,

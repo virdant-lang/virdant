@@ -5,7 +5,7 @@
 use crate::analysis::symbols::SymbolId;
 use crate::common::Width;
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, serde::Serialize)]
 pub enum Type {
     Bit,
     Clock,

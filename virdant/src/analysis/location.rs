@@ -9,6 +9,14 @@ use crate::syntax::ast::AstNodeId;
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Location(PackageId, AstNodeId);
 
+// Serializes as the string "{package}:{ast_node_id}",
+// so that `Location` can be used as a JSON map key.
+impl serde::Serialize for Location {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&format!("{}:{}", self.0.id(), self.1.0))
+    }
+}
+
 impl Location {
     pub fn new(package: PackageId, ast_node_id: AstNodeId) -> Location {
         Location(package, ast_node_id)

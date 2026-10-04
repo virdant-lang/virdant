@@ -26,7 +26,7 @@ pub(crate) fn build_package_analysis(builder: &mut Builder, package: PackageId) 
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct PackageAnalysis {
     package: PackageId,
     imports: IndexSet<PackageId>,

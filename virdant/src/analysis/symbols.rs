@@ -18,7 +18,7 @@ use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 use crate::{analysis::Location, diagnostics::Diagnostic};
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct SymbolTable {
     pub symbols: IndexMap<BString, Symbol>,
     symbols_by_id: Vec<Symbol>,
@@ -27,7 +27,7 @@ pub struct SymbolTable {
     builtin: PackageId,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Symbol {
     pub id: SymbolId,
     pub fqn: BString,
@@ -40,7 +40,13 @@ pub struct Symbol {
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SymbolId(pub u32);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl serde::Serialize for SymbolId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_u32(self.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub enum SymbolKind {
     ModDef,
     UnionDef,

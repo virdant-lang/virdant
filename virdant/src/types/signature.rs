@@ -12,7 +12,7 @@ use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
 
 /// The signature of a union constructor: its named arguments and return type.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Signature {
     pub parameters: Vec<(BString, Type)>,
     pub ret_typ: Type,

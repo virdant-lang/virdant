@@ -27,7 +27,7 @@ use crate::types::context::Referent;
 use super::context::TypingContext;
 use super::typ::Type;
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct Typing {
     item: Symbol,
     exprroot: ExprRoot,
@@ -37,7 +37,7 @@ pub struct Typing {
     tags: IndexMap<Location, Tag>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize)]
 pub struct ExprRoot {
     pub location: Location,
 }
@@ -56,7 +56,7 @@ impl ExprRoot {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub enum Primitive {
     Any,
     All,
@@ -69,7 +69,7 @@ pub enum Primitive {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub enum Tag {
     None,
     SymbolResolution(SymbolId),

@@ -18,7 +18,7 @@ lalrpop_util::lalrpop_mod!(grammar, "/syntax/virdant.rs");
 
 pub type ParseError = lalrpop_util::ErrorRecovery<SourceOffset, Token, TokenError>;
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 pub struct Parsing {
     pub(super) source: Source,
     pub(super) strings: Vec<BString>,
@@ -27,6 +27,7 @@ pub struct Parsing {
     pub(super) parents: Vec<AstNodeId>,
     pub(super) num_children: Vec<u16>,
     pub(super) errors: Vec<AstNodeId>,
+    #[serde(skip)]
     pub(super) error_data: Vec<ParseError>,
     pub(super) docstring_diagnostics: Vec<Diagnostic>,
 }
@@ -35,6 +36,16 @@ pub struct Parsing {
 pub struct InternedString {
     package: PackageId,
     id: usize,
+}
+
+impl serde::Serialize for InternedString {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("InternedString", 2)?;
+        state.serialize_field("package", &self.package)?;
+        state.serialize_field("id", &self.id)?;
+        state.end()
+    }
 }
 
 impl InternedString {

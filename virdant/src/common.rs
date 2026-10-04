@@ -17,32 +17,32 @@ pub enum ComponentClass {
     Reg,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize)]
 pub enum Flow {
     Source,
     Sink,
     Duplex,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
 pub enum DriverType {
     Continuous,
     Latched,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, serde::Serialize)]
 pub enum ChannelDir {
     Cosi,
     Soci,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, serde::Serialize)]
 pub enum PortDir {
     Input,
     Output,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, serde::Serialize)]
 pub enum SocketRole {
     Client,
     Server,
@@ -65,7 +65,7 @@ pub enum ItemKind {
     SocketDef,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, serde::Serialize)]
 pub enum TypeScheme {
     BuiltinDef,
     UnionDef,
@@ -73,7 +73,7 @@ pub enum TypeScheme {
     EnumDef,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, serde::Serialize)]
 pub enum ComponentKind {
     Incoming,
     Outgoing,
@@ -83,7 +83,7 @@ pub enum ComponentKind {
     Wire,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, serde::Serialize)]
 pub enum BinOp {
     LogicalAnd,
     LogicalOr,
@@ -101,7 +101,7 @@ pub enum BinOp {
     Xor,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash, serde::Serialize)]
 pub enum UnOp {
     Neg,
     Inv,

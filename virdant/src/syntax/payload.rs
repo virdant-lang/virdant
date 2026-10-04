@@ -6,7 +6,7 @@
 use crate::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, UnOp};
 use crate::syntax::parsing::InternedString;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub enum AstNodePayload {
     Error,
 
@@ -158,27 +158,27 @@ impl AstNodePayload {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct PackagePayload {
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct AnnotationsPayload;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct AnnotationPayload {
     pub name: InternedString,
     pub str_value: Option<InternedString>,
     pub nat_value: Option<u64>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Import {
     pub package: InternedString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ModDef {
     pub name: InternedString,
     pub is_ext: bool,
@@ -186,204 +186,204 @@ pub struct ModDef {
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct StructDef {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct UnionDef {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct EnumDef {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct BuiltinDef {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct SocketDef {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct FnDef {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Component {
     pub name: InternedString,
     pub kind: ComponentKind,
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Driver {
     pub driver_type: DriverType,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Submodule {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ModDefStmtBlock;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Socket {
     pub name: InternedString,
     pub role: SocketRole,
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Field {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Ctor {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Enumerant {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Channel {
     pub name: InternedString,
     pub dir: ChannelDir,
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct GenericsParams {
     pub value: InternedString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Param {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Kind {
     pub name: InternedString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Type {
     pub num_generics: u16,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ExprBitLit {
     pub literal: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ExprWordLit {
     pub literal: InternedString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ExprStrLit {
     pub literal: InternedString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ExprBinOp {
     pub op: BinOp,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ExprUnOp {
     pub op: UnOp,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ExprField {
     pub field: InternedString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ExprCtor {
     pub ctor: InternedString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ExprEnumerant {
     pub enumerant: InternedString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ExprIndex {
     pub index: u16,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ExprIndexRange {
     pub index_hi: u16,
     pub index_lo: u16,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Assign {
     pub name: InternedString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct PatCtor {
     pub name: InternedString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct PatEnumerant {
     pub name: InternedString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct PatWordLit {
     pub literal: InternedString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct PatBitLit {
     pub literal: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct PatIdent {
     pub name: InternedString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Ofness {
     pub package: Option<InternedString>,
     pub name: InternedString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Path {
     pub path: InternedString,
 }

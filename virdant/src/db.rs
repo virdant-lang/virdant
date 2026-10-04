@@ -7,6 +7,8 @@ mod macros;
 mod graphviz;
 mod guts;
 mod json;
+#[cfg(feature = "virdb-bin")]
+mod dump;
 
 use std::fmt::Write;
 use std::sync::Arc;
