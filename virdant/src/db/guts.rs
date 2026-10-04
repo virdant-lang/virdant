@@ -192,7 +192,7 @@ impl Db {
 }
 
 impl Db {
-    pub fn set_packages(&mut self, packages: Vec<PackageFqn>) {
+    pub fn set_packages(&mut self, packages: PackageTable) {
         self.rev += 1;
         self.dirty_cache.lock().unwrap().clear();
 
@@ -212,7 +212,7 @@ impl Db {
         }
     }
 
-    pub fn set_source(&mut self, package: PackageFqn, source: Source) {
+    pub fn set_source(&mut self, package: PackageId, source: Source) {
         self.rev += 1;
         self.dirty_cache.lock().unwrap().clear();
 

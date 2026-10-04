@@ -14,7 +14,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use virdant::db::Db;
 use virdant::diagnostics::DiagnosticLevel;
-use virdant::package::PackageFqn;
+use virdant::package::PackageTable;
 use virdant::common::{Flow, source::{Region, Source}};
 use virdant::analysis::symbols::SymbolKind;
 use virdant::syntax::parsing::parse;
@@ -168,8 +168,10 @@ fn project_db(args: &Args) -> Db {
     db_from_dir(src_dir)
 }
 
-fn region_string(region: Region) -> String {
-    let package = region.package().to_string();
+fn region_string(db: &Db, region: Region) -> String {
+    use bstr::ByteSlice as _;
+
+    let package = db.get_packages().name(region.package()).to_str_lossy().into_owned();
     let span = region.span().to_string();
 
     format!("{package}.vir {span}")
@@ -182,7 +184,7 @@ fn dump_diagnostics(db: &Db) {
     };
     let longest_region = diagnostics
         .iter()
-        .map(|diag| region_string(diag.region()).len())
+        .map(|diag| region_string(db, diag.region()).len())
         .max()
         .unwrap_or_default();
 
@@ -190,7 +192,7 @@ fn dump_diagnostics(db: &Db) {
     let mut error_count = 0;
 
     for diagnostic in diagnostics.iter() {
-        let unpadded_region = region_string(diagnostic.region());
+        let unpadded_region = region_string(db, diagnostic.region());
         let padded_region = format!("{}{}", unpadded_region, " ".repeat(longest_region - unpadded_region.len()));
         if diagnostic.level() == DiagnosticLevel::Error {
             println!("{}   {}   {}", "ERROR  ".red(), padded_region, diagnostic.message());
@@ -232,8 +234,8 @@ fn parse_file(path: &Path) {
         }
     };
 
-    let package = match path.file_stem() {
-        Some(stem) => PackageFqn::new(BString::from(stem.as_bytes())),
+    let name = match path.file_stem() {
+        Some(stem) => BString::from(stem.as_bytes()),
         None => {
             eprintln!("ERROR");
             eprintln!("could not determine package name from path: {}", path.display());
@@ -241,12 +243,13 @@ fn parse_file(path: &Path) {
         }
     };
 
-    let source = Source::new(package.clone(), input.into());
+    let mut db = Db::new();
+    db.set_packages(PackageTable::new(vec!["builtin".into(), name.clone()]));
+    let package = db.get_packages().id(name.as_bstr()).unwrap();
+
+    let source = Source::new(package, input.into());
     let parsing = parse(&source);
     parsing.dump();
-
-    let mut db = Db::new();
-    db.set_packages(vec![package.clone()]);
 
     let diagnostics = parsing.diagnostics();
     let longest_region = diagnostics
@@ -355,7 +358,7 @@ fn diagnostics_json(db: &Db) -> json::JsonValue {
             DiagnosticLevel::Info => "info",
         };
         entry.insert("level", level.into());
-        entry.insert("region", region_string(diagnostic.region()).into());
+        entry.insert("region", region_string(db, diagnostic.region()).into());
         entry.insert("message", diagnostic.message().to_string().into());
         array.push(json::JsonValue::Object(entry)).unwrap();
     }
@@ -367,7 +370,7 @@ fn dump_types(args: &Args) {
     let _ = db.check();
     for (location, typ) in db.get_typeof_all() {
         let package = location.package();
-        let parsing = db.get_parsing(package.clone());
+        let parsing = db.get_parsing(package);
         let node = parsing.ast_node(location.ast_node_id());
         let spelling = node.spelling().to_owned();
         let region = Region::new(package, node.span());
@@ -463,7 +466,7 @@ fn dump_exprroots(args: &Args) {
     let exprroots = db.get_exprroots();
     for exprroot in exprroots.iter() {
         let package = exprroot.location().package();
-        let parsing = db.get_parsing(package.clone());
+        let parsing = db.get_parsing(package);
         let location = exprroot.location();
         let typ = db.get_expected_type(exprroot.clone());
         let node = parsing.ast_node(location.ast_node_id());

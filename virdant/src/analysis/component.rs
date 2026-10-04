@@ -12,7 +12,7 @@ use indexmap::{IndexMap, IndexSet};
 use crate::analysis::Location;
 use crate::analysis::symbols::SymbolId;
 use crate::db::Builder;
-use crate::package::PackageFqn;
+use crate::package::PackageId;
 use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
@@ -164,14 +164,11 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     // ensure all dependent packages have been created
     // TODO this doesn't recurse though?
     let package_analysis = builder.get_package_analysis(location.package());
-    let packages = builder.get_packages();
     for import in package_analysis.imports() {
         if import == location.package() {
             continue;
         }
-        if packages.contains(&import) {
-            builder.get_package_analysis(import);
-        }
+        builder.get_package_analysis(import);
     }
 
     for stmt in item_ast.children() {
@@ -216,12 +213,13 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
                     continue;
                 };
-                let submodule_package = ofness
-                    .package
-                    .map(|pkg| PackageFqn::new(bstr::BString::from(parsing.string(pkg).to_vec())))
-                    .unwrap_or_else(|| location.package());
+                let packages = builder.get_packages();
+                let submodule_package: Option<PackageId> = match ofness.package {
+                    Some(pkg) => packages.id(parsing.string(pkg)),
+                    None => Some(location.package()),
+                };
                 let submodule_name = parsing.string(ofness.name);
-                let submodule_symbol = match symboltable.resolve_item(submodule_name, submodule_package) {
+                let submodule_symbol = match submodule_package.and_then(|pkg| symboltable.resolve_item(submodule_name, pkg)) {
                     Some(symbol) => symbol.clone(),
                     None => {
                         component_analysis.diagnostics.push(
@@ -286,14 +284,13 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                             let AstNodePayload::Ofness(socket_ofness) = socket_ofness_node.payload() else {
                                 continue;
                             };
-                            let socket_package = socket_ofness
-                                .package
-                                .map(|pkg| PackageFqn::new(bstr::BString::from(submodule_parsing.string(pkg).to_vec())))
-                                .unwrap_or_else(|| submodule_location.package());
+                            let socket_package: Option<PackageId> = match socket_ofness.package {
+                                Some(pkg) => packages.id(submodule_parsing.string(pkg)),
+                                None => Some(submodule_location.package()),
+                            };
                             let socket_name = submodule_parsing.string(socket_ofness.name);
-                            let socket_symbol = match symboltable.resolve_item(socket_name, socket_package) {
-                                Some(symbol) => symbol.clone(),
-                                None => continue,
+                            let Some(socket_symbol) = socket_package.and_then(|pkg| symboltable.resolve_item(socket_name, pkg)) else {
+                                continue;
                             };
 
                             let socket_def_location = socket_symbol.location();
@@ -356,14 +353,14 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
                     continue;
                 };
-                let socket_package = ofness
-                    .package
-                    .map(|pkg| PackageFqn::new(bstr::BString::from(parsing.string(pkg).to_vec())))
-                    .unwrap_or_else(|| location.package());
+                let packages = builder.get_packages();
+                let socket_package: Option<PackageId> = match ofness.package {
+                    Some(pkg) => packages.id(parsing.string(pkg)),
+                    None => Some(location.package()),
+                };
                 let socket_name = parsing.string(ofness.name);
-                let socket_symbol = match symboltable.resolve_item(socket_name, socket_package) {
-                    Some(symbol) => symbol.clone(),
-                    None => continue,
+                let Some(socket_symbol) = socket_package.and_then(|pkg| symboltable.resolve_item(socket_name, pkg)) else {
+                    continue;
                 };
 
                 let socket_location = socket_symbol.location();

@@ -18,7 +18,7 @@ use crate::common::{BinOp, ComponentKind, Flow, UnOp as UnOp, Width};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticLevel, DiagnosticPayload};
 use crate::analysis::location::Location;
-use crate::package::PackageFqn;
+use crate::package::PackageId;
 use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::{self, AstNodePayload};
@@ -51,7 +51,7 @@ impl ExprRoot {
         self.location.clone()
     }
 
-    pub fn package(&self) -> PackageFqn {
+    pub fn package(&self) -> PackageId {
         self.location.package()
     }
 }

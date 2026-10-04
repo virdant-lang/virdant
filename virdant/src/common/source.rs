@@ -5,12 +5,12 @@
 
 use bstr::{BStr, BString};
 
-use crate::package::PackageFqn;
+use crate::package::PackageId;
 
 /// A source file loaded into memory for use by the tokenizer with a given package name.
 #[derive(Clone, Debug)]
 pub struct Source {
-    package: PackageFqn,
+    package: PackageId,
     text: BString, // TODO Make this an Arc
 }
 
@@ -26,27 +26,26 @@ pub struct LineCol(usize, usize);
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Span(LineCol, LineCol);
 
-#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq)]
 pub struct Region {
-    package: PackageFqn,
+    package: PackageId,
     span: Span,
 }
 
 impl Source {
-    pub fn new(package: PackageFqn, text: BString) -> Source {
+    pub fn new(package: PackageId, text: BString) -> Source {
         Source { package, text }
     }
 
-    pub fn load_file<P: AsRef<std::path::Path>>(filepath: P) -> Source {
-        let package_name = BString::from(filepath.as_ref().file_stem().unwrap().as_encoded_bytes());
-        let package = PackageFqn::new(package_name);
+    pub fn load_file<P: AsRef<std::path::Path>>(filepath: P) -> (BString, BString) {
+        let name = BString::from(filepath.as_ref().file_stem().unwrap().as_encoded_bytes());
         let filepath: &std::path::Path = filepath.as_ref();
         let text = BString::new(std::fs::read(&filepath).expect(&format!("Could not read file: {filepath:?}")));
-        Source::new(package, text)
+        (name, text)
     }
 
-    pub fn package(&self) -> PackageFqn {
-        self.package.clone()
+    pub fn package(&self) -> PackageId {
+        self.package
     }
 
     pub fn text(&self) -> &BStr {
@@ -99,7 +98,7 @@ impl Source {
         let start_linecol = self.to_linecol(start);
         let end_linecol = self.to_linecol(end);
         let span = Span::new(start_linecol, end_linecol);
-        Region::new(self.package.clone(), span)
+        Region::new(self.package, span)
     }
 
     pub fn summary(&self) -> String {
@@ -110,12 +109,12 @@ impl Source {
             let text = BStr::new(&self.text).to_str_lossy()
                 .replace("\n", "\\n")
                 .replace("\"", "\\\"");
-            format!("[Source \"{}\" \"{}\"]", self.package, text)
+            format!("[Source \"{:?}\" \"{}\"]", self.package, text)
         } else {
              let text = BStr::new(&self.text[0..preview_len]).to_str_lossy()
                 .replace("\n", "\\n")
                 .replace("\"", "\\\"");
-            format!("[Source \"{}\" \"{}\"...]", self.package, text)
+            format!("[Source \"{:?}\" \"{}\"...]", self.package, text)
         }
     }
 }
@@ -243,12 +242,12 @@ impl Span {
 }
 
 impl Region {
-    pub fn new(package: PackageFqn, span: Span) -> Self {
+    pub fn new(package: PackageId, span: Span) -> Self {
         Region { package, span }
     }
 
-    pub fn package(&self) -> PackageFqn {
-        self.package.clone()
+    pub fn package(&self) -> PackageId {
+        self.package
     }
 
     pub fn span(&self) -> Span {
@@ -266,7 +265,8 @@ impl Region {
 
 impl Region {
     pub fn display(&self, db: &crate::db::Db) -> String {
-        let package = self.package.to_string();
+        use bstr::ByteSlice as _;
+        let package = db.get_packages().name(self.package).to_str_lossy().into_owned();
         if self.span.start().line() == self.span.end().line() {
             format!(
                 "{}[{}:{}-{}]",

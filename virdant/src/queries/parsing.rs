@@ -7,10 +7,10 @@ use std::sync::Arc;
 use bstr::BString;
 
 use crate::db::Builder;
-use crate::package::PackageFqn;
+use crate::package::PackageId;
 use crate::syntax::parsing::{InternedString, Parsing, parse};
 
-pub(crate) fn build_parsing(builder: &mut Builder<'_>, package: PackageFqn) -> Arc<Parsing> {
+pub(crate) fn build_parsing(builder: &mut Builder<'_>, package: PackageId) -> Arc<Parsing> {
     let source = builder.get_source(package);
     let parsing = parse(&source);
     Arc::new(parsing)

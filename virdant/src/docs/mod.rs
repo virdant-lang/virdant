@@ -12,7 +12,7 @@ use tera::Tera;
 use crate::analysis::symbols::{SymbolKind, SymbolTable};
 use crate::common::PortDir;
 use crate::db::Db;
-use crate::package::PackageFqn;
+use crate::package::{PackageId, PackageTable};
 use crate::syntax::ast::AstNode;
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
@@ -177,14 +177,14 @@ fn style_href(nesting_depth: usize) -> String {
 // ---------------------------------------------------------------------------
 
 struct ItemEntry {
-    package: PackageFqn,
+    package: PackageId,
     name: BString,
     kind: SymbolKind,
     doc_body: BString,
 }
 
 struct PkgData {
-    package: PackageFqn,
+    package: PackageId,
     package_doc: String,
     pkg_items: Vec<PackageItemCtx>,
 }
@@ -194,19 +194,20 @@ struct PkgData {
 // ---------------------------------------------------------------------------
 
 fn build_sidebar_tree(
-    packages: &[PackageFqn],
+    packages: &PackageTable,
     all_items: &[ItemEntry],
     active_pkg: Option<&str>,
     current_item: Option<&str>,
 ) -> Vec<SidebarPkgCtx> {
+    use bstr::ByteSlice as _;
+
     let mut result: Vec<SidebarPkgCtx> = Vec::new();
-    for pkg in packages {
-        let pkg_name = pkg.as_ref().to_str_lossy().into_owned();
+    for pkg in packages.ids() {
+        let pkg_name = packages.name(pkg).to_str_lossy().into_owned();
         let is_active = active_pkg == Some(pkg_name.as_str());
         let mut items: Vec<SidebarItemCtx> = Vec::new();
         for entry in all_items {
-            let entry_pkg = entry.package.as_ref().to_str_lossy();
-            if entry_pkg != pkg_name {
+            if entry.package != pkg {
                 continue;
             }
             let entry_name = entry.name.to_str_lossy().into_owned();
@@ -257,11 +258,11 @@ pub fn generate_docs(
     let mut all_items: Vec<ItemEntry> = Vec::new();
     let mut pkg_datas: Vec<PkgData> = Vec::new();
 
-    for pkg in packages.iter() {
-        let analysis = db.get_package_analysis(pkg.clone());
-        let parsing = db.get_parsing(pkg.clone());
+    for pkg in packages.ids() {
+        let analysis = db.get_package_analysis(pkg);
+        let parsing = db.get_parsing(pkg);
 
-        let pkg_str: String = pkg.as_ref().to_str_lossy().into_owned();
+        let pkg_str: String = packages.name(pkg).to_str_lossy().into_owned();
         let pkg_dir = out_dir.join(&pkg_str);
         std::fs::create_dir_all(&pkg_dir)?;
 
@@ -346,12 +347,12 @@ pub fn generate_docs(
         style_href: style_href(0),
         all_packages: project_sidebar,
         packages: packages
-            .iter()
+            .ids()
             .map(|pkg| {
-                let pkg_name = pkg.as_ref().to_str_lossy();
+                let pkg_name = packages.name(pkg).to_str_lossy();
                 let count = all_items
                     .iter()
-                    .filter(|e| e.package.as_ref().to_str_lossy() == pkg_name)
+                    .filter(|e| e.package == pkg)
                     .count();
                 PackageEntry {
                     name: pkg_name.into_owned(),
@@ -362,7 +363,7 @@ pub fn generate_docs(
         items: all_items
             .iter()
             .map(|entry| ItemEntryCtx {
-                package: entry.package.as_ref().to_str_lossy().into_owned(),
+                package: packages.name(entry.package).to_str_lossy().into_owned(),
                 name: entry.name.to_str_lossy().into_owned(),
                 kind_label: kind_label(&entry.kind).to_owned(),
                 filename: format!("{}.html", entry.name.to_str_lossy()),
@@ -378,7 +379,7 @@ pub fn generate_docs(
 
     // Per-package pages
     for pkg_data in &pkg_datas {
-        let pkg_str: String = pkg_data.package.as_ref().to_str_lossy().into_owned();
+        let pkg_str: String = packages.name(pkg_data.package).to_str_lossy().into_owned();
         let pkg_dir = out_dir.join(&pkg_str);
 
         // Package index (active package, no current item)
@@ -401,8 +402,7 @@ pub fn generate_docs(
 
         // Item pages (active package + current item)
         for entry in &all_items {
-            let entry_pkg = entry.package.as_ref().to_str_lossy();
-            if entry_pkg != pkg_str {
+            if entry.package != pkg_data.package {
                 continue;
             }
             let item_name = entry.name.to_str_lossy().into_owned();
@@ -419,9 +419,9 @@ pub fn generate_docs(
             //
             // Simplest approach: rebuild the context and re-render.
             let ast_node_id = db
-                .get_package_analysis(entry.package.clone())
+                .get_package_analysis(entry.package)
                 .item_ast_node_id(entry.name.as_ref());
-            let parsing = db.get_parsing(entry.package.clone());
+            let parsing = db.get_parsing(entry.package);
             let node = parsing.ast_node(ast_node_id);
             let kind = node_kind(&node);
 
@@ -432,7 +432,7 @@ pub fn generate_docs(
                     &parsing,
                     db,
                     &symboltable,
-                    &entry.package,
+                    entry.package,
                     entry.name.as_bstr(),
                     entry.doc_body.as_bstr(),
                     &item_sidebar,
@@ -590,12 +590,12 @@ fn render_moddef_page_with_sidebar(
     parsing: &Parsing,
     db: &Db,
     symboltable: &SymbolTable,
-    pkg: &PackageFqn,
+    pkg: PackageId,
     item_name: &BStr,
     doc_body: &BStr,
     all_packages: &[SidebarPkgCtx],
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let pkg_str = pkg.as_ref().to_str_lossy().into_owned();
+    let pkg_str = db.get_packages().name(pkg).to_str_lossy().into_owned();
     let name_str: String = item_name.to_str_lossy().into_owned();
 
     // Build FQN for symbol lookup
@@ -745,7 +745,7 @@ fn render_moddef_page(
     parsing: &Parsing,
     db: &Db,
     symboltable: &SymbolTable,
-    pkg: &PackageFqn,
+    pkg: PackageId,
     item_name: &BStr,
     doc_body: &BStr,
 ) -> Result<String, Box<dyn std::error::Error>> {

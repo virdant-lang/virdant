@@ -7,7 +7,7 @@ use bstr::{BStr, ByteSlice};
 
 use crate::analysis::Location;
 use crate::common::{ComponentKind, DriverType};
-use crate::package::PackageFqn;
+use crate::package::PackageId;
 use crate::common::source::{Region, Span};
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::{InternedString, Parsing};
@@ -105,7 +105,7 @@ impl<'p> AstNode<'p> {
         Location::new(self.package(), self.id)
     }
 
-    pub fn package(&self) -> PackageFqn {
+    pub fn package(&self) -> PackageId {
         self.parsing.package()
     }
 

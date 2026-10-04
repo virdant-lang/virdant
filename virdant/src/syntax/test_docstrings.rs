@@ -5,13 +5,17 @@
 #[cfg(test)]
 mod test_docstrings {
     use crate::common::source::{Source, Span};
-    use crate::package::PackageFqn;
+    use std::sync::LazyLock;
+    use crate::package::PackageTable;
     use crate::syntax::parsing::parse;
     use crate::syntax::ast::AstNode;
     use crate::syntax::payload::AstNodePayload;
 
     fn test_source(text: &[u8]) -> Source {
-        Source::new(PackageFqn::new("test".into()), text.into())
+        static TABLE: LazyLock<PackageTable> = LazyLock::new(|| {
+            PackageTable::new(vec!["builtin".into(), "test".into()])
+        });
+        Source::new(TABLE.id(b"test".as_bstr()).unwrap(), text.into())
     }
 
     #[test]

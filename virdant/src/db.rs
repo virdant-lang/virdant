@@ -33,7 +33,7 @@ use crate::types::typedef::TypeIndex;
 use crate::types::signature::Signature;
 use crate::types::{ExprRoot, Type, Typing, TypingContext};
 use crate::diagnostics::Diagnostic;
-use crate::package::PackageFqn;
+use crate::package::{PackageId, PackageTable};
 use crate::common::source::{Region, Source};
 use crate::syntax::ast::AstNodeId;
 use crate::syntax::parsing::Parsing;
@@ -41,13 +41,13 @@ use crate::syntax::parsing::Parsing;
 pub use guts::*;
 
 queries! {
-    Packages() -> Arc<Vec<PackageFqn>>;
-    Source(package: PackageFqn) -> Source;
-    Parsing(package: PackageFqn) -> Arc<Parsing>;
+    Packages() -> Arc<PackageTable>;
+    Source(package: PackageId) -> Source;
+    Parsing(package: PackageId) -> Arc<Parsing>;
     String(string: InternedString) -> Arc<BString>; // TODO is this used anywhere?
     SyntaxErrors() -> Arc<Vec<Diagnostic>>; // TODO is this even useful?
     LocationRegion(location: Location) -> Region;
-    PackageAnalysis(package: PackageFqn) -> Arc<PackageAnalysis>;
+    PackageAnalysis(package: PackageId) -> Arc<PackageAnalysis>;
     ComponentAnalysis(symbol_id: SymbolId) -> Arc<ComponentAnalysis>;
     SymbolTable() -> Arc<SymbolTable>;
     SymbolAst(symbol_id: SymbolId) -> AstNodeId; // TODO Should return Location. Also, is this used?
@@ -131,12 +131,12 @@ impl Query {
 
 // These methods are all defined on BOTH Db and on Builder.
 // And service the given queries.
-db_getter!(get_packages : Packages() -> Arc<Vec<PackageFqn>>);
-db_getter!(get_source : Source(package : PackageFqn) -> Source);
-db_getter!(get_parsing : Parsing(package: PackageFqn) -> Arc<Parsing>);
+db_getter!(get_packages : Packages() -> Arc<PackageTable>);
+db_getter!(get_source : Source(package : PackageId) -> Source);
+db_getter!(get_parsing : Parsing(package: PackageId) -> Arc<Parsing>);
 db_getter!(string : String(string: InternedString) -> Arc<BString>);
 db_getter!(get_syntax_errors : SyntaxErrors() -> Arc<Vec<Diagnostic>>);
-db_getter!(get_package_analysis : PackageAnalysis(package: PackageFqn) -> Arc<PackageAnalysis>);
+db_getter!(get_package_analysis : PackageAnalysis(package: PackageId) -> Arc<PackageAnalysis>);
 db_getter!(get_component_analysis : ComponentAnalysis(moddef: SymbolId) -> Arc<ComponentAnalysis>);
 db_getter!(get_symboltable : SymbolTable() -> Arc<SymbolTable>);
 db_getter!(get_symbol_ast : SymbolAst(symbol_id: SymbolId) -> AstNodeId);

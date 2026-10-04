@@ -12,13 +12,13 @@ use crate::common::ComponentKind;
 use crate::db::Builder;
 use crate::diagnostics;
 use crate::diagnostics::Diagnostic;
-use crate::package::PackageFqn;
+use crate::package::{PackageId, PackageTable};
 use crate::common::source::Region;
 use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 
-pub(crate) fn build_package_analysis(builder: &mut Builder, package: PackageFqn) -> Arc<PackageAnalysis> {
+pub(crate) fn build_package_analysis(builder: &mut Builder, package: PackageId) -> Arc<PackageAnalysis> {
     let parsing = builder.get_parsing(package);
     let packages = builder.get_packages();
     let analysis = PackageAnalysis::new(&packages, parsing.clone());
@@ -28,18 +28,18 @@ pub(crate) fn build_package_analysis(builder: &mut Builder, package: PackageFqn)
 
 #[derive(Debug)]
 pub struct PackageAnalysis {
-    package: PackageFqn,
-    imports: IndexSet<PackageFqn>,
+    package: PackageId,
+    imports: IndexSet<PackageId>,
     items: IndexMap<BString, Vec<AstNodeId>>,
     expr_roots: Vec<AstNodeId>,
     diagnostics: Vec<Diagnostic>,
 }
 
 impl PackageAnalysis {
-    pub fn new(packages: &[PackageFqn], parsing: Arc<Parsing>) -> PackageAnalysis {
+    pub fn new(packages: &PackageTable, parsing: Arc<Parsing>) -> PackageAnalysis {
         let mut analysis = PackageAnalysis {
             package: parsing.package(),
-            imports: vec![PackageFqn::new("builtin".into())].into_iter().collect(),
+            imports: vec![packages.builtin()].into_iter().collect(),
             items: IndexMap::new(),
             expr_roots: vec![],
             diagnostics: vec![],
@@ -50,39 +50,41 @@ impl PackageAnalysis {
         analysis
     }
 
-    fn add_and_validate_imports(&mut self, packages: &[PackageFqn], parsing: Arc<Parsing>) {
+    fn add_and_validate_imports(&mut self, packages: &PackageTable, parsing: Arc<Parsing>) {
         let root = parsing.root();
         for child_node in root.children() {
             if let AstNodePayload::Import(import) = child_node.payload() {
-                let package = PackageFqn::new(parsing.string(import.package).into());
-                if packages.contains(&package) {
-                    if !self.imports.insert(package) {
-                        let imported_package = PackageFqn::new(parsing.string(child_node.import_package().unwrap()).to_owned());
+                let name = parsing.string(import.package);
+                match packages.id(name) {
+                    Some(package_id) => {
+                        if !self.imports.insert(package_id) {
+                            self.diagnostics.push(Diagnostic::new(
+                                Region::new(self.package(), child_node.span()),
+                                diagnostics::DuplicateImport {
+                                    imported_package: name.to_owned(),
+                                },
+                            ));
+                        }
+                    }
+                    None => {
                         self.diagnostics.push(Diagnostic::new(
                             Region::new(self.package(), child_node.span()),
-                            diagnostics::DuplicateImport {
-                                imported_package,
+                            diagnostics::UnresolvedImportError {
+                                imported_package: name.to_owned(),
                             },
                         ));
                     }
-                } else {
-                    self.diagnostics.push(Diagnostic::new(
-                        Region::new(self.package(), child_node.span()),
-                        diagnostics::UnresolvedImportError {
-                            imported_package: package,
-                        },
-                    ));
                 }
             }
         }
     }
 
-    pub fn package(&self) -> PackageFqn {
-        self.package.clone()
+    pub fn package(&self) -> PackageId {
+        self.package
     }
 
-    pub fn imports(&self) -> Vec<PackageFqn> {
-        self.imports.iter().cloned().collect()
+    pub fn imports(&self) -> Vec<PackageId> {
+        self.imports.iter().copied().collect()
     }
 
     pub fn diagnostics(&self) -> Vec<Diagnostic> {

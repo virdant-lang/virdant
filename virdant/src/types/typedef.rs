@@ -354,8 +354,8 @@ pub(crate) fn build_type_index(builder: &mut Builder) -> Arc<TypeIndex> {
     let symboltable = builder.get_symboltable();
 
     let packages = builder.get_packages();
-    for package in packages.iter() {
-        let parsing = builder.get_parsing(package.clone());
+    for package in packages.ids() {
+        let parsing = builder.get_parsing(package);
         type_index.gather_type_roots(builder, parsing.root(), &symboltable);
     }
 

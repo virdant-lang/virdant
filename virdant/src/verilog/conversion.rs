@@ -13,7 +13,7 @@ use crate::analysis::location::Location;
 use crate::analysis::symbols::SymbolTable;
 use crate::common::{self, ComponentKind, DriverType, Radix, TypeScheme, Width, WordValue};
 use crate::db::Db;
-use crate::package::PackageFqn;
+use crate::package::PackageId;
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
 use crate::types::typing::Primitive;
@@ -104,8 +104,8 @@ impl<'d> Converter<'d> {
         self.build_module_info();
         let mut files = vec![];
         let packages = self.db.get_packages();
-        for package in packages.iter() {
-            if let Some(file) = self.convert_package(package.clone()) {
+        for package in packages.ids() {
+            if let Some(file) = self.convert_package(package) {
                 files.push(file);
             }
         }
@@ -115,14 +115,14 @@ impl<'d> Converter<'d> {
     fn build_module_info(&mut self) {
         let symboltable = self.db.get_symboltable();
         let packages = self.db.get_packages();
-        for package in packages.iter() {
-            let parsing = self.db.get_parsing(package.clone());
+        for package in packages.ids() {
+            let parsing = self.db.get_parsing(package);
             for item_ast in parsing.root().children() {
                 let AstNodePayload::ModDef(moddef) = item_ast.payload() else {
                     continue;
                 };
                 let moddef_name = parsing.string(moddef.name.clone()).to_str_lossy().into_owned();
-                let module_path = qualified_module_name(&package.to_string(), &moddef_name);
+                let module_path = qualified_module_name(&self.db.get_packages().name(package).to_str_lossy(), &moddef_name);
                 let emitted_name = if moddef.is_export {
                     valid_verilog_name(&moddef_name)
                 } else {
@@ -131,7 +131,7 @@ impl<'d> Converter<'d> {
                 self.emitted_module_names.insert(module_path.clone(), emitted_name);
 
                 let moddef_symbol = symboltable
-                    .resolve_item_in_package(parsing.string(moddef.name), package.clone())
+                    .resolve_item_in_package(parsing.string(moddef.name), package)
                     .unwrap();
                 let ports_of = self.db.get_ports_of(moddef_symbol.id());
                 let mut ports = vec![];
@@ -146,15 +146,15 @@ impl<'d> Converter<'d> {
         }
     }
 
-    fn convert_package(&self, package: PackageFqn) -> Option<verilog::VerilogFile> {
-        let parsing = self.db.get_parsing(package.clone());
-        let package_name = package.to_string();
+    fn convert_package(&self, package: PackageId) -> Option<verilog::VerilogFile> {
+        let parsing = self.db.get_parsing(package);
+        let package_name = self.db.get_packages().name(package).to_str_lossy().into_owned();
         let mut modules = vec![];
         for item_ast in parsing.root().children() {
             let AstNodePayload::ModDef(_) = item_ast.payload() else {
                 continue;
             };
-            modules.push(self.convert_moddef(&package, item_ast));
+            modules.push(self.convert_moddef(package, item_ast));
         }
         if modules.is_empty() {
             return None;
@@ -165,18 +165,18 @@ impl<'d> Converter<'d> {
         })
     }
 
-    fn convert_moddef(&self, package: &PackageFqn, item_ast: AstNode) -> verilog::Module {
+    fn convert_moddef(&self, package: PackageId, item_ast: AstNode) -> verilog::Module {
         let AstNodePayload::ModDef(moddef) = item_ast.payload() else {
             panic!("expected ModDef");
         };
-        let parsing = self.db.get_parsing(package.clone());
+        let parsing = self.db.get_parsing(package);
         let moddef_name = parsing.string(moddef.name.clone()).to_str_lossy().into_owned();
-        let module_path = qualified_module_name(&package.to_string(), &moddef_name);
+        let module_path = qualified_module_name(&self.db.get_packages().name(package).to_str_lossy(), &moddef_name);
         let module_name = self.emitted_module_names[&module_path].clone();
 
         let symboltable = self.db.get_symboltable();
         let moddef_symbol = symboltable
-            .resolve_item_in_package(parsing.string(moddef.name), package.clone())
+            .resolve_item_in_package(parsing.string(moddef.name), package)
             .unwrap();
         let component_analysis = self.db.get_component_analysis(moddef_symbol.id());
 
@@ -276,7 +276,7 @@ impl<'d> Converter<'d> {
                         .find(|c| matches!(c.payload(), AstNodePayload::Ofness(_)))
                         .cloned()
                         .expect("Submodule node must have an Ofness child");
-                    let mod_path = render_ofness_path(ofness_node, package, &symboltable);
+                    let mod_path = render_ofness_path(ofness_node, self.db, package, &symboltable);
                     let ports_info = self.module_ports.get(&mod_path).cloned().unwrap_or_default();
                     let sub_name = self.emitted_module_names.get(&mod_path)
                         .cloned()
@@ -461,7 +461,7 @@ impl<'d> Converter<'d> {
     /// `Driver::When` becomes a right-associative ternary chain (`cond ? then : else`).
     fn convert_driver_to_expr(
         &self,
-        package: &PackageFqn,
+        package: PackageId,
         driver: &Driver,
         typ: &Type,
         scheduler: &mut ExprScheduler,
@@ -480,7 +480,7 @@ impl<'d> Converter<'d> {
 
     fn convert_driver_when_to_expr(
         &self,
-        package: &PackageFqn,
+        package: PackageId,
         driver_when: &DriverWhen,
         typ: &Type,
         scheduler: &mut ExprScheduler,
@@ -510,7 +510,7 @@ impl<'d> Converter<'d> {
     /// with non-blocking assignments.  When there is no else clause, no else branch is emitted.
     fn convert_latched_driver_when_to_stmts(
         &self,
-        package: &PackageFqn,
+        package: PackageId,
         driver_when: &DriverWhen,
         typ: &Type,
         path: &str,
@@ -541,7 +541,7 @@ impl<'d> Converter<'d> {
     /// to `path`.  Used in both combinational (via temp-reg) and sequential contexts.
     fn convert_driver_match_to_stmts(
         &self,
-        package: &PackageFqn,
+        package: PackageId,
         driver_match: &DriverMatch,
         typ: &Type,
         path: &str,
@@ -589,7 +589,7 @@ impl<'d> Converter<'d> {
     /// Convert a `Driver::Match` into a Verilog expression using a temp-reg + always @(*) casez.
     fn convert_driver_match_to_expr(
         &self,
-        package: &PackageFqn,
+        package: PackageId,
         driver_match: &DriverMatch,
         typ: &Type,
         scheduler: &mut ExprScheduler,
@@ -654,7 +654,7 @@ impl<'d> Converter<'d> {
 
     fn convert_latched_driver_to_stmts(
         &self,
-        package: &PackageFqn,
+        package: PackageId,
         driver: &Driver,
         typ: &Type,
         path: &str,
@@ -693,7 +693,7 @@ impl<'d> Converter<'d> {
     /// `always @(posedge clock)` context.
     fn convert_match_expr_to_nonblocking_stmts(
         &self,
-        package: &PackageFqn,
+        package: PackageId,
         node: AstNode,
         typ: &Type,
         target_name: &str,
@@ -996,7 +996,7 @@ impl<'d> Converter<'d> {
 
     fn convert_expr(
         &self,
-        package: &PackageFqn,
+        package: PackageId,
         node: AstNode,
         typ: &Type,
         db: &Db,
@@ -1499,7 +1499,7 @@ impl<'d> Converter<'d> {
                 use std::collections::HashMap;
                 use bstr::ByteSlice;
                 let mut field_exprs: HashMap<String, verilog::Expr> = HashMap::new();
-                let parsing = self.db.get_parsing(package.clone());
+                let parsing = self.db.get_parsing(package);
 
                 for assign_node in node.children() {
                     let AstNodePayload::Assign(assign) = assign_node.payload() else {
@@ -1558,7 +1558,7 @@ impl<'d> Converter<'d> {
 
                 // Get the struct fields to determine bit positions
                 let struct_fields = self.db.get_struct_fields(typedef_symbol_id);
-                let parsing = self.db.get_parsing(package.clone());
+                let parsing = self.db.get_parsing(package);
                 let field_name = parsing.string(field.field);
 
                 // Find the field and calculate its bit range
@@ -1625,7 +1625,7 @@ impl<'d> Converter<'d> {
 
     fn convert_when_expr(
         &self,
-        package: &PackageFqn,
+        package: PackageId,
         children: &[AstNode],
         typ: &Type,
         scheduler: &mut ExprScheduler,
@@ -1704,7 +1704,7 @@ impl<'d> Converter<'d> {
         })
     }
 
-    fn convert_zext(&self, package: &PackageFqn, node: AstNode, typ: &Type, scheduler: &mut ExprScheduler) -> verilog::Expr {
+    fn convert_zext(&self, package: PackageId, node: AstNode, typ: &Type, scheduler: &mut ExprScheduler) -> verilog::Expr {
         // child(0) is function name, child(1) is the argument
         let inner = node.child(1);
         let inner_type = self.node_type(package, &inner).unwrap();
@@ -1728,7 +1728,7 @@ impl<'d> Converter<'d> {
         })
     }
 
-    fn convert_trunc(&self, package: &PackageFqn, node: AstNode, typ: &Type, scheduler: &mut ExprScheduler) -> verilog::Expr {
+    fn convert_trunc(&self, package: PackageId, node: AstNode, typ: &Type, scheduler: &mut ExprScheduler) -> verilog::Expr {
         // child(0) is function name, child(1) is the argument
         let inner = node.child(1);
         let inner_type = self.node_type(package, &inner).unwrap();
@@ -1745,7 +1745,7 @@ impl<'d> Converter<'d> {
         })
     }
 
-    fn convert_sext(&self, package: &PackageFqn, node: AstNode, typ: &Type, scheduler: &mut ExprScheduler) -> verilog::Expr {
+    fn convert_sext(&self, package: PackageId, node: AstNode, typ: &Type, scheduler: &mut ExprScheduler) -> verilog::Expr {
         // child(0) is function name, child(1) is the argument
         let inner = node.child(1);
         let inner_type = self.node_type(package, &inner).unwrap();
@@ -1782,15 +1782,15 @@ impl<'d> Converter<'d> {
         self.db.get_typing(exprroot)
     }
 
-    fn node_type(&self, package: &PackageFqn, node: &AstNode) -> Option<Type> {
-        self.db.get_typeof(Location::new(package.clone(), node.id())).ok()
+    fn node_type(&self, package: PackageId, node: &AstNode) -> Option<Type> {
+        self.db.get_typeof(Location::new(package, node.id())).ok()
     }
 
-    fn node_width(&self, package: &PackageFqn, node: &AstNode) -> Width {
+    fn node_width(&self, package: PackageId, node: &AstNode) -> Width {
         self.node_type(package, node).map(|t| type_width(&t, self.db)).unwrap_or(0)
     }
 
-    fn node_or_expected_width(&self, package: &PackageFqn, node: &AstNode, expected: &Type) -> Width {
+    fn node_or_expected_width(&self, package: PackageId, node: &AstNode, expected: &Type) -> Width {
         self.node_type(package, node)
             .map(|t| type_width(&t, self.db))
             .unwrap_or_else(|| type_width(expected, self.db))
@@ -1949,7 +1949,7 @@ fn type_width(typ: &Type, db: &Db) -> Width {
     }
 }
 
-fn render_ofness_path(ofness_node: AstNode, package: &PackageFqn, symboltable: &SymbolTable) -> String {
+fn render_ofness_path(ofness_node: AstNode, db: &Db, package: PackageId, symboltable: &SymbolTable) -> String {
     let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
         panic!("expected Ofness node");
     };
@@ -1963,7 +1963,7 @@ fn render_ofness_path(ofness_node: AstNode, package: &PackageFqn, symboltable: &
             if symboltable.builtin_names.contains(module_name.as_bytes()) {
                 "builtin".to_string()
             } else {
-                package.to_string()
+                db.get_packages().name(package).to_str_lossy().into_owned()
             }
         }
     };

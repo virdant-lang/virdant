@@ -14,8 +14,8 @@ use crate::syntax::ast::AstNode;
 pub(crate) fn find_exprroots(builder: &mut Builder) -> Arc<Vec<ExprRoot>> {
     let mut exprroots = vec![];
     let packages = builder.get_packages();
-    for package in packages.iter() {
-        let analysis = builder.get_package_analysis(package.clone());
+    for package in packages.ids() {
+        let analysis = builder.get_package_analysis(package);
 
         for ast_node_id in analysis.expr_roots_node_ids() {
             let location = Location::new(analysis.package(), ast_node_id);
@@ -28,8 +28,8 @@ pub(crate) fn find_exprroots(builder: &mut Builder) -> Arc<Vec<ExprRoot>> {
 pub(crate) fn build_syntax_errors(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     let mut diagnostics = vec![];
     let packages = builder.get_packages();
-    for package in packages.iter() {
-        let parsing = builder.get_parsing(package.clone());
+    for package in packages.ids() {
+        let parsing = builder.get_parsing(package);
         diagnostics.extend(parsing.diagnostics());
     }
 
@@ -40,8 +40,8 @@ pub(crate) fn build_all_exprs(builder: &mut Builder) -> Arc<Vec<Location>> {
     let mut exprs = vec![];
 
     let packages = builder.get_packages();
-    for package in packages.iter() {
-        let parsing = builder.get_parsing(package.clone());
+    for package in packages.ids() {
+        let parsing = builder.get_parsing(package);
         collect_expr_locations(parsing.root(), &mut exprs);
     }
 

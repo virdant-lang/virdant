@@ -3,7 +3,7 @@
 //! indexed by dense `SymbolId`s, with lookup/resolution/filtering
 //! helpers and diagnostics collection.
 
-use bstr::{BStr, BString};
+use bstr::{BStr, BString, ByteSlice};
 use indexmap::IndexSet;
 use indexmap::IndexMap;
 use std::sync::Arc;
@@ -11,7 +11,7 @@ use std::sync::Arc;
 use crate::analysis::PackageAnalysis;
 use crate::db::Builder;
 use crate::diagnostics;
-use crate::package::PackageFqn;
+use crate::package::{PackageId, PackageTable};
 use crate::common::source::Region;
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::parsing::Parsing;
@@ -24,6 +24,7 @@ pub struct SymbolTable {
     symbols_by_id: Vec<Symbol>,
     pub diagnostics: Vec<Diagnostic>,
     pub builtin_names: IndexSet<BString>,
+    builtin: PackageId,
 }
 
 #[derive(Debug, Clone)]
@@ -113,19 +114,17 @@ impl SymbolTable {
         self.lookup_item_by_fqn(item_fqn)
     }
 
-    pub fn resolve_item_in_package(&self, name: &BStr, package: PackageFqn) -> Option<&Symbol> {
-        use bstr::ByteSlice;
-
+    pub fn resolve_item_in_package(&self, name: &BStr, package: PackageId) -> Option<&Symbol> {
         self.symbols_by_id.iter().find(|s| {
             s.kind.is_item() && s.location.package() == package && s.name.as_bstr() == name
         })
     }
 
-    pub fn resolve_item(&self, name: &BStr, in_package: PackageFqn) -> Option<&Symbol> {
+    pub fn resolve_item(&self, name: &BStr, in_package: PackageId) -> Option<&Symbol> {
         if let Some((_package_name, _item_name)) = try_split_qualification(name) {
             self.resolve_item_fqn(name)
         } else if self.builtin_names.contains(name) {
-            self.resolve_item_in_package(name, PackageFqn::new("builtin".into()))
+            self.resolve_item_in_package(name, self.builtin)
         } else {
             self.resolve_item_in_package(name, in_package)
         }
@@ -182,7 +181,7 @@ impl Symbol {
         self.location.clone()
     }
 
-    pub fn package(&self) -> PackageFqn {
+    pub fn package(&self) -> PackageId {
         self.location.package()
     }
 
@@ -232,13 +231,14 @@ pub(crate) fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
     let mut symbols = vec![];
     let mut builtin_names = vec![];
 
-    for package in packages.iter() {
+    for package in packages.ids() {
         build_symboltable_package(
             builder,
+            &packages,
             &mut symbols,
             &mut diagnostics,
             &mut builtin_names,
-            package.clone(),
+            package,
         );
     }
 
@@ -249,18 +249,20 @@ pub(crate) fn build_symboltable(builder: &mut Builder) -> Arc<SymbolTable> {
         symbols_by_id,
         diagnostics,
         builtin_names: builtin_names.into_iter().collect(),
+        builtin: packages.builtin(),
     })
 }
 
 fn build_symboltable_package(
     builder: &mut Builder,
+    packages: &PackageTable,
     symbols: &mut Vec<(BString, Symbol)>,
     diagnostics: &mut Vec<Diagnostic>,
     builtin_names: &mut Vec<BString>,
-    package: PackageFqn,
+    package: PackageId,
 ) {
-    let analysis = builder.get_package_analysis(package.clone());
-    let parsing = builder.get_parsing(package.clone());
+    let analysis = builder.get_package_analysis(package);
+    let parsing = builder.get_parsing(package);
 
     diagnostics.extend(analysis.diagnostics());
 
@@ -269,7 +271,8 @@ fn build_symboltable_package(
             symbols,
             diagnostics,
             builtin_names,
-            package.clone(),
+            packages,
+            package,
             &analysis,
             &parsing,
             item_name,
@@ -281,7 +284,8 @@ fn build_symboltable_item(
     symbols: &mut Vec<(BString, Symbol)>,
     diagnostics: &mut Vec<Diagnostic>,
     builtin_names: &mut Vec<BString>,
-    package: PackageFqn,
+    packages: &PackageTable,
+    package: PackageId,
     analysis: &PackageAnalysis,
     parsing: &Parsing,
     item_name: &BString,
@@ -289,11 +293,12 @@ fn build_symboltable_item(
 ) {
     let ast_node_id = analysis.item_ast_node_id(item_name.as_ref());
     let node = parsing.ast_node(ast_node_id);
-    let location = Location::new(package.clone(), ast_node_id);
-    let fqn: BString = format!("{}::{}", package, item_name.clone()).into();
+    let location = Location::new(package, ast_node_id);
+    let fqn: BString =
+        format!("{}::{}", packages.name(package).to_str_lossy(), item_name.clone()).into();
     let kind = node_to_symbol_kind(&node);
 
-    if package == PackageFqn::new("builtin".into()) {
+    if package == packages.builtin() {
         builtin_names.push(item_name.to_owned());
     }
 
@@ -316,6 +321,7 @@ fn build_symboltable_item(
             build_symboltable_moddef_slot(
                 symbols,
                 diagnostics,
+                packages,
                 package,
                 parsing,
                 item_name,
@@ -330,6 +336,7 @@ fn build_symboltable_item(
             build_symboltable_typedef_slot(
                 symbols,
                 diagnostics,
+                packages,
                 package,
                 parsing,
                 item_name,
@@ -346,7 +353,8 @@ fn build_symboltable_item(
 fn build_symboltable_moddef_slot(
     symbols: &mut Vec<(BString, Symbol)>,
     diagnostics: &mut Vec<Diagnostic>,
-    package: PackageFqn,
+    packages: &PackageTable,
+    package: PackageId,
     parsing: &Parsing,
     item_name: &BString,
     node: &AstNode<'_>,
@@ -371,7 +379,7 @@ fn build_symboltable_moddef_slot(
             _ => continue,
         };
 
-        let component_region = Region::new(package.clone(), child.span());
+        let component_region = Region::new(package, child.span());
 
         if seen.contains_key(&component_name) {
             diagnostics.push(Diagnostic::new(
@@ -386,9 +394,13 @@ fn build_symboltable_moddef_slot(
 
         seen.insert(component_name.clone(), component_region);
 
-        let component_fqn: BString =
-            format!("{}::{}::{}", package, item_name, component_name).into();
-        let component_location = Location::new(package.clone(), component_ast_node_id);
+        let component_fqn: BString = format!(
+            "{}::{}::{}",
+            packages.name(package).to_str_lossy(),
+            item_name,
+            component_name
+        ).into();
+        let component_location = Location::new(package, component_ast_node_id);
         let component_id = SymbolId(symbols.len().try_into().unwrap());
 
         symbols.push((
@@ -408,7 +420,8 @@ fn build_symboltable_moddef_slot(
 fn build_symboltable_typedef_slot(
     symbols: &mut Vec<(BString, Symbol)>,
     diagnostics: &mut Vec<Diagnostic>,
-    package: PackageFqn,
+    packages: &PackageTable,
+    package: PackageId,
     parsing: &Parsing,
     item_name: &BString,
     node: &AstNode<'_>,
@@ -433,7 +446,7 @@ fn build_symboltable_typedef_slot(
             _ => continue,
         };
 
-        let slot_region = Region::new(package.clone(), child.span());
+        let slot_region = Region::new(package, child.span());
 
         if seen.contains_key(&slot_name) {
             diagnostics.push(Diagnostic::new(
@@ -448,9 +461,13 @@ fn build_symboltable_typedef_slot(
 
         seen.insert(slot_name.clone(), slot_region);
 
-        let slot_fqn: BString =
-            format!("{}::{}::{}", package, item_name, slot_name).into();
-        let slot_location = Location::new(package.clone(), slot_ast_node_id);
+        let slot_fqn: BString = format!(
+            "{}::{}::{}",
+            packages.name(package).to_str_lossy(),
+            item_name,
+            slot_name
+        ).into();
+        let slot_location = Location::new(package, slot_ast_node_id);
         let slot_id = SymbolId(symbols.len().try_into().unwrap());
 
         symbols.push((

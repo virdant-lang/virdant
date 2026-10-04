@@ -1,21 +1,21 @@
-//! Defines `Location`, a lightweight value pairing a `PackageFqn` with
+//! Defines `Location`, a lightweight value pairing a `PackageId` with
 //! an `AstNodeId` that uniquely identifies an AST node across the whole
 //! compilation, serving as the canonical reference handle in the
 //! analysis layer.
 
-use crate::package::PackageFqn;
+use crate::package::PackageId;
 use crate::syntax::ast::AstNodeId;
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct Location(PackageFqn, AstNodeId);
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Location(PackageId, AstNodeId);
 
 impl Location {
-    pub fn new(package: PackageFqn, ast_node_id: AstNodeId) -> Location {
+    pub fn new(package: PackageId, ast_node_id: AstNodeId) -> Location {
         Location(package, ast_node_id)
     }
 
-    pub fn package(&self) -> PackageFqn {
-        self.0.clone()
+    pub fn package(&self) -> PackageId {
+        self.0
     }
 
     pub fn ast_node_id(&self) -> AstNodeId {
@@ -25,6 +25,6 @@ impl Location {
 
 impl std::fmt::Debug for Location {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Location({}, {:?})", self.0, self.1)
+        write!(f, "Location({:?}, {:?})", self.0, self.1)
     }
 }

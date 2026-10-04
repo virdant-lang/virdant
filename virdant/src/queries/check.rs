@@ -6,6 +6,7 @@
 use std::sync::Arc;
 
 use bstr::BString;
+use bstr::ByteSlice;
 use indexmap::IndexMap;
 
 use crate::analysis::symbols::{SymbolId, SymbolKind};
@@ -14,7 +15,7 @@ use crate::common::source::Region;
 use crate::common::WordValue;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticPayload};
-use crate::package::PackageFqn;
+use crate::package::PackageId;
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::token::KEYWORDS;
 
@@ -33,13 +34,14 @@ fn package_name_is_keyword(name: &str) -> bool {
 
 /// Check that no package name (except `builtin`) collides with a keyword.
 fn check_package_name_not_keyword(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
-    for package in builder.get_packages().iter() {
-        let package_name: &str = &package.to_string();
+    let packages = builder.get_packages();
+    for package in packages.ids() {
+        let package_name = packages.name(package).to_str_lossy().into_owned();
         if package_name == "builtin" {
             continue;
         }
-        if package_name_is_keyword(package_name) {
-            let parsing = builder.get_parsing(package.clone());
+        if package_name_is_keyword(&package_name) {
+            let parsing = builder.get_parsing(package);
             let root_node = parsing.root();
             diagnostics.push(Diagnostic::new(
                 root_node.region(),
@@ -101,11 +103,13 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     // stitching per-module graphs along the instance tree.
     diagnostics.extend(builder.get_combinational_cycle_check().iter().cloned());
 
+    let packages = builder.get_packages();
     diagnostics.sort_by_key(|d| {
         let region = d.region();
+        let package_name = packages.name(region.package()).to_owned();
         let start = region.start();
         let end = region.end();
-        (region.package(), start.line(), start.col(), end.line(), end.col())
+        (package_name, start.line(), start.col(), end.line(), end.col())
     });
 
     Arc::new(diagnostics)
@@ -201,13 +205,14 @@ fn check_mod_cycles(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
             let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
                 continue;
             };
-            let target_package = ofness
-                .package
-                .map(|pkg| PackageFqn::new(parsing.string(pkg).into()))
-                .unwrap_or_else(|| location.package());
+            let packages = builder.get_packages();
+            let target_package: Option<PackageId> = match ofness.package {
+                Some(pkg) => packages.id(parsing.string(pkg)),
+                None => Some(location.package()),
+            };
             let target_name = parsing.string(ofness.name);
             let Some(target_symbol) =
-                symboltable.resolve_item(target_name, target_package)
+                target_package.and_then(|pkg| symboltable.resolve_item(target_name, pkg))
             else {
                 continue;
             };

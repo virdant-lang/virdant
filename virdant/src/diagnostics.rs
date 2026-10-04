@@ -3,7 +3,6 @@
 use bstr::{BStr, BString};
 
 use crate::common::{DriverType, Width, WordValue};
-use crate::package::PackageFqn;
 use crate::common::source::Region;
 
 pub type Type = BString;
@@ -137,12 +136,12 @@ pub struct ImportCycle {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedImportError {
-    pub imported_package: PackageFqn,
+    pub imported_package: BString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuplicateImport {
-    pub imported_package: PackageFqn,
+    pub imported_package: BString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

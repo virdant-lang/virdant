@@ -13,7 +13,7 @@ use crate::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
 use crate::common::graph::{Graph, VertIndex};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
-use crate::package::PackageFqn;
+use crate::package::{PackageId, PackageTable};
 use crate::syntax::ast::AstNode;
 use crate::syntax::payload::AstNodePayload;
 
@@ -112,6 +112,7 @@ fn build_stitched(
     // 2. Imported edges from immediate submodule instances.
     let location = symboltable.symbol(moddef).location();
     let parsing = builder.get_parsing(location.package());
+    let packages = builder.get_packages();
     let moddef_node_id = builder.get_symbol_ast(moddef);
     let moddef_node = parsing.ast_node(moddef_node_id);
 
@@ -121,7 +122,7 @@ fn build_stitched(
         };
         let inst_name = parsing.string(submodule.name);
         let Some(child_id) =
-            resolve_submodule_moddef(&stmt, &parsing, &location, &symboltable)
+            resolve_submodule_moddef(&stmt, &parsing, &location, &symboltable, &packages)
         else {
             continue;
         };
@@ -220,6 +221,7 @@ fn inclusion_order(builder: &mut Builder, moddefs: &[SymbolId]) -> Vec<SymbolId>
     for &m in moddefs {
         adj.entry(m).or_default();
     }
+    let packages = builder.get_packages();
     for &parent in moddefs {
         let location = symboltable.symbol(parent).location();
         let parsing = builder.get_parsing(location.package());
@@ -228,7 +230,7 @@ fn inclusion_order(builder: &mut Builder, moddefs: &[SymbolId]) -> Vec<SymbolId>
         for stmt in node.children() {
             if let AstNodePayload::Submodule(_) = stmt.payload() {
                 if let Some(child) =
-                    resolve_submodule_moddef(&stmt, &parsing, &location, &symboltable)
+                    resolve_submodule_moddef(&stmt, &parsing, &location, &symboltable, &packages)
                 {
                     adj.entry(parent).or_default().push(child);
                 }
@@ -276,17 +278,18 @@ fn resolve_submodule_moddef(
     parsing: &crate::syntax::parsing::Parsing,
     location: &crate::analysis::Location,
     symboltable: &SymbolTable,
+    packages: &PackageTable,
 ) -> Option<SymbolId> {
     let ofness_node = stmt.child(1);
     let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
         return None;
     };
-    let target_package = ofness
-        .package
-        .map(|pkg| PackageFqn::new(parsing.string(pkg).into()))
-        .unwrap_or_else(|| location.package());
+    let target_package: Option<PackageId> = match ofness.package {
+        Some(pkg) => packages.id(parsing.string(pkg)),
+        None => Some(location.package()),
+    };
     let target_name = parsing.string(ofness.name);
-    let target_symbol = symboltable.resolve_item(target_name, target_package)?;
+    let target_symbol = target_package.and_then(|pkg| symboltable.resolve_item(target_name, pkg))?;
     if target_symbol.kind() != SymbolKind::ModDef {
         return None;
     }

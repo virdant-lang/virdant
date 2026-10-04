@@ -7,7 +7,7 @@
 use bstr::{BStr, BString};
 
 use crate::diagnostics::{self, Diagnostic};
-use crate::package::PackageFqn;
+use crate::package::PackageId;
 use crate::common::source::{LineCol, Region, Source, SourceOffset, Span};
 use crate::syntax::ast::{AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
@@ -31,21 +31,21 @@ pub struct Parsing {
     pub(super) docstring_diagnostics: Vec<Diagnostic>,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct InternedString {
-    package: PackageFqn,
+    package: PackageId,
     id: usize,
 }
 
 impl InternedString {
-    pub fn package(&self) -> PackageFqn {
-        self.package.clone()
+    pub fn package(&self) -> PackageId {
+        self.package
     }
 }
 
 impl std::fmt::Debug for InternedString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "InternedString {}#{}", self.package, self.id)
+        write!(f, "InternedString {:?}#{}", self.package, self.id)
     }
 }
 
@@ -59,7 +59,8 @@ fn test_parse() {
     out := inp;
 }
 ";
-    let source = Source::new(crate::package::PackageFqn::new("top".into()), text.into());
+    let table = crate::package::PackageTable::new(vec!["builtin".into(), "top".into()]);
+    let source = Source::new(table.id(b"top"[..].into()).unwrap(), text.into());
     let _ = parse(&source);
 }
 
@@ -110,7 +111,7 @@ impl Parsing {
         }
     }
 
-    pub fn package(&self) -> PackageFqn {
+    pub fn package(&self) -> PackageId {
         self.source.package()
     }
 
@@ -276,6 +277,6 @@ impl Parsing {
     }
 
     pub fn summary(&self) -> String {
-        format!("[Parsing: \"{}\" with {} nodes and {} errors]", self.source.package(), self.payloads.len(), self.errors.len())
+        format!("[Parsing: \"{:?}\" with {} nodes and {} errors]", self.source.package(), self.payloads.len(), self.errors.len())
     }
 }

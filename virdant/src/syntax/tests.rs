@@ -29,7 +29,8 @@ macro_rules! test_example {
                 let mut text = vec![];
                 file.read_to_end(&mut text).unwrap();
 
-                let source = Source::new(crate::package::PackageFqn::new("top".into()), text.into());
+                let table = crate::package::PackageTable::new(vec!["builtin".into(), "top".into()]);
+                let source = Source::new(table.id(b"top".as_bstr()).unwrap(), text.into());
 
                 let start = Instant::now();
                 let parsing = parse(&source);
@@ -83,12 +84,15 @@ test_example!(valid);
 mod test_docstrings {
     use bstr::ByteSlice;
     use crate::common::source::Source;
-    use crate::package::PackageFqn;
+    use crate::package::PackageTable;
     use crate::syntax::parsing::parse;
     use crate::syntax::payload::AstNodePayload;
 
     fn test_source(text: &[u8]) -> Source {
-        Source::new(PackageFqn::new("test".into()), text.into())
+        static TABLE: LazyLock<PackageTable> = LazyLock::new(|| {
+            PackageTable::new(vec!["builtin".into(), "test".into()])
+        });
+        Source::new(TABLE.id(b"test".as_bstr()).unwrap(), text.into())
     }
 
     #[test]
@@ -409,12 +413,15 @@ mod test_docstrings {
 #[cfg(test)]
 mod test_clock_domain {
     use crate::common::source::Source;
-    use crate::package::PackageFqn;
+    use crate::package::PackageTable;
     use crate::syntax::parsing::parse;
     use crate::syntax::payload::AstNodePayload;
 
     fn test_source(text: &[u8]) -> Source {
-        Source::new(PackageFqn::new("test".into()), text.into())
+        static TABLE: LazyLock<PackageTable> = LazyLock::new(|| {
+            PackageTable::new(vec!["builtin".into(), "test".into()])
+        });
+        Source::new(TABLE.id(b"test".as_bstr()).unwrap(), text.into())
     }
 
     #[test]

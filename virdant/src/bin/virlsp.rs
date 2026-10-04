@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
 
-use bstr::BString;
+use bstr::{BString, ByteSlice as _};
 use indexmap::IndexSet;
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
@@ -19,7 +19,7 @@ use virdant::LIB_DIR;
 use virdant::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
 use virdant::types::{ExprRoot, Type};
 use virdant::db::Db;
-use virdant::package::PackageFqn;
+use virdant::package::{PackageId, PackageTable};
 use virdant::common::source::{LineCol, Source, SourceOffset, Span};
 use virdant::syntax::ast::{AstNode, AstNodeId, match_arm_children};
 use virdant::syntax::payload::AstNodePayload;
@@ -44,22 +44,16 @@ enum HoverMode {
 
 fn new_db() -> Db {
     let mut db = Db::new();
-    db.set_packages(vec![]);
-    let builtin = PackageFqn::new("builtin".into());
-    let mut packages = db.get_packages().as_ref().clone();
-    packages.push(builtin.clone());
-    db.set_packages(packages);
-    let builtin_source = Source::new(builtin.clone(), include_bytes!("../../../lib/builtin.vir").as_ref().into());
-    db.set_source(builtin, builtin_source);
+    let builtin_text: BString = include_bytes!("../../../lib/builtin.vir").as_ref().into();
+    db.set_packages(PackageTable::new(vec!["builtin".into()]));
+    let builtin = db.get_packages().builtin();
+    db.set_source(builtin, Source::new(builtin, builtin_text));
     db
 }
 
 fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
-    let mut db = Db::new();
-    db.set_packages(vec![]);
-    let builtin_source = Source::load_file(LIB_DIR.join("builtin.vir"));
-    let mut sources = vec![builtin_source.clone()];
-    db.set_source(builtin_source.package(), builtin_source);
+    let builtin = Source::load_file(LIB_DIR.join("builtin.vir"));
+    let mut files = vec![builtin];
     let source_dir = source_dir.into();
     match std::fs::read_dir(&source_dir) {
         Ok(entries) => {
@@ -72,9 +66,7 @@ fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
                     Some(ext) if ext.to_string_lossy() == "vir" => (),
                     _ => continue,
                 }
-                let source = Source::load_file(filepath);
-                db.set_source(source.package(), source.clone());
-                sources.push(source);
+                files.push(Source::load_file(filepath));
             }
         }
         Err(e) => {
@@ -84,12 +76,20 @@ fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
             );
         }
     }
-    db.set_packages(sources.iter().map(|source| source.package()).collect());
+
+    let mut db = Db::new();
+    let names: Vec<BString> = files.iter().map(|(name, _)| name.clone()).collect();
+    db.set_packages(PackageTable::new(names));
+    let packages = db.get_packages();
+    for (name, text) in files {
+        let package = packages.id(name.as_bstr()).expect("package missing from table");
+        db.set_source(package, Source::new(package, text));
+    }
     db
 }
 
 fn db_is_empty(db: &Db) -> bool {
-    db.get_packages().len() < 2
+    db.get_packages().ids().count() < 2
 }
 
 impl Backend {
@@ -167,7 +167,7 @@ impl LanguageServer for Backend {
             .await;
 
         let workspace = workspace_root(&uri);
-        let package = uri_to_packagefqn(&uri);
+        let package_name = uri_to_package_name(&uri);
         let text: BString = params.text_document.text.into();
 
         {
@@ -176,14 +176,21 @@ impl LanguageServer for Backend {
                 state.db = db_from_dir(&workspace);
             }
 
-            let new_source = Source::new(package.clone(), text);
-            state.db.set_source(package.clone(), new_source);
-            let packages = state.db.get_packages();
-            if !packages.contains(&package) {
-                let mut packages = packages.as_ref().clone();
-                packages.push(package.clone());
-                state.db.set_packages(packages);
-            }
+            let package = match state.db.get_packages().id(package_name.as_bstr()) {
+                Some(package) => package,
+                None => {
+                    // The package is new: rebuild the table wholesale with
+                    // the new name included, then re-resolve its id.
+                    let packages = state.db.get_packages();
+                    let mut names: Vec<BString> = packages.ids().map(|id| packages.name(id).to_owned()).collect();
+                    names.push(package_name.clone());
+                    state.db.set_packages(PackageTable::new(names));
+                    state.db.get_packages().id(package_name.as_bstr()).unwrap()
+                }
+            };
+
+            let new_source = Source::new(package, text);
+            state.db.set_source(package, new_source);
 
             state.uris.insert(uri.clone());
         }
@@ -197,7 +204,7 @@ impl LanguageServer for Backend {
             .log_message(MessageType::ERROR, format!("File changed: {uri}"))
             .await;
 
-        let package = uri_to_packagefqn(&uri);
+        let package_name = uri_to_package_name(&uri);
         let text: BString = params.content_changes[0].text.clone().into();
 
         {
@@ -206,14 +213,18 @@ impl LanguageServer for Backend {
             if db_is_empty(&state.db) {
                 state.db = db_from_dir(workspace);
             }
-            let packages = state.db.get_packages();
-            if !packages.contains(&package) {
-                let mut packages = packages.as_ref().clone();
-                packages.push(package.clone());
-                state.db.set_packages(packages);
-            }
-            let new_source = Source::new(package.clone(), text);
-            state.db.set_source(package.clone(), new_source);
+            let package = match state.db.get_packages().id(package_name.as_bstr()) {
+                Some(package) => package,
+                None => {
+                    let packages = state.db.get_packages();
+                    let mut names: Vec<BString> = packages.ids().map(|id| packages.name(id).to_owned()).collect();
+                    names.push(package_name.clone());
+                    state.db.set_packages(PackageTable::new(names));
+                    state.db.get_packages().id(package_name.as_bstr()).unwrap()
+                }
+            };
+            let new_source = Source::new(package, text);
+            state.db.set_source(package, new_source);
         }
 
         self.check_all_documents().await;
@@ -239,7 +250,6 @@ impl LanguageServer for Backend {
         let position = params.text_document_position_params.position;
         let linecol = LineCol::new((position.line + 1) as usize, (position.character + 1) as usize);
         let uri = params.text_document_position_params.text_document.uri;
-        let package = uri_to_packagefqn(&uri);
 
         self.client
             .log_message(MessageType::INFO, &format!("GOTO DEF at {linecol:?}"))
@@ -247,7 +257,8 @@ impl LanguageServer for Backend {
 
         let state = self.state.lock().await;
         let db = &state.db;
-        let parsing = db.get_parsing(package.clone());
+        let package = uri_to_package(db, &uri);
+        let parsing = db.get_parsing(package);
 
         let Some(node_id) = parsing.at(linecol) else {
             return Ok(None);
@@ -262,14 +273,16 @@ impl LanguageServer for Backend {
             AstNodePayload::Ofness(ofness) => {
                 // Resolve the item this Ofness names (e.g. `Gcd` in `mod gcd of Gcd`).
                 let symboltable = db.get_symboltable();
-                let item_pkg = ofness.package
-                    .map(|pkg| PackageFqn::new(parsing.string(pkg).to_owned()))
-                    .unwrap_or_else(|| package.clone());
+                let packages = db.get_packages();
+                let item_pkg: Option<PackageId> = match ofness.package {
+                    Some(pkg) => packages.id(parsing.string(pkg)),
+                    None => Some(package),
+                };
                 let item_name = parsing.string(ofness.name);
                 self.client
                     .log_message(MessageType::INFO, &format!("item_name: {item_name:?}"))
                     .await;
-                symboltable.resolve_item(item_name, item_pkg)
+                item_pkg.and_then(|pkg| symboltable.resolve_item(item_name, pkg))
                     .map(|sym| sym.location())
             }
             AstNodePayload::Path(path_payload) => {
@@ -286,7 +299,7 @@ impl LanguageServer for Backend {
                 let current = parsing.ast_node(current_id);
                 let item_name = parsing.string(current.name().unwrap());
                 let symboltable = db.get_symboltable();
-                let Some(item_symbol) = symboltable.resolve_item_in_package(item_name, package.clone()) else {
+                let Some(item_symbol) = symboltable.resolve_item_in_package(item_name, package) else {
                     return Ok(None);
                 };
                 // Resolve the path string to a component in that module's analysis.
@@ -311,7 +324,7 @@ impl LanguageServer for Backend {
                 let current = parsing.ast_node(current_id);
                 let item_name = parsing.string(current.name().unwrap());
                 let symboltable = db.get_symboltable();
-                let Some(item_symbol) = symboltable.resolve_item_in_package(item_name, package.clone()) else {
+                let Some(item_symbol) = symboltable.resolve_item_in_package(item_name, package) else {
                     return Ok(None);
                 };
                 let component_analysis = db.get_component_analysis(item_symbol.id);
@@ -327,11 +340,13 @@ impl LanguageServer for Backend {
                     .await;
                 let AstNodePayload::Ofness(ofness) = ofness_node.payload() else { return Ok(None); };
                 let symboltable = db.get_symboltable();
-                let item_pkg = ofness.package
-                    .map(|pkg| PackageFqn::new(parsing.string(pkg).to_owned()))
-                    .unwrap_or_else(|| package.clone());
+                let packages = db.get_packages();
+                let item_pkg: Option<PackageId> = match ofness.package {
+                    Some(pkg) => packages.id(parsing.string(pkg)),
+                    None => Some(package),
+                };
                 let item_name = parsing.string(ofness.name);
-                symboltable.resolve_item(item_name, item_pkg)
+                item_pkg.and_then(|pkg| symboltable.resolve_item(item_name, pkg))
                     .map(|sym| sym.location())
             }
             _ => None,
@@ -344,11 +359,11 @@ impl LanguageServer for Backend {
         // Convert the Virdant Location to an LSP Location.
         let target_parsing = db.get_parsing(target_loc.package());
         let target_node = target_parsing.ast_node(target_loc.ast_node_id());
-        let target_uri = packagefqn_to_uri(target_loc.package(), &uri);
+        let target_uri = package_id_to_uri(db, target_loc.package(), &uri);
 
-        let package = target_loc.package();
+        let package_name = db.get_packages().name(target_loc.package()).to_str_lossy().into_owned();
         self.client
-            .log_message(MessageType::INFO, &format!("GOing TO (package: {package}) {target_uri} {}", target_node.span()))
+            .log_message(MessageType::INFO, &format!("GOing TO (package: {package_name}) {target_uri} {}", target_node.span()))
             .await;
 
         Ok(Some(GotoDefinitionResponse::Scalar(Location {
@@ -428,9 +443,9 @@ impl LanguageServer for Backend {
         let _range = params.range;
         let _linecol = LineCol::new(1, 1);
 
-        let package = uri_to_packagefqn(&uri);
         let _parsing = {
             let state = self.state.lock().await;
+            let package = uri_to_package(&state.db, &uri);
             state.db.get_parsing(package.clone())
         };
 
@@ -463,9 +478,9 @@ impl LanguageServer for Backend {
         let linecol = LineCol::new((position.line + 1) as usize, (position.character + 1) as usize);
 
         let uri = params.text_document_position_params.text_document.uri;
-        let package = uri_to_packagefqn(&uri);
         let parsing = {
             let state = self.state.lock().await;
+            let package = uri_to_package(&state.db, &uri);
             state.db.get_parsing(package.clone())
         };
 
@@ -521,11 +536,10 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri;
         let position = params.range.start;
         let linecol = LineCol::new((position.line + 1) as usize, (position.character + 1) as usize);
-        let package = uri_to_packagefqn(&uri);
-
         let state = self.state.lock().await;
         let db = &state.db;
-        let parsing = db.get_parsing(package.clone());
+        let package = uri_to_package(db, &uri);
+        let parsing = db.get_parsing(package);
 
         let Some(node_id) = parsing.at(linecol) else { return Ok(None); };
         let Some(match_node) = find_enclosing_match(&parsing, node_id) else { return Ok(None); };
@@ -615,7 +629,7 @@ impl Backend {
     #[allow(dead_code)]
     async fn source(&self, uri: &Url) -> Option<Source> {
         let state = self.state.lock().await;
-        let package = uri_to_packagefqn(uri);
+        let package = uri_to_package(&state.db, uri);
         Some(state.db.get_source(package))
     }
 
@@ -640,7 +654,7 @@ impl Backend {
         let state = self.state.lock().await;
         let diags = state.db.check();
 
-        let package = uri_to_packagefqn(&uri);
+        let package = uri_to_package(&state.db, &uri);
 
         for diag in diags.iter() {
             // Only display diagnostics relevant to this file.
@@ -682,11 +696,10 @@ impl Backend {
         let linecol = LineCol::new((position.line + 1) as usize, (position.character + 1) as usize);
 
         let uri = params.text_document_position_params.text_document.uri;
-        let package = uri_to_packagefqn(&uri);
-
         let (parsing, _hover_mode) = {
             let state = self.state.lock().await;
-            (state.db.get_parsing(package.clone()), state.hover_mode)
+            let package = uri_to_package(&state.db, &uri);
+            (state.db.get_parsing(package), state.hover_mode)
         };
 
         if let Some(node_id) = parsing.at(linecol) {
@@ -710,12 +723,10 @@ impl Backend {
         let linecol = LineCol::new((position.line + 1) as usize, (position.character + 1) as usize);
 
         let uri = params.text_document_position_params.text_document.uri;
-        let package = uri_to_packagefqn(&uri);
-
         let state = self.state.lock().await;
         let db = &state.db;
-
-        let parsing = db.get_parsing(package.clone());
+        let package = uri_to_package(db, &uri);
+        let parsing = db.get_parsing(package);
 
         if let Some(node_id) = parsing.at(linecol) {
             let node = parsing.ast_node(node_id);
@@ -752,7 +763,7 @@ impl Backend {
 ",
                     node.spelling(),
                     node.summary(),
-                    package,
+                    db.get_packages().name(package).to_str_lossy(),
                     node.id(),
                     typof,
                 ),
@@ -920,22 +931,35 @@ fn workspace_root(uri: &Url) -> std::path::PathBuf {
     dirpath
 }
 
-fn uri_to_packagefqn(uri: &Url) -> PackageFqn {
+fn uri_to_package_name(uri: &Url) -> BString {
     Path::new(uri.path())
         .file_stem()
-        .map(|stem| PackageFqn::new(stem.as_bytes().into()))
-        .unwrap_or_else(|| PackageFqn::new(uri.path().as_bytes().into()))
+        .map(|stem| BString::from(stem.as_bytes()))
+        .unwrap_or_else(|| BString::from(uri.path().as_bytes()))
 }
 
-fn packagefqn_to_uri(package: PackageFqn, sibling: &Url) -> Url {
-    if package == PackageFqn::new("builtin".into()) {
+fn uri_to_package(db: &Db, uri: &Url) -> PackageId {
+    use bstr::ByteSlice as _;
+
+    let name = uri_to_package_name(uri);
+    db.get_packages()
+        .id(name.as_bstr())
+        .unwrap_or_else(|| panic!("Package not loaded: {name:?}"))
+}
+
+fn package_id_to_uri(db: &Db, package: PackageId, sibling: &Url) -> Url {
+    use bstr::ByteSlice as _;
+
+    let packages = db.get_packages();
+    if package == packages.builtin() {
         let path = LIB_DIR.join("builtin.vir");
         Url::from_file_path(&path).unwrap()
     } else {
+        let name = packages.name(package).to_str_lossy();
         let path = Path::new(sibling.path())
             .parent()
             .unwrap()
-            .join(format!("{package}.vir"));
+            .join(format!("{name}.vir"));
         Url::from_file_path(&path).unwrap()
     }
 }
@@ -993,23 +1017,24 @@ fn escape_markdown(text: impl AsRef<str>) -> String {
     escaped
 }
 
-fn dump_hover(workspace_dir: &std::path::Path, package: PackageFqn, linecol: LineCol) {
+fn dump_hover(workspace_dir: &std::path::Path, package_name: BString, linecol: LineCol) {
     let db = db_from_dir(workspace_dir);
-    if !db.get_packages().contains(&package) {
+    let Some(package) = db.get_packages().id(package_name.as_bstr()) else {
         eprintln!(
-            "error: package {package} not found in workspace {}",
+            "error: package {} not found in workspace {}",
+            package_name.to_str_lossy(),
             workspace_dir.display(),
         );
         return;
-    }
-    let parsing = db.get_parsing(package.clone());
+    };
+    let parsing = db.get_parsing(package);
 
     if let Some(node_id) = parsing.at(linecol) {
         let node = parsing.ast_node(node_id);
 
         println!("Spelling : {}", node.spelling());
         println!("Summary  : {}", node.summary());
-        println!("Package  : {}", package);
+        println!("Package  : {}", package_name.to_str_lossy());
         println!("Location : {:?}", node.id());
 
         if node.is_expr() {
@@ -1017,7 +1042,7 @@ fn dump_hover(workspace_dir: &std::path::Path, package: PackageFqn, linecol: Lin
             println!("Typeof   : {:?}", typof);
         }
     } else {
-        println!("No node at {package} {linecol:?}");
+        println!("No node at {} {linecol:?}", package_name.to_str_lossy());
     }
 }
 
@@ -1038,7 +1063,7 @@ enum Command {
     },
 }
 
-fn parse_hover_location(location: &str) -> std::result::Result<(std::path::PathBuf, PackageFqn, LineCol), String> {
+fn parse_hover_location(location: &str) -> std::result::Result<(std::path::PathBuf, BString, LineCol), String> {
     let parts: Vec<&str> = location.rsplitn(3, ':').collect();
     if parts.len() != 3 {
         return Err(format!(
@@ -1058,13 +1083,13 @@ fn parse_hover_location(location: &str) -> std::result::Result<(std::path::PathB
         let workspace = path.parent().unwrap_or(Path::new(".")).to_path_buf();
         let pkg = path
             .file_stem()
-            .map(|stem| PackageFqn::new(stem.as_bytes().into()))
+            .map(|stem| BString::from(stem.as_bytes()))
             .ok_or_else(|| format!("Invalid file path: {file_or_package:?}"))?;
         (workspace, pkg)
     } else {
         let workspace = std::env::current_dir()
             .map_err(|e| format!("Cannot determine current directory: {e}"))?;
-        let pkg = PackageFqn::new(file_or_package.as_bytes().into());
+        let pkg = BString::from(file_or_package.as_bytes());
         (workspace, pkg)
     };
 
