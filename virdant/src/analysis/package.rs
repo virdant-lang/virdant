@@ -45,18 +45,27 @@ impl PackageAnalysis {
             diagnostics: vec![],
         };
 
-        analysis.add_imports(parsing.clone());
+        analysis.add_and_validate_imports(packages, parsing.clone());
         analysis.add_items(parsing.clone());
-        analysis.validate_imports(packages, parsing);
         analysis
     }
 
-    fn validate_imports(&mut self, packages: &[PackageFqn], parsing: Arc<Parsing>) {
+    fn add_and_validate_imports(&mut self, packages: &[PackageFqn], parsing: Arc<Parsing>) {
         let root = parsing.root();
         for child_node in root.children() {
             if let AstNodePayload::Import(import) = child_node.payload() {
                 let package = PackageFqn::new(parsing.string(import.package).into());
-                if !packages.contains(&package) {
+                if packages.contains(&package) {
+                    if !self.imports.insert(package) {
+                        let imported_package = PackageFqn::new(parsing.string(child_node.import_package().unwrap()).to_owned());
+                        self.diagnostics.push(Diagnostic::new(
+                            Region::new(self.package(), child_node.span()),
+                            diagnostics::DuplicateImport {
+                                imported_package,
+                            },
+                        ));
+                    }
+                } else {
                     self.diagnostics.push(Diagnostic::new(
                         Region::new(self.package(), child_node.span()),
                         diagnostics::UnresolvedImportError {
@@ -95,24 +104,6 @@ impl PackageAnalysis {
         }
 
         panic!("No such item: {item_name}")
-    }
-
-    fn add_imports(&mut self, parsing: Arc<Parsing>) {
-        let root = parsing.root();
-        for child_node in root.children() {
-            if let AstNodePayload::Import(import) = child_node.payload() {
-                let package = PackageFqn::new(parsing.string(import.package).into());
-                if !self.imports.insert(package) {
-                    let imported_package = PackageFqn::new(parsing.string(child_node.import_package().unwrap()).to_owned());
-                    self.diagnostics.push(Diagnostic::new(
-                        Region::new(self.package(), child_node.span()),
-                        diagnostics::DuplicateImport {
-                            imported_package,
-                        },
-                    ));
-                }
-            }
-        }
     }
 
     fn add_items(&mut self, parsing: Arc<Parsing>) {

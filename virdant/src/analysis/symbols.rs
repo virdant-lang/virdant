@@ -116,8 +116,9 @@ impl SymbolTable {
     pub fn resolve_item_in_package(&self, name: &BStr, package: PackageFqn) -> Option<&Symbol> {
         use bstr::ByteSlice;
 
-        let item_fqn: BString = format!("{package}::{name}").into();
-        self.lookup_item_by_fqn(item_fqn.as_bstr())
+        self.symbols_by_id.iter().find(|s| {
+            s.kind.is_item() && s.location.package() == package && s.name.as_bstr() == name
+        })
     }
 
     pub fn resolve_item(&self, name: &BStr, in_package: PackageFqn) -> Option<&Symbol> {
