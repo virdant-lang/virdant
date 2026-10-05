@@ -70,10 +70,19 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     diagnostics.extend(type_index.diagnostics());
 
     for item in symboltable.items() {
+        // Platform items are unvalidated data (they have no drivers
+        // and no match arms); running module checks on them would
+        // falsely flag their `outgoing` ports as undriven.
+        if item.kind == SymbolKind::Platform {
+            continue;
+        }
         diagnostics.extend(builder.check_drivers(item.id()).iter().cloned());
     }
 
     for item in symboltable.items() {
+        if item.kind == SymbolKind::Platform {
+            continue;
+        }
         diagnostics.extend(builder.get_match_coverage(item.id()).iter().cloned());
     }
 
