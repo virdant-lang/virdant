@@ -1,4 +1,5 @@
 ignore/
+plans/
 **/target
 build
 .cargo
