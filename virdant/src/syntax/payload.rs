@@ -20,6 +20,7 @@ pub enum AstNodePayload {
     BuiltinDef(BuiltinDef),
     FnDef(FnDef),
     SocketDef(SocketDef),
+    Platform(Platform),
 
     Component(Component),
     Driver(Driver),
@@ -99,6 +100,7 @@ impl AstNodePayload {
             AstNodePayload::BuiltinDef(_builtin_def) => "BuiltinDef",
             AstNodePayload::FnDef(_fn_def) => "FnDef",
             AstNodePayload::SocketDef(_socket_def) => "SocketDef",
+            AstNodePayload::Platform(_platform) => "Platform",
             AstNodePayload::Component(_component) => "Component",
             AstNodePayload::Driver(_driver) => "Driver",
             AstNodePayload::BidirectionalDriver => "BidirectionalDriver",
@@ -212,6 +214,12 @@ pub struct BuiltinDef {
 
 #[derive(Clone, Debug)]
 pub struct SocketDef {
+    pub name: InternedString,
+    pub doc_string: Option<InternedString>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Platform {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
 }

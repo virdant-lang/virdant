@@ -165,6 +165,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::BuiltinDef(_builtin_def) => format!("BuiltinDef"),
             AstNodePayload::FnDef(_fn_def) => format!("FnDef"),
             AstNodePayload::SocketDef(_socket_def) => format!("SocketDef"),
+            AstNodePayload::Platform(platform) => format!("Platform {}", parsing.string(platform.name.clone())),
             AstNodePayload::Component(component) => format!("Component {:?} {}", component.kind, parsing.string(component.name.clone())),
             AstNodePayload::Driver(_driver) => format!("Driver"),
             AstNodePayload::BidirectionalDriver => format!("BidirectionalDriver"),
@@ -231,7 +232,8 @@ impl<'p> AstNode<'p> {
             AstNodePayload::EnumDef(_) |
             AstNodePayload::BuiltinDef(_) |
             AstNodePayload::FnDef(_) |
-            AstNodePayload::SocketDef(_)
+            AstNodePayload::SocketDef(_) |
+            AstNodePayload::Platform(_)
         )
     }
 
@@ -245,6 +247,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::BuiltinDef(b) => b.doc_string.as_ref(),
             AstNodePayload::FnDef(f) => f.doc_string.as_ref(),
             AstNodePayload::SocketDef(s) => s.doc_string.as_ref(),
+            AstNodePayload::Platform(p) => p.doc_string.as_ref(),
             AstNodePayload::Component(c) => c.doc_string.as_ref(),
             AstNodePayload::Socket(s) => s.doc_string.as_ref(),
             AstNodePayload::Field(f) => f.doc_string.as_ref(),
@@ -266,6 +269,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::SocketDef(socket_def) => Some(socket_def.name.clone()),
             AstNodePayload::BuiltinDef(builtin_def) => Some(builtin_def.name.clone()),
             AstNodePayload::EnumDef(enum_def) => Some(enum_def.name.clone()),
+            AstNodePayload::Platform(platform) => Some(platform.name.clone()),
             _ => None,
         }
     }

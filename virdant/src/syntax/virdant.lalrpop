@@ -146,6 +146,7 @@ Item: AstNodeId = {
     <enumdef:EnumDef> => enumdef,
     <builtindef:BuiltinDef> => builtindef,
     <socketdef:SocketDef> => socketdef,
+    <platformdef:PlatformDef> => platformdef,
 }
 
 ModDef: AstNodeId = {
@@ -175,6 +176,25 @@ StructDef: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
+}
+
+PlatformDef: AstNodeId = {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "platform" <name:Ident> "{"
+        <stmts:PlatformStmt*>
+    "}" <rr:@R> => {
+        let payload = AstNodePayload::Platform(payload::Platform {
+            name,
+            doc_string: docstring,
+        });
+        let span = parser.span(ll, rr);
+        let num_children: u16 = 1u16 + stmts.len() as u16;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+PlatformStmt: AstNodeId = {
+    <component:ModDefStmtComponent> => component,
 }
 
 StructDefStmt: AstNodeId = {
@@ -1094,6 +1114,7 @@ extern {
         "dontcare" => Token::KwDontcare,
         "dyn" => Token::KwDyn,
         "dependson" => Token::KwDependsOn,
+        "platform" => Token::KwPlatform,
         "Str" => Token::Str,
         "DocComment" => Token::DocComment,
         "DocBang" => Token::DocBang,
