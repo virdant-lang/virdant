@@ -3,7 +3,7 @@
 //! docstrings, driver targets, and annotation data, plus
 //! `match_arm_children`/`when_arm_children` iterators.
 
-use bstr::{BStr, ByteSlice};
+use bstr::{BStr, BString, ByteSlice};
 
 use crate::analysis::Location;
 use crate::common::{ComponentKind, DriverType};
@@ -453,6 +453,23 @@ impl<'p> AstNode<'p> {
         }
     }
 
+    /// All values of `@<name>(...)` annotations on this node, in source
+    /// order.  Bare `@name` annotations (no value) are skipped.
+    pub fn annotation_values(&self, parsing: &Parsing, name: &str) -> Vec<AnnotationValue> {
+        let mut result = vec![];
+        for annotation in self.annotations() {
+            let Some(annotation_name) = annotation.annotation_name() else { continue };
+            if parsing.string(annotation_name) == BStr::new(name) {
+                if let Some(nat) = annotation.annotation_natural() {
+                    result.push(AnnotationValue::Nat(nat));
+                } else if let Some(str_value) = annotation.annotation_string() {
+                    result.push(AnnotationValue::Str(unquote(parsing.string(str_value))));
+                }
+            }
+        }
+        result
+    }
+
     pub fn args(&self) -> Option<Vec<AstNode<'_>>> {
         match &self.payload {
             AstNodePayload::ExprFn => {
@@ -542,4 +559,21 @@ pub fn item_children<'p>(node: &'p AstNode<'p>) -> Vec<AstNode<'p>> {
             | AstNodePayload::Annotation(_)
         ))
         .collect()
+}
+
+/// The value of an annotation: either the nat form (`@pin(35)`) or the
+/// str form (`@pin("A1")`, stored unquoted).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AnnotationValue {
+    Nat(u64),
+    Str(BString),
+}
+
+/// Strips the surrounding double quotes from a `Str` token's interned
+/// span (`Str` values keep their quotes as written in the source).
+fn unquote(s: &BStr) -> BString {
+    let s = s.as_bytes();
+    let s = s.strip_prefix(b"\"").unwrap_or(s);
+    let s = s.strip_suffix(b"\"").unwrap_or(s);
+    BString::from(s.to_vec())
 }

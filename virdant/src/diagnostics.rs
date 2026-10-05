@@ -3,6 +3,7 @@
 use bstr::{BStr, BString};
 
 use crate::common::{DriverType, Width, WordValue};
+use crate::common::PortDir;
 use crate::common::source::Region;
 
 pub type Type = BString;
@@ -122,6 +123,16 @@ pub enum DiagnosticPayload {
     EnumUnknownWidth,
     /// A driver block is empty.
     EmptyDriverBlock,
+    /// A module's `for` clause names an item which is not a platform.
+    ExpectedPlatform(ExpectedPlatform),
+    /// A module's port set is missing a port required by its platform.
+    PlatformMissingPort(PlatformMissingPort),
+    /// A module declares a port which its platform does not have.
+    PlatformExtraPort(PlatformExtraPort),
+    /// A module port's direction does not match its platform's port direction.
+    PlatformPortDirMismatch(PlatformPortDirMismatch),
+    /// A module port's type does not match its platform's port type.
+    PlatformPortTypeMismatch(PlatformPortTypeMismatch),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -350,6 +361,37 @@ pub struct CombinationalLoop {
     pub components: Vec<BString>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpectedPlatform {
+    pub item: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformMissingPort {
+    pub platform: BString,
+    pub port: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformExtraPort {
+    pub platform: BString,
+    pub port: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformPortDirMismatch {
+    pub port: BString,
+    pub expected: PortDir,
+    pub actual: PortDir,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformPortTypeMismatch {
+    pub port: BString,
+    pub expected: crate::types::Type,
+    pub actual: crate::types::Type,
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl Diagnostic {
@@ -519,6 +561,21 @@ impl Diagnostic {
                         .join(" -> "),
                 ).into()
             }
+            DiagnosticPayload::ExpectedPlatform(d) => format!("Expected a platform: {} is not a platform", d.item).into(),
+            DiagnosticPayload::PlatformMissingPort(d) => format!("Module is missing port {} required by platform {}", d.port, d.platform).into(),
+            DiagnosticPayload::PlatformExtraPort(d) => format!("Module has port {} which platform {} does not declare", d.port, d.platform).into(),
+            DiagnosticPayload::PlatformPortDirMismatch(d) => {
+                format!(
+                    "Port {} has direction {:?} but platform expects {:?}",
+                    d.port, d.actual, d.expected,
+                ).into()
+            }
+            DiagnosticPayload::PlatformPortTypeMismatch(d) => {
+                format!(
+                    "Port {} has type {:?} but platform expects {:?}",
+                    d.port, d.actual, d.expected,
+                ).into()
+            }
         }
     }
 
@@ -570,4 +627,6 @@ from_diagnostic! {
     DuplicateEnumValue, IndexOutOfBounds, IndexRangeOutOfBounds, InvalidIndexRange,
     InvalidWordIndexWidth, IndexNotWordType, RedundantUnused, RedundantDriver,
     CombinationalLoop,
+    ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,
+    PlatformPortTypeMismatch,
 }

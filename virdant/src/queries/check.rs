@@ -93,6 +93,12 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
         }
         diagnostics.extend(builder.typecheck(item.id()).iter().cloned());
 
+        // Exact port match for modules with a `for` clause.
+        if item.kind == SymbolKind::ModDef {
+            crate::analysis::platform::check_platform_ports_for(
+                builder, item.id(), &mut diagnostics);
+        }
+
 //        let driver_analysis = builder.get_driver_analysis(item.id());
 //        diagnostics.extend(driver_analysis); // TODO
     }

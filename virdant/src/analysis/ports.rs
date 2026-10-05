@@ -26,8 +26,8 @@ pub(crate) fn build_ports_of(builder: &mut Builder, symbol_id: SymbolId) -> Arc<
     let symboltable = builder.get_symboltable();
     let symbol = symboltable.symbol(symbol_id);
 
-    // Only ModDef items have ports
-    if !matches!(symbol.kind(), SymbolKind::ModDef) {
+    // Only ModDef and Platform items have ports
+    if !matches!(symbol.kind(), SymbolKind::ModDef | SymbolKind::Platform) {
         return Arc::new(ports);
     }
 

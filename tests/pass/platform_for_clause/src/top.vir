@@ -3,8 +3,24 @@
 
 // CHECK: Check OK
 
+platform PlatformA {
+    @pin(0)
+    incoming data : Bit
+
+    @pin(1)
+    outgoing result : Bit
+}
+
+platform PlatformB {
+    @pin(0)
+    incoming clock : Clock
+
+    @pin(1)
+    outgoing result : Bit
+}
+
 // FPGA-specific module with for clause
-export mod FpgaModule for FPGA {
+export mod ModuleA for PlatformA {
     incoming data : Bit
     outgoing result : Bit
 
@@ -12,11 +28,12 @@ export mod FpgaModule for FPGA {
 }
 
 // ASIC-specific module with for clause
-export mod AsicModule for ASIC {
-    incoming data : Bit
+export mod ModuleB for PlatformB {
+    incoming clock : Clock
     outgoing result : Bit
 
-    result := data
+    result := false
+    unused clock
 }
 
 // Top-level module that instantiates platform-specific modules
