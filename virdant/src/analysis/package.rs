@@ -189,6 +189,7 @@ impl PackageAnalysis {
                         }
                     }
                     AstNodePayload::BidirectionalDriver => (),
+                    AstNodePayload::Ofness(_) => (),
 
                     AstNodePayload::ModDefStmtWhen => {
                         self.add_moddefstmtwhen_expr_roots(child_node);

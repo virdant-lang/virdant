@@ -124,6 +124,7 @@ pub enum Token {
     #[token(b"dyn")]       KwDyn,
     #[token(b"dependson")]  KwDependsOn,
     #[token(b"platform")]  KwPlatform,
+    #[token(b"for")]       KwFor,
 
     // Unused
     #[token(b"/*")]        SlashStar,
@@ -144,7 +145,7 @@ pub const KEYWORDS: &[&str] = &[
     "if", "it", "else", "when",
     "match", "case", "unused",
     "true", "false", "dontcare", "dependson",
-    "platform",
+    "platform", "for",
 ];
 
 impl std::fmt::Display for Token {

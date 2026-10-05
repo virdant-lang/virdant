@@ -150,7 +150,7 @@ Item: AstNodeId = {
 }
 
 ModDef: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> <ext:"ext"?> <export:"export"?> "mod" <ident:Ident> "{"
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <ext:"ext"?> <export:"export"?> "mod" <ident:Ident> <for_clause:ForClause?> "{"
         <stmts:ModDefStmt*>
     "}" <rr:@R> => {
         let payload = AstNodePayload::ModDef(payload::ModDef {
@@ -160,10 +160,14 @@ ModDef: AstNodeId = {
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + stmts.len() as u16;
+        let num_children: u16 = 1u16 + if for_clause.is_none() { 0u16 } else { 1u16 } + stmts.len() as u16;
 
         parser.add_node(payload, span, num_children)
     },
+}
+
+ForClause: AstNodeId = {
+    "for" <ofness:Ofness> => ofness,
 }
 
 StructDef: AstNodeId = {
@@ -1115,6 +1119,7 @@ extern {
         "dyn" => Token::KwDyn,
         "dependson" => Token::KwDependsOn,
         "platform" => Token::KwPlatform,
+        "for" => Token::KwFor,
         "Str" => Token::Str,
         "DocComment" => Token::DocComment,
         "DocBang" => Token::DocBang,

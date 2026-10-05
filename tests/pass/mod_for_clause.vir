@@ -1,0 +1,81 @@
+// Tests that module definitions can have a `for` clause
+// that specifies what platform the module is for.
+
+// CHECK: Check OK
+
+// Basic empty module with simple for clause
+mod EmptyModuleForPlatform for FPGA {
+}
+
+// Module with package-qualified platform
+mod ModuleForQualifiedPlatform for vendor::SpecificFPGA {
+}
+
+// Module with submodule instantiation and for clause
+mod Parent for CustomPlatform {
+    mod child of EmptyModuleForPlatform
+}
+
+// Module with slots and simple assignment
+mod ModuleWithSlots for ASIC {
+    incoming data : Bit
+    outgoing out : Bit
+
+    out := data
+}
+
+// Module with when block and registers
+mod ModuleWithWhen for FPGA {
+    incoming clock : Clock
+    incoming reset : Reset
+    incoming enable : Bit
+    outgoing reg counter : Word[8] on clock
+
+    when {
+        case reset {
+            counter <= 0
+        }
+        case enable {
+            counter <= counter + 1
+        }
+    }
+}
+
+// Module with annotations and for clause
+@synthesis("vivado")
+@target("xczu9eg")
+mod AnnotatedModuleWithFor for Xilinx {
+    incoming data : Bit
+    outgoing result : Bit
+
+    result := data
+}
+
+// Module with ext and for clause
+ext mod ExternalModuleWithFor for ASIC {
+    incoming clock : Clock
+    outgoing ready : Bit
+}
+
+// Module with export and for clause
+export mod ExportedModuleWithFor for CustomPlatform {
+    incoming enable : Bit
+    outgoing status : Bit
+
+    status := enable
+}
+
+// Module with both ext and export, plus for clause
+ext export mod ExtExportModuleWithFor for Platform42 {
+    incoming data : Word[16]
+}
+
+// Module with doc comment, annotations, ext, export, and for clause
+/// This is a comprehensive module
+/// with all possible modifiers
+@author("TestBot")
+@version("1.0")
+ext export mod ComprehensiveModule for ComplexPlatform {
+    incoming clock : Clock
+    outgoing done : Bit
+}

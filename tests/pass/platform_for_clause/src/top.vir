@@ -1,0 +1,36 @@
+// Tests that the `for` clause works in a project with multiple files
+// and with module instantiations.
+
+// CHECK: Check OK
+
+// FPGA-specific module with for clause
+export mod FpgaModule for FPGA {
+    incoming data : Bit
+    outgoing result : Bit
+
+    result := data
+}
+
+// ASIC-specific module with for clause
+export mod AsicModule for ASIC {
+    incoming data : Bit
+    outgoing result : Bit
+
+    result := data
+}
+
+// Top-level module that instantiates platform-specific modules
+mod Top {
+    incoming data : Bit
+
+    outgoing fpga_result : Bit
+    outgoing asic_result : Bit
+
+    mod fpga_inst of FpgaModule
+    fpga_inst.data := data
+    fpga_result := fpga_inst.result
+
+    mod asic_inst of AsicModule
+    asic_inst.data := data
+    asic_result := asic_inst.result
+}

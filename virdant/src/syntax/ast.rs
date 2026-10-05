@@ -282,6 +282,15 @@ impl<'p> AstNode<'p> {
         }
     }
 
+    /// The `for`-clause node (`Ofness`) of a `ModDef`, if present.
+    pub fn platform_for(&self) -> Option<AstNode<'_>> {
+        if !matches!(self.payload(), AstNodePayload::ModDef(_)) {
+            return None;
+        }
+        self.children().into_iter().find(|c|
+            matches!(c.payload(), AstNodePayload::Ofness(_)))
+    }
+
     pub fn path(&self) -> Option<InternedString> {
         match &self.payload {
             AstNodePayload::ExprReference => self.child(0).path(),
@@ -522,4 +531,15 @@ pub fn when_arm_children<'a, 'p>(
         }
     }
     out
+}
+
+/// Returns the structural children of `node`, skipping the leading
+/// `Annotations` wrapper node and any `Annotation` children.
+pub fn item_children<'p>(node: &'p AstNode<'p>) -> Vec<AstNode<'p>> {
+    node.children().into_iter()
+        .filter(|c| !matches!(c.payload(),
+            AstNodePayload::Annotations(_)
+            | AstNodePayload::Annotation(_)
+        ))
+        .collect()
 }

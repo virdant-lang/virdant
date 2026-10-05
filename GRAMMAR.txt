@@ -26,7 +26,9 @@ Item :=
     | SocketDef
     | PlatformDef
 
-ModDef := DocString? Annotations "ext"? "export"? "mod" Ident "{" ModDefStmt* "}"
+ModDef := DocString? Annotations "ext"? "export"? "mod" Ident ForClause? "{" ModDefStmt* "}"
+
+ForClause := "for" Ofness
 
 StructDef := DocString? Annotations "struct" "type" Ident "{" StructDefStmt* "}"
 
@@ -332,6 +334,7 @@ Tokens:
   "export"
   "ext"
   "false"
+  "for"
   "import"
   "incoming"
   "it"
