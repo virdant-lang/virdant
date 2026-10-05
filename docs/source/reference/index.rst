@@ -8,6 +8,7 @@ This is the Virdant language reference.
     grammar
     items
     annotations
+    platforms
     types
     patterns
     expressions
