@@ -16,12 +16,15 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 use serde_json::json;
 
 use virdant::LIB_DIR;
+use virdant::analysis::platform::resolve_platform_for;
+use virdant::analysis::ports::Port;
 use virdant::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
 use virdant::types::{ExprRoot, Type};
-use virdant::db::Db;
+use virdant::common::PortDir;
+use virdant::db::{Builder, Db};
 use virdant::package::{PackageId, PackageTable};
 use virdant::common::source::{LineCol, Source, SourceOffset, Span};
-use virdant::syntax::ast::{AstNode, AstNodeId, match_arm_children};
+use virdant::syntax::ast::{AstNode, AstNodeId, item_children, match_arm_children};
 use virdant::syntax::payload::AstNodePayload;
 use virdant::syntax::parsing::Parsing;
 
@@ -556,86 +559,22 @@ impl LanguageServer for Backend {
         let parsing = db.get_parsing(package);
 
         let Some(node_id) = parsing.at(linecol) else { return Ok(None); };
-        let Some(match_node) = find_enclosing_match(&parsing, node_id) else { return Ok(None); };
 
-        let children = match_node.children();
-        if children.is_empty() { return Ok(None); }
-        let subject = &children[0];
-        let Ok(subject_typ) = db.get_typeof(subject.location()) else { return Ok(None); };
+        let mut actions = vec![];
 
-        let symboltable = db.get_symboltable();
-        let missing = missing_match_patterns(db, &parsing, &match_node, &subject_typ, &symboltable);
-        if missing.is_empty() { return Ok(None); }
-
-        let is_stmt = matches!(match_node.payload(), AstNodePayload::ModDefStmtMatch);
-        let arm_body = if is_stmt { "{ }" } else { "?" };
-
-        let arms = match_arm_children(&children);
-        let first_pat_col = arms.iter().find_map(|(p, _)| p.map(|n| n.span().start().col()));
-        let indent_col = match first_pat_col {
-            Some(col) => col.saturating_sub(5).max(1),
-            None => match_node.span().start().col().saturating_add(4),
-        };
-        let indent_str = " ".repeat(indent_col.saturating_sub(1));
-
-        // Find an insertion point immediately after the last non-whitespace byte
-        // before the closing `}` of the match, so the `}` keeps its layout.
-        let source = db.get_source(package.clone());
-        let close_col = match_node.span().end().col().saturating_sub(1).max(1);
-        let close_line = match_node.span().end().line();
-        let close_offset: usize = source.to_offset(LineCol::new(close_line, close_col)).into();
-        let text = source.text();
-        let mut insert_offset = close_offset;
-        while insert_offset > 0 {
-            let b = text[insert_offset - 1];
-            if b == b' ' || b == b'\t' || b == b'\n' || b == b'\r' {
-                insert_offset -= 1;
-            } else {
-                break;
-            }
-        }
-        let insert_lc = source.to_linecol(SourceOffset::new(insert_offset as u32));
-        let insert_position = Position {
-            line: (insert_lc.line().saturating_sub(1)) as u32,
-            character: (insert_lc.col().saturating_sub(1)) as u32,
-        };
-
-        let mut new_text = String::new();
-        for pat in &missing {
-            new_text.push('\n');
-            new_text.push_str(&indent_str);
-            new_text.push_str("case ");
-            new_text.push_str(pat);
-            new_text.push_str(" => ");
-            new_text.push_str(arm_body);
+        if let Some(action) = missing_match_cases_action(db, &parsing, package, node_id, &uri) {
+            actions.push(CodeActionOrCommand::CodeAction(action));
         }
 
-        let edit = TextEdit {
-            range: Range { start: insert_position, end: insert_position },
-            new_text,
-        };
+        if let Some(action) = missing_platform_ports_action(db, &parsing, package, node_id, &uri) {
+            actions.push(CodeActionOrCommand::CodeAction(action));
+        }
 
-        let mut changes = std::collections::HashMap::new();
-        changes.insert(uri.clone(), vec![edit]);
-
-        let workspace_edit = WorkspaceEdit {
-            changes: Some(changes),
-            document_changes: None,
-            change_annotations: None,
-        };
-
-        let action = CodeAction {
-            title: "Add missing match cases".into(),
-            kind: Some(CodeActionKind::QUICKFIX),
-            diagnostics: None,
-            edit: Some(workspace_edit),
-            command: None,
-            is_preferred: Some(true),
-            disabled: None,
-            data: None,
-        };
-
-        Ok(Some(vec![CodeActionOrCommand::CodeAction(action)]))
+        if actions.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(actions))
+        }
     }
 }
 
@@ -814,6 +753,95 @@ async fn get_expr_root<'a>(client: &Client, db: &'a Db, parsing: &'a Parsing, no
     Some(current)
 }
 
+/// Builds the "Add missing match cases" quickfix for a `match` expression
+/// or statement enclosing `node_id`, if it is non-exhaustive.
+fn missing_match_cases_action(
+    db: &Db,
+    parsing: &Parsing,
+    package: PackageId,
+    node_id: AstNodeId,
+    uri: &Url,
+) -> Option<CodeAction> {
+    let match_node = find_enclosing_match(parsing, node_id)?;
+
+    let children = match_node.children();
+    if children.is_empty() { return None; }
+    let subject = &children[0];
+    let subject_typ = db.get_typeof(subject.location()).ok()?;
+
+    let symboltable = db.get_symboltable();
+    let missing = missing_match_patterns(db, parsing, &match_node, &subject_typ, &symboltable);
+    if missing.is_empty() { return None; }
+
+    let is_stmt = matches!(match_node.payload(), AstNodePayload::ModDefStmtMatch);
+    let arm_body = if is_stmt { "{ }" } else { "?" };
+
+    let arms = match_arm_children(&children);
+    let first_pat_col = arms.iter().find_map(|(p, _)| p.map(|n| n.span().start().col()));
+    let indent_col = match first_pat_col {
+        Some(col) => col.saturating_sub(5).max(1),
+        None => match_node.span().start().col().saturating_add(4),
+    };
+    let indent_str = " ".repeat(indent_col.saturating_sub(1));
+
+    // Find an insertion point immediately after the last non-whitespace byte
+    // before the closing `}` of the match, so the `}` keeps its layout.
+    let source = db.get_source(package);
+    let close_col = match_node.span().end().col().saturating_sub(1).max(1);
+    let close_line = match_node.span().end().line();
+    let close_offset: usize = source.to_offset(LineCol::new(close_line, close_col)).into();
+    let text = source.text();
+    let mut insert_offset = close_offset;
+    while insert_offset > 0 {
+        let b = text[insert_offset - 1];
+        if b == b' ' || b == b'\t' || b == b'\n' || b == b'\r' {
+            insert_offset -= 1;
+        } else {
+            break;
+        }
+    }
+    let insert_lc = source.to_linecol(SourceOffset::new(insert_offset as u32));
+    let insert_position = Position {
+        line: (insert_lc.line().saturating_sub(1)) as u32,
+        character: (insert_lc.col().saturating_sub(1)) as u32,
+    };
+
+    let mut new_text = String::new();
+    for pat in &missing {
+        new_text.push('\n');
+        new_text.push_str(&indent_str);
+        new_text.push_str("case ");
+        new_text.push_str(pat);
+        new_text.push_str(" => ");
+        new_text.push_str(arm_body);
+    }
+
+    let edit = TextEdit {
+        range: Range { start: insert_position, end: insert_position },
+        new_text,
+    };
+
+    let mut changes = std::collections::HashMap::new();
+    changes.insert(uri.clone(), vec![edit]);
+
+    let workspace_edit = WorkspaceEdit {
+        changes: Some(changes),
+        document_changes: None,
+        change_annotations: None,
+    };
+
+    Some(CodeAction {
+        title: "Add missing match cases".into(),
+        kind: Some(CodeActionKind::QUICKFIX),
+        diagnostics: None,
+        edit: Some(workspace_edit),
+        command: None,
+        is_preferred: Some(true),
+        disabled: None,
+        data: None,
+    })
+}
+
 fn find_enclosing_match<'p>(parsing: &'p Parsing, node_id: AstNodeId) -> Option<AstNode<'p>> {
     let mut current_id = node_id;
     loop {
@@ -921,6 +949,173 @@ fn missing_match_patterns(
             }
         }
         _ => vec![],
+    }
+}
+
+/// Builds the "Add missing platform ports" quickfix for the `mod`
+/// enclosing `node_id`, when it has a `for` clause naming a platform
+/// that requires ports the module does not declare. Each added port
+/// gets a stub it-block: `unused it` for incoming ports, `it := ?`
+/// for outgoing ports.
+fn missing_platform_ports_action(
+    db: &Db,
+    parsing: &Parsing,
+    package: PackageId,
+    node_id: AstNodeId,
+    uri: &Url,
+) -> Option<CodeAction> {
+    let moddef_node = find_enclosing_moddef(parsing, node_id)?;
+    let item_name = parsing.string(moddef_node.name()?);
+
+    let moddef_symbol = db.get_symboltable()
+        .resolve_item_in_package(item_name, package)?
+        .clone();
+
+    let mut builder = Builder::new(db);
+    let platform_id = resolve_platform_for(&mut builder, moddef_symbol.id).ok()??;
+
+    let module_ports = db.get_ports_of(moddef_symbol.id);
+    let platform_ports = db.get_ports_of(platform_id);
+    let missing: Vec<&Port> = platform_ports.iter()
+        .filter(|pp| !module_ports.iter().any(|mp| mp.path == pp.path))
+        .collect();
+    if missing.is_empty() { return None; }
+
+    let platform_name = db.get_symboltable().symbol(platform_id).name.to_str_lossy().into_owned();
+
+    // Find where to insert the new port declarations: right before the
+    // first statement in the module body (skipping the `for`-clause
+    // child, which is not a statement), or right after the opening `{`
+    // if the body is empty.
+    let mut stmt_children = item_children(&moddef_node);
+    if matches!(stmt_children.first().map(|c| c.payload()), Some(AstNodePayload::Ofness(_))) {
+        stmt_children.remove(0);
+    }
+
+    let source = db.get_source(package);
+
+    let (insert_offset, indent_col, insert_before_stmt) = if let Some(first) = stmt_children.first() {
+        let lc = first.span().start();
+        let offset: usize = source.to_offset(lc).into();
+        (offset, lc.col(), true)
+    } else {
+        // Empty body: insert right after the opening `{`.
+        let text = source.text();
+        let node_span = moddef_node.span();
+        let start_off: usize = source.to_offset(node_span.start()).into();
+        let end_off: usize = source.to_offset(node_span.end()).into();
+        let brace_off = text[start_off..end_off].iter().position(|&b| b == b'{')
+            .map(|i| start_off + i + 1)?;
+        let indent_col = node_span.start().col().saturating_add(4);
+        (brace_off, indent_col, false)
+    };
+    let indent_str = " ".repeat(indent_col.saturating_sub(1));
+    let inner_indent_str = format!("{indent_str}    ");
+
+    let mut new_text = String::new();
+    for port in &missing {
+        let dir_kw = match port.dir {
+            PortDir::Input => "incoming",
+            PortDir::Output => "outgoing",
+        };
+        // Stub the port's it-block: incoming ports are marked `unused`
+        // (nothing drives them yet), outgoing ports are driven by the
+        // hole value `?` (a placeholder to be filled in later).
+        let body = match port.dir {
+            PortDir::Input => "unused it",
+            PortDir::Output => "it := ?",
+        };
+        let typ_str = port.typ.as_ref()
+            .map(|t| type_to_source(db, package, t))
+            .unwrap_or_else(|| "Bit".to_string());
+        let name = port.path.to_str_lossy();
+        let declaration = format!(
+            "{dir_kw} {name} : {typ_str} {{\n{inner_indent_str}{body}\n{indent_str}}}"
+        );
+        if insert_before_stmt {
+            new_text.push_str(&declaration);
+            new_text.push('\n');
+            new_text.push_str(&indent_str);
+        } else {
+            new_text.push('\n');
+            new_text.push_str(&indent_str);
+            new_text.push_str(&declaration);
+        }
+    }
+
+    let insert_lc = source.to_linecol(SourceOffset::new(insert_offset as u32));
+    let insert_position = Position {
+        line: (insert_lc.line().saturating_sub(1)) as u32,
+        character: (insert_lc.col().saturating_sub(1)) as u32,
+    };
+
+    let edit = TextEdit {
+        range: Range { start: insert_position, end: insert_position },
+        new_text,
+    };
+
+    let mut changes = std::collections::HashMap::new();
+    changes.insert(uri.clone(), vec![edit]);
+
+    let workspace_edit = WorkspaceEdit {
+        changes: Some(changes),
+        document_changes: None,
+        change_annotations: None,
+    };
+
+    Some(CodeAction {
+        title: format!("Add missing ports required by platform {platform_name}"),
+        kind: Some(CodeActionKind::QUICKFIX),
+        diagnostics: None,
+        edit: Some(workspace_edit),
+        command: None,
+        is_preferred: Some(true),
+        disabled: None,
+        data: None,
+    })
+}
+
+fn find_enclosing_moddef<'p>(parsing: &'p Parsing, node_id: AstNodeId) -> Option<AstNode<'p>> {
+    let mut current_id = node_id;
+    loop {
+        let node = parsing.ast_node(current_id);
+        if matches!(node.payload(), AstNodePayload::ModDef(_)) {
+            return Some(node);
+        }
+        match node.parent().map(|p| p.id()) {
+            Some(id) => current_id = id,
+            None => return None,
+        }
+    }
+}
+
+/// Renders a `Type` as Virdant source syntax, qualifying user-defined
+/// types with their defining package when that package is neither the
+/// destination module's own package nor already imported there.
+fn type_to_source(db: &Db, module_package: PackageId, typ: &Type) -> String {
+    match typ {
+        Type::Bit => "Bit".to_string(),
+        Type::Clock => "Clock".to_string(),
+        Type::Reset => "Reset".to_string(),
+        Type::Word(width) => format!("Word[{width}]"),
+        Type::Valid(inner) => format!("Valid[{}]", type_to_source(db, module_package, inner)),
+        Type::Usual(symbol_id) => {
+            let symbol = db.get_symboltable().symbol(*symbol_id);
+            let def_package = symbol.location.package();
+            let name = symbol.name.to_str_lossy().into_owned();
+            if def_package == module_package || def_package == db.get_packages().builtin() {
+                return name;
+            }
+            let imported = db.get_package_analysis(module_package)
+                .imports()
+                .contains(&def_package);
+            if imported {
+                name
+            } else {
+                let pkg_name = db.get_packages().name(def_package).to_str_lossy().into_owned();
+                format!("{pkg_name}::{name}")
+            }
+        }
     }
 }
 
@@ -1132,5 +1327,136 @@ async fn main() {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod platform_code_action_tests {
+    use super::*;
+
+    fn test_db(design: &str) -> Db {
+        let builtin_text: BString = include_bytes!("../../../lib/builtin.vir").as_ref().into();
+        let design_text: BString = design.as_bytes().into();
+
+        let mut db = Db::new();
+        db.set_packages(PackageTable::new(vec!["builtin".into(), "design".into()]));
+        let packages = db.get_packages();
+        let builtin = packages.id(b"builtin".as_bstr()).unwrap();
+        let design_pkg = packages.id(b"design".as_bstr()).unwrap();
+        db.set_source(builtin, Source::new(builtin, builtin_text));
+        db.set_source(design_pkg, Source::new(design_pkg, design_text));
+        db
+    }
+
+    #[test]
+    fn adds_missing_port_before_existing_statement() {
+        let design = "\
+platform IceSugar {
+    @pin(35)
+    incoming clock : Clock
+
+    @pin(39)
+    outgoing led : Bit
+}
+
+mod Top for IceSugar {
+    incoming clock : Clock
+
+    unused clock
+}
+";
+        let db = test_db(design);
+        let design_pkg = db.get_packages().id(b"design".as_bstr()).unwrap();
+        let parsing = db.get_parsing(design_pkg);
+
+        // Inside `incoming clock : Clock` on the first line of Top's body.
+        let node_id = parsing.at(LineCol::new(10, 14)).expect("node at position");
+        let uri = Url::parse("file:///design.vir").unwrap();
+
+        let action = missing_platform_ports_action(&db, &parsing, design_pkg, node_id, &uri)
+            .expect("expected a code action");
+
+        assert_eq!(action.title, "Add missing ports required by platform IceSugar");
+
+        let edits = action.edit.unwrap().changes.unwrap().remove(&uri).unwrap();
+        assert_eq!(edits.len(), 1);
+        assert_eq!(
+            edits[0].new_text,
+            "outgoing led : Bit {\n        it := ?\n    }\n    ",
+        );
+        // The insertion point is right before the existing first statement.
+        assert_eq!(edits[0].range.start, Position { line: 9, character: 4 });
+        assert_eq!(edits[0].range, Range { start: edits[0].range.start, end: edits[0].range.start });
+    }
+
+    #[test]
+    fn adds_all_ports_to_empty_body() {
+        let design = "\
+platform IceSugar {
+    @pin(35)
+    incoming clock : Clock
+}
+
+mod Top for IceSugar {
+}
+";
+        let db = test_db(design);
+        let design_pkg = db.get_packages().id(b"design".as_bstr()).unwrap();
+        let parsing = db.get_parsing(design_pkg);
+
+        // On `Top` in the `mod Top for IceSugar {` line.
+        let node_id = parsing.at(LineCol::new(6, 5)).expect("node at position");
+        let uri = Url::parse("file:///design.vir").unwrap();
+
+        let action = missing_platform_ports_action(&db, &parsing, design_pkg, node_id, &uri)
+            .expect("expected a code action");
+
+        let edits = action.edit.unwrap().changes.unwrap().remove(&uri).unwrap();
+        assert_eq!(edits.len(), 1);
+        assert_eq!(
+            edits[0].new_text,
+            "\n    incoming clock : Clock {\n        unused it\n    }",
+        );
+    }
+
+    #[test]
+    fn no_action_when_ports_already_match() {
+        let design = "\
+platform IceSugar {
+    @pin(35)
+    incoming clock : Clock
+}
+
+mod Top for IceSugar {
+    incoming clock : Clock
+    unused clock
+}
+";
+        let db = test_db(design);
+        let design_pkg = db.get_packages().id(b"design".as_bstr()).unwrap();
+        let parsing = db.get_parsing(design_pkg);
+
+        let node_id = parsing.at(LineCol::new(6, 5)).expect("node at position");
+        let uri = Url::parse("file:///design.vir").unwrap();
+
+        assert!(missing_platform_ports_action(&db, &parsing, design_pkg, node_id, &uri).is_none());
+    }
+
+    #[test]
+    fn no_action_without_for_clause() {
+        let design = "\
+mod Top {
+    incoming clock : Clock
+    unused clock
+}
+";
+        let db = test_db(design);
+        let design_pkg = db.get_packages().id(b"design".as_bstr()).unwrap();
+        let parsing = db.get_parsing(design_pkg);
+
+        let node_id = parsing.at(LineCol::new(1, 5)).expect("node at position");
+        let uri = Url::parse("file:///design.vir").unwrap();
+
+        assert!(missing_platform_ports_action(&db, &parsing, design_pkg, node_id, &uri).is_none());
     }
 }

@@ -803,7 +803,7 @@ fn bitstream(args: &Args) {
     // Resolve the top module named by [prog] top.
     let symboltable = db.get_symboltable();
     let top_symbol = symboltable.items().into_iter()
-        .find(|sym| sym.name.as_bytes() == top_name.as_bytes()
+        .find(|sym| sym.fqn.as_bytes() == top_name.as_bytes()
             && sym.kind == SymbolKind::ModDef)
         .unwrap_or_else(|| {
             eprintln!("Top module '{top_name}' not found");
