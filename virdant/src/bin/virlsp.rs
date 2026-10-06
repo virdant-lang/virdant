@@ -52,8 +52,22 @@ fn new_db() -> Db {
 }
 
 fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
-    let builtin = Source::load_file(LIB_DIR.join("builtin.vir"));
-    let mut files = vec![builtin];
+    // Load every *.vir in the standard library directory (builtin.vir,
+    // ice40.vir, ...) so that `import` can resolve platform libraries, then
+    // every *.vir in the source directory.  Mirrors `util::load_lib_dir`:
+    // loading is not scoping, only `import` brings items into scope.
+    let mut lib_paths: Vec<std::path::PathBuf> = std::fs::read_dir(LIB_DIR.as_path())
+        .unwrap_or_else(|e| panic!("Could not open library directory {LIB_DIR:?}: {e}"))
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|filepath| matches!(filepath.extension(), Some(ext) if ext.to_string_lossy() == "vir"))
+        .collect();
+    // Deterministic package ordering regardless of read_dir order.
+    lib_paths.sort();
+    let mut files: Vec<(BString, BString)> = lib_paths
+        .into_iter()
+        .map(Source::load_file)
+        .collect();
+
     let source_dir = source_dir.into();
     match std::fs::read_dir(&source_dir) {
         Ok(entries) => {
