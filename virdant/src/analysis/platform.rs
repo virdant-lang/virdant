@@ -252,9 +252,10 @@ pub fn check_platform_ports_for(
             .iter()
             .find(|p| p.path == module_port.path)
         else {
+            // The module declares a port the platform does not have.
             diagnostics.push(Diagnostic::new(
                 module_port_region(builder, moddef_symbol_id, &module_port.path),
-                diagnostics::PlatformMissingPort {
+                diagnostics::PlatformExtraPort {
                     platform: platform_name.clone(),
                     port: module_port.path.clone(),
                 },
@@ -287,9 +288,10 @@ pub fn check_platform_ports_for(
 
     for platform_port in platform_ports.iter() {
         if !module_ports.iter().any(|p| p.path == platform_port.path) {
+            // The platform requires a port the module does not declare.
             diagnostics.push(Diagnostic::new(
                 moddef_node.region(),
-                diagnostics::PlatformExtraPort {
+                diagnostics::PlatformMissingPort {
                     platform: platform_name.clone(),
                     port: platform_port.path.clone(),
                 },

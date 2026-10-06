@@ -1,5 +1,10 @@
 VIR_FILES := $(wildcard *.vir)
 
+# Project-style tests (directory + Virdant.toml + own Makefile),
+# listed explicitly: other project directories carry simulator tests
+# that need external tools (iverilog, verilator) and are not wired in.
+VIR_PROJS := platform_icesugar
+
 BASEDIR = $(abspath ../..)
 VIR ?= $(BASEDIR)/target/release/vir
 FILECHECK ?= $(BASEDIR)/target/release/filecheck
@@ -19,4 +24,8 @@ test:
 			echo "ERROR: $$f check failed"; \
 			exit 1; \
 		fi; \
+	done
+	for d in $(VIR_PROJS); do \
+		echo "TEST: tests/pass/$$d"; \
+		$(MAKE) -C $$d VIR=$(VIR) FILECHECK=$(FILECHECK) || exit 1; \
 	done

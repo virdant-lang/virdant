@@ -1,0 +1,38 @@
+// Tests that vir check loads the shipped ice40 lib package
+// and resolves `import ice40` + `for ice40::IceSugar`.
+
+// CHECK: Check OK
+
+//! Blink the iCESugar RGB LEDs.
+
+import ice40
+
+export mod Top for ice40::IceSugar {
+    incoming clock : Clock
+    outgoing led_red   : Bit
+    outgoing led_blue  : Bit
+    outgoing led_green : Bit
+    incoming switch0 : Bit
+    incoming uart_rx : Bit
+    outgoing uart_tx : Bit
+    outgoing flash_cs   : Bit
+    outgoing flash_clk  : Bit
+    outgoing flash_mosi : Bit
+    incoming flash_miso : Bit
+
+    reg counter : Word[24] on clock {
+        it <= it + 1w24
+    }
+
+    led_red := counter[23]
+    led_blue := false
+    led_green := false
+    uart_tx := true
+    flash_cs := true
+    flash_clk := false
+    flash_mosi := false
+
+    unused switch0
+    unused uart_rx
+    unused flash_miso
+}

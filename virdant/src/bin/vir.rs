@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use virdant::db::Db;
 use virdant::diagnostics::DiagnosticLevel;
 use virdant::package::PackageTable;
-use virdant::common::{Flow, source::{Region, Source}};
+use virdant::common::source::{Region, Source};
 use virdant::analysis::symbols::SymbolKind;
 use virdant::syntax::parsing::parse;
 use virdant::syntax::token::tokenize;
@@ -182,6 +182,26 @@ fn read_prog_key(cwd: &Path, key: &str) -> Option<String> {
         .and_then(|prog| prog.get(key))
         .and_then(|value| value.as_str())
         .map(|s| s.to_owned())
+}
+
+/// Read `[project].name` from `Virdant.toml` in `cwd`.
+fn read_project_name(cwd: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(cwd.join("Virdant.toml")).ok()?;
+    let toml: toml::Value = toml::from_str(&text).ok()?;
+    toml.get("project")
+        .and_then(|project| project.get("name"))
+        .and_then(|value| value.as_str())
+        .map(|s| s.to_owned())
+}
+
+/// Print one diagnostic in the same style as `dump_diagnostics`.
+fn dump_diagnostic(db: &Db, diagnostic: &virdant::diagnostics::Diagnostic) {
+    println!(
+        "{}   {}   {}",
+        "ERROR  ".red(),
+        region_string(db, diagnostic.region()),
+        diagnostic.message(),
+    );
 }
 
 fn region_string(db: &Db, region: Region) -> String {
@@ -756,195 +776,123 @@ fn new_project(args: &Args, project: &str) {
 
 fn bitstream(args: &Args) {
     let cwd = resolve_cwd(args);
-
     if !cwd.join("Virdant.toml").exists() {
         eprintln!("No Virdant.toml found");
         std::process::exit(1);
     }
 
-    let virdant_toml_text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
-    let virdant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
-
-    let project = virdant_toml["project"]["name"].as_str().unwrap().to_owned();
-
-    let platform = read_prog_key(&cwd, "platform").unwrap_or_else(|| {
-        eprintln!("Virdant.toml is missing [prog] platform");
+    let project = read_project_name(&cwd).unwrap_or_else(|| {
+        eprintln!("Virdant.toml is missing [project] name");
         std::process::exit(1);
     });
-    assert_eq!(platform, "icesugar", "Only 'icesugar' platform is supported");
+    let Some(top_name) = read_prog_key(&cwd, "top") else {
+        eprintln!("Virdant.toml is missing [prog] top");
+        std::process::exit(1);
+    };
 
     let builddir = cwd.join("build");
-
-    // Build Verilog
     let source_dir = cwd.join("src");
+
     let db = db_from_dir(source_dir);
     dump_diagnostics(&db);
     if check_db(&db).is_err() {
         eprintln!("Build failed");
         std::process::exit(1);
     }
+
+    // Resolve the top module named by [prog] top.
+    let symboltable = db.get_symboltable();
+    let top_symbol = symboltable.items().into_iter()
+        .find(|sym| sym.name.as_bytes() == top_name.as_bytes()
+            && sym.kind == SymbolKind::ModDef)
+        .unwrap_or_else(|| {
+            eprintln!("Top module '{top_name}' not found");
+            std::process::exit(1);
+        });
+
+    // The top module's `for` clause selects the platform.
+    let mut builder = virdant::db::Builder::new(&db);
+    let platform_id = match virdant::analysis::platform::resolve_platform_for(
+        &mut builder, top_symbol.id())
+    {
+        Ok(Some(platform_id)) => platform_id,
+        Ok(None) => {
+            eprintln!("Top module '{top_name}' does not implement a platform (no `for` clause)");
+            std::process::exit(1);
+        }
+        Err(diagnostic) => {
+            dump_diagnostic(&db, &diagnostic);
+            std::process::exit(1);
+        }
+    };
+
+    // Defensive re-check: ports must exactly match the platform.
+    // (Normally already enforced by `vir check` via check_platform_ports.)
+    let mut diagnostics = vec![];
+    virdant::analysis::platform::check_platform_ports_for(
+        &mut builder, top_symbol.id(), &mut diagnostics);
+    if !diagnostics.is_empty() {
+        for diagnostic in &diagnostics {
+            dump_diagnostic(&db, diagnostic);
+        }
+        eprintln!("Build failed");
+        std::process::exit(1);
+    }
+
+    // Platform data via the Phase 4 accessors.
+    let fpga = virdant::analysis::platform::platform_fpga(&mut builder, platform_id)
+        .unwrap_or_else(|| {
+            eprintln!("Platform is missing @fpga");
+            std::process::exit(1);
+        });
+    let part = virdant::analysis::platform::platform_part(&mut builder, platform_id);
+
     std::fs::create_dir_all(&builddir).unwrap();
     let verilog = virdant::verilog::conversion::convert_db_to_verilog(&db);
     verilog.write_in_dir(&builddir).unwrap();
     println!("Wrote Verilog to {}", builddir.to_string_lossy());
 
-    // Write yosys script
-    let sv_files = glob_sv_files(&builddir);
-    let sv_list: Vec<String> = sv_files.iter()
-        .map(|p| p.to_string_lossy().into_owned())
-        .collect();
-    let project_json = builddir.join(format!("{project}.json"));
-    let script_content = format!(
-        "read_verilog -I {} {}; synth_ice40 -top Top -json {}",
-        builddir.to_string_lossy(),
-        sv_list.join(" "),
-        project_json.to_string_lossy(),
-    );
-    let script_path = builddir.join("script.ys");
-    std::fs::write(&script_path, &script_content).unwrap();
-
-    // Run yosys
-    let yosys_log = builddir.join("yosys.log");
-    let output = std::process::Command::new("yosys")
-        .arg("-l").arg(&yosys_log)
-        .arg(&script_path)
-        .output().unwrap();
-    if !output.status.success() {
-        eprintln!("{}", BStr::new(&output.stderr));
-        eprintln!("yosys failed");
+    let Some(toolchain) = virdant::build::toolchain_for(fpga.to_str_lossy().as_ref()) else {
+        eprintln!("FPGA family '{}' is not supported", fpga.to_str_lossy());
         std::process::exit(1);
-    }
-    println!("{}", BStr::new(&output.stdout));
-    println!("yosys OK");
+    };
 
-    // Run nextpnr-ice40
-    create_pcf_file(&db, "Top".into(), &builddir);
-    let pcf = builddir.join("icesugar.pcf");
-    let project_asc = builddir.join(format!("{project}.asc"));
-    let output = std::process::Command::new("nextpnr-ice40")
-        .arg("--up5k")
-        .arg("--top").arg("Top")
-        .arg("--json").arg(&project_json)
-        .arg("--pcf").arg(&pcf)
-        .arg("--asc").arg(&project_asc)
-        .arg("--package").arg("sg48")
-        .output().unwrap();
-    if !output.status.success() {
-        eprintln!("{}", BStr::new(&output.stderr));
-        eprintln!("nextpnr-ice40 failed");
-        std::process::exit(1);
-    }
-    println!("{}", BStr::new(&output.stdout));
-    println!("nextpnr-ice40 OK");
-
-    // Run icepack
-    let project_bin = builddir.join(format!("{project}.bin"));
-    let output = std::process::Command::new("icepack")
-        .arg("-s")
-        .arg(&project_asc)
-        .arg(&project_bin)
-        .output().unwrap();
-    if !output.status.success() {
-        eprintln!("{}", BStr::new(&output.stderr));
-        eprintln!("icepack failed");
-        std::process::exit(1);
-    }
-    println!("{}", BStr::new(&output.stdout));
-    println!("Bitstream written to {}", project_bin.to_string_lossy());
-}
-
-fn create_pcf_file(db: &Db, top: &BStr, builddir: &PathBuf) {
-    const ICESGUAR_PORTS: [(&'static str, usize); 45] = [
-        ("clock", 35),
-        ("led_red", 39),
-        ("led_blue", 40),
-        ("led_green", 41),
-        ("switch0", 18),
-        ("switch1", 19),
-        ("switch2", 20),
-        ("switch3", 21),
-        ("uart_rx", 4),
-        ("uart_tx", 6),
-        ("usb_dp", 10),
-        ("usb_dn", 9),
-        ("usb_pullup", 11),
-        ("p1_1", 10),
-        ("p1_2", 6),
-        ("p1_3", 3),
-        ("p1_4", 48),
-        ("p1_9", 47),
-        ("p1_10", 2),
-        ("p1_11", 4),
-        ("p1_12", 9),
-        ("p2_1", 46),
-        ("p2_2", 44),
-        ("p2_3", 42),
-        ("p2_4", 37),
-        ("p2_9", 36),
-        ("p2_10", 38),
-        ("p2_11", 43),
-        ("p2_12", 45),
-        ("p3_1", 34),
-        ("p3_2", 31),
-        ("p3_3", 27),
-        ("p3_4", 25),
-        ("p3_9", 23),
-        ("p3_10", 26),
-        ("p3_11", 28),
-        ("p3_12", 32),
-        ("p4_1", 21),
-        ("p4_2", 20),
-        ("p4_3", 19),
-        ("p4_4", 18),
-        ("spi_cs", 16),
-        ("spi_clk", 15),
-        ("spi_do", 14),
-        ("spi_di", 17),
-    ];
-    // Collect the port names present on the top module
-    let symboltable = db.get_symboltable();
-    let top_symbol = symboltable.items()
-        .into_iter()
-        .find(|sym| sym.name.as_bstr() == top && sym.kind == SymbolKind::ModDef)
-        .unwrap_or_else(|| panic!("module '{}' not found", top));
-    let component_analysis = db.get_component_analysis(top_symbol.id);
-    let port_names: indexmap::IndexSet<String> = component_analysis.components()
-        .into_iter()
-        .filter(|(path, component)| !path.contains(&b'.') && component.flow() != Flow::Duplex)
-        .map(|(path, _)| path.to_str_lossy().into_owned())
-        .collect();
-
-    // Emit only the ICESUGAR_PORTS entries that exist on the top module
-    let mut pcf_content = String::new();
-    for (name, pin) in ICESGUAR_PORTS.iter() {
-        if port_names.contains(*name) {
-            pcf_content.push_str(&format!("set_io {name} {pin}\n"));
+    match virdant::build::emit_pcf(&mut builder, platform_id) {
+        Ok(pcf_text) => {
+            let pcf = builddir.join(format!("{project}.pcf"));
+            std::fs::write(&pcf, pcf_text).unwrap();
+        }
+        Err(diagnostics) => {
+            // e.g. a platform port with no @pin (Unknown diagnostics).
+            for diagnostic in &diagnostics {
+                dump_diagnostic(&db, diagnostic);
+            }
+            eprintln!("Build failed");
+            std::process::exit(1);
         }
     }
-    std::fs::write(builddir.join("icesugar.pcf"), pcf_content).unwrap();
+
+    virdant::build::run_toolchain(&builddir, &project, &top_name, part.as_ref(), toolchain)
+        .unwrap_or_else(|e| {
+            eprintln!("Toolchain error: {e}");
+            std::process::exit(1);
+        });
 }
 
 fn upload(args: &Args) {
     bitstream(args);
 
     let cwd = resolve_cwd(args);
-
-    let virdant_toml_text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
-    let virdant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
-    let project = virdant_toml["project"]["name"].as_str().unwrap().to_owned();
-
-    let builddir = cwd.join("build");
-    let project_bin = builddir.join(format!("{project}.bin"));
-
-    let output = std::process::Command::new("icesprog")
-        .arg(&project_bin)
-        .output().unwrap();
-    if !output.status.success() {
-        eprintln!("icesprog failed");
-        eprintln!("{}", BStr::new(&output.stderr));
+    let project = read_project_name(&cwd).unwrap_or_else(|| {
+        eprintln!("Virdant.toml is missing [project] name");
         std::process::exit(1);
-    }
-    println!("Uploaded {}", project_bin.to_string_lossy());
+    });
+
+    virdant::build::flash_bitstream(&cwd, &project)
+        .unwrap_or_else(|e| {
+            eprintln!("Flash error: {e}");
+            std::process::exit(1);
+        });
 }
 
 fn glob_sv_files(dir: &Path) -> Vec<PathBuf> {

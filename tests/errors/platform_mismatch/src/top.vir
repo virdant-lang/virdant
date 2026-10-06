@@ -1,0 +1,35 @@
+// Tests that a module whose ports do not exactly match its
+// platform's ports fails `vir check`.
+
+import ice40
+
+export mod Top for ice40::IceSugar {
+    incoming clock : Clock
+    outgoing led_red   : Bit
+    outgoing led_blue  : Bit
+    outgoing led_green : Bit
+    incoming switch0 : Bit
+    incoming uart_rx : Bit
+    outgoing uart_tx : Bit
+    outgoing flash_cs   : Bit
+    outgoing flash_clk  : Bit
+    outgoing flash_mosi : Bit
+    incoming flash_miso : Bit
+    outgoing extra : Bit
+
+    unused clock
+    unused switch0
+    unused uart_rx
+    unused flash_miso
+    led_red := false
+    led_blue := false
+    led_green := false
+    uart_tx := true
+    flash_cs := true
+    flash_clk := false
+    flash_mosi := false
+    extra := false
+}
+
+// CHECK: Module has port extra which platform IceSugar does not declare
+// CHECK: FAILED with:

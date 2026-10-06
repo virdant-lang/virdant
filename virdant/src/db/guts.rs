@@ -35,7 +35,7 @@ pub(super) struct TraceElement {
 }
 
 impl<'d> Builder<'d> {
-    pub(crate) fn new(db: &'d Db) -> Builder<'d> {
+    pub fn new(db: &'d Db) -> Builder<'d> {
         Builder {
             db,
             deps: IndexSet::new(),
