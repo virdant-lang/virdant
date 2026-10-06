@@ -50,6 +50,7 @@ the keyword of any annotatable declaration.
 Annotatable declarations include:
 
 * Module definitions
+* Platform definitions and their ports (see :doc:`platforms`)
 * Struct type definitions and their fields
 * Union type definitions and their variants (with params)
 * Enum type definitions and their variants
@@ -68,6 +69,7 @@ The grammar shows :vir:`Annotations` as a non-terminal in all of these productio
     Annotations := Annotation*
 
     ModDef := DocString Annotations "ext"? "export"? "mod" Ident "{" ...
+    PlatformDef := DocString Annotations "platform" Ident "{" ...
     StructDef := DocString Annotations "struct" "type" Ident "{" ...
     StructDefStmt := DocString Annotations Ident ":" Type
     UnionDef := DocString Annotations "union" "type" Ident "{" ...

@@ -220,13 +220,16 @@ The `Virdant.toml` file selects which module `vir bitstream` synthesizes:
 
 `vir bitstream` then:
 
-1. Resolves the top module named by `[prog] top`.
-2. Resolves the top module's `for` clause to its platform. A top module
-   with no `for` clause (or a missing `[prog] top` key) is an error
-   before any external tool is invoked.
-3. Emits a PCF constraints file from the platform's `@pin` annotations
+1. Resolves the top module named by `[prog] top`. A missing
+   `[prog] top` key is an error before any external tool is invoked.
+2. Resolves the top module's `for` clause to its platform, and
+   re-verifies the port match as a defensive check (normally already
+   enforced by `vir check`). A top module with no `for` clause is an
+   error here, before any external tool is invoked.
+3. Emits Verilog for the design into `build/`.
+4. Emits a PCF constraints file from the platform's `@pin` annotations
    and the clock's `@period_ns`.
-4. Runs the toolchain (yosys, nextpnr-ice40, icepack) and writes
+5. Runs the toolchain (yosys, nextpnr-ice40, icepack) and writes
    `build/<project>.bin`.
 
 `vir upload` builds the bitstream and flashes it with icesprog.
@@ -235,8 +238,8 @@ Only the ice40 family is supported. The `@fpga` value selects the
 toolchain at build time, so a platform naming an unsupported family
 passes `vir check` and fails in `vir bitstream` with a clear error.
 
-A scaffolded blink project binds the top module to the board and ties
-off every unused output:
+A blink project bound to the IceSugar board ties off every unused
+output:
 
 .. code-block:: virdant
 
@@ -260,6 +263,17 @@ off every unused output:
 
         unused switch0
     }
+
+.. note::
+
+   `vir new <project>` scaffolds a `Virdant.toml` and a `src/top.vir`,
+   but its current output predates the `for`-clause binding scheme
+   described above: the generated `Virdant.toml` sets `[prog] platform`
+   (not `[prog] top`), and the generated `Top` module has a single
+   `led : Bit` port and no `for` clause. Such a project is not
+   bound to a board and will not build with `vir bitstream` as-is;
+   edit both files by hand into the `[prog] top` / `for` form shown
+   above before building.
 
 
 Adding a Platform
