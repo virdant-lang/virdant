@@ -29,6 +29,44 @@ platform IceSugar {
     @pin(47) incoming flash_miso : Bit
 }
 
+//> Fomu board (PVT).
+//> Lattice iCE40-UP5K, UWG30 (WLCSP-30) package, programmed over USB.  Fomu fits
+//> in a USB port and implements USB itself in a softcore, so the bitstream must
+//> drive the USB pins (or hold them low to disconnect, as the workshop blink
+//> example does).  Pin numbers are UWG30 ball names, matching the upstream
+//> `fomu-pvt.pcf`.
+@fpga("ice40")
+@part("up5k-uwg30")
+platform Fomu {
+    //> Primary 48 MHz clock on ball F4.
+    @period_ns("20.833")
+    @pin("F4")
+    incoming clock : Clock
+
+    //> RGB LED (active low).  The physical colour order on the PVT is
+    //> red = B5, green = A5, blue = C5.
+    @pin("B5") outgoing led_red   : Bit
+    @pin("A5") outgoing led_green : Bit
+    @pin("C5") outgoing led_blue  : Bit
+
+    //> Four capacitive touch buttons (active low).
+    @pin("E4") incoming touch1 : Bit
+    @pin("D5") incoming touch2 : Bit
+    @pin("E5") incoming touch3 : Bit
+    @pin("F5") incoming touch4 : Bit
+
+    //> USB (implemented in a softcore; hold low to disconnect).
+    @pin("A1") outgoing usb_dp    : Bit
+    @pin("A2") outgoing usb_dn    : Bit
+    @pin("A4") outgoing usb_dp_pu : Bit
+
+    //> SPI flash.
+    @pin("C1") outgoing flash_cs   : Bit
+    @pin("D1") outgoing flash_clk  : Bit
+    @pin("F1") outgoing flash_mosi : Bit
+    @pin("E1") incoming flash_miso : Bit
+}
+
 //> iCEstick board.
 //> Lattice iCE40HX-1K, TQ144 package, programmed over USB (FTDI).
 @fpga("ice40")

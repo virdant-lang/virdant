@@ -873,7 +873,11 @@ fn bitstream(args: &Args) -> String {
         }
     }
 
-    virdant::build::run_toolchain(&builddir, &project, &top_name, part.as_ref(), toolchain)
+    // Yosys and nextpnr see the Verilog emitter's module names, not
+    // Virdant's fully-qualified names (see `verilog_top_name`).
+    let verilog_top = verilog_top_name(&db, top_symbol.id());
+
+    virdant::build::run_toolchain(&builddir, &project, &verilog_top, part.as_ref(), toolchain)
         .unwrap_or_else(|e| {
             eprintln!("Toolchain error: {e}");
             std::process::exit(1);
@@ -882,13 +886,47 @@ fn bitstream(args: &Args) -> String {
     platform_name
 }
 
+/// The name yosys and nextpnr should use for a top module: the Verilog
+/// emitter names an `export`ed module by its simple name, and any other
+/// module by its qualified path (escaped when not a plain Verilog
+/// identifier).  Passing the raw `[prog] top` FQN instead would make the
+/// toolchain look for a module that may not exist in the emitted Verilog.
+fn verilog_top_name(
+    db: &Db,
+    top_symbol_id: virdant::analysis::symbols::SymbolId,
+) -> String {
+    let symboltable = db.get_symboltable();
+    let symbol = symboltable.symbol(top_symbol_id);
+    let is_export = {
+        let package = symbol.location().package();
+        let parsing = db.get_parsing(package);
+        let node = parsing.ast_node(symbol.location().ast_node_id());
+        match node.payload() {
+            virdant::syntax::payload::AstNodePayload::ModDef(mod_def) => mod_def.is_export,
+            _ => false,
+        }
+    };
+    if is_export {
+        virdant::verilog::valid_verilog_name(&symbol.name().to_str_lossy())
+    } else {
+        virdant::verilog::valid_verilog_name(&symbol.fqn().to_str_lossy())
+    }
+}
+
 /// Selects the on-board programmer for a resolved platform name.
 /// The platform is determined by the top module's `for` clause, so the
 /// programmer is inferred from it rather than configured in `Virdant.toml`.
-fn programmer_for(platform: &str) -> &str {
+/// The tuple carries flags that go before the bitstream path (e.g. dfu-util's
+/// `-D`, which iceprog/icesprog do not need).
+fn programmer_for(platform: &str) -> (&'static str, &'static [&'static str]) {
     match platform {
-        "IceSugar" => "icesprog",
-        "IceStick" => "iceprog",
+        "IceSugar" => ("icesprog", &[]),
+        "IceStick" => ("iceprog", &[]),
+        // Fomu is programmed over USB with dfu-util.  `-d` pins the
+        // Fomu DFU bootloader's USB ID (1209:5bf0) so dfu-util can never
+        // grab some other DFU-capable device that happens to be plugged
+        // in (webcams, for instance, expose a DFU interface).
+        "Fomu" => ("dfu-util", &["-d", "1209:5bf0", "-D"]),
         other => {
             eprintln!("No programmer tool known for platform '{other}'");
             std::process::exit(1);
@@ -904,9 +942,9 @@ fn upload(args: &Args) {
         eprintln!("Virdant.toml is missing [project] name");
         std::process::exit(1);
     });
-    let tool = programmer_for(&platform_name);
+    let (tool, tool_args) = programmer_for(&platform_name);
 
-    virdant::build::flash_bitstream(&cwd, &project, tool)
+    virdant::build::flash_bitstream(&cwd, &project, tool, tool_args)
         .unwrap_or_else(|e| {
             eprintln!("Flash error: {e}");
             std::process::exit(1);

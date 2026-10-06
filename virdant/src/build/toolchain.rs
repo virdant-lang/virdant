@@ -36,15 +36,35 @@ pub fn run_toolchain(
 /// Flashes the built bitstream with the given programmer, e.g. `iceprog`
 /// (iCEstick) or `icesprog` (iceSUGAR).  The caller selects the
 /// programmer from the resolved platform.
-pub fn flash_bitstream(cwd: &Path, project: &str, tool: &str) -> Result<(), String> {
+pub fn flash_bitstream(
+    cwd: &Path,
+    project: &str,
+    tool: &str,
+    tool_args: &[&str],
+) -> Result<(), String> {
     let builddir = cwd.join("build");
     let project_bin = builddir.join(format!("{project}.bin"));
 
     let output = std::process::Command::new(tool)
+        .args(tool_args)
         .arg(&project_bin)
-        .output()
-        .unwrap();
+        .output();
+    let output = match output {
+        Ok(output) => output,
+        Err(err) => return Err(format!("could not run '{tool}': {err}")),
+    };
     if !output.status.success() {
+        // dfu-util reports failure when the device reboots into the freshly
+        // downloaded bitstream before its final status poll: reaching that
+        // poll means every byte was sent, and a Fomu drops off USB the moment
+        // the new bitstream boots.  That is evidence of success, not failure,
+        // so treat it as done.  Every other error path still fails below.
+        let diagnostics = BStr::new(&output.stderr).to_str_lossy().into_owned();
+        if diagnostics.contains("unable to read DFU status after completion") {
+            eprintln!("{diagnostics}");
+            println!("Uploaded {}", project_bin.to_string_lossy());
+            return Ok(());
+        }
         eprintln!("{tool} failed");
         eprintln!("{}", BStr::new(&output.stderr));
         return Err(format!("{tool} failed"));
