@@ -1,0 +1,40 @@
+//! Platform definitions for the Lattice iCE40 family.
+
+//> iCESugar board.
+//> Lattice iCE40-UP5K, SG48 package, programmed over USB.
+@fpga("ice40")
+@part("up5k-sg48")
+platform IceSugar {
+    //> Primary 12 MHz clock on pin 35.
+    @period_ns("83.33")
+    @pin(35)
+    incoming clock : Clock
+
+    //> RGB LEDs (active low).
+    @pin(39) outgoing led_red   : Bit
+    @pin(40) outgoing led_blue  : Bit
+    @pin(41) outgoing led_green : Bit
+
+    //> User switch.
+    @pin(18) incoming switch0 : Bit
+
+    //> UART (USB CDC).
+    @pin(4) incoming  uart_rx : Bit
+    @pin(6) outgoing  uart_tx : Bit
+
+    //> SPI flash.
+    @pin(46) outgoing flash_cs   : Bit
+    @pin(48) outgoing flash_clk  : Bit
+    @pin(45) outgoing flash_mosi : Bit
+    @pin(47) incoming  flash_miso : Bit
+}
+
+//> iCE40 Block RAM primitive.
+@cell("SB_RAM40_4K")
+ext mod SbRam40_4k {
+    incoming clock : Clock
+    incoming addr  : Word[14]
+    incoming wdata : Word[8]
+    incoming wmask : Bit
+    outgoing rdata : Word[8]
+}

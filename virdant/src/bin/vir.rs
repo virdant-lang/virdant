@@ -136,23 +136,7 @@ fn project_db(args: &Args) -> Db {
         return db_from_files(paths);
     }
 
-    let cwd = if let Some(cwd) = &args.cwd {
-        match std::fs::canonicalize(cwd) {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("ERROR: cannot resolve directory {}: {e}", cwd.display());
-                std::process::exit(1);
-            }
-        }
-    } else {
-        match std::env::current_dir() {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("ERROR: cannot determine current directory: {e}");
-                std::process::exit(1);
-            }
-        }
-    };
+    let cwd = resolve_cwd(args);
 
     if !cwd.join("Virdant.toml").exists() {
         eprintln!("No Virdant.toml found");
@@ -166,6 +150,38 @@ fn project_db(args: &Args) -> Db {
     }
 
     db_from_dir(src_dir)
+}
+
+/// Canonicalize `args.cwd` if present, else the current directory.
+fn resolve_cwd(args: &Args) -> PathBuf {
+    if let Some(cwd) = &args.cwd {
+        match std::fs::canonicalize(cwd) {
+            Ok(path) => path,
+            Err(e) => {
+                eprintln!("ERROR: cannot resolve directory {}: {e}", cwd.display());
+                std::process::exit(1);
+            }
+        }
+    } else {
+        match std::env::current_dir() {
+            Ok(path) => path,
+            Err(e) => {
+                eprintln!("ERROR: cannot determine current directory: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+/// Read `[prog].<key>` from `Virdant.toml` in `cwd`, tolerating a
+/// missing file or missing keys.
+fn read_prog_key(cwd: &Path, key: &str) -> Option<String> {
+    let text = std::fs::read_to_string(cwd.join("Virdant.toml")).ok()?;
+    let toml: toml::Value = toml::from_str(&text).ok()?;
+    toml.get("prog")
+        .and_then(|prog| prog.get(key))
+        .and_then(|value| value.as_str())
+        .map(|s| s.to_owned())
 }
 
 fn region_string(db: &Db, region: Region) -> String {
@@ -488,17 +504,7 @@ fn dump_typing(args: &Args) {
 }
 
 fn doc(args: &Args, open: bool) {
-    let cwd = if let Some(cwd) = &args.cwd {
-        match std::fs::canonicalize(cwd) {
-            Ok(path) => path,
-            Err(_) => {
-                eprintln!("Directory not found: {}", cwd.display());
-                std::process::exit(1);
-            }
-        }
-    } else {
-        std::env::current_dir().unwrap()
-    };
+    let cwd = resolve_cwd(args);
 
     if !cwd.join("Virdant.toml").exists() {
         eprintln!("No Virdant.toml found");
@@ -577,17 +583,7 @@ fn build(args: &Args) {
         let builddir = std::env::current_dir().unwrap().join("build");
         (db, builddir)
     } else {
-        let cwd = if let Some(cwd) = &args.cwd {
-            match std::fs::canonicalize(cwd) {
-                Ok(path) => path,
-                Err(_) => {
-                    eprintln!("Directory not found: {}", cwd.display());
-                    std::process::exit(1);
-                }
-            }
-        } else {
-            std::env::current_dir().unwrap()
-        };
+        let cwd = resolve_cwd(args);
 
         if !cwd.join("Virdant.toml").exists() {
             eprintln!("No Virdant.toml found");
@@ -633,11 +629,7 @@ fn compile(path: PathBuf) {
 }
 
 fn run_icarus(args: &Args, _path: &Option<PathBuf>, vcd: &Option<String>) {
-    let cwd = if let Some(cwd) = &args.cwd {
-        std::fs::canonicalize(cwd).unwrap()
-    } else {
-        std::env::current_dir().unwrap()
-    };
+    let cwd = resolve_cwd(args);
 
     if !cwd.join("Virdant.toml").exists() {
         eprintln!("No Virdant.toml found");
@@ -712,11 +704,7 @@ fn run(_args: &Args, path: &PathBuf) {
 }
 
 fn new_project(args: &Args, project: &str) {
-    let cwd = if let Some(cwd) = &args.cwd {
-        std::fs::canonicalize(cwd).unwrap()
-    } else {
-        std::env::current_dir().unwrap()
-    };
+    let cwd = resolve_cwd(args);
 
     let project_dir = cwd.join(project);
 
@@ -767,11 +755,7 @@ fn new_project(args: &Args, project: &str) {
 }
 
 fn bitstream(args: &Args) {
-    let cwd = if let Some(cwd) = &args.cwd {
-        std::fs::canonicalize(cwd).unwrap()
-    } else {
-        std::env::current_dir().unwrap()
-    };
+    let cwd = resolve_cwd(args);
 
     if !cwd.join("Virdant.toml").exists() {
         eprintln!("No Virdant.toml found");
@@ -783,14 +767,10 @@ fn bitstream(args: &Args) {
 
     let project = virdant_toml["project"]["name"].as_str().unwrap().to_owned();
 
-    let platform = virdant_toml
-        .get("prog")
-        .and_then(|p| p.get("platform"))
-        .and_then(|p| p.as_str())
-        .unwrap_or_else(|| {
-            eprintln!("Virdant.toml is missing [prog] platform");
-            std::process::exit(1);
-        });
+    let platform = read_prog_key(&cwd, "platform").unwrap_or_else(|| {
+        eprintln!("Virdant.toml is missing [prog] platform");
+        std::process::exit(1);
+    });
     assert_eq!(platform, "icesugar", "Only 'icesugar' platform is supported");
 
     let builddir = cwd.join("build");
@@ -947,11 +927,7 @@ fn create_pcf_file(db: &Db, top: &BStr, builddir: &PathBuf) {
 fn upload(args: &Args) {
     bitstream(args);
 
-    let cwd = if let Some(cwd) = &args.cwd {
-        std::fs::canonicalize(cwd).unwrap()
-    } else {
-        std::env::current_dir().unwrap()
-    };
+    let cwd = resolve_cwd(args);
 
     let virdant_toml_text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
     let virdant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();

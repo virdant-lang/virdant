@@ -123,7 +123,12 @@ impl<'d> Converter<'d> {
                 };
                 let moddef_name = parsing.string(moddef.name.clone()).to_str_lossy().into_owned();
                 let module_path = qualified_module_name(&self.db.get_packages().name(package).to_str_lossy(), &moddef_name);
-                let emitted_name = if moddef.is_export {
+                let emitted_name = if let Some(cell) = cell_annotation(&self.db, package, &item_ast) {
+                    // Yosys matches ext-mod instantiations against its
+                    // native cell names (e.g. `SB_RAM40_4K`), so the
+                    // `@cell` name is the emitted name.
+                    cell
+                } else if moddef.is_export {
                     valid_verilog_name(&moddef_name)
                 } else {
                     valid_verilog_name(&module_path)
@@ -1917,6 +1922,29 @@ fn qualified_module_name(package_name: &str, module_name: &str) -> String {
     format!("{package_name}::{module_name}")
 }
 
+/// The `@cell("...")` annotation on a mod def, if any. Only meaningful
+/// for ext mods, whose instantiations must use the toolchain's native
+/// cell name (e.g. `SB_RAM40_4K`) for yosys to recognize the primitive.
+fn cell_annotation(db: &Db, package: PackageId, item_ast: &AstNode<'_>) -> Option<String> {
+    let AstNodePayload::ModDef(moddef) = item_ast.payload() else {
+        return None;
+    };
+    if !moddef.is_ext {
+        return None;
+    }
+    let parsing = db.get_parsing(package);
+    use crate::syntax::ast::AnnotationValue;
+    item_ast
+        .annotation_values(&parsing, "cell")
+        .into_iter()
+        .next()
+        .map(|value| match value {
+            AnnotationValue::Str(s) => s,
+            AnnotationValue::Nat(n) => n.to_string().into(),
+        })
+        .map(|s| s.to_str_lossy().into_owned())
+}
+
 fn type_width(typ: &Type, db: &Db) -> Width {
     match typ {
         Type::Bit | Type::Clock | Type::Reset => 1,
@@ -2036,4 +2064,71 @@ fn collect_ast_holes(node: AstNode<'_>, db: &crate::db::Db) -> Vec<String> {
         }
     }
     holes
+}
+
+#[cfg(test)]
+mod tests {
+    use bstr::BString;
+
+    use crate::common::source::Source;
+    use crate::db::Db;
+    use crate::package::PackageTable;
+    use crate::verilog::Element;
+
+    fn db_from_pairs(files: &[(&str, String)]) -> Db {
+        let mut db = Db::new();
+        let names: Vec<BString> = files.iter().map(|(name, _)| BString::from(*name)).collect();
+        db.set_packages(PackageTable::new(names));
+        let packages = db.get_packages();
+        for (name, text) in files {
+            let package = packages.id(name.as_bytes().into()).unwrap();
+            db.set_source(package, Source::new(package, text.clone().into()));
+        }
+        db
+    }
+
+    #[test]
+    fn cell_annotation_names_ext_mod_instantiation() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let builtin = std::fs::read_to_string(root.join("../lib/builtin.vir")).unwrap();
+        let ice40 = std::fs::read_to_string(root.join("../lib/ice40.vir")).unwrap();
+        let design = r#"export mod Top {
+    incoming clock : Clock
+    outgoing rdata : Word[8]
+    mod ram of ice40::SbRam40_4k {
+        it.clock := clock
+        it.addr := 0w14
+        it.wdata := 0w8
+        it.wmask := false
+        rdata := it.rdata
+    }
+}
+"#.to_string();
+
+        let db = db_from_pairs(&[
+            ("builtin", builtin),
+            ("ice40", ice40),
+            ("design", design),
+        ]);
+        if let Err(diagnostics) = crate::util::check_db(&db) {
+            panic!("Design should check clean: {diagnostics:?}");
+        }
+
+        let verilog = super::convert_db_to_verilog(&db);
+
+        // The instantiation of the ram primitive is emitted under the
+        // `@cell` name, not the mangled Virdant name.
+        let top_file = verilog.files.iter().find(|f| f.name == "design.sv").unwrap();
+        let top_module = top_file.modules.iter().find(|m| m.name == "Top").unwrap();
+        let submodule = top_module.elements.iter().find_map(|element| match element {
+            Element::Submodule(submodule) if submodule.submodule_name == "SB_RAM40_4K" => Some(submodule),
+            _ => None,
+        }).expect("expected an SB_RAM40_4K instantiation in Top");
+        assert_eq!(submodule.name, "ram");
+
+        // Ext mod definitions are not emitted; the ice40 package's
+        // ext mod carries the cell name with `is_ext` set.
+        let ice40_file = verilog.files.iter().find(|f| f.name == "ice40.sv").unwrap();
+        assert!(ice40_file.modules.iter().any(|m| m.is_ext && m.name == "SB_RAM40_4K"));
+    }
 }

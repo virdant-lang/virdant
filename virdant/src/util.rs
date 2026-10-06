@@ -31,21 +31,44 @@ fn db_from_name_text_pairs(files: Vec<(BString, BString)>) -> Db {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn load_vir_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Vec<(BString, BString)> {
-    let builtin = Source::load_file(crate::LIB_DIR.join("builtin.vir"));
-    let mut files = vec![builtin];
+fn load_lib_dir<P: Into<std::path::PathBuf>>(lib_dir: P) -> Vec<(BString, BString)> {
+    let lib_dir = std::fs::canonicalize(lib_dir.into())
+        .expect("Could not find lib directory");
+    let mut filepaths: Vec<std::path::PathBuf> = std::fs::read_dir(&lib_dir)
+        .expect(&format!("Could not open directory: {lib_dir:?}"))
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|filepath| match filepath.extension() {
+            Some(ext) => ext.to_string_lossy() == "vir",
+            None => false,
+        })
+        .collect();
+    // Deterministic package ordering regardless of read_dir order.
+    filepaths.sort();
+    filepaths.into_iter().map(Source::load_file).collect()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn load_source_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Vec<(BString, BString)> {
     let source_dir: std::path::PathBuf = source_dir.into();
-    for filepath in std::fs::read_dir(&source_dir).expect(&format!("Could not open directory: {source_dir:?}")) {
-        let filepath = match filepath {
-            Ok(filepath) => filepath.path(),
-            Err(_) => continue,
-        };
-        match filepath.extension() {
-            Some(ext) if ext.to_string_lossy() == "vir" => (),
-            _ => continue,
-        }
-        files.push(Source::load_file(filepath));
-    }
+    let mut filepaths: Vec<std::path::PathBuf> = std::fs::read_dir(&source_dir)
+        .expect(&format!("Could not open directory: {source_dir:?}"))
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|filepath| match filepath.extension() {
+            Some(ext) => ext.to_string_lossy() == "vir",
+            None => false,
+        })
+        .collect();
+    filepaths.sort();
+    filepaths.into_iter().map(Source::load_file).collect()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn load_vir_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Vec<(BString, BString)> {
+    // Load every *.vir in LIB_DIR (builtin.vir, ice40.vir, ...) plus
+    // the source dir.  Loading is not scoping: only `import` puts a
+    // package's items in scope.
+    let mut files = load_lib_dir(crate::LIB_DIR.as_path());
+    files.extend(load_source_dir(source_dir));
     files
 }
 
@@ -57,22 +80,8 @@ pub fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn db_from_dir_with_lib<P, Q>(source_dir: P, lib_dir: Q) -> Db
 where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
-    let lib_dir = lib_dir.into();
-    let lib_dir = std::fs::canonicalize(&lib_dir).expect(&format!("Could not find {lib_dir:?}"));
-    let builtin = Source::load_file(lib_dir.join("builtin.vir"));
-    let mut files = vec![builtin];
-    let source_dir: std::path::PathBuf = source_dir.into();
-    for filepath in std::fs::read_dir(&source_dir).expect(&format!("Could not open directory: {source_dir:?}")) {
-        let filepath = match filepath {
-            Ok(filepath) => filepath.path(),
-            Err(_) => continue,
-        };
-        match filepath.extension() {
-            Some(ext) if ext.to_string_lossy() == "vir" => (),
-            _ => continue,
-        }
-        files.push(Source::load_file(filepath));
-    }
+    let mut files = load_lib_dir(lib_dir);
+    files.extend(load_source_dir(source_dir));
     db_from_name_text_pairs(files)
 }
 
@@ -95,11 +104,7 @@ pub fn db_from_files<P: Into<std::path::PathBuf>>(source_files: Vec<P>) -> Db {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn db_from_files_with_lib<P, Q>(source_files: Vec<P>, lib_dir: Q) -> Db
 where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
-    let lib_dir = lib_dir.into();
-    let lib_dir = std::fs::canonicalize(&lib_dir).expect(&format!("Could not find {lib_dir:?}"));
-
-    let builtin = Source::load_file(lib_dir.join("builtin.vir"));
-    let mut files = vec![builtin];
+    let mut files = load_lib_dir(lib_dir);
 
     for source_file in source_files {
         files.push(Source::load_file(source_file.into()));

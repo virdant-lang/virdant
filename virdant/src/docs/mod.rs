@@ -497,6 +497,7 @@ fn node_kind(node: &AstNode<'_>) -> SymbolKind {
         AstNodePayload::BuiltinDef(_) => SymbolKind::BuiltinDef,
         AstNodePayload::FnDef(_) => SymbolKind::FnDef,
         AstNodePayload::SocketDef(_) => SymbolKind::SocketDef,
+        AstNodePayload::Platform(_) => SymbolKind::Platform,
         _ => unreachable!(),
     }
 }
