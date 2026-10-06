@@ -114,7 +114,7 @@ fn main() {
         Command::Run { ref path } => run(&args, path),
         Command::RunIcarus { ref path, ref vcd } => run_icarus(&args, path, vcd),
         Command::New { ref project } => new_project(&args, project),
-        Command::Bitstream { } => bitstream(&args),
+        Command::Bitstream { } => { bitstream(&args); },
         Command::Upload { } => upload(&args),
         Command::Doc { open } => doc(&args, open),
         Command::External(args) => exec_external(args),
@@ -736,7 +736,7 @@ fn new_project(args: &Args, project: &str) {
     std::fs::create_dir_all(project_dir.join("src")).unwrap();
 
     let toml_content = format!(
-        "[project]\nname = \"{project}\"\n\n[prog]\nplatform = \"icesugar\"\n"
+        "[project]\nname = \"{project}\"\n\n[prog]\ntop = \"top::Top\"\n"
     );
     std::fs::write(project_dir.join("Virdant.toml"), toml_content).unwrap();
 
@@ -774,7 +774,7 @@ fn new_project(args: &Args, project: &str) {
     println!("Created project '{project}'");
 }
 
-fn bitstream(args: &Args) {
+fn bitstream(args: &Args) -> String {
     let cwd = resolve_cwd(args);
     if !cwd.join("Virdant.toml").exists() {
         eprintln!("No Virdant.toml found");
@@ -825,6 +825,7 @@ fn bitstream(args: &Args) {
             std::process::exit(1);
         }
     };
+    let platform_name = symboltable.symbol(platform_id).name().to_string();
 
     // Defensive re-check: ports must exactly match the platform.
     // (Normally already enforced by `vir check` via check_platform_ports.)
@@ -877,19 +878,35 @@ fn bitstream(args: &Args) {
             eprintln!("Toolchain error: {e}");
             std::process::exit(1);
         });
+
+    platform_name
+}
+
+/// Selects the on-board programmer for a resolved platform name.
+/// The platform is determined by the top module's `for` clause, so the
+/// programmer is inferred from it rather than configured in `Virdant.toml`.
+fn programmer_for(platform: &str) -> &str {
+    match platform {
+        "IceSugar" => "icesprog",
+        "IceStick" => "iceprog",
+        other => {
+            eprintln!("No programmer tool known for platform '{other}'");
+            std::process::exit(1);
+        }
+    }
 }
 
 fn upload(args: &Args) {
-    bitstream(args);
+    let platform_name = bitstream(args);
 
     let cwd = resolve_cwd(args);
     let project = read_project_name(&cwd).unwrap_or_else(|| {
         eprintln!("Virdant.toml is missing [project] name");
         std::process::exit(1);
     });
-    let tool = read_prog_key(&cwd, "tool");
+    let tool = programmer_for(&platform_name);
 
-    virdant::build::flash_bitstream(&cwd, &project, tool.as_deref())
+    virdant::build::flash_bitstream(&cwd, &project, tool)
         .unwrap_or_else(|e| {
             eprintln!("Flash error: {e}");
             std::process::exit(1);

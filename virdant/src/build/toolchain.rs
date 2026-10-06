@@ -34,9 +34,9 @@ pub fn run_toolchain(
 }
 
 /// Flashes the built bitstream with the given programmer, e.g. `iceprog`
-/// (iCEstick) or `icesprog` (iceSUGAR).  Defaults to `icesprog`.
-pub fn flash_bitstream(cwd: &Path, project: &str, tool: Option<&str>) -> Result<(), String> {
-    let tool = tool.unwrap_or("icesprog");
+/// (iCEstick) or `icesprog` (iceSUGAR).  The caller selects the
+/// programmer from the resolved platform.
+pub fn flash_bitstream(cwd: &Path, project: &str, tool: &str) -> Result<(), String> {
     let builddir = cwd.join("build");
     let project_bin = builddir.join(format!("{project}.bin"));
 

@@ -264,7 +264,9 @@ The `Virdant.toml` file selects which module `vir bitstream` synthesizes:
 5. Runs the toolchain (yosys, nextpnr-ice40, icepack) and writes
    `build/<project>.bin`.
 
-`vir upload` builds the bitstream and flashes it with icesprog.
+`vir upload` builds the bitstream and flashes it with the board's
+programmer, inferred from the top module's platform (e.g. `icesprog`
+for IceSugar, `iceprog` for IceStick).
 
 Only the ice40 family is supported. The `@fpga` value selects the
 toolchain at build time, so a platform naming an unsupported family
@@ -298,13 +300,11 @@ output:
 
 .. note::
 
-   `vir new <project>` scaffolds a `Virdant.toml` and a `src/top.vir`,
-   but its current output predates the `for`-clause binding scheme
-   described above: the generated `Virdant.toml` sets `[prog] platform`
-   (not `[prog] top`), and the generated `Top` module has a single
-   `led : Bit` port and no `for` clause. Such a project is not
-   bound to a board and will not build with `vir bitstream` as-is;
-   edit both files by hand into the `[prog] top` / `for` form shown
+   `vir new <project>` scaffolds a `Virdant.toml` and a `src/top.vir`.
+   The generated `Virdant.toml` sets `[prog] top`, but the generated
+   `Top` module has a single `led : Bit` port and no `for` clause, so
+   it is not yet bound to a board and will not build with `vir bitstream`
+   as-is. Add a `for` clause (and matching platform ports) as shown
    above before building.
 
 

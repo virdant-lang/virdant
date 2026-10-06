@@ -1,5 +1,2 @@
 [project]
 name = "virdoc"
-
-[prog]
-platform = "icesugar"

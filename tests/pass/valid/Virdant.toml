@@ -1,5 +1,2 @@
 [project]
 name = "valid"
-
-[prog]
-platform = "icesugar"

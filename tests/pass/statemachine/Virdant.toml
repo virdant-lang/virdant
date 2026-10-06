@@ -1,5 +1,2 @@
 [project]
 name = "statemachine"
-
-[prog]
-platform = "icesugar"

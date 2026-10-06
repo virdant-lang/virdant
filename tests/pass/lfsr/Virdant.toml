@@ -1,5 +1,2 @@
 [project]
 name = "lfsr"
-
-[prog]
-platform = "icesugar"
