@@ -49,6 +49,12 @@ platform IceStick {
     //> UART (FTDI USB).
     @pin(9) incoming  uart_rx : Bit
     @pin(8) outgoing  uart_tx : Bit
+
+    //> SPI flash.
+    @pin(71) outgoing flash_cs   : Bit
+    @pin(70) outgoing flash_clk  : Bit
+    @pin(67) outgoing flash_mosi : Bit
+    @pin(68) incoming flash_miso : Bit
 }
 
 //> iCE40 Block RAM primitive.

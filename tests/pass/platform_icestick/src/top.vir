@@ -16,6 +16,10 @@ export mod Top for ice40::IceStick {
     outgoing led5 : Bit
     incoming uart_rx : Bit
     outgoing uart_tx : Bit
+    outgoing flash_cs   : Bit
+    outgoing flash_clk  : Bit
+    outgoing flash_mosi : Bit
+    incoming flash_miso : Bit
 
     reg counter : Word[24] on clock {
         it <= it + 1w24
@@ -27,6 +31,10 @@ export mod Top for ice40::IceStick {
     led4 := false
     led5 := false
     uart_tx := true
+    flash_cs := true
+    flash_clk := false
+    flash_mosi := false
 
     unused uart_rx
+    unused flash_miso
 }
