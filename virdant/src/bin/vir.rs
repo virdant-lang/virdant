@@ -887,8 +887,9 @@ fn upload(args: &Args) {
         eprintln!("Virdant.toml is missing [project] name");
         std::process::exit(1);
     });
+    let tool = read_prog_key(&cwd, "tool");
 
-    virdant::build::flash_bitstream(&cwd, &project)
+    virdant::build::flash_bitstream(&cwd, &project, tool.as_deref())
         .unwrap_or_else(|e| {
             eprintln!("Flash error: {e}");
             std::process::exit(1);

@@ -3,7 +3,7 @@ VIR_FILES := $(wildcard *.vir)
 # Project-style tests (directory + Virdant.toml + own Makefile),
 # listed explicitly: other project directories carry simulator tests
 # that need external tools (iverilog, verilator) and are not wired in.
-VIR_PROJS := platform_icesugar
+VIR_PROJS := platform_icesugar platform_icestick
 
 BASEDIR = $(abspath ../..)
 VIR ?= $(BASEDIR)/target/release/vir

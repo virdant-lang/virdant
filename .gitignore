@@ -2,6 +2,7 @@ ignore/
 plans/
 **/target
 build
+!/virdant/src/build/
 .cargo
 *.gtkw
 *.vcd

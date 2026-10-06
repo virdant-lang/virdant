@@ -150,7 +150,7 @@ The `ice40` package ships at `lib/ice40.vir`, next to `lib/builtin.vir`.
 Every project loads all `lib/*.vir` files automatically; as with any
 package, :vir:`import ice40` puts its items in scope.
 
-It currently defines one board, the iCESugar:
+It currently defines two boards, the iCESugar and the iCEstick:
 
 .. code-block:: virdant
 
@@ -184,6 +184,38 @@ It currently defines one board, the iCESugar:
         @pin(45) outgoing flash_mosi : Bit
         @pin(47) incoming  flash_miso : Bit
     }
+
+    //> iCEstick board.
+    //> Lattice iCE40HX-1K, TQ144 package, programmed over USB (FTDI).
+    @fpga("ice40")
+    @part("hx1k-tq144")
+    platform IceStick {
+        //> Primary 12 MHz clock on pin 21.
+        @period_ns("83.33")
+        @pin(21)
+        incoming clock : Clock
+
+        //> User LEDs (D1-D5).
+        @pin(99) outgoing led1 : Bit
+        @pin(98) outgoing led2 : Bit
+        @pin(97) outgoing led3 : Bit
+        @pin(96) outgoing led4 : Bit
+        @pin(95) outgoing led5 : Bit
+
+        //> UART (FTDI USB).
+        @pin(9) incoming  uart_rx : Bit
+        @pin(8) outgoing  uart_tx : Bit
+    }
+
+.. note::
+
+   The build flow's nextpnr invocation currently hardcodes the
+   `--up5k` chip flag (see `virdant/src/build/toolchain.rs`), so
+   `vir bitstream` only place-and-routes correctly for the iCESugar
+   today. `vir check` and PCF generation work for any board, including
+   the iCEstick, but driving nextpnr for a non-up5k chip (like the
+   iCEstick's hx1k) needs that chip flag derived from `@part` instead
+   of hardcoded.
 
 The same package declares external modules for the FPGA's hardware
 primitives, annotated with the cell name yosys expects in the generated

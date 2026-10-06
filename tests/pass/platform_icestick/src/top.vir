@@ -1,0 +1,32 @@
+// Tests that vir check loads the shipped ice40 lib package
+// and resolves `import ice40` + `for ice40::IceStick`.
+
+// CHECK: Check OK
+
+//! Blink an iCEstick LED.
+
+import ice40
+
+export mod Top for ice40::IceStick {
+    incoming clock : Clock
+    outgoing led1 : Bit
+    outgoing led2 : Bit
+    outgoing led3 : Bit
+    outgoing led4 : Bit
+    outgoing led5 : Bit
+    incoming uart_rx : Bit
+    outgoing uart_tx : Bit
+
+    reg counter : Word[24] on clock {
+        it <= it + 1w24
+    }
+
+    led1 := counter[23]
+    led2 := false
+    led3 := false
+    led4 := false
+    led5 := false
+    uart_tx := true
+
+    unused uart_rx
+}
