@@ -1,0 +1,5 @@
+[project]
+name = "platform_artya7"
+
+[prog]
+top = "top::Top"

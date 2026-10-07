@@ -1,0 +1,63 @@
+// Tests that vir check loads the shipped xilinx lib package
+// and resolves `import xilinx` + `for xilinx::ArtyA7`.
+
+// CHECK: Check OK
+
+//! Arty A7 blink demo.
+//!
+//! Blinks the Arty A7's four user LEDs: `led0` toggles at about 0.7
+//! Hz and the other three stay dark.  The LEDs are active high, and
+//! the remaining platform I/O (buttons, switches, UART, SPI flash) is
+//! tied off or marked unused, since a design bound to a platform must
+//! declare all of the platform's ports.
+
+import xilinx
+
+export mod Top for xilinx::ArtyA7 {
+    incoming clock : Clock
+    outgoing led0 : Bit
+    outgoing led1 : Bit
+    outgoing led2 : Bit
+    outgoing led3 : Bit
+    incoming btn0 : Bit
+    incoming btn1 : Bit
+    incoming btn2 : Bit
+    incoming btn3 : Bit
+    incoming sw0 : Bit
+    incoming sw1 : Bit
+    incoming sw2 : Bit
+    incoming sw3 : Bit
+    incoming uart_rx : Bit
+    outgoing uart_tx : Bit
+    outgoing flash_cs   : Bit
+    outgoing flash_clk  : Bit
+    outgoing flash_mosi : Bit
+    incoming flash_miso : Bit
+
+    reg counter : Word[27] on clock {
+        it <= it + 1w27
+    }
+
+    // 2^27 cycles at 100 MHz is about 1.3 seconds per blink.
+    led0 := counter[26]
+    led1 := false
+    led2 := false
+    led3 := false
+
+    // Keep the UART and SPI flash idle.
+    uart_tx    := true
+    flash_cs   := true
+    flash_clk  := false
+    flash_mosi := false
+
+    unused btn0
+    unused btn1
+    unused btn2
+    unused btn3
+    unused sw0
+    unused sw1
+    unused sw2
+    unused sw3
+    unused uart_rx
+    unused flash_miso
+}

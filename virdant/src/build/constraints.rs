@@ -1,5 +1,6 @@
-//! PCF constraint emission: turns a platform item's `@pin`/`@period_ns`
-//! metadata into the PCF file nextpnr-ice40 consumes.
+//! Constraint emission: turns a platform item's `@pin`/`@period_ns`
+//! metadata into the PCF file nextpnr-ice40 consumes, or the XDC file
+//! nextpnr-xilinx consumes.
 
 use std::fmt::Write;
 
@@ -9,21 +10,32 @@ use indexmap::IndexSet;
 
 use crate::analysis::platform::{platform_clocks, platform_pins};
 use crate::analysis::symbols::{SymbolId, SymbolKind};
+use crate::build::toolchain::Toolchain;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
 
-/// Emits the PCF for a platform item: one `set_io` line per pinned
-/// port, one `set_frequency` line per clock port (platforms with
-/// several clocks simply get several lines; Decision 13 forbids
-/// cardinality constraints).  A platform port with no `@pin` yields
-/// an `Unknown` diagnostic naming the port, and no file content is
-/// produced — the PCF would otherwise be silently incomplete
-/// (Decision 13: point-of-use errors).
-pub fn emit_pcf(builder: &mut Builder, platform_id: SymbolId) -> Result<String, Vec<Diagnostic>> {
-    let pins = platform_pins(builder, platform_id);
-    let clocks = platform_clocks(builder, platform_id);
+/// Emits constraints for a platform item in the toolchain's format,
+/// returning the build directory file extension together with the
+/// content: PCF for ice40, XDC for xilinx.  The toolchain runners read
+/// the same `<project>.<extension>` name from the build directory.
+pub fn emit_constraints(
+    builder: &mut Builder,
+    platform_id: SymbolId,
+    toolchain: Toolchain,
+) -> Result<(&'static str, String), Vec<Diagnostic>> {
+    match toolchain {
+        Toolchain::Ice40 => emit_pcf(builder, platform_id).map(|text| ("pcf", text)),
+        Toolchain::Xilinx => emit_xdc(builder, platform_id).map(|text| ("xdc", text)),
+    }
+}
 
-    // Every platform port must have a @pin.
+/// Diagnostics for every platform port without a `@pin`.  Both
+/// emitters refuse to emit an incomplete constraints file: a missing
+/// pin would otherwise leave the port unconstrained at place-and-route
+/// time (Decision 13: point-of-use errors).
+fn require_pins(builder: &mut Builder, platform_id: SymbolId) -> Result<(), Vec<Diagnostic>> {
+    let pins = platform_pins(builder, platform_id);
+
     let pinned: IndexSet<BString> = pins.iter().map(|(port, _)| port.clone()).collect();
     let mut diagnostics = vec![];
     let symboltable = builder.get_symboltable();
@@ -44,17 +56,57 @@ pub fn emit_pcf(builder: &mut Builder, platform_id: SymbolId) -> Result<String, 
             ));
         }
     }
-    if !diagnostics.is_empty() {
-        return Err(diagnostics);
+    if diagnostics.is_empty() {
+        Ok(())
+    } else {
+        Err(diagnostics)
     }
+}
+
+/// Emits the PCF for a platform item: one `set_io` line per pinned
+/// port, one `set_frequency` line per clock port (platforms with
+/// several clocks simply get several lines; Decision 13 forbids
+/// cardinality constraints).  A platform port with no `@pin` yields
+/// an `Unknown` diagnostic naming the port, and no file content is
+/// produced — the PCF would otherwise be silently incomplete
+/// (Decision 13: point-of-use errors).
+pub fn emit_pcf(builder: &mut Builder, platform_id: SymbolId) -> Result<String, Vec<Diagnostic>> {
+    require_pins(builder, platform_id)?;
+    let pins = platform_pins(builder, platform_id);
+    let clocks = platform_clocks(builder, platform_id);
 
     let mut out = String::new();
     for (port, pin) in &pins {
         let _ = writeln!(out, "set_io {port} {pin}");
     }
-    for (_port, pin, period_ns) in &clocks {
+    for (port, _pin, period_ns) in &clocks {
         let mhz = (1000.0 / period_ns * 10.0).round() / 10.0;
-        let _ = writeln!(out, "set_frequency {pin} {mhz:.1}");
+        let _ = writeln!(out, "set_frequency {port} {mhz:.1}");
+    }
+    Ok(out)
+}
+
+/// Emits the XDC for a platform item: one `set_property LOC` and
+/// `set_property IOSTANDARD LVCMOS33` pair per pinned port, and one
+/// `create_clock` per clock port.  nextpnr-xilinx reads the `LOC`
+/// property (not `PACKAGE_PIN`), and its `create_clock` target lookup
+/// does not strip `{}` braces the way `set_property`'s does, so port
+/// names are written bare.  The I/O standard is hardcoded `LVCMOS33`:
+/// the Arty A7's banks are 3.3 V, and a platform on other-voltage
+/// banks would need the standard spelled out in its port
+/// annotations, which do not exist yet.
+pub fn emit_xdc(builder: &mut Builder, platform_id: SymbolId) -> Result<String, Vec<Diagnostic>> {
+    require_pins(builder, platform_id)?;
+    let pins = platform_pins(builder, platform_id);
+    let clocks = platform_clocks(builder, platform_id);
+
+    let mut out = String::new();
+    for (port, pin) in &pins {
+        let _ = writeln!(out, "set_property LOC {pin} [get_ports {port}]");
+        let _ = writeln!(out, "set_property IOSTANDARD LVCMOS33 [get_ports {port}]");
+    }
+    for (port, _pin, period_ns) in &clocks {
+        let _ = writeln!(out, "create_clock -period {period_ns} [get_ports {port}]");
     }
     Ok(out)
 }
@@ -118,7 +170,7 @@ mod tests {
             "set_io clock 35\n\
              set_io led_red 39\n\
              set_io switch0 E3\n\
-             set_frequency 35 12.0\n"
+             set_frequency clock 12.0\n"
         );
     }
 
@@ -142,9 +194,66 @@ mod tests {
             pcf,
             "set_io clk1 35\n\
              set_io clk2 36\n\
-             set_frequency 35 12.0\n\
-             set_frequency 36 100.0\n"
+             set_frequency clk1 12.0\n\
+             set_frequency clk2 100.0\n"
         );
+    }
+
+    #[test]
+    fn xdc_pins_and_clock() {
+        let design = r#"platform ArtyA7 {
+    @period_ns("10")
+    @pin("E3")
+    incoming clock : Clock
+
+    @pin("H5")
+    outgoing led0 : Bit
+
+    @pin("A8")
+    incoming switch0 : Bit
+}
+"#.to_string();
+        let mut db = db_from_pairs(&[("builtin", builtin_source()), ("design", design)]);
+        let platform_id = platform_symbol_id(&db);
+        let mut builder = builder(&db);
+        let xdc = emit_xdc(&mut builder, platform_id).unwrap();
+        assert_eq!(
+            xdc,
+            "set_property LOC E3 [get_ports clock]\n\
+             set_property IOSTANDARD LVCMOS33 [get_ports clock]\n\
+             set_property LOC H5 [get_ports led0]\n\
+             set_property IOSTANDARD LVCMOS33 [get_ports led0]\n\
+             set_property LOC A8 [get_ports switch0]\n\
+             set_property IOSTANDARD LVCMOS33 [get_ports switch0]\n\
+             create_clock -period 10 [get_ports clock]\n"
+        );
+    }
+
+    #[test]
+    fn xdc_missing_pin_is_unknown_diagnostic() {
+        let design = r#"platform ArtyA7 {
+    @period_ns("10")
+    @pin("E3")
+    incoming clock : Clock
+
+    outgoing no_pin : Bit
+}
+"#.to_string();
+        let mut db = db_from_pairs(&[("builtin", builtin_source()), ("design", design)]);
+        let platform_id = platform_symbol_id(&db);
+        let mut builder = builder(&db);
+        let Err(diagnostics) = emit_xdc(&mut builder, platform_id) else {
+            panic!("expected missing-pin diagnostics");
+        };
+        assert_eq!(diagnostics.len(), 1);
+        let message = match &diagnostics[0].payload {
+            crate::diagnostics::DiagnosticPayload::Unknown(unknown) => {
+                unknown.message.to_string()
+            }
+            payload => panic!("expected Unknown diagnostic, got {payload:?}"),
+        };
+        assert!(message.contains("no_pin"), "message: {message}");
+        assert!(message.contains("missing a @pin"), "message: {message}");
     }
 
     #[test]

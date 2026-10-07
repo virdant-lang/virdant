@@ -209,13 +209,10 @@ It currently defines two boards, the iCESugar and the iCEstick:
 
 .. note::
 
-   The build flow's nextpnr invocation currently hardcodes the
-   `--up5k` chip flag (see `virdant/src/build/toolchain.rs`), so
-   `vir bitstream` only place-and-routes correctly for the iCESugar
-   today. `vir check` and PCF generation work for any board, including
-   the iCEstick, but driving nextpnr for a non-up5k chip (like the
-   iCEstick's hx1k) needs that chip flag derived from `@part` instead
-   of hardcoded.
+   The nextpnr-ice40 chip flag and package are derived from `@part`
+   (see `virdant/src/build/toolchain.rs`): `"hx1k-tq144"` becomes
+   `--hx1k --package tq144`.  `vir check` and PCF generation work for
+   any ice40 board.
 
 The same package declares external modules for the FPGA's hardware
 primitives, annotated with the cell name yosys expects in the generated
@@ -257,6 +254,77 @@ cell's default parameters.  See :doc:`items` for `ext mod`
 declarations.
 
 
+The Shipped xilinx Platform
+---------------------------
+The `xilinx` package ships at `lib/xilinx.vir`, next to `lib/ice40.vir`.
+It defines two Arty A7 boards, which share one ball assignment (only
+the die differs):
+
+.. code-block:: virdant
+
+    //! Platform definitions for the Xilinx 7-series family.
+
+    //> Digilent Arty A7-35T (Rev. D/E).
+    //> Xilinx Artix-7 xc7a35t, CSG324 package, programmed over FTDI JTAG.
+    @fpga("xilinx")
+    @part("xc7a35tcsg324-1")
+    platform ArtyA7 {
+        //> Primary 100 MHz clock on ball E3.
+        @period_ns("10")
+        @pin("E3")
+        incoming clock : Clock
+
+        //> User LEDs LD0-LD3 (light when driven high).
+        @pin("H5")  outgoing led0 : Bit
+        // ... led1-led3, buttons, switches, UART, SPI flash ...
+    }
+
+    //> Digilent Arty A7-100T (Rev. D/E).
+    @fpga("xilinx")
+    @part("xc7a100tcsg324-1")
+    platform ArtyA7_100T {
+        // ... the same ports as ArtyA7 ...
+    }
+
+Here `@part` is the full Xilinx part string, and it is passed verbatim
+to every tool in the flow: as nextpnr-xilinx's `--device`-naming chipdb
+(`xc7a35tcsg324.bin`, the part with its speed grade dropped), as
+fasm2frames's `--part`, and as xc7frames2bit's `--part_name`.
+
+`vir bitstream` runs the Xilinx 7-series flow:
+
+1. Yosys: ``synth_xilinx -flatten -abc9 -arch xc7``, producing a JSON
+   netlist in `build/`.
+2. nextpnr-xilinx with an XDC constraints file emitted from the
+   platform's `@pin` annotations:
+   ``set_property LOC E3 [get_ports clock]`` lines, an
+   ``IOSTANDARD LVCMOS33`` per port (the Arty A7's banks are 3.3 V),
+   and one ``create_clock -period 10 [get_ports clock]`` per clock
+   port.
+3. Project X-Ray's frame tools convert nextpnr's FASM output to
+   frames and pack the frames into ``build/<project>.bit``.
+
+This flow needs more environment than the ice40 flow: `nextpnr-xilinx`
+(the openXC7 toolchain's shim or an equivalent build), the
+``fasm2frames`` and ``xc7frames2bit`` programs from Project X-Ray, a
+nextpnr-xilinx chipdb for the part, and the Project X-Ray database.
+Two environment variables point the build flow at the last two:
+
+* ``NEXTPNR_CHIPDB_DIR`` --- a directory of nextpnr-xilinx chip
+  databases; ``xc7a35tcsg324.bin`` (or ``chipdb-xc7a35tcsg324.bin``)
+  is expected there for the Arty A7-35T.
+* ``PRJXRAY_DB_DIR`` --- the Project X-Ray database root, whose
+  ``artix7/xc7a35tcsg324-1/part.yaml`` must exist (this is the same
+  variable the openXC7 toolchain's ``export.sh`` sets).
+
+A missing tool or environment variable fails before the affected
+external tool runs, naming the variable.
+
+`vir upload` flashes with openFPGALoader
+(``openFPGALoader -b arty_a7_35t`` for the Arty A7-35T,
+``-b arty_a7_100t`` for the Arty A7-100T).
+
+
 Building and Flashing
 ---------------------
 The `Virdant.toml` file selects which module `vir bitstream` synthesizes:
@@ -278,18 +346,21 @@ The `Virdant.toml` file selects which module `vir bitstream` synthesizes:
    enforced by `vir check`). A top module with no `for` clause is an
    error here, before any external tool is invoked.
 3. Emits Verilog for the design into `build/`.
-4. Emits a PCF constraints file from the platform's `@pin` annotations
-   and the clock's `@period_ns`.
-5. Runs the toolchain (yosys, nextpnr-ice40, icepack) and writes
-   `build/<project>.bin`.
+4. Emits a constraints file in the platform family's format from the
+   `@pin` annotations and the clock's `@period_ns`: a PCF for ice40,
+   an XDC for xilinx.
+5. Runs the toolchain (yosys, nextpnr-ice40, icepack for ice40;
+   yosys, nextpnr-xilinx, fasm2frames, xc7frames2bit for xilinx) and
+   writes `build/<project>.bin` or `build/<project>.bit`.
 
 `vir upload` builds the bitstream and flashes it with the board's
 programmer, inferred from the top module's platform (e.g. `icesprog`
-for IceSugar, `iceprog` for IceStick).
+for IceSugar, `iceprog` for IceStick, `openFPGALoader` for Arty A7).
 
-Only the ice40 family is supported. The `@fpga` value selects the
-toolchain at build time, so a platform naming an unsupported family
-passes `vir check` and fails in `vir bitstream` with a clear error.
+Only the ice40 and xilinx families are supported. The `@fpga` value
+selects the toolchain at build time, so a platform naming an
+unsupported family passes `vir check` and fails in `vir bitstream`
+with a clear error.
 
 A blink project bound to the IceSugar board ties off every unused
 output:
@@ -332,9 +403,11 @@ Adding a Platform
 Because a platform is a `.vir` file rather than code, the work depends
 on whether the FPGA family is already supported.
 
-A new board in a supported family (today: ice40) is pure data: add one
-`platform` item to `lib/ice40.vir` with the item-level `@fpga` and
-`@part` annotations, one `@pin(...)` per port, and a `Clock`-typed
+A new board in a supported family (today: ice40 or xilinx) is pure
+data: add one
+`platform` item to `lib/ice40.vir` or `lib/xilinx.vir` with the
+item-level `@fpga` and `@part` annotations, one `@pin(...)` per port,
+and a `Clock`-typed
 incoming port with `@period_ns(...)`. Nothing else is needed ---
 constraint generation and toolchain dispatch are keyed off the `@fpga`
 family. A single lib file may declare several `platform` items.

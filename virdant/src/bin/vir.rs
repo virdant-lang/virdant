@@ -858,10 +858,26 @@ fn bitstream(args: &Args) -> String {
         std::process::exit(1);
     };
 
-    match virdant::build::emit_pcf(&mut builder, platform_id) {
-        Ok(pcf_text) => {
-            let pcf = builddir.join(format!("{project}.pcf"));
-            std::fs::write(&pcf, pcf_text).unwrap();
+    match virdant::build::emit_constraints(&mut builder, platform_id, toolchain) {
+        Ok((extension, mut constraints_text)) => {
+            // An optional <project>.extra.<extension> in the project
+            // root is appended to the emitted constraints.  Platform
+            // annotations can only constrain top-level ports; the
+            // escape hatch covers what they cannot express, such as
+            // the frequency of a clock derived inside the design.
+            let extra_path = cwd.join(format!("{project}.extra.{extension}"));
+            if extra_path.is_file() {
+                match std::fs::read_to_string(&extra_path) {
+                    Ok(extra) => constraints_text.push_str(&extra),
+                    Err(err) => {
+                        eprintln!("Could not read {}: {err}", extra_path.display());
+                        std::process::exit(1);
+                    }
+                }
+                println!("Appended extra constraints from {}", extra_path.display());
+            }
+            let constraints = builddir.join(format!("{project}.{extension}"));
+            std::fs::write(&constraints, constraints_text).unwrap();
         }
         Err(diagnostics) => {
             // e.g. a platform port with no @pin (Unknown diagnostics).
@@ -927,6 +943,10 @@ fn programmer_for(platform: &str) -> (&'static str, &'static [&'static str]) {
         // grab some other DFU-capable device that happens to be plugged
         // in (webcams, for instance, expose a DFU interface).
         "Fomu" => ("dfu-util", &["-d", "1209:5bf0", "-D"]),
+        // The Arty A7's FTDI JTAG.  The board selects cable and flash
+        // model; the -1L variants are programmed like their -1 parts.
+        "ArtyA7" => ("openFPGALoader", &["-b", "arty_a7_35t"]),
+        "ArtyA7_100T" => ("openFPGALoader", &["-b", "arty_a7_100t"]),
         other => {
             eprintln!("No programmer tool known for platform '{other}'");
             std::process::exit(1);

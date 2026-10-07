@@ -1,0 +1,161 @@
+//! Platform definitions for the Xilinx 7-series family.
+//!
+//! Also declares common 7-series hard cells as `@cell` ext mods.  Port
+//! names match the primitives yosys's `synth_xilinx` emits, so
+//! instantiating these modules produces the corresponding hard cell in
+//! the netlist.
+//!
+//! The `@part` value is the full Xilinx part string, e.g.
+//! `xc7a35tcsg324-1`.  The build flow passes it verbatim to
+//! nextpnr-xilinx's `--device`, to fasm2frames's `--part`, and to
+//! xc7frames2bit's `--part_name`, and derives the chipdb file name
+//! (`xc7a35tcsg324.bin`) from it by dropping the speed grade.
+//!
+//! Virdant cannot set Verilog cell parameters yet, so instantiations
+//! use each cell's default parameters.  Yosys infers logic cells,
+//! block RAMs, and the I/O and clock buffers automatically, which is
+//! usually what you want.  The block RAM and clock-management
+//! primitives (RAMB36E1, PLLE2_ADV, MMCME2_ADV, ...) are not declared
+//! here: they are only useful with parameters, and yosys infers the
+//! block RAMs from ordinary memories.
+
+//> Digilent Arty A7-35T (Rev. D/E).
+//> Xilinx Artix-7 xc7a35t, CSG324 package, programmed over FTDI JTAG.
+//> The four RGB LEDs are not declared; extend the platform if you need
+//> them.
+@fpga("xilinx")
+@part("xc7a35tcsg324-1")
+platform ArtyA7 {
+    //> Primary 100 MHz clock on ball E3.
+    @period_ns("10")
+    @pin("E3")
+    incoming clock : Clock
+
+    //> User LEDs LD0-LD3 (light when driven high).
+    @pin("H5")  outgoing led0 : Bit
+    @pin("J5")  outgoing led1 : Bit
+    @pin("T9")  outgoing led2 : Bit
+    @pin("T10") outgoing led3 : Bit
+
+    //> Push buttons BTN0-BTN3.
+    @pin("D9") incoming btn0 : Bit
+    @pin("C9") incoming btn1 : Bit
+    @pin("B9") incoming btn2 : Bit
+    @pin("B8") incoming btn3 : Bit
+
+    //> Slide switches SW0-SW3.
+    @pin("A8")  incoming sw0 : Bit
+    @pin("C11") incoming sw1 : Bit
+    @pin("C10") incoming sw2 : Bit
+    @pin("A10") incoming sw3 : Bit
+
+    //> UART (FTDI USB).
+    @pin("A9")  incoming uart_rx : Bit
+    @pin("D10") outgoing uart_tx : Bit
+
+    //> SPI flash (S25FL128S, 128 Mbit).
+    //> `flash_clk` is the QSPI clock, wired to ball L16, which is also
+    //> the FPGA's configuration clock pin.
+    @pin("L13") outgoing flash_cs   : Bit
+    @pin("L16") outgoing flash_clk  : Bit
+    @pin("K17") outgoing flash_mosi : Bit
+    @pin("K18") incoming flash_miso : Bit
+}
+
+//> Digilent Arty A7-100T (Rev. D/E).
+//> Xilinx Artix-7 xc7a100t, CSG324 package, programmed over FTDI JTAG.
+//> Same board layout as the 35T: the ball assignments below are the
+//> same, only the die is larger.  The four RGB LEDs are not declared;
+//> extend the platform if you need them.
+@fpga("xilinx")
+@part("xc7a100tcsg324-1")
+platform ArtyA7_100T {
+    //> Primary 100 MHz clock on ball E3.
+    @period_ns("10")
+    @pin("E3")
+    incoming clock : Clock
+
+    //> User LEDs LD0-LD3 (light when driven high).
+    @pin("H5")  outgoing led0 : Bit
+    @pin("J5")  outgoing led1 : Bit
+    @pin("T9")  outgoing led2 : Bit
+    @pin("T10") outgoing led3 : Bit
+
+    //> Push buttons BTN0-BTN3.
+    @pin("D9") incoming btn0 : Bit
+    @pin("C9") incoming btn1 : Bit
+    @pin("B9") incoming btn2 : Bit
+    @pin("B8") incoming btn3 : Bit
+
+    //> Slide switches SW0-SW3.
+    @pin("A8")  incoming sw0 : Bit
+    @pin("C11") incoming sw1 : Bit
+    @pin("C10") incoming sw2 : Bit
+    @pin("A10") incoming sw3 : Bit
+
+    //> UART (FTDI USB).
+    @pin("A9")  incoming uart_rx : Bit
+    @pin("D10") outgoing uart_tx : Bit
+
+    //> SPI flash (S25FL128S, 128 Mbit).
+    //> `flash_clk` is the QSPI clock, wired to ball L16, which is also
+    //> the FPGA's configuration clock pin.
+    @pin("L13") outgoing flash_cs   : Bit
+    @pin("L16") outgoing flash_clk  : Bit
+    @pin("K17") outgoing flash_mosi : Bit
+    @pin("K18") incoming flash_miso : Bit
+}
+
+// 7-series logic and storage cells.
+
+//> The 7-series 6-input lookup table, with the shared 5-input output.
+//> Yosys infers `LUT6_2` cells from ordinary logic; instantiate this
+//> only when you need a LUT you can name directly.
+//> The truth table runs across `I5-I0` with `O6` as the full LUT6
+//> output and `O5` sharing only the five lower inputs.
+@cell("LUT6_2")
+ext mod Lut6_2 {
+    outgoing O6 : Bit
+    outgoing O5 : Bit
+    incoming I5 : Bit
+    incoming I4 : Bit
+    incoming I3 : Bit
+    incoming I2 : Bit
+    incoming I1 : Bit
+    incoming I0 : Bit
+}
+
+//> D flip-flop sampling on the positive clock edge, with a clock
+//> enable and a synchronous reset.
+@cell("FDRE")
+ext mod Fdre {
+    outgoing Q  : Bit
+    incoming C  : Clock
+    incoming CE : Bit
+    incoming R  : Bit
+    incoming D  : Bit
+}
+
+//> D flip-flop sampling on the positive clock edge, with a clock
+//> enable and an asynchronous reset.
+@cell("FDCE")
+ext mod Fdce {
+    outgoing Q   : Bit
+    incoming C   : Clock
+    incoming CE  : Bit
+    incoming CLR : Bit
+    incoming D   : Bit
+}
+
+// 7-series clocking and I/O cells.
+
+//> Routes any signal onto one of the 7-series global clock networks.
+//> Most often used to distribute a clock.  Its ports are typed
+//> `Clock`, so a plain `Bit` signal cannot be routed through it.
+//> Yosys inserts `BUFG` automatically for top-level clocks;
+//> instantiate this only when you need a buffer you can name.
+@cell("BUFG")
+ext mod Bufg {
+    incoming I : Clock
+    outgoing O : Clock
+}

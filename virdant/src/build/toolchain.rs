@@ -3,18 +3,21 @@
 //! in the codebase: platforms are unvalidated data (Decision 13), so
 //! an unknown family simply fails here when a build is attempted.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
 
 use bstr::{BStr, BString, ByteSlice};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Toolchain {
     Ice40,
+    Xilinx,
 }
 
 pub fn toolchain_for(fpga: &str) -> Option<Toolchain> {
     match fpga {
         "ice40" => Some(Toolchain::Ice40),
+        "xilinx" => Some(Toolchain::Xilinx),
         _ => None,
     }
 }
@@ -30,6 +33,7 @@ pub fn run_toolchain(
 ) -> Result<(), String> {
     match toolchain {
         Toolchain::Ice40 => run_ice40(builddir, project, top, part),
+        Toolchain::Xilinx => run_xilinx(builddir, project, top, part),
     }
 }
 
@@ -148,6 +152,212 @@ fn run_ice40(
     Ok(())
 }
 
+/// Runs synthesis, place-and-route, and bitstream assembly for Xilinx
+/// 7-series FPGAs: yosys `synth_xilinx`, nextpnr-xilinx, then Project
+/// X-Ray's frame tools (`fasm2frames`, `xc7frames2bit`).
+///
+/// `part` is the platform's `@part` value, e.g. `xc7a35tcsg324-1`, and
+/// is required: nextpnr-xilinx needs the chipdb named for the die and
+/// package, and the frame tools need the part name.  The chipdb
+/// directory comes from `NEXTPNR_CHIPDB_DIR` and the Project X-Ray
+/// database root from `PRJXRAY_DB_DIR` (the variable the openXC7
+/// toolchain's `export.sh` sets).  The invocation matches the
+/// openXC7 flow (`nextpnr-xilinx --chipdb ... --xdc ... --json ...
+/// --fasm ...`, `fasm2frames --part ... --db-root ...`, `xc7frames2bit
+/// --part_file ... --part_name ...`), which is also the archived
+/// nextpnr-xilinx CLI.
+fn run_xilinx(
+    builddir: &Path,
+    project: &str,
+    top: &str,
+    part: Option<&BString>,
+) -> Result<(), String> {
+    let part = match part {
+        Some(part) => part.to_str_lossy().into_owned(),
+        None => {
+            return Err(
+                "Platform is missing @part (nextpnr-xilinx needs a part string like xc7a35tcsg324-1)"
+                    .to_string(),
+            )
+        }
+    };
+
+    // Fail fast on the toolchain's external state before synthesizing.
+    let chipdb = chipdb_path(&part)?;
+    let db_root = xray_db_root(&part)?;
+
+    let builddir = builddir.to_path_buf();
+
+    // Write yosys script
+    let sv_files = glob_sv_files(&builddir);
+    let sv_list: Vec<String> = sv_files.iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    let project_json = builddir.join(format!("{project}.json"));
+    let script_content = format!(
+        "read_verilog -I {} {}; synth_xilinx -flatten -abc9 -arch xc7 -top {top}; write_json {}",
+        builddir.to_string_lossy(),
+        sv_list.join(" "),
+        project_json.to_string_lossy(),
+    );
+    let script_path = builddir.join("script.ys");
+    std::fs::write(&script_path, &script_content).unwrap();
+
+    // Run yosys
+    let yosys_log = builddir.join("yosys.log");
+    let output = std::process::Command::new("yosys")
+        .arg("-l").arg(&yosys_log)
+        .arg(&script_path)
+        .output()
+        .unwrap();
+    if !output.status.success() {
+        eprintln!("{}", BStr::new(&output.stderr));
+        return Err("yosys failed".to_string());
+    }
+    println!("{}", BStr::new(&output.stdout));
+    println!("yosys OK");
+
+    // Run nextpnr-xilinx
+    let xdc = builddir.join(format!("{project}.xdc"));
+    let fasm = builddir.join(format!("{project}.fasm"));
+    let output = match std::process::Command::new("nextpnr-xilinx")
+        .arg("--chipdb").arg(&chipdb)
+        .arg("--xdc").arg(&xdc)
+        .arg("--json").arg(&project_json)
+        .arg("--fasm").arg(&fasm)
+        .output()
+    {
+        Ok(output) => output,
+        Err(err) => return Err(format!("could not run 'nextpnr-xilinx': {err}")),
+    };
+    if !output.status.success() {
+        eprintln!("{}", BStr::new(&output.stderr));
+        return Err("nextpnr-xilinx failed".to_string());
+    }
+    println!("{}", BStr::new(&output.stdout));
+    println!("nextpnr-xilinx OK");
+
+    // Run fasm2frames: the FASM goes to frames on stdout, so the file
+    // is the child's stdout and only stderr is captured.
+    let frames = builddir.join(format!("{project}.frames"));
+    let frames_out = std::fs::File::create(&frames)
+        .map_err(|err| format!("could not create {frames:?}: {err}"))?;
+    let output = match std::process::Command::new("fasm2frames")
+        .arg("--part").arg(&part)
+        .arg("--db-root").arg(&db_root)
+        .arg(&fasm)
+        .stdout(Stdio::from(frames_out))
+        .output()
+    {
+        Ok(output) => output,
+        Err(err) => return Err(format!("could not run 'fasm2frames': {err}")),
+    };
+    if !output.status.success() {
+        eprintln!("{}", BStr::new(&output.stderr));
+        return Err("fasm2frames failed".to_string());
+    }
+    println!("fasm2frames OK");
+
+    // Run xc7frames2bit
+    let project_bin = builddir.join(format!("{project}.bit"));
+    let part_file = db_root.join(&part).join("part.yaml");
+    let output = match std::process::Command::new("xc7frames2bit")
+        .arg("--part_file").arg(&part_file)
+        .arg("--part_name").arg(&part)
+        .arg("--frm_file").arg(&frames)
+        .arg("--output_file").arg(&project_bin)
+        .output()
+    {
+        Ok(output) => output,
+        Err(err) => return Err(format!("could not run 'xc7frames2bit': {err}")),
+    };
+    if !output.status.success() {
+        eprintln!("{}", BStr::new(&output.stderr));
+        return Err("xc7frames2bit failed".to_string());
+    }
+    println!("{}", BStr::new(&output.stdout));
+    println!("Bitstream written to {}", project_bin.to_string_lossy());
+
+    Ok(())
+}
+
+/// The prjxray database root for a 7-series part: `PRJXRAY_DB_DIR`
+/// plus the part's family directory (`"xc7a35tcsg324-1"` ->
+/// `<db>/artix7`).  Requires the part's `part.yaml` to exist there,
+/// since both frame tools need it.
+fn xray_db_root(part: &str) -> Result<std::path::PathBuf, String> {
+    let db = std::env::var("PRJXRAY_DB_DIR").map_err(|_| {
+        "PRJXRAY_DB_DIR is not set (point it at the Project X-Ray database root, \
+         e.g. as the openXC7 toolchain's export.sh does)"
+            .to_string()
+    })?;
+    let family = xray_family(part)?;
+    let part_file = PathBuf::from(&db).join(family).join(part).join("part.yaml");
+    if !part_file.exists() {
+        return Err(format!(
+            "PRJXRAY_DB_DIR ({db:?}) has no {family}/{part}/part.yaml (is it a Project X-Ray database root?)"
+        ));
+    }
+    Ok(PathBuf::from(&db).join(family))
+}
+
+/// The prjxray database family directory for a 7-series part
+/// (`"xc7a35tcsg324-1"` -> `"artix7"`).
+fn xray_family(part: &str) -> Result<&'static str, String> {
+    if part.starts_with("xc7a") {
+        Ok("artix7")
+    } else if part.starts_with("xc7k") {
+        Ok("kintex7")
+    } else if part.starts_with("xc7s") {
+        Ok("spartan7")
+    } else if part.starts_with("xc7z") {
+        Ok("zynq7")
+    } else {
+        Err(format!(
+            "Unknown 7-series part '{part}' (expected an xc7a/xc7k/xc7s/xc7z part)"
+        ))
+    }
+}
+
+/// The part string minus its trailing speed grade, as nextpnr-xilinx
+/// chipdb files are named (`"xc7a35tcsg324-1"` -> `"xc7a35tcsg324"`).
+fn chipdb_name(part: &str) -> String {
+    let Some((head, tail)) = part.rsplit_once('-') else {
+        return part.to_string();
+    };
+    let tail = tail.strip_suffix('L').unwrap_or(tail);
+    if !tail.is_empty() && tail.chars().all(|c| c.is_ascii_digit()) {
+        head.to_string()
+    } else {
+        part.to_string()
+    }
+}
+
+/// The chipdb file nextpnr-xilinx `--chipdb` wants: the part with the
+/// speed-grade suffix stripped, resolved against `NEXTPNR_CHIPDB_DIR`.
+/// Both plain (`xc7a35tcsg324.bin`) and `chipdb-` prefixed file names
+/// are accepted, matching the chipdb layouts in the wild.
+fn chipdb_path(part: &str) -> Result<PathBuf, String> {
+    let die_package = chipdb_name(part);
+    let dir = std::env::var("NEXTPNR_CHIPDB_DIR").map_err(|_| {
+        "NEXTPNR_CHIPDB_DIR is not set (point it at a directory of nextpnr-xilinx \
+         chip databases, e.g. one containing xc7a35tcsg324.bin)"
+            .to_string()
+    })?;
+    let dir = PathBuf::from(dir);
+    for name in [format!("{die_package}.bin"), format!("chipdb-{die_package}.bin")] {
+        let path = dir.join(&name);
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+    Err(format!(
+        "No chipdb for part '{part}' in {dir:?} (expected {die_package}.bin; generate it \
+         with nextpnr-xilinx's xilinx_gen.py, or point NEXTPNR_CHIPDB_DIR at the installed \
+         chip databases)"
+    ))
+}
+
 /// The nextpnr `--package` value: the trailing component of `@part`
 /// (`"up5k-sg48"` -> `"sg48"`), defaulting to `"sg48"` when absent.
 fn package_str(part: Option<&BString>) -> String {
@@ -214,10 +424,39 @@ mod tests {
     }
 
     #[test]
+    fn xilinx_dispatches() {
+        assert!(matches!(toolchain_for("xilinx"), Some(Toolchain::Xilinx)));
+    }
+
+    #[test]
     fn unknown_family_rejected() {
-        for fpga in ["ecp5", "nexus", "gowin", "xilinx", ""] {
+        for fpga in ["ecp5", "nexus", "gowin", ""] {
             assert!(toolchain_for(fpga).is_none(), "{fpga} should not dispatch");
         }
+    }
+
+    #[test]
+    fn chipdb_name_strips_speed_grade() {
+        assert_eq!(chipdb_name("xc7a35tcsg324-1"), "xc7a35tcsg324");
+        assert_eq!(chipdb_name("xc7a100tcsg324-1"), "xc7a100tcsg324");
+        assert_eq!(chipdb_name("xc7k325tffg900-2"), "xc7k325tffg900");
+        assert_eq!(chipdb_name("xc7a35tcsg324"), "xc7a35tcsg324");
+        assert_eq!(chipdb_name("xc7a35tcsg324-1L"), "xc7a35tcsg324");
+    }
+
+    #[test]
+    fn xray_family_directories() {
+        assert_eq!(xray_family("xc7a35tcsg324-1").unwrap(), "artix7");
+        assert_eq!(xray_family("xc7a100tcsg324-1").unwrap(), "artix7");
+        assert_eq!(xray_family("xc7k325tffg900-2").unwrap(), "kintex7");
+        assert_eq!(xray_family("xc7s50csg324-1").unwrap(), "spartan7");
+        assert_eq!(xray_family("xc7z020clg484-1").unwrap(), "zynq7");
+        assert!(xray_family("xc6slx16csg324").is_err());
+    }
+
+    #[test]
+    fn xilinx_part_required() {
+        assert!(run_xilinx(Path::new("/nonexistent"), "arty", "Top", None).is_err());
     }
 
     #[test]
