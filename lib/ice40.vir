@@ -1,4 +1,12 @@
 //! Platform definitions for the Lattice iCE40 family.
+//!
+//! Also declares the iCE40's hard cells as `@cell` ext mods.  Port names
+//! match the primitives yosys expects, so instantiating these modules
+//! produces the corresponding hard cell in the netlist.
+//!
+//! Virdant cannot set Verilog cell parameters yet, so instantiations use
+//! each cell's default parameters.  Yosys infers logic cells and block
+//! RAMs automatically, which is usually what you want.
 
 //> iCESugar board.
 //> Lattice iCE40-UP5K, SG48 package, programmed over USB.
@@ -95,12 +103,718 @@ platform IceStick {
     @pin(68) incoming flash_miso : Bit
 }
 
-//> iCE40 Block RAM primitive.
+// SiliconBlue logic cells.
+
+//> The iCE40 4-input lookup table.
+//> Yosys infers `SB_LUT4` cells from ordinary logic; instantiate this only
+//> when you need a LUT you can name directly.
+@cell("SB_LUT4")
+ext mod SbLut4 {
+    outgoing O  : Bit
+    incoming I0 : Bit
+    incoming I1 : Bit
+    incoming I2 : Bit
+    incoming I3 : Bit
+}
+
+//> The iCE40 fast carry-chain cell, computing `CO = majority(I0, I1, CI)`.
+//> Yosys infers `SB_CARRY` cells from adders; instantiate this only when you
+//> need a carry cell you can name directly.
+@cell("SB_CARRY")
+ext mod SbCarry {
+    outgoing CO : Bit
+    incoming I0 : Bit
+    incoming I1 : Bit
+    incoming CI : Bit
+}
+
+//> D flip-flop sampling on the positive clock edge.
+@cell("SB_DFF")
+ext mod SbDff {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the positive clock edge, holding when `E` is low.
+@cell("SB_DFFE")
+ext mod SbDffe {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming E : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the positive clock edge with a synchronous reset.
+@cell("SB_DFFSR")
+ext mod SbDffsr {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming R : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the positive clock edge with an asynchronous reset.
+@cell("SB_DFFR")
+ext mod SbDffr {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming R : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the positive clock edge with a synchronous set.
+@cell("SB_DFFSS")
+ext mod SbDffss {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming S : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the positive clock edge with an asynchronous set.
+@cell("SB_DFFS")
+ext mod SbDffs {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming S : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the positive clock edge with a clock enable
+//> and a synchronous reset.
+@cell("SB_DFFESR")
+ext mod SbDffesr {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming E : Bit
+    incoming R : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the positive clock edge with a clock enable
+//> and an asynchronous reset.
+@cell("SB_DFFER")
+ext mod SbDffer {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming E : Bit
+    incoming R : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the positive clock edge with a clock enable
+//> and a synchronous set.
+@cell("SB_DFFESS")
+ext mod SbDffess {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming E : Bit
+    incoming S : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the positive clock edge with a clock enable
+//> and an asynchronous set.
+@cell("SB_DFFES")
+ext mod SbDffes {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming E : Bit
+    incoming S : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the negative clock edge.
+@cell("SB_DFFN")
+ext mod SbDffn {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the negative clock edge, holding when `E` is low.
+@cell("SB_DFFNE")
+ext mod SbDffne {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming E : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the negative clock edge with a synchronous reset.
+@cell("SB_DFFNSR")
+ext mod SbDffnsr {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming R : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the negative clock edge with an asynchronous reset.
+@cell("SB_DFFNR")
+ext mod SbDffnr {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming R : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the negative clock edge with a synchronous set.
+@cell("SB_DFFNSS")
+ext mod SbDffnss {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming S : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the negative clock edge with an asynchronous set.
+@cell("SB_DFFNS")
+ext mod SbDffns {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming S : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the negative clock edge with a clock enable
+//> and a synchronous reset.
+@cell("SB_DFFNESR")
+ext mod SbDffnesr {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming E : Bit
+    incoming R : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the negative clock edge with a clock enable
+//> and an asynchronous reset.
+@cell("SB_DFFNER")
+ext mod SbDffner {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming E : Bit
+    incoming R : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the negative clock edge with a clock enable
+//> and a synchronous set.
+@cell("SB_DFFNESS")
+ext mod SbDffness {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming E : Bit
+    incoming S : Bit
+    incoming D : Bit
+}
+
+//> D flip-flop sampling on the negative clock edge with a clock enable
+//> and an asynchronous set.
+@cell("SB_DFFNES")
+ext mod SbDffnes {
+    outgoing Q : Bit
+    incoming C : Clock
+    incoming E : Bit
+    incoming S : Bit
+    incoming D : Bit
+}
+
+// SiliconBlue I/O cells.
+
+//> The iCE40 I/O cell.
+//> Set the pin's behaviour (registered, DDR, open-drain, pull-ups) through
+//> the `PIN_TYPE` parameter, which Virdant cannot set yet.
+//>
+//> `PACKAGE_PIN` is the physical pad: drive it with the top-level incoming
+//> port constrained to that pin, and sample it through `D_IN_0`/`D_IN_1`.
+//> Mark the instance's `PACKAGE_PIN` `unused` to silence the write-only
+//> warning.  Plain output pins need no `SB_IO`: drive an ordinary outgoing
+//> port.
+@cell("SB_IO")
+ext mod SbIo {
+    incoming PACKAGE_PIN       : Bit
+    incoming LATCH_INPUT_VALUE : Bit
+    incoming CLOCK_ENABLE      : Bit
+    incoming INPUT_CLK         : Clock
+    incoming OUTPUT_CLK        : Clock
+    incoming OUTPUT_ENABLE     : Bit
+    incoming D_OUT_0           : Bit
+    incoming D_OUT_1           : Bit
+    outgoing D_IN_0            : Bit
+    outgoing D_IN_1            : Bit
+}
+
+//> The iCE40 I/O cell feeding a global network, for pads used as clocks.
+//> `PACKAGE_PIN` is the physical pad: drive it with the top-level incoming
+//> clock port constrained to that pin, and read the buffered clock from
+//> `GLOBAL_BUFFER_OUTPUT`.
+@cell("SB_GB_IO")
+ext mod SbGbIo {
+    incoming PACKAGE_PIN          : Bit
+    outgoing GLOBAL_BUFFER_OUTPUT : Clock
+    incoming LATCH_INPUT_VALUE    : Bit
+    incoming CLOCK_ENABLE         : Bit
+    incoming INPUT_CLK            : Clock
+    incoming OUTPUT_CLK           : Clock
+    incoming OUTPUT_ENABLE        : Bit
+    incoming D_OUT_0              : Bit
+    incoming D_OUT_1              : Bit
+    outgoing D_IN_0               : Bit
+    outgoing D_IN_1               : Bit
+}
+
+//> Routes any signal onto one of the iCE40's global networks.
+//> Most often used to distribute a clock.  Its ports are typed `Clock`, so
+//> a plain `Bit` signal cannot be routed through it.
+@cell("SB_GB")
+ext mod SbGb {
+    incoming USER_SIGNAL_TO_GLOBAL_BUFFER : Clock
+    outgoing GLOBAL_BUFFER_OUTPUT         : Clock
+}
+
+// SiliconBlue memory cells.
+
+//> The iCE40 4 Kbit block RAM.
+//> True dual-port: the read and write ports have separate clocks.
+//> Yosys infers `SB_RAM40_4K` from ordinary memories; instantiate this only
+//> when you need a block RAM you can name directly.
 @cell("SB_RAM40_4K")
 ext mod SbRam40_4k {
-    incoming clock : Clock
-    incoming addr  : Word[14]
-    incoming wdata : Word[8]
-    incoming wmask : Bit
-    outgoing rdata : Word[8]
+    outgoing RDATA : Word[16]
+    incoming RCLK  : Clock
+    incoming RCLKE : Bit
+    incoming RE    : Bit
+    incoming RADDR : Word[11]
+    incoming WCLK  : Clock
+    incoming WCLKE : Bit
+    incoming WE    : Bit
+    incoming WADDR : Word[11]
+    incoming MASK  : Word[16]
+    incoming WDATA : Word[16]
+}
+
+//> The iCE40 4 Kbit block RAM with an inverted (falling-edge) read clock.
+@cell("SB_RAM40_4KNR")
+ext mod SbRam40_4knr {
+    outgoing RDATA  : Word[16]
+    incoming RCLKN  : Clock
+    incoming RCLKE  : Bit
+    incoming RE     : Bit
+    incoming RADDR  : Word[11]
+    incoming WCLK   : Clock
+    incoming WCLKE  : Bit
+    incoming WE     : Bit
+    incoming WADDR  : Word[11]
+    incoming MASK   : Word[16]
+    incoming WDATA  : Word[16]
+}
+
+//> The iCE40 4 Kbit block RAM with an inverted (falling-edge) write clock.
+@cell("SB_RAM40_4KNW")
+ext mod SbRam40_4knw {
+    outgoing RDATA  : Word[16]
+    incoming RCLK   : Clock
+    incoming RCLKE  : Bit
+    incoming RE     : Bit
+    incoming RADDR  : Word[11]
+    incoming WCLKN  : Clock
+    incoming WCLKE  : Bit
+    incoming WE     : Bit
+    incoming WADDR  : Word[11]
+    incoming MASK   : Word[16]
+    incoming WDATA  : Word[16]
+}
+
+//> The iCE40 4 Kbit block RAM with inverted (falling-edge) clocks on
+//> both ports.
+@cell("SB_RAM40_4KNRNW")
+ext mod SbRam40_4knrnw {
+    outgoing RDATA  : Word[16]
+    incoming RCLKN  : Clock
+    incoming RCLKE  : Bit
+    incoming RE     : Bit
+    incoming RADDR  : Word[11]
+    incoming WCLKN  : Clock
+    incoming WCLKE  : Bit
+    incoming WE     : Bit
+    incoming WADDR  : Word[11]
+    incoming MASK   : Word[16]
+    incoming WDATA  : Word[16]
+}
+
+//> The iCE40 UltraPlus 256 Kbit single-port RAM.
+//> Hold `STANDBY`, `SLEEP`, and `POWEROFF` low for normal operation.
+@cell("SB_SPRAM256KA")
+ext mod SbSpram256ka {
+    incoming ADDRESS     : Word[14]
+    incoming DATAIN      : Word[16]
+    incoming MASKWREN    : Word[4]
+    incoming WREN        : Bit
+    incoming CHIPSELECT  : Bit
+    incoming CLOCK       : Clock
+    incoming STANDBY     : Bit
+    incoming SLEEP       : Bit
+    incoming POWEROFF    : Bit
+    outgoing DATAOUT     : Word[16]
+}
+
+// SiliconBlue PLL cells.
+
+//> The iCE40 PLL, taking its reference clock from a design signal.
+//> Configure the output frequency through the `DIVR`, `DIVF`, `DIVQ`, and
+//> related parameters, which Virdant cannot set yet.
+//> Tie `SDI` and `SCLK` low to leave the dynamic reconfiguration interface
+//> idle, and drive `BYPASS` low and `RESETB` high for normal operation.
+@cell("SB_PLL40_CORE")
+ext mod SbPll40Core {
+    incoming REFERENCECLK    : Clock
+    outgoing PLLOUTCORE      : Clock
+    outgoing PLLOUTGLOBAL    : Clock
+    incoming EXTFEEDBACK     : Bit
+    incoming DYNAMICDELAY    : Word[8]
+    outgoing LOCK            : Bit
+    incoming BYPASS          : Bit
+    incoming RESETB          : Bit
+    incoming LATCHINPUTVALUE : Bit
+    outgoing SDO             : Bit
+    incoming SDI             : Bit
+    incoming SCLK            : Bit
+}
+
+//> The iCE40 PLL, taking its reference clock directly from a package pin.
+//> Drive `PACKAGEPIN` with the `Clock` port constrained to that pin.
+//> Configure the output frequency through the `DIVR`, `DIVF`, `DIVQ`, and
+//> related parameters, which Virdant cannot set yet.
+//> Tie `SDI` and `SCLK` low to leave the dynamic reconfiguration interface
+//> idle, and drive `BYPASS` low and `RESETB` high for normal operation.
+@cell("SB_PLL40_PAD")
+ext mod SbPll40Pad {
+    incoming PACKAGEPIN      : Clock
+    outgoing PLLOUTCORE      : Clock
+    outgoing PLLOUTGLOBAL    : Clock
+    incoming EXTFEEDBACK     : Bit
+    incoming DYNAMICDELAY    : Word[8]
+    outgoing LOCK            : Bit
+    incoming BYPASS          : Bit
+    incoming RESETB          : Bit
+    incoming LATCHINPUTVALUE : Bit
+    outgoing SDO             : Bit
+    incoming SDI             : Bit
+    incoming SCLK            : Bit
+}
+
+//> The iCE40 dual-output PLL, taking its reference clock from a package pin.
+//> Configure the output frequencies through the `DIVR`, `DIVF`, `DIVQ`, and
+//> related parameters, which Virdant cannot set yet.
+//> Tie `SDI` and `SCLK` low to leave the dynamic reconfiguration interface
+//> idle, and drive `BYPASS` low and `RESETB` high for normal operation.
+@cell("SB_PLL40_2_PAD")
+ext mod SbPll40_2Pad {
+    incoming PACKAGEPIN      : Clock
+    outgoing PLLOUTCOREA     : Clock
+    outgoing PLLOUTGLOBALA   : Clock
+    outgoing PLLOUTCOREB     : Clock
+    outgoing PLLOUTGLOBALB   : Clock
+    incoming EXTFEEDBACK     : Bit
+    incoming DYNAMICDELAY    : Word[8]
+    outgoing LOCK            : Bit
+    incoming BYPASS          : Bit
+    incoming RESETB          : Bit
+    incoming LATCHINPUTVALUE : Bit
+    outgoing SDO             : Bit
+    incoming SDI             : Bit
+    incoming SCLK            : Bit
+}
+
+//> The iCE40 dual-output PLL, taking its reference clock from a design
+//> signal.  Configure the output frequencies through the `DIVR`, `DIVF`,
+//> `DIVQ`, and related parameters, which Virdant cannot set yet.
+//> Tie `SDI` and `SCLK` low to leave the dynamic reconfiguration interface
+//> idle, and drive `BYPASS` low and `RESETB` high for normal operation.
+@cell("SB_PLL40_2F_CORE")
+ext mod SbPll40_2fCore {
+    incoming REFERENCECLK    : Clock
+    outgoing PLLOUTCOREA     : Clock
+    outgoing PLLOUTGLOBALA   : Clock
+    outgoing PLLOUTCOREB     : Clock
+    outgoing PLLOUTGLOBALB   : Clock
+    incoming EXTFEEDBACK     : Bit
+    incoming DYNAMICDELAY    : Word[8]
+    outgoing LOCK            : Bit
+    incoming BYPASS          : Bit
+    incoming RESETB          : Bit
+    incoming LATCHINPUTVALUE : Bit
+    outgoing SDO             : Bit
+    incoming SDI             : Bit
+    incoming SCLK            : Bit
+}
+
+//> The iCE40 dual-output PLL with a feedback path and a reference clock
+//> from a package pin.  Configure the output frequencies through the
+//> `DIVR`, `DIVF`, `DIVQ`, and related parameters, which Virdant cannot
+//> set yet.
+//> Tie `SDI` and `SCLK` low to leave the dynamic reconfiguration interface
+//> idle, and drive `BYPASS` low and `RESETB` high for normal operation.
+@cell("SB_PLL40_2F_PAD")
+ext mod SbPll40_2fPad {
+    incoming PACKAGEPIN      : Clock
+    outgoing PLLOUTCOREA     : Clock
+    outgoing PLLOUTGLOBALA   : Clock
+    outgoing PLLOUTCOREB     : Clock
+    outgoing PLLOUTGLOBALB   : Clock
+    incoming EXTFEEDBACK     : Bit
+    incoming DYNAMICDELAY    : Word[8]
+    outgoing LOCK            : Bit
+    incoming BYPASS          : Bit
+    incoming RESETB          : Bit
+    incoming LATCHINPUTVALUE : Bit
+    outgoing SDO             : Bit
+    incoming SDI             : Bit
+    incoming SCLK            : Bit
+}
+
+// SiliconBlue oscillator cells (UltraPlus only).
+
+//> The iCE40 UltraPlus high-frequency (10-146 MHz) ring oscillator.
+@cell("SB_HFOSC")
+ext mod SbHfosc {
+    incoming TRIM0   : Bit
+    incoming TRIM1   : Bit
+    incoming TRIM2   : Bit
+    incoming TRIM3   : Bit
+    incoming TRIM4   : Bit
+    incoming TRIM5   : Bit
+    incoming TRIM6   : Bit
+    incoming TRIM7   : Bit
+    incoming TRIM8   : Bit
+    incoming TRIM9   : Bit
+    incoming CLKHFPU : Bit
+    incoming CLKHFEN : Bit
+    outgoing CLKHF   : Clock
+}
+
+//> The iCE40 UltraPlus low-frequency (about 10 kHz) ring oscillator.
+@cell("SB_LFOSC")
+ext mod SbLfosc {
+    incoming CLKLFPU : Bit
+    incoming CLKLFEN : Bit
+    outgoing CLKLF   : Clock
+}
+
+// SiliconBlue LED driver cells.
+
+//> Constant-current RGB LED driver with three PWM inputs.
+//> Set the per-channel currents through the `RGB*_CURRENT` parameters,
+//> which Virdant cannot set yet.
+@cell("SB_RGBA_DRV")
+ext mod SbRgbaDrv {
+    incoming CURREN   : Bit
+    incoming RGBLEDEN : Bit
+    incoming RGB0PWM  : Bit
+    incoming RGB1PWM  : Bit
+    incoming RGB2PWM  : Bit
+    outgoing RGB0     : Bit
+    outgoing RGB1     : Bit
+    outgoing RGB2     : Bit
+}
+
+//> Configurable RGB LED driver with an internal current source.
+//> Set the per-channel currents through the `RGB*_CURRENT` parameters,
+//> which Virdant cannot set yet.
+@cell("SB_RGB_DRV")
+ext mod SbRgbDrv {
+    incoming RGBLEDEN : Bit
+    incoming RGB0PWM  : Bit
+    incoming RGB1PWM  : Bit
+    incoming RGB2PWM  : Bit
+    incoming RGBPU    : Bit
+    outgoing RGB0     : Bit
+    outgoing RGB1     : Bit
+    outgoing RGB2     : Bit
+}
+
+//> Constant-current driver for a single external LED.
+@cell("SB_LED_DRV_CUR")
+ext mod SbLedDrvCur {
+    incoming EN    : Bit
+    outgoing LEDPU : Bit
+}
+
+//> The iCE40 UltraPlus LED driver interface, a register file controlling
+//> the three hard PWM channels.  `LEDDCLK` is its interface clock.
+@cell("SB_LEDDA_IP")
+ext mod SbLeddaIp {
+    incoming LEDDCS    : Bit
+    incoming LEDDCLK   : Clock
+    incoming LEDDDAT7  : Bit
+    incoming LEDDDAT6  : Bit
+    incoming LEDDDAT5  : Bit
+    incoming LEDDDAT4  : Bit
+    incoming LEDDDAT3  : Bit
+    incoming LEDDDAT2  : Bit
+    incoming LEDDDAT1  : Bit
+    incoming LEDDDAT0  : Bit
+    incoming LEDDADDR3 : Bit
+    incoming LEDDADDR2 : Bit
+    incoming LEDDADDR1 : Bit
+    incoming LEDDADDR0 : Bit
+    incoming LEDDDEN   : Bit
+    incoming LEDDEXE   : Bit
+    incoming LEDDRST   : Bit
+    outgoing PWMOUT0   : Bit
+    outgoing PWMOUT1   : Bit
+    outgoing PWMOUT2   : Bit
+    outgoing LEDDON    : Bit
+}
+
+// SiliconBlue hardened I2C and SPI cells (UltraPlus only).
+
+//> The iCE40 UltraPlus hardened I2C master and slave.
+//> The register-file interface is bit-serial: `SBADRI7`..`SBADRI0` carry
+//> the address, `SBDATI7`..`SBDATI0` the write data, and `SBDATO7`..
+//> `SBDATO0` the read data.
+@cell("SB_I2C")
+ext mod SbI2c {
+    incoming SBCLKI  : Clock
+    incoming SBRWI   : Bit
+    incoming SBSTBI  : Bit
+    incoming SBADRI7 : Bit
+    incoming SBADRI6 : Bit
+    incoming SBADRI5 : Bit
+    incoming SBADRI4 : Bit
+    incoming SBADRI3 : Bit
+    incoming SBADRI2 : Bit
+    incoming SBADRI1 : Bit
+    incoming SBADRI0 : Bit
+    incoming SBDATI7 : Bit
+    incoming SBDATI6 : Bit
+    incoming SBDATI5 : Bit
+    incoming SBDATI4 : Bit
+    incoming SBDATI3 : Bit
+    incoming SBDATI2 : Bit
+    incoming SBDATI1 : Bit
+    incoming SBDATI0 : Bit
+    incoming SCLI    : Bit
+    incoming SDAI    : Bit
+    outgoing SBDATO7 : Bit
+    outgoing SBDATO6 : Bit
+    outgoing SBDATO5 : Bit
+    outgoing SBDATO4 : Bit
+    outgoing SBDATO3 : Bit
+    outgoing SBDATO2 : Bit
+    outgoing SBDATO1 : Bit
+    outgoing SBDATO0 : Bit
+    outgoing SBACKO  : Bit
+    outgoing I2CIRQ  : Bit
+    outgoing I2CWKUP : Bit
+    outgoing SCLO    : Bit
+    outgoing SCLOE   : Bit
+    outgoing SDAO    : Bit
+    outgoing SDAOE   : Bit
+}
+
+//> The iCE40 UltraPlus hardened SPI master and slave.
+//> The register-file interface is bit-serial: `SBADRI7`..`SBADRI0` carry
+//> the address, `SBDATI7`..`SBDATI0` the write data, and `SBDATO7`..
+//> `SBDATO0` the read data.
+@cell("SB_SPI")
+ext mod SbSpi {
+    incoming SBCLKI   : Clock
+    incoming SBRWI    : Bit
+    incoming SBSTBI   : Bit
+    incoming SBADRI7  : Bit
+    incoming SBADRI6  : Bit
+    incoming SBADRI5  : Bit
+    incoming SBADRI4  : Bit
+    incoming SBADRI3  : Bit
+    incoming SBADRI2  : Bit
+    incoming SBADRI1  : Bit
+    incoming SBADRI0  : Bit
+    incoming SBDATI7  : Bit
+    incoming SBDATI6  : Bit
+    incoming SBDATI5  : Bit
+    incoming SBDATI4  : Bit
+    incoming SBDATI3  : Bit
+    incoming SBDATI2  : Bit
+    incoming SBDATI1  : Bit
+    incoming SBDATI0  : Bit
+    incoming MI       : Bit
+    incoming SI       : Bit
+    incoming SCKI     : Bit
+    incoming SCSNI    : Bit
+    outgoing SBDATO7  : Bit
+    outgoing SBDATO6  : Bit
+    outgoing SBDATO5  : Bit
+    outgoing SBDATO4  : Bit
+    outgoing SBDATO3  : Bit
+    outgoing SBDATO2  : Bit
+    outgoing SBDATO1  : Bit
+    outgoing SBDATO0  : Bit
+    outgoing SBACKO   : Bit
+    outgoing SPIIRQ   : Bit
+    outgoing SPIWKUP  : Bit
+    outgoing SO       : Bit
+    outgoing SOE      : Bit
+    outgoing MO       : Bit
+    outgoing MOE      : Bit
+    outgoing SCKO     : Bit
+    outgoing SCKOE    : Bit
+    outgoing MCSNO3   : Bit
+    outgoing MCSNO2   : Bit
+    outgoing MCSNO1   : Bit
+    outgoing MCSNO0   : Bit
+    outgoing MCSNOE3  : Bit
+    outgoing MCSNOE2  : Bit
+    outgoing MCSNOE1  : Bit
+    outgoing MCSNOE0  : Bit
+}
+
+// SiliconBlue configuration and arithmetic cells.
+
+//> Warm-boot configuration: reboots into one of the four configuration
+//> slots selected by `S1` and `S0`, or re-runs the current slot's boot
+//> sequence when `BOOT` is pulsed.
+@cell("SB_WARMBOOT")
+ext mod SbWarmboot {
+    incoming BOOT : Bit
+    incoming S1   : Bit
+    incoming S0   : Bit
+}
+
+//> The iCE40 UltraPlus hardened 16x16 multiplier-accumulator.
+//> Configure its pipeline registers, add/subtract modes, and output
+//> selection through the many `*_REG` and `*_SELECT` parameters, which
+//> Virdant cannot set yet.
+@cell("SB_MAC16")
+ext mod SbMac16 {
+    incoming CLK         : Clock
+    incoming CE          : Bit
+    incoming C           : Word[16]
+    incoming A           : Word[16]
+    incoming B           : Word[16]
+    incoming D           : Word[16]
+    incoming AHOLD       : Bit
+    incoming BHOLD       : Bit
+    incoming CHOLD       : Bit
+    incoming DHOLD       : Bit
+    incoming IRSTTOP     : Bit
+    incoming IRSTBOT     : Bit
+    incoming ORSTTOP     : Bit
+    incoming ORSTBOT     : Bit
+    incoming OLOADTOP    : Bit
+    incoming OLOADBOT    : Bit
+    incoming ADDSUBTOP   : Bit
+    incoming ADDSUBBOT   : Bit
+    incoming OHOLDTOP    : Bit
+    incoming OHOLDBOT    : Bit
+    incoming CI          : Bit
+    incoming ACCUMCI     : Bit
+    incoming SIGNEXTIN   : Bit
+    outgoing O           : Word[32]
+    outgoing CO          : Bit
+    outgoing ACCUMCO     : Bit
+    outgoing SIGNEXTOUT  : Bit
 }

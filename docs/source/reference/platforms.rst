@@ -223,18 +223,37 @@ Verilog:
 
 .. code-block:: virdant
 
-    //> iCE40 Block RAM primitive.
+    //> The iCE40 4 Kbit block RAM.
+    //> True dual-port: the read and write ports have separate clocks.
+    //> Yosys infers `SB_RAM40_4K` from ordinary memories; instantiate this only
+    //> when you need a block RAM you can name directly.
     @cell("SB_RAM40_4K")
     ext mod SbRam40_4k {
-        incoming clock : Clock
-        incoming addr  : Word[14]
-        incoming wdata : Word[8]
-        incoming wmask : Bit
-        outgoing rdata : Word[8]
+        outgoing RDATA : Word[16]
+        incoming RCLK  : Clock
+        incoming RCLKE : Bit
+        incoming RE    : Bit
+        incoming RADDR : Word[11]
+        incoming WCLK  : Clock
+        incoming WCLKE : Bit
+        incoming WE    : Bit
+        incoming WADDR : Word[11]
+        incoming MASK  : Word[16]
+        incoming WDATA : Word[16]
     }
 
 The :vir:`@cell("...")` annotation names the Verilog primitive emitted
-for instantiations of the ext mod. See :doc:`items` for `ext mod`
+for instantiations of the ext mod.  The ``ice40`` package declares the
+full iCE40 cell library this way: the lookup table and carry cells, the
+twenty flip-flop cells (positive and negative edge, with clock enable,
+and with synchronous or asynchronous set and reset), the I/O and global
+buffer cells, the block and spring RAMs, the PLLs, the UltraPlus
+oscillators, LED drivers, hardened I2C and SPI blocks, and the
+``SB_WARMBOOT`` and ``SB_MAC16`` cells.  Port names must match the
+Verilog primitives verbatim (including their case), since the emitted
+instantiation is matched against yosys's own cell library.  Virdant
+cannot set Verilog cell parameters yet, so instantiations use each
+cell's default parameters.  See :doc:`items` for `ext mod`
 declarations.
 
 

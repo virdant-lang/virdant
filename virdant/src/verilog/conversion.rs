@@ -2094,13 +2094,19 @@ mod tests {
         let ice40 = std::fs::read_to_string(root.join("../lib/ice40.vir")).unwrap();
         let design = r#"export mod Top {
     incoming clock : Clock
-    outgoing rdata : Word[8]
+    outgoing rdata : Word[16]
     mod ram of ice40::SbRam40_4k {
-        it.clock := clock
-        it.addr := 0w14
-        it.wdata := 0w8
-        it.wmask := false
-        rdata := it.rdata
+        it.RCLK := clock
+        it.RCLKE := true
+        it.RE := true
+        it.RADDR := 0
+        it.WCLK := clock
+        it.WCLKE := true
+        it.WE := false
+        it.WADDR := 0
+        it.MASK := 0
+        it.WDATA := 0
+        rdata := it.RDATA
     }
 }
 "#.to_string();
