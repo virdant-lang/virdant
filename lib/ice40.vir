@@ -18,22 +18,28 @@ platform IceSugar {
     @pin(35)
     incoming clock : Clock
 
-    //> RGB LEDs (active low).
+    //> Red channel of the RGB LED (active low).
     @pin(39) outgoing led_red   : Bit
+    //> Blue channel of the RGB LED (active low).
     @pin(40) outgoing led_blue  : Bit
+    //> Green channel of the RGB LED (active low).
     @pin(41) outgoing led_green : Bit
 
     //> User switch.
     @pin(18) incoming switch0 : Bit
 
-    //> UART (USB CDC).
+    //> UART receive data from the host (USB CDC).
     @pin(4) incoming  uart_rx : Bit
+    //> UART transmit data to the host (USB CDC).
     @pin(6) outgoing  uart_tx : Bit
 
-    //> SPI flash.
+    //> SPI flash chip select (active low).
     @pin(46) outgoing flash_cs   : Bit
+    //> SPI flash clock.
     @pin(48) outgoing flash_clk  : Bit
+    //> SPI flash controller-out data.
     @pin(45) outgoing flash_mosi : Bit
+    //> SPI flash controller-in data.
     @pin(47) incoming flash_miso : Bit
 }
 
@@ -53,25 +59,41 @@ platform Fomu {
 
     //> RGB LED (active low).  The physical colour order on the PVT is
     //> red = B5, green = A5, blue = C5.
+    //>
+    //> Red channel of the RGB LED.
     @pin("B5") outgoing led_red   : Bit
+    //> Green channel of the RGB LED.
     @pin("A5") outgoing led_green : Bit
+    //> Blue channel of the RGB LED.
     @pin("C5") outgoing led_blue  : Bit
 
     //> Four capacitive touch buttons (active low).
+    //>
+    //> Capacitive touch button 1.
     @pin("E4") incoming touch1 : Bit
+    //> Capacitive touch button 2.
     @pin("D5") incoming touch2 : Bit
+    //> Capacitive touch button 3.
     @pin("E5") incoming touch3 : Bit
+    //> Capacitive touch button 4.
     @pin("F5") incoming touch4 : Bit
 
     //> USB (implemented in a softcore; hold low to disconnect).
+    //>
+    //> USB D+ signal.
     @pin("A1") outgoing usb_dp    : Bit
+    //> USB D- signal.
     @pin("A2") outgoing usb_dn    : Bit
+    //> USB D+ pull-up enable; hold low to disconnect from the host.
     @pin("A4") outgoing usb_dp_pu : Bit
 
-    //> SPI flash.
+    //> SPI flash chip select (active low).
     @pin("C1") outgoing flash_cs   : Bit
+    //> SPI flash clock.
     @pin("D1") outgoing flash_clk  : Bit
+    //> SPI flash controller-out data.
     @pin("F1") outgoing flash_mosi : Bit
+    //> SPI flash controller-in data.
     @pin("E1") incoming flash_miso : Bit
 }
 
@@ -86,20 +108,30 @@ platform IceStick {
     incoming clock : Clock
 
     //> User LEDs (D1-D5).
+    //>
+    //> User LED D1.
     @pin(99) outgoing led1 : Bit
+    //> User LED D2.
     @pin(98) outgoing led2 : Bit
+    //> User LED D3.
     @pin(97) outgoing led3 : Bit
+    //> User LED D4.
     @pin(96) outgoing led4 : Bit
+    //> User LED D5.
     @pin(95) outgoing led5 : Bit
 
-    //> UART (FTDI USB).
+    //> UART receive data from the host (FTDI USB).
     @pin(9) incoming  uart_rx : Bit
+    //> UART transmit data to the host (FTDI USB).
     @pin(8) outgoing  uart_tx : Bit
 
-    //> SPI flash.
+    //> SPI flash chip select (active low).
     @pin(71) outgoing flash_cs   : Bit
+    //> SPI flash clock.
     @pin(70) outgoing flash_clk  : Bit
+    //> SPI flash controller-out data.
     @pin(67) outgoing flash_mosi : Bit
+    //> SPI flash controller-in data.
     @pin(68) incoming flash_miso : Bit
 }
 
@@ -110,10 +142,15 @@ platform IceStick {
 //> when you need a LUT you can name directly.
 @cell("SB_LUT4")
 ext mod SbLut4 {
+    //> Lookup table output.
     outgoing O  : Bit
+    //> Lookup table input 0.
     incoming I0 : Bit
+    //> Lookup table input 1.
     incoming I1 : Bit
+    //> Lookup table input 2.
     incoming I2 : Bit
+    //> Lookup table input 3.
     incoming I3 : Bit
 }
 
@@ -122,62 +159,89 @@ ext mod SbLut4 {
 //> need a carry cell you can name directly.
 @cell("SB_CARRY")
 ext mod SbCarry {
+    //> Carry output: `majority(I0, I1, CI)`.
     outgoing CO : Bit
+    //> Carry-chain input 0.
     incoming I0 : Bit
+    //> Carry-chain input 1.
     incoming I1 : Bit
+    //> Carry-in from the previous stage.
     incoming CI : Bit
 }
 
 //> D flip-flop sampling on the positive clock edge.
 @cell("SB_DFF")
 ext mod SbDff {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (positive edge).
     incoming C : Clock
+    //> Data input.
     incoming D : Bit
 }
 
 //> D flip-flop sampling on the positive clock edge, holding when `E` is low.
 @cell("SB_DFFE")
 ext mod SbDffe {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (positive edge).
     incoming C : Clock
+    //> Clock enable (active high); holds state when low.
     incoming E : Bit
+    //> Data input.
     incoming D : Bit
 }
 
 //> D flip-flop sampling on the positive clock edge with a synchronous reset.
 @cell("SB_DFFSR")
 ext mod SbDffsr {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (positive edge).
     incoming C : Clock
+    //> Synchronous reset (active high).
     incoming R : Bit
+    //> Data input.
     incoming D : Bit
 }
 
 //> D flip-flop sampling on the positive clock edge with an asynchronous reset.
 @cell("SB_DFFR")
 ext mod SbDffr {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (positive edge).
     incoming C : Clock
+    //> Asynchronous reset (active high).
     incoming R : Bit
+    //> Data input.
     incoming D : Bit
 }
 
 //> D flip-flop sampling on the positive clock edge with a synchronous set.
 @cell("SB_DFFSS")
 ext mod SbDffss {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (positive edge).
     incoming C : Clock
+    //> Synchronous set (active high).
     incoming S : Bit
+    //> Data input.
     incoming D : Bit
 }
 
 //> D flip-flop sampling on the positive clock edge with an asynchronous set.
 @cell("SB_DFFS")
 ext mod SbDffs {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (positive edge).
     incoming C : Clock
+    //> Asynchronous set (active high).
     incoming S : Bit
+    //> Data input.
     incoming D : Bit
 }
 
@@ -185,10 +249,15 @@ ext mod SbDffs {
 //> and a synchronous reset.
 @cell("SB_DFFESR")
 ext mod SbDffesr {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (positive edge).
     incoming C : Clock
+    //> Clock enable (active high); holds state when low.
     incoming E : Bit
+    //> Synchronous reset (active high).
     incoming R : Bit
+    //> Data input.
     incoming D : Bit
 }
 
@@ -196,10 +265,15 @@ ext mod SbDffesr {
 //> and an asynchronous reset.
 @cell("SB_DFFER")
 ext mod SbDffer {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (positive edge).
     incoming C : Clock
+    //> Clock enable (active high); holds state when low.
     incoming E : Bit
+    //> Asynchronous reset (active high).
     incoming R : Bit
+    //> Data input.
     incoming D : Bit
 }
 
@@ -207,10 +281,15 @@ ext mod SbDffer {
 //> and a synchronous set.
 @cell("SB_DFFESS")
 ext mod SbDffess {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (positive edge).
     incoming C : Clock
+    //> Clock enable (active high); holds state when low.
     incoming E : Bit
+    //> Synchronous set (active high).
     incoming S : Bit
+    //> Data input.
     incoming D : Bit
 }
 
@@ -218,63 +297,91 @@ ext mod SbDffess {
 //> and an asynchronous set.
 @cell("SB_DFFES")
 ext mod SbDffes {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (positive edge).
     incoming C : Clock
+    //> Clock enable (active high); holds state when low.
     incoming E : Bit
+    //> Asynchronous set (active high).
     incoming S : Bit
+    //> Data input.
     incoming D : Bit
 }
 
 //> D flip-flop sampling on the negative clock edge.
 @cell("SB_DFFN")
 ext mod SbDffn {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (negative edge).
     incoming C : Clock
+    //> Data input.
     incoming D : Bit
 }
 
 //> D flip-flop sampling on the negative clock edge, holding when `E` is low.
 @cell("SB_DFFNE")
 ext mod SbDffne {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (negative edge).
     incoming C : Clock
+    //> Clock enable (active high); holds state when low.
     incoming E : Bit
+    //> Data input.
     incoming D : Bit
 }
 
 //> D flip-flop sampling on the negative clock edge with a synchronous reset.
 @cell("SB_DFFNSR")
 ext mod SbDffnsr {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (negative edge).
     incoming C : Clock
+    //> Synchronous reset (active high).
     incoming R : Bit
+    //> Data input.
     incoming D : Bit
 }
 
 //> D flip-flop sampling on the negative clock edge with an asynchronous reset.
 @cell("SB_DFFNR")
 ext mod SbDffnr {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (negative edge).
     incoming C : Clock
+    //> Asynchronous reset (active high).
     incoming R : Bit
+    //> Data input.
     incoming D : Bit
 }
 
 //> D flip-flop sampling on the negative clock edge with a synchronous set.
 @cell("SB_DFFNSS")
 ext mod SbDffnss {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (negative edge).
     incoming C : Clock
+    //> Synchronous set (active high).
     incoming S : Bit
+    //> Data input.
     incoming D : Bit
 }
 
 //> D flip-flop sampling on the negative clock edge with an asynchronous set.
 @cell("SB_DFFNS")
 ext mod SbDffns {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (negative edge).
     incoming C : Clock
+    //> Asynchronous set (active high).
     incoming S : Bit
+    //> Data input.
     incoming D : Bit
 }
 
@@ -282,10 +389,15 @@ ext mod SbDffns {
 //> and a synchronous reset.
 @cell("SB_DFFNESR")
 ext mod SbDffnesr {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (negative edge).
     incoming C : Clock
+    //> Clock enable (active high); holds state when low.
     incoming E : Bit
+    //> Synchronous reset (active high).
     incoming R : Bit
+    //> Data input.
     incoming D : Bit
 }
 
@@ -293,10 +405,15 @@ ext mod SbDffnesr {
 //> and an asynchronous reset.
 @cell("SB_DFFNER")
 ext mod SbDffner {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (negative edge).
     incoming C : Clock
+    //> Clock enable (active high); holds state when low.
     incoming E : Bit
+    //> Asynchronous reset (active high).
     incoming R : Bit
+    //> Data input.
     incoming D : Bit
 }
 
@@ -304,10 +421,15 @@ ext mod SbDffner {
 //> and a synchronous set.
 @cell("SB_DFFNESS")
 ext mod SbDffness {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (negative edge).
     incoming C : Clock
+    //> Clock enable (active high); holds state when low.
     incoming E : Bit
+    //> Synchronous set (active high).
     incoming S : Bit
+    //> Data input.
     incoming D : Bit
 }
 
@@ -315,10 +437,15 @@ ext mod SbDffness {
 //> and an asynchronous set.
 @cell("SB_DFFNES")
 ext mod SbDffnes {
+    //> Registered output.
     outgoing Q : Bit
+    //> Clock input (negative edge).
     incoming C : Clock
+    //> Clock enable (active high); holds state when low.
     incoming E : Bit
+    //> Asynchronous set (active high).
     incoming S : Bit
+    //> Data input.
     incoming D : Bit
 }
 
@@ -335,15 +462,25 @@ ext mod SbDffnes {
 //> port.
 @cell("SB_IO")
 ext mod SbIo {
+    //> Physical pad connection.
     incoming PACKAGE_PIN       : Bit
+    //> Latches the input register value when low (bypasses `INPUT_CLK`).
     incoming LATCH_INPUT_VALUE : Bit
+    //> Clock enable shared by the input and output registers.
     incoming CLOCK_ENABLE      : Bit
+    //> Clock for the input register.
     incoming INPUT_CLK         : Clock
+    //> Clock for the output register.
     incoming OUTPUT_CLK        : Clock
+    //> Tristate control for the pad driver (active high enables the driver).
     incoming OUTPUT_ENABLE     : Bit
+    //> Output data (or DDR rising-edge data).
     incoming D_OUT_0           : Bit
+    //> DDR falling-edge output data (unused in SDR modes).
     incoming D_OUT_1           : Bit
+    //> Input data (or DDR rising-edge data).
     outgoing D_IN_0            : Bit
+    //> DDR falling-edge input data (unused in SDR modes).
     outgoing D_IN_1            : Bit
 }
 
@@ -353,16 +490,27 @@ ext mod SbIo {
 //> `GLOBAL_BUFFER_OUTPUT`.
 @cell("SB_GB_IO")
 ext mod SbGbIo {
+    //> Physical pad connection.
     incoming PACKAGE_PIN          : Bit
+    //> Buffered clock distributed onto the global network.
     outgoing GLOBAL_BUFFER_OUTPUT : Clock
+    //> Latches the input register value when low (bypasses `INPUT_CLK`).
     incoming LATCH_INPUT_VALUE    : Bit
+    //> Clock enable shared by the input and output registers.
     incoming CLOCK_ENABLE         : Bit
+    //> Clock for the input register.
     incoming INPUT_CLK            : Clock
+    //> Clock for the output register.
     incoming OUTPUT_CLK           : Clock
+    //> Tristate control for the pad driver (active high enables the driver).
     incoming OUTPUT_ENABLE        : Bit
+    //> Output data (or DDR rising-edge data).
     incoming D_OUT_0              : Bit
+    //> DDR falling-edge output data (unused in SDR modes).
     incoming D_OUT_1              : Bit
+    //> Input data (or DDR rising-edge data).
     outgoing D_IN_0               : Bit
+    //> DDR falling-edge input data (unused in SDR modes).
     outgoing D_IN_1               : Bit
 }
 
@@ -371,7 +519,9 @@ ext mod SbGbIo {
 //> a plain `Bit` signal cannot be routed through it.
 @cell("SB_GB")
 ext mod SbGb {
+    //> Signal to route onto the global network.
     incoming USER_SIGNAL_TO_GLOBAL_BUFFER : Clock
+    //> Buffered signal distributed onto the global network.
     outgoing GLOBAL_BUFFER_OUTPUT         : Clock
 }
 
@@ -383,48 +533,81 @@ ext mod SbGb {
 //> when you need a block RAM you can name directly.
 @cell("SB_RAM40_4K")
 ext mod SbRam40_4k {
+    //> Read data.
     outgoing RDATA : Word[16]
+    //> Read port clock.
     incoming RCLK  : Clock
+    //> Read port clock enable.
     incoming RCLKE : Bit
+    //> Read enable.
     incoming RE    : Bit
+    //> Read address.
     incoming RADDR : Word[11]
+    //> Write port clock.
     incoming WCLK  : Clock
+    //> Write port clock enable.
     incoming WCLKE : Bit
+    //> Write enable.
     incoming WE    : Bit
+    //> Write address.
     incoming WADDR : Word[11]
+    //> Per-bit write mask (set bits are masked out of the write).
     incoming MASK  : Word[16]
+    //> Write data.
     incoming WDATA : Word[16]
 }
 
 //> The iCE40 4 Kbit block RAM with an inverted (falling-edge) read clock.
 @cell("SB_RAM40_4KNR")
 ext mod SbRam40_4knr {
+    //> Read data.
     outgoing RDATA  : Word[16]
+    //> Read port clock (inverted; samples on the falling edge).
     incoming RCLKN  : Clock
+    //> Read port clock enable.
     incoming RCLKE  : Bit
+    //> Read enable.
     incoming RE     : Bit
+    //> Read address.
     incoming RADDR  : Word[11]
+    //> Write port clock.
     incoming WCLK   : Clock
+    //> Write port clock enable.
     incoming WCLKE  : Bit
+    //> Write enable.
     incoming WE     : Bit
+    //> Write address.
     incoming WADDR  : Word[11]
+    //> Per-bit write mask (set bits are masked out of the write).
     incoming MASK   : Word[16]
+    //> Write data.
     incoming WDATA  : Word[16]
 }
 
 //> The iCE40 4 Kbit block RAM with an inverted (falling-edge) write clock.
 @cell("SB_RAM40_4KNW")
 ext mod SbRam40_4knw {
+    //> Read data.
     outgoing RDATA  : Word[16]
+    //> Read port clock.
     incoming RCLK   : Clock
+    //> Read port clock enable.
     incoming RCLKE  : Bit
+    //> Read enable.
     incoming RE     : Bit
+    //> Read address.
     incoming RADDR  : Word[11]
+    //> Write port clock (inverted; samples on the falling edge).
     incoming WCLKN  : Clock
+    //> Write port clock enable.
     incoming WCLKE  : Bit
+    //> Write enable.
     incoming WE     : Bit
+    //> Write address.
     incoming WADDR  : Word[11]
+    //> Per-bit write mask (set bits are masked out of the write).
     incoming MASK   : Word[16]
+    //> Write data.
     incoming WDATA  : Word[16]
 }
 
@@ -432,16 +615,27 @@ ext mod SbRam40_4knw {
 //> both ports.
 @cell("SB_RAM40_4KNRNW")
 ext mod SbRam40_4knrnw {
+    //> Read data.
     outgoing RDATA  : Word[16]
+    //> Read port clock (inverted; samples on the falling edge).
     incoming RCLKN  : Clock
+    //> Read port clock enable.
     incoming RCLKE  : Bit
+    //> Read enable.
     incoming RE     : Bit
+    //> Read address.
     incoming RADDR  : Word[11]
+    //> Write port clock (inverted; samples on the falling edge).
     incoming WCLKN  : Clock
+    //> Write port clock enable.
     incoming WCLKE  : Bit
+    //> Write enable.
     incoming WE     : Bit
+    //> Write address.
     incoming WADDR  : Word[11]
+    //> Per-bit write mask (set bits are masked out of the write).
     incoming MASK   : Word[16]
+    //> Write data.
     incoming WDATA  : Word[16]
 }
 
@@ -449,15 +643,25 @@ ext mod SbRam40_4knrnw {
 //> Hold `STANDBY`, `SLEEP`, and `POWEROFF` low for normal operation.
 @cell("SB_SPRAM256KA")
 ext mod SbSpram256ka {
+    //> Memory address.
     incoming ADDRESS     : Word[14]
+    //> Write data.
     incoming DATAIN      : Word[16]
+    //> Per-nibble write enable mask.
     incoming MASKWREN    : Word[4]
+    //> Write enable.
     incoming WREN        : Bit
+    //> Chip select; must be high to read or write.
     incoming CHIPSELECT  : Bit
+    //> Memory clock.
     incoming CLOCK       : Clock
+    //> Standby mode control; hold low for normal operation.
     incoming STANDBY     : Bit
+    //> Sleep mode control; hold low for normal operation.
     incoming SLEEP       : Bit
+    //> Power-off control; hold low for normal operation.
     incoming POWEROFF    : Bit
+    //> Read data.
     outgoing DATAOUT     : Word[16]
 }
 
@@ -470,17 +674,30 @@ ext mod SbSpram256ka {
 //> idle, and drive `BYPASS` low and `RESETB` high for normal operation.
 @cell("SB_PLL40_CORE")
 ext mod SbPll40Core {
+    //> Reference clock input from design logic.
     incoming REFERENCECLK    : Clock
+    //> PLL output routed to fabric (core) resources.
     outgoing PLLOUTCORE      : Clock
+    //> PLL output routed onto the global network.
     outgoing PLLOUTGLOBAL    : Clock
+    //> External feedback input, used when the feedback path is routed
+    //> off-chip.
     incoming EXTFEEDBACK     : Bit
+    //> Dynamic delay adjustment for the output clock.
     incoming DYNAMICDELAY    : Word[8]
+    //> High when the PLL has achieved lock.
     outgoing LOCK            : Bit
+    //> Bypasses the PLL, passing the reference clock straight through.
     incoming BYPASS          : Bit
+    //> Active-low reset; hold high for normal operation.
     incoming RESETB          : Bit
+    //> Latches the dynamic reconfiguration inputs.
     incoming LATCHINPUTVALUE : Bit
+    //> Dynamic reconfiguration serial data out.
     outgoing SDO             : Bit
+    //> Dynamic reconfiguration serial data in.
     incoming SDI             : Bit
+    //> Dynamic reconfiguration serial clock.
     incoming SCLK            : Bit
 }
 
@@ -492,17 +709,30 @@ ext mod SbPll40Core {
 //> idle, and drive `BYPASS` low and `RESETB` high for normal operation.
 @cell("SB_PLL40_PAD")
 ext mod SbPll40Pad {
+    //> Reference clock input from a package pin.
     incoming PACKAGEPIN      : Clock
+    //> PLL output routed to fabric (core) resources.
     outgoing PLLOUTCORE      : Clock
+    //> PLL output routed onto the global network.
     outgoing PLLOUTGLOBAL    : Clock
+    //> External feedback input, used when the feedback path is routed
+    //> off-chip.
     incoming EXTFEEDBACK     : Bit
+    //> Dynamic delay adjustment for the output clock.
     incoming DYNAMICDELAY    : Word[8]
+    //> High when the PLL has achieved lock.
     outgoing LOCK            : Bit
+    //> Bypasses the PLL, passing the reference clock straight through.
     incoming BYPASS          : Bit
+    //> Active-low reset; hold high for normal operation.
     incoming RESETB          : Bit
+    //> Latches the dynamic reconfiguration inputs.
     incoming LATCHINPUTVALUE : Bit
+    //> Dynamic reconfiguration serial data out.
     outgoing SDO             : Bit
+    //> Dynamic reconfiguration serial data in.
     incoming SDI             : Bit
+    //> Dynamic reconfiguration serial clock.
     incoming SCLK            : Bit
 }
 
@@ -513,19 +743,34 @@ ext mod SbPll40Pad {
 //> idle, and drive `BYPASS` low and `RESETB` high for normal operation.
 @cell("SB_PLL40_2_PAD")
 ext mod SbPll40_2Pad {
+    //> Reference clock input from a package pin.
     incoming PACKAGEPIN      : Clock
+    //> First PLL output routed to fabric (core) resources.
     outgoing PLLOUTCOREA     : Clock
+    //> First PLL output routed onto the global network.
     outgoing PLLOUTGLOBALA   : Clock
+    //> Second PLL output routed to fabric (core) resources.
     outgoing PLLOUTCOREB     : Clock
+    //> Second PLL output routed onto the global network.
     outgoing PLLOUTGLOBALB   : Clock
+    //> External feedback input, used when the feedback path is routed
+    //> off-chip.
     incoming EXTFEEDBACK     : Bit
+    //> Dynamic delay adjustment for the output clock.
     incoming DYNAMICDELAY    : Word[8]
+    //> High when the PLL has achieved lock.
     outgoing LOCK            : Bit
+    //> Bypasses the PLL, passing the reference clock straight through.
     incoming BYPASS          : Bit
+    //> Active-low reset; hold high for normal operation.
     incoming RESETB          : Bit
+    //> Latches the dynamic reconfiguration inputs.
     incoming LATCHINPUTVALUE : Bit
+    //> Dynamic reconfiguration serial data out.
     outgoing SDO             : Bit
+    //> Dynamic reconfiguration serial data in.
     incoming SDI             : Bit
+    //> Dynamic reconfiguration serial clock.
     incoming SCLK            : Bit
 }
 
@@ -536,19 +781,34 @@ ext mod SbPll40_2Pad {
 //> idle, and drive `BYPASS` low and `RESETB` high for normal operation.
 @cell("SB_PLL40_2F_CORE")
 ext mod SbPll40_2fCore {
+    //> Reference clock input from design logic.
     incoming REFERENCECLK    : Clock
+    //> First PLL output routed to fabric (core) resources.
     outgoing PLLOUTCOREA     : Clock
+    //> First PLL output routed onto the global network.
     outgoing PLLOUTGLOBALA   : Clock
+    //> Second PLL output routed to fabric (core) resources.
     outgoing PLLOUTCOREB     : Clock
+    //> Second PLL output routed onto the global network.
     outgoing PLLOUTGLOBALB   : Clock
+    //> External feedback input, used when the feedback path is routed
+    //> off-chip.
     incoming EXTFEEDBACK     : Bit
+    //> Dynamic delay adjustment for the output clock.
     incoming DYNAMICDELAY    : Word[8]
+    //> High when the PLL has achieved lock.
     outgoing LOCK            : Bit
+    //> Bypasses the PLL, passing the reference clock straight through.
     incoming BYPASS          : Bit
+    //> Active-low reset; hold high for normal operation.
     incoming RESETB          : Bit
+    //> Latches the dynamic reconfiguration inputs.
     incoming LATCHINPUTVALUE : Bit
+    //> Dynamic reconfiguration serial data out.
     outgoing SDO             : Bit
+    //> Dynamic reconfiguration serial data in.
     incoming SDI             : Bit
+    //> Dynamic reconfiguration serial clock.
     incoming SCLK            : Bit
 }
 
@@ -560,19 +820,34 @@ ext mod SbPll40_2fCore {
 //> idle, and drive `BYPASS` low and `RESETB` high for normal operation.
 @cell("SB_PLL40_2F_PAD")
 ext mod SbPll40_2fPad {
+    //> Reference clock input from a package pin.
     incoming PACKAGEPIN      : Clock
+    //> First PLL output routed to fabric (core) resources.
     outgoing PLLOUTCOREA     : Clock
+    //> First PLL output routed onto the global network.
     outgoing PLLOUTGLOBALA   : Clock
+    //> Second PLL output routed to fabric (core) resources.
     outgoing PLLOUTCOREB     : Clock
+    //> Second PLL output routed onto the global network.
     outgoing PLLOUTGLOBALB   : Clock
+    //> External feedback input, routed back from one of the PLL outputs for
+    //> feedback-divider configurations.
     incoming EXTFEEDBACK     : Bit
+    //> Dynamic delay adjustment for the output clock.
     incoming DYNAMICDELAY    : Word[8]
+    //> High when the PLL has achieved lock.
     outgoing LOCK            : Bit
+    //> Bypasses the PLL, passing the reference clock straight through.
     incoming BYPASS          : Bit
+    //> Active-low reset; hold high for normal operation.
     incoming RESETB          : Bit
+    //> Latches the dynamic reconfiguration inputs.
     incoming LATCHINPUTVALUE : Bit
+    //> Dynamic reconfiguration serial data out.
     outgoing SDO             : Bit
+    //> Dynamic reconfiguration serial data in.
     incoming SDI             : Bit
+    //> Dynamic reconfiguration serial clock.
     incoming SCLK            : Bit
 }
 
@@ -581,26 +856,42 @@ ext mod SbPll40_2fPad {
 //> The iCE40 UltraPlus high-frequency (10-146 MHz) ring oscillator.
 @cell("SB_HFOSC")
 ext mod SbHfosc {
+    //> Frequency trim input bit 0 (fixed trim value; typically unused).
     incoming TRIM0   : Bit
+    //> Frequency trim input bit 1 (fixed trim value; typically unused).
     incoming TRIM1   : Bit
+    //> Frequency trim input bit 2 (fixed trim value; typically unused).
     incoming TRIM2   : Bit
+    //> Frequency trim input bit 3 (fixed trim value; typically unused).
     incoming TRIM3   : Bit
+    //> Frequency trim input bit 4 (fixed trim value; typically unused).
     incoming TRIM4   : Bit
+    //> Frequency trim input bit 5 (fixed trim value; typically unused).
     incoming TRIM5   : Bit
+    //> Frequency trim input bit 6 (fixed trim value; typically unused).
     incoming TRIM6   : Bit
+    //> Frequency trim input bit 7 (fixed trim value; typically unused).
     incoming TRIM7   : Bit
+    //> Frequency trim input bit 8 (fixed trim value; typically unused).
     incoming TRIM8   : Bit
+    //> Frequency trim input bit 9 (fixed trim value; typically unused).
     incoming TRIM9   : Bit
+    //> Power-up enable for the oscillator.
     incoming CLKHFPU : Bit
+    //> Output enable for the oscillator clock.
     incoming CLKHFEN : Bit
+    //> Oscillator output clock (10-146 MHz).
     outgoing CLKHF   : Clock
 }
 
 //> The iCE40 UltraPlus low-frequency (about 10 kHz) ring oscillator.
 @cell("SB_LFOSC")
 ext mod SbLfosc {
+    //> Power-up enable for the oscillator.
     incoming CLKLFPU : Bit
+    //> Output enable for the oscillator clock.
     incoming CLKLFEN : Bit
+    //> Oscillator output clock (about 10 kHz).
     outgoing CLKLF   : Clock
 }
 
@@ -611,13 +902,21 @@ ext mod SbLfosc {
 //> which Virdant cannot set yet.
 @cell("SB_RGBA_DRV")
 ext mod SbRgbaDrv {
+    //> Enables the constant-current source.
     incoming CURREN   : Bit
+    //> Enables the RGB LED driver outputs.
     incoming RGBLEDEN : Bit
+    //> PWM input for channel 0.
     incoming RGB0PWM  : Bit
+    //> PWM input for channel 1.
     incoming RGB1PWM  : Bit
+    //> PWM input for channel 2.
     incoming RGB2PWM  : Bit
+    //> Channel 0 driver output.
     outgoing RGB0     : Bit
+    //> Channel 1 driver output.
     outgoing RGB1     : Bit
+    //> Channel 2 driver output.
     outgoing RGB2     : Bit
 }
 
@@ -626,20 +925,30 @@ ext mod SbRgbaDrv {
 //> which Virdant cannot set yet.
 @cell("SB_RGB_DRV")
 ext mod SbRgbDrv {
+    //> Enables the RGB LED driver outputs.
     incoming RGBLEDEN : Bit
+    //> PWM input for channel 0.
     incoming RGB0PWM  : Bit
+    //> PWM input for channel 1.
     incoming RGB1PWM  : Bit
+    //> PWM input for channel 2.
     incoming RGB2PWM  : Bit
+    //> Power-up enable for the internal current source.
     incoming RGBPU    : Bit
+    //> Channel 0 driver output.
     outgoing RGB0     : Bit
+    //> Channel 1 driver output.
     outgoing RGB1     : Bit
+    //> Channel 2 driver output.
     outgoing RGB2     : Bit
 }
 
 //> Constant-current driver for a single external LED.
 @cell("SB_LED_DRV_CUR")
 ext mod SbLedDrvCur {
+    //> Enables the constant-current driver.
     incoming EN    : Bit
+    //> Current-source output driving the external LED.
     outgoing LEDPU : Bit
 }
 
@@ -647,26 +956,47 @@ ext mod SbLedDrvCur {
 //> the three hard PWM channels.  `LEDDCLK` is its interface clock.
 @cell("SB_LEDDA_IP")
 ext mod SbLeddaIp {
+    //> Chip select for the register-file interface.
     incoming LEDDCS    : Bit
+    //> Register-file interface clock.
     incoming LEDDCLK   : Clock
+    //> Register-file write data bit 7.
     incoming LEDDDAT7  : Bit
+    //> Register-file write data bit 6.
     incoming LEDDDAT6  : Bit
+    //> Register-file write data bit 5.
     incoming LEDDDAT5  : Bit
+    //> Register-file write data bit 4.
     incoming LEDDDAT4  : Bit
+    //> Register-file write data bit 3.
     incoming LEDDDAT3  : Bit
+    //> Register-file write data bit 2.
     incoming LEDDDAT2  : Bit
+    //> Register-file write data bit 1.
     incoming LEDDDAT1  : Bit
+    //> Register-file write data bit 0.
     incoming LEDDDAT0  : Bit
+    //> Register-file address bit 3.
     incoming LEDDADDR3 : Bit
+    //> Register-file address bit 2.
     incoming LEDDADDR2 : Bit
+    //> Register-file address bit 1.
     incoming LEDDADDR1 : Bit
+    //> Register-file address bit 0.
     incoming LEDDADDR0 : Bit
+    //> Data enable for the register-file interface.
     incoming LEDDDEN   : Bit
+    //> Execute strobe for the register-file interface.
     incoming LEDDEXE   : Bit
+    //> Resets the LED driver.
     incoming LEDDRST   : Bit
+    //> Hard PWM output for channel 0.
     outgoing PWMOUT0   : Bit
+    //> Hard PWM output for channel 1.
     outgoing PWMOUT1   : Bit
+    //> Hard PWM output for channel 2.
     outgoing PWMOUT2   : Bit
+    //> High while the LED driver is active.
     outgoing LEDDON    : Bit
 }
 
@@ -678,41 +1008,77 @@ ext mod SbLeddaIp {
 //> `SBDATO0` the read data.
 @cell("SB_I2C")
 ext mod SbI2c {
+    //> Register-file bus clock.
     incoming SBCLKI  : Clock
+    //> Register-file bus read/write select (high = read).
     incoming SBRWI   : Bit
+    //> Register-file bus strobe.
     incoming SBSTBI  : Bit
+    //> Register-file address bit 7.
     incoming SBADRI7 : Bit
+    //> Register-file address bit 6.
     incoming SBADRI6 : Bit
+    //> Register-file address bit 5.
     incoming SBADRI5 : Bit
+    //> Register-file address bit 4.
     incoming SBADRI4 : Bit
+    //> Register-file address bit 3.
     incoming SBADRI3 : Bit
+    //> Register-file address bit 2.
     incoming SBADRI2 : Bit
+    //> Register-file address bit 1.
     incoming SBADRI1 : Bit
+    //> Register-file address bit 0.
     incoming SBADRI0 : Bit
+    //> Register-file write data bit 7.
     incoming SBDATI7 : Bit
+    //> Register-file write data bit 6.
     incoming SBDATI6 : Bit
+    //> Register-file write data bit 5.
     incoming SBDATI5 : Bit
+    //> Register-file write data bit 4.
     incoming SBDATI4 : Bit
+    //> Register-file write data bit 3.
     incoming SBDATI3 : Bit
+    //> Register-file write data bit 2.
     incoming SBDATI2 : Bit
+    //> Register-file write data bit 1.
     incoming SBDATI1 : Bit
+    //> Register-file write data bit 0.
     incoming SBDATI0 : Bit
+    //> I2C clock line input.
     incoming SCLI    : Bit
+    //> I2C data line input.
     incoming SDAI    : Bit
+    //> Register-file read data bit 7.
     outgoing SBDATO7 : Bit
+    //> Register-file read data bit 6.
     outgoing SBDATO6 : Bit
+    //> Register-file read data bit 5.
     outgoing SBDATO5 : Bit
+    //> Register-file read data bit 4.
     outgoing SBDATO4 : Bit
+    //> Register-file read data bit 3.
     outgoing SBDATO3 : Bit
+    //> Register-file read data bit 2.
     outgoing SBDATO2 : Bit
+    //> Register-file read data bit 1.
     outgoing SBDATO1 : Bit
+    //> Register-file read data bit 0.
     outgoing SBDATO0 : Bit
+    //> Register-file bus acknowledge.
     outgoing SBACKO  : Bit
+    //> Interrupt request.
     outgoing I2CIRQ  : Bit
+    //> Wake-up request.
     outgoing I2CWKUP : Bit
+    //> I2C clock line output.
     outgoing SCLO    : Bit
+    //> Output enable for the I2C clock line (for open-drain driving).
     outgoing SCLOE   : Bit
+    //> I2C data line output.
     outgoing SDAO    : Bit
+    //> Output enable for the I2C data line (for open-drain driving).
     outgoing SDAOE   : Bit
 }
 
@@ -722,53 +1088,101 @@ ext mod SbI2c {
 //> `SBDATO0` the read data.
 @cell("SB_SPI")
 ext mod SbSpi {
+    //> Register-file bus clock.
     incoming SBCLKI   : Clock
+    //> Register-file bus read/write select (high = read).
     incoming SBRWI    : Bit
+    //> Register-file bus strobe.
     incoming SBSTBI   : Bit
+    //> Register-file address bit 7.
     incoming SBADRI7  : Bit
+    //> Register-file address bit 6.
     incoming SBADRI6  : Bit
+    //> Register-file address bit 5.
     incoming SBADRI5  : Bit
+    //> Register-file address bit 4.
     incoming SBADRI4  : Bit
+    //> Register-file address bit 3.
     incoming SBADRI3  : Bit
+    //> Register-file address bit 2.
     incoming SBADRI2  : Bit
+    //> Register-file address bit 1.
     incoming SBADRI1  : Bit
+    //> Register-file address bit 0.
     incoming SBADRI0  : Bit
+    //> Register-file write data bit 7.
     incoming SBDATI7  : Bit
+    //> Register-file write data bit 6.
     incoming SBDATI6  : Bit
+    //> Register-file write data bit 5.
     incoming SBDATI5  : Bit
+    //> Register-file write data bit 4.
     incoming SBDATI4  : Bit
+    //> Register-file write data bit 3.
     incoming SBDATI3  : Bit
+    //> Register-file write data bit 2.
     incoming SBDATI2  : Bit
+    //> Register-file write data bit 1.
     incoming SBDATI1  : Bit
+    //> Register-file write data bit 0.
     incoming SBDATI0  : Bit
+    //> SPI controller-mode data input (from device).
     incoming MI       : Bit
+    //> SPI device-mode data input (from controller).
     incoming SI       : Bit
+    //> SPI device-mode clock input.
     incoming SCKI     : Bit
+    //> SPI device-mode chip select input (active low).
     incoming SCSNI    : Bit
+    //> Register-file read data bit 7.
     outgoing SBDATO7  : Bit
+    //> Register-file read data bit 6.
     outgoing SBDATO6  : Bit
+    //> Register-file read data bit 5.
     outgoing SBDATO5  : Bit
+    //> Register-file read data bit 4.
     outgoing SBDATO4  : Bit
+    //> Register-file read data bit 3.
     outgoing SBDATO3  : Bit
+    //> Register-file read data bit 2.
     outgoing SBDATO2  : Bit
+    //> Register-file read data bit 1.
     outgoing SBDATO1  : Bit
+    //> Register-file read data bit 0.
     outgoing SBDATO0  : Bit
+    //> Register-file bus acknowledge.
     outgoing SBACKO   : Bit
+    //> Interrupt request.
     outgoing SPIIRQ   : Bit
+    //> Wake-up request.
     outgoing SPIWKUP  : Bit
+    //> SPI device-mode data output.
     outgoing SO       : Bit
+    //> Output enable for `SO`.
     outgoing SOE      : Bit
+    //> SPI controller-mode data output.
     outgoing MO       : Bit
+    //> Output enable for `MO`.
     outgoing MOE      : Bit
+    //> SPI controller-mode clock output.
     outgoing SCKO     : Bit
+    //> Output enable for `SCKO`.
     outgoing SCKOE    : Bit
+    //> SPI controller-mode chip select output 3 (active low).
     outgoing MCSNO3   : Bit
+    //> SPI controller-mode chip select output 2 (active low).
     outgoing MCSNO2   : Bit
+    //> SPI controller-mode chip select output 1 (active low).
     outgoing MCSNO1   : Bit
+    //> SPI controller-mode chip select output 0 (active low).
     outgoing MCSNO0   : Bit
+    //> Output enable for `MCSNO3`.
     outgoing MCSNOE3  : Bit
+    //> Output enable for `MCSNO2`.
     outgoing MCSNOE2  : Bit
+    //> Output enable for `MCSNO1`.
     outgoing MCSNOE1  : Bit
+    //> Output enable for `MCSNO0`.
     outgoing MCSNOE0  : Bit
 }
 
@@ -779,8 +1193,11 @@ ext mod SbSpi {
 //> sequence when `BOOT` is pulsed.
 @cell("SB_WARMBOOT")
 ext mod SbWarmboot {
+    //> Pulse to reboot into the slot selected by `S1` and `S0`.
     incoming BOOT : Bit
+    //> Configuration slot select bit 1.
     incoming S1   : Bit
+    //> Configuration slot select bit 0.
     incoming S0   : Bit
 }
 
@@ -790,31 +1207,58 @@ ext mod SbWarmboot {
 //> Virdant cannot set yet.
 @cell("SB_MAC16")
 ext mod SbMac16 {
+    //> Multiplier-accumulator clock.
     incoming CLK         : Clock
+    //> Clock enable.
     incoming CE          : Bit
+    //> Accumulator addend input.
     incoming C           : Word[16]
+    //> Multiplicand input.
     incoming A           : Word[16]
+    //> Multiplier input.
     incoming B           : Word[16]
+    //> Pre-adder input, added to or subtracted from `A`.
     incoming D           : Word[16]
+    //> Holds the `A` input register.
     incoming AHOLD       : Bit
+    //> Holds the `B` input register.
     incoming BHOLD       : Bit
+    //> Holds the `C` input register.
     incoming CHOLD       : Bit
+    //> Holds the `D` input register.
     incoming DHOLD       : Bit
+    //> Resets the top input registers.
     incoming IRSTTOP     : Bit
+    //> Resets the bottom input registers.
     incoming IRSTBOT     : Bit
+    //> Resets the top output/accumulator register.
     incoming ORSTTOP     : Bit
+    //> Resets the bottom output/accumulator register.
     incoming ORSTBOT     : Bit
+    //> Loads the top accumulator from `C` instead of accumulating.
     incoming OLOADTOP    : Bit
+    //> Loads the bottom accumulator from `C` instead of accumulating.
     incoming OLOADBOT    : Bit
+    //> Selects add/subtract for the top half (high selects subtract).
     incoming ADDSUBTOP   : Bit
+    //> Selects add/subtract for the bottom half (high selects subtract).
     incoming ADDSUBBOT   : Bit
+    //> Holds the top output/accumulator register.
     incoming OHOLDTOP    : Bit
+    //> Holds the bottom output/accumulator register.
     incoming OHOLDBOT    : Bit
+    //> Carry-in to the adder.
     incoming CI          : Bit
+    //> Carry-in to the accumulator.
     incoming ACCUMCI     : Bit
+    //> Sign-extension input, for cascading multiple `SB_MAC16` cells.
     incoming SIGNEXTIN   : Bit
+    //> 32-bit multiply-accumulate result.
     outgoing O           : Word[32]
+    //> Carry-out from the adder.
     outgoing CO          : Bit
+    //> Carry-out from the accumulator.
     outgoing ACCUMCO     : Bit
+    //> Sign-extension output, for cascading multiple `SB_MAC16` cells.
     outgoing SIGNEXTOUT  : Bit
 }
