@@ -13,8 +13,7 @@ DocBang := ("DocBang")+
 Annotations := Annotation*
 
 Annotation :=
-      "@" Ident "(" Nat ")"
-    | "@" Ident "(" Str ")"
+      "@" Ident "(" ArgList? ")"
     | "@" Ident
 
 Item :=
@@ -234,12 +233,12 @@ ExprAscription :=
     | ExprPrimary
 
 ExprPrimary :=
-      Ofness "(" ArgList ")"
+      Ofness "(" ArgList? ")"
     | ExprPrimary "->" Ident
     | ExprPrimary "[" "dyn" Expr "]"
     | ExprPrimary "[" Index "]"
     | ExprPrimary "[" Index ".." Index "]"
-    | "@" Ident "(" ArgList ")"
+    | "@" Ident "(" ArgList? ")"
     | ExprAtom
 
 ExprAtom :=
@@ -256,7 +255,6 @@ ExprAtom :=
 ArgList :=
       (Expr ",")+ Expr ","?
     | Expr ","?
-    |
 
 Ofness :=
       Ident

@@ -44,18 +44,41 @@ enum type State {
     @initial
     Idle = 0w2
 
-    @active
+    @active(true, false)
     Running = 1w2
 
     @done
     Complete = 2w2
 }
 
-@platform("ice40")
+@chip("ice40")
 socket SpiSocket {
     @master
     cosi data_out : Bit
 
     @slave
     soci data_in : Bit
+}
+
+//> Module exercising new annotation arg syntax
+
+// Multi-arg annotation with trailing comma
+@multi_arg(1, 2, 3,)
+// Empty parens
+@empty()
+// Bare annotation (no parens)
+@bare
+mod AnnotationsTest {
+    // Multi-arg on a port
+    @attr("a", "b", 42,)
+    // Empty parens on a port
+    @flag()
+    // Bare on a port
+    @simple
+    // Boolean literals as annotation arguments
+    @active(true)
+    @active(false)
+    incoming test_port : Bit
+
+    unused test_port
 }

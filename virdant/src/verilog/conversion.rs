@@ -1948,6 +1948,7 @@ fn cell_annotation(db: &Db, package: PackageId, item_ast: &AstNode<'_>) -> Optio
         .map(|value| match value {
             AnnotationValue::Str(s) => s,
             AnnotationValue::Nat(n) => n.to_string().into(),
+            AnnotationValue::Bool(b) => b.to_string().into(),
         })
         .map(|s| s.to_str_lossy().into_owned())
 }

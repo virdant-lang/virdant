@@ -437,33 +437,30 @@ impl<'p> AstNode<'p> {
         }
     }
 
-    /// The string value of this annotation, if any.
-    pub fn annotation_string(&self) -> Option<InternedString> {
+    /// The argument expressions of this annotation (the `ArgList` between
+    /// its parens), if this is an Annotation node.  Empty for a bare
+    /// `@name` annotation (no parens) as well as for `@name()`.
+    pub fn annotation_args(&self) -> Vec<AstNode<'_>> {
         match &self.payload {
-            AstNodePayload::Annotation(a) => a.str_value.clone(),
-            _ => None,
+            AstNodePayload::Annotation(_) => self.children(),
+            _ => vec![],
         }
     }
 
-    /// The natural number value of this annotation, if any.
-    pub fn annotation_natural(&self) -> Option<u64> {
-        match &self.payload {
-            AstNodePayload::Annotation(a) => a.nat_value,
-            _ => None,
-        }
-    }
-
-    /// All values of `@<name>(...)` annotations on this node, in source
-    /// order.  Bare `@name` annotations (no value) are skipped.
+    /// All argument values of `@<name>(...)` annotations on this node, in
+    /// source order.  Bare `@name` annotations (no args) contribute
+    /// nothing.  Only literal (`Nat`/`Word`/`Str`) arguments are
+    /// recognized; other expressions are silently skipped, since
+    /// annotation values are unvalidated data.
     pub fn annotation_values(&self, parsing: &Parsing, name: &str) -> Vec<AnnotationValue> {
         let mut result = vec![];
         for annotation in self.annotations() {
             let Some(annotation_name) = annotation.annotation_name() else { continue };
             if parsing.string(annotation_name) == BStr::new(name) {
-                if let Some(nat) = annotation.annotation_natural() {
-                    result.push(AnnotationValue::Nat(nat));
-                } else if let Some(str_value) = annotation.annotation_string() {
-                    result.push(AnnotationValue::Str(unquote(parsing.string(str_value))));
+                for arg in annotation.annotation_args() {
+                    if let Some(value) = annotation_arg_value(&arg, parsing) {
+                        result.push(value);
+                    }
                 }
             }
         }
@@ -561,12 +558,13 @@ pub fn item_children<'p>(node: &'p AstNode<'p>) -> Vec<AstNode<'p>> {
         .collect()
 }
 
-/// The value of an annotation: either the nat form (`@pin(35)`) or the
-/// str form (`@pin("A1")`, stored unquoted).
+/// The value of an annotation: the nat form (`@pin(35)`), the str form
+/// (`@pin("A1")`, stored unquoted), or the bool form (`@keep(true)`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AnnotationValue {
     Nat(u64),
     Str(BString),
+    Bool(bool),
 }
 
 /// Strips the surrounding double quotes from a `Str` token's interned
@@ -576,4 +574,24 @@ fn unquote(s: &BStr) -> BString {
     let s = s.strip_prefix(b"\"").unwrap_or(s);
     let s = s.strip_suffix(b"\"").unwrap_or(s);
     BString::from(s.to_vec())
+}
+
+/// Interprets an annotation argument expression as an `AnnotationValue`,
+/// if it is a literal (`Nat`/`Word`/`Str`/`true`/`false`).  Any other
+/// expression form (references, calls, binops, etc.) yields `None`.
+fn annotation_arg_value(node: &AstNode<'_>, parsing: &Parsing) -> Option<AnnotationValue> {
+    match node.payload() {
+        AstNodePayload::ExprWordLit(lit) => {
+            let literal = parsing.string(lit.literal).to_str_lossy();
+            let (value, _width) = crate::util::parse_word_literal(&literal);
+            Some(AnnotationValue::Nat(value))
+        }
+        AstNodePayload::ExprStrLit(lit) => {
+            Some(AnnotationValue::Str(unquote(parsing.string(lit.literal))))
+        }
+        AstNodePayload::ExprBitLit(lit) => {
+            Some(AnnotationValue::Bool(lit.literal))
+        }
+        _ => None,
+    }
 }

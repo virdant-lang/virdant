@@ -34,7 +34,7 @@ pub enum AstNodePayload {
     Socket(Socket),
 
     Annotations(AnnotationsPayload),
-    Annotation(AnnotationPayload),
+    Annotation(AnnotationArg),
 
     Field(Field),
     Ctor(Ctor),
@@ -169,10 +169,8 @@ pub struct PackagePayload {
 pub struct AnnotationsPayload;
 
 #[derive(Clone, Debug)]
-pub struct AnnotationPayload {
+pub struct AnnotationArg {
     pub name: InternedString,
-    pub str_value: Option<InternedString>,
-    pub nat_value: Option<u64>,
 }
 
 #[derive(Clone, Debug)]

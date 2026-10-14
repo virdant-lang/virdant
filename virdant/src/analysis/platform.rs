@@ -125,6 +125,7 @@ fn pin_value_to_string(value: AnnotationValue) -> BString {
     match value {
         AnnotationValue::Nat(nat) => nat.to_string().into(),
         AnnotationValue::Str(s) => s,
+        AnnotationValue::Bool(b) => b.to_string().into(),
     }
 }
 
@@ -132,6 +133,7 @@ fn period_value_to_f64(value: AnnotationValue) -> Option<f64> {
     match value {
         AnnotationValue::Nat(nat) => Some(nat as f64),
         AnnotationValue::Str(s) => s.to_str_lossy().parse::<f64>().ok(),
+        AnnotationValue::Bool(b) => Some(if b { 1.0 } else { 0.0 }),
     }
 }
 
