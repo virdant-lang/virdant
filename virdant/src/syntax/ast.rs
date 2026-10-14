@@ -467,6 +467,28 @@ impl<'p> AstNode<'p> {
         result
     }
 
+    /// (name, optional value) pairs for every `@parameter("NAME"[, VALUE])`
+    /// annotation on this node, in source order.
+    pub fn parameter_annotations(&self, parsing: &Parsing) -> Vec<(BString, Option<AnnotationValue>)> {
+        let mut result = vec![];
+        for annotation in self.annotations() {
+            let Some(annotation_name) = annotation.annotation_name() else { continue };
+            if parsing.string(annotation_name) != BStr::new("parameter") {
+                continue;
+            }
+            let args = annotation.annotation_args();
+            if args.is_empty() {
+                continue;
+            }
+            let Some(AnnotationValue::Str(name)) = annotation_arg_value(&args[0], parsing) else {
+                continue;
+            };
+            let value = args.get(1).and_then(|arg| annotation_arg_value(arg, parsing));
+            result.push((name, value));
+        }
+        result
+    }
+
     pub fn args(&self) -> Option<Vec<AstNode<'_>>> {
         match &self.payload {
             AstNodePayload::ExprFn => {
@@ -579,7 +601,7 @@ fn unquote(s: &BStr) -> BString {
 /// Interprets an annotation argument expression as an `AnnotationValue`,
 /// if it is a literal (`Nat`/`Word`/`Str`/`true`/`false`).  Any other
 /// expression form (references, calls, binops, etc.) yields `None`.
-fn annotation_arg_value(node: &AstNode<'_>, parsing: &Parsing) -> Option<AnnotationValue> {
+pub(crate) fn annotation_arg_value(node: &AstNode<'_>, parsing: &Parsing) -> Option<AnnotationValue> {
     match node.payload() {
         AstNodePayload::ExprWordLit(lit) => {
             let literal = parsing.string(lit.literal).to_str_lossy();

@@ -1,12 +1,10 @@
 //! Platform definitions for the Lattice iCE40 family.
 //!
-//! Also declares the iCE40's hard cells as `@cell` ext mods.  Port names
-//! match the primitives yosys expects, so instantiating these modules
-//! produces the corresponding hard cell in the netlist.
-//!
-//! Virdant cannot set Verilog cell parameters yet, so instantiations use
-//! each cell's default parameters.  Yosys infers logic cells and block
-//! RAMs automatically, which is usually what you want.
+//! Also declares the iCE40's hard cells as `@cell` ext mods.  Cell
+//! parameters are declared via `@parameter("NAME", DEFAULT)` annotations
+//! and can be overridden at each instantiation site.  Port names match
+//! the primitives yosys expects, so instantiating these modules produces
+//! the corresponding hard cell in the netlist.
 
 //> iCESugar board.
 //> Lattice iCE40-UP5K, SG48 package, programmed over USB.
@@ -140,6 +138,7 @@ platform IceStick {
 //> The iCE40 4-input lookup table.
 //> Yosys infers `SB_LUT4` cells from ordinary logic; instantiate this only
 //> when you need a LUT you can name directly.
+@parameter("LUT_INIT", 0)
 @cell("SB_LUT4")
 ext mod SbLut4 {
     //> Lookup table output.
@@ -453,13 +452,17 @@ ext mod SbDffnes {
 
 //> The iCE40 I/O cell.
 //> Set the pin's behaviour (registered, DDR, open-drain, pull-ups) through
-//> the `PIN_TYPE` parameter, which Virdant cannot set yet.
+//> the `@parameter("PIN_TYPE", ...)` annotation on each instantiation.
 //>
 //> `PACKAGE_PIN` is the physical pad: drive it with the top-level incoming
 //> port constrained to that pin, and sample it through `D_IN_0`/`D_IN_1`.
 //> Mark the instance's `PACKAGE_PIN` `unused` to silence the write-only
 //> warning.  Plain output pins need no `SB_IO`: drive an ordinary outgoing
 //> port.
+@parameter("PIN_TYPE", 0)
+@parameter("PULLUP", 0)
+@parameter("NEG_TRIGGER", 0)
+@parameter("IO_STANDARD", "SB_LVCMOS")
 @cell("SB_IO")
 ext mod SbIo {
     //> Physical pad connection.
@@ -488,6 +491,10 @@ ext mod SbIo {
 //> `PACKAGE_PIN` is the physical pad: drive it with the top-level incoming
 //> clock port constrained to that pin, and read the buffered clock from
 //> `GLOBAL_BUFFER_OUTPUT`.
+@parameter("PIN_TYPE", 0)
+@parameter("PULLUP", 0)
+@parameter("NEG_TRIGGER", 0)
+@parameter("IO_STANDARD", "SB_LVCMOS")
 @cell("SB_GB_IO")
 ext mod SbGbIo {
     //> Physical pad connection.
@@ -531,6 +538,9 @@ ext mod SbGb {
 //> True dual-port: the read and write ports have separate clocks.
 //> Yosys infers `SB_RAM40_4K` from ordinary memories; instantiate this only
 //> when you need a block RAM you can name directly.
+@parameter("WRITE_MODE", 0)
+@parameter("READ_MODE", 0)
+@parameter("INIT_FILE", "")
 @cell("SB_RAM40_4K")
 ext mod SbRam40_4k {
     //> Read data.
@@ -558,6 +568,9 @@ ext mod SbRam40_4k {
 }
 
 //> The iCE40 4 Kbit block RAM with an inverted (falling-edge) read clock.
+@parameter("WRITE_MODE", 0)
+@parameter("READ_MODE", 0)
+@parameter("INIT_FILE", "")
 @cell("SB_RAM40_4KNR")
 ext mod SbRam40_4knr {
     //> Read data.
@@ -585,6 +598,9 @@ ext mod SbRam40_4knr {
 }
 
 //> The iCE40 4 Kbit block RAM with an inverted (falling-edge) write clock.
+@parameter("WRITE_MODE", 0)
+@parameter("READ_MODE", 0)
+@parameter("INIT_FILE", "")
 @cell("SB_RAM40_4KNW")
 ext mod SbRam40_4knw {
     //> Read data.
@@ -613,6 +629,9 @@ ext mod SbRam40_4knw {
 
 //> The iCE40 4 Kbit block RAM with inverted (falling-edge) clocks on
 //> both ports.
+@parameter("WRITE_MODE", 0)
+@parameter("READ_MODE", 0)
+@parameter("INIT_FILE", "")
 @cell("SB_RAM40_4KNRNW")
 ext mod SbRam40_4knrnw {
     //> Read data.
@@ -668,10 +687,25 @@ ext mod SbSpram256ka {
 // SiliconBlue PLL cells.
 
 //> The iCE40 PLL, taking its reference clock from a design signal.
-//> Configure the output frequency through the `DIVR`, `DIVF`, `DIVQ`, and
-//> related parameters, which Virdant cannot set yet.
+//> Configure the output frequency through `@parameter("DIVR", ...)`,
+//> `@parameter("DIVF", ...)`, `@parameter("DIVQ", ...)`, and related
+//> parameters on each instantiation.
 //> Tie `SDI` and `SCLK` low to leave the dynamic reconfiguration interface
 //> idle, and drive `BYPASS` low and `RESETB` high for normal operation.
+@parameter("FEEDBACK_PATH", "SIMPLE")
+@parameter("DELAY_ADJUSTMENT_MODE_FEEDBACK", "FIXED")
+@parameter("DELAY_ADJUSTMENT_MODE_RELATIVE", "FIXED")
+@parameter("SHIFTREG_DIV_MODE", 0)
+@parameter("FDA_FEEDBACK", 0)
+@parameter("FDA_RELATIVE", 0)
+@parameter("PLLOUT_SELECT", "GENCLK")
+@parameter("DIVR", 0)
+@parameter("DIVF", 0)
+@parameter("DIVQ", 0)
+@parameter("FILTER_RANGE", 0)
+@parameter("ENABLE_ICEGATE", 0)
+@parameter("TEST_MODE", 0)
+@parameter("EXTERNAL_DIVIDE_FACTOR", 1)
 @cell("SB_PLL40_CORE")
 ext mod SbPll40Core {
     //> Reference clock input from design logic.
@@ -703,10 +737,25 @@ ext mod SbPll40Core {
 
 //> The iCE40 PLL, taking its reference clock directly from a package pin.
 //> Drive `PACKAGEPIN` with the `Clock` port constrained to that pin.
-//> Configure the output frequency through the `DIVR`, `DIVF`, `DIVQ`, and
-//> related parameters, which Virdant cannot set yet.
+//> Configure the output frequency through `@parameter("DIVR", ...)`,
+//> `@parameter("DIVF", ...)`, `@parameter("DIVQ", ...)`, and related
+//> parameters on each instantiation.
 //> Tie `SDI` and `SCLK` low to leave the dynamic reconfiguration interface
 //> idle, and drive `BYPASS` low and `RESETB` high for normal operation.
+@parameter("FEEDBACK_PATH", "SIMPLE")
+@parameter("DELAY_ADJUSTMENT_MODE_FEEDBACK", "FIXED")
+@parameter("DELAY_ADJUSTMENT_MODE_RELATIVE", "FIXED")
+@parameter("SHIFTREG_DIV_MODE", 0)
+@parameter("FDA_FEEDBACK", 0)
+@parameter("FDA_RELATIVE", 0)
+@parameter("PLLOUT_SELECT", "GENCLK")
+@parameter("DIVR", 0)
+@parameter("DIVF", 0)
+@parameter("DIVQ", 0)
+@parameter("FILTER_RANGE", 0)
+@parameter("ENABLE_ICEGATE", 0)
+@parameter("TEST_MODE", 0)
+@parameter("EXTERNAL_DIVIDE_FACTOR", 1)
 @cell("SB_PLL40_PAD")
 ext mod SbPll40Pad {
     //> Reference clock input from a package pin.
@@ -737,10 +786,26 @@ ext mod SbPll40Pad {
 }
 
 //> The iCE40 dual-output PLL, taking its reference clock from a package pin.
-//> Configure the output frequencies through the `DIVR`, `DIVF`, `DIVQ`, and
-//> related parameters, which Virdant cannot set yet.
+//> Configure the output frequencies through `@parameter("DIVR", ...)`,
+//> `@parameter("DIVF", ...)`, `@parameter("DIVQ", ...)`, and related
+//> parameters on each instantiation.
 //> Tie `SDI` and `SCLK` low to leave the dynamic reconfiguration interface
 //> idle, and drive `BYPASS` low and `RESETB` high for normal operation.
+@parameter("FEEDBACK_PATH", "SIMPLE")
+@parameter("DELAY_ADJUSTMENT_MODE_FEEDBACK", "FIXED")
+@parameter("DELAY_ADJUSTMENT_MODE_RELATIVE", "FIXED")
+@parameter("SHIFTREG_DIV_MODE", 0)
+@parameter("FDA_FEEDBACK", 0)
+@parameter("FDA_RELATIVE", 0)
+@parameter("PLLOUT_SELECT_PORTB", "GENCLK")
+@parameter("DIVR", 0)
+@parameter("DIVF", 0)
+@parameter("DIVQ", 0)
+@parameter("FILTER_RANGE", 0)
+@parameter("ENABLE_ICEGATE_PORTA", 0)
+@parameter("ENABLE_ICEGATE_PORTB", 0)
+@parameter("TEST_MODE", 0)
+@parameter("EXTERNAL_DIVIDE_FACTOR", 1)
 @cell("SB_PLL40_2_PAD")
 ext mod SbPll40_2Pad {
     //> Reference clock input from a package pin.
@@ -775,10 +840,27 @@ ext mod SbPll40_2Pad {
 }
 
 //> The iCE40 dual-output PLL, taking its reference clock from a design
-//> signal.  Configure the output frequencies through the `DIVR`, `DIVF`,
-//> `DIVQ`, and related parameters, which Virdant cannot set yet.
+//> signal.  Configure the output frequencies through `@parameter("DIVR", ...)`,
+//> `@parameter("DIVF", ...)`, `@parameter("DIVQ", ...)`, and related
+//> parameters on each instantiation.
 //> Tie `SDI` and `SCLK` low to leave the dynamic reconfiguration interface
 //> idle, and drive `BYPASS` low and `RESETB` high for normal operation.
+@parameter("FEEDBACK_PATH", "SIMPLE")
+@parameter("DELAY_ADJUSTMENT_MODE_FEEDBACK", "FIXED")
+@parameter("DELAY_ADJUSTMENT_MODE_RELATIVE", "FIXED")
+@parameter("SHIFTREG_DIV_MODE", 0)
+@parameter("FDA_FEEDBACK", 0)
+@parameter("FDA_RELATIVE", 0)
+@parameter("PLLOUT_SELECT_PORTA", "GENCLK")
+@parameter("PLLOUT_SELECT_PORTB", "GENCLK")
+@parameter("DIVR", 0)
+@parameter("DIVF", 0)
+@parameter("DIVQ", 0)
+@parameter("FILTER_RANGE", 0)
+@parameter("ENABLE_ICEGATE_PORTA", 0)
+@parameter("ENABLE_ICEGATE_PORTB", 0)
+@parameter("TEST_MODE", 0)
+@parameter("EXTERNAL_DIVIDE_FACTOR", 1)
 @cell("SB_PLL40_2F_CORE")
 ext mod SbPll40_2fCore {
     //> Reference clock input from design logic.
@@ -813,11 +895,27 @@ ext mod SbPll40_2fCore {
 }
 
 //> The iCE40 dual-output PLL with a feedback path and a reference clock
-//> from a package pin.  Configure the output frequencies through the
-//> `DIVR`, `DIVF`, `DIVQ`, and related parameters, which Virdant cannot
-//> set yet.
+//> from a package pin.  Configure the output frequencies through
+//> `@parameter("DIVR", ...)`, `@parameter("DIVF", ...)`,
+//> `@parameter("DIVQ", ...)`, and related parameters on each instantiation.
 //> Tie `SDI` and `SCLK` low to leave the dynamic reconfiguration interface
 //> idle, and drive `BYPASS` low and `RESETB` high for normal operation.
+@parameter("FEEDBACK_PATH", "SIMPLE")
+@parameter("DELAY_ADJUSTMENT_MODE_FEEDBACK", "FIXED")
+@parameter("DELAY_ADJUSTMENT_MODE_RELATIVE", "FIXED")
+@parameter("SHIFTREG_DIV_MODE", 0)
+@parameter("FDA_FEEDBACK", 0)
+@parameter("FDA_RELATIVE", 0)
+@parameter("PLLOUT_SELECT_PORTA", "GENCLK")
+@parameter("PLLOUT_SELECT_PORTB", "GENCLK")
+@parameter("DIVR", 0)
+@parameter("DIVF", 0)
+@parameter("DIVQ", 0)
+@parameter("FILTER_RANGE", 0)
+@parameter("ENABLE_ICEGATE_PORTA", 0)
+@parameter("ENABLE_ICEGATE_PORTB", 0)
+@parameter("TEST_MODE", 0)
+@parameter("EXTERNAL_DIVIDE_FACTOR", 1)
 @cell("SB_PLL40_2F_PAD")
 ext mod SbPll40_2fPad {
     //> Reference clock input from a package pin.
@@ -854,6 +952,8 @@ ext mod SbPll40_2fPad {
 // SiliconBlue oscillator cells (UltraPlus only).
 
 //> The iCE40 UltraPlus high-frequency (10-146 MHz) ring oscillator.
+@parameter("TRIM_EN", "0b0")
+@parameter("CLKHF_DIV", "0b00")
 @cell("SB_HFOSC")
 ext mod SbHfosc {
     //> Frequency trim input bit 0 (fixed trim value; typically unused).
@@ -898,8 +998,12 @@ ext mod SbLfosc {
 // SiliconBlue LED driver cells.
 
 //> Constant-current RGB LED driver with three PWM inputs.
-//> Set the per-channel currents through the `RGB*_CURRENT` parameters,
-//> which Virdant cannot set yet.
+//> Set the per-channel currents through the `@parameter("RGB*_CURRENT", ...)`
+//> annotations on each instantiation.
+@parameter("CURRENT_MODE", "0b0")
+@parameter("RGB0_CURRENT", "0b000000")
+@parameter("RGB1_CURRENT", "0b000000")
+@parameter("RGB2_CURRENT", "0b000000")
 @cell("SB_RGBA_DRV")
 ext mod SbRgbaDrv {
     //> Enables the constant-current source.
@@ -921,8 +1025,12 @@ ext mod SbRgbaDrv {
 }
 
 //> Configurable RGB LED driver with an internal current source.
-//> Set the per-channel currents through the `RGB*_CURRENT` parameters,
-//> which Virdant cannot set yet.
+//> Set the per-channel currents through the `@parameter("RGB*_CURRENT", ...)`
+//> annotations on each instantiation.
+@parameter("CURRENT_MODE", "0b0")
+@parameter("RGB0_CURRENT", "0b000000")
+@parameter("RGB1_CURRENT", "0b000000")
+@parameter("RGB2_CURRENT", "0b000000")
 @cell("SB_RGB_DRV")
 ext mod SbRgbDrv {
     //> Enables the RGB LED driver outputs.
@@ -1006,6 +1114,8 @@ ext mod SbLeddaIp {
 //> The register-file interface is bit-serial: `SBADRI7`..`SBADRI0` carry
 //> the address, `SBDATI7`..`SBDATI0` the write data, and `SBDATO7`..
 //> `SBDATO0` the read data.
+@parameter("I2C_SLAVE_INIT_ADDR", "0b1111100001")
+@parameter("BUS_ADDR74", "0b0001")
 @cell("SB_I2C")
 ext mod SbI2c {
     //> Register-file bus clock.
@@ -1086,6 +1196,7 @@ ext mod SbI2c {
 //> The register-file interface is bit-serial: `SBADRI7`..`SBADRI0` carry
 //> the address, `SBDATI7`..`SBDATI0` the write data, and `SBDATO7`..
 //> `SBDATO0` the read data.
+@parameter("BUS_ADDR74", "0b0000")
 @cell("SB_SPI")
 ext mod SbSpi {
     //> Register-file bus clock.
@@ -1203,8 +1314,28 @@ ext mod SbWarmboot {
 
 //> The iCE40 UltraPlus hardened 16x16 multiplier-accumulator.
 //> Configure its pipeline registers, add/subtract modes, and output
-//> selection through the many `*_REG` and `*_SELECT` parameters, which
-//> Virdant cannot set yet.
+//> selection through the corresponding `@parameter(...)` annotations
+//> on each instantiation.
+@parameter("NEG_TRIGGER", 0)
+@parameter("C_REG", 0)
+@parameter("A_REG", 0)
+@parameter("B_REG", 0)
+@parameter("D_REG", 0)
+@parameter("TOP_8x8_MULT_REG", 0)
+@parameter("BOT_8x8_MULT_REG", 0)
+@parameter("PIPELINE_16x16_MULT_REG1", 0)
+@parameter("PIPELINE_16x16_MULT_REG2", 0)
+@parameter("TOPOUTPUT_SELECT", 0)
+@parameter("TOPADDSUB_LOWERINPUT", 0)
+@parameter("TOPADDSUB_UPPERINPUT", 0)
+@parameter("TOPADDSUB_CARRYSELECT", 0)
+@parameter("BOTOUTPUT_SELECT", 0)
+@parameter("BOTADDSUB_LOWERINPUT", 0)
+@parameter("BOTADDSUB_UPPERINPUT", 0)
+@parameter("BOTADDSUB_CARRYSELECT", 0)
+@parameter("MODE_8x8", 0)
+@parameter("A_SIGNED", 0)
+@parameter("B_SIGNED", 0)
 @cell("SB_MAC16")
 ext mod SbMac16 {
     //> Multiplier-accumulator clock.

@@ -1,0 +1,33 @@
+@parameter("WIDTH", 8)
+@parameter("INIT", 0)
+@parameter("MODE", "SYNC")
+ext mod Cell {
+    incoming clk : Clock
+    outgoing data : Word[16]
+}
+
+export mod Top {
+    incoming clk : Clock
+    outgoing a : Word[16]
+    outgoing b : Word[16]
+    outgoing c : Word[16]
+
+    @parameter("WIDTH", 4)
+    @parameter("MODE", "ASYNC")
+    mod u0 of Cell {
+        it.clk := clk
+        a := it.data
+    }
+
+    mod u1 of Cell {
+        it.clk := clk
+        b := it.data
+    }
+
+    @parameter("WIDTH", 1)
+    @parameter("EXTRA", true)
+    mod u2 of Cell {
+        it.clk := clk
+        c := it.data
+    }
+}

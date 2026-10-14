@@ -104,6 +104,7 @@ pub struct Submodule {
     pub name: String,
     pub submodule_name: String,
     pub ports: Vec<String>,
+    pub parameters: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone)]
@@ -415,24 +416,48 @@ impl Submodule {
         let submodule_name = &self.submodule_name;
         let name = &self.name;
 
-        if self.ports.is_empty() {
-            verilog_writeln!(writer, "{submodule_name} {name}();")?;
-            return Ok(());
+        if self.parameters.is_empty() {
+            if self.ports.is_empty() {
+                verilog_writeln!(writer, "{submodule_name} {name}();")?;
+                return Ok(());
+            }
+            verilog_writeln!(writer, "{submodule_name} {name}(")?;
+            writer.indent();
+            write_ports(writer, &self.ports, &self.name)?;
+            writer.dedent();
+            verilog_writeln!(writer, ");")?;
+        } else {
+            let param_width = self.parameters.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
+            verilog_writeln!(writer, "{submodule_name} #(")?;
+            writer.indent();
+            for (i, (param_name, param_value)) in self.parameters.iter().enumerate() {
+                let comma = if i + 1 == self.parameters.len() && self.ports.is_empty() { "" } else { "," };
+                verilog_writeln!(writer, ".{param_name:<param_width$}({param_value}){comma}")?;
+            }
+            writer.dedent();
+            if self.ports.is_empty() {
+                verilog_writeln!(writer, ") {name}();")?;
+            } else {
+                verilog_writeln!(writer, ") {name}(")?;
+                writer.indent();
+                write_ports(writer, &self.ports, &self.name)?;
+                writer.dedent();
+                verilog_writeln!(writer, ");")?;
+            }
         }
-
-        verilog_writeln!(writer, "{submodule_name} {name}(")?;
-        writer.indent();
-        let port_width = self.ports.iter().map(|p| valid_verilog_name(p).len()).max().unwrap_or(0);
-        for (i, port) in self.ports.iter().enumerate() {
-            let comma = if i + 1 == self.ports.len() { "" } else { "," };
-            let port_name = valid_verilog_name(port);
-            let wire_name = valid_verilog_name(&format!("{}.{}", self.name, port));
-            verilog_writeln!(writer, ".{port_name:<port_width$}({wire_name}){comma}")?;
-        }
-        writer.dedent();
-        verilog_writeln!(writer, ");")?;
         Ok(())
     }
+}
+
+fn write_ports(writer: &mut Writer, ports: &[String], instance_name: &str) -> std::io::Result<()> {
+    let port_width = ports.iter().map(|p| valid_verilog_name(p).len()).max().unwrap_or(0);
+    for (i, port) in ports.iter().enumerate() {
+        let comma = if i + 1 == ports.len() { "" } else { "," };
+        let port_name = valid_verilog_name(port);
+        let wire_name = valid_verilog_name(&format!("{instance_name}.{port}"));
+        verilog_writeln!(writer, ".{port_name:<port_width$}({wire_name}){comma}")?;
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

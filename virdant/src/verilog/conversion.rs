@@ -14,7 +14,7 @@ use crate::analysis::symbols::SymbolTable;
 use crate::common::{self, ComponentKind, DriverType, Radix, TypeScheme, Width, WordValue};
 use crate::db::Db;
 use crate::package::PackageId;
-use crate::syntax::ast::{AstNode, AstNodeId};
+use crate::syntax::ast::{AnnotationValue, AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
 use crate::types::typing::Primitive;
 use crate::types::{Type, Typing};
@@ -89,6 +89,8 @@ struct Converter<'d> {
     module_ports: IndexMap<String, Vec<(String, Width)>>,
     /// "package::Module" -> emitted Verilog name
     emitted_module_names: IndexMap<String, String>,
+    /// "package::Module" -> [(param name, declared default, in @parameter order)]
+    module_declared_params: IndexMap<String, Vec<(String, Option<AnnotationValue>)>>,
 }
 
 impl<'d> Converter<'d> {
@@ -97,6 +99,7 @@ impl<'d> Converter<'d> {
             db,
             module_ports: IndexMap::new(),
             emitted_module_names: IndexMap::new(),
+            module_declared_params: IndexMap::new(),
         }
     }
 
@@ -146,9 +149,68 @@ impl<'d> Converter<'d> {
                     let width = port.clone().typ.map(|t| type_width(&t, self.db)).unwrap_or(0);
                     ports.push((name, width));
                 }
-                self.module_ports.insert(module_path, ports);
+                self.module_ports.insert(module_path.clone(), ports);
+
+                let params = item_ast.parameter_annotations(&parsing);
+                if !params.is_empty() {
+                    let declared: Vec<(String, Option<AnnotationValue>)> = params.into_iter()
+                        .map(|(name, value)| (name.to_str_lossy().into_owned(), value))
+                        .collect();
+                    self.module_declared_params.insert(module_path, declared);
+                }
             }
         }
+    }
+
+    /// Build the merged parameter list for a submodule instantiation.
+    /// Walks the declared parameters first (using instance-supplied override
+    /// or declared default), then appends any instance-supplied names not
+    /// in the declared list.
+    fn build_submodule_parameters(&self, stmt: &AstNode, mod_path: &str) -> Vec<(String, String)> {
+        use crate::syntax::ast::AnnotationValue;
+        // Instance-supplied @parameter annotations.
+        let supplied: Vec<(String, Option<AnnotationValue>)> = stmt
+            .parameter_annotations(&self.db.get_parsing(stmt.package()))
+            .into_iter()
+            .map(|(name, value)| (name.to_str_lossy().into_owned(), value))
+            .collect();
+
+        let declared = self.module_declared_params.get(mod_path);
+        let Some(declared) = declared else {
+            // Target has no declared parameters; emit only instance-supplied values
+            // that have a value (not just a name).
+            return supplied.into_iter()
+                .filter_map(|(name, value)| value.map(|v| (name, render_param_value(&v))))
+                .collect();
+        };
+
+        // Build a lookup from instance-supplied names to their values.
+        let supplied_map: IndexMap<String, Option<AnnotationValue>> =
+            supplied.into_iter().collect();
+
+        let mut result: Vec<(String, String)> = Vec::with_capacity(declared.len());
+
+        // Walk declared params: use instance override if present, else declared default.
+        for (decl_name, decl_default) in declared {
+            let rendered = supplied_map.get(decl_name.as_str())
+                .and_then(|v| v.as_ref())
+                .or(decl_default.as_ref())
+                .map(render_param_value);
+            if let Some(rendered) = rendered {
+                result.push((decl_name.clone(), rendered));
+            }
+        }
+
+        // Append any instance-supplied names not in the declared list.
+        for (name, value) in supplied_map.iter() {
+            if !declared.iter().any(|(d, _)| d == name) {
+                if let Some(v) = value {
+                    result.push((name.clone(), render_param_value(v)));
+                }
+            }
+        }
+
+        result
     }
 
     fn convert_package(&self, package: PackageId) -> Option<verilog::VerilogFile> {
@@ -297,6 +359,7 @@ impl<'d> Converter<'d> {
                         name: valid_verilog_name(&raw_name),
                         submodule_name: sub_name,
                         ports: ports_info.into_iter().map(|(n, _)| n).collect(),
+                        parameters: self.build_submodule_parameters(&stmt, &mod_path),
                     }));
                 }
 
@@ -1982,6 +2045,14 @@ fn type_width(typ: &Type, db: &Db) -> Width {
             }
         }
         Type::Valid(inner) => type_width(inner, db) + 1,
+    }
+}
+
+fn render_param_value(value: &AnnotationValue) -> String {
+    match value {
+        AnnotationValue::Nat(n) => n.to_string(),
+        AnnotationValue::Str(s) => format!("\"{}\"", s.to_str_lossy()),
+        AnnotationValue::Bool(b) => (if *b { "1'b1" } else { "1'b0" }).to_string(),
     }
 }
 
