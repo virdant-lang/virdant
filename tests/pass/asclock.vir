@@ -1,0 +1,23 @@
+// CHECK: Check OK
+mod ClockDiv {
+    incoming clock_inp : Clock
+    outgoing clock_out : Clock {
+        it := asclock(r)
+    }
+
+    reg r : Bit on clock_inp {
+        it <= !it
+    }
+}
+
+mod ClockDivTest {
+    incoming clock : Clock
+
+    mod clock_div of ClockDiv {
+        it.clock_inp := clock
+    }
+
+    reg r : Bit on clock_div.clock_out {
+        it <= !it
+    }
+}

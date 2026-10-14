@@ -66,6 +66,7 @@ pub enum Primitive {
     Zext,
     Trunc,
     Mux,
+    AsClock,
 }
 
 

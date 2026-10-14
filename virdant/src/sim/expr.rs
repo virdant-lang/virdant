@@ -42,6 +42,7 @@ pub enum ExprPayload {
     Word(payload::Word),
     Zext(payload::Zext),
     Sext(payload::Sext),
+    AsClock(payload::AsClock),
     Cast(payload::Cast),
     Trunc(payload::Trunc),
     Any(payload::Any),
@@ -413,6 +414,10 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
                     Primitive::Sext => {
                         assert!(args.len() == 1, "sext expects exactly 1 argument");
                         ExprPayload::Sext(payload::Sext { subject: args[0].clone() })
+                    }
+                    Primitive::AsClock => {
+                        assert!(args.len() == 1, "asclock expects exactly 1 argument");
+                        ExprPayload::AsClock(payload::AsClock { subject: args[0].clone() })
                     }
                     Primitive::Cast => {
                         assert!(args.len() == 1, "cast expects exactly 1 argument");

@@ -100,6 +100,19 @@ s := sext(0x8w4)    // result: 0xf8 (0x8 = 0b1000, MSB is 1)
 
 The target width is inferred from the context of the assignment.
 
+## `asclock()`
+
+Convert a `Bit` signal to a `Clock`.
+
+- `asclock(x)` — reinterpret a `Bit` as a `Clock`.
+  Useful when you need to connect a `Bit` signal to a `Clock` port.
+
+```virdant
+wire bit_sig : Bit
+wire clk : Clock
+clk := asclock(bit_sig)
+```
+
 ## `cast()`
 
 Reinterpret the bit pattern of a `Word[n]` as an enum type, or vice versa:

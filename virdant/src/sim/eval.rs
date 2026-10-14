@@ -154,6 +154,7 @@ impl Expr {
             ExprPayload::Word(word) => self.eval_word(context, word),
             ExprPayload::Zext(zext) => self.eval_zext(context, zext),
             ExprPayload::Sext(sext) => self.eval_sext(context, sext),
+            ExprPayload::AsClock(asclock) => asclock.subject.eval(context),
             ExprPayload::Cast(cast) => cast.subject.eval(context),
             ExprPayload::Trunc(trunc) => self.eval_trunc(context, trunc),
             ExprPayload::Any(any) => self.eval_any(context, any),

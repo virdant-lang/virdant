@@ -408,6 +408,18 @@ impl Typing {
                     .insert(node.location(), Tag::PrimitiveResolution(Primitive::Word));
                 self.infer_word(builder, context, &node)
             }
+            b"asclock" => {
+                self.tags
+                    .insert(node.location(), Tag::PrimitiveResolution(Primitive::AsClock));
+                let subject = node.subject().unwrap();
+
+                if let Ok(()) = self.check(builder, context, &subject, &Type::Bit) {
+                    self.annotate(&node, &Type::Clock);
+                    Ok(Some(Type::Clock))
+                } else {
+                    Ok(None)
+                }
+            }
             _ => Ok(None),
         }
     }

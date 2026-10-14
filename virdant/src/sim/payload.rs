@@ -138,6 +138,11 @@ pub struct Sext {
 }
 
 #[derive(Debug)]
+pub struct AsClock {
+    pub subject: Arc<Expr>,
+}
+
+#[derive(Debug)]
 pub struct Cast {
     pub subject: Arc<Expr>,
 }

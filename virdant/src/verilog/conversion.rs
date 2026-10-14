@@ -1265,6 +1265,7 @@ impl<'d> Converter<'d> {
                             Primitive::Cast => arg_expr,
                             Primitive::Zext => self.convert_zext(package, node, typ, scheduler),
                             Primitive::Sext => self.convert_sext(package, node, typ, scheduler),
+                            Primitive::AsClock => self.convert_asclock(package, node, typ, scheduler),
                             Primitive::Trunc => self.convert_trunc(package, node, typ, scheduler),
                             Primitive::Word => {
                                 let width = self.node_or_expected_width(package, &node, typ);
@@ -1780,6 +1781,12 @@ impl<'d> Converter<'d> {
             ],
             width: target_width,
         })
+    }
+
+    fn convert_asclock(&self, package: PackageId, node: AstNode, _typ: &Type, scheduler: &mut ExprScheduler) -> verilog::Expr {
+        let inner = node.child(1);
+        let inner_type = self.node_type(package, &inner).unwrap();
+        self.convert_expr(package, inner, &inner_type, self.db, scheduler)
     }
 
     fn typing_for(&self, node: &AstNode) -> Arc<Typing> {
