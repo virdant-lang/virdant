@@ -29,7 +29,7 @@ mod Sync {
     }
 
     //> The clock of the output
-    outgoing reg out: Bit  on clock {
+    outgoing reg out: Bit on clock {
         it <= meta
     }
 }
