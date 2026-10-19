@@ -9,6 +9,7 @@ use std::sync::Arc;
 use bstr::{BStr, BString, ByteSlice};
 use indexmap::IndexMap;
 
+use crate::analysis::Location;
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::drivers::{Driver, DriverAnalysis};
 use crate::analysis::symbols::SymbolId;
@@ -67,6 +68,8 @@ pub struct ElaboratedComponent {
     component_kind: ComponentKind,
     driver_type: DriverType,
     driver: Option<Driver>,
+    /// RHS expression of the component's `initial` statement, if any.
+    initial_expr: Option<Location>,
     alias: Option<SignalId>,
     clock: Option<SignalId>,
 }
@@ -140,6 +143,10 @@ impl ElaboratedComponent {
 
     pub fn driver(&self) -> Option<&Driver> {
         self.driver.as_ref()
+    }
+
+    pub fn initial_expr(&self) -> Option<&Location> {
+        self.initial_expr.as_ref()
     }
 
     pub fn is_reg(&self) -> bool {
@@ -222,6 +229,10 @@ fn elaborate_module(
                         .and_then(|c| driver_analysis.drivers().get(&c.id())?.first().cloned())
                 };
 
+                let initial_expr = component_analysis
+                    .resolve(name)
+                    .and_then(|c| driver_analysis.initials().get(&c.id())?.first().cloned());
+
                 let id = SignalId(components.len());
                 let clock = if let Some(clock_node) = stmt.clock() {
                     // Resolve the clock reference (e.g. `clock` in `reg x : T on clock`)
@@ -246,6 +257,7 @@ fn elaborate_module(
                     component_kind: component.kind,
                     driver_type,
                     driver,
+                    initial_expr,
                     alias: None,
                     clock,
                 });

@@ -1,0 +1,15 @@
+// `initial` statements are not aligned with drivers
+mod Initial {
+incoming clock : Clock
+reg counter : Word[3] on clock
+reg longer_name : Word[3] on clock
+
+     initial counter <= 7
+counter <= counter - 1
+  longer_name <= 0
+
+    reg r : Word[4] on clock {
+initial    it <= 9
+        it <= it + 1
+    }
+}

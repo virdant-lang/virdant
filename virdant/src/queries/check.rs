@@ -77,6 +77,7 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
             continue;
         }
         diagnostics.extend(builder.check_drivers(item.id()).iter().cloned());
+        diagnostics.extend(builder.check_initial(item.id()).iter().cloned());
     }
 
     for item in symboltable.items() {

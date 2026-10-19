@@ -13,6 +13,7 @@ The full set of module body statements includes:
 * Conditional statements (when)
 * Match statements
 * Unused declarations
+* Initial declarations
 
 Statements are order-independent within a module body.
 Virdant processes them as a set of declarations, not as a sequence of
@@ -281,6 +282,42 @@ This suppresses compiler warnings about unused components or ports.
     }
 
 The path must refer to an existing signal, port, or instance field.
+
+
+The Initial Statement
+---------------------
+The `initial` statement declares the value a register holds when the design
+starts up (for example, after an FPGA is configured).
+
+.. code-block:: grammar
+
+    ModDefStmtInitial :=
+        "initial" Path "<=" Expr
+
+.. code-block:: virdant
+
+    mod Top {
+        incoming clock : Clock
+
+        reg counter : Word[3] on clock {
+            initial it <= 7
+
+            when {
+                case it > 0 {
+                    it <= it - 1
+                }
+            }
+        }
+    }
+
+The target must be a `reg` or `outgoing reg`,
+and the value should be a constant expression of the register's type.
+A register without an `initial` statement starts at 0 in the generated Verilog.
+
+An `initial` statement is not a driver:
+a register with an `initial` statement still needs its usual `<=` driver.
+Each register may have at most one `initial` statement,
+and `initial` may not appear inside a `when` or `match` block.
 
 
 on Clause

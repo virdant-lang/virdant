@@ -23,6 +23,10 @@ use crate::syntax::payload::AstNodePayload;
 #[derive(Debug)]
 pub struct DriverAnalysis {
     drivers: IndexMap<ComponentId, Vec<Driver>>,
+    /// Location of the RHS expression of each `initial` statement, keyed by
+    /// the targeted component. Initial statements are not drivers and never
+    /// appear in `drivers`.
+    initials: IndexMap<ComponentId, Vec<Location>>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -72,6 +76,10 @@ pub struct DriverMatch {
 impl DriverAnalysis {
     pub fn drivers(&self) -> &IndexMap<ComponentId, Vec<Driver>> {
         &self.drivers
+    }
+
+    pub fn initials(&self) -> &IndexMap<ComponentId, Vec<Location>> {
+        &self.initials
     }
 
     pub fn diagnostics(&self) -> &[Diagnostic] {
@@ -142,12 +150,14 @@ pub(crate) fn build_driver_analysis(
     let item_ast = parsing.ast_node(location.ast_node_id());
     let component_analysis = builder.get_component_analysis(symbol_id);
 
-    let (drivers, diagnostics) = collect_block_drivers(item_ast.children(), &component_analysis, None);
+    let mut initials = IndexMap::new();
+    let (drivers, diagnostics) = collect_block_drivers(item_ast.children(), &component_analysis, None, false, &mut initials);
 
 //    driver_analysis.dump(&component_analysis);
 
     Arc::new(DriverAnalysis {
         drivers,
+        initials,
         diagnostics,
     })
 }
@@ -194,15 +204,29 @@ fn collect_block_drivers(
     stmts: Vec<AstNode<'_>>,
     component_analysis: &ComponentAnalysis,
     it_context: Option<&BStr>,
+    in_conditional: bool,
+    initials: &mut IndexMap<ComponentId, Vec<Location>>,
 ) -> (IndexMap<ComponentId, Vec<Driver>>, Vec<Diagnostic>) {
     let mut result: IndexMap<ComponentId, Vec<Driver>> = IndexMap::new();
     let mut diagnostics: Vec<Diagnostic> = vec![];
 
     for stmt in stmts {
         match stmt.payload() {
-            AstNodePayload::Driver(driver) => {
+            AstNodePayload::Driver(_) | AstNodePayload::InitialDriver => {
+                let is_initial = matches!(stmt.payload(), AstNodePayload::InitialDriver);
                 let Some(target) = stmt.target() else { continue };
                 let mut target_str = stmt.parsing.string(target).to_owned();
+
+                if is_initial && in_conditional {
+                    diagnostics.push(Diagnostic::new(
+                        stmt.region(),
+                        diagnostics::InitialInsideWhenMatch {
+                            target: target_str,
+                        },
+                    ));
+                    continue;
+                }
+
                 if let Some(ctx) = it_context {
                     if target_str.starts_with(b"it.") {
                         let suffix = target_str[3..].to_owned();
@@ -247,8 +271,17 @@ fn collect_block_drivers(
                     continue;
                 };
 
+                // `initial` statements are not drivers.
+                if is_initial {
+                    let expr = stmt.driver().unwrap().location();
+                    initials.entry(component.id()).or_default().push(expr);
+                    continue;
+                }
+
+                let driver_type = stmt.driver_type().unwrap();
+
                 // For latched drivers, flag reg <= reg as redundant.
-                if driver.driver_type == DriverType::Latched {
+                if driver_type == DriverType::Latched {
                     if let Some(rhs_node) = stmt.driver() {
                         if let Some(rhs_path) = rhs_node.path() {
                             let mut rhs_str = stmt.parsing.string(rhs_path).to_owned();
@@ -276,7 +309,7 @@ fn collect_block_drivers(
                 }
 
                 let expr = stmt.driver().unwrap().location();
-                result.entry(component.id()).or_default().push(Driver::Expr(driver.driver_type, expr));
+                result.entry(component.id()).or_default().push(Driver::Expr(driver_type, expr));
             }
             AstNodePayload::BidirectionalDriver => {
                 let parsing = stmt.parsing;
@@ -402,7 +435,7 @@ fn collect_block_drivers(
                             BString::from(name)
                         };
 
-                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, Some(name_with_context.as_bstr()));
+                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, Some(name_with_context.as_bstr()), in_conditional, initials);
                         for (comp_id, mut drivers) in block_drivers {
                             result.entry(comp_id).or_default().append(&mut drivers);
                         }
@@ -433,7 +466,7 @@ fn collect_block_drivers(
                             BString::from(name)
                         };
 
-                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, Some(name_with_context.as_bstr()));
+                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, Some(name_with_context.as_bstr()), in_conditional, initials);
                         for (comp_id, mut drivers) in block_drivers {
                             result.entry(comp_id).or_default().append(&mut drivers);
                         }
@@ -464,7 +497,7 @@ fn collect_block_drivers(
                             BString::from(name)
                         };
 
-                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, Some(name_with_context.as_bstr()));
+                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, Some(name_with_context.as_bstr()), in_conditional, initials);
                         for (comp_id, mut drivers) in block_drivers {
                             result.entry(comp_id).or_default().append(&mut drivers);
                         }
@@ -486,10 +519,10 @@ fn collect_block_drivers(
                         let guard = first;
                         if let Some(body) = children.get(idx + 1) {
                             let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ModDefStmtBlock) {
-                                collect_block_drivers(body.children(), component_analysis, it_context)
+                                collect_block_drivers(body.children(), component_analysis, it_context, true, initials)
                             } else {
                                 // nested when/match or bare expr - recurse as single stmt
-                                collect_block_drivers(vec![body.clone()], component_analysis, it_context)
+                                collect_block_drivers(vec![body.clone()], component_analysis, it_context, true, initials)
                             };
                             diagnostics.append(&mut body_diags);
                             clause_drivers.push((guard.location(), body_drivers));
@@ -499,9 +532,9 @@ fn collect_block_drivers(
                         // else arm: body only
                         let body = first;
                         let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ModDefStmtBlock) {
-                            collect_block_drivers(body.children(), component_analysis, it_context)
+                            collect_block_drivers(body.children(), component_analysis, it_context, true, initials)
                         } else {
-                            collect_block_drivers(vec![body.clone()], component_analysis, it_context)
+                            collect_block_drivers(vec![body.clone()], component_analysis, it_context, true, initials)
                         };
                         diagnostics.append(&mut body_diags);
                         else_drivers = body_drivers;
@@ -554,10 +587,10 @@ fn collect_block_drivers(
                 let mut else_arm_drivers: Option<IndexMap<ComponentId, Vec<Driver>>> = None;
                 for (pat_opt, body) in match_arm_children(&children) {
                     let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ModDefStmtBlock) {
-                        collect_block_drivers(body.children(), component_analysis, it_context)
+                        collect_block_drivers(body.children(), component_analysis, it_context, true, initials)
                     } else {
                         // nested when/match or bare expr - recurse as single stmt
-                        collect_block_drivers(vec![body.clone()], component_analysis, it_context)
+                        collect_block_drivers(vec![body.clone()], component_analysis, it_context, true, initials)
                     };
                     diagnostics.append(&mut body_diags);
                     match pat_opt {

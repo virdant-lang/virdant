@@ -75,6 +75,7 @@ ModDefStmt :=
     | ModDefStmtWhen
     | ModDefStmtMatch
     | ModDefStmtUnused
+    | ModDefStmtInitial
     | ModDefStmtDependsOn
 
 ModDefStmtComponent :=
@@ -125,6 +126,8 @@ ModDefStmtMatchArm :=
     | "else" ModDefStmtMatch
 
 ModDefStmtUnused := "unused" Path
+
+ModDefStmtInitial := "initial" Path "<=" Expr
 
 ModDefStmtDependsOn := Path "dependson" Path
 
@@ -335,6 +338,7 @@ Tokens:
   "for"
   "import"
   "incoming"
+  "initial"
   "it"
   "match"
   "mod"

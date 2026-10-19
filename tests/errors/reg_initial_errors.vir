@@ -1,0 +1,36 @@
+// Tests for errors involving `initial` statements.
+
+mod InitialErrors {
+    incoming clock : Clock
+    incoming cond : Bit
+    outgoing out : Word[8]
+
+    // Non-register target.
+    wire w : Word[8]
+    w := 1
+    // CHECK: initial targets non-register component w
+    initial w <= 0
+
+    // Multiple initial statements for the same register.
+    reg r : Word[8] on clock
+    initial r <= 1
+    // CHECK: multiple initial statements for register r
+    initial r <= 2
+    r <= r + 1
+
+    // `initial` inside a `when` block.
+    reg s : Word[8] on clock
+    when {
+        case cond {
+            // CHECK: initial statement for s must not appear inside a when/match block
+            initial s <= 3
+            s <= s + 1
+        }
+    }
+
+    // Unresolved target.
+    // CHECK: Unresolved component nope
+    initial nope <= 0
+
+    out := w + r + s
+}

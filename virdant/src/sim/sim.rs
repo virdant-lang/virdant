@@ -103,7 +103,30 @@ impl Sim {
         };
 
         sim.flow_constants();
+        sim.apply_initials();
         sim
+    }
+
+    /// Set every register with an `initial` statement to its initial value
+    /// (registers without one start as `X`), then propagate.  `initial`
+    /// expressions are constant, so they are evaluated in an empty context.
+    fn apply_initials(&mut self) {
+        let initials: Vec<(SignalId, Arc<crate::sim::expr::Expr>)> = self
+            .circuit
+            .initial_exprs
+            .iter()
+            .map(|(id, expr)| (*id, expr.clone()))
+            .collect();
+        if initials.is_empty() {
+            return;
+        }
+
+        let context = Context::new(vec![]);
+        for (signal_id, expr) in initials {
+            let value = expr.eval(&context);
+            self.state.set_val(signal_id, value);
+        }
+        self.flow();
     }
 
     pub(super) fn type_layout_index(&self) -> &TypeLayoutIndex {

@@ -1,0 +1,55 @@
+// Tests for the NotIt warning on `initial` statements: using the
+// component name instead of 'it' inside its own driver block.
+// All cases here are warnings only, so the run ends with "Check OK".
+
+// Targeting a reg by its own name inside its it block should warn.
+mod InitialRegLhs {
+    incoming clk : Clock
+    outgoing out : Word[8]
+
+    reg foo : Word[8] on clk {
+        // CHECK: 'foo' should be written as 'it' inside of this driver block
+        initial foo <= 0
+        it <= it + 1
+    }
+    out := foo
+}
+
+// Same for an outgoing reg.
+mod InitialOutgoingRegLhs {
+    incoming clk : Clock
+
+    outgoing reg foo : Word[8] on clk {
+        // CHECK: 'foo' should be written as 'it' inside of this driver block
+        initial foo <= 0
+        it <= it + 1
+    }
+}
+
+// Correct use of 'it' produces no warning.
+mod InitialCorrect {
+    incoming clk : Clock
+    outgoing out : Word[8]
+
+    reg foo : Word[8] on clk {
+        // CHECK-NOT: 'foo' should be written as 'it'
+        initial it <= 0
+        it <= it + 1
+    }
+    out := foo
+}
+
+// Targeting a reg by name outside of any driver block produces no warning.
+mod InitialOutsideBlock {
+    incoming clk : Clock
+    outgoing out : Word[8]
+
+    reg foo : Word[8] on clk {
+        it <= it + 1
+    }
+    // CHECK-NOT: 'foo' should be written as 'it'
+    initial foo <= 0
+    out := foo
+}
+
+// CHECK: Check OK

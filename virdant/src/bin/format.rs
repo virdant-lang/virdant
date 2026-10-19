@@ -50,6 +50,16 @@ fn classify_line(raw: &str) -> LineKind {
         return LineKind::CloseBrace;
     }
 
+    // `initial <reg> <= <expr>` is not a driver; don't align it with driver lines.
+    if let Some(rest) = trimmed.strip_prefix("initial ") {
+        if let Some(pos) = find_first_not_in_str(rest, "<=") {
+            let target = rest[..pos].trim();
+            let value = rest[pos + 2..].trim();
+            return LineKind::Other(format!("initial {target} <= {value}"));
+        }
+        return LineKind::Other(trimmed.to_string());
+    }
+
     // Check for driver operators first (they may also contain colons)
     // We look for := , <= , :=: -- longest first to avoid := matching :=:
     if let Some(pos) = find_first_not_in_str(&trimmed, ":=:") {

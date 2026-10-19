@@ -81,6 +81,11 @@ pub fn driver_to_expr(db: &Db, driver: &Driver) -> Arc<Expr> {
     }
 }
 
+/// Convert the RHS of an `initial` statement (at `loc`) into a sim `Expr`.
+pub fn initial_to_expr(db: &Db, loc: &Location) -> Arc<Expr> {
+    convert_ast_expr(db, loc.clone())
+}
+
 fn convert_driver_match(db: &Db, dm: &DriverMatch) -> Arc<Expr> {
     let location = dm.subject.clone();
     let subject = convert_ast_expr(db, dm.subject.clone());

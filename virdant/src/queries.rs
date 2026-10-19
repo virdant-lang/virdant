@@ -2,6 +2,7 @@
 
 pub mod check;
 pub mod check_drivers;
+pub mod check_initial;
 pub mod combinational_cycles;
 pub mod match_coverage;
 pub mod parsing;
@@ -11,6 +12,7 @@ pub mod typing;
 
 pub(crate) use check::check;
 pub(crate) use check_drivers::check_drivers;
+pub(crate) use check_initial::check_initial;
 pub(crate) use match_coverage::build_match_coverage;
 pub(crate) use crate::analysis::package::build_package_analysis;
 pub(crate) use parsing::build_parsing;

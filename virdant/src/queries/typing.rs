@@ -1,7 +1,7 @@
 //! Builds the per-item `TypingContext` (component path/type bindings)
 //! and computes the expected type for an `ExprRoot` from its parent
 //! context (`Bit` for `when` guards, `Clock` for reg drivers, LHS
-//! component type for drivers, inherited through `when`/`match` arms).
+//! component type for drivers and `initial` statements, inherited through `when`/`match` arms).
 
 use bstr::ByteSlice;
 use crate::analysis::symbols::SymbolId;
@@ -35,7 +35,8 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
     match parent_node.payload() {
         AstNodePayload::Component(component) if component.kind == ComponentKind::Reg
             || component.kind == ComponentKind::OutgoingReg => Some(Type::Clock),
-        AstNodePayload::Driver(_) => {
+        // An `initial` statement's RHS is typed against its target, exactly like a driver.
+        AstNodePayload::Driver(_) | AstNodePayload::InitialDriver => {
             let mut lhs_path = parsing.string(parent_node.child(0).path().unwrap()).to_owned();
 
             // Walk up through any enclosing ModDefStmtBlocks and ModDefStmtWhens

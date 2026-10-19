@@ -1,0 +1,42 @@
+// Tests the `initial` statement for declaring register initial values.
+
+// CHECK: Check OK
+mod Initial {
+    incoming clock : Clock
+    incoming inp : Word[8]
+    outgoing out : Word[8]
+
+    // Basic `initial` alongside a normal latched driver.
+    reg counter : Word[3] on clock
+    initial counter <= 7
+    counter <= counter - 1
+
+    // `initial it` inside the reg's it-block.
+    reg down : Word[4] on clock {
+        initial it <= 9
+        when {
+            case it > 0 {
+                it <= it - 1
+            }
+        }
+    }
+
+    // A Bit-typed initial value.
+    reg flag : Bit on clock {
+        initial it <= true
+        it <= !it
+    }
+
+    // A reg without an `initial` defaults to 0.
+    reg plain : Word[8] on clock
+    plain <= inp
+
+    // `initial` on an `outgoing reg`.
+    outgoing reg oreg : Word[8] on clock {
+        initial it <= 0xff
+        it <= inp
+    }
+
+    out := plain + zext(counter) + zext(down) + oreg
+    unused flag
+}

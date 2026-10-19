@@ -19,7 +19,7 @@ use crate::analysis::drivers::Driver;
 use crate::analysis::elaboration::{ElaboratedComponent, SignalId, Elaboration};
 use crate::common::ComponentKind;
 use crate::db::Db;
-use crate::sim::expr::{Expr, ExprPayload, Referent, driver_to_expr};
+use crate::sim::expr::{Expr, ExprPayload, Referent, driver_to_expr, initial_to_expr};
 use crate::sim::vcd::TypeLayoutIndex;
 use crate::syntax::ast::AstNodeId;
 use crate::syntax::parsing::Parsing;
@@ -33,6 +33,8 @@ pub(super) struct Circuit {
     pub(super) clock_sensitivities: IndexMap<SignalId, IndexSet<SignalId>>,
     pub(super) registers: IndexSet<SignalId>,
     pub(super) exprs: IndexMap<SignalId, Arc<Expr>>,
+    /// Constant expressions from `initial` statements, keyed by register.
+    pub(super) initial_exprs: IndexMap<SignalId, Arc<Expr>>,
     /// Pre-resolved referents for every component that has a driver expression.
     /// Keyed by the owning component; each value is the DFS-ordered list of
     /// `(referent, target_id)` pairs that `Sim::build_context` zips with live
@@ -54,11 +56,15 @@ impl Circuit {
         let clock_sensitivities = build_clock_sensitivities(&elaboration);
 
         let mut exprs: IndexMap<SignalId, Arc<Expr>> = IndexMap::new();
+        let mut initial_exprs: IndexMap<SignalId, Arc<Expr>> = IndexMap::new();
         let mut registers: IndexSet<SignalId> = IndexSet::new();
         for elab_component in elaboration.components() {
             let elab_id = elab_component.id();
             if let Some(driver) = elab_component.driver() {
                 exprs.insert(elab_id, driver_to_expr(db, driver));
+            }
+            if let Some(loc) = elab_component.initial_expr() {
+                initial_exprs.insert(elab_id, initial_to_expr(db, loc));
             }
             if elab_component.is_reg() {
                 registers.insert(elab_id);
@@ -82,6 +88,7 @@ impl Circuit {
             clock_sensitivities,
             registers,
             exprs,
+            initial_exprs,
             resolved_referents,
         }
     }

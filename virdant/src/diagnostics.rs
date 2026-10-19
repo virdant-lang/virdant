@@ -104,6 +104,12 @@ pub enum DiagnosticPayload {
     RedundantUnused(RedundantUnused),
     /// Latched driver from a component to itself
     RedundantDriver(RedundantDriver),
+    /// An `initial` statement targets a component which is not a register.
+    InitialForNonReg(InitialForNonReg),
+    /// A register has more than one `initial` statement.
+    InitialMultiple(InitialMultiple),
+    /// An `initial` statement appears inside a `when` or `match` block.
+    InitialInsideWhenMatch(InitialInsideWhenMatch),
     /// A combinational loop was detected in a module's dependency graph.
     /// All edges in the cycle are combinational, which would causal, which would cause
     /// simulation to never converge.
@@ -357,6 +363,21 @@ pub struct RedundantDriver {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InitialForNonReg {
+    pub target: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InitialMultiple {
+    pub target: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InitialInsideWhenMatch {
+    pub target: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CombinationalLoop {
     pub components: Vec<BString>,
 }
@@ -551,6 +572,18 @@ impl Diagnostic {
             DiagnosticPayload::EmptyDriverBlock => "Empty driver block".into(),
             DiagnosticPayload::RedundantUnused(d) => format!("Redundant `unused`: {}", d.path).into(),
             DiagnosticPayload::RedundantDriver(d) => format!("Redundant driver: {}", d.path).into(),
+            DiagnosticPayload::InitialForNonReg(d) => {
+                format!("initial targets non-register component {}", d.target).into()
+            }
+            DiagnosticPayload::InitialMultiple(d) => {
+                format!("multiple initial statements for register {}", d.target).into()
+            }
+            DiagnosticPayload::InitialInsideWhenMatch(d) => {
+                format!(
+                    "initial statement for {} must not appear inside a when/match block",
+                    d.target,
+                ).into()
+            }
             DiagnosticPayload::CombinationalLoop(d) => {
                 format!(
                     "Combinational loop detected: {}",
@@ -626,7 +659,7 @@ from_diagnostic! {
     CantTruncate, Todo, MatchNotExhaustive, MatchOverlappingArm, InvalidDocstring,
     DuplicateEnumValue, IndexOutOfBounds, IndexRangeOutOfBounds, InvalidIndexRange,
     InvalidWordIndexWidth, IndexNotWordType, RedundantUnused, RedundantDriver,
-    CombinationalLoop,
+    CombinationalLoop, InitialForNonReg, InitialMultiple, InitialInsideWhenMatch,
     ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,
     PlatformPortTypeMismatch,
 }

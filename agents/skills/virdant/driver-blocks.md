@@ -234,3 +234,25 @@ reg r : Word[8] on clock {
 This self-reference is distinct from forwarding a submodule's output
 (where `it` refers to the submodule instance, not the same signal).
 See module-system.md for the instantiation it-block pattern."}]
+
+
+Register initial values
+-----------------------
+Use an `initial` statement to give a register a power-on value.
+Put it at the top of the register's driver block, using `it`:
+
+```virdant
+reg counter : Word[3] on clock {
+    initial it <= 7
+    it <= it - 1
+}
+```
+
+Rules:
+
+- The target must be a `reg` or `outgoing reg`.
+- The value must be a constant (no component references).
+- `initial` is NOT a driver; the register still needs its `<=` driver.
+- At most one `initial` per register.
+- `initial` may not appear inside a `when` or `match` block.
+- Registers without `initial` start at 0 in Verilog (X in the simulator).

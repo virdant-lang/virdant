@@ -166,7 +166,7 @@ impl PackageAnalysis {
                             }
                         }
                     }
-                    AstNodePayload::Driver(_driver) => {
+                    AstNodePayload::Driver(_) | AstNodePayload::InitialDriver => {
                         let node_id = child_node.driver().unwrap().id();
                         self.expr_roots.push(node_id);
                     }
@@ -283,7 +283,7 @@ impl PackageAnalysis {
     fn add_moddefstmt_block_expr_roots(&mut self, block_node: &AstNode<'_>) {
         for stmt in block_node.children() {
             match stmt.payload() {
-                AstNodePayload::Driver(_) => {
+                AstNodePayload::Driver(_) | AstNodePayload::InitialDriver => {
                     let driver_expr = stmt.driver().unwrap();
                     self.expr_roots.push(driver_expr.id());
                     // Trace into ExprWhen/ExprMatch nodes inside the driver expression

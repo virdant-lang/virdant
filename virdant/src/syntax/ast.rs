@@ -169,6 +169,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Component(component) => format!("Component {:?} {}", component.kind, parsing.string(component.name.clone())),
             AstNodePayload::Driver(_driver) => format!("Driver"),
             AstNodePayload::BidirectionalDriver => format!("BidirectionalDriver"),
+            AstNodePayload::InitialDriver => format!("InitialDriver"),
             AstNodePayload::Submodule(_module) => format!("Module"),
             AstNodePayload::ModDefStmtBlock => format!("ModDefStmtBlock"),
             AstNodePayload::ModDefStmtWhen => format!("ModDefStmtWhen"),
@@ -309,7 +310,7 @@ impl<'p> AstNode<'p> {
 
     pub fn target(&self) -> Option<InternedString> {
         match &self.payload {
-            AstNodePayload::Driver(_driver) => {
+            AstNodePayload::Driver(_) | AstNodePayload::InitialDriver => {
                 let target_node = self.child(0);
                 target_node.path()
             }
@@ -326,7 +327,7 @@ impl<'p> AstNode<'p> {
 
     pub fn driver(&self) -> Option<AstNode<'_>> {
         match &self.payload {
-            AstNodePayload::Driver(_driver) => Some(self.child(1)),
+            AstNodePayload::Driver(_) | AstNodePayload::InitialDriver => Some(self.child(1)),
             _ => None
         }
     }

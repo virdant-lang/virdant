@@ -41,7 +41,7 @@ union type Result {
 
 @experimental
 enum type State {
-    @initial
+    @init
     Idle = 0w2
 
     @active(true, false)

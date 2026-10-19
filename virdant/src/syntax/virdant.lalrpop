@@ -329,6 +329,7 @@ ModDefStmt: AstNodeId = {
     <w:ModDefStmtWhen> => w,
     <m:ModDefStmtMatch> => m,
     <unused_:ModDefStmtUnused> => unused_,
+    <initial:ModDefStmtInitial> => initial,
     <dependson:ModDefStmtDependsOn> => dependson,
     <ll:@L> <error:!> <rr:@R> => {
         let span = parser.span(ll, rr);
@@ -521,6 +522,16 @@ ModDefStmtUnused: AstNodeId = {
         let payload = AstNodePayload::ModDefStmtUnused;
         let span = parser.span(ll, rr);
         let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+ModDefStmtInitial: AstNodeId = {
+    <ll:@L> "initial" <lhs:Path> "<=" <rhs:Expr> <rr:@R> => {
+        let payload = AstNodePayload::InitialDriver;
+        let span = parser.span(ll, rr);
+        let num_children = 2;
 
         parser.add_node(payload, span, num_children)
     },
@@ -1091,6 +1102,7 @@ extern {
         "match" => Token::KwMatch,
         "case" => Token::KwCase,
         "unused" => Token::KwUnused,
+        "initial" => Token::KwInitial,
         "true" => Token::KwTrue,
         "false" => Token::KwFalse,
         "dontcare" => Token::KwDontcare,
