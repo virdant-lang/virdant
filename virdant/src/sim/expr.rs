@@ -76,6 +76,7 @@ pub fn driver_to_expr(db: &Db, driver: &Driver) -> Arc<Expr> {
     match driver {
         Driver::Expr(_, loc) => convert_ast_expr(db, loc.clone()),
         Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are resolved in conversion, not simulation"),
+        Driver::Absent => unreachable!("Absent drivers only appear inside when clauses"),
         Driver::When(driver_when) => convert_driver_when(db, driver_when),
         Driver::Match(driver_match) => convert_driver_match(db, driver_match),
     }
@@ -178,12 +179,26 @@ fn convert_pattern(
 }
 
 fn convert_driver_when(db: &Db, driver_when: &DriverWhen) -> Arc<Expr> {
-    let location = driver_when.clauses[0].0.clone();
+    let location = match driver_when.clauses.first() {
+        Some((cond_loc, _)) => cond_loc.clone(),
+        None => driver_when.else_clause.as_ref()
+            .and_then(|else_driver| else_driver.location())
+            .expect("when driver has no clauses and no else clause"),
+    };
 
     let mut branches: Vec<(Arc<Expr>, Arc<Expr>)> = Vec::new();
     for (cond_loc, sub_driver) in &driver_when.clauses {
         let cond = convert_ast_expr(db, cond_loc.clone());
-        let body = driver_to_expr(db, sub_driver.as_ref());
+        let body = match sub_driver.as_ref() {
+            // The component is not driven in this clause; evaluate as X,
+            // the same value a missing else clause produces.
+            Driver::Absent => Arc::new(Expr {
+                location: cond_loc.clone(),
+                typ: Type::Bit,
+                payload: ExprPayload::Hole(payload::Hole {}),
+            }),
+            sub_driver => driver_to_expr(db, sub_driver),
+        };
         branches.push((cond, body));
     }
 

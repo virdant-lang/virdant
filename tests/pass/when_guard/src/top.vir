@@ -1,0 +1,68 @@
+// Regression test for the "lost when-arm guard" compiler bug.
+//
+// A statement-level `when` that assigns to multiple registers is lowered
+// into one `always @(posedge clock)` block per register.  For a register
+// assigned in only a subset of the arms, the path predicate must be
+// preserved: a register not driven in an arm holds its value there.
+//
+// With the bug, `phase` (inside a `match` case) and `done` (top level)
+// lose the guard of the first arm and are assigned every cycle.
+
+enum type Phase {
+    Wait = 0b01w2
+    Go   = 0b10
+}
+
+export mod Top {
+    incoming clock : Clock
+    incoming go    : Bit
+
+    // `when` inside a `match` case: `count` is driven in both arms, `phase`
+    // only in the `else` arm.  The `phase` transition must be guarded by
+    // `count == 0`.
+    reg count : Word[4] on clock {
+        initial it <= 3
+    }
+    reg phase : Phase on clock {
+        initial it <= #Wait
+    }
+
+    match phase {
+        case #Wait {
+            when {
+                case count > 0 {
+                    count <= count - 1
+                }
+                else {
+                    count <= 5
+                    phase <= #Go
+                }
+            }
+        }
+        case #Go {
+            count <= 0
+        }
+    }
+
+    // Top-level `when` with the same shape: `busy` is driven in both arms,
+    // `done` only in the `else` arm.  The `done` assignment must be guarded
+    // by `!go`.
+    reg busy : Bit on clock {
+        initial it <= false
+    }
+    reg done : Bit on clock {
+        initial it <= false
+    }
+    unused busy
+    unused done
+
+    when {
+        case go {
+            busy <= true
+        }
+        else {
+            busy <= false
+            done <= true
+        }
+    }
+}

@@ -36,6 +36,15 @@ pub enum Driver {
     Bidirectional(Location),
     When(DriverWhen),
     Match(DriverMatch),
+    /// A `when`-clause position in which the component is *not* driven.
+    ///
+    /// `collect_block_drivers` builds one `Driver::When` per driven component,
+    /// so a clause that assigns to some other component must still be
+    /// represented for this one, or the clause's guard is silently dropped
+    /// (making later clauses and the `else` arm unconditional). Lowering
+    /// treats `Absent` as "no assignment here": sequential contexts hold the
+    /// register's value, combinational contexts drive X.
+    Absent,
 }
 
 impl Driver {
@@ -45,6 +54,9 @@ impl Driver {
             Driver::Bidirectional(_) => DriverType::Continuous,
             Driver::When(driver_when) => driver_when.driver_type,
             Driver::Match(driver_match) => driver_match.driver_type,
+            // `Absent` never appears at the top level and is skipped by
+            // driver-type inference; this value is never observed.
+            Driver::Absent => DriverType::Continuous,
         }
     }
 
@@ -54,6 +66,7 @@ impl Driver {
             Driver::Bidirectional(loc) => Some(loc.clone()),
             Driver::When(driver_when) => driver_when.clauses.first().map(|(loc, _)| loc.clone()),
             Driver::Match(driver_match) => Some(driver_match.subject.clone()),
+            Driver::Absent => None,
         }
     }
 }
@@ -137,6 +150,7 @@ fn dump_driver(driver: &Driver, level: usize) {
                 dump_driver(else_driver, level + 1);
             }
         }
+        Driver::Absent => eprintln!("{pad} (absent)"),
     }
 }
 
@@ -584,10 +598,18 @@ fn collect_block_drivers(
                 all_components.extend(else_drivers.keys().copied());
 
                 // Build a Driver::When for each driven component and merge into the result.
+                // Every clause is kept, even those that do not drive this component:
+                // they lower to `Absent`, which preserves the clause's guard
+                // (hold / X) instead of dropping it and making later clauses
+                // and the `else` arm unconditional.
                 for comp_id in all_components {
                     let clauses: Vec<(Location, Box<Driver>)> = clause_drivers.iter()
-                        .filter_map(|(cond_loc, cd)| {
-                            cd.get(&comp_id)?.first().map(|d| (cond_loc.clone(), Box::new(d.clone())))
+                        .map(|(cond_loc, cd)| {
+                            let sub_driver = cd.get(&comp_id)
+                                .and_then(|ds| ds.first())
+                                .cloned()
+                                .unwrap_or(Driver::Absent);
+                            (cond_loc.clone(), Box::new(sub_driver))
                         })
                         .collect();
 
@@ -595,9 +617,11 @@ fn collect_block_drivers(
                         .and_then(|ds| ds.first())
                         .map(|d| Box::new(d.clone()));
 
-                    // Infer the driver type from the first available sub-driver.
-                    let driver_type = clauses.first()
+                    // Infer the driver type from the first non-`Absent` sub-driver.
+                    let driver_type = clauses.iter()
+                        .filter(|(_, d)| !matches!(d.as_ref(), Driver::Absent))
                         .map(|(_, d)| d.driver_type())
+                        .next()
                         .or_else(|| else_clause.as_ref().map(|d| d.driver_type()))
                         .unwrap_or(DriverType::Continuous);
 

@@ -161,6 +161,7 @@ fn collect_wrong_driver_type_errors(
             }
         }
         Driver::Bidirectional(_) => {}
+        Driver::Absent => {}
         Driver::When(driver_when) => {
             for (_, sub_driver) in &driver_when.clauses {
                 collect_wrong_driver_type_errors(builder, sub_driver, expected, path, diagnostics);

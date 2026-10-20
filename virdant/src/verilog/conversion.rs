@@ -526,6 +526,7 @@ impl<'d> Converter<'d> {
                 collect_ast_holes(expr_node, self.db)
             }
             Driver::Bidirectional(_) => vec![],
+            Driver::Absent => vec![],
             Driver::When(driver_when) => {
                 let mut holes = vec![];
                 for (_, sub_driver) in &driver_when.clauses {
@@ -565,6 +566,7 @@ impl<'d> Converter<'d> {
                 self.convert_expr(package, expr_node, typ, self.db, scheduler)
             }
             Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are emitted directly, not via convert_driver_to_expr"),
+            Driver::Absent => verilog::Expr::XLit(verilog::expr::XLit { width: type_width(typ, self.db) }),
             Driver::When(driver_when) => self.convert_driver_when_to_expr(package, driver_when, typ, scheduler),
             Driver::Match(driver_match) => self.convert_driver_match_to_expr(package, driver_match, typ, scheduler),
         }
@@ -770,6 +772,9 @@ impl<'d> Converter<'d> {
                 })]
             }
             Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are emitted directly, not via convert_latched_driver_to_stmts"),
+            // No assignment here: inside a clocked always block, emitting
+            // nothing means the register holds its value.
+            Driver::Absent => vec![],
             Driver::When(driver_when) => {
                 self.convert_latched_driver_when_to_stmts(package, driver_when, typ, path, scheduler)
             }
