@@ -148,11 +148,11 @@ impl PackageAnalysis {
                 match child_node.payload() {
                     AstNodePayload::Component(component) => {
                         if component.kind == ComponentKind::Reg || component.kind == ComponentKind::OutgoingReg {
-                            if let Some(node) = child_node.clock() {
-                                self.expr_roots.push(node.id());
+                            if let Some(clock_expr) = child_node.clock() {
+                                self.expr_roots.push(clock_expr.id());
                             } else {
                                 self.diagnostics.push(Diagnostic::new(
-                                    node.region(),
+                                    child_node.region(),
                                     diagnostics::MissingOnClause {
                                         component: parsing.string(component.name).into(),
                                     },

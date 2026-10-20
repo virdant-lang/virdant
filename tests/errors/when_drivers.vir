@@ -1,0 +1,15 @@
+mod Foo {
+    incoming clock : Clock
+    reg r : Bit on clock {
+        unused it
+    }
+
+    when {
+        case true {
+            // CHECK: Multiple drivers for r
+            r <= false
+            // CHECK: Multiple drivers for r
+            r <= true
+        }
+    }
+}

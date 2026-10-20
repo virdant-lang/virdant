@@ -200,6 +200,38 @@ fn collect_not_it_in_expr(
     }
 }
 
+/// Emits a `MultipleDrivers` diagnostic for every component driven more
+/// than once within a single `when` clause or `match` arm body.
+///
+/// The per-clause driver map keeps all drivers for a component, but the
+/// clause is later collapsed to a single `Driver` via `.first()`, so this
+/// is the only point at which intra-clause driver conflicts are visible.
+/// (Top-level conflicts are caught separately in `check_drivers.rs` by
+/// counting the drivers in `DriverAnalysis.drivers()`.)
+fn flag_duplicate_clause_drivers(
+    body_drivers: &IndexMap<ComponentId, Vec<Driver>>,
+    component_analysis: &ComponentAnalysis,
+    stmt: &AstNode<'_>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for (comp_id, drivers) in body_drivers {
+        if drivers.len() > 1 {
+            let Some(component) = component_analysis.component(*comp_id) else { continue };
+            let path = component.path();
+            for driver in drivers {
+                let Some(location) = driver.location() else { continue };
+                let region = stmt.parsing.ast_node(location.ast_node_id()).region();
+                diagnostics.push(Diagnostic::new(
+                    region,
+                    diagnostics::MultipleDrivers {
+                        target: path.clone(),
+                    },
+                ));
+            }
+        }
+    }
+}
+
 fn collect_block_drivers(
     stmts: Vec<AstNode<'_>>,
     component_analysis: &ComponentAnalysis,
@@ -525,6 +557,7 @@ fn collect_block_drivers(
                                 collect_block_drivers(vec![body.clone()], component_analysis, it_context, true, initials)
                             };
                             diagnostics.append(&mut body_diags);
+                            flag_duplicate_clause_drivers(&body_drivers, component_analysis, &stmt, &mut diagnostics);
                             clause_drivers.push((guard.location(), body_drivers));
                         }
                         idx += 2;
@@ -537,6 +570,7 @@ fn collect_block_drivers(
                             collect_block_drivers(vec![body.clone()], component_analysis, it_context, true, initials)
                         };
                         diagnostics.append(&mut body_diags);
+                        flag_duplicate_clause_drivers(&body_drivers, component_analysis, &stmt, &mut diagnostics);
                         else_drivers = body_drivers;
                         idx += 1;
                     }
@@ -593,6 +627,7 @@ fn collect_block_drivers(
                         collect_block_drivers(vec![body.clone()], component_analysis, it_context, true, initials)
                     };
                     diagnostics.append(&mut body_diags);
+                    flag_duplicate_clause_drivers(&body_drivers, component_analysis, &stmt, &mut diagnostics);
                     match pat_opt {
                         Some(pat) => case_arm_drivers.push((pat.location(), body_drivers)),
                         None => { else_arm_drivers = Some(body_drivers); }

@@ -1,0 +1,10 @@
+mod M {
+    incoming clock : Clock
+
+    reg data_buf : Word[8]
+
+    data_buf <= 0
+}
+
+// CHECK: Missing on clause for reg data_buf
+// CHECK-NOT: for reg M
