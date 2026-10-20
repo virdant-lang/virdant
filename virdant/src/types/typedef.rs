@@ -6,7 +6,7 @@
 use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::location::Location;
-use crate::analysis::symbols::{SymbolId, SymbolTable};
+use crate::analysis::symbols::{SymbolId, SymbolTable, Symbol};
 use crate::common::{TypeScheme, Width, WordValue};
 
 use std::sync::Arc;
@@ -55,29 +55,7 @@ pub(crate) fn build_typedefs(builder: &mut Builder) -> Arc<Vec<TypeDef>> {
         };
 
         let (width, enumerant_values) = if kind == TypeScheme::EnumDef {
-            let location = item_symbol.location();
-            let parsing = builder.get_parsing(location.package());
-            let symboltable = builder.get_symboltable();
-            let enumdef_node = parsing.ast_node(location.ast_node_id());
-
-            let mut enumerant_values = IndexMap::new();
-            let mut width = None;
-            for enumerant_node in enumdef_node.children() {
-                let AstNodePayload::Enumerant(enumerant) = enumerant_node.payload() else { continue; };
-                let enumerant_name = parsing.string(enumerant.name);
-                let enumerant_id = {
-                    let Some(enumerant_symbol) = symboltable.slot(item_symbol.id(), enumerant_name) else { continue; };
-                    enumerant_symbol.id()
-                };
-                let expr_node = enumerant_node.child(1);
-                let (value, expr_width) = eval_const_expr(&expr_node);
-                if width.is_none() {
-                    width = expr_width;
-                }
-                enumerant_values.insert(enumerant_id, value);
-            }
-
-            (width, enumerant_values)
+            eval_enumdef(builder, &item_symbol)
         } else {
             (None, IndexMap::new())
         };
@@ -105,29 +83,7 @@ pub(crate) fn build_typedef(builder: &mut Builder, symbol_id: SymbolId) -> Arc<T
     };
 
     let (width, enumerant_values) = if kind == TypeScheme::EnumDef {
-        let location = item_symbol.location();
-        let parsing = builder.get_parsing(location.package());
-        let symboltable = builder.get_symboltable();
-        let enumdef_node = parsing.ast_node(location.ast_node_id());
-
-        let mut enumerant_values = IndexMap::new();
-        let mut width = None;
-        for enumerant_node in enumdef_node.children() {
-            let AstNodePayload::Enumerant(enumerant) = enumerant_node.payload() else { continue; };
-            let enumerant_name = parsing.string(enumerant.name);
-            let enumerant_id = {
-                let Some(enumerant_symbol) = symboltable.slot(item_symbol.id(), enumerant_name) else { continue; };
-                enumerant_symbol.id()
-            };
-            let expr_node = enumerant_node.child(1);
-            let (value, expr_width) = eval_const_expr(&expr_node);
-            if width.is_none() {
-                width = expr_width;
-            }
-            enumerant_values.insert(enumerant_id, value);
-        }
-
-        (width, enumerant_values)
+        eval_enumdef(builder, &item_symbol)
     } else {
         (None, IndexMap::new())
     };
@@ -138,6 +94,56 @@ pub(crate) fn build_typedef(builder: &mut Builder, symbol_id: SymbolId) -> Arc<T
         width,
         enumerant_values,
     })
+}
+
+/// Evaluate the enumerant values of an enum type definition.
+///
+/// If no enumerant specifies a value, the enumerants are one-hot encoded
+/// by default: enumerant `i` (in declaration order) gets the value `1 << i`,
+/// and the width of the enum type is the number of enumerants.
+fn eval_enumdef(builder: &mut Builder, item_symbol: &Symbol) -> (Option<Width>, IndexMap<SymbolId, WordValue>) {
+    let location = item_symbol.location();
+    let parsing = builder.get_parsing(location.package());
+    let symboltable = builder.get_symboltable();
+    let enumdef_node = parsing.ast_node(location.ast_node_id());
+
+    // Collect (enumerant, optionally-specified value) in declaration order.
+    let mut entries: Vec<(SymbolId, Option<WordValue>)> = vec![];
+    let mut width = None;
+    for enumerant_node in enumdef_node.children() {
+        let AstNodePayload::Enumerant(enumerant) = enumerant_node.payload() else { continue; };
+        let enumerant_name = parsing.string(enumerant.name);
+        let Some(enumerant_symbol) = symboltable.slot(item_symbol.id(), enumerant_name) else { continue; };
+        let enumerant_id = enumerant_symbol.id();
+        let value = enumerant_node.children().get(1).map(|expr_node| {
+            let (value, expr_width) = eval_const_expr(expr_node);
+            if width.is_none() {
+                width = expr_width;
+            }
+            value
+        });
+        entries.push((enumerant_id, value));
+    }
+
+    let any_specified = entries.iter().any(|(_, value)| value.is_some());
+    let mut enumerant_values = IndexMap::new();
+    if !any_specified {
+        // One-hot encoding: enumerant i gets 1 << i, width = number of enumerants.
+        if let Ok(count) = u16::try_from(entries.len()) {
+            width = Some(count);
+        }
+        for (index, (enumerant_id, _)) in entries.iter().enumerate() {
+            let value = 1u64.checked_shl(index as u32).unwrap_or(0);
+            enumerant_values.insert(*enumerant_id, value);
+        }
+    } else {
+        for (enumerant_id, value) in entries {
+            let value = value.unwrap_or_else(|| 1u64.checked_shl(enumerant_values.len() as u32).unwrap_or(0));
+            enumerant_values.insert(enumerant_id, value);
+        }
+    }
+
+    (width, enumerant_values)
 }
 
 fn eval_const_expr(node: &AstNode<'_>) -> (WordValue, Option<Width>) {

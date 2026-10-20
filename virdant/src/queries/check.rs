@@ -15,6 +15,7 @@ use crate::common::source::Region;
 use crate::common::WordValue;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticPayload};
+use crate::diagnostics::EnumPartiallySpecified;
 use crate::package::PackageId;
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::token::KEYWORDS;
@@ -108,6 +109,9 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     // Only the first duplicate per value is reported (as an Error).
     check_duplicate_enum_values(builder, &mut diagnostics);
 
+    // Check that enum types do not mix enumerants with and without explicit values.
+    check_enum_partially_specified(builder, &mut diagnostics);
+
     // Check that enum types have an inferrable width from the first enumerant.
     check_enum_unknown_width(builder, &mut diagnostics);
 
@@ -161,6 +165,39 @@ fn check_duplicate_enum_values(builder: &mut Builder, diagnostics: &mut Vec<Diag
                 let enumerant_node = parsing.ast_node(enumerant_symbol.location().ast_node_id());
                 first.insert(*value, (enumerant_symbol.name().to_owned(), enumerant_node.region()));
             }
+        }
+    }
+}
+
+/// Check that enum types do not mix enumerants with explicit values and
+/// enumerants without. When no enumerant specifies a value, the enum type
+/// is one-hot encoded by default; mixing the two styles is ambiguous and
+/// reported as an Error.
+fn check_enum_partially_specified(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        if item.kind != SymbolKind::EnumDef {
+            continue;
+        }
+        let parsing = builder.get_parsing(item.package());
+        let enumdef_node = parsing.ast_node(item.location().ast_node_id());
+        let mut any_specified = false;
+        let mut any_missing = false;
+        for enumerant_node in enumdef_node.children() {
+            let AstNodePayload::Enumerant(_) = enumerant_node.payload() else { continue; };
+            if enumerant_node.children().len() > 1 {
+                any_specified = true;
+            } else {
+                any_missing = true;
+            }
+        }
+        if any_specified && any_missing {
+            diagnostics.push(Diagnostic::new(
+                enumdef_node.region(),
+                DiagnosticPayload::EnumPartiallySpecified(EnumPartiallySpecified {
+                    enum_name: item.name().to_owned(),
+                }),
+            ));
         }
     }
 }

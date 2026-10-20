@@ -272,10 +272,17 @@ EnumDef: AstNodeId = {
 }
 
 EnumDefStmt: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> <name:Ident> "=" Expr <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <name:Ident> "=" <expr:Expr> <rr:@R> => {
         let payload = AstNodePayload::Enumerant(payload::Enumerant { name, doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + 1u16;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <name:Ident> <rr:@R> => {
+        let payload = AstNodePayload::Enumerant(payload::Enumerant { name, doc_string: docstring });
+        let span = parser.span(ll, rr);
+        let num_children: u16 = 1u16;
 
         parser.add_node(payload, span, num_children)
     },

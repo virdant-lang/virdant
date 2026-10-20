@@ -89,6 +89,8 @@ pub enum DiagnosticPayload {
     InvalidDocstring(InvalidDocstring),
     /// Two enumerants of the same enum type have the same value.
     DuplicateEnumValue(DuplicateEnumValue),
+    /// An enum type specifies values for some but not all enumerants.
+    EnumPartiallySpecified(EnumPartiallySpecified),
     /// A single-bit index `a[i]` where `i >= width` of the subject `Word[n]`.
     IndexOutOfBounds(IndexOutOfBounds),
     /// A bit range `a[hi..lo]` where the bounds exceed the width of the subject.
@@ -322,6 +324,11 @@ pub struct DuplicateEnumValue {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumPartiallySpecified {
+    pub enum_name: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexOutOfBounds {
     pub array_width: Width,
     pub index: u16,
@@ -544,6 +551,12 @@ impl Diagnostic {
                     d.enum_name, d.value,
                 ).into()
             }
+            DiagnosticPayload::EnumPartiallySpecified(d) => {
+                format!(
+                    "Enum type {} specifies values for some but not all enumerants. Either give every enumerant a value, or none (which defaults to one-hot encoding).",
+                    d.enum_name,
+                ).into()
+            }
             DiagnosticPayload::InvalidWordIndexWidth(d) => {
                 format!(
                     "Invalid word index width: Word[{}] indexed by Word[{}] requires {} == 2^{}",
@@ -657,7 +670,7 @@ from_diagnostic! {
     DriverForSink, UnresolvedComponent, NotIt, UnresolvedCtor, UnusedSource, ReadFromSink,
     UnfilledHole, ModuleCycle, UnresolvedMethod, WrongType, Unknown, DoesntFit, NotWordType,
     CantTruncate, Todo, MatchNotExhaustive, MatchOverlappingArm, InvalidDocstring,
-    DuplicateEnumValue, IndexOutOfBounds, IndexRangeOutOfBounds, InvalidIndexRange,
+    DuplicateEnumValue, EnumPartiallySpecified, IndexOutOfBounds, IndexRangeOutOfBounds, InvalidIndexRange,
     InvalidWordIndexWidth, IndexNotWordType, RedundantUnused, RedundantDriver,
     CombinationalLoop, InitialForNonReg, InitialMultiple, InitialInsideWhenMatch,
     ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,

@@ -57,7 +57,9 @@ Generics := "[" Ident ":" Kind "]"
 
 EnumDef := DocString? Annotations "enum" "type" Ident "{" EnumDefStmt* "}"
 
-EnumDefStmt := DocString? Annotations Ident "=" Expr
+EnumDefStmt :=
+      DocString? Annotations Ident "=" Expr
+    | DocString? Annotations Ident
 
 BuiltinDef := DocString? Annotations "builtin" "type" Ident Generics? "{" "}"
 

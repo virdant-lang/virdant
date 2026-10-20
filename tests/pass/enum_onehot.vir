@@ -1,0 +1,52 @@
+// Enum types with no values specified default to one-hot encoding:
+// enumerant i (in declaration order) gets the value 1 << i, and the
+// width of the enum type is the number of enumerants.
+
+// Three enumerants, no values: width is 3, values are 1, 2, 4.
+enum type Trio {
+    A
+    B
+    C
+}
+
+// Four enumerants, no values: width is 4, values are 1, 2, 4, 8.
+enum type Quad {
+    W
+    X
+    Y
+    Z
+}
+
+// An enum that still specifies values explicitly is unaffected.
+enum type Explicit {
+    Low  = 0w2
+    High = 3w2
+}
+
+mod WidthCheck {
+    incoming t : Trio
+    incoming q : Quad
+    incoming e : Explicit
+    outgoing t3 : Word[3]
+    outgoing q4 : Word[4]
+    outgoing e2 : Word[2]
+
+    // The word() conversion pins the width of each enum type:
+    // these assignments only fit when the widths are exactly 3, 4, and 2.
+    t3 := word(t)
+    q4 := word(q)
+    e2 := word(e)
+
+    unused t
+    unused q
+    unused e
+}
+
+mod MatchCheck {
+    incoming t : Trio
+    outgoing isB : Bit
+
+    isB := match t { case #B => true else => false }
+}
+
+// CHECK: Check OK

@@ -210,8 +210,10 @@ impl PackageAnalysis {
             }
             for child_node in node.children() {
                 if let AstNodePayload::Enumerant(_) = child_node.payload() {
-                    let node_id = child_node.child(1).id();
-                    self.expr_roots.push(node_id);
+                    // Enumerants without an explicit value have no expr child.
+                    if let Some(expr_node) = child_node.children().get(1) {
+                        self.expr_roots.push(expr_node.id());
+                    }
                 }
             }
         } else {
