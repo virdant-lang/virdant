@@ -146,6 +146,13 @@ impl ComponentAnalysis {
     }
 }
 
+fn drives_channel(role: SocketRole, dir: ChannelDir) -> bool {
+    matches!(
+        (role, dir),
+        (SocketRole::Client, ChannelDir::Cosi) | (SocketRole::Server, ChannelDir::Soci)
+    )
+}
+
 pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) -> Arc<ComponentAnalysis> {
     let mut component_analysis = ComponentAnalysis {
         moddef,
@@ -318,11 +325,10 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                     Ok(typ) => Some(typ),
                                     Err(_) => None,
                                 };
-                                let flow = match (submodule_socket.role, channel.dir) {
-                                    (SocketRole::Client, ChannelDir::Cosi) => Flow::Source,
-                                    (SocketRole::Client, ChannelDir::Soci) => Flow::Sink,
-                                    (SocketRole::Server, ChannelDir::Cosi) => Flow::Sink,
-                                    (SocketRole::Server, ChannelDir::Soci) => Flow::Source,
+                                let flow = if drives_channel(submodule_socket.role, channel.dir) {
+                                    Flow::Source
+                                } else {
+                                    Flow::Sink
                                 };
                                 let kind = match flow {
                                     Flow::Sink => Some(ComponentKind::Incoming),
@@ -384,11 +390,10 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         Ok(typ) => Some(typ),
                         Err(_) => None,
                     };
-                    let flow = match (socket.role, channel.dir) {
-                        (SocketRole::Client, ChannelDir::Cosi) => Flow::Sink,
-                        (SocketRole::Client, ChannelDir::Soci) => Flow::Source,
-                        (SocketRole::Server, ChannelDir::Cosi) => Flow::Source,
-                        (SocketRole::Server, ChannelDir::Soci) => Flow::Sink,
+                    let flow = if drives_channel(socket.role, channel.dir) {
+                        Flow::Sink
+                    } else {
+                        Flow::Source
                     };
                     let component = Component {
                         id,
