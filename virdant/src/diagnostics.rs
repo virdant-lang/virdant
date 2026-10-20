@@ -141,6 +141,20 @@ pub enum DiagnosticPayload {
     PlatformPortDirMismatch(PlatformPortDirMismatch),
     /// A module port's type does not match its platform's port type.
     PlatformPortTypeMismatch(PlatformPortTypeMismatch),
+    /// A parsed feature whose semantics are not implemented yet
+    /// (e.g. generic socket/mod defs in the types-only generics slice).
+    NotYetImplemented(NotYetImplemented),
+    /// A type reference supplies the wrong number of type arguments.
+    TypeArgCount(TypeArgCount),
+    /// A type argument does not have the kind its parameter declares
+    /// (e.g. `Valid[8]`: a `Nat` literal given to a `Type` parameter).
+    TypeArgKind(TypeArgKind),
+    /// A generic parameter is declared with an unknown kind
+    /// (neither `Type` nor `Nat`).
+    UnknownKind(UnknownKind),
+    /// A ctor or enumerant carries payload parameters but was used
+    /// without them (e.g. `#Name` where `@Name(...)` is required).
+    CtorRequiresArgs(CtorRequiresArgs),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -420,6 +434,40 @@ pub struct PlatformPortTypeMismatch {
     pub actual: crate::types::Type,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotYetImplemented {
+    pub feature: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeArgCount {
+    pub typ: BString,
+    pub expected: usize,
+    pub actual: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeArgKind {
+    /// The generic type being instantiated.
+    pub typ: BString,
+    /// The parameter whose kind was violated.
+    pub param: BString,
+    /// The kind the parameter declares.
+    pub expected: BString,
+    /// What was written instead ("a type" or "a Nat literal").
+    pub actual: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownKind {
+    pub kind: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CtorRequiresArgs {
+    pub ctor: BString,
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 impl Diagnostic {
@@ -622,6 +670,37 @@ impl Diagnostic {
                     d.port, d.actual, d.expected,
                 ).into()
             }
+            DiagnosticPayload::NotYetImplemented(d) => {
+                format!("Not yet implemented: {}", d.feature).into()
+            }
+            DiagnosticPayload::TypeArgCount(d) => {
+                format!(
+                    "Type {} takes {} type argument{}, but {} {} given",
+                    d.typ,
+                    d.expected,
+                    if d.expected == 1 { "" } else { "s" },
+                    d.actual,
+                    if d.actual == 1 { "was" } else { "were" },
+                ).into()
+            }
+            DiagnosticPayload::TypeArgKind(d) => {
+                format!(
+                    "Type argument mismatch: parameter {} of {} expects {}, but found {}",
+                    d.param, d.typ, d.expected, d.actual,
+                ).into()
+            }
+            DiagnosticPayload::UnknownKind(d) => {
+                format!(
+                    "Unknown kind {}: generic parameters must be declared as `: Type` or `: Nat`",
+                    d.kind,
+                ).into()
+            }
+            DiagnosticPayload::CtorRequiresArgs(d) => {
+                format!(
+                    "Ctor {} requires arguments: use @{}(...)",
+                    d.ctor, d.ctor,
+                ).into()
+            }
         }
     }
 
@@ -674,5 +753,6 @@ from_diagnostic! {
     InvalidWordIndexWidth, IndexNotWordType, RedundantUnused, RedundantDriver,
     CombinationalLoop, InitialForNonReg, InitialMultiple, InitialInsideWhenMatch,
     ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,
-    PlatformPortTypeMismatch,
+    PlatformPortTypeMismatch, NotYetImplemented, TypeArgCount, TypeArgKind, UnknownKind,
+    CtorRequiresArgs,
 }

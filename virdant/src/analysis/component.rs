@@ -153,6 +153,52 @@ fn drives_channel(role: SocketRole, dir: ChannelDir) -> bool {
     )
 }
 
+/// The `GenericsParams` node of an instantiation (`mod f of Fifo[Word[8]]`,
+/// `client socket s of Pipe[Bit]`), if it has type arguments.
+fn instantiation_args_node<'p>(node: &'p AstNode<'p>) -> Option<AstNode<'p>> {
+    node.children()
+        .into_iter()
+        .find(|child| matches!(child.payload(), AstNodePayload::GenericsParams(_)))
+}
+
+/// Guard for the not-yet-implemented generics slice: instantiating a
+/// generic socket/mod def, or supplying type arguments to a socket/mod
+/// instantiation, must fail loudly rather than silently or with a
+/// confusing downstream error.
+///
+/// * A generic def instantiated (even bare) reports
+///   `NotYetImplemented: generic socket defs / mod defs are not yet
+///   supported`, pointing at the def's parameter list.
+/// * Type arguments on the instantiation report
+///   `NotYetImplemented: type arguments on socket/mod instantiation are
+///   not yet supported`, pointing at the argument list.
+fn guard_generic_instantiation(
+    builder: &mut Builder,
+    def_symbol: &crate::analysis::symbols::Symbol,
+    args_node: Option<&AstNode<'_>>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let location = def_symbol.location();
+    let parsing = builder.get_parsing(location.package());
+    let def_node = parsing.ast_node(location.ast_node_id());
+    if let Some(generics_node) = crate::types::typedef::generics_decl_of(&def_node) {
+        diagnostics.push(Diagnostic::new(
+            generics_node.region(),
+            diagnostics::NotYetImplemented {
+                feature: "generic socket defs / mod defs are not yet supported".into(),
+            },
+        ));
+    }
+    if let Some(args_node) = args_node {
+        diagnostics.push(Diagnostic::new(
+            args_node.region(),
+            diagnostics::NotYetImplemented {
+                feature: "type arguments on socket/mod instantiation are not yet supported".into(),
+            },
+        ));
+    }
+}
+
 pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) -> Arc<ComponentAnalysis> {
     let mut component_analysis = ComponentAnalysis {
         moddef,
@@ -241,6 +287,12 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     }
                 };
                 let submodule_location = submodule_symbol.location();
+                guard_generic_instantiation(
+                    builder,
+                    &submodule_symbol,
+                    instantiation_args_node(&stmt).as_ref(),
+                    &mut component_analysis.diagnostics,
+                );
                 let submodule_parsing = builder.get_parsing(submodule_location.package());
                 let submodule_ast = submodule_parsing.ast_node(submodule_location.ast_node_id());
                 for submodule_stmt in submodule_ast.children() {
@@ -299,6 +351,13 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                             let Some(socket_symbol) = socket_package.and_then(|pkg| symboltable.resolve_item(socket_name, pkg)) else {
                                 continue;
                             };
+
+                            guard_generic_instantiation(
+                                builder,
+                                socket_symbol,
+                                instantiation_args_node(&submodule_stmt).as_ref(),
+                                &mut component_analysis.diagnostics,
+                            );
 
                             let socket_def_location = socket_symbol.location();
                             let socket_def_parsing = builder.get_parsing(socket_def_location.package());
@@ -368,6 +427,13 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 let Some(socket_symbol) = socket_package.and_then(|pkg| symboltable.resolve_item(socket_name, pkg)) else {
                     continue;
                 };
+
+                guard_generic_instantiation(
+                    builder,
+                    socket_symbol,
+                    instantiation_args_node(&stmt).as_ref(),
+                    &mut component_analysis.diagnostics,
+                );
 
                 let socket_location = socket_symbol.location();
                 let socket_parsing = builder.get_parsing(socket_location.package());
@@ -605,25 +671,28 @@ fn collect_references(
             AstNodePayload::Submodule(submodule) => {
                 let name = stmt.parsing.string(submodule.name);
                 let children = stmt.children();
-                if children.len() == 3 {
-                    let it_block = &children[2];
-                    if matches!(it_block.payload(), AstNodePayload::It) {
-                        let block = &it_block.children()[0];
-                        let name_with_context =
-                            if let Some(ctx) = it_context {
-                                let mut new_name = BString::from(ctx);
-                                new_name.push(b'.');
-                                new_name.extend_from_slice(name);
-                                new_name
-                            } else {
-                                BString::from(name)
-                            };
-                        collect_references(
-                            &block.children(),
-                            component_analysis,
-                            Some(name_with_context.as_bstr()),
-                        );
-                    }
+                // The It-block is found by payload rather than by index,
+                // so the optional GenericsParams child of a type-argument
+                // instantiation does not shift it out from under us.
+                if let Some(it_block) = children
+                    .iter()
+                    .find(|c| matches!(c.payload(), AstNodePayload::It))
+                {
+                    let block = &it_block.children()[0];
+                    let name_with_context =
+                        if let Some(ctx) = it_context {
+                            let mut new_name = BString::from(ctx);
+                            new_name.push(b'.');
+                            new_name.extend_from_slice(name);
+                            new_name
+                        } else {
+                            BString::from(name)
+                        };
+                    collect_references(
+                        &block.children(),
+                        component_analysis,
+                        Some(name_with_context.as_bstr()),
+                    );
                 }
             }
             AstNodePayload::Component(component) => {

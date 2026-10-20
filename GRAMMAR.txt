@@ -25,11 +25,11 @@ Item :=
     | SocketDef
     | PlatformDef
 
-ModDef := DocString? Annotations "ext"? "export"? "mod" Ident ForClause? "{" ModDefStmt* "}"
+ModDef := DocString? Annotations "ext"? "export"? "mod" Ident ForClause? Generics? "{" ModDefStmt* "}"
 
 ForClause := "for" Ofness
 
-StructDef := DocString? Annotations "struct" "type" Ident "{" StructDefStmt* "}"
+StructDef := DocString? Annotations "struct" "type" Ident Generics? "{" StructDefStmt* "}"
 
 PlatformDef := DocString? Annotations "platform" Ident "{" PlatformStmt* "}"
 
@@ -37,7 +37,7 @@ PlatformStmt := ModDefStmtComponent
 
 StructDefStmt := DocString? Annotations Ident ":" Type
 
-UnionDef := DocString? Annotations "union" "type" Ident "{" UnionDefStmt* "}"
+UnionDef := DocString? Annotations "union" "type" Ident Generics? "{" UnionDefStmt* "}"
 
 UnionDefStmt := DocString? Annotations Ident ParamList?
 
@@ -49,21 +49,30 @@ Params :=
 
 Param := DocString? Annotations Ident ":" Type
 
-GenericsParams :=
-      "[" Nat "]"
-    | "[" Type "]"
+GenericsParams := "[" GenericsArgList "]"
 
-Generics := "[" Ident ":" Kind "]"
+GenericsArgList := (GenericsArg ",")* GenericsArg
 
-EnumDef := DocString? Annotations "enum" "type" Ident "{" EnumDefStmt* "}"
+GenericsArg :=
+      Nat
+    | Type
+
+Generics := "[" KindParamList "]"
+
+KindParamList := (KindParam ",")* KindParam
+
+KindParam := Ident ":" Kind
+
+EnumDef := DocString? Annotations "enum" "type" Ident Generics? "{" EnumDefStmt* "}"
 
 EnumDefStmt :=
       DocString? Annotations Ident "=" Expr
-    | DocString? Annotations Ident
+    | DocString? Annotations Ident ParamList?
+    | DocString? Annotations Ident ParamList "=" Expr
 
 BuiltinDef := DocString? Annotations "builtin" "type" Ident Generics? "{" "}"
 
-SocketDef := DocString? Annotations "socket" Ident "{" SocketDefStmt* "}"
+SocketDef := DocString? Annotations "socket" Ident Generics? "{" SocketDefStmt* "}"
 
 SocketDefStmt :=
       DocString? Annotations "cosi" Ident ":" Type
@@ -95,13 +104,13 @@ ModDefStmtDriver :=
     | Path "<=" Expr
     | Path ":=:" Path
 
-ModDefStmtInstance := DocString? Annotations "mod" Ident "of" Ofness ItBlock?
+ModDefStmtInstance := DocString? Annotations "mod" Ident "of" Ofness GenericsParams? ItBlock?
 
 ItBlock := ModDefStmtBlock
 
 ModDefStmtSocket :=
-      DocString? Annotations "client" "socket" Ident "of" Ofness ItBlock?
-    | DocString? Annotations "server" "socket" Ident "of" Ofness ItBlock?
+      DocString? Annotations "client" "socket" Ident "of" Ofness GenericsParams? ItBlock?
+    | DocString? Annotations "server" "socket" Ident "of" Ofness GenericsParams? ItBlock?
 
 ModDefStmtWhen := "when" "{" ModDefStmtWhenArm* "}"
 

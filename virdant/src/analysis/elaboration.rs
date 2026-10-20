@@ -280,6 +280,18 @@ fn elaborate_module(
                         Some(symbol) => symbol.clone(),
                         None => continue,
                     };
+                // Generic mod defs are not yet implemented (guarded with
+                // an error by the component analysis); skip them here so
+                // their generic (Param-carrying) types never reach mono
+                // artifacts.
+                {
+                    let submodule_location = submodule_symbol.location();
+                    let submodule_parsing = builder.get_parsing(submodule_location.package());
+                    let submodule_ast = submodule_parsing.ast_node(submodule_location.ast_node_id());
+                    if crate::types::typedef::generics_decl_of(&submodule_ast).is_some() {
+                        continue;
+                    }
+                }
                 let child_prefix = format!("{prefix}.{instance_name}");
                 let ctx = ParentCtx {
                     component_analysis: component_analysis.clone(),
@@ -316,6 +328,19 @@ fn elaborate_module(
                     Some(symbol) => symbol.clone(),
                     None => continue,
                 };
+
+                // Generic socket defs are not yet implemented (guarded
+                // with an error by the component analysis); skip them
+                // here so their generic (Param-carrying) types never
+                // reach mono artifacts.
+                {
+                    let socket_def_location = socket_symbol.location();
+                    let socket_def_parsing = builder.get_parsing(socket_def_location.package());
+                    let socket_def_ast = socket_def_parsing.ast_node(socket_def_location.ast_node_id());
+                    if crate::types::typedef::generics_decl_of(&socket_def_ast).is_some() {
+                        continue;
+                    }
+                }
 
                 let socket_prefix: BString = format!(
                     "{prefix}.{}",

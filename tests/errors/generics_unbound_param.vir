@@ -1,0 +1,14 @@
+// A generic parameter referenced outside its declaring def.
+
+struct type Box[T : Type] {
+    value : T
+}
+
+export mod Top {
+    incoming inp : T
+    outgoing out : Bit
+    out := inp[0]
+}
+
+// CHECK: Unresolved type T
+// CHECK: Check failed

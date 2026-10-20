@@ -1,0 +1,10 @@
+// A Nat-kind parameter given a type: Word[Bit].
+
+export mod Top {
+    incoming inp : Word[Bit]
+    outgoing out : Bit
+    out := inp[0]
+}
+
+// CHECK: Type argument mismatch: parameter n of Word expects a Nat, but found a type
+// CHECK: Check failed

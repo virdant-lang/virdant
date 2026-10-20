@@ -10,7 +10,7 @@ use bstr::ByteSlice;
 
 use crate::analysis::drivers::{Driver, DriverWhen, DriverMatch};
 use crate::analysis::location::Location;
-use crate::analysis::symbols::SymbolTable;
+use crate::analysis::symbols::{SymbolId, SymbolTable};
 use crate::common::{self, ComponentKind, DriverType, Radix, TypeScheme, Width, WordValue};
 use crate::db::Db;
 use crate::package::PackageId;
@@ -821,98 +821,13 @@ impl<'d> Converter<'d> {
             let mut bound_keys: Vec<String> = vec![];
             let pattern = match pat.as_ref().map(|p| p.payload()) {
                 None => { has_else = true; verilog::CasePattern::Default },
-                Some(AstNodePayload::PatEnumerant(pat_enumerant)) => {
+                Some(AstNodePayload::PatEnumerant(_)) => {
                     let pat = pat.unwrap();
-                    let enumerant_name = pat.parsing.string(pat_enumerant.name);
-                    let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
-                    let symboltable = db.get_symboltable();
-                    let typedef = db.get_typedef(*typedef_symbol_id);
-                    let enumerant_sym = symboltable.slot(*typedef_symbol_id, enumerant_name).unwrap();
-                    let value = *typedef.enumerant_values.get(&enumerant_sym.id()).unwrap();
-                    let width = type_width(&subject_typ, db);
-                    let pat_str = format!("{:0>width$b}", value, width = width as usize);
-                    verilog::CasePattern::PatternLit(verilog::PatternLit { width, radix: Radix::Bin, pattern: pat_str })
+                    self.build_enumerant_case_pattern(&pat, &subject_typ)
                 }
-                Some(AstNodePayload::PatCtor(pat_ident)) => {
+                Some(AstNodePayload::PatCtor(_)) => {
                     let pat = pat.unwrap();
-                    let ctor_name = pat.parsing.string(pat_ident.name);
-                    // Handle builtin Valid[T] pattern constructors
-                    if let Type::Valid(inner_typ) = &subject_typ {
-                        let inner_width = type_width(inner_typ, db);
-                        let total_width = inner_width + 1;
-                        if ctor_name.as_bytes() == b"Valid" {
-                            for bound_var in pat.children().iter() {
-                                let Some(var_path) = bound_var.path() else { continue };
-                                let var_name = bound_var.parsing.string(
-                                    var_path,
-                                ).to_str_lossy().into_owned();
-                                let slice_expr = verilog::Expr::IndexRange(
-                                    verilog::expr::IndexRange {
-                                        subject: Box::new(subject_expr.clone()),
-                                        index_hi: Box::new(constant_index_expr(inner_width - 1)),
-                                        index_lo: Box::new(constant_index_expr(0)),
-                                    },
-                                );
-                                scheduler.subst.insert(var_name.clone(), slice_expr);
-                                bound_keys.push(var_name);
-                            }
-                            verilog::CasePattern::PatternLit(verilog::PatternLit {
-                                width: total_width,
-                                radix: Radix::Bin,
-                                pattern: format!("1{}", "?".repeat(inner_width as usize)),
-                            })
-                        } else {
-                            verilog::CasePattern::PatternLit(verilog::PatternLit {
-                                width: total_width,
-                                radix: Radix::Bin,
-                                pattern: format!("0{}", "?".repeat(inner_width as usize)),
-                            })
-                        }
-                    } else {
-                    let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
-                    let symboltable = db.get_symboltable();
-                    let slots = symboltable.slots(*typedef_symbol_id);
-                    let ctor_slot = symboltable.slot(*typedef_symbol_id, ctor_name).unwrap();
-                    let ctor_sym_id = ctor_slot.id();
-                    let slot_index = slots.iter().position(|s| s.id() == ctor_sym_id).unwrap();
-                    let tag_width: Width = slots.len().try_into().unwrap();
-                    let tag_value: u64 = 1u64 << slot_index;
-                    let max_payload_width: Width = slots.iter().map(|slot| {
-                        let sig = db.get_ctor_signature(slot.id());
-                        sig.parameters.iter().map(|(_n, pt)| type_width(pt, db)).sum::<Width>()
-                    }).max().unwrap_or(0);
-                    let this_sig = db.get_ctor_signature(ctor_sym_id);
-                    let arg_widths: Vec<Width> = this_sig.parameters.iter()
-                        .map(|(_n, pt)| type_width(pt, db)).collect();
-                    let mut bit_ranges = vec![(0u16, 0u16); arg_widths.len()];
-                    let mut current_lo = tag_width;
-                    for j in (0..arg_widths.len()).rev() {
-                        let w = arg_widths[j];
-                        bit_ranges[j] = (current_lo, current_lo + w - 1);
-                        current_lo += w;
-                    }
-                    for (j, bound_var) in pat.children().iter().enumerate() {
-                        let Some(var_path) = bound_var.path() else { continue };
-                        let var_name = bound_var.parsing.string(var_path)
-                            .to_str_lossy().into_owned();
-                        let (lo, hi) = bit_ranges[j];
-                        let slice_expr = verilog::Expr::IndexRange(verilog::expr::IndexRange {
-                            subject: Box::new(subject_expr.clone()),
-                            index_hi: Box::new(constant_index_expr(hi)),
-                            index_lo: Box::new(constant_index_expr(lo)),
-                        });
-                        scheduler.subst.insert(var_name.clone(), slice_expr);
-                        bound_keys.push(var_name);
-                    }
-                    let tag_bin = format!("{:0>width$b}", tag_value, width = tag_width as usize);
-                    let question_marks = "?".repeat(max_payload_width as usize);
-                    let pattern_str = format!("{}{}", question_marks, tag_bin);
-                    verilog::CasePattern::PatternLit(verilog::PatternLit {
-                        width: tag_width + max_payload_width,
-                        radix: Radix::Bin,
-                        pattern: pattern_str,
-                    })
-                }
+                    self.build_ctor_case_pattern(&pat, &subject_expr, &subject_typ, scheduler, &mut bound_keys)
                 }
                 Some(AstNodePayload::PatWordLit(pat_word_lit)) => {
                     let pat = pat.unwrap();
@@ -961,104 +876,17 @@ impl<'d> Converter<'d> {
         scheduler: &mut ExprScheduler,
         bound_keys: &mut Vec<String>,
     ) -> verilog::CasePattern {
-        let db = self.db;
         match pat_node.payload() {
-            AstNodePayload::PatEnumerant(pat_enumerant) => {
-                let enumerant_name = pat_node.parsing.string(pat_enumerant.name);
-                let Type::Usual(typedef_symbol_id) = subject_typ else { unreachable!() };
-                let symboltable = db.get_symboltable();
-                let typedef = db.get_typedef(*typedef_symbol_id);
-                let enumerant_sym = symboltable.slot(*typedef_symbol_id, enumerant_name).unwrap();
-                let value = *typedef.enumerant_values.get(&enumerant_sym.id()).unwrap();
-                let width = type_width(subject_typ, db);
-                let pat_str = format!("{:0>width$b}", value, width = width as usize);
-                verilog::CasePattern::PatternLit(verilog::PatternLit { width, radix: Radix::Bin, pattern: pat_str })
+            AstNodePayload::PatEnumerant(_) => {
+                self.build_enumerant_case_pattern(pat_node, subject_typ)
             }
-            AstNodePayload::PatCtor(pat_ctor) => {
-                let ctor_name = pat_node.parsing.string(pat_ctor.name);
-                // Handle builtin Valid[T] pattern constructors: @Valid(t) and @Invalid()
-                if let Type::Valid(inner_typ) = subject_typ {
-                    let inner_width = type_width(inner_typ, db);
-                    let total_width = inner_width + 1;
-                    if ctor_name.as_bytes() == b"Valid" {
-                        for bound_var in pat_node.children().iter() {
-                            let Some(var_path) = bound_var.path() else { continue };
-                            let var_name = bound_var.parsing.string(
-                                var_path,
-                            ).to_str_lossy().into_owned();
-                            let slice_expr = verilog::Expr::IndexRange(
-                                verilog::expr::IndexRange {
-                                    subject: Box::new(subject_expr.clone()),
-                                    index_hi: Box::new(constant_index_expr(inner_width - 1)),
-                                    index_lo: Box::new(constant_index_expr(0)),
-                                },
-                            );
-                            scheduler.subst.insert(var_name.clone(), slice_expr);
-                            bound_keys.push(var_name);
-                        }
-                        verilog::CasePattern::PatternLit(verilog::PatternLit {
-                            width: total_width,
-                            radix: Radix::Bin,
-                            pattern: format!("1{}", "?".repeat(inner_width as usize)),
-                        })
-                    } else {
-                        // @Invalid() takes no arguments, so no bindings
-                        verilog::CasePattern::PatternLit(verilog::PatternLit {
-                            width: total_width,
-                            radix: Radix::Bin,
-                            pattern: format!("0{}", "?".repeat(inner_width as usize)),
-                        })
-                    }
-                } else {
-                    let Type::Usual(typedef_symbol_id) = subject_typ else { unreachable!() };
-                    let symboltable = db.get_symboltable();
-                    let slots = symboltable.slots(*typedef_symbol_id);
-                    let ctor_slot = symboltable.slot(*typedef_symbol_id, ctor_name).unwrap();
-                    let ctor_sym_id = ctor_slot.id();
-                    let slot_index = slots.iter().position(|s| s.id() == ctor_sym_id).unwrap();
-                    let tag_width: Width = slots.len().try_into().unwrap();
-                    let tag_value: u64 = 1u64 << slot_index;
-                    let max_payload_width: Width = slots.iter().map(|slot| {
-                        let sig = db.get_ctor_signature(slot.id());
-                        sig.parameters.iter().map(|(_n, pt)| type_width(pt, db)).sum::<Width>()
-                    }).max().unwrap_or(0);
-                    let this_sig = db.get_ctor_signature(ctor_sym_id);
-                    let arg_widths: Vec<Width> = this_sig.parameters.iter()
-                        .map(|(_n, pt)| type_width(pt, db)).collect();
-                    let mut bit_ranges = vec![(0u16, 0u16); arg_widths.len()];
-                    let mut current_lo = tag_width;
-                    for j in (0..arg_widths.len()).rev() {
-                        let w = arg_widths[j];
-                        bit_ranges[j] = (current_lo, current_lo + w - 1);
-                        current_lo += w;
-                    }
-                    for (j, bound_var) in pat_node.children().iter().enumerate() {
-                        let Some(var_path) = bound_var.path() else { continue };
-                        let var_name = bound_var.parsing.string(var_path)
-                            .to_str_lossy().into_owned();
-                        let (lo, hi) = bit_ranges[j];
-                        let slice_expr = verilog::Expr::IndexRange(verilog::expr::IndexRange {
-                            subject: Box::new(subject_expr.clone()),
-                            index_hi: Box::new(constant_index_expr(hi)),
-                            index_lo: Box::new(constant_index_expr(lo)),
-                        });
-                        scheduler.subst.insert(var_name.clone(), slice_expr);
-                        bound_keys.push(var_name);
-                    }
-                    let tag_bin = format!("{:0>width$b}", tag_value, width = tag_width as usize);
-                    let question_marks = "?".repeat(max_payload_width as usize);
-                    let pattern_str = format!("{}{}", question_marks, tag_bin);
-                    verilog::CasePattern::PatternLit(verilog::PatternLit {
-                        width: tag_width + max_payload_width,
-                        radix: Radix::Bin,
-                        pattern: pattern_str,
-                    })
-                }
+            AstNodePayload::PatCtor(_) => {
+                self.build_ctor_case_pattern(pat_node, subject_expr, subject_typ, scheduler, bound_keys)
             }
             AstNodePayload::PatWordLit(pat_word_lit) => {
                 let literal = pat_node.parsing.string(pat_word_lit.literal).to_str_lossy().into_owned();
                 let (value, _lit_width) = parse_word_literal(&literal);
-                let width = type_width(subject_typ, db);
+                let width = type_width(subject_typ, self.db);
                 let pat_str = format!("{:0>width$b}", value, width = width as usize);
                 verilog::CasePattern::PatternLit(verilog::PatternLit { width, radix: Radix::Bin, pattern: pat_str })
             }
@@ -1071,7 +899,7 @@ impl<'d> Converter<'d> {
                 let var_name = pat_node.parsing.string(pat_ident.name).to_str_lossy().into_owned();
                 scheduler.subst.insert(var_name.clone(), subject_expr.clone());
                 bound_keys.push(var_name);
-                let width = type_width(subject_typ, db);
+                let width = type_width(subject_typ, self.db);
                 verilog::CasePattern::PatternLit(verilog::PatternLit {
                     width,
                     radix: Radix::Bin,
@@ -1080,7 +908,7 @@ impl<'d> Converter<'d> {
             }
             AstNodePayload::PatDontcare => {
                 // Dontcare patterns match everything without binding.
-                let width = type_width(subject_typ, db);
+                let width = type_width(subject_typ, self.db);
                 verilog::CasePattern::PatternLit(verilog::PatternLit {
                     width,
                     radix: Radix::Bin,
@@ -1088,6 +916,192 @@ impl<'d> Converter<'d> {
                 })
             }
             _ => unreachable!("expected pattern node"),
+        }
+    }
+
+    /// Build a `casez` pattern for a `@Name(...)` ctor (or payload
+    /// enumerant) pattern, registering bound-variable bit-slices into
+    /// `scheduler.subst`.
+    ///
+    /// Layout (LSB→MSB): tag | argN | ... | arg0 | padding.
+    fn build_ctor_case_pattern(
+        &self,
+        pat_node: &AstNode,
+        subject_expr: &verilog::Expr,
+        subject_typ: &Type,
+        scheduler: &mut ExprScheduler,
+        bound_keys: &mut Vec<String>,
+    ) -> verilog::CasePattern {
+        let Type::Usual(typedef_sym, args) = subject_typ else {
+            unreachable!("ctor pattern subject must be a typedef type, got {subject_typ:?}")
+        };
+        let symboltable = self.db.get_symboltable();
+        let AstNodePayload::PatCtor(pat_ctor) = pat_node.payload() else {
+            unreachable!("expected PatCtor node")
+        };
+        let ctor_name = pat_node.parsing().string(pat_ctor.name);
+        let ctor_slot = symboltable
+            .slot(*typedef_sym, ctor_name)
+            .unwrap_or_else(|| panic!("unknown ctor name {ctor_name} in pattern"));
+        let layout = tagged_layout(self.db, *typedef_sym, args);
+        let (tag_value, arg_widths) = layout.slot(ctor_slot.id());
+
+        // Compute bit ranges: tag at [tag_width-1:0], then args from last to first.
+        let mut bit_ranges = vec![(0u16, 0u16); arg_widths.len()];
+        let mut current_lo = layout.tag_width;
+        for j in (0..arg_widths.len()).rev() {
+            let w = arg_widths[j];
+            bit_ranges[j] = (current_lo, current_lo + w.saturating_sub(1));
+            current_lo += w;
+        }
+        // Register subst for each bound variable as a direct bit-slice.
+        for (j, bound_var) in pat_node.children().iter().enumerate() {
+            let Some(var_path) = bound_var.path() else { continue };
+            let var_name = bound_var.parsing.string(var_path)
+                .to_str_lossy().into_owned();
+            let (lo, hi) = bit_ranges[j];
+            let slice_expr = verilog::Expr::IndexRange(verilog::expr::IndexRange {
+                subject: Box::new(subject_expr.clone()),
+                index_hi: Box::new(constant_index_expr(hi)),
+                index_lo: Box::new(constant_index_expr(lo)),
+            });
+            scheduler.subst.insert(var_name.clone(), slice_expr);
+            bound_keys.push(var_name);
+        }
+        // Build casez pattern: ?'s for payload, exact binary tag at LSB
+        let tag_bin = format!("{:0>width$b}", tag_value, width = layout.tag_width as usize);
+        let question_marks = "?".repeat(layout.max_payload as usize);
+        verilog::CasePattern::PatternLit(verilog::PatternLit {
+            width: layout.tag_width + layout.max_payload,
+            radix: Radix::Bin,
+            pattern: format!("{}{}", question_marks, tag_bin),
+        })
+    }
+
+    /// Build a `casez` pattern for a `#Name` enumerant pattern.
+    ///
+    /// For enums whose enumerants carry payloads, the payload bits are
+    /// matched as `?`s above the tag, mirroring how the ctor value is
+    /// packed.
+    fn build_enumerant_case_pattern(
+        &self,
+        pat_node: &AstNode,
+        subject_typ: &Type,
+    ) -> verilog::CasePattern {
+        let Type::Usual(typedef_sym, args) = subject_typ else {
+            unreachable!("enumerant pattern subject must be an enum type, got {subject_typ:?}")
+        };
+        let symboltable = self.db.get_symboltable();
+        let AstNodePayload::PatEnumerant(pat_enumerant) = pat_node.payload() else {
+            unreachable!("expected PatEnumerant node")
+        };
+        let enumerant_name = pat_node.parsing().string(pat_enumerant.name);
+        let enumerant_sym = symboltable
+            .slot(*typedef_sym, enumerant_name)
+            .unwrap_or_else(|| panic!("unknown enumerant name {enumerant_name} in pattern"));
+        let layout = tagged_layout(self.db, *typedef_sym, args);
+        let (value, _) = layout.slot(enumerant_sym.id());
+
+        if layout.max_payload > 0 {
+            let tag_bin = format!("{:0>width$b}", value, width = layout.tag_width as usize);
+            let question_marks = "?".repeat(layout.max_payload as usize);
+            verilog::CasePattern::PatternLit(verilog::PatternLit {
+                width: layout.tag_width + layout.max_payload,
+                radix: Radix::Bin,
+                pattern: format!("{}{}", question_marks, tag_bin),
+            })
+        } else {
+            let width = type_width(subject_typ, self.db);
+            let pat_str = format!("{:0>width$b}", value, width = width as usize);
+            verilog::CasePattern::PatternLit(verilog::PatternLit { width, radix: Radix::Bin, pattern: pat_str })
+        }
+    }
+
+    /// Convert a constructor expression (`@Name(args)`) of a union ctor
+    /// or an enum payload enumerant into its packed Verilog value.
+    ///
+    /// Layout (LSB→MSB): tag | argN | ... | arg0 | padding.
+    fn convert_ctor_expr(
+        &self,
+        package: PackageId,
+        node: AstNode,
+        typ: &Type,
+        typing: &Arc<Typing>,
+        db: &Db,
+        scheduler: &mut ExprScheduler,
+    ) -> verilog::Expr {
+        let Type::Usual(typedef_sym, args) = typ else {
+            unreachable!("ctor expression must have a typedef type, got {typ:?}")
+        };
+        let ctor_symbol_id = typing.tag(node.location()).symbol_id().unwrap();
+        let layout = tagged_layout(db, *typedef_sym, args);
+        let (tag_value, arg_widths) = layout.slot(ctor_symbol_id);
+
+        let tag_expr = verilog::Expr::WordLit(verilog::expr::WordLit {
+            value: tag_value,
+            width: layout.tag_width,
+            radix: Radix::Bin,
+        });
+
+        if layout.max_payload == 0 {
+            // No payload at all: just return the tag word.
+            return tag_expr;
+        }
+
+        // Build the full value: {padding, arg0, ..., argN, tag}
+        // This ensures the tag is always at consistent LSB bit positions
+        // regardless of which ctor variant is used, enabling casez matching.
+        let this_sig = db.get_ctor_signature(ctor_symbol_id);
+        let arguments = node.children();
+        let this_payload_width: Width = arg_widths.iter().sum();
+        let padding_width = layout.max_payload - this_payload_width;
+
+        let mut exprs = vec![];
+        if padding_width > 0 {
+            exprs.push(padding_expr(padding_width));
+        }
+        // Arguments in order (first arg at higher bits than last arg),
+        // substituting the def's generic parameters with the type args.
+        for (arg, (_param_name, param_typ)) in arguments.iter().zip(this_sig.parameters.iter()) {
+            let param_typ = crate::types::substitute::substitute(param_typ, args);
+            exprs.push(self.convert_expr(package, arg.clone(), &param_typ, db, scheduler));
+        }
+        // Tag at LSB (least significant, rightmost in concat)
+        exprs.push(tag_expr);
+
+        let total_width = layout.tag_width + layout.max_payload;
+        verilog::Expr::Concat(verilog::expr::Concat { exprs, width: total_width })
+    }
+
+    /// Convert an enumerant expression (`#Name`) into its packed
+    /// Verilog value: for enums whose enumerants carry payloads, the
+    /// payload bits are filled with padding (mirroring `@Name(...)`);
+    /// otherwise the value is the bare tag word.
+    fn convert_enumerant_expr(
+        &self,
+        node: AstNode,
+        typing: &Arc<Typing>,
+        typ: &Type,
+    ) -> verilog::Expr {
+        let Type::Usual(typedef_sym, args) = typ else {
+            unreachable!("{:?} type is {:?}", node.region(), typ)
+        };
+        let enumerant_symbol_id = typing.tag(node.location()).symbol_id().unwrap();
+        let layout = tagged_layout(self.db, *typedef_sym, args);
+        let (value, _) = layout.slot(enumerant_symbol_id);
+
+        if layout.max_payload > 0 {
+            let mut exprs = vec![padding_expr(layout.max_payload)];
+            exprs.push(verilog::Expr::WordLit(verilog::expr::WordLit {
+                value,
+                width: layout.tag_width,
+                radix: Radix::Bin,
+            }));
+            let total_width = layout.tag_width + layout.max_payload;
+            verilog::Expr::Concat(verilog::expr::Concat { exprs, width: total_width })
+        } else {
+            let width: Width = type_width(typ, self.db);
+            verilog::Expr::WordLit(verilog::expr::WordLit { value, width, radix: Radix::Dec })
         }
     }
 
@@ -1208,130 +1222,10 @@ impl<'d> Converter<'d> {
                 verilog::Expr::XLit(verilog::expr::XLit { width })
             }
             AstNodePayload::ExprCtor(_ctor) => {
-                let symboltable = db.get_symboltable();
-                // Handle builtin Valid[T] constructors: @Valid(t) and @Invalid()
-                if let Type::Valid(inner_typ) = typ {
-                    let ctor_name = node.parsing().string(_ctor.ctor);
-                    let inner_width = type_width(inner_typ, db);
-                    let total_width = inner_width + 1;
-                    if ctor_name.as_bytes() == b"Valid" {
-                        let children = node.children();
-                        let inner_expr = self.convert_expr(
-                            package, children[0].clone(), inner_typ, db, scheduler,
-                        );
-                        return verilog::Expr::Concat(verilog::expr::Concat {
-                            exprs: vec![
-                                verilog::Expr::BitLit(verilog::expr::BitLit { value: true }),
-                                inner_expr,
-                            ],
-                            width: total_width,
-                        });
-                    } else {
-                        let mut exprs = vec![
-                            verilog::Expr::BitLit(verilog::expr::BitLit { value: false }),
-                        ];
-                        if inner_width > 0 {
-                            let fill_expr = match PADDING_FILL {
-                                "x" => verilog::Expr::XLit(verilog::expr::XLit { width: inner_width }),
-                                "z" => verilog::Expr::ZLit(verilog::expr::ZLit { width: inner_width }),
-                                "0" => verilog::Expr::Repeat(verilog::expr::Repeat {
-                                    count: Box::new(constant_index_expr(inner_width)),
-                                    exprs: vec![verilog::Expr::BitLit(verilog::expr::BitLit { value: false })],
-                                    width: inner_width,
-                                }),
-                                "1" => verilog::Expr::Repeat(verilog::expr::Repeat {
-                                    count: Box::new(constant_index_expr(inner_width)),
-                                    exprs: vec![verilog::Expr::BitLit(verilog::expr::BitLit { value: true })],
-                                    width: inner_width,
-                                }),
-                                _ => unreachable!("PADDING_FILL must be one of: \"x\", \"z\", \"0\", \"1\""),
-                            };
-                            exprs.push(fill_expr);
-                        }
-                        return verilog::Expr::Concat(
-                            verilog::expr::Concat { exprs, width: total_width },
-                        );
-                    }
-                }
-                let Type::Usual(typedef_symbol_id) = typ else {
-                    unreachable!()
-                };
-                let slots = symboltable.slots(*typedef_symbol_id);
-                let ctor_symbol_id = typing.tag(node.location()).symbol_id().unwrap();
-                let tag_width: Width = TryInto::<u16>::try_into(slots.len()).unwrap();
-                let slot_index = slots.iter().position(|slot_id| slot_id.id() == ctor_symbol_id).unwrap();
-                let tag_value: WordValue = 1 << slot_index;
-
-                // Compute the max payload width across all ctor variants.
-                let max_payload_width: Width = slots.iter().map(|slot| {
-                    let sig = db.get_ctor_signature(slot.id());
-                    sig.parameters.iter().map(|(_name, param_typ)| type_width(param_typ, db)).sum::<Width>()
-                }).max().unwrap_or(0);
-
-                let tag_expr = verilog::Expr::WordLit(verilog::expr::WordLit {
-                    value: tag_value,
-                    width: tag_width,
-                    radix: Radix::Bin,
-                });
-
-                if max_payload_width == 0 {
-                    // No payload at all: just return the tag word.
-                    tag_expr
-                } else {
-                    // Build the full value: {padding_x, arg0, ..., argN, tag}
-                    // Layout (LSB to MSB): tag | argN | ... | arg0 | padding
-                    // This ensures the tag is always at consistent LSB bit positions
-                    // regardless of which ctor variant is used, enabling casez matching.
-                    let this_sig = db.get_ctor_signature(ctor_symbol_id);
-                    let arguments = node.children();
-
-                    let this_payload_width: Width = this_sig.parameters.iter()
-                        .map(|(_name, param_typ)| type_width(param_typ, db))
-                        .sum();
-
-                    let padding_width = max_payload_width - this_payload_width;
-                    let mut exprs = vec![];
-                    // Padding at MSB (most significant, leftmost in concat).
-                    // `padding_fill` controls what value fills unused payload bits.
-                    // Supported: "x" (don't-care), "z" (high-impedance), "0" (zeros), "1" (ones).
-                    if padding_width > 0 {
-                        let padding_expr = match PADDING_FILL {
-                            "x" => verilog::Expr::XLit(verilog::expr::XLit { width: padding_width }),
-                            "z" => verilog::Expr::ZLit(verilog::expr::ZLit { width: padding_width }),
-                            "0" => verilog::Expr::Repeat(verilog::expr::Repeat {
-                                count: Box::new(constant_index_expr(padding_width)),
-                                exprs: vec![verilog::Expr::BitLit(verilog::expr::BitLit { value: false })],
-                                width: padding_width,
-                            }),
-                            "1" => verilog::Expr::Repeat(verilog::expr::Repeat {
-                                count: Box::new(constant_index_expr(padding_width)),
-                                exprs: vec![verilog::Expr::BitLit(verilog::expr::BitLit { value: true })],
-                                width: padding_width,
-                            }),
-                            _ => unreachable!("padding_fill must be one of: \"x\", \"z\", \"0\", \"1\""),
-                        };
-                        exprs.push(padding_expr);
-                    }
-                    // Arguments in order (first arg at higher bits than last arg)
-                    for (arg, (_param_name, param_typ)) in arguments.iter().zip(this_sig.parameters.iter()) {
-                        exprs.push(self.convert_expr(package, arg.clone(), param_typ, db, scheduler));
-                    }
-                    // Tag at LSB (least significant, rightmost in concat)
-                    exprs.push(tag_expr);
-
-                    let total_width = tag_width + max_payload_width;
-                    verilog::Expr::Concat(verilog::expr::Concat { exprs, width: total_width })
-                }
+                self.convert_ctor_expr(package, node, typ, &typing, db, scheduler)
             }
             AstNodePayload::ExprEnumerant(_enumerant) => {
-                let Type::Usual(typedef_symbol_id) = typ else {
-                    unreachable!("{:?} type is {:?}", node.region(), typ)
-                };
-                let typedef = db.get_typedef(*typedef_symbol_id);
-                let enumerant_symbol_id = typing.tag(node.location()).symbol_id().unwrap();
-                let value = *typedef.enumerant_values.get(&enumerant_symbol_id).unwrap();
-                let width: u16 = type_width(typ, db);
-                verilog::Expr::WordLit(verilog::expr::WordLit { value: value, width, radix: Radix::Dec })
+                self.convert_enumerant_expr(node, &typing, typ)
             }
             AstNodePayload::ExprFn => {
                 let tag = typing.tag(node.location());
@@ -1420,110 +1314,13 @@ impl<'d> Converter<'d> {
                     let mut bound_keys: Vec<String> = vec![];
                     let pattern = match pat.as_ref().map(|p| p.payload()) {
                         None => { has_else = true; verilog::CasePattern::Default },
-                        Some(AstNodePayload::PatEnumerant(pat_enumerant)) => {
+                        Some(AstNodePayload::PatEnumerant(_)) => {
                             let pat = pat.unwrap();
-                            let enumerant_name = pat.parsing.string(pat_enumerant.name);
-                            let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
-                            let symboltable = db.get_symboltable();
-                            let typedef = db.get_typedef(*typedef_symbol_id);
-                            let enumerant_sym = symboltable.slot(*typedef_symbol_id, enumerant_name).unwrap();
-                            let value = *typedef.enumerant_values.get(&enumerant_sym.id()).unwrap();
-                            let width = type_width(&subject_typ, db);
-                            let pat_str = format!("{:0>width$b}", value, width = width as usize);
-                            verilog::CasePattern::PatternLit(verilog::PatternLit {
-                                width,
-                                radix: Radix::Bin,
-                                pattern: pat_str,
-                            })
+                            self.build_enumerant_case_pattern(&pat, &subject_typ)
                         }
-                        Some(AstNodePayload::PatCtor(pat_ident)) => {
+                        Some(AstNodePayload::PatCtor(_)) => {
                             let pat = pat.unwrap();
-                            let ctor_name = pat.parsing.string(pat_ident.name);
-                            // Handle builtin Valid[T] pattern constructors
-                            if let Type::Valid(inner_typ) = &subject_typ {
-                                let inner_width = type_width(inner_typ, db);
-                                let total_width = inner_width + 1;
-                                if ctor_name.as_bytes() == b"Valid" {
-                                    for bound_var in pat.children().iter() {
-                                        let Some(var_path) = bound_var.path() else { continue };
-                                        let var_name = bound_var.parsing.string(
-                                            var_path,
-                                        ).to_str_lossy().into_owned();
-                                        let slice_expr = verilog::Expr::IndexRange(
-                                            verilog::expr::IndexRange {
-                                                subject: Box::new(subject_expr.clone()),
-                                                index_hi: Box::new(
-                                                    constant_index_expr(inner_width - 1),
-                                                ),
-                                                index_lo: Box::new(constant_index_expr(0)),
-                                            },
-                                        );
-                                        scheduler.subst.insert(var_name.clone(), slice_expr);
-                                        bound_keys.push(var_name);
-                                    }
-                                    verilog::CasePattern::PatternLit(verilog::PatternLit {
-                                        width: total_width,
-                                        radix: Radix::Bin,
-                                        pattern: format!("1{}", "?".repeat(inner_width as usize)),
-                                    })
-                                } else {
-                                    verilog::CasePattern::PatternLit(verilog::PatternLit {
-                                        width: total_width,
-                                        radix: Radix::Bin,
-                                        pattern: format!("0{}", "?".repeat(inner_width as usize)),
-                                    })
-                                }
-                            } else {
-                            let Type::Usual(typedef_symbol_id) = &subject_typ else { unreachable!() };
-                            let symboltable = db.get_symboltable();
-                            let slots = symboltable.slots(*typedef_symbol_id);
-                            // Look up the ctor slot by name (avoids needing typing tags on pattern nodes)
-                            let ctor_slot = symboltable.slot(*typedef_symbol_id, ctor_name).unwrap();
-                            let ctor_sym_id = ctor_slot.id();
-                            let slot_index = slots.iter().position(|s| s.id() == ctor_sym_id).unwrap();
-                            let tag_width: Width = slots.len().try_into().unwrap();
-                            let tag_value: u64 = 1u64 << slot_index;
-                            let max_payload_width: Width = slots.iter().map(|slot| {
-                                let sig = db.get_ctor_signature(slot.id());
-                                sig.parameters.iter().map(|(_n, pt)| type_width(pt, db)).sum::<Width>()
-                            }).max().unwrap_or(0);
-                            let this_sig = db.get_ctor_signature(ctor_sym_id);
-                            let arg_widths: Vec<Width> = this_sig.parameters.iter()
-                                .map(|(_n, pt)| type_width(pt, db))
-                                .collect();
-                            // Compute bit ranges: tag at [tag_width-1:0], then args from last to first.
-                            // Layout (LSB→MSB): tag | argN | arg(N-1) | ... | arg0 | padding
-                            let mut bit_ranges = vec![(0u16, 0u16); arg_widths.len()];
-                            let mut current_lo = tag_width;
-                            for j in (0..arg_widths.len()).rev() {
-                                let w = arg_widths[j];
-                                bit_ranges[j] = (current_lo, current_lo + w - 1);
-                                current_lo += w;
-                            }
-                            // Register subst for each bound variable as a direct bit-slice.
-                            for (j, bound_var) in pat.children().iter().enumerate() {
-                                let Some(var_path) = bound_var.path() else { continue };
-                                let var_name = bound_var.parsing.string(var_path)
-                                    .to_str_lossy().into_owned();
-                                let (lo, hi) = bit_ranges[j];
-                                let slice_expr = verilog::Expr::IndexRange(verilog::expr::IndexRange {
-                                    subject: Box::new(subject_expr.clone()),
-                                    index_hi: Box::new(constant_index_expr(hi)),
-                                    index_lo: Box::new(constant_index_expr(lo)),
-                                });
-                                scheduler.subst.insert(var_name.clone(), slice_expr);
-                                bound_keys.push(var_name);
-                            }
-                            // Build casez pattern: ?'s for payload, exact binary tag at LSB
-                            let tag_bin = format!("{:0>width$b}", tag_value, width = tag_width as usize);
-                            let question_marks = "?".repeat(max_payload_width as usize);
-                            let pattern_str = format!("{}{}", question_marks, tag_bin);
-                            verilog::CasePattern::PatternLit(verilog::PatternLit {
-                                width: tag_width + max_payload_width,
-                                radix: Radix::Bin,
-                                pattern: pattern_str,
-                            })
-                        }
+                            self.build_ctor_case_pattern(&pat, &subject_expr, &subject_typ, scheduler, &mut bound_keys)
                         }
                         Some(AstNodePayload::PatWordLit(pat_word_lit)) => {
                             let pat = pat.unwrap();
@@ -1586,7 +1383,7 @@ impl<'d> Converter<'d> {
             }
             AstNodePayload::ExprStruct => {
                 // Get the struct type to determine field order
-                let Type::Usual(typedef_symbol_id) = typ else {
+                let Type::Usual(typedef_symbol_id, type_args) = typ else {
                     panic!("ExprStruct must have a struct type, got {:?}", typ);
                 };
 
@@ -1606,10 +1403,13 @@ impl<'d> Converter<'d> {
                     let field_name = parsing.string(assign.name).to_str_lossy().into_owned();
                     let expr_node = assign_node.child(0);
 
-                    // Get the field type to convert the expression correctly
+                    // Get the field type to convert the expression correctly,
+                    // substituting the struct def's generic parameters with the
+                    // type arguments of this instantiation.
                     let field_type = struct_fields.iter()
                         .find(|f| f.name.to_str_lossy() == field_name)
                         .and_then(|f| f.typ.clone())
+                        .map(|typ| crate::types::substitute::substitute(&typ, type_args))
                         .unwrap_or_else(|| Type::Word(8)); // fallback
 
                     let field_expr = self.convert_expr(package, expr_node, &field_type, self.db, scheduler);
@@ -1650,12 +1450,14 @@ impl<'d> Converter<'d> {
                     .cloned()
                     .unwrap_or_else(|| Type::Word(8));
 
-                let Type::Usual(typedef_symbol_id) = subject_typ else {
+                let Type::Usual(typedef_symbol_id, type_args) = &subject_typ else {
                     panic!("ExprField subject must have a struct type, got {:?}", subject_typ);
                 };
 
-                // Get the struct fields to determine bit positions
-                let struct_fields = self.db.get_struct_fields(typedef_symbol_id);
+                // Get the struct fields to determine bit positions,
+                // substituting the def's generic parameters with the
+                // subject's type arguments before measuring widths.
+                let struct_fields = self.db.get_struct_fields(*typedef_symbol_id);
                 let parsing = self.db.get_parsing(package);
                 let field_name = parsing.string(field.field);
 
@@ -1668,7 +1470,7 @@ impl<'d> Converter<'d> {
 
                 for struct_field in &struct_fields {
                     let current_field_width = struct_field.typ.as_ref()
-                        .map(|t| type_width(t, self.db))
+                        .map(|t| type_width(&crate::types::substitute::substitute(t, type_args), self.db))
                         .unwrap_or(0);
 
                     if struct_field.name == field_name {
@@ -2045,37 +1847,84 @@ fn cell_annotation(db: &Db, package: PackageId, item_ast: &AstNode<'_>) -> Optio
         .map(|s| s.to_str_lossy().into_owned())
 }
 
-fn type_width(typ: &Type, db: &Db) -> Width {
-    match typ {
-        Type::Bit | Type::Clock | Type::Reset => 1,
-        Type::Word(w) => *w,
-        Type::Usual(typedef_symbol_id) => {
-            let typedef = db.get_typedef(*typedef_symbol_id);
-            let symboltable = db.get_symboltable();
-            let slots = symboltable.slots(*typedef_symbol_id);
-            if typedef.kind == TypeScheme::UnionDef {
-                // For union types: tag_width + max_payload_width across all variants.
-                // tag_width = number of ctor variants (1-hot encoding)
-                let tag_width: Width = slots.len().try_into().unwrap();
-                let max_payload_width: Width = slots.iter().map(|slot| {
-                    let sig = db.get_ctor_signature(slot.id());
-                    sig.parameters.iter().map(|(_n, pt)| type_width(pt, db)).sum::<Width>()
-                }).max().unwrap_or(0);
-                tag_width + max_payload_width
-            } else if typedef.kind == TypeScheme::StructDef {
-                // For struct types: sum of all field widths.
-                let struct_fields = db.get_struct_fields(*typedef_symbol_id);
-                struct_fields.iter().map(|field| {
-                    field.typ.as_ref().map(|t| type_width(t, db)).unwrap_or(0)
-                }).sum::<Width>()
-            } else {
-                // For enum and other types: use typedef width or number of slots.
-                typedef.width.unwrap_or_else(|| slots.len().try_into().unwrap())
+/// Tag+payload packing info for a union or enum type instantiation:
+/// the width of the tag, the widest payload across all ctors /
+/// enumerants, and per-slot tag values and argument widths.
+struct TaggedLayout {
+    tag_width: Width,
+    max_payload: Width,
+    /// `(slot_symbol_id, tag_value, arg_widths)` in slot order.
+    slots: Vec<(SymbolId, WordValue, Vec<Width>)>,
+}
+
+impl TaggedLayout {
+    fn slot(&self, symbol_id: SymbolId) -> (WordValue, &[Width]) {
+        for (slot_id, tag_value, arg_widths) in &self.slots {
+            if *slot_id == symbol_id {
+                return (*tag_value, arg_widths);
             }
         }
-        Type::Valid(inner) => type_width(inner, db) + 1,
+        panic!("slot {symbol_id:?} not found in layout");
     }
 }
+
+/// Compute the `TaggedLayout` of the union or enum instantiation
+/// `Type::Usual(sym, args)`, substituting generic members with `args`.
+///
+/// Unions use a one-hot tag (bit `i` per ctor `i`); enums use their
+/// enumerant values as tags, at the enum's declared (tag) width.
+fn tagged_layout(db: &Db, sym: SymbolId, args: &[Type]) -> TaggedLayout {
+    let symboltable = db.get_symboltable();
+    let typedef = db.get_typedef(sym);
+    let slot_symbols: Vec<SymbolId> = symboltable
+        .slots(sym)
+        .iter()
+        .map(|slot| slot.id())
+        .collect();
+
+    let tag_width: Width = match typedef.kind {
+        TypeScheme::UnionDef => slot_symbols.len().try_into().unwrap(),
+        TypeScheme::EnumDef => typedef.width.unwrap_or_else(|| {
+            slot_symbols.len().try_into().unwrap()
+        }),
+        _ => panic!("tagged_layout on a non-tagged type"),
+    };
+
+    let mut slots = Vec::with_capacity(slot_symbols.len());
+    for (index, slot_id) in slot_symbols.iter().enumerate() {
+        let tag_value: WordValue = match typedef.kind {
+            TypeScheme::UnionDef => 1u64 << index,
+            _ => *typedef
+                .enumerant_values
+                .get(slot_id)
+                .unwrap_or(&0),
+        };
+        let sig = db.get_ctor_signature(*slot_id);
+        let arg_widths: Vec<Width> = sig
+            .parameters
+            .iter()
+            .map(|(_name, typ)| type_width(&crate::types::substitute::substitute(typ, args), db))
+            .collect();
+        slots.push((*slot_id, tag_value, arg_widths));
+    }
+
+    let max_payload: Width = slots
+        .iter()
+        .map(|(_, _, arg_widths)| arg_widths.iter().sum::<Width>())
+        .max()
+        .unwrap_or(0);
+
+    TaggedLayout { tag_width, max_payload, slots }
+}
+
+/// The bit width of the mono type `typ`, delegating to the shared
+/// `types::width::type_width` (which recurses through `Usual`
+/// argument lists and substitutes generic members before measuring).
+fn type_width(typ: &Type, db: &Db) -> Width {
+    let mut ctx = db;
+    crate::types::width::type_width(&mut ctx, typ)
+}
+
 
 fn render_param_value(value: &AnnotationValue) -> String {
     match value {
@@ -2131,6 +1980,27 @@ fn constant_word_expr(width: Width, value: WordValue) -> verilog::Expr {
 
 fn constant_index_expr(index: Width) -> verilog::Expr {
     constant_word_expr(32, u64::from(index))
+}
+
+/// The expression filling `width` bits of unused payload above a ctor's
+/// arguments.  `PADDING_FILL` controls the value: "x" (don't-care),
+/// "z" (high-impedance), "0" (zeros), "1" (ones).
+fn padding_expr(width: Width) -> verilog::Expr {
+    match PADDING_FILL {
+        "x" => verilog::Expr::XLit(verilog::expr::XLit { width }),
+        "z" => verilog::Expr::ZLit(verilog::expr::ZLit { width }),
+        "0" => verilog::Expr::Repeat(verilog::expr::Repeat {
+            count: Box::new(constant_index_expr(width)),
+            exprs: vec![verilog::Expr::BitLit(verilog::expr::BitLit { value: false })],
+            width,
+        }),
+        "1" => verilog::Expr::Repeat(verilog::expr::Repeat {
+            count: Box::new(constant_index_expr(width)),
+            exprs: vec![verilog::Expr::BitLit(verilog::expr::BitLit { value: true })],
+            width,
+        }),
+        _ => unreachable!("PADDING_FILL must be one of: \"x\", \"z\", \"0\", \"1\""),
+    }
 }
 
 fn convert_binop(op: common::BinOp) -> verilog::BinOp {

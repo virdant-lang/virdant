@@ -1,0 +1,15 @@
+// A type reference supplies the wrong number of type arguments.
+
+struct type Pair[A : Type, B : Type] {
+    fst : A
+    snd : B
+}
+
+export mod Top {
+    incoming inp : Pair[Bit]
+    outgoing out : Bit
+    out := inp->fst
+}
+
+// CHECK: Type Pair takes 2 type arguments, but 1 was given
+// CHECK: Check failed

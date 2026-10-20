@@ -43,10 +43,11 @@ pub enum AstNodePayload {
     Channel(Channel),
 
     GenericsParams(GenericsParams),
-    GenericsType,
+    GenericsNat(GenericsNat),
     Generics,
     Param(Param),
 
+    KindParam(KindParam),
     Kind(Kind),
     Type(Type),
 
@@ -121,8 +122,9 @@ impl AstNodePayload {
             AstNodePayload::Channel(_channel) => "Channel",
             AstNodePayload::Param(_param) => "Param",
             AstNodePayload::GenericsParams(_params) => "GenericsParams",
-            AstNodePayload::GenericsType => "GenericsType",
+            AstNodePayload::GenericsNat(_nat) => "GenericsNat",
             AstNodePayload::Generics => "Generics",
+            AstNodePayload::KindParam(_kind_param) => "KindParam",
             AstNodePayload::Kind(_kind) => "Kind",
             AstNodePayload::Type(_) => "Type",
             AstNodePayload::ExprReference => "ExprReference",
@@ -283,8 +285,17 @@ pub struct Channel {
     pub doc_string: Option<InternedString>,
 }
 
+/// The argument list of a type reference or instantiation
+/// (`[Word[8], Bit]`).  The arguments are the node's children: one
+/// `GenericsNat` node per numeric literal argument, one `Type` node per
+/// type argument.
 #[derive(Clone, Debug)]
 pub struct GenericsParams {
+}
+
+/// A numeric literal argument in a `GenericsParams` list.
+#[derive(Clone, Debug)]
+pub struct GenericsNat {
     pub value: InternedString,
 }
 
@@ -296,6 +307,13 @@ pub struct Param {
 
 #[derive(Clone, Debug)]
 pub struct Kind {
+    pub name: InternedString,
+}
+
+/// One generic parameter declaration (`Ident : Kind`) inside a `Generics`
+/// declaration list.  The declared kind is the node's single `Kind` child.
+#[derive(Clone, Debug)]
+pub struct KindParam {
     pub name: InternedString,
 }
 

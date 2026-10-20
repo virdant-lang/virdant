@@ -8,8 +8,11 @@ pub mod typ;
 pub mod typing;
 pub mod typedef;
 pub mod signature;
+pub mod substitute;
+pub mod width;
 pub mod match_coverage;
 
 pub use context::TypingContext;
-pub use typ::Type;
+pub use typ::{Kind, ParamId, Type};
+pub use substitute::substitute;
 pub use typing::{ExprRoot, Typing};

@@ -459,34 +459,37 @@ fn collect_block_drivers(
             AstNodePayload::Submodule(submodule) => {
                 let name = stmt.parsing.string(submodule.name);
                 let children = stmt.children();
-                if children.len() == 3 {
-                    let it_block = &children[2];
-                    if matches!(it_block.payload(), AstNodePayload::It) {
-                        let block = &it_block.children()[0];
+                // The It-block is found by payload rather than by index, so
+                // the optional GenericsParams child of a type-argument
+                // instantiation does not shift it out from under us.
+                if let Some(it_block) = children
+                    .iter()
+                    .find(|c| matches!(c.payload(), AstNodePayload::It))
+                {
+                    let block = &it_block.children()[0];
 
-                        if block.children().is_empty() {
-                            diagnostics.push(Diagnostic::new(
-                                it_block.region(),
-                                DiagnosticPayload::EmptyDriverBlock,
-                            ));
-                            continue;
-                        }
-
-                        let name_with_context = if let Some(ctx) = it_context {
-                            let mut new_name = BString::from(ctx);
-                            new_name.push(b'.');
-                            new_name.extend_from_slice(name);
-                            new_name
-                        } else {
-                            BString::from(name)
-                        };
-
-                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, Some(name_with_context.as_bstr()), in_conditional, initials);
-                        for (comp_id, mut drivers) in block_drivers {
-                            result.entry(comp_id).or_default().append(&mut drivers);
-                        }
-                        diagnostics.append(&mut block_diags);
+                    if block.children().is_empty() {
+                        diagnostics.push(Diagnostic::new(
+                            it_block.region(),
+                            DiagnosticPayload::EmptyDriverBlock,
+                        ));
+                        continue;
                     }
+
+                    let name_with_context = if let Some(ctx) = it_context {
+                        let mut new_name = BString::from(ctx);
+                        new_name.push(b'.');
+                        new_name.extend_from_slice(name);
+                        new_name
+                    } else {
+                        BString::from(name)
+                    };
+
+                    let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, Some(name_with_context.as_bstr()), in_conditional, initials);
+                    for (comp_id, mut drivers) in block_drivers {
+                        result.entry(comp_id).or_default().append(&mut drivers);
+                    }
+                    diagnostics.append(&mut block_diags);
                 }
             }
             AstNodePayload::Socket(socket) => {

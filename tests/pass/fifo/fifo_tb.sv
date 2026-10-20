@@ -20,10 +20,10 @@ module FifoTb;
     reg   clock = 1;
     reg   reset = 0;
 
-    reg   [8:0] inp_data = 0;
+    reg   [9:0] inp_data = 0;
     wire        inp_ready;
 
-    wire  [8:0] out_data;
+    wire  [9:0] out_data;
     reg         out_ready = 0;
 
     reg  [63:0] master_state;
@@ -39,7 +39,7 @@ module FifoTb;
     always @(*) begin
         if (reset) begin
             master_state = "RESET";
-        end else if (inp_data[8] == 1) begin
+        end else if (inp_data[1:0] == 2'b10) begin
             master_state = "PUSH";
         end else begin
             master_state = "IDLE";
@@ -67,14 +67,14 @@ module FifoTb;
 
     // ---------- helper functions ----------
 
-    function automatic logic [8:0] valid(
+    function automatic logic [9:0] valid(
         input logic [7:0] in
     );
-        return in | (logic'(1) << 8);
+        return {in, 2'b10};
     endfunction
 
-    function automatic logic [8:0] invalid();
-        return 9'b0_1111_1111;
+    function automatic logic [9:0] invalid();
+        return 10'b1111_1111_01;
     endfunction
 
     // ---------- clock ----------
@@ -110,11 +110,11 @@ module FifoTb;
         output logic [7:0] out
     );
         #1ps out_ready = 1;
-        while (!out_data[8]) begin
+        while (out_data[1:0] != 2'b10) begin
             @(posedge clock);
         end
         @(posedge clock);
-        out = out_data[7:0];
+        out = out_data[9:2];
         #1ps out_ready = 0;
     endtask
 
@@ -149,9 +149,9 @@ module FifoTb;
     task check_out_invalid(
         input string msg
     );
-        if (out_data[8] != 1'b0) begin
-            $display("FAIL [%0t] %s: out_data[8]=%b (expected 0)",
-                     $time, msg, out_data[8]);
+        if (out_data[1:0] != 2'b01) begin
+            $display("FAIL [%0t] %s: out_data[1:0]=%b (expected 01)",
+                     $time, msg, out_data[1:0]);
             $fatal;
         end else begin
             $display("PASS [%0t] %s", $time, msg);

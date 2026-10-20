@@ -1,0 +1,15 @@
+// A generic parameter declared with an unknown kind
+// (neither `Type` nor `Nat`).
+
+struct type S[X : Foo] {
+    value : X
+}
+
+export mod Top {
+    incoming inp : Bit
+    outgoing out : Bit
+    out := inp
+}
+
+// CHECK: Unknown kind Foo
+// CHECK: Check failed

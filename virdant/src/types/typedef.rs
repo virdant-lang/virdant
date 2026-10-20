@@ -2,29 +2,46 @@
 //! (unions, structs, enums, builtins) and mapping AST locations to
 //! types; `build_typedefs` populates the global list including
 //! evaluating constant expressions for enumerant values.
+//!
+//! Generic type definitions carry their declared parameters
+//! (`[T : Type]`, `[n : Nat]`) on their `TypeDef`; their member types
+//! are stored *as written*, containing `Type::Param` references to the
+//! declared parameters.  Substitution to a mono type happens only at
+//! use sites, via `types::substitute::substitute`.
 
 use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::location::Location;
-use crate::analysis::symbols::{SymbolId, SymbolTable, Symbol};
+use crate::analysis::symbols::{SymbolId, SymbolTable, Symbol, SymbolKind};
 use crate::common::{TypeScheme, Width, WordValue};
+use crate::types::typ::{Kind, ParamId};
 
 use std::sync::Arc;
 
 use bstr::ByteSlice;
-use bstr::BString;
+use bstr::{BStr, BString};
 
-use crate::analysis::symbols::SymbolKind;
 use crate::diagnostics::{self, Diagnostic};
 use crate::syntax::ast::AstNode;
 use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
 use crate::db::Builder;
 
+/// One declared generic parameter of a type definition.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeParam {
+    pub name: BString,
+    pub kind: Kind,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeDef {
     pub symbol_id: SymbolId,
     pub kind: TypeScheme,
+
+    /// The generic parameters declared by the def, in declaration
+    /// order.  `ParamId`s in member types index into this list.
+    pub params: Vec<TypeParam>,
 
     pub width: Option<Width>,
     pub enumerant_values: IndexMap<SymbolId, WordValue>,
@@ -38,6 +55,51 @@ pub struct TypeIndex {
     typs: IndexSet<Type>,
     typ_at_location: IndexMap<Location, TypeId>,
     diagnostics: Vec<Diagnostic>,
+}
+
+/// The generic parameter declaration list (`Generics` AST node) of an
+/// item, if it declares one.
+pub fn generics_decl_of<'p>(node: &'p AstNode<'p>) -> Option<AstNode<'p>> {
+    node.children()
+        .into_iter()
+        .find(|child| matches!(child.payload(), AstNodePayload::Generics))
+}
+
+/// Parse a `Generics` declaration node into its parameter list.
+///
+/// Unknown kind names map to `Kind::Type`; the declaration-site
+/// diagnostic for those lives in the `Check` pass
+/// (`check_generic_param_kinds`).
+pub(crate) fn parse_generics_decl(node: &AstNode<'_>) -> Vec<TypeParam> {
+    let parsing = node.parsing();
+    let mut params = vec![];
+    for param_node in node.children() {
+        let AstNodePayload::KindParam(kind_param) = param_node.payload() else { continue };
+        let name = parsing.string(kind_param.name).to_owned();
+        let kind = match param_node.child(0).payload() {
+            AstNodePayload::Kind(kind) => match parsing.string(kind.name).as_bytes() {
+                b"Type" => Kind::Type,
+                b"Nat" => Kind::Nat,
+                _ => Kind::Type,
+            },
+            _ => continue,
+        };
+        params.push(TypeParam { name, kind });
+    }
+    params
+}
+
+/// The generic parameter list of the item owning `symbol`, if any.
+/// Works for every item kind which accepts a `Generics` declaration
+/// (typedefs, builtin defs, socket defs, mod defs).
+fn params_of_item(builder: &mut Builder, symbol: &Symbol) -> Vec<TypeParam> {
+    let location = symbol.location();
+    let parsing = builder.get_parsing(location.package());
+    let node = parsing.ast_node(location.ast_node_id());
+    match generics_decl_of(&node) {
+        Some(generics_node) => parse_generics_decl(&generics_node),
+        None => vec![],
+    }
 }
 
 pub(crate) fn build_typedefs(builder: &mut Builder) -> Arc<Vec<TypeDef>> {
@@ -54,6 +116,8 @@ pub(crate) fn build_typedefs(builder: &mut Builder) -> Arc<Vec<TypeDef>> {
             _ => unreachable!(),
         };
 
+        let params = params_of_item(builder, &item_symbol);
+
         let (width, enumerant_values) = if kind == TypeScheme::EnumDef {
             eval_enumdef(builder, &item_symbol)
         } else {
@@ -63,6 +127,7 @@ pub(crate) fn build_typedefs(builder: &mut Builder) -> Arc<Vec<TypeDef>> {
         typedefs.push(TypeDef {
             symbol_id: item_symbol.id(),
             kind,
+            params,
             width,
             enumerant_values,
         });
@@ -82,6 +147,8 @@ pub(crate) fn build_typedef(builder: &mut Builder, symbol_id: SymbolId) -> Arc<T
         _ => unreachable!(),
     };
 
+    let params = params_of_item(builder, &item_symbol);
+
     let (width, enumerant_values) = if kind == TypeScheme::EnumDef {
         eval_enumdef(builder, &item_symbol)
     } else {
@@ -91,6 +158,7 @@ pub(crate) fn build_typedef(builder: &mut Builder, symbol_id: SymbolId) -> Arc<T
     Arc::new(TypeDef {
         symbol_id: item_symbol.id(),
         kind,
+        params,
         width,
         enumerant_values,
     })
@@ -115,8 +183,10 @@ fn eval_enumdef(builder: &mut Builder, item_symbol: &Symbol) -> (Option<Width>, 
         let enumerant_name = parsing.string(enumerant.name);
         let Some(enumerant_symbol) = symboltable.slot(item_symbol.id(), enumerant_name) else { continue; };
         let enumerant_id = enumerant_symbol.id();
-        let value = enumerant_node.children().get(1).map(|expr_node| {
-            let (value, expr_width) = eval_const_expr(expr_node);
+        // The value expression, if any, is the first expression child
+        // (after the Annotations wrapper and any ctor Param children).
+        let value = enumerant_node.children().into_iter().find(|child| child.is_expr()).map(|expr_node| {
+            let (value, expr_width) = eval_const_expr(&expr_node);
             if width.is_none() {
                 width = expr_width;
             }
@@ -200,152 +270,282 @@ impl TypeIndex {
         self.diagnostics.clone()
     }
 
-    fn typ_to_index(&self, typ: &Type) -> Option<usize> {
-        for (idx, typ_) in self.typs.iter().enumerate() {
-            if typ == typ_ {
-                return Some(idx);
-            }
-        }
-        None
+    fn insert(&mut self, location: Location, typ: Type) {
+        let idx = self.typs.insert_full(typ).0;
+        self.typ_at_location.insert(location, TypeId(idx));
     }
 
-    fn gather_type_roots(&mut self, builder: &mut Builder, node: AstNode<'_>, symboltable: &SymbolTable) {
+    /// The `GenericsParams` child of a Type (or instantiation) node, if any.
+    fn type_args_node<'p>(node: &'p AstNode<'p>) -> Option<AstNode<'p>> {
+        node.children()
+            .into_iter()
+            .find(|child| matches!(child.payload(), AstNodePayload::GenericsParams(_)))
+    }
+
+    fn gather_type_roots(
+        &mut self,
+        builder: &mut Builder,
+        node: AstNode<'_>,
+        symboltable: &SymbolTable,
+        // Generic parameters in scope: (name, kind), in declaration order.
+        scope_params: &[(BString, Kind)],
+    ) {
         if let AstNodePayload::Type(_) = node.payload() {
-            let parsing = node.parsing;
-            let type_name: BString = match node.child(0).payload() {
-                AstNodePayload::Ofness(ofness) => {
-                    if let Some(package) = ofness.package {
-                        let package_name = parsing.string(package);
-                        let typ_name = parsing.string(ofness.name);
-                        format!("{}::{}", package_name, typ_name).into()
-                    } else {
-                        parsing.string(ofness.name).to_owned()
-                    }
-                }
-                _ => panic!("expected Ofness inside Type node"),
-            };
-
-            if let Some(symbol) = symboltable.resolve_item(type_name.as_bstr(), parsing.package()) {
-                let is_builtin = |name: &[u8]| {
-                    symboltable
-                        .resolve(name.into())
-                        .map_or(false, |b| b.id() == symbol.id())
-                };
-
-                let typ = if is_builtin(b"builtin::Bit") {
-                    if node.children().len() >= 2 {
-                        self.diagnostics.push(Diagnostic::new(
-                            node.region(),
-                            diagnostics::Unknown {
-                                message: "Type Bit takes no parameters.".into(),
-                            },
-                        ));
-                        return;
-                    }
-                    Type::Bit
-                } else if is_builtin(b"builtin::Clock") {
-                    if node.children().len() >= 2 {
-                        self.diagnostics.push(Diagnostic::new(
-                            node.region(),
-                            diagnostics::Unknown {
-                                message: "Type Clock takes no parameters.".into(),
-                            },
-                        ));
-                        return;
-                    }
-                    Type::Clock
-                } else if is_builtin(b"builtin::Reset") {
-                    if node.children().len() >= 2 {
-                        self.diagnostics.push(Diagnostic::new(
-                            node.region(),
-                            diagnostics::Unknown {
-                                message: "Type Reset takes no parameters.".into(),
-                            },
-                        ));
-                        return;
-                    }
-                    Type::Reset
-                } else if is_builtin(b"builtin::Word") {
-                    if node.children().len() < 2 {
-                        self.diagnostics.push(Diagnostic::new(
-                            node.region(),
-                            diagnostics::Unknown {
-                                message: "Word type requires a width parameter.".into(),
-                            },
-                        ));
-                        return;
-                    }
-                    let generics_node = node.child(1);
-                    let AstNodePayload::GenericsParams(generics_params) = generics_node.payload() else {
-                        unreachable!()
-                    };
-                    let spelling = parsing.string(generics_params.value).to_str_lossy().into_owned();
-                    let width = spelling.parse::<Width>().unwrap();
-                    Type::Word(width)
-                } else if is_builtin(b"builtin::Valid") {
-                    if node.children().len() < 2 {
-                        self.diagnostics.push(Diagnostic::new(
-                            node.region(),
-                            diagnostics::Unknown {
-                                message: "Valid type requires a type parameter.".into(),
-                            },
-                        ));
-                        return;
-                    }
-                    let generics_node = node.child(1);
-                    let AstNodePayload::GenericsType = generics_node.payload() else {
-                        self.diagnostics.push(Diagnostic::new(
-                            node.region(),
-                            diagnostics::Unknown {
-                                message: "Valid type requires a type parameter.".into(),
-                            },
-                        ));
-                        return;
-                    };
-                    let inner_type_node = generics_node.child(0);
-                    // Process the inner type node first so its Type gets indexed.
-                    // Normally gather_type_roots returns early for Type nodes,
-                    // so the inner Type node would never be visited otherwise.
-                    let inner_type_location = inner_type_node.location();
-                    self.gather_type_roots(builder, inner_type_node, symboltable);
-                    let Some(inner_typ) = self.type_at(inner_type_location) else {
-                        self.diagnostics.push(Diagnostic::new(
-                            node.region(),
-                            diagnostics::Unknown {
-                                message: "Could not resolve inner type of Valid.".into(),
-                            },
-                        ));
-                        return;
-                    };
-                    Type::Valid(Box::new(inner_typ.clone()))
-                } else {
-                    Type::Usual(symbol.id())
-                };
-
-                let idx = if let Some(idx) = self.typ_to_index(&typ) {
-                    idx
-                } else {
-                    self.typs.len()
-                };
-
-                self.typs.insert(typ);
-
-                self.typ_at_location.insert(node.location(), TypeId(idx));
-            } else {
-                self.diagnostics.push(Diagnostic::new(
-                    node.region(),
-                    diagnostics::UnresolvedType {
-                        typ: type_name.into(),
-                    },
-                ));
-            }
-
-            // Don't recurse into the children of a Type node (Ofness, GenericsParams, etc.)
+            self.gather_type_root(builder, &node, symboltable, scope_params);
             return;
         }
 
+        // Entering an item which declares generic parameters establishes
+        // a new scope for its body (struct fields, union ctor params,
+        // enum enumerant params, socket channels, mod components).
+        let owned_scope: Vec<(BString, Kind)>;
+        let scope_params: &[(BString, Kind)] = if let Some(generics_node) = generics_decl_of(&node) {
+            owned_scope = parse_generics_decl(&generics_node)
+                .into_iter()
+                .map(|param| (param.name, param.kind))
+                .collect();
+            &owned_scope
+        } else {
+            scope_params
+        };
+
         for child in node.children() {
-            self.gather_type_roots(builder, child, symboltable);
+            self.gather_type_roots(builder, child, symboltable, scope_params);
+        }
+    }
+
+    fn gather_type_root(
+        &mut self,
+        builder: &mut Builder,
+        node: &AstNode<'_>,
+        symboltable: &SymbolTable,
+        scope_params: &[(BString, Kind)],
+    ) {
+        let parsing = node.parsing;
+        let ofness = match node.child(0).payload() {
+            AstNodePayload::Ofness(ofness) => ofness,
+            _ => panic!("expected Ofness inside Type node"),
+        };
+        let type_name: BString = match ofness.package {
+            Some(package) => {
+                let package_name = parsing.string(package);
+                let typ_name = parsing.string(ofness.name);
+                format!("{}::{}", package_name, typ_name).into()
+            }
+            None => parsing.string(ofness.name).to_owned(),
+        };
+
+        // Process the argument Type nodes first, so their own types are
+        // indexed (a Type node never recurses into its children).
+        let args_node = Self::type_args_node(node);
+        let arg_nodes: Vec<AstNode<'_>> = args_node
+            .as_ref()
+            .map(|args: &AstNode<'_>| args.children())
+            .unwrap_or_default();
+        for arg in &arg_nodes {
+            if let AstNodePayload::Type(_) = arg.payload() {
+                self.gather_type_roots(builder, arg.clone(), symboltable, scope_params);
+            }
+        }
+
+        // A generic parameter reference (`T`), shadowing any item of the
+        // same name.  Parameters take no arguments.
+        if ofness.package.is_none() {
+            let name = ofness.name;
+            let param = parsing
+                .string(name)
+                .to_owned();
+            if let Some((index, _)) = scope_params
+                .iter()
+                .enumerate()
+                .find(|(_, (param_name, _))| *param_name == param)
+            {
+                if !arg_nodes.is_empty() {
+                    self.diagnostics.push(Diagnostic::new(
+                        node.region(),
+                        diagnostics::Unknown {
+                            message: format!("Parameter {param} takes no type arguments.").into(),
+                        },
+                    ));
+                    return;
+                }
+                self.insert(node.location(), Type::Param(ParamId(index as u32)));
+                return;
+            }
+        }
+
+        let Some(symbol) = symboltable.resolve_item(type_name.as_bstr(), parsing.package()) else {
+            self.diagnostics.push(Diagnostic::new(
+                node.region(),
+                diagnostics::UnresolvedType {
+                    typ: type_name.into(),
+                },
+            ));
+            return;
+        };
+
+        let is_builtin = |name: &[u8]| {
+            symboltable
+                .resolve(name.into())
+                .map_or(false, |b| b.id() == symbol.id())
+        };
+
+        let typ = if is_builtin(b"builtin::Bit") {
+            if args_node.is_some() {
+                self.diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::Unknown {
+                        message: "Type Bit takes no parameters.".into(),
+                    },
+                ));
+                return;
+            }
+            Type::Bit
+        } else if is_builtin(b"builtin::Clock") {
+            if args_node.is_some() {
+                self.diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::Unknown {
+                        message: "Type Clock takes no parameters.".into(),
+                    },
+                ));
+                return;
+            }
+            Type::Clock
+        } else if is_builtin(b"builtin::Reset") {
+            if args_node.is_some() {
+                self.diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::Unknown {
+                        message: "Type Reset takes no parameters.".into(),
+                    },
+                ));
+                return;
+            }
+            Type::Reset
+        } else if is_builtin(b"builtin::Word") {
+            if arg_nodes.is_empty() {
+                self.diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::Unknown {
+                        message: "Word type requires a width parameter.".into(),
+                    },
+                ));
+                return;
+            }
+            if arg_nodes.len() > 1 {
+                self.diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::TypeArgCount {
+                        typ: type_name.into(),
+                        expected: 1,
+                        actual: arg_nodes.len(),
+                    },
+                ));
+                return;
+            }
+            let Some(width) = self.nat_arg(&arg_nodes[0], &type_name, b"n".as_bstr()) else {
+                return;
+            };
+            Type::Word(width)
+        } else {
+            // A user-defined (or library) type: kind-check the
+            // arguments against the def's declared parameters, then
+            // carry them on the type.
+            let params: Vec<(BString, Kind)> = match symbol.kind() {
+                SymbolKind::UnionDef | SymbolKind::StructDef | SymbolKind::EnumDef | SymbolKind::BuiltinDef => {
+                    builder
+                        .get_typedef(symbol.id())
+                        .params
+                        .iter()
+                        .map(|p| (p.name.clone(), p.kind))
+                        .collect()
+                }
+                _ => vec![],
+            };
+
+            if arg_nodes.len() != params.len() {
+                self.diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::TypeArgCount {
+                        typ: type_name.into(),
+                        expected: params.len(),
+                        actual: arg_nodes.len(),
+                    },
+                ));
+                return;
+            }
+
+            let mut args: Vec<Type> = Vec::with_capacity(arg_nodes.len());
+            for ((param_name, param_kind), arg) in params.iter().zip(arg_nodes.iter()) {
+                match param_kind {
+                    Kind::Type => {
+                        let AstNodePayload::Type(_) = arg.payload() else {
+                            self.diagnostics.push(Diagnostic::new(
+                                arg.region(),
+                                diagnostics::TypeArgKind {
+                                    typ: type_name.clone(),
+                                    param: param_name.clone(),
+                                    expected: "a type".into(),
+                                    actual: "a Nat literal".into(),
+                                },
+                            ));
+                            return;
+                        };
+                        let Some(arg_typ) = self.type_at(arg.location()).cloned() else {
+                            // The inner type failed to resolve; its
+                            // diagnostic is already reported.
+                            return;
+                        };
+                        args.push(arg_typ);
+                    }
+                    Kind::Nat => {
+                        let Some(width) = self.nat_arg(arg, &type_name, param_name.as_bstr()) else {
+                            return;
+                        };
+                        args.push(Type::Word(width));
+                    }
+                }
+            }
+            Type::Usual(symbol.id(), args)
+        };
+
+        self.insert(node.location(), typ);
+    }
+
+    /// Interpret `arg` as a `Nat`-kind type argument, emitting the
+    /// kind-mismatch diagnostic when a type was written instead, or the
+    /// value-parse diagnostic when the literal is malformed.
+    fn nat_arg(&mut self, arg: &AstNode<'_>, typ: &BString, param: &BStr) -> Option<Width> {
+        let parsing = arg.parsing();
+        match arg.payload() {
+            AstNodePayload::GenericsNat(nat) => {
+                let spelling = parsing.string(nat.value).to_str_lossy().into_owned();
+                match spelling.parse::<Width>() {
+                    Ok(width) => Some(width),
+                    Err(_) => {
+                        self.diagnostics.push(Diagnostic::new(
+                            arg.region(),
+                            diagnostics::Unknown {
+                                message: format!("Malformed width parameter: {spelling}").into(),
+                            },
+                        ));
+                        None
+                    }
+                }
+            }
+            _ => {
+                self.diagnostics.push(Diagnostic::new(
+                    arg.region(),
+                    diagnostics::TypeArgKind {
+                        typ: typ.clone(),
+                        param: param.to_owned(),
+                        expected: "a Nat".into(),
+                        actual: "a type".into(),
+                    },
+                ));
+                None
+            }
         }
     }
 }
@@ -362,7 +562,7 @@ pub(crate) fn build_type_index(builder: &mut Builder) -> Arc<TypeIndex> {
     let packages = builder.get_packages();
     for package in packages.ids() {
         let parsing = builder.get_parsing(package);
-        type_index.gather_type_roots(builder, parsing.root(), &symboltable);
+        type_index.gather_type_roots(builder, parsing.root(), &symboltable, &[]);
     }
 
     Arc::new(type_index)

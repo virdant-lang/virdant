@@ -82,7 +82,7 @@ pub(crate) fn check_match_coverage(
                 any_pattern_seen = true;
             }
             AstNodePayload::PatCtor(pat_ctor) => {
-                let Type::Usual(typedef_id) = subject_typ else {
+                let Type::Usual(typedef_id, _args) = subject_typ else {
                     if is_stmt_match {
                         diagnostics.push(Diagnostic::new(
                             pat.region(),
@@ -105,7 +105,7 @@ pub(crate) fn check_match_coverage(
                 any_pattern_seen = true;
             }
             AstNodePayload::PatEnumerant(pat_enum) => {
-                let Type::Usual(typedef_id) = subject_typ else {
+                let Type::Usual(typedef_id, _args) = subject_typ else {
                     if is_stmt_match {
                         diagnostics.push(Diagnostic::new(
                             pat.region(),
@@ -119,6 +119,20 @@ pub(crate) fn check_match_coverage(
                 let symboltable = builder.get_symboltable();
                 let name = parsing.string(pat_enum.name);
                 let Some(sym) = symboltable.slot(*typedef_id, name) else { continue };
+                // An enumerant carrying payload parameters must be
+                // matched with `@Name(...)`, not `#Name`; it is not
+                // covered by a `#Name` pattern.
+                if !builder.get_ctor_signature(sym.id()).parameters.is_empty() {
+                    if is_stmt_match {
+                        diagnostics.push(Diagnostic::new(
+                            pat.region(),
+                            diagnostics::CtorRequiresArgs {
+                                ctor: name.to_owned(),
+                            },
+                        ));
+                    }
+                    continue;
+                }
                 let sym_id = sym.id();
                 if covered_syms.contains_key(&sym_id) {
                     overlap = Some((pat.region(), format!("#{}", name.to_str_lossy()).into()));
@@ -242,7 +256,10 @@ fn subtree_only_latched_drivers(node: &AstNode<'_>) -> bool {
 
 enum Category {
     Union { slots: Vec<(SymbolId, String)> },
-    Enum { slots: Vec<(SymbolId, String)> },
+    /// Enum slots, with the parameter names of payload enumerants:
+    /// `(symbol, name, param_names)`.  A non-empty `param_names` marks
+    /// a payload enumerant, matched with `@Name(params)`.
+    Enum { slots: Vec<(SymbolId, String, Vec<String>)> },
     Bit,
     WordExhaustible { width: Width },
     WordTooWide,
@@ -259,17 +276,34 @@ fn subject_category(builder: &mut Builder, subject_typ: &Type) -> Category {
                 Category::WordTooWide
             }
         }
-        Type::Usual(typedef_id) => {
+        Type::Usual(typedef_id, _args) => {
             let symboltable = builder.get_symboltable();
             let symbol = symboltable.symbol(*typedef_id);
-            let slots: Vec<(SymbolId, String)> = symboltable
-                .slots(*typedef_id)
-                .iter()
-                .map(|s| (s.id(), s.name().to_str_lossy().into_owned()))
-                .collect();
             match symbol.kind() {
-                SymbolKind::UnionDef => Category::Union { slots },
-                SymbolKind::EnumDef => Category::Enum { slots },
+                SymbolKind::UnionDef => {
+                    let slots: Vec<(SymbolId, String)> = symboltable
+                        .slots(*typedef_id)
+                        .iter()
+                        .map(|s| (s.id(), s.name().to_str_lossy().into_owned()))
+                        .collect();
+                    Category::Union { slots }
+                }
+                SymbolKind::EnumDef => {
+                    let slots: Vec<(SymbolId, String, Vec<String>)> = symboltable
+                        .slots(*typedef_id)
+                        .iter()
+                        .map(|s| {
+                            let params = builder
+                                .get_ctor_signature(s.id())
+                                .parameters
+                                .iter()
+                                .map(|(name, _)| name.to_str_lossy().into_owned())
+                                .collect();
+                            (s.id(), s.name().to_str_lossy().into_owned(), params)
+                        })
+                        .collect();
+                    Category::Enum { slots }
+                }
                 _ => Category::Other,
             }
         }
@@ -294,8 +328,14 @@ fn compute_missing(
         }
         Category::Enum { slots } => {
             let missing: Vec<BString> = slots.iter()
-                .filter(|(id, _)| !covered_syms.contains_key(id))
-                .map(|(_, name)| format!("#{}", name).into())
+                .filter(|(id, _, _)| !covered_syms.contains_key(id))
+                .map(|(_, name, params)| {
+                    if params.is_empty() {
+                        format!("#{name}").into()
+                    } else {
+                        format!("@{}({})", name, params.join(", ")).into()
+                    }
+                })
                 .collect();
             let exhausted = missing.is_empty();
             (missing, exhausted)

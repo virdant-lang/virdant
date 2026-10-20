@@ -1,0 +1,86 @@
+// Generic type defs with type arguments on type references: the
+// types-only generics slice.  Covers a generic struct as a reg type
+// (driven, matched, flattened), nested type arguments, a generic enum
+// instantiated at two different arguments in one module, and a generic
+// union.
+//
+// CHECK-NOT: Check failed
+
+struct type Pair[A : Type, B : Type] {
+    fst : A
+    snd : B
+}
+
+union type Either[L : Type, R : Type] {
+    Left(l : L)
+    Right(r : R)
+}
+
+enum type Option[T : Type] {
+    None
+    Some(value : T)
+}
+
+export mod Top {
+    incoming clock : Clock
+    incoming a     : Word[4]
+    incoming b     : Bit
+
+    // Generic struct as a reg type: driven, flattened, field-projected.
+    reg pair : Pair[Word[4], Bit] on clock {
+        it <= ${
+            fst = a,
+            snd = b,
+        }
+    }
+
+    // Nested type arguments: the argument to Valid is itself a full type.
+    wire nested : Valid[Pair[Word[4], Bit]]
+    nested := @Valid(${
+        fst = a,
+        snd = b,
+    })
+
+    // A generic enum instantiated at two different arguments in one module.
+    wire opt_word : Option[Word[4]]
+    opt_word := match b {
+        case true => @Some(a)
+        case false => #None
+    }
+
+    wire opt_bit : Option[Bit]
+    opt_bit := match b {
+        case true => #None
+        case false => @Some(false)
+    }
+
+    // A generic union.
+    wire either : Either[Word[4], Bit]
+    either := @Left(a)
+
+    outgoing o_fst      : Word[4]
+    outgoing o_snd      : Bit
+    outgoing o_nested   : Word[4]
+    outgoing o_opt_word : Word[5]
+    outgoing o_opt_bit  : Bit
+    outgoing o_either   : Word[5]
+
+    o_fst      := pair->fst
+    o_snd      := pair->snd
+    o_nested   := match nested {
+        case @Valid(p) => p->fst
+        case @Invalid() => 0
+    }
+    o_opt_word := match opt_word {
+        case @Some(w) => zext(w)
+        case #None => 0
+    }
+    o_opt_bit  := match opt_bit {
+        case @Some(x) => x
+        case #None => false
+    }
+    o_either   := match either {
+        case @Left(w) => zext(w)
+        case @Right(x) => zext(word(false, x))
+    }
+}

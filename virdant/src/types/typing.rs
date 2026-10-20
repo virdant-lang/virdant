@@ -25,6 +25,7 @@ use crate::syntax::payload::{self, AstNodePayload};
 use crate::types::context::Referent;
 
 use super::context::TypingContext;
+use super::substitute::substitute;
 use super::typ::Type;
 
 #[derive(Debug)]
@@ -720,34 +721,19 @@ fn extend_context_with_stmt_match_pat(
         }
         AstNodePayload::PatCtor(pat_ctor) => {
             let ctor_name = pat_node.parsing().string(pat_ctor.name);
-            // Handle builtin Valid[T] pattern constructors: @Valid(t) and @Invalid()
-            if ctor_name.as_bytes() == b"Valid" || ctor_name.as_bytes() == b"Invalid" {
-                let Type::Valid(inner_typ) = expected_typ else { return context; };
-                if ctor_name.as_bytes() == b"Valid" {
-                    let children = pat_node.children();
-                    if children.len() == 1 {
-                        let child = &children[0];
-                        if let Some(var_name_interned) = child.path() {
-                            let var_name = child.parsing().string(var_name_interned).to_owned();
-                            context = context.push_local(
-                                var_name, child.location(), (**inner_typ).clone(),
-                            );
-                        }
-                    }
-                }
-                // @Invalid() takes no arguments, so no bindings
-            } else {
-                let Type::Usual(typedef_id) = expected_typ else { return context; };
-                let symboltable = builder.get_symboltable();
-                let Some(ctor_symbol) = symboltable.slot(*typedef_id, ctor_name) else { return context; };
-                let ctor_symbol_id = ctor_symbol.id();
-                let sig = builder.get_ctor_signature(ctor_symbol_id);
-                let children = pat_node.children();
-                for (child, (_param_name, param_typ)) in children.iter().zip(sig.parameters.iter()) {
-                    if let Some(var_name_interned) = child.path() {
-                        let var_name = child.parsing().string(var_name_interned).to_owned();
-                        context = context.push_local(var_name, child.location(), param_typ.clone());
-                    }
+            let Type::Usual(typedef_id, args) = expected_typ else { return context; };
+            let symboltable = builder.get_symboltable();
+            let Some(ctor_symbol) = symboltable.slot(*typedef_id, ctor_name) else { return context; };
+            let ctor_symbol_id = ctor_symbol.id();
+            let sig = builder.get_ctor_signature(ctor_symbol_id);
+            let children = pat_node.children();
+            for (child, (_param_name, param_typ)) in children.iter().zip(sig.parameters.iter()) {
+                if let Some(var_name_interned) = child.path() {
+                    let var_name = child.parsing().string(var_name_interned).to_owned();
+                    // Substitute the def's generic parameters with the
+                    // type arguments of the subject type.
+                    let param_typ = substitute(param_typ, args);
+                    context = context.push_local(var_name, child.location(), param_typ);
                 }
             }
         }

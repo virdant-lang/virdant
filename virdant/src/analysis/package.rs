@@ -171,13 +171,17 @@ impl PackageAnalysis {
                         self.expr_roots.push(node_id);
                     }
                     AstNodePayload::Submodule(_module) => {
-                        let children = child_node.children();
-                        if children.len() == 3 {
-                            let it_block = &children[2];
-                            if matches!(it_block.payload(), AstNodePayload::It) {
-                                let block = &it_block.children()[0];
-                                self.add_moddefstmt_block_expr_roots(block);
-                            }
+                        // The It-block is found by payload rather than by
+                        // index, so the optional GenericsParams child of a
+                        // type-argument instantiation does not shift it
+                        // out from under us.
+                        if let Some(it_block) = child_node
+                            .children()
+                            .iter()
+                            .find(|c| matches!(c.payload(), AstNodePayload::It))
+                        {
+                            let block = &it_block.children()[0];
+                            self.add_moddefstmt_block_expr_roots(block);
                         }
                     }
                     AstNodePayload::Socket(_socket) => {
@@ -201,6 +205,8 @@ impl PackageAnalysis {
                     AstNodePayload::ModDefStmtDependsOn => (),
                     AstNodePayload::Error => (), // TODO should we even have error nodes at this point?
                     AstNodePayload::Annotations(_) => (),
+                    // A generic parameter declaration list on a mod def.
+                    AstNodePayload::Generics => (),
                     _ => unreachable!("{:?}", child_node.summary()),
                 }
             }
@@ -210,8 +216,13 @@ impl PackageAnalysis {
             }
             for child_node in node.children() {
                 if let AstNodePayload::Enumerant(_) = child_node.payload() {
-                    // Enumerants without an explicit value have no expr child.
-                    if let Some(expr_node) = child_node.children().get(1) {
+                    // Enumerants without an explicit value have no expr
+                    // child; the value expression, if any, is the first
+                    // expression child (after the Annotations wrapper and
+                    // any ctor Param children).
+                    if let Some(expr_node) =
+                        child_node.children().into_iter().find(|c| c.is_expr())
+                    {
                         self.expr_roots.push(expr_node.id());
                     }
                 }

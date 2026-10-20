@@ -1,0 +1,22 @@
+// An enumerant carrying payload parameters must be constructed and
+// matched with `@Name(...)`, not `#Name`.
+
+enum type Opt[T : Type] {
+    None
+    Some(value : T)
+}
+
+export mod Top {
+    incoming a : Word[4]
+    wire opt : Opt[Word[4]]
+    opt := #Some
+    outgoing out : Bit
+    out := match opt {
+        case #Some => true
+        case #None => false
+    }
+}
+
+// CHECK: Ctor Some requires arguments: use @Some(...)
+// CHECK: Ctor Some requires arguments: use @Some(...)
+// CHECK: Check failed

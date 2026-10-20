@@ -1,6 +1,6 @@
 //! Plain payload structs backing each `ExprPayload` variant (references,
 //! literals, operators, constructors, patterns, indexing, width
-//! operations) and `Pat` for match arms covering `Ctor`, `Valid`,
+//! operations) and `Pat` for match arms covering `Ctor`,
 //! `WordLit`, `BitLit`, `Else`.
 
 use std::sync::Arc;
@@ -31,7 +31,6 @@ pub struct When {
 #[derive(Debug)]
 pub enum Pat {
     Ctor { symbol_id: SymbolId, bound_vars: Vec<(BString, Location)> },
-    Valid { is_valid: bool, bound_vars: Vec<(BString, Location)> },
     WordLit { width: Width, value: WordValue },
     BitLit { value: bool },
     Else,

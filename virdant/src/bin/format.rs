@@ -123,6 +123,9 @@ fn find_first_not_in_str(text: &str, pattern: &str) -> Option<usize> {
 fn find_type_colon(text: &str) -> Option<usize> {
     let bytes = text.as_bytes();
     let mut i = 0;
+    // A colon inside `[...]` (a generic parameter declaration or a
+    // type-argument list) is not a type-annotation colon.
+    let mut bracket_depth: usize = 0;
     while i < bytes.len() {
         if bytes[i] == b'"' {
             i += 1;
@@ -137,7 +140,11 @@ fn find_type_colon(text: &str) -> Option<usize> {
             }
             continue;
         }
-        if bytes[i] == b':' {
+        if bytes[i] == b'[' {
+            bracket_depth += 1;
+        } else if bytes[i] == b']' && bracket_depth > 0 {
+            bracket_depth -= 1;
+        } else if bytes[i] == b':' && bracket_depth == 0 {
             // Not :: and not := or :=: or <= or =>
             if i + 1 < bytes.len() && bytes[i + 1] == b':' {
                 i += 2;

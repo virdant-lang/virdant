@@ -204,10 +204,16 @@ fn get_all_driver_locations(
                 }
                 AstNodePayload::Submodule(_) => {
                     let sub_children = child.children();
-                    // If the submodule has an ItBlock (child index 2),
-                    // recurse into its children.
-                    if sub_children.len() > 2 {
-                        stack.push(sub_children[2].id());
+                    // If the submodule has an ItBlock, recurse into its
+                    // children.  The ItBlock is found by payload rather
+                    // than by index, so the optional GenericsParams
+                    // child of a type-argument instantiation does not
+                    // shift it out from under us.
+                    if let Some(it_block) = sub_children
+                        .iter()
+                        .find(|c| matches!(c.payload(), AstNodePayload::It))
+                    {
+                        stack.push(it_block.id());
                     }
                 }
                 AstNodePayload::ModDefStmtBlock

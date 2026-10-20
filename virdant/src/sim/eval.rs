@@ -209,32 +209,6 @@ impl Expr {
                 (payload::Pat::Else, _) => {
                     return body.eval(context);
                 }
-                // Valid[T] pattern against Ctor value from a Valid[T] expression:
-                // match @Valid/unvalid by type, not symbol ID (since Valid is builtin).
-                (
-                    payload::Pat::Valid { is_valid, bound_vars },
-                    Value::Ctor(typ, _, subject_args),
-                ) => {
-                    if matches!(typ, Type::Valid(_)) {
-                        if *is_valid {
-                            let extra: Vec<(Referent, Arc<Value>)> = bound_vars
-                                .iter()
-                                .zip(subject_args.iter())
-                                .map(|((_var_name, var_loc), arg_value)| {
-                                    (
-                                        Referent::Location(var_loc.clone()),
-                                        Arc::new(arg_value.clone()),
-                                    )
-                                })
-                                .collect();
-                            let arm_context = context.extend(extra);
-                            return body.eval(&arm_context);
-                        } else {
-                            // @Invalid() pattern: no bound vars, matches any Valid Ctor with empty args
-                            return body.eval(context);
-                        }
-                    }
-                }
                 // Ctor pattern against Ctor value: compare symbol IDs
                 (
                     payload::Pat::Ctor { symbol_id, bound_vars },

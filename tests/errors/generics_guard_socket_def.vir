@@ -1,0 +1,19 @@
+// Guard: generic socket defs are parsed but not yet implemented.
+// Instantiating one (even bare) fails loudly at the guard, pointing at
+// the parameter list of the declaration.
+
+socket Pipe[T : Type] {
+    cosi data : T
+    soci ready : Bit
+}
+
+export mod Top {
+    outgoing out : Bit
+    out := false
+    client socket inp of Pipe {
+        it.data := ?
+    }
+}
+
+// CHECK: Not yet implemented: generic socket defs / mod defs are not yet supported
+// CHECK: Check failed

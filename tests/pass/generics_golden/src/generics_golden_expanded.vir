@@ -1,0 +1,49 @@
+struct type Pair {
+    fst : Word[4]
+    snd : Bit
+}
+
+enum type Opt {
+    None
+    Some(value : Word[4])
+}
+
+union type Either {
+    Left(l : Word[4])
+    Right(r : Bit)
+}
+
+export mod Top {
+    incoming clock : Clock
+    incoming a : Word[4]
+    incoming b : Bit
+
+    reg pair : Pair on clock {
+        it <= ${
+            fst = a,
+            snd = b,
+        }
+    }
+
+    wire opt : Opt
+    opt := match b {
+        case true => @Some(a)
+        case false => #None
+    }
+
+    wire either : Either
+    either := @Left(a)
+
+    outgoing o_fst : Word[4]
+    outgoing o_opt : Word[5]
+    outgoing o_either : Word[5]
+    o_fst := pair->fst
+    o_opt := match opt {
+        case @Some(w) => zext(w)
+        case #None => 0
+    }
+    o_either := match either {
+        case @Left(w) => zext(w)
+        case @Right(x) => zext(word(false, x))
+    }
+}

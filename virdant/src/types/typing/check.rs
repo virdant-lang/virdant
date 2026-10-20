@@ -455,13 +455,13 @@ impl Typing {
             return Err(());
         };
 
-        let Type::Usual(typedef_id) = subject_typ else {
+        let Type::Usual(typedef_id, args) = &subject_typ else {
             // TODO check that it's a struct type
             self.flag_unknown(node, "Should be a typedef type");
             return Err(());
         };
 
-        let struct_fields = builder.get_struct_fields(typedef_id);
+        let struct_fields = builder.get_struct_fields(*typedef_id);
         let field_name = node.parsing().string(field.field);
 
         let Some(struct_field) = struct_fields
@@ -477,12 +477,15 @@ impl Typing {
             self.flag_todo(&subject, "Field missing type");
             return Err(());
         };
+        // Substitute the generic parameters of the struct def with the
+        // type arguments at this use site.
+        let field_typ = substitute(field_typ, args);
 
-        if field_typ == expected_typ {
+        if field_typ == *expected_typ {
             self.annotate(node, &expected_typ);
         } else {
             self.flag_unknown(node, format!("Unknown field {field_name}"));
-            self.flag_wrong_type(node, expected_typ, field_typ);
+            self.flag_wrong_type(node, expected_typ, &field_typ);
         }
 
         Ok(())
@@ -496,102 +499,79 @@ impl Typing {
         expected_typ: &Type,
     ) -> Result<TypingContext, ()> {
         match node.payload() {
-            AstNodePayload::PatCtor(pat_ident) => {
-                let ctor_name = node.parsing().string(pat_ident.name);
+            AstNodePayload::PatCtor(pat_ctor) => {
+                let ctor_name = node.parsing().string(pat_ctor.name);
                 let children = node.children();
 
-                // Handle builtin Valid[T] pattern constructors:
-                // @Valid(t) and @Invalid()
-                if ctor_name == b"Valid" || ctor_name == b"Invalid" {
-                    let Type::Valid(inner_typ) = expected_typ else {
-                        self.diagnostics.push(Diagnostic::new(
-                            node.region(),
-                            diagnostics::UnresolvedCtor {
-                                ctor: ctor_name.to_owned(),
-                            },
-                        ));
-                        return Err(());
-                    };
-                    if ctor_name.as_bytes() == b"Valid" {
-                        if children.len() != 1 {
-                            self.flag_unknown(
-                                node,
-                                "Pattern @Valid(...) requires exactly one argument.",
-                            );
-                            return Err(());
-                        }
-                        let child = &children[0];
-                        self.annotate(child, inner_typ);
-                        let mut arm_context = context;
-                        if let Some(var_name_interned) = child.path() {
-                            let var_name = child.parsing().string(var_name_interned).to_owned();
-                            arm_context = arm_context.push_local(
-                                var_name, child.location(), (**inner_typ).clone(),
-                            );
-                        }
-                        Ok(arm_context)
-                    } else {
-                        // ctor_name == b"Invalid"
-                        if !children.is_empty() {
-                            self.flag_unknown(
-                                node,
-                                "Pattern @Invalid() takes no arguments.",
-                            );
-                            return Err(());
-                        }
-                        Ok(context)
-                    }
-                } else {
-                    let Type::Usual(typedef_id) = expected_typ else {
-                        self.diagnostics.push(Diagnostic::new(
-                            node.region(),
-                            diagnostics::UnresolvedCtor {
-                                ctor: ctor_name.to_owned(),
-                            },
-                        ));
-                        return Err(());
-                    };
-                    let symboltable = builder.get_symboltable();
-                    let Some(ctor_symbol) = symboltable.slot(*typedef_id, ctor_name) else {
-                        self.flag_unknown(node, "Unknown ctor name in pattern");
-                        return Err(());
-                    };
-                    let sig = builder.get_ctor_signature(ctor_symbol.id());
-                    if sig.parameters.len() != children.len() {
-                        self.flag_unknown(
-                            node,
-                            format!(
-                                "Pattern has wrong number of arguments: expected {}, but found {}",
-                                sig.parameters.len(),
-                                children.len(),
-                            ),
-                        );
-                        return Err(());
-                    }
-                    let mut arm_context = context;
-                    for (child, (_param_name, param_typ)) in children.iter().zip(sig.parameters.iter())
-                    {
-                        self.annotate(child, param_typ);
-                        if let Some(var_name_interned) = child.path() {
-                            let var_name = child.parsing().string(var_name_interned).to_owned();
-                            arm_context =
-                                arm_context.push_local(var_name, child.location(), param_typ.clone());
-                        }
-                    }
-                    Ok(arm_context)
+                let Type::Usual(typedef_id, args) = expected_typ else {
+                    self.diagnostics.push(Diagnostic::new(
+                        node.region(),
+                        diagnostics::UnresolvedCtor {
+                            ctor: ctor_name.to_owned(),
+                        },
+                    ));
+                    return Err(());
+                };
+                let symboltable = builder.get_symboltable();
+                let Some(ctor_symbol) = symboltable.slot(*typedef_id, ctor_name) else {
+                    self.flag_unknown(node, "Unknown ctor name in pattern");
+                    return Err(());
+                };
+                let sig = builder.get_ctor_signature(ctor_symbol.id());
+                let parameters: Vec<(BString, Type)> = sig
+                    .parameters
+                    .iter()
+                    .map(|(name, typ)| (name.clone(), substitute(typ, args)))
+                    .collect();
+                if parameters.len() != children.len() {
+                    self.flag_unknown(
+                        node,
+                        format!(
+                            "Pattern has wrong number of arguments: expected {}, but found {}",
+                            parameters.len(),
+                            children.len(),
+                        ),
+                    );
+                    return Err(());
                 }
+                let mut arm_context = context;
+                for (child, (_param_name, param_typ)) in children.iter().zip(parameters.iter())
+                {
+                    self.annotate(child, param_typ);
+                    if let Some(var_name_interned) = child.path() {
+                        let var_name = child.parsing().string(var_name_interned).to_owned();
+                        arm_context =
+                            arm_context.push_local(var_name, child.location(), param_typ.clone());
+                    }
+                }
+                Ok(arm_context)
             }
             AstNodePayload::PatEnumerant(pat_enumerant) => {
-                let Type::Usual(typedef_id) = expected_typ else {
+                let Type::Usual(typedef_id, _args) = expected_typ else {
                     self.flag_unknown(node, "PatEnumerant expects an enum type");
                     return Err(());
                 };
                 let enumerant_name = node.parsing().string(pat_enumerant.name);
                 let symboltable = builder.get_symboltable();
-                let Some(_enumerant_symbol) = symboltable.slot(*typedef_id, enumerant_name) else {
+                let Some(enumerant_symbol) = symboltable.slot(*typedef_id, enumerant_name) else {
                     self.flag_unknown(node, "Unknown enumerant name in pattern");
                     return Err(());
                 };
+                // An enumerant carrying payload parameters must be
+                // matched with `@Name(...)`, not `#Name`.
+                if !builder
+                    .get_ctor_signature(enumerant_symbol.id())
+                    .parameters
+                    .is_empty()
+                {
+                    self.diagnostics.push(Diagnostic::new(
+                        node.region(),
+                        diagnostics::CtorRequiresArgs {
+                            ctor: enumerant_name.to_owned(),
+                        },
+                    ));
+                    return Err(());
+                }
                 Ok(context)
             }
             AstNodePayload::PatWordLit(_pat_word_lit) => {
@@ -664,41 +644,7 @@ impl Typing {
         let ctor_name = node.parsing().string(expr_ctor.ctor);
         let arguments = node.children();
 
-        // Handle builtin Valid[T] constructors: @Valid(t) and @Invalid()
-        if ctor_name == b"Valid" || ctor_name == b"Invalid" {
-            let Type::Valid(inner_typ) = expected_typ else {
-                self.flag_unknown(
-                    node,
-                    format!(
-                        "Ctor @{ctor_name} requires a Valid[...] type, got {expected_typ:?}",
-                    ),
-                );
-                return Err(());
-            };
-            if ctor_name.as_bytes() == b"Valid" {
-                if arguments.len() != 1 {
-                    self.flag_unknown(
-                        node,
-                        "@Valid() requires exactly one argument.",
-                    );
-                    return Err(());
-                }
-                self.check(builder, context, &arguments[0], inner_typ)?;
-            } else {
-                // ctor_name == b"Invalid"
-                if !arguments.is_empty() {
-                    self.flag_unknown(
-                        node,
-                        "@Invalid() takes no arguments.",
-                    );
-                    return Err(());
-                }
-            }
-            self.annotate(node, expected_typ);
-            return Ok(());
-        }
-
-        let Type::Usual(typedef_id) = expected_typ else {
+        let Type::Usual(typedef_id, args) = expected_typ else {
             self.flag_unknown(node, "Should be a typedef type");
             return Err(());
         };
@@ -707,7 +653,7 @@ impl Typing {
         let Some(ctor_symbol) = symboltable.slot(*typedef_id, ctor_name) else {
             self.flag_unknown(
                 node,
-                format!("Unknown ctor name: {ctor_name} in union type {expected_typ:?}"),
+                format!("Unknown ctor name: {ctor_name} in type {expected_typ:?}"),
             );
             return Err(());
         };
@@ -727,7 +673,10 @@ impl Typing {
         }
 
         for (arg, (_param_name, param_typ)) in arguments.into_iter().zip(sig.parameters.iter()) {
-            self.check(builder, context.clone(), &arg, param_typ)?;
+            // Substitute the generic parameters of the def with the
+            // type arguments of the expected type.
+            let param_typ = substitute(param_typ, args);
+            self.check(builder, context.clone(), &arg, &param_typ)?;
         }
 
         self.tags
@@ -745,7 +694,7 @@ impl Typing {
         let AstNodePayload::ExprEnumerant(expr_enumerant) = node.payload() else {
             unreachable!()
         };
-        let Type::Usual(typedef_id) = expected_typ else {
+        let Type::Usual(typedef_id, _args) = expected_typ else {
             // TODO check that it's an enum type
             self.flag_unknown(node, "Should be a typedef type");
             return Err(());
@@ -760,6 +709,22 @@ impl Typing {
             );
             return Err(());
         };
+
+        // An enumerant carrying payload parameters must be constructed
+        // with `@Name(...)`, not `#Name`.
+        if !builder
+            .get_ctor_signature(enumerant_symbol.id())
+            .parameters
+            .is_empty()
+        {
+            self.diagnostics.push(Diagnostic::new(
+                node.region(),
+                diagnostics::CtorRequiresArgs {
+                    ctor: enumerant_name.to_owned(),
+                },
+            ));
+            return Err(());
+        }
 
         self.tags.insert(
             node.location(),
@@ -779,7 +744,7 @@ impl Typing {
         let AstNodePayload::ExprStruct = node.payload() else {
             unreachable!()
         };
-        let Type::Usual(typedef_id) = expected_typ else {
+        let Type::Usual(typedef_id, args) = expected_typ else {
             // TODO check that it's a struct type
             self.flag_unknown(node, "Should be a typedef type");
             return Err(());
@@ -815,11 +780,14 @@ impl Typing {
 
             let expr = child.child(0);
 
-            // Get the actual field type from the struct definition
+            // Get the actual field type from the struct definition,
+            // substituting the generic parameters with the type
+            // arguments of the expected type.
             let expected_field_typ = struct_fields
                 .iter()
                 .find(|f| f.field_symbol_id == field_symbol.id())
-                .and_then(|f| f.typ.clone());
+                .and_then(|f| f.typ.clone())
+                .map(|typ| substitute(&typ, args));
 
             let Some(expected_field_typ) = expected_field_typ else {
                 self.flag_unknown(

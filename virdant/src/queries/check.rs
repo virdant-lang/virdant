@@ -115,6 +115,9 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     // Check that enum types have an inferrable width from the first enumerant.
     check_enum_unknown_width(builder, &mut diagnostics);
 
+    // Check that declared generic parameters have known kinds.
+    check_generic_param_kinds(builder, &mut diagnostics);
+
     // Check for recursive module instantiations.
     check_mod_cycles(builder, &mut diagnostics);
 
@@ -185,7 +188,9 @@ fn check_enum_partially_specified(builder: &mut Builder, diagnostics: &mut Vec<D
         let mut any_missing = false;
         for enumerant_node in enumdef_node.children() {
             let AstNodePayload::Enumerant(_) = enumerant_node.payload() else { continue; };
-            if enumerant_node.children().len() > 1 {
+            // The value expression, if any, is the first expression child
+            // (after the Annotations wrapper and any ctor Param children).
+            if enumerant_node.children().into_iter().any(|child| child.is_expr()) {
                 any_specified = true;
             } else {
                 any_missing = true;
@@ -198,6 +203,33 @@ fn check_enum_partially_specified(builder: &mut Builder, diagnostics: &mut Vec<D
                     enum_name: item.name().to_owned(),
                 }),
             ));
+        }
+    }
+}
+
+/// Check that every declared generic parameter has a known kind
+/// (`Type` or `Nat`), on every item kind which accepts a generic
+/// parameter declaration list.
+fn check_generic_param_kinds(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        let parsing = builder.get_parsing(item.package());
+        let item_node = parsing.ast_node(item.location().ast_node_id());
+        let Some(generics_node) = crate::types::typedef::generics_decl_of(&item_node) else {
+            continue;
+        };
+        for param_node in generics_node.children() {
+            let AstNodePayload::KindParam(_kind_param) = param_node.payload() else { continue };
+            let AstNodePayload::Kind(kind) = param_node.child(0).payload() else { continue };
+            let kind_name = parsing.string(kind.name);
+            if !matches!(kind_name.as_bytes(), b"Type" | b"Nat") {
+                diagnostics.push(Diagnostic::new(
+                    param_node.region(),
+                    diagnostics::UnknownKind {
+                        kind: kind_name.to_owned(),
+                    },
+                ));
+            }
         }
     }
 }

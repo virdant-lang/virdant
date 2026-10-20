@@ -1,0 +1,15 @@
+// A generic parameter applied to type arguments: parameters take no
+// type arguments.
+
+struct type Box[T : Type] {
+    value : T[Bit]
+}
+
+export mod Top {
+    incoming inp : Box[Bit]
+    outgoing out : Bit
+    out := inp->value
+}
+
+// CHECK: Parameter T takes no type arguments
+// CHECK: Check failed

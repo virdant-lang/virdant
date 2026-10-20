@@ -878,14 +878,14 @@ fn missing_match_patterns(
         let Some(pat) = pat_opt else { has_else = true; continue; };
         match pat.payload() {
             AstNodePayload::PatCtor(pat_ctor) => {
-                let Type::Usual(td) = subject_typ else { continue };
+                let Type::Usual(td, _) = subject_typ else { continue };
                 let name = parsing.string(pat_ctor.name);
                 if let Some(sym) = symboltable.slot(*td, name) {
                     covered_syms.insert(sym.id());
                 }
             }
             AstNodePayload::PatEnumerant(pat_enum) => {
-                let Type::Usual(td) = subject_typ else { continue };
+                let Type::Usual(td, _) = subject_typ else { continue };
                 let name = parsing.string(pat_enum.name);
                 if let Some(sym) = symboltable.slot(*td, name) {
                     covered_syms.insert(sym.id());
@@ -924,14 +924,28 @@ fn missing_match_patterns(
                 .map(|v| v.to_string())
                 .collect()
         }
-        Type::Usual(td) => {
+        Type::Usual(td, _args) => {
             let sym = symboltable.symbol(*td);
             match sym.kind() {
                 SymbolKind::EnumDef => symboltable
                     .slots(*td)
                     .iter()
                     .filter(|s| !covered_syms.contains(&s.id()))
-                    .map(|s| format!("#{}", s.name().to_str_lossy()))
+                    .map(|s| {
+                        // Enumerants carrying payload parameters are
+                        // matched with `@Name(params)`, others with `#Name`.
+                        let params = db
+                            .get_ctor_signature(s.id())
+                            .parameters
+                            .iter()
+                            .map(|(name, _)| name.to_str_lossy().into_owned())
+                            .collect::<Vec<_>>();
+                        if params.is_empty() {
+                            format!("#{}", s.name().to_str_lossy())
+                        } else {
+                            format!("@{}({})", s.name().to_str_lossy(), params.join(", "))
+                        }
+                    })
                     .collect(),
                 SymbolKind::UnionDef => symboltable
                     .slots(*td)
@@ -1098,22 +1112,32 @@ fn type_to_source(db: &Db, module_package: PackageId, typ: &Type) -> String {
         Type::Clock => "Clock".to_string(),
         Type::Reset => "Reset".to_string(),
         Type::Word(width) => format!("Word[{width}]"),
-        Type::Valid(inner) => format!("Valid[{}]", type_to_source(db, module_package, inner)),
-        Type::Usual(symbol_id) => {
+        Type::Param(_) => "?".to_string(),
+        Type::Usual(symbol_id, args) => {
             let symbol = db.get_symboltable().symbol(*symbol_id);
             let def_package = symbol.location.package();
             let name = symbol.name.to_str_lossy().into_owned();
-            if def_package == module_package || def_package == db.get_packages().builtin() {
-                return name;
-            }
-            let imported = db.get_package_analysis(module_package)
-                .imports()
-                .contains(&def_package);
-            if imported {
+            let qualified = if def_package == module_package || def_package == db.get_packages().builtin() {
                 name
             } else {
-                let pkg_name = db.get_packages().name(def_package).to_str_lossy().into_owned();
-                format!("{pkg_name}::{name}")
+                let imported = db.get_package_analysis(module_package)
+                    .imports()
+                    .contains(&def_package);
+                if imported {
+                    name
+                } else {
+                    let pkg_name = db.get_packages().name(def_package).to_str_lossy().into_owned();
+                    format!("{pkg_name}::{name}")
+                }
+            };
+            if args.is_empty() {
+                qualified
+            } else {
+                let args: Vec<String> = args
+                    .iter()
+                    .map(|arg| type_to_source(db, module_package, arg))
+                    .collect();
+                format!("{}[{}]", qualified, args.join(", "))
             }
         }
     }

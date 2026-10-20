@@ -10,6 +10,11 @@
 //! Change that one method to change how structs / unions / enums appear on
 //! the wire.
 //!
+//! `TypeLayoutIndex` is keyed by the full instantiated type
+//! (`Type::Usual` with its type arguments), so a generic type
+//! instantiated at two different argument lists gets two layouts.
+//! Layouts store member types *substituted* with those arguments.
+//!
 //! `TypeEncoder` is built once from `&Db` inside `Sim::new` and stored on
 //! `Sim`.  The `on_change` closures clone it (cheap: the inner map is behind
 //! an `Arc`) instead of retaining `Arc<Db>`, so the database may be dropped
@@ -29,20 +34,25 @@ use crate::common::{TypeScheme, Width, WordValue};
 use crate::db::Db;
 use crate::sim::eval::Value;
 use crate::sim::sim::Sim;
-use crate::types::Type;
+use crate::types::substitute::substitute;
+use crate::types::typ::Type;
+use crate::types::typedef::TypeDef;
 
 // TypeLayoutIndex / TypeLayout
 
-/// Index of precomputed bit-layout data for every `Type::Usual` reachable
+/// Index of precomputed bit-layout data for every user-defined type
+/// instantiation (`Type::Usual` including its type arguments) reachable
 /// from the elaboration.  Built once from `&Db` inside `Circuit::new`;
 /// cloned cheaply (inner map is `Arc`) into every `on_change` closure
 /// registered by `attach_vcd`.
 #[derive(Clone)]
 pub(super) struct TypeLayoutIndex {
-    layouts: Arc<IndexMap<SymbolId, TypeLayout>>,
+    layouts: Arc<IndexMap<Type, TypeLayout>>,
 }
 
-/// Bit-layout description for a single `Type::Usual` typedef.
+/// Bit-layout description for a single user-defined type instantiation.
+/// Member types are substituted with the instantiation's type arguments,
+/// so widths are mono.
 #[derive(Clone)]
 pub(super) enum TypeLayout {
     Union {
@@ -51,8 +61,11 @@ pub(super) enum TypeLayout {
         slots: Vec<(SymbolId, Vec<Type>)>,
     },
     Enum {
-        width: Width,
+        tag_width: Width,
         enumerant_values: IndexMap<SymbolId, WordValue>,
+        /// `(enumerant_symbol_id, param_types)` - one entry per
+        /// enumerant; payload-less enumerants have an empty list.
+        slots: Vec<(SymbolId, Vec<Type>)>,
     },
     Struct {
         field_types: Vec<Type>,
@@ -61,11 +74,11 @@ pub(super) enum TypeLayout {
 }
 
 impl TypeLayoutIndex {
-    /// Build a `TypeLayoutIndex` covering every `Type::Usual` reachable from
-    /// the elaborated component types.
+    /// Build a `TypeLayoutIndex` covering every user-defined type
+    /// instantiation reachable from the elaborated component types.
     pub(super) fn build(db: &Db, elab: &Elaboration) -> Self {
-        let mut layouts: IndexMap<SymbolId, TypeLayout> = IndexMap::new();
-        let mut queue: Vec<SymbolId> = Vec::new();
+        let mut layouts: IndexMap<Type, TypeLayout> = IndexMap::new();
+        let mut queue: Vec<Type> = Vec::new();
 
         for comp in elab.components() {
             seed_type(&comp.typ(), &mut queue);
@@ -73,12 +86,12 @@ impl TypeLayoutIndex {
 
         let symboltable = db.get_symboltable();
 
-        while let Some(sym) = queue.pop() {
-            if layouts.contains_key(&sym) {
+        while let Some(typ) = queue.pop() {
+            if layouts.contains_key(&typ) {
                 continue;
             }
-            let layout = build_type_layout(db, &symboltable, sym, &mut queue);
-            layouts.insert(sym, layout);
+            let layout = build_type_layout(db, &symboltable, &typ, &mut queue);
+            layouts.insert(typ, layout);
         }
 
         TypeLayoutIndex { layouts: Arc::new(layouts) }
@@ -88,15 +101,26 @@ impl TypeLayoutIndex {
         match typ {
             Type::Bit | Type::Clock | Type::Reset => 1,
             Type::Word(w) => *w,
-            Type::Usual(sym) => self.usual_width(*sym),
-            Type::Valid(inner) => self.type_width(inner) + 1,
+            Type::Param(_) => 0,
+            Type::Usual(..) => self.usual_width(typ),
         }
     }
 
-    fn usual_width(&self, sym: SymbolId) -> Width {
-        match &self.layouts[&sym] {
+    fn usual_width(&self, typ: &Type) -> Width {
+        let Some(layout) = self.layouts.get(typ) else {
+            return 0;
+        };
+        match layout {
             TypeLayout::Union { slots } => {
                 let tag_width: Width = slots.len().try_into().unwrap();
+                let max_payload: Width = slots
+                    .iter()
+                    .map(|(_, types)| types.iter().map(|t| self.type_width(t)).sum::<Width>())
+                    .max()
+                    .unwrap_or(0);
+                tag_width + max_payload
+            }
+            TypeLayout::Enum { tag_width, slots, .. } => {
                 let max_payload: Width = slots
                     .iter()
                     .map(|(_, types)| types.iter().map(|t| self.type_width(t)).sum::<Width>())
@@ -107,7 +131,7 @@ impl TypeLayoutIndex {
             TypeLayout::Struct { field_types } => {
                 field_types.iter().map(|t| self.type_width(t)).sum()
             }
-            TypeLayout::Enum { width, .. } | TypeLayout::Other(width) => *width,
+            TypeLayout::Other(width) => *width,
         }
     }
 
@@ -123,10 +147,13 @@ impl TypeLayoutIndex {
     }
 
     fn encode_ctor(&self, typ: &Type, ctor_sym: SymbolId, args: &[Value]) -> String {
-        let Type::Usual(typedef_sym) = typ else {
+        let Type::Usual(..) = typ else {
             return "x".repeat(self.type_width(typ) as usize);
         };
-        match &self.layouts[typedef_sym] {
+        let Some(layout) = self.layouts.get(typ) else {
+            return "x".repeat(self.type_width(typ) as usize);
+        };
+        match layout {
             TypeLayout::Union { slots } => {
                 let tag_width: Width = slots.len().try_into().unwrap();
                 let max_payload: Width = slots
@@ -148,25 +175,45 @@ impl TypeLayoutIndex {
                 out.push_str(&format_word(1u64 << slot_index, tag_width));
                 out
             }
-            TypeLayout::Enum { width, enumerant_values } => {
+            TypeLayout::Enum { tag_width, enumerant_values, slots } => {
+                let max_payload: Width = slots
+                    .iter()
+                    .map(|(_, types)| types.iter().map(|t| self.type_width(t)).sum::<Width>())
+                    .max()
+                    .unwrap_or(0);
                 let val = enumerant_values.get(&ctor_sym).copied().unwrap_or(0);
-                format_word(val, *width)
+
+                let mut payload = String::new();
+                for arg in args {
+                    payload.push_str(&self.encode(arg));
+                }
+                let payload_width = payload.len() as Width;
+                let padding = max_payload.saturating_sub(payload_width);
+                let mut out = String::with_capacity((tag_width + max_payload) as usize);
+                for _ in 0..padding { out.push('0'); }
+                out.push_str(&payload);
+                out.push_str(&format_word(val, *tag_width));
+                out
             }
             _ => "x".repeat(self.type_width(typ) as usize),
         }
     }
 }
 
-/// Build the `TypeLayout` for a single typedef `sym`, seeding `queue` with
-/// any `Type::Usual` symbols found in its definition.
+/// Build the `TypeLayout` for the type instantiation `typ`
+/// (`Type::Usual(sym, args)`), seeding `queue` with any user-defined
+/// type instantiations found in its (substituted) member types.
 fn build_type_layout(
     db: &Db,
     symboltable: &crate::analysis::symbols::SymbolTable,
-    sym: SymbolId,
-    queue: &mut Vec<SymbolId>,
+    typ: &Type,
+    queue: &mut Vec<Type>,
 ) -> TypeLayout {
-    let typedef = db.get_typedef(sym);
-    let slots = symboltable.slots(sym);
+    let Type::Usual(sym, args) = typ else {
+        return TypeLayout::Other(0);
+    };
+    let typedef: Arc<TypeDef> = db.get_typedef(*sym);
+    let slots = symboltable.slots(*sym);
     match typedef.kind {
         TypeScheme::UnionDef => {
             let slot_infos = slots
@@ -176,7 +223,11 @@ fn build_type_layout(
                     let param_types: Vec<Type> = sig
                         .parameters
                         .iter()
-                        .map(|(_name, t)| { seed_type(t, queue); t.clone() })
+                        .map(|(_name, t)| {
+                            let substituted = substitute(t, args);
+                            seed_type(&substituted, queue);
+                            substituted
+                        })
                         .collect();
                     (slot.id(), param_types)
                 })
@@ -185,16 +236,40 @@ fn build_type_layout(
         }
         TypeScheme::StructDef => {
             let field_types: Vec<Type> = db
-                .get_struct_fields(sym)
+                .get_struct_fields(*sym)
                 .into_iter()
                 .filter_map(|f| f.typ)
-                .map(|t| { seed_type(&t, queue); t })
+                .map(|t| {
+                    let substituted = substitute(&t, args);
+                    seed_type(&substituted, queue);
+                    substituted
+                })
                 .collect();
             TypeLayout::Struct { field_types }
         }
         TypeScheme::EnumDef => {
-            let width = typedef.width.unwrap_or_else(|| slots.len().try_into().unwrap());
-            TypeLayout::Enum { width, enumerant_values: typedef.enumerant_values.clone() }
+            let tag_width = typedef.width.unwrap_or_else(|| slots.len().try_into().unwrap());
+            let slot_infos = slots
+                .iter()
+                .map(|slot| {
+                    let sig = db.get_ctor_signature(slot.id());
+                    let param_types: Vec<Type> = sig
+                        .parameters
+                        .iter()
+                        .map(|(_name, t)| {
+                            let substituted = substitute(t, args);
+                            seed_type(&substituted, queue);
+                            substituted
+                        })
+                        .collect();
+                    (slot.id(), param_types)
+                })
+                .collect();
+            TypeLayout::Enum {
+                tag_width,
+                enumerant_values: typedef.enumerant_values.clone(),
+                slots: slot_infos,
+            }
         }
         _ => {
             let width = typedef.width.unwrap_or_else(|| slots.len().try_into().unwrap());
@@ -203,10 +278,14 @@ fn build_type_layout(
     }
 }
 
-/// Push any `SymbolId` embedded in `typ` onto `queue` for processing.
-fn seed_type(typ: &Type, queue: &mut Vec<SymbolId>) {
-    if let Type::Usual(sym) = typ {
-        queue.push(*sym);
+/// Push any user-defined type instantiation embedded in `typ` onto
+/// `queue` for processing, recursing through `Usual` argument lists.
+fn seed_type(typ: &Type, queue: &mut Vec<Type>) {
+    if let Type::Usual(_, args) = typ {
+        queue.push(typ.clone());
+        for arg in args {
+            seed_type(arg, queue);
+        }
     }
 }
 

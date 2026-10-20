@@ -13,7 +13,10 @@ builtin type Reset {}
 //> `Valid[T]` represents a value which can either be:
 //> * `@Invalid(), or
 //> * `@Valid(t)` for `t` of type `T`
-builtin type Valid[T : Type] {}
+enum type Valid[T : Type] {
+    Invalid
+    Valid(value : T)
+}
 
 //> `Sync` synchronizes a `Bit` input on one clock domain
 //> on another clock domain `clock`
