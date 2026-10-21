@@ -4,18 +4,20 @@
 //! to hoist non-inline expressions into temporaries.
 
 use indexmap::IndexMap;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use bstr::ByteSlice;
 
 use crate::analysis::drivers::{Driver, DriverWhen, DriverMatch};
 use crate::analysis::location::Location;
-use crate::analysis::symbols::{SymbolId, SymbolTable};
+use crate::analysis::symbols::{Symbol, SymbolId, SymbolTable};
 use crate::common::{self, ComponentKind, DriverType, Radix, TypeScheme, Width, WordValue};
 use crate::db::Db;
 use crate::package::PackageId;
 use crate::syntax::ast::{AnnotationValue, AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
+use crate::types::substitute::substitute;
 use crate::types::typing::Primitive;
 use crate::types::{Type, Typing};
 use crate::verilog::{self, valid_verilog_name};
@@ -83,6 +85,23 @@ pub fn convert_db_to_verilog(db: &Db) -> verilog::Verilog {
     verilog
 }
 
+/// One monomorphized instantiation of a generic mod def: the def
+/// together with concrete type arguments.  Emitted as one Verilog
+/// module with a hash-mangled name and a `//` origin comment.
+#[derive(Clone)]
+struct MonoModule {
+    /// The type arguments of this instantiation.
+    args: Vec<Type>,
+    /// The emitted Verilog module name (hash-mangled).
+    name: String,
+    /// Human-readable origin, e.g. `design::Fifo[Word[8]]`.
+    origin: String,
+    /// `(port_name, width)` for the parent's wire declarations.
+    ports: Vec<(String, Width)>,
+    /// `@parameter` annotations declared on the def, in order.
+    declared_params: Vec<(String, Option<AnnotationValue>)>,
+}
+
 struct Converter<'d> {
     db: &'d Db,
     /// "package::Module" -> list of (port_name, width)
@@ -91,6 +110,16 @@ struct Converter<'d> {
     emitted_module_names: IndexMap<String, String>,
     /// "package::Module" -> [(param name, declared default, in @parameter order)]
     module_declared_params: IndexMap<String, Vec<(String, Option<AnnotationValue>)>>,
+    /// Discovered instantiations of generic mod defs, keyed by
+    /// `(def, args)`.  Insertion order is deterministic (packages, then
+    /// item order, then depth-first through nested instances), so the
+    /// emitted mono modules are stable.
+    mono_modules: IndexMap<(SymbolId, Vec<Type>), MonoModule>,
+    /// The type arguments of the mono module currently being converted
+    /// (`[]` outside a generic def's instantiation).  Every type
+    /// fetched from the (generic) analysis is substituted with these
+    /// before use.
+    mono_env: Vec<Type>,
 }
 
 impl<'d> Converter<'d> {
@@ -100,6 +129,8 @@ impl<'d> Converter<'d> {
             module_ports: IndexMap::new(),
             emitted_module_names: IndexMap::new(),
             module_declared_params: IndexMap::new(),
+            mono_modules: IndexMap::new(),
+            mono_env: vec![],
         }
     }
 
@@ -124,6 +155,14 @@ impl<'d> Converter<'d> {
                 let AstNodePayload::ModDef(moddef) = item_ast.payload() else {
                     continue;
                 };
+
+                // A generic mod def is never emitted at def level: it
+                // has no concrete port widths.  Its instantiations are
+                // discovered below and emitted as mono modules.
+                if item_generics(&item_ast).is_some() {
+                    continue;
+                }
+
                 let moddef_name = parsing.string(moddef.name.clone()).to_str_lossy().into_owned();
                 let module_path = qualified_module_name(&self.db.get_packages().name(package).to_str_lossy(), &moddef_name);
                 let emitted_name = if let Some(cell) = cell_annotation(&self.db, package, &item_ast) {
@@ -160,13 +199,127 @@ impl<'d> Converter<'d> {
                 }
             }
         }
+
+        // Discover every instantiation of a generic mod def reachable
+        // from a non-generic module, recursively.  Instantiations are
+        // keyed by `(def, args)`; identical arguments share one mono
+        // module.
+        let packages = self.db.get_packages();
+        for package in packages.ids() {
+            let parsing = self.db.get_parsing(package);
+            for item_ast in parsing.root().children() {
+                if !matches!(item_ast.payload(), AstNodePayload::ModDef(_)) {
+                    continue;
+                }
+                if item_generics(&item_ast).is_some() {
+                    continue;
+                }
+                for stmt in item_ast.children() {
+                    if !matches!(stmt.payload(), AstNodePayload::Submodule(_)) {
+                        continue;
+                    }
+                    let Some((target_symbol, args)) = instantiation_target(self.db, &stmt) else {
+                        continue;
+                    };
+                    if !target_is_generic(self.db, &target_symbol) {
+                        continue;
+                    }
+                    self.register_mono_module(target_symbol.id(), args);
+                }
+            }
+        }
+    }
+
+    /// Register the mono module for instantiating the generic def
+    /// `def` at `args` (concrete in this context), computing its ports
+    /// with the arguments substituted, then recursing into the def's
+    /// own instantiations with the arguments composed.
+    fn register_mono_module(&mut self, def: SymbolId, args: Vec<Type>) {
+        let key = (def, args.clone());
+        if self.mono_modules.contains_key(&key) {
+            return;
+        }
+
+        let db = self.db;
+        let symbol = db.get_symboltable().symbol(def);
+        let def_location = symbol.location();
+        let def_parsing = db.get_parsing(def_location.package());
+        let def_node = def_parsing.ast_node(def_location.ast_node_id());
+        let AstNodePayload::ModDef(moddef) = def_node.payload() else {
+            return;
+        };
+        let moddef_name = def_parsing.string(moddef.name.clone()).to_str_lossy().into_owned();
+        let module_path = qualified_module_name(
+            &db.get_packages().name(def_location.package()).to_str_lossy(),
+            &moddef_name,
+        );
+
+        let def_params = target_params(db, &symbol);
+        let origin = crate::types::render::render_mono_item(db, def, &def_params, &args);
+        let name = mono_module_name(&module_path, &args);
+
+        // Ports with the instance's type arguments substituted.
+        let ports_of = db.get_ports_of(def);
+        let mut ports = vec![];
+        for port in ports_of.iter() {
+            let port_name = port.path.to_str_lossy().into_owned();
+            let width = port
+                .typ
+                .clone()
+                .map(|t| type_width(&substitute(&t, &args), db))
+                .unwrap_or(0);
+            ports.push((port_name, width));
+        }
+
+        // `@parameter` annotations declared on the def.
+        let declared_params: Vec<(String, Option<AnnotationValue>)> = def_node
+            .parameter_annotations(&def_parsing)
+            .into_iter()
+            .map(|(name, value)| (name.to_str_lossy().into_owned(), value))
+            .collect();
+
+        self.mono_modules.insert(
+            key.clone(),
+            MonoModule {
+                args,
+                name,
+                origin,
+                ports,
+                declared_params,
+            },
+        );
+
+        // Recurse into this def's own instantiations, composing the
+        // written arguments (which may mention this def's parameters)
+        // with this instance's arguments.
+        for stmt in def_node.children() {
+            if !matches!(stmt.payload(), AstNodePayload::Submodule(_)) {
+                continue;
+            }
+            let Some((target_symbol, written_args)) = instantiation_target(db, &stmt) else {
+                continue;
+            };
+            if !target_is_generic(db, &target_symbol) {
+                continue;
+            }
+            let mono_args: Vec<Type> = written_args
+                .iter()
+                .map(|arg| substitute(arg, &key.1))
+                .collect();
+            self.register_mono_module(target_symbol.id(), mono_args);
+        }
     }
 
     /// Build the merged parameter list for a submodule instantiation.
     /// Walks the declared parameters first (using instance-supplied override
     /// or declared default), then appends any instance-supplied names not
-    /// in the declared list.
-    fn build_submodule_parameters(&self, stmt: &AstNode, mod_path: &str) -> Vec<(String, String)> {
+    /// in the declared list.  `declared` is the target's `@parameter`
+    /// declaration list (def-level or mono-module-level).
+    fn build_submodule_parameters(
+        &self,
+        stmt: &AstNode,
+        declared: Option<&[(String, Option<AnnotationValue>)]>,
+    ) -> Vec<(String, String)> {
         use crate::syntax::ast::AnnotationValue;
         // Instance-supplied @parameter annotations.
         let supplied: Vec<(String, Option<AnnotationValue>)> = stmt
@@ -175,7 +328,6 @@ impl<'d> Converter<'d> {
             .map(|(name, value)| (name.to_str_lossy().into_owned(), value))
             .collect();
 
-        let declared = self.module_declared_params.get(mod_path);
         let Some(declared) = declared else {
             // Target has no declared parameters; emit only instance-supplied values
             // that have a value (not just a name).
@@ -213,15 +365,42 @@ impl<'d> Converter<'d> {
         result
     }
 
-    fn convert_package(&self, package: PackageId) -> Option<verilog::VerilogFile> {
+    fn convert_package(&mut self, package: PackageId) -> Option<verilog::VerilogFile> {
         let parsing = self.db.get_parsing(package);
         let package_name = self.db.get_packages().name(package).to_str_lossy().into_owned();
+        let symboltable = self.db.get_symboltable();
         let mut modules = vec![];
         for item_ast in parsing.root().children() {
-            let AstNodePayload::ModDef(_) = item_ast.payload() else {
+            let AstNodePayload::ModDef(moddef) = item_ast.payload() else {
                 continue;
             };
-            modules.push(self.convert_moddef(package, item_ast));
+            if item_generics(&item_ast).is_some() {
+                // A generic mod def: emit one module per discovered
+                // instantiation of it (in discovery order), each with
+                // its own arguments in scope.  An uninstantiated
+                // generic def emits nothing.
+                let moddef_symbol = symboltable
+                    .resolve_item_in_package(parsing.string(moddef.name), package)
+                    .unwrap();
+                let keys: Vec<(SymbolId, Vec<Type>)> = self
+                    .mono_modules
+                    .keys()
+                    .filter(|(def, _)| *def == moddef_symbol.id())
+                    .cloned()
+                    .collect();
+                for key in keys {
+                    let Some(mono) = self.mono_modules.get(&key) else {
+                        continue;
+                    };
+                    self.mono_env = mono.args.clone();
+                    let item_ast = item_ast.clone();
+                    modules.push(self.convert_moddef(package, item_ast, Some(mono)));
+                }
+                self.mono_env = vec![];
+            } else {
+                self.mono_env = vec![];
+                modules.push(self.convert_moddef(package, item_ast, None));
+            }
         }
         if modules.is_empty() {
             return None;
@@ -232,14 +411,27 @@ impl<'d> Converter<'d> {
         })
     }
 
-    fn convert_moddef(&self, package: PackageId, item_ast: AstNode) -> verilog::Module {
+    /// Convert one mod def to a Verilog module.  `mono` names the
+    /// mono-module instantiation being converted (`None` for a plain
+    /// non-generic def); when present, every type fetched from the
+    /// (generic) analysis is substituted with `self.mono_env` — the
+    /// instance's type arguments — before use.
+    fn convert_moddef(
+        &self,
+        package: PackageId,
+        item_ast: AstNode,
+        mono: Option<&MonoModule>,
+    ) -> verilog::Module {
         let AstNodePayload::ModDef(moddef) = item_ast.payload() else {
             panic!("expected ModDef");
         };
         let parsing = self.db.get_parsing(package);
         let moddef_name = parsing.string(moddef.name.clone()).to_str_lossy().into_owned();
         let module_path = qualified_module_name(&self.db.get_packages().name(package).to_str_lossy(), &moddef_name);
-        let module_name = self.emitted_module_names[&module_path].clone();
+        let (module_name, module_origin) = match mono {
+            Some(mono) => (mono.name.clone(), Some(mono.origin.clone())),
+            None => (self.emitted_module_names[&module_path].clone(), None),
+        };
 
         let symboltable = self.db.get_symboltable();
         let moddef_symbol = symboltable
@@ -252,13 +444,14 @@ impl<'d> Converter<'d> {
         // reg name -> AstNodeId of its explicit `on clock` expression (if present)
         let mut sequential_regs: IndexMap<String, AstNodeId> = IndexMap::new();
 
-        // Gather ports using get_ports_of
+        // Gather ports using get_ports_of, substituting the mono
+        // instantiation's type arguments when converting a generic def.
         let ports_of = self.db.get_ports_of(moddef_symbol.id());
         let mut ports: Vec<verilog::Port> = vec![];
         for port in ports_of.iter() {
             use bstr::ByteSlice;
             let name = port.path.to_str_lossy().into_owned();
-            let width = port.typ.clone().map(|t| type_width(&t, self.db)).unwrap_or(0);
+            let width = port.typ.clone().map(|t| type_width(&self.mono_substitute(t), self.db)).unwrap_or(0);
             let port_name = valid_verilog_name(&name);
             // OutgoingReg is an output reg port in Verilog.
             // All other ports (Incoming, Outgoing, OutgoingWire) are wire ports.
@@ -284,6 +477,7 @@ impl<'d> Converter<'d> {
                 AstNodePayload::Component(component) => {
                     let name = parsing.string(component.name.clone()).to_str_lossy().into_owned();
                     let typ = component_analysis.type_of(parsing.string(component.name)).unwrap();
+                    let typ = self.mono_substitute(typ);
                     let width = type_width(&typ, self.db);
                     match component.kind {
                         ComponentKind::Incoming | ComponentKind::Outgoing
@@ -336,18 +530,47 @@ impl<'d> Converter<'d> {
                 }
                 AstNodePayload::Submodule(module) => {
                     let raw_name = parsing.string(module.name).to_str_lossy().into_owned();
-                    // The Ofness child may sit at different indices depending on
-                    // whether an Annotations child is present, so locate it by
-                    // payload rather than by a hard-coded index.
-                    let ofness_node = stmt.children().iter()
-                        .find(|c| matches!(c.payload(), AstNodePayload::Ofness(_)))
-                        .cloned()
-                        .expect("Submodule node must have an Ofness child");
-                    let mod_path = render_ofness_path(ofness_node, self.db, package, &symboltable);
-                    let ports_info = self.module_ports.get(&mod_path).cloned().unwrap_or_default();
-                    let sub_name = self.emitted_module_names.get(&mod_path)
-                        .cloned()
-                        .unwrap_or_else(|| valid_verilog_name(&mod_path));
+                    // Resolve the target and this instance's type
+                    // arguments.  A generic target refers to its
+                    // discovered mono module, with the written arguments
+                    // composed with the current mono instantiation's
+                    // arguments; a non-generic target uses the def-level
+                    // registration.
+                    let (ports_info, sub_name, declared_params) =
+                        match instantiation_target(self.db, &stmt) {
+                            Some((target_symbol, written_args))
+                                if target_is_generic(self.db, &target_symbol) =>
+                            {
+                                let mono_args: Vec<Type> = written_args
+                                    .iter()
+                                    .map(|arg| self.mono_substitute(arg.clone()))
+                                    .collect();
+                                let mono =
+                                    self.mono_modules.get(&(target_symbol.id(), mono_args))
+                                        .expect("mono module of an instantiation must have been discovered");
+                                (
+                                    mono.ports.clone(),
+                                    mono.name.clone(),
+                                    Some(mono.declared_params.as_slice()),
+                                )
+                            }
+                            _ => {
+                                // The Ofness child may sit at different indices depending on
+                                // whether an Annotations child is present, so locate it by
+                                // payload rather than a hard-coded index.
+                                let ofness_node = stmt.children().iter()
+                                    .find(|c| matches!(c.payload(), AstNodePayload::Ofness(_)))
+                                    .cloned()
+                                    .expect("Submodule node must have an Ofness child");
+                                let mod_path = render_ofness_path(ofness_node, self.db, package, &symboltable);
+                                let ports_info = self.module_ports.get(&mod_path).cloned().unwrap_or_default();
+                                let sub_name = self.emitted_module_names.get(&mod_path)
+                                    .cloned()
+                                    .unwrap_or_else(|| valid_verilog_name(&mod_path));
+                                let declared_params = self.module_declared_params.get(&mod_path).map(|v| v.as_slice());
+                                (ports_info, sub_name, declared_params)
+                            }
+                        };
                     for (port_name, width) in &ports_info {
                         elements.push(verilog::Element::Wire(verilog::Wire {
                             name: valid_verilog_name(&format!("{raw_name}.{port_name}")),
@@ -359,7 +582,7 @@ impl<'d> Converter<'d> {
                         name: valid_verilog_name(&raw_name),
                         submodule_name: sub_name,
                         ports: ports_info.into_iter().map(|(n, _)| n).collect(),
-                        parameters: self.build_submodule_parameters(&stmt, &mod_path),
+                        parameters: self.build_submodule_parameters(&stmt, declared_params),
                     }));
                 }
 
@@ -376,7 +599,7 @@ impl<'d> Converter<'d> {
         for (comp_id, comp_drivers) in driver_analysis.drivers() {
             let Some(component) = component_analysis.component(*comp_id) else { continue };
             let path = component.path().to_str_lossy().into_owned();
-            let Some(typ) = component.typ() else { continue };
+            let Some(typ) = component.typ().map(|t| self.mono_substitute(t)) else { continue };
 
             for driver in comp_drivers {
                 // Bidirectional drivers are emitted by the dedicated pass below.
@@ -473,7 +696,7 @@ impl<'d> Converter<'d> {
         let mut initial_exprs: IndexMap<String, verilog::Expr> = IndexMap::new();
         for (comp_id, locs) in driver_analysis.initials() {
             let Some(component) = component_analysis.component(*comp_id) else { continue };
-            let Some(typ) = component.typ() else { continue };
+            let Some(typ) = component.typ().map(|t| self.mono_substitute(t)) else { continue };
             let Some(loc) = locs.first() else { continue };
             let expr_parsing = self.db.get_parsing(loc.package());
             let expr_node = expr_parsing.ast_node(loc.ast_node_id());
@@ -514,7 +737,7 @@ impl<'d> Converter<'d> {
             elements.push(verilog::Element::Initial(verilog::Initial { stmts: init_stmts }));
         }
 
-        verilog::Module { name: module_name, is_ext: moddef.is_ext, ports, elements }
+        verilog::Module { name: module_name, is_ext: mono.is_none() && moddef.is_ext, ports, elements, origin: module_origin }
     }
 
     /// Recursively collects the region strings of all `?` (hole) nodes in a driver tree.
@@ -1447,7 +1670,7 @@ impl<'d> Converter<'d> {
                 // The subject expression should have a struct type
                 let subject_node = node.child(0);
                 let subject_typ = typing.type_of_node(subject_node.id())
-                    .cloned()
+                    .map(|t| self.mono_substitute(t.clone()))
                     .unwrap_or_else(|| Type::Word(8));
 
                 let Type::Usual(typedef_symbol_id, type_args) = &subject_typ else {
@@ -1688,8 +1911,20 @@ impl<'d> Converter<'d> {
         self.db.get_typing(exprroot)
     }
 
+    /// Substitute the current mono instantiation's type arguments into
+    /// `typ`.  A no-op outside a generic def's instantiation (mono
+    /// types substitute to themselves).
+    fn mono_substitute(&self, typ: Type) -> Type {
+        if self.mono_env.is_empty() {
+            typ
+        } else {
+            substitute(&typ, &self.mono_env)
+        }
+    }
+
     fn node_type(&self, package: PackageId, node: &AstNode) -> Option<Type> {
-        self.db.get_typeof(Location::new(package, node.id())).ok()
+        let typ = self.db.get_typeof(Location::new(package, node.id())).ok();
+        typ.map(|t| self.mono_substitute(t))
     }
 
     fn node_width(&self, package: PackageId, node: &AstNode) -> Width {
@@ -1821,6 +2056,105 @@ fn collect_bidirectional_assigns<'a>(
 
 fn qualified_module_name(package_name: &str, module_name: &str) -> String {
     format!("{package_name}::{module_name}")
+}
+
+/// The `Generics` declaration of a mod def item node, if it declares
+/// one.
+fn item_generics<'p>(item_ast: &'p AstNode<'p>) -> Option<AstNode<'p>> {
+    crate::types::typedef::generics_decl_of(item_ast)
+}
+
+/// The generic parameter list of the item owning `symbol`: empty when
+/// the item is not generic.
+fn target_params(db: &Db, symbol: &Symbol) -> Vec<crate::types::typedef::TypeParam> {
+    let location = symbol.location();
+    let parsing = db.get_parsing(location.package());
+    let node = parsing.ast_node(location.ast_node_id());
+    match crate::types::typedef::generics_decl_of(&node) {
+        Some(decl) => crate::types::typedef::parse_generics_decl(&decl),
+        None => Vec::new(),
+    }
+}
+
+/// Whether the item owning `symbol` declares generic parameters.
+fn target_is_generic(db: &Db, symbol: &Symbol) -> bool {
+    !target_params(db, symbol).is_empty()
+}
+
+/// Resolve the target def of a socket or submodule instantiation node
+/// and its type arguments, as written.  The component analysis has
+/// already kind-checked the arguments (conversion only runs on checked
+/// designs); returns `None` if the target or arguments do not resolve.
+fn instantiation_target(db: &Db, stmt: &AstNode<'_>) -> Option<(Symbol, Vec<Type>)> {
+    let ofness_node = stmt
+        .children()
+        .iter()
+        .find(|c| matches!(c.payload(), AstNodePayload::Ofness(_)))?
+        .clone();
+    let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
+        return None;
+    };
+    let parsing = db.get_parsing(stmt.package());
+    let packages = db.get_packages();
+    let target_package = match ofness.package {
+        Some(pkg) => packages.id(parsing.string(pkg)),
+        None => Some(stmt.package()),
+    };
+    let name = parsing.string(ofness.name);
+    let symboltable = db.get_symboltable();
+    let symbol = target_package
+        .and_then(|pkg| symboltable.resolve_item(name, pkg))?
+        .clone();
+    let args = instance_args_of(db, stmt, &symbol)?;
+    Some((symbol, args))
+}
+
+/// Resolve the type arguments written on an instantiation node against
+/// the target def's parameter list.  Returns the arguments *as
+/// written*: inside a generic def they may mention that def's
+/// parameters (`Param`), to be composed by the caller.
+fn instance_args_of(db: &Db, stmt: &AstNode<'_>, def_symbol: &Symbol) -> Option<Vec<Type>> {
+    let args_node = stmt
+        .children()
+        .iter()
+        .find(|c| matches!(c.payload(), AstNodePayload::GenericsParams(_)))
+        .cloned();
+    let params = target_params(db, def_symbol);
+    let arg_nodes: Vec<AstNode<'_>> = match &args_node {
+        Some(node) => node.children(),
+        None => vec![],
+    };
+    if arg_nodes.len() != params.len() {
+        return None;
+    }
+    let type_index = db.get_type_index();
+    let mut args: Vec<Type> = Vec::with_capacity(arg_nodes.len());
+    for arg in &arg_nodes {
+        match arg.payload() {
+            AstNodePayload::Type(_) => {
+                args.push(type_index.type_at(arg.location())?.clone());
+            }
+            AstNodePayload::GenericsNat(nat) => {
+                let spelling = arg.parsing().string(nat.value).to_str_lossy().into_owned();
+                args.push(Type::Word(spelling.parse().ok()?));
+            }
+            _ => return None,
+        }
+    }
+    Some(args)
+}
+
+/// The Verilog name of a mono module: the def's qualified module path,
+/// a `#`, then a hash of the type arguments
+/// (`top::Reg#bde2499a`).  Hashing the `Type` values (rather than
+/// encoding their string rendering) keeps names valid even if the
+/// rendering is not unique in the future; a `//` comment above the
+/// emitted declaration records the readable origin.
+fn mono_module_name(module_path: &str, args: &[Type]) -> String {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    args.hash(&mut hasher);
+    let hash = (hasher.finish() & 0xFFFF_FFFF) as u32;
+    valid_verilog_name(&format!("{module_path}#{hash:08x}"))
 }
 
 /// The `@cell("...")` annotation on a mod def, if any. Only meaningful

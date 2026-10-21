@@ -60,11 +60,12 @@ impl Circuit {
         let mut registers: IndexSet<SignalId> = IndexSet::new();
         for elab_component in elaboration.components() {
             let elab_id = elab_component.id();
+            let env = elab_component.env();
             if let Some(driver) = elab_component.driver() {
-                exprs.insert(elab_id, driver_to_expr(db, driver));
+                exprs.insert(elab_id, driver_to_expr(db, driver, env));
             }
             if let Some(loc) = elab_component.initial_expr() {
-                initial_exprs.insert(elab_id, initial_to_expr(db, loc));
+                initial_exprs.insert(elab_id, initial_to_expr(db, loc, env));
             }
             if elab_component.is_reg() {
                 registers.insert(elab_id);

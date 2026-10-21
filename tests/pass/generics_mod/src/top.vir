@@ -1,0 +1,84 @@
+// Generic socket defs and generic mod defs, instantiated at concrete
+// type arguments and wired end-to-end.  The testbench drives this
+// through the generated Verilog: the combinational generic socket pair
+// must pass data through the `:=:` connection, and the generic
+// register/enum modules must latch and unwrap their argument's payload
+// width.
+
+socket Bus[T : Type] {
+    cosi req : T
+    soci rsp : T
+}
+
+mod Master[W : Type] {
+    incoming d : W
+    client socket bus of Bus[W] {
+        it.req := d
+    }
+    unused bus.rsp
+}
+
+mod Slave[W : Type] {
+    server socket bus of Bus[W] {
+        it.rsp := it.req
+    }
+}
+
+// A generic register: its payload width is the argument's width.
+mod Reg[T : Type] {
+    incoming clk : Clock
+    incoming d : T
+    reg slot : T on clk {
+        it <= d
+    }
+    outgoing q : T
+    q := slot
+}
+
+// A generic enum flowing through a generic mod: the payload of
+// `Some` carries the argument's width.
+enum type Opt[T : Type] {
+    None
+    Some(value : T)
+}
+
+mod Tagged[T : Type] {
+    incoming clk : Clock
+    incoming d : T
+    reg best : Opt[T] on clk {
+        it <= @Some(d)
+    }
+    outgoing o : Opt[T]
+    o := best
+}
+
+export mod Top {
+    incoming clk : Clock
+    incoming a : Word[8]
+    incoming b : Word[4]
+
+    mod m of Master[Word[8]] {
+        it.d := a
+    }
+    mod s of Slave[Word[8]] {
+        m.bus :=: it.bus
+    }
+
+    mod r4 of Reg[Word[4]] {
+        it.clk := clk
+        it.d := b
+    }
+    mod t4 of Tagged[Word[4]] {
+        it.clk := clk
+        it.d := b
+    }
+
+    outgoing out8 : Word[8]
+    outgoing out4 : Word[4]
+    out8 := s.bus.rsp
+    out4 := match t4.o {
+        case @Some(v) => v
+        case #None => 0
+    }
+    unused r4.q
+}

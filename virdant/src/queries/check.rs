@@ -118,6 +118,18 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     // Check that declared generic parameters have known kinds.
     check_generic_param_kinds(builder, &mut diagnostics);
 
+    // Check that `:=:` socket connections match on mono sockets: the
+    // socketdef together with its type arguments (PLANv2 §6).
+    check_socket_connections(builder, &mut diagnostics);
+
+    // Check that no `ext mod` declares generic parameters: ext mods
+    // never support generics (a hard rule, not a missing feature).
+    check_ext_mod_generics(builder, &mut diagnostics);
+
+    // Check that no `export mod` declares generic parameters: an
+    // exported top must be a concrete instantiation.
+    check_export_mod_generics(builder, &mut diagnostics);
+
     // Check for recursive module instantiations.
     check_mod_cycles(builder, &mut diagnostics);
 
@@ -338,6 +350,262 @@ fn check_mod_cycles(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
             edge.region.clone(),
             diagnostics::ModuleCycle {
                 module_cycle: cycle_fqns,
+            },
+        ));
+    }
+}
+
+/// Check that every `:=:` socket connection connects two instances of
+/// the *same* mono socket: the same socketdef instantiated at the same
+/// type arguments (PLANv2 §6).  Two instances of the same socketdef
+/// with different arguments are different mono sockets and do not
+/// connect; the diagnostic names both instantiations and points at the
+/// connection.
+fn check_socket_connections(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let symboltable = builder.get_symboltable();
+    let items: Vec<SymbolId> = symboltable
+        .items()
+        .into_iter()
+        .filter(|item| item.kind == SymbolKind::ModDef)
+        .map(|item| item.id())
+        .collect();
+    for item in items {
+        let location = builder.get_symboltable().symbol(item).location();
+        let parsing = builder.get_parsing(location.package());
+        let node = parsing.ast_node(location.ast_node_id());
+        check_connection_nodes(builder, item, &node, None, diagnostics);
+    }
+}
+
+/// Recursively walk `node`'s statement tree, tracking the `it`-context
+/// (the dotted instance name of the enclosing submodule), checking
+/// every `BidirectionalDriver`.
+fn check_connection_nodes(
+    builder: &mut Builder,
+    item: SymbolId,
+    node: &crate::syntax::ast::AstNode<'_>,
+    it_context: Option<&bstr::BStr>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    use crate::syntax::payload::AstNodePayload;
+
+    match node.payload() {
+        AstNodePayload::BidirectionalDriver => {
+            let parsing = node.parsing();
+            let lhs = node.child(0);
+            let rhs = node.child(1);
+            let lhs_path = rewrite_connection_side(parsing, lhs, it_context);
+            let rhs_path = rewrite_connection_side(parsing, rhs, it_context);
+            if let (Some(lhs_path), Some(rhs_path)) = (lhs_path, rhs_path) {
+                let lhs_socket = resolve_mono_socket(builder, item, lhs_path.as_bstr());
+                let rhs_socket = resolve_mono_socket(builder, item, rhs_path.as_bstr());
+                if let (Some(lhs_socket), Some(rhs_socket)) = (lhs_socket, rhs_socket) {
+                    if lhs_socket.socketdef != rhs_socket.socketdef
+                        || lhs_socket.args != rhs_socket.args
+                    {
+                        diagnostics.push(Diagnostic::new(
+                            node.region(),
+                            diagnostics::SocketConnectMismatch {
+                                lhs: lhs_socket.rendered,
+                                rhs: rhs_socket.rendered,
+                            },
+                        ));
+                    }
+                }
+            }
+            return;
+        }
+        AstNodePayload::Submodule(submodule) => {
+            // Recurse into the It-block body, using the submodule
+            // instance name as the new `it`-context so `it.foo` paths
+            // inside resolve to the instance.
+            let parsing = node.parsing();
+            let name = parsing.string(submodule.name);
+            let new_context = match it_context {
+                Some(ctx) => {
+                    let mut joined = bstr::BString::from(ctx);
+                    joined.push(b'.');
+                    joined.extend_from_slice(name);
+                    joined
+                }
+                None => bstr::BString::from(name),
+            };
+            for child in node.children() {
+                if matches!(child.payload(), AstNodePayload::It) {
+                    let block = &child.children()[0];
+                    for stmt in block.children() {
+                        check_connection_nodes(builder, item, &stmt, Some(new_context.as_bstr()), diagnostics);
+                    }
+                }
+            }
+            return;
+        }
+        _ => {}
+    }
+
+    for child in node.children() {
+        check_connection_nodes(builder, item, &child, it_context, diagnostics);
+    }
+}
+
+/// Rewrite a `:=:` side path, resolving `it` / `it.*` against the
+/// enclosing it-context (mirroring the driver-analysis rewrite).
+fn rewrite_connection_side(
+    parsing: &crate::syntax::parsing::Parsing,
+    side_node: crate::syntax::ast::AstNode<'_>,
+    it_context: Option<&bstr::BStr>,
+) -> Option<bstr::BString> {
+    let path_interned = side_node.path()?;
+    let path = parsing.string(path_interned).to_owned();
+    let Some(ctx) = it_context else {
+        return Some(path);
+    };
+    if path == b"it" {
+        Some(ctx.to_owned())
+    } else if path.starts_with(b"it.") {
+        let suffix: bstr::BString = path[3..].to_owned().into();
+        let mut joined = ctx.to_owned();
+        joined.push(b'.');
+        joined.extend_from_slice(&suffix);
+        Some(joined)
+    } else {
+        Some(path)
+    }
+}
+
+/// A socket instance resolved at a `:=:` connection side, together
+/// with its mono identity: the socketdef and its type arguments
+/// (composed through the enclosing submodule instances).
+struct MonoSocket {
+    socketdef: SymbolId,
+    args: Vec<crate::types::Type>,
+    rendered: BString,
+}
+
+/// Resolve one `:=:` side path (already it-rewritten) to its mono
+/// socket: walk the instance prefix through submodule statements
+/// (composing written type arguments with the enclosing instance's
+/// arguments), then find the socket instance named by the last path
+/// segment in the innermost module.
+fn resolve_mono_socket(
+    builder: &mut Builder,
+    item: SymbolId,
+    path: &bstr::BStr,
+) -> Option<MonoSocket> {
+    use crate::syntax::payload::AstNodePayload;
+    use crate::types::substitute::substitute;
+
+    let segments: Vec<&[u8]> = path.split(|b| *b == b'.').collect();
+    let (socket_name, instance_segments) = segments.split_last()?;
+
+    let symboltable = builder.get_symboltable();
+
+    // Walk the instance prefix through submodule statements, composing
+    // each instance's written arguments with the enclosing environment.
+    let mut current_moddef = item;
+    let mut env: Vec<crate::types::Type> = vec![];
+    for instance_name in instance_segments {
+        let location = symboltable.symbol(current_moddef).location();
+        let parsing = builder.get_parsing(location.package());
+        let def_node = parsing.ast_node(location.ast_node_id());
+        let sub_stmt = def_node.children().into_iter().find(|stmt| {
+            matches!(
+                stmt.payload(),
+                AstNodePayload::Submodule(submodule)
+                    if parsing.string(submodule.name) == *instance_name
+            )
+        })?;
+        let (target_symbol, written_args) =
+            crate::types::typedef::instantiation_target(builder, &sub_stmt)?;
+        env = written_args
+            .iter()
+            .map(|arg| substitute(arg, &env))
+            .collect();
+        current_moddef = target_symbol.id();
+    }
+
+    // Find the socket instance in the innermost module.
+    let location = symboltable.symbol(current_moddef).location();
+    let parsing = builder.get_parsing(location.package());
+    let def_node = parsing.ast_node(location.ast_node_id());
+    let socket_stmt = def_node.children().into_iter().find(|stmt| {
+        matches!(
+            stmt.payload(),
+            AstNodePayload::Socket(socket) if parsing.string(socket.name) == socket_name
+        )
+    })?;
+    let (socket_symbol, written_args) =
+        crate::types::typedef::instantiation_target(builder, &socket_stmt)?;
+    let args: Vec<crate::types::Type> = written_args
+        .iter()
+        .map(|arg| substitute(arg, &env))
+        .collect();
+
+    let params = crate::types::typedef::params_of_item(builder, &socket_symbol);
+    let rendered = crate::types::render::render_mono_item(
+        builder.db(),
+        socket_symbol.id(),
+        &params,
+        &args,
+    );
+
+    Some(MonoSocket {
+        socketdef: socket_symbol.id(),
+        args,
+        rendered: rendered.into(),
+    })
+}
+
+/// Check that no `ext mod` declares generic parameters: ext mods never
+/// support generics (they parameterize through `@parameter`
+/// annotations instead).  This is a hard rule, not a missing feature.
+fn check_ext_mod_generics(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        if item.kind != SymbolKind::ModDef {
+            continue;
+        }
+        let location = item.location();
+        let parsing = builder.get_parsing(location.package());
+        let node = parsing.ast_node(location.ast_node_id());
+        let AstNodePayload::ModDef(moddef) = node.payload() else { continue };
+        if !moddef.is_ext {
+            continue;
+        }
+        let Some(decl) = crate::types::typedef::generics_decl_of(&node) else {
+            continue;
+        };
+        diagnostics.push(Diagnostic::new(
+            decl.region(),
+            diagnostics::ExtModGenerics {
+                item: item.fqn().to_owned(),
+            },
+        ));
+    }
+}
+
+/// Check that no `export mod` declares generic parameters: an exported
+/// top must be a concrete instantiation, and a generic def has none.
+fn check_export_mod_generics(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        if item.kind != SymbolKind::ModDef {
+            continue;
+        }
+        let location = item.location();
+        let parsing = builder.get_parsing(location.package());
+        let node = parsing.ast_node(location.ast_node_id());
+        let AstNodePayload::ModDef(moddef) = node.payload() else { continue };
+        if !moddef.is_export {
+            continue;
+        }
+        let Some(decl) = crate::types::typedef::generics_decl_of(&node) else {
+            continue;
+        };
+        diagnostics.push(Diagnostic::new(
+            decl.region(),
+            diagnostics::ExportModGenerics {
+                item: item.fqn().to_owned(),
             },
         ));
     }

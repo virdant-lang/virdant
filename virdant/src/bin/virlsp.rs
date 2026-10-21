@@ -8,7 +8,7 @@ use std::sync::Arc;
 use clap::{Parser, Subcommand};
 
 use bstr::{BString, ByteSlice as _};
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -66,7 +66,7 @@ fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
         .collect();
     // Deterministic package ordering regardless of read_dir order.
     lib_paths.sort();
-    let mut files: Vec<(BString, BString)> = lib_paths
+    let mut files: IndexMap<BString, BString> = lib_paths
         .into_iter()
         .map(Source::load_file)
         .collect();
@@ -83,7 +83,8 @@ fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
                     Some(ext) if ext.to_string_lossy() == "vir" => (),
                     _ => continue,
                 }
-                files.push(Source::load_file(filepath));
+                let (name, text) = Source::load_file(filepath);
+                files.insert(name, text);
             }
         }
         Err(e) => {
@@ -95,8 +96,7 @@ fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
     }
 
     let mut db = Db::new();
-    let names: Vec<BString> = files.iter().map(|(name, _)| name.clone()).collect();
-    db.set_packages(PackageTable::new(names));
+    db.set_packages(PackageTable::new(files.keys().cloned().collect()));
     let packages = db.get_packages();
     for (name, text) in files {
         let package = packages.id(name.as_bstr()).expect("package missing from table");

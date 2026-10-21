@@ -17,7 +17,8 @@ use crate::common::{ComponentKind, DriverType, SocketRole};
 use crate::db::Builder;
 use crate::package::PackageId;
 use crate::syntax::payload::AstNodePayload;
-use crate::types::Type;
+use crate::types::substitute::substitute;
+use crate::types::typ::Type;
 
 #[derive(Debug)]
 pub struct Elaboration {
@@ -72,6 +73,11 @@ pub struct ElaboratedComponent {
     initial_expr: Option<Location>,
     alias: Option<SignalId>,
     clock: Option<SignalId>,
+    /// The mono type arguments of the generic mod def instance this
+    /// component belongs to (`[]` when its module is non-generic).  The
+    /// simulator substitutes these into the (generic) analysis types
+    /// of driver expressions inside the instance.
+    env: Vec<Type>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -137,6 +143,12 @@ impl ElaboratedComponent {
         self.typ.clone()
     }
 
+    /// The mono type arguments of the generic mod def instance this
+    /// component belongs to (`[]` when its module is non-generic).
+    pub fn env(&self) -> &[Type] {
+        &self.env
+    }
+
     pub fn driver_type(&self) -> DriverType {
         self.driver_type
     }
@@ -175,6 +187,12 @@ struct ParentCtx {
 /// Recursively traverse the module at `moddef`, collecting all fully-qualified
 /// component paths into `components`.  `prefix` is the dotted path so far
 /// (e.g. `"top"` or `"top.foo"`).
+/// Recursively traverse the module at `moddef`, collecting all fully-qualified
+/// component paths into `components`.  `prefix` is the dotted path so far
+/// (e.g. `"top"` or `"top.foo"`).  `env` holds the mono type arguments of the
+/// generic mod def instance being elaborated (`[]` for a non-generic module);
+/// component types are substituted with them, and nested instantiations
+/// compose their written arguments with them.
 fn elaborate_module(
     builder: &mut Builder,
     moddef: SymbolId,
@@ -183,6 +201,7 @@ fn elaborate_module(
     modules: &mut Vec<ElaboratedModule>,
     sockets: &mut Vec<ElaboratedSocket>,
     parent_ctx: Option<ParentCtx>,
+    env: Vec<Type>,
 ) {
     modules.push(ElaboratedModule {
         moddef,
@@ -204,6 +223,9 @@ fn elaborate_module(
 
                 let typ_node = stmt.typ().unwrap();
                 let typ = builder.get_type_at(typ_node.location()).unwrap();
+                // Substitute the def's generic parameters with this
+                // instance's type arguments (mono after this point).
+                let typ = substitute(&typ, &env);
 
                 let driver_type = match component.kind {
                     ComponentKind::Reg | ComponentKind::OutgoingReg => DriverType::Latched,
@@ -260,6 +282,7 @@ fn elaborate_module(
                     initial_expr,
                     alias: None,
                     clock,
+                    env: env.clone(),
                 });
             }
             AstNodePayload::Submodule(module) => {
@@ -298,6 +321,18 @@ fn elaborate_module(
                     driver_analysis: driver_analysis.clone(),
                     instance_name: instance_name.clone(),
                 };
+                // Compose this instance's written type arguments with
+                // the current (mono) environment, giving the child's
+                // mono environment.  A non-generic target has no
+                // arguments, so the child environment is empty.
+                let child_env: Vec<Type> = crate::types::typedef::instantiation_target(builder, &stmt)
+                    .map(|(_symbol, written)| {
+                        written
+                            .iter()
+                            .map(|arg| substitute(arg, &env))
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 elaborate_module(
                     builder,
                     submodule_symbol.id,
@@ -306,6 +341,7 @@ fn elaborate_module(
                     modules,
                     sockets,
                     Some(ctx),
+                    child_env,
                 );
             }
             AstNodePayload::Socket(socket) => {
@@ -328,19 +364,6 @@ fn elaborate_module(
                     Some(symbol) => symbol.clone(),
                     None => continue,
                 };
-
-                // Generic socket defs are not yet implemented (guarded
-                // with an error by the component analysis); skip them
-                // here so their generic (Param-carrying) types never
-                // reach mono artifacts.
-                {
-                    let socket_def_location = socket_symbol.location();
-                    let socket_def_parsing = builder.get_parsing(socket_def_location.package());
-                    let socket_def_ast = socket_def_parsing.ast_node(socket_def_location.ast_node_id());
-                    if crate::types::typedef::generics_decl_of(&socket_def_ast).is_some() {
-                        continue;
-                    }
-                }
 
                 let socket_prefix: BString = format!(
                     "{prefix}.{}",
@@ -367,6 +390,7 @@ pub(crate) fn build_elaboration(builder: &mut Builder, top: SymbolId) -> Arc<Ela
         builder, top, "top",
         &mut components, &mut modules, &mut sockets,
         None,
+        vec![],
     );
 
     // Build a reverse index: fully-elaborated path -> ElaboratedComponentId.

@@ -1,0 +1,64 @@
+// Generic socket defs and generic mod defs, instantiated with type
+// arguments (the `of Foo[args]` sites), connected with `:=:` on mono
+// sockets, elaborated, and monomorphized into per-instantiation Verilog
+// modules.
+//
+// CHECK-NOT: Check failed
+
+socket Bus[T : Type] {
+    cosi req : T
+    soci rsp : T
+}
+
+mod Master[W : Type] {
+    incoming d : W
+    client socket bus of Bus[W] {
+        it.req := d
+    }
+    unused bus.rsp
+}
+
+mod Slave[W : Type] {
+    server socket bus of Bus[W] {
+        it.rsp := it.req
+    }
+}
+
+// A generic mod instantiated at two different arguments in one module.
+mod Reg[T : Type] {
+    incoming clk : Clock
+    incoming d : T
+    reg slot : T on clk {
+        it <= d
+    }
+    outgoing q : T
+    q := slot
+}
+
+export mod Top {
+    incoming clk : Clock
+    incoming inp : Word[8]
+    incoming wide : Word[16]
+
+    mod m of Master[Word[8]] {
+        it.d := inp
+    }
+    mod s of Slave[Word[8]] {
+        m.bus :=: it.bus
+    }
+
+    mod r8 of Reg[Word[8]] {
+        it.clk := clk
+        it.d := inp
+    }
+    mod r16 of Reg[Word[16]] {
+        it.clk := clk
+        it.d := wide
+    }
+
+    outgoing out8 : Word[8]
+    outgoing out16 : Word[16]
+    out8 := s.bus.rsp
+    out16 := r16.q
+    unused r8.q
+}

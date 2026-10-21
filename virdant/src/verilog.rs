@@ -48,6 +48,11 @@ pub struct Module {
     pub is_ext: bool,
     pub ports: Vec<Port>,
     pub elements: Vec<Element>,
+    /// A human-readable comment naming where this module came from,
+    /// emitted as a `//` line above the declaration.  Used by the
+    /// monomorphized modules of generic mod defs, whose mangled names
+    /// alone are not readable.
+    pub origin: Option<String>,
 }
 
 #[derive(Debug)]
@@ -259,6 +264,9 @@ impl Module {
 
     fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
         let name = &self.name;
+        if let Some(origin) = &self.origin {
+            verilog_writeln!(writer, "// {origin}")?;
+        }
         verilog_writeln!(writer, "module {name}(")?;
         writer.indent();
         for (i, port) in self.ports.iter().enumerate() {

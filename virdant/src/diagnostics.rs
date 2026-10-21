@@ -144,6 +144,18 @@ pub enum DiagnosticPayload {
     /// A parsed feature whose semantics are not implemented yet
     /// (e.g. generic socket/mod defs in the types-only generics slice).
     NotYetImplemented(NotYetImplemented),
+    /// An `ext mod` declares generic parameters, or an ext-mod
+    /// instantiation supplies type arguments.  This is a hard rule:
+    /// ext mods never support generics (they parameterize through
+    /// `@parameter` annotations instead).
+    ExtModGenerics(ExtModGenerics),
+    /// An `export mod` declares generic parameters: a top module must
+    /// be a concrete instantiation, so it cannot be generic.
+    ExportModGenerics(ExportModGenerics),
+    /// A `:=:` connects two socket instances of the same socketdef
+    /// instantiated at different type arguments (different mono
+    /// sockets).  Names both instantiations.
+    SocketConnectMismatch(SocketConnectMismatch),
     /// A type reference supplies the wrong number of type arguments.
     TypeArgCount(TypeArgCount),
     /// A type argument does not have the kind its parameter declares
@@ -440,6 +452,25 @@ pub struct NotYetImplemented {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtModGenerics {
+    pub item: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExportModGenerics {
+    pub item: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SocketConnectMismatch {
+    /// The rendered mono socket of the left-hand side,
+    /// e.g. `Pipe[Word[8]]`.
+    pub lhs: BString,
+    /// The rendered mono socket of the right-hand side.
+    pub rhs: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeArgCount {
     pub typ: BString,
     pub expected: usize,
@@ -673,6 +704,25 @@ impl Diagnostic {
             DiagnosticPayload::NotYetImplemented(d) => {
                 format!("Not yet implemented: {}", d.feature).into()
             }
+            DiagnosticPayload::ExtModGenerics(d) => {
+                format!(
+                    "ext mod {} cannot have generics: ext mods do not support type parameters \
+                     (use @parameter annotations instead)",
+                    d.item,
+                ).into()
+            }
+            DiagnosticPayload::ExportModGenerics(d) => {
+                format!(
+                    "export mod {} cannot have generic parameters: a top module must be a concrete instantiation",
+                    d.item,
+                ).into()
+            }
+            DiagnosticPayload::SocketConnectMismatch(d) => {
+                format!(
+                    "Cannot connect {} to {}: mismatched socket instantiations",
+                    d.lhs, d.rhs,
+                ).into()
+            }
             DiagnosticPayload::TypeArgCount(d) => {
                 format!(
                     "Type {} takes {} type argument{}, but {} {} given",
@@ -754,5 +804,5 @@ from_diagnostic! {
     CombinationalLoop, InitialForNonReg, InitialMultiple, InitialInsideWhenMatch,
     ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,
     PlatformPortTypeMismatch, NotYetImplemented, TypeArgCount, TypeArgKind, UnknownKind,
-    CtorRequiresArgs,
+    CtorRequiresArgs, ExtModGenerics, ExportModGenerics, SocketConnectMismatch,
 }

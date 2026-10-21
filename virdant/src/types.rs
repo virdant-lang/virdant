@@ -4,6 +4,7 @@
 //! signatures, and match coverage.
 
 pub mod context;
+pub mod render;
 pub mod typ;
 pub mod typing;
 pub mod typedef;

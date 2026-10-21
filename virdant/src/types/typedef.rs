@@ -92,7 +92,7 @@ pub(crate) fn parse_generics_decl(node: &AstNode<'_>) -> Vec<TypeParam> {
 /// The generic parameter list of the item owning `symbol`, if any.
 /// Works for every item kind which accepts a `Generics` declaration
 /// (typedefs, builtin defs, socket defs, mod defs).
-fn params_of_item(builder: &mut Builder, symbol: &Symbol) -> Vec<TypeParam> {
+pub(crate) fn params_of_item(builder: &mut Builder, symbol: &Symbol) -> Vec<TypeParam> {
     let location = symbol.location();
     let parsing = builder.get_parsing(location.package());
     let node = parsing.ast_node(location.ast_node_id());
@@ -100,6 +100,219 @@ fn params_of_item(builder: &mut Builder, symbol: &Symbol) -> Vec<TypeParam> {
         Some(generics_node) => parse_generics_decl(&generics_node),
         None => vec![],
     }
+}
+
+/// Check the number of written type arguments against the def's
+/// parameter list, reporting `TypeArgCount` at `region` on mismatch.
+/// Returns true when the count matches.
+pub(crate) fn check_arg_count(
+    params_len: usize,
+    actual: usize,
+    def_name: &BStr,
+    region: crate::common::source::Region,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> bool {
+    if params_len != actual {
+        diagnostics.push(Diagnostic::new(
+            region,
+            diagnostics::TypeArgCount {
+                typ: def_name.to_owned(),
+                expected: params_len,
+                actual,
+            },
+        ));
+        return false;
+    }
+    true
+}
+
+/// Report the `TypeArgKind` mismatch for one argument: a `Type`-kind
+/// parameter given a `Nat` literal.
+pub(crate) fn type_arg_kind_error(
+    arg: &AstNode<'_>,
+    def_name: &BStr,
+    param_name: &BStr,
+    expected: &str,
+    actual: &str,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    diagnostics.push(Diagnostic::new(
+        arg.region(),
+        diagnostics::TypeArgKind {
+            typ: def_name.to_owned(),
+            param: param_name.to_owned(),
+            expected: expected.into(),
+            actual: actual.into(),
+        },
+    ));
+}
+
+/// Interpret `arg` as a `Nat`-kind type argument, emitting the
+/// kind-mismatch diagnostic when a type was written instead, or the
+/// value-parse diagnostic when the literal is malformed.
+pub(crate) fn nat_arg_value(
+    arg: &AstNode<'_>,
+    def_name: &BStr,
+    param_name: &BStr,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Width> {
+    let parsing = arg.parsing();
+    match arg.payload() {
+        AstNodePayload::GenericsNat(nat) => {
+            let spelling = parsing.string(nat.value).to_str_lossy().into_owned();
+            match spelling.parse::<Width>() {
+                Ok(width) => Some(width),
+                Err(_) => {
+                    diagnostics.push(Diagnostic::new(
+                        arg.region(),
+                        diagnostics::Unknown {
+                            message: format!("Malformed width parameter: {spelling}").into(),
+                        },
+                    ));
+                    None
+                }
+            }
+        }
+        _ => {
+            type_arg_kind_error(arg, def_name, param_name, "a Nat", "a type", diagnostics);
+            None
+        }
+    }
+}
+
+/// Resolve and kind-check the type arguments written on an
+/// instantiation — a socket instance (`client socket p of Pipe[...]`)
+/// or a submodule instance (`mod f of Fifo[...]`) — against the
+/// instantiated def's generic parameters.
+///
+/// This is the instantiation-site half of the one shared
+/// argument-checking routine (PLANv2 §10): type references are checked
+/// in `gather_type_root`, socket and submodule instances here.  Arity
+/// and kind errors are reported at the instantiation site.
+///
+/// The resolved arguments are the *mono* argument types for this
+/// instance; inside a generic def they may themselves contain `Param`s
+/// (generic analysis composes).
+pub(crate) fn resolve_instantiation_args(
+    builder: &mut Builder,
+    args_node: Option<&AstNode<'_>>,
+    def_symbol: &Symbol,
+    region: crate::common::source::Region,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Vec<Type>> {
+    let params = params_of_item(builder, def_symbol);
+    let arg_nodes: Vec<AstNode<'_>> = args_node
+        .map(|args: &AstNode<'_>| args.children())
+        .unwrap_or_default();
+    if !check_arg_count(params.len(), arg_nodes.len(), def_symbol.fqn(), region, diagnostics) {
+        return None;
+    }
+
+    let type_index = builder.get_type_index();
+    let mut args: Vec<Type> = Vec::with_capacity(arg_nodes.len());
+    for (param, arg) in params.iter().zip(arg_nodes.iter()) {
+        match param.kind {
+            Kind::Type => {
+                if !matches!(arg.payload(), AstNodePayload::Type(_)) {
+                    type_arg_kind_error(
+                        arg,
+                        def_symbol.fqn(),
+                        param.name.as_bstr(),
+                        "a type",
+                        "a Nat literal",
+                        diagnostics,
+                    );
+                    return None;
+                }
+                let Some(typ) = type_index.type_at(arg.location()).cloned() else {
+                    // The inner type failed to resolve; its diagnostic
+                    // is already reported.
+                    return None;
+                };
+                args.push(typ);
+            }
+            Kind::Nat => {
+                let Some(width) =
+                    nat_arg_value(arg, def_symbol.fqn(), param.name.as_bstr(), diagnostics)
+                else {
+                    return None;
+                };
+                args.push(Type::Word(width));
+            }
+        }
+    }
+    Some(args)
+}
+
+/// Resolve the target def of a socket or submodule instantiation node
+/// and its type arguments *as written*, without diagnostics (the
+/// component analysis has already kind-checked them).  Returns `None`
+/// if the target or arguments do not resolve (only possible on
+/// unchecked input).  Inside a generic def the arguments may mention
+/// that def's parameters (`Param`), to be composed by the caller.
+pub(crate) fn instantiation_target(
+    builder: &mut Builder,
+    stmt: &AstNode<'_>,
+) -> Option<(Symbol, Vec<Type>)> {
+    let ofness_node = stmt
+        .children()
+        .iter()
+        .find(|c| matches!(c.payload(), AstNodePayload::Ofness(_)))?
+        .clone();
+    let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
+        return None;
+    };
+    let parsing = builder.get_parsing(stmt.package());
+    let packages = builder.get_packages();
+    let target_package = match ofness.package {
+        Some(pkg) => packages.id(parsing.string(pkg)),
+        None => Some(stmt.package()),
+    };
+    let name = parsing.string(ofness.name);
+    let symboltable = builder.get_symboltable();
+    let symbol = target_package
+        .and_then(|pkg| symboltable.resolve_item(name, pkg))?
+        .clone();
+    let args = instantiation_args(builder, stmt, &symbol)?;
+    Some((symbol, args))
+}
+
+/// Resolve the type arguments written on an instantiation node against
+/// the target def's parameter list, without diagnostics.
+/// See `instantiation_target`.
+fn instantiation_args(
+    builder: &mut Builder,
+    stmt: &AstNode<'_>,
+    def_symbol: &Symbol,
+) -> Option<Vec<Type>> {
+    let args_node = stmt
+        .children()
+        .iter()
+        .find(|c| matches!(c.payload(), AstNodePayload::GenericsParams(_)))
+        .cloned();
+    let params = params_of_item(builder, def_symbol);
+    let arg_nodes: Vec<AstNode<'_>> = match &args_node {
+        Some(node) => node.children(),
+        None => vec![],
+    };
+    if arg_nodes.len() != params.len() {
+        return None;
+    }
+    let type_index = builder.get_type_index();
+    let mut args: Vec<Type> = Vec::with_capacity(arg_nodes.len());
+    for arg in &arg_nodes {
+        match arg.payload() {
+            AstNodePayload::Type(_) => {
+                args.push(type_index.type_at(arg.location())?.clone());
+            }
+            AstNodePayload::GenericsNat(nat) => {
+                let spelling = arg.parsing().string(nat.value).to_str_lossy().into_owned();
+                args.push(Type::Word(spelling.parse().ok()?));
+            }
+            _ => return None,
+        }
+    }
+    Some(args)
 }
 
 pub(crate) fn build_typedefs(builder: &mut Builder) -> Arc<Vec<TypeDef>> {
@@ -444,7 +657,7 @@ impl TypeIndex {
                 ));
                 return;
             }
-            let Some(width) = self.nat_arg(&arg_nodes[0], &type_name, b"n".as_bstr()) else {
+            let Some(width) = nat_arg_value(&arg_nodes[0], type_name.as_bstr(), b"n".as_bstr(), &mut self.diagnostics) else {
                 return;
             };
             Type::Word(width)
@@ -452,46 +665,39 @@ impl TypeIndex {
             // A user-defined (or library) type: kind-check the
             // arguments against the def's declared parameters, then
             // carry them on the type.
-            let params: Vec<(BString, Kind)> = match symbol.kind() {
-                SymbolKind::UnionDef | SymbolKind::StructDef | SymbolKind::EnumDef | SymbolKind::BuiltinDef => {
-                    builder
-                        .get_typedef(symbol.id())
-                        .params
-                        .iter()
-                        .map(|p| (p.name.clone(), p.kind))
-                        .collect()
-                }
+            let params: Vec<TypeParam> = match symbol.kind() {
+                SymbolKind::UnionDef
+                | SymbolKind::StructDef
+                | SymbolKind::EnumDef
+                | SymbolKind::BuiltinDef => params_of_item(builder, &symbol),
                 _ => vec![],
             };
 
-            if arg_nodes.len() != params.len() {
-                self.diagnostics.push(Diagnostic::new(
-                    node.region(),
-                    diagnostics::TypeArgCount {
-                        typ: type_name.into(),
-                        expected: params.len(),
-                        actual: arg_nodes.len(),
-                    },
-                ));
+            if !check_arg_count(
+                params.len(),
+                arg_nodes.len(),
+                type_name.as_bstr(),
+                node.region(),
+                &mut self.diagnostics,
+            ) {
                 return;
             }
 
             let mut args: Vec<Type> = Vec::with_capacity(arg_nodes.len());
-            for ((param_name, param_kind), arg) in params.iter().zip(arg_nodes.iter()) {
-                match param_kind {
+            for (param, arg) in params.iter().zip(arg_nodes.iter()) {
+                match param.kind {
                     Kind::Type => {
-                        let AstNodePayload::Type(_) = arg.payload() else {
-                            self.diagnostics.push(Diagnostic::new(
-                                arg.region(),
-                                diagnostics::TypeArgKind {
-                                    typ: type_name.clone(),
-                                    param: param_name.clone(),
-                                    expected: "a type".into(),
-                                    actual: "a Nat literal".into(),
-                                },
-                            ));
+                        if !matches!(arg.payload(), AstNodePayload::Type(_)) {
+                            type_arg_kind_error(
+                                arg,
+                                type_name.as_bstr(),
+                                param.name.as_bstr(),
+                                "a type",
+                                "a Nat literal",
+                                &mut self.diagnostics,
+                            );
                             return;
-                        };
+                        }
                         let Some(arg_typ) = self.type_at(arg.location()).cloned() else {
                             // The inner type failed to resolve; its
                             // diagnostic is already reported.
@@ -500,7 +706,12 @@ impl TypeIndex {
                         args.push(arg_typ);
                     }
                     Kind::Nat => {
-                        let Some(width) = self.nat_arg(arg, &type_name, param_name.as_bstr()) else {
+                        let Some(width) = nat_arg_value(
+                            arg,
+                            type_name.as_bstr(),
+                            param.name.as_bstr(),
+                            &mut self.diagnostics,
+                        ) else {
                             return;
                         };
                         args.push(Type::Word(width));
@@ -513,41 +724,6 @@ impl TypeIndex {
         self.insert(node.location(), typ);
     }
 
-    /// Interpret `arg` as a `Nat`-kind type argument, emitting the
-    /// kind-mismatch diagnostic when a type was written instead, or the
-    /// value-parse diagnostic when the literal is malformed.
-    fn nat_arg(&mut self, arg: &AstNode<'_>, typ: &BString, param: &BStr) -> Option<Width> {
-        let parsing = arg.parsing();
-        match arg.payload() {
-            AstNodePayload::GenericsNat(nat) => {
-                let spelling = parsing.string(nat.value).to_str_lossy().into_owned();
-                match spelling.parse::<Width>() {
-                    Ok(width) => Some(width),
-                    Err(_) => {
-                        self.diagnostics.push(Diagnostic::new(
-                            arg.region(),
-                            diagnostics::Unknown {
-                                message: format!("Malformed width parameter: {spelling}").into(),
-                            },
-                        ));
-                        None
-                    }
-                }
-            }
-            _ => {
-                self.diagnostics.push(Diagnostic::new(
-                    arg.region(),
-                    diagnostics::TypeArgKind {
-                        typ: typ.clone(),
-                        param: param.to_owned(),
-                        expected: "a Nat".into(),
-                        actual: "a type".into(),
-                    },
-                ));
-                None
-            }
-        }
-    }
 }
 
 pub(crate) fn build_type_index(builder: &mut Builder) -> Arc<TypeIndex> {

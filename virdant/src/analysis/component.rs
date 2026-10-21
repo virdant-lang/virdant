@@ -10,12 +10,13 @@ use bstr::ByteSlice;
 use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::Location;
-use crate::analysis::symbols::SymbolId;
+use crate::analysis::symbols::{Symbol, SymbolId};
 use crate::db::Builder;
 use crate::package::PackageId;
 use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
+use crate::types::substitute::substitute;
 use crate::types::Type;
 use crate::common::{ChannelDir, ComponentKind, Flow, SocketRole};
 use crate::diagnostics::{self, Diagnostic};
@@ -161,42 +162,63 @@ fn instantiation_args_node<'p>(node: &'p AstNode<'p>) -> Option<AstNode<'p>> {
         .find(|child| matches!(child.payload(), AstNodePayload::GenericsParams(_)))
 }
 
-/// Guard for the not-yet-implemented generics slice: instantiating a
-/// generic socket/mod def, or supplying type arguments to a socket/mod
-/// instantiation, must fail loudly rather than silently or with a
-/// confusing downstream error.
-///
-/// * A generic def instantiated (even bare) reports
-///   `NotYetImplemented: generic socket defs / mod defs are not yet
-///   supported`, pointing at the def's parameter list.
-/// * Type arguments on the instantiation report
-///   `NotYetImplemented: type arguments on socket/mod instantiation are
-///   not yet supported`, pointing at the argument list.
-fn guard_generic_instantiation(
-    builder: &mut Builder,
-    def_symbol: &crate::analysis::symbols::Symbol,
-    args_node: Option<&AstNode<'_>>,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
+/// Whether the mod def owning `def_symbol` is an `ext mod`.
+fn moddef_is_ext(builder: &mut Builder, def_symbol: &Symbol) -> bool {
     let location = def_symbol.location();
     let parsing = builder.get_parsing(location.package());
     let def_node = parsing.ast_node(location.ast_node_id());
-    if let Some(generics_node) = crate::types::typedef::generics_decl_of(&def_node) {
-        diagnostics.push(Diagnostic::new(
-            generics_node.region(),
-            diagnostics::NotYetImplemented {
-                feature: "generic socket defs / mod defs are not yet supported".into(),
-            },
-        ));
+    matches!(def_node.payload(), AstNodePayload::ModDef(moddef) if moddef.is_ext)
+}
+
+/// Resolve the type arguments of a socket or submodule instantiation,
+/// checking them against the instantiated def's generic parameters.
+///
+/// * Arity and kind errors are reported at the instantiation site
+///   (PLANv2 §10) through the shared `resolve_instantiation_args`
+///   routine.
+/// * For an `ext mod` target, *any* generics — declared parameters or
+///   written arguments — are a hard error: ext mods never support
+///   generics.
+///
+/// Returns the resolved (mono) argument types, or `None` after
+/// reporting, in which case the caller must skip registering the
+/// instance's channels/ports (a diagnostic already explains why).
+fn checked_instantiation_args(
+    builder: &mut Builder,
+    args_node: Option<&AstNode<'_>>,
+    instantiation_region: crate::common::source::Region,
+    def_symbol: &Symbol,
+    def_is_ext: bool,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Vec<Type>> {
+    if def_is_ext {
+        let def_has_generics = {
+            let location = def_symbol.location();
+            let parsing = builder.get_parsing(location.package());
+            let def_node = parsing.ast_node(location.ast_node_id());
+            crate::types::typedef::generics_decl_of(&def_node).is_some()
+        };
+        if def_has_generics || args_node.is_some() {
+            let region = args_node
+                .map(|node| node.region())
+                .unwrap_or(instantiation_region);
+            diagnostics.push(Diagnostic::new(
+                region,
+                diagnostics::ExtModGenerics {
+                    item: def_symbol.fqn().to_owned(),
+                },
+            ));
+            return None;
+        }
+        return Some(vec![]);
     }
-    if let Some(args_node) = args_node {
-        diagnostics.push(Diagnostic::new(
-            args_node.region(),
-            diagnostics::NotYetImplemented {
-                feature: "type arguments on socket/mod instantiation are not yet supported".into(),
-            },
-        ));
-    }
+    crate::types::typedef::resolve_instantiation_args(
+        builder,
+        args_node,
+        def_symbol,
+        instantiation_region,
+        diagnostics,
+    )
 }
 
 pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) -> Arc<ComponentAnalysis> {
@@ -287,12 +309,20 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     }
                 };
                 let submodule_location = submodule_symbol.location();
-                guard_generic_instantiation(
+                let submodule_is_ext = moddef_is_ext(builder, &submodule_symbol);
+                // Resolve and kind-check this instance's type arguments
+                // (arity/kind errors are reported at the site); skip
+                // registration of the instance's ports on failure.
+                let Some(submodule_args) = checked_instantiation_args(
                     builder,
-                    &submodule_symbol,
                     instantiation_args_node(&stmt).as_ref(),
+                    stmt.region(),
+                    &submodule_symbol,
+                    submodule_is_ext,
                     &mut component_analysis.diagnostics,
-                );
+                ) else {
+                    continue;
+                };
                 let submodule_parsing = builder.get_parsing(submodule_location.package());
                 let submodule_ast = submodule_parsing.ast_node(submodule_location.ast_node_id());
                 for submodule_stmt in submodule_ast.children() {
@@ -310,8 +340,11 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes()
                             );
                             let typ_node = submodule_stmt.typ().unwrap();
+                            // The port type as written in the def,
+                            // substituted with this instance's type
+                            // arguments.
                             let typ = match builder.get_type_at(typ_node.location()) {
-                                Ok(typ) => Some(typ),
+                                Ok(typ) => Some(substitute(&typ, &submodule_args)),
                                 Err(_) => None,
                             };
                             let flow = match component.kind {
@@ -352,12 +385,28 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 continue;
                             };
 
-                            guard_generic_instantiation(
+                            let socket_symbol = socket_symbol.clone();
+                            // Resolve and kind-check the socket
+                            // instance's own type arguments, then
+                            // compose them with the enclosing submodule
+                            // instance's arguments: a socket written
+                            // `of Pipe[T]` inside a generic def, whose
+                            // def is instantiated at `Word[8]`, is the
+                            // mono socket `Pipe[Word[8]]` here.
+                            let Some(socket_args) = checked_instantiation_args(
                                 builder,
-                                socket_symbol,
                                 instantiation_args_node(&submodule_stmt).as_ref(),
+                                submodule_stmt.region(),
+                                &socket_symbol,
+                                false,
                                 &mut component_analysis.diagnostics,
-                            );
+                            ) else {
+                                continue;
+                            };
+                            let mono_socket_args: Vec<Type> = socket_args
+                                .iter()
+                                .map(|arg| substitute(arg, &submodule_args))
+                                .collect();
 
                             let socket_def_location = socket_symbol.location();
                             let socket_def_parsing = builder.get_parsing(socket_def_location.package());
@@ -380,8 +429,11 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                         channel_name.to_str_lossy()).into_bytes()
                                 );
                                 let typ_node = channel_stmt.typ().unwrap();
+                                // The channel type as written in the
+                                // socketdef, substituted with the
+                                // instance's (composed) type arguments.
                                 let typ = match builder.get_type_at(typ_node.location()) {
-                                    Ok(typ) => Some(typ),
+                                    Ok(typ) => Some(substitute(&typ, &mono_socket_args)),
                                     Err(_) => None,
                                 };
                                 let flow = if drives_channel(submodule_socket.role, channel.dir) {
@@ -427,13 +479,21 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 let Some(socket_symbol) = socket_package.and_then(|pkg| symboltable.resolve_item(socket_name, pkg)) else {
                     continue;
                 };
+                let socket_symbol = socket_symbol.clone();
 
-                guard_generic_instantiation(
+                // Resolve and kind-check this socket instance's type
+                // arguments (arity/kind errors are reported at the
+                // site); skip registering its channels on failure.
+                let Some(socket_args) = checked_instantiation_args(
                     builder,
-                    socket_symbol,
                     instantiation_args_node(&stmt).as_ref(),
+                    stmt.region(),
+                    &socket_symbol,
+                    false,
                     &mut component_analysis.diagnostics,
-                );
+                ) else {
+                    continue;
+                };
 
                 let socket_location = socket_symbol.location();
                 let socket_parsing = builder.get_parsing(socket_location.package());
@@ -452,8 +512,10 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         format!("{}.{}", instance_name.to_str_lossy(), port_name.to_str_lossy()).into_bytes()
                     );
                     let typ_node = socket_stmt.typ().unwrap();
+                    // The channel type as written in the socketdef,
+                    // substituted with this instance's type arguments.
                     let typ = match builder.get_type_at(typ_node.location()) {
-                        Ok(typ) => Some(typ),
+                        Ok(typ) => Some(substitute(&typ, &socket_args)),
                         Err(_) => None,
                     };
                     let flow = if drives_channel(socket.role, channel.dir) {

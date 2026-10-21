@@ -1,0 +1,20 @@
+// An `ext mod` cannot have generics — a hard rule.  This also holds
+// for the instantiation side: an ext-mod instantiation cannot take
+// type arguments, even when the ext mod itself declares none.
+
+ext mod Cell {
+    incoming clk : Clock
+    outgoing data : Word[16]
+}
+
+export mod Top {
+    incoming clk : Clock
+    outgoing out : Word[16]
+    out := 0
+    mod f of Cell[Word[8]] {
+        it.clk := clk
+    }
+}
+
+// CHECK: ext mod generics_ext_mod_args::Cell cannot have generics
+// CHECK: Check failed

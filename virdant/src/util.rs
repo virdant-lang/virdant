@@ -20,10 +20,10 @@ use crate::package::PackageTable;
 fn db_from_name_text_pairs(files: Vec<(BString, BString)>) -> Db {
     let mut db = Db::new();
 
-    let names: Vec<BString> = files.iter().map(|(name, _)| name.clone()).collect();
-    db.set_packages(PackageTable::new(names));
+    let deduped: indexmap::IndexMap<BString, BString> = files.into_iter().collect();
+    db.set_packages(PackageTable::new(deduped.keys().cloned().collect()));
     let packages = db.get_packages();
-    for (name, text) in files {
+    for (name, text) in deduped {
         let package = packages.id(name.as_bstr()).expect("package missing from table");
         db.set_source(package, Source::new(package, text));
     }

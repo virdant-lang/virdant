@@ -10,6 +10,7 @@ use crate::sim::payload;
 use crate::syntax::ast::{AstNode, match_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
+use crate::types::substitute::substitute;
 use crate::types::Type;
 use crate::analysis::Location;
 
@@ -72,35 +73,40 @@ pub enum Referent {
     Location(Location),
 }
 
-pub fn driver_to_expr(db: &Db, driver: &Driver) -> Arc<Expr> {
+/// Convert a driver tree to a sim `Expr`.  `env` holds the mono type
+/// arguments of the generic mod def instance the driver belongs to
+/// (`[]` when its module is non-generic); every type fetched from the
+/// (generic) analysis is substituted with them.
+pub fn driver_to_expr(db: &Db, driver: &Driver, env: &[Type]) -> Arc<Expr> {
     match driver {
-        Driver::Expr(_, loc) => convert_ast_expr(db, loc.clone()),
+        Driver::Expr(_, loc) => convert_ast_expr(db, loc.clone(), env),
         Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are resolved in conversion, not simulation"),
         Driver::Absent => unreachable!("Absent drivers only appear inside when clauses"),
-        Driver::When(driver_when) => convert_driver_when(db, driver_when),
-        Driver::Match(driver_match) => convert_driver_match(db, driver_match),
+        Driver::When(driver_when) => convert_driver_when(db, driver_when, env),
+        Driver::Match(driver_match) => convert_driver_match(db, driver_match, env),
     }
 }
 
-/// Convert the RHS of an `initial` statement (at `loc`) into a sim `Expr`.
-pub fn initial_to_expr(db: &Db, loc: &Location) -> Arc<Expr> {
-    convert_ast_expr(db, loc.clone())
+/// Convert the RHS of an `initial` statement (at `loc`) into a sim
+/// `Expr`.  `env` holds the mono type arguments of the owning instance.
+pub fn initial_to_expr(db: &Db, loc: &Location, env: &[Type]) -> Arc<Expr> {
+    convert_ast_expr(db, loc.clone(), env)
 }
 
-fn convert_driver_match(db: &Db, dm: &DriverMatch) -> Arc<Expr> {
+fn convert_driver_match(db: &Db, dm: &DriverMatch, env: &[Type]) -> Arc<Expr> {
     let location = dm.subject.clone();
-    let subject = convert_ast_expr(db, dm.subject.clone());
-    let subject_typ = db.get_typeof(dm.subject.clone()).unwrap_or(Type::Bit);
+    let subject = convert_ast_expr(db, dm.subject.clone(), env);
+    let subject_typ = mono_type(db, &dm.subject.clone(), env);
     let parsing = db.get_parsing(dm.subject.package());
     let mut arms: Vec<(payload::Pat, Arc<Expr>)> = Vec::new();
     for (pat_loc, sub_driver) in &dm.arms {
         let pat_node = parsing.ast_node(pat_loc.ast_node_id());
         let pattern = convert_pattern(db, &parsing, &pat_node, &subject_typ);
-        let body = driver_to_expr(db, sub_driver.as_ref());
+        let body = driver_to_expr(db, sub_driver.as_ref(), env);
         arms.push((pattern, body));
     }
     if let Some(else_driver) = &dm.else_clause {
-        let body = driver_to_expr(db, else_driver.as_ref());
+        let body = driver_to_expr(db, else_driver.as_ref(), env);
         arms.push((payload::Pat::Else, body));
     }
     let typ = arms.first().map(|(_, e)| e.typ.clone()).unwrap_or(Type::Bit);
@@ -164,7 +170,7 @@ fn convert_pattern(
     }
 }
 
-fn convert_driver_when(db: &Db, driver_when: &DriverWhen) -> Arc<Expr> {
+fn convert_driver_when(db: &Db, driver_when: &DriverWhen, env: &[Type]) -> Arc<Expr> {
     let location = match driver_when.clauses.first() {
         Some((cond_loc, _)) => cond_loc.clone(),
         None => driver_when.else_clause.as_ref()
@@ -174,7 +180,7 @@ fn convert_driver_when(db: &Db, driver_when: &DriverWhen) -> Arc<Expr> {
 
     let mut branches: Vec<(Arc<Expr>, Arc<Expr>)> = Vec::new();
     for (cond_loc, sub_driver) in &driver_when.clauses {
-        let cond = convert_ast_expr(db, cond_loc.clone());
+        let cond = convert_ast_expr(db, cond_loc.clone(), env);
         let body = match sub_driver.as_ref() {
             // The component is not driven in this clause; evaluate as X,
             // the same value a missing else clause produces.
@@ -183,13 +189,13 @@ fn convert_driver_when(db: &Db, driver_when: &DriverWhen) -> Arc<Expr> {
                 typ: Type::Bit,
                 payload: ExprPayload::Hole(payload::Hole {}),
             }),
-            sub_driver => driver_to_expr(db, sub_driver),
+            sub_driver => driver_to_expr(db, sub_driver, env),
         };
         branches.push((cond, body));
     }
 
     let else_branch = match &driver_when.else_clause {
-        Some(else_driver) => driver_to_expr(db, else_driver.as_ref()),
+        Some(else_driver) => driver_to_expr(db, else_driver.as_ref(), env),
         None => {
             let typ = Type::Bit;
             Arc::new(Expr { location: location.clone(), typ, payload: ExprPayload::Hole(payload::Hole {}) })
@@ -201,14 +207,14 @@ fn convert_driver_when(db: &Db, driver_when: &DriverWhen) -> Arc<Expr> {
 }
 
 // Recursively build `If` branches from the flat [cond, then, cond, then, ..., else] child list.
-fn build_if_branches(db: &Db, locs: &[Location]) -> (Vec<(Arc<Expr>, Arc<Expr>)>, Arc<Expr>) {
-    let cond = convert_ast_expr(db, locs[0].clone());
-    let then_expr = convert_ast_expr(db, locs[1].clone());
+fn build_if_branches(db: &Db, locs: &[Location], env: &[Type]) -> (Vec<(Arc<Expr>, Arc<Expr>)>, Arc<Expr>) {
+    let cond = convert_ast_expr(db, locs[0].clone(), env);
+    let then_expr = convert_ast_expr(db, locs[1].clone(), env);
     if locs.len() == 3 {
-        let else_expr = convert_ast_expr(db, locs[2].clone());
+        let else_expr = convert_ast_expr(db, locs[2].clone(), env);
         (vec![(cond, then_expr)], else_expr)
     } else {
-        let (mut rest, else_expr) = build_if_branches(db, &locs[2..]);
+        let (mut rest, else_expr) = build_if_branches(db, &locs[2..], env);
         rest.insert(0, (cond, then_expr));
         (rest, else_expr)
     }
@@ -270,8 +276,19 @@ fn parse_word_value(s: &str) -> WordValue {
     }
 }
 
-fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
+/// The mono type of the expression at `loc`, substituted with the
+/// owning generic mod def instance's type arguments (`env`).
+fn mono_type(db: &Db, loc: &Location, env: &[Type]) -> Type {
     let typ = db.get_typeof(loc.clone()).unwrap_or(Type::Bit);
+    if env.is_empty() {
+        typ
+    } else {
+        substitute(&typ, env)
+    }
+}
+
+fn convert_ast_expr(db: &Db, loc: Location, env: &[Type]) -> Arc<Expr> {
+    let typ = mono_type(db, &loc, env);
     let parsing = db.get_parsing(loc.package());
     let node = parsing.ast_node(loc.ast_node_id());
 
@@ -329,7 +346,7 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
         }
         AstNodePayload::ExprParen => {
             let child_loc = node.child(0).location();
-            ExprPayload::Paren(payload::Paren { subject: convert_ast_expr(db, child_loc) })
+            ExprPayload::Paren(payload::Paren { subject: convert_ast_expr(db, child_loc, env) })
         }
         AstNodePayload::ExprWhen => {
             use crate::syntax::ast::when_arm_children;
@@ -340,11 +357,11 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
 
             for (guard_opt, body) in arms {
                 if let Some(guard) = guard_opt {
-                    let guard_expr = convert_ast_expr(db, guard.location());
-                    let body_expr = convert_ast_expr(db, body.location());
+                    let guard_expr = convert_ast_expr(db, guard.location(), env);
+                    let body_expr = convert_ast_expr(db, body.location(), env);
                     branches.push((guard_expr, body_expr));
                 } else {
-                    else_branch_opt = Some(convert_ast_expr(db, body.location()));
+                    else_branch_opt = Some(convert_ast_expr(db, body.location(), env));
                 }
             }
 
@@ -354,7 +371,7 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
         AstNodePayload::ExprMatch => {
             let children = node.children();
             let subject_loc = children[0].location();
-            let subject_typ = db.get_typeof(subject_loc.clone()).unwrap_or(Type::Bit);
+            let subject_typ = mono_type(db, &subject_loc, env);
             let arm_data: Vec<(payload::Pat, Location)> = match_arm_children(&children)
                 .into_iter()
                 .map(|(pat_opt, body)| {
@@ -365,10 +382,10 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
                     (pattern, body.location())
                 })
                 .collect();
-            let subject = convert_ast_expr(db, subject_loc);
+            let subject = convert_ast_expr(db, subject_loc, env);
             let mut arms: Vec<(payload::Pat, Arc<Expr>)> = Vec::new();
             for (pat, body_loc) in arm_data {
-                arms.push((pat, convert_ast_expr(db, body_loc)));
+                arms.push((pat, convert_ast_expr(db, body_loc, env)));
             }
             ExprPayload::Match(payload::Match { subject, arms })
         }
@@ -388,14 +405,14 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
             let lhs_loc = node.child(0).location();
             let rhs_loc = node.child(1).location();
             let op = binop.op;
-            let lhs = convert_ast_expr(db, lhs_loc);
-            let rhs = convert_ast_expr(db, rhs_loc);
+            let lhs = convert_ast_expr(db, lhs_loc, env);
+            let rhs = convert_ast_expr(db, rhs_loc, env);
             ExprPayload::BinOp(payload::BinOp { lhs, op, rhs })
         }
         AstNodePayload::ExprUnOp(unop) => {
             let child_loc = node.child(0).location();
             let op = unop.op;
-            let subject = convert_ast_expr(db, child_loc);
+            let subject = convert_ast_expr(db, child_loc, env);
             ExprPayload::UnOp(payload::UnOp { op, subject })
         }
         AstNodePayload::ExprFn => {
@@ -409,7 +426,7 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
                 use crate::types::typing::Primitive;
                 let arg_locs: Vec<Location> = node.args().unwrap().into_iter().map(|c| c.location()).collect();
                 let mut args: Vec<Arc<Expr>> = Vec::new();
-                for l in arg_locs { args.push(convert_ast_expr(db, l)); }
+                for l in arg_locs { args.push(convert_ast_expr(db, l, env)); }
 
                 match primitive {
                     Primitive::Word => ExprPayload::Word(payload::Word { args }),
@@ -455,9 +472,9 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
                 // Not a primitive, treat as regular function call
                 let subject_loc = node.child(0).location();
                 let arg_locs: Vec<Location> = node.args().unwrap().into_iter().map(|c| c.location()).collect();
-                let subject = convert_ast_expr(db, subject_loc);
+                let subject = convert_ast_expr(db, subject_loc, env);
                 let mut args: Vec<Arc<Expr>> = Vec::new();
-                for l in arg_locs { args.push(convert_ast_expr(db, l)); }
+                for l in arg_locs { args.push(convert_ast_expr(db, l, env)); }
                 ExprPayload::Fn(payload::Fn { subject, args })
             }
         }
@@ -467,7 +484,7 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
             // records the ctor/enumerant symbol for the expected type.
             let arg_locs: Vec<Location> = node.children().iter().map(|c| c.location()).collect();
             let mut args: Vec<Arc<Expr>> = Vec::new();
-            for l in arg_locs { args.push(convert_ast_expr(db, l)); }
+            for l in arg_locs { args.push(convert_ast_expr(db, l, env)); }
 
             let exprroot = db.get_exprroot_for(loc.clone());
             let typing = db.get_typing(exprroot);
@@ -484,31 +501,31 @@ fn convert_ast_expr(db: &Db, loc: Location) -> Arc<Expr> {
             let field_locs: Vec<Location> = node.children().iter().map(|c| c.location()).collect();
             let mut fields: Vec<(BString, Arc<Expr>)> = Vec::new();
             for (i, l) in field_locs.into_iter().enumerate() {
-                fields.push((format!("{i}").into(), convert_ast_expr(db, l)));
+                fields.push((format!("{i}").into(), convert_ast_expr(db, l, env)));
             }
             ExprPayload::Struct(payload::Struct { fields })
         }
         AstNodePayload::ExprIndex(idx) => {
             let child_loc = node.child(0).location();
             let index = idx.index;
-            let subject = convert_ast_expr(db, child_loc);
+            let subject = convert_ast_expr(db, child_loc, env);
             ExprPayload::Index(payload::Index { subject, index })
         }
         AstNodePayload::ExprIndexDyn => {
             let subject_loc = node.child(0).location();
             let index_loc = node.child(1).location();
-            let subject = convert_ast_expr(db, subject_loc);
-            let index = convert_ast_expr(db, index_loc);
+            let subject = convert_ast_expr(db, subject_loc, env);
+            let index = convert_ast_expr(db, index_loc, env);
             ExprPayload::IndexDyn(payload::IndexDyn { subject, index })
         }
         AstNodePayload::ExprIndexRange(range) => {
             let child_loc = node.child(0).location();
             let (index_hi, index_lo) = (range.index_hi, range.index_lo);
-            let subject = convert_ast_expr(db, child_loc);
+            let subject = convert_ast_expr(db, child_loc, env);
             ExprPayload::IndexRange(payload::IndexRange { subject, index_hi, index_lo })
         }
         AstNodePayload::ExprAs => {
-            let subject = convert_ast_expr(db, node.child(0).location());
+            let subject = convert_ast_expr(db, node.child(0).location(), env);
             ExprPayload::As(payload::As { subject })
         }
         AstNodePayload::ExprHole => ExprPayload::Hole(payload::Hole {}),

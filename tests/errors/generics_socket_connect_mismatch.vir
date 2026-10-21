@@ -1,0 +1,33 @@
+// `:=:` matches on the *mono socket* — the socketdef together with its
+// type arguments (PLANv2 §6).  Two instances of the same socketdef
+// with different arguments are different mono sockets and do not
+// connect; the diagnostic names both instantiations and points at the
+// connection.
+
+socket Pipe[T : Type] {
+    cosi data : T
+    soci ready : Bit
+}
+
+mod Client {
+    client socket pipe of Pipe[Word[8]] {
+        it.data := 7w8
+        unused it.ready
+    }
+}
+
+mod Server {
+    server socket pipe of Pipe[Word[9]] {
+        it.ready := true
+    }
+    unused pipe.data
+}
+
+export mod Top {
+    mod master of Client
+    mod slave of Server
+    slave.pipe :=: master.pipe
+}
+
+// CHECK: Cannot connect generics_socket_connect_mismatch::Pipe[Word[9]] to generics_socket_connect_mismatch::Pipe[Word[8]]: mismatched socket instantiations
+// CHECK: Check failed
