@@ -36,3 +36,8 @@ mod Sync {
         it <= meta
     }
 }
+
+socket Pipe[T : Type] {
+    cosi data  : Valid[T]
+    soci ready : Bit
+}

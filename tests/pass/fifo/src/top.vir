@@ -1,13 +1,8 @@
-socket Pipe {
-    cosi data : Valid[Word[8]]
-    soci ready : Bit
-}
-
 mod Fifo {
     incoming clock : Clock
     incoming reset : Reset
 
-    server socket inp of Pipe {
+    server socket inp of Pipe[Word[8]] {
         it.ready := match out_data {
             case @Valid(dontcare) => true
             case @Invalid() => !is_full
@@ -35,7 +30,7 @@ mod Fifo {
         }
     }
 
-    client socket out of Pipe {
+    client socket out of Pipe[Word[8]] {
         it.data := out_data
     }
 

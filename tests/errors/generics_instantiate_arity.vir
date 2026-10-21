@@ -1,11 +1,4 @@
 // A generic socket or mod def must be instantiated with the declared
-// number of type arguments: `of Pipe` (bare) is an arity error, and the
-// diagnostic is pointed at the instantiation site (PLANv2 §10).
-
-socket Pipe[T : Type] {
-    cosi data : T
-    soci ready : Bit
-}
 
 mod Keep[T : Type] {
     incoming d : T
@@ -20,11 +13,12 @@ export mod Top {
     client socket p of Pipe {
         it.data := ?
     }
+
     mod f of Keep {
         it.d := ?
     }
 }
 
-// CHECK: Type generics_instantiate_arity::Pipe takes 1 type argument, but 0 were given
+// CHECK: Type builtin::Pipe takes 1 type argument, but 0 were given
 // CHECK: Type generics_instantiate_arity::Keep takes 1 type argument, but 0 were given
 // CHECK: Check failed

@@ -1,0 +1,83 @@
+// The builtin generic socket `Pipe[T]` (lib/builtin.vir), instantiated
+// at two different type arguments in one top module, connected with
+// `:=:` on mono sockets, and driven end-to-end through the generated
+// Verilog (see tb.sv).
+//
+// The testbench checks that the client's `@Valid(d)` payload passes
+// combinationally through the connection at each argument's width,
+// and that the server's `ready` flows back to the client.
+
+// A producer: pushes a `Valid` payload into its end of the pipe.
+mod Client[W : Type] {
+    // The payload the client pushes into the pipe.
+    incoming d : W
+
+    client socket pipe of Pipe[W] {
+        it.data := @Valid(d)
+    }
+
+    // The server's readiness, received back through the pipe.
+    outgoing ready : Bit
+    ready := pipe.ready
+}
+
+// A consumer: asserts readiness and forwards the received payload.
+mod Server[W : Type] {
+    server socket pipe of Pipe[W] {
+        it.ready := true
+    }
+
+    // The payload received from the client, forwarded verbatim.
+    outgoing data : Valid[W]
+    data := pipe.data
+}
+
+export mod Top {
+    incoming a8 : Word[8]
+    incoming a4 : Word[4]
+
+    mod c8 of Client[Word[8]] {
+        it.d := a8
+    }
+    mod s8 of Server[Word[8]] {
+        c8.pipe :=: it.pipe
+    }
+
+    mod c4 of Client[Word[4]] {
+        it.d := a4
+    }
+    mod s4 of Server[Word[4]] {
+        c4.pipe :=: it.pipe
+    }
+
+    outgoing ready8 : Bit
+    outgoing valid8 : Bit
+    outgoing data8 : Word[8]
+    outgoing ready4 : Bit
+    outgoing valid4 : Bit
+    outgoing data4 : Word[4]
+
+    // The server's `ready` flows back to the client through the
+    // connection.
+    ready8 := c8.ready
+    ready4 := c4.ready
+
+    // The client's payload appears on the server side, unwrapped here
+    // where the type arguments are concrete.
+    valid8 := match s8.data {
+        case @Valid(dontcare) => true
+        case @Invalid() => false
+    }
+    data8 := match s8.data {
+        case @Valid(v) => v
+        case @Invalid() => 0
+    }
+    valid4 := match s4.data {
+        case @Valid(dontcare) => true
+        case @Invalid() => false
+    }
+    data4 := match s4.data {
+        case @Valid(v) => v
+        case @Invalid() => 0
+    }
+}
