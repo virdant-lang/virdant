@@ -183,6 +183,10 @@ div.code-block-caption {
 
 .rst-content code.literal, .rst-content tt.literal {
   color: var(--text-main);
+  background: var(--bg-code) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 6px;
+  padding: 1px 5px !important;
   white-space: nowrap;
 }
 
