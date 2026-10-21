@@ -27,7 +27,7 @@ Modules are the primary building block of Virdant designs.
 .. code-block:: grammar
 
     ModDef :=
-        DocString Annotations "ext"? "export"? "mod" Ident "{" ModDefStmt* "}"
+        DocString Annotations "ext"? "export"? "mod" Ident ForClause? Generics? "{" ModDefStmt* "}"
 
 A module definition begins with the `mod` keyword, followed by the module name,
 and a body enclosed in curly braces.
@@ -76,7 +76,7 @@ A struct type definition declares a new nominal product type with named fields.
 .. code-block:: grammar
 
     StructDef :=
-        DocString Annotations "struct" "type" Ident "{" StructDefStmt* "}"
+        DocString Annotations "struct" "type" Ident Generics? "{" StructDefStmt* "}"
 
     StructDefStmt :=
         DocString Annotations Ident ":" Type
@@ -102,7 +102,7 @@ A union type definition declares a new sum type with a set of variants.
 .. code-block:: grammar
 
     UnionDef :=
-        DocString Annotations "union" "type" Ident "{" UnionDefStmt* "}"
+        DocString Annotations "union" "type" Ident Generics? "{" UnionDefStmt* "}"
 
     UnionDefStmt :=
         DocString Annotations Ident ParamList?
@@ -137,22 +137,27 @@ An enum type definition declares a set of named constants with a fixed bit width
 .. code-block:: grammar
 
     EnumDef :=
-        DocString Annotations "enum" "type" Ident "width" Width "{" EnumDefStmt* "}"
+        DocString Annotations "enum" "type" Ident Generics? "{" EnumDefStmt* "}"
 
     EnumDefStmt :=
         DocString Annotations Ident "=" Expr
+        | DocString Annotations Ident ParamList?
+        | DocString Annotations Ident ParamList "=" Expr
 
 .. code-block:: virdant
 
-    enum type State width 2 {
-        Idle    = 0
+    enum type State {
+        Idle    = 0w2
         Active  = 1
         Done    = 2
         Error   = 3
     }
 
-Each variant is assigned a constant expression matching the declared width.
+Each enumerant is assigned a constant expression; the width of the enum type
+is taken from the first enumerant's literal.
 The assigned values must be distinct within a single enum type.
+When no enumerant specifies a value, the enumerants are one-hot encoded
+by default --- see :doc:`types` for details.
 
 For more details on enum types, see :doc:`types`.
 
@@ -186,7 +191,7 @@ named ports with directions.
 .. code-block:: grammar
 
     SocketDef :=
-        DocString Annotations "socket" Ident "{" SocketDefStmt* "}"
+        DocString Annotations "socket" Ident Generics? "{" SocketDefStmt* "}"
 
     SocketDefStmt :=
         DocString Annotations "cosi" Ident ":" Type

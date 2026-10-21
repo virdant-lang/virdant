@@ -11,5 +11,4 @@ This tutorial will introduce Virdant through a series of examples.
     arbiter
     adder
     blink
-    debounce
     spi

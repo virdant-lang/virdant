@@ -15,14 +15,14 @@ destructure values and bind their components to names.
 
 Enum Patterns
 -------------
-Enum patterns match a value against a specific enum variant.
+Enum patterns match a value against a specific enumerant.
 
 .. code-block:: grammar
 
     Pat :=
         "#" Ident
 
-The `#` syntax selects a named variant of an enum type.
+The `#` syntax selects a named enumerant of an enum type.
 
 .. code-block:: virdant
 
@@ -34,8 +34,49 @@ The `#` syntax selects a named variant of an enum type.
         case #STORE  => 0x23
     }
 
-The pattern `#OP` matches only the `OP` variant of the enum type.
+The pattern `#OP` matches only the `OP` enumerant of the enum type.
 The scrutinee and the patterns must belong to the same enum type.
+
+
+Enumerant Constructor Patterns
+------------------------------
+An enumerant that carries parameters (a *payload enumerant*) is matched
+with the `@` constructor syntax, like a union variant.
+For how payload enumerants are declared, see :doc:`types`.
+
+.. code-block:: virdant
+
+    enum type Opt[T : Type] {
+        None
+        Some(value : T)
+    }
+
+    wire inner : Word[4]
+    inner := match opt {
+        case @Some(v) => v   // `v` is bound to the payload of `Some`.
+        case #None    => 0
+    }
+
+The pattern list matches the enumerant's parameters positionally.
+Each parameter binds a name that is in scope only within the matched arm,
+like a union binding; `_` discards a payload value.
+
+An enumerant without parameters is matched with `#Name`, and may also be
+matched with an empty constructor pattern `@Name()`:
+
+.. code-block:: virdant
+
+    wire tagged : Bit
+    tagged := match opt {
+        case @Some(_) => true
+        case @None()  => false
+    }
+
+Using `#Name` on an enumerant that carries parameters is an error;
+the compiler reports ``Ctor Some requires arguments: use @Some(...)``.
+
+The builtin `Valid[T]` is the canonical example of a payload enum;
+see `Valid Patterns`_ below.
 
 
 Union Patterns
@@ -99,6 +140,11 @@ optional values:
 These patterns are checked against the `Valid[T]` type by the compiler.
 The scrutinee must be of type `Valid[T]` for either pattern to apply.
 
+`Valid[T]` is a payload enum: `@Valid(x)` is the constructor pattern for
+its `Valid` enumerant and `@Invalid()` the empty constructor pattern for
+`Invalid` (`#Invalid` also matches).
+See :doc:`types` for how payload enumerants are declared and constructed.
+
 
 Literal Patterns
 ----------------
@@ -130,13 +176,14 @@ Match expressions and statements must be exhaustive.
 This means that every possible value of the scrutinee type must be covered
 by at least one pattern.
 
-For enum types, exhaustiveness is checked by ensuring every variant appears
-in at least one arm.
+For enum types, exhaustiveness is checked by ensuring every enumerant
+appears in at least one arm --- including payload enumerants, which must
+be covered with their constructor pattern (``@Some(v)``, not ``#Some``).
 
 .. code-block:: virdant
 
-    enum type State width 2 {
-        Idle = 0
+    enum type State {
+        Idle = 0w2
         Busy = 1
         Done = 2
     }

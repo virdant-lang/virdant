@@ -139,7 +139,7 @@ Module instances allow you to compose larger designs from smaller modules.
 .. code-block:: grammar
 
     ModDefStmtInstance :=
-        DocString Annotations "mod" Ident "of" Ofness ItBlock?
+        DocString Annotations "mod" Ident "of" Ofness GenericsParams? ItBlock?
 
 .. code-block:: virdant
 
@@ -151,6 +151,9 @@ Module instances allow you to compose larger designs from smaller modules.
 
 The `mod` keyword introduces an instance, followed by a name for the instance,
 the `of` keyword, and the type (module name) being instantiated.
+When the module being instantiated is a generic module, the type arguments
+follow the module name in square brackets, as in :vir:`mod r8 of Reg[Word[8]]`.
+See `Generic Modules`_ below.
 
 Ports on the instance are accessed using dot notation: `<instance>.<port>`.
 
@@ -164,6 +167,153 @@ An instance may optionally have an `it` block for grouping connections:
     }
     sum := ha1.sum
     carry := ha1.carry
+
+
+Generic Modules
+---------------
+A module definition may declare *generic parameters*: a comma-separated
+list in square brackets after the module name, each parameter written
+`name : kind`, exactly like a generic type definition (see :doc:`types`).
+The two kinds are :vir:`Type` (the parameter stands for a whole type) and
+:vir:`Nat` (a number literal, as in :vir:`Word[n : Nat]`).
+
+.. code-block:: virdant
+
+    mod Reg[T : Type] {
+        incoming clk : Clock
+        incoming d : T
+        reg slot : T on clk {
+            it <= d
+        }
+        outgoing q : T
+        q := slot
+    }
+
+Generic parameters are in scope inside the body of the declaring module:
+port and component types may reference them by name
+(:vir:`d : T` and :vir:`slot : T` above).
+A generic module is a template: it is not emitted to Verilog on its own
+and has no concrete port widths until it is instantiated.
+
+
+Instantiating a Generic Module
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+An instantiation of a generic module supplies *type arguments* after the
+module name, comma-separated and in the same order as the declared
+parameters:
+
+.. code-block:: virdant
+
+    export mod Top {
+        incoming clk : Clock
+        incoming a : Word[8]
+        incoming wide : Word[16]
+
+        mod r8 of Reg[Word[8]] {
+            it.clk := clk
+            it.d := a
+        }
+        mod r16 of Reg[Word[16]] {
+            it.clk := clk
+            it.d := wide
+        }
+
+        outgoing out8 : Word[8]
+        outgoing out16 : Word[16]
+        out8 := r8.q
+        out16 := r16.q
+    }
+
+Inside the it-block of an instantiation the parameters are substituted
+with the arguments: `it.d` of :vir:`r8` has type :vir:`Word[8]`, while
+`it.d` of :vir:`r16` has type :vir:`Word[16]`.
+Connecting a :vir:`Word[8]` signal to :vir:`r16` is therefore rejected:
+
+.. code-block:: virdant
+
+    mod r16 of Reg[Word[16]] {
+        it.clk := clk
+        it.d := a            // a : Word[8] --- wrong width for T = Word[16]
+    }
+
+reports ``Wrong type: Expected Word[16] but found Word[8]``.
+
+The same generic module may be instantiated several times with different
+arguments in one design.
+Each distinct combination of a module definition and concrete type
+arguments is a *mono module* (a monomorphized instantiation);
+two instances with identical arguments share one mono module.
+
+The number and the kinds of the type arguments are checked at the
+instantiation site, so diagnostics point at the arguments as written:
+
+*Wrong arity.* :vir:`mod f of Reg` reports ``Type Reg takes 1 type
+argument, but 0 were given``.
+
+*Wrong kind.* :vir:`mod f of Reg[8]` reports ``Type argument mismatch:
+parameter T of Reg expects a type, but found a Nat literal``.
+
+
+Restrictions
+~~~~~~~~~~~~
+Two hard rules restrict where generic parameters may appear.
+
+An :vir:`ext mod` cannot have generic parameters: external modules
+parameterize through `@parameter` annotations instead
+(see :doc:`annotations`).
+The rule cuts both ways: an ext-mod instantiation cannot take type
+arguments either, even when the ext mod declares none.
+:vir:`ext mod BadCell[T : Type]` reports ``ext mod BadCell cannot have
+generics: ext mods do not support type parameters (use @parameter
+annotations instead)``.
+
+A generic module cannot be :vir:`export`: an exported top must be a
+concrete instantiation, and a generic definition has none.
+:vir:`export mod Fifo[T : Type]` reports ``export mod Fifo cannot have
+generic parameters: a top module must be a concrete instantiation``.
+
+
+Monomorphized Verilog Generation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Verilog generation emits exactly one Verilog module per distinct mono
+module --- one per (definition, type arguments) combination.
+Instantiations with identical arguments share the emitted module;
+a generic module that is never instantiated emits nothing.
+
+Mono module names carry a hash of the type arguments, so instantiations
+at different arguments never collide, and a ``//`` comment above each
+emitted declaration records the readable origin.
+For :vir:`Top` above, the generated Verilog contains:
+
+.. code-block:: verilog
+
+    // top::Reg[Word[8]]
+    module \top::Reg#bde2499a (
+        input  wire             clk,
+        input  wire      [7:0]  d,
+        output wire      [7:0]  q
+    );
+        /* ... */
+    endmodule
+
+    // top::Reg[Word[16]]
+    module \top::Reg#e5a295e4 (
+        input  wire             clk,
+        input  wire     [15:0]  d,
+        output wire     [15:0]  q
+    );
+        /* ... */
+    endmodule
+
+and :vir:`Top` wires each instance up to its mono module by that name:
+
+.. code-block:: verilog
+
+    \top::Reg#bde2499a  r8(
+        .clk(\r8.clk ),
+        .d  (\r8.d ),
+        .q  (\r8.q )
+    );
 
 
 Socket Instances

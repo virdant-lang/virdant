@@ -413,8 +413,58 @@ All three arguments must be provided:
 - `a` and `b` must have the same type
 - The result type matches the type of `a` and `b`
 
-For other builtin functions such as `any`, `all`, `sext`, `zext`, and `trunc`,
-see the language reference or examples.
+**asclock(x)** - Convert a `Bit` to a `Clock`
+
+Reinterprets a `Bit` signal as a `Clock`.
+The subject :vir:`x` must be of type `Bit`,
+and the result is of type `Clock`.
+
+.. code-block:: virdant
+
+    wire bit_sig : Bit
+    wire clk : Clock
+    clk := asclock(bit_sig)
+
+Since `Clock` is opaque —
+clocks may only be passed through ports or used in a register's `on` clause —
+:vir:`asclock` is the only way to obtain a `Clock` from an ordinary signal.
+Its main use is clocking a register on a `Bit` signal,
+because the expression after `on` must be of type `Clock`:
+
+.. code-block:: virdant
+
+    mod ClockFromBit {
+        incoming clk_bit : Bit
+
+        wire clk : Clock
+        clk := asclock(clk_bit)
+
+        reg counter : Word[8] on clk {
+            it <= it + 1w8
+        }
+
+        outgoing count : Word[8] {
+            it := counter
+        }
+    }
+
+It can also be applied inline in the `on` clause itself:
+
+.. code-block:: virdant
+
+    reg r : Bit on asclock(clk_bit) {
+        it <= !it
+    }
+
+The remaining builtin functions are:
+
+- :vir:`any(w)` / :vir:`all(w)` — unary reductions over a :vir:`Word`,
+  yielding a :vir:`Bit` that is set if any (respectively all) bits are set.
+- :vir:`sext(w)` / :vir:`zext(w)` / :vir:`trunc(w)` — change the width of a
+  :vir:`Word`, sign-extending, zero-extending, or truncating it;
+  the target width is checked against the expected type.
+- :vir:`cast(x)` — reinterpret the bit pattern of a :vir:`Word[n]` as an enum
+  type, or vice versa.
 
 
 Unary Operators
