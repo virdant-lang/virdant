@@ -931,7 +931,7 @@ fn str_escape(s: &str) -> String {
 
 #[rustfmt::skip]
 const VERILOG_KEYWORDS: &[&str] = &[
-    "always", "and", "assign", "automatic", "begin", "buf", "bufif0", "bufif1", "case",
+    "always", "and", "assign", "automatic", "begin", "buf", "bufif0", "bufif1", "byte", "case",
     "casex", "casez", "cell", "cmos", "config", "deassign", "default", "defparam", "design",
     "disable", "edge", "else", "end", "endcase", "endconfig", "endfunction", "endgenerate",
     "endmodule", "endprimitive", "endspecify", "endtable", "endtask", "event", "for", "force",
