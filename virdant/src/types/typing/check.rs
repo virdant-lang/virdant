@@ -4,6 +4,7 @@
 //! when, match, fn, ctor, struct, etc.).
 
 use super::*;
+use crate::util::parse_word_literal;
 
 impl Typing {
     #[rustfmt::skip]
@@ -834,21 +835,4 @@ fn min_word_width(value: WordValue) -> Width {
     }
 }
 
-fn parse_word_literal(literal: &str) -> (WordValue, Option<Width>) {
-    if let Some((value, width)) = literal.split_once('w') {
-        (parse_nat_literal(value), Some(width.parse().unwrap()))
-    } else {
-        (parse_nat_literal(literal), None)
-    }
-}
 
-fn parse_nat_literal(literal: &str) -> WordValue {
-    let literal = literal.replace('_', "");
-    if let Some(hex) = literal.strip_prefix("0x") {
-        u64::from_str_radix(hex, 16).unwrap()
-    } else if let Some(bin) = literal.strip_prefix("0b") {
-        u64::from_str_radix(bin, 2).unwrap()
-    } else {
-        literal.parse().unwrap()
-    }
-}

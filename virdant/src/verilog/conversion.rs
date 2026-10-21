@@ -21,6 +21,7 @@ use crate::types::substitute::substitute;
 use crate::types::typing::Primitive;
 use crate::types::{Type, Typing};
 use crate::verilog::{self, valid_verilog_name};
+use crate::util::parse_word_literal;
 
 /// Must be one of: "x", "z", "0", "1".
 const PADDING_FILL: &str = "1";
@@ -2287,25 +2288,6 @@ fn render_ofness_path(ofness_node: AstNode, db: &Db, package: PackageId, symbolt
         }
     };
     format!("{module_package}::{module_name}")
-}
-
-fn parse_word_literal(literal: &str) -> (u64, Option<Width>) {
-    if let Some((value, width)) = literal.split_once('w') {
-        (parse_nat_literal(value), Some(width.parse().unwrap()))
-    } else {
-        (parse_nat_literal(literal), None)
-    }
-}
-
-fn parse_nat_literal(literal: &str) -> u64 {
-    let literal = literal.replace('_', "");
-    if let Some(hex) = literal.strip_prefix("0x") {
-        u64::from_str_radix(hex, 16).unwrap()
-    } else if let Some(bin) = literal.strip_prefix("0b") {
-        u64::from_str_radix(bin, 2).unwrap()
-    } else {
-        literal.parse().unwrap()
-    }
 }
 
 fn constant_word_expr(width: Width, value: WordValue) -> verilog::Expr {

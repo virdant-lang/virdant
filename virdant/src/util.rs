@@ -132,6 +132,7 @@ pub fn log2(n: Width) -> Option<Width> {
 
 pub fn parse_word_literal(literal: &str) -> (WordValue, Option<Width>) {
     if let Some((value, width)) = literal.split_once('w') {
+        // TODO: Handle overflow instead of panicking.
         (parse_nat_literal(value), Some(width.parse().unwrap()))
     } else {
         (parse_nat_literal(literal), None)
@@ -140,6 +141,13 @@ pub fn parse_word_literal(literal: &str) -> (WordValue, Option<Width>) {
 
 pub fn parse_nat_literal(literal: &str) -> WordValue {
     let literal = literal.replace('_', "");
+    // NOTE: The lexer (logos) can emit a bare `0x`/`0b` prefix as a `Nat`
+    // token while the text is mid-edit. It has no digits, hence no value,
+    // so it is treated as zero rather than panicking.
+    if literal == "0x" || literal == "0b" {
+        return 0;
+    }
+    // TODO: Handle overflow (PosOverflow) instead of panicking.
     if let Some(hex) = literal.strip_prefix("0x") {
         u64::from_str_radix(hex, 16).unwrap()
     } else if let Some(bin) = literal.strip_prefix("0b") {
