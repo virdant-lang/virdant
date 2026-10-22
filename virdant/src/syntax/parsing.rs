@@ -29,6 +29,7 @@ pub struct Parsing {
     pub(super) errors: Vec<AstNodeId>,
     pub(super) error_data: Vec<ParseError>,
     pub(super) docstring_diagnostics: Vec<Diagnostic>,
+    pub(super) tab_diagnostics: Vec<Diagnostic>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -66,6 +67,29 @@ fn test_parse() {
 
 pub fn parse(source: &Source) -> Parsing {
     let mut parsing = Parsing::new(source);
+
+    // Tabs are skipped by the lexer (see `token.rs`) so a stray tab cannot
+    // cascade into parse errors. Scan the raw source and flag each line
+    // containing a tab, pointing at its first tab.
+    let mut line_has_tab = false;
+    for (i, byte) in source.text().iter().enumerate() {
+        if *byte == b'\t' {
+            if !line_has_tab {
+                line_has_tab = true;
+                let start = SourceOffset(i as u32);
+                let region = source.to_region(start, start + 1);
+                let diagnostic = Diagnostic::new(
+                    region,
+                    diagnostics::SyntaxError {
+                        message: "Tabs are not allowed in Virdant. Use 4 spaces instead.".into(),
+                    },
+                );
+                parsing.tab_diagnostics.push(diagnostic);
+            }
+        } else if *byte == b'\n' {
+            line_has_tab = false;
+        }
+    }
 
     let parser = PackageParser::new();
     let text = source.text();
@@ -108,6 +132,7 @@ impl Parsing {
             errors: vec![],
             error_data: vec![],
             docstring_diagnostics: vec![],
+            tab_diagnostics: vec![],
         }
     }
 
@@ -209,6 +234,7 @@ impl Parsing {
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         let mut diagnostics = vec![];
         diagnostics.extend(self.docstring_diagnostics.clone());
+        diagnostics.extend(self.tab_diagnostics.clone());
         for (error, error_data) in self.errors() {
             let (message, region) = match error_data.error {
                 lalrpop_util::ParseError::UnrecognizedToken { token, expected } => {
@@ -216,11 +242,7 @@ impl Parsing {
                     let region = self.source.to_region(start, end);
                     let expected_tokens = expected.into_iter().map(|t| t.to_string()).collect::<Vec<_>>().join(" ");
                     let token_str = BStr::new(&self.source[region.span()]);
-                    let message = if token_str == b"\t" {
-                        format!("Tabs are not allowed in Virdant. Use 4 spaces instead.")
-                    } else {
-                        format!("Unexpected token: \"{token_str}\". Expected: {expected_tokens}")
-                    }.into();
+                    let message = format!("Unexpected token: \"{token_str}\". Expected: {expected_tokens}").into();
                     (message, region)
                 }
                 lalrpop_util::ParseError::InvalidToken { location:_ } => {

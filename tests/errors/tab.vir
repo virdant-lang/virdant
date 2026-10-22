@@ -1,0 +1,21 @@
+// Tabs are not permitted in Virdant source: the lexer drops them
+// before parsing so a stray tab cannot cascade into parse errors,
+// and each offending line is flagged with a single clear error.
+
+// CHECK: Syntax Error: Tabs are not allowed in Virdant. Use 4 spaces instead.
+// CHECK: Syntax Error: Tabs are not allowed in Virdant. Use 4 spaces instead.
+// CHECK-NOT: Unexpected token
+
+mod HalfAdder {
+	incoming a : Bit
+	incoming b : Bit
+
+	outgoing sum : Bit
+	outgoing carry : Bit
+
+	// sum is true when exactly one of a and b is true
+	sum := a ^^ b
+
+	// carry is true when a and b are both true
+	carry := a && b
+}

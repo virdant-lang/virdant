@@ -14,7 +14,10 @@ pub struct TokenError;
 
 #[rustfmt::skip]
 #[derive(Logos, Copy, Clone, Debug, PartialEq)]
-#[logos(skip br"[ \n]+", skip br"//[^\n]*", error = TokenError)]
+// Tabs are skipped here rather than lexed as tokens: dropping them
+// keeps a stray tab from cascading into parse errors. `parse`
+// (syntax/parsing.rs) flags them by scanning the source text instead.
+#[logos(skip br"[ \n\t]+", skip br"//[^\n]*", error = TokenError)]
 #[repr(u16)]
 pub enum Token {
     // Literals
@@ -130,10 +133,6 @@ pub enum Token {
     // Unused
     #[token(b"/*")]        SlashStar,
     #[token(b"*/")]        StarSlash,
-
-    // Rejected tokens (clear error messages)
-    #[regex(br"\t")]
-    Tab,
 
     Error,
 }
