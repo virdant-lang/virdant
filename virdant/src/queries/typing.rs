@@ -35,6 +35,17 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
     match parent_node.payload() {
         AstNodePayload::Component(component) if component.kind == ComponentKind::Reg
             || component.kind == ComponentKind::OutgoingReg => Some(Type::Clock),
+        AstNodePayload::DefaultClause => {
+            // A platform `outgoing ... default <EXPR>` clause: the
+            // default expression is typed against the port's declared
+            // type. (In a mod definition the clause is a semantic
+            // error, but the expression still type-checks here.)
+            let component_node = parent_node.parent().unwrap();
+            let typ_node = component_node
+                .typ()
+                .expect("default clause on a non-component statement");
+            builder.get_type_at(typ_node.location()).ok()
+        }
         // An `initial` statement's RHS is typed against its target, exactly like a driver.
         AstNodePayload::Driver(_) | AstNodePayload::InitialDriver => {
             let mut lhs_path = parsing.string(parent_node.child(0).path().unwrap()).to_owned();

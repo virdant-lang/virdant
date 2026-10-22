@@ -2,9 +2,9 @@
 // which are errors). Each offending line is flagged, spanning the
 // trailing whitespace.
 
-// CHECK: Trailing spaces
-// CHECK: Trailing spaces
-// CHECK: Trailing spaces
+// CHECK: trailing space
+// CHECK: trailing space
+// CHECK: trailing space
 // CHECK-NOT: Check failed
 
 mod HalfAdder {

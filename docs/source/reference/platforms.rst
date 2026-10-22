@@ -30,6 +30,12 @@ platform never declares `wire` or `reg` ports, and its body contains no
 drivers, instances, or statements --- a platform is a description of the
 board, not of a design.
 
+An `outgoing` port may carry a `default <EXPR>` clause, where `<EXPR>`
+is a constant expression (a literal, an enum variant, `@Invalid()`,
+`@Valid(n)`, a struct literal, or any expression composed of those).
+The compiler does not evaluate the default; it is lowered to Verilog
+as-is. See `Platform Defaults`_ below.
+
 .. code-block:: virdant
 
     @fpga("ice40")
@@ -129,7 +135,9 @@ and the same types.
 The match is enforced by `vir check`. It reports an error when:
 
 * a port of the module has no matching platform port (an extra port),
-* a platform port has no matching module port (a missing port),
+* a platform port has no matching module port (a missing port) ---
+  unless the platform port carries a `default` clause, see
+  `Platform Defaults`_ below,
 * a same-named pair has mismatched directions,
 * a same-named pair has mismatched types,
 * the name in the `for` clause does not resolve to any item, or
@@ -142,6 +150,57 @@ outgoing ports must be driven.
 
 `vir bitstream` re-verifies the port match before invoking any
 toolchain, as a defensive check.
+
+
+Platform Defaults
+-----------------
+Asking every module bound to a platform to declare and drive all of its
+ports is often boilerplate. An `outgoing` platform port may therefore
+declare a `default <EXPR>` clause. When a module with a `for` clause
+does not declare that port, the compiler behaves exactly as if the
+module had declared it and driven it with the default expression:
+
+.. code-block:: virdant
+
+    platform SpiFlash {
+        incoming clock     : Clock
+        incoming read_addr : Valid[Word[24]]
+        outgoing read_data : Valid[Word[32]]
+
+        outgoing device_ready : Bit        default true
+        outgoing spi_ck       : Bit        default false
+        outgoing spi_cs       : Bit        default true
+        outgoing spi_mosi     : Bit        default false
+
+        incoming spi_miso : Bit
+    }
+
+    mod MySpiFlash for SpiFlash {
+        incoming clock     : Clock
+        incoming read_addr : Valid[Word[24]]
+        outgoing read_data : Valid[Word[32]]
+
+        incoming spi_miso : Bit
+    }
+
+For every defaulted `outgoing` port the module omits, a synthetic port
+is created and driven by the default expression. The synthesized port
+is indistinguishable from a hand-written port: every analysis sees it,
+it is type-checked against the platform's port type (a mismatching
+default expression is an error, reported at the platform's
+expression), and it appears in documentation just like any other port.
+
+An `incoming` platform port the module omits is synthesized as a
+never-read input, and does not trigger the unused-signal warning.
+There is no `default` on `incoming` ports: an incoming port cannot be
+driven from the module's side.
+
+A platform `outgoing` port *without* a `default` keeps the old
+behavior: a module that omits it gets a missing-port error.
+
+A `default` clause is not allowed on `outgoing` ports of a module
+itself --- only in platform definitions. The compiler reports
+``DefaultOutsidePlatformPort`` otherwise.
 
 
 The Shipped ice40 Platform

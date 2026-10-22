@@ -1,0 +1,34 @@
+// Tests for platform-default error cases:
+//
+// 1. `default` on an outgoing port of a plain mod definition is a
+//    semantic error (the grammar accepts it; the analyser rejects it).
+// 2. A platform `outgoing` port *without* a `default` must still be
+//    declared by the module (`PlatformMissingPort`).
+// 3. A default expression whose type does not match the port's type
+//    is an error, reported at the platform's expression.
+
+platform Buttons {
+    incoming clk_in : Bit
+    outgoing no_default : Bit
+    outgoing mismatched : Word[4] default true
+    outgoing ok_default : Bit default false
+}
+
+// A plain mod definition may not use `default`.
+mod BadMod {
+    outgoing oops : Bit default false
+    oops := false
+}
+
+mod Top for Buttons {
+    incoming clk_in : Bit
+    outgoing ok_default : Bit
+
+    unused clk_in
+    ok_default := true
+}
+
+// CHECK: Wrong type: Expected Word[4] but found Bit
+// CHECK: `default` on outgoing port oops is only allowed in a platform definition
+// CHECK: Module is missing port no_default required by platform Buttons
+// CHECK: FAILED with:

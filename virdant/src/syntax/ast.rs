@@ -50,7 +50,10 @@ impl<'p> AstNode<'p> {
         }
     }
 
-    pub fn child(&self, mut n: u16) -> AstNode<'_> {
+    /// The `n`-th child, tied to the parsing's lifetime (not the borrow
+    /// of `self`), so multi-level accessors like `default_expr` can
+    /// return grandchild nodes.
+    pub fn child(&self, mut n: u16) -> AstNode<'p> {
         let mut ast_node_id = 0;
         loop {
             if self.parsing.parents[ast_node_id] == self.id {
@@ -66,7 +69,7 @@ impl<'p> AstNode<'p> {
         }
     }
 
-    pub fn children(&self) -> Vec<AstNode<'_>> {
+    pub fn children(&self) -> Vec<AstNode<'p>> {
         let mut result = vec![];
         let num_children = self.parsing.num_children[self.id.index()];
         for i in 0..num_children {
@@ -167,6 +170,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::SocketDef(_socket_def) => format!("SocketDef"),
             AstNodePayload::Platform(platform) => format!("Platform {}", parsing.string(platform.name.clone())),
             AstNodePayload::Component(component) => format!("Component {:?} {}", component.kind, parsing.string(component.name.clone())),
+            AstNodePayload::DefaultClause => format!("DefaultClause"),
             AstNodePayload::Driver(_driver) => format!("Driver"),
             AstNodePayload::BidirectionalDriver => format!("BidirectionalDriver"),
             AstNodePayload::InitialDriver => format!("InitialDriver"),
@@ -338,14 +342,37 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Component(component) => {
                 if component.kind == ComponentKind::Reg || component.kind == ComponentKind::OutgoingReg {
                     for child in self.children().into_iter().skip(2) {
-                        if !matches!(child.payload(), AstNodePayload::It) {
-                            return Some(child);
+                        if matches!(child.payload(), AstNodePayload::It | AstNodePayload::DefaultClause) {
+                            continue;
                         }
+                        return Some(child);
                     }
                 }
                 None
             }
             _ => None
+        }
+    }
+
+    /// The `default <EXPR>` clause of an outgoing component, if present.
+    /// Only meaningful on platform declarations; on mod definitions it is
+    /// a semantic error (see `DefaultOutsidePlatformPort`).
+    pub fn default_clause(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::Component(_component) => {
+                self.children().into_iter().find(|child| {
+                    matches!(child.payload(), AstNodePayload::DefaultClause)
+                })
+            }
+            _ => None,
+        }
+    }
+
+    /// The expression of this component's `default <EXPR>` clause, if present.
+    pub fn default_expr(&self) -> Option<AstNode<'_>> {
+        match self.default_clause() {
+            Some(clause) => Some(clause.child(0)),
+            None => None,
         }
     }
 

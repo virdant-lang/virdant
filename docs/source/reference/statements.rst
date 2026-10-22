@@ -28,11 +28,13 @@ Component declarations introduce named signals into a module.
 
     ModDefStmtComponent :=
         DocString Annotations "incoming" Ident ":" Type OnClause? ItBlock?
-        | DocString Annotations "outgoing" Ident ":" Type OnClause? ItBlock?
-        | DocString Annotations "outgoing" "wire" Ident ":" Type OnClause? ItBlock?
-        | DocString Annotations "outgoing" "reg" Ident ":" Type OnClause? ItBlock?
+        | DocString Annotations "outgoing" Ident ":" Type DefaultClause? OnClause? ItBlock?
+        | DocString Annotations "outgoing" "wire" Ident ":" Type DefaultClause? OnClause? ItBlock?
+        | DocString Annotations "outgoing" "reg" Ident ":" Type DefaultClause? OnClause? ItBlock?
         | DocString Annotations "wire" Ident ":" Type OnClause? ItBlock?
         | DocString Annotations "reg" Ident ":" Type OnClause? ItBlock?
+
+    DefaultClause := "default" Expr
 
 .. code-block:: virdant
 

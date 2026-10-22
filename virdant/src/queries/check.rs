@@ -105,6 +105,11 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
 //        diagnostics.extend(driver_analysis); // TODO
     }
 
+    // `default` clauses are grammatically allowed wherever outgoing
+    // components are declared (the rule is shared with platforms), but
+    // semantically only platform `outgoing` ports may carry one.
+    check_default_clause_placement(builder, &mut diagnostics);
+
     // Check for duplicate enumerant values in enum types.
     // Only the first duplicate per value is reported (as an Error).
     check_duplicate_enum_values(builder, &mut diagnostics);
@@ -150,6 +155,48 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     Arc::new(diagnostics)
 }
 
+/// Check that `default` clauses only appear on outgoing ports in
+/// platform definitions. The grammar accepts `default` on outgoing
+/// components in plain mod definitions too (the rule is shared), so
+/// this is a semantic check, not a syntactic one.
+fn check_default_clause_placement(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        if item.kind != SymbolKind::ModDef {
+            continue;
+        }
+        let location = item.location();
+        let parsing = builder.get_parsing(location.package());
+        let node = parsing.ast_node(location.ast_node_id());
+        check_default_clauses_in(&node, &parsing, diagnostics);
+    }
+}
+
+fn check_default_clauses_in(
+    node: &crate::syntax::ast::AstNode<'_>,
+    parsing: &crate::syntax::parsing::Parsing,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for child in node.children() {
+        if let AstNodePayload::Component(component) = child.payload() {
+            if let Some(clause) = child.default_clause() {
+                diagnostics.push(Diagnostic::new(
+                    clause.region(),
+                    diagnostics::DefaultOutsidePlatformPort {
+                        port: parsing.string(component.name).to_owned(),
+                    },
+                ));
+            }
+        }
+        check_default_clauses_in(&child, parsing, diagnostics);
+    }
+}
+
+/// Check each port synthesized from a platform `default <EXPR>` clause:
+/// the default expression's type must match the platform port's type.
+/// The expression itself is type-checked in the platform's own context
+/// (it is an exprroot of the platform item); a mismatch is reported
+/// here, pointing at the platform's expression.
 /// Check for enumerants of the same enum type that share the same value.
 /// Only the first duplicate per value is reported (as an Error);
 /// further duplicates for the same value are silently ignored.

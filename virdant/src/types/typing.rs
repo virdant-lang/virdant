@@ -262,6 +262,7 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
         for (path, component) in component_analysis.components() {
             if component.can_source()
                 && !use_locations.contains_key(&path)
+                && !component.synthetic()
                 && !matches!(component.kind(), Some(ComponentKind::OutgoingReg) | Some(ComponentKind::OutgoingWire))
             {
                 let region = builder.get_location_region(component.location());

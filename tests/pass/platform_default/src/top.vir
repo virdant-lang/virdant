@@ -1,0 +1,53 @@
+// Tests for platform `default <EXPR>` clauses on `outgoing` ports.
+//
+// A module bound to a platform via a `for` clause is considered to
+// declare every platform port: a missing `outgoing` port with a
+// `default` is synthesized and driven by the default expression, and
+// a missing `incoming` port is synthesized as a never-read input
+// without an unused warning.
+
+struct type Point {
+    x : Word[8]
+    y : Word[8]
+}
+
+enum type Color {
+    Red
+    Green
+    Blue
+}
+
+platform Buttons {
+    incoming clk_in : Bit
+    outgoing easy_default : Bit default true
+    outgoing word_default : Word[4] default 0w4
+    outgoing struct_default : Point default ${ x = 1w8, y = 2w8 }
+    outgoing enum_default : Color default #Blue
+    outgoing valid_default : Valid[Word[4]] default @Valid(3w4)
+    outgoing must_declare : Bit
+    incoming ignored_in : Bit
+}
+
+// Omits every defaulted outgoing port and the `ignored_in` incoming
+// port: all of them are synthesized. Only `must_declare` (no default)
+// and `clk_in` are declared by hand.
+mod Top for Buttons {
+    incoming clk_in : Bit
+    outgoing must_declare : Bit
+
+    unused clk_in
+    must_declare := false
+}
+
+// A module may still declare a defaulted port itself; its own driver
+// wins and no synthesis happens for it.
+mod Override for Buttons {
+    incoming clk_in : Bit
+    outgoing easy_default : Bit
+    outgoing must_declare : Bit
+
+    unused clk_in
+    unused ignored_in
+    easy_default := false
+    must_declare := true
+}

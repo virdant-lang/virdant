@@ -1,0 +1,21 @@
+// Tests that ports synthesized from platform defaults do not trigger
+// the "Unused signal" warning: a missing `incoming` platform port is
+// synthesized as a never-read input, and a missing defaulted
+// `outgoing` port is synthesized and driven.
+
+platform Widgets {
+    incoming unused_in : Bit
+    outgoing defaulted : Bit default true
+    outgoing declared  : Bit
+}
+
+// Omits `unused_in` (synthesized incoming: no unused warning) and
+// `defaulted` (synthesized outgoing, driven by the default).
+mod Top for Widgets {
+    outgoing declared : Bit
+
+    declared := false
+}
+
+// CHECK-NOT: Unused signal
+// CHECK: Check OK

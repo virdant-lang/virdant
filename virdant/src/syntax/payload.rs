@@ -23,6 +23,7 @@ pub enum AstNodePayload {
     Platform(Platform),
 
     Component(Component),
+    DefaultClause,
     Driver(Driver),
     BidirectionalDriver,
     InitialDriver,
@@ -104,6 +105,7 @@ impl AstNodePayload {
             AstNodePayload::SocketDef(_socket_def) => "SocketDef",
             AstNodePayload::Platform(_platform) => "Platform",
             AstNodePayload::Component(_component) => "Component",
+            AstNodePayload::DefaultClause => "DefaultClause",
             AstNodePayload::Driver(_driver) => "Driver",
             AstNodePayload::BidirectionalDriver => "BidirectionalDriver",
             AstNodePayload::InitialDriver => "InitialDriver",

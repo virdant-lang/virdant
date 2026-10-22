@@ -210,6 +210,21 @@ impl PackageAnalysis {
                     _ => unreachable!("{:?}", child_node.summary()),
                 }
             }
+        } else if matches!(node.payload(), AstNodePayload::Platform(_)) {
+            if node.contains_errors() {
+                return;
+            }
+            for child_node in node.children() {
+                // A platform `outgoing ... default <EXPR>` clause: the
+                // default expression is type-checked in the platform's
+                // own context. The driver synthesis in the consuming
+                // module lowers it verbatim; a type mismatch against
+                // the port type is reported separately (see
+                // `check_platform_default_types`).
+                if let Some(expr_node) = child_node.default_expr() {
+                    self.expr_roots.push(expr_node.id());
+                }
+            }
         } else if matches!(node.payload(), AstNodePayload::EnumDef(_)) {
             if node.contains_errors() {
                 return;

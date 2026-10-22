@@ -396,36 +396,36 @@ ModDefStmtComponent: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" <ident:Ident> ":" <typ:Type> <default:DefaultClause?> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Outgoing,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + 1u16 + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
+        let num_children: u16 = 1u16 + 1u16 + if default.is_none() { 0u16 } else { 1u16 } + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" "wire" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" "wire" <ident:Ident> ":" <typ:Type> <default:DefaultClause?> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::OutgoingWire,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + 1u16 + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
+        let num_children: u16 = 1u16 + 1u16 + if default.is_none() { 0u16 } else { 1u16 } + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" "reg" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" "reg" <ident:Ident> ":" <typ:Type> <default:DefaultClause?> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::OutgoingReg,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + 1u16 + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
+        let num_children: u16 = 1u16 + 1u16 + if default.is_none() { 0u16 } else { 1u16 } + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
@@ -455,6 +455,16 @@ ModDefStmtComponent: AstNodeId = {
 
 OnClause: AstNodeId = {
     "on" <expr:Expr> => expr,
+}
+
+DefaultClause: AstNodeId = {
+    <ll:@L> "default" <expr:Expr> <rr:@R> => {
+        let payload = AstNodePayload::DefaultClause;
+        let span = parser.span(ll, rr);
+        let num_children: u16 = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
 }
 
 ModDefStmtDriver: AstNodeId = {
@@ -1163,6 +1173,7 @@ extern {
         "dependson" => Token::KwDependsOn,
         "platform" => Token::KwPlatform,
         "for" => Token::KwFor,
+        "default" => Token::KwDefault,
         "Str" => Token::Str,
         "DocComment" => Token::DocComment,
         "DocBang" => Token::DocBang,

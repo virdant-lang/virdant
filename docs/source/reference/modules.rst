@@ -35,11 +35,13 @@ They are declared with a direction, a name, and a type.
 
     ModDefStmtComponent :=
         DocString Annotations "incoming" Ident ":" Type OnClause? ItBlock?
-        | DocString Annotations "outgoing" Ident ":" Type OnClause? ItBlock?
-        | DocString Annotations "outgoing" "wire" Ident ":" Type OnClause? ItBlock?
-        | DocString Annotations "outgoing" "reg" Ident ":" Type OnClause? ItBlock?
+        | DocString Annotations "outgoing" Ident ":" Type DefaultClause? OnClause? ItBlock?
+        | DocString Annotations "outgoing" "wire" Ident ":" Type DefaultClause? OnClause? ItBlock?
+        | DocString Annotations "outgoing" "reg" Ident ":" Type DefaultClause? OnClause? ItBlock?
         | DocString Annotations "wire" Ident ":" Type OnClause? ItBlock?
         | DocString Annotations "reg" Ident ":" Type OnClause? ItBlock?
+
+    DefaultClause := "default" Expr
 
 .. code-block:: virdant
 
@@ -52,6 +54,11 @@ They are declared with a direction, a name, and a type.
 
 `incoming` ports receive values from outside the module.
 `outgoing` ports send values from the module to the outside.
+
+A `default` clause on an `outgoing` port is only allowed in a platform
+definition; in a module it is an error (``DefaultOutsidePlatformPort``).
+See :doc:`platforms` for how platform defaults synthesize ports a
+module does not declare.
 
 
 Wires

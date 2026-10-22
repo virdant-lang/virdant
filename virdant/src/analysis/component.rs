@@ -10,7 +10,7 @@ use bstr::ByteSlice;
 use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::Location;
-use crate::analysis::symbols::{Symbol, SymbolId};
+use crate::analysis::symbols::{Symbol, SymbolId, SymbolKind};
 use crate::db::Builder;
 use crate::package::PackageId;
 use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
@@ -18,7 +18,7 @@ use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 use crate::types::substitute::substitute;
 use crate::types::Type;
-use crate::common::{ChannelDir, ComponentKind, Flow, SocketRole};
+use crate::common::{ChannelDir, ComponentKind, Flow, PortDir, SocketRole};
 use crate::diagnostics::{self, Diagnostic};
 
 #[derive(Debug)]
@@ -48,6 +48,18 @@ pub struct Component {
     // Type may be absent when `builder.get_type_at()` fails during resolution
     // We keep the component anyway -- path, flow, kind, and location are independently useful.
     typ: Option<Type>,
+
+    /// True for components synthesized from a platform (`for` clause):
+    /// outgoing ports with a platform `default`, and incoming ports the
+    /// module does not declare. Synthesized incoming ports suppress the
+    /// unused-signal warning; synthesized ports are otherwise identical
+    /// to hand-written ones.
+    synthetic: bool,
+
+    /// For a synthesized outgoing port: the location of the platform's
+    /// `default <EXPR>` expression, which driver analysis turns into
+    /// the port's driver.
+    default_expr: Option<Location>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -89,6 +101,14 @@ impl Component {
 
     pub fn location(&self) -> Location {
         self.location.clone()
+    }
+
+    pub fn synthetic(&self) -> bool {
+        self.synthetic
+    }
+
+    pub fn default_expr(&self) -> Option<Location> {
+        self.default_expr.clone()
     }
 
     pub fn can_sink(&self) -> bool {
@@ -276,6 +296,8 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     typ,
                     flow,
                     kind: Some(component_kind),
+                    synthetic: false,
+                    default_expr: None,
                 };
                 if !components_seen.contains(&path) {
                     components_seen.insert(path.clone());
@@ -363,6 +385,8 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 typ,
                                 flow,
                                 kind: Some(component_kind),
+                                synthetic: false,
+                                default_expr: None,
                             };
                             if !components_seen.contains(&path) {
                                 components_seen.insert(path.clone());
@@ -453,6 +477,8 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                     typ,
                                     flow,
                                     kind,
+                                    synthetic: false,
+                                    default_expr: None,
                                 };
                                 if !components_seen.contains(&path) {
                                     components_seen.insert(path.clone());
@@ -530,6 +556,8 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         typ,
                         flow,
                         kind: None,
+                        synthetic: false,
+                        default_expr: None,
                     };
                     if !components_seen.contains(&path) {
                         components_seen.insert(path.clone());
@@ -538,6 +566,60 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 }
             }
             _ => (),
+        }
+    }
+
+    // Platform-default synthesis: a module bound to a platform via a
+    // `for` clause is considered to declare every platform port. A
+    // missing `outgoing` port with a platform `default <EXPR>` is
+    // synthesized here (driver analysis turns the default expression
+    // into its driver); a missing `incoming` port is synthesized as a
+    // never-read input whose unused-signal warning is suppressed.
+    // Ports missing without a `default` remain missing, so
+    // `check_platform_ports_for` still reports `PlatformMissingPort`
+    // for them.
+    if matches!(symboltable.symbol(moddef).kind(), SymbolKind::ModDef) {
+        match crate::analysis::platform::resolve_platform_for(builder, moddef) {
+            Ok(Some(platform_id)) => {
+                let platform_ports =
+                    crate::analysis::platform::platform_ports_detailed(builder, platform_id);
+                for platform_port in platform_ports {
+                    if components_seen.contains(&platform_port.name) {
+                        continue;
+                    }
+                    let id = ComponentId {
+                        item_id: moddef,
+                        index: component_analysis.components.len(),
+                    };
+                    let (flow, kind, default_expr) = match platform_port.dir {
+                        PortDir::Input => (Flow::Source, Some(ComponentKind::Incoming), None),
+                        PortDir::Output => match platform_port.default_expr {
+                            Some(expr_location) =>
+                                (Flow::Sink, Some(ComponentKind::Outgoing), Some(expr_location)),
+                            // No `default`: the port stays missing and
+                            // `check_platform_ports_for` reports it.
+                            None => continue,
+                        },
+                    };
+                    let component = Component {
+                        id,
+                        path: platform_port.name.clone(),
+                        location: platform_port.location,
+                        typ: platform_port.typ,
+                        flow,
+                        kind,
+                        synthetic: true,
+                        default_expr,
+                    };
+                    components_seen.insert(platform_port.name.clone());
+                    component_analysis.components.push((platform_port.name, component));
+                }
+            }
+            // No `for` clause (or an `ext mod`): nothing to synthesize.
+            Ok(None) => {}
+            // `UnresolvedItem`/`ExpectedPlatform` are reported by
+            // `check_platform_ports_for`; do not duplicate them here.
+            Err(_) => {}
         }
     }
 

@@ -8,9 +8,10 @@
 use bstr::BString;
 use bstr::ByteSlice;
 
+use crate::analysis::location::Location;
 use crate::analysis::ports::Port;
 use crate::analysis::symbols::{SymbolId, SymbolKind};
-use crate::common::ComponentKind;
+use crate::common::{ComponentKind, PortDir};
 use crate::db::Builder;
 use crate::diagnostics;
 use crate::diagnostics::Diagnostic;
@@ -18,6 +19,63 @@ use crate::syntax::ast::item_children;
 use crate::syntax::ast::AnnotationValue;
 use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
+
+/// A platform port with its declaration location and, for `outgoing`
+/// ports carrying one, the location of the `default <EXPR>` expression.
+#[derive(Debug, Clone)]
+pub struct PlatformPortInfo {
+    pub name: BString,
+    pub dir: PortDir,
+    pub typ: Option<Type>,
+    /// Location of the port's declaration statement in the platform.
+    pub location: Location,
+    /// Location of the `default <EXPR>` expression, for `outgoing`
+    /// ports that declare one.
+    pub default_expr: Option<Location>,
+}
+
+/// Every `incoming`/`outgoing` port of a platform, in declaration
+/// order, with its declaration location and default-expression
+/// location. Used by component analysis to synthesize ports a module
+/// bound to the platform does not declare.
+pub fn platform_ports_detailed(
+    builder: &mut Builder,
+    platform_id: SymbolId,
+) -> Vec<PlatformPortInfo> {
+    let mut result = vec![];
+    let symboltable = builder.get_symboltable();
+    let symbol = symboltable.symbol(platform_id);
+    debug_assert_eq!(symbol.kind(), SymbolKind::Platform);
+
+    let package = symbol.location().package();
+    let parsing = builder.get_parsing(package);
+    let node = parsing.ast_node(symbol.location().ast_node_id());
+
+    for child in item_children(&node) {
+        let AstNodePayload::Component(component) = child.payload() else { continue };
+        let dir = match component.kind {
+            ComponentKind::Incoming => PortDir::Input,
+            ComponentKind::Outgoing => PortDir::Output,
+            // `outgoing wire`/`outgoing reg` are not allowed in
+            // platform definitions; they are not ports.
+            _ => continue,
+        };
+        let typ_node = match child.typ() {
+            Some(typ_node) => typ_node,
+            None => continue,
+        };
+        let typ = builder.get_type_at(typ_node.location()).ok();
+        let default_expr = child.default_expr().map(|expr| expr.location());
+        result.push(PlatformPortInfo {
+            name: parsing.string(component.name).to_owned(),
+            dir,
+            typ,
+            location: child.location(),
+            default_expr,
+        });
+    }
+    result
+}
 
 pub fn platform_fpga(builder: &mut Builder, symbol_id: SymbolId) -> Option<BString> {
     first_str(builder, symbol_id, "fpga")

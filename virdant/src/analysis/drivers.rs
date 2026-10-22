@@ -14,7 +14,7 @@ use indexmap::IndexMap;
 use crate::analysis::Location;
 use crate::analysis::component::{ComponentAnalysis, ComponentId};
 use crate::analysis::symbols::SymbolId;
-use crate::common::{DriverType, Flow};
+use crate::common::{ComponentKind, DriverType, Flow};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticPayload};
 use crate::syntax::ast::{AstNode, match_arm_children};
@@ -165,7 +165,27 @@ pub(crate) fn build_driver_analysis(
     let component_analysis = builder.get_component_analysis(symbol_id);
 
     let mut initials = IndexMap::new();
-    let (drivers, diagnostics) = collect_block_drivers(item_ast.children(), &component_analysis, None, false, &mut initials);
+    let (mut drivers, diagnostics) = collect_block_drivers(item_ast.children(), &component_analysis, None, false, &mut initials);
+
+    // Ports synthesized from platform `default <EXPR>` clauses have no
+    // driver statement in the module's own AST: their driver is the
+    // platform's default expression, lowered verbatim. The expression
+    // node lives in the platform's parsing; every consumer of a driver
+    // already resolves expressions through the driver's `Location`, so
+    // a cross-package location needs no special handling.
+    for (_path, component) in component_analysis.components() {
+        if !component.synthetic() {
+            continue;
+        }
+        if component.kind() != Some(ComponentKind::Outgoing) {
+            continue;
+        }
+        let Some(expr_location) = component.default_expr() else { continue };
+        drivers
+            .entry(component.id())
+            .or_default()
+            .push(Driver::Expr(DriverType::Continuous, expr_location));
+    }
 
 //    driver_analysis.dump(&component_analysis);
 

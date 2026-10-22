@@ -143,6 +143,9 @@ pub enum DiagnosticPayload {
     PlatformPortDirMismatch(PlatformPortDirMismatch),
     /// A module port's type does not match its platform's port type.
     PlatformPortTypeMismatch(PlatformPortTypeMismatch),
+    /// A mod definition (not a platform) declares an `outgoing` port
+    /// with a `default` clause.
+    DefaultOutsidePlatformPort(DefaultOutsidePlatformPort),
     /// A parsed feature whose semantics are not implemented yet
     /// (e.g. generic socket/mod defs in the types-only generics slice).
     NotYetImplemented(NotYetImplemented),
@@ -435,6 +438,11 @@ pub struct PlatformExtraPort {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DefaultOutsidePlatformPort {
+    pub port: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlatformPortDirMismatch {
     pub port: BString,
     pub expected: PortDir,
@@ -693,6 +701,7 @@ impl Diagnostic {
             DiagnosticPayload::ExpectedPlatform(d) => format!("Expected a platform: {} is not a platform", d.item).into(),
             DiagnosticPayload::PlatformMissingPort(d) => format!("Module is missing port {} required by platform {}", d.port, d.platform).into(),
             DiagnosticPayload::PlatformExtraPort(d) => format!("Module has port {} which platform {} does not declare", d.port, d.platform).into(),
+            DiagnosticPayload::DefaultOutsidePlatformPort(d) => format!("`default` on outgoing port {} is only allowed in a platform definition", d.port).into(),
             DiagnosticPayload::PlatformPortDirMismatch(d) => {
                 format!(
                     "Port {} has direction {:?} but platform expects {:?}",
@@ -808,6 +817,7 @@ from_diagnostic! {
     InvalidWordIndexWidth, IndexNotWordType, RedundantUnused, RedundantDriver,
     CombinationalLoop, InitialForNonReg, InitialMultiple, InitialInsideWhenMatch,
     ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,
-    PlatformPortTypeMismatch, NotYetImplemented, TypeArgCount, TypeArgKind, UnknownKind,
+    PlatformPortTypeMismatch, DefaultOutsidePlatformPort, NotYetImplemented, TypeArgCount,
+    TypeArgKind, UnknownKind,
     CtorRequiresArgs, ExtModGenerics, ExportModGenerics, SocketConnectMismatch,
 }
