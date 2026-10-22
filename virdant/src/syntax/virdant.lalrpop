@@ -1168,6 +1168,7 @@ extern {
         "DocBang" => Token::DocBang,
         "/*" => Token::StarSlash,
         "*/" => Token::SlashStar,
+        "Tab" => Token::Tab,
 
         "ERROR" => Token::Error,
     }

@@ -216,7 +216,11 @@ impl Parsing {
                     let region = self.source.to_region(start, end);
                     let expected_tokens = expected.into_iter().map(|t| t.to_string()).collect::<Vec<_>>().join(" ");
                     let token_str = BStr::new(&self.source[region.span()]);
-                    let message = format!("Unexpected token: \"{token_str}\". Expected: {expected_tokens}").into();
+                    let message = if token_str == b"\t" {
+                        format!("Tabs are not allowed in Virdant. Use 4 spaces instead.")
+                    } else {
+                        format!("Unexpected token: \"{token_str}\". Expected: {expected_tokens}")
+                    }.into();
                     (message, region)
                 }
                 lalrpop_util::ParseError::InvalidToken { location:_ } => {

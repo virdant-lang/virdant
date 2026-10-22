@@ -131,6 +131,10 @@ pub enum Token {
     #[token(b"/*")]        SlashStar,
     #[token(b"*/")]        StarSlash,
 
+    // Rejected tokens (clear error messages)
+    #[regex(br"\t")]
+    Tab,
+
     Error,
 }
 
