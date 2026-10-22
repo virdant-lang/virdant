@@ -17,11 +17,11 @@ platform IceSugar {
     incoming clock : Clock
 
     //> Red channel of the RGB LED (active low).
-    @pin(39) outgoing led_red   : Bit
+    @pin(39) outgoing led_red   : Bit default true
     //> Blue channel of the RGB LED (active low).
-    @pin(40) outgoing led_blue  : Bit
+    @pin(40) outgoing led_blue  : Bit default true
     //> Green channel of the RGB LED (active low).
-    @pin(41) outgoing led_green : Bit
+    @pin(41) outgoing led_green : Bit default true
 
     //> User switch.
     @pin(18) incoming switch0 : Bit
@@ -29,14 +29,14 @@ platform IceSugar {
     //> UART receive data from the host (USB CDC).
     @pin(4) incoming  uart_rx : Bit
     //> UART transmit data to the host (USB CDC).
-    @pin(6) outgoing  uart_tx : Bit
+    @pin(6) outgoing  uart_tx : Bit default true
 
     //> SPI flash chip select (active low).
-    @pin(46) outgoing flash_cs   : Bit
+    @pin(46) outgoing flash_cs   : Bit default true
     //> SPI flash clock.
-    @pin(48) outgoing flash_clk  : Bit
+    @pin(48) outgoing flash_clk  : Bit default true
     //> SPI flash controller-out data.
-    @pin(45) outgoing flash_mosi : Bit
+    @pin(45) outgoing flash_mosi : Bit default true
     //> SPI flash controller-in data.
     @pin(47) incoming flash_miso : Bit
 }
@@ -59,11 +59,11 @@ platform Fomu {
     //> red = B5, green = A5, blue = C5.
     //>
     //> Red channel of the RGB LED.
-    @pin("B5") outgoing led_red   : Bit
+    @pin("B5") outgoing led_red   : Bit default true
     //> Green channel of the RGB LED.
-    @pin("A5") outgoing led_green : Bit
+    @pin("A5") outgoing led_green : Bit default true
     //> Blue channel of the RGB LED.
-    @pin("C5") outgoing led_blue  : Bit
+    @pin("C5") outgoing led_blue  : Bit default true
 
     //> Four capacitive touch buttons (active low).
     //>
@@ -79,18 +79,18 @@ platform Fomu {
     //> USB (implemented in a softcore; hold low to disconnect).
     //>
     //> USB D+ signal.
-    @pin("A1") outgoing usb_dp    : Bit
+    @pin("A1") outgoing usb_dp    : Bit default false
     //> USB D- signal.
-    @pin("A2") outgoing usb_dn    : Bit
+    @pin("A2") outgoing usb_dn    : Bit default false
     //> USB D+ pull-up enable; hold low to disconnect from the host.
-    @pin("A4") outgoing usb_dp_pu : Bit
+    @pin("A4") outgoing usb_dp_pu : Bit default false
 
     //> SPI flash chip select (active low).
-    @pin("C1") outgoing flash_cs   : Bit
+    @pin("C1") outgoing flash_cs   : Bit default true
     //> SPI flash clock.
-    @pin("D1") outgoing flash_clk  : Bit
+    @pin("D1") outgoing flash_clk  : Bit default true
     //> SPI flash controller-out data.
-    @pin("F1") outgoing flash_mosi : Bit
+    @pin("F1") outgoing flash_mosi : Bit default true
     //> SPI flash controller-in data.
     @pin("E1") incoming flash_miso : Bit
 }
@@ -108,27 +108,27 @@ platform IceStick {
     //> User LEDs (D1-D5).
     //>
     //> User LED D1.
-    @pin(99) outgoing led1 : Bit
+    @pin(99) outgoing led1 : Bit default false
     //> User LED D2.
-    @pin(98) outgoing led2 : Bit
+    @pin(98) outgoing led2 : Bit default false
     //> User LED D3.
-    @pin(97) outgoing led3 : Bit
+    @pin(97) outgoing led3 : Bit default false
     //> User LED D4.
-    @pin(96) outgoing led4 : Bit
+    @pin(96) outgoing led4 : Bit default false
     //> User LED D5.
-    @pin(95) outgoing led5 : Bit
+    @pin(95) outgoing led5 : Bit default false
 
     //> UART receive data from the host (FTDI USB).
     @pin(9) incoming  uart_rx : Bit
     //> UART transmit data to the host (FTDI USB).
-    @pin(8) outgoing  uart_tx : Bit
+    @pin(8) outgoing  uart_tx : Bit default true
 
     //> SPI flash chip select (active low).
-    @pin(71) outgoing flash_cs   : Bit
+    @pin(71) outgoing flash_cs   : Bit default true
     //> SPI flash clock.
-    @pin(70) outgoing flash_clk  : Bit
+    @pin(70) outgoing flash_clk  : Bit default true
     //> SPI flash controller-out data.
-    @pin(67) outgoing flash_mosi : Bit
+    @pin(67) outgoing flash_mosi : Bit default true
     //> SPI flash controller-in data.
     @pin(68) incoming flash_miso : Bit
 }

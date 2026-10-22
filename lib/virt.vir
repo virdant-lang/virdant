@@ -18,21 +18,21 @@ platform Virt {
     incoming clock : Clock
 
     //> UART transmit data to the host (stdout).
-    outgoing tx : Bit
+    outgoing tx : Bit default true
     //> UART receive data from the host (stdin).
     incoming rx : Bit
 
     //> Program exit request.  While `@Invalid()`, the simulator runs.
     //> When it reads `@Valid(n)` on a clock tick, the simulator exits with
     //   exit code `n`.
-    outgoing exit : Valid[Word[8]]
+    outgoing exit : Valid[Word[8]] default @Invalid()
 
     //> SPI flash clock.
-    outgoing spi_ck : Bit
+    outgoing spi_ck : Bit default true
     //> SPI flash chip select (active low).
-    outgoing spi_cs : Bit
+    outgoing spi_cs : Bit default true
     //> SPI flash controller-out data.
-    outgoing spi_mosi : Bit
+    outgoing spi_mosi : Bit default true
     //> SPI flash controller-in data.
     incoming spi_miso : Bit
 }
@@ -53,34 +53,34 @@ platform VirtVga {
     incoming clock : Clock
 
     //> UART transmit data to the host (stdout).
-    outgoing tx : Bit
+    outgoing tx : Bit default true
     //> UART receive data from the host (stdin).
     incoming rx : Bit
 
     //> Program exit request.  While `@Invalid()`, the simulator runs.
     //> When it reads `@Valid(n)` on a clock tick, the simulator exits
     //> with exit code `n`.
-    outgoing exit : Valid[Word[8]]
+    outgoing exit : Valid[Word[8]] default @Invalid()
 
     //> SPI flash clock.
-    outgoing spi_ck : Bit
+    outgoing spi_ck : Bit default true
     //> SPI flash chip select (active low).
-    outgoing spi_cs : Bit
+    outgoing spi_cs : Bit default true
     //> SPI flash controller-out data.
-    outgoing spi_mosi : Bit
+    outgoing spi_mosi : Bit default true
     //> SPI flash controller-in data.
     incoming spi_miso : Bit
 
     //> VGA red channel, 4 bits (RGB444).
-    outgoing vga_r : Word[4]
+    outgoing vga_r : Word[4] default 0w4
     //> VGA green channel, 4 bits (RGB444).
-    outgoing vga_g : Word[4]
+    outgoing vga_g : Word[4] default 0w4
     //> VGA blue channel, 4 bits (RGB444).
-    outgoing vga_b : Word[4]
+    outgoing vga_b : Word[4] default 0w4
     //> Horizontal sync.  The Nexys4 connector is active-high; the
     //> simulator recovers the polarity either way (from duty cycle).
-    outgoing vga_hs : Bit
+    outgoing vga_hs : Bit default false
     //> Vertical sync.  The Nexys4 connector is active-high; the
     //> simulator recovers the polarity either way (from duty cycle).
-    outgoing vga_vs : Bit
+    outgoing vga_vs : Bit default false
 }

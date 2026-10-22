@@ -32,10 +32,10 @@ platform ArtyA7 {
     incoming clock : Clock
 
     //> User LEDs LD0-LD3 (light when driven high).
-    @pin("H5")  outgoing led0 : Bit
-    @pin("J5")  outgoing led1 : Bit
-    @pin("T9")  outgoing led2 : Bit
-    @pin("T10") outgoing led3 : Bit
+    @pin("H5")  outgoing led0 : Bit default false
+    @pin("J5")  outgoing led1 : Bit default false
+    @pin("T9")  outgoing led2 : Bit default false
+    @pin("T10") outgoing led3 : Bit default false
 
     //> Push buttons BTN0-BTN3.
     @pin("D9") incoming btn0 : Bit
@@ -51,14 +51,14 @@ platform ArtyA7 {
 
     //> UART (FTDI USB).
     @pin("A9")  incoming uart_rx : Bit
-    @pin("D10") outgoing uart_tx : Bit
+    @pin("D10") outgoing uart_tx : Bit default true
 
     //> SPI flash (S25FL128S, 128 Mbit).
     //> `flash_clk` is the QSPI clock, wired to ball L16, which is also
     //> the FPGA's configuration clock pin.
-    @pin("L13") outgoing flash_cs   : Bit
-    @pin("L16") outgoing flash_clk  : Bit
-    @pin("K17") outgoing flash_mosi : Bit
+    @pin("L13") outgoing flash_cs   : Bit default true
+    @pin("L16") outgoing flash_clk  : Bit default true
+    @pin("K17") outgoing flash_mosi : Bit default true
     @pin("K18") incoming flash_miso : Bit
 }
 
@@ -76,10 +76,10 @@ platform ArtyA7_100T {
     incoming clock : Clock
 
     //> User LEDs LD0-LD3 (light when driven high).
-    @pin("H5")  outgoing led0 : Bit
-    @pin("J5")  outgoing led1 : Bit
-    @pin("T9")  outgoing led2 : Bit
-    @pin("T10") outgoing led3 : Bit
+    @pin("H5")  outgoing led0 : Bit default false
+    @pin("J5")  outgoing led1 : Bit default false
+    @pin("T9")  outgoing led2 : Bit default false
+    @pin("T10") outgoing led3 : Bit default false
 
     //> Push buttons BTN0-BTN3.
     @pin("D9") incoming btn0 : Bit
@@ -95,14 +95,14 @@ platform ArtyA7_100T {
 
     //> UART (FTDI USB).
     @pin("A9")  incoming uart_rx : Bit
-    @pin("D10") outgoing uart_tx : Bit
+    @pin("D10") outgoing uart_tx : Bit default true
 
     //> SPI flash (S25FL128S, 128 Mbit).
     //> `flash_clk` is the QSPI clock, wired to ball L16, which is also
     //> the FPGA's configuration clock pin.
-    @pin("L13") outgoing flash_cs   : Bit
-    @pin("L16") outgoing flash_clk  : Bit
-    @pin("K17") outgoing flash_mosi : Bit
+    @pin("L13") outgoing flash_cs   : Bit default true
+    @pin("L16") outgoing flash_clk  : Bit default true
+    @pin("K17") outgoing flash_mosi : Bit default true
     @pin("K18") incoming flash_miso : Bit
 }
 
