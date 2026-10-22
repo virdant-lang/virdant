@@ -8,6 +8,7 @@
 use bstr::BString;
 use bstr::ByteSlice;
 
+use crate::analysis::ports::Port;
 use crate::analysis::symbols::{SymbolId, SymbolKind};
 use crate::common::ComponentKind;
 use crate::db::Builder;
@@ -75,6 +76,62 @@ pub fn platform_clocks(builder: &mut Builder, symbol_id: SymbolId)
         let Some(period_ns) = period_value_to_f64(value) else { return None; };
         Some((port_name, pin_value_to_string(pin), period_ns))
     })
+}
+
+/// (clock port name, pin, period_ns) for every Clock-typed incoming
+/// port carrying a `@period_ns` annotation.
+///
+/// Unlike [`platform_clocks`], the `@pin` is *optional*: virtual
+/// platforms (`virt::Virt`, `virt::VirtVga`) declare clock periods
+/// but no pins.  Ports without a `@period_ns` are skipped.  Used by
+/// `vir build` to emit `build/virmanifest.json`.
+pub fn platform_clock_meta(
+    builder: &mut Builder,
+    symbol_id: SymbolId,
+) -> Vec<(BString, Option<BString>, Option<f64>)> {
+    platform_ports(builder, symbol_id, |parsing, child, port_name| {
+        if !is_clock_port(parsing, child) {
+            return None;
+        }
+        let pin = child
+            .annotation_values(parsing, "pin")
+            .into_iter()
+            .next()
+            .map(pin_value_to_string);
+        let period = child
+            .annotation_values(parsing, "period_ns")
+            .into_iter()
+            .next()
+            .and_then(period_value_to_f64);
+        if period.is_none() {
+            return None;
+        }
+        Some((port_name, pin, period))
+    })
+}
+
+/// The platform's port list, in declaration order.  A public
+/// manifest-data accessor: the `get_ports_of` database getter is
+/// crate-private, but external tools (`vir build` →
+/// `build/virmanifest.json`) read the platform through these.
+pub fn platform_port_list(
+    builder: &mut Builder,
+    symbol_id: SymbolId,
+) -> std::sync::Arc<Vec<Port>> {
+    builder.get_ports_of(symbol_id)
+}
+
+/// The bit width of a platform port's type (1 for `Bit`/`Clock`,
+/// `n` for `Word[n]`, ...; 0 for an untyped port).  Public for the
+/// same manifest-data reasons as [`platform_port_list`].
+pub fn platform_port_width(
+    builder: &mut Builder,
+    port: &Port,
+) -> crate::common::Width {
+    port.typ
+        .as_ref()
+        .map(|typ| crate::types::width::type_width(builder, typ))
+        .unwrap_or(0)
 }
 
 /// Walks the platform item's `Incoming`/`Outgoing` ports, mapping each

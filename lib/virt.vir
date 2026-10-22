@@ -1,0 +1,86 @@
+//! Platform definitions for the virtual FPGA (`virt`).
+//!
+//! `virt` is not a physical board: designs written `for Virt` are
+//! simulated with Verilator via the `virt` tool (repo `virdant-virt/`).
+//! The simulated board emulates a UART (115200 8N1, stdin/stdout) and a
+//! 16 MiB SPI flash device (initially all 0xFF, preloadable with
+//! `--flash=<FILE>`).
+//!
+//! `VirtVga` additionally emulates a VGA monitor (Nexys4-style
+//! RGB444 + HSYNC/VSYNC) rendered with SDL2; see that platform below.
+
+//> Virtual FPGA, simulated by Verilator via the `virt` tool.
+@fpga("virt")
+@part("virt")
+platform Virt {
+    //> 48 MHz primary clock.
+    @period_ns("20.833")
+    incoming clock : Clock
+
+    //> UART transmit data to the host (stdout).
+    outgoing tx : Bit
+    //> UART receive data from the host (stdin).
+    incoming rx : Bit
+
+    //> Program exit request.  While `@Invalid()`, the simulator runs.
+    //> When it reads `@Valid(n)` on a clock tick, the simulator exits with
+    //   exit code `n`.
+    outgoing exit : Valid[Word[8]]
+
+    //> SPI flash clock.
+    outgoing spi_ck : Bit
+    //> SPI flash chip select (active low).
+    outgoing spi_cs : Bit
+    //> SPI flash controller-out data.
+    outgoing spi_mosi : Bit
+    //> SPI flash controller-in data.
+    incoming spi_miso : Bit
+}
+
+//> Virtual FPGA with VGA output, simulated by Verilator via the `virt`
+//> tool.  `VirtVga` extends `Virt` with a VGA connector modelled on the
+//> Digilent Nexys4: 4 bits per RGB channel (driving an ADV7123-class
+//> DAC in hardware) and active-high HSYNC/VSYNC.  The `virt` tool
+//> renders the output with SDL2 (`sim_vga.cpp`) using VESA timing
+//> tables to recover the frame geometry from the sync signals.
+@fpga("virt")
+@part("virt-vga")
+platform VirtVga {
+    //> 50 MHz primary clock (the Nexys4's 100 MHz / 2; a clean source
+    //> for common VGA pixel clocks: /2 gives the 25 MHz of 640x480@60,
+    //> and /1 the 50 MHz of 800x600@72).
+    @period_ns("20.0")
+    incoming clock : Clock
+
+    //> UART transmit data to the host (stdout).
+    outgoing tx : Bit
+    //> UART receive data from the host (stdin).
+    incoming rx : Bit
+
+    //> Program exit request.  While `@Invalid()`, the simulator runs.
+    //> When it reads `@Valid(n)` on a clock tick, the simulator exits
+    //> with exit code `n`.
+    outgoing exit : Valid[Word[8]]
+
+    //> SPI flash clock.
+    outgoing spi_ck : Bit
+    //> SPI flash chip select (active low).
+    outgoing spi_cs : Bit
+    //> SPI flash controller-out data.
+    outgoing spi_mosi : Bit
+    //> SPI flash controller-in data.
+    incoming spi_miso : Bit
+
+    //> VGA red channel, 4 bits (RGB444).
+    outgoing vga_r : Word[4]
+    //> VGA green channel, 4 bits (RGB444).
+    outgoing vga_g : Word[4]
+    //> VGA blue channel, 4 bits (RGB444).
+    outgoing vga_b : Word[4]
+    //> Horizontal sync.  The Nexys4 connector is active-high; the
+    //> simulator recovers the polarity either way (from duty cycle).
+    outgoing vga_hs : Bit
+    //> Vertical sync.  The Nexys4 connector is active-high; the
+    //> simulator recovers the polarity either way (from duty cycle).
+    outgoing vga_vs : Bit
+}

@@ -16,6 +16,7 @@ use virdant::db::Db;
 use virdant::diagnostics::DiagnosticLevel;
 use virdant::package::PackageTable;
 use virdant::common::source::{Region, Source};
+use virdant::common::PortDir;
 use virdant::analysis::symbols::SymbolKind;
 use virdant::syntax::parsing::parse;
 use virdant::syntax::token::tokenize;
@@ -629,6 +630,119 @@ fn build(args: &Args) {
     let verilog = virdant::verilog::conversion::convert_db_to_verilog(&db);
     verilog.write_in_dir(&builddir).unwrap();
     println!("Wrote Verilog to {}", builddir.to_string_lossy());
+
+    // `build/virmanifest.json`: the resolved platform's metadata, for
+    // external tools that drive the built design (e.g. the `virt`
+    // simulator for `virt::Virt`/`virt::VirtVga`).  Emitted only when
+    // the `[prog] top` module resolves a platform `for` clause.
+    emit_manifest(args, &db, &builddir);
+}
+
+/// Emit `build/virmanifest.json` for the `[prog] top` module's platform.
+///
+/// The manifest carries what a simulator cannot recover from the
+/// emitted `.sv` alone: the platform (name and FPGA family) the top
+/// implements, its clock periods, and its port list.  Skipped (with a
+/// note, not an error) when the top names no platform — plain
+/// Verilog-only designs still build.
+fn emit_manifest(args: &Args, db: &Db, builddir: &Path) {
+    // Resolve the top module named by [prog] top, exactly as
+    // `vir bitstream` does.
+    let cwd = resolve_cwd(args);
+    let Some(top_name) = read_prog_key(&cwd, "top") else {
+        println!("No [prog] top: skipped virmanifest.json");
+        return;
+    };
+    let symboltable = db.get_symboltable();
+    let Some(top_symbol) = symboltable
+        .items()
+        .into_iter()
+        .find(|sym| sym.fqn.as_bytes() == top_name.as_bytes()
+            && sym.kind == SymbolKind::ModDef)
+    else {
+        println!("Top module '{top_name}' not found: skipped virmanifest.json");
+        return;
+    };
+
+    // The top module's `for` clause selects the platform.
+    let mut builder = virdant::db::Builder::new(db);
+    let platform_id = match virdant::analysis::platform::resolve_platform_for(
+        &mut builder, top_symbol.id(),
+    ) {
+        Ok(Some(platform_id)) => platform_id,
+        Ok(None) => {
+            println!("Top module '{top_name}' implements no platform: skipped virmanifest.json");
+            return;
+        }
+        Err(diagnostic) => {
+            dump_diagnostic(db, &diagnostic);
+            println!("Platform resolution failed: skipped virmanifest.json");
+            return;
+        }
+    };
+    let platform_symbol = symboltable.symbol(platform_id);
+    let platform_fqn = platform_symbol.fqn().to_string();
+    let platform_name = platform_symbol.name().to_string();
+
+    let fpga = virdant::analysis::platform::platform_fpga(&mut builder, platform_id)
+        .unwrap_or_else(|| {
+            eprintln!("Platform '{platform_fqn}' is missing @fpga");
+            std::process::exit(1);
+        });
+    let part = virdant::analysis::platform::platform_part(&mut builder, platform_id);
+
+    let mut root = json::object::Object::new();
+    root.insert("vir", 1.into());
+    root.insert("platform", platform_fqn.clone().into());
+    root.insert("platform_name", platform_name.clone().into());
+    root.insert("fpga", fpga.to_str_lossy().to_string().into());
+    if let Some(part) = &part {
+        root.insert("part", part.to_str_lossy().to_string().into());
+    }
+
+    // Clocks: period in ns plus the rounded frequency in Hz, so tools
+    // do not have to redo (or disagree on) the 1e9/period rounding.
+    let mut clocks = json::JsonValue::new_array();
+    for (name, pin, period) in virdant::analysis::platform::platform_clock_meta(
+        &mut builder, platform_id,
+    ) {
+        let mut entry = json::object::Object::new();
+        entry.insert("name", name.to_str_lossy().to_string().into());
+        match pin {
+            Some(pin) => entry.insert("pin", pin.to_str_lossy().to_string().into()),
+            None => entry.insert("pin", json::JsonValue::Null),
+        }
+        if let Some(period) = period {
+            entry.insert("period_ns", period.into());
+            entry.insert("clock_hz", ((1e9 / period).round() as u64).into());
+        }
+        clocks.push(json::JsonValue::Object(entry)).unwrap();
+    }
+    root.insert("clocks", clocks);
+
+    // Ports: name, direction, and bit width (from the platform type —
+    // the top module's ports are checked to match exactly).
+    let mut ports = json::JsonValue::new_array();
+    for port in virdant::analysis::platform::platform_port_list(&mut builder, platform_id).iter() {
+        let mut entry = json::object::Object::new();
+        entry.insert("name", port.path.to_str_lossy().to_string().into());
+        entry.insert(
+            "dir",
+            match port.dir {
+                PortDir::Input => "input",
+                PortDir::Output => "output",
+            }
+            .into(),
+        );
+        let bits = virdant::analysis::platform::platform_port_width(&mut builder, port);
+        entry.insert("bits", (bits as u64).into());
+        ports.push(json::JsonValue::Object(entry)).unwrap();
+    }
+    root.insert("ports", ports);
+
+    let path = builddir.join("virmanifest.json");
+    std::fs::write(&path, json::stringify_pretty(json::JsonValue::Object(root), 2)).unwrap();
+    println!("Wrote manifest to {}", path.to_string_lossy());
 }
 
 fn compile(path: PathBuf) {
