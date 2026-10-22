@@ -5,6 +5,7 @@
 //! and a positional `at` query.
 
 use bstr::{BStr, BString};
+use bstr::ByteSlice as _;
 
 use crate::diagnostics::{self, Diagnostic};
 use crate::package::PackageId;
@@ -30,6 +31,8 @@ pub struct Parsing {
     pub(super) error_data: Vec<ParseError>,
     pub(super) docstring_diagnostics: Vec<Diagnostic>,
     pub(super) tab_diagnostics: Vec<Diagnostic>,
+    pub(super) indentation_diagnostics: Vec<Diagnostic>,
+    pub(super) trailing_space_diagnostics: Vec<Diagnostic>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -91,6 +94,47 @@ pub fn parse(source: &Source) -> Parsing {
         }
     }
 
+    // Every line containing at least one token must begin with a number of
+    // spaces which is a multiple of 4. Blank lines and comment-only lines
+    // are exempt. Scan the raw source line by line and flag each offending
+    // line, spanning its leading whitespace.
+    let mut line_start: u32 = 0;
+    for raw_line in source.text().split_str(b"\n") {
+        let line = if raw_line.last() == Some(&b'\r') {
+            &raw_line[..raw_line.len() - 1]
+        } else {
+            raw_line
+        };
+        let mut spaces = 0;
+        while spaces < line.len() && line[spaces] == b' ' {
+            spaces += 1;
+        }
+        let blank = spaces == line.len();
+        let comment = !blank && line.len() >= spaces + 2 && &line[spaces..spaces + 2] == b"//";
+        if !blank && !comment && spaces % 4 != 0 {
+            let start = SourceOffset(line_start);
+            let end = SourceOffset(line_start + spaces as u32);
+            let region = source.to_region(start, end);
+            let diagnostic = Diagnostic::new(region, diagnostics::DiagnosticPayload::InvalidIndentation);
+            parsing.indentation_diagnostics.push(diagnostic);
+        }
+
+        // Trailing spaces are a warning. Flag each line ending in spaces,
+        // spanning the trailing whitespace.
+        let mut trailing = 0;
+        while trailing < line.len() && line[line.len() - 1 - trailing] == b' ' {
+            trailing += 1;
+        }
+        if trailing > 0 {
+            let start = SourceOffset(line_start + (line.len() - trailing) as u32);
+            let end = SourceOffset(line_start + line.len() as u32);
+            let region = source.to_region(start, end);
+            let diagnostic = Diagnostic::new(region, diagnostics::DiagnosticPayload::TrailingSpaces);
+            parsing.trailing_space_diagnostics.push(diagnostic);
+        }
+        line_start += raw_line.len() as u32 + 1;
+    }
+
     let parser = PackageParser::new();
     let text = source.text();
     let tokens = tokenize(BStr::new(&text));
@@ -133,6 +177,8 @@ impl Parsing {
             error_data: vec![],
             docstring_diagnostics: vec![],
             tab_diagnostics: vec![],
+            indentation_diagnostics: vec![],
+            trailing_space_diagnostics: vec![],
         }
     }
 
@@ -235,6 +281,8 @@ impl Parsing {
         let mut diagnostics = vec![];
         diagnostics.extend(self.docstring_diagnostics.clone());
         diagnostics.extend(self.tab_diagnostics.clone());
+        diagnostics.extend(self.indentation_diagnostics.clone());
+        diagnostics.extend(self.trailing_space_diagnostics.clone());
         for (error, error_data) in self.errors() {
             let (message, region) = match error_data.error {
                 lalrpop_util::ParseError::UnrecognizedToken { token, expected } => {

@@ -1,0 +1,19 @@
+// Trailing spaces are a warning (unlike tabs and bad indentation,
+// which are errors). Each offending line is flagged, spanning the
+// trailing whitespace.
+
+// CHECK: Trailing spaces
+// CHECK: Trailing spaces
+// CHECK: Trailing spaces
+// CHECK-NOT: Check failed
+
+mod HalfAdder {
+    incoming a : Bit   
+    incoming b : Bit
+
+    outgoing sum : Bit   
+    outgoing carry : Bit
+
+    sum := a ^^ b
+    carry := a && b   
+}

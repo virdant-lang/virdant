@@ -117,6 +117,8 @@ pub enum DiagnosticPayload {
     /// simulation to never converge.
     CombinationalLoop(CombinationalLoop),
     ImportNotAtTopError,
+    InvalidIndentation,
+    TrailingSpaces,
     /// `it` keyword used outside of an `ItBlock`.
     ItNotInItBlock,
     CantInfer,
@@ -515,6 +517,8 @@ impl Diagnostic {
         match &self.payload {
             DiagnosticPayload::SyntaxError(d) => format!("Syntax Error: {}", d.message).into(),
             DiagnosticPayload::ImportNotAtTopError => "Import not at top of file".into(),
+            DiagnosticPayload::InvalidIndentation => "Line must be indented by a multiple of 4 spaces".into(),
+            DiagnosticPayload::TrailingSpaces => "Line should not end with trailing space".into(),
             DiagnosticPayload::ImportCycle(d) => {
                 debug_assert!(d.package_cycle.len() > 0);
                 if d.package_cycle.len() > 1 {
@@ -762,7 +766,8 @@ impl Diagnostic {
             | DiagnosticPayload::ReadFromSink(_)
             | DiagnosticPayload::UnfilledHole(_)
             | DiagnosticPayload::EmptyDriverBlock
-            | DiagnosticPayload::RedundantDriver(_) => DiagnosticLevel::Warning,
+            | DiagnosticPayload::RedundantDriver(_)
+            | DiagnosticPayload::TrailingSpaces => DiagnosticLevel::Warning,
             DiagnosticPayload::Todo(_) => DiagnosticLevel::Info,
             _ => DiagnosticLevel::Error,
         }
