@@ -237,7 +237,7 @@ fn resolve_pattern_binding(
         let parent_id = parent_node.id();
         let parent = parsing.ast_node(parent_id);
         match parent.payload() {
-            AstNodePayload::ModDefStmtMatch | AstNodePayload::ExprMatch => {
+            AstNodePayload::Match => {
                 // Children: [subject, arm_0, arm_1, ...] where each `case` arm contributes
                 // (pattern, body) and each `else` arm contributes (body) only.
                 let children = parent.children();
@@ -348,7 +348,7 @@ fn convert_ast_expr(db: &Db, loc: Location, env: &[Type]) -> Arc<Expr> {
             let child_loc = node.child(0).location();
             ExprPayload::Paren(payload::Paren { subject: convert_ast_expr(db, child_loc, env) })
         }
-        AstNodePayload::ExprWhen => {
+        AstNodePayload::When => {
             use crate::syntax::ast::when_arm_children;
             let children = node.children();
             let arms = when_arm_children(&children);
@@ -368,7 +368,7 @@ fn convert_ast_expr(db: &Db, loc: Location, env: &[Type]) -> Arc<Expr> {
             let else_branch = else_branch_opt.expect("when must have else arm");
             ExprPayload::When(payload::When { branches, else_branch })
         }
-        AstNodePayload::ExprMatch => {
+        AstNodePayload::Match => {
             let children = node.children();
             let subject_loc = children[0].location();
             let subject_typ = mono_type(db, &subject_loc, env);

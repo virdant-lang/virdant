@@ -368,13 +368,11 @@ SocketDefStmt: AstNodeId = {
     },
 }
 
-ModDefStmt: AstNodeId = {
+ModDefStmtCore: AstNodeId = {
     <component:ModDefStmtComponent> => component,
     <driver:ModDefStmtDriver> => driver,
     <instance:ModDefStmtInstance> => instance,
     <socket:ModDefStmtSocket> => socket,
-    <w:ModDefStmtWhen> => w,
-    <m:ModDefStmtMatch> => m,
     <unused_:ModDefStmtUnused> => unused_,
     <initial:ModDefStmtInitial> => initial,
     <dependson:ModDefStmtDependsOn> => dependson,
@@ -382,6 +380,12 @@ ModDefStmt: AstNodeId = {
         let span = parser.span(ll, rr);
         parser.add_error_node(span, error)
     },
+}
+
+ModDefStmt: AstNodeId = {
+    <stmt:ModDefStmtCore> => stmt,
+    <w:When> => w,
+    <m:Match> => m,
 }
 
 ModDefStmtComponent: AstNodeId = {
@@ -538,9 +542,9 @@ ModDefStmtSocket: AstNodeId = {
     },
 }
 
-ModDefStmtWhen: AstNodeId = {
-    <ll:@L> "when" "{" <arms:ModDefStmtWhenArm*> "}" <rr:@R> => {
-        let payload = AstNodePayload::ModDefStmtWhen;
+When: AstNodeId = {
+    <ll:@L> "when" "{" <arms:WhenArm*> "}" <rr:@R> => {
+        let payload = AstNodePayload::When;
         let span = parser.span(ll, rr);
         let num_children = arms.into_iter().sum::<u16>();
 
@@ -548,20 +552,20 @@ ModDefStmtWhen: AstNodeId = {
     },
 }
 
-ModDefStmtWhenArm: u16 = {
+WhenArm: u16 = {
     "case" Expr "=>" Expr => 2,
-    "case" Expr ModDefStmtBlock => 2,
-    "case" Expr ModDefStmtWhen => 2,
-    "case" Expr ModDefStmtMatch => 2,
+    "case" Expr ArmBlock => 2,
+    "case" Expr When => 2,
+    "case" Expr Match => 2,
     "else" "=>" Expr => 1,
-    "else" ModDefStmtBlock => 1,
-    "else" ModDefStmtWhen => 1,
-    "else" ModDefStmtMatch => 1,
+    "else" ArmBlock => 1,
+    "else" When => 1,
+    "else" Match => 1,
 }
 
-ModDefStmtMatch: AstNodeId = {
-    <ll:@L> "match" Expr "{" <arms:ModDefStmtMatchArm*> "}" <rr:@R> => {
-        let payload = AstNodePayload::ModDefStmtMatch;
+Match: AstNodeId = {
+    <ll:@L> "match" Expr "{" <arms:MatchArm*> "}" <rr:@R> => {
+        let payload = AstNodePayload::Match;
         let span = parser.span(ll, rr);
         let num_children = 1 + arms.into_iter().sum::<u16>();
 
@@ -569,15 +573,15 @@ ModDefStmtMatch: AstNodeId = {
     },
 }
 
-ModDefStmtMatchArm: u16 = {
+MatchArm: u16 = {
     "case" Pat "=>" Expr => 2,
-    "case" Pat ModDefStmtBlock => 2,
-    "case" Pat ModDefStmtWhen => 2,
-    "case" Pat ModDefStmtMatch => 2,
+    "case" Pat ArmBlock => 2,
+    "case" Pat When => 2,
+    "case" Pat Match => 2,
     "else" "=>" Expr => 1,
-    "else" ModDefStmtBlock => 1,
-    "else" ModDefStmtWhen => 1,
-    "else" ModDefStmtMatch => 1,
+    "else" ArmBlock => 1,
+    "else" When => 1,
+    "else" Match => 1,
 }
 
 ModDefStmtUnused: AstNodeId = {
@@ -642,54 +646,62 @@ Type: AstNodeId = {
 }
 
 Expr: AstNodeId = {
-    <e:ExprWhen> => e,
-    <e:ExprMatch> => e,
+    <e:When> => e,
+    <e:Match> => e,
     <e:ExprStruct> => e,
     <e:ExprBinOpLogical> => e,
 }
 
-ExprWhen: AstNodeId = {
-    <ll:@L> "when" "{" <arms:ExprWhenArm*> "}" <rr:@R> => {
-        let payload = AstNodePayload::ExprWhen;
+ArmBlock: AstNodeId = {
+    <ll:@L> "{" <stmts:ModDefStmt*> "}" <rr:@R> => {
+        let num_children = u16::try_from(stmts.len()).unwrap();
+        let payload = AstNodePayload::ArmBlock;
         let span = parser.span(ll, rr);
-        let num_children = arms.into_iter().sum::<u16>();
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "{" <e:ArmBlockExpr> "}" <rr:@R> => {
+        let payload = AstNodePayload::ArmBlock;
+        let span = parser.span(ll, rr);
+        let num_children = 1;
 
         parser.add_node(payload, span, num_children)
     },
 }
 
-ExprWhenArm: u16 = {
-    "case" Expr "=>" Expr => 2,
-    "case" Expr ModDefStmtBlock => 2,
-    "case" Expr ExprWhen => 2,
-    "case" Expr ExprMatch => 2,
-    "else" "=>" Expr => 1,
-    "else" ModDefStmtBlock => 1,
-    "else" ExprWhen => 1,
-    "else" ExprMatch => 1,
-}
-
-ExprMatch: AstNodeId = {
-    <ll:@L> "match" Expr "{"
-        <arms:ExprMatchArm*>
-    "}" <rr:@R> => {
-        let payload = AstNodePayload::ExprMatch;
+/// A single-expression arm block body: `{ <expr> }`.  This mirrors the
+/// ordinary expression chain except that the top-level comparison may
+/// not use `<=`, which at block-item position is a latched driver
+/// (`lhs <= rhs`), not a comparison.  A top-level `<=` comparison in
+/// this position must be parenthesized.
+ArmBlockExpr: AstNodeId = {
+    <ll:@L> <lhs:ArmBlockExpr> <op:BinOpLogical> <rhs:ArmBlockCompare> <rr:@R> => {
+        let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op });
         let span = parser.span(ll, rr);
-        let num_children = 1 + arms.into_iter().sum::<u16>();
+        let num_children = 2;
 
         parser.add_node(payload, span, num_children)
     },
+    <e:ArmBlockCompare> => e,
 }
 
-ExprMatchArm: u16 = {
-    "case" Pat "=>" Expr => 2,
-    "case" Pat ModDefStmtBlock => 2,
-    "case" Pat ExprWhen => 2,
-    "case" Pat ExprMatch => 2,
-    "else" "=>" Expr => 1,
-    "else" ModDefStmtBlock => 1,
-    "else" ExprWhen => 1,
-    "else" ExprMatch => 1,
+ArmBlockCompare: AstNodeId = {
+    <ll:@L> <lhs:ArmBlockCompare> <op:BinOpCompareNoLe> <rhs:ExprBinOpAdditive> <rr:@R> => {
+        let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op });
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <e:ExprBinOpAdditive> => e,
+}
+
+BinOpCompareNoLe: BinOp = {
+    "<" => BinOp::Lt,
+    ">" => BinOp::Gt,
+    ">=" => BinOp::Gte,
+    "==" => BinOp::Eq,
+    "!=" => BinOp::Neq,
 }
 
 Pat: () = {

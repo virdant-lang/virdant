@@ -217,8 +217,8 @@ fn get_all_driver_locations(
                     }
                 }
                 AstNodePayload::ModDefStmtBlock
-                | AstNodePayload::ModDefStmtWhen
-                | AstNodePayload::ModDefStmtMatch => {
+                | AstNodePayload::When
+                | AstNodePayload::Match => {
                     stack.push(child.id());
                 }
                 _ => {}

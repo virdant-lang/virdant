@@ -133,6 +133,14 @@ pub enum DiagnosticPayload {
     EnumUnknownWidth,
     /// A driver block is empty.
     EmptyDriverBlock,
+    /// A `when`/`match` arm uses a `{ ... }` block for a value where the
+    /// when/match is used as an expression; the idiomatic arm form is
+    /// `case <cond> => <expr>`.
+    ArmBlockNeedsArrow,
+    /// A `when`/`match` arm produces a value where the when/match is used
+    /// as a statement; the idiomatic arm form is `case <cond> { <stmts> }`
+    /// with driver statements.
+    ArmNeedsBlock,
     /// A module's `for` clause names an item which is not a platform.
     ExpectedPlatform(ExpectedPlatform),
     /// A module's port set is missing a port required by its platform.
@@ -674,6 +682,12 @@ impl Diagnostic {
             }
             DiagnosticPayload::IndexNotWordType(d) => format!("Expected a Word type: {}", d.typ).into(),
             DiagnosticPayload::EmptyDriverBlock => "Empty driver block".into(),
+            DiagnosticPayload::ArmBlockNeedsArrow => {
+                "For expression-based conditionals, use `=>` instead of `{ ... }`".into()
+            }
+            DiagnosticPayload::ArmNeedsBlock => {
+                "For statement-based conditionals, use `{ ... }` instead of `=>`".into()
+            }
             DiagnosticPayload::RedundantUnused(d) => format!("Redundant `unused`: {}", d.path).into(),
             DiagnosticPayload::RedundantDriver(d) => format!("Redundant driver: {}", d.path).into(),
             DiagnosticPayload::InitialForNonReg(d) => {

@@ -677,7 +677,7 @@ fn extend_context_for_enclosing_stmt_matches(
     let mut arm_pats: Vec<(Location, Option<AstNodeId>)> = vec![];
     for &ancestor_id in &ancestor_ids {
         let ancestor = parsing.ast_node(ancestor_id);
-        if let AstNodePayload::ModDefStmtMatch = ancestor.payload() {
+        if let AstNodePayload::Match = ancestor.payload() {
             let children = ancestor.children();
             for (pat_opt, block) in match_arm_children(&children) {
                 if ancestor_ids.contains(&block.id()) {

@@ -78,16 +78,19 @@ SocketDefStmt :=
       DocString? Annotations "cosi" Ident ":" Type
     | DocString? Annotations "soci" Ident ":" Type
 
-ModDefStmt :=
+ModDefStmtCore :=
       ModDefStmtComponent
     | ModDefStmtDriver
     | ModDefStmtInstance
     | ModDefStmtSocket
-    | ModDefStmtWhen
-    | ModDefStmtMatch
     | ModDefStmtUnused
     | ModDefStmtInitial
     | ModDefStmtDependsOn
+
+ModDefStmt :=
+      ModDefStmtCore
+    | When
+    | Match
 
 ModDefStmtComponent :=
       DocString? Annotations "incoming" Ident ":" Type OnClause? ItBlock?
@@ -114,29 +117,29 @@ ModDefStmtSocket :=
       DocString? Annotations "client" "socket" Ident "of" Ofness GenericsParams? ItBlock?
     | DocString? Annotations "server" "socket" Ident "of" Ofness GenericsParams? ItBlock?
 
-ModDefStmtWhen := "when" "{" ModDefStmtWhenArm* "}"
+When := "when" "{" WhenArm* "}"
 
-ModDefStmtWhenArm :=
+WhenArm :=
       "case" Expr "=>" Expr
-    | "case" Expr ModDefStmtBlock
-    | "case" Expr ModDefStmtWhen
-    | "case" Expr ModDefStmtMatch
+    | "case" Expr ArmBlock
+    | "case" Expr When
+    | "case" Expr Match
     | "else" "=>" Expr
-    | "else" ModDefStmtBlock
-    | "else" ModDefStmtWhen
-    | "else" ModDefStmtMatch
+    | "else" ArmBlock
+    | "else" When
+    | "else" Match
 
-ModDefStmtMatch := "match" Expr "{" ModDefStmtMatchArm* "}"
+Match := "match" Expr "{" MatchArm* "}"
 
-ModDefStmtMatchArm :=
+MatchArm :=
       "case" Pat "=>" Expr
-    | "case" Pat ModDefStmtBlock
-    | "case" Pat ModDefStmtWhen
-    | "case" Pat ModDefStmtMatch
+    | "case" Pat ArmBlock
+    | "case" Pat When
+    | "case" Pat Match
     | "else" "=>" Expr
-    | "else" ModDefStmtBlock
-    | "else" ModDefStmtWhen
-    | "else" ModDefStmtMatch
+    | "else" ArmBlock
+    | "else" When
+    | "else" Match
 
 ModDefStmtUnused := "unused" Path
 
@@ -151,34 +154,29 @@ Kind := Ident
 Type := Ofness GenericsParams?
 
 Expr :=
-      ExprWhen
-    | ExprMatch
+      When
+    | Match
     | ExprStruct
     | ExprBinOpLogical
 
-ExprWhen := "when" "{" ExprWhenArm* "}"
+ArmBlock :=
+      "{" ModDefStmt* "}"
+    | "{" ArmBlockExpr "}"
 
-ExprWhenArm :=
-      "case" Expr "=>" Expr
-    | "case" Expr ModDefStmtBlock
-    | "case" Expr ExprWhen
-    | "case" Expr ExprMatch
-    | "else" "=>" Expr
-    | "else" ModDefStmtBlock
-    | "else" ExprWhen
-    | "else" ExprMatch
+ArmBlockExpr :=
+      ArmBlockExpr BinOpLogical ArmBlockCompare
+    | ArmBlockCompare
 
-ExprMatch := "match" Expr "{" ExprMatchArm* "}"
+ArmBlockCompare :=
+      ArmBlockCompare BinOpCompareNoLe ExprBinOpAdditive
+    | ExprBinOpAdditive
 
-ExprMatchArm :=
-      "case" Pat "=>" Expr
-    | "case" Pat ModDefStmtBlock
-    | "case" Pat ExprWhen
-    | "case" Pat ExprMatch
-    | "else" "=>" Expr
-    | "else" ModDefStmtBlock
-    | "else" ExprWhen
-    | "else" ExprMatch
+BinOpCompareNoLe :=
+      "<"
+    | ">"
+    | ">="
+    | "=="
+    | "!="
 
 Pat :=
       "#" Ident

@@ -90,55 +90,25 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
             let component_analysis = builder.get_component_analysis(moddef.id());
             component_analysis.type_of(lhs_path.as_bstr())
         }
-        AstNodePayload::ModDefStmtWhen => {
-            // Children of ModDefStmtWhen: [guard_0?, body_0, guard_1?, body_1, ...]
-            // Only the guard expressions are registered as expr roots.
-            // Each guard must be a Bit.
-            Some(Type::Bit)
-        }
-        AstNodePayload::ModDefStmtMatch => {
-            // The only expr root whose parent is ModDefStmtMatch is the subject expression
-            // (child[0]).  Its expected type is unconstrained; let the expression itself
-            // determine its own type.
-            None
-        }
-
-        AstNodePayload::ExprWhen => {
-            // Children of ExprWhen: [guard_0?, body_0, guard_1?, body_1, ...]
-            // case arms: guard at even index, body at odd index
-            // else arms: body only at even index (no preceding guard)
+        AstNodePayload::When => {
             // Guard expressions must be Bit.
-            // Body expressions inherit the expected type from the ExprWhen itself.
+            // Body expressions inherit the expected type from the When
+            // itself (only reachable when the When is in expression
+            // position; in statement position only guards are expr
+            // roots).
             let children = parent_node.children();
-            for (i, child) in children.iter().enumerate() {
-                if child.id() == node.id() {
-                    // Check if this is a guard or a body
-                    let is_guard = if i > 0 && i % 2 == 0 {
-                        // Even index > 0: could be a guard or an else body
-                        // It's a guard if the previous child (i-1) is also a guard or body
-                        // Actually, simpler: it's a guard if this node is followed by another expr
-                        i + 1 < children.len() && children[i + 1].is_expr()
-                    } else if i == 0 {
-                        // First child: must be a guard (case arms start with guard)
-                        true
-                    } else {
-                        // Odd index: this is a body (follows a guard)
-                        false
-                    };
-
-                    if is_guard {
-                        return Some(Type::Bit);
-                    } else {
-                        // Body expression - inherit expected type from parent ExprWhen
-                        return build_expected_type(builder,
-                            ExprRoot::new(parent_node.location()));
-                    }
-                }
+            let is_guard = crate::syntax::ast::when_arm_children(&children)
+                .into_iter()
+                .any(|(guard, _)| guard.is_some_and(|g| g.id() == node.id()));
+            if is_guard {
+                Some(Type::Bit)
+            } else {
+                build_expected_type(builder,
+                    ExprRoot::new(parent_node.location()))
             }
-            None
         }
 
-        AstNodePayload::ExprMatch => {
+        AstNodePayload::Match => {
             // The subject expression (child[0]) has unconstrained expected type.
             // Body expressions inherit the expected type from the ExprMatch itself.
             let children = parent_node.children();

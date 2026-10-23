@@ -574,7 +574,7 @@ fn collect_block_drivers(
                     }
                 }
             }
-            AstNodePayload::ModDefStmtWhen => {
+            AstNodePayload::When => {
                 // Children: [guard_0?, body_0, guard_1?, body_1, ...]
                 // case arms have guard + body (2 children), else arms have only body (1 child)
                 let children = stmt.children();
@@ -587,7 +587,7 @@ fn collect_block_drivers(
                         // case arm: guard + body
                         let guard = first;
                         if let Some(body) = children.get(idx + 1) {
-                            let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ModDefStmtBlock) {
+                            let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
                                 collect_block_drivers(body.children(), component_analysis, it_context, true, initials)
                             } else {
                                 // nested when/match or bare expr - recurse as single stmt
@@ -601,7 +601,7 @@ fn collect_block_drivers(
                     } else {
                         // else arm: body only
                         let body = first;
-                        let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ModDefStmtBlock) {
+                        let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
                             collect_block_drivers(body.children(), component_analysis, it_context, true, initials)
                         } else {
                             collect_block_drivers(vec![body.clone()], component_analysis, it_context, true, initials)
@@ -655,7 +655,7 @@ fn collect_block_drivers(
                     }));
                 }
             }
-            AstNodePayload::ModDefStmtMatch => {
+            AstNodePayload::Match => {
                 // Children: [subject, arm_0, arm_1, ...] where each `case` arm contributes
                 // (pattern, block) and each `else` arm contributes (block) only.
                 let children = stmt.children();
@@ -667,7 +667,7 @@ fn collect_block_drivers(
                 let mut case_arm_drivers: Vec<(Location, IndexMap<ComponentId, Vec<Driver>>)> = vec![];
                 let mut else_arm_drivers: Option<IndexMap<ComponentId, Vec<Driver>>> = None;
                 for (pat_opt, body) in match_arm_children(&children) {
-                    let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ModDefStmtBlock) {
+                    let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
                         collect_block_drivers(body.children(), component_analysis, it_context, true, initials)
                     } else {
                         // nested when/match or bare expr - recurse as single stmt

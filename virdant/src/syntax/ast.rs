@@ -176,8 +176,9 @@ impl<'p> AstNode<'p> {
             AstNodePayload::InitialDriver => format!("InitialDriver"),
             AstNodePayload::Submodule(_module) => format!("Module"),
             AstNodePayload::ModDefStmtBlock => format!("ModDefStmtBlock"),
-            AstNodePayload::ModDefStmtWhen => format!("ModDefStmtWhen"),
-            AstNodePayload::ModDefStmtMatch => format!("ModDefStmtMatch"),
+            AstNodePayload::ArmBlock => format!("ArmBlock"),
+            AstNodePayload::When => format!("When"),
+            AstNodePayload::Match => format!("Match"),
             AstNodePayload::ModDefStmtUnused => format!("ModDefStmtUnused"),
             AstNodePayload::Annotations(_) => format!("Annotations"),
             AstNodePayload::Annotation(annotation) => format!("Annotation {}", parsing.string(annotation.name.clone())),
@@ -196,8 +197,6 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Type(_) => format!("Type"),
             AstNodePayload::ExprReference => format!("ExprReference"),
             AstNodePayload::ExprParen => format!("ExprParen"),
-            AstNodePayload::ExprWhen => format!("ExprWhen"),
-            AstNodePayload::ExprMatch => format!("ExprMatch"),
             AstNodePayload::ExprBitLit(_expr_bit_lit) => format!("ExprBitLit"),
             AstNodePayload::ExprWordLit(_expr_word_lit) => format!("ExprWordLit"),
             AstNodePayload::ExprStrLit(_expr_str_lit) => format!("ExprStrLit"),
@@ -380,8 +379,8 @@ impl<'p> AstNode<'p> {
         matches!(self.payload(),
             AstNodePayload::ExprReference |
             AstNodePayload::ExprParen |
-            AstNodePayload::ExprWhen |
-            AstNodePayload::ExprMatch |
+            AstNodePayload::When |
+            AstNodePayload::Match |
             AstNodePayload::ExprBitLit(_) |
             AstNodePayload::ExprWordLit(_) |
             AstNodePayload::ExprStrLit(_) |
@@ -413,11 +412,57 @@ impl<'p> AstNode<'p> {
         )
     }
 
+    /// Whether this `When`/`Match` node is used as an *expression*
+    /// (the RHS of a driver, an operand, a guard, a `match` subject, an
+    /// arm body of an enclosing expression-position `when`/`match`)
+    /// rather than as a *statement* (a direct statement of a module
+    /// body, an It-block, or the statement list of an arm block).
+    ///
+    /// A bare `When`/`Match` arm body (written without `=>` and without
+    /// braces) inherits the position of its enclosing `When`/`Match`.
+    pub fn is_expression_position(&self) -> bool {
+        let parsing = self.parsing;
+        let mut node_id = self.id;
+        loop {
+            let node = parsing.ast_node(node_id);
+            let Some(parent_id) = node.parent else { return false };
+            let parent = parsing.ast_node(parent_id);
+            match parent.payload() {
+                AstNodePayload::ModDef(_)
+                | AstNodePayload::Platform(_)
+                | AstNodePayload::ModDefStmtBlock
+                | AstNodePayload::It
+                | AstNodePayload::ArmBlock => return false,
+                AstNodePayload::When => {
+                    // A guard is in expression position; a bare arm body
+                    // inherits the enclosing when's position.
+                    let children = parent.children();
+                    let is_guard = when_arm_children(&children)
+                        .into_iter()
+                        .any(|(guard, _)| guard.is_some_and(|g| g.id() == node_id));
+                    if is_guard {
+                        return true;
+                    }
+                    node_id = parent_id;
+                }
+                AstNodePayload::Match => {
+                    // The subject (child 0) is in expression position;
+                    // an arm body inherits the enclosing match's position.
+                    if parent.child(0).id() == node_id {
+                        return true;
+                    }
+                    node_id = parent_id;
+                }
+                _ => return true,
+            }
+        }
+    }
+
     pub fn subject(&self) -> Option<AstNode<'_>> {
         match &self.payload {
             AstNodePayload::ExprParen => Some(self.child(0)),
-            AstNodePayload::ExprWhen => None,
-            AstNodePayload::ExprMatch => Some(self.child(0)),
+            AstNodePayload::When => None,
+            AstNodePayload::Match => Some(self.child(0)),
             AstNodePayload::ExprUnOp(_expr_un_op) => Some(self.child(0)),
             AstNodePayload::ExprField(_) => Some(self.child(0)),
             AstNodePayload::ExprFn => Some(self.child(1)), // skips over the Ofness

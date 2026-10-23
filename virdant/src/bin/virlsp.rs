@@ -773,7 +773,7 @@ fn missing_match_cases_action(
     let missing = missing_match_patterns(db, parsing, &match_node, &subject_typ, &symboltable);
     if missing.is_empty() { return None; }
 
-    let is_stmt = matches!(match_node.payload(), AstNodePayload::ModDefStmtMatch);
+    let is_stmt = !match_node.is_expression_position();
     let arm_body = if is_stmt { "{ }" } else { "?" };
 
     let arms = match_arm_children(&children);
@@ -847,7 +847,7 @@ fn find_enclosing_match<'p>(parsing: &'p Parsing, node_id: AstNodeId) -> Option<
     loop {
         let node = parsing.ast_node(current_id);
         match node.payload() {
-            AstNodePayload::ExprMatch | AstNodePayload::ModDefStmtMatch => return Some(node),
+            AstNodePayload::Match => return Some(node),
             _ => match node.parent().map(|p| p.id()) {
                 Some(id) => current_id = id,
                 None => return None,

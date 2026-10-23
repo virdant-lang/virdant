@@ -54,7 +54,7 @@ pub(crate) fn check_match_coverage(
     // Coverage pass.  For statement-level matches the typing pass does not
     // validate arm patterns against the subject type, so emit shape mismatch
     // diagnostics inline; expression matches are already covered by check_pat.
-    let is_stmt_match = matches!(match_node.payload(), AstNodePayload::ModDefStmtMatch);
+    let is_stmt_match = matches!(match_node.payload(), AstNodePayload::Match);
     let mut overlap: Option<(Region, BString)> = None;
     let mut covered_syms: IndexMap<SymbolId, Region> = IndexMap::new();
     let mut covered_words: IndexMap<WordValue, Region> = IndexMap::new();
@@ -204,7 +204,7 @@ pub(crate) fn check_match_coverage(
 
     // Statement-level matches whose arm bodies contain only latched drivers
     // (<=) are exempt from exhaustiveness and redundant-else checks.
-    let latched_exempt = matches!(match_node.payload(), AstNodePayload::ModDefStmtMatch)
+    let latched_exempt = !match_node.is_expression_position()
         && arms_only_latched_drivers(&arms);
     if latched_exempt {
         return;

@@ -658,7 +658,7 @@ fn is_shadowed_by_pattern(
         let parent_id = parent_node.id();
         let parent = parsing.ast_node(parent_id);
         match parent.payload() {
-            AstNodePayload::ModDefStmtMatch | AstNodePayload::ExprMatch => {
+            AstNodePayload::Match => {
                 let children = parent.children();
                 for (pat_opt, body) in match_arm_children(&children) {
                     if body.id() == child_id {
@@ -907,7 +907,7 @@ fn collect_references(
                     }
                 }
             }
-            AstNodePayload::ModDefStmtWhen => {
+            AstNodePayload::When => {
                 let children = stmt.children();
                 let mut idx = 0;
                 while let Some(first) = children.get(idx) {
@@ -915,7 +915,7 @@ fn collect_references(
                         // case arm: guard + body
                         collect_references_in_expr(first, component_analysis, it_context);
                         if let Some(body) = children.get(idx + 1) {
-                            if matches!(body.payload(), AstNodePayload::ModDefStmtBlock) {
+                            if matches!(body.payload(), AstNodePayload::ArmBlock) {
                                 collect_references(
                                     &body.children(),
                                     component_analysis,
@@ -929,7 +929,7 @@ fn collect_references(
                         idx += 2;
                     } else {
                         // else arm: body only
-                        if matches!(first.payload(), AstNodePayload::ModDefStmtBlock) {
+                        if matches!(first.payload(), AstNodePayload::ArmBlock) {
                             collect_references(
                                 &first.children(),
                                 component_analysis,
@@ -942,7 +942,7 @@ fn collect_references(
                     }
                 }
             }
-            AstNodePayload::ModDefStmtMatch => {
+            AstNodePayload::Match => {
                 let children = stmt.children();
                 // Walk references in the match subject expression (first child).
                 if let Some(subject) = children.first() {
@@ -950,7 +950,7 @@ fn collect_references(
                 }
                 for (_pat_opt, body) in match_arm_children(&children) {
                     match body.payload() {
-                        AstNodePayload::ModDefStmtBlock => {
+                        AstNodePayload::ArmBlock => {
                             collect_references(
                                 &body.children(),
                                 component_analysis,
@@ -958,7 +958,7 @@ fn collect_references(
                             );
                         }
                         _ => {
-                            // For ModDefStmtWhen, ModDefStmtMatch and other
+                            // For When, Match and other
                             // non-block bodies, pass the body node itself so
                             // the appropriate handler processes guards etc.
                             collect_references(

@@ -51,7 +51,7 @@ pub(crate) fn build_match_coverage(
 
 fn collect_match_nodes(node: &AstNode<'_>, out: &mut Vec<AstNodeId>) {
     match node.payload() {
-        AstNodePayload::ExprMatch | AstNodePayload::ModDefStmtMatch => {
+        AstNodePayload::Match => {
             out.push(node.id());
         }
         _ => {}

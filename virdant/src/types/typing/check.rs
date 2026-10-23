@@ -31,12 +31,12 @@ impl Typing {
 
         match node.payload() {
             AstNodePayload::ExprParen                => self.check_paren(builder, context, node, expected_typ),
-            AstNodePayload::ExprWhen                 => self.check_when(builder, context, node, expected_typ),
+            AstNodePayload::When                     => self.check_when(builder, context, node, expected_typ),
             AstNodePayload::ExprWordLit(_)           => self.check_word_lit(node, expected_typ),
             AstNodePayload::ExprIndex(expr_index)    => self.check_index(builder, context, node, expr_index.index, expected_typ),
             AstNodePayload::ExprHole                 => self.check_hole(node, expected_typ),
             AstNodePayload::ExprDontcare             => self.check_dontcare(node, expected_typ),
-            AstNodePayload::ExprMatch                => self.check_match(builder, context, node, expected_typ),
+            AstNodePayload::Match                    => self.check_match(builder, context, node, expected_typ),
             AstNodePayload::ExprFn                   => self.check_fn(builder, context, node, expected_typ),
             AstNodePayload::ExprField(field)         => self.check_field(builder, context, node, expected_typ, field),
             AstNodePayload::ExprCtor(_ctor)          => self.check_ctor(builder, context, node, expected_typ),
@@ -89,22 +89,10 @@ impl Typing {
 
             // Check body based on its type
             match body.payload() {
-                AstNodePayload::ModDefStmtBlock => {
-                    // Block body - check if it's valid in expression context
-                    let block_children = body.children();
-                    if block_children.is_empty() {
-                        self.flag_unknown(body, "Empty block not allowed in expression position");
-                        err = true;
-                    } else if block_children.len() == 1 && block_children[0].is_expr() {
-                        // Single expression block - unwrap and check
-                        err |= self.check(builder, context.clone(), &block_children[0], expected_typ).is_err();
-                    } else {
-                        // Multi-statement block or non-expression
-                        self.flag_unknown(body, "Block with statements not allowed in expression position");
-                        err = true;
-                    }
+                AstNodePayload::ArmBlock => {
+                    err |= self.check_arm_block(builder, context.clone(), body, expected_typ).is_err();
                 }
-                AstNodePayload::ExprWhen | AstNodePayload::ExprMatch => {
+                AstNodePayload::When | AstNodePayload::Match => {
                     // Nested conditional - recurse
                     err |= self.check(builder, context.clone(), body, expected_typ).is_err();
                 }
@@ -429,17 +417,57 @@ impl Typing {
                 let pat = child;
                 let expr = &children[idx + 1];
                 let arm_context = self.check_pat(builder, context.clone(), pat, &subject_typ)?;
-                self.check(builder, arm_context, expr, expected_typ)?;
+                if matches!(expr.payload(), AstNodePayload::ArmBlock) {
+                    self.check_arm_block(builder, arm_context, expr, expected_typ)?;
+                } else {
+                    self.check(builder, arm_context, expr, expected_typ)?;
+                }
                 idx += 2;
             } else {
                 let expr = child;
-                self.check(builder, context.clone(), expr, expected_typ)?;
+                if matches!(expr.payload(), AstNodePayload::ArmBlock) {
+                    self.check_arm_block(builder, context.clone(), expr, expected_typ)?;
+                } else {
+                    self.check(builder, context.clone(), expr, expected_typ)?;
+                }
                 idx += 1;
             }
         }
 
         self.annotate(node, &expected_typ);
         Ok(())
+    }
+
+    /// Type-check a `when`/`match` arm body written as a `{ ... }`
+    /// block.  A block containing a single bare expression is a style
+    /// error reported by the when/match style pass; its expression is
+    /// still checked here against the expected type so any additional
+    /// type mismatch is also reported.  Empty blocks and statement
+    /// blocks cannot produce a value in expression position.
+    fn check_arm_block<'p>(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        body: &AstNode<'p>,
+        expected_typ: &Type,
+    ) -> Result<(), ()> {
+        let block_children = body.children();
+        if block_children.is_empty() {
+            self.flag_unknown(body, "Empty block not allowed in expression position");
+            Err(())
+        } else if block_children.len() == 1
+            && block_children[0].is_expr()
+            && !matches!(
+                block_children[0].payload(),
+                AstNodePayload::When | AstNodePayload::Match
+            )
+        {
+            // Single bare-expression block: unwrap and check it.
+            self.check(builder, context, &block_children[0], expected_typ)
+        } else {
+            self.flag_unknown(body, "Block with statements not allowed in expression position");
+            Err(())
+        }
     }
 
     fn check_field<'p>(

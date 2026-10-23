@@ -984,7 +984,7 @@ impl<'d> Converter<'d> {
                 let expr_node = parsing.ast_node(loc.ast_node_id());
                 // Inline match expressions as casez statements directly — no temp reg needed
                 // inside a sequential (always @(posedge clock)) context.
-                if matches!(expr_node.payload(), AstNodePayload::ExprMatch) {
+                if matches!(expr_node.payload(), AstNodePayload::Match) {
                     return self.convert_match_expr_to_nonblocking_stmts(
                         package, expr_node, typ, path, scheduler,
                     );
@@ -1403,7 +1403,7 @@ impl<'d> Converter<'d> {
                     expr: Box::new(self.convert_expr(package, child, &child_type, self.db, scheduler)),
                 })
             }
-            AstNodePayload::ExprWhen => {
+            AstNodePayload::When => {
                 let children = node.children();
                 self.convert_when_expr(package, &children, typ, scheduler)
             }
@@ -1513,7 +1513,7 @@ impl<'d> Converter<'d> {
                     crate::types::typing::Tag::None => unreachable!(),
                 }
             }
-            AstNodePayload::ExprMatch => {
+            AstNodePayload::Match => {
                 let children = node.children();
                 let subject = children[0].clone();
                 let subject_typ = self.node_type(package, &subject).unwrap();
@@ -1779,9 +1779,9 @@ impl<'d> Converter<'d> {
                 } else {
                     panic!("when arm body block with multiple statements in expr context")
                 }
-            } else if matches!(body.payload(), AstNodePayload::ExprWhen) {
+            } else if matches!(body.payload(), AstNodePayload::When) {
                 self.convert_when_expr(package, &body.children(), typ, scheduler)
-            } else if matches!(body.payload(), AstNodePayload::ExprMatch) {
+            } else if matches!(body.payload(), AstNodePayload::Match) {
                 let body_type = self.node_type(package, body).unwrap();
                 self.convert_expr(package, body.clone(), &body_type, self.db, scheduler)
             } else if body.is_expr() {
@@ -1802,9 +1802,9 @@ impl<'d> Converter<'d> {
                 } else {
                     panic!("when arm else body block with multiple statements in expr context")
                 }
-            } else if matches!(remainder.payload(), AstNodePayload::ExprWhen) {
+            } else if matches!(remainder.payload(), AstNodePayload::When) {
                 self.convert_when_expr(package, &remainder.children(), typ, scheduler)
-            } else if matches!(remainder.payload(), AstNodePayload::ExprMatch) {
+            } else if matches!(remainder.payload(), AstNodePayload::Match) {
                 let body_type = self.node_type(package, remainder).unwrap();
                 self.convert_expr(package, remainder.clone(), &body_type, self.db, scheduler)
             } else if remainder.is_expr() {

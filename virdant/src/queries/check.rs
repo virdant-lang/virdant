@@ -70,6 +70,11 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     let type_index = builder.get_type_index();
     diagnostics.extend(type_index.diagnostics());
 
+    // Arm-style validation runs before the driver checks so that
+    // style-mismatch arms are reported with their own diagnostic
+    // rather than as missing drivers.
+    check_when_match_style(builder, &mut diagnostics);
+
     for item in symboltable.items() {
         // Platform items are unvalidated data (they have no drivers
         // and no match arms); running module checks on them would
@@ -153,6 +158,89 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     });
 
     Arc::new(diagnostics)
+}
+
+/// Check the arm style of every `when`/`match` against its context:
+/// a when/match used as an expression takes value arms (`=> <expr>`),
+/// while one used as a statement takes statement arms (`{ <stmts> }`).
+/// The grammar accepts both forms everywhere; this pass reports the
+/// mismatches as errors.
+fn check_when_match_style(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        if item.kind != SymbolKind::ModDef {
+            continue;
+        }
+        let location = item.location();
+        let parsing = builder.get_parsing(location.package());
+        let node = parsing.ast_node(location.ast_node_id());
+        check_when_match_style_in(&node, diagnostics);
+    }
+}
+
+fn check_when_match_style_in(
+    node: &crate::syntax::ast::AstNode<'_>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let payload = node.payload();
+    if matches!(payload, AstNodePayload::When | AstNodePayload::Match) {
+        let is_expression = node.is_expression_position();
+        let children = node.children();
+        let arms: Vec<(Option<crate::syntax::ast::AstNode<'_>>, crate::syntax::ast::AstNode<'_>)> =
+            if matches!(payload, AstNodePayload::When) {
+                crate::syntax::ast::when_arm_children(&children)
+                    .into_iter()
+                    .map(|(guard, body)| (guard.cloned(), body.clone()))
+                    .collect()
+            } else {
+                crate::syntax::ast::match_arm_children(&children)
+                    .into_iter()
+                    .map(|(pat, body)| (pat.cloned(), body.clone()))
+                    .collect()
+            };
+        for (_guard, body) in arms {
+            match body.payload() {
+                // `{ <stmts> }`: statements always fit either context.
+                // `{ <expr> }` (a single bare expression) is the
+                // mismatch to report.
+                AstNodePayload::ArmBlock => {
+                    let block_children = body.children();
+                    if block_children.len() == 1
+                        && block_children[0].is_expr()
+                        && !matches!(
+                            block_children[0].payload(),
+                            AstNodePayload::When | AstNodePayload::Match
+                        )
+                    {
+                        diagnostics.push(Diagnostic::new(
+                            body.region(),
+                            if is_expression {
+                                DiagnosticPayload::ArmBlockNeedsArrow
+                            } else {
+                                DiagnosticPayload::ArmNeedsBlock
+                            },
+                        ));
+                    }
+                }
+                // A bare `When`/`Match` arm body is indistinguishable
+                // from `=> <when/match>` after parsing, and is legal
+                // in both contexts; skip it.
+                AstNodePayload::When | AstNodePayload::Match => {}
+                // Any other expression body comes from a `=>` arm: a
+                // value, which only fits expression context.
+                _ if body.is_expr() && !is_expression => {
+                    diagnostics.push(Diagnostic::new(
+                        body.region(),
+                        DiagnosticPayload::ArmNeedsBlock,
+                    ));
+                }
+                _ => {}
+            }
+        }
+    }
+    for child in node.children() {
+        check_when_match_style_in(&child, diagnostics);
+    }
 }
 
 /// Check that `default` clauses only appear on outgoing ports in

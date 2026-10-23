@@ -269,7 +269,7 @@ fn collect_driver_edges(
                     }
                 }
             }
-            AstNodePayload::ModDefStmtWhen => {
+            AstNodePayload::When => {
                 let children = stmt.children();
                 let mut idx = 0;
                 while let Some(first) = children.get(idx) {
@@ -278,7 +278,7 @@ fn collect_driver_edges(
                         if let Some(body) = children.get(idx + 1) {
                             let body_stmts = if matches!(
                                 body.payload(),
-                                AstNodePayload::ModDefStmtBlock
+                                AstNodePayload::ArmBlock
                             ) {
                                 body.children()
                             } else {
@@ -296,7 +296,7 @@ fn collect_driver_edges(
                         // else arm: body only
                         let body_stmts = if matches!(
                             first.payload(),
-                            AstNodePayload::ModDefStmtBlock
+                            AstNodePayload::ArmBlock
                         ) {
                             first.children()
                         } else {
@@ -312,12 +312,12 @@ fn collect_driver_edges(
                     }
                 }
             }
-            AstNodePayload::ModDefStmtMatch => {
+            AstNodePayload::Match => {
                 let children = stmt.children();
                 for (_pat_opt, body) in match_arm_children(&children) {
                     let body_stmts = if matches!(
                         body.payload(),
-                        AstNodePayload::ModDefStmtBlock
+                        AstNodePayload::ArmBlock
                     ) {
                         body.children()
                     } else {
@@ -477,7 +477,7 @@ fn collect_dependson_edges(
                     }
                 }
             }
-            AstNodePayload::ModDefStmtWhen => {
+            AstNodePayload::When => {
                 let children = stmt.children();
                 let mut idx = 0;
                 while let Some(first) = children.get(idx) {
@@ -485,7 +485,7 @@ fn collect_dependson_edges(
                         if let Some(body) = children.get(idx + 1) {
                             let body_stmts = if matches!(
                                 body.payload(),
-                                AstNodePayload::ModDefStmtBlock
+                                AstNodePayload::ArmBlock
                             ) {
                                 body.children()
                             } else {
@@ -502,7 +502,7 @@ fn collect_dependson_edges(
                     } else {
                         let body_stmts = if matches!(
                             first.payload(),
-                            AstNodePayload::ModDefStmtBlock
+                            AstNodePayload::ArmBlock
                         ) {
                             first.children()
                         } else {
@@ -518,12 +518,12 @@ fn collect_dependson_edges(
                     }
                 }
             }
-            AstNodePayload::ModDefStmtMatch => {
+            AstNodePayload::Match => {
                 let children = stmt.children();
                 for (_pat_opt, body) in match_arm_children(&children) {
                     let body_stmts = if matches!(
                         body.payload(),
-                        AstNodePayload::ModDefStmtBlock
+                        AstNodePayload::ArmBlock
                     ) {
                         body.children()
                     } else {

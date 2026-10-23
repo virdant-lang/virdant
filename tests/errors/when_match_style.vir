@@ -1,0 +1,87 @@
+// Tests for when/match arm style mismatches.  The grammar accepts both
+// `=> <expr>` arms and `{ ... }` block arms in both statement and
+// expression position; the style pass flags the mismatches.
+
+enum type StyleE {
+    A
+    B
+}
+
+// A `when` used as an expression (RHS of a driver) whose arm bodies are
+// bare-expression blocks: the arms must use `=>` instead.
+mod ExprWhenBlockArm {
+    incoming a : Bit
+    outgoing out : Bit
+    // CHECK: For expression-based conditionals, use `=>` instead of `{ ... }`
+    // CHECK: For expression-based conditionals, use `=>` instead of `{ ... }`
+    out := when {
+        case a {
+            true
+        }
+        else {
+            false
+        }
+    }
+}
+
+// A `match` used as an expression whose arm bodies are bare-expression
+// blocks: the arms must use `=>` instead.
+mod ExprMatchBlockArm {
+    incoming t : StyleE
+    outgoing out : Bit
+    // CHECK: For expression-based conditionals, use `=>` instead of `{ ... }
+    // CHECK: For expression-based conditionals, use `=>` instead of `{ ... }
+    out := match t {
+        case #A {
+            true
+        }
+        else {
+            false
+        }
+    }
+}
+
+// A `when` used as a statement (a direct statement of the module body)
+// whose arm bodies are `=>` values: the arms must contain driver
+// statements in `{ ... }` instead.
+mod StmtWhenArrowArm {
+    incoming a : Bit
+    outgoing out : Bit
+    // CHECK: For statement-based conditionals, use `{ ... }` instead of `=>`
+    // CHECK: For statement-based conditionals, use `{ ... }` instead of `=>`
+    when {
+        case a => true
+        else => false
+    }
+
+    out := a
+}
+
+// A statement `when` whose arm body is a bare-expression block: same
+// error as `=>` arms.
+mod StmtWhenExprBlock {
+    incoming a : Bit
+    outgoing out : Bit
+    // CHECK: For statement-based conditionals, use `{ ... }` instead of `=>`
+    when {
+        case a {
+            true
+        }
+    }
+
+    out := a
+}
+
+// A statement `match` whose arm bodies are `=>` values.
+mod StmtMatchArrowArm {
+    incoming t : StyleE
+    outgoing out : Bit
+    // CHECK: For statement-based conditionals, use `{ ... }` instead of `=>`
+    // CHECK: For statement-based conditionals, use `{ ... }` instead of `=>`
+    match t {
+        case #A => true
+        else => false
+    }
+
+    out := false
+}
