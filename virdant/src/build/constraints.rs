@@ -86,6 +86,21 @@ pub fn emit_pcf(builder: &mut Builder, platform_id: SymbolId) -> Result<String, 
     Ok(out)
 }
 
+/// Determines the MHz value to pass as nextpnr's `--freq` flag, given
+/// the platform's clock list.  `--freq` takes a single frequency, so it
+/// only applies when the platform declares exactly one clock: 0 clocks
+/// means nothing to constrain, and >1 clocks means the placer runs
+/// without the flag (Decision 13 forbids cardinality constraints).
+/// Uses the same rounding as `emit_pcf`'s `set_frequency` lines so the
+/// PCF and the `--freq` flag can never disagree.
+pub fn freq_flag_mhz(clocks: &[(BString, BString, f64)]) -> Option<f64> {
+    if clocks.len() != 1 {
+        return None;
+    }
+    let (_port, _pin, period_ns) = &clocks[0];
+    Some((1000.0 / period_ns * 10.0).round() / 10.0)
+}
+
 /// Emits the XDC for a platform item: one `set_property LOC` and
 /// `set_property IOSTANDARD LVCMOS33` pair per pinned port, and one
 /// `create_clock` per clock port.  nextpnr-xilinx reads the `LOC`
@@ -281,6 +296,32 @@ mod tests {
         };
         assert!(message.contains("no_pin"), "message: {message}");
         assert!(message.contains("missing a @pin"), "message: {message}");
+    }
+
+    #[test]
+    fn freq_flag_mhz_zero_clocks_is_none() {
+        let clocks: Vec<(BString, BString, f64)> = vec![];
+        assert_eq!(freq_flag_mhz(&clocks), None);
+    }
+
+    #[test]
+    fn freq_flag_mhz_one_clock_is_some() {
+        // 20.833 ns is 48 MHz, the fomu-usb clock.
+        let clocks = vec![(
+            BString::from("clock"),
+            BString::from("48"),
+            20.833,
+        )];
+        assert_eq!(freq_flag_mhz(&clocks), Some(48.0));
+    }
+
+    #[test]
+    fn freq_flag_mhz_two_clocks_is_none() {
+        let clocks = vec![
+            (BString::from("clock"), BString::from("48"), 20.833),
+            (BString::from("other_clock"), BString::from("12"), 10.0),
+        ];
+        assert_eq!(freq_flag_mhz(&clocks), None);
     }
 
     fn builtin_source() -> String {

@@ -29,10 +29,13 @@ pub fn run_toolchain(
     project: &str,
     top: &str,
     part: Option<&BString>,
+    freq_mhz: Option<f64>,
     toolchain: Toolchain,
 ) -> Result<(), String> {
     match toolchain {
-        Toolchain::Ice40 => run_ice40(builddir, project, top, part),
+        Toolchain::Ice40 => run_ice40(builddir, project, top, part, freq_mhz),
+        // `--freq` for nextpnr-xilinx is a separate follow-up; the
+        // Xilinx runner is left untouched until then.
         Toolchain::Xilinx => run_xilinx(builddir, project, top, part),
     }
 }
@@ -82,6 +85,7 @@ fn run_ice40(
     project: &str,
     top: &str,
     part: Option<&BString>,
+    freq_mhz: Option<f64>,
 ) -> Result<(), String> {
     let builddir = builddir.to_path_buf();
 
@@ -118,20 +122,30 @@ fn run_ice40(
     let chip = chip_flag(part)?;
     let pcf = builddir.join(format!("{project}.pcf"));
     let project_asc = builddir.join(format!("{project}.asc"));
-    let output = std::process::Command::new("nextpnr-ice40")
+    let mut command = std::process::Command::new("nextpnr-ice40");
+    command
         .arg(format!("--{chip}"))
         .arg("--top").arg(top)
         .arg("--json").arg(&project_json)
         .arg("--pcf").arg(&pcf)
         .arg("--asc").arg(&project_asc)
-        .arg("--package").arg(package_str(part))
-        .output()
+        .arg("--package").arg(package_str(part));
+    if let Some(mhz) = freq_mhz {
+        command.arg("--freq").arg(format!("{mhz}"));
+    }
+    // nextpnr writes its progress (including the Fmax summary) to
+    // stderr, so capturing it would hide everything during a successful
+    // build.  Inherit the terminal's stdio instead, so the output
+    // streams live the way yosys's does; the exit status is all the
+    // success/failure signal we need.
+    let status = command
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
         .unwrap();
-    if !output.status.success() {
-        eprintln!("{}", BStr::new(&output.stderr));
+    if !status.success() {
         return Err("nextpnr-ice40 failed".to_string());
     }
-    println!("{}", BStr::new(&output.stdout));
     println!("nextpnr-ice40 OK");
 
     // Run icepack

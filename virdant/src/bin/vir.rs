@@ -1010,7 +1010,17 @@ fn bitstream(args: &Args) -> String {
     // Virdant's fully-qualified names (see `verilog_top_name`).
     let verilog_top = verilog_top_name(&db, top_symbol.id());
 
-    virdant::build::run_toolchain(&builddir, &project, &verilog_top, part.as_ref(), toolchain)
+    // `--freq` feeds nextpnr-ice40's timing-driven placer.  It takes a
+    // single frequency, so it is only passed when the platform declares
+    // exactly one clock; the PCF's `set_frequency` lines (emitted
+    // above) still drive static timing analysis in every case.
+    let clocks = virdant::analysis::platform::platform_clocks(&mut builder, platform_id);
+    let freq_mhz = virdant::build::constraints::freq_flag_mhz(&clocks);
+    if clocks.len() > 1 {
+        println!("multiple clocks: nextpnr placer runs without --freq");
+    }
+
+    virdant::build::run_toolchain(&builddir, &project, &verilog_top, part.as_ref(), freq_mhz, toolchain)
         .unwrap_or_else(|e| {
             eprintln!("Toolchain error: {e}");
             std::process::exit(1);
