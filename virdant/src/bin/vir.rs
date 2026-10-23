@@ -627,6 +627,7 @@ fn build(args: &Args) {
     }
 
     std::fs::create_dir_all(&builddir).unwrap();
+    copy_ext_dir(&builddir);
     let verilog = virdant::verilog::conversion::convert_db_to_verilog(&db);
     verilog.write_in_dir(&builddir).unwrap();
     println!("Wrote Verilog to {}", builddir.to_string_lossy());
@@ -785,6 +786,7 @@ fn run_icarus(args: &Args, _path: &Option<PathBuf>, vcd: &Option<String>) {
     }
 
     std::fs::create_dir_all(&builddir).unwrap();
+    copy_ext_dir(&builddir);
     let verilog = virdant::verilog::conversion::convert_db_to_verilog(&db);
     verilog.write_in_dir(&builddir).unwrap();
     println!("Wrote Verilog to {}", builddir.to_string_lossy());
@@ -963,6 +965,7 @@ fn bitstream(args: &Args) -> String {
     let part = virdant::analysis::platform::platform_part(&mut builder, platform_id);
 
     std::fs::create_dir_all(&builddir).unwrap();
+    copy_ext_dir(&builddir);
     let verilog = virdant::verilog::conversion::convert_db_to_verilog(&db);
     verilog.write_in_dir(&builddir).unwrap();
     println!("Wrote Verilog to {}", builddir.to_string_lossy());
@@ -1085,14 +1088,66 @@ fn upload(args: &Args) {
         });
 }
 
+/// Mirror the project's `ext/` directory (if any) into `build/ext/`.
+///
+/// `ext mod` bodies live outside Virdant as plain Verilog under `ext/`,
+/// so a build directory holding only emitted Verilog cannot synthesize
+/// or simulate a design that instantiates one.  Mirroring `ext/` into
+/// the build directory puts the external sources next to the emitted
+/// Verilog, where the `.sv` globbers used by yosys and iverilog pick
+/// them up, and keeps data files (e.g. `$readmemh` images) reachable
+/// at their original `ext/...` relative paths once cwd moves into
+/// `build/`.
+fn copy_ext_dir(builddir: &Path) {
+    let Some(projectdir) = builddir.parent() else { return };
+    let extdir = projectdir.join("ext");
+    if !extdir.is_dir() {
+        return;
+    }
+    // Start from a clean slate so ext files removed since the last
+    // build do not linger in the mirror.
+    let target = builddir.join("ext");
+    if target.exists() {
+        std::fs::remove_dir_all(&target).unwrap();
+    }
+    if let Err(err) = copy_tree(&extdir, &target) {
+        eprintln!("Could not copy {} to {}: {err}", extdir.display(), target.display());
+        std::process::exit(1);
+    }
+    println!("Copied {} to {}", extdir.display(), target.display());
+}
+
+fn copy_tree(source: &Path, target: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(target)?;
+    for entry in std::fs::read_dir(source)? {
+        let entry = entry?;
+        let path = entry.path();
+        let dest = target.join(entry.file_name());
+        if path.is_dir() {
+            copy_tree(&path, &dest)?;
+        } else {
+            std::fs::copy(&path, &dest)?;
+        }
+    }
+    Ok(())
+}
+
 fn glob_sv_files(dir: &Path) -> Vec<PathBuf> {
-    let mut sources: Vec<PathBuf> = std::fs::read_dir(dir)
-        .unwrap()
-        .filter_map(|entry| entry.ok().map(|entry| std::fs::canonicalize(entry.path()).unwrap()))
-        .filter(|path| path.extension().is_some_and(|ext| ext == "sv"))
-        .collect();
+    let mut sources = vec![];
+    collect_sv_files(dir, &mut sources);
     sources.sort();
     sources
+}
+
+fn collect_sv_files(dir: &Path, sources: &mut Vec<PathBuf>) {
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = std::fs::canonicalize(entry.unwrap().path()).unwrap();
+        if path.is_dir() {
+            collect_sv_files(&path, sources);
+        } else if path.extension().is_some_and(|ext| ext == "sv") {
+            sources.push(path);
+        }
+    }
 }
 
 fn exec_external(args: Vec<OsString>) {

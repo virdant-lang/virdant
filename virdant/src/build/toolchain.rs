@@ -405,13 +405,21 @@ fn chip_flag(part: Option<&BString>) -> Result<String, String> {
 }
 
 fn glob_sv_files(dir: &Path) -> Vec<std::path::PathBuf> {
-    let mut sources: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
-        .unwrap()
-        .filter_map(|entry| entry.ok().map(|entry| std::fs::canonicalize(entry.path()).unwrap()))
-        .filter(|path| path.extension().is_some_and(|ext| ext == "sv"))
-        .collect();
+    let mut sources: Vec<std::path::PathBuf> = vec![];
+    collect_sv_files(dir, &mut sources);
     sources.sort();
     sources
+}
+
+fn collect_sv_files(dir: &Path, sources: &mut Vec<std::path::PathBuf>) {
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = std::fs::canonicalize(entry.unwrap().path()).unwrap();
+        if path.is_dir() {
+            collect_sv_files(&path, sources);
+        } else if path.extension().is_some_and(|ext| ext == "sv") {
+            sources.push(path);
+        }
+    }
 }
 
 #[cfg(test)]
