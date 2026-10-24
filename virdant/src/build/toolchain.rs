@@ -22,8 +22,33 @@ pub fn toolchain_for(fpga: &str) -> Option<Toolchain> {
     }
 }
 
+/// Options governing the place-and-route step.
+///
+/// The simulated-annealing placer is stochastic: the same netlist can
+/// close timing on one seed and miss on another (see FREQ_PLAN.md).
+/// With `tries > 1`, nextpnr runs up to `tries` times, varying `--seed`
+/// from `seed` upward (`seed`, `seed + 1`, ...), and the first attempt
+/// that closes wins.  `allow_timing_failure` passes `--timing-allow-fail`
+/// so a timing miss no longer fails the run — which makes the first
+/// attempt succeed, so `tries` then only matters for hard placement
+/// failures (overutilization and the like).
+#[derive(Debug, Clone, Copy)]
+pub struct PnrOptions {
+    pub tries: u32,
+    pub seed: u32,
+    pub allow_timing_failure: bool,
+}
+
+impl Default for PnrOptions {
+    fn default() -> Self {
+        PnrOptions { tries: 1, seed: 1, allow_timing_failure: false }
+    }
+}
+
 /// Runs synthesis, place-and-route, and bitstream packing for the
 /// given toolchain.  `part` is the platform's `@part` value, if any.
+/// `opts` governs the place-and-route step (seed retries and
+/// `--timing-allow-fail`; see `PnrOptions`).
 pub fn run_toolchain(
     builddir: &Path,
     project: &str,
@@ -31,13 +56,77 @@ pub fn run_toolchain(
     part: Option<&BString>,
     freq_mhz: Option<f64>,
     toolchain: Toolchain,
+    opts: PnrOptions,
 ) -> Result<(), String> {
     match toolchain {
-        Toolchain::Ice40 => run_ice40(builddir, project, top, part, freq_mhz),
+        Toolchain::Ice40 => {
+            synth_ice40(builddir, project, top)?;
+            pnr_ice40(builddir, project, top, part, freq_mhz, opts)?;
+            pack_ice40(builddir, project)
+        }
         // `--freq` for nextpnr-xilinx is a separate follow-up; the
         // Xilinx runner is left untouched until then.
-        Toolchain::Xilinx => run_xilinx(builddir, project, top, part),
+        Toolchain::Xilinx => {
+            synth_xilinx(builddir, project, top)?;
+            pnr_xilinx(builddir, project, part, opts)?;
+            pack_xilinx(builddir, project, part)
+        }
     }
+}
+
+/// Runs only place-and-route and bitstream packing, reusing the
+/// netlist a previous synthesis left at `<builddir>/<project>.json`.
+/// This is the entry point for `vir pnr`, which re-runs PnR over an
+/// existing synthesis (e.g. to try more placer seeds after a timing
+/// failure) without paying for yosys again.
+pub fn run_pnr(
+    builddir: &Path,
+    project: &str,
+    top: &str,
+    part: Option<&BString>,
+    freq_mhz: Option<f64>,
+    toolchain: Toolchain,
+    opts: PnrOptions,
+) -> Result<(), String> {
+    let project_json = builddir.join(format!("{project}.json"));
+    if !project_json.exists() {
+        return Err(format!(
+            "no synthesized design at {} (run `vir bitstream` first)",
+            project_json.to_string_lossy(),
+        ));
+    }
+    match toolchain {
+        Toolchain::Ice40 => {
+            pnr_ice40(builddir, project, top, part, freq_mhz, opts)?;
+            pack_ice40(builddir, project)
+        }
+        Toolchain::Xilinx => {
+            pnr_xilinx(builddir, project, part, opts)?;
+            pack_xilinx(builddir, project, part)
+        }
+    }
+}
+
+/// The directory per-seed attempt outputs live in:
+/// `<builddir>/nextpnr/`.
+fn attempts_dir(builddir: &Path) -> Result<PathBuf, String> {
+    let dir = builddir.join("nextpnr");
+    std::fs::create_dir_all(&dir)
+        .map_err(|err| format!("could not create {}: {err}", dir.to_string_lossy()))?;
+    Ok(dir)
+}
+
+/// Copies a winning attempt's output to the canonical location the
+/// pack step (and any other consumer) expects.
+fn copy_attempt(source: &Path, target: &Path) -> Result<(), String> {
+    std::fs::copy(source, target).map_err(|err| {
+        format!(
+            "could not copy {} to {}: {err}",
+            source.to_string_lossy(),
+            target.to_string_lossy(),
+        )
+    })?;
+    Ok(())
 }
 
 /// Flashes the built bitstream with the given programmer, e.g. `iceprog`
@@ -80,13 +169,9 @@ pub fn flash_bitstream(
     Ok(())
 }
 
-fn run_ice40(
-    builddir: &Path,
-    project: &str,
-    top: &str,
-    part: Option<&BString>,
-    freq_mhz: Option<f64>,
-) -> Result<(), String> {
+/// Synthesis for ice40: yosys `synth_ice40`, writing
+/// `<builddir>/<project>.json`.
+fn synth_ice40(builddir: &Path, project: &str, top: &str) -> Result<(), String> {
     let builddir = builddir.to_path_buf();
 
     // Write yosys script
@@ -118,37 +203,88 @@ fn run_ice40(
     println!("{}", BStr::new(&output.stdout));
     println!("yosys OK");
 
-    // Run nextpnr-ice40
+    Ok(())
+}
+
+/// Place-and-route for ice40: nextpnr-ice40, run `opts.tries` times
+/// with `--seed` values `opts.seed .. opts.seed + opts.tries - 1`.
+/// Each attempt's placement is kept as
+/// `<builddir>/nextpnr/<project>.<seed>.asc` (failed attempts included,
+/// for inspection); the first successful attempt's .asc is copied to
+/// `<builddir>/<project>.asc`, where the pack step expects it.
+fn pnr_ice40(
+    builddir: &Path,
+    project: &str,
+    top: &str,
+    part: Option<&BString>,
+    freq_mhz: Option<f64>,
+    opts: PnrOptions,
+) -> Result<(), String> {
+    let builddir = builddir.to_path_buf();
     let chip = chip_flag(part)?;
     let pcf = builddir.join(format!("{project}.pcf"));
+    let project_json = builddir.join(format!("{project}.json"));
     let project_asc = builddir.join(format!("{project}.asc"));
-    let mut command = std::process::Command::new("nextpnr-ice40");
-    command
-        .arg(format!("--{chip}"))
-        .arg("--top").arg(top)
-        .arg("--json").arg(&project_json)
-        .arg("--pcf").arg(&pcf)
-        .arg("--asc").arg(&project_asc)
-        .arg("--package").arg(package_str(part));
-    if let Some(mhz) = freq_mhz {
-        command.arg("--freq").arg(format!("{mhz}"));
-    }
-    // nextpnr writes its progress (including the Fmax summary) to
-    // stderr, so capturing it would hide everything during a successful
-    // build.  Inherit the terminal's stdio instead, so the output
-    // streams live the way yosys's does; the exit status is all the
-    // success/failure signal we need.
-    let status = command
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .unwrap();
-    if !status.success() {
-        return Err("nextpnr-ice40 failed".to_string());
-    }
-    println!("nextpnr-ice40 OK");
+    let attempts = attempts_dir(&builddir)?;
 
-    // Run icepack
+    for attempt in 0..opts.tries {
+        let seed = opts.seed + attempt;
+        let asc = attempts.join(format!("{project}.{seed}.asc"));
+        println!("nextpnr-ice40: attempt {}/{}, seed {seed}", attempt + 1, opts.tries);
+
+        let mut command = std::process::Command::new("nextpnr-ice40");
+        command
+            .arg(format!("--{chip}"))
+            .arg("--top").arg(top)
+            .arg("--json").arg(&project_json)
+            .arg("--pcf").arg(&pcf)
+            .arg("--asc").arg(&asc)
+            .arg("--package").arg(package_str(part))
+            // nextpnr's default seed is 1, so an explicit `--seed 1`
+            // reproduces the pre-retry behavior exactly.
+            .arg("--seed").arg(format!("{seed}"));
+        if let Some(mhz) = freq_mhz {
+            command.arg("--freq").arg(format!("{mhz}"));
+        }
+        if opts.allow_timing_failure {
+            command.arg("--timing-allow-fail");
+        }
+        // nextpnr writes its progress (including the Fmax summary) to
+        // stderr, so capturing it would hide everything during a successful
+        // build.  Inherit the terminal's stdio instead, so the output
+        // streams live the way yosys's does; the exit status is all the
+        // success/failure signal we need.
+        let status = command
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+            .unwrap();
+        if status.success() {
+            copy_attempt(&asc, &project_asc)?;
+            println!("nextpnr-ice40 OK (seed {seed})");
+            return Ok(());
+        }
+        eprintln!(
+            "nextpnr-ice40: attempt {}/{} (seed {seed}) failed",
+            attempt + 1,
+            opts.tries,
+        );
+    }
+
+    let last_seed = opts.seed + opts.tries - 1;
+    Err(format!(
+        "nextpnr-ice40 failed: {}/{} attempt(s) did not close (seeds {}..{}); attempt outputs are in {}",
+        opts.tries,
+        opts.tries,
+        opts.seed,
+        last_seed,
+        attempts.to_string_lossy(),
+    ))
+}
+
+/// Bitstream packing for ice40: `icepack`.
+fn pack_ice40(builddir: &Path, project: &str) -> Result<(), String> {
+    let project_asc = builddir.join(format!("{project}.asc"));
     let project_bin = builddir.join(format!("{project}.bin"));
     let output = std::process::Command::new("icepack")
         .arg("-s")
@@ -166,40 +302,9 @@ fn run_ice40(
     Ok(())
 }
 
-/// Runs synthesis, place-and-route, and bitstream assembly for Xilinx
-/// 7-series FPGAs: yosys `synth_xilinx`, nextpnr-xilinx, then Project
-/// X-Ray's frame tools (`fasm2frames`, `xc7frames2bit`).
-///
-/// `part` is the platform's `@part` value, e.g. `xc7a35tcsg324-1`, and
-/// is required: nextpnr-xilinx needs the chipdb named for the die and
-/// package, and the frame tools need the part name.  The chipdb
-/// directory comes from `NEXTPNR_CHIPDB_DIR` and the Project X-Ray
-/// database root from `PRJXRAY_DB_DIR` (the variable the openXC7
-/// toolchain's `export.sh` sets).  The invocation matches the
-/// openXC7 flow (`nextpnr-xilinx --chipdb ... --xdc ... --json ...
-/// --fasm ...`, `fasm2frames --part ... --db-root ...`, `xc7frames2bit
-/// --part_file ... --part_name ...`), which is also the archived
-/// nextpnr-xilinx CLI.
-fn run_xilinx(
-    builddir: &Path,
-    project: &str,
-    top: &str,
-    part: Option<&BString>,
-) -> Result<(), String> {
-    let part = match part {
-        Some(part) => part.to_str_lossy().into_owned(),
-        None => {
-            return Err(
-                "Platform is missing @part (nextpnr-xilinx needs a part string like xc7a35tcsg324-1)"
-                    .to_string(),
-            )
-        }
-    };
-
-    // Fail fast on the toolchain's external state before synthesizing.
-    let chipdb = chipdb_path(&part)?;
-    let db_root = xray_db_root(&part)?;
-
+/// Synthesis for Xilinx 7-series: yosys `synth_xilinx`, writing
+/// `<builddir>/<project>.json`.
+fn synth_xilinx(builddir: &Path, project: &str, top: &str) -> Result<(), String> {
     let builddir = builddir.to_path_buf();
 
     // Write yosys script
@@ -231,25 +336,81 @@ fn run_xilinx(
     println!("{}", BStr::new(&output.stdout));
     println!("yosys OK");
 
-    // Run nextpnr-xilinx
+    Ok(())
+}
+
+/// Place-and-route for Xilinx 7-series: nextpnr-xilinx, run
+/// `opts.tries` times with `--seed` values
+/// `opts.seed .. opts.seed + opts.tries - 1`.  Each attempt's FASM is
+/// kept as `<builddir>/nextpnr/<project>.<seed>.fasm` (failed attempts
+/// included, for inspection); the first successful attempt's FASM is
+/// copied to `<builddir>/<project>.fasm`, where the pack step expects
+/// it.
+fn pnr_xilinx(
+    builddir: &Path,
+    project: &str,
+    part: Option<&BString>,
+    opts: PnrOptions,
+) -> Result<(), String> {
+    let builddir = builddir.to_path_buf();
+    let part = xilinx_part(part)?;
+
+    // Fail fast on the chipdb before running anything.
+    let chipdb = chipdb_path(&part)?;
+
     let xdc = builddir.join(format!("{project}.xdc"));
-    let fasm = builddir.join(format!("{project}.fasm"));
-    let output = match std::process::Command::new("nextpnr-xilinx")
-        .arg("--chipdb").arg(&chipdb)
-        .arg("--xdc").arg(&xdc)
-        .arg("--json").arg(&project_json)
-        .arg("--fasm").arg(&fasm)
-        .output()
-    {
-        Ok(output) => output,
-        Err(err) => return Err(format!("could not run 'nextpnr-xilinx': {err}")),
-    };
-    if !output.status.success() {
+    let project_json = builddir.join(format!("{project}.json"));
+    let project_fasm = builddir.join(format!("{project}.fasm"));
+    let attempts = attempts_dir(&builddir)?;
+
+    for attempt in 0..opts.tries {
+        let seed = opts.seed + attempt;
+        let fasm = attempts.join(format!("{project}.{seed}.fasm"));
+        println!("nextpnr-xilinx: attempt {}/{}, seed {seed}", attempt + 1, opts.tries);
+
+        let output = match std::process::Command::new("nextpnr-xilinx")
+            .arg("--chipdb").arg(&chipdb)
+            .arg("--xdc").arg(&xdc)
+            .arg("--json").arg(&project_json)
+            .arg("--fasm").arg(&fasm)
+            .arg("--seed").arg(format!("{seed}"))
+            .args(opts.allow_timing_failure.then_some("--timing-allow-fail"))
+            .output()
+        {
+            Ok(output) => output,
+            Err(err) => return Err(format!("could not run 'nextpnr-xilinx': {err}")),
+        };
+        if output.status.success() {
+            println!("{}", BStr::new(&output.stdout));
+            copy_attempt(&fasm, &project_fasm)?;
+            println!("nextpnr-xilinx OK (seed {seed})");
+            return Ok(());
+        }
         eprintln!("{}", BStr::new(&output.stderr));
-        return Err("nextpnr-xilinx failed".to_string());
+        eprintln!(
+            "nextpnr-xilinx: attempt {}/{} (seed {seed}) failed",
+            attempt + 1,
+            opts.tries,
+        );
     }
-    println!("{}", BStr::new(&output.stdout));
-    println!("nextpnr-xilinx OK");
+
+    let last_seed = opts.seed + opts.tries - 1;
+    Err(format!(
+        "nextpnr-xilinx failed: {}/{} attempt(s) did not close (seeds {}..{}); attempt outputs are in {}",
+        opts.tries,
+        opts.tries,
+        opts.seed,
+        last_seed,
+        attempts.to_string_lossy(),
+    ))
+}
+
+/// Bitstream assembly for Xilinx 7-series: Project X-Ray's frame tools
+/// (`fasm2frames`, `xc7frames2bit`).
+fn pack_xilinx(builddir: &Path, project: &str, part: Option<&BString>) -> Result<(), String> {
+    let part = xilinx_part(part)?;
+    let db_root = xray_db_root(&part)?;
+    let fasm = builddir.join(format!("{project}.fasm"));
 
     // Run fasm2frames: the FASM goes to frames on stdout, so the file
     // is the child's stdout and only stderr is captured.
@@ -293,6 +454,18 @@ fn run_xilinx(
     println!("Bitstream written to {}", project_bin.to_string_lossy());
 
     Ok(())
+}
+
+/// The Xilinx `@part` string (`xc7a35tcsg324-1`), which nextpnr-xilinx
+/// (chipdb) and the frame tools all need.
+fn xilinx_part(part: Option<&BString>) -> Result<String, String> {
+    match part {
+        Some(part) => Ok(part.to_str_lossy().into_owned()),
+        None => Err(
+            "Platform is missing @part (nextpnr-xilinx needs a part string like xc7a35tcsg324-1)"
+                .to_string(),
+        ),
+    }
 }
 
 /// The prjxray database root for a 7-series part: `PRJXRAY_DB_DIR`
@@ -478,7 +651,9 @@ mod tests {
 
     #[test]
     fn xilinx_part_required() {
-        assert!(run_xilinx(Path::new("/nonexistent"), "arty", "Top", None).is_err());
+        let opts = PnrOptions::default();
+        assert!(pnr_xilinx(Path::new("/nonexistent"), "arty", None, opts).is_err());
+        assert!(pack_xilinx(Path::new("/nonexistent"), "arty", None).is_err());
     }
 
     #[test]

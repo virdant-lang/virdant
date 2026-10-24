@@ -80,8 +80,30 @@ enum Command {
     New { project: String },
     /// Synthesize, place-and-route, and pack a bitstream
     Bitstream { },
+    /// Place-and-route (and pack) an already-synthesized design
+    Pnr {
+        /// Number of place-and-route attempts, varying --seed
+        #[arg(long, default_value_t = 1)]
+        tries: u32,
+        /// Seed for the first attempt (later attempts increment by one)
+        #[arg(long, default_value_t = 1)]
+        seed: u32,
+        /// Keep the bitstream even when timing constraints are not met
+        #[arg(long)]
+        allow_timing_failure: bool,
+    },
     /// Synthesize, place-and-route, pack, and upload a bitstream
-    Upload { },
+    Upload {
+        /// Number of place-and-route attempts, varying --seed
+        #[arg(long, default_value_t = 1)]
+        tries: u32,
+        /// Seed for the first attempt (later attempts increment by one)
+        #[arg(long, default_value_t = 1)]
+        seed: u32,
+        /// Keep the bitstream even when timing constraints are not met
+        #[arg(long)]
+        allow_timing_failure: bool,
+    },
 
     /// Generate HTML documentation
     Doc {
@@ -116,7 +138,12 @@ fn main() {
         Command::RunIcarus { ref path, ref vcd } => run_icarus(&args, path, vcd),
         Command::New { ref project } => new_project(&args, project),
         Command::Bitstream { } => { bitstream(&args); },
-        Command::Upload { } => upload(&args),
+        Command::Pnr { ref tries, ref seed, allow_timing_failure } => {
+            pnr(&args, *tries, *seed, allow_timing_failure)
+        },
+        Command::Upload { ref tries, ref seed, allow_timing_failure } => {
+            upload(&args, *tries, *seed, allow_timing_failure)
+        },
         Command::Doc { open } => doc(&args, open),
         Command::External(args) => exec_external(args),
     }
@@ -890,7 +917,21 @@ fn new_project(args: &Args, project: &str) {
     println!("Created project '{project}'");
 }
 
-fn bitstream(args: &Args) -> String {
+/// Everything `vir bitstream`/`vir pnr`/`vir upload` need from the
+/// project sources: the resolved platform, the toolchain, and the file
+/// names the toolchain will read and write in `build/`.  Shared by the
+/// full build (`bitstream`) and the PnR-only re-run (`pnr`).
+struct BitstreamPlan {
+    platform_name: String,
+    project: String,
+    builddir: PathBuf,
+    verilog_top: String,
+    part: Option<BString>,
+    freq_mhz: Option<f64>,
+    toolchain: virdant::build::Toolchain,
+}
+
+fn plan_bitstream(args: &Args) -> BitstreamPlan {
     let cwd = resolve_cwd(args);
     if !cwd.join("Virdant.toml").exists() {
         eprintln!("No Virdant.toml found");
@@ -1020,13 +1061,55 @@ fn bitstream(args: &Args) -> String {
         println!("multiple clocks: nextpnr placer runs without --freq");
     }
 
-    virdant::build::run_toolchain(&builddir, &project, &verilog_top, part.as_ref(), freq_mhz, toolchain)
+    BitstreamPlan {
+        platform_name,
+        project,
+        builddir,
+        verilog_top,
+        part,
+        freq_mhz,
+        toolchain,
+    }
+}
+
+/// Builds the PnR options shared by `vir pnr` and `vir upload`,
+/// rejecting a zero `--tries`.
+fn pnr_options(tries: u32, seed: u32, allow_timing_failure: bool) -> virdant::build::PnrOptions {
+    if tries == 0 {
+        eprintln!("--tries must be at least 1");
+        std::process::exit(1);
+    }
+    virdant::build::PnrOptions { tries, seed, allow_timing_failure }
+}
+
+/// Synthesize, place-and-route, and pack a bitstream (`vir bitstream`).
+fn bitstream(args: &Args) -> String {
+    let plan = plan_bitstream(args);
+    virdant::build::run_toolchain(&plan.builddir, &plan.project, &plan.verilog_top, plan.part.as_ref(), plan.freq_mhz, plan.toolchain, virdant::build::PnrOptions::default())
         .unwrap_or_else(|e| {
             eprintln!("Toolchain error: {e}");
             std::process::exit(1);
         });
 
-    platform_name
+    plan.platform_name
+}
+
+/// Place-and-route (and pack) an already-synthesized design
+/// (`vir pnr`): reuses the netlist `vir bitstream` left at
+/// `build/<project>.json`, re-running only nextpnr (optionally across
+/// several seeds, when `--tries > 1`) and the pack step.  The
+/// source-level checks and constraint emission still run, so the
+/// constraints stay in sync with the sources — but the netlist is not
+/// resynthesized, so source edits since the last `vir bitstream` are
+/// not reflected in it.
+fn pnr(args: &Args, tries: u32, seed: u32, allow_timing_failure: bool) {
+    let plan = plan_bitstream(args);
+    let opts = pnr_options(tries, seed, allow_timing_failure);
+    virdant::build::run_pnr(&plan.builddir, &plan.project, &plan.verilog_top, plan.part.as_ref(), plan.freq_mhz, plan.toolchain, opts)
+        .unwrap_or_else(|e| {
+            eprintln!("PnR error: {e}");
+            std::process::exit(1);
+        });
 }
 
 /// The name yosys and nextpnr should use for a top module: the Verilog
@@ -1081,15 +1164,18 @@ fn programmer_for(platform: &str) -> (&'static str, &'static [&'static str]) {
     }
 }
 
-fn upload(args: &Args) {
-    let platform_name = bitstream(args);
+fn upload(args: &Args, tries: u32, seed: u32, allow_timing_failure: bool) {
+    let plan = plan_bitstream(args);
+    let opts = pnr_options(tries, seed, allow_timing_failure);
+    virdant::build::run_toolchain(&plan.builddir, &plan.project, &plan.verilog_top, plan.part.as_ref(), plan.freq_mhz, plan.toolchain, opts)
+        .unwrap_or_else(|e| {
+            eprintln!("Toolchain error: {e}");
+            std::process::exit(1);
+        });
 
     let cwd = resolve_cwd(args);
-    let project = read_project_name(&cwd).unwrap_or_else(|| {
-        eprintln!("Virdant.toml is missing [project] name");
-        std::process::exit(1);
-    });
-    let (tool, tool_args) = programmer_for(&platform_name);
+    let project = plan.project;
+    let (tool, tool_args) = programmer_for(&plan.platform_name);
 
     virdant::build::flash_bitstream(&cwd, &project, tool, tool_args)
         .unwrap_or_else(|e| {

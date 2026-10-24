@@ -416,6 +416,31 @@ The `Virdant.toml` file selects which module `vir bitstream` synthesizes:
 programmer, inferred from the top module's platform (e.g. `icesprog`
 for IceSugar, `iceprog` for IceStick, `openFPGALoader` for Arty A7).
 
+`vir pnr` re-runs only place-and-route and packing over a design that
+`vir bitstream` has already synthesized, reusing the netlist at
+``build/<project>.json`` instead of paying for yosys again. Because
+nextpnr's simulated-annealing placer is stochastic --- the same netlist
+can close timing on one seed and miss on another --- this is the tool
+for fighting a marginal timing closure:
+
+.. code-block:: text
+
+    vir pnr --tries 8 --seed 1
+
+Each attempt runs nextpnr with a different ``--seed`` (the first seed
+is ``--seed``, later attempts increment it), and the first attempt that
+closes wins. Every attempt's output is kept in ``build/nextpnr/`` as
+``<project>.<seed>.asc`` (ice40) or ``<project>.<seed>.fasm`` (xilinx),
+failed attempts included, for inspection; the winning attempt is
+copied to ``build/<project>.asc``/``<project>.fasm`` and packed as
+usual. ``--allow-timing-failure`` passes nextpnr's
+``--timing-allow-fail``, so a timing miss no longer fails the run and
+the first attempt wins even if it misses timing. Like `vir bitstream`,
+`vir pnr` still resolves the platform and re-emits the constraints, so
+source edits are reflected in the constraints --- but the netlist is
+not resynthesized, so run `vir bitstream` first whenever the design
+itself changed.
+
 Only the ice40 and xilinx families are supported. The `@fpga` value
 selects the toolchain at build time, so a platform naming an
 unsupported family passes `vir check` and fails in `vir bitstream`
