@@ -439,7 +439,7 @@ impl Submodule {
             verilog_writeln!(writer, "{submodule_name} #(")?;
             writer.indent();
             for (i, (param_name, param_value)) in self.parameters.iter().enumerate() {
-                let comma = if i + 1 == self.parameters.len() && self.ports.is_empty() { "" } else { "," };
+                let comma = if i + 1 == self.parameters.len() { "" } else { "," };
                 verilog_writeln!(writer, ".{param_name:<param_width$}({param_value}){comma}")?;
             }
             writer.dedent();
