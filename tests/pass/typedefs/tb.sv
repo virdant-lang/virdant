@@ -6,13 +6,15 @@ module Tb;
     reg  [3:0] opcode_bits;
     wire [7:0] out;
     wire [7:0] red;
+    wire [7:0] inferred;
 
     Top dut(
         .x(x),
         .y(y),
         .opcode_bits(opcode_bits),
         .out(out),
-        .red(red)
+        .red(red),
+        .inferred(inferred)
     );
 
     task assert_(input [7:0] x_val, input [7:0] y_val, input [3:0] op, input [7:0] expected);
@@ -40,6 +42,12 @@ module Tb;
 
         if (dut.red != 128) begin
             $display("Error dut.red != 128, was %d instead.\n", dut.red);
+            $fatal;
+        end
+
+        // color->red (= x) and color->green (= 128) are inferred, not checked
+        if (dut.inferred != x + 128) begin
+            $display("Error dut.inferred != x + 128, was %d instead.\n", dut.inferred);
             $fatal;
         end
 

@@ -32,10 +32,15 @@ export mod Top {
     }
 
     color := ${
-        red = 0,
+        red = x,
         green = 128,
         blue = 255,
     }
 
     red := color->green
+
+    // Field projections in infer-only positions (binop operands):
+    // `->` must be inferable, not just checkable.
+    outgoing inferred : Word[8]
+    inferred := color->red + color->green
 }

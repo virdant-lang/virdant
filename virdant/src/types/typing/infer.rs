@@ -62,6 +62,7 @@ impl Typing {
                 self.infer_unop(builder, context, node, expr_un_op.op)
             }
             AstNodePayload::ExprFn => self.infer_fn(builder, context, node),
+            AstNodePayload::ExprField(field) => self.infer_field(builder, context, node, field),
             AstNodePayload::ExprCtor(_expr_ctor) => {
                 // Constructors are not inferred from their arguments:
                 // they are checked against an expected type, which
@@ -343,6 +344,52 @@ impl Typing {
             ));
             Err(())
         }
+    }
+
+    fn infer_field<'p>(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        node: &AstNode<'p>,
+        field: payload::ExprField,
+    ) -> Result<Option<Type>, ()> {
+        // A field projection `foo->x` infers from its subject: once the
+        // subject's type is known (a struct typedef with type arguments),
+        // the field's type is fully determined by the struct definition.
+        let subject = node.subject().unwrap();
+        let Some(subject_typ) = self.infer(builder, context, &subject)? else {
+            // Subject couldn't be inferred; leave the projection uninferred.
+            // In check mode, check_field produces the diagnostic.
+            return Ok(None);
+        };
+
+        let Type::Usual(typedef_id, args) = &subject_typ else {
+            self.flag_unknown(node, "Should be a typedef type");
+            return Err(());
+        };
+
+        let struct_fields = builder.get_struct_fields(*typedef_id);
+        let field_name = node.parsing().string(field.field);
+
+        let Some(struct_field) = struct_fields
+            .into_iter()
+            .filter(|field_| field_.name() == field_name)
+            .next()
+        else {
+            self.flag_unknown(node, format!("Unknown field {field_name}"));
+            return Err(());
+        };
+
+        let Some(field_typ) = struct_field.typ() else {
+            self.flag_todo(&subject, "Field missing type");
+            return Err(());
+        };
+        // Substitute the generic parameters of the struct def with the
+        // type arguments at this use site.
+        let field_typ = substitute(field_typ, args);
+
+        self.annotate(node, &field_typ);
+        Ok(Some(field_typ))
     }
 
     fn infer_fn<'p>(
