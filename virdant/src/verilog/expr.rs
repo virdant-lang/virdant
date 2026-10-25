@@ -17,12 +17,16 @@ pub struct BinOp {
     pub op: super::BinOp,
     pub lhs: Box<Expr>,
     pub rhs: Box<Expr>,
+    /// Bit width of the result. Set to 0 when unknown.
+    pub width: super::Width,
 }
 
 #[derive(Debug, Clone)]
 pub struct UnOp {
     pub op: super::UnOp,
     pub expr: Box<Expr>,
+    /// Bit width of the result. Set to 0 when unknown.
+    pub width: super::Width,
 }
 
 #[derive(Debug, Clone)]
@@ -47,6 +51,8 @@ pub struct If {
     pub cond: Box<Expr>,
     pub then_expr: Box<Expr>,
     pub else_expr: Box<Expr>,
+    /// Bit width of the result. Set to 0 when unknown.
+    pub width: super::Width,
 }
 
 #[derive(Debug, Clone)]

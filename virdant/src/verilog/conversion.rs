@@ -820,6 +820,7 @@ impl<'d> Converter<'d> {
                 cond: Box::new(cond_expr),
                 then_expr: Box::new(then_expr),
                 else_expr: Box::new(acc),
+                width: type_width(typ, self.db),
             })
         })
     }
@@ -1393,6 +1394,7 @@ impl<'d> Converter<'d> {
                     op: convert_binop(expr_bin_op.op),
                     lhs: Box::new(self.convert_expr(package, lhs, &lhs_type, self.db, scheduler)),
                     rhs: Box::new(self.convert_expr(package, rhs, &rhs_type, self.db, scheduler)),
+                    width: self.node_width(package, &node),
                 })
             }
             AstNodePayload::ExprUnOp(expr_un_op) => {
@@ -1401,6 +1403,7 @@ impl<'d> Converter<'d> {
                 verilog::Expr::UnOp(verilog::expr::UnOp {
                     op: convert_unop(expr_un_op.op),
                     expr: Box::new(self.convert_expr(package, child, &child_type, self.db, scheduler)),
+                    width: self.node_width(package, &node),
                 })
             }
             AstNodePayload::When => {
@@ -1464,12 +1467,14 @@ impl<'d> Converter<'d> {
                                 verilog::Expr::UnOp(verilog::expr::UnOp {
                                     op: verilog::UnOp::RedOr,
                                     expr: Box::new(arg_expr),
+                                    width: 1,
                                 })
                             }
                             Primitive::All => {
                                 verilog::Expr::UnOp(verilog::expr::UnOp {
                                     op: verilog::UnOp::RedAnd,
                                     expr: Box::new(arg_expr),
+                                    width: 1,
                                 })
                             }
                             Primitive::Cast => arg_expr,
@@ -1505,6 +1510,7 @@ impl<'d> Converter<'d> {
                                     cond: Box::new(cond_expr),
                                     then_expr: Box::new(a_expr),
                                     else_expr: Box::new(b_expr),
+                                    width: self.node_width(package, &node),
                                 })
                             }
                         }
@@ -1824,6 +1830,7 @@ impl<'d> Converter<'d> {
                 cond: Box::new(guard_expr),
                 then_expr: Box::new(body_expr),
                 else_expr: Box::new(acc),
+                width: type_width(typ, self.db),
             })
         })
     }

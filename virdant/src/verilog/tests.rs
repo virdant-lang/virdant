@@ -39,6 +39,7 @@ macro_rules! binop {
             op: BinOp::$op,
             lhs: $lhs.into(),
             rhs: $rhs.into(),
+            width: 0,
         })
     }
 }
@@ -49,6 +50,7 @@ macro_rules! unop {
         Expr::UnOp(expr::UnOp {
             op: UnOp::$op,
             expr: $expr.into(),
+            width: 0,
         })
     }
 }
@@ -60,6 +62,7 @@ macro_rules! if_ {
             cond: $cond.into(),
             then_expr: $then_expr.into(),
             else_expr: $else_expr.into(),
+            width: 0,
         })
     }
 }
@@ -381,5 +384,119 @@ macro_rules! assign_non_blocking {
             name: stringify!($name).to_string(),
             expr: $expr.into(),
         })
+    }
+}
+
+use super::*;
+
+use crate::{binop, index_range, lit, refr};
+
+/// An `IndexRange` with constant bounds has a known width of
+/// `index_hi - index_lo + 1` (the emitter stores `index_hi` as the
+/// Verilog MSB, already decremented from the Virdant `hi` bound).
+#[test]
+fn compute_expr_width_knows_constant_index_range() {
+    let expr = index_range!(refr!(w), lit!(11, 32), lit!(3, 32));
+    assert_eq!(compute_expr_width(&expr), Some(9));
+}
+
+/// A slice whose subject is itself a slice must be lifted into a temp wire,
+/// so the emitted Verilog applies exactly one range-select to a plain
+/// identifier instead of an illegal chained part-select.
+#[test]
+fn slice_of_slice_subject_is_lifted_into_temp_wire() {
+    let mut module = Module {
+        name: "Top".to_string(),
+        is_ext: false,
+        ports: vec![],
+        elements: vec![Element::Assign(Assign {
+            name: "chained".to_string(),
+            expr: index_range!(index_range!(refr!(w), lit!(11, 32), lit!(3, 32)), lit!(5, 32), lit!(4, 32)),
+        })],
+        origin: None,
+    };
+    module.normalize();
+
+    // The original assign now selects on a plain temp-wire reference.
+    let last = module.elements.last().unwrap();
+    match last {
+        Element::Assign(a) => {
+            assert_eq!(a.name, "chained");
+            match &a.expr {
+                // Exactly one range-select applied to a plain identifier.
+                Expr::IndexRange(r) => assert!(matches!(r.subject.as_ref(), Expr::Reference(_)),
+                    "expected temp-wire subject, got {a:?}"),
+                other => panic!("expected IndexRange, got {other:?}"),
+            }
+        }
+        other => panic!("unexpected trailing element {other:?}"),
+    }
+
+    // A temp wire (width 9) and its defining assign were inserted before it.
+    let mut temp_wires = module.elements.iter().filter_map(|e| match e {
+        Element::Wire(w) => Some(w),
+        _ => None,
+    });
+    let wire = temp_wires.next().expect("expected a temp wire");
+    assert_eq!(wire.width, 9);
+
+    let temp_assigns = module.elements.iter().filter_map(|e| match e {
+        Element::Assign(a) => Some(a),
+        _ => None,
+    }).collect::<Vec<_>>();
+    assert_eq!(temp_assigns.len(), 2, "expected original assign plus one temp assign");
+    match &temp_assigns[0].expr {
+        Expr::IndexRange(r) => {
+            assert!(matches!(r.subject.as_ref(), Expr::Reference(_)));
+        }
+        other => panic!("expected inner IndexRange in temp assign, got {other:?}"),
+    }
+}
+
+/// An `Index`/`IndexRange` whose subject is any known-width non-`Reference`
+/// expression (here, an arithmetic expression) is lifted into a temp wire,
+/// never emitted as a select on a parenthesized expression.
+#[test]
+fn operator_subject_of_slice_is_lifted_into_temp_wire() {
+    let mut module = Module {
+        name: "Top".to_string(),
+        is_ext: false,
+        ports: vec![],
+        elements: vec![Element::Assign(Assign {
+            name: "c".to_string(),
+            // The conversion pass records the operand width on operator
+            // nodes; simulate a Word[7] `b ^ d` result here.
+            expr: index_range!(Expr::BinOp(expr::BinOp {
+                op: BinOp::BitXor,
+                lhs: refr!(b).into(),
+                rhs: refr!(d).into(),
+                width: 7,
+            }), lit!(8, 32), lit!(2, 32)),
+        })],
+        origin: None,
+    };
+    module.normalize();
+
+    let last = module.elements.last().unwrap();
+    match last {
+        Element::Assign(a) => match &a.expr {
+            Expr::IndexRange(r) => {
+                assert!(matches!(r.subject.as_ref(), Expr::Reference(_)),
+                    "expected temp-wire subject, got {a:?}");
+            }
+            other => panic!("expected IndexRange, got {other:?}"),
+        },
+        other => panic!("unexpected trailing element {other:?}"),
+    }
+
+    // The temp wire carries the BinOp (width 7 from the BinOp node).
+    let temp_wire = module.elements.iter().find_map(|e| match e {
+        Element::Wire(w) if w.name.contains("temp") => Some(w),
+        _ => None,
+    }).expect("expected a temp wire");
+    assert_eq!(temp_wire.width, 7);
+    match &temp_wire.expr {
+        None => {}
+        other => panic!("temp wire should have no initial expr, got {other:?}"),
     }
 }

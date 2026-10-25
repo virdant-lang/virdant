@@ -477,6 +477,13 @@ fn write_ports(writer: &mut Writer, ports: &[String], instance_name: &str) -> st
 //      confuse iverilog's parser.
 //   2. A `Concat` or `Repeat` used as the subject of `Index` / `IndexRange` —
 //      iverilog only permits bit-selects on plain identifiers.
+//   3. Any non-`Reference` subject of `Index` / `IndexRange`, most notably a
+//      slice whose subject is itself a slice (`x[hi..lo][hi2..lo2]`).  The
+//      emitter would produce a chained part-select (`x[hi-1:lo][hi2-1:lo2]`),
+//      which is not legal Verilog: iverilog rejects it at elaboration and
+//      yosys silently mis-elaborates it to a different bit range.  Such
+//      subjects are lifted into a temp wire so exactly one range-select is
+//      applied to a plain identifier, preserving Virdant's slice semantics.
 //
 // Temp-wire names use the prefix `__vir_tmp_` followed by a counter.  The
 // counter is incremented until an unused name is found, guaranteeing that
@@ -492,8 +499,30 @@ fn compute_expr_width(expr: &Expr) -> Option<Width> {
         Expr::Concat(c) if c.width > 0 => Some(c.width),
         Expr::Repeat(r) if r.width > 0 => Some(r.width),
         Expr::Index(_) => Some(1),
+        Expr::BinOp(b) if b.width > 0 => Some(b.width),
+        Expr::UnOp(u) if u.width > 0 => Some(u.width),
+        Expr::If(i) if i.width > 0 => Some(i.width),
+        Expr::IndexRange(r) => {
+            // IndexRange bounds are always emitted as constant literals
+            // (see `conversion.rs`), with `index_hi` already decremented to
+            // the Verilog MSB.  The selected width is therefore
+            // `index_hi - index_lo + 1`.
+            match (const_index_value(&r.index_hi), const_index_value(&r.index_lo)) {
+                (Some(hi), Some(lo)) if hi >= lo => Some((hi - lo + 1) as Width),
+                _ => None,
+            }
+        }
         Expr::XLit(x) => Some(x.width),
         Expr::ZLit(z) => Some(z.width),
+        _ => None,
+    }
+}
+
+/// Extracts a constant integer from a Verilog IR index expression, or `None`
+/// when the index is not a literal.
+fn const_index_value(expr: &Expr) -> Option<u64> {
+    match expr {
+        Expr::WordLit(w) => Some(w.value),
         _ => None,
     }
 }
