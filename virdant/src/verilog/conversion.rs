@@ -1646,9 +1646,16 @@ impl<'d> Converter<'d> {
                     field_exprs.insert(field_name, field_expr);
                 }
 
-                // Pack fields in order: first field in lower bits, last field in higher bits
+                // Pack fields so the FIRST field occupies the LOW bits and the
+                // LAST field the high bits, matching `ExprField`'s bit-offset
+                // arithmetic (`->field` slices with bit_offset accumulated from
+                // 0 upward through the field list).
+                //
+                // A Verilog concatenation `{e0, e1, ...}` places `e0` in the
+                // MSBs, so we emit the fields in REVERSE definition order:
+                // `{last, ..., second, first}` puts `first` in the LSBs.
                 let mut packed_exprs = vec![];
-                for field in &struct_fields {
+                for field in struct_fields.iter().rev() {
                     let field_name = field.name.to_str_lossy().into_owned();
                     if let Some(field_expr) = field_exprs.get(&field_name) {
                         packed_exprs.push(field_expr.clone());
