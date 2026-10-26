@@ -45,6 +45,17 @@ Unless it is conventional for the technology, consider using "client" instead of
 Alternatively, you may use the terms "controller" for "master" and "device" for "slave" as well.
 
 
+Module Definition Slot Ordering
+-------------------------------
+The general order for slots defined inside `mod` definition is:
+
+* First, port components (`incoming` `outgoing` `bus`) and `socket`s
+* Second, submodules (`mod`)
+* Third, `reg`s
+* Fourth, `wire`s and `net`s.
+* Fifth, any drivers which were intentionally not placed in driver blocks (especially FSM state transitions)
+
+
 Types
 -----
 Whenever you give the type of a component, you should put a space both before and after the colon.
@@ -214,3 +225,19 @@ Put a blank `//!` line between paragraphs.
 A package docstring typically appears at line 1 of the file, before any
 `import` statements or module definitions.
 It may be omitted for very small files whose purpose is obvious.
+
+
+## The `Valid[T]` type and the `Pipe[T]` socket
+Whenever you have a `*_valid` signal (or similar),
+it is an incredibly strong hint that you should be using a `Valid[T]`
+to pass the data that is being transferred.
+
+Whenever you also see a `*_ready` (or sometimes, `*_busy`) signal,
+it is an incredibly strong hint that you should be using a `Pipe[T]` socket,
+which contains a `Valid[T]` for the data and a `*_ready` for backpressure.
+
+
+## Unclocked signals
+When using unclocked signals from the top level (esp. for buttons or switches),
+you should carefully consider whether you need to synchronize it with the clock.
+Use the builtin `Sync` module for this.

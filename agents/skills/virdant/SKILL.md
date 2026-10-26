@@ -14,10 +14,12 @@ https://virdant.org/tutorial/
 https://virdant.org/reference/
 
 # Coding Conventions
+When writing Virdant code, always make sure to follow the coding conventions.
 
 * `./coding-conventions.md`
 
 # Techniques
+When writing Virdant code, always make sure to follow the techniques.
 
 * `./driver-blocks.md`
 * `./control-flow.md`
