@@ -1,6 +1,6 @@
 // A Type-kind parameter given a Nat literal: Valid[8].
 
-export mod Top {
+pub mod Top {
     incoming inp : Valid[8]
     outgoing out : Word[8]
     out := match inp {

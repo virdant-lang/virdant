@@ -5,7 +5,7 @@ struct type Box[T : Type] {
     value : T[Bit]
 }
 
-export mod Top {
+pub mod Top {
     incoming inp : Box[Bit]
     outgoing out : Bit
     out := inp->value

@@ -332,6 +332,13 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     }
                 };
                 let submodule_location = submodule_symbol.location();
+                crate::queries::pubcheck::check_item_reference(
+                    builder,
+                    &submodule_symbol,
+                    stmt.package(),
+                    ofness_node.region(),
+                    &mut component_analysis.diagnostics,
+                );
                 let submodule_is_ext = moddef_is_ext(builder, &submodule_symbol);
                 // Resolve and kind-check this instance's type arguments
                 // (arity/kind errors are reported at the site); skip
@@ -412,6 +419,13 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                             };
 
                             let socket_symbol = socket_symbol.clone();
+                            crate::queries::pubcheck::check_item_reference(
+                                builder,
+                                &socket_symbol,
+                                submodule_stmt.package(),
+                                socket_ofness_node.region(),
+                                &mut component_analysis.diagnostics,
+                            );
                             // Resolve and kind-check the socket
                             // instance's own type arguments, then
                             // compose them with the enclosing submodule
@@ -508,6 +522,13 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     continue;
                 };
                 let socket_symbol = socket_symbol.clone();
+                crate::queries::pubcheck::check_item_reference(
+                    builder,
+                    &socket_symbol,
+                    stmt.package(),
+                    ofness_node.region(),
+                    &mut component_analysis.diagnostics,
+                );
 
                 // Resolve and kind-check this socket instance's type
                 // arguments (arity/kind errors are reported at the

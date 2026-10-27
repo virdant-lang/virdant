@@ -7,7 +7,7 @@ ext mod BadCell[T : Type] {
     outgoing data : Word[16]
 }
 
-export mod Top {
+pub mod Top {
     incoming clk : Clock
     outgoing out : Word[16]
     out := 0

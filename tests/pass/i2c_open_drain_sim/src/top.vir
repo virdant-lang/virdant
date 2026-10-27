@@ -1,0 +1,45 @@
+//> I2C-style open-drain SDA line.
+//>
+//> A shared bus works like real I2C wiring: no participant ever drives
+//> the line high. Each one either pulls it low strongly (`#= false`,
+//> like an open-drain transistor) or leaves it undriven (the incomplete
+//> `when` arm: no `else` means no driver at all, so the line floats).
+//> A single weak pull-up (`#- true`, a pull resistor) holds the idle
+//> line high. Strong low always wins over the weak high, and if nobody
+//> drives, the resistor pulls the line back up.
+mod Participant {
+    incoming pull : Bit
+
+    bus sda : Bit {
+        when {
+            case pull {
+                it #= false
+            }
+        }
+    }
+}
+
+pub mod Top {
+    incoming master_pull : Bit
+    incoming slave_ack : Bit
+
+    outgoing seen : Bit
+
+    net sda : Bit
+
+    // Pull resistor on the shared line: idle-high.
+    sda #- true
+
+    mod master of Participant {
+        it.pull := master_pull
+        it.sda #=# sda
+    }
+    mod slave of Participant {
+        it.pull := slave_ack
+        it.sda #=# sda
+    }
+
+    // Reading the shared net requires `tap`: an assertion that SDA is
+    // not floating at this point (the pull resistor guarantees it).
+    seen := tap sda
+}

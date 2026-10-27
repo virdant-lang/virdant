@@ -6,22 +6,22 @@
 //
 // CHECK-NOT: Check failed
 
-struct type Pair[A : Type, B : Type] {
+pub struct type Pair[A : Type, B : Type] {
     fst : A
     snd : B
 }
 
-union type Either[L : Type, R : Type] {
+pub union type Either[L : Type, R : Type] {
     Left(l : L)
     Right(r : R)
 }
 
-enum type Option[T : Type] {
+pub enum type Option[T : Type] {
     None
     Some(value : T)
 }
 
-export mod Top {
+pub mod Top {
     incoming clock : Clock
     incoming a     : Word[4]
     incoming b     : Bit

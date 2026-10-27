@@ -32,7 +32,7 @@ mod Server[W : Type] {
     data := pipe.data
 }
 
-export mod Top {
+pub mod Top {
     incoming a8 : Word[8]
     incoming a4 : Word[4]
 

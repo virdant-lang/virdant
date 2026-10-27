@@ -13,7 +13,7 @@ enum type Phase {
     Go   = 0b10
 }
 
-export mod Top {
+pub mod Top {
     incoming clock : Clock
     incoming go    : Bit
 

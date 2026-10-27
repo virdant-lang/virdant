@@ -11,7 +11,7 @@ struct type Color {
     blue : Word[8]
 }
 
-export mod Top {
+pub mod Top {
     incoming opcode_bits : Word[4]
     incoming x : Word[8]
     incoming y : Word[8]

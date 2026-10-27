@@ -7,7 +7,7 @@ mod Keep[T : Type] {
     unused d
 }
 
-export mod Top {
+pub mod Top {
     outgoing out : Bit
     out := false
     client socket p of Pipe {

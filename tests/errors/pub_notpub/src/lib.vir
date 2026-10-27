@@ -1,0 +1,18 @@
+//! A library package with private and public items.
+
+pub struct type Pair {
+    a : Word[8]
+    b : Word[8]
+}
+
+mod Priv {
+    incoming inp : Word[8]
+    outgoing out : Word[8]
+    out := inp
+}
+
+pub mod Lib {
+    incoming inp : Word[8]
+    outgoing out : Word[8]
+    out := inp
+}

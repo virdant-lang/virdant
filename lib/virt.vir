@@ -12,7 +12,7 @@
 //> Virtual FPGA, simulated by Verilator via the `virt` tool.
 @fpga("virt")
 @part("virt")
-platform Virt {
+pub platform Virt {
     //> 48 MHz primary clock.
     @period_ns("20.833")
     incoming clock : Clock
@@ -45,7 +45,7 @@ platform Virt {
 //> tables to recover the frame geometry from the sync signals.
 @fpga("virt")
 @part("virt-vga")
-platform VirtVga {
+pub platform VirtVga {
     //> 50 MHz primary clock (the Nexys4's 100 MHz / 2; a clean source
     //> for common VGA pixel clocks: /2 gives the 25 MHz of 640x480@60,
     //> and /1 the 50 MHz of 800x600@72).

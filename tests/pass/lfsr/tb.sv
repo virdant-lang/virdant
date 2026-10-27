@@ -16,7 +16,7 @@ module Tb;
     reg  reset = 0;
     wire [7:0] out;
 
-    Top dut(
+    \top::Top dut(
         .clock(clock),
         .reset(reset),
         .out(out)

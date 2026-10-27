@@ -201,7 +201,7 @@ compose with the arguments of the enclosing module instances:
         }
     }
 
-    export mod Top {
+    pub mod Top {
         incoming inp : Word[8]
 
         mod master of Master[Word[8]] {
@@ -351,7 +351,7 @@ consumer asserts readiness, and a top module connects the two with
         data := pipe.data
     }
 
-    export mod Top {
+    pub mod Top {
         incoming d : Word[8]
 
         mod producer of Producer {

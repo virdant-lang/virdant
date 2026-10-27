@@ -11,7 +11,7 @@ module Tb;
     reg  reset = 0;
     wire fin;
 
-    Top dut(
+    \top::Top dut(
         .clock(clock),
         .reset(reset),
         .fin(fin)

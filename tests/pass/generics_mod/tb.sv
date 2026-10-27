@@ -12,7 +12,7 @@ module Tb;
     wire [7:0] out8;
     wire [3:0] out4;
 
-    Top dut(
+    \top::Top dut(
         .clk(clk),
         .a(a),
         .b(b),

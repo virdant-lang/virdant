@@ -1,0 +1,18 @@
+// A mod with a `for` clause implements a platform, which only top
+// modules do: every such mod must be `pub`.
+
+platform Buttons {
+    incoming clk_in : Bit
+    outgoing led : Bit default true
+}
+
+mod Top for Buttons {
+    incoming clk_in : Bit
+    outgoing led : Bit
+
+    unused clk_in
+    led := false
+}
+
+// CHECK: mod pub_for_notpub::Top has a `for` clause and must be `pub`
+// CHECK: Check failed

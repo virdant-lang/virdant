@@ -579,6 +579,14 @@ impl TypeIndex {
             return;
         };
 
+        crate::queries::pubcheck::check_item_reference(
+            builder,
+            &symbol,
+            parsing.package(),
+            node.region(),
+            &mut self.diagnostics,
+        );
+
         let is_builtin = |name: &[u8]| {
             symboltable
                 .resolve(name.into())

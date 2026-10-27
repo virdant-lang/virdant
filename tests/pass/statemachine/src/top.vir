@@ -19,7 +19,7 @@ enum type Phase {
     Walk   = 8w4
 }
 
-export mod Top {
+pub mod Top {
     incoming clock    : Clock
     incoming reset    : Bit
     incoming walk_req : Bit    // pedestrian crossing button

@@ -45,7 +45,7 @@ mod Internal {
 }
 
 // Top module instantiates everything and wires it up.
-export mod Top {
+pub mod Top {
     incoming clk      : Clock
     incoming inp      : Word[8] on clk
     outgoing final_out : Word[8] on clk

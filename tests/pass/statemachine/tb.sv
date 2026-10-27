@@ -26,7 +26,7 @@ module Tb;
     wire red;
     wire walk_signal;
 
-    Top dut(
+    \top::Top dut(
         .clock(clock),
         .reset(reset),
         .walk_req(walk_req),

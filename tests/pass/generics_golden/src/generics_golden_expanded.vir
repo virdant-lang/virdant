@@ -1,19 +1,19 @@
-struct type Pair {
+pub struct type Pair {
     fst : Word[4]
     snd : Bit
 }
 
-enum type Opt {
+pub enum type Opt {
     None
     Some(value : Word[4])
 }
 
-union type Either {
+pub union type Either {
     Left(l : Word[4])
     Right(r : Bit)
 }
 
-export mod Top {
+pub mod Top {
     incoming clock : Clock
     incoming a : Word[4]
     incoming b : Bit

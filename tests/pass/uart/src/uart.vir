@@ -1,4 +1,4 @@
-export mod Top {
+pub mod Top {
     incoming clock      : Clock // 12MHz
     incoming reset      : Bit
     outgoing fin        : Bit

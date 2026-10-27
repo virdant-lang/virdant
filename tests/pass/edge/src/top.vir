@@ -1,4 +1,4 @@
-export mod Top {
+pub mod Top {
     incoming clock : Clock
     incoming reset : Reset
     incoming inp   : Bit

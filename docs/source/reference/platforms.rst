@@ -81,7 +81,7 @@ clause, written after the module name and before the body:
 .. code-block:: grammar
 
     ModDef :=
-        DocString Annotations "ext"? "export"? "mod" Ident ForClause? "{" ModDefStmt* "}"
+        DocString Annotations "pub"? "ext"? "mod" Ident ForClause? "{" ModDefStmt* "}"
 
     ForClause :=
         "for" Ofness

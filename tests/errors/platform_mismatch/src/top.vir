@@ -3,7 +3,7 @@
 
 import ice40
 
-export mod Top for ice40::IceSugar {
+pub mod Top for ice40::IceSugar {
     incoming clock : Clock
     outgoing led_red   : Bit
     outgoing led_blue  : Bit

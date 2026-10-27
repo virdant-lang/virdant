@@ -7,7 +7,7 @@ module Tb;
     wire       out_sync;
     wire [7:0] cycle_count;
 
-    Top dut(
+    \top::Top dut(
         .clock(clock),
         .reset(reset),
         .inp_async(inp_async),

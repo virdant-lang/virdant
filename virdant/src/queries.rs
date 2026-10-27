@@ -6,6 +6,7 @@ pub mod check_initial;
 pub mod combinational_cycles;
 pub mod match_coverage;
 pub mod parsing;
+pub mod pubcheck;
 pub mod syntax;
 pub mod typecheck;
 pub mod typing;

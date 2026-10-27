@@ -9,7 +9,7 @@
 // and `out` will not equal 8.
 module Tb;
     wire [7:0] out;
-    Top dut(.out(out));
+    \top::Top dut(.out(out));
 
     initial begin
         #1;

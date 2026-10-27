@@ -1,6 +1,6 @@
-// Keywords: ext, export, import
+// Keywords: pub, ext, import
 import foo
 
-export ext mod Top {
+pub ext mod Top {
     incoming clk : Clock
 }

@@ -3,7 +3,7 @@ enum type State {
     Off = 2w2
 }
 
-export mod Top {
+pub mod Top {
     incoming clock : Clock
     incoming reset : Bit
 

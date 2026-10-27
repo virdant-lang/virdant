@@ -554,7 +554,7 @@ declaring definition; referencing it anywhere else is an unresolved type:
         value : T
     }
 
-    export mod Top {
+    pub mod Top {
         incoming inp : T
     }
 

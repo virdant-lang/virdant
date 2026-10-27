@@ -136,9 +136,9 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     // never support generics (a hard rule, not a missing feature).
     check_ext_mod_generics(builder, &mut diagnostics);
 
-    // Check that no `export mod` declares generic parameters: an
-    // exported top must be a concrete instantiation.
-    check_export_mod_generics(builder, &mut diagnostics);
+    crate::queries::pubcheck::check_pub_visibility(builder, &mut diagnostics);
+    crate::queries::pubcheck::check_pub_surface(builder, &mut diagnostics);
+    crate::queries::pubcheck::check_for_mods_pub(builder, &mut diagnostics);
 
     // Check for recursive module instantiations.
     check_mod_cycles(builder, &mut diagnostics);
@@ -749,29 +749,3 @@ fn check_ext_mod_generics(builder: &mut Builder, diagnostics: &mut Vec<Diagnosti
     }
 }
 
-/// Check that no `export mod` declares generic parameters: an exported
-/// top must be a concrete instantiation, and a generic def has none.
-fn check_export_mod_generics(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
-    let symboltable = builder.get_symboltable();
-    for item in symboltable.items() {
-        if item.kind != SymbolKind::ModDef {
-            continue;
-        }
-        let location = item.location();
-        let parsing = builder.get_parsing(location.package());
-        let node = parsing.ast_node(location.ast_node_id());
-        let AstNodePayload::ModDef(moddef) = node.payload() else { continue };
-        if !moddef.is_export {
-            continue;
-        }
-        let Some(decl) = crate::types::typedef::generics_decl_of(&node) else {
-            continue;
-        };
-        diagnostics.push(Diagnostic::new(
-            decl.region(),
-            diagnostics::ExportModGenerics {
-                item: item.fqn().to_owned(),
-            },
-        ));
-    }
-}

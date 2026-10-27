@@ -18,7 +18,7 @@ mod Slave {
     }
 }
 
-export mod Top {
+pub mod Top {
     mod m of Master
     mod s of Slave {
         m.bus :=: it.bus

@@ -16,7 +16,7 @@ and function definitions.
         | FnDef
 
 Each item may be preceded by a documentation comment (`///`).
-Items may be exported from a package with the `export` keyword.
+Items may be made visible to other packages with the `pub` keyword.
 
 
 Module Definitions
@@ -27,7 +27,7 @@ Modules are the primary building block of Virdant designs.
 .. code-block:: grammar
 
     ModDef :=
-        DocString Annotations "ext"? "export"? "mod" Ident ForClause? Generics? "{" ModDefStmt* "}"
+        DocString Annotations "pub"? "ext"? "mod" Ident ForClause? Generics? "{" ModDefStmt* "}"
 
 A module definition begins with the `mod` keyword, followed by the module name,
 and a body enclosed in curly braces.
@@ -59,12 +59,12 @@ External modules may only declare ports.
 The Virdant compiler generates a stub that connects to the corresponding
 Verilog implementation.
 
-The optional `export` modifier makes the module visible to other packages
+The optional `pub` modifier makes the module visible to other packages
 that import this package.
 
 .. code-block:: virdant
 
-    export mod Top {
+    pub mod Top {
         // ...
     }
 
@@ -76,7 +76,7 @@ A struct type definition declares a new nominal product type with named fields.
 .. code-block:: grammar
 
     StructDef :=
-        DocString Annotations "struct" "type" Ident Generics? "{" StructDefStmt* "}"
+        DocString Annotations "pub"? "struct" "type" Ident Generics? "{" StructDefStmt* "}"
 
     StructDefStmt :=
         DocString Annotations Ident ":" Type
@@ -102,7 +102,7 @@ A union type definition declares a new sum type with a set of variants.
 .. code-block:: grammar
 
     UnionDef :=
-        DocString Annotations "union" "type" Ident Generics? "{" UnionDefStmt* "}"
+        DocString Annotations "pub"? "union" "type" Ident Generics? "{" UnionDefStmt* "}"
 
     UnionDefStmt :=
         DocString Annotations Ident ParamList?
@@ -137,7 +137,7 @@ An enum type definition declares a set of named constants with a fixed bit width
 .. code-block:: grammar
 
     EnumDef :=
-        DocString Annotations "enum" "type" Ident Generics? "{" EnumDefStmt* "}"
+        DocString Annotations "pub"? "enum" "type" Ident Generics? "{" EnumDefStmt* "}"
 
     EnumDefStmt :=
         DocString Annotations Ident "=" Expr
@@ -170,7 +170,7 @@ by the compiler rather than by user code.
 .. code-block:: grammar
 
     BuiltinDef :=
-        DocString Annotations "builtin" "type" Ident Generics? "{" "}"
+        DocString Annotations "pub"? "builtin" "type" Ident Generics? "{" "}"
 
 .. code-block:: virdant
 
@@ -191,7 +191,7 @@ named ports with directions.
 .. code-block:: grammar
 
     SocketDef :=
-        DocString Annotations "socket" Ident Generics? "{" SocketDefStmt* "}"
+        DocString Annotations "pub"? "socket" Ident Generics? "{" SocketDefStmt* "}"
 
     SocketDefStmt :=
         DocString Annotations "cosi" Ident ":" Type

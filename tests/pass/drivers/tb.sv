@@ -22,7 +22,7 @@ module Tb;
 
     wire out;
 
-    Top dut(
+    \top::Top dut(
         .clock(clock),
         .reset(reset),
         .out(out)

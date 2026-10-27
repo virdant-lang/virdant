@@ -20,7 +20,7 @@ mod BadMod {
     oops := false
 }
 
-mod Top for Buttons {
+pub mod Top for Buttons {
     incoming clk_in : Bit
     outgoing ok_default : Bit
 

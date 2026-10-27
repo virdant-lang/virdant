@@ -14,7 +14,7 @@ module Tb;
     reg clock = 0;
     reg go    = 1;
 
-    Top dut(
+    \top::Top dut(
         .clock(clock),
         .go(go)
     );

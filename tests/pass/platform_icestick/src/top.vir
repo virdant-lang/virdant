@@ -7,7 +7,7 @@
 
 import ice40
 
-export mod Top for ice40::IceStick {
+pub mod Top for ice40::IceStick {
     incoming clock : Clock
     outgoing led1 : Bit
     outgoing led2 : Bit

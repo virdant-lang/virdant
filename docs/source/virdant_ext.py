@@ -17,7 +17,7 @@ class VirdantLexer(RegexLexer):
     KEYWORDS = [
         'builtin', 'case', 'soci', 'client', 'cosi', 'else', 'enum',
         'export', 'ext', 'fn', 'if', 'import', 'incoming',
-        'match', 'mod', 'of', 'on', 'outgoing', 'reg',
+        'match', 'mod', 'of', 'on', 'outgoing', 'pub', 'reg',
         'server', 'socket', 'struct', 'type', 'union',
         'unused', 'when', 'width', 'wire',
     ]

@@ -25,7 +25,7 @@
 //> them.
 @fpga("xilinx")
 @part("xc7a35tcsg324-1")
-platform ArtyA7 {
+pub platform ArtyA7 {
     //> Primary 100 MHz clock on ball E3.
     @period_ns("10")
     @pin("E3")
@@ -69,7 +69,7 @@ platform ArtyA7 {
 //> extend the platform if you need them.
 @fpga("xilinx")
 @part("xc7a100tcsg324-1")
-platform ArtyA7_100T {
+pub platform ArtyA7_100T {
     //> Primary 100 MHz clock on ball E3.
     @period_ns("10")
     @pin("E3")
@@ -114,7 +114,7 @@ platform ArtyA7_100T {
 //> The truth table runs across `I5-I0` with `O6` as the full LUT6
 //> output and `O5` sharing only the five lower inputs.
 @cell("LUT6_2")
-ext mod Lut6_2 {
+pub ext mod Lut6_2 {
     outgoing O6 : Bit
     outgoing O5 : Bit
     incoming I5 : Bit
@@ -128,7 +128,7 @@ ext mod Lut6_2 {
 //> D flip-flop sampling on the positive clock edge, with a clock
 //> enable and a synchronous reset.
 @cell("FDRE")
-ext mod Fdre {
+pub ext mod Fdre {
     outgoing Q  : Bit
     incoming C  : Clock
     incoming CE : Bit
@@ -139,7 +139,7 @@ ext mod Fdre {
 //> D flip-flop sampling on the positive clock edge, with a clock
 //> enable and an asynchronous reset.
 @cell("FDCE")
-ext mod Fdce {
+pub ext mod Fdce {
     outgoing Q   : Bit
     incoming C   : Clock
     incoming CE  : Bit
@@ -155,7 +155,7 @@ ext mod Fdce {
 //> Yosys inserts `BUFG` automatically for top-level clocks;
 //> instantiate this only when you need a buffer you can name.
 @cell("BUFG")
-ext mod Bufg {
+pub ext mod Bufg {
     incoming I : Clock
     outgoing O : Clock
 }
