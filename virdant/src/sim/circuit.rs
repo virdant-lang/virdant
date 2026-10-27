@@ -20,7 +20,7 @@ use crate::analysis::elaboration::{ElaboratedComponent, SignalId, Elaboration};
 use crate::common::ComponentKind;
 use crate::db::Db;
 use crate::sim::expr::{Expr, ExprPayload, Referent, driver_to_expr, initial_to_expr};
-use crate::sim::vcd::TypeLayoutIndex;
+use crate::sim::layout::TypeLayoutIndex;
 use crate::syntax::ast::AstNodeId;
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
@@ -32,6 +32,9 @@ pub(super) struct Circuit {
     pub(super) sensitivities: IndexMap<SignalId, IndexSet<SignalId>>,
     pub(super) clock_sensitivities: IndexMap<SignalId, IndexSet<SignalId>>,
     pub(super) registers: IndexSet<SignalId>,
+    /// Socket-connection aliases: a Sink-side channel's value is a copy
+    /// of its Source-side peer's value (`a :=: b`).
+    pub(super) aliases: IndexMap<SignalId, SignalId>,
     pub(super) exprs: IndexMap<SignalId, Arc<Expr>>,
     /// Constant expressions from `initial` statements, keyed by register.
     pub(super) initial_exprs: IndexMap<SignalId, Arc<Expr>>,
@@ -51,18 +54,30 @@ impl Circuit {
     pub(super) fn new(db: &Db, top: SymbolId) -> Circuit {
         let elaboration = db.get_elaboration(top);
 
-        let deps = build_dependencies(db, &elaboration);
-        let sensitivities = build_sensitivities(&deps);
+        let mut deps = build_dependencies(db, &elaboration);
+        let mut sensitivities = build_sensitivities(&deps);
         let clock_sensitivities = build_clock_sensitivities(&elaboration);
 
         let mut exprs: IndexMap<SignalId, Arc<Expr>> = IndexMap::new();
         let mut initial_exprs: IndexMap<SignalId, Arc<Expr>> = IndexMap::new();
         let mut registers: IndexSet<SignalId> = IndexSet::new();
+        let mut aliases: IndexMap<SignalId, SignalId> = IndexMap::new();
         for elab_component in elaboration.components() {
             let elab_id = elab_component.id();
             let env = elab_component.env();
-            if let Some(driver) = elab_component.driver() {
-                exprs.insert(elab_id, driver_to_expr(db, driver, env));
+            if let Some(peer_id) = elab_component.alias() {
+                // Socket connection (`:=:`): the Sink-side channel's value
+                // is its peer's; handled by the runtime, not an Expr.
+                aliases.insert(elab_id, peer_id);
+            } else if let Some(driver) = elab_component.driver() {
+                match driver {
+                    // Bidirectional drivers are resolved into aliases above.
+                    crate::analysis::drivers::Driver::Bidirectional(_) => {}
+                    _ => {
+                        let component_typ = elab_component.typ();
+                        exprs.insert(elab_id, driver_to_expr(db, driver, &component_typ, env));
+                    }
+                }
             }
             if let Some(loc) = elab_component.initial_expr() {
                 initial_exprs.insert(elab_id, initial_to_expr(db, loc, env));
@@ -81,6 +96,15 @@ impl Circuit {
 
         let type_layout_index = TypeLayoutIndex::build(db, &elaboration);
 
+
+
+
+        // Socket aliases are dataflow edges: the source feeds the sink.
+        for (sink, source) in &aliases {
+            deps.entry(*sink).or_default().insert(*source);
+            sensitivities.entry(*source).or_default().insert(*sink);
+        }
+
         Circuit {
             elaboration,
             type_layout_index,
@@ -88,6 +112,7 @@ impl Circuit {
             sensitivities,
             clock_sensitivities,
             registers,
+            aliases,
             exprs,
             initial_exprs,
             resolved_referents,
@@ -143,16 +168,22 @@ fn compute_resolved_referents(
     expr: &Expr,
 ) -> Vec<(Referent, SignalId)> {
     let ec = elaboration.component(owner_id);
-    let prefix = scope_prefix(ec);
+    let prefix = ec.driver_scope().to_str_lossy().into_owned();
 
     let mut out = Vec::new();
     for referent in collect_referents(expr) {
+        if let Referent::Owner = &referent {
+            out.push((referent, owner_id));
+            continue;
+        }
         if let Referent::Component(comp_id) = &referent {
             let comp_analysis = db.get_component_analysis(comp_id.item_id());
             if let Some(comp) = comp_analysis.component(*comp_id) {
                 let full_path: BString = format!("{prefix}.{}", comp.path()).into();
                 if let Some(elab_comp) = elaboration.resolve(&full_path) {
                     out.push((referent, elab_comp.id()));
+                } else {
+                    eprintln!("DEBUG unresolved referent: owner={:?} prefix={prefix:?} comp_path={:?} full={full_path:?}", elaboration.component(owner_id).path().as_bstr(), comp.path().as_bstr());
                 }
             }
         }
@@ -177,7 +208,7 @@ fn build_dependencies(
         let mut deps: IndexSet<SignalId> = IndexSet::new();
 
         if let Some(driver) = component.driver() {
-            let prefix = scope_prefix(component);
+            let prefix = component.driver_scope().to_str_lossy().into_owned();
             for loc in collect_locations(driver) {
                 let parsing = db.get_parsing(loc.package());
                 for name in walk_expr_refs(&parsing, loc.ast_node_id()) {
@@ -232,25 +263,6 @@ fn build_clock_sensitivities(
         }
     }
     map
-}
-
-/// Compute the module-scope prefix used to resolve relative references inside
-/// a component's driver expression.
-///
-/// Incoming ports are driven from the *parent* module's scope (one level above
-/// the submodule instance), so two path segments are dropped.
-/// All other components are driven within their own module, so one is dropped.
-fn scope_prefix(component: &ElaboratedComponent) -> String {
-    let path = component.path();
-    let last_dot = path.rfind_byte(b'.').expect("elaborated path always has at least one dot");
-    if component.component_kind() == ComponentKind::Incoming {
-        // e.g. "top.gcd.clock" -> "top"
-        let second_last = path[..last_dot].rfind_byte(b'.').unwrap_or(0);
-        path[..second_last].to_str_lossy().into_owned()
-    } else {
-        // e.g. "top.gcd.state" -> "top.gcd"
-        path[..last_dot].to_str_lossy().into_owned()
-    }
 }
 
 /// Recursively collect every expression `Location` from a `Driver`.

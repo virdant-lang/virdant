@@ -10,19 +10,38 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use bstr::{BStr, BString};
+use bstr::{BStr, BString, ByteSlice};
 use indexmap::IndexSet;
 
 use crate::analysis::symbols::SymbolId;
 use crate::analysis::elaboration::{SignalId, Elaboration};
-use crate::common::ComponentKind;
+use crate::common::{ComponentKind, Width};
 use crate::db::Db;
 use crate::sim::{Scheduler, State};
+use crate::sim::bits::BitPat;
 use crate::sim::circuit::Circuit;
 use crate::sim::eval::{Context, Value};
+use crate::sim::layout::TypeLayoutIndex;
 use crate::sim::scheduler::{Callback, Event, EventCallback};
-use crate::sim::vcd::TypeLayoutIndex;
 use crate::types::Type;
+
+/// Strategy for choosing the value of uninitialized registers and
+/// top-level incoming ports.  There are no X or Z values: every cell
+/// always carries a fully-defined bit pattern.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum InitStrategy {
+    /// Pseudorandom bit patterns (seeded from the wall clock).
+    #[default]
+    Random,
+}
+
+impl InitStrategy {
+    pub(super) fn value(&self, typ: Type, width: Width, rng: &mut u64) -> Value {
+        match self {
+            InitStrategy::Random => Value::new(typ, BitPat::random(width, rng)),
+        }
+    }
+}
 
 
 /// A lock that defers circuit settlement until dropped.
@@ -93,23 +112,24 @@ impl std::fmt::Debug for Sim {
 }
 
 impl Sim {
-    pub fn new(db: &Db, top: SymbolId) -> Sim {
+    pub fn new(db: &Db, top: SymbolId, strategy: InitStrategy) -> Sim {
         let circuit = Circuit::new(db, top);
 
         let mut sim = Sim {
-            state: State::new(circuit.elaboration.as_ref()),
+            state: State::new(circuit.elaboration.as_ref(), &circuit.type_layout_index, &strategy),
             circuit,
             sched: Scheduler::new(),
         };
 
-        sim.flow_constants();
         sim.apply_initials();
+        sim.flow_all();
         sim
     }
 
     /// Set every register with an `initial` statement to its initial value
-    /// (registers without one start as `X`), then propagate.  `initial`
-    /// expressions are constant, so they are evaluated in an empty context.
+    /// (registers without one keep their `InitStrategy` value).
+    /// `initial` expressions are constant, so they are evaluated in an
+    /// empty context; propagation happens in the following `flow_all`.
     fn apply_initials(&mut self) {
         let initials: Vec<(SignalId, Arc<crate::sim::expr::Expr>)> = self
             .circuit
@@ -121,7 +141,7 @@ impl Sim {
             return;
         }
 
-        let context = Context::new(vec![]);
+        let context = Context::new(vec![], self.circuit.type_layout_index.clone());
         for (signal_id, expr) in initials {
             let value = expr.eval(&context);
             self.state.set_val(signal_id, value);
@@ -130,6 +150,13 @@ impl Sim {
     }
 
     pub(super) fn type_layout_index(&self) -> &TypeLayoutIndex {
+        &self.circuit.type_layout_index
+    }
+
+    /// The precomputed type bit-layouts, for decoding typed values
+    /// outside the engine (e.g. the `virt::Virt` board decoding the
+    /// `exit` port's `Valid[Word[8]]`).
+    pub(crate) fn type_layouts(&self) -> &TypeLayoutIndex {
         &self.circuit.type_layout_index
     }
 
@@ -142,28 +169,53 @@ impl Sim {
         crate::sim::vcd::attach(self, writer);
     }
 
-    fn flow_constants(&mut self) {
-        // Evaluate all components whose expression has no dependencies (empty deps set).
-        // These are constant-valued nodes — their driver reads nothing from the simulation
-        // state, so their value is fixed and can be determined immediately.  Collect the
-        // IDs first to satisfy the borrow checker, then evaluate and set each one.
-        let constant_ids: Vec<SignalId> = self
-            .circuit
-            .deps
-            .iter()
-            .filter(|(id, dep_set)| dep_set.is_empty() && self.circuit.exprs.contains_key(*id))
-            .map(|(id, _)| *id)
-            .collect();
+    /// Evaluate every driven component, repeating until the
+    /// combinational network reaches a fixpoint.
+    ///
+    /// Used at construction: there are no X values, so a component whose
+    /// random-initialized bits happen to equal its computed value would
+    /// never look "changed" and its dependents would keep stale random
+    /// values.  A full-network pass makes every value consistent with
+    /// the (initial) register values before the run starts.
+    fn flow_all(&mut self) {
+        loop {
+            let mut changed = false;
 
-        for signal_id in constant_ids {
-            let expr = self.circuit.exprs[&signal_id].clone();
-            let context = Context::context_for_component(&self.circuit, &self.state, signal_id);
-            let value = expr.eval(&context);
-            self.state.set_val(signal_id, value);
+            let ids: Vec<SignalId> = self.circuit.exprs.keys().copied().collect();
+            for signal_id in ids {
+                let expr = self.circuit.exprs[&signal_id].clone();
+                let context = Context::context_for_component(&self.circuit, &self.state, signal_id);
+                let new_value = expr.eval(&context);
+                if self.circuit.registers.contains(&signal_id) {
+                    // A register's driver computes its *next* value; the
+                    // current value only changes on a clock edge.
+                    self.state.set_reg(signal_id, new_value);
+                } else if self.state.get(signal_id) != new_value {
+                    self.state.set_val(signal_id, new_value);
+                    changed = true;
+                }
+            }
+
+            // Socket-connection aliases copy their peer's value.
+            let alias_pairs: Vec<(SignalId, SignalId)> = self
+                .circuit
+                .aliases
+                .iter()
+                .map(|(sink, source)| (*sink, *source))
+                .collect();
+            for (sink, source) in alias_pairs {
+                let value = self.state.get(source);
+                if self.state.get(sink) != value {
+                    self.state.set_val(sink, value);
+                    changed = true;
+                }
+            }
+
+            if !changed {
+                break;
+            }
         }
-
-        // Propagate constant values to all transitively-dependent components.
-        self.flow();
+        self.state.clear_dirty();
     }
 
     pub fn tick(&mut self, signal_id: SignalId) {
@@ -193,9 +245,19 @@ impl Sim {
             let n = self.circuit.sensitivity_count(signal_id);
             for i in 0..n {
                 let update_signal_id = self.circuit.sensitivity_at(signal_id, i);
-                let expr = self.circuit.exprs.get(&update_signal_id).unwrap().clone();
-                let context = Context::context_for_component(&self.circuit, &self.state, update_signal_id);
-                let new_value = expr.eval(&context);
+                // Aliases (socket connections `:=:`, and bare-reference
+                // drivers resolved by the elaboration): the value is a
+                // copy of the peer's.  Edge detection below applies to
+                // alias copies too (e.g. a clock routed through a bare
+                // reference or a socket connection).
+                let new_value = if let Some(&peer_id) = self.circuit.aliases.get(&update_signal_id) {
+                    self.state.get(peer_id)
+                } else {
+                    let expr = self.circuit.exprs.get(&update_signal_id).unwrap().clone();
+                    let context = Context::context_for_component(&self.circuit, &self.state, update_signal_id);
+                    let v = expr.eval(&context);
+                    v
+                };
                 if self.circuit.registers.contains(&update_signal_id) {
                     self.state.set_reg(update_signal_id, new_value);
                 } else {
@@ -228,7 +290,8 @@ impl Sim {
         let watched: Vec<SignalId> = self.sched.collect_watched_signals();
         let mut changed: IndexSet<SignalId> = IndexSet::new();
         for id in watched {
-            if self.state.get(id) != self.state.get_prev(id) {
+            let changed_ = self.state.get(id) != self.state.get_prev(id);
+            if changed_ {
                 changed.insert(id);
             }
         }
@@ -294,8 +357,9 @@ impl Sim {
     pub fn attach_clock(&mut self, signal: SignalId, clock: Clock) {
         let half = clock.period_ps / 2;
         {
+            let typ = self.component_type(signal);
             let mut lock = self.lock();
-            lock.set(signal, Value::Bit(false));
+            lock.set(signal, Value::from_bool(typ, false));
         }
         self.register_clock_toggle(signal, half);
     }
@@ -460,7 +524,13 @@ impl Sim {
     /// survive into a subsequent `run()`.
     pub fn on_clock(&mut self, clock: SignalId, cb: Callback) {
         let cell: Rc<RefCell<Callback>> = Rc::new(RefCell::new(cb));
-        Self::register_clock_watcher(self, clock, cell);
+        // The watcher tracks the last value *it* observed.  The state's
+        // `prev_vals` is unreliable here: nested watcher dispatches (a
+        // callback driving a signal re-enters `unlock`) can
+        // `commit_change` this signal before a later-registered watcher
+        // runs, erasing the very transition the late watcher must see.
+        let last = Rc::new(std::cell::Cell::new(self.state.get(clock).bits().get_bit(0)));
+        Self::register_clock_watcher(self, clock, cell, last);
     }
 
     fn register_on_change_watcher(
@@ -484,20 +554,25 @@ impl Sim {
         sim: &mut Sim,
         clock: SignalId,
         cell: Rc<RefCell<Callback>>,
+        last: Rc<std::cell::Cell<bool>>,
     ) {
         let cell_for_closure = cell.clone();
+        let last_for_closure = last.clone();
         sim.sched.register(EventCallback {
             event: Event::ValueChange { signal: clock },
             callback: Some(Box::new(move |s| {
-                let current = s.state.get(clock);
-                let last = s.state.get_prev(clock);
-                let is_rising_edge = is_rising(&last, &current);
+                let current = s.state.get(clock).bits().get_bit(0);
+                let last_bit = last_for_closure.get();
+                let is_rising_edge = !last_bit && current;
+                // Update our own last-seen value on EVERY dispatch, so
+                // nested re-fires see the current state, not a stale one.
+                last_for_closure.set(current);
 
                 if is_rising_edge {
                     (cell_for_closure.borrow_mut())(s);
                 }
                 if !s.sched.is_shutdown_requested() {
-                    Sim::register_clock_watcher(s, clock, cell_for_closure.clone());
+                    Sim::register_clock_watcher(s, clock, cell_for_closure.clone(), last_for_closure.clone());
                 }
             })),
         });
@@ -507,11 +582,8 @@ impl Sim {
     /// toggles the signal and re-arms itself for `half_period_ps` later.
     fn register_clock_toggle(&mut self, clock: SignalId, half_period_ps: u64) {
         self.after(half_period_ps, Box::new(move |sim| {
-            let next = match sim.state.get(clock) {
-                Value::Bit(b) => Value::Bit(!b),
-                Value::X(_)   => Value::Bit(true),
-                other => panic!("clock signal {clock:?} has non-Bit value: {other:?}"),
-            };
+            let current = sim.state.get(clock);
+            let next = Value::from_bool(current.typ().clone(), !current.bits().get_bit(0));
             {
                 let mut lock = sim.lock();
                 lock.set(clock, next);
@@ -521,9 +593,11 @@ impl Sim {
     }
 }
 
-/// 0→1 transition on a `Bit` signal.  Any other old/new pair (including
-/// X→Bit(true)) is not a rising edge — keeps `set()`'s edge
-/// detection safe on non-clock signals.
+pub fn debug_transfer(id: crate::analysis::elaboration::SignalId, v: &Value) {
+}
+
+/// 0→1 transition on a 1-bit signal.  Keeps `set()`'s edge detection
+/// safe on non-clock (and multi-bit) signals.
 fn is_rising(old: &Value, new: &Value) -> bool {
-    matches!((old, new), (Value::Bit(false), Value::Bit(true)))
+    old.width() == 1 && !old.bits().get_bit(0) && new.bits().get_bit(0)
 }

@@ -1,43 +1,82 @@
-//! Evaluation of simulator `Expr` trees: defines `Value` (X/Z/Bit/Word/
-//! Ctor), the per-eval binding `Context`, and `Expr::eval` implementing
-//! Verilog-like semantics for `when`, `match` (casez), binary/unary
+//! Evaluation of simulator `Expr` trees: defines `Value` (a bit pattern
+//! tagged with its type), the per-eval binding `Context`, and
+//! `Expr::eval` implementing `when`, `match` (casez), binary/unary
 //! operators, constructors, indexing, concatenation, and width
-//! operations with X-propagation.
+//! operations on bit patterns.
+//!
+//! There are no X or Z values: every value is a fully-defined bit
+//! pattern.  Uninitialized cells start from the sim's `InitStrategy`
+//! (random by default); a pattern that is not a valid inhabitant of its
+//! type (e.g. an out-of-range union tag) simply fails to decode, and
+//! prints as `<invalid>`.
 
 use std::sync::Arc;
 
 use indexmap::IndexMap;
 
-use crate::common;
-use crate::common::{Width, WordValue};
+use crate::common::{BinOp, UnOp, Width};
+use crate::sim::bits::BitPat;
+use crate::sim::layout::TypeLayoutIndex;
 use crate::sim::payload;
 use crate::types::Type;
 use crate::sim::expr::{Expr, ExprPayload, Referent};
-use crate::analysis::symbols::SymbolId;
 use crate::analysis::elaboration::SignalId;
 
+/// A simulated value: a bit pattern tagged with its (semantic) type.
+///
+/// The `typ` tag says how to interpret the bits (see `sim::layout`).
+/// Gate logic decodes the bits on demand; aggregate types (unions,
+/// enums, structs) are stored pre-encoded.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Value {
-    X(Type),
-    Z(Type),
-    Bit(bool),
-    Word(Width, WordValue),
-    Ctor(Type, SymbolId, Vec<Value>),
+pub struct Value {
+    typ: Type,
+    bits: BitPat,
+}
+
+impl std::fmt::Display for Value {
+    /// Print according to the object type: a `Bit` pattern "0" prints
+    /// as `false`, a `Word` prints numerically, an aggregate type prints
+    /// its raw bit pattern (rich typed rendering — including
+    /// `<invalid>` for patterns that are not inhabitants of their type —
+    /// is [`TypeLayoutIndex::display`]).
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.typ {
+            Type::Bit => f.write_str(if self.bits.get_bit(0) { "true" } else { "false" }),
+            Type::Clock | Type::Reset => f.write_str(&self.bits.to_bit_string()),
+            Type::Word(w) => {
+                if *w < 64 {
+                    write!(f, "{}", self.bits.to_u64())
+                } else {
+                    write!(f, "0b{}", self.bits.to_bit_string())
+                }
+            }
+            Type::Usual(..) => f.write_str(&self.bits.to_bit_string()),
+            Type::Param(_) => f.write_str("<invalid>"),
+        }
+    }
 }
 
 impl Value {
-    pub fn typ(&self) -> Type {
-        match self {
-            Value::X(typ) => typ.clone(),
-            Value::Z(typ) => typ.clone(),
-            Value::Bit(_) => Type::Bit,
-            Value::Word(width, _) => Type::Word(*width),
-            Value::Ctor(typ, _symbol_id, _values) => typ.clone(),
-        }
+    pub fn new(typ: Type, bits: BitPat) -> Value {
+        Value { typ, bits }
     }
 
-    pub fn is_x(&self) -> bool {
-        matches!(self, Value::X(_))
+    /// A single-bit value of `typ` (for `Bit`/`Clock`/`Reset`-typed
+    /// signals).
+    pub fn from_bool(typ: Type, b: bool) -> Value {
+        Value { typ, bits: BitPat::bit(b) }
+    }
+
+    pub fn typ(&self) -> &Type {
+        &self.typ
+    }
+
+    pub fn bits(&self) -> &BitPat {
+        &self.bits
+    }
+
+    pub fn width(&self) -> Width {
+        self.bits.width()
     }
 }
 
@@ -51,23 +90,24 @@ impl Value {
 /// `iter().rev()`; `IndexMap::insert` is last-write-wins).
 #[derive(Clone, Debug)]
 pub struct Context {
+    pub(crate) layouts: TypeLayoutIndex,
     context: IndexMap<Referent, Arc<Value>>,
 }
 
 impl Context {
-    pub fn new(entries: Vec<(Referent, Arc<Value>)>) -> Context {
+    pub fn new(entries: Vec<(Referent, Arc<Value>)>, layouts: TypeLayoutIndex) -> Context {
         let mut context: IndexMap<Referent, Arc<Value>> =
             IndexMap::with_capacity(entries.len());
         for (r, v) in entries {
             context.insert(r, v);
         }
-        Context { context }
+        Context { layouts, context }
     }
 
     pub fn get(&self, referent: &Referent) -> Value {
         match self.context.get(referent) {
             Some(arc) => arc.as_ref().clone(),
-            None => Value::X(Type::Bit),
+            None => Value::new(Type::Bit, BitPat::bit(false)),
         }
     }
 
@@ -80,7 +120,7 @@ impl Context {
         for (r, v) in extra {
             context.insert(r, v);
         }
-        Context { context }
+        Context { layouts: self.layouts.clone(), context }
     }
 
     /// Build an eval `Context` for `signal_id`'s driver expression.
@@ -101,41 +141,41 @@ impl Context {
             .iter()
             .map(|(r, id)| (r.clone(), Arc::new(state.get(*id))))
             .collect();
-        Context::new(entries)
-    }
-}
-
-/// Returns a bitmask selecting the low `width` bits of a u64.
-/// For width >= 64 returns u64::MAX.
-fn word_mask(width: Width) -> u64 {
-    if width >= 64 { u64::MAX } else { (1u64 << (width as u32)).wrapping_sub(1) }
-}
-
-/// Structural equality used to evaluate `Eq` / `Neq` binary operators.
-fn values_equal(a: &Value, b: &Value) -> bool {
-    match (a, b) {
-        (Value::Bit(l), Value::Bit(r)) => l == r,
-        (Value::Word(w, l), Value::Word(_, r)) => {
-            (l & word_mask(*w)) == (r & word_mask(*w))
-        }
-        (Value::Ctor(_, sym_l, args_l), Value::Ctor(_, sym_r, args_r)) => {
-            sym_l == sym_r
-                && args_l.len() == args_r.len()
-                && args_l.iter().zip(args_r.iter()).all(|(a, b)| values_equal(a, b))
-        }
-        _ => false,
+        Context::new(entries, circuit.type_layout_index.clone())
     }
 }
 
 impl Expr {
+    /// A `Value` of this expression's static type carrying `bits`.
+    fn val(&self, bits: BitPat) -> Value {
+        Value::new(self.typ().clone(), bits)
+    }
+
+    fn layouts(context: &Context) -> &TypeLayoutIndex {
+        &context.layouts
+    }
+
+    /// The bit width of this expression's static type.
+    fn width_of_typ(&self, context: &Context) -> Width {
+        context.layouts.type_width(self.typ())
+    }
+
     pub fn eval(&self, context: &Context) -> Value {
         match self.payload() {
-            ExprPayload::Reference(reference) => context.get(&reference.referent),
+            ExprPayload::Reference(reference) => {
+                let value = context.get(&reference.referent);
+                if value.width() != Self::layouts(context).type_width(self.typ()) {
+                    eprintln!("DEBUG ref width mismatch: referent={:?} got_width={} node_typ={:?}", reference.referent, value.width(), self.typ());
+                }
+                self.val(value.bits().clone())
+            }
             ExprPayload::Paren(paren) => paren.subject.eval(context),
             ExprPayload::When(when) => self.eval_when(context, when),
             ExprPayload::Match(match_) => self.eval_match(context, match_),
-            ExprPayload::BitLit(bit_lit) => Value::Bit(bit_lit.value),
-            ExprPayload::WordLit(word_lit) => Value::Word(word_lit.width, word_lit.value),
+            ExprPayload::BitLit(bit_lit) => self.val(BitPat::bit(bit_lit.value)),
+            ExprPayload::WordLit(word_lit) => {
+                self.val(BitPat::from_u64(word_lit.width, word_lit.value))
+            }
             ExprPayload::StrLit(_) => todo!("eval StrLit: string literal evaluation is not supported"),
             ExprPayload::BinOp(binop) => self.eval_binop(context, binop),
             ExprPayload::UnOp(un_op) => self.eval_unop(context, un_op),
@@ -146,42 +186,53 @@ impl Expr {
                  ExprReference for function names also hits a todo!() in convert_ast_expr"
             ),
             ExprPayload::Ctor(ctor) => self.eval_ctor(context, ctor),
-            ExprPayload::Enumerant(enumerant) => self.eval_enumerant(enumerant),
-            ExprPayload::Struct(_) => todo!("eval Struct: struct literal evaluation is not implemented"),
+            ExprPayload::Enumerant(enumerant) => self.eval_enumerant(context, enumerant),
+            ExprPayload::Struct(struct_) => self.eval_struct(context, struct_),
             ExprPayload::Index(index) => self.eval_index(context, index),
             ExprPayload::IndexDyn(index_dyn) => self.eval_index_dyn(context, index_dyn),
             ExprPayload::IndexRange(index_range) => self.eval_index_range(context, index_range),
             ExprPayload::Word(word) => self.eval_word(context, word),
             ExprPayload::Zext(zext) => self.eval_zext(context, zext),
             ExprPayload::Sext(sext) => self.eval_sext(context, sext),
-            ExprPayload::AsClock(asclock) => asclock.subject.eval(context),
-            ExprPayload::Cast(cast) => cast.subject.eval(context),
+            ExprPayload::AsClock(asclock) => self.eval_passthrough(context, &asclock.subject),
+            ExprPayload::Cast(cast) => self.eval_passthrough(context, &cast.subject),
             ExprPayload::Trunc(trunc) => self.eval_trunc(context, trunc),
             ExprPayload::Any(any) => self.eval_any(context, any),
             ExprPayload::All(all) => self.eval_all(context, all),
-            ExprPayload::As(as_) => as_.subject.eval(context),
-            // Hole is an unfilled expression placeholder — treat as X of the appropriate type.
-            ExprPayload::Hole(_) => Value::X(self.typ().clone()),
-            // Dontcare is a valid the compiler is free to replace with any well-typed constant.
-            ExprPayload::Dontcare(_) => Value::X(self.typ().clone()),
+            ExprPayload::As(as_) => self.eval_passthrough(context, &as_.subject),
+            // Hole is an unfilled expression placeholder — its bits are arbitrary.
+            ExprPayload::Hole(_) => self.val(BitPat::zeros(self.width_of_typ(context))),
+            // Dontcare is a valid value the compiler is free to choose.
+            ExprPayload::Dontcare(_) => self.val(BitPat::zeros(self.width_of_typ(context))),
+        }
+    }
+
+    /// Evaluate an expression whose value passes the subject's bits
+    /// through unchanged, re-tagged with this node's type (`as`,
+    /// `cast`, `asclock`).
+    fn eval_passthrough(&self, context: &Context, subject: &Expr) -> Value {
+        let subject_val = subject.eval(context);
+        self.val(subject_val.bits().clone())
+    }
+
+    /// Truthiness of a condition value: a `Bit` is true when its bit is
+    /// set; a `Word` is true when non-zero.
+    fn truthy(value: &Value) -> bool {
+        if value.width() == 1 {
+            value.bits().get_bit(0)
+        } else {
+            !value.bits().is_zero()
         }
     }
 
     /// Evaluate a `when` chain.
-    /// Matches Verilog ternary semantics: the first truthy branch wins.
-    /// X in any condition poisons the whole result.
+    /// The first truthy branch wins; an untruthy condition falls through
+    /// to the next branch (Verilog ternary semantics without X: every
+    /// condition is a fully-defined bit pattern).
     fn eval_when(&self, context: &Context, when: &payload::When) -> Value {
         for (cond, body) in &when.branches {
             let cond_val = cond.eval(context);
-            let taken = match cond_val {
-                Value::Bit(b) => b,
-                Value::Word(_, v) => v != 0,
-                // X/Z conditions are not taken (matches Verilog casex
-                // semantics for unknown conditions).
-                Value::X(_) | Value::Z(_) => false,
-                _ => unreachable!("when condition must be Bit or Word"),
-            };
-            if taken {
+            if Self::truthy(&cond_val) {
                 return body.eval(context);
             }
         }
@@ -192,71 +243,64 @@ impl Expr {
     ///
     /// Matches Verilog `casez` semantics: the first matching arm wins, and the
     /// default arm (`MatchPattern::Else`) is a catch-all.  An unmatched subject
-    /// (no arm applies and no else arm) returns X, mirroring the Verilog default
-    /// casez arm that drives X.
+    /// (no arm applies and no else arm) yields a zero bit pattern of the
+    /// result type — which, for constructor types, is simply an invalid
+    /// value.
     ///
-    /// Works at the semantic level: `Value::Ctor` (produced by `eval_ctor` /
-    /// `eval_enumerant`) is matched by comparing `SymbolId`s rather than
-    /// inspecting bit-packed tags.
+    /// Constructor patterns decode the subject's bits through the type
+    /// layout: the tag selects the slot, the payload bits are bound to
+    /// the pattern's variables.  A subject whose bits do not decode
+    /// (out-of-range tag) matches no arm.
     fn eval_match(&self, context: &Context, match_: &payload::Match) -> Value {
         let subject = match_.subject.eval(context);
-        if subject.is_x() {
-            return Value::X(self.typ().clone());
-        }
+        let layouts = Self::layouts(context);
         for (pattern, body) in &match_.arms {
-            match (pattern, &subject) {
+            match pattern {
                 // Else arm: always matches
-                (payload::Pat::Else, _) => {
+                payload::Pat::Else => {
                     return body.eval(context);
                 }
-                // Ctor pattern against Ctor value: compare symbol IDs
-                (
-                    payload::Pat::Ctor { symbol_id, bound_vars },
-                    Value::Ctor(_, subject_sym, subject_args),
-                ) => {
-                    if subject_sym == symbol_id {
-                        let extra: Vec<(Referent, Arc<Value>)> = bound_vars
-                            .iter()
-                            .zip(subject_args.iter())
-                            .map(|((_var_name, var_loc), arg_value)| {
-                                (
-                                    Referent::Location(var_loc.clone()),
-                                    Arc::new(arg_value.clone()),
-                                )
-                            })
-                            .collect();
-                        let arm_context = context.extend(extra);
-                        return body.eval(&arm_context);
+                // Ctor pattern: decode the subject's tag/payload through
+                // the layout and bind the payload to the pattern variables.
+                payload::Pat::Ctor { symbol_id, bound_vars } => {
+                    let Some((slot, payloads)) = layouts.decode_ctor(subject.typ(), subject.bits())
+                    else {
+                        continue;
+                    };
+                    if slot.symbol_id != *symbol_id {
+                        continue;
                     }
+                    let extra: Vec<(Referent, Arc<Value>)> = bound_vars
+                        .iter()
+                        .zip(payloads.iter())
+                        .zip(slot.param_types.iter())
+                        .map(|(((_var_name, var_loc), bits), typ)| {
+                            (
+                                Referent::Location(var_loc.clone()),
+                                Arc::new(Value::new(typ.clone(), bits.clone())),
+                            )
+                        })
+                        .collect();
+                    let arm_context = context.extend(extra);
+                    return body.eval(&arm_context);
                 }
-                // WordLit pattern against Word value: compare numeric values
-                (
-                    payload::Pat::WordLit { width, value },
-                    Value::Word(subject_width, subject_value),
-                ) => {
-                    let mask = word_mask(*width);
-                    if (subject_value & mask) == (value & mask) && subject_width == width {
+                // WordLit pattern: compare bit patterns.
+                payload::Pat::WordLit { width, value } => {
+                    let expected = BitPat::from_u64(*width, *value);
+                    if subject.width() == *width && subject.bits() == &expected {
                         return body.eval(context);
                     }
                 }
-                // BitLit pattern against Bit value: compare booleans
-                (
-                    payload::Pat::BitLit { value },
-                    Value::Bit(subject_value),
-                ) => {
-                    if subject_value == value {
+                // BitLit pattern: compare bit patterns.
+                payload::Pat::BitLit { value } => {
+                    if subject.width() == 1 && subject.bits().get_bit(0) == *value {
                         return body.eval(context);
                     }
                 }
-                // Any other combination is a type error that should have been caught
-                _ => unreachable!(
-                    "invalid pattern/subject combination: pattern={:?}, subject={:?}",
-                    pattern, subject
-                ),
             }
         }
-        // No arm matched and no else arm — return X (matches Verilog casez default arm).
-        Value::X(self.typ().clone())
+        // No arm matched and no else arm — zero bits of the result type.
+        self.val(BitPat::zeros(self.width_of_typ(context)))
     }
 
     /// Evaluate a binary operator.
@@ -266,77 +310,26 @@ impl Expr {
     /// - `And/Or/Xor` operate on `Word` values (bitwise).
     /// - Comparison operators (`Lt`, `Lte`, `Gt`, `Gte`, `Eq`, `Neq`) return `Bit`.
     /// - `Add` / `Sub` wrap modulo 2^width, matching Verilog unsigned arithmetic.
-    /// X in either operand poisons the result to `X` of the **result** type.
     fn eval_binop(&self, context: &Context, binop: &payload::BinOp) -> Value {
         let lhs_val = binop.lhs.eval(context);
         let rhs_val = binop.rhs.eval(context);
-        // X poisons the result; use the result type (self.typ()), not operand types.
-        if lhs_val.is_x() || rhs_val.is_x() {
-            return Value::X(self.typ().clone());
-        }
+        let lhs = lhs_val.bits();
+        let rhs = rhs_val.bits();
         match binop.op {
-            common::BinOp::LogicalAnd => {
-                let Value::Bit(l) = lhs_val else { unreachable!() };
-                let Value::Bit(r) = rhs_val else { unreachable!() };
-                Value::Bit(l & r)
-            }
-            common::BinOp::LogicalOr => {
-                let Value::Bit(l) = lhs_val else { unreachable!() };
-                let Value::Bit(r) = rhs_val else { unreachable!() };
-                Value::Bit(l | r)
-            }
-            common::BinOp::LogicalXor => {
-                let Value::Bit(l) = lhs_val else { unreachable!() };
-                let Value::Bit(r) = rhs_val else { unreachable!() };
-                Value::Bit(l ^ r)
-            }
-            common::BinOp::Lt => {
-                let Value::Word(_, l) = lhs_val else { unreachable!() };
-                let Value::Word(_, r) = rhs_val else { unreachable!() };
-                Value::Bit(l < r)
-            }
-            common::BinOp::Lte => {
-                let Value::Word(_, l) = lhs_val else { unreachable!() };
-                let Value::Word(_, r) = rhs_val else { unreachable!() };
-                Value::Bit(l <= r)
-            }
-            common::BinOp::Gt => {
-                let Value::Word(_, l) = lhs_val else { unreachable!() };
-                let Value::Word(_, r) = rhs_val else { unreachable!() };
-                Value::Bit(l > r)
-            }
-            common::BinOp::Gte => {
-                let Value::Word(_, l) = lhs_val else { unreachable!() };
-                let Value::Word(_, r) = rhs_val else { unreachable!() };
-                Value::Bit(l >= r)
-            }
-            common::BinOp::Eq => Value::Bit(values_equal(&lhs_val, &rhs_val)),
-            common::BinOp::Neq => Value::Bit(!values_equal(&lhs_val, &rhs_val)),
-            common::BinOp::Add => {
-                let Value::Word(width, l) = lhs_val else { unreachable!() };
-                let Value::Word(_, r) = rhs_val else { unreachable!() };
-                Value::Word(width, l.wrapping_add(r) & word_mask(width))
-            }
-            common::BinOp::Sub => {
-                let Value::Word(width, l) = lhs_val else { unreachable!() };
-                let Value::Word(_, r) = rhs_val else { unreachable!() };
-                Value::Word(width, l.wrapping_sub(r) & word_mask(width))
-            }
-            common::BinOp::And => {
-                let Value::Word(width, l) = lhs_val else { unreachable!() };
-                let Value::Word(_, r) = rhs_val else { unreachable!() };
-                Value::Word(width, l & r)
-            }
-            common::BinOp::Or => {
-                let Value::Word(width, l) = lhs_val else { unreachable!() };
-                let Value::Word(_, r) = rhs_val else { unreachable!() };
-                Value::Word(width, l | r)
-            }
-            common::BinOp::Xor => {
-                let Value::Word(width, l) = lhs_val else { unreachable!() };
-                let Value::Word(_, r) = rhs_val else { unreachable!() };
-                Value::Word(width, l ^ r)
-            }
+            BinOp::LogicalAnd => self.val(BitPat::bit(lhs.get_bit(0) && rhs.get_bit(0))),
+            BinOp::LogicalOr => self.val(BitPat::bit(lhs.get_bit(0) || rhs.get_bit(0))),
+            BinOp::LogicalXor => self.val(BitPat::bit(lhs.get_bit(0) ^ rhs.get_bit(0))),
+            BinOp::Lt => self.val(BitPat::bit(lhs.ucmp(rhs) == std::cmp::Ordering::Less)),
+            BinOp::Lte => self.val(BitPat::bit(lhs.ucmp(rhs) != std::cmp::Ordering::Greater)),
+            BinOp::Gt => self.val(BitPat::bit(lhs.ucmp(rhs) == std::cmp::Ordering::Greater)),
+            BinOp::Gte => self.val(BitPat::bit(lhs.ucmp(rhs) != std::cmp::Ordering::Less)),
+            BinOp::Eq => self.val(BitPat::bit(lhs == rhs)),
+            BinOp::Neq => self.val(BitPat::bit(lhs != rhs)),
+            BinOp::Add => self.val(lhs.add(rhs)),
+            BinOp::Sub => self.val(lhs.sub(rhs)),
+            BinOp::And => self.val(lhs.and(rhs)),
+            BinOp::Or => self.val(lhs.or(rhs)),
+            BinOp::Xor => self.val(lhs.xor(rhs)),
         }
     }
 
@@ -348,86 +341,61 @@ impl Expr {
     /// - `Not` → logical NOT (`!`), returns `Bit`; zero maps to true, nonzero to false.
     fn eval_unop(&self, context: &Context, un_op: &payload::UnOp) -> Value {
         let val = un_op.subject.eval(context);
-        if val.is_x() {
-            return Value::X(self.typ().clone());
-        }
+        let bits = val.bits();
         match un_op.op {
-            common::UnOp::Neg => {
-                let Value::Word(width, v) = val else { unreachable!() };
-                Value::Word(width, v.wrapping_neg() & word_mask(width))
-            }
-            common::UnOp::Inv => {
-                match val {
-                    Value::Bit(b) => Value::Bit(!b),
-                    Value::Word(width, v) => Value::Word(width, (!v) & word_mask(width)),
-                    _ => unreachable!(),
-                }
-            }
-            common::UnOp::Not => {
-                match val {
-                    Value::Bit(b) => Value::Bit(!b),
-                    Value::Word(_, v) => Value::Bit(v == 0),
-                    _ => unreachable!(),
-                }
-            }
+            UnOp::Neg => self.val(bits.neg()),
+            UnOp::Inv => self.val(bits.not()),
+            UnOp::Not => self.val(BitPat::bit(bits.is_zero())),
         }
     }
 
-    /// Evaluate a constructor expression, producing `Value::Ctor`.
-    ///
-    /// Works at the semantic level — does not bit-pack like the Verilog backend.
-    /// X in any argument poisons the whole result.
+    /// Evaluate a constructor expression: encode the tag and the
+    /// encoded parameters through the type layout.
     fn eval_ctor(&self, context: &Context, ctor: &payload::Ctor) -> Value {
-        let mut arg_values = Vec::with_capacity(ctor.args.len());
-        for arg in &ctor.args {
-            let v = arg.eval(context);
-            if v.is_x() {
-                return Value::X(self.typ().clone());
-            }
-            arg_values.push(v);
+        let arg_values: Vec<BitPat> = ctor
+            .args
+            .iter()
+            .map(|arg| arg.eval(context).bits().clone())
+            .collect();
+        match Self::layouts(context).encode_ctor(self.typ(), ctor.symbol_id, &arg_values) {
+            Some(bits) => self.val(bits),
+            None => self.val(BitPat::zeros(self.width_of_typ(context))),
         }
-        Value::Ctor(self.typ().clone(), ctor.symbol_id, arg_values)
     }
 
-    /// Evaluate an enumerant reference.
-    ///
-    /// Enumerants are represented as zero-argument `Ctor` values keyed by their
-    /// `SymbolId`.  This lets `eval_match` identify them by symbol without
-    /// needing `Db` access (the numeric value is only needed for bit-level output).
-    fn eval_enumerant(&self, enumerant: &payload::Enumerant) -> Value {
-        Value::Ctor(self.typ().clone(), enumerant.symbol_id, vec![])
+    /// Evaluate an enumerant reference: an enum's tag-only ctor value.
+    fn eval_enumerant(&self, context: &Context, enumerant: &payload::Enumerant) -> Value {
+        match Self::layouts(context).encode_ctor(self.typ(), enumerant.symbol_id, &[]) {
+            Some(bits) => self.val(bits),
+            None => self.val(BitPat::zeros(self.width_of_typ(context))),
+        }
+    }
+
+    /// Evaluate a struct literal: concatenate the fields' bits, first
+    /// field at the MSB end (struct layouts carry no tag).
+    fn eval_struct(&self, context: &Context, struct_: &payload::Struct) -> Value {
+        let field_values: Vec<BitPat> = struct_
+            .fields
+            .iter()
+            .map(|(_, field)| field.eval(context).bits().clone())
+            .collect();
+        let mut bits = BitPat::zeros(0);
+        for value in field_values {
+            bits = bits.concat_msb_first(&value);
+        }
+        self.val(bits.zext_to(self.width_of_typ(context)))
     }
 
     /// Evaluate a single-bit index expression: `subject[index]`.
-    /// Matches Verilog bit-select semantics.
     fn eval_index(&self, context: &Context, index: &payload::Index) -> Value {
         let val = index.subject.eval(context);
-        if val.is_x() {
-            return Value::X(Type::Bit);
-        }
-        let Value::Word(_, v) = val else {
-            unreachable!("index subject must be Word");
-        };
-        Value::Bit(((v >> (index.index as u32)) & 1) != 0)
+        self.val(BitPat::bit(val.bits().get_bit(index.index as usize)))
     }
 
-    fn eval_index_dyn(&self, context: &Context, index: &payload::IndexDyn) -> Value {
-        let val = index.subject.eval(context);
-        if val.is_x() {
-            return Value::X(Type::Bit);
-        }
-        let idx_val = index.index.eval(context);
-        if idx_val.is_x() {
-            return Value::X(Type::Bit);
-        }
-        let idx = match idx_val {
-            Value::Word(_, v) => v as u32,
-            _ => unreachable!("index expr must be a Word"),
-        };
-        let Value::Word(_, v) = val else {
-            unreachable!("index subject must be Word");
-        };
-        Value::Bit(((v >> idx) & 1) != 0)
+    fn eval_index_dyn(&self, context: &Context, index_dyn: &payload::IndexDyn) -> Value {
+        let val = index_dyn.subject.eval(context);
+        let idx_val = index_dyn.index.eval(context);
+        self.val(BitPat::bit(val.bits().get_bit(idx_val.bits().to_u64() as usize)))
     }
 
     /// Evaluate a bit-range index expression: `subject[index_hi..index_lo]`.
@@ -438,43 +406,24 @@ impl Expr {
     fn eval_index_range(&self, context: &Context, index_range: &payload::IndexRange) -> Value {
         let lo = index_range.index_lo;
         let hi = index_range.index_hi; // exclusive
-        let width = hi - lo;
         let val = index_range.subject.eval(context);
-        if val.is_x() {
-            return Value::X(Type::Word(width));
+        if hi as usize > val.bits().width() as usize {
+            eprintln!("DEBUG index_range: lo={lo} hi={hi} subject_width={} subject_typ={:?} subject_bits_width={}", val.bits().width(), val.typ(), val.bits().width());
         }
-        match val {
-            Value::Word(_, v) => Value::Word(width, (v >> (lo as u32)) & word_mask(width)),
-            _ => unreachable!("index range subject must be Word"),
-        }
+        self.val(val.bits().slice(lo, hi))
     }
 
     /// Evaluate a word-concatenation expression `{a, b, c}`.
     ///
     /// First child is the MSB (leftmost in `{}`), last child is the LSB,
     /// matching Verilog `Concat` semantics and `ExprWord` in `convert_expr`.
-    /// X in any part poisons the whole result.
     fn eval_word(&self, context: &Context, word: &payload::Word) -> Value {
-        let mut values = Vec::with_capacity(word.args.len());
+        let mut bits = BitPat::zeros(0);
         for arg in &word.args {
             let v = arg.eval(context);
-            if v.is_x() {
-                return Value::X(self.typ().clone());
-            }
-            values.push(v);
+            bits = bits.concat_msb_first(v.bits());
         }
-        let Type::Word(total_width) = self.typ() else {
-            unreachable!("eval_word result must be Word")
-        };
-        let mut result: u64 = 0;
-        for val in &values {
-            match val {
-                Value::Bit(b) => result = (result << 1) | (*b as u64),
-                Value::Word(w, v) => result = (result << w) | (v & word_mask(*w)),
-                _ => unreachable!("concat arg must be Bit or Word"),
-            }
-        }
-        Value::Word(*total_width, result & word_mask(*total_width))
+        self.val(bits.zext_to(self.width_of_typ(context)))
     }
 
     /// Evaluate a zero-extension: `zext(subject)`.
@@ -482,94 +431,37 @@ impl Expr {
     /// Matches Verilog `{repeat(extend_by, 1'b0), inner}` from `convert_zext`.
     /// Upper bits are filled with zeros; the low bits are taken from the subject value.
     fn eval_zext(&self, context: &Context, zext: &payload::Zext) -> Value {
-        let Type::Word(target_width) = self.typ() else {
-            unreachable!("eval_zext result must be Word")
-        };
         let val = zext.subject.eval(context);
-        if val.is_x() {
-            return Value::X(Type::Word(*target_width));
-        }
-        match val {
-            Value::Bit(b) => Value::Word(*target_width, b as u64),
-            Value::Word(_, v) => Value::Word(*target_width, v & word_mask(*target_width)),
-            _ => unreachable!("zext subject must be Bit or Word"),
-        }
+        self.val(val.bits().zext_to(self.width_of_typ(context)))
     }
 
     /// Evaluate a sign-extension: `sext(subject)`.
     ///
     /// Matches Verilog `{repeat(extend_by, inner[msb]), inner}` from `convert_sext`.
     /// The MSB of the subject is replicated into all upper bits.
+    fn eval_sext(&self, context: &Context, sext: &payload::Sext) -> Value {
+        let val = sext.subject.eval(context);
+        self.val(val.bits().sext_to(self.width_of_typ(context)))
+    }
+
     /// Evaluate a truncation: `trunc(subject)`.
     ///
     /// The low `target_width` bits are taken from the subject value.
     /// If subject is wider than target, the upper bits are discarded.
     fn eval_trunc(&self, context: &Context, trunc: &payload::Trunc) -> Value {
-        let Type::Word(target_width) = self.typ() else {
-            unreachable!("eval_trunc result must be Word")
-        };
         let val = trunc.subject.eval(context);
-        if val.is_x() {
-            return Value::X(Type::Word(*target_width));
-        }
-        match val {
-            Value::Bit(b) => Value::Word(*target_width, b as u64),
-            Value::Word(_, v) => Value::Word(*target_width, v & word_mask(*target_width)),
-            _ => unreachable!("trunc subject must be Bit or Word"),
-        }
-    }
-
-    fn eval_sext(&self, context: &Context, sext: &payload::Sext) -> Value {
-        let Type::Word(target_width) = self.typ() else {
-            unreachable!("eval_sext result must be Word")
-        };
-        let val = sext.subject.eval(context);
-        if val.is_x() {
-            return Value::X(Type::Word(*target_width));
-        }
-        match val {
-            Value::Bit(b) => {
-                // Single-bit sext: replicate the bit into all target positions.
-                // Matches Verilog: {extend_by{bit}, bit}
-                if b { Value::Word(*target_width, word_mask(*target_width)) }
-                else { Value::Word(*target_width, 0) }
-            }
-            Value::Word(src_width, v) => {
-                // Check the MSB of the source.
-                // Matches Verilog: {extend_by{src[src_width-1]}, src}
-                let msb = (v >> ((src_width - 1) as u32)) & 1;
-                if msb == 1 {
-                    // Fill all bits above src_width with 1s.
-                    let fill = word_mask(*target_width) ^ word_mask(src_width);
-                    Value::Word(*target_width, v | fill)
-                } else {
-                    Value::Word(*target_width, v)
-                }
-            }
-            _ => unreachable!("sext subject must be Bit or Word"),
-        }
+        self.val(val.bits().zext_to(self.width_of_typ(context)))
     }
 
     fn eval_any(&self, context: &Context, any: &payload::Any) -> Value {
         let subject_value = any.subject.eval(context);
-        match subject_value {
-            Value::Word(_, val) => Value::Bit(val != 0),
-            Value::Bit(b) => Value::Bit(b),
-            Value::X(_) | Value::Z(_) => Value::X(Type::Bit),
-            Value::Ctor(_, _, _) => Value::X(Type::Bit), // Not applicable for constructors
-        }
+        self.val(BitPat::bit(!subject_value.bits().is_zero()))
     }
 
     fn eval_all(&self, context: &Context, all: &payload::All) -> Value {
         let subject_value = all.subject.eval(context);
-        match subject_value {
-            Value::Word(width, val) => {
-                let all_ones = (1u64 << width) - 1;
-                Value::Bit(val == all_ones)
-            }
-            Value::Bit(b) => Value::Bit(b),
-            Value::X(_) | Value::Z(_) => Value::X(Type::Bit),
-            Value::Ctor(_, _, _) => Value::X(Type::Bit), // Not applicable for constructors
-        }
+        self.val(BitPat::bit(subject_value.bits().is_all_ones()))
     }
 }
+
+
