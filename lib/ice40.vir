@@ -10,7 +10,7 @@
 //> Lattice iCE40-UP5K, SG48 package, programmed over USB.
 @fpga("ice40")
 @part("up5k-sg48")
-platform IceSugar {
+pub platform IceSugar {
     //> Primary 12 MHz clock on pin 35.
     @period_ns("83.33")
     @pin(35)
@@ -49,7 +49,7 @@ platform IceSugar {
 //> `fomu-pvt.pcf`.
 @fpga("ice40")
 @part("up5k-uwg30")
-platform Fomu {
+pub platform Fomu {
     //> Primary 48 MHz clock on ball F4.
     @period_ns("20.833")
     @pin("F4")
@@ -99,7 +99,7 @@ platform Fomu {
 //> Lattice iCE40HX-1K, TQ144 package, programmed over USB (FTDI).
 @fpga("ice40")
 @part("hx1k-tq144")
-platform IceStick {
+pub platform IceStick {
     //> Primary 12 MHz clock on pin 21.
     @period_ns("83.33")
     @pin(21)
@@ -140,7 +140,7 @@ platform IceStick {
 //> when you need a LUT you can name directly.
 @parameter("LUT_INIT", 0)
 @cell("SB_LUT4")
-ext mod SbLut4 {
+pub ext mod SbLut4 {
     //> Lookup table output.
     outgoing O  : Bit
     //> Lookup table input 0.
@@ -157,7 +157,7 @@ ext mod SbLut4 {
 //> Yosys infers `SB_CARRY` cells from adders; instantiate this only when you
 //> need a carry cell you can name directly.
 @cell("SB_CARRY")
-ext mod SbCarry {
+pub ext mod SbCarry {
     //> Carry output: `majority(I0, I1, CI)`.
     outgoing CO : Bit
     //> Carry-chain input 0.
@@ -170,7 +170,7 @@ ext mod SbCarry {
 
 //> D flip-flop sampling on the positive clock edge.
 @cell("SB_DFF")
-ext mod SbDff {
+pub ext mod SbDff {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (positive edge).
@@ -181,7 +181,7 @@ ext mod SbDff {
 
 //> D flip-flop sampling on the positive clock edge, holding when `E` is low.
 @cell("SB_DFFE")
-ext mod SbDffe {
+pub ext mod SbDffe {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (positive edge).
@@ -194,7 +194,7 @@ ext mod SbDffe {
 
 //> D flip-flop sampling on the positive clock edge with a synchronous reset.
 @cell("SB_DFFSR")
-ext mod SbDffsr {
+pub ext mod SbDffsr {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (positive edge).
@@ -207,7 +207,7 @@ ext mod SbDffsr {
 
 //> D flip-flop sampling on the positive clock edge with an asynchronous reset.
 @cell("SB_DFFR")
-ext mod SbDffr {
+pub ext mod SbDffr {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (positive edge).
@@ -220,7 +220,7 @@ ext mod SbDffr {
 
 //> D flip-flop sampling on the positive clock edge with a synchronous set.
 @cell("SB_DFFSS")
-ext mod SbDffss {
+pub ext mod SbDffss {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (positive edge).
@@ -233,7 +233,7 @@ ext mod SbDffss {
 
 //> D flip-flop sampling on the positive clock edge with an asynchronous set.
 @cell("SB_DFFS")
-ext mod SbDffs {
+pub ext mod SbDffs {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (positive edge).
@@ -247,7 +247,7 @@ ext mod SbDffs {
 //> D flip-flop sampling on the positive clock edge with a clock enable
 //> and a synchronous reset.
 @cell("SB_DFFESR")
-ext mod SbDffesr {
+pub ext mod SbDffesr {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (positive edge).
@@ -263,7 +263,7 @@ ext mod SbDffesr {
 //> D flip-flop sampling on the positive clock edge with a clock enable
 //> and an asynchronous reset.
 @cell("SB_DFFER")
-ext mod SbDffer {
+pub ext mod SbDffer {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (positive edge).
@@ -279,7 +279,7 @@ ext mod SbDffer {
 //> D flip-flop sampling on the positive clock edge with a clock enable
 //> and a synchronous set.
 @cell("SB_DFFESS")
-ext mod SbDffess {
+pub ext mod SbDffess {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (positive edge).
@@ -295,7 +295,7 @@ ext mod SbDffess {
 //> D flip-flop sampling on the positive clock edge with a clock enable
 //> and an asynchronous set.
 @cell("SB_DFFES")
-ext mod SbDffes {
+pub ext mod SbDffes {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (positive edge).
@@ -310,7 +310,7 @@ ext mod SbDffes {
 
 //> D flip-flop sampling on the negative clock edge.
 @cell("SB_DFFN")
-ext mod SbDffn {
+pub ext mod SbDffn {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (negative edge).
@@ -321,7 +321,7 @@ ext mod SbDffn {
 
 //> D flip-flop sampling on the negative clock edge, holding when `E` is low.
 @cell("SB_DFFNE")
-ext mod SbDffne {
+pub ext mod SbDffne {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (negative edge).
@@ -334,7 +334,7 @@ ext mod SbDffne {
 
 //> D flip-flop sampling on the negative clock edge with a synchronous reset.
 @cell("SB_DFFNSR")
-ext mod SbDffnsr {
+pub ext mod SbDffnsr {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (negative edge).
@@ -347,7 +347,7 @@ ext mod SbDffnsr {
 
 //> D flip-flop sampling on the negative clock edge with an asynchronous reset.
 @cell("SB_DFFNR")
-ext mod SbDffnr {
+pub ext mod SbDffnr {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (negative edge).
@@ -360,7 +360,7 @@ ext mod SbDffnr {
 
 //> D flip-flop sampling on the negative clock edge with a synchronous set.
 @cell("SB_DFFNSS")
-ext mod SbDffnss {
+pub ext mod SbDffnss {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (negative edge).
@@ -373,7 +373,7 @@ ext mod SbDffnss {
 
 //> D flip-flop sampling on the negative clock edge with an asynchronous set.
 @cell("SB_DFFNS")
-ext mod SbDffns {
+pub ext mod SbDffns {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (negative edge).
@@ -387,7 +387,7 @@ ext mod SbDffns {
 //> D flip-flop sampling on the negative clock edge with a clock enable
 //> and a synchronous reset.
 @cell("SB_DFFNESR")
-ext mod SbDffnesr {
+pub ext mod SbDffnesr {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (negative edge).
@@ -403,7 +403,7 @@ ext mod SbDffnesr {
 //> D flip-flop sampling on the negative clock edge with a clock enable
 //> and an asynchronous reset.
 @cell("SB_DFFNER")
-ext mod SbDffner {
+pub ext mod SbDffner {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (negative edge).
@@ -419,7 +419,7 @@ ext mod SbDffner {
 //> D flip-flop sampling on the negative clock edge with a clock enable
 //> and a synchronous set.
 @cell("SB_DFFNESS")
-ext mod SbDffness {
+pub ext mod SbDffness {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (negative edge).
@@ -435,7 +435,7 @@ ext mod SbDffness {
 //> D flip-flop sampling on the negative clock edge with a clock enable
 //> and an asynchronous set.
 @cell("SB_DFFNES")
-ext mod SbDffnes {
+pub ext mod SbDffnes {
     //> Registered output.
     outgoing Q : Bit
     //> Clock input (negative edge).
@@ -464,7 +464,7 @@ ext mod SbDffnes {
 @parameter("NEG_TRIGGER", 0)
 @parameter("IO_STANDARD", "SB_LVCMOS")
 @cell("SB_IO")
-ext mod SbIo {
+pub ext mod SbIo {
     //> Physical pad connection.
     incoming PACKAGE_PIN       : Bit
     //> Latches the input register value when low (bypasses `INPUT_CLK`).
@@ -496,7 +496,7 @@ ext mod SbIo {
 @parameter("NEG_TRIGGER", 0)
 @parameter("IO_STANDARD", "SB_LVCMOS")
 @cell("SB_GB_IO")
-ext mod SbGbIo {
+pub ext mod SbGbIo {
     //> Physical pad connection.
     incoming PACKAGE_PIN          : Bit
     //> Buffered clock distributed onto the global network.
@@ -525,7 +525,7 @@ ext mod SbGbIo {
 //> Most often used to distribute a clock.  Its ports are typed `Clock`, so
 //> a plain `Bit` signal cannot be routed through it.
 @cell("SB_GB")
-ext mod SbGb {
+pub ext mod SbGb {
     //> Signal to route onto the global network.
     incoming USER_SIGNAL_TO_GLOBAL_BUFFER : Clock
     //> Buffered signal distributed onto the global network.
@@ -542,7 +542,7 @@ ext mod SbGb {
 @parameter("READ_MODE", 0)
 @parameter("INIT_FILE", "")
 @cell("SB_RAM40_4K")
-ext mod SbRam40_4k {
+pub ext mod SbRam40_4k {
     //> Read data.
     outgoing RDATA : Word[16]
     //> Read port clock.
@@ -572,7 +572,7 @@ ext mod SbRam40_4k {
 @parameter("READ_MODE", 0)
 @parameter("INIT_FILE", "")
 @cell("SB_RAM40_4KNR")
-ext mod SbRam40_4knr {
+pub ext mod SbRam40_4knr {
     //> Read data.
     outgoing RDATA  : Word[16]
     //> Read port clock (inverted; samples on the falling edge).
@@ -602,7 +602,7 @@ ext mod SbRam40_4knr {
 @parameter("READ_MODE", 0)
 @parameter("INIT_FILE", "")
 @cell("SB_RAM40_4KNW")
-ext mod SbRam40_4knw {
+pub ext mod SbRam40_4knw {
     //> Read data.
     outgoing RDATA  : Word[16]
     //> Read port clock.
@@ -633,7 +633,7 @@ ext mod SbRam40_4knw {
 @parameter("READ_MODE", 0)
 @parameter("INIT_FILE", "")
 @cell("SB_RAM40_4KNRNW")
-ext mod SbRam40_4knrnw {
+pub ext mod SbRam40_4knrnw {
     //> Read data.
     outgoing RDATA  : Word[16]
     //> Read port clock (inverted; samples on the falling edge).
@@ -661,7 +661,7 @@ ext mod SbRam40_4knrnw {
 //> The iCE40 UltraPlus 256 Kbit single-port RAM.
 //> Hold `STANDBY`, `SLEEP`, and `POWEROFF` low for normal operation.
 @cell("SB_SPRAM256KA")
-ext mod SbSpram256ka {
+pub ext mod SbSpram256ka {
     //> Memory address.
     incoming ADDRESS     : Word[14]
     //> Write data.
@@ -707,7 +707,7 @@ ext mod SbSpram256ka {
 @parameter("TEST_MODE", 0)
 @parameter("EXTERNAL_DIVIDE_FACTOR", 1)
 @cell("SB_PLL40_CORE")
-ext mod SbPll40Core {
+pub ext mod SbPll40Core {
     //> Reference clock input from design logic.
     incoming REFERENCECLK    : Clock
     //> PLL output routed to fabric (core) resources.
@@ -757,7 +757,7 @@ ext mod SbPll40Core {
 @parameter("TEST_MODE", 0)
 @parameter("EXTERNAL_DIVIDE_FACTOR", 1)
 @cell("SB_PLL40_PAD")
-ext mod SbPll40Pad {
+pub ext mod SbPll40Pad {
     //> Reference clock input from a package pin.
     incoming PACKAGEPIN      : Clock
     //> PLL output routed to fabric (core) resources.
@@ -807,7 +807,7 @@ ext mod SbPll40Pad {
 @parameter("TEST_MODE", 0)
 @parameter("EXTERNAL_DIVIDE_FACTOR", 1)
 @cell("SB_PLL40_2_PAD")
-ext mod SbPll40_2Pad {
+pub ext mod SbPll40_2Pad {
     //> Reference clock input from a package pin.
     incoming PACKAGEPIN      : Clock
     //> First PLL output routed to fabric (core) resources.
@@ -862,7 +862,7 @@ ext mod SbPll40_2Pad {
 @parameter("TEST_MODE", 0)
 @parameter("EXTERNAL_DIVIDE_FACTOR", 1)
 @cell("SB_PLL40_2F_CORE")
-ext mod SbPll40_2fCore {
+pub ext mod SbPll40_2fCore {
     //> Reference clock input from design logic.
     incoming REFERENCECLK    : Clock
     //> First PLL output routed to fabric (core) resources.
@@ -917,7 +917,7 @@ ext mod SbPll40_2fCore {
 @parameter("TEST_MODE", 0)
 @parameter("EXTERNAL_DIVIDE_FACTOR", 1)
 @cell("SB_PLL40_2F_PAD")
-ext mod SbPll40_2fPad {
+pub ext mod SbPll40_2fPad {
     //> Reference clock input from a package pin.
     incoming PACKAGEPIN      : Clock
     //> First PLL output routed to fabric (core) resources.
@@ -955,7 +955,7 @@ ext mod SbPll40_2fPad {
 @parameter("TRIM_EN", "0b0")
 @parameter("CLKHF_DIV", "0b00")
 @cell("SB_HFOSC")
-ext mod SbHfosc {
+pub ext mod SbHfosc {
     //> Frequency trim input bit 0 (fixed trim value; typically unused).
     incoming TRIM0   : Bit
     //> Frequency trim input bit 1 (fixed trim value; typically unused).
@@ -986,7 +986,7 @@ ext mod SbHfosc {
 
 //> The iCE40 UltraPlus low-frequency (about 10 kHz) ring oscillator.
 @cell("SB_LFOSC")
-ext mod SbLfosc {
+pub ext mod SbLfosc {
     //> Power-up enable for the oscillator.
     incoming CLKLFPU : Bit
     //> Output enable for the oscillator clock.
@@ -1005,7 +1005,7 @@ ext mod SbLfosc {
 @parameter("RGB1_CURRENT", "0b000000")
 @parameter("RGB2_CURRENT", "0b000000")
 @cell("SB_RGBA_DRV")
-ext mod SbRgbaDrv {
+pub ext mod SbRgbaDrv {
     //> Enables the constant-current source.
     incoming CURREN   : Bit
     //> Enables the RGB LED driver outputs.
@@ -1032,7 +1032,7 @@ ext mod SbRgbaDrv {
 @parameter("RGB1_CURRENT", "0b000000")
 @parameter("RGB2_CURRENT", "0b000000")
 @cell("SB_RGB_DRV")
-ext mod SbRgbDrv {
+pub ext mod SbRgbDrv {
     //> Enables the RGB LED driver outputs.
     incoming RGBLEDEN : Bit
     //> PWM input for channel 0.
@@ -1053,7 +1053,7 @@ ext mod SbRgbDrv {
 
 //> Constant-current driver for a single external LED.
 @cell("SB_LED_DRV_CUR")
-ext mod SbLedDrvCur {
+pub ext mod SbLedDrvCur {
     //> Enables the constant-current driver.
     incoming EN    : Bit
     //> Current-source output driving the external LED.
@@ -1063,7 +1063,7 @@ ext mod SbLedDrvCur {
 //> The iCE40 UltraPlus LED driver interface, a register file controlling
 //> the three hard PWM channels.  `LEDDCLK` is its interface clock.
 @cell("SB_LEDDA_IP")
-ext mod SbLeddaIp {
+pub ext mod SbLeddaIp {
     //> Chip select for the register-file interface.
     incoming LEDDCS    : Bit
     //> Register-file interface clock.
@@ -1117,7 +1117,7 @@ ext mod SbLeddaIp {
 @parameter("I2C_SLAVE_INIT_ADDR", "0b1111100001")
 @parameter("BUS_ADDR74", "0b0001")
 @cell("SB_I2C")
-ext mod SbI2c {
+pub ext mod SbI2c {
     //> Register-file bus clock.
     incoming SBCLKI  : Clock
     //> Register-file bus read/write select (high = read).
@@ -1198,7 +1198,7 @@ ext mod SbI2c {
 //> `SBDATO0` the read data.
 @parameter("BUS_ADDR74", "0b0000")
 @cell("SB_SPI")
-ext mod SbSpi {
+pub ext mod SbSpi {
     //> Register-file bus clock.
     incoming SBCLKI   : Clock
     //> Register-file bus read/write select (high = read).
@@ -1303,7 +1303,7 @@ ext mod SbSpi {
 //> slots selected by `S1` and `S0`, or re-runs the current slot's boot
 //> sequence when `BOOT` is pulsed.
 @cell("SB_WARMBOOT")
-ext mod SbWarmboot {
+pub ext mod SbWarmboot {
     //> Pulse to reboot into the slot selected by `S1` and `S0`.
     incoming BOOT : Bit
     //> Configuration slot select bit 1.
@@ -1337,7 +1337,7 @@ ext mod SbWarmboot {
 @parameter("A_SIGNED", 0)
 @parameter("B_SIGNED", 0)
 @cell("SB_MAC16")
-ext mod SbMac16 {
+pub ext mod SbMac16 {
     //> Multiplier-accumulator clock.
     incoming CLK         : Clock
     //> Clock enable.

@@ -1,0 +1,68 @@
+// `pub` is allowed on every top-level item kind, `pub mod`s may be
+// generic, and same-package references need no `pub`: the non-pub
+// `Helper` mod and non-pub `Hidden` struct are used freely inside this
+// package, and every pub item's surface is transitively pub.
+//
+// CHECK-NOT: Check failed
+
+pub struct type Pair {
+    a : Word[8]
+    b : Bit
+}
+
+pub union type Either {
+    Left(l : Word[8])
+    Right(r : Pair)
+}
+
+pub enum type State {
+    Idle = 0w2
+    Busy = 1
+    Done = 2
+}
+
+pub builtin type Id {}
+
+pub socket Chan {
+    cosi req : Word[8]
+    soci rsp : Word[8]
+}
+
+struct type Hidden {
+    x : Word[8]
+}
+
+mod Helper {
+    incoming inp : Word[8]
+    outgoing out : Word[8]
+    out := inp + 1w8
+}
+
+pub platform Board {
+    incoming clk : Clock
+    outgoing led : Bit default true
+}
+
+pub mod Top[W : Type] {
+    incoming clk : Clock
+    incoming inp : Word[8]
+    outgoing out : Word[8]
+
+    // Same-package, non-pub items are visible.
+    mod h of Helper {
+        it.inp := inp
+    }
+
+    wire hidden : Hidden
+    hidden := ${ x = inp }
+    unused hidden
+
+    client socket c of Chan {
+        it.req := h.out
+    }
+
+    reg r : Word[8] on clk {
+        it <= c.rsp
+    }
+    out := r
+}

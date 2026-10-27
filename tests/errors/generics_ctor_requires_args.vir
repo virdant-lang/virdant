@@ -6,7 +6,7 @@ enum type Opt[T : Type] {
     Some(value : T)
 }
 
-export mod Top {
+pub mod Top {
     incoming a : Word[4]
     wire opt : Opt[Word[4]]
     opt := #Some

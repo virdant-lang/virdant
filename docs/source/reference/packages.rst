@@ -62,8 +62,8 @@ current package.
 
 The `import` keyword is followed by the package name (without the `.vir`
 extension).
-All items exported by the imported package become available through their
-fully-qualified names.
+All items marked `pub` in the imported package become available through
+their fully-qualified names.
 
 
 Fully-Qualified Names
@@ -95,14 +95,14 @@ Within the same package, declarations may be referred to by their simple
 name without the `::` prefix.
 
 
-Exporting Declarations
-----------------------
-Only items marked with the `export` modifier are visible to other packages.
+Public Declarations (`pub`)
+---------------------------
+Only items marked with the `pub` modifier are visible to other packages.
 
 .. code-block:: virdant
 
     /// buffer.vir
-    export mod Buffer {
+    pub mod Buffer {
         incoming clock : Clock
         incoming inp : Word[8]
         outgoing out : Word[8]
@@ -112,22 +112,39 @@ Only items marked with the `export` modifier are visible to other packages.
         out := r
     }
 
-    // Not exported: only visible within buffer.vir
+    // Not pub: only visible within buffer.vir
     mod InternalHelper {
         // ...
     }
 
-An item without the `export` keyword is private to the package.
-Private items cannot be imported or referenced from other packages.
+An item without the `pub` keyword is private to the package.
+Referencing a non-`pub` item from another package is an error at the
+reference site; the `import` statement itself never fails for visibility
+reasons.
 
-The `export` modifier is available on:
+The `pub` modifier is available on every top-level item kind:
 
 * Module definitions (`mod`)
 * Struct type definitions (`struct type`)
 * Union type definitions (`union type`)
 * Enum type definitions (`enum type`)
+* Builtin type definitions (`builtin type`)
 * Socket definitions (`socket`)
-* Function definitions (`fn`)
+* Platform definitions (`platform`)
+
+Within the defining package, every item is visible to every other item,
+whether `pub` or not: `pub` only matters at package boundaries.
+
+A `pub` item may not expose a non-`pub` item to other packages: every
+type appearing in a `pub` item's public surface (module port types,
+struct/union field types, enum variant payload types, socket `cosi`/
+`soci` types) must itself be transitively `pub`.
+Referencing a type whose head is not `pub` from a `pub` item's surface
+is an error at the offending type's span.
+Generic parameters (`T` in `Word[T]`) are exempt: they are bound at the
+instantiation site.
+A `pub mod` may be generic; only the top module named by `[prog] top`
+must be non-generic.
 
 
 Package Dependency

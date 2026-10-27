@@ -10,7 +10,7 @@ module Tb;
     reg  [7:0] y;
     reg  fire;
 
-    Top dut(
+    \top::Top dut(
         .clock(clock),
         .reset(reset),
         .result(result),

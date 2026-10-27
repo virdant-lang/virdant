@@ -4,7 +4,7 @@ module Top_tb;
     reg reset;
 
     // Instantiate the DUT
-    Top dut (
+    \top::Top dut (
         .clock(clock),
         .reset(reset)
     );

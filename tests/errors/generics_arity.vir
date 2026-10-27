@@ -5,7 +5,7 @@ struct type Pair[A : Type, B : Type] {
     snd : B
 }
 
-export mod Top {
+pub mod Top {
     incoming inp : Pair[Bit]
     outgoing out : Bit
     out := inp->fst

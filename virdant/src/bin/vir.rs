@@ -885,7 +885,7 @@ fn new_project(args: &Args, project: &str) {
     );
     std::fs::write(project_dir.join("Virdant.toml"), toml_content).unwrap();
 
-    let top_vir_content = include_str!("../../../assets/blink.vir");
+    let top_vir_content = include_str!("../../../assets/vir_new_top.vir");
     std::fs::write(project_dir.join("src").join("top.vir"), top_vir_content).unwrap();
 
     // Walk up from cwd looking for an existing .git directory
@@ -968,6 +968,22 @@ fn plan_bitstream(args: &Args) -> BitstreamPlan {
             eprintln!("Top module '{top_name}' not found");
             std::process::exit(1);
         });
+
+    {
+        let location = top_symbol.location();
+        let parsing = db.get_parsing(location.package());
+        let node = parsing.ast_node(location.ast_node_id());
+        if let Some(decl) = virdant::types::typedef::generics_decl_of(&node) {
+            dump_diagnostic(&db, &virdant::diagnostics::Diagnostic::new(
+                decl.region(),
+                virdant::diagnostics::TopGenerics {
+                    item: top_symbol.fqn().to_owned(),
+                },
+            ));
+            eprintln!("Build failed");
+            std::process::exit(1);
+        }
+    }
 
     // The top module's `for` clause selects the platform.
     let mut builder = virdant::db::Builder::new(&db);
@@ -1114,31 +1130,13 @@ fn pnr(args: &Args, tries: u32, seed: u32, allow_timing_failure: bool) {
         });
 }
 
-/// The name yosys and nextpnr should use for a top module: the Verilog
-/// emitter names an `export`ed module by its simple name, and any other
-/// module by its qualified path (escaped when not a plain Verilog
-/// identifier).  Passing the raw `[prog] top` FQN instead would make the
-/// toolchain look for a module that may not exist in the emitted Verilog.
 fn verilog_top_name(
     db: &Db,
     top_symbol_id: virdant::analysis::symbols::SymbolId,
 ) -> String {
     let symboltable = db.get_symboltable();
     let symbol = symboltable.symbol(top_symbol_id);
-    let is_export = {
-        let package = symbol.location().package();
-        let parsing = db.get_parsing(package);
-        let node = parsing.ast_node(symbol.location().ast_node_id());
-        match node.payload() {
-            virdant::syntax::payload::AstNodePayload::ModDef(mod_def) => mod_def.is_export,
-            _ => false,
-        }
-    };
-    if is_export {
-        virdant::verilog::valid_verilog_name(&symbol.name().to_str_lossy())
-    } else {
-        virdant::verilog::valid_verilog_name(&symbol.fqn().to_str_lossy())
-    }
+    symbol.fqn().to_str_lossy().into_owned()
 }
 
 /// Selects the on-board programmer for a resolved platform name.

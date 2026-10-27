@@ -129,13 +129,13 @@ Item: AstNodeId = {
 }
 
 ModDef: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> <ext:"ext"?> <export:"export"?> "mod" <ident:Ident> <for_clause:ForClause?> <generics:Generics?> "{"
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <pub_:"pub"?> <ext:"ext"?> "mod" <ident:Ident> <for_clause:ForClause?> <generics:Generics?> "{"
         <stmts:ModDefStmt*>
     "}" <rr:@R> => {
         let payload = AstNodePayload::ModDef(payload::ModDef {
             name: ident,
             is_ext: ext.is_some(),
-            is_export: export.is_some(),
+            is_pub: pub_.is_some(),
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
@@ -153,10 +153,10 @@ ForClause: AstNodeId = {
 }
 
 StructDef: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "struct" "type" <name:Ident> <generics:Generics?> "{"
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <pub_:"pub"?> "struct" "type" <name:Ident> <generics:Generics?> "{"
         <stmts:StructDefStmt*>
     "}" <rr:@R> => {
-        let payload = AstNodePayload::StructDef(payload::StructDef { name, doc_string: docstring });
+        let payload = AstNodePayload::StructDef(payload::StructDef { name, is_pub: pub_.is_some(), doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + if generics.is_none() { 0u16 } else { 1u16 } + stmts.len() as u16;
 
@@ -165,11 +165,12 @@ StructDef: AstNodeId = {
 }
 
 PlatformDef: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "platform" <name:Ident> "{"
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <pub_:"pub"?> "platform" <name:Ident> "{"
         <stmts:PlatformStmt*>
     "}" <rr:@R> => {
         let payload = AstNodePayload::Platform(payload::Platform {
             name,
+            is_pub: pub_.is_some(),
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
@@ -194,10 +195,10 @@ StructDefStmt: AstNodeId = {
 }
 
 UnionDef: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "union" "type" <name:Ident> <generics:Generics?> "{"
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <pub_:"pub"?> "union" "type" <name:Ident> <generics:Generics?> "{"
         <stmts:UnionDefStmt*>
     "}" <rr:@R> => {
-        let payload = AstNodePayload::UnionDef(payload::UnionDef { name, doc_string: docstring });
+        let payload = AstNodePayload::UnionDef(payload::UnionDef { name, is_pub: pub_.is_some(), doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + if generics.is_none() { 0u16 } else { 1u16 } + stmts.len() as u16;
 
@@ -289,10 +290,10 @@ KindParam: AstNodeId = {
 }
 
 EnumDef: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "enum" "type" <name:Ident> <generics:Generics?> "{"
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <pub_:"pub"?> "enum" "type" <name:Ident> <generics:Generics?> "{"
         <stmts:EnumDefStmt*>
     "}" <rr:@R> => {
-        let payload = AstNodePayload::EnumDef(payload::EnumDef { name, doc_string: docstring });
+        let payload = AstNodePayload::EnumDef(payload::EnumDef { name, is_pub: pub_.is_some(), doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + if generics.is_none() { 0u16 } else { 1u16 } + stmts.len() as u16;
 
@@ -329,9 +330,9 @@ EnumDefStmt: AstNodeId = {
 }
 
 BuiltinDef: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "builtin" "type" <name:Ident> <generics:Generics?> "{"
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <pub_:"pub"?> "builtin" "type" <name:Ident> <generics:Generics?> "{"
     "}" <rr:@R> => {
-        let payload = AstNodePayload::BuiltinDef(payload::BuiltinDef { name, doc_string: docstring });
+        let payload = AstNodePayload::BuiltinDef(payload::BuiltinDef { name, is_pub: pub_.is_some(), doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + if generics.is_some() { 1u16 } else { 0u16 };
 
@@ -340,10 +341,10 @@ BuiltinDef: AstNodeId = {
 }
 
 SocketDef: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "socket" <name:Ident> <generics:Generics?> "{"
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> <pub_:"pub"?> "socket" <name:Ident> <generics:Generics?> "{"
         <stmts:SocketDefStmt*>
     "}" <rr:@R> => {
-        let payload = AstNodePayload::SocketDef(payload::SocketDef { name, doc_string: docstring });
+        let payload = AstNodePayload::SocketDef(payload::SocketDef { name, is_pub: pub_.is_some(), doc_string: docstring });
         let span = parser.span(ll, rr);
         let num_children: u16 = 1u16 + if generics.is_none() { 0u16 } else { 1u16 } + stmts.len() as u16;
 

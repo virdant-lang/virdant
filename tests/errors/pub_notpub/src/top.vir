@@ -1,0 +1,17 @@
+//! Referencing a non-pub item from another package errors at the
+//! reference site; the import itself never visibility-errors.
+
+import lib
+
+pub mod Top {
+    incoming inp : Word[8]
+    outgoing out : Word[8]
+
+    // The import of `lib` is fine even though `Priv` is not pub.
+    mod p of lib::Priv {
+        it.inp := inp
+        out := it.out
+    }
+}
+
+// CHECK: `Priv` is not pub in package `lib`; mark it `pub` to reference it from other packages

@@ -164,6 +164,19 @@ impl AstNodePayload {
             AstNodePayload::ExprDontcare => "ExprDontcare",
         }
     }
+
+    pub fn is_pub(&self) -> bool {
+        match self {
+            AstNodePayload::ModDef(mod_def) => mod_def.is_pub,
+            AstNodePayload::StructDef(struct_def) => struct_def.is_pub,
+            AstNodePayload::UnionDef(union_def) => union_def.is_pub,
+            AstNodePayload::EnumDef(enum_def) => enum_def.is_pub,
+            AstNodePayload::BuiltinDef(builtin_def) => builtin_def.is_pub,
+            AstNodePayload::SocketDef(socket_def) => socket_def.is_pub,
+            AstNodePayload::Platform(platform) => platform.is_pub,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -188,43 +201,49 @@ pub struct Import {
 pub struct ModDef {
     pub name: InternedString,
     pub is_ext: bool,
-    pub is_export: bool,
+    pub is_pub: bool,
     pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct StructDef {
     pub name: InternedString,
+    pub is_pub: bool,
     pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct UnionDef {
     pub name: InternedString,
+    pub is_pub: bool,
     pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct EnumDef {
     pub name: InternedString,
+    pub is_pub: bool,
     pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct BuiltinDef {
     pub name: InternedString,
+    pub is_pub: bool,
     pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct SocketDef {
     pub name: InternedString,
+    pub is_pub: bool,
     pub doc_string: Option<InternedString>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Platform {
     pub name: InternedString,
+    pub is_pub: bool,
     pub doc_string: Option<InternedString>,
 }
 

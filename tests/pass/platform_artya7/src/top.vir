@@ -13,7 +13,7 @@
 
 import xilinx
 
-export mod Top for xilinx::ArtyA7 {
+pub mod Top for xilinx::ArtyA7 {
     incoming clock : Clock
     outgoing led0 : Bit
     outgoing led1 : Bit

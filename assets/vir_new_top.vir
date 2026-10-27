@@ -1,0 +1,17 @@
+import virt
+
+pub mod Top for virt::Virt {
+    incoming clock : Clock
+
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case counter == 0xf => @Valid(0)
+            else => @Invalid()
+        }
+    }
+
+    reg counter : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+}

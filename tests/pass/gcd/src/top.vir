@@ -4,7 +4,7 @@ union type State {
     Done(result : Word[8])
 }
 
-export mod Top {
+pub mod Top {
     incoming clock : Clock
     incoming reset : Bit
 

@@ -11,7 +11,7 @@ platform Widgets {
 
 // Omits `unused_in` (synthesized incoming: no unused warning) and
 // `defaulted` (synthesized outgoing, driven by the default).
-mod Top for Widgets {
+pub mod Top for Widgets {
     outgoing declared : Bit
 
     declared := false

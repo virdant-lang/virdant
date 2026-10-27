@@ -173,8 +173,6 @@ impl<'d> Converter<'d> {
                     // native cell names (e.g. `SB_RAM40_4K`), so the
                     // `@cell` name is the emitted name.
                     cell
-                } else if moddef.is_export {
-                    valid_verilog_name(&moddef_name)
                 } else {
                     valid_verilog_name(&module_path)
                 };
@@ -2514,7 +2512,7 @@ mod tests {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let builtin = std::fs::read_to_string(root.join("../lib/builtin.vir")).unwrap();
         let ice40 = std::fs::read_to_string(root.join("../lib/ice40.vir")).unwrap();
-        let design = r#"export mod Top {
+        let design = r#"pub mod Top {
     incoming clock : Clock
     outgoing rdata : Word[16]
     mod ram of ice40::SbRam40_4k {
@@ -2547,7 +2545,7 @@ mod tests {
         // The instantiation of the ram primitive is emitted under the
         // `@cell` name, not the mangled Virdant name.
         let top_file = verilog.files.iter().find(|f| f.name == "design.sv").unwrap();
-        let top_module = top_file.modules.iter().find(|m| m.name == "Top").unwrap();
+        let top_module = top_file.modules.iter().find(|m| m.name == r"\design::Top ").unwrap();
         let submodule = top_module.elements.iter().find_map(|element| match element {
             Element::Submodule(submodule) if submodule.submodule_name == "SB_RAM40_4K" => Some(submodule),
             _ => None,

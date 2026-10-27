@@ -52,7 +52,7 @@ mod Tagged[T : Type] {
     o := best
 }
 
-export mod Top {
+pub mod Top {
     incoming clk : Clock
     incoming a : Word[8]
     incoming b : Word[4]

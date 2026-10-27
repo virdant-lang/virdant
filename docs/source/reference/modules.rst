@@ -211,7 +211,7 @@ parameters:
 
 .. code-block:: virdant
 
-    export mod Top {
+    pub mod Top {
         incoming clk : Clock
         incoming a : Word[8]
         incoming wide : Word[16]
@@ -274,10 +274,12 @@ arguments either, even when the ext mod declares none.
 generics: ext mods do not support type parameters (use @parameter
 annotations instead)``.
 
-A generic module cannot be :vir:`export`: an exported top must be a
-concrete instantiation, and a generic definition has none.
-:vir:`export mod Fifo[T : Type]` reports ``export mod Fifo cannot have
-generic parameters: a top module must be a concrete instantiation``.
+A generic module cannot be a top: the top module named by `[prog] top`
+in `Virdant.toml` must be a concrete instantiation, and a generic
+definition has none.  (`pub mod`s may be generic.)
+Building a project whose `[prog] top` names a generic module reports
+``top module top::Fifo cannot have generic parameters: a top module must
+be a concrete instantiation``.
 
 
 Monomorphized Verilog Generation

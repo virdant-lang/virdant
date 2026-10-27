@@ -1,19 +1,19 @@
-struct type Pair[A : Type, B : Type] {
+pub struct type Pair[A : Type, B : Type] {
     fst : A
     snd : B
 }
 
-enum type Opt[T : Type] {
+pub enum type Opt[T : Type] {
     None
     Some(value : T)
 }
 
-union type Either[L : Type, R : Type] {
+pub union type Either[L : Type, R : Type] {
     Left(l : L)
     Right(r : R)
 }
 
-export mod Top {
+pub mod Top {
     incoming clock : Clock
     incoming a : Word[4]
     incoming b : Bit

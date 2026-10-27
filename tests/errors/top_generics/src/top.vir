@@ -1,0 +1,11 @@
+// The `[prog] top` module must be a concrete instantiation: a generic
+// def has none.  (`pub mod`s may be generic — only tops may not.)
+
+pub mod Fifo[T : Type] {
+    incoming clk : Clock
+    incoming d : T
+    outgoing q : T
+    q := d
+}
+
+// CHECK: top module top::Fifo cannot have generic parameters

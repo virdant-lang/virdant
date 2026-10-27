@@ -22,7 +22,7 @@ module Tb;
     wire [7:0] data;
     wire       done;
 
-    Top dut(
+    \top::Top dut(
         .clock(clock),
         .reset(reset),
         .addr(addr),

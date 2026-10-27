@@ -2,7 +2,7 @@ VIR_FILES := $(wildcard *.vir)
 
 # Project-style fail-tests (directory + Virdant.toml + own Makefile),
 # listed explicitly like tests/pass/Makefile's VIR_PROJS.
-VIR_PROJS := platform_mismatch
+VIR_PROJS := platform_mismatch top_generics
 
 BASEDIR = $(abspath ../..)
 VIR ?= $(BASEDIR)/target/release/vir

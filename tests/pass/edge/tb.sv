@@ -15,7 +15,7 @@ module Tb;
     reg  inp   = 0;
     wire out;
 
-    Top dut(
+    \top::Top dut(
         .clock(clock),
         .reset(reset),
         .inp(inp),

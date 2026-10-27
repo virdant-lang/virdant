@@ -1,26 +1,26 @@
 //> `Bit` is a 1-bit value
-builtin type Bit {}
+pub builtin type Bit {}
 
 //> `Word[n]` is an n-bit value
-builtin type Word[n : Nat] {}
+pub builtin type Word[n : Nat] {}
 
 //> `Clock` is a 1-bit value which represents a system clock
-builtin type Clock {}
+pub builtin type Clock {}
 
 //> `Reset` is a 1-bit value which represents a system reset
-builtin type Reset {}
+pub builtin type Reset {}
 
 //> `Valid[T]` represents a value which can either be:
 //> * `@Invalid(), or
 //> * `@Valid(t)` for `t` of type `T`
-enum type Valid[T : Type] {
+pub enum type Valid[T : Type] {
     Invalid
     Valid(value : T)
 }
 
 //> `Sync` synchronizes a `Bit` input on one clock domain
 //> on another clock domain `clock`
-mod Sync {
+pub mod Sync {
     //> An input `Bit` on another clock domain
     incoming inp : Bit
 
@@ -37,7 +37,7 @@ mod Sync {
     }
 }
 
-socket Pipe[T : Type] {
+pub socket Pipe[T : Type] {
     cosi data  : Valid[T]
     soci ready : Bit
 }

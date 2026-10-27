@@ -1,6 +1,6 @@
 // A Nat-kind parameter given a type: Word[Bit].
 
-export mod Top {
+pub mod Top {
     incoming inp : Word[Bit]
     outgoing out : Bit
     out := inp[0]

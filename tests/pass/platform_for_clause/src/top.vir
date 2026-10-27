@@ -20,7 +20,7 @@ platform PlatformB {
 }
 
 // FPGA-specific module with for clause
-export mod ModuleA for PlatformA {
+pub mod ModuleA for PlatformA {
     incoming data : Bit
     outgoing result : Bit
 
@@ -28,7 +28,7 @@ export mod ModuleA for PlatformA {
 }
 
 // ASIC-specific module with for clause
-export mod ModuleB for PlatformB {
+pub mod ModuleB for PlatformB {
     incoming clock : Clock
     outgoing result : Bit
 

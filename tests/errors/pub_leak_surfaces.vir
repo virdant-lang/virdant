@@ -1,0 +1,57 @@
+// No type leakage, per public-surface category: every type in a `pub`
+// item's public surface must be transitively `pub` — socket channels,
+// struct fields, union ctors, enum enumerants, mod ports (incoming,
+// outgoing, bus), and platform ports.
+
+struct type Priv {
+    x : Word[8]
+}
+
+pub struct type PubStruct {
+    field : Priv
+    // CHECK: `Priv` is not pub: the public surface of `pub_leak_surfaces::PubStruct` must be transitively pub
+}
+
+pub union type PubUnion {
+    Variant(v : Priv)
+    // CHECK: `Priv` is not pub: the public surface of `pub_leak_surfaces::PubUnion` must be transitively pub
+}
+
+pub enum type PubEnum {
+    Item(p : Priv)
+    // CHECK: `Priv` is not pub: the public surface of `pub_leak_surfaces::PubEnum` must be transitively pub
+}
+
+pub socket PubChan {
+    cosi req : Priv
+    // CHECK: `Priv` is not pub: the public surface of `pub_leak_surfaces::PubChan` must be transitively pub
+    soci rsp : Word[8]
+}
+
+pub mod PubMod {
+    incoming inp : Priv
+    // CHECK: `Priv` is not pub: the public surface of `pub_leak_surfaces::PubMod` must be transitively pub
+    outgoing outp : Priv
+    // CHECK: `Priv` is not pub: the public surface of `pub_leak_surfaces::PubMod` must be transitively pub
+    bus lane : Priv
+    // CHECK: `Priv` is not pub: the public surface of `pub_leak_surfaces::PubMod` must be transitively pub
+
+    unused inp
+    unused lane
+    outp := ${ x = 0w8 }
+}
+
+pub platform PubPlat {
+    incoming clk_in : Priv
+    // CHECK: `Priv` is not pub: the public surface of `pub_leak_surfaces::PubPlat` must be transitively pub
+    outgoing led : Priv default ${ x = 0w8 }
+    // CHECK: `Priv` is not pub: the public surface of `pub_leak_surfaces::PubPlat` must be transitively pub
+}
+
+pub mod Top {
+    incoming inp : Word[8]
+    outgoing out : Word[8]
+    out := inp
+}
+
+// CHECK: Check failed

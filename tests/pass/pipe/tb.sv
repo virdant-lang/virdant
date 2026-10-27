@@ -15,7 +15,7 @@ module Tb;
     wire       valid4;
     wire [3:0] data4;
 
-    Top dut(
+    \top::Top dut(
         .a8     (a8),
         .a4     (a4),
         .ready8 (ready8),

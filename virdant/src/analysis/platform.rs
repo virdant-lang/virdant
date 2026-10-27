@@ -334,6 +334,18 @@ pub fn resolve_platform_for(
         ));
     }
 
+    let mut pub_diagnostics = vec![];
+    crate::queries::pubcheck::check_item_reference(
+        builder,
+        &platform_symbol,
+        package,
+        for_node.region(),
+        &mut pub_diagnostics,
+    );
+    if let Some(diagnostic) = pub_diagnostics.into_iter().next() {
+        return Err(diagnostic);
+    }
+
     Ok(Some(platform_symbol.id()))
 }
 

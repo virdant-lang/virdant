@@ -35,7 +35,7 @@ mod Reg[T : Type] {
     q := slot
 }
 
-export mod Top {
+pub mod Top {
     incoming clk : Clock
     incoming inp : Word[8]
     incoming wide : Word[16]

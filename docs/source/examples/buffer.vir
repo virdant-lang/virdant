@@ -1,4 +1,4 @@
-mod Buffer {
+pub mod Buffer {
     incoming clock : Clock
     incoming inp : Word[32]
     outgoing out : Word[32]

@@ -3,7 +3,7 @@
 
 //> `Strobe` asserts `pulse` for one clock cycle
 //> every `period` cycles.
-mod Strobe {
+pub mod Strobe {
     incoming clock  : Clock
     incoming reset  : Reset
 

@@ -1,0 +1,41 @@
+// No type leakage: every type in a `pub` item's public surface must be
+// transitively `pub`.  A non-`pub` head leaks whether it lives in the
+// same package or across one: other packages using the `pub` item would
+// see the non-`pub` type through it.
+
+struct type Priv {
+    x : Word[8]
+}
+
+pub struct type Inner {
+    x : Word[8]
+}
+
+// Leak through two pub layers: PubShell is pub, but its field exposes
+// Priv through PubShell's own field.
+pub struct type PubShell {
+    inner : Inner
+    priv : Priv
+}
+
+// Recursion: Layer2 is pub and references pub PubShell, whose
+// surface reaches Priv — the leak is reported with Layer2 as owner.
+pub struct type Layer2 {
+    shell : PubShell
+}
+
+pub mod Top {
+    incoming inp : Word[8]
+    outgoing out : Word[8]
+
+    // A pub mod's port type must be transitively pub.
+    incoming c : Priv
+
+    unused c
+    out := inp
+}
+
+// CHECK: `Priv` is not pub: the public surface of `pub_leak::PubShell` must be transitively pub
+// CHECK: `Priv` is not pub: the public surface of `pub_leak::Layer2` must be transitively pub
+// CHECK: `Priv` is not pub: the public surface of `pub_leak::Top` must be transitively pub
+// CHECK: Check failed

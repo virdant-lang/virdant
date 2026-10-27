@@ -166,9 +166,10 @@ pub enum DiagnosticPayload {
     /// ext mods never support generics (they parameterize through
     /// `@parameter` annotations instead).
     ExtModGenerics(ExtModGenerics),
-    /// An `export mod` declares generic parameters: a top module must
-    /// be a concrete instantiation, so it cannot be generic.
-    ExportModGenerics(ExportModGenerics),
+    NotPub(NotPub),
+    TypeNotPub(TypeNotPub),
+    TopNotPub(TopNotPub),
+    TopGenerics(TopGenerics),
     /// A `:=:` connects two socket instances of the same socketdef
     /// instantiated at different type arguments (different mono
     /// sockets).  Names both instantiations.
@@ -489,7 +490,24 @@ pub struct ExtModGenerics {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExportModGenerics {
+pub struct NotPub {
+    pub item: BString,
+    pub package: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TopNotPub {
+    pub item: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeNotPub {
+    pub typ: BString,
+    pub owner: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TopGenerics {
     pub item: BString,
 }
 
@@ -765,9 +783,29 @@ impl Diagnostic {
                     d.item,
                 ).into()
             }
-            DiagnosticPayload::ExportModGenerics(d) => {
+            DiagnosticPayload::NotPub(d) => {
                 format!(
-                    "export mod {} cannot have generic parameters: a top module must be a concrete instantiation",
+                    "`{}` is not pub in package `{}`; mark it `pub` to reference it from other packages",
+                    d.item,
+                    d.package,
+                ).into()
+            }
+            DiagnosticPayload::TopNotPub(d) => {
+                format!(
+                    "Top module {} must be `pub`",
+                    d.item,
+                ).into()
+            }
+            DiagnosticPayload::TypeNotPub(d) => {
+                format!(
+                    "`{}` is not pub: the public surface of `{}` must be transitively pub",
+                    d.typ,
+                    d.owner,
+                ).into()
+            }
+            DiagnosticPayload::TopGenerics(d) => {
+                format!(
+                    "top module {} cannot have generic parameters: a top module must be a concrete instantiation",
                     d.item,
                 ).into()
             }
@@ -861,5 +899,5 @@ from_diagnostic! {
     ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,
     PlatformPortTypeMismatch, DefaultOutsidePlatformPort, NotYetImplemented, TypeArgCount,
     TypeArgKind, UnknownKind,
-    CtorRequiresArgs, ExtModGenerics, ExportModGenerics, SocketConnectMismatch,
+    CtorRequiresArgs, ExtModGenerics, NotPub, TypeNotPub, TopNotPub, TopGenerics, SocketConnectMismatch,
 }

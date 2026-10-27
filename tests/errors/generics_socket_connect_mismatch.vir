@@ -23,7 +23,7 @@ mod Server {
     unused pipe.data
 }
 
-export mod Top {
+pub mod Top {
     mod master of Client
     mod slave of Server
     slave.pipe :=: master.pipe

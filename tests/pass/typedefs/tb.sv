@@ -8,7 +8,7 @@ module Tb;
     wire [7:0] red;
     wire [7:0] inferred;
 
-    Top dut(
+    \top::Top dut(
         .x(x),
         .y(y),
         .opcode_bits(opcode_bits),

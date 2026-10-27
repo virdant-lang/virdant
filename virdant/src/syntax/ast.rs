@@ -29,6 +29,10 @@ impl<'p> std::fmt::Debug for AstNode<'p> {
     }
 }
 
+fn pub_prefix(is_pub: bool) -> &'static str {
+    if is_pub { "pub " } else { "" }
+}
+
 impl<'p> AstNode<'p> {
     pub fn id(&self) -> AstNodeId {
         self.id
@@ -155,20 +159,20 @@ impl<'p> AstNode<'p> {
                 } else {
                     ""
                 };
-                let export = if mod_def.is_export {
-                    "export "
+                let pub_ = if mod_def.is_pub {
+                    "pub "
                 } else {
                     ""
                 };
-                format!("ModDef {ext}{export}{}", parsing.string(mod_def.name.clone()))
+                format!("ModDef {pub_}{ext}{}", parsing.string(mod_def.name.clone()))
             }
-            AstNodePayload::StructDef(_struct_def) => format!("StructDef"),
-            AstNodePayload::UnionDef(_union_def) => format!("UnionDef"),
-            AstNodePayload::EnumDef(_enum_def) => format!("EnumDef"),
-            AstNodePayload::BuiltinDef(_builtin_def) => format!("BuiltinDef"),
+            AstNodePayload::StructDef(struct_def) => format!("StructDef{}{}", pub_prefix(struct_def.is_pub), parsing.string(struct_def.name.clone())),
+            AstNodePayload::UnionDef(union_def) => format!("UnionDef{}{}", pub_prefix(union_def.is_pub), parsing.string(union_def.name.clone())),
+            AstNodePayload::EnumDef(enum_def) => format!("EnumDef{}{}", pub_prefix(enum_def.is_pub), parsing.string(enum_def.name.clone())),
+            AstNodePayload::BuiltinDef(builtin_def) => format!("BuiltinDef{}{}", pub_prefix(builtin_def.is_pub), parsing.string(builtin_def.name.clone())),
             AstNodePayload::FnDef(_fn_def) => format!("FnDef"),
-            AstNodePayload::SocketDef(_socket_def) => format!("SocketDef"),
-            AstNodePayload::Platform(platform) => format!("Platform {}", parsing.string(platform.name.clone())),
+            AstNodePayload::SocketDef(socket_def) => format!("SocketDef{}{}", pub_prefix(socket_def.is_pub), parsing.string(socket_def.name.clone())),
+            AstNodePayload::Platform(platform) => format!("Platform {}{}", pub_prefix(platform.is_pub), parsing.string(platform.name.clone())),
             AstNodePayload::Component(component) => format!("Component {:?} {}", component.kind, parsing.string(component.name.clone())),
             AstNodePayload::DefaultClause => format!("DefaultClause"),
             AstNodePayload::Driver(_driver) => format!("Driver"),
