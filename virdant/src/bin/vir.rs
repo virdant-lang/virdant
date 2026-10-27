@@ -72,8 +72,27 @@ enum Command {
     Compile { path: PathBuf },
     /// Build Virdant package
     Build { },
-    /// Run Virdant package
-    Run { path: PathBuf },
+    /// Run the `virt::Virt` board simulation for the project's top module.
+    ///
+    /// The top module (from Virdant.toml `[prog] top`) must be `for` the
+    /// `virt::Virt` platform; the simulation then behaves like the
+    /// virdant-virt board: UART on stdin/stdout, 16 MiB SPI flash, and
+    /// the `exit` port.  The clock runs at the platform's declared
+    /// frequency, paced to real time unless `--fps-no-cap`.
+    Run {
+        /// Write a VCD trace to FILE (default: trace.vcd)
+        #[arg(long, num_args = 0..=1, default_missing_value = "trace.vcd")]
+        trace: Option<String>,
+        /// Run the simulation at full speed (no real-time cap)
+        #[arg(long)]
+        fps_no_cap: bool,
+        /// Preload the 16 MiB SPI flash image from FILE
+        #[arg(long)]
+        flash: Option<PathBuf>,
+        /// Stop after this many clock cycles (exit code 124)
+        #[arg(long)]
+        cycles: Option<u64>,
+    },
     /// Run Virdant package with Icarus Verilog
     RunIcarus { path: Option<PathBuf>, #[arg(long)] vcd: Option<String> },
     /// Create a new Virdant project
@@ -134,7 +153,7 @@ fn main() {
         Command::Typing { } => dump_typing(&args),
         Command::Compile { path } => compile(path),
         Command::Build { } => build(&args),
-        Command::Run { ref path } => run(&args, path),
+        Command::Run { ref trace, fps_no_cap, ref flash, ref cycles } => run(&args, trace, fps_no_cap, flash, cycles),
         Command::RunIcarus { ref path, ref vcd } => run_icarus(&args, path, vcd),
         Command::New { ref project } => new_project(&args, project),
         Command::Bitstream { } => { bitstream(&args); },
@@ -861,11 +880,83 @@ fn run_icarus(args: &Args, _path: &Option<PathBuf>, vcd: &Option<String>) {
     let _ = execvp(&program, &args);
 }
 
-fn run(_args: &Args, path: &PathBuf) {
-    if let Err(e) = virdant::script::run_script_file(path) {
-        eprintln!("Script error: {}", e);
+fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, flash: &Option<PathBuf>, cycles: &Option<u64>) {
+    let cwd = resolve_cwd(args);
+    if !cwd.join("Virdant.toml").exists() {
+        eprintln!("No Virdant.toml found");
         std::process::exit(1);
     }
+    let Some(top_name) = read_prog_key(&cwd, "top") else {
+        eprintln!("Virdant.toml is missing [prog] top");
+        std::process::exit(1);
+    };
+
+    let db = db_from_dir(cwd.join("src"));
+    dump_diagnostics(&db);
+    if check_db(&db).is_err() {
+        eprintln!("Check failed");
+        std::process::exit(1);
+    }
+
+    // Resolve the top module named by [prog] top.
+    let symboltable = db.get_symboltable();
+    let top_symbol = symboltable.items().into_iter()
+        .find(|sym| sym.fqn.as_bytes() == top_name.as_bytes()
+            && sym.kind == SymbolKind::ModDef)
+        .unwrap_or_else(|| {
+            eprintln!("Top module '{top_name}' not found");
+            std::process::exit(1);
+        });
+
+    // The top module's `for` clause selects the platform; `vir run`
+    // simulates the `virt::Virt` board only.
+    let mut builder = virdant::db::Builder::new(&db);
+    let platform_id = match virdant::analysis::platform::resolve_platform_for(
+        &mut builder, top_symbol.id())
+    {
+        Ok(Some(platform_id)) => platform_id,
+        Ok(None) => {
+            eprintln!("Top module '{top_name}' does not implement a platform (no `for` clause)");
+            std::process::exit(1);
+        }
+        Err(diagnostic) => {
+            dump_diagnostic(&db, &diagnostic);
+            std::process::exit(1);
+        }
+    };
+    let platform_name = symboltable.symbol(platform_id).name().to_string();
+    let fpga = virdant::analysis::platform::platform_fpga(&mut builder, platform_id);
+    if platform_name != "Virt" || fpga.as_deref().map(|f| f.as_bytes()) != Some(b"virt".as_bstr()) {
+        eprintln!(
+            "Top module '{top_name}' implements platform '{}', but `vir run` simulates virt::Virt only",
+            platform_name
+        );
+        std::process::exit(1);
+    }
+
+    // The clock runs at the frequency the platform declares (@period_ns).
+    // `platform_clock_meta` allows the virtual platforms' pinless clocks
+    // (virt::Virt declares @period_ns but no @pin).
+    let clocks = virdant::analysis::platform::platform_clock_meta(&mut builder, platform_id);
+    let Some((clock_port, _, Some(period_ns))) = clocks.into_iter().next() else {
+        eprintln!("Platform '{}' declares no clock", platform_name);
+        std::process::exit(1);
+    };
+    let _ = clock_port; // resolved by name inside the board
+    let clock_hz = (1e9 / period_ns) as u64;
+
+    let exit_code = virdant::virt::run(
+        &db,
+        top_symbol.id(),
+        clock_hz,
+        virdant::virt::VirtOptions {
+            flash: flash.clone(),
+            trace: trace.clone().map(PathBuf::from),
+            fps_no_cap: fps_no_cap,
+            cycles: cycles.clone(),
+        },
+    );
+    std::process::exit(exit_code);
 }
 
 fn new_project(args: &Args, project: &str) {

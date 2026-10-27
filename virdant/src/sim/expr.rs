@@ -71,19 +71,26 @@ impl Expr {
 pub enum Referent {
     Component(ComponentId),
     Location(Location),
+    /// The component that owns the driver expression being evaluated:
+    /// used for `when` drivers with no matching clause / no else clause
+    /// ("hold the current value" — the X-free stand-in for Verilog's
+    /// latched/inert semantics).
+    Owner,
 }
 
 /// Convert a driver tree to a sim `Expr`.  `env` holds the mono type
 /// arguments of the generic mod def instance the driver belongs to
 /// (`[]` when its module is non-generic); every type fetched from the
-/// (generic) analysis is substituted with them.
-pub fn driver_to_expr(db: &Db, driver: &Driver, env: &[Type]) -> Arc<Expr> {
+/// (generic) analysis is substituted with them.  `component_typ` is
+/// the driven component's mono type: the converted driver is tagged
+/// with it.
+pub fn driver_to_expr(db: &Db, driver: &Driver, component_typ: &Type, env: &[Type]) -> Arc<Expr> {
     match driver {
         Driver::Expr(_, loc) => convert_ast_expr(db, loc.clone(), env),
-        Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are resolved in conversion, not simulation"),
+        Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are resolved into aliases, not simulation"),
         Driver::Absent => unreachable!("Absent drivers only appear inside when clauses"),
-        Driver::When(driver_when) => convert_driver_when(db, driver_when, env),
-        Driver::Match(driver_match) => convert_driver_match(db, driver_match, env),
+        Driver::When(driver_when) => convert_driver_when(db, driver_when, component_typ, env),
+        Driver::Match(driver_match) => convert_driver_match(db, driver_match, component_typ, env),
     }
 }
 
@@ -93,7 +100,7 @@ pub fn initial_to_expr(db: &Db, loc: &Location, env: &[Type]) -> Arc<Expr> {
     convert_ast_expr(db, loc.clone(), env)
 }
 
-fn convert_driver_match(db: &Db, dm: &DriverMatch, env: &[Type]) -> Arc<Expr> {
+fn convert_driver_match(db: &Db, dm: &DriverMatch, component_typ: &Type, env: &[Type]) -> Arc<Expr> {
     let location = dm.subject.clone();
     let subject = convert_ast_expr(db, dm.subject.clone(), env);
     let subject_typ = mono_type(db, &dm.subject.clone(), env);
@@ -102,18 +109,30 @@ fn convert_driver_match(db: &Db, dm: &DriverMatch, env: &[Type]) -> Arc<Expr> {
     for (pat_loc, sub_driver) in &dm.arms {
         let pat_node = parsing.ast_node(pat_loc.ast_node_id());
         let pattern = convert_pattern(db, &parsing, &pat_node, &subject_typ);
-        let body = driver_to_expr(db, sub_driver.as_ref(), env);
+        let body = driver_to_expr(db, sub_driver.as_ref(), component_typ, env);
         arms.push((pattern, body));
     }
     if let Some(else_driver) = &dm.else_clause {
-        let body = driver_to_expr(db, else_driver.as_ref(), env);
+        let body = driver_to_expr(db, else_driver.as_ref(), component_typ, env);
         arms.push((payload::Pat::Else, body));
+    } else {
+        // No else arm: un-matched subjects hold their current value.
+        arms.push((payload::Pat::Else, self_reference(location.clone(), component_typ)));
     }
-    let typ = arms.first().map(|(_, e)| e.typ.clone()).unwrap_or(Type::Bit);
     Arc::new(Expr {
         location,
-        typ,
+        typ: component_typ.clone(),
         payload: ExprPayload::Match(payload::Match { subject, arms }),
+    })
+}
+
+/// A reference to the owning component itself (`Referent::Owner`), tagged
+/// with the component's type.
+fn self_reference(location: Location, component_typ: &Type) -> Arc<Expr> {
+    Arc::new(Expr {
+        location,
+        typ: component_typ.clone(),
+        payload: ExprPayload::Reference(payload::Reference { referent: Referent::Owner }),
     })
 }
 
@@ -170,7 +189,7 @@ fn convert_pattern(
     }
 }
 
-fn convert_driver_when(db: &Db, driver_when: &DriverWhen, env: &[Type]) -> Arc<Expr> {
+fn convert_driver_when(db: &Db, driver_when: &DriverWhen, component_typ: &Type, env: &[Type]) -> Arc<Expr> {
     let location = match driver_when.clauses.first() {
         Some((cond_loc, _)) => cond_loc.clone(),
         None => driver_when.else_clause.as_ref()
@@ -182,24 +201,19 @@ fn convert_driver_when(db: &Db, driver_when: &DriverWhen, env: &[Type]) -> Arc<E
     for (cond_loc, sub_driver) in &driver_when.clauses {
         let cond = convert_ast_expr(db, cond_loc.clone(), env);
         let body = match sub_driver.as_ref() {
-            // The component is not driven in this clause; evaluate as X,
-            // the same value a missing else clause produces.
-            Driver::Absent => Arc::new(Expr {
-                location: cond_loc.clone(),
-                typ: Type::Bit,
-                payload: ExprPayload::Hole(payload::Hole {}),
-            }),
-            sub_driver => driver_to_expr(db, sub_driver, env),
+            // The component is not driven in this clause: it holds its
+            // current value (the X-free stand-in for Verilog's inert
+            // sequential/latch semantics).
+            Driver::Absent => self_reference(cond_loc.clone(), component_typ),
+            sub_driver => driver_to_expr(db, sub_driver, component_typ, env),
         };
         branches.push((cond, body));
     }
 
     let else_branch = match &driver_when.else_clause {
-        Some(else_driver) => driver_to_expr(db, else_driver.as_ref(), env),
-        None => {
-            let typ = Type::Bit;
-            Arc::new(Expr { location: location.clone(), typ, payload: ExprPayload::Hole(payload::Hole {}) })
-        }
+        Some(else_driver) => driver_to_expr(db, else_driver.as_ref(), component_typ, env),
+        // No else clause: the component holds its current value.
+        None => self_reference(location.clone(), component_typ),
     };
 
     let typ = else_branch.typ.clone();
