@@ -19,6 +19,8 @@ use crate::syntax::ast::{AnnotationValue, AstNode, AstNodeId};
 use crate::syntax::payload::AstNodePayload;
 use crate::types::substitute::substitute;
 use crate::types::typing::Primitive;
+use crate::types::typing::Tag;
+use crate::types::context::Referent;
 use crate::types::{Type, Typing};
 use crate::verilog::{self, valid_verilog_name};
 use crate::util::parse_word_literal;
@@ -527,6 +529,14 @@ impl<'d> Converter<'d> {
                                 expr: None,
                             }));
                         }
+                        ComponentKind::Net => {
+                            elements.push(verilog::Element::Wire(verilog::Wire {
+                                name: valid_verilog_name(&name),
+                                width,
+                                expr: None,
+                            }));
+                        }
+                        ComponentKind::Bus => {}
                     }
                 }
                 AstNodePayload::Submodule(module) => {
@@ -601,6 +611,10 @@ impl<'d> Converter<'d> {
             let Some(component) = component_analysis.component(*comp_id) else { continue };
             let path = component.path().to_str_lossy().into_owned();
             let Some(typ) = component.typ().map(|t| self.mono_substitute(t)) else { continue };
+            let net = matches!(
+                component.kind(),
+                Some(ComponentKind::Bus) | Some(ComponentKind::Net)
+            );
 
             for driver in comp_drivers {
                 // Bidirectional drivers are emitted by the dedicated pass below.
@@ -657,7 +671,7 @@ impl<'d> Converter<'d> {
                             self.convert_driver_match_to_stmts(package, driver_match, &typ, &path, &mut scheduler)
                         }
                         _ => {
-                            let expr = self.convert_driver_to_expr(package, driver, &typ, &mut scheduler);
+                            let expr = self.convert_driver_to_expr(package, driver, &typ, net, &mut scheduler);
                             vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
                                 name: valid_verilog_name(&path),
                                 expr,
@@ -672,10 +686,12 @@ impl<'d> Converter<'d> {
                         stmts: all_stmts,
                     }));
                 } else {
-                    let expr = self.convert_driver_to_expr(package, driver, &typ, &mut scheduler);
+                    let strength = self.driver_strength(driver);
+                    let expr = self.convert_driver_to_expr(package, driver, &typ, net, &mut scheduler);
                     combinational.push(verilog::Element::Assign(verilog::Assign {
                         name: valid_verilog_name(&path),
                         expr,
+                        strength,
                     }));
                 }
             }
@@ -686,6 +702,7 @@ impl<'d> Converter<'d> {
         // resolving `it.*` paths to the actual submodule instance name.
         collect_bidirectional_assigns(
             item_ast.children(),
+            self.db,
             &component_analysis,
             None,
             &mut elements,
@@ -781,6 +798,7 @@ impl<'d> Converter<'d> {
         package: PackageId,
         driver: &Driver,
         typ: &Type,
+        net: bool,
         scheduler: &mut ExprScheduler,
     ) -> verilog::Expr {
         match driver {
@@ -790,9 +808,61 @@ impl<'d> Converter<'d> {
                 self.convert_expr(package, expr_node, typ, self.db, scheduler)
             }
             Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are emitted directly, not via convert_driver_to_expr"),
-            Driver::Absent => verilog::Expr::XLit(verilog::expr::XLit { width: type_width(typ, self.db) }),
-            Driver::When(driver_when) => self.convert_driver_when_to_expr(package, driver_when, typ, scheduler),
-            Driver::Match(driver_match) => self.convert_driver_match_to_expr(package, driver_match, typ, scheduler),
+            Driver::Absent => self.driver_default_expr(typ, net),
+            Driver::When(driver_when) => self.convert_driver_when_to_expr(package, driver_when, typ, net, scheduler),
+            Driver::Match(driver_match) => self.convert_driver_match_to_expr(package, driver_match, typ, net, scheduler),
+        }
+    }
+
+    fn driver_default_expr(&self, typ: &Type, net: bool) -> verilog::Expr {
+        let width = type_width(typ, self.db);
+        if net {
+            verilog::Expr::ZLit(verilog::expr::ZLit { width })
+        } else {
+            verilog::Expr::XLit(verilog::expr::XLit { width })
+        }
+    }
+
+    fn driver_strength(&self, driver: &Driver) -> crate::common::Strength {
+        use crate::common::Strength;
+        match driver {
+            Driver::Expr(_, loc) => {
+                let parsing = self.db.get_parsing(loc.package());
+                let node = parsing.ast_node(loc.ast_node_id());
+                node.parent()
+                    .and_then(|parent| parent.driver_strength())
+                    .unwrap_or(Strength::Strong)
+            }
+            Driver::Bidirectional(_) => Strength::Strong,
+            Driver::Absent => Strength::Weak,
+            Driver::When(driver_when) => {
+                let mut strength = Strength::Weak;
+                for (_, sub_driver) in &driver_when.clauses {
+                    if self.driver_strength(sub_driver) == Strength::Strong {
+                        strength = Strength::Strong;
+                    }
+                }
+                if let Some(else_driver) = &driver_when.else_clause {
+                    if self.driver_strength(else_driver) == Strength::Strong {
+                        strength = Strength::Strong;
+                    }
+                }
+                strength
+            }
+            Driver::Match(driver_match) => {
+                let mut strength = Strength::Weak;
+                for (_, sub_driver) in &driver_match.arms {
+                    if self.driver_strength(sub_driver) == Strength::Strong {
+                        strength = Strength::Strong;
+                    }
+                }
+                if let Some(else_driver) = &driver_match.else_clause {
+                    if self.driver_strength(else_driver) == Strength::Strong {
+                        strength = Strength::Strong;
+                    }
+                }
+                strength
+            }
         }
     }
 
@@ -801,21 +871,20 @@ impl<'d> Converter<'d> {
         package: PackageId,
         driver_when: &DriverWhen,
         typ: &Type,
+        net: bool,
         scheduler: &mut ExprScheduler,
     ) -> verilog::Expr {
-        // Base: else clause, or X-bits when there is no else.
         let else_expr = match &driver_when.else_clause {
-            Some(else_driver) => self.convert_driver_to_expr(package, else_driver, typ, scheduler),
-            None => verilog::Expr::XLit(verilog::expr::XLit { width: type_width(typ, self.db) }),
+            Some(else_driver) => self.convert_driver_to_expr(package, else_driver, typ, net, scheduler),
+            None => self.driver_default_expr(typ, net),
         };
 
-        // Build right-associative ternary chain from last clause to first.
         driver_when.clauses.iter().rev().fold(else_expr, |acc, (cond_loc, sub_driver)| {
             let cond_parsing = self.db.get_parsing(cond_loc.package());
             let cond_node = cond_parsing.ast_node(cond_loc.ast_node_id());
             let cond_type = self.node_type(package, &cond_node).unwrap_or(Type::Bit);
             let cond_expr = self.convert_expr(package, cond_node, &cond_type, self.db, scheduler);
-            let then_expr = self.convert_driver_to_expr(package, sub_driver, typ, scheduler);
+            let then_expr = self.convert_driver_to_expr(package, sub_driver, typ, net, scheduler);
             verilog::Expr::If(verilog::expr::If {
                 cond: Box::new(cond_expr),
                 then_expr: Box::new(then_expr),
@@ -911,6 +980,7 @@ impl<'d> Converter<'d> {
         package: PackageId,
         driver_match: &DriverMatch,
         typ: &Type,
+        net: bool,
         scheduler: &mut ExprScheduler,
     ) -> verilog::Expr {
         let db = self.db;
@@ -928,7 +998,7 @@ impl<'d> Converter<'d> {
             let pat_node = pat_parsing.ast_node(pat_loc.ast_node_id());
             let mut bound_keys: Vec<String> = vec![];
             let pattern = self.build_case_pattern(&pat_node, &subject_expr, &subject_typ, scheduler, &mut bound_keys);
-            let arm_expr = self.convert_driver_to_expr(package, sub_driver, typ, scheduler);
+            let arm_expr = self.convert_driver_to_expr(package, sub_driver, typ, net, scheduler);
             for key in &bound_keys { scheduler.subst.shift_remove(key); }
             case_items.push(verilog::CaseItem {
                 pattern,
@@ -940,7 +1010,7 @@ impl<'d> Converter<'d> {
         }
 
         if let Some(else_driver) = &driver_match.else_clause {
-            let else_expr = self.convert_driver_to_expr(package, else_driver, typ, scheduler);
+            let else_expr = self.convert_driver_to_expr(package, else_driver, typ, net, scheduler);
             case_items.push(verilog::CaseItem {
                 pattern: verilog::CasePattern::Default,
                 stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
@@ -956,7 +1026,7 @@ impl<'d> Converter<'d> {
                 pattern: verilog::CasePattern::Default,
                 stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
                     name: temp_name.clone(),
-                    expr: verilog::Expr::XLit(verilog::expr::XLit { width: result_width }),
+                    expr: self.driver_default_expr(typ, net),
                 })],
             });
         }
@@ -1340,6 +1410,24 @@ impl<'d> Converter<'d> {
     ) -> verilog::Expr {
         let typing = self.typing_for(&node);
         match node.payload() {
+            AstNodePayload::ExprTap => {
+                let path_node = node.child(0);
+                let path_typing = self.typing_for(&path_node);
+                let referent = path_typing.tag(path_node.location());
+                match referent {
+                    Tag::ReferentResolution(Referent::Component(component_id)) => {
+                        let component_analysis = self.db.get_component_analysis(component_id.item_id());
+                        let component = component_analysis
+                            .component(component_id)
+                            .expect("tap referent component");
+                        let name = component.path().to_str_lossy().into_owned();
+                        verilog::Expr::Reference(verilog::expr::Reference {
+                            name: valid_verilog_name(&name),
+                        })
+                    }
+                    _ => unreachable!("tap operand must resolve to a component"),
+                }
+            }
             AstNodePayload::ExprReference => {
                 let path = node.parsing.string(node.path().unwrap()).to_str_lossy().into_owned();
                 let mut path_str = path.clone();
@@ -1960,6 +2048,7 @@ impl<'d> Converter<'d> {
 /// (the submodule instance name, dotted for nested contexts).
 fn collect_bidirectional_assigns<'a>(
     stmts: Vec<AstNode<'a>>,
+    db: &Db,
     component_analysis: &crate::analysis::component::ComponentAnalysis,
     it_context: Option<&bstr::BStr>,
     elements: &mut Vec<verilog::Element>,
@@ -2001,6 +2090,29 @@ fn collect_bidirectional_assigns<'a>(
                 let lhs_prefix = format!("{}.", lhs_str.to_str_lossy());
                 let rhs_prefix = format!("{}.", rhs_str.to_str_lossy());
 
+                if let (Some(lhs_component), Some(rhs_component)) = (
+                    component_analysis.resolve(lhs_str.as_bstr()),
+                    component_analysis.resolve(rhs_str.as_bstr()),
+                ) {
+                    let is_net = |component: &crate::analysis::component::Component| {
+                        matches!(
+                            component.kind(),
+                            Some(ComponentKind::Bus) | Some(ComponentKind::Net)
+                        )
+                    };
+                    if is_net(&lhs_component) && is_net(&rhs_component) {
+                        elements.push(verilog::Element::Tran(verilog::Tran {
+                            a: valid_verilog_name(&lhs_component.path().to_str_lossy()),
+                            b: valid_verilog_name(&rhs_component.path().to_str_lossy()),
+                            width: lhs_component
+                                .typ()
+                                .map(|t| type_width(&t, db))
+                                .unwrap_or(1),
+                        }));
+                        continue;
+                    }
+                }
+
                 for (lhs_full_path, lhs_component) in component_analysis.components() {
                     let lhs_path_str = lhs_full_path.to_str_lossy();
                     if !lhs_path_str.starts_with(&lhs_prefix) {
@@ -2030,6 +2142,7 @@ fn collect_bidirectional_assigns<'a>(
                         expr: verilog::Expr::Reference(verilog::expr::Reference {
                             name: valid_verilog_name(&source_path),
                         }),
+                        strength: crate::common::Strength::Strong,
                     }));
                 }
             }
@@ -2058,6 +2171,7 @@ fn collect_bidirectional_assigns<'a>(
                     };
                     collect_bidirectional_assigns(
                         block.children(),
+                        db,
                         component_analysis,
                         Some(name_bstr.as_bstr()),
                         elements,

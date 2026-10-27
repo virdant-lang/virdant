@@ -574,7 +574,7 @@ fn add_edge(
 
 /// Resolve `it` references in a path string using the enclosing statement
 /// context.
-fn resolve_it_path(
+pub(crate) fn resolve_it_path(
     path: &mut BString,
     it_context: Option<&BStr>,
 ) {
@@ -611,7 +611,7 @@ fn resolve_it_path_simple(path: &mut BString, it_context: Option<&BStr>) {
 }
 
 /// Resolve a Path node to a Component, handling `it` resolution.
-fn resolve_path_component(
+pub(crate) fn resolve_path_component(
     node: &AstNode<'_>,
     parsing: &crate::syntax::parsing::Parsing,
     component_analysis: &ComponentAnalysis,

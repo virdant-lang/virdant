@@ -56,6 +56,7 @@ pub(crate) fn build_ports_of(builder: &mut Builder, symbol_id: SymbolId) -> Arc<
             | Some(ComponentKind::Outgoing)
             | Some(ComponentKind::OutgoingWire)
             | Some(ComponentKind::OutgoingReg)
+            | Some(ComponentKind::Bus)
         ) || component.kind().is_none() && matches!(component.flow(), Flow::Source | Flow::Sink);
         if !is_port {
             continue;
@@ -65,6 +66,7 @@ pub(crate) fn build_ports_of(builder: &mut Builder, symbol_id: SymbolId) -> Arc<
             Some(ComponentKind::Outgoing)
             | Some(ComponentKind::OutgoingWire)
             | Some(ComponentKind::OutgoingReg) => PortDir::Output,
+            Some(ComponentKind::Bus) => PortDir::Bidir,
             // Socket channels: kind=None, use flow to determine direction.
             None => match component.flow() {
                 Flow::Source => PortDir::Input,

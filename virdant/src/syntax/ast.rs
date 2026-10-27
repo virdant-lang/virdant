@@ -6,7 +6,7 @@
 use bstr::{BStr, BString, ByteSlice};
 
 use crate::analysis::Location;
-use crate::common::{ComponentKind, DriverType};
+use crate::common::{ComponentKind, DriverType, Strength};
 use crate::package::PackageId;
 use crate::common::source::{Region, Span};
 use crate::syntax::payload::AstNodePayload;
@@ -196,6 +196,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Kind(_kind) => format!("Kind"),
             AstNodePayload::Type(_) => format!("Type"),
             AstNodePayload::ExprReference => format!("ExprReference"),
+            AstNodePayload::ExprTap => format!("ExprTap"),
             AstNodePayload::ExprParen => format!("ExprParen"),
             AstNodePayload::ExprBitLit(_expr_bit_lit) => format!("ExprBitLit"),
             AstNodePayload::ExprWordLit(_expr_word_lit) => format!("ExprWordLit"),
@@ -325,6 +326,13 @@ impl<'p> AstNode<'p> {
     pub fn driver_type(&self) -> Option<DriverType> {
         match &self.payload {
             AstNodePayload::Driver(driver) => Some(driver.driver_type),
+            _ => None
+        }
+    }
+
+    pub fn driver_strength(&self) -> Option<Strength> {
+        match &self.payload {
+            AstNodePayload::Driver(driver) => Some(driver.strength),
             _ => None
         }
     }

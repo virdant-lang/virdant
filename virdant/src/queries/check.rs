@@ -532,6 +532,36 @@ fn check_connection_nodes(
             let lhs_path = rewrite_connection_side(parsing, lhs, it_context);
             let rhs_path = rewrite_connection_side(parsing, rhs, it_context);
             if let (Some(lhs_path), Some(rhs_path)) = (lhs_path, rhs_path) {
+                let component_analysis = builder.get_component_analysis(item);
+                let lhs_component = component_analysis.resolve(lhs_path.as_bstr());
+                let rhs_component = component_analysis.resolve(rhs_path.as_bstr());
+                let is_net = |component: &Option<crate::analysis::component::Component>| {
+                    component
+                        .as_ref()
+                        .map(|component| {
+                            matches!(
+                                component.kind(),
+                                Some(crate::common::ComponentKind::Bus)
+                                    | Some(crate::common::ComponentKind::Net)
+                            )
+                        })
+                        .unwrap_or(false)
+                };
+                if is_net(&lhs_component) && is_net(&rhs_component) {
+                    let lhs_typ = lhs_component.as_ref().and_then(|component| component.typ());
+                    let rhs_typ = rhs_component.as_ref().and_then(|component| component.typ());
+                    if let (Some(lhs_typ), Some(rhs_typ)) = (lhs_typ, rhs_typ) {
+                        if lhs_typ != rhs_typ {
+                            diagnostics.push(Diagnostic::new(
+                                node.region(),
+                                diagnostics::WrongType {
+                                    expected: lhs_typ.to_string().into(),
+                                    actual: rhs_typ.to_string().into(),
+                                },
+                            ));
+                        }
+                    }
+                }
                 let lhs_socket = resolve_mono_socket(builder, item, lhs_path.as_bstr());
                 let rhs_socket = resolve_mono_socket(builder, item, rhs_path.as_bstr());
                 if let (Some(lhs_socket), Some(rhs_socket)) = (lhs_socket, rhs_socket) {

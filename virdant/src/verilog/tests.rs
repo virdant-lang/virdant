@@ -412,6 +412,7 @@ fn slice_of_slice_subject_is_lifted_into_temp_wire() {
         elements: vec![Element::Assign(Assign {
             name: "chained".to_string(),
             expr: index_range!(index_range!(refr!(w), lit!(11, 32), lit!(3, 32)), lit!(5, 32), lit!(4, 32)),
+            strength: crate::common::Strength::Strong,
         })],
         origin: None,
     };
@@ -472,6 +473,7 @@ fn operator_subject_of_slice_is_lifted_into_temp_wire() {
                 rhs: refr!(d).into(),
                 width: 7,
             }), lit!(8, 32), lit!(2, 32)),
+            strength: crate::common::Strength::Strong,
         })],
         origin: None,
     };

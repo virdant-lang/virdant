@@ -12,14 +12,14 @@ socket Bus[T : Type] {
 
 mod Master[W : Type] {
     incoming d : W
-    client socket bus of Bus[W] {
+    client socket busif of Bus[W] {
         it.req := d
     }
-    unused bus.rsp
+    unused busif.rsp
 }
 
 mod Slave[W : Type] {
-    server socket bus of Bus[W] {
+    server socket busif of Bus[W] {
         it.rsp := it.req
     }
 }
@@ -61,7 +61,7 @@ export mod Top {
         it.d := a
     }
     mod s of Slave[Word[8]] {
-        m.bus :=: it.bus
+        m.busif :=: it.busif
     }
 
     mod r4 of Reg[Word[4]] {
@@ -75,7 +75,7 @@ export mod Top {
 
     outgoing out8 : Word[8]
     outgoing out4 : Word[4]
-    out8 := s.bus.rsp
+    out8 := s.busif.rsp
     out4 := match t4.o {
         case @Some(v) => v
         case #None => 0

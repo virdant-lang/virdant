@@ -56,6 +56,10 @@ pub enum DiagnosticPayload {
     NoDrivers(NoDrivers),
     /// Component has multiple drivers.
     MultipleDrivers(MultipleDrivers),
+    /// A `bus`/`net` component was referenced without `tap`.
+    NetReadWithoutTap(NetReadWithoutTap),
+    /// `tap` was applied to a component that is not a `bus` or `net`.
+    TapNotOnNet(TapNotOnNet),
     /// Incoming signal has a driver.
     DriverForSink(DriverForSink),
     /// A component could not be resolved.
@@ -257,6 +261,16 @@ pub struct NoDrivers {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultipleDrivers {
     pub target: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NetReadWithoutTap {
+    pub source: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TapNotOnNet {
+    pub source: BString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -580,6 +594,19 @@ impl Diagnostic {
                     d.component,
                 ).into()
             }
+            DiagnosticPayload::NetReadWithoutTap(d) => {
+                format!(
+                    "{} is not guaranteed to have a value. Use `tap {}` to assert it will.",
+                    d.source,
+                    d.source,
+                ).into()
+            }
+            DiagnosticPayload::TapNotOnNet(d) => {
+                format!(
+                    "`tap` may only be applied to a `bus` or `net`: {} is neither",
+                    d.source,
+                ).into()
+            }
             DiagnosticPayload::UnresolvedCtor(d) => format!("Unresolved constructor {}", d.ctor).into(),
             DiagnosticPayload::UnusedSource(d) => format!("Unused signal {}", d.path).into(),
             DiagnosticPayload::ReadFromSink(d) => format!("Read from sink {}", d.path).into(),
@@ -824,6 +851,7 @@ from_diagnostic! {
     SyntaxError, ImportCycle, UnresolvedImportError, DuplicateImport, DuplicateItem,
     DuplicateSlot, UnresolvedPackage, UnresolvedItem, UnresolvedType, MissingOnClause,
     UnexpectedOnClause, WrongDriverType, NoRegDrivers, NoDrivers, MultipleDrivers,
+    NetReadWithoutTap, TapNotOnNet,
     DriverForSink, UnresolvedComponent, NotIt, UnresolvedCtor, UnusedSource, ReadFromSink,
     UnfilledHole, ModuleCycle, UnresolvedMethod, WrongType, Unknown, DoesntFit, NotWordType,
     CantTruncate, Todo, MatchNotExhaustive, MatchOverlappingArm, InvalidDocstring,

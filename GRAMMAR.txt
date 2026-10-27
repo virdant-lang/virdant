@@ -95,6 +95,8 @@ ModDefStmt :=
 ModDefStmtComponent :=
       DocString? Annotations "incoming" Ident ":" Type OnClause? ItBlock?
     | DocString? Annotations "outgoing" Ident ":" Type DefaultClause? OnClause? ItBlock?
+    | DocString? Annotations "bus" Ident ":" Type ItBlock?
+    | DocString? Annotations "net" Ident ":" Type ItBlock?
     | DocString? Annotations "outgoing" "wire" Ident ":" Type DefaultClause? OnClause? ItBlock?
     | DocString? Annotations "outgoing" "reg" Ident ":" Type DefaultClause? OnClause? ItBlock?
     | DocString? Annotations "wire" Ident ":" Type OnClause? ItBlock?
@@ -107,6 +109,9 @@ DefaultClause := "default" Expr
 ModDefStmtDriver :=
       Path ":=" Expr
     | Path "<=" Expr
+    | Path "#=" Expr
+    | Path "#-" Expr
+    | Path "#=#" Path
     | Path ":=:" Path
 
 ModDefStmtInstance := DocString? Annotations "mod" Ident "of" Ofness GenericsParams? ItBlock?
@@ -240,6 +245,7 @@ UnOp :=
 
 ExprUnOp :=
       UnOp ExprUnOp
+    | "tap" Path
     | ExprAscription
 
 ExprAscription :=
@@ -300,6 +306,9 @@ Tokens:
   "!"
   "!="
   "#"
+  "#-"
+  "#="
+  "#=#"
   "$"
   "&"
   "&&"
@@ -335,6 +344,7 @@ Tokens:
   "^"
   "^^"
   "builtin"
+  "bus"
   "case"
   "client"
   "cosi"
@@ -354,6 +364,7 @@ Tokens:
   "it"
   "match"
   "mod"
+  "net"
   "of"
   "on"
   "outgoing"
@@ -363,6 +374,7 @@ Tokens:
   "soci"
   "socket"
   "struct"
+  "tap"
   "true"
   "type"
   "union"

@@ -61,6 +61,7 @@ impl Typing {
             AstNodePayload::ExprUnOp(expr_un_op) => {
                 self.infer_unop(builder, context, node, expr_un_op.op)
             }
+            AstNodePayload::ExprTap => self.infer_tap(builder, node),
             AstNodePayload::ExprFn => self.infer_fn(builder, context, node),
             AstNodePayload::ExprField(field) => self.infer_field(builder, context, node, field),
             AstNodePayload::ExprCtor(_expr_ctor) => {
@@ -496,6 +497,45 @@ impl Typing {
         }
     }
 
+    fn infer_tap<'p>(
+        &mut self,
+        builder: &mut Builder,
+        node: &AstNode<'p>,
+    ) -> Result<Option<Type>, ()> {
+        let path_node = node.child(0);
+        let component_analysis = builder.get_component_analysis(self.item.id());
+        let Some(component) = component_analysis.component_at(path_node.location()) else {
+            self.flag_tap_not_on_net(node);
+            return Err(());
+        };
+        if !matches!(
+            component.kind(),
+            Some(ComponentKind::Bus) | Some(ComponentKind::Net)
+        ) {
+            self.flag_tap_not_on_net(node);
+            return Err(());
+        }
+        let referent = Referent::Component(component.id());
+        self.tags
+            .insert(path_node.location(), Tag::ReferentResolution(referent));
+        self.use_component(component.path().as_bstr(), node.location());
+        if let Some(typ) = component.typ() {
+            self.annotate(node, &typ);
+            Ok(Some(typ))
+        } else {
+            Err(())
+        }
+    }
+
+    fn flag_tap_not_on_net(&mut self, node: &AstNode<'_>) {
+        self.diagnostics.push(Diagnostic::new(
+            node.region(),
+            diagnostics::TapNotOnNet {
+                source: node.spelling().to_owned(),
+            },
+        ));
+    }
+
     fn infer_reference<'p>(
         &mut self,
         builder: &mut Builder,
@@ -507,6 +547,18 @@ impl Typing {
         // collection, so no string manipulation is needed here.
         let component_analysis = builder.get_component_analysis(self.item.id());
         if let Some(component) = component_analysis.component_at(node.location()) {
+            if matches!(
+                component.kind(),
+                Some(ComponentKind::Bus) | Some(ComponentKind::Net)
+            ) {
+                self.diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::NetReadWithoutTap {
+                        source: node.spelling().to_owned(),
+                    },
+                ));
+                return Err(());
+            }
             let referent = Referent::Component(component.id());
             self.tags
                 .insert(node.location(), Tag::ReferentResolution(referent));

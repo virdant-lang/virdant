@@ -3,7 +3,7 @@
 //! expression/pattern payloads) carried by AST nodes, each holding
 //! interned identifiers and flags produced by the parser.
 
-use crate::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, UnOp};
+use crate::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, Strength, UnOp};
 use crate::syntax::parsing::InternedString;
 
 #[derive(Debug, Clone)]
@@ -54,6 +54,7 @@ pub enum AstNodePayload {
     Type(Type),
 
     ExprReference,
+    ExprTap,
     ExprParen,
     ExprBitLit(ExprBitLit),
     ExprWordLit(ExprWordLit),
@@ -130,6 +131,7 @@ impl AstNodePayload {
             AstNodePayload::Kind(_kind) => "Kind",
             AstNodePayload::Type(_) => "Type",
             AstNodePayload::ExprReference => "ExprReference",
+            AstNodePayload::ExprTap => "ExprTap",
             AstNodePayload::ExprParen => "ExprParen",
             AstNodePayload::ExprBitLit(_expr_bit_lit) => "ExprBitLit",
             AstNodePayload::ExprWordLit(_expr_word_lit) => "ExprWordLit",
@@ -242,6 +244,7 @@ pub struct Component {
 #[derive(Clone, Debug)]
 pub struct Driver {
     pub driver_type: DriverType,
+    pub strength: Strength,
 }
 
 #[derive(Clone, Debug)]

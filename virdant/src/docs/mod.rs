@@ -638,6 +638,7 @@ fn render_moddef_page_with_sidebar(
                 let dir_str = match port.dir {
                     PortDir::Input => "incoming",
                     PortDir::Output => "outgoing",
+                    PortDir::Bidir => "bus",
                 };
                 PortCtx {
                     direction: dir_str.to_owned(),

@@ -251,6 +251,9 @@ fn flag_duplicate_clause_drivers(
     for (comp_id, drivers) in body_drivers {
         if drivers.len() > 1 {
             let Some(component) = component_analysis.component(*comp_id) else { continue };
+            if matches!(component.kind(), Some(ComponentKind::Bus) | Some(ComponentKind::Net)) {
+                continue;
+            }
             let path = component.path();
             for driver in drivers {
                 let Some(location) = driver.location() else { continue };

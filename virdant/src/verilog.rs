@@ -12,7 +12,7 @@ mod macros;
 #[cfg(test)]
 mod tests;
 
-use crate::common::{PortDir, Radix, Width};
+use crate::common::{PortDir, Radix, Strength, Width};
 
 use self::macros::{verilog_write, verilog_writeln};
 pub use self::stmt::{Assert, AssignBlocking, AssignNonBlocking, Display, If, Stmt,
@@ -71,6 +71,7 @@ pub enum Element {
     Always(Always),
     Initial(Initial),
     Submodule(Submodule),
+    Tran(Tran),
 }
 
 #[derive(Debug)]
@@ -91,6 +92,14 @@ pub struct Reg {
 pub struct Assign {
     pub name: String,
     pub expr: Expr,
+    pub strength: Strength,
+}
+
+#[derive(Debug)]
+pub struct Tran {
+    pub a: String,
+    pub b: String,
+    pub width: Width,
 }
 
 #[derive(Debug)]
@@ -293,6 +302,7 @@ impl Port {
         let dir = match self.dir {
             PortDir::Input => "input",
             PortDir::Output => "output",
+            PortDir::Bidir => "inout",
         };
         let kind = match self.kind {
             PortKind::Wire => "wire",
@@ -325,7 +335,23 @@ impl Element {
             Element::Always(always) => always.write(f),
             Element::Initial(initial) => initial.write(f),
             Element::Submodule(submodule) => submodule.write(f),
+            Element::Tran(tran) => tran.write(f),
         }
+    }
+}
+
+impl Tran {
+    fn write(&self, f: &mut Writer) -> std::io::Result<()> {
+        let a = &self.a;
+        let b = &self.b;
+        if self.width <= 1 {
+            verilog_writeln!(f, "tran ({a} , {b} );")?;
+        } else {
+            for i in 0..self.width {
+                verilog_writeln!(f, "tran ({a}[{i}] , {b}[{i}] );")?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -379,7 +405,10 @@ fn display_width(width: Width) -> String {
 impl Assign {
     fn write(&self, writer: &mut Writer) -> std::io::Result<()> {
         let name = &self.name;
-        verilog_write!(writer, "assign {name} = ")?;
+        match self.strength {
+            Strength::Strong => verilog_write!(writer, "assign {name} = ")?,
+            Strength::Weak => verilog_write!(writer, "assign (weak1, weak0) {name} = ")?,
+        }
         self.expr.write(writer)?;
         writeln!(writer.file, ";")?;
         Ok(())
@@ -554,7 +583,7 @@ impl Normalizer {
             Expr::Reference(expr::Reference { name: name.clone() }),
         );
         self.new_elements.push(Element::Wire(Wire { name: name.clone(), width, expr: None }));
-        self.new_elements.push(Element::Assign(Assign { name, expr: old }));
+        self.new_elements.push(Element::Assign(Assign { name, expr: old, strength: Strength::Strong }));
     }
 
     fn normalize_expr(&mut self, expr: &mut Expr) {
@@ -730,6 +759,7 @@ impl Module {
                     }
                 }
                 Element::Submodule(_) => {}
+                Element::Tran(_) => {}
             }
         }
 

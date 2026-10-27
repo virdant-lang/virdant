@@ -4,11 +4,13 @@
 //! coverage diagnostics.
 
 use bstr::{BString, ByteSlice};
+use bstr::BStr;
 use indexmap::IndexMap;
 
+use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::symbols::{SymbolId, SymbolKind};
 use crate::common::DriverType;
-use crate::common::{Width, WordValue};
+use crate::common::{ComponentKind, Width, WordValue};
 use crate::common::source::Region;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticPayload};
@@ -19,6 +21,7 @@ use crate::types::Type;
 pub(crate) fn check_match_coverage(
     builder: &mut Builder,
     match_node: &AstNode<'_>,
+    it_context: Option<&BStr>,
     subject_typ: &Type,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
@@ -48,6 +51,26 @@ pub(crate) fn check_match_coverage(
     let has_else = first_else_idx.is_some();
     let category = subject_category(builder, subject_typ);
     if matches!(category, Category::Other) {
+        return;
+    }
+
+    // A match whose drivers all target `bus`/`net` components is exempt
+    // from exhaustiveness: a missing case drives nothing, leaving the
+    // net floating. This covers both statement-level matches and a
+    // match written directly as the RHS of a `#=` driver on a net
+    // (the tristate idiom).
+    let net_exempt = {
+        let item = crate::types::typing::item_for(builder, match_node.location());
+        if matches!(item.kind(), SymbolKind::ModDef) {
+            let component_analysis = builder.get_component_analysis(item.id());
+            driver_rhs_net_target(&component_analysis, match_node, it_context)
+                || (!match_node.is_expression_position()
+                    && arms_only_net_drivers(&component_analysis, it_context, &arms))
+        } else {
+            false
+        }
+    };
+    if net_exempt {
         return;
     }
 
@@ -226,6 +249,76 @@ pub(crate) fn check_match_coverage(
             },
         ));
     }
+}
+
+fn subtree_only_net_drivers(
+    component_analysis: &ComponentAnalysis,
+    node: &AstNode<'_>,
+    it_context: Option<&BStr>,
+) -> bool {
+    let parsing = node.parsing();
+    match node.payload() {
+        AstNodePayload::Driver(_) => {
+            let Some(target) = node.target() else { return false };
+            let mut path = parsing.string(target).to_owned();
+            crate::analysis::dependency::resolve_it_path(&mut path, it_context);
+            component_analysis
+                .resolve(path.as_bstr())
+                .map(|component| {
+                    matches!(
+                        component.kind(),
+                        Some(ComponentKind::Bus) | Some(ComponentKind::Net)
+                    )
+                })
+                .unwrap_or(false)
+        }
+        AstNodePayload::BidirectionalDriver => false,
+        _ => {
+            for child in node.children() {
+                if !subtree_only_net_drivers(component_analysis, &child, it_context) {
+                    return false;
+                }
+            }
+            true
+        }
+    }
+}
+
+fn arms_only_net_drivers(
+    component_analysis: &ComponentAnalysis,
+    it_context: Option<&BStr>,
+    arms: &[(Option<&AstNode<'_>>, &AstNode<'_>)],
+) -> bool {
+    for (_pat, body) in arms {
+        if !subtree_only_net_drivers(component_analysis, body, it_context) {
+            return false;
+        }
+    }
+    true
+}
+
+fn driver_rhs_net_target(
+    component_analysis: &ComponentAnalysis,
+    match_node: &AstNode<'_>,
+    it_context: Option<&BStr>,
+) -> bool {
+    let Some(parent) = match_node.parent() else { return false };
+    if !matches!(parent.payload(), AstNodePayload::Driver(_)) {
+        return false;
+    }
+    let parsing = parent.parsing();
+    let Some(target) = parent.target() else { return false };
+    let mut path = parsing.string(target).to_owned();
+    crate::analysis::dependency::resolve_it_path(&mut path, it_context);
+    component_analysis
+        .resolve(path.as_bstr())
+        .map(|component| {
+            matches!(
+                component.kind(),
+                Some(ComponentKind::Bus) | Some(ComponentKind::Net)
+            )
+        })
+        .unwrap_or(false)
 }
 
 fn arms_only_latched_drivers(arms: &[(Option<&AstNode<'_>>, &AstNode<'_>)]) -> bool {

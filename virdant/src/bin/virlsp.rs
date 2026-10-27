@@ -1031,6 +1031,7 @@ fn missing_platform_ports_action(
         let dir_kw = match port.dir {
             PortDir::Input => "incoming",
             PortDir::Output => "outgoing",
+            PortDir::Bidir => "bus",
         };
         // Stub the port's it-block: incoming ports are marked `unused`
         // (nothing drives them yet), outgoing ports are driven by the
@@ -1038,6 +1039,7 @@ fn missing_platform_ports_action(
         let body = match port.dir {
             PortDir::Input => "unused it",
             PortDir::Output => "it := ?",
+            PortDir::Bidir => "",
         };
         let typ_str = port.typ.as_ref()
             .map(|t| type_to_source(db, package, t))

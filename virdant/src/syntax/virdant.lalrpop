@@ -7,7 +7,7 @@ use crate::syntax::token::{Token, TokenError};
 
 use bstr::ByteSlice;
 use crate::common::source::{Region, SourceOffset};
-use crate::common::{DriverType, ComponentKind, BinOp, ChannelDir, SocketRole, UnOp};
+use crate::common::{DriverType, ComponentKind, BinOp, ChannelDir, SocketRole, Strength, UnOp};
 use crate::diagnostics::{self, Diagnostic};
 
 grammar<'a>(parser: &mut Parsing);
@@ -411,6 +411,28 @@ ModDefStmtComponent: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "bus" <ident:Ident> ":" <typ:Type> <it:ItBlock?> <rr:@R> => {
+        let payload = AstNodePayload::Component(payload::Component {
+            name: ident,
+            kind: ComponentKind::Bus,
+            doc_string: docstring,
+        });
+        let span = parser.span(ll, rr);
+        let num_children: u16 = 1u16 + 1u16 + if it.is_none() { 0u16 } else { 1u16 };
+
+        parser.add_node(payload, span, num_children)
+    },
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "net" <ident:Ident> ":" <typ:Type> <it:ItBlock?> <rr:@R> => {
+        let payload = AstNodePayload::Component(payload::Component {
+            name: ident,
+            kind: ComponentKind::Net,
+            doc_string: docstring,
+        });
+        let span = parser.span(ll, rr);
+        let num_children: u16 = 1u16 + 1u16 + if it.is_none() { 0u16 } else { 1u16 };
+
+        parser.add_node(payload, span, num_children)
+    },
     <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" "wire" <ident:Ident> ":" <typ:Type> <default:DefaultClause?> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
@@ -475,6 +497,7 @@ ModDefStmtDriver: AstNodeId = {
     <ll:@L> <lhs:Path> ":=" <rhs:Expr> <rr:@R> => {
         let payload = AstNodePayload::Driver(payload::Driver {
             driver_type: DriverType::Continuous,
+            strength: Strength::Strong,
         });
         let span = parser.span(ll, rr);
         let num_children = 2;
@@ -484,7 +507,35 @@ ModDefStmtDriver: AstNodeId = {
     <ll:@L> <lhs:Path> "<=" <rhs:Expr> <rr:@R> => {
         let payload = AstNodePayload::Driver(payload::Driver {
             driver_type: DriverType::Latched,
+            strength: Strength::Strong,
         });
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <lhs:Path> "#=" <rhs:Expr> <rr:@R> => {
+        let payload = AstNodePayload::Driver(payload::Driver {
+            driver_type: DriverType::Continuous,
+            strength: Strength::Strong,
+        });
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <lhs:Path> "#-" <rhs:Expr> <rr:@R> => {
+        let payload = AstNodePayload::Driver(payload::Driver {
+            driver_type: DriverType::Continuous,
+            strength: Strength::Weak,
+        });
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <lhs:Path> "#=#" <rhs:Path> <rr:@R> => {
+        let payload = AstNodePayload::BidirectionalDriver;
         let span = parser.span(ll, rr);
         let num_children = 2;
 
@@ -860,6 +911,13 @@ ExprUnOp: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
+    <ll:@L> "tap" <path:Path> <rr:@R> => {
+        let payload = AstNodePayload::ExprTap;
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
     <e:ExprAscription> => e,
 }
 
@@ -1111,6 +1169,9 @@ extern {
         "!="  => Token::BangEq,
         ":="  => Token::EqColon,
         ":=:" => Token::EqColoneq,
+        "#=#" => Token::OpAttach,
+        "#="  => Token::OpStrongDriver,
+        "#-"  => Token::OpWeakDriver,
         "<="  => Token::LtEq,
         "=>"  => Token::FatArrow,
         "->"  => Token::Arrow,
@@ -1160,6 +1221,9 @@ extern {
         "width" => Token::KwWidth,
         "incoming" => Token::KwIncoming,
         "outgoing" => Token::KwOutgoing,
+        "bus" => Token::KwBus,
+        "net" => Token::KwNet,
+        "tap" => Token::KwTap,
         "reg" => Token::KwReg,
         "wire" => Token::KwWire,
         "submod" => Token::KwSubmod,

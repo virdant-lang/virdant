@@ -40,6 +40,13 @@ pub enum ChannelDir {
 pub enum PortDir {
     Input,
     Output,
+    Bidir,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub enum Strength {
+    Strong,
+    Weak,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -81,6 +88,8 @@ pub enum ComponentKind {
     OutgoingReg,
     Reg,
     Wire,
+    Bus,
+    Net,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]

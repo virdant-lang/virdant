@@ -6,14 +6,14 @@ socket Bus {
 }
 
 mod Master {
-    client socket bus of Bus {
+    client socket busif of Bus {
         it.req := 7w8
         unused it.rsp
     }
 }
 
 mod Slave {
-    server socket bus of Bus {
+    server socket busif of Bus {
         it.rsp := it.req + 1w8
     }
 }
@@ -24,6 +24,6 @@ export mod Top {
         m.bus :=: it.bus
     }
     outgoing out : Word[8] {
-        it := s.bus.rsp
+        it := s.busif.rsp
     }
 }

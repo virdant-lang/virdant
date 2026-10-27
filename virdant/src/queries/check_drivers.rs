@@ -72,6 +72,12 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<V
     }
 
     for (path, component) in component_analysis.components() {
+        if matches!(
+            component.kind(),
+            Some(ComponentKind::Bus) | Some(ComponentKind::Net)
+        ) {
+            continue;
+        }
         let drivers = driver_analysis.drivers().get(&component.id());
         if component.can_sink() {
             match drivers {
@@ -130,7 +136,8 @@ fn check_wrong_driver_types(
         let expected = match component.kind() {
             Some(ComponentKind::Reg) | Some(ComponentKind::OutgoingReg) => DriverType::Latched,
             Some(ComponentKind::Wire) | Some(ComponentKind::Incoming)
-            | Some(ComponentKind::Outgoing) | Some(ComponentKind::OutgoingWire) => DriverType::Continuous,
+            | Some(ComponentKind::Outgoing) | Some(ComponentKind::OutgoingWire)
+            | Some(ComponentKind::Bus) | Some(ComponentKind::Net) => DriverType::Continuous,
             None => continue,
         };
         let path = component.path();

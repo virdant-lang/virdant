@@ -42,6 +42,13 @@ impl Typing {
             AstNodePayload::ExprCtor(_ctor)          => self.check_ctor(builder, context, node, expected_typ),
             AstNodePayload::ExprEnumerant(_)         => self.check_enumerant(builder, node, expected_typ),
             AstNodePayload::ExprStruct               => self.check_struct(builder, context, node, expected_typ),
+            AstNodePayload::ExprTap => {
+                if self.typs.contains_key(&node.id()) {
+                    Ok(())
+                } else {
+                    Err(())
+                }
+            }
             AstNodePayload::ExprIndexRange(_expr_index_range) => Ok(()), // TODO
             _ => unreachable!("Can't typecheck {:?}", node.summary()),
         }

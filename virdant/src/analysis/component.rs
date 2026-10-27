@@ -287,6 +287,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     ComponentKind::OutgoingReg => Flow::Duplex,
                     ComponentKind::Reg => Flow::Duplex,
                     ComponentKind::Wire => Flow::Duplex,
+                    ComponentKind::Bus | ComponentKind::Net => Flow::Duplex,
                 };
                 let component_kind = component.kind;
                 let component = Component {
@@ -350,7 +351,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 for submodule_stmt in submodule_ast.children() {
                     match submodule_stmt.payload() {
                         AstNodePayload::Component(component) => {
-                            if !matches!(component.kind, ComponentKind::Incoming | ComponentKind::Outgoing | ComponentKind::OutgoingWire | ComponentKind::OutgoingReg) {
+                            if !matches!(component.kind, ComponentKind::Incoming | ComponentKind::Outgoing | ComponentKind::OutgoingWire | ComponentKind::OutgoingReg | ComponentKind::Bus) {
                                 continue;
                             }
                             let id = ComponentId {
@@ -376,6 +377,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 ComponentKind::OutgoingReg => Flow::Source,
                                 ComponentKind::Reg => Flow::Duplex,
                                 ComponentKind::Wire => Flow::Duplex,
+                                ComponentKind::Bus | ComponentKind::Net => Flow::Duplex,
                             };
                             let component_kind = component.kind;
                             let component = Component {
@@ -600,6 +602,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                             // `check_platform_ports_for` reports it.
                             None => continue,
                         },
+                        PortDir::Bidir => continue,
                     };
                     let component = Component {
                         id,
@@ -702,6 +705,22 @@ fn collect_references_in_expr(
     let mut stack: Vec<AstNodeId> = vec![expr.id()];
     while let Some(node_id) = stack.pop() {
         let node = parsing.ast_node(node_id);
+        if matches!(node.payload(), AstNodePayload::ExprTap) {
+            let path_node = node.child(0);
+            if let Some(component) =
+                crate::analysis::dependency::resolve_path_component(
+                    &path_node,
+                    &parsing,
+                    component_analysis,
+                    it_context,
+                )
+            {
+                component_analysis.references.insert(
+                    path_node.location(),
+                    (component.id(), ReferenceKind::Expr),
+                );
+            }
+        }
         if matches!(node.payload(), AstNodePayload::ExprReference) {
             if let Some(path) = node.path() {
                 let mut name = parsing.string(path).to_owned();

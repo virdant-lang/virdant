@@ -471,6 +471,7 @@ fn dump_ports(args: &Args, moddef_fqn: &str) {
         let dir = match port.dir {
             virdant::common::PortDir::Input => "input",
             virdant::common::PortDir::Output => "output",
+            virdant::common::PortDir::Bidir => "bus",
         };
         let typ = port.typ
             .clone()
@@ -759,6 +760,7 @@ fn emit_manifest(args: &Args, db: &Db, builddir: &Path) {
             match port.dir {
                 PortDir::Input => "input",
                 PortDir::Output => "output",
+                PortDir::Bidir => "inout",
             }
             .into(),
         );
