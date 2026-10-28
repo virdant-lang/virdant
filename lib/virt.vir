@@ -13,8 +13,8 @@
 @fpga("virt")
 @part("virt")
 pub platform Virt {
-    //> 48 MHz primary clock.
-    @period_ns("20.833")
+    //> 1 MHz primary clock.
+    @period_ns("1000.000")
     incoming clock : Clock
 
     //> UART transmit data to the host (stdout).
