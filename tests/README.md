@@ -12,8 +12,7 @@ suite), or run a single suite with `make -C tests/<suite> test`.
 - `errors/` — programs that MUST fail to compile. Each `.vir` file is run
   through `vir check`; the test fails if the run succeeds, and FileCheck
   directives assert the exact diagnostics. Organized into feature
-  subdirectories (`syntax/`, `naming/`, `typing/`, `drivers/`, `match/`,
-  `cycles/`, `visibility/`, `platforms/`, `style/`).
+  subdirectories that group files by diagnostic family.
 - `warnings/` — programs that compile with expected warnings. The Makefile
   requires the exit code to be 0; FileCheck directives assert which warnings
   appear (and which do not).
@@ -83,4 +82,4 @@ skipped with a notice. CI installs the tools and sets the variable; local
   automatically wired in — no central list to forget to update.
 - `build/` output directories are gitignored and excluded from recursion.
 - `TESTING_REPORT/NOTES.md` records the reasoning behind the current layout
-  and any known, deliberately skipped tests (see `check/projects/patterns/`).
+  and any known, deliberately skipped tests.

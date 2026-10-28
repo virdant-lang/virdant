@@ -1,6 +1,5 @@
 # sim/fifo
 
-FIFO behavioral test. `src/top.vir` implements a FIFO; `fifo_tb.sv` runs a
-randomized push/pop stress test (pushes and pops hundreds of items with
-random data) and asserts full/empty behavior and data integrity through the
-generated Verilog.
+FIFO behavioral test: the design implements a FIFO, and `fifo_tb.sv` runs
+a randomized push/pop stress test, asserting full/empty behavior and data
+integrity through the generated Verilog.
