@@ -27,7 +27,7 @@ mod imp {
     use std::os::fd::BorrowedFd;
     use std::path::PathBuf;
     use std::rc::Rc;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::mpsc::{self, TryRecvError};
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
@@ -52,6 +52,8 @@ mod imp {
         pub fps_no_cap: bool,
         /// Stop after this many emulated clock cycles (exit code 124).
         pub cycles: Option<u64>,
+        /// On exit, report the average clock frequency achieved (MHz).
+        pub fps: bool,
     }
 
     const FLASH_SIZE: u64 = 1 << 24; // 16 MiB
@@ -136,6 +138,8 @@ mod imp {
         });
 
         let start = Instant::now();
+        FPS_START.lock().unwrap().replace(start);
+        FPS_REPORT.store(opts.fps, Ordering::Relaxed);
         setup_terminal();
 
         let exit_code: Rc<Cell<Option<i32>>> = Rc::new(Cell::new(None));
@@ -174,6 +178,7 @@ mod imp {
 
         let _ = sim.run();
         restore_term();
+        report_fps();
 
         // Distinct status for hitting the cycle cap without an exit
         // request, so test drivers can tell a hang (124) from a clean
@@ -272,6 +277,7 @@ mod imp {
             }
 
             self.cycles.set(self.cycles.get() + 1);
+            FPS_CYCLES.store(self.cycles.get(), Ordering::Relaxed);
             if self.cycles.get() >= self.max_cycles {
                 sim.finish();
             }
@@ -584,6 +590,51 @@ mod imp {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Average clock frequency report (--fps)
+    // ─────────────────────────────────────────────────────────────
+
+    // Shared with the SIGINT handler, which must print the summary
+    // itself before exiting immediately.
+    static FPS_START: Mutex<Option<Instant>> = Mutex::new(None);
+    static FPS_CYCLES: AtomicU64 = AtomicU64::new(0);
+    static FPS_REPORT: AtomicBool = AtomicBool::new(false);
+
+    /// Average clock frequency achieved (MHz), from the cycle count and
+    /// the elapsed wall time.  `None` if the run was too short to be
+    /// meaningful (no cycles, or no measurable elapsed time).
+    fn fps_mhz() -> Option<f64> {
+        let cycles = FPS_CYCLES.load(Ordering::Relaxed);
+        let secs = FPS_START.lock().ok()?.as_ref()?.elapsed().as_secs_f64();
+        if cycles == 0 || secs <= 0.0 {
+            return None;
+        }
+        Some(cycles as f64 / secs / 1e6)
+    }
+
+    /// Format a frequency with up to 4 decimal places (trailing zeros
+    /// trimmed).
+    fn fmt_mhz(mhz: f64) -> String {
+        format!("{mhz:.4}")
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_string()
+    }
+
+    /// Print the `--fps` summary (the average clock frequency in MHz),
+    /// on a natural exit or, via the SIGINT handler, on Ctrl-C.  Writes
+    /// straight to stdout because the handler cannot take the stdout
+    /// lock.
+    fn report_fps() {
+        if !FPS_REPORT.load(Ordering::Relaxed) {
+            return;
+        }
+        let Some(mhz) = fps_mhz() else { return };
+        let text = format!("Average clock frequency: {} MHz\n", fmt_mhz(mhz));
+        let fd = unsafe { BorrowedFd::borrow_raw(1) };
+        let _ = nix::unistd::write(fd, text.as_bytes());
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Terminal raw mode (so keystrokes go straight to the UART)
     // ─────────────────────────────────────────────────────────────
 
@@ -592,6 +643,7 @@ mod imp {
 
     extern "C" fn sigint_handler(_sig: i32) {
         restore_term();
+        report_fps();
         // Immediate exit, bypassing atexit (matches the C++ harness's
         // _exit; termios is already restored above).
         std::process::exit(0);

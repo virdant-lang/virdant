@@ -86,6 +86,9 @@ enum Command {
         /// Run the simulation at full speed (no real-time cap)
         #[arg(long)]
         fps_no_cap: bool,
+        /// On exit, report the average clock frequency achieved (MHz)
+        #[arg(long)]
+        fps: bool,
         /// Preload the 16 MiB SPI flash image from FILE
         #[arg(long)]
         flash: Option<PathBuf>,
@@ -153,7 +156,7 @@ fn main() {
         Command::Typing { } => dump_typing(&args),
         Command::Compile { path } => compile(path),
         Command::Build { } => build(&args),
-        Command::Run { ref trace, fps_no_cap, ref flash, ref cycles } => run(&args, trace, fps_no_cap, flash, cycles),
+        Command::Run { ref trace, fps_no_cap, fps, ref flash, ref cycles } => run(&args, trace, fps_no_cap, fps, flash, cycles),
         Command::RunIcarus { ref path, ref vcd } => run_icarus(&args, path, vcd),
         Command::New { ref project } => new_project(&args, project),
         Command::Bitstream { } => { bitstream(&args); },
@@ -880,7 +883,7 @@ fn run_icarus(args: &Args, _path: &Option<PathBuf>, vcd: &Option<String>) {
     let _ = execvp(&program, &args);
 }
 
-fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, flash: &Option<PathBuf>, cycles: &Option<u64>) {
+fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: &Option<PathBuf>, cycles: &Option<u64>) {
     let cwd = resolve_cwd(args);
     if !cwd.join("Virdant.toml").exists() {
         eprintln!("No Virdant.toml found");
@@ -954,6 +957,7 @@ fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, flash: &Option<Pat
             trace: trace.clone().map(PathBuf::from),
             fps_no_cap: fps_no_cap,
             cycles: cycles.clone(),
+            fps: fps,
         },
     );
     std::process::exit(exit_code);
