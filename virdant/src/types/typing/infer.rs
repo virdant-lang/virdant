@@ -438,6 +438,11 @@ impl Typing {
                     .insert(node.location(), Tag::PrimitiveResolution(Primitive::Word));
                 self.infer_word(builder, context, &node)
             }
+            b"mux" => {
+                self.tags
+                    .insert(node.location(), Tag::PrimitiveResolution(Primitive::Mux));
+                self.infer_mux(builder, context, node, args)
+            }
             b"asclock" => {
                 self.tags
                     .insert(node.location(), Tag::PrimitiveResolution(Primitive::AsClock));
@@ -452,6 +457,62 @@ impl Typing {
             }
             _ => Ok(None),
         }
+    }
+
+    /// Infer the type of a `mux(cond, a, b)` expression.
+    ///
+    /// A mux is inferrable whenever either of its data arms (`a` or
+    /// `b`) is inferrable.  If both arms are inferrable, they must
+    /// match.  If only one is, the other is checked against it.
+    ///
+    /// When neither arm is inferrable, the condition is left
+    /// untouched for `check_mux`, which is reached exactly when this
+    /// function returns `Ok(None)`.
+    fn infer_mux<'p>(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        node: &AstNode<'p>,
+        args: &[AstNode<'p>],
+    ) -> Result<Option<Type>, ()> {
+        // mux(cond, a, b) requires exactly 3 arguments
+        if args.len() != 3 {
+            self.flag_unknown(node, format!("mux requires exactly 3 arguments, got {}", args.len()));
+            return Err(());
+        }
+
+        let cond = &args[0];
+        let a = &args[1];
+        let b = &args[2];
+
+        let a_typ = self.infer(builder, context.clone(), a)?;
+        let b_typ = self.infer(builder, context.clone(), b)?;
+
+        let typ = match (a_typ, b_typ) {
+            (None, None) => return Ok(None),
+            (Some(a_typ), Some(b_typ)) => {
+                if a_typ != b_typ {
+                    self.flag_wrong_type(node, &a_typ, &b_typ);
+                    return Err(());
+                }
+                a_typ
+            }
+            (Some(typ), None) => {
+                self.check(builder, context.clone(), b, &typ)?;
+                typ
+            }
+            (None, Some(typ)) => {
+                self.check(builder, context.clone(), a, &typ)?;
+                typ
+            }
+        };
+
+        // The mux is inferrable from its arms, so the condition is
+        // checked here rather than in `check_mux`.
+        self.check(builder, context.clone(), cond, &Type::Bit)?;
+
+        self.annotate(node, &typ);
+        Ok(Some(typ))
     }
 
     fn infer_unop<'p>(
