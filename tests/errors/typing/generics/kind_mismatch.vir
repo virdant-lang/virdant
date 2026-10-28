@@ -1,0 +1,38 @@
+// A Nat-kind parameter given a type: Word[Bit].
+
+pub mod Top {
+    incoming inp : Word[Bit]
+    outgoing out : Bit
+    out := inp[0]
+}
+
+// CHECK: Type argument mismatch: parameter n of Word expects a Nat, but found a type
+
+// A Type-kind parameter given a Nat literal: Valid[8].
+
+pub mod Top2 {
+    incoming inp : Valid[8]
+    outgoing out : Word[8]
+    out := match inp {
+        case @Valid(v) => v
+        case @Invalid() => 0
+    }
+}
+
+// CHECK: Type argument mismatch: parameter T of Valid expects a type, but found a Nat literal
+
+// A generic parameter declared with an unknown kind
+// (neither `Type` nor `Nat`).
+
+struct type S[X : Foo] {
+    value : X
+}
+
+pub mod Top3 {
+    incoming inp : Bit
+    outgoing out : Bit
+    out := inp
+}
+
+// CHECK: Unknown kind Foo
+// CHECK: Check failed

@@ -1,0 +1,73 @@
+mod OverlapIdent {
+    incoming b : Bit
+    outgoing out : Bit
+    // CHECK: Overlapping match arm: x
+    out := match b {
+        case true  => false
+        case x => true
+    }
+}
+
+mod OverlapDontcare {
+    incoming b : Bit
+    outgoing out : Bit
+    // CHECK: Overlapping match arm
+    out := match b {
+        case true  => false
+        case dontcare => true
+    }
+}
+
+
+// MatchCoverage: duplicated `case true` arm on a Bit subject.
+
+mod OverlapBit {
+    incoming b : Bit
+    outgoing out : Bit
+    // CHECK: Overlapping match arm: true
+    out := match b {
+        case true  => false
+        case false => true
+        case true  => true
+    }
+}
+
+
+// MatchCoverage: duplicated @Foo arm in a union match.
+
+union type MyUnion {
+    Foo()
+    Bar(x : Bit)
+}
+
+mod OverlapUnion {
+    wire u : MyUnion
+    u := @Foo()
+
+    wire out : Bit
+    unused out
+    // CHECK: Overlapping match arm: @Foo
+    out := match u {
+        case @Foo() => true
+        case @Bar(x) => x
+        case @Foo() => false
+    }
+}
+
+
+// MatchCoverage: duplicated word-literal arm.
+
+mod OverlapWord {
+    incoming x : Word[2]
+    outgoing out : Bit
+    // CHECK: Overlapping match arm: 0
+    out := match x {
+        case 0 => true
+        case 1 => false
+        case 2 => true
+        case 3 => false
+        case 0 => false
+    }
+}
+
+// CHECK: Check failed

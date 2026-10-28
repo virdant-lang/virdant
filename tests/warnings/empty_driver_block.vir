@@ -1,6 +1,7 @@
-// Tests for empty driver blocks: components, submodules, and sockets
-// whose it-blocks contain no drivers.
+// Tests for empty driver blocks: components whose it-blocks contain
+// no drivers.
 // Each empty driver block should produce a warning.
+// (Submodule and socket cases are planned new tests; see TESTING_REPORT.)
 
 mod ComponentModule {
     incoming a : Bit {

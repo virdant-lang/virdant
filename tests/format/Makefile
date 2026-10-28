@@ -9,6 +9,8 @@ VIRFILES := $(filter-out %.golden.vir,$(wildcard *.vir))
 GOLDEN := $(VIRFILES:.vir=.golden.vir)
 
 # Format each input file, diff against golden, and verify parse succeeds.
+# The parse gate greps for 'Syntax Error' in the parse output instead of
+# trusting the exit code: `vir parse` exits 0 even on syntax errors.
 .PHONY: test
 test: $(VIRFILES)
 	@for f in $^; do \
@@ -22,9 +24,10 @@ test: $(VIRFILES)
 			rm -rf "$$tmpdir"; \
 			exit 1; \
 		fi; \
-		if ! $(VIR) parse "$$tmpdir/input.vir" > /dev/null 2>&1; then \
+		$(VIR) parse "$$tmpdir/input.vir" > "$$tmpdir/parse.out" 2>&1 || true; \
+		if grep -q 'Syntax Error' "$$tmpdir/parse.out"; then \
 			echo "FAIL: $$f (formatted) does not parse"; \
-			$(VIR) parse "$$tmpdir/input.vir" 2>&1 || true; \
+			grep 'Syntax Error' "$$tmpdir/parse.out" || true; \
 			rm -rf "$$tmpdir"; \
 			exit 1; \
 		fi; \

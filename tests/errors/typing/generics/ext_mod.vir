@@ -1,0 +1,38 @@
+// `ext mod` cannot have generics — a hard rule, not a missing
+// feature: ext mods parameterize through `@parameter` annotations
+// instead (plans/PARAMETERS.md).
+
+ext mod BadCell[T : Type] {
+    incoming clk : Clock
+    outgoing data : Word[16]
+}
+
+pub mod Top {
+    incoming clk : Clock
+    outgoing out : Word[16]
+    out := 0
+    unused clk
+}
+
+// CHECK: ext mod ext_mod::BadCell cannot have generics
+
+// An `ext mod` cannot have generics — a hard rule.  This also holds
+// for the instantiation side: an ext-mod instantiation cannot take
+// type arguments, even when the ext mod itself declares none.
+
+ext mod Cell {
+    incoming clk : Clock
+    outgoing data : Word[16]
+}
+
+pub mod Top2 {
+    incoming clk : Clock
+    outgoing out : Word[16]
+    out := 0
+    mod f of Cell[Word[8]] {
+        it.clk := clk
+    }
+}
+
+// CHECK: ext mod ext_mod::Cell cannot have generics
+// CHECK: Check failed

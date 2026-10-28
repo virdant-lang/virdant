@@ -1,0 +1,11 @@
+// Tests for the UnfilledHole warning: using the hole expression "?"
+// fills the type but leaves the driver unimplemented.
+// None of these are errors, so the run ends with "Check OK".
+
+mod WithHole {
+    outgoing out : Word[4]
+    // CHECK: Unfilled hole: ? : Word[4]
+    out := ?
+}
+
+// CHECK: Check OK
