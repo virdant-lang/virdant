@@ -54,6 +54,9 @@ mod imp {
         pub cycles: Option<u64>,
         /// On exit, report the average clock frequency achieved (MHz).
         pub fps: bool,
+        /// Print informational board messages (builtin attachments, flash
+        /// load).  Errors print regardless.
+        pub verbose: bool,
     }
 
     const FLASH_SIZE: u64 = 1 << 24; // 16 MiB
@@ -73,7 +76,7 @@ mod imp {
     /// `top`.  Returns the process exit code.
     pub fn run(db: &Db, top: SymbolId, clock_hz: u64, opts: VirtOptions) -> i32 {
         let mut sim = Sim::new(db, top, Default::default());
-        crate::sim::builtins::attach(&mut sim, db, top);
+        crate::sim::builtins::attach(&mut sim, db, top, opts.verbose);
 
         let port = |sim: &Sim, name: &str| -> SignalId {
             let path = format!("top.{name}");
@@ -151,7 +154,7 @@ mod imp {
             spi_cs,
             spi_mosi,
             spi_miso,
-            flash: SpiFlash::new(opts.flash.as_ref()),
+            flash: SpiFlash::new(opts.flash.as_ref(), opts.verbose),
         };
         let mut per_cycle = PerCycle {
             tx,
@@ -345,14 +348,16 @@ mod imp {
     enum FlashState { Idle, Cmd, Addr, Data, Ignore }
 
     impl SpiFlash {
-        fn new(flash_path: Option<&PathBuf>) -> SpiFlash {
+        fn new(flash_path: Option<&PathBuf>, verbose: bool) -> SpiFlash {
             let mut mem = vec![0xFF; FLASH_SIZE as usize];
             if let Some(path) = flash_path {
                 match std::fs::read(path) {
                     Ok(bytes) => {
                         let n = bytes.len().min(mem.len());
                         mem[..n].copy_from_slice(&bytes[..n]);
-                        eprintln!("virt: loaded {n} bytes from {}", path.display());
+                        if verbose {
+                            eprintln!("virt: loaded {n} bytes from {}", path.display());
+                        }
                     }
                     Err(e) => {
                         eprintln!("virt: cannot open flash image {}: {e}", path.display());

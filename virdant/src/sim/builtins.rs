@@ -25,7 +25,7 @@ use crate::syntax::payload::AstNodePayload;
 
 /// Attach builtin behavior to every `ext mod` instance in the
 /// elaborated design rooted at `top`.
-pub fn attach(sim: &mut Sim, db: &Db, top: SymbolId) {
+pub fn attach(sim: &mut Sim, db: &Db, top: SymbolId, verbose: bool) {
     let elaboration = sim.elaboration();
     let symboltable = db.get_symboltable();
     let instances: Vec<(BString, String)> = elaboration
@@ -51,7 +51,7 @@ pub fn attach(sim: &mut Sim, db: &Db, top: SymbolId) {
                 false
             }
         };
-        if attached {
+        if attached && verbose {
             eprintln!("sim: builtin ext module `{fqn}` at `{}`", prefix.as_bstr().to_str_lossy());
         }
     }

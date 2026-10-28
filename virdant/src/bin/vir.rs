@@ -95,6 +95,9 @@ enum Command {
         /// Stop after this many clock cycles (exit code 124)
         #[arg(long)]
         cycles: Option<u64>,
+        /// Print informational board messages (builtin attachments, flash load)
+        #[arg(short = 'v', long)]
+        verbose: bool,
     },
     /// Run Virdant package with Icarus Verilog
     RunIcarus { path: Option<PathBuf>, #[arg(long)] vcd: Option<String> },
@@ -156,7 +159,7 @@ fn main() {
         Command::Typing { } => dump_typing(&args),
         Command::Compile { path } => compile(path),
         Command::Build { } => build(&args),
-        Command::Run { ref trace, fps_no_cap, fps, ref flash, ref cycles } => run(&args, trace, fps_no_cap, fps, flash, cycles),
+        Command::Run { ref trace, fps_no_cap, fps, ref flash, ref cycles, verbose } => run(&args, trace, fps_no_cap, fps, flash, cycles, verbose),
         Command::RunIcarus { ref path, ref vcd } => run_icarus(&args, path, vcd),
         Command::New { ref project } => new_project(&args, project),
         Command::Bitstream { } => { bitstream(&args); },
@@ -883,7 +886,7 @@ fn run_icarus(args: &Args, _path: &Option<PathBuf>, vcd: &Option<String>) {
     let _ = execvp(&program, &args);
 }
 
-fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: &Option<PathBuf>, cycles: &Option<u64>) {
+fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: &Option<PathBuf>, cycles: &Option<u64>, verbose: bool) {
     let cwd = resolve_cwd(args);
     if !cwd.join("Virdant.toml").exists() {
         eprintln!("No Virdant.toml found");
@@ -958,6 +961,7 @@ fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: 
             fps_no_cap: fps_no_cap,
             cycles: cycles.clone(),
             fps: fps,
+            verbose,
         },
     );
     std::process::exit(exit_code);
