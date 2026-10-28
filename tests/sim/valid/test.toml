@@ -1,0 +1,2 @@
+kind = "sim"
+description = "Behavioral test of `Valid` matching: the top module produces a wire from a"

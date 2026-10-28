@@ -1,0 +1,3 @@
+[package]
+name = "module_cycle_negative"
+version = "1.0.0"

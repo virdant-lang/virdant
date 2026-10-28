@@ -1,0 +1,4 @@
+kind = "check"
+description = "Tests for platform-default error cases:"
+expect = "error"
+filecheck = "src/top.vir"

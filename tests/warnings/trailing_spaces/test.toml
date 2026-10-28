@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok"
+description = "Trailing spaces are a warning (unlike tabs and bad indentation, which are errors)."
+filecheck = "src/trailing_spaces.vir"

@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Ensure that references in when/match guard expressions are properly tracked as 'used', so no..."
+filecheck = "src/when_match_guards.vir"

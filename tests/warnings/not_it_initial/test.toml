@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok"
+description = "Tests for the NotIt warning on `initial` statements: using the component name instead of..."
+filecheck = "src/not_it_initial.vir"

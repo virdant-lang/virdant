@@ -1,0 +1,2 @@
+kind = "sim"
+description = "The builtin generic socket `Pipe[T]` (lib/builtin.vir), instantiated at two different type..."

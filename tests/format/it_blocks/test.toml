@@ -1,0 +1,4 @@
+kind = "format"
+description = "it blocks"
+input = "it_blocks.vir"
+golden = "it_blocks.golden.vir"

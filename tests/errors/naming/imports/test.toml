@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "imports"
+filecheck = "src/imports.vir"

@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Every line containing at least one token must begin with a number of spaces which is a..."
+filecheck = "src/indentation.vir"

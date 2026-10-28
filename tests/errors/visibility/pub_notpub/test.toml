@@ -1,0 +1,4 @@
+kind = "check"
+description = "Referencing a non-pub item from another package errors at the !"
+expect = "error"
+filecheck = "src/top.vir"

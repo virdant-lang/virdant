@@ -1,0 +1,4 @@
+kind = "format"
+description = "Basic 4-space indentation"
+input = "basic_indent.vir"
+golden = "basic_indent.golden.vir"

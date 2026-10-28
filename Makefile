@@ -1,10 +1,11 @@
 .PHONY: build build-wasm test clean install grammar docs release
 
-VIR       ?= $(CURDIR)/target/release/vir
-FILECHECK ?= $(CURDIR)/target/release/filecheck
+VIR    ?= $(CURDIR)/target/release/vir
+RUNNER ?= $(CURDIR)/target/release/virtue
 
 build: virdant/target/lib
-	cargo build --release --features "vir-bin,filecheck-bin,vir-lsp-bin"
+	cargo build --release -p virdant --features "vir-bin,vir-lsp-bin"
+	cargo build --release -p virtue
 
 # Cargo's build script places generated artifacts in OUT_DIR, which has the
 # concrete form: target/<profile>/build/<crate>-<hash>/out/foo.grammar
@@ -20,14 +21,39 @@ virdant/target/lib:
 build-wasm:
 	cargo build -p virdant --lib --target wasm32-unknown-unknown --no-default-features --features "wasm"
 
+test_runner: virdant/target/lib build
+	$(RUNNER)
+	@echo
+	@echo "########################################"
+	@echo "# RUNNER TESTS PASS"
+	@echo "########################################"
+
+# The standard entry point: Rust unit tests + the parallel test runner
+# over tests/ + the docs examples suite (docs/ is out of bounds for the
+# test.toml conversion, so its Makefile keeps running the example checks).
 test: virdant/target/lib build
-	cargo test
-	$(MAKE) -C tests test VIR=$(VIR) FILECHECK=$(FILECHECK)
+	@echo "########################################"
+	@echo "# RUNNING TESTS IN docs/"
+	@echo "########################################"
+	@echo
 	$(MAKE) -C docs  test VIR=$(VIR)
 	@echo
-	@printf '%*s\n' "$$(tput cols)" '' | tr ' ' '#'
-	@echo "  All Tests Pass  "
-	@printf '%*s\n' "$$(tput cols)" '' | tr ' ' '#'
+	@echo "########################################"
+	@echo "RUNNING CARGO TESTS"
+	@echo "########################################"
+	@echo
+	cargo test
+	@echo
+	@echo "########################################"
+	@echo "# RUNNING TESTS IN tests/"
+	@echo "########################################"
+	@echo
+	$(RUNNER)
+	@echo
+	@echo "########################################"
+	@echo "# RUNNER TESTS PASS"
+	@echo "########################################"
+
 
 clean:
 	cargo clean

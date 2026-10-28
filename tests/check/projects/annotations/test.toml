@@ -1,0 +1,3 @@
+kind = "check"
+description = "Test that annotations can be parsed on various items and slots"
+expect = "ok"

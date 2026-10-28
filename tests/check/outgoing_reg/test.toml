@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Tests that an outgoing reg does not emit an 'Unused signal' warning when it is never read..."
+filecheck = "src/outgoing_reg.vir"

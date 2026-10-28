@@ -1,0 +1,2 @@
+kind = "sim"
+description = "Traffic light state machine demonstrating enum types."

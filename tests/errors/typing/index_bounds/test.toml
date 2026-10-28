@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Regression tests for IndexOutOfBounds and IndexRangeOutOfBounds diagnostics."
+filecheck = "src/index_bounds.vir"

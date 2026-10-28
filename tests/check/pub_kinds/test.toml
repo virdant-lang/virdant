@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "`pub` is allowed on every top-level item kind, `pub mod`s may be generic, and same-package..."
+filecheck = "src/pub_kinds.vir"

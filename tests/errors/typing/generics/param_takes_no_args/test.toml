@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "A generic parameter applied to type arguments: parameters take no type arguments."
+filecheck = "src/param_takes_no_args.vir"

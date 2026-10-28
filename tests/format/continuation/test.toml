@@ -1,0 +1,4 @@
+kind = "format"
+description = "Multi-line continuation: driver with RHS on next line"
+input = "continuation.vir"
+golden = "continuation.golden.vir"

@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok"
+description = "Tests for the UnusedSource warning family: ports, wires, and sub-module outgoing ports that..."
+filecheck = "src/unused_source.vir"

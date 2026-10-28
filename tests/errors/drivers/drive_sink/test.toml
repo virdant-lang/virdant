@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "drive_sink"
+filecheck = "src/drive_sink.vir"

@@ -1,0 +1,3 @@
+kind = "check"
+description = "Project-style positive test for `@parameter` annotations: parameters are"
+expect = "ok"

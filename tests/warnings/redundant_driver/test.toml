@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok"
+description = "RedundantDriver: a latched driver (<=) where the source and target refer to the same..."
+filecheck = "src/redundant_driver.vir"

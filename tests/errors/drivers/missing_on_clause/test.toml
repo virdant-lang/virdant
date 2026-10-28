@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "missing_on_clause"
+filecheck = "src/missing_on_clause.vir"

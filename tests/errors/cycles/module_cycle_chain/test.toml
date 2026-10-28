@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Three modules forming a cycle: A -> B -> C -> A."
+filecheck = "src/module_cycle_chain.vir"

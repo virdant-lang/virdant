@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "A generic parameter referenced outside its declaring def."
+filecheck = "src/unbound_param.vir"

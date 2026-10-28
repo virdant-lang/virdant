@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "No type leakage: every type in a `pub` item's public surface must be transitively `pub`."
+filecheck = "src/pub_leak.vir"

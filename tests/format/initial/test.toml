@@ -1,0 +1,4 @@
+kind = "format"
+description = "`initial` statements are not aligned with drivers"
+input = "initial.vir"
+golden = "initial.golden.vir"

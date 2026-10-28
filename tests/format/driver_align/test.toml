@@ -1,0 +1,4 @@
+kind = "format"
+description = "Driver alignment with :=, <=, :=:"
+input = "driver_align.vir"
+golden = "driver_align.golden.vir"

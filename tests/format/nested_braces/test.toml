@@ -1,0 +1,4 @@
+kind = "format"
+description = "Nested braces: if/else and match"
+input = "nested_braces.vir"
+golden = "nested_braces.golden.vir"

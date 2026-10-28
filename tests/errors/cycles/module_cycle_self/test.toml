@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "A module that instantiates itself: A -> A."
+filecheck = "src/module_cycle_self.vir"

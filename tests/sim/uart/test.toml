@@ -1,0 +1,4 @@
+kind = "sim"
+description = "UART design (`src/uart.vir`, 12 MHz clock). Unlike the other sim projects,"
+simulator = "verilator"
+flags = ["-Wno-MULTITOP"]

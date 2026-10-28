@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "MatchCoverage: `else` arm followed by another `case`."
+filecheck = "src/else_arms.vir"

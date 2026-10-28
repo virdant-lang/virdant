@@ -1,0 +1,4 @@
+kind = "format"
+description = "Mixed alignment of types AND drivers together"
+input = "mixed_align.vir"
+golden = "mixed_align.golden.vir"

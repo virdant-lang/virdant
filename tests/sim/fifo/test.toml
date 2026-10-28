@@ -1,0 +1,4 @@
+kind = "sim"
+description = "FIFO behavioral test: the design implements a FIFO, and `fifo_tb.sv` runs"
+sources = ["build/*.sv", "fifo_tb.sv"]
+flags = ["-g2012"]

@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "MatchCoverage: enum subject with one enumerant omitted."
+filecheck = "src/exhaustive_enum.vir"

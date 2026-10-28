@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Tests for the new pattern features: 1."
+filecheck = "src/patterns.vir"

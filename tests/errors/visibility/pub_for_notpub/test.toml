@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "A mod with a `for` clause implements a platform, which only top modules do: every such mod..."
+filecheck = "src/pub_for_notpub.vir"

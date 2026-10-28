@@ -8,7 +8,7 @@ site (the import itself never visibility-errors), and a
 the referencing package; the FileCheck directives assert the warning
 appears exactly once, ordered before the use-site errors.
 
-Note: the project's Makefile previously resolved `BASEDIR` one directory
+Note: the project's harness previously resolved the repo root one directory
 too far up, pointing filecheck outside the repository. It was fixed for the
-new, deeper location; the suite's automatic recursion now wires the project
-in.
+new, deeper location; the runner's automatic discovery now wires the
+project in.

@@ -1,0 +1,2 @@
+kind = "sim"
+description = "Generic socket defs and generic mod defs, instantiated at concrete type arguments and wired..."

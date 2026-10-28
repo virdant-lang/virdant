@@ -1,0 +1,2 @@
+kind = "sim"
+description = "Behavioral test of a GCD computed by a union-typed state machine: the"

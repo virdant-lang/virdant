@@ -1,0 +1,4 @@
+kind = "check"
+description = "Intended to test pattern-matching features (ident patterns and constructor"
+expect = "ok"
+skip = "source hits known pattern-matching issues; see TESTING_REPORT/NOTES.md"

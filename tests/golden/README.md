@@ -6,9 +6,11 @@ hand-expanded reference. This is a different verification layer from
 is the recommended home for future platform-codegen goldens.
 
 Subdirectories group tests by feature area (e.g. generics). Each golden
-test needs its own bespoke Makefile — the typical pattern is to check,
-build, grep for the escaped FQN, and tail-diff the generated Verilog
-against the reference (dropping the header line).
+test's `test.toml` is bespoke — the typical pattern is a `kind =
+"golden"` entry that checks, builds, greps for the escaped FQN, and
+tail-diffs the generated Verilog against the reference via the `grep`
+and `diff` keys (see `virtue/README.md`).
 
 To add a golden test, create a new subdirectory with the source, the
-hand-expanded reference, and a Makefile following the existing pattern.
+hand-expanded reference, and a `test.toml` following the existing
+pattern.

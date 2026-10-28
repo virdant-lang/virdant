@@ -1,0 +1,3 @@
+[package]
+name = "ctor_requires_args"
+version = "1.0.0"

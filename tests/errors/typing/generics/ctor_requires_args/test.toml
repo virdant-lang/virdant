@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "An enumerant carrying payload parameters must be constructed and matched with `@Name(...)`,..."
+filecheck = "src/ctor_requires_args.vir"

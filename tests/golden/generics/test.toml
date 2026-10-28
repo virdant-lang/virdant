@@ -1,0 +1,9 @@
+kind = "golden"
+description = "A single golden-master test: a generic module and a hand-expanded copy of"
+grep = [
+  { path = "build/generics_golden_generic.sv", pattern = "module \\generics_golden_generic::Top (" },
+  { path = "build/generics_golden_expanded.sv", pattern = "module \\generics_golden_expanded::Top (" },
+]
+diff = [
+  { a = "build/generics_golden_generic.sv", b = "build/generics_golden_expanded.sv", skip_lines = 1 },
+]
