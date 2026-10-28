@@ -162,24 +162,64 @@ impl Typing {
         };
         match binop.op {
             BinOp::Lt | BinOp::Lte | BinOp::Gt | BinOp::Gte | BinOp::Eq | BinOp::Neq => {
-                if let Some(lhs_typ) = self.infer(builder, context.clone(), &lhs)? {
-                    self.check(builder, context, &rhs, &lhs_typ)?;
-                    self.annotate(node, &Type::Bit);
-                    Ok(Some(Type::Bit))
-                } else {
-                    self.flag_unknown(&node, "Can't infer LHS");
-                    Err(())
+                // A comparison is inferrable whenever either operand
+                // is inferrable.  If both are, they must be
+                // compatible; if only one is, the other is checked
+                // against it.  The result is always a Bit.
+                let lhs_typ = self.infer(builder, context.clone(), &lhs)?;
+                let rhs_typ = self.infer(builder, context.clone(), &rhs)?;
+                match (lhs_typ, rhs_typ) {
+                    (Some(lhs_typ), Some(rhs_typ)) => {
+                        if !Self::compatible_typs(&lhs_typ, &rhs_typ) {
+                            self.flag_wrong_type(node, &lhs_typ, &rhs_typ);
+                            return Err(());
+                        }
+                    }
+                    (Some(lhs_typ), None) => {
+                        self.check(builder, context.clone(), &rhs, &lhs_typ)?;
+                    }
+                    (None, Some(rhs_typ)) => {
+                        self.check(builder, context.clone(), &lhs, &rhs_typ)?;
+                    }
+                    (None, None) => {
+                        self.flag_cant_infer(node);
+                        return Err(());
+                    }
                 }
+                self.annotate(node, &Type::Bit);
+                Ok(Some(Type::Bit))
             }
             BinOp::Add | BinOp::Sub | BinOp::And | BinOp::Or | BinOp::Xor => {
-                if let Some(lhs_typ) = self.infer(builder, context.clone(), &lhs)? {
-                    self.check(builder, context, &rhs, &lhs_typ)?;
-                    self.annotate(node, &lhs_typ);
-                    Ok(Some(lhs_typ))
-                } else {
-                    self.flag_cant_infer(node);
-                    Err(())
-                }
+                // An arithmetic/bitwise op is inferrable whenever
+                // either operand is inferrable.  If both are, they
+                // must be compatible; if only one is, the other is
+                // checked against it.  The result takes their common
+                // type.
+                let lhs_typ = self.infer(builder, context.clone(), &lhs)?;
+                let rhs_typ = self.infer(builder, context.clone(), &rhs)?;
+                let typ = match (lhs_typ, rhs_typ) {
+                    (Some(lhs_typ), Some(rhs_typ)) => {
+                        if !Self::compatible_typs(&lhs_typ, &rhs_typ) {
+                            self.flag_wrong_type(node, &lhs_typ, &rhs_typ);
+                            return Err(());
+                        }
+                        lhs_typ
+                    }
+                    (Some(lhs_typ), None) => {
+                        self.check(builder, context.clone(), &rhs, &lhs_typ)?;
+                        lhs_typ
+                    }
+                    (None, Some(rhs_typ)) => {
+                        self.check(builder, context.clone(), &lhs, &rhs_typ)?;
+                        rhs_typ
+                    }
+                    (None, None) => {
+                        self.flag_cant_infer(node);
+                        return Err(());
+                    }
+                };
+                self.annotate(node, &typ);
+                Ok(Some(typ))
             }
             BinOp::LogicalAnd | BinOp::LogicalOr | BinOp::LogicalXor => {
                 let lhs_ok = self
@@ -448,11 +488,21 @@ impl Typing {
                     .insert(node.location(), Tag::PrimitiveResolution(Primitive::AsClock));
                 let subject = node.subject().unwrap();
 
-                if let Ok(()) = self.check(builder, context, &subject, &Type::Bit) {
-                    self.annotate(&node, &Type::Clock);
-                    Ok(Some(Type::Clock))
-                } else {
-                    Ok(None)
+                // Infer the subject directly rather than checking it
+                // against Bit: a `check` here would annotate the
+                // subject even when this function goes on to return
+                // `Ok(None)`, and a later visit would annotate it
+                // again.
+                match self.infer(builder, context, &subject)? {
+                    Some(typ) if matches!(typ, Type::Bit | Type::Reset) => {
+                        self.annotate(&node, &Type::Clock);
+                        Ok(Some(Type::Clock))
+                    }
+                    Some(typ) => {
+                        self.flag_wrong_type(node, &Type::Bit, &typ);
+                        Err(())
+                    }
+                    None => Ok(None),
                 }
             }
             _ => Ok(None),
@@ -491,7 +541,7 @@ impl Typing {
         let typ = match (a_typ, b_typ) {
             (None, None) => return Ok(None),
             (Some(a_typ), Some(b_typ)) => {
-                if a_typ != b_typ {
+                if !Self::compatible_typs(&a_typ, &b_typ) {
                     self.flag_wrong_type(node, &a_typ, &b_typ);
                     return Err(());
                 }

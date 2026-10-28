@@ -1,0 +1,41 @@
+// Tests for mux inference errors.  A mux is inferrable whenever
+// either data arm is inferrable; if both are, they must be
+// compatible, and if only one is, the other is checked against it.
+
+mod MuxArmMismatch {
+    incoming c : Bit
+    outgoing out : Word[4]
+    // Both arms are inferrable but incompatible.
+    // CHECK: Wrong type: Expected Word[4] but found Word[6]
+    out := mux(c, 4w4, 6w6)
+}
+
+mod MuxCondWrongType {
+    incoming x : Word[4]
+    outgoing out : Word[4]
+    // The condition must be a Bit.
+    // CHECK: Wrong type: Expected Bit but found Word[4]
+    out := mux(x, 4w4, 4w4)
+}
+
+mod MuxArmCheckedAgainstInferredArm {
+    incoming c : Bit
+    outgoing out : Word[4]
+    // The first arm is inferrable; the second arm is checked against
+    // Word[4] and does not fit.
+    // CHECK: Wrong type: Expected Word[4] but found Word[6]
+    out := mux(c, 4w4, 0w6)
+}
+
+mod MuxCheckedAgainstExpected {
+    incoming x : Word[4]
+    outgoing out : Word[4]
+    // Neither arm is inferrable, so the mux falls back to being
+    // checked against the expected type: the condition is checked
+    // first (and fails), then both arms are checked against Word[4]
+    // and reported as unfilled holes.
+    // CHECK: Wrong type: Expected Bit but found Word[4]
+    // CHECK: Unfilled hole
+    // CHECK: Unfilled hole
+    out := mux(x, ?, ?)
+}

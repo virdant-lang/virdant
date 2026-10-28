@@ -129,6 +129,17 @@ impl Typing {
         self.typs.get(&id)
     }
 
+    /// Whether a value of type `a` is acceptable where `b` is
+    /// expected.  Identical types are compatible; `Bit` and `Reset`
+    /// are mutually compatible.
+    fn compatible_typs(a: &Type, b: &Type) -> bool {
+        a == b
+            || matches!(
+                (a, b),
+                (Type::Bit, Type::Reset) | (Type::Reset, Type::Bit)
+            )
+    }
+
     fn flag_wrong_type<'p>(&mut self, node: &AstNode<'p>, expected: &Type, actual: &Type) {
         let diag: Diagnostic = Diagnostic::new(
             node.region(),

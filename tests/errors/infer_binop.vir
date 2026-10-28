@@ -1,0 +1,46 @@
+// Tests for binary-operator inference errors: when both operands are
+// inferrable they must be compatible, and when only one is, the other
+// is checked against it.
+
+mod AddOperandMismatch {
+    incoming a : Word[4]
+    incoming b : Word[6]
+    outgoing out : Word[4]
+    // Both operands are inferrable but incompatible.
+    // CHECK: Wrong type: Expected Word[4] but found Word[6]
+    out := a + b
+}
+
+mod CmpOperandMismatch {
+    incoming a : Word[4]
+    incoming b : Word[6]
+    outgoing out : Bit
+    // Both operands are inferrable but incompatible.
+    // CHECK: Wrong type: Expected Word[4] but found Word[6]
+    out := a == b
+}
+
+mod AddRhsCheckedAgainstLhs {
+    incoming a : Word[4]
+    outgoing out : Word[4]
+    // Only the LHS is inferrable; the RHS hole is checked against
+    // Word[4].
+    // CHECK: Unfilled hole: ? : Word[4]
+    out := a + ?
+}
+
+mod AddLhsCheckedAgainstRhs {
+    incoming a : Word[6]
+    outgoing out : Word[6]
+    // Only the RHS is inferrable; the LHS hole is checked against
+    // Word[6].
+    // CHECK: Unfilled hole: ? : Word[6]
+    out := ? + a
+}
+
+mod CmpNeitherInfers {
+    outgoing out : Bit
+    // Neither operand is inferrable.
+    // CHECK: Can't infer
+    out := 0 == 0
+}

@@ -16,12 +16,7 @@ impl Typing {
         expected_typ: &Type,
     ) -> Result<(), ()> {
         if let Some(actual_typ) = self.infer(builder, context.clone(), node)? {
-            let compatible = actual_typ == *expected_typ
-                || matches!(
-                    (&actual_typ, expected_typ),
-                    (Type::Bit, Type::Reset) | (Type::Reset, Type::Bit)
-                );
-            if !compatible {
+            if !Self::compatible_typs(&actual_typ, expected_typ) {
                 self.flag_wrong_type(node, expected_typ, &actual_typ);
                 return Err(());
             } else {

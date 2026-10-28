@@ -1,0 +1,73 @@
+// Tests that binary operators are inferrable from either operand:
+// if both operands are inferrable they must be compatible, and if
+// only one is, the other is checked against it.
+
+// CHECK: Check OK
+
+mod AddInferFromRhs {
+    incoming a : Word[4]
+    outgoing out : Word[4] {
+        // Only the RHS is inferrable; the LHS literal is checked
+        // against Word[4].
+        it := 4w4 + a
+    }
+}
+
+mod AddInferFromLhs {
+    incoming a : Word[4]
+    outgoing out : Word[4] {
+        // Only the LHS is inferrable; the RHS literal is checked
+        // against Word[4].
+        it := a + 4w4
+    }
+}
+
+mod AddInferBoth {
+    incoming a : Word[4]
+    incoming b : Word[4]
+    outgoing out : Word[4] {
+        // Both operands are inferrable and compatible.
+        it := a + b
+    }
+}
+
+mod SubInferFromRhs {
+    incoming a : Word[4]
+    outgoing out : Word[4] {
+        // Only the RHS is inferrable; the LHS literal is checked
+        // against Word[4].
+        it := 12 - a
+    }
+}
+
+mod CmpInferFromRhs {
+    incoming a : Word[4]
+    outgoing out : Bit {
+        // Only the RHS is inferrable; the LHS literal is checked
+        // against Word[4].  The result is always Bit.
+        it := 0 < a
+    }
+}
+
+mod CmpInferFromLhs {
+    incoming a : Word[4]
+    outgoing out : Bit {
+        it := a > 0
+    }
+}
+
+mod CmpInferBoth {
+    incoming a : Word[4]
+    incoming b : Word[4]
+    outgoing out : Bit {
+        it := a == b
+    }
+}
+
+// `Bit` and `Reset` are mutually compatible operands.
+mod BitResetOperands {
+    incoming r : Reset
+    outgoing out : Bit {
+        it := r | true
+    }
+}
