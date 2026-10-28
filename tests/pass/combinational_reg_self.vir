@@ -1,0 +1,100 @@
+// CHECK: Check OK
+// Registers can safely be assigned to themselves: a reg's drivers are
+// sequential (latched on a clock), so a reg depending on itself is a
+// next-state dependency, not a combinational loop. This covers self-
+// assignment, guards and match subjects that reference the reg being
+// driven, and cross-references between regs.
+//
+// (A bare `reg <= reg` identity driver is deliberately reported as a
+// RedundantDriver warning, so the identity self-assignment below is
+// written as a zero-offset add.)
+
+mod RegSelfAssign {
+    incoming clock : Clock
+    incoming inp : Word[8]
+    outgoing out : Word[8]
+
+    // Identity: it <= it + 0 (self-dependency, not a redundant bare
+    // identity driver).
+    reg identity : Word[8] on clock {
+        it <= it + 0w8
+    }
+
+    // Arithmetic on itself.
+    reg counter : Word[8] on clock {
+        it <= it + 1
+    }
+
+    // Guard on itself inside its own reg block.
+    reg guarded : Word[8] on clock {
+        when {
+            case it == 0 {
+                it <= inp
+            }
+            else {
+                it <= it - 1
+            }
+        }
+    }
+
+    // Match subject on itself inside its own reg block.
+    reg matched : Word[8] on clock {
+        match it {
+            case 0w8 {
+                it <= inp
+            }
+            else {
+                it <= it + 1
+            }
+        }
+    }
+
+    // Cross-referencing regs: each guards on the other and drives
+    // from the other. All edges are sequential, so no loop.
+    reg a : Word[4] on clock {
+        when {
+            case b == 0w4 {
+                it <= 0w4
+            }
+            else {
+                it <= b
+            }
+        }
+    }
+    reg b : Word[4] on clock {
+        when {
+            case a == 0w4 {
+                it <= 15w4
+            }
+            else {
+                it <= a
+            }
+        }
+    }
+
+    // Self-assign at mod level (outside an it-block).
+    reg plain : Word[8] on clock
+    plain <= plain + 0w8
+
+    // A combinational wire depending on a reg, feeding that same reg:
+    // the wire-to-reg edge is sequential, so no loop.
+    reg pipelined : Word[8] on clock
+    wire next : Word[8]
+    next := pipelined + 1
+    pipelined <= next
+
+    // A reg appearing in the guard of a combinational when: the wire
+    // depends on the reg, but the reg's own drivers stay sequential.
+    wire w : Word[8]
+    when {
+        case counter == 0 {
+            w := 0
+        }
+        else {
+            w := counter
+        }
+    }
+    unused w
+
+    out := identity + counter + guarded + matched + zext(a) + zext(b) + plain + pipelined
+}

@@ -98,9 +98,9 @@ fn build_stitched(
                 continue;
             };
             let dep_path = dep_comp.path();
-            if src_path == dep_path {
-                continue;
-            }
+            // Self-loops (src_path == dep_path) are kept: a driver whose
+            // target appears in its own RHS or in an enclosing guard is
+            // a genuine one-component combinational loop.
             edges
                 .entry(src_path.clone())
                 .or_default()
@@ -172,9 +172,7 @@ fn check_module(
             let dv = *vert_map
                 .entry(dep.clone())
                 .or_insert_with(|| comb_graph.add_vert(dep.clone()));
-            if sv != dv {
-                comb_graph.add_edge(sv, dv);
-            }
+            comb_graph.add_edge(sv, dv);
         }
     }
 
@@ -185,14 +183,20 @@ fn check_module(
         let Some(&vv) = vert_map.get(v) else { continue };
         if let Some(path) = comb_graph.path(vv, uv) {
             // path is exclusive of v, inclusive of u: [n1, ..., u].
-            let mut comps: Vec<bstr::BString> = vec![u.clone(), v.clone()];
-            for vi in &path {
-                comps.push(comb_graph[*vi].clone());
-            }
-            // Drop the trailing duplicate u.
-            if comps.last().map(|last| last == u).unwrap_or(false) {
-                comps.pop();
-            }
+            let comps: Vec<bstr::BString> = if u == v {
+                // Self-loop: the cycle is the single component alone.
+                vec![u.clone()]
+            } else {
+                let mut comps: Vec<bstr::BString> = vec![u.clone(), v.clone()];
+                for vi in &path {
+                    comps.push(comb_graph[*vi].clone());
+                }
+                // Drop the trailing duplicate u.
+                if comps.last().map(|last| last == u).unwrap_or(false) {
+                    comps.pop();
+                }
+                comps
+            };
 
             let region = moddef_region(builder, moddef);
             diagnostics.push(Diagnostic::new(

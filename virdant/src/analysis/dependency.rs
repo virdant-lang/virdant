@@ -17,7 +17,7 @@ use crate::analysis::component::ComponentId;
 use crate::analysis::symbols::SymbolId;
 use crate::common::{DriverType, Flow};
 use crate::db::Builder;
-use crate::syntax::ast::{match_arm_children, AstNode};
+use crate::syntax::ast::{match_arm_children, when_arm_children, AstNode};
 use crate::syntax::payload::AstNodePayload;
 
 // ---------------------------------------------------------------------------
@@ -95,6 +95,7 @@ pub(crate) fn build_dependency_graph(
         &component_analysis,
         &mut edges,
         None,
+        &[],
     );
 
     // 2. Edges from `dependson` statements.
@@ -115,11 +116,18 @@ pub(crate) fn build_dependency_graph(
 /// Walk all driver statements and their sub-structures (when, match) to
 /// record edges from the target component to each component referenced
 /// in the RHS expression.
+///
+/// `cond_refs` carries the components referenced by the guards/subjects
+/// of the enclosing `when`/`match` statements: every driver inside an
+/// arm depends not only on its RHS but also on the arm's condition, so
+/// a driver target that appears in its own guard forms a
+/// combinational loop.
 fn collect_driver_edges(
     stmts: &[AstNode<'_>],
     component_analysis: &ComponentAnalysis,
     edges: &mut IndexMap<ComponentId, Vec<DependencyEdge>>,
     it_context: Option<&BStr>,
+    cond_refs: &[ComponentId],
 ) {
     for stmt in stmts {
         match stmt.payload() {
@@ -148,6 +156,12 @@ fn collect_driver_edges(
                         edge_kind,
                         it_context,
                     );
+                }
+
+                // The target also depends on every guard/subject of the
+                // enclosing `when`/`match` statements.
+                for cond in cond_refs {
+                    add_edge(edges, target_component.id(), *cond, edge_kind);
                 }
             }
             AstNodePayload::BidirectionalDriver => {
@@ -221,6 +235,7 @@ fn collect_driver_edges(
                             component_analysis,
                             edges,
                             Some(name_with_context.as_bstr()),
+                            cond_refs,
                         );
                     }
                 }
@@ -243,6 +258,7 @@ fn collect_driver_edges(
                             component_analysis,
                             edges,
                             Some(name_with_context.as_bstr()),
+                            cond_refs,
                         );
                     }
                 }
@@ -265,55 +281,54 @@ fn collect_driver_edges(
                             component_analysis,
                             edges,
                             Some(name_with_context.as_bstr()),
+                            cond_refs,
                         );
                     }
                 }
             }
             AstNodePayload::When => {
                 let children = stmt.children();
-                let mut idx = 0;
-                while let Some(first) = children.get(idx) {
-                    if first.is_expr() {
-                        // case arm: guard + body
-                        if let Some(body) = children.get(idx + 1) {
-                            let body_stmts = if matches!(
-                                body.payload(),
-                                AstNodePayload::ArmBlock
-                            ) {
-                                body.children()
-                            } else {
-                                vec![body.clone()]
-                            };
-                            collect_driver_edges(
-                                &body_stmts,
-                                component_analysis,
-                                edges,
-                                it_context,
-                            );
-                        }
-                        idx += 2;
-                    } else {
-                        // else arm: body only
-                        let body_stmts = if matches!(
-                            first.payload(),
-                            AstNodePayload::ArmBlock
-                        ) {
-                            first.children()
-                        } else {
-                            vec![first.clone()]
-                        };
-                        collect_driver_edges(
-                            &body_stmts,
+                for (guard, body) in when_arm_children(&children) {
+                    // A `case` arm's drivers also depend on the guard's
+                    // referenced components; an `else` arm only on the
+                    // conditions of enclosing `when`/`match` statements.
+                    let mut arm_cond_refs: Vec<ComponentId> =
+                        cond_refs.to_vec();
+                    if let Some(guard_node) = guard {
+                        arm_cond_refs.extend(collect_cond_refs_in_expr(
+                            guard_node,
                             component_analysis,
-                            edges,
                             it_context,
-                        );
-                        idx += 1;
+                        ));
                     }
+                    let body_stmts = if matches!(
+                        body.payload(),
+                        AstNodePayload::ArmBlock
+                    ) {
+                        body.children()
+                    } else {
+                        vec![body.clone()]
+                    };
+                    collect_driver_edges(
+                        &body_stmts,
+                        component_analysis,
+                        edges,
+                        it_context,
+                        &arm_cond_refs,
+                    );
                 }
             }
             AstNodePayload::Match => {
                 let children = stmt.children();
+                // The subject (child 0) conditions every arm's drivers.
+                let mut arm_cond_refs: Vec<ComponentId> = cond_refs.to_vec();
+                if let Some(subject) = children.first() {
+                    arm_cond_refs.extend(collect_cond_refs_in_expr(
+                        subject,
+                        component_analysis,
+                        it_context,
+                    ));
+                }
                 for (_pat_opt, body) in match_arm_children(&children) {
                     let body_stmts = if matches!(
                         body.payload(),
@@ -328,6 +343,7 @@ fn collect_driver_edges(
                         component_analysis,
                         edges,
                         it_context,
+                        &arm_cond_refs,
                     );
                 }
             }
@@ -337,11 +353,53 @@ fn collect_driver_edges(
                     component_analysis,
                     edges,
                     it_context,
+                    cond_refs,
                 );
             }
             _ => {}
         }
     }
+}
+
+/// Walk an expression subtree and collect every `ExprReference` that
+/// resolves to a known component, without adding edges. Used to record
+/// the components referenced by `when` guards and `match` subjects,
+/// which condition every driver inside their arms.
+fn collect_cond_refs_in_expr(
+    expr: &AstNode<'_>,
+    component_analysis: &ComponentAnalysis,
+    it_context: Option<&BStr>,
+) -> Vec<ComponentId> {
+    let parsing = expr.parsing;
+    let mut out: Vec<ComponentId> = vec![];
+    let mut stack: Vec<crate::syntax::ast::AstNodeId> = vec![expr.id()];
+    while let Some(node_id) = stack.pop() {
+        let node = parsing.ast_node(node_id);
+        if matches!(node.payload(), AstNodePayload::ExprReference) {
+            if let Some(path) = node.path() {
+                let mut name = parsing.string(path).to_owned();
+                resolve_it_path_simple(&mut name, it_context);
+                // References shadowed by a match-arm pattern binding name
+                // the pattern variable, not a component.
+                if crate::analysis::component::is_shadowed_by_pattern(
+                    parsing,
+                    node_id,
+                    name.as_bstr(),
+                ) {
+                    continue;
+                }
+                if let Some(component) =
+                    component_analysis.resolve(name.as_bstr())
+                {
+                    out.push(component.id());
+                }
+            }
+        }
+        for child in node.children() {
+            stack.push(child.id());
+        }
+    }
+    out
 }
 
 /// Walk an expression subtree and add edges for every `ExprReference`
@@ -362,6 +420,15 @@ fn collect_references_in_expr(
             if let Some(path) = node.path() {
                 let mut name = parsing.string(path).to_owned();
                 resolve_it_path_simple(&mut name, it_context);
+                // References shadowed by a match-arm pattern binding name
+                // the pattern variable, not a component.
+                if crate::analysis::component::is_shadowed_by_pattern(
+                    parsing,
+                    node_id,
+                    name.as_bstr(),
+                ) {
+                    continue;
+                }
                 if let Some(dependee) =
                     component_analysis.resolve(name.as_bstr())
                 {
@@ -560,12 +627,10 @@ fn add_edge(
     dependee: ComponentId,
     kind: EdgeKind,
 ) {
-    // Skip self-loops - a component depending on itself is not meaningful
-    // for dependency tracking (the value of a component doesn't depend on
-    // itself in a way that affects scheduling or cycle detection).
-    if source == dependee {
-        return;
-    }
+    // Self-loops are allowed: a driver whose target appears in its own
+    // RHS or in the guard of an enclosing `when`/`match` genuinely
+    // depends on itself, and the combinational cycle check uses those
+    // self-loops to report one-component loops.
     edges
         .entry(source)
         .or_default()

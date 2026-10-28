@@ -1,0 +1,33 @@
+// Combinational loops through `when` guards.
+// Drivers inside a `when` arm depend on the arm's guard, so driving
+// the guarded wire from inside its own arm is a loop (Verilator
+// reports the equivalent `assign w = w ? 1'b1 : ...` as a LOOP).
+
+// CHECK: Combinational loop detected
+mod WhenLoop {
+    wire w : Bit
+
+    when {
+        case w {
+            w := true
+        }
+    }
+}
+
+// A two-component loop closed through a guard: x depends on the guard
+// y, and y is driven from x.
+
+// CHECK: Combinational loop detected
+mod WhenLoopMulti {
+    wire x : Bit
+    wire y : Bit
+
+    y := x
+    when {
+        case y {
+            x := true
+        }
+    }
+}
+
+// CHECK: Check failed

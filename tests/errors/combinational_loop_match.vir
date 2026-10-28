@@ -1,0 +1,19 @@
+// Combinational loop through a `match` subject.
+// Drivers inside a `match` arm depend on the matched subject, so
+// driving the subject wire from inside its own arm is a loop.
+
+// CHECK: Combinational loop detected
+mod MatchLoop {
+    wire w : Bit
+
+    match w {
+        case true {
+            w := false
+        }
+        case false {
+            w := true
+        }
+    }
+}
+
+// CHECK: Check failed

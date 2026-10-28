@@ -667,7 +667,7 @@ pub(crate) fn build_component(
 
 /// Walk the enclosing match arms to determine whether `name` at `start_id` is
 /// shadowed by a pattern-bound variable (PatIdent or PatCtor sub-variable).
-fn is_shadowed_by_pattern(
+pub(crate) fn is_shadowed_by_pattern(
     parsing: &Parsing,
     start_id: AstNodeId,
     name: &BStr,
