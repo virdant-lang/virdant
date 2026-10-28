@@ -1,10 +1,9 @@
 # naming
 
-Name-resolution errors:
+Name-resolution errors: unresolved names (types, components, and
+`it.`-path flavors), package/import errors, and duplicate item definitions
+within one package.
 
-- `unresolved.vir` — UnresolvedType, UnresolvedComponent, and Unknown
-  component diagnostics, including the `it.`-path flavor. Merged from the
-  old `unresolved.vir`, `it.vir`, and `unresolved_type.vir`.
-- `imports.vir` — package/import errors (was `errors/packages.vir`).
-- `duplicate_items.vir` — duplicate item definitions in one package
-  (was `errors/duplicate_names.vir`).
+One file per diagnostic family, each ending with the standard
+`// CHECK: Check failed` trailer. See the source `.vir` files for the exact
+coverage.

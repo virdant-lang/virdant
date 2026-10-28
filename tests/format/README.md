@@ -10,7 +10,5 @@ trusting `vir parse`'s exit code, because `vir parse` currently exits 0 even
 on syntax errors (see TESTING_REPORT/NOTES.md; fixing the exit code is a
 compiler change that needs separate approval).
 
-12 input/golden pairs cover indentation, alignment, continuations,
-comments, it-blocks, initial statements, and assorted item kinds. To add a
-formatter test, create both files of a pair; the Makefile picks them up
-automatically.
+To add a formatter test, create both files of a pair; the Makefile picks
+them up automatically.

@@ -1,11 +1,11 @@
 # tests/sim — behavioral end-to-end tests
 
 Each subdirectory is a full Virdant project: `src/` Virdant sources,
-`Virdant.toml`, a SystemVerilog testbench (`tb.sv`, or `fifo_tb.sv` for the
-FIFO), and a Makefile that runs `vir build` and then simulates the generated
-Verilog with iverilog (or verilator, for `uart/`). These are the repository's
-behavioral tests — they exercise codegen lowering end to end, which no other
-suite covers.
+`Virdant.toml`, a SystemVerilog testbench (`tb.sv`), and a Makefile that
+runs `vir build` and then simulates the generated Verilog with iverilog
+(verilator for lint-only projects). These are the repository's behavioral
+tests — they exercise codegen lowering end to end, which no other suite
+covers.
 
 ## Toolchain policy
 
@@ -16,33 +16,11 @@ suite covers.
   with a `SKIP:` notice instead. CI sets that variable after installing the
   tools; locally, `make test` runs everything when the tools are present.
 
-## Projects
+## Adding a new sim project
 
-- `basics/` — core operators and literals checked through generated Verilog
-  (bit/word ops, concatenation, ascription, truncation).
-- `dontcare/` — dontcare values in simulation.
-- `drivers/` — driver forms (`:=`, `<=`, it-blocks) around an enum state
-  machine; the tb asserts all forms lower to the same values on every edge.
-- `edge/` — edge detection (rising/falling).
-- `extmod/` — `ext mod` declarations bound to an external SystemVerilog
-  module (`ext/Rom.sv` with a `rom.hex` payload).
-- `fifo/` — FIFO with randomized push/pop stress testing.
-- `gcd/` — GCD computed by a union-type state machine, swept over values.
-- `generics_mod/` — generic sockets and mods instantiated at concrete type
-  arguments and wired end-to-end through `:=:` connections.
-- `i2c_open_drain/` — open-drain I2C bus semantics.
-- `lfsr/` — an LFSR.
-- `literals/` — literal handling in simulation.
-- `pipe/` — the builtin generic socket `Pipe[T]`, instantiated at two
-  different type arguments in one top, connected with `:=:` on mono sockets.
-- `sockets/` — client/server sockets between instances (core + memory).
-- `statemachine/` — traffic-light state machine over an enum type.
-- `submod_socket/` — regression for the socket-wiring bug where two
-  submodules are connected with `:=:` inside an instantiation block
-  (`m.busif :=: it.busif`); asserts the end-to-end value.
-- `sync/` — the builtin `Sync` component syncing an async input.
-- `typedefs/` — enum/struct typedefs in simulation.
-- `uart/` — UART design; verilator lint-only (no testbench).
-- `valid/` — Valid matching; asserts the `foo` wire produced by a
-  `match @Valid(n)` (the test's one distinguishing feature).
-- `when_guard/` — regression test for the "lost when-arm guard" bug.
+- Create a new subdirectory under `tests/sim/` with the standard layout:
+  `src/`, `Virdant.toml`, a `tb.sv` testbench, and a Makefile.
+- Copy the Makefile from an existing project and adjust it for your design
+  name; it runs `vir build` and then simulates the generated Verilog.
+- Put the assertions in the testbench (`tb.sv`), not in the Makefile — the
+  Makefile only builds and runs the simulation.
