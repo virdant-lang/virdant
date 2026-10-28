@@ -10,8 +10,6 @@ pub mod types;
 pub mod docs;
 pub mod util;
 pub mod sim;
-#[cfg(feature = "vir-bin")]
-pub mod virt;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod build;
 #[cfg(not(feature = "wasm"))]

@@ -945,11 +945,11 @@ fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, flash: &Option<Pat
     let _ = clock_port; // resolved by name inside the board
     let clock_hz = (1e9 / period_ns) as u64;
 
-    let exit_code = virdant::virt::run(
+    let exit_code = virdant::sim::virt::run(
         &db,
         top_symbol.id(),
         clock_hz,
-        virdant::virt::VirtOptions {
+        virdant::sim::virt::VirtOptions {
             flash: flash.clone(),
             trace: trace.clone().map(PathBuf::from),
             fps_no_cap: fps_no_cap,

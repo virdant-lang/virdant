@@ -5,7 +5,7 @@
 //! value from the [`InitStrategy`] (random by default).
 
 mod bits;
-pub mod builtins;
+mod builtins;
 mod expr;
 mod payload;
 mod layout;
@@ -17,6 +17,11 @@ mod vcd;
 
 mod scheduler;
 mod state;
+
+/// The `virt::Virt` board, built on top of this engine.  Requires the
+/// `vir-bin` feature (the terminal/`nix` dependency).
+#[cfg(feature = "vir-bin")]
+pub mod virt;
 
 use scheduler::Scheduler;
 use state::State;
