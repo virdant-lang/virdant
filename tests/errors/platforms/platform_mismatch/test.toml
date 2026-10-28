@@ -1,0 +1,4 @@
+kind = "check"
+description = "Tests that a module whose ports do not exactly match its platform's ports fails `vir check`."
+expect = "error"
+filecheck = "src/top.vir"

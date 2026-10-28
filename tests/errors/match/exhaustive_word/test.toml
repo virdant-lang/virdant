@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "MatchCoverage: Word[8] subject with only a few literals and no `else`."
+filecheck = "src/exhaustive_word.vir"

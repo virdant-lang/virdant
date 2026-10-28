@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Tests the `initial` statement for declaring register initial values."
+filecheck = "src/reg_initial.vir"

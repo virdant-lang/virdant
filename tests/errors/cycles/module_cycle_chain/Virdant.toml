@@ -1,0 +1,3 @@
+[package]
+name = "module_cycle_chain"
+version = "1.0.0"

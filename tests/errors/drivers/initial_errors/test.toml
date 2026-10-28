@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Tests for errors involving `initial` statements."
+filecheck = "src/initial_errors.vir"

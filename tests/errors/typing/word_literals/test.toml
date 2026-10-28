@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Tests for DoesntFit, CantInfer, and valid word-literal cases that should not produce those..."
+filecheck = "src/word_literals.vir"

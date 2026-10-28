@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok"
+description = "Tests for the ReadFromSink warning: reading from a sink (e.g."
+filecheck = "src/read_from_sink.vir"

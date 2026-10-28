@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Simple combinational loop: x -> y -> x via continuous assignments."
+filecheck = "src/combinational_loop.vir"

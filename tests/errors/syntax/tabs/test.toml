@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Tabs are not permitted in Virdant source: the lexer drops them before parsing so a stray tab..."
+filecheck = "src/tabs.vir"

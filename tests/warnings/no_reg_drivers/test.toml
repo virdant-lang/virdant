@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok"
+description = "Tests for undriven reg components."
+filecheck = "src/no_reg_drivers.vir"

@@ -1,0 +1,4 @@
+kind = "format"
+description = "Comment preservation"
+input = "comments.vir"
+golden = "comments.golden.vir"

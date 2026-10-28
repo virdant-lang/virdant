@@ -1,0 +1,4 @@
+kind = "format"
+description = "Case continuation: match arms with body on next line"
+input = "case_continuation.vir"
+golden = "case_continuation.golden.vir"

@@ -1,0 +1,3 @@
+kind = "sim"
+description = "I2C-style open-drain SDA line."
+flags = ["-g2012"]

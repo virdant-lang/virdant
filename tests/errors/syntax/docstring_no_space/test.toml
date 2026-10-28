@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "InvalidDocstring: a doccomment with text after it but no space after the `//>` or `//!`..."
+filecheck = "src/docstring_no_space.vir"

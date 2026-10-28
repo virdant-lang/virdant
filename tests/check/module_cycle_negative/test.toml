@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Valid module instantiation DAG: no cycles."
+filecheck = "src/module_cycle_negative.vir"

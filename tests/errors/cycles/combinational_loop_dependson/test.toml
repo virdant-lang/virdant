@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Combinational loop via `dependson` statements."
+filecheck = "src/combinational_loop_dependson.vir"

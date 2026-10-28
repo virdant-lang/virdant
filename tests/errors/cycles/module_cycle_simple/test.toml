@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Two modules that instantiate each other: A -> B -> A."
+filecheck = "src/module_cycle_simple.vir"

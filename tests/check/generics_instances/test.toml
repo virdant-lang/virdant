@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Generic socket defs and generic mod defs, instantiated with type arguments (the `of..."
+filecheck = "src/generics_instances.vir"

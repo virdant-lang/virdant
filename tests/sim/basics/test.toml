@@ -1,0 +1,2 @@
+kind = "sim"
+description = "Core-operators behavioral test: the top module drives the same values"

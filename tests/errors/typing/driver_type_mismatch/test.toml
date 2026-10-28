@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "driver_type_mismatch"
+filecheck = "src/driver_type_mismatch.vir"

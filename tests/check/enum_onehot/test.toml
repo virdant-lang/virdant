@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Enum types with no values specified default to one-hot encoding: enumerant i (in declaration..."
+filecheck = "src/enum_onehot.vir"

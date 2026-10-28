@@ -1,0 +1,2 @@
+kind = "sim"
+description = "Minimal repro of the riscv SoC socket-wiring bug."

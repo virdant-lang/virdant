@@ -1,0 +1,4 @@
+kind = "format"
+description = "Keywords: pub, ext, import"
+input = "keywords.vir"
+golden = "keywords.golden.vir"

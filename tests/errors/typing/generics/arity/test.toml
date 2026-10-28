@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "A type reference supplies the wrong number of type arguments."
+filecheck = "src/arity.vir"

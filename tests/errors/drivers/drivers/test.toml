@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Tests for MultipleDrivers and DriverForSink."
+filecheck = "src/drivers.vir"

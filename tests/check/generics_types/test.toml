@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Generic type defs with type arguments on type references: the types-only generics slice."
+filecheck = "src/generics_types.vir"

@@ -7,5 +7,5 @@ exist, that the package-level docstring (`//!`) and item-level docstrings
 its docstring.
 
 Platform doc-page generation is not implemented in the renderer (it drops
-platform items), so the Makefile does not assert on platform pages yet —
-there is a TODO in the Makefile.
+platform items), so the test does not assert on platform pages yet. Once
+fixed, grep build/doc for a platform page here.

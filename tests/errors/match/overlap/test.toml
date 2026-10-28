@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "overlap"
+filecheck = "src/overlap.vir"

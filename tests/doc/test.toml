@@ -1,0 +1,13 @@
+kind = "doc"
+description = "This is a package-level docstring for the virdoc test."
+expect_files = [
+  "build/doc/index.html",
+  "build/doc/top/index.html",
+  "build/doc/top/Top.html",
+]
+grep = [
+  { path = "build/doc/top/index.html", pattern = "package-level docstring" },
+  { path = "build/doc/top/Top.html", pattern = "Top module" },
+  { path = "build/doc/top/Top.html", pattern = "counter and blinking LED" },
+  { path = "build/doc/builtin/Word.html", pattern = "is an n-bit value" },
+]

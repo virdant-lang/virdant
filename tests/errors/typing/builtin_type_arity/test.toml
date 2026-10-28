@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "builtin_type_arity"
+filecheck = "src/builtin_type_arity.vir"

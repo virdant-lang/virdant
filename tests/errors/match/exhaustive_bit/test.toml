@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "MatchCoverage: Bit subject with only `case true`, no `false`."
+filecheck = "src/exhaustive_bit.vir"

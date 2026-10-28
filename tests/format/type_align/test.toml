@@ -1,0 +1,4 @@
+kind = "format"
+description = "Type annotation alignment"
+input = "type_align.vir"
+golden = "type_align.golden.vir"

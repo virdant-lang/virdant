@@ -4,8 +4,13 @@ This directory holds all Virdant compiler and tooling tests. The suites are
 organized **first by verification layer** (what harness runs them and what
 exit-code contract they have), **then by language feature** within a layer.
 
-Run everything from the repo root with `make test` (which recurses into every
-suite), or run a single suite with `make -C tests/<suite> test`.
+Run everything from the repo root with `make test` (= `cargo test` +
+`target/release/virtue` over every suite + the docs examples).  The
+runner discovers every test automatically: a test is any directory
+under `tests/` containing a `test.toml`, and its name is its directory
+path (`tests/<path/to/test>`).  See `virtue/README.md` for the
+`test.toml` format and the runner's CLI (`--list`, `--suite`,
+`--filter`, `--jobs`, `-ff`).
 
 ## Suites
 
@@ -13,8 +18,8 @@ suite), or run a single suite with `make -C tests/<suite> test`.
   through `vir check`; the test fails if the run succeeds, and FileCheck
   directives assert the exact diagnostics. Organized into feature
   subdirectories that group files by diagnostic family.
-- `warnings/` — programs that compile with expected warnings. The Makefile
-  requires the exit code to be 0; FileCheck directives assert which warnings
+- `warnings/` — programs that compile with expected warnings. The test
+  must exit 0; FileCheck directives assert which warnings
   appear (and which do not).
 - `check/` — focused, positive compile-time tests. Files must compile with
   **no warnings at all** (the harness greps the output for `WARNING`).
@@ -38,7 +43,7 @@ suite), or run a single suite with `make -C tests/<suite> test`.
   the warnings.
 - `check/`: `vir check` must exit 0, no `WARNING` may appear in the output,
   and FileCheck directives must match.
-- `sim/`, `golden/`, `format/`, `doc/`: the Makefiles assert output correctness
+- `sim/`, `golden/`, `format/`, `doc/`: the runner asserts output correctness
   directly (simulator exit codes, diffs, greps).
 
 ## FileCheck directive conventions
@@ -52,34 +57,59 @@ suite), or run a single suite with `make -C tests/<suite> test`.
 - One file asserts **one diagnostic family** (or one feature) — keep merges
   to related flavors of the same family.
 
+## Layout of a test directory
+
+Every test is a directory containing a `test.toml` (kind, one-line
+description, optional `skip`).  Single-file language tests are full
+projects named after the test:
+
+```
+tests/errors/typing/word_literals/
+├── Virdant.toml            [package] name = "word_literals"
+├── src/word_literals.vir   the test source, with CHECK directives
+└── test.toml               kind = "check", expect, filecheck, description
+```
+
+Project tests (`check/projects/`, `sim/`, `errors/platforms/`, …) keep
+their `Virdant.toml` + `src/` layout and get a `test.toml` describing
+their kind (`check`, `sim`, …).
+
 ## Adding a test
 
-- A new diagnostic for language construct X: add `errors/<feature>/X.vir`
-  with CHECKs for the exact diagnostic text, plus a `// CHECK: Check failed`
-  trailer.
-- A regression that must compile cleanly: add `check/X.vir` (or a
-  `check/projects/<name>/` project if it needs multiple files / a platform).
+- A new diagnostic for language construct X: add
+  `errors/<feature>/X/` with `src/X.vir`, a `Virdant.toml`, and a
+  `test.toml` (`kind = "check"`, `expect = "error"`) with CHECKs for
+  the exact diagnostic text, plus a `// CHECK: Check failed` trailer.
+- A regression that must compile cleanly: add `check/X/`
+  (`expect = "ok_no_warnings"`), or a `check/projects/<name>/` project
+  if it needs multiple files / a platform.
 - A behavioral test: add `sim/<name>/` with `src/top.vir`, `tb.sv`,
-  `Virdant.toml`, and a Makefile modeled on the existing ones.
-- A formatter change: add `format/<name>.vir` plus `format/<name>.golden.vir`
-  (the golden file is the expected formatted output).
-- Rename caution: the package name of a single-file test is the file stem, so
-  CHECK lines that quote package-qualified names (e.g. `Type foo::Bar takes
-  1 type argument`) must be updated when a file is renamed.
+  `Virdant.toml`, and a `test.toml` (`kind = "sim"`).
+- A formatter change: add `format/<name>/` with the input `.vir` plus
+  `<name>.golden.vir` (the golden file is the expected formatted
+  output) and a `test.toml` (`kind = "format"`).
+- Rename caution: the package name of a single-file test is its source
+  file stem, so CHECK lines that quote package-qualified names (e.g.
+  `Type foo::Bar takes 1 type argument`) must be updated when a test
+  directory is renamed.
 
 ## Sim toolchain policy
 
 `tests/sim/` needs `iverilog` (and `verilator` for `uart/`). If either is
-missing, `make -C tests/sim test` fails loudly, unless the environment
+missing, the runner fails loudly, unless the environment
 variable `VIRDANT_ALLOW_MISSING_SIM=1` is set, in which case every project is
 skipped with a notice. CI installs the tools and sets the variable; local
 `make test` runs everything when the tools are present.
 
 ## Layout notes
 
-- Every suite directory (and every feature subdirectory) has its own
-  `Makefile` that recurses into subdirectories, so a new test directory is
-  automatically wired in — no central list to forget to update.
-- `build/` output directories are gitignored and excluded from recursion.
-- `TESTING_REPORT/NOTES.md` records the reasoning behind the current layout
-  and any known, deliberately skipped tests.
+- Test discovery is automatic: the runner recurses under `tests/` and
+  treats any directory with a `test.toml` as a test — no central list
+  to forget to update, and no Makefile to write.
+- `build/` output directories are gitignored and excluded from
+  discovery.
+- Failing tests leave evidence in `build/tests/<path/to/test>/test.log`
+  (exact command line, exit codes, merged output, filecheck stderr,
+  duration, status).
+- `TESTING_REPORT/NOTES.md` records the reasoning behind the current
+  layout and any known, deliberately skipped tests.

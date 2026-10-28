@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "`:=:` matches on the *mono socket* — the socketdef together with its type arguments (PLANv2 §6)."
+filecheck = "src/socket_connect_mismatch.vir"

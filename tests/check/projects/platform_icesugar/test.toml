@@ -1,0 +1,3 @@
+kind = "check"
+description = "Tests that vir check loads the shipped ice40 lib package and resolves `import ice40` + `for..."
+expect = "ok"

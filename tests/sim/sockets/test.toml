@@ -1,0 +1,2 @@
+kind = "sim"
+description = "Behavioral test of client/server sockets between module instances: the top"

@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Regression: arm patterns in a statement-level match must agree with the subject type."
+filecheck = "src/pattern_types.vir"

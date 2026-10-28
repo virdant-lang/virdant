@@ -27,8 +27,9 @@ case "$FAMILY" in
     ;;
 esac
 
-# The feature set matches `make build`.
-TOOLCHAIN_FEATURES="vir-bin,filecheck-bin,vir-lsp-bin"
+# The feature set matches `make build` (the virtue/filecheck tooling
+# is not part of the shipped toolchain).
+TOOLCHAIN_FEATURES="vir-bin,vir-lsp-bin"
 
 # Pick a sha256 command that works on Linux (sha256sum).
 sha256_sum() { sha256sum "$1"; }

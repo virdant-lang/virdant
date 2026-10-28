@@ -1,0 +1,4 @@
+kind = "format"
+description = "Various items: struct, enum, union, builtin"
+input = "items.vir"
+golden = "items.golden.vir"

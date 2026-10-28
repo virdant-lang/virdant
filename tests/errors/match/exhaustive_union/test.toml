@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "MatchCoverage: union subject with one constructor omitted."
+filecheck = "src/exhaustive_union.vir"

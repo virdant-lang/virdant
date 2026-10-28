@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok"
+description = "Tests for the UnfilledHole warning: using the hole expression '?' fills the type but leaves..."
+filecheck = "src/unfilled_hole.vir"

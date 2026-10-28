@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "A Nat-kind parameter given a type: Word[Bit]."
+filecheck = "src/kind_mismatch.vir"

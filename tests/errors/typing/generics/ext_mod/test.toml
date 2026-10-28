@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "`ext mod` cannot have generics — a hard rule, not a missing feature: ext mods parameterize..."
+filecheck = "src/ext_mod.vir"

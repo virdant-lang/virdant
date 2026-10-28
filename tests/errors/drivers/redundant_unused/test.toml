@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "RedundantUnused: a component is marked `unused` two or more times."
+filecheck = "src/redundant_unused.vir"

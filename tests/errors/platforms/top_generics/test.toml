@@ -1,0 +1,5 @@
+kind = "check"
+description = "The `[prog] top` module must be a concrete instantiation: a generic def has none."
+expect = "error"
+filecheck = "src/top.vir"
+command = "bitstream"

@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok"
+description = "Tests for empty driver blocks: components whose it-blocks contain no drivers."
+filecheck = "src/empty_driver_block.vir"
