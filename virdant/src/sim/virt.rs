@@ -206,7 +206,7 @@ mod imp {
         /// Drives `spi_miso` from the model's response.
         fn step(&mut self, sim: &mut Sim) {
             let bit = |sim: &Sim, id: SignalId| -> bool {
-                sim.get(id).bits().get_bit(0)
+                sim.get(id).get_bit(0)
             };
             let cs = bit(sim, self.spi_cs);
             let ck = bit(sim, self.spi_ck);
@@ -244,7 +244,7 @@ mod imp {
             }
 
             let bit = |sim: &Sim, id: SignalId| -> bool {
-                sim.get(id).bits().get_bit(0)
+                sim.get(id).get_bit(0)
             };
             let tx = bit(sim, self.tx);
 
@@ -282,7 +282,7 @@ mod imp {
     /// Decode the `exit : Valid[Word[8]]` value.  The Valid slot's
     /// payload (the `Word[8]`) is the requested exit code.
     fn decode_exit(layouts: &TypeLayoutIndex, value: &Value) -> Option<i32> {
-        let (slot, payloads) = layouts.decode_ctor(value.typ(), value.bits())?;
+        let (slot, payloads) = layouts.decode_ctor(value.typ(), &value.bitpat())?;
         if slot.name.as_bstr() != b"Valid".as_bstr() {
             return None;
         }

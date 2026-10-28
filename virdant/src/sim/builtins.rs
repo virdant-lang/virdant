@@ -78,11 +78,11 @@ fn sig(sim: &Sim, prefix: &str, name: &str) -> Option<SignalId> {
 }
 
 fn get_u64(sim: &Sim, id: SignalId) -> u64 {
-    sim.get(id).bits().to_u64()
+    sim.get(id).to_u64()
 }
 
 fn get_bit(sim: &Sim, id: SignalId) -> bool {
-    sim.get(id).bits().get_bit(0)
+    sim.get(id).get_bit(0)
 }
 
 fn set_u64(sim: &mut Sim, id: SignalId, value: u64) {

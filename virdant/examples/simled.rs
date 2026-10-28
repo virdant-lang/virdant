@@ -1,4 +1,5 @@
-use virdant::sim::{Clock, Sim, Value};
+use virdant::sim::{BitPat, Clock, InitStrategy, Sim, Value};
+use virdant::types::Type;
 use virdant::util::{check_db, db_from_file_with_lib};
 
 fn sim() -> Sim {
@@ -12,7 +13,7 @@ fn sim() -> Sim {
 
     let symboltable = db.get_symboltable();
     let top = symboltable.resolve(b"extmods::Top".into()).unwrap();
-    Sim::new(&db, top.id())
+    Sim::new(&db, top.id(), InitStrategy::Random)
 }
 
 fn main() {
@@ -30,11 +31,11 @@ fn main() {
 
     sim.at_start(Box::new(move |sim| {
         let mut lock = sim.lock();
-        lock.set(reset, Value::Bit(true));
+        lock.set(reset, Value::from_bool(Type::Reset, true));
         drop(lock);
         sim.after(10_000, Box::new(move |sim| {
             let mut lock = sim.lock();
-            lock.set(reset, Value::Bit(false));
+            lock.set(reset, Value::from_bool(Type::Reset, false));
         }));
     }));
 

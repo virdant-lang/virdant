@@ -529,7 +529,7 @@ impl Sim {
         // callback driving a signal re-enters `unlock`) can
         // `commit_change` this signal before a later-registered watcher
         // runs, erasing the very transition the late watcher must see.
-        let last = Rc::new(std::cell::Cell::new(self.state.get(clock).bits().get_bit(0)));
+        let last = Rc::new(std::cell::Cell::new(self.state.get(clock).get_bit(0)));
         Self::register_clock_watcher(self, clock, cell, last);
     }
 
@@ -561,7 +561,7 @@ impl Sim {
         sim.sched.register(EventCallback {
             event: Event::ValueChange { signal: clock },
             callback: Some(Box::new(move |s| {
-                let current = s.state.get(clock).bits().get_bit(0);
+                let current = s.state.get(clock).get_bit(0);
                 let last_bit = last_for_closure.get();
                 let is_rising_edge = !last_bit && current;
                 // Update our own last-seen value on EVERY dispatch, so
@@ -583,7 +583,7 @@ impl Sim {
     fn register_clock_toggle(&mut self, clock: SignalId, half_period_ps: u64) {
         self.after(half_period_ps, Box::new(move |sim| {
             let current = sim.state.get(clock);
-            let next = Value::from_bool(current.typ().clone(), !current.bits().get_bit(0));
+            let next = Value::from_bool(current.typ().clone(), !current.get_bit(0));
             {
                 let mut lock = sim.lock();
                 lock.set(clock, next);
@@ -599,5 +599,5 @@ pub fn debug_transfer(id: crate::analysis::elaboration::SignalId, v: &Value) {
 /// 0→1 transition on a 1-bit signal.  Keeps `set()`'s edge detection
 /// safe on non-clock (and multi-bit) signals.
 fn is_rising(old: &Value, new: &Value) -> bool {
-    old.width() == 1 && !old.bits().get_bit(0) && new.bits().get_bit(0)
+    old.width() == 1 && !old.get_bit(0) && new.get_bit(0)
 }

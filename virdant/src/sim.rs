@@ -15,5 +15,6 @@ mod vcd;
 #[cfg(feature = "vir-bin")]
 pub mod virt;
 
-pub use sim::Sim;
+pub use sim::{Clock, InitStrategy, Sim};
+pub use bits::BitPat;
 pub use eval::Value;

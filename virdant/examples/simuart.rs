@@ -4,7 +4,8 @@ use std::io::{BufWriter, Write};
 use std::rc::Rc;
 use std::time::Instant;
 
-use virdant::sim::{Clock, Sim, Value};
+use virdant::sim::{BitPat, Clock, InitStrategy, Sim, Value};
+use virdant::types::Type;
 use virdant::util::{check_db, db_from_dir_with_lib};
 
 const CLOCK_HZ:  u64 = 12_000_000;
@@ -21,7 +22,7 @@ fn sim() -> Sim {
 
     let symboltable = db.get_symboltable();
     let top = symboltable.resolve(b"uart::Top".into()).unwrap();
-    Sim::new(&db, top.id())
+    Sim::new(&db, top.id(), InitStrategy::Random)
 }
 
 struct Decoder {
@@ -49,7 +50,7 @@ fn main() {
 
     sim.at_start(Box::new(move |sim| {
         let mut lock = sim.lock();
-        lock.set(reset, Value::Bit(true));
+        lock.set(reset, Value::from_bool(Type::Reset, true));
     }));
     sim.at_end(Box::new(move |_sim| {
         println!();
@@ -59,11 +60,11 @@ fn main() {
     // reset values.
     sim.after(2 * clock_period_ps, Box::new(move |sim| {
         let mut lock = sim.lock();
-        lock.set(reset, Value::Bit(false));
+        lock.set(reset, Value::from_bool(Type::Reset, false));
     }));
 
     sim.on_change(fin, Box::new(move |sim| {
-        if sim.get(fin) == Value::Bit(true) {
+        if sim.get(fin).get_bit(0) {
             sim.finish();
         }
     }));
@@ -74,7 +75,7 @@ fn main() {
         if decoder_cb.borrow().decoding {
             return;
         }
-        if sim.get(uart_tx) != Value::Bit(false) {
+        if sim.get(uart_tx).get_bit(0) {
             return;
         }
         decoder_cb.borrow_mut().decoding = true;
@@ -85,13 +86,13 @@ fn main() {
             let delay = half_bit_ps + (i as u64 + 1) * bit_period_ps;
             if i < 7 {
                 sim.after(delay, Box::new(move |sim| {
-                    let bit = matches!(sim.get(uart_tx), Value::Bit(true));
+                    let bit = sim.get(uart_tx).get_bit(0);
                     *acc_i.borrow_mut() |= (bit as u8) << i;
                 }));
             } else {
                 let decoder_done = decoder_cb.clone();
                 sim.after(delay, Box::new(move |sim| {
-                    let bit = matches!(sim.get(uart_tx), Value::Bit(true));
+                    let bit = sim.get(uart_tx).get_bit(0);
                     *acc_i.borrow_mut() |= (bit as u8) << i;
                     let b = *acc_i.borrow();
                     let mut out = std::io::stdout();

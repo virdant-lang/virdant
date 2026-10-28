@@ -7,7 +7,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use virdant::sim::{Clock, Sim, Value};
+use virdant::sim::{BitPat, Clock, InitStrategy, Sim, Value};
+use virdant::types::Type;
+
+fn word8(v: u64) -> Value {
+    Value::new(Type::Word(8), BitPat::from_u64(8, v))
+}
 use virdant::util::{check_db, db_from_file_with_lib};
 
 /// Build a `Sim` for `examples/lfsr.vir`.
@@ -22,7 +27,7 @@ fn lfsr_sim() -> Sim {
 
     let symboltable = db.get_symboltable();
     let top = symboltable.resolve(b"lfsr::Lfsr".into()).unwrap();
-    Sim::new(&db, top.id())
+    Sim::new(&db, top.id(), InitStrategy::Random)
 }
 
 /// Minimal lifecycle test: register at_start / at_end callbacks and run
@@ -60,11 +65,11 @@ fn lfsr_run() {
 
     {
         let mut lock = sim.lock();
-        lock.set(reset, Value::Bit(true));
+        lock.set(reset, Value::from_bool(Type::Reset, true));
     }
     sim.after(10_000, Box::new(move |sim| {
         let mut lock = sim.lock();
-        lock.set(reset, Value::Bit(false));
+        lock.set(reset, Value::from_bool(Type::Reset, false));
     }));
     sim.after(100_000, Box::new(|sim| sim.finish()));
 
@@ -90,7 +95,7 @@ fn lfsr_check() {
         (75_000,  98),
         (85_000, 196),
         (95_000, 149),
-    ].into_iter().map(|(t, v)| (t, Value::Word(8, v))).collect();
+    ].into_iter().map(|(t, v)| (t, word8(v))).collect();
     let expected_len = expected.len();
 
     let clock = sim.signal("top.clock");
@@ -112,11 +117,11 @@ fn lfsr_check() {
 
     {
         let mut lock = sim.lock();
-        lock.set(reset, Value::Bit(true));
+        lock.set(reset, Value::from_bool(Type::Reset, true));
     }
     sim.after(10_000, Box::new(move |sim| {
         let mut lock = sim.lock();
-        lock.set(reset, Value::Bit(false));
+        lock.set(reset, Value::from_bool(Type::Reset, false));
     }));
     sim.after(100_000, Box::new(|sim| sim.finish()));
 
@@ -146,11 +151,11 @@ fn lfsr_on_clock() {
 
     {
         let mut lock = sim.lock();
-        lock.set(reset, Value::Bit(true));
+        lock.set(reset, Value::from_bool(Type::Reset, true));
     }
     sim.after(10_000, Box::new(move |sim| {
         let mut lock = sim.lock();
-        lock.set(reset, Value::Bit(false));
+        lock.set(reset, Value::from_bool(Type::Reset, false));
     }));
     sim.after(100_000, Box::new(|sim| sim.finish()));
 

@@ -57,7 +57,7 @@ pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W) {
         last_time.set(Some(t));
         writeln!(w, "$dumpvars").unwrap();
         for (s, _) in &sigs {
-            write_change(&mut *w, &s.code, s.width, &sim.get(s.id).bits().to_bit_string());
+            write_change(&mut *w, &s.code, s.width, &sim.get(s.id).to_bit_string());
         }
         writeln!(w, "$end").unwrap();
     }
@@ -79,7 +79,7 @@ pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W) {
                 last_time_cb.set(Some(t));
             }
             let v = s.get(sig_id);
-            write_change(&mut *w, &code, width, &v.bits().to_bit_string());
+            write_change(&mut *w, &code, width, &v.to_bit_string());
         }));
     }
 

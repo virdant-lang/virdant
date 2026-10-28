@@ -3,10 +3,15 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::rc::Rc;
 
-use virdant::sim::{Clock, Sim, Value};
+use virdant::sim::{BitPat, Clock, InitStrategy, Sim, Value};
+use virdant::types::Type;
 use virdant::util::{check_db, db_from_dir_with_lib};
 
 /// (a, b, expected_gcd)
+fn word8(v: u64) -> Value {
+    Value::new(Type::Word(8), BitPat::from_u64(8, v))
+}
+
 const CASES: &[(u64, u64, u64)] = &[
     // Usual cases
     (75,  145,   5),
@@ -32,7 +37,7 @@ fn sim() -> Sim {
 
     let symboltable = db.get_symboltable();
     let top = symboltable.resolve(b"top::Top".into()).unwrap();
-    Sim::new(&db, top.id())
+    Sim::new(&db, top.id(), InitStrategy::Random)
 }
 
 fn main() {
@@ -67,13 +72,13 @@ fn main() {
 
     sim.at_start(Box::new(move |sim| {
         let mut lock = sim.lock();
-        lock.set(reset, Value::Bit(true));
-        lock.set(fire,  Value::Bit(false));
+        lock.set(reset, Value::from_bool(Type::Reset, true));
+        lock.set(fire,  Value::from_bool(Type::Bit, false));
     }));
 
     sim.after(15_000, Box::new(move |sim| {
         let mut lock = sim.lock();
-        lock.set(reset, Value::Bit(false));
+        lock.set(reset, Value::from_bool(Type::Reset, false));
         drop(lock);
         *started_init.borrow_mut() = true;
     }));
@@ -89,24 +94,21 @@ fn main() {
             let (a, b, _) = CASES[idx];
             {
                 let mut lock = sim.lock();
-                lock.set(x,    Value::Word(8, a));
-                lock.set(y,    Value::Word(8, b));
-                lock.set(fire, Value::Bit(true));
+                lock.set(x,    word8(a));
+                lock.set(y,    word8(b));
+                lock.set(fire, Value::from_bool(Type::Bit, true));
             }
             *state_cb.borrow_mut() = (idx, true);
         } else {
             // Deassert fire after the one cycle it was high.
             {
                 let mut lock = sim.lock();
-                lock.set(fire, Value::Bit(false));
+                lock.set(fire, Value::from_bool(Type::Bit, false));
             }
 
-            if sim.get(valid) == Value::Bit(true) {
+            if sim.get(valid).get_bit(0) {
                 let (a, b, expected) = CASES[idx];
-                let actual = match sim.get(result) {
-                    Value::Word(_, v) => v,
-                    other => panic!("unexpected result value: {other:?}"),
-                };
+                let actual = sim.get(result).to_u64();
                 assert_eq!(actual, expected,
                     "gcd({a}, {b}): expected {expected}, got {actual}");
                 println!("gcd({a:3}, {b:3}) = {actual:3}  ✓");

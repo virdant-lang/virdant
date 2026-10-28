@@ -24,13 +24,34 @@ use crate::analysis::elaboration::SignalId;
 
 /// A simulated value: a bit pattern tagged with its (semantic) type.
 ///
+/// `Value` is a thin newtype over the private [`InternalValue`] enum, which
+/// has two representations:
+///
+/// - `Small` — the hot path.  For patterns of at most 64 bits the whole
+///   pattern is one masked `u64`: constructing, cloning, and comparing a
+///   value never touches the heap.
+/// - `Big` — the original representation (a heap-allocated [`BitPat`])
+///   for anything wider than 64 bits (large words, aggregates).
+///
 /// The `typ` tag says how to interpret the bits (see `sim::layout`).
 /// Gate logic decodes the bits on demand; aggregate types (unions,
 /// enums, structs) are stored pre-encoded.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Value {
-    typ: Type,
-    bits: BitPat,
+#[derive(Clone, Debug)]
+pub struct Value(InternalValue);
+
+#[derive(Clone, Debug)]
+enum InternalValue {
+    /// Original representation: an arbitrary-width [`BitPat`] (limb vector
+    /// on the heap).  Used for patterns wider than 64 bits.
+    Big { typ: Type, bits: BitPat },
+    /// Hot path for patterns of at most 64 bits: the whole (masked)
+    /// pattern in a single `u64`.
+    Small { typ: Type, width: Width, bits: u64 },
+}
+
+/// Mask with the low `width` bits set (assumes `width <= 64`).
+fn mask(width: Width) -> u64 {
+    if width >= 64 { u64::MAX } else { (1u64 << width) - 1 }
 }
 
 impl std::fmt::Display for Value {
@@ -40,43 +61,180 @@ impl std::fmt::Display for Value {
     /// `<invalid>` for patterns that are not inhabitants of their type —
     /// is [`TypeLayoutIndex::display`]).
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.typ {
-            Type::Bit => f.write_str(if self.bits.get_bit(0) { "true" } else { "false" }),
-            Type::Clock | Type::Reset => f.write_str(&self.bits.to_bit_string()),
+        match self.typ() {
+            Type::Bit => f.write_str(if self.get_bit(0) { "true" } else { "false" }),
+            Type::Clock | Type::Reset => f.write_str(&self.to_bit_string()),
             Type::Word(w) => {
                 if *w < 64 {
-                    write!(f, "{}", self.bits.to_u64())
+                    write!(f, "{}", self.to_u64())
                 } else {
-                    write!(f, "0b{}", self.bits.to_bit_string())
+                    write!(f, "0b{}", self.to_bit_string())
                 }
             }
-            Type::Usual(..) => f.write_str(&self.bits.to_bit_string()),
+            Type::Usual(..) => f.write_str(&self.to_bit_string()),
             Type::Param(_) => f.write_str("<invalid>"),
         }
     }
 }
 
+impl PartialEq for Value {
+    /// Values are equal when they carry the same type tag and the same
+    /// bits — regardless of which representation (`Small`/`Big`) each
+    /// side uses.
+    fn eq(&self, other: &Self) -> bool {
+        self.typ() == other.typ() && self.same_bits(other)
+    }
+}
+
+impl Eq for Value {}
+
 impl Value {
     pub fn new(typ: Type, bits: BitPat) -> Value {
-        Value { typ, bits }
+        if bits.width() <= 64 {
+            Value(InternalValue::Small {
+                typ,
+                width: bits.width(),
+                bits: bits.to_u64() & mask(bits.width()),
+            })
+        } else {
+            Value(InternalValue::Big { typ, bits })
+        }
+    }
+
+    /// A `width`-bit value of `typ` holding `bits` (truncated, masked to
+    /// `width`).  Only meaningful for `width <= 64`; wider patterns must
+    /// go through [`Value::new`].
+    pub(crate) fn from_u64(typ: Type, width: Width, bits: u64) -> Value {
+        if width <= 64 {
+            Value(InternalValue::Small { typ, width, bits: bits & mask(width) })
+        } else {
+            Value(InternalValue::Big { typ, bits: BitPat::from_u64(width, bits) })
+        }
     }
 
     /// A single-bit value of `typ` (for `Bit`/`Clock`/`Reset`-typed
     /// signals).
     pub fn from_bool(typ: Type, b: bool) -> Value {
-        Value { typ, bits: BitPat::bit(b) }
+        Value(InternalValue::Small { typ, width: 1, bits: b as u64 })
+    }
+
+    /// The same bits re-tagged with `typ` (keeps the representation).
+    pub(crate) fn with_typ(&self, typ: Type) -> Value {
+        match &self.0 {
+            InternalValue::Big { bits, .. } => Value(InternalValue::Big { typ, bits: bits.clone() }),
+            InternalValue::Small { width, bits, .. } => {
+                Value(InternalValue::Small { typ, width: *width, bits: *bits })
+            }
+        }
     }
 
     pub fn typ(&self) -> &Type {
-        &self.typ
-    }
-
-    pub fn bits(&self) -> &BitPat {
-        &self.bits
+        match &self.0 {
+            InternalValue::Big { typ, .. } | InternalValue::Small { typ, .. } => typ,
+        }
     }
 
     pub fn width(&self) -> Width {
-        self.bits.width()
+        match &self.0 {
+            InternalValue::Big { bits, .. } => bits.width(),
+            InternalValue::Small { width, .. } => *width,
+        }
+    }
+
+    /// The bit at position `i` (0 = LSB).  Returns false for `i >= width`.
+    pub fn get_bit(&self, i: usize) -> bool {
+        match &self.0 {
+            InternalValue::Big { bits, .. } => bits.get_bit(i),
+            InternalValue::Small { width, bits, .. } => {
+                if i >= *width as usize { return false; }
+                (bits >> i) & 1 != 0
+            }
+        }
+    }
+
+    /// The low 64 bits (truncated).
+    pub fn to_u64(&self) -> u64 {
+        match &self.0 {
+            InternalValue::Big { bits, .. } => bits.to_u64(),
+            InternalValue::Small { bits, .. } => *bits,
+        }
+    }
+
+    /// The whole pattern as a bit string, MSB first.
+    pub fn to_bit_string(&self) -> String {
+        match &self.0 {
+            InternalValue::Big { bits, .. } => bits.to_bit_string(),
+            InternalValue::Small { width, bits, .. } => {
+                let mut s = String::with_capacity(*width as usize);
+                for i in (0..*width).rev() {
+                    s.push(if (bits >> i) & 1 != 0 { '1' } else { '0' });
+                }
+                s
+            }
+        }
+    }
+
+    /// True when every bit is zero.
+    pub fn is_zero(&self) -> bool {
+        match &self.0 {
+            InternalValue::Big { bits, .. } => bits.is_zero(),
+            InternalValue::Small { bits, .. } => *bits == 0,
+        }
+    }
+
+    /// True when every bit within `width` is one.
+    pub fn is_all_ones(&self) -> bool {
+        match &self.0 {
+            InternalValue::Big { bits, .. } => bits.is_all_ones(),
+            InternalValue::Small { width, bits, .. } => *width == 64 || *bits == mask(*width),
+        }
+    }
+
+    /// The bits as a [`BitPat`] (materialises the `Small` hot path; the
+    /// returned pattern is a fresh heap allocation in that case).
+    pub(crate) fn bitpat(&self) -> BitPat {
+        match &self.0 {
+            InternalValue::Big { bits, .. } => bits.clone(),
+            InternalValue::Small { width, bits, .. } => BitPat::from_u64(*width, *bits),
+        }
+    }
+
+    /// Bits `[lo, hi)` (MSB-exclusive convention matches Virdant range
+    /// indexing: `x[hi..lo]` has `hi` exclusive).  Panics if `lo > hi`
+    /// or `hi > width`.  The result is a fresh [`BitPat`]; wrap it back
+    /// into a `Value` with [`Value::new`].
+    pub(crate) fn slice(&self, lo: u16, hi: u16) -> BitPat {
+        assert!(lo <= hi, "Value::slice: lo > hi");
+        assert!(hi <= self.width(), "Value::slice: hi out of range");
+        match &self.0 {
+            InternalValue::Small { bits, .. } => BitPat::from_u64(hi - lo, (bits >> lo) & mask(hi - lo)),
+            InternalValue::Big { bits, .. } => bits.slice(lo, hi),
+        }
+    }
+
+    /// True when the value's bits equal `other`'s (which must have the
+    /// same width; unequal widths compare unequal).
+    pub(crate) fn bits_eq(&self, other: &BitPat) -> bool {
+        if self.width() != other.width() {
+            return false;
+        }
+        match &self.0 {
+            InternalValue::Big { bits, .. } => bits == other,
+            InternalValue::Small { bits, .. } => (other.to_u64() & mask(other.width())) == *bits,
+        }
+    }
+
+    /// Bit-wise equality against another `Value` (ignores the type tag;
+    /// [`PartialEq for Value`] compares the tag too).
+    fn same_bits(&self, other: &Value) -> bool {
+        if self.width() != other.width() {
+            return false;
+        }
+        match (&self.0, &other.0) {
+            (InternalValue::Small { bits: a, .. }, InternalValue::Small { bits: b, .. }) => a == b,
+            (InternalValue::Big { bits: a, .. }, InternalValue::Big { bits: b, .. }) => a == b,
+            _ => self.bitpat() == other.bitpat(),
+        }
     }
 }
 
@@ -151,6 +309,12 @@ impl Expr {
         Value::new(self.typ().clone(), bits)
     }
 
+    /// A `Value` of this expression's static type carrying `value`'s
+    /// bits (re-tags `value`, keeping its representation).
+    fn val_value(&self, value: Value) -> Value {
+        value.with_typ(self.typ().clone())
+    }
+
     fn layouts(context: &Context) -> &TypeLayoutIndex {
         &context.layouts
     }
@@ -167,7 +331,7 @@ impl Expr {
                 if value.width() != Self::layouts(context).type_width(self.typ()) {
                     eprintln!("DEBUG ref width mismatch: referent={:?} got_width={} node_typ={:?}", reference.referent, value.width(), self.typ());
                 }
-                self.val(value.bits().clone())
+                self.val_value(value)
             }
             ExprPayload::Paren(paren) => paren.subject.eval(context),
             ExprPayload::When(when) => self.eval_when(context, when),
@@ -212,16 +376,16 @@ impl Expr {
     /// `cast`, `asclock`).
     fn eval_passthrough(&self, context: &Context, subject: &Expr) -> Value {
         let subject_val = subject.eval(context);
-        self.val(subject_val.bits().clone())
+        self.val_value(subject_val)
     }
 
     /// Truthiness of a condition value: a `Bit` is true when its bit is
     /// set; a `Word` is true when non-zero.
     fn truthy(value: &Value) -> bool {
         if value.width() == 1 {
-            value.bits().get_bit(0)
+            value.get_bit(0)
         } else {
-            !value.bits().is_zero()
+            !value.is_zero()
         }
     }
 
@@ -263,7 +427,8 @@ impl Expr {
                 // Ctor pattern: decode the subject's tag/payload through
                 // the layout and bind the payload to the pattern variables.
                 payload::Pat::Ctor { symbol_id, bound_vars } => {
-                    let Some((slot, payloads)) = layouts.decode_ctor(subject.typ(), subject.bits())
+                    let Some((slot, payloads)) =
+                        layouts.decode_ctor(subject.typ(), &subject.bitpat())
                     else {
                         continue;
                     };
@@ -287,13 +452,13 @@ impl Expr {
                 // WordLit pattern: compare bit patterns.
                 payload::Pat::WordLit { width, value } => {
                     let expected = BitPat::from_u64(*width, *value);
-                    if subject.width() == *width && subject.bits() == &expected {
+                    if subject.width() == *width && subject.bits_eq(&expected) {
                         return body.eval(context);
                     }
                 }
                 // BitLit pattern: compare bit patterns.
                 payload::Pat::BitLit { value } => {
-                    if subject.width() == 1 && subject.bits().get_bit(0) == *value {
+                    if subject.width() == 1 && subject.get_bit(0) == *value {
                         return body.eval(context);
                     }
                 }
@@ -313,23 +478,51 @@ impl Expr {
     fn eval_binop(&self, context: &Context, binop: &payload::BinOp) -> Value {
         let lhs_val = binop.lhs.eval(context);
         let rhs_val = binop.rhs.eval(context);
-        let lhs = lhs_val.bits();
-        let rhs = rhs_val.bits();
+
+        // Hot path: both operands fit in a `u64` — compute in machine
+        // words, no `BitPat` allocation.
+        if let (
+            InternalValue::Small { width: lw, bits: a, .. },
+            InternalValue::Small { width: rw, bits: b, .. },
+        ) = (&lhs_val.0, &rhs_val.0)
+        {
+            assert!(lw == rw, "eval_binop: operand width mismatch ({lw} vs {rw})");
+            let (w, a, b) = (*lw, *a, *b);
+            return match binop.op {
+                BinOp::LogicalAnd => self.val(BitPat::bit((a & 1) != 0 && (b & 1) != 0)),
+                BinOp::LogicalOr => self.val(BitPat::bit((a & 1) != 0 || (b & 1) != 0)),
+                BinOp::LogicalXor => self.val(BitPat::bit(((a & 1) != 0) ^ ((b & 1) != 0))),
+                BinOp::Lt => self.val(BitPat::bit(a < b)),
+                BinOp::Lte => self.val(BitPat::bit(a <= b)),
+                BinOp::Gt => self.val(BitPat::bit(a > b)),
+                BinOp::Gte => self.val(BitPat::bit(a >= b)),
+                BinOp::Eq => self.val(BitPat::bit(a == b)),
+                BinOp::Neq => self.val(BitPat::bit(a != b)),
+                BinOp::Add => Value::from_u64(self.typ().clone(), w, a.wrapping_add(b) & mask(w)),
+                BinOp::Sub => Value::from_u64(self.typ().clone(), w, a.wrapping_sub(b) & mask(w)),
+                BinOp::And => Value::from_u64(self.typ().clone(), w, a & b),
+                BinOp::Or => Value::from_u64(self.typ().clone(), w, a | b),
+                BinOp::Xor => Value::from_u64(self.typ().clone(), w, a ^ b),
+            };
+        }
+
+        let lhs = lhs_val.bitpat();
+        let rhs = rhs_val.bitpat();
         match binop.op {
             BinOp::LogicalAnd => self.val(BitPat::bit(lhs.get_bit(0) && rhs.get_bit(0))),
             BinOp::LogicalOr => self.val(BitPat::bit(lhs.get_bit(0) || rhs.get_bit(0))),
             BinOp::LogicalXor => self.val(BitPat::bit(lhs.get_bit(0) ^ rhs.get_bit(0))),
-            BinOp::Lt => self.val(BitPat::bit(lhs.ucmp(rhs) == std::cmp::Ordering::Less)),
-            BinOp::Lte => self.val(BitPat::bit(lhs.ucmp(rhs) != std::cmp::Ordering::Greater)),
-            BinOp::Gt => self.val(BitPat::bit(lhs.ucmp(rhs) == std::cmp::Ordering::Greater)),
-            BinOp::Gte => self.val(BitPat::bit(lhs.ucmp(rhs) != std::cmp::Ordering::Less)),
+            BinOp::Lt => self.val(BitPat::bit(lhs.ucmp(&rhs) == std::cmp::Ordering::Less)),
+            BinOp::Lte => self.val(BitPat::bit(lhs.ucmp(&rhs) != std::cmp::Ordering::Greater)),
+            BinOp::Gt => self.val(BitPat::bit(lhs.ucmp(&rhs) == std::cmp::Ordering::Greater)),
+            BinOp::Gte => self.val(BitPat::bit(lhs.ucmp(&rhs) != std::cmp::Ordering::Less)),
             BinOp::Eq => self.val(BitPat::bit(lhs == rhs)),
             BinOp::Neq => self.val(BitPat::bit(lhs != rhs)),
-            BinOp::Add => self.val(lhs.add(rhs)),
-            BinOp::Sub => self.val(lhs.sub(rhs)),
-            BinOp::And => self.val(lhs.and(rhs)),
-            BinOp::Or => self.val(lhs.or(rhs)),
-            BinOp::Xor => self.val(lhs.xor(rhs)),
+            BinOp::Add => self.val(lhs.add(&rhs)),
+            BinOp::Sub => self.val(lhs.sub(&rhs)),
+            BinOp::And => self.val(lhs.and(&rhs)),
+            BinOp::Or => self.val(lhs.or(&rhs)),
+            BinOp::Xor => self.val(lhs.xor(&rhs)),
         }
     }
 
@@ -341,7 +534,18 @@ impl Expr {
     /// - `Not` → logical NOT (`!`), returns `Bit`; zero maps to true, nonzero to false.
     fn eval_unop(&self, context: &Context, un_op: &payload::UnOp) -> Value {
         let val = un_op.subject.eval(context);
-        let bits = val.bits();
+
+        // Hot path: the subject fits in a `u64` — no `BitPat` allocation.
+        if let InternalValue::Small { width, bits, .. } = &val.0 {
+            let (w, a) = (*width, *bits);
+            return match un_op.op {
+                UnOp::Neg => Value::from_u64(self.typ().clone(), w, a.wrapping_neg() & mask(w)),
+                UnOp::Inv => Value::from_u64(self.typ().clone(), w, !a & mask(w)),
+                UnOp::Not => self.val(BitPat::bit(a == 0)),
+            };
+        }
+
+        let bits = val.bitpat();
         match un_op.op {
             UnOp::Neg => self.val(bits.neg()),
             UnOp::Inv => self.val(bits.not()),
@@ -355,7 +559,7 @@ impl Expr {
         let arg_values: Vec<BitPat> = ctor
             .args
             .iter()
-            .map(|arg| arg.eval(context).bits().clone())
+            .map(|arg| arg.eval(context).bitpat())
             .collect();
         match Self::layouts(context).encode_ctor(self.typ(), ctor.symbol_id, &arg_values) {
             Some(bits) => self.val(bits),
@@ -377,7 +581,7 @@ impl Expr {
         let field_values: Vec<BitPat> = struct_
             .fields
             .iter()
-            .map(|(_, field)| field.eval(context).bits().clone())
+            .map(|(_, field)| field.eval(context).bitpat())
             .collect();
         let mut bits = BitPat::zeros(0);
         for value in field_values {
@@ -389,13 +593,13 @@ impl Expr {
     /// Evaluate a single-bit index expression: `subject[index]`.
     fn eval_index(&self, context: &Context, index: &payload::Index) -> Value {
         let val = index.subject.eval(context);
-        self.val(BitPat::bit(val.bits().get_bit(index.index as usize)))
+        self.val(BitPat::bit(val.get_bit(index.index as usize)))
     }
 
     fn eval_index_dyn(&self, context: &Context, index_dyn: &payload::IndexDyn) -> Value {
         let val = index_dyn.subject.eval(context);
         let idx_val = index_dyn.index.eval(context);
-        self.val(BitPat::bit(val.bits().get_bit(idx_val.bits().to_u64() as usize)))
+        self.val(BitPat::bit(val.get_bit(idx_val.to_u64() as usize)))
     }
 
     /// Evaluate a bit-range index expression: `subject[index_hi..index_lo]`.
@@ -407,10 +611,10 @@ impl Expr {
         let lo = index_range.index_lo;
         let hi = index_range.index_hi; // exclusive
         let val = index_range.subject.eval(context);
-        if hi as usize > val.bits().width() as usize {
-            eprintln!("DEBUG index_range: lo={lo} hi={hi} subject_width={} subject_typ={:?} subject_bits_width={}", val.bits().width(), val.typ(), val.bits().width());
+        if hi as usize > val.width() as usize {
+            eprintln!("DEBUG index_range: lo={lo} hi={hi} subject_width={} subject_typ={:?} subject_bits_width={}", val.width(), val.typ(), val.width());
         }
-        self.val(val.bits().slice(lo, hi))
+        self.val(val.slice(lo, hi))
     }
 
     /// Evaluate a word-concatenation expression `{a, b, c}`.
@@ -421,9 +625,22 @@ impl Expr {
         let mut bits = BitPat::zeros(0);
         for arg in &word.args {
             let v = arg.eval(context);
-            bits = bits.concat_msb_first(v.bits());
+            bits = bits.concat_msb_first(&v.bitpat());
         }
         self.val(bits.zext_to(self.width_of_typ(context)))
+    }
+
+    /// Zero-extend (or truncate) `val`'s bits to this expression's type
+    /// width, keeping the `Small` representation when the result also
+    /// fits in 64 bits (`zext`/`trunc`).
+    fn val_zext(&self, context: &Context, val: Value) -> Value {
+        let w = self.width_of_typ(context);
+        match &val.0 {
+            InternalValue::Small { bits, .. } if w <= 64 => {
+                Value::from_u64(self.typ().clone(), w, *bits)
+            }
+            _ => self.val(val.bitpat().zext_to(w)),
+        }
     }
 
     /// Evaluate a zero-extension: `zext(subject)`.
@@ -432,7 +649,7 @@ impl Expr {
     /// Upper bits are filled with zeros; the low bits are taken from the subject value.
     fn eval_zext(&self, context: &Context, zext: &payload::Zext) -> Value {
         let val = zext.subject.eval(context);
-        self.val(val.bits().zext_to(self.width_of_typ(context)))
+        self.val_zext(context, val)
     }
 
     /// Evaluate a sign-extension: `sext(subject)`.
@@ -441,7 +658,19 @@ impl Expr {
     /// The MSB of the subject is replicated into all upper bits.
     fn eval_sext(&self, context: &Context, sext: &payload::Sext) -> Value {
         let val = sext.subject.eval(context);
-        self.val(val.bits().sext_to(self.width_of_typ(context)))
+        let w = self.width_of_typ(context);
+        if let InternalValue::Small { width, bits, .. } = &val.0 {
+            if w <= 64 {
+                let out = if w >= *width {
+                    let msb = if *width == 0 { false } else { (bits >> (*width - 1)) & 1 != 0 };
+                    if msb { bits | (mask(w) & !mask(*width)) } else { bits & mask(w) }
+                } else {
+                    bits & mask(w)
+                };
+                return Value::from_u64(self.typ().clone(), w, out);
+            }
+        }
+        self.val(val.bitpat().sext_to(w))
     }
 
     /// Evaluate a truncation: `trunc(subject)`.
@@ -450,17 +679,17 @@ impl Expr {
     /// If subject is wider than target, the upper bits are discarded.
     fn eval_trunc(&self, context: &Context, trunc: &payload::Trunc) -> Value {
         let val = trunc.subject.eval(context);
-        self.val(val.bits().zext_to(self.width_of_typ(context)))
+        self.val_zext(context, val)
     }
 
     fn eval_any(&self, context: &Context, any: &payload::Any) -> Value {
         let subject_value = any.subject.eval(context);
-        self.val(BitPat::bit(!subject_value.bits().is_zero()))
+        self.val(BitPat::bit(!subject_value.is_zero()))
     }
 
     fn eval_all(&self, context: &Context, all: &payload::All) -> Value {
         let subject_value = all.subject.eval(context);
-        self.val(BitPat::bit(subject_value.bits().is_all_ones()))
+        self.val(BitPat::bit(subject_value.is_all_ones()))
     }
 }
 
