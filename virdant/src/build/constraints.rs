@@ -158,7 +158,7 @@ mod tests {
         platform_symbol.id()
     }
 
-    fn builder(db: &Db) -> crate::db::Builder {
+    fn builder(db: &Db) -> crate::db::Builder<'_> {
         crate::db::Builder::new(db)
     }
 
@@ -176,7 +176,7 @@ mod tests {
     incoming switch0 : Bit
 }
 "#.to_string();
-        let mut db = db_from_pairs(&[("builtin", builtin_source()), ("design", design)]);
+        let db = db_from_pairs(&[("builtin", builtin_source()), ("design", design)]);
         let platform_id = platform_symbol_id(&db);
         let mut builder = builder(&db);
         let pcf = emit_pcf(&mut builder, platform_id).unwrap();
@@ -201,7 +201,7 @@ mod tests {
     incoming clk2 : Clock
 }
 "#.to_string();
-        let mut db = db_from_pairs(&[("builtin", builtin_source()), ("design", design)]);
+        let db = db_from_pairs(&[("builtin", builtin_source()), ("design", design)]);
         let platform_id = platform_symbol_id(&db);
         let mut builder = builder(&db);
         let pcf = emit_pcf(&mut builder, platform_id).unwrap();
@@ -228,7 +228,7 @@ mod tests {
     incoming switch0 : Bit
 }
 "#.to_string();
-        let mut db = db_from_pairs(&[("builtin", builtin_source()), ("design", design)]);
+        let db = db_from_pairs(&[("builtin", builtin_source()), ("design", design)]);
         let platform_id = platform_symbol_id(&db);
         let mut builder = builder(&db);
         let xdc = emit_xdc(&mut builder, platform_id).unwrap();
@@ -254,7 +254,7 @@ mod tests {
     outgoing no_pin : Bit
 }
 "#.to_string();
-        let mut db = db_from_pairs(&[("builtin", builtin_source()), ("design", design)]);
+        let db = db_from_pairs(&[("builtin", builtin_source()), ("design", design)]);
         let platform_id = platform_symbol_id(&db);
         let mut builder = builder(&db);
         let Err(diagnostics) = emit_xdc(&mut builder, platform_id) else {
@@ -281,7 +281,7 @@ mod tests {
     outgoing no_pin : Bit
 }
 "#.to_string();
-        let mut db = db_from_pairs(&[("builtin", builtin_source()), ("design", design)]);
+        let db = db_from_pairs(&[("builtin", builtin_source()), ("design", design)]);
         let platform_id = platform_symbol_id(&db);
         let mut builder = builder(&db);
         let Err(diagnostics) = emit_pcf(&mut builder, platform_id) else {

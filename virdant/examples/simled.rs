@@ -1,4 +1,4 @@
-use virdant::sim::{BitPat, Clock, InitStrategy, Sim, Value};
+use virdant::sim::{Clock, InitStrategy, Sim, Value};
 use virdant::util::{check_db, db_from_file_with_lib};
 
 fn sim() -> Sim {

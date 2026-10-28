@@ -76,7 +76,7 @@ mod imp {
     /// `top`.  Returns the process exit code.
     pub fn run(db: &Db, top: SymbolId, clock_hz: u64, opts: VirtOptions) -> i32 {
         let mut sim = Sim::new(db, top, Default::default());
-        crate::sim::builtins::attach(&mut sim, db, top, opts.verbose);
+        crate::sim::builtins::attach(&mut sim, db, opts.verbose);
 
         let port = |sim: &Sim, name: &str| -> SignalId {
             let path = format!("top.{name}");

@@ -62,15 +62,12 @@ pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W) {
         writeln!(w, "$end").unwrap();
     }
 
-    let total_sigs = sigs.len();
-    let mut registered = 0usize;
     for (s, _) in sigs {
         let code = s.code;
         let width = s.width;
         let writer_cb = writer.clone();
         let last_time_cb = last_time.clone();
         let sig_id = s.id;
-        registered += 1;
         sim.on_change(sig_id, Box::new(move |s| {
             let t = s.now();
             let mut w = writer_cb.borrow_mut();

@@ -389,7 +389,6 @@ macro_rules! assign_non_blocking {
 
 use super::*;
 
-use crate::{binop, index_range, lit, refr};
 
 /// An `IndexRange` with constant bounds has a known width of
 /// `index_hi - index_lo + 1` (the emitter stores `index_hi` as the

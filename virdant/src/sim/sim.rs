@@ -21,7 +21,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use bstr::{BStr, BString, ByteSlice};
+use bstr::{BStr, BString};
 
 /// Strategy for choosing the value of uninitialized registers and
 /// top-level incoming ports.  There are no X or Z values: every cell
@@ -688,7 +688,9 @@ impl Sim {
     }
 }
 
-pub fn debug_transfer(id: crate::analysis::elaboration::SignalId, v: &Value) {
+/// Intentionally-empty hook for tracing register transfers when
+/// debugging; params kept for call-site readability.
+pub fn debug_transfer(_id: crate::analysis::elaboration::SignalId, _v: &Value) {
 }
 
 /// 0→1 transition on a 1-bit signal.  Keeps `set()`'s edge detection

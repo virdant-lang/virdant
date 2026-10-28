@@ -4,7 +4,7 @@ use std::io::{BufWriter, Write};
 use std::rc::Rc;
 use std::time::Instant;
 
-use virdant::sim::{BitPat, Clock, InitStrategy, Sim, Value};
+use virdant::sim::{Clock, InitStrategy, Sim, Value};
 use virdant::util::{check_db, db_from_dir_with_lib};
 
 const CLOCK_HZ:  u64 = 12_000_000;

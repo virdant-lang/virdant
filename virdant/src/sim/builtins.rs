@@ -24,8 +24,8 @@ use crate::sim::{Sim, Value};
 use crate::syntax::payload::AstNodePayload;
 
 /// Attach builtin behavior to every `ext mod` instance in the
-/// elaborated design rooted at `top`.
-pub fn attach(sim: &mut Sim, db: &Db, top: SymbolId, verbose: bool) {
+/// elaborated design inside `sim`.
+pub fn attach(sim: &mut Sim, db: &Db, verbose: bool) {
     let elaboration = sim.elaboration();
     let symboltable = db.get_symboltable();
     let instances: Vec<(BString, String)> = elaboration
@@ -91,12 +91,6 @@ fn set_u64(sim: &mut Sim, id: SignalId, value: u64) {
     let bits = BitPat::from_u64(width, value);
     let mut lock = sim.lock();
     lock.set(id, Value::new(typ_id, bits));
-}
-
-fn set_bit(sim: &mut Sim, id: SignalId, b: bool) {
-    let typ = sim.component_type_id(id);
-    let mut lock = sim.lock();
-    lock.set(id, Value::from_bool(typ, b));
 }
 
 /// Resolve a set of ports by name; `None` when any is missing.
@@ -183,7 +177,6 @@ fn builtin_rf(sim: &mut Sim, prefix: &str) -> bool {
 
     // Initial combinational state.
     {
-        let x = regs.borrow();
         set_u64(sim, rs1_out, 0);
         set_u64(sim, rs2_out, 0);
     }
