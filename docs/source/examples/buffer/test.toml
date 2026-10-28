@@ -1,0 +1,3 @@
+kind = "check"
+description = "Tutorial buffer example: a clocked register buffering a Word[32]."
+expect = "ok"

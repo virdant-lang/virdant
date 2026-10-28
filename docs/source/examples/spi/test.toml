@@ -1,0 +1,3 @@
+kind = "check"
+description = "Tutorial SPI example: serial peripheral interface slave."
+expect = "ok"

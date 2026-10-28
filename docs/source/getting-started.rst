@@ -37,10 +37,10 @@ Create a new Virdant project by running:
   $ cd blink
 
 This will create a new project in a subdirectory named `blink`.
-If we look at the `src/top.vir` file, we will see our blinking LED design:
+If we look at the design in `src/blink.vir` of the `blink` example project, we will see our blinking LED design:
 
-.. literalinclude:: /examples/blink.vir
-   :caption: top.vir
+.. literalinclude:: /examples/blink/src/blink.vir
+   :caption: src/blink.vir
    :language: virdant
 
 
@@ -58,7 +58,7 @@ The result will be a new file called `build/top.sv`.
 To simulate the design, you need a Verilog testbench.
 Here is one which will run the design for 100 cycles:
 
-.. literalinclude:: /examples/testbench.sv
+.. literalinclude:: /examples/blink/testbench.sv
    :caption: testbench.sv
    :language: verilog
 

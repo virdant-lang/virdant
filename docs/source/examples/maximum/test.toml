@@ -1,0 +1,3 @@
+kind = "check"
+description = "Standalone example: running maximum of a Word[8] input stream."
+expect = "ok"

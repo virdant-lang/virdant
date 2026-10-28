@@ -1,0 +1,3 @@
+kind = "check"
+description = "Standalone example of match expressions on unions."
+expect = "ok"

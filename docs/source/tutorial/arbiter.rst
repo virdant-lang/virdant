@@ -6,7 +6,7 @@ We will also see the pattern for resetting a register.
 `Arbiter` is a circuit which allows two clients to ask for access to a device,
 but only grants access to one of them at a time.
 
-.. literalinclude:: /examples/arbiter.vir
+.. literalinclude:: /examples/arbiter/src/arbiter.vir
     :caption: arbiter.vir
     :language: virdant
 
@@ -28,7 +28,7 @@ Clock and Reset
 ---------------
 Most modules you will write will have both a clock and a reset like this:
 
-.. literalinclude:: /examples/arbiter.vir
+.. literalinclude:: /examples/arbiter/src/arbiter.vir
     :language: virdant
     :dedent:
     :lines: 2-3
@@ -53,7 +53,7 @@ Resets and Round-Robin
 ----------------------
 `client0_priority` is given its value with a driver block:
 
-.. literalinclude:: /examples/arbiter.vir
+.. literalinclude:: /examples/arbiter/src/arbiter.vir
     :language: virdant
     :dedent:
     :lines: 11-16
@@ -89,7 +89,7 @@ The Heart of the Arbiter
 ------------------------
 The heart of `Arbiter` is this `when` block:
 
-.. literalinclude:: /examples/arbiter.vir
+.. literalinclude:: /examples/arbiter/src/arbiter.vir
     :language: virdant
     :dedent:
     :lines: 18-31
@@ -124,7 +124,7 @@ This style of `when` block allows you to group them together.
 The first `case` occurs on a reset.
 This tells us that upon reset, neither client is granted access:
 
-.. literalinclude:: /examples/arbiter.vir
+.. literalinclude:: /examples/arbiter/src/arbiter.vir
     :language: virdant
     :dedent:
     :lines: 19-22
@@ -134,7 +134,7 @@ In this case, we grant access to client 0 if it asks.
 We grant access to client 1 if it asks but client 0 hasn't asked,
 using the `&&` operator (logical AND):
 
-.. literalinclude:: /examples/arbiter.vir
+.. literalinclude:: /examples/arbiter/src/arbiter.vir
     :language: virdant
     :dedent:
     :lines: 23-26

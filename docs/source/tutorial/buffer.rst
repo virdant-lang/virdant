@@ -4,7 +4,7 @@ In this next example, we will demonstrate how to use registers, the stateful com
 
 `Buffer` is a module which takes in some data and then, on the next clock cycle, sends it back out.
 
-.. literalinclude:: /examples/buffer.vir
+.. literalinclude:: /examples/buffer/src/buffer.vir
     :caption: buffer.vir
     :language: virdant
 
@@ -36,7 +36,7 @@ Driver Blocks
 --------------
 Just after `buffer` is declared, we see a block containing two drivers:
 
-.. literalinclude:: /examples/buffer.vir
+.. literalinclude:: /examples/buffer/src/buffer.vir
     :language: virdant
     :dedent:
     :lines: 6-9

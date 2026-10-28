@@ -5,7 +5,7 @@ We will start by showing how to define a module in Virdant.
 
 `Passthrough` is a module which takes in some data and immediately sends it back out unchanged.
 
-.. literalinclude:: /examples/passthrough.vir
+.. literalinclude:: /examples/passthrough/src/passthrough.vir
     :caption: passthrough.vir
     :language: virdant
 
@@ -20,7 +20,7 @@ Ports
 -----
 Ports are signals that allow communication between the module and the outside world.
 
-.. literalinclude:: /examples/passthrough.vir
+.. literalinclude:: /examples/passthrough/src/passthrough.vir
     :language: virdant
     :dedent:
     :lines: 2-3
@@ -50,7 +50,7 @@ Drivers
 -------
 The last statement in our module is a driver statement:
 
-.. literalinclude:: /examples/passthrough.vir
+.. literalinclude:: /examples/passthrough/src/passthrough.vir
     :language: virdant
     :dedent:
     :lines: 5
