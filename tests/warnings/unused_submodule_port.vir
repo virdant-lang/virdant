@@ -75,4 +75,34 @@ mod ExplicitUnused {
     // CHECK-NOT: Unused signal ha.carry
 }
 
+// A sub-module with an outgoing wire port.
+mod WireSource {
+    incoming a : Bit
+    outgoing wire s : Bit { it := a }
+}
+
+// Reading the sub-module's outgoing wire — no warning for it.
+mod SubWireUsed {
+    incoming a : Bit
+    outgoing out : Bit
+
+    mod ws of WireSource {
+        it.a := a
+    }
+    out := ws.s
+    // CHECK-NOT: Unused signal ws.s
+}
+
+// Ignoring the sub-module's outgoing wire — it should warn.
+mod SubWireUnused {
+    incoming a : Bit
+    outgoing out : Bit
+
+    mod ws of WireSource {
+        it.a := a
+    }
+    out := false
+    // CHECK: Unused signal ws.s
+}
+
 // CHECK: Check OK

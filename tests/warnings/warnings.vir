@@ -34,6 +34,23 @@ mod UsedPort {
     out := data
 }
 
+// An `outgoing wire` that is driven but never read warns, just like
+// an internal `wire`.
+mod UnusedOutgoingWire {
+    outgoing wire w : Bit { it := true }
+    outgoing out : Bit
+    // CHECK: Unused signal w
+    out := true
+}
+
+// An `outgoing wire` that IS read produces no Unused signal warning.
+mod UsedOutgoingWire {
+    outgoing wire w : Bit { it := true }
+    outgoing out : Bit
+    // CHECK-NOT: Unused signal w
+    out := w
+}
+
 // Driving an outgoing without reading it back produces no ReadFromSink warning.
 mod NoReadFromSink {
     outgoing out : Bit

@@ -277,7 +277,6 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
                 && !matches!(
                     component.kind(),
                     Some(ComponentKind::OutgoingReg)
-                        | Some(ComponentKind::OutgoingWire)
                         | Some(ComponentKind::Bus)
                         | Some(ComponentKind::Net)
                 )
