@@ -132,6 +132,32 @@ pub fn parse(source: &Source) -> Parsing {
             let diagnostic = Diagnostic::new(region, diagnostics::DiagnosticPayload::TrailingSpaces);
             parsing.trailing_space_diagnostics.push(diagnostic);
         }
+
+        // A doccomment line (`//>` or `//!`) with text after the marker but
+        // no space is malformed. Scan the raw source so the check applies
+        // even when parser error recovery swallows the DocComment token
+        // without running its grammar action.
+        let rest = &line[spaces..];
+        let marker_len = if rest.starts_with(b"//>") || rest.starts_with(b"//!") {
+            3
+        } else {
+            0
+        };
+        if marker_len > 0 && rest.len() > marker_len && rest[marker_len] != b' ' {
+            let start = SourceOffset(line_start + spaces as u32);
+            let end = SourceOffset(line_start + line.len() as u32);
+            let region = source.to_region(start, end);
+            let diagnostic = Diagnostic::new(
+                region,
+                diagnostics::SyntaxError {
+                    message: format!(
+                        "Doccomment must be followed by a space (or end of line), got {:?}",
+                        BStr::new(&rest[..4.min(rest.len())]),
+                    ).into(),
+                },
+            );
+            parsing.docstring_diagnostics.push(diagnostic);
+        }
         line_start += raw_line.len() as u32 + 1;
     }
 
@@ -271,10 +297,6 @@ impl Parsing {
             errors.push((self.ast_node(*error_id), error_data));
         }
         errors
-    }
-
-    pub(super) fn add_docstring_diagnostic(&mut self, diagnostic: Diagnostic) {
-        self.docstring_diagnostics.push(diagnostic);
     }
 
     pub fn diagnostics(&self) -> Vec<Diagnostic> {

@@ -1,0 +1,22 @@
+// InvalidDocstring: a doccomment with text after it but no space after
+// the `//>` or `//!` marker is an error.
+
+//!>Bar
+// CHECK: Doccomment must be followed by a space
+
+mod Foo {
+    //>Baz
+    // CHECK: Doccomment must be followed by a space
+    incoming inp : Bit
+    outgoing out : Bit
+    out := inp
+}
+
+// Even in malformed doccomment soup, where parser error recovery swallows
+// the DocComment tokens, each bad line is still flagged.
+//>Soup1
+//!>Soup2
+// CHECK: Doccomment must be followed by a space
+// CHECK: Doccomment must be followed by a space
+
+// CHECK: Check failed

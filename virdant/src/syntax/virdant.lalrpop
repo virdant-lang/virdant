@@ -5,10 +5,8 @@ use crate::syntax::parsing::{InternedString, Parsing};
 use crate::syntax::token::{Token, TokenError};
 
 
-use bstr::ByteSlice;
-use crate::common::source::{Region, SourceOffset};
+use crate::common::source::SourceOffset;
 use crate::common::{DriverType, ComponentKind, BinOp, ChannelDir, SocketRole, Strength, UnOp};
-use crate::diagnostics::{self, Diagnostic};
 
 grammar<'a>(parser: &mut Parsing);
 
@@ -46,23 +44,10 @@ PackageImport: AstNodeId = {
 DocString: InternedString = {
     <ll:@L> <texts:("DocComment")+> <rr:@R> => {
         let span = parser.span(ll, rr);
-        // Validate: each docstring line must start with a space after `//>`,
-        // or be exactly `//>` (empty).
-        let raw = parser.text(span);
-        for raw_line in raw.split_str(b"\n") {
-            let line: &[u8] = raw_line;
-            if line.len() > 3 && line[3] != b' ' {
-                let region = Region::new(parser.package(), span);
-                let diag = Diagnostic::new(
-                    region,
-                    diagnostics::InvalidDocstring {
-                        content: line[..4.min(line.len())].into(),
-                    },
-                );
-                parser.add_docstring_diagnostic(diag);
-                break;
-            }
-        }
+        // Note: a doccomment line with text after the marker but no space
+        // is rejected by the source scan in `parse` (syntax/parsing.rs),
+        // not here: parser error recovery can swallow a DocComment token
+        // without running this action.
         parser.intern(span)
     },
 }
@@ -70,23 +55,6 @@ DocString: InternedString = {
 DocBang: InternedString = {
     <ll:@L> <texts:("DocBang")+> <rr:@R> => {
         let span = parser.span(ll, rr);
-        // Validate: each docbang line must start with a space after `//!`,
-        // or be exactly `//!` (empty).
-        let raw = parser.text(span);
-        for raw_line in raw.split_str(b"\n") {
-            let line: &[u8] = raw_line;
-            if line.len() > 3 && line[3] != b' ' {
-                let region = Region::new(parser.package(), span);
-                let diag = Diagnostic::new(
-                    region,
-                    diagnostics::InvalidDocstring {
-                        content: line[..4.min(line.len())].into(),
-                    },
-                );
-                parser.add_docstring_diagnostic(diag);
-                break;
-            }
-        }
         parser.intern(span)
     },
 }
