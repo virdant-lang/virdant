@@ -120,7 +120,10 @@ Only items marked with the `pub` modifier are visible to other packages.
 An item without the `pub` keyword is private to the package.
 Referencing a non-`pub` item from another package is an error at the
 reference site; the `import` statement itself never fails for visibility
-reasons.
+reasons. A warning is also emitted at the non-`pub` item's *definition*,
+naming the package that references it, so the item's author learns that
+another package depends on it. The warning is reported once per
+referencing package, no matter how many times the item is referenced.
 
 The `pub` modifier is available on every top-level item kind:
 

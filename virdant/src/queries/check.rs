@@ -148,6 +148,19 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     // stitching per-module graphs along the instance tree.
     diagnostics.extend(builder.get_combinational_cycle_check().iter().cloned());
 
+    // `ReferencedWhileNotPub` warnings are emitted once per cross-package
+    // reference to a non-`pub` item, from several independent analyses.
+    // Collapse duplicates so each non-`pub` item is warned about once per
+    // referencing package.
+    let mut warned: indexmap::IndexSet<(BString, BString, BString)> = indexmap::IndexSet::new();
+    diagnostics.retain(|d| {
+        if let DiagnosticPayload::ReferencedWhileNotPub(d) = &d.payload {
+            warned.insert((d.item.clone(), d.package.clone(), d.referencing_package.clone()))
+        } else {
+            true
+        }
+    });
+
     let packages = builder.get_packages();
     diagnostics.sort_by_key(|d| {
         let region = d.region();

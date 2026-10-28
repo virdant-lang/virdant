@@ -1,17 +1,36 @@
 //! Referencing a non-pub item from another package errors at the
 //! reference site; the import itself never visibility-errors.
+//!
+//! In addition, a warning is emitted at the *definition* site of the
+//! non-`pub` item, naming the package that references it.
 
 import lib
 
 pub mod Top {
     incoming inp : Word[8]
     outgoing out : Word[8]
+    outgoing out2 : Word[8]
 
     // The import of `lib` is fine even though `Priv` is not pub.
     mod p of lib::Priv {
         it.inp := inp
         out := it.out
     }
+
+    // A second reference from the same package: a second use-site error,
+    // but the definition-site warning is reported only once.
+    mod p2 of lib::Priv {
+        it.inp := inp
+        out2 := it.out
+    }
 }
 
+// The definition-site warning sorts before the use-site errors, because
+// `lib` sorts before this package. It appears exactly once despite the
+// two references: the CHECK-NOT fails if a second warning sneaks in
+// before the use-site errors (the two identical CHECKs match one error
+// per use-site, `p` and `p2`).
+// CHECK: `Priv` is not pub but referenced from package `top`
+// CHECK-NOT: `Priv` is not pub but referenced from package `top`
+// CHECK: `Priv` is not pub in package `lib`; mark it `pub` to reference it from other packages
 // CHECK: `Priv` is not pub in package `lib`; mark it `pub` to reference it from other packages

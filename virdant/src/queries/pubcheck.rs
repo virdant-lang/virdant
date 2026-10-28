@@ -34,11 +34,23 @@ pub(crate) fn check_item_reference(
         return;
     }
     let packages = builder.get_packages();
+    let item = symbol.name().to_owned();
+    let package = packages.name(symbol_package).to_owned();
     diagnostics.push(Diagnostic::new(
         region,
         diagnostics::NotPub {
-            item: symbol.name().to_owned(),
-            package: packages.name(symbol_package).to_owned(),
+            item: item.clone(),
+            package: package.clone(),
+        },
+    ));
+    // Also warn at the definition site, so the author of the non-`pub`
+    // item learns that another package depends on it.
+    diagnostics.push(Diagnostic::new(
+        builder.get_location_region(symbol.location()),
+        diagnostics::ReferencedWhileNotPub {
+            item,
+            package,
+            referencing_package: packages.name(referencing_package).to_owned(),
         },
     ));
 }

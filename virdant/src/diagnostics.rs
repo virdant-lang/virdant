@@ -167,6 +167,7 @@ pub enum DiagnosticPayload {
     /// `@parameter` annotations instead).
     ExtModGenerics(ExtModGenerics),
     NotPub(NotPub),
+    ReferencedWhileNotPub(ReferencedWhileNotPub),
     TypeNotPub(TypeNotPub),
     TopNotPub(TopNotPub),
     TopGenerics(TopGenerics),
@@ -495,6 +496,17 @@ pub struct NotPub {
     pub package: BString,
 }
 
+/// A non-`pub` item is referenced from another package.
+/// Reported at the item's *definition* as a warning, naming the package
+/// that references it, so the author knows where to add `pub` (or that
+/// their item is being depended on while private).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReferencedWhileNotPub {
+    pub item: BString,
+    pub package: BString,
+    pub referencing_package: BString,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TopNotPub {
     pub item: BString,
@@ -790,6 +802,13 @@ impl Diagnostic {
                     d.package,
                 ).into()
             }
+            DiagnosticPayload::ReferencedWhileNotPub(d) => {
+                format!(
+                    "`{}` is not pub but referenced from package `{}`",
+                    d.item,
+                    d.referencing_package,
+                ).into()
+            }
             DiagnosticPayload::TopNotPub(d) => {
                 format!(
                     "Top module {} must be `pub`",
@@ -855,7 +874,8 @@ impl Diagnostic {
             | DiagnosticPayload::UnfilledHole(_)
             | DiagnosticPayload::EmptyDriverBlock
             | DiagnosticPayload::RedundantDriver(_)
-            | DiagnosticPayload::TrailingSpaces => DiagnosticLevel::Warning,
+            | DiagnosticPayload::TrailingSpaces
+            | DiagnosticPayload::ReferencedWhileNotPub(_) => DiagnosticLevel::Warning,
             DiagnosticPayload::Todo(_) => DiagnosticLevel::Info,
             _ => DiagnosticLevel::Error,
         }
@@ -899,5 +919,5 @@ from_diagnostic! {
     ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,
     PlatformPortTypeMismatch, DefaultOutsidePlatformPort, NotYetImplemented, TypeArgCount,
     TypeArgKind, UnknownKind,
-    CtorRequiresArgs, ExtModGenerics, NotPub, TypeNotPub, TopNotPub, TopGenerics, SocketConnectMismatch,
+    CtorRequiresArgs, ExtModGenerics, NotPub, ReferencedWhileNotPub, TypeNotPub, TopNotPub, TopGenerics, SocketConnectMismatch,
 }
