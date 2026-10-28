@@ -1,4 +1,4 @@
-//! The Virdant test runner.
+//! The Virdant test runner (`virtue`).
 //!
 //! A pure orchestrator: it links nothing from the compiler.  Every test
 //! is a subprocess of `target/release/vir` (plus iverilog / verilator
@@ -55,7 +55,7 @@ struct Args {
     #[arg(long)]
     filecheck: bool,
 
-    /// Run only one suite (top-level directory under tests/, e.g. `sim`)
+    /// Run only one suite (top-level group of the test path, e.g. `sim`)
     #[arg(long)]
     suite: Option<String>,
 
@@ -240,7 +240,11 @@ fn run_all(args: Args) -> Result<(), RunErr> {
 }
 
 fn suite_of(test: &Test) -> Option<&str> {
-    test.name.strip_prefix("tests/")?.split('/').next()
+    // The suite is the test path's top-level group: for the conventional
+    // tests/ tree that's the verification layer (check, errors, sim, ...);
+    // elsewhere it's the first directory component.
+    let name = test.name.strip_prefix("tests/").unwrap_or(&test.name);
+    name.split('/').next()
 }
 
 fn find_on_path(binary: &str) -> bool {

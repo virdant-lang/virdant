@@ -1,4 +1,4 @@
-//! The Virdant test runner library.
+//! The Virdant test runner library (`virtue`).
 //!
 //! A pure orchestrator: it links nothing from the compiler.  Every test
 //! is a subprocess of `target/release/vir` (plus iverilog / verilator
