@@ -1,0 +1,138 @@
+// Tests for the UnusedSource warning family: ports, wires, and
+// sub-module outgoing ports that are driven but never read.
+// None of these are errors, so the run ends with "Check OK".
+
+// An incoming port that is never read in any expression.
+mod HasUnusedPort {
+    incoming unused_val : Word[8]
+    outgoing out : Bit
+    // CHECK: Unused signal unused_val
+    out := true
+}
+
+// An incoming port that IS read should produce no Unused signal warning.
+mod UsedPort {
+    incoming data : Word[8]
+    outgoing out  : Word[8]
+    // CHECK-NOT: Unused signal data
+    out := data
+}
+
+// An `outgoing wire` that is driven but never read warns, just like
+// an internal `wire`.
+mod UnusedOutgoingWire {
+    outgoing wire w : Bit { it := true }
+    outgoing out : Bit
+    // CHECK: Unused signal w
+    out := true
+}
+
+// An `outgoing wire` that IS read produces no Unused signal warning.
+mod UsedOutgoingWire {
+    outgoing wire w : Bit { it := true }
+    outgoing out : Bit
+    // CHECK-NOT: Unused signal w
+    out := w
+}
+
+// A trivial sub-module with two outgoing ports.
+mod HalfAdder {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing sum : Bit
+    outgoing carry : Bit
+    sum := a ^^ b
+    carry := a && b
+}
+
+// Reading both outgoing ports — no warning.
+mod AllUsed {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing out : Word[2]
+
+    mod ha of HalfAdder {
+        it.a := a
+        it.b := b
+    }
+    out := word(ha.sum, ha.carry)
+    // CHECK-NOT: Unused signal ha.sum
+    // CHECK-NOT: Unused signal ha.carry
+}
+
+// Reading only one outgoing port — the other should warn.
+mod OneUnused {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing out : Bit
+
+    mod ha of HalfAdder {
+        it.a := a
+        it.b := b
+    }
+    out := ha.sum
+    // CHECK: Unused signal ha.carry
+}
+
+// Reading neither outgoing port — both should warn.
+mod BothUnused {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing out : Bit
+
+    mod ha of HalfAdder {
+        it.a := a
+        it.b := b
+    }
+    out := false
+    // CHECK: Unused signal ha.sum
+    // CHECK: Unused signal ha.carry
+}
+
+// An unused outgoing port that is explicitly marked `unused` inside
+// the mod block — should NOT warn for that port.
+mod ExplicitUnused {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing out : Bit
+
+    mod ha of HalfAdder {
+        it.a := a
+        it.b := b
+        unused it.carry
+    }
+    out := ha.sum
+    // CHECK-NOT: Unused signal ha.carry
+}
+
+// A sub-module with an outgoing wire port.
+mod WireSource {
+    incoming a : Bit
+    outgoing wire s : Bit { it := a }
+}
+
+// Reading the sub-module's outgoing wire — no warning for it.
+mod SubWireUsed {
+    incoming a : Bit
+    outgoing out : Bit
+
+    mod ws of WireSource {
+        it.a := a
+    }
+    out := ws.s
+    // CHECK-NOT: Unused signal ws.s
+}
+
+// Ignoring the sub-module's outgoing wire — it should warn.
+mod SubWireUnused {
+    incoming a : Bit
+    outgoing out : Bit
+
+    mod ws of WireSource {
+        it.a := a
+    }
+    out := false
+    // CHECK: Unused signal ws.s
+}
+
+// CHECK: Check OK

@@ -1,0 +1,21 @@
+// Tests for the ReadFromSink warning: reading from a sink (e.g. an
+// outgoing port) that can only be driven, never read.
+// None of these are errors, so the run ends with "Check OK".
+
+// Reading from an outgoing port — outgoing is a sink and cannot be read.
+mod ReadFromOutgoing {
+    outgoing a : Bit
+    outgoing b : Bit
+    a := true
+    // CHECK: Read from sink a
+    b := a
+}
+
+// Driving an outgoing without reading it back produces no ReadFromSink warning.
+mod NoReadFromSink {
+    outgoing out : Bit
+    // CHECK-NOT: Read from sink
+    out := true
+}
+
+// CHECK: Check OK

@@ -1,0 +1,86 @@
+# Virdant tests
+
+This directory holds all Virdant compiler and tooling tests. The suites are
+organized **first by verification layer** (what harness runs them and what
+exit-code contract they have), **then by language feature** within a layer.
+
+Run everything from the repo root with `make test` (which recurses into every
+suite), or run a single suite with `make -C tests/<suite> test`.
+
+## Suites
+
+- `errors/` — programs that MUST fail to compile. Each `.vir` file is run
+  through `vir check`; the test fails if the run succeeds, and FileCheck
+  directives assert the exact diagnostics. Organized into feature
+  subdirectories (`syntax/`, `naming/`, `typing/`, `drivers/`, `match/`,
+  `cycles/`, `visibility/`, `platforms/`, `style/`).
+- `warnings/` — programs that compile with expected warnings. The Makefile
+  requires the exit code to be 0; FileCheck directives assert which warnings
+  appear (and which do not).
+- `check/` — focused, positive compile-time tests. Files must compile with
+  **no warnings at all** (the harness greps the output for `WARNING`).
+  Flat `.vir` files exercise language features; `projects/` contains
+  project-style tests (each with its own `Virdant.toml`).
+- `sim/` — end-to-end behavioral tests: `vir build` + iverilog (or verilator)
+  simulation of a testbench against the generated Verilog. Requires
+  iverilog/verilator; see the toolchain policy below.
+- `golden/` — golden-master tests: generated Verilog must be byte-identical
+  to a hand-expanded reference.
+- `format/` — formatter tests: each input `.vir` must format to exactly its
+  `.golden.vir` counterpart, and the formatted output must parse cleanly.
+- `doc/` — `vir doc` HTML-generation tests (file existence + docstring
+  content assertions).
+
+## Exit-code contracts
+
+- `errors/`: `vir check` must exit nonzero, and every `CHECK:` directive must
+  match. A file that passes `vir check` is a test failure.
+- `warnings/`: `vir check` must exit 0 (warnings are OK); FileCheck asserts
+  the warnings.
+- `check/`: `vir check` must exit 0, no `WARNING` may appear in the output,
+  and FileCheck directives must match.
+- `sim/`, `golden/`, `format/`, `doc/`: the Makefiles assert output correctness
+  directly (simulator exit codes, diffs, greps).
+
+## FileCheck directive conventions
+
+- A FileCheck directive is a comment line `// CHECK: <pattern>` matched
+  against the compiler output of the file being tested.
+- `// CHECK-NOT: <pattern>` asserts the pattern does NOT appear anywhere in
+  the output.
+- Errors-suite files end with `// CHECK: Check failed`; warnings/check suite
+  files end with `// CHECK: Check OK`.
+- One file asserts **one diagnostic family** (or one feature) — keep merges
+  to related flavors of the same family.
+
+## Adding a test
+
+- A new diagnostic for language construct X: add `errors/<feature>/X.vir`
+  with CHECKs for the exact diagnostic text, plus a `// CHECK: Check failed`
+  trailer.
+- A regression that must compile cleanly: add `check/X.vir` (or a
+  `check/projects/<name>/` project if it needs multiple files / a platform).
+- A behavioral test: add `sim/<name>/` with `src/top.vir`, `tb.sv`,
+  `Virdant.toml`, and a Makefile modeled on the existing ones.
+- A formatter change: add `format/<name>.vir` plus `format/<name>.golden.vir`
+  (the golden file is the expected formatted output).
+- Rename caution: the package name of a single-file test is the file stem, so
+  CHECK lines that quote package-qualified names (e.g. `Type foo::Bar takes
+  1 type argument`) must be updated when a file is renamed.
+
+## Sim toolchain policy
+
+`tests/sim/` needs `iverilog` (and `verilator` for `uart/`). If either is
+missing, `make -C tests/sim test` fails loudly, unless the environment
+variable `VIRDANT_ALLOW_MISSING_SIM=1` is set, in which case every project is
+skipped with a notice. CI installs the tools and sets the variable; local
+`make test` runs everything when the tools are present.
+
+## Layout notes
+
+- Every suite directory (and every feature subdirectory) has its own
+  `Makefile` that recurses into subdirectories, so a new test directory is
+  automatically wired in — no central list to forget to update.
+- `build/` output directories are gitignored and excluded from recursion.
+- `TESTING_REPORT/NOTES.md` records the reasoning behind the current layout
+  and any known, deliberately skipped tests (see `check/projects/patterns/`).

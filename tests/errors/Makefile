@@ -1,8 +1,5 @@
 VIR_FILES := $(wildcard *.vir)
-
-# Project-style fail-tests (directory + Virdant.toml + own Makefile),
-# listed explicitly like tests/pass/Makefile's VIR_PROJS.
-VIR_PROJS := platform_mismatch top_generics
+SUBDIRS := $(filter-out build/,$(wildcard */))
 
 BASEDIR = $(abspath ../..)
 VIR ?= $(BASEDIR)/target/release/vir
@@ -17,7 +14,7 @@ test:
 		cat build/$$name.out | $(FILECHECK) $$(realpath $$f) || exit 1; \
 		if [ $$rc -eq 0 ]; then echo "ERROR: $$f reported an unexpected 0 errors"; exit 1; fi \
 	done
-	for d in $(VIR_PROJS); do \
+	for d in $(SUBDIRS); do \
 		echo "TEST: tests/errors/$$d"; \
 		$(MAKE) -C $$d VIR=$(VIR) FILECHECK=$(FILECHECK) || exit 1; \
 	done

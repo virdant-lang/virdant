@@ -1,0 +1,54 @@
+// Tests that the `for` clause works in a project with multiple files
+// and with module instantiations.
+
+// CHECK: Check OK
+
+platform PlatformA {
+    @pin(0)
+    incoming data : Bit
+
+    @pin(1)
+    outgoing result : Bit
+}
+
+platform PlatformB {
+    @pin(0)
+    incoming clock : Clock
+
+    @pin(1)
+    outgoing result : Bit
+}
+
+// FPGA-specific module with for clause
+pub mod ModuleA for PlatformA {
+    incoming data : Bit
+    outgoing result : Bit
+
+    result := data
+}
+
+// ASIC-specific module with for clause
+pub mod ModuleB for PlatformB {
+    incoming clock : Clock
+    outgoing result : Bit
+
+    result := false
+    unused clock
+}
+
+// Top-level module that instantiates platform-specific modules
+mod Top {
+    incoming data : Bit
+    incoming clock : Clock
+
+    outgoing fpga_result : Bit
+    outgoing asic_result : Bit
+
+    mod fpga_inst of ModuleA
+    fpga_inst.data := data
+    fpga_result := fpga_inst.result
+
+    mod asic_inst of ModuleB
+    asic_inst.clock := clock
+    asic_result := asic_inst.result
+}

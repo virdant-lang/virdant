@@ -1,0 +1,39 @@
+// A type reference supplies the wrong number of type arguments.
+
+struct type Pair[A : Type, B : Type] {
+    fst : A
+    snd : B
+}
+
+pub mod Top {
+    incoming inp : Pair[Bit]
+    outgoing out : Bit
+    out := inp->fst
+}
+
+// CHECK: Type Pair takes 2 type arguments, but 1 was given
+
+// A generic socket or mod def must be instantiated with the declared
+
+mod Keep[T : Type] {
+    incoming d : T
+    wire w : Bit
+    w := true
+    unused d
+}
+
+pub mod Top2 {
+    outgoing out : Bit
+    out := false
+    client socket p of Pipe {
+        it.data := ?
+    }
+
+    mod f of Keep {
+        it.d := ?
+    }
+}
+
+// CHECK: Type builtin::Pipe takes 1 type argument, but 0 were given
+// CHECK: Type arity::Keep takes 1 type argument, but 0 were given
+// CHECK: Check failed

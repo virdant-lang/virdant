@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "when guards and match subjects do not by themselves create combinational loops"
+filecheck = "src/combinational_when_match_ok.vir"
