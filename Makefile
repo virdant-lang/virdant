@@ -28,16 +28,10 @@ test_runner: virdant/target/lib build
 	@echo "# RUNNER TESTS PASS"
 	@echo "########################################"
 
-# The standard entry point: Rust unit tests + the parallel test runner
-# over tests/ + the docs examples suite (docs/ is out of bounds for the
-# test.toml conversion, so its Makefile keeps running the example checks).
+# The standard entry point: Rust unit tests + the parallel test runner.
+# The runner discovers every test.toml in the tree, including the docs
+# example projects under docs/source/examples/.
 test: virdant/target/lib build
-	@echo "########################################"
-	@echo "# RUNNING TESTS IN docs/"
-	@echo "########################################"
-	@echo
-	$(MAKE) -C docs  test VIR=$(VIR)
-	@echo
 	@echo "########################################"
 	@echo "RUNNING CARGO TESTS"
 	@echo "########################################"

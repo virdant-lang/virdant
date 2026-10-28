@@ -7,7 +7,7 @@ Now, we will demonstrate how to use conditional expressions through a series of 
 `Mux2` is a module which takes two inputs and selects between them.
 
 
-.. literalinclude:: /examples/mux2.vir
+.. literalinclude:: /examples/mux2/src/mux2.vir
     :caption: mux2.vir
     :language: virdant
 
@@ -31,7 +31,7 @@ Otherwise, it returns the third argument.
 -----------------
 `Mux3` is a module which takes three inputs and selects between them.
 
-.. literalinclude:: /examples/mux3.vir
+.. literalinclude:: /examples/mux3/src/mux3.vir
     :caption: mux3.vir
     :language: virdant
 
@@ -51,7 +51,7 @@ When Blocks
 -----------
 In Virdant, we use `when` blocks to represent priority muxes.
 
-.. literalinclude:: /examples/mux3.vir
+.. literalinclude:: /examples/mux3/src/mux3.vir
     :language: virdant
     :lines: 11-16
     :dedent:
@@ -70,7 +70,7 @@ Otherwise, the value of the `when` block is given by the `else` clause.
 For our last example, we have `Mux4`,
 a 4-way multiplexer which takes four inputs and selects between them.
 
-.. literalinclude:: /examples/mux4.vir
+.. literalinclude:: /examples/mux4/src/mux4.vir
     :caption: mux4.vir
     :language: virdant
 
@@ -83,7 +83,7 @@ Match Blocks
 In this example, we chose to make use of final conditional syntax in Virdant:
 the `match` block:
 
-.. literalinclude:: /examples/mux4.vir
+.. literalinclude:: /examples/mux4/src/mux4.vir
     :language: virdant
     :lines: 10-15
     :dedent:

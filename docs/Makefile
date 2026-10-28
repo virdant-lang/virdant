@@ -8,15 +8,13 @@ SPHINXBUILD   ?= uv run sphinx-build
 SOURCEDIR     = source
 BUILDDIR      = build
 BASEDIR       = $(abspath ..)
-VIR          ?= $(BASEDIR)/target/release/vir
-EXAMPLES      = $(wildcard source/examples/*.vir)
 
 # The commit the docs were built from, with -dirty if the tree has changes.
 COMMIT        = $(shell git -C $(BASEDIR) rev-parse --short HEAD 2>/dev/null)
 DIRTY         = $(shell test -n "$$(git -C $(BASEDIR) status --porcelain 2>/dev/null)" && echo "-dirty")
 export VIRDANT_COMMIT = $(COMMIT)$(DIRTY)
 
-auto: Makefile $(EXAMPLES) # rustdocs
+auto: Makefile # rustdocs
 	retry=0; until $(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O); do \
 	  if [ $$retry -ge 5 ]; then exit 1; fi; \
 	  if grep -q "FileNotFoundError.*searchindexfn" /tmp/sphinx-err-*.log 2>/dev/null; then \
@@ -34,7 +32,7 @@ watch:
 serve: auto
 	bash serve.sh
 
-.PHONY: auto clean push rustdocs watch
+.PHONY: auto clean push rustdocs watch test
 
 clean:
 	rm -rf $(BUILDDIR)
@@ -46,11 +44,8 @@ rustdocs:
 	cargo doc --manifest-path ../virdant/Cargo.toml
 	cp -r ../virdant/target/doc/ $(BUILDDIR)/html/.
 
-test: $(EXAMPLES)
-	for example in $(EXAMPLES); do \
-	  if [ "$$(basename $$example)" = "blink.vir" ]; then \
-	    $(VIR) -F $$example,$$(dirname $$example)/strobe.vir check  || exit 1; \
-	  else \
-	    $(VIR) -F $$example check  || exit 1; \
-	  fi; \
-done
+# The examples under source/examples/ are full Virdant projects, each with
+# a test.toml, so the virtue runner (see the root Makefile) checks them.
+# This target is kept as a no-op for compatibility.
+test:
+	@echo "Examples are checked by the virtue runner (see source/examples/README.md)."

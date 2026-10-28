@@ -1,0 +1,26 @@
+# Virdant examples
+
+Each subdirectory is a full Virdant project, laid out just like `vir new`
+creates one:
+
+```
+<example>/
+├── Virdant.toml    [project] name (plus [prog] top where the example has one)
+├── test.toml       kind = "check", expect = "ok" (run by the virtue runner)
+└── src/            the example's packages (one package per .vir file)
+```
+
+These projects double as the live sources for the documentation: the
+tutorial pages `literalinclude` files from here, and the virtue test
+runner (see the root `Makefile`) runs `vir check` on every project, so a
+broken example fails `make test`.
+
+Notes:
+
+- `blink/` contains two packages (`blink` and `strobe`) because the
+  blink tutorial walks through a multi-package design; `testbench.sv`
+  there is the simulator testbench shown in the getting-started guide.
+- `packages/` demonstrates imports across packages (`top` imports
+  `buffer`).
+- `external/` pairs `src/external.vir` with `Memory.v`, the external
+  Verilog its `ext mod` refers to.

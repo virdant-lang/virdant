@@ -1,0 +1,3 @@
+kind = "check"
+description = "Standalone example: GCD computed by a state machine."
+expect = "ok"

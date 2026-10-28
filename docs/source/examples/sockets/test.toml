@@ -1,0 +1,3 @@
+kind = "check"
+description = "Standalone example of socket declarations and :=: connections."
+expect = "ok"

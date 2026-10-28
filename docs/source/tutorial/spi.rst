@@ -5,7 +5,7 @@ In this next example, we will demonstrate enum types.
 `SpiController` is a circuit which sends data to a device
 using the :tip:`SPI (Serial Peripheral Interface)` protocol.
 
-.. literalinclude:: /examples/spi.vir
+.. literalinclude:: /examples/spi/src/spi.vir
     :caption: spi.vir
     :language: virdant
 
@@ -14,7 +14,7 @@ Sending Data
 ------------
 To send data using `SpiController`, we use two ports:
 
-.. literalinclude:: /examples/spi.vir
+.. literalinclude:: /examples/spi/src/spi.vir
     :language: virdant
     :dedent:
     :lines: 11-12
@@ -29,7 +29,7 @@ and it will ignore its inputs until it's ready again.
 
 You can tell whether the `SpiController` is ready by looking at the value of the `ready` port:
 
-.. literalinclude:: /examples/spi.vir
+.. literalinclude:: /examples/spi/src/spi.vir
     :language: virdant
     :dedent:
     :lines: 14-16
@@ -93,7 +93,7 @@ it alternates between setting up the next bit to send and actually sending it wi
 
 To represent these state values, we use a feature of Virdant called enum types:
 
-.. literalinclude:: /examples/spi.vir
+.. literalinclude:: /examples/spi/src/spi.vir
     :language: virdant
     :lines: 1-6
 
@@ -129,19 +129,19 @@ Equality Testing
 In Virdant, we can compare values with `==`.
 This makes it easy when we want to ask if we're in a particular state.
 
-.. literalinclude:: /examples/spi.vir
+.. literalinclude:: /examples/spi/src/spi.vir
     :language: virdant
     :lines: 14-16
     :dedent:
 
-.. literalinclude:: /examples/spi.vir
+.. literalinclude:: /examples/spi/src/spi.vir
     :language: virdant
     :lines: 22-24
     :dedent:
 
 And as you might expect, we use `!=` to test that two values are *not* equal:
 
-.. literalinclude:: /examples/spi.vir
+.. literalinclude:: /examples/spi/src/spi.vir
     :language: virdant
     :lines: 18-20
     :dedent:
@@ -152,7 +152,7 @@ State Machines
 The `SpiController` also defines how `state` changes over time.
 This is done with a driver that uses `when` and `match` expressions:
 
-.. literalinclude:: /examples/spi.vir
+.. literalinclude:: /examples/spi/src/spi.vir
     :language: virdant
     :dedent:
     :lines: 32-39
@@ -192,7 +192,7 @@ Shifting out Data
 The `buffer` register is used to keep track of what data is left to be sent.
 The `do` port is simply an alias for the top bit of `buffer`:
 
-.. literalinclude:: /examples/spi.vir
+.. literalinclude:: /examples/spi/src/spi.vir
     :language: virdant
     :dedent:
     :lines: 26-28
@@ -200,7 +200,7 @@ The `do` port is simply an alias for the top bit of `buffer`:
 
 The definition of `buffer` itself comes a bit later:
 
-.. literalinclude:: /examples/spi.vir
+.. literalinclude:: /examples/spi/src/spi.vir
     :language: virdant
     :dedent:
     :lines: 44-48

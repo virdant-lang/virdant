@@ -15,7 +15,7 @@ and `strobe` (which lives in `strobe.vir`).
 
 Let's look at `strobe` first:
 
-.. literalinclude:: /examples/strobe.vir
+.. literalinclude:: /examples/blink/src/strobe.vir
     :caption: strobe.vir
     :language: virdant
 
@@ -39,7 +39,7 @@ but when present, they *must* appear at the very top of the file.
 
 Here is the package docstring from `strobe.vir`:
 
-.. literalinclude:: /examples/strobe.vir
+.. literalinclude:: /examples/blink/src/strobe.vir
     :language: virdant
     :lines: 1-2
 
@@ -52,7 +52,7 @@ They must appear immediately before the thing they are describing.
 
 Here is one of the four element docstrings in the `strobe` package:
 
-.. literalinclude:: /examples/strobe.vir
+.. literalinclude:: /examples/blink/src/strobe.vir
     :language: virdant
     :lines: 10-11
     :dedent:
@@ -71,7 +71,7 @@ or others reading the source code.
 
 Here are two ordinary comments from inside the `Strobe` module:
 
-.. literalinclude:: /examples/strobe.vir
+.. literalinclude:: /examples/blink/src/strobe.vir
     :language: virdant
     :lines: 24-25
     :dedent:
@@ -84,7 +84,7 @@ Hopefully you feel this way too.
 There's only one tiny detail I want to point out to you.
 It's inside of this `when` block:
 
-.. literalinclude:: /examples/strobe.vir
+.. literalinclude:: /examples/blink/src/strobe.vir
     :language: virdant
     :lines: 21-27
     :dedent:
@@ -150,7 +150,7 @@ Another Package
 ---------------
 Let's move on to the next package, `blink`:
 
-.. literalinclude:: /examples/blink.vir
+.. literalinclude:: /examples/blink/src/blink.vir
     :caption: blink.vir
     :language: virdant
 
@@ -167,14 +167,14 @@ Once you have imported a package, you can use the stuff inside of it.
 We see at the bottom of the `Blink` module, we instantiate the `Strobe` module,
 using its qualified name, `strobe::Strobe`:
 
-.. literalinclude:: /examples/blink.vir
+.. literalinclude:: /examples/blink/src/blink.vir
     :language: virdant
     :lines: 19-24
     :dedent:
 
 While we're looking at this, let's also notice this driver:
 
-.. literalinclude:: /examples/blink.vir
+.. literalinclude:: /examples/blink/src/blink.vir
     :language: virdant
     :lines: 23
     :dedent:
@@ -188,7 +188,7 @@ Outgoing Registers
 The `led` port is different than the other ports we've seen.
 It is an `outgoing reg`:
 
-.. literalinclude:: /examples/blink.vir
+.. literalinclude:: /examples/blink/src/blink.vir
     :language: virdant
     :lines: 10-17
     :dedent:
@@ -205,7 +205,7 @@ Registers Hold their Value
 --------------------------
 Let's zoom in closely on the `when` statement for `led`:
 
-.. literalinclude:: /examples/blink.vir
+.. literalinclude:: /examples/blink/src/blink.vir
     :language: virdant
     :lines: 12-16
     :dedent:

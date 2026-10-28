@@ -15,7 +15,7 @@ Half Adder
 The first module is `HalfAdder`.
 This is a standard circuit everyone should know.
 
-.. literalinclude:: /examples/adder.vir
+.. literalinclude:: /examples/adder/src/adder.vir
     :language: virdant
     :lines: 1-13
 
@@ -72,7 +72,7 @@ However, if we want to sum up numbers with more than 1 bit, we need to handle ca
 
 `FullAdder` is a standard circuit which is a variation of `HalfAdder` that does this.
 
-.. literalinclude:: /examples/adder.vir
+.. literalinclude:: /examples/adder/src/adder.vir
     :language: virdant
     :lines: 15-37
 
@@ -85,7 +85,7 @@ First Half Adder Submodule
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 The first `HalfAdder` is this:
 
-.. literalinclude:: /examples/adder.vir
+.. literalinclude:: /examples/adder/src/adder.vir
     :language: virdant
     :dedent:
     :lines: 22-27
@@ -115,7 +115,7 @@ Second Half Adder Submodule
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Our second `HalfAdder` submodule is this:
 
-.. literalinclude:: /examples/adder.vir
+.. literalinclude:: /examples/adder/src/adder.vir
     :language: virdant
     :dedent:
     :lines: 28-33
@@ -127,7 +127,7 @@ Wrapping up the Full Adder
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 The two remaining lines of `FullAdder` drive the outputs.
 
-.. literalinclude:: /examples/adder.vir
+.. literalinclude:: /examples/adder/src/adder.vir
     :language: virdant
     :dedent:
     :lines: 35-36
@@ -140,7 +140,7 @@ The joy of the `FullAdder` is that they can be chained together to add numbers o
 
 We define a module `Adder4`, which can add together any two `Word[4]`\s:
 
-.. literalinclude:: /examples/adder.vir
+.. literalinclude:: /examples/adder/src/adder.vir
     :language: virdant
     :lines: 39-73
 
@@ -185,7 +185,7 @@ Chaining Full Adders
 ~~~~~~~~~~~~~~~~~~~~
 The key of the `Adder4` design is the four `FullAdder`\s which are chained together:
 
-.. literalinclude:: /examples/adder.vir
+.. literalinclude:: /examples/adder/src/adder.vir
     :language: virdant
     :lines: 59-63
     :dedent:
@@ -199,6 +199,6 @@ I wonder what the `carry_in` of the first `FullAdder` should be?
 
 The Complete Example
 --------------------
-.. literalinclude:: /examples/adder.vir
+.. literalinclude:: /examples/adder/src/adder.vir
     :caption: adder.vir
     :language: virdant

@@ -1,0 +1,3 @@
+kind = "check"
+description = "Standalone example: alternate 3-input multiplexer."
+expect = "ok"

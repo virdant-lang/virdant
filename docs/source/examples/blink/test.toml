@@ -1,0 +1,3 @@
+kind = "check"
+description = "Tutorial blink example: two-package design (blink imports strobe) plus the iverilog testbench from the getting-started guide."
+expect = "ok"
