@@ -1,6 +1,6 @@
 # virtue
 
-The Virdant test runner: a pure orchestrator that runs every test as a
+The Virdant test runner (`virtue`): a pure orchestrator that runs every test as a
 subprocess of `target/release/vir` (plus `iverilog` / `verilator` for the
 sim suite), with the same commands and exit-code contracts the
 per-directory Makefiles used before the runner replaced them. It links
@@ -11,7 +11,7 @@ Run from the repo root (or anywhere above it):
 ```
 virtue                    run ALL tests, regardless of failures
 virtue <test> ...         run only the named tests
-virtue --suite sim        run one suite (top-level dir under tests/)
+virtue --suite sim        run one suite (top-level group of the test path)
 virtue --filter substr    run tests whose name contains substr
 virtue --list             list all tests
 virtue -ff                --fail-fast: stop scheduling on first failure
@@ -22,10 +22,12 @@ Exit code 0 iff no failures and no policy violations.
 
 ## Adding a test
 
-Add a directory anywhere under `tests/` containing a `test.toml`. The
-test's name is its directory path (`tests/<path/to/test>`), used
-identically on screen and under `build/tests/`. Nothing else needs
-wiring — discovery is automatic.
+Add a directory **anywhere in the project** containing a `test.toml`
+(`tests/` is the convention). The test's name is its directory path
+relative to the repo root (`tests/<path/to/test>`), used identically on
+screen and under `build/tests/`. Nothing else needs wiring — discovery
+walks the whole project automatically (build trees and hidden
+directories are skipped).
 
 Single-file language tests use a full project layout:
 

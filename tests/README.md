@@ -6,9 +6,10 @@ exit-code contract they have), **then by language feature** within a layer.
 
 Run everything from the repo root with `make test` (= `cargo test` +
 `target/release/virtue` over every suite + the docs examples).  The
-runner discovers every test automatically: a test is any directory
-under `tests/` containing a `test.toml`, and its name is its directory
-path (`tests/<path/to/test>`).  See `virtue/README.md` for the
+runner discovers every test automatically: a test is any directory in
+the project containing a `test.toml` (the whole tree is searched;
+`tests/` is the convention), and its name is its directory path
+(`tests/<path/to/test>`).  See `virtue/README.md` for the
 `test.toml` format and the runner's CLI (`--list`, `--suite`,
 `--filter`, `--jobs`, `-ff`).
 

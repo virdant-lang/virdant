@@ -299,12 +299,13 @@ impl Test {
     }
 }
 
-/// Find every test under `<root>/tests`: any directory (at any depth)
-/// containing a `test.toml`.  Discovery order is canonical (tree-sorted).
+/// Find every test in the project: any directory (at any depth below
+/// the repository root) containing a `test.toml`.  Discovery order is
+/// canonical (tree-sorted).  Build trees and hidden directories are
+/// never searched.
 pub fn discover(root: &Path) -> Result<Vec<Test>, String> {
-    let tests_root = root.join("tests");
     let mut dirs = Vec::new();
-    walk(&tests_root, &mut dirs)?;
+    walk(root, &mut dirs)?;
 
     let mut tests = Vec::new();
     for abs_dir in dirs {
@@ -313,10 +314,11 @@ pub fn discover(root: &Path) -> Result<Vec<Test>, String> {
             .map_err(|e| format!("{}: {}", toml_path.display(), e))?;
         let dir = abs_dir.strip_prefix(root).unwrap().to_path_buf();
         let mut test = parse_test_toml(&abs_dir, &text)?;
-        // Stable identity includes the tests/ prefix, used identically on
+        // Stable identity: the directory path relative to the repo root
+        // (tests/check/whens, docs/mytest, ...), used identically on
         // screen and in build/tests/ paths.
         test.dir = dir.clone();
-        test.name = format!("tests/{}", dir.strip_prefix("tests").unwrap().display());
+        test.name = dir.to_string_lossy().to_string();
         tests.push(test);
     }
     tests.sort_by(|a, b| a.name.cmp(&b.name));
@@ -324,14 +326,15 @@ pub fn discover(root: &Path) -> Result<Vec<Test>, String> {
 }
 
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
-    let mut entries: Vec<_> = std::fs::read_dir(dir)
-        .map_err(|e| format!("{}: {}", dir.display(), e))?
-        .filter_map(|entry| entry.ok())
-        .collect();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Ok(()); // unreadable (permissions, race): skip silently
+    };
+    let mut entries: Vec<_> = entries.filter_map(|entry| entry.ok()).collect();
     entries.sort_by_key(|entry| entry.file_name());
 
     // A directory containing test.toml is a test; its own subdirectories
-    // (its scratch space) are part of the test, not more tests.
+    // are part of the test (its sources, its scratch space), not more
+    // tests.
     let has_test_toml = entries.iter().any(|entry| entry.file_name() == "test.toml");
     if has_test_toml {
         out.push(dir.to_path_buf());
@@ -342,7 +345,11 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
         if !path.is_dir() || has_test_toml {
             continue;
         }
-        if entry.file_name() == "build" {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        // Hidden directories (.git, .github, .agents, ...) and build
+        // trees (target, build) are never searched.
+        if name.starts_with('.') || name == "target" || name == "build" {
             continue;
         }
         walk(&path, out)?;

@@ -102,9 +102,8 @@ impl Env {
     fn log_dir(&self, test: &Test) -> PathBuf {
         // build/tests/<path>/<to>/<test>/ mirrors the test name
         // (build/tests/check/whens for tests/check/whens).
-        self.root.join("build").join("tests").join(
-            test.name.strip_prefix("tests/").expect("test name starts with tests/"),
-        )
+        let rel = test.name.strip_prefix("tests/").unwrap_or(&test.name);
+        self.root.join("build").join("tests").join(rel)
     }
 }
 
