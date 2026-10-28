@@ -12,6 +12,7 @@ use std::sync::Arc;
 use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::elaboration::{Elaboration, SignalId};
+use crate::sim::sim::InitStrategy;
 
 use super::*;
 

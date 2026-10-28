@@ -37,7 +37,9 @@ mod imp {
     use crate::analysis::elaboration::SignalId;
     use crate::analysis::symbols::SymbolId;
     use crate::db::Db;
-    use crate::sim::{Clock, Sim, TypeLayoutIndex, Value};
+    use crate::sim::layout::TypeLayoutIndex;
+    use crate::sim::sim::Clock;
+    use crate::sim::{Sim, Value};
 
     /// Options for [`run`], straight from the `vir run` CLI.
     #[derive(Debug, Default)]

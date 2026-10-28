@@ -17,12 +17,12 @@ use crate::analysis::symbols::SymbolId;
 use crate::analysis::elaboration::{SignalId, Elaboration};
 use crate::common::{ComponentKind, Width};
 use crate::db::Db;
-use crate::sim::{Scheduler, State};
 use crate::sim::bits::BitPat;
 use crate::sim::circuit::Circuit;
 use crate::sim::eval::{Context, Value};
 use crate::sim::layout::TypeLayoutIndex;
-use crate::sim::scheduler::{Callback, Event, EventCallback};
+use crate::sim::scheduler::{Callback, Event, EventCallback, Scheduler};
+use crate::sim::state::State;
 use crate::types::Type;
 
 /// Strategy for choosing the value of uninitialized registers and

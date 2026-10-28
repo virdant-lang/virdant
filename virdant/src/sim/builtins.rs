@@ -18,6 +18,8 @@ use bstr::{BString, ByteSlice};
 use crate::analysis::elaboration::SignalId;
 use crate::analysis::symbols::SymbolId;
 use crate::db::Db;
+use crate::sim::bits::BitPat;
+use crate::sim::layout::TypeLayoutIndex;
 use crate::sim::{Sim, Value};
 use crate::syntax::payload::AstNodePayload;
 use crate::types::Type;
@@ -85,8 +87,8 @@ fn get_bit(sim: &Sim, id: SignalId) -> bool {
 
 fn set_u64(sim: &mut Sim, id: SignalId, value: u64) {
     let typ = sim.component_type(id);
-    let width = crate::sim::TypeLayoutIndex::type_width_of(&typ);
-    let bits = crate::sim::BitPat::from_u64(width, value);
+    let width = TypeLayoutIndex::type_width_of(&typ);
+    let bits = BitPat::from_u64(width, value);
     let mut lock = sim.lock();
     lock.set(id, Value::new(typ, bits));
 }
