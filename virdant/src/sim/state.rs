@@ -1,15 +1,12 @@
-//! Live circuit values and the propagation worklist: `vals`/`prev_vals`
-//! for current/previous signal values, `set_vals` for pending register
-//! inputs, and the `dirty` set driven by `flow`, with `Arc`-wrapped
-//! values shared by eval contexts.
+//! Live circuit values and the propagation worklist: `vals` for current
+//! signal values, `set_vals` for pending register inputs, and the
+//! `dirty` set driven by `flow`.
 //!
 //! There are no X or Z values: every cell is initialized by the sim's
 //! `InitStrategy` (random by default), so even never-written registers
 //! and top-level incoming ports carry fully-defined bit patterns.
 
-use std::sync::Arc;
-
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexSet;
 
 use crate::analysis::elaboration::{Elaboration, SignalId};
 use crate::sim::sim::InitStrategy;
@@ -20,13 +17,14 @@ use super::*;
 /// mutated by combinational propagation, register transfers, and
 /// direct `set` writes lives here.
 ///
-/// Values are wrapped in `Arc` so that `Sim::build_context` can hand
-/// the eval `Context` a refcount-bumped clone of each binding instead
-/// of deep-copying every live signal value.
+/// Values are stored inline: with interned type tags a `Value` is a
+/// small struct for the common (≤64-bit) case, so storing, cloning,
+/// and comparing one never touches the heap.
 pub(super) struct State {
-    vals: Vec<Arc<Value>>,
-    prev_vals: Vec<Arc<Value>>,
-    set_vals: IndexMap<SignalId, Arc<Value>>,
+    vals: Vec<Value>,
+    /// Pending next-values for registers, densely indexed by
+    /// `SignalId::index()` (`None` for non-registers).
+    set_vals: Vec<Option<Value>>,
     dirty: IndexSet<SignalId>,
 }
 
@@ -38,36 +36,38 @@ impl State {
     ) -> State {
         let n_components = elaboration.components().len();
         let mut rng: u64 = initial_seed();
-        let mut vals: Vec<Arc<Value>> = Vec::with_capacity(n_components);
-        let mut prev_vals: Vec<Arc<Value>> = Vec::with_capacity(n_components);
-        let mut set_vals: IndexMap<SignalId, Arc<Value>> = IndexMap::new();
+        let mut vals: Vec<Value> = Vec::with_capacity(n_components);
+        let mut set_vals: Vec<Option<Value>> = vec![None; n_components];
         for elab_component in elaboration.components() {
             let elab_component_id = elab_component.id();
             let typ = elab_component.typ();
+            let typ_id = layouts.type_id(&typ);
             let width = layouts.type_width(&typ);
 
-            vals.push(Arc::new(strategy.value(typ.clone(), width, &mut rng)));
-            prev_vals.push(Arc::new(strategy.value(typ.clone(), width, &mut rng)));
+            vals.push(strategy.value(typ_id, width, &mut rng));
 
             if elab_component.is_reg() {
-                set_vals.insert(elab_component_id, Arc::new(strategy.value(typ.clone(), width, &mut rng)));
+                set_vals[elab_component_id.index()] =
+                    Some(strategy.value(typ_id, width, &mut rng));
             }
         }
 
         State {
             vals,
-            prev_vals,
             set_vals,
             dirty: IndexSet::new(),
         }
     }
 
     pub(super) fn get(&self, signal_id: SignalId) -> Value {
-        self.vals[signal_id.index()].as_ref().clone()
+        self.vals[signal_id.index()].clone()
     }
 
-    pub(super) fn get_prev(&self, signal_id: SignalId) -> Value {
-        self.prev_vals[signal_id.index()].as_ref().clone()
+    /// Borrow the live value of `signal_id` without cloning it (for
+    /// allocation-free watcher-sweep comparisons; clone only on an
+    /// actual change).
+    pub(super) fn peek(&self, signal_id: SignalId) -> &Value {
+        &self.vals[signal_id.index()]
     }
 
     pub(super) fn pop_dirty(&mut self) -> Option<SignalId> {
@@ -75,9 +75,12 @@ impl State {
     }
 
     pub(super) fn transfer(&mut self, component_id: SignalId) {
-        let new_value = Arc::clone(self.set_vals.get(&component_id).unwrap());
+        let new_value = self.set_vals[component_id.index()]
+            .as_ref()
+            .expect("transfer: component has no pending register value")
+            .clone();
         super::sim::debug_transfer(component_id, &new_value);
-        if self.vals[component_id.index()].as_ref() == new_value.as_ref() {
+        if self.vals[component_id.index()] == new_value {
             return;
         }
         self.vals[component_id.index()] = new_value;
@@ -91,30 +94,18 @@ impl State {
     ///
     /// Idempotent: writing the current value is a no-op.  This matters
     /// for `flow`, which may evaluate a component several times within
-    /// one propagation pass — `prev_vals` must keep the *pre-pass* value
-    /// so `unlock`'s change detection sees the net transition (writing
-    /// same-value repeatedly would otherwise erase the change history
-    /// and starve watchers/VCD of real transitions).
+    /// one propagation pass — re-marking an unchanged signal dirty would
+    /// cycle the worklist forever.
     pub(super) fn set_val(&mut self, signal_id: SignalId, value: Value) {
-        if self.vals[signal_id.index()].as_ref() == &value {
+        if self.vals[signal_id.index()] == value {
             return;
         }
-        self.prev_vals[signal_id.index()] = Arc::clone(&self.vals[signal_id.index()]);
-        self.vals[signal_id.index()] = Arc::new(value);
+        self.vals[signal_id.index()] = value;
         self.dirty.insert(signal_id);
     }
 
     pub(super) fn set_reg(&mut self, signal_id: SignalId, value: Value) {
-        let value_ref = self.set_vals.get_mut(&signal_id).unwrap();
-        *value_ref = Arc::new(value);
-    }
-
-    /// Acknowledge that the current value of `signal_id` has been observed
-    /// (e.g. an `on_change` watcher just fired for it).  Synchronises
-    /// `prev_vals` with `vals` so subsequent change-detection passes see
-    /// "no change" until the signal is written again.
-    pub(super) fn commit_change(&mut self, signal_id: SignalId) {
-        self.prev_vals[signal_id.index()] = Arc::clone(&self.vals[signal_id.index()]);
+        self.set_vals[signal_id.index()] = Some(value);
     }
 }
 
@@ -129,12 +120,6 @@ fn initial_seed() -> u64 {
 }
 
 impl State {
-    /// Drop the pending worklist without propagating (used after a
-    /// full-network evaluation pass).
-    pub(super) fn dirty_len(&self) -> usize {
-        self.dirty.len()
-    }
-
     pub(super) fn clear_dirty(&mut self) {
         self.dirty.clear();
     }

@@ -1,19 +1,20 @@
-//! Event scheduler owning simulated time, the one-shot callback queue,
-//! FIFO sequence counter, and shutdown flag, supporting timed
-//! (`AfterDelay`), lifecycle (`StartOfSimulation`/
-//! `EndOfSimulation`), and `ValueChange` callbacks mirroring a subset
-//! of VPI reasons.
+//! Event scheduler owning simulated time, the callback queue for timed
+//! (`AfterDelay`) and lifecycle (`StartOfSimulation`/
+//! `EndOfSimulation`) events, the FIFO sequence counter, and the
+//! shutdown flag — mirroring a subset of VPI callback reasons.
+//! Value-change watching is not queue-based: `Sim` keeps a persistent
+//! watcher table swept in place at each settlement (see `Sim::unlock`).
 
 use crate::sim::Sim;
 use crate::analysis::elaboration::SignalId;
-use indexmap::IndexSet;
 
 /// Event scheduler and dispatch state.  Owns simulated time, the
-/// unified one-shot callback queue, the FIFO tie-breaker counter,
-/// and the early-termination flag toggled by `Sim::finish`.  Every
-/// registration — timed, lifecycle, or value-change — pushes one
-/// entry into `queue`; every fire removes one.  See `Event` for the
-/// trigger conditions.
+/// one-shot callback queue for timed and lifecycle events, the FIFO
+/// tie-breaker counter, and the early-termination flag toggled by
+/// `Sim::finish`.  Every registration pushes one entry into `queue`;
+/// every fire removes one.  Value-change watchers live in `Sim`'s
+/// persistent watcher table instead.  See `Event` for the trigger
+/// conditions.
 #[derive(Debug)]
 pub(super) struct Scheduler {
     time_ps: u64,
@@ -39,6 +40,11 @@ pub enum Event {
     AfterDelay { at_ps: u64 },
     /// Fire when `signal`'s value changes.  Counterpart of VPI
     /// `cbValueChange` (#1).
+    ///
+    /// Kept for API compatibility, but not queue-dispatched: a
+    /// `ValueChange` registration is routed into `Sim`'s persistent
+    /// watcher table (equivalent to `Sim::on_change`) and swept in
+    /// place at each settlement.
     ValueChange { signal: SignalId },
 }
 
@@ -80,10 +86,17 @@ impl Scheduler {
     }
 
     /// Push `event_cb` onto the queue.  The single primitive on which
-    /// `at`, `after`, `at_start`, `at_end`, and `on_change` are built;
-    /// expose `Event` and `EventCallback` directly when you want to skip
-    /// the sugar.  Same-trigger entries fire in registration (FIFO) order.
+    /// `at`, `after`, `at_start`, and `at_end` are built; value-change
+    /// events do not belong in the queue (register them through
+    /// `Sim::register`, which routes them into the watcher table).
+    /// Same-trigger entries fire in registration (FIFO) order.
     pub fn register(&mut self, event_cb: EventCallback) {
+        if matches!(event_cb.event, Event::ValueChange { .. }) {
+            panic!(
+                "Event::ValueChange must be registered via Sim::register / Sim::on_change; \
+                 the scheduler queue does not dispatch value-change events"
+            );
+        }
         let seq = self.next_seq;
         self.next_seq += 1;
         self.queue.push(QueueEntry { seq, cb: event_cb });
@@ -114,35 +127,6 @@ impl Scheduler {
         self.queue = keep;
         to_process.sort_by_key(|q| q.seq);
         to_process.into_iter().filter_map(|mut e| e.cb.callback.take()).collect()
-    }
-
-    pub(super) fn drain_value_changes(&mut self, changed: &IndexSet<SignalId>) -> Vec<Callback> {
-        let queue = std::mem::take(&mut self.queue);
-        let mut keep: Vec<QueueEntry> = Vec::with_capacity(queue.len());
-        let mut to_process: Vec<QueueEntry> = Vec::new();
-        for entry in queue {
-            let matches = match entry.cb.event {
-                Event::ValueChange { signal } => changed.contains(&signal),
-                _ => false,
-            };
-            if matches {
-                to_process.push(entry);
-            } else {
-                keep.push(entry);
-            }
-        }
-        self.queue = keep;
-        to_process.sort_by_key(|q| q.seq);
-        to_process.into_iter().filter_map(|mut e| e.cb.callback.take()).collect()
-    }
-
-    pub(super) fn collect_watched_signals(&self) -> Vec<SignalId> {
-        self.queue.iter()
-            .filter_map(|q| match q.cb.event {
-                Event::ValueChange { signal } => Some(signal),
-                _ => None,
-            })
-            .collect()
     }
 
     pub(super) fn next_after_delay(&mut self) -> Option<Callback> {

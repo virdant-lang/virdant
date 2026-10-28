@@ -5,7 +5,6 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use virdant::sim::{BitPat, Clock, InitStrategy, Sim, Value};
-use virdant::types::Type;
 use virdant::util::{check_db, db_from_dir_with_lib};
 
 const CLOCK_HZ:  u64 = 12_000_000;
@@ -49,8 +48,9 @@ fn main() {
     let half_bit_ps:     u64 = bit_period_ps / 2;
 
     sim.at_start(Box::new(move |sim| {
+        let reset_typ = sim.component_type_id(reset);
         let mut lock = sim.lock();
-        lock.set(reset, Value::from_bool(Type::Reset, true));
+        lock.set(reset, Value::from_bool(reset_typ, true));
     }));
     sim.at_end(Box::new(move |_sim| {
         println!();
@@ -59,8 +59,9 @@ fn main() {
     // half_period after t=0) so the registers actually load their
     // reset values.
     sim.after(2 * clock_period_ps, Box::new(move |sim| {
+        let reset_typ = sim.component_type_id(reset);
         let mut lock = sim.lock();
-        lock.set(reset, Value::from_bool(Type::Reset, false));
+        lock.set(reset, Value::from_bool(reset_typ, false));
     }));
 
     sim.on_change(fin, Box::new(move |sim| {

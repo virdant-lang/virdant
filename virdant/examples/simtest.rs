@@ -8,10 +8,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use virdant::sim::{BitPat, Clock, InitStrategy, Sim, Value};
-use virdant::types::Type;
 
-fn word8(v: u64) -> Value {
-    Value::new(Type::Word(8), BitPat::from_u64(8, v))
+fn word8(typ: virdant::sim::TypeId, v: u64) -> Value {
+    Value::new(typ, BitPat::from_u64(8, v))
 }
 use virdant::util::{check_db, db_from_file_with_lib};
 
@@ -64,12 +63,14 @@ fn lfsr_run() {
     }));
 
     {
+        let reset_typ = sim.component_type_id(reset);
         let mut lock = sim.lock();
-        lock.set(reset, Value::from_bool(Type::Reset, true));
+        lock.set(reset, Value::from_bool(reset_typ, true));
     }
     sim.after(10_000, Box::new(move |sim| {
+        let reset_typ = sim.component_type_id(reset);
         let mut lock = sim.lock();
-        lock.set(reset, Value::from_bool(Type::Reset, false));
+        lock.set(reset, Value::from_bool(reset_typ, false));
     }));
     sim.after(100_000, Box::new(|sim| sim.finish()));
 
@@ -84,6 +85,10 @@ fn lfsr_run() {
 fn lfsr_check() {
     let mut sim = lfsr_sim();
 
+    let clock = sim.signal("top.clock");
+    let reset = sim.signal("top.reset");
+    let out   = sim.signal("top.out");
+
     let expected: Vec<(u64, Value)> = [
         (5_000,  255u64),
         (15_000, 227),
@@ -95,12 +100,8 @@ fn lfsr_check() {
         (75_000,  98),
         (85_000, 196),
         (95_000, 149),
-    ].into_iter().map(|(t, v)| (t, word8(v))).collect();
+    ].into_iter().map(|(t, v)| (t, word8(sim.component_type_id(out), v))).collect();
     let expected_len = expected.len();
-
-    let clock = sim.signal("top.clock");
-    let reset = sim.signal("top.reset");
-    let out   = sim.signal("top.out");
 
     sim.attach_clock(clock, Clock::with_period_ps(10_000));
 
@@ -116,12 +117,14 @@ fn lfsr_check() {
     }));
 
     {
+        let reset_typ = sim.component_type_id(reset);
         let mut lock = sim.lock();
-        lock.set(reset, Value::from_bool(Type::Reset, true));
+        lock.set(reset, Value::from_bool(reset_typ, true));
     }
     sim.after(10_000, Box::new(move |sim| {
+        let reset_typ = sim.component_type_id(reset);
         let mut lock = sim.lock();
-        lock.set(reset, Value::from_bool(Type::Reset, false));
+        lock.set(reset, Value::from_bool(reset_typ, false));
     }));
     sim.after(100_000, Box::new(|sim| sim.finish()));
 
@@ -150,12 +153,14 @@ fn lfsr_on_clock() {
     }));
 
     {
+        let reset_typ = sim.component_type_id(reset);
         let mut lock = sim.lock();
-        lock.set(reset, Value::from_bool(Type::Reset, true));
+        lock.set(reset, Value::from_bool(reset_typ, true));
     }
     sim.after(10_000, Box::new(move |sim| {
+        let reset_typ = sim.component_type_id(reset);
         let mut lock = sim.lock();
-        lock.set(reset, Value::from_bool(Type::Reset, false));
+        lock.set(reset, Value::from_bool(reset_typ, false));
     }));
     sim.after(100_000, Box::new(|sim| sim.finish()));
 

@@ -22,7 +22,6 @@ use crate::sim::bits::BitPat;
 use crate::sim::layout::TypeLayoutIndex;
 use crate::sim::{Sim, Value};
 use crate::syntax::payload::AstNodePayload;
-use crate::types::Type;
 
 /// Attach builtin behavior to every `ext mod` instance in the
 /// elaborated design rooted at `top`.
@@ -88,13 +87,14 @@ fn get_bit(sim: &Sim, id: SignalId) -> bool {
 fn set_u64(sim: &mut Sim, id: SignalId, value: u64) {
     let typ = sim.component_type(id);
     let width = TypeLayoutIndex::type_width_of(&typ);
+    let typ_id = sim.component_type_id(id);
     let bits = BitPat::from_u64(width, value);
     let mut lock = sim.lock();
-    lock.set(id, Value::new(typ, bits));
+    lock.set(id, Value::new(typ_id, bits));
 }
 
 fn set_bit(sim: &mut Sim, id: SignalId, b: bool) {
-    let typ = sim.component_type(id);
+    let typ = sim.component_type_id(id);
     let mut lock = sim.lock();
     lock.set(id, Value::from_bool(typ, b));
 }

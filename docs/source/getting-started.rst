@@ -13,8 +13,14 @@ You can install it by cloning the repository and running `make install`:
   $ cd virdant
   $ make install
 
-This will build Virdant from source and then copy the binaries to `$HOME/.local/virdant/bin`.
+This will build Virdant from source (in release mode) and then copy the binaries to `$HOME/.local/virdant/bin`.
 Make sure that this directory is on your `$PATH`.
+
+.. note::
+
+   Unoptimized (debug) builds of the simulator are about 10x slower than release builds.
+   This repository opts its own dev builds into optimization (see `profile.dev.package.virdant` in the root `Cargo.toml`), so plain `cargo build`/`cargo run` is fine for running simulations here.
+   If you use `virdant` as a dependency in your own crate, add `[profile.dev.package.virdant] opt-level = 2` to your manifest (or build with `--release`) to get full simulation speed.
 
 
 Blinky

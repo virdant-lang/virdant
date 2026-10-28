@@ -105,8 +105,8 @@ mod imp {
 
         // Start inputs in a sane state: UART idle high, flash idle low.
         {
-            let rx_typ = sim.component_type(rx);
-            let miso_typ = sim.component_type(spi_miso);
+            let rx_typ = sim.component_type_id(rx);
+            let miso_typ = sim.component_type_id(spi_miso);
             let mut lock = sim.lock();
             lock.set(rx, Value::from_bool(rx_typ, true));
             lock.set(spi_miso, Value::from_bool(miso_typ, false));
@@ -159,6 +159,7 @@ mod imp {
             exit,
             uart_tx: UartTx::new(&baud_timing(clock_hz, BAUD)),
             uart_rx: UartRx::new(&baud_timing(clock_hz, BAUD)),
+            prev_exit: None,
             cycles: cycles.clone(),
             max_cycles,
             exit_code: exit_code.clone(),
@@ -218,9 +219,14 @@ mod imp {
             let mosi = bit(sim, self.spi_mosi);
             self.flash.step(cs, ck, mosi);
             let miso = if self.flash.miso_active() { self.flash.miso } else { false };
-            let miso_typ = sim.component_type(self.spi_miso);
-            let mut lock = sim.lock();
-            lock.set(self.spi_miso, Value::from_bool(miso_typ, miso));
+            // spi_miso only actually changes when the flash is actively
+            // driving it; skip the lock()/unlock() watcher-sweep churn
+            // (flow + queue scan) when the driven bit is unchanged.
+            if bit(sim, self.spi_miso) != miso {
+                let miso_typ = sim.component_type_id(self.spi_miso);
+                let mut lock = sim.lock();
+                lock.set(self.spi_miso, Value::from_bool(miso_typ, miso));
+            }
         }
     }
 
@@ -230,6 +236,9 @@ mod imp {
         exit: SignalId,
         uart_tx: UartTx,
         uart_rx: UartRx,
+        /// Last seen `exit`-port value; `decode_exit` is a pure function
+        /// of the value, so it only needs to rerun when it changes.
+        prev_exit: Option<Value>,
         cycles: Rc<Cell<u64>>,
         max_cycles: u64,
         exit_code: Rc<Cell<Option<i32>>>,
@@ -262,18 +271,29 @@ mod imp {
             // Drive the UART input for the next cycle (the design samples
             // it on the next rising edge).  spi_miso is driven by the
             // flash stepper, which runs on every clock edge.
-            {
-                let rx_typ = sim.component_type(self.rx);
+            // uart_rx.pin only changes during UART start/stop bit
+            // transitions; skip the lock()/unlock() watcher-sweep churn
+            // when the driven bit is unchanged.
+            if bit(sim, self.rx) != self.uart_rx.pin {
+                let rx_typ = sim.component_type_id(self.rx);
                 let mut lock = sim.lock();
                 lock.set(self.rx, Value::from_bool(rx_typ, self.uart_rx.pin));
             }
 
 
             // Exit request (virt::Virt `exit` port): a @Valid(n) on a
-            // clock tick ends the simulation with exit code n.
-            if let Some(code) = decode_exit(sim.type_layouts(), &sim.get(self.exit)) {
-                self.exit_code.set(Some(code));
-                sim.finish();
+            // clock tick ends the simulation with exit code n.  The
+            // decode allocates (heap `BitPat` + layout slot clones), so
+            // skip it unless the port's raw value changed since the
+            // last cycle — it stays `@Invalid()` for virtually the
+            // whole run.
+            let exit_value = sim.get(self.exit);
+            if self.prev_exit.as_ref() != Some(&exit_value) {
+                if let Some(code) = decode_exit(sim.type_layouts(), &exit_value) {
+                    self.exit_code.set(Some(code));
+                    sim.finish();
+                }
+                self.prev_exit = Some(exit_value);
             }
 
             self.cycles.set(self.cycles.get() + 1);
@@ -288,7 +308,7 @@ mod imp {
     /// Decode the `exit : Valid[Word[8]]` value.  The Valid slot's
     /// payload (the `Word[8]`) is the requested exit code.
     fn decode_exit(layouts: &TypeLayoutIndex, value: &Value) -> Option<i32> {
-        let (slot, payloads) = layouts.decode_ctor(value.typ(), &value.bitpat())?;
+        let (slot, payloads) = layouts.decode_ctor(value.typ_id(), &value.bitpat())?;
         if slot.name.as_bstr() != b"Valid".as_bstr() {
             return None;
         }

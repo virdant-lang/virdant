@@ -4,12 +4,11 @@ use std::io::BufWriter;
 use std::rc::Rc;
 
 use virdant::sim::{BitPat, Clock, InitStrategy, Sim, Value};
-use virdant::types::Type;
 use virdant::util::{check_db, db_from_dir_with_lib};
 
 /// (a, b, expected_gcd)
-fn word8(v: u64) -> Value {
-    Value::new(Type::Word(8), BitPat::from_u64(8, v))
+fn word8(typ: virdant::sim::TypeId, v: u64) -> Value {
+    Value::new(typ, BitPat::from_u64(8, v))
 }
 
 const CASES: &[(u64, u64, u64)] = &[
@@ -71,14 +70,17 @@ fn main() {
     let state_cb = state.clone();
 
     sim.at_start(Box::new(move |sim| {
+        let reset_typ = sim.component_type_id(reset);
+        let fire_typ = sim.component_type_id(fire);
         let mut lock = sim.lock();
-        lock.set(reset, Value::from_bool(Type::Reset, true));
-        lock.set(fire,  Value::from_bool(Type::Bit, false));
+        lock.set(reset, Value::from_bool(reset_typ, true));
+        lock.set(fire,  Value::from_bool(fire_typ, false));
     }));
 
     sim.after(15_000, Box::new(move |sim| {
+        let reset_typ = sim.component_type_id(reset);
         let mut lock = sim.lock();
-        lock.set(reset, Value::from_bool(Type::Reset, false));
+        lock.set(reset, Value::from_bool(reset_typ, false));
         drop(lock);
         *started_init.borrow_mut() = true;
     }));
@@ -93,17 +95,21 @@ fn main() {
         if !fired {
             let (a, b, _) = CASES[idx];
             {
+                let x_typ = sim.component_type_id(x);
+                let y_typ = sim.component_type_id(y);
+                let fire_typ = sim.component_type_id(fire);
                 let mut lock = sim.lock();
-                lock.set(x,    word8(a));
-                lock.set(y,    word8(b));
-                lock.set(fire, Value::from_bool(Type::Bit, true));
+                lock.set(x,    word8(x_typ, a));
+                lock.set(y,    word8(y_typ, b));
+                lock.set(fire, Value::from_bool(fire_typ, true));
             }
             *state_cb.borrow_mut() = (idx, true);
         } else {
             // Deassert fire after the one cycle it was high.
             {
+                let fire_typ = sim.component_type_id(fire);
                 let mut lock = sim.lock();
-                lock.set(fire, Value::from_bool(Type::Bit, false));
+                lock.set(fire, Value::from_bool(fire_typ, false));
             }
 
             if sim.get(valid).get_bit(0) {

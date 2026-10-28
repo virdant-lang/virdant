@@ -1,5 +1,4 @@
 use virdant::sim::{BitPat, Clock, InitStrategy, Sim, Value};
-use virdant::types::Type;
 use virdant::util::{check_db, db_from_file_with_lib};
 
 fn sim() -> Sim {
@@ -30,12 +29,14 @@ fn main() {
     sim.after(100_000, Box::new(|sim| sim.finish()));
 
     sim.at_start(Box::new(move |sim| {
+        let reset_typ = sim.component_type_id(reset);
         let mut lock = sim.lock();
-        lock.set(reset, Value::from_bool(Type::Reset, true));
+        lock.set(reset, Value::from_bool(reset_typ, true));
         drop(lock);
         sim.after(10_000, Box::new(move |sim| {
+            let reset_typ = sim.component_type_id(reset);
             let mut lock = sim.lock();
-            lock.set(reset, Value::from_bool(Type::Reset, false));
+            lock.set(reset, Value::from_bool(reset_typ, false));
         }));
     }));
 

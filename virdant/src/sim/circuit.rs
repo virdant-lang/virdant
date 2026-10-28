@@ -20,7 +20,7 @@ use crate::analysis::elaboration::{ElaboratedComponent, SignalId, Elaboration};
 use crate::common::ComponentKind;
 use crate::db::Db;
 use crate::sim::expr::{Expr, ExprPayload, Referent, driver_to_expr, initial_to_expr};
-use crate::sim::layout::TypeLayoutIndex;
+use crate::sim::layout::{TypeInterner, TypeLayoutIndex};
 use crate::syntax::ast::AstNodeId;
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
@@ -28,14 +28,24 @@ use crate::syntax::payload::AstNodePayload;
 pub(super) struct Circuit {
     pub(super) elaboration: Arc<Elaboration>,
     pub(super) type_layout_index: TypeLayoutIndex,
-    pub(super) deps: IndexMap<SignalId, IndexSet<SignalId>>,
-    pub(super) sensitivities: IndexMap<SignalId, IndexSet<SignalId>>,
-    pub(super) clock_sensitivities: IndexMap<SignalId, IndexSet<SignalId>>,
-    pub(super) registers: IndexSet<SignalId>,
+    /// Dataflow sensitivity lists, densely indexed by `SignalId::index()`.
+    /// `sensitivities[p]` is the insertion-ordered list of components whose
+    /// driver reads `p`.  Built from the `deps` map (which is only needed
+    /// during construction, so it is not stored here).
+    pub(super) sensitivities: Vec<Vec<SignalId>>,
+    /// Registers clocked by each clock, densely indexed by
+    /// `SignalId::index()`, in insertion order.
+    pub(super) clock_sensitivities: Vec<Vec<SignalId>>,
+    /// Whether each component is a register, densely indexed by
+    /// `SignalId::index()`.
+    pub(super) registers: Vec<bool>,
     /// Socket-connection aliases: a Sink-side channel's value is a copy
-    /// of its Source-side peer's value (`a :=: b`).
-    pub(super) aliases: IndexMap<SignalId, SignalId>,
-    pub(super) exprs: IndexMap<SignalId, Arc<Expr>>,
+    /// of its Source-side peer's value (`a :=: b`).  Densely indexed by
+    /// `SignalId::index()`.
+    pub(super) aliases: Vec<Option<SignalId>>,
+    /// Driver expressions, densely indexed by `SignalId::index()`;
+    /// `None` for components without a driver expression.
+    pub(super) exprs: Vec<Option<Arc<Expr>>>,
     /// Constant expressions from `initial` statements, keyed by register.
     pub(super) initial_exprs: IndexMap<SignalId, Arc<Expr>>,
     /// Pre-resolved referents for every component that has a driver expression.
@@ -58,6 +68,12 @@ impl Circuit {
         let mut sensitivities = build_sensitivities(&deps);
         let clock_sensitivities = build_clock_sensitivities(&elaboration);
 
+        // Build the type layouts and the type intern table first: the
+        // expression conversion below interns every expression node's
+        // type into the same table (so `Value`s can carry `TypeId`s).
+        let mut interner = TypeInterner::new();
+        let layouts = TypeLayoutIndex::build_layouts(db, &elaboration, &mut interner);
+
         let mut exprs: IndexMap<SignalId, Arc<Expr>> = IndexMap::new();
         let mut initial_exprs: IndexMap<SignalId, Arc<Expr>> = IndexMap::new();
         let mut registers: IndexSet<SignalId> = IndexSet::new();
@@ -75,12 +91,12 @@ impl Circuit {
                     crate::analysis::drivers::Driver::Bidirectional(_) => {}
                     _ => {
                         let component_typ = elab_component.typ();
-                        exprs.insert(elab_id, driver_to_expr(db, driver, &component_typ, env));
+                        exprs.insert(elab_id, driver_to_expr(db, driver, &component_typ, env, &mut interner));
                     }
                 }
             }
             if let Some(loc) = elab_component.initial_expr() {
-                initial_exprs.insert(elab_id, initial_to_expr(db, loc, env));
+                initial_exprs.insert(elab_id, initial_to_expr(db, loc, env, &mut interner));
             }
             if elab_component.is_reg() {
                 registers.insert(elab_id);
@@ -94,26 +110,46 @@ impl Circuit {
             resolved_referents.insert(*signal_id, entries);
         }
 
-        let type_layout_index = TypeLayoutIndex::build(db, &elaboration);
+        let type_layout_index = TypeLayoutIndex::from_parts(layouts, interner);
 
 
 
 
         // Socket aliases are dataflow edges: the source feeds the sink.
+        // These inserts happen before the dense conversion so alias edges
+        // are preserved in the sensitivity lists.
         for (sink, source) in &aliases {
             deps.entry(*sink).or_default().insert(*source);
             sensitivities.entry(*source).or_default().insert(*sink);
         }
 
+        // Densify the dataflow tables: index each `Vec` by
+        // `SignalId::index()`, preserving insertion order so propagation
+        // order is unchanged.
+        let n = elaboration.components().len();
+        let sensitivities = densify(&sensitivities, &elaboration);
+        let clock_sensitivities = densify(&clock_sensitivities, &elaboration);
+        let mut dense_registers = vec![false; n];
+        for id in &registers {
+            dense_registers[id.index()] = true;
+        }
+        let mut dense_aliases: Vec<Option<SignalId>> = vec![None; n];
+        for (sink, source) in &aliases {
+            dense_aliases[sink.index()] = Some(*source);
+        }
+        let mut dense_exprs: Vec<Option<Arc<Expr>>> = vec![None; n];
+        for (id, expr) in &exprs {
+            dense_exprs[id.index()] = Some(expr.clone());
+        }
+
         Circuit {
             elaboration,
             type_layout_index,
-            deps,
             sensitivities,
             clock_sensitivities,
-            registers,
-            aliases,
-            exprs,
+            registers: dense_registers,
+            aliases: dense_aliases,
+            exprs: dense_exprs,
             initial_exprs,
             resolved_referents,
         }
@@ -131,25 +167,44 @@ impl Circuit {
 
     /// Number of components whose driver reads `signal`.
     pub(super) fn sensitivity_count(&self, signal: SignalId) -> usize {
-        self.sensitivities.get(&signal).map(|s| s.len()).unwrap_or(0)
+        self.sensitivities[signal.index()].len()
     }
 
     /// The `i`-th component (in insertion order) whose driver reads `signal`.
     /// Caller must ensure `i < sensitivity_count(signal)`.
     pub(super) fn sensitivity_at(&self, signal: SignalId, i: usize) -> SignalId {
-        *self.sensitivities[&signal].get_index(i).unwrap()
+        self.sensitivities[signal.index()][i]
     }
 
     /// Number of registers clocked by `clock`.
     pub(super) fn clock_sensitivity_count(&self, clock: SignalId) -> usize {
-        self.clock_sensitivities.get(&clock).map(|s| s.len()).unwrap_or(0)
+        self.clock_sensitivities[clock.index()].len()
     }
 
     /// The `i`-th register (in insertion order) clocked by `clock`.
     /// Caller must ensure `i < clock_sensitivity_count(clock)`.
     pub(super) fn clock_sensitivity_at(&self, clock: SignalId, i: usize) -> SignalId {
-        *self.clock_sensitivities[&clock].get_index(i).unwrap()
+        self.clock_sensitivities[clock.index()][i]
     }
+}
+
+/// Densify a signal-keyed table into a `Vec` indexed by `SignalId::index()`,
+/// preserving each entry's insertion order.  Components with no entry get an
+/// empty list.
+fn densify(
+    table: &IndexMap<SignalId, IndexSet<SignalId>>,
+    elaboration: &Elaboration,
+) -> Vec<Vec<SignalId>> {
+    elaboration
+        .components()
+        .iter()
+        .map(|c| {
+            table
+                .get(&c.id())
+                .map(|set| set.iter().copied().collect())
+                .unwrap_or_default()
+        })
+        .collect()
 }
 
 /// Resolve every `Referent::Component` inside `expr` to the

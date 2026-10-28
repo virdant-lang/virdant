@@ -18,3 +18,4 @@ pub mod virt;
 pub use sim::{Clock, InitStrategy, Sim};
 pub use bits::BitPat;
 pub use eval::Value;
+pub use layout::TypeId;

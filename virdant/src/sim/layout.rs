@@ -48,6 +48,70 @@ pub struct Slot {
     pub param_types: Vec<Type>,
 }
 
+/// A dense handle for an interned [`Type`].
+///
+/// Every `Type` reachable from the elaborated design (component types,
+/// type-layout member types, and every sim `Expr` node's type) is
+/// interned once while the immutable `Circuit` is built; after that a
+/// `TypeId` is a plain `u32`, so `Value`s can carry their type tag as
+/// four bytes instead of a heap-allocated `Type` tree.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct TypeId(u32);
+
+/// The `Type` -> `TypeId` intern table.  Built once during `Circuit`
+/// construction (seeded from the elaboration, the type layouts, and the
+/// converted driver expressions), then frozen behind an `Arc` inside
+/// [`TypeLayoutIndex`]; runtime access is read-only and allocation-free.
+#[derive(Debug, Default)]
+pub struct TypeInterner {
+    ids: IndexMap<Type, TypeId>,
+    types: Vec<Type>,
+}
+
+impl TypeInterner {
+    pub fn new() -> TypeInterner {
+        TypeInterner { ids: IndexMap::new(), types: Vec::new() }
+    }
+
+    /// The id for `typ`, interning it if this is the first sighting.
+    /// (Construction-time only: the table is frozen once `Circuit::new`
+    /// finishes.)
+    pub fn intern(&mut self, typ: &Type) -> TypeId {
+        if let Some(&id) = self.ids.get(typ) {
+            return id;
+        }
+        let id = TypeId(self.types.len() as u32);
+        self.types.push(typ.clone());
+        self.ids.insert(typ.clone(), id);
+        id
+    }
+
+    /// The id for a previously-interned `typ`.  Distinct types get
+    /// distinct ids, so id equality is type equality.
+    pub fn type_id(&self, typ: &Type) -> TypeId {
+        *self.ids.get(typ).unwrap_or_else(|| {
+            panic!("TypeInterner: type not interned: {typ:?}")
+        })
+    }
+
+    /// The interned `Type` for `id`.
+    pub fn type_of(&self, id: TypeId) -> &Type {
+        &self.types[id.0 as usize]
+    }
+}
+
+/// Intern `typ` and, recursively, every type embedded in its `Usual`
+/// argument list (including primitive argument types, which `seed_type`
+/// alone does not reach).
+fn intern_all(typ: &Type, types: &mut TypeInterner) {
+    types.intern(typ);
+    if let Type::Usual(_, args) = typ {
+        for arg in args {
+            intern_all(arg, types);
+        }
+    }
+}
+
 
 #[derive(Clone, Debug)]
 enum TypeLayoutKind {
@@ -62,7 +126,7 @@ enum TypeLayoutKind {
 }
 
 #[derive(Clone, Debug)]
-struct TypeLayout {
+pub(super) struct TypeLayout {
     /// The typedef's (simple) name, for display.
     #[allow(dead_code)]
     name: BString,
@@ -70,11 +134,13 @@ struct TypeLayout {
 }
 
 /// Index of precomputed bit-layout data for every user-defined type
-/// instantiation reachable from the elaborated component types.  Built
-/// once from `&Db`; cloned cheaply (inner map behind an `Arc`).
+/// instantiation reachable from the elaborated component types, plus
+/// the `Type` intern table (see [`TypeId`]).  Built once from `&Db`;
+/// cloned cheaply (both inner structures behind an `Arc`).
 #[derive(Clone, Debug)]
 pub struct TypeLayoutIndex {
     layouts: Arc<IndexMap<Type, TypeLayout>>,
+    types: Arc<TypeInterner>,
 }
 
 impl TypeLayoutIndex {
@@ -88,14 +154,28 @@ impl TypeLayoutIndex {
         }
     }
 
-    /// Build a `TypeLayoutIndex` covering every user-defined type
-    /// instantiation reachable from the elaborated component types.
-    pub(super) fn build(db: &Db, elab: &Elaboration) -> Self {
+    /// Build the bit-layout map for every user-defined type
+    /// instantiation reachable from the elaborated component types,
+    /// interning every type encountered (component types, layout keys,
+    /// and member types) into `types`.  Returns the bare layout map;
+    /// wrap it with [`TypeLayoutIndex::from_parts`] once expression
+    /// conversion has finished interning the expression types.
+    pub(super) fn build_layouts(
+        db: &Db,
+        elab: &Elaboration,
+        types: &mut TypeInterner,
+    ) -> IndexMap<Type, TypeLayout> {
+        types.intern(&Type::Bit);
+        types.intern(&Type::Clock);
+        types.intern(&Type::Reset);
+
         let mut layouts: IndexMap<Type, TypeLayout> = IndexMap::new();
         let mut queue: Vec<Type> = Vec::new();
 
         for comp in elab.components() {
-            seed_type(&comp.typ(), &mut queue);
+            let comp_typ = comp.typ();
+            intern_all(&comp_typ, types);
+            seed_type(&comp_typ, &mut queue);
         }
 
         let symboltable = db.get_symboltable();
@@ -104,15 +184,59 @@ impl TypeLayoutIndex {
             if layouts.contains_key(&typ) {
                 continue;
             }
+            intern_all(&typ, types);
             let layout = build_type_layout(db, &symboltable, &typ, &mut queue);
             layouts.insert(typ, layout);
         }
 
-        TypeLayoutIndex { layouts: Arc::new(layouts) }
+        // Member types (union/enum slot parameters, struct fields) can
+        // be primitive (`Word`/`Bit`), which `seed_type` does not seed;
+        // intern them so runtime value construction (e.g. `match` arm
+        // bindings) can always resolve a `TypeId`.
+        for layout in layouts.values() {
+            let member_types: &[Slot] = match &layout.kind {
+                TypeLayoutKind::Union { slots } => slots,
+                TypeLayoutKind::Enum { slots, .. } => slots,
+                TypeLayoutKind::Struct { fields } => fields,
+                TypeLayoutKind::Other(_) => continue,
+            };
+            for slot in member_types {
+                for typ in &slot.param_types {
+                    intern_all(typ, types);
+                }
+            }
+        }
+
+        layouts
+    }
+
+    /// Freeze the built layout map and intern table into the shared,
+    /// read-only index.
+    pub(super) fn from_parts(
+        layouts: IndexMap<Type, TypeLayout>,
+        types: TypeInterner,
+    ) -> Self {
+        TypeLayoutIndex { layouts: Arc::new(layouts), types: Arc::new(types) }
     }
 
     fn layout(&self, typ: &Type) -> Option<&TypeLayout> {
         self.layouts.get(typ)
+    }
+
+    /// The interned id for `typ`.  Panics if `typ` was never interned
+    /// during `Circuit` construction — every runtime value's type is
+    /// seeded there, so this indicates a construction-order bug.
+    pub fn type_id(&self, typ: &Type) -> TypeId {
+        self.types.type_id(typ)
+    }
+
+    /// The interned `Type` for `id`.
+    pub fn type_of(&self, id: TypeId) -> &Type {
+        self.types.type_of(id)
+    }
+
+    fn layout_of(&self, typ: TypeId) -> Option<&TypeLayout> {
+        self.layouts.get(self.types.type_of(typ))
     }
 
     /// The bit width of a value of `typ`.  `Type::Param` is generic and
@@ -148,24 +272,6 @@ impl TypeLayoutIndex {
             .unwrap_or(0)
     }
 
-    /// The tag width for a union/enum type.
-    fn tag_width(&self, typ: &Type) -> Option<Width> {
-        match self.layout(typ).map(|l| &l.kind) {
-            Some(TypeLayoutKind::Union { slots }) => Some(slots.len().try_into().unwrap()),
-            Some(TypeLayoutKind::Enum { tag_width, .. }) => Some(*tag_width),
-            _ => None,
-        }
-    }
-
-    /// The slots of a union/enum type (in tag order).
-    pub(crate) fn slots(&self, typ: &Type) -> Option<&[Slot]> {
-        match self.layout(typ).map(|l| &l.kind) {
-            Some(TypeLayoutKind::Union { slots }) => Some(slots),
-            Some(TypeLayoutKind::Enum { slots, .. }) => Some(slots),
-            _ => None,
-        }
-    }
-
     /// The fields of a struct type, in declaration order.
     #[allow(dead_code)]
     pub(crate) fn fields(&self, typ: &Type) -> Option<&[Slot]> {
@@ -175,32 +281,27 @@ impl TypeLayoutIndex {
         }
     }
 
-    /// The tag value selecting `ctor_sym` in a union/enum type.
-    pub(crate) fn ctor_tag_value(&self, typ: &Type, ctor_sym: SymbolId) -> Option<u64> {
-        match self.layout(typ).map(|l| &l.kind) {
-            Some(TypeLayoutKind::Union { slots }) => {
-                let index = slots.iter().position(|s| s.symbol_id == ctor_sym)?;
-                Some(1u64 << index)
-            }
-            Some(TypeLayoutKind::Enum { enumerant_values, .. }) => {
-                Some(*enumerant_values.get(&ctor_sym)?)
-            }
-            _ => None,
-        }
-    }
-
     /// Encode a constructor application as a bit pattern of `typ`:
     /// the tag in the low bits, the encoded parameters above (first
     /// parameter at the MSB end), zero padding up to the type width.
     pub(crate) fn encode_ctor(
         &self,
-        typ: &Type,
+        typ: TypeId,
         ctor_sym: SymbolId,
         args: &[BitPat],
     ) -> Option<BitPat> {
-        let tag_width = self.tag_width(typ)?;
-        let tag = self.ctor_tag_value(typ, ctor_sym)?;
-        let total = self.type_width(typ);
+        let layout = self.layout_of(typ)?;
+        let (tag_width, tag) = match &layout.kind {
+            TypeLayoutKind::Union { slots } => {
+                let index = slots.iter().position(|s| s.symbol_id == ctor_sym)?;
+                (slots.len().try_into().unwrap(), 1u64 << index)
+            }
+            TypeLayoutKind::Enum { tag_width, enumerant_values, .. } => {
+                (*tag_width, *enumerant_values.get(&ctor_sym)?)
+            }
+            _ => return None,
+        };
+        let total = self.type_width(self.type_of(typ));
 
         let mut payload = BitPat::zeros(0);
         for arg in args {
@@ -222,20 +323,31 @@ impl TypeLayoutIndex {
     /// Returns the selected slot and the payload bit patterns for its
     /// parameters (substituted types), or `None` when the pattern is
     /// not a valid inhabitant (unknown tag, non-zero padding).
-    pub(crate) fn decode_ctor(&self, typ: &Type, bits: &BitPat) -> Option<(Slot, Vec<BitPat>)> {
-        let slots: Vec<Slot> = self.slots(typ)?.to_vec();
-        let tag_width = self.tag_width(typ)?;
+    pub(crate) fn decode_ctor(&self, typ: TypeId, bits: &BitPat) -> Option<(Slot, Vec<BitPat>)> {
+        let layout = self.layout_of(typ)?;
+        let (slots, tag_width, enumerant_values) = match &layout.kind {
+            TypeLayoutKind::Union { slots } => {
+                (slots, slots.len().try_into().unwrap(), None)
+            }
+            TypeLayoutKind::Enum { tag_width, enumerant_values, slots } => {
+                (slots, *tag_width, Some(enumerant_values))
+            }
+            _ => return None,
+        };
         let tag = bits.slice(0, tag_width).to_u64();
 
-        let slot_index = slots
-            .iter()
-            .position(|s| self.ctor_tag_value(typ, s.symbol_id) == Some(tag))?;
-        let slot = slots[slot_index].clone();
+        let slot_index = match enumerant_values {
+            Some(values) => slots
+                .iter()
+                .position(|s| values.get(&s.symbol_id).copied() == Some(tag))?,
+            None => slots.iter().enumerate().find(|(i, _)| 1u64 << i == tag)?.0,
+        };
+        let slot = &slots[slot_index];
 
         // Payload area: bits [tag_width, tag_width + payload_width), zero
         // padding above.
         let payload_width: Width = slot.param_types.iter().map(|t| self.type_width(t)).sum();
-        let total = self.type_width(typ);
+        let total = self.type_width(self.type_of(typ));
         if total > tag_width + payload_width {
             let padding = bits.slice(tag_width + payload_width, total);
             if !padding.is_zero() {
@@ -251,7 +363,7 @@ impl TypeLayoutIndex {
             payloads.push(bits.slice(hi - w, hi));
             hi -= w;
         }
-        Some((slot, payloads))
+        Some((slot.clone(), payloads))
     }
 
     /// Decode a bit pattern of a struct type into its fields' bit
@@ -277,23 +389,25 @@ impl TypeLayoutIndex {
 
     /// True when `bits` is a valid inhabitant of `typ`.
     #[allow(dead_code)]
-    pub(crate) fn valid(&self, typ: &Type, bits: &BitPat) -> bool {
-        match typ {
+    pub(crate) fn valid(&self, typ: TypeId, bits: &BitPat) -> bool {
+        match self.type_of(typ) {
             Type::Bit | Type::Clock | Type::Reset | Type::Word(_) => true,
             Type::Param(_) => false,
-            Type::Usual(..) => match self.layout(typ).map(|l| &l.kind) {
-                Some(TypeLayoutKind::Struct { .. }) => match self.decode_struct(typ, bits) {
-                    Some(field_bits) => {
-                        let fields = self.fields(typ).unwrap();
-                        field_bits
-                            .iter()
-                            .zip(fields.iter())
-                            .all(|(bits, field)| {
-                                self.valid(&field.param_types[0], bits)
-                            })
+            Type::Usual(..) => match self.layout_of(typ).map(|l| &l.kind) {
+                Some(TypeLayoutKind::Struct { .. }) => {
+                    match self.decode_struct(self.type_of(typ), bits) {
+                        Some(field_bits) => {
+                            let fields = self.fields(self.type_of(typ)).unwrap();
+                            field_bits
+                                .iter()
+                                .zip(fields.iter())
+                                .all(|(bits, field)| {
+                                    self.valid(self.type_id(&field.param_types[0]), bits)
+                                })
+                        }
+                        None => false,
                     }
-                    None => false,
-                },
+                }
                 Some(TypeLayoutKind::Other(_)) => true,
                 _ => self.decode_ctor(typ, bits).is_some(),
             },
@@ -304,11 +418,11 @@ impl TypeLayoutIndex {
     /// according to the object type.  Invalid patterns print as
     /// `<invalid>`.
     #[allow(dead_code)]
-    pub(crate) fn display(&self, typ: &Type, bits: &BitPat) -> String {
+    pub(crate) fn display(&self, typ: TypeId, bits: &BitPat) -> String {
         if !self.valid(typ, bits) {
             return "<invalid>".into();
         }
-        match typ {
+        match self.type_of(typ) {
             Type::Bit => if bits.get_bit(0) { "true".into() } else { "false".into() },
             Type::Clock | Type::Reset => bits.to_bit_string(),
             Type::Word(w) => {
@@ -318,10 +432,10 @@ impl TypeLayoutIndex {
                     format!("0b{}", bits.to_bit_string())
                 }
             }
-            Type::Usual(..) => match self.layout(typ).map(|l| &l.kind) {
+            Type::Usual(..) => match self.layout_of(typ).map(|l| &l.kind) {
                 Some(TypeLayoutKind::Struct { .. }) => {
-                    let fields = self.fields(typ).unwrap().to_vec();
-                    let field_bits = self.decode_struct(typ, bits).unwrap();
+                    let fields = self.fields(self.type_of(typ)).unwrap().to_vec();
+                    let field_bits = self.decode_struct(self.type_of(typ), bits).unwrap();
                     let args: Vec<String> = fields
                         .iter()
                         .zip(field_bits.iter())
@@ -329,18 +443,18 @@ impl TypeLayoutIndex {
                             format!(
                                 "{}={}",
                                 field.name.as_bstr(),
-                                self.display(&field.param_types[0], bits)
+                                self.display(self.type_id(&field.param_types[0]), bits)
                             )
                         })
                         .collect();
-                    format!("{}{{{}}}", self.layout(typ).unwrap().name.as_bstr(), args.join(", "))
+                    format!("{}{{{}}}", self.layout(self.type_of(typ)).unwrap().name.as_bstr(), args.join(", "))
                 }
                 kind => {
                     let (slot, payloads) = self.decode_ctor(typ, bits).unwrap();
                     let args: Vec<String> = payloads
                         .iter()
                         .zip(slot.param_types.iter())
-                        .map(|(bits, typ)| self.display(typ, bits))
+                        .map(|(bits, typ)| self.display(self.type_id(typ), bits))
                         .collect();
                     match kind {
                         Some(TypeLayoutKind::Enum { .. }) => format!("#{}", slot.name.as_bstr()),
