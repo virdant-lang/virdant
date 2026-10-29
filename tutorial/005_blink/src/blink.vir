@@ -1,0 +1,25 @@
+//! The `blink` package: blink an LED.
+//!
+
+import strobe
+
+mod Blink {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    //> `led` is the LED output.
+    //> It flips on every strobe pulse.
+    outgoing reg led : Bit on clock {
+        when {
+            case strobe_timer.pulse {
+                it <= !it
+            }
+        }
+    }
+
+    mod strobe_timer of strobe::Strobe {
+        it.clock  := clock
+        it.reset  := reset
+        it.period := 16_000_000
+    }
+}

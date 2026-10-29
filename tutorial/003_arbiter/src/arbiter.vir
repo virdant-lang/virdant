@@ -1,0 +1,32 @@
+mod Arbiter {
+    incoming clock   : Clock
+    incoming reset   : Reset
+
+    incoming req0   : Bit
+    incoming req1   : Bit
+
+    outgoing grant0 : Bit
+    outgoing grant1 : Bit
+
+    reg client0_priority : Bit on clock {
+        it <= when {
+            case reset => true
+            else => !it
+        }
+    }
+
+    when {
+        case reset {
+            grant0 := false
+            grant1 := false
+        }
+        case client0_priority {
+            grant0 := req0
+            grant1 := req1 && !req0
+        }
+        else {
+            grant0 := req0 && !req1
+            grant1 := req1
+        }
+    }
+}

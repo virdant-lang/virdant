@@ -1,0 +1,30 @@
+//! The `strobe` package: a timer which emits a periodic pulse.
+//!
+
+pub mod Strobe {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    //> The period of the strobe, in clock cycles.
+    //> Tweak this to make the LED blink faster or slower.
+    incoming period : Word[24]
+
+    //> `pulse` is asserted for one cycle every `period` cycles.
+    outgoing pulse : Bit
+
+    //> `counter` repeatedly counts down from `period` to 0.
+    //> When it reaches 0, it starts over and asserts `pulse`.
+    reg counter : Word[24] on clock {
+        it <= when {
+            case reset => period - 1
+            else match it {
+                // loop when we get to 0
+                // otherwise, decrement
+                case 0 => period - 1
+                else   => it - 1
+            }
+        }
+
+        pulse := it == 0
+    }
+}
