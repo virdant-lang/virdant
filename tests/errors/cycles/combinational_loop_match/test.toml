@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Combinational loop through a `match` subject: the subject wire driven from inside its own arm."
+filecheck = "src/combinational_loop_match.vir"

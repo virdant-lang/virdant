@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Combinational loops through `when` guards: a guarded wire driven from its own arm, and a two-wire loop closed through a guard."
+filecheck = "src/combinational_loop_when.vir"
