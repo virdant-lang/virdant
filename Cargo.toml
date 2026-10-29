@@ -10,3 +10,11 @@ members = ["virtue",
 # incremental compile times low. See TODO.md item 8 for the measurements.
 [profile.dev.package.virdant]
 opt-level = 2
+
+# Release builds of `virtue` prioritize fast compilation over fast execution:
+# opt-level 1 keeps basic optimization but compiles much faster, and
+# codegen-units 256 maximizes parallel codegen at the cost of cross-unit
+# inlining opportunities.
+[profile.release.package.virtue]
+opt-level = 1
+codegen-units = 256
