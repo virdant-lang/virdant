@@ -2,11 +2,11 @@
 //! tokenizing, type-checking, elaboration, Verilog compilation,
 //! running, documentation generation, and project scaffolding.
 
-use clap::CommandFactory;
-use clap::{Parser, Subcommand};
-
+mod cli;
 mod docs;
 mod virt;
+
+use cli::{Args, Command};
 
 use bstr::{BStr, BString, ByteSlice};
 use colored::Colorize;
@@ -25,127 +25,11 @@ use virdant::syntax::parsing::parse;
 use virdant::syntax::token::tokenize;
 use virdant::syntax::token::Token;
 
-/// The Virdant Hardware Language
-#[derive(Parser, Debug)]
-#[command(name = "vir", author, version, about, disable_help_subcommand = true, arg_required_else_help = true)]
-struct Args {
-    #[arg(short = 'C', conflicts_with = "virfile")]
-    cwd: Option<PathBuf>,
-
-    /// Load .vir file(s) as a self-contained project (comma-separated, no spaces; exclusive with -C)
-    #[arg(short = 'F', conflicts_with = "cwd")]
-    virfile: Option<String>,
-
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Subcommand, Debug)]
-enum Command {
-    /// Parse and dump the AST for a Virdant source file
-    Parse { file: PathBuf },
-    /// Tokenize a Virdant source file
-    Tokenize { file: PathBuf },
-    /// Typecheck a Virdant project
-    Check { },
-    /// Dump inferred expression types
-    Types { },
-    /// Dump the symbol table
-    Symbols { },
-    /// Dump typedefs
-    Typedefs { },
-    /// Dump expression roots
-    Exprroots { },
-    /// Dump typing results
-    Typing { },
-    /// Dump database state, optionally saving a Graphviz file
-    Db {
-        outpath: Option<PathBuf>,
-        /// Render the output as JSON
-        #[arg(long)]
-        json: bool,
-    },
-    /// Dump component analysis for a module definition
-    Components { moddef_fqn: String },
-    /// List ports for a module definition
-    Ports { moddef_fqn: String },
-    /// Dump the elaborated design rooted at a top module
-    Elaborate { top: String },
-    /// Compile Virdant package
-    Compile { path: PathBuf },
-    /// Build Virdant package
-    Build { },
-    /// Run the `virt::Virt` board simulation for the project's top module.
-    ///
-    /// The top module (from Virdant.toml `[prog] top`) must be `for` the
-    /// `virt::Virt` platform; the simulation then behaves like the
-    /// virdant-virt board: UART on stdin/stdout, 16 MiB SPI flash, and
-    /// the `exit` port.  The clock runs at the platform's declared
-    /// frequency, paced to real time unless `--fps-no-cap`.
-    Run {
-        /// Write a VCD trace to FILE (default: trace.vcd)
-        #[arg(long, num_args = 0..=1, default_missing_value = "trace.vcd")]
-        trace: Option<String>,
-        /// Run the simulation at full speed (no real-time cap)
-        #[arg(long)]
-        fps_no_cap: bool,
-        /// On exit, report the average clock frequency achieved (MHz)
-        #[arg(long)]
-        fps: bool,
-        /// Preload the 16 MiB SPI flash image from FILE
-        #[arg(long)]
-        flash: Option<PathBuf>,
-        /// Stop after this many clock cycles (exit code 124)
-        #[arg(long)]
-        cycles: Option<u64>,
-        /// Print informational board messages (builtin attachments, flash load)
-        #[arg(short = 'v', long)]
-        verbose: bool,
-    },
-    /// Run Virdant package with Icarus Verilog
-    RunIcarus { path: Option<PathBuf>, #[arg(long)] vcd: Option<String> },
-    /// Create a new Virdant project
-    New { project: String },
-    /// Synthesize, place-and-route, and pack a bitstream
-    Bitstream { },
-    /// Place-and-route (and pack) an already-synthesized design
-    Pnr {
-        /// Number of place-and-route attempts, varying --seed
-        #[arg(long, default_value_t = 1)]
-        tries: u32,
-        /// Seed for the first attempt (later attempts increment by one)
-        #[arg(long, default_value_t = 1)]
-        seed: u32,
-        /// Keep the bitstream even when timing constraints are not met
-        #[arg(long)]
-        allow_timing_failure: bool,
-    },
-    /// Synthesize, place-and-route, pack, and upload a bitstream
-    Upload {
-        /// Number of place-and-route attempts, varying --seed
-        #[arg(long, default_value_t = 1)]
-        tries: u32,
-        /// Seed for the first attempt (later attempts increment by one)
-        #[arg(long, default_value_t = 1)]
-        seed: u32,
-        /// Keep the bitstream even when timing constraints are not met
-        #[arg(long)]
-        allow_timing_failure: bool,
-    },
-
-    /// Generate HTML documentation
-    Doc {
-        /// Open the docs in a browser after generation
-        #[arg(long)]
-        open: bool,
-    },
-
-    #[command(external_subcommand)]
-    External(Vec<OsString>),
-}
+// The `Args` struct and `Command` enum are defined in `cli`, built up
+// with the vanilla clap builder API (see `cli.rs`).
 
 fn main() {
-    let args = Args::parse();
+    let args = cli::parse();
 
     match args.command {
         Command::Parse { file } => parse_file(&file),
@@ -1350,34 +1234,28 @@ fn collect_sv_files(dir: &Path, sources: &mut Vec<PathBuf>) {
 
 fn exec_external(args: Vec<OsString>) {
     let Some(command) = args.first() else {
-        Args::command().print_help().unwrap();
+        cli::command().print_help().unwrap();
         std::process::exit(3);
     };
 
-    let command = command.to_string_lossy();
-    if let Some(bin) = find_bin(&format!("vir-{command}")) {
+    let command = command.to_string_lossy().into_owned();
+    let bin_name = format!("vir-{command}");
+    if let Some(bin) = cli::find_bin(&bin_name) {
         let program = CString::new(bin).unwrap();
-        let c_args: Vec<CString> = args
-            .into_iter()
-            .map(|arg| CString::new(arg.as_os_str().as_bytes()).unwrap())
-            .collect();
+
+        // Linux-style exec: the companion binary is invoked as
+        // `vir-${CMD} ...remaining args`, i.e. the first element of the
+        // command line is replaced with the `vir-` prefixed binary name.
+        let mut c_args: Vec<CString> = vec![CString::new(bin_name).unwrap()];
+        c_args.extend(
+            args.into_iter()
+                .skip(1)
+                .map(|arg| CString::new(arg.as_os_str().as_bytes()).unwrap()),
+        );
 
         let _ = execvp(&program, &c_args);
     } else {
-        Args::command().print_help().unwrap();
+        cli::command().print_help().unwrap();
         std::process::exit(3);
     }
-}
-
-fn find_bin(command: &str) -> Option<String> {
-    let path = std::env::var("PATH").unwrap();
-
-    for dirpath in path.split(":") {
-        let binpath: std::path::PathBuf = std::path::PathBuf::from(dirpath).join(command);
-        if std::fs::exists(&binpath).unwrap() {
-            return Some(binpath.to_string_lossy().to_string());
-        }
-    }
-
-    None
 }
