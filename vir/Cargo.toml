@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 
+[lib]
+name = "vircommon"
+path = "src/common.rs"
+
 [dependencies]
 virdant = { path = "../virdant" }
 
@@ -32,6 +36,18 @@ path = "src/virlsp/main.rs"
 [[bin]]
 name = "vir-format"
 path = "src/format/main.rs"
+
+[[bin]]
+name = "vir-doc"
+path = "src/doc/main.rs"
+
+[[bin]]
+name = "vir-inspect"
+path = "src/inspect/main.rs"
+
+[[bin]]
+name = "vir-run-icarus"
+path = "src/run_icarus/main.rs"
 
 # The Virdant test runner (formerly the `virtue` crate): a pure
 # orchestrator that links nothing from the compiler; see

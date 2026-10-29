@@ -1,6 +1,6 @@
 //! Shared `--help-json` support for the non-`vir` binaries.
 //!
-//! Each binary includes this module with `#[path = "../help_json.rs"]`,
+//! Each binary includes this module with `#[path = "../common/help_json.rs"]`,
 //! and when `--help-json` appears on the command line it dumps a JSON
 //! description of that binary's clap arg-parse data (flags, options,
 //! positionals, and subcommands) to stdout and exits 0.

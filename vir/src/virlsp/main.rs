@@ -23,7 +23,7 @@ use virdant::types::{ExprRoot, Type};
 use virdant::common::{ComponentKind, PortDir};
 use virdant::db::{Builder, Db};
 
-#[path = "../help_json.rs"]
+#[path = "../common/help_json.rs"]
 mod help_json;
 use virdant::package::{PackageId, PackageTable};
 use virdant::common::source::{LineCol, Source, SourceOffset, Span};

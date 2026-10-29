@@ -7,7 +7,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[path = "../help_json.rs"]
+#[path = "../common/help_json.rs"]
 mod help_json;
 
 // ---------------------------------------------------------------------------

@@ -44,6 +44,8 @@ test: virdant/target/lib build
 	@echo "# RUNNER TESTS PASS"
 	@echo "########################################"
 
+test_cli: install
+	make -C tests/cli/ test
 
 clean:
 	cargo clean
