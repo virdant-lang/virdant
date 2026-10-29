@@ -12,7 +12,9 @@ clap = { version = "4.5.46", features = ["derive"] }
 colored = "3.1.1"
 indexmap = "2.13.0"
 json = "0.12.4"
+libc = "0.2"
 nix = { version = "0.31.2", features = ["process"] }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.149"
 tokio = { version = "=1.49.0", features = ["macros", "rt-multi-thread", "io-std", "sync"] }
 toml = "1.1.0"
@@ -29,3 +31,16 @@ path = "src/virlsp/main.rs"
 [[bin]]
 name = "vir-format"
 path = "src/format/main.rs"
+
+# The Virdant test runner (formerly the `virtue` crate): a pure
+# orchestrator that links nothing from the compiler; see
+# src/virtue/README.md.
+[[bin]]
+name = "vir-virtue"
+path = "src/virtue/main.rs"
+
+# Compatibility shim: a standalone FileCheck matcher, equivalent to
+# `vir-virtue --filecheck`; also what `make install` copies.
+[[bin]]
+name = "vir-filecheck"
+path = "src/filecheck/main.rs"

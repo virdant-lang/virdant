@@ -1,4 +1,4 @@
-//! The Virdant test runner (`virtue`).
+//! The Virdant test runner (`vir-virtue`).
 //!
 //! A pure orchestrator: it links nothing from the compiler.  Every test
 //! is a subprocess of `target/release/vir` (plus iverilog / verilator
@@ -7,12 +7,12 @@
 //! them.
 //!
 //! Usage:
-//!   virtue                     run all tests
-//!   virtue <test> ...          run only the named tests
-//!   virtue --list              list all tests
-//!   virtue --suite sim         run one suite
-//!   virtue --filter substr     run matching tests
-//!   virtue --filecheck <file>  standalone FileCheck mode
+//!   vir-virtue                     run all tests
+//!   vir-virtue <test> ...          run only the named tests
+//!   vir-virtue --list              list all tests
+//!   vir-virtue --suite sim         run one suite
+//!   vir-virtue --filter substr     run matching tests
+//!   vir-virtue --filecheck <file>  standalone FileCheck mode
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -23,10 +23,10 @@ use std::time::{Duration, Instant};
 
 use clap::Parser;
 
-use virtue::discovery;
-use virtue::exec;
-use virtue::filecheck;
-use virtue::output;
+mod discovery;
+mod exec;
+mod filecheck;
+mod output;
 
 use discovery::Test;
 use exec::{Env, Status};
@@ -48,7 +48,7 @@ extern "C" fn on_sigint(_: libc::c_int) {
 
 /// The Virdant test runner
 #[derive(Parser, Debug)]
-#[command(name = "virtue", disable_help_subcommand = true)]
+#[command(name = "vir-virtue", disable_help_subcommand = true)]
 struct Args {
     /// Standalone FileCheck mode: match CHECK directives in <check-file> against stdin
     #[arg(long)]
@@ -112,7 +112,7 @@ impl From<RunErr> for ExitCode {
     fn from(e: RunErr) -> ExitCode {
         match e {
             RunErr::Fatal(msg) => {
-                eprintln!("virtue: {msg}");
+                eprintln!("vir-virtue: {msg}");
                 ExitCode::from(2)
             }
             RunErr::Failed => ExitCode::from(1),
@@ -171,7 +171,7 @@ fn run_all(args: Args) -> Result<(), RunErr> {
                     Some(&i) => named.push(i),
                     None => {
                         return Err(RunErr::Fatal(format!(
-                            "unknown test `{name}` (see `virtue --list`)"
+                            "unknown test `{name}` (see `vir-virtue --list`)"
                         )))
                     }
                 }

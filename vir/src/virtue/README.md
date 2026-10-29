@@ -1,6 +1,6 @@
-# virtue
+# vir-virtue
 
-The Virdant test runner (`virtue`): a pure orchestrator that runs every test as a
+The Virdant test runner (`vir-virtue`): a pure orchestrator that runs every test as a
 subprocess of `target/release/vir` (plus `iverilog` / `verilator` for the
 sim suite), with the same commands and exit-code contracts the
 per-directory Makefiles used before the runner replaced them. It links
@@ -9,13 +9,13 @@ nothing from the compiler.
 Run from the repo root (or anywhere above it):
 
 ```
-virtue                    run ALL tests, regardless of failures
-virtue <test> ...         run only the named tests
-virtue --suite sim        run one suite (top-level group of the test path)
-virtue --filter substr    run tests whose name contains substr
-virtue --list             list all tests
-virtue -ff                --fail-fast: stop scheduling on first failure
-virtue --jobs <n>         worker threads (default: min(cores, 16))
+vir-virtue                    run ALL tests, regardless of failures
+vir-virtue <test> ...         run only the named tests
+vir-virtue --suite sim        run one suite (top-level group of the test path)
+vir-virtue --filter substr    run tests whose name contains substr
+vir-virtue --list             list all tests
+vir-virtue -ff                --fail-fast: stop scheduling on first failure
+vir-virtue --jobs <n>         worker threads (default: min(cores, 16))
 ```
 
 Exit code 0 iff no failures and no policy violations.
@@ -117,7 +117,7 @@ during the run as well as after it, in completion order.
 
 On a terminal, a footer is repainted in place just below the last
 printed line (the shell leaves the cursor on a fresh line after
-Enter; virtue anchors there): one `⌛` row per in-flight test (never
+Enter; vir-virtue anchors there): one `⌛` row per in-flight test (never
 more than `--jobs`, so the region is bounded) with the progress line
 (`⌛ 43/140 done, 15 running`) on the region's bottom row.  The footer
 is the only thing ever repainted; the screen above it only ever
@@ -150,8 +150,8 @@ and status. Written iff the test failed.
 The FileCheck matcher moved here from the `virdant` crate:
 
 ```
-virtue --filecheck <check-file>   # directives in <check-file>, input on stdin
+vir-virtue --filecheck <check-file>   # directives in <check-file>, input on stdin
 ```
 
-A `filecheck` compatibility binary is also built, for anyone invoking
+A `vir-filecheck` compatibility binary is also built, for anyone invoking
 the matcher directly (it is also what `make install` installs).

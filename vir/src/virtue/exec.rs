@@ -159,7 +159,7 @@ fn run_command(argv: &[String], cwd: &Path, extra_path: Option<&Path>) -> StepRe
             code: None,
             signal: None,
             stdout: Vec::new(),
-            stderr: format!("virtue: could not run {}: {}\n", argv[0], e).into_bytes(),
+            stderr: format!("vir-virtue: could not run {}: {}\n", argv[0], e).into_bytes(),
             duration: start.elapsed(),
         },
     }

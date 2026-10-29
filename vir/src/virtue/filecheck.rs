@@ -4,7 +4,7 @@
 //!
 //! Moved here from the `virdant` crate: it is test tooling, not part of
 //! the compiler under test.  The runner invokes [`run`] in-process; the
-//! `virtue --filecheck <check-file>` flag (and the `filecheck`
+//! `vir-virtue --filecheck <check-file>` flag (and the `vir-filecheck`
 //! compatibility binary) expose the same functionality standalone.
 
 use std::io::Read;
@@ -66,7 +66,7 @@ pub fn cli_main(check_file: Option<String>) -> ! {
     let check_file = match check_file {
         Some(path) => path,
         None => {
-            eprintln!("Usage: virtue --filecheck <check-file>");
+            eprintln!("Usage: vir-virtue --filecheck <check-file>");
             eprintln!("       Input is read from stdin.");
             std::process::exit(1);
         }

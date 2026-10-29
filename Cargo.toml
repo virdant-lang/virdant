@@ -1,8 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["virtue",
-    "virdant", "vir",
-]
+members = ["virdant", "vir"]
 
 # The simulator is allocation- and compute-bound; at the default
 # dev opt-level 0 it runs ~10x slower than release. Optimize just the
@@ -12,10 +10,11 @@ members = ["virtue",
 [profile.dev.package.virdant]
 opt-level = 2
 
-# Release builds of `virtue` prioritize fast compilation over fast execution:
-# opt-level 1 keeps basic optimization but compiles much faster, and
-# codegen-units 256 maximizes parallel codegen at the cost of cross-unit
-# inlining opportunities.
-[profile.release.package.virtue]
+# Release builds of the `vir` binaries (CLI dispatch and the test
+# runner) prioritize fast compilation over fast execution: opt-level 1
+# keeps basic optimization but compiles much faster, and codegen-units
+# 256 maximizes parallel codegen at the cost of cross-unit inlining
+# opportunities.
+[profile.release.package.vir]
 opt-level = 1
 codegen-units = 256

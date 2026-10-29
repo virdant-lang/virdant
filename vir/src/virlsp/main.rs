@@ -20,7 +20,7 @@ use virdant::analysis::platform::resolve_platform_for;
 use virdant::analysis::ports::Port;
 use virdant::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
 use virdant::types::{ExprRoot, Type};
-use virdant::common::PortDir;
+use virdant::common::{ComponentKind, PortDir};
 use virdant::db::{Builder, Db};
 use virdant::package::{PackageId, PackageTable};
 use virdant::common::source::{LineCol, Source, SourceOffset, Span};
@@ -988,10 +988,28 @@ fn missing_platform_ports_action(
     let mut builder = Builder::new(db);
     let platform_id = resolve_platform_for(&mut builder, moddef_symbol.id).ok()??;
 
-    let module_ports = db.get_ports_of(moddef_symbol.id);
     let platform_ports = db.get_ports_of(platform_id);
+    // A module bound to a platform *inherits* its ports: the component
+    // analysis synthesizes them (`Component::synthetic`), so
+    // `get_ports_of(moddef)` already contains them even when the body
+    // is empty.  The quickfix must offer exactly the ports the module
+    // does not declare in its own body, so compare against declared
+    // (non-synthetic) port components instead.
+    let module_components = db.get_component_analysis(moddef_symbol.id);
+    let declared_port_paths: Vec<BString> = module_components.components().iter()
+        .filter(|(_, c)|
+            !c.synthetic()
+            && matches!(c.kind(),
+                Some(ComponentKind::Incoming)
+                | Some(ComponentKind::Outgoing)
+                | Some(ComponentKind::OutgoingWire)
+                | Some(ComponentKind::OutgoingReg)
+                | Some(ComponentKind::Bus))
+        )
+        .map(|(path, _)| path.clone())
+        .collect();
     let missing: Vec<&Port> = platform_ports.iter()
-        .filter(|pp| !module_ports.iter().any(|mp| mp.path == pp.path))
+        .filter(|pp| !declared_port_paths.iter().any(|mp| mp == &pp.path))
         .collect();
     if missing.is_empty() { return None; }
 

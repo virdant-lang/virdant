@@ -42,18 +42,6 @@ pub enum Kind {
     Doc,
 }
 
-impl Kind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Kind::Check => "check",
-            Kind::Sim => "sim",
-            Kind::Format => "format",
-            Kind::Golden => "golden",
-            Kind::Doc => "doc",
-        }
-    }
-}
-
 /// `expect = ...` exit-code/output contract for `kind = "check"`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Expect {

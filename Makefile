@@ -1,11 +1,10 @@
 .PHONY: build build-wasm test clean install grammar docs release
 
 VIR    ?= $(CURDIR)/target/release/vir
-RUNNER ?= $(CURDIR)/target/release/virtue
+RUNNER ?= $(CURDIR)/target/release/vir-virtue
 
 build: virdant/target/lib
 	cargo build --release -p vir
-	cargo build --release -p virtue
 
 # Cargo's build script places generated artifacts in OUT_DIR, which has the
 # concrete form: target/<profile>/build/<crate>-<hash>/out/foo.grammar
@@ -58,7 +57,6 @@ install: build
 	cp ./target/release/vir ${HOME}/.local/virdant/bin/
 	cp ./target/release/vir-* ${HOME}/.local/virdant/bin/
 	cp -r ./lib/* ${HOME}/.local/virdant/lib/
-	cp ./target/release/filecheck ${HOME}/.local/virdant/bin/
 
 docs:
 	$(MAKE) -C docs
