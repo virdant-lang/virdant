@@ -111,34 +111,31 @@ Runs `vir doc`, then:
 
 ## Output
 
-On a terminal, the display is a fixed viewport repainted in place at
-the bottom of the screen (like `top`); the terminal never scrolls, so
-nothing is pushed off the top and the scrollback is never written to.
-The viewport holds one line per test
+Completed tests stream: each test's line is printed the moment it
+finishes, so the scrollback accumulates the whole run naturally —
+during the run as well as after it, in completion order.
 
-```
- ✅ tests/check/whens            whens
- ❌ tests/errors/typing/word_literals  ...
- ⌛ tests/sim/fifo               ...      (animated in place)
- ⚠️ tests/check/projects/platform_fomu  ... (reason)
-```
+On a terminal, a footer is repainted in place just below the last
+printed line (the shell leaves the cursor on a fresh line after
+Enter; virtue anchors there): one `⌛` row per in-flight test (never
+more than `--jobs`, so the region is bounded) with the progress line
+(`⌛ 43/140 done, 15 running`) on the region's bottom row.  The footer
+is the only thing ever repainted; the screen above it only ever
+scrolls, one line per finished test, and every line that scrolls off
+lands in the scrollback in order.  Nothing is destroyed and nothing
+phantom appears: the footer takes over the blank rows below the
+prompt without scrolling them (blank screen was never output, so it
+never enters the scrollback), and only the printed lines it would
+otherwise overwrite are scrolled, in order.  When the terminal is too
+short for the full footer, it is capped to the terminal height.
 
-— a window over the canonical test list ending at the dispatch
-frontier (every test, when the terminal is tall enough) — blank rows
-reserved for the summary, and a progress line (`⌛ 43/116 done, 15
-running`) on the last row.
-
-Descriptions are padded two spaces past the longest test name and cut
-at the terminal edge with `...`.
-
-At the end the summary is printed into the viewport without clearing
-or scrolling: skips and failures are listed in the reserved rows, the
-counts line (`116 tests: 114 passed, ...`) replaces the progress line,
-and the board with every test's final status stays on screen above.
+At the end the footer is cleared and the summary (counts line, then
+skips and failures with reasons and log paths) prints as ordinary
+output below the last test line; the shell prompt lands beneath it.
 
 Without a terminal (piped output), each test's line is printed as
-soon as that test finishes — no in-progress lines, no escape codes —
-followed by the full summary.  In piped mode SIGINT keeps its default
+soon as that test finishes — no footer, no escape codes — followed
+by the full summary.  In piped mode SIGINT keeps its default
 behavior; on a terminal, Ctrl+C clears the display's bottom lines and
 parks the cursor at the start of the next line (exit code 130).
 

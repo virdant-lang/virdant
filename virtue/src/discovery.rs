@@ -134,6 +134,35 @@ pub struct DocCfg {
     pub grep: Vec<Grep>,
 }
 
+/// A minimal `Test` for unit tests.  Never built by discovery.
+#[cfg(test)]
+pub(crate) fn test_stub(name: &str, description: &str) -> Test {
+    Test {
+        name: name.to_string(),
+        dir: std::path::PathBuf::from(name),
+        description: description.to_string(),
+        skip: None,
+        kind: Kind::Check,
+        check_cfg: CheckCfg {
+            command: "check".to_string(),
+            expect: Expect::Ok,
+            filecheck: None,
+        },
+        sim_cfg: SimCfg {
+            simulator: Simulator::Icarus,
+            flags: vec![],
+            sources: None,
+            lint_only: false,
+        },
+        format_cfg: FormatCfg {
+            input: std::path::PathBuf::from("input.vir"),
+            golden: std::path::PathBuf::from("golden.vir"),
+        },
+        golden_cfg: GoldenCfg { grep: vec![], diff: vec![] },
+        doc_cfg: DocCfg { expect_files: vec![], grep: vec![] },
+    }
+}
+
 // --- test.toml deserialization ------------------------------------------------
 
 #[derive(Debug, Deserialize)]

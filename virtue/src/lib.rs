@@ -9,7 +9,7 @@
 //! Public modules:
 //! - [`discovery`]: finding tests and the `test.toml` format
 //! - [`exec`]: running one test, evidence logs
-//! - [`output`]: screen rendering and the end summary
+//! - [`output`]: streamed test output with the in-place footer
 //! - [`filecheck`]: the CHECK-directive matcher (also exposed via
 //!   `virtue --filecheck` and the `filecheck` compatibility binary)
 

@@ -14,7 +14,6 @@
 //!   virtue --filter substr     run matching tests
 //!   virtue --filecheck <file>  standalone FileCheck mode
 
-use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -261,15 +260,14 @@ fn find_on_path(binary: &str) -> bool {
 /// Dispatch in canonical order, thread-per-test, and render output.
 fn run_suite(env: &Env, tests: &[Test], jobs: usize, fail_fast: bool) -> Result<(), RunErr> {
     let start = Instant::now();
-    let total = tests.len();
-    let renderer = output::Renderer::new(tests, output::term_size());
+    let mut display = output::Display::open(tests, jobs);
     let spinner_base = Instant::now();
 
-    // Ctrl+C handling applies to the screen display only: the handler
+    // Ctrl+C handling applies to the terminal display only: the handler
     // just raises a flag (async-signal-safe); the main loop performs
-    // the terminal cleanup and exits.  In piped mode the default
+    // the terminal cleanup and exits.  In pipe mode the default
     // SIGINT disposition (immediate termination) is kept.
-    if renderer.is_screen() {
+    if display.is_tty() {
         unsafe { libc::signal(libc::SIGINT, on_sigint as extern "C" fn(libc::c_int) as libc::sighandler_t) };
     }
 
@@ -310,30 +308,19 @@ fn run_suite(env: &Env, tests: &[Test], jobs: usize, fail_fast: bool) -> Result<
     }
     drop(tx);
 
-    let mut statuses: Vec<Option<Status>> = vec![None; total];
-    let mut log_paths: Vec<Option<String>> = vec![None; total];
-    let mut running: std::collections::BTreeSet<usize> = Default::default();
-    // The dispatch frontier: the highest test index handed to a worker.
-    let mut frontier = 0usize;
+    let mut log_paths: Vec<Option<String>> = vec![None; tests.len()];
 
     loop {
         const TICK: Duration = Duration::from_millis(120);
         match rx.recv_timeout(TICK) {
             Ok(WorkerMsg::Started(idx)) => {
-                running.insert(idx);
-                frontier = frontier.max(idx);
+                // Claimed: the board's window grows (frontier), the
+                // status stays in flight.
+                display.update(tests, idx, None);
             }
             Ok(WorkerMsg::Done(idx, status, log_path)) => {
-                running.remove(&idx);
-                statuses[idx] = Some(status);
                 log_paths[idx] = log_path;
-                frontier = frontier.max(idx);
-                if !renderer.is_screen() {
-                    // Piped mode: plain output, one line per test,
-                    // printed only once that test has finished; no
-                    // in-progress lines, no escape codes.
-                    println!("{}", renderer.line(&tests[idx], Some(status), 0));
-                }
+                display.update(tests, idx, Some(status));
                 if fail_fast && status == Status::Fail {
                     stop.store(true, Ordering::SeqCst);
                 }
@@ -343,23 +330,12 @@ fn run_suite(env: &Env, tests: &[Test], jobs: usize, fail_fast: bool) -> Result<
         }
 
         if INTERRUPTED.load(Ordering::SeqCst) {
-            // Clear the cursor's line (which holds the progress line
-            // and the terminal's ^C echo) and everything below it, then
-            // move to the next line, first column — the shell prompt
-            // will land there, with the test lines above kept on
-            // screen.
-            let mut out = std::io::stdout().lock();
-            write!(out, "\r\x1b[2K\x1b[0J\n\r").ok();
-            out.flush().ok();
+            display.interrupt();
             std::process::exit(130); // 128 + SIGINT
         }
 
         let spinner = (spinner_base.elapsed().as_millis() / 120) as usize;
-        // On a terminal: repaint the alternate-screen board in place
-        // (the main screen and its scrollback are untouched).
-        // Piped output stays silent during the run so that the per-test
-        // lines always appear in canonical order; printed after the loop.
-        renderer.frame(tests, &statuses, frontier, spinner);
+        display.tick(tests, spinner);
     }
 
     for handle in handles {
@@ -367,16 +343,10 @@ fn run_suite(env: &Env, tests: &[Test], jobs: usize, fail_fast: bool) -> Result<
     }
 
     let wall = start.elapsed();
-    if renderer.is_screen() {
-        // Summary into the reserved viewport rows: no clearing, no
-        // scrolling, the board stays on screen.
-        renderer.end_summary(tests, &statuses, wall);
-    } else {
-        // (Test lines were already printed as each test finished.)
-        output::summary(tests, &statuses, &log_paths, wall);
-    }
+    display.finish(tests, &log_paths, wall);
 
-    let failed_at: Option<usize> = statuses
+    let failed_at: Option<usize> = display
+        .statuses()
         .iter()
         .position(|s| matches!(s, Some(Status::Fail)));
     if let Some(idx) = failed_at {
