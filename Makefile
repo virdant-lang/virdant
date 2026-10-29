@@ -1,4 +1,4 @@
-.PHONY: build build-wasm test clean install grammar docs release
+.PHONY: build test clean install grammar docs release
 
 VIR    ?= $(CURDIR)/target/release/vir
 RUNNER ?= $(CURDIR)/target/release/vir-virtue
@@ -16,9 +16,6 @@ grammar:
 virdant/target/lib:
 	mkdir -p target/lib
 	cp -r ./lib/* target/lib/
-
-build-wasm:
-	cargo build -p virdant --lib --target wasm32-unknown-unknown --features "wasm"
 
 test_runner: virdant/target/lib build
 	$(RUNNER)

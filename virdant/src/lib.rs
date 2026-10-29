@@ -11,8 +11,6 @@ pub mod util;
 pub mod sim;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod build;
-#[cfg(not(feature = "wasm"))]
-pub mod script;
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::sync::LazyLock;
