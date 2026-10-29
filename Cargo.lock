@@ -1703,12 +1703,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
+name = "vir"
+version = "0.1.0"
+dependencies = [
+ "bstr",
+ "clap",
+ "colored",
+ "indexmap",
+ "json",
+ "nix",
+ "serde_json",
+ "tokio",
+ "toml",
+ "tower-lsp",
+ "virdant",
+]
+
+[[package]]
 name = "virdant"
 version = "0.4.0"
 dependencies = [
  "bstr",
- "clap",
- "clap_derive",
  "colored",
  "indexmap",
  "json",
@@ -1718,11 +1733,7 @@ dependencies = [
  "nix",
  "paste",
  "serde",
- "serde_json",
  "tera",
- "tokio",
- "toml",
- "tower-lsp",
 ]
 
 [[package]]

@@ -17,10 +17,10 @@
 //! (`@period_ns`).  The run is paced to real time unless
 //! `--fps-no-cap` is given.
 //!
-//! Requires the `vir-bin` feature (the terminal/`nix` dependency); the
+//! Requires the `virt` feature (the terminal/`nix` dependency); the
 //! CLI lives in `vir run`.
 
-#[cfg(feature = "vir-bin")]
+#[cfg(feature = "virt")]
 mod imp {
     use std::cell::Cell;
     use std::io::{Read as _, Write as _};
@@ -903,5 +903,7 @@ mod imp {
 
 }
 
+#[cfg(feature = "virt")]
 pub use imp::run;
+#[cfg(feature = "virt")]
 pub use imp::VirtOptions;

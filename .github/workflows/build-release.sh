@@ -27,10 +27,6 @@ case "$FAMILY" in
     ;;
 esac
 
-# The feature set matches `make build` (the virtue/filecheck tooling
-# is not part of the shipped toolchain).
-TOOLCHAIN_FEATURES="vir-bin,vir-lsp-bin"
-
 # Pick a sha256 command that works on Linux (sha256sum).
 sha256_sum() { sha256sum "$1"; }
 
@@ -44,7 +40,7 @@ build_one() {
 
   # --- toolchain ---
   # One build produces vir, vir-lsp, and vir-format binaries.
-  $CARGO build --release --target "$host" --features "$TOOLCHAIN_FEATURES"
+  $CARGO build --release --target "$host" -p vir
   tc_stage="$(mktemp -d)"
   tc_dir="virdant-$VER-$host"
   mkdir -p "$tc_stage/$tc_dir/bin" "$tc_stage/$tc_dir/lib"

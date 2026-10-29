@@ -11,8 +11,8 @@ mod state;
 mod vcd;
 
 /// The `virt::Virt` board, built on top of this engine.
-/// Requires the `vir-bin` feature for the `nix` dependency.
-#[cfg(feature = "vir-bin")]
+/// Requires the `virt` feature for the `nix` dependency.
+#[cfg(feature = "virt")]
 pub mod virt;
 
 pub use sim::{Clock, InitStrategy, Sim};

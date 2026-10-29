@@ -4,7 +4,7 @@ VIR    ?= $(CURDIR)/target/release/vir
 RUNNER ?= $(CURDIR)/target/release/virtue
 
 build: virdant/target/lib
-	cargo build --release -p virdant --features "vir-bin,vir-lsp-bin"
+	cargo build --release -p vir
 	cargo build --release -p virtue
 
 # Cargo's build script places generated artifacts in OUT_DIR, which has the

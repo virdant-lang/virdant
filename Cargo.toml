@@ -1,12 +1,13 @@
 [workspace]
 resolver = "2"
 members = ["virtue",
-    "virdant",
+    "virdant", "vir",
 ]
 
-# The simulator (`vir run`) is allocation- and compute-bound; at the default
-# dev opt-level 0 it runs ~10x slower than release. Optimize just this
-# package's dev builds (lib + bins); dependencies stay at opt-level 0 to keep
+# The simulator is allocation- and compute-bound; at the default
+# dev opt-level 0 it runs ~10x slower than release. Optimize just the
+# `virdant` library's dev builds (the simulator engine lives here); the
+# `vir` binaries are CLI dispatch and stay at opt-level 0 to keep
 # incremental compile times low. See TODO.md item 8 for the measurements.
 [profile.dev.package.virdant]
 opt-level = 2

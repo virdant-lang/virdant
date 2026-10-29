@@ -2,50 +2,27 @@
 name = "virdant"
 version = "0.4.0"
 edition = "2024"
-autobins = false
-default-run = "vir"
 rust-version = "1.88"
 
 [lib]
 crate-type = ["rlib", "cdylib"]
 
 [features]
-default = ["vir-bin"]
-vir-bin = ["dep:nix"]
-vir-lsp-bin = ["dep:serde_json", "dep:tokio", "dep:tower-lsp"]
+default = ["virt"]
+virt = ["dep:nix"]
 wasm = []
 
 [dependencies]
 bstr = "1.12.0"
-clap = { version = "4.5.46", features = ["derive"] }
-clap_derive = "4.6.0"
 colored = "3.1.1"
 indexmap = "2.13.0"
 json = "0.12.4"
 lalrpop-util = { version = "0.23.1", features = ["lexer"], git = "https://github.com/virdant-lang/lalrpop" }
 logos = "0.15.1"
-nix = { version = "0.31.2", features = ["process", "term", "signal", "ioctl", "fs"], optional = true }
+nix = { version = "0.31.2", features = ["term", "signal", "fs"], optional = true }
 paste = "1.0.15"
-serde_json = { version = "1.0.149", optional = true }
-tera = "1"
 serde = { version = "1", features = ["derive"] }
-tokio = { version = "=1.49.0", features = ["macros", "rt-multi-thread", "io-std", "sync"], optional = true }
-toml = { version = "1.1.0" }
-tower-lsp = { version = "0.20.0", optional = true }
+tera = "1"
 
 [build-dependencies]
 lalrpop = { version = "0.23.1", git = "https://github.com/virdant-lang/lalrpop" }
-
-[[bin]]
-name = "vir"
-path = "src/bin/vir.rs"
-required-features = ["vir-bin"]
-
-[[bin]]
-name = "vir-lsp"
-path = "src/bin/virlsp.rs"
-required-features = ["vir-lsp-bin"]
-
-[[bin]]
-name = "vir-format"
-path = "src/bin/format.rs"
