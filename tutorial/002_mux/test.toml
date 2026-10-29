@@ -1,0 +1,3 @@
+kind = "check"
+description = "Tutorial mux lesson: 2-way, 3-way, and 4-way multiplexers."
+expect = "ok"

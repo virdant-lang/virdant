@@ -29,3 +29,7 @@ path = "src/virlsp/main.rs"
 [[bin]]
 name = "vir-format"
 path = "src/format/main.rs"
+
+[[bin]]
+name = "vir-tutor"
+path = "src/vir-tutor/main.rs"

@@ -1,0 +1,10 @@
+pub mod Buffer {
+    incoming clock : Clock
+    incoming inp : Word[32]
+    outgoing out : Word[32]
+
+    reg buffer : Word[32] on clock {
+        it <= inp
+        out := it
+    }
+}
