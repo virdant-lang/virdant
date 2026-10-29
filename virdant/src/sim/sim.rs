@@ -136,6 +136,24 @@ impl Clock {
     }
 }
 
+/// The decoded constructor of a union/enum [`Value`]: which
+/// constructor was selected, and the typed payloads it carries.
+///
+/// Returned by [`Sim::decode_ctor`].  This is the public face of the
+/// type-layout machinery: callers never see `TypeLayoutIndex`,
+/// `TypeId`, or raw bit patterns.
+#[derive(Clone, Debug)]
+pub struct Ctor {
+    /// The selected constructor's name, e.g. `"Valid"`.
+    pub name: String,
+    /// The constructor's data, one [`Value`] per type parameter, in
+    /// declaration order.  Each payload carries its parameter's type,
+    /// so it can be compared with `==` or, if it is itself a
+    /// union/enum, decoded further with [`Sim::decode_ctor`].  Empty
+    /// for constructors with no data (e.g. `Invalid`).
+    pub payloads: Vec<Value>,
+}
+
 #[derive(Debug)]
 pub enum SimError {}
 
@@ -191,11 +209,28 @@ impl Sim {
         &self.circuit.type_layout_index
     }
 
-    /// The precomputed type bit-layouts, for decoding typed values
-    /// outside the engine (e.g. the `virt::Virt` board decoding the
-    /// `exit` port's `Valid[Word[8]]`).
-    pub(crate) fn type_layouts(&self) -> &TypeLayoutIndex {
-        &self.circuit.type_layout_index
+    /// Decode a value whose type is a union or enum into the
+    /// constructor it currently is.  Returns `None` when the value's
+    /// type is not a union/enum (e.g. a plain `Word` or `Bit` — there
+    /// is no "variant" to decode), or the bit pattern is not a valid
+    /// inhabitant of the type (unknown tag, non-zero padding above the
+    /// payload; mid-simulation this can happen transiently, before the
+    /// logic has settled).
+    pub fn decode_ctor(&self, value: &Value) -> Option<Ctor> {
+        let (slot, payload_bits) = self
+            .circuit
+            .type_layout_index
+            .decode_ctor(value.typ_id(), &value.bitpat())?;
+        let payloads = slot
+            .param_types
+            .iter()
+            .zip(payload_bits)
+            .map(|(typ, bits)| Value::new(self.circuit.type_layout_index.type_id(typ), bits))
+            .collect();
+        let name = String::from_utf8(slot.name.to_vec()).unwrap_or_else(|_| {
+            panic!("constructor name was not valid UTF-8: {:?}", slot.name)
+        });
+        Some(Ctor { name, payloads })
     }
 
     /// Stream a VCD trace of every dumpable signal to `writer`.  The header

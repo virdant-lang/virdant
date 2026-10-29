@@ -1733,7 +1733,6 @@ dependencies = [
  "lalrpop",
  "lalrpop-util",
  "logos",
- "nix",
  "paste",
  "serde",
 ]

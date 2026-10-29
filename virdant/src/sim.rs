@@ -1,5 +1,5 @@
 mod bits;
-mod builtins;
+pub mod builtins;
 mod circuit;
 mod eval;
 mod expr;
@@ -10,12 +10,7 @@ mod sim;
 mod state;
 mod vcd;
 
-/// The `virt::Virt` board, built on top of this engine.
-/// Requires the `virt` feature for the `nix` dependency.
-#[cfg(feature = "virt")]
-pub mod virt;
-
-pub use sim::{Clock, InitStrategy, Sim};
+pub use sim::{Clock, Ctor, InitStrategy, Sim};
 pub use bits::BitPat;
 pub use eval::Value;
 pub use layout::TypeId;

@@ -18,7 +18,7 @@ virdant/target/lib:
 	cp -r ./lib/* target/lib/
 
 build-wasm:
-	cargo build -p virdant --lib --target wasm32-unknown-unknown --no-default-features --features "wasm"
+	cargo build -p virdant --lib --target wasm32-unknown-unknown --features "wasm"
 
 test_runner: virdant/target/lib build
 	$(RUNNER)
