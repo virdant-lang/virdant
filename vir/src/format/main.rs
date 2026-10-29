@@ -7,6 +7,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[path = "../help_json.rs"]
+mod help_json;
+
 // ---------------------------------------------------------------------------
 // Line classification
 // ---------------------------------------------------------------------------
@@ -582,6 +585,24 @@ fn collect_vir_files(dir: &Path) -> Vec<PathBuf> {
 }
 
 fn main() {
+    help_json::maybe_dump(|| {
+        clap::Command::new("vir-format")
+            .about("Format Virdant source files")
+            .long_about(
+                "Formats `.vir` files with 4-space indentation, preserving vertical \
+                 alignment of consecutive driver operators (`:=`, `<=`, `:=:`) and \
+                 type-annotation colons (`:`) within the same block.\
+                 \n\nWith no files, formats every `src/*.vir` in the project.",
+            )
+            .arg(
+                clap::Arg::new("files")
+                    .value_name("FILES")
+                    .help("Virdant source files to format (default: every src/*.vir in the project)")
+                    .num_args(0..)
+                    .value_hint(clap::ValueHint::FilePath),
+            )
+    });
+
     let args: Vec<String> = std::env::args().collect();
 
     // Determine files to format.

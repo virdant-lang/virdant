@@ -21,7 +21,7 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 
 mod discovery;
 mod exec;
@@ -30,6 +30,9 @@ mod output;
 
 use discovery::Test;
 use exec::{Env, Status};
+
+#[path = "../help_json.rs"]
+mod help_json;
 
 /// Worker → main thread events: a test was claimed (about to run) or
 /// finished.
@@ -74,6 +77,10 @@ struct Args {
     #[arg(long, alias = "ff")]
     fail_fast: bool,
 
+    /// Dump the arg-parse data as JSON and exit (hidden)
+    #[arg(long, hide = true)]
+    help_json: bool,
+
     /// Tests to run (stable names, e.g. tests/errors/typing/word_literals)
     tests: Vec<String>,
 }
@@ -88,6 +95,10 @@ fn main() -> ExitCode {
         .map(|arg| if arg == "-ff" { "--fail-fast".to_string() } else { arg })
         .collect();
     let args = Args::parse_from(raw.clone());
+
+    if args.help_json {
+        help_json::dump(&Args::command());
+    }
 
     if args.filecheck {
         let rest: Vec<String> = raw.iter().skip(1).filter(|a| a.as_str() != "--fail-fast").cloned().collect();

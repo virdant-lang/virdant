@@ -5,7 +5,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::sync::Arc;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 
 use bstr::{BString, ByteSlice as _};
 use indexmap::{IndexMap, IndexSet};
@@ -22,6 +22,9 @@ use virdant::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
 use virdant::types::{ExprRoot, Type};
 use virdant::common::{ComponentKind, PortDir};
 use virdant::db::{Builder, Db};
+
+#[path = "../help_json.rs"]
+mod help_json;
 use virdant::package::{PackageId, PackageTable};
 use virdant::common::source::{LineCol, Source, SourceOffset, Span};
 use virdant::syntax::ast::{AstNode, AstNodeId, item_children, match_arm_children};
@@ -1302,6 +1305,10 @@ fn dump_hover(workspace_dir: &std::path::Path, package_name: BString, linecol: L
 #[derive(Parser, Debug)]
 #[command(name = "vir-lsp", author, version, about)]
 struct Cli {
+    /// Dump the arg-parse data as JSON and exit (hidden)
+    #[arg(long, hide = true)]
+    help_json: bool,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -1352,6 +1359,10 @@ fn parse_hover_location(location: &str) -> std::result::Result<(std::path::PathB
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
+
+    if cli.help_json {
+        help_json::dump(&Cli::command());
+    }
 
     match cli.command {
         None => {
