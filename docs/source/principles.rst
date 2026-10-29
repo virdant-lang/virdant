@@ -19,34 +19,48 @@ It has a clean syntax and excellent developer tooling.
 
 Strongly Typed
 --------------
-Mistakes in hardware can be expensive.
-While Virdant is primarily aimed at hobbyist FPGA designs,
-it still detracts from the experience whenever a preventable error occurs.
+Mistakes in hardware can be expensive, hard to debug, and frustrating.
+Virdant tells you when you're about to make mistakes
+before you actually make them.
 
-Virdant's strong type system is designed so that if your circuit synthesizes, it works.
+Strong typing allows you to think at a higher level than bits.
+If those 7 bits represent an opcode, let's create a type called `Opcode`.
 
-Under normal operation, the expression sublanguage has many nice properties:
-
-* Operations must always be totally defined.
-* All conditional expressions are required to have full case coverage.
-* You are prohibited from observing the unset bits in a value.
-* Virdant's equivalent of Verilog's `X` values are handled in a principled way.
-
-* No components may be left uninitialized.
-* All nets must have a single driver.
-
-
-Digital
--------
-Virdant is oriented towards digital circuits.
-It does not support latches or tristate buffers.
-It has no support for analog hardware.
+If a cache can receive one of several commands,
+let's use make a type called `Command` which can be
+`@Get(addr)` `Put(addr, data)` `@Hint(addr)` `Ack()`.
 
 
 Synthesizable
 -------------
 Virdant has a clear delineation in terms of what is synthesizable and what is not.
 The translation to actual hardware is always reasonable.
+There are no constructs for verifying or generating hardware in the core language.
+
+Both of these things are important, but there are many ways to do them.
+Instead of choosing the one that is right for me,
+you get to choose the one that is right for you.
+
+Virdant is simple enough that testbenches and generators
+can be built on top of the langauge instead of into it.
+
+
+Easy
+----
+Virdant is easy to get started with,
+even if you've never touched a piece of hardware
+and even if you don't know what an :tip:`FPGA (Field-Programmable Gate Array)` is.
+
+All you need is `vir` on your command line,
+and you can get started with the builtin simulator.
+From here, you can get all the way up to a working RISC-V core!
+
+With the Virdant language server, you can learn from your mistakes as you type them.
+Virdant's incredibly helpful error messages will never leave you scratching your head.
+
+Once you're ready to graduate,
+Virdant works seemlessly with any synthesis tool,
+including the source tools, such as Yosys, Icarus Verilog, and Verilator.
 
 
 Fun
