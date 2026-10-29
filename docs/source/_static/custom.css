@@ -737,6 +737,39 @@ footer .virdant-footer-meta {
   background: #161616;
 }
 
+/* Dark mode for sidebar toctree-expand buttons (theme.css hardcodes dark
+   grays that are invisible on the dark sidebar) */
+[data-theme="dark"] .wy-menu-vertical li button.toctree-expand {
+  color: #b8b8b8;
+}
+
+[data-theme="dark"] .wy-menu-vertical li.current > a button.toctree-expand,
+[data-theme="dark"] .wy-menu-vertical li.on a button.toctree-expand {
+  color: #b8b8b8;
+}
+
+[data-theme="dark"] .wy-menu-vertical li.toctree-l2 button.toctree-expand {
+  color: #999;
+}
+
+[data-theme="dark"] .wy-menu-vertical li.toctree-l3 button.toctree-expand {
+  color: #888;
+}
+
+[data-theme="dark"] .wy-menu-vertical a:hover button.toctree-expand,
+[data-theme="dark"] .wy-menu-vertical li.current > a:hover button.toctree-expand,
+[data-theme="dark"] .wy-menu-vertical li.on a:hover button.toctree-expand {
+  color: #d9d9d9;
+}
+
+/* Dark mode for bullet points in the content area (theme.css hardcodes
+   #404040 text, which is invisible on the dark page background) */
+[data-theme="dark"] .rst-content ul li,
+[data-theme="dark"] .rst-content ol li,
+[data-theme="dark"] .rst-content .toctree-wrapper ul li {
+  color: var(--text-main);
+}
+
 [data-theme="dark"] .wy-menu-vertical li.toctree-l2.current > a {
   border-bottom-color: #444;
   border-top-color: #444;
@@ -748,6 +781,20 @@ footer .virdant-footer-meta {
 
 [data-theme="dark"] .rst-content pre.literal-block {
   border-color: var(--border-code);
+}
+
+/* Dark mode for bare <pre> blocks (grammar production lists), which unlike
+   highlighted code blocks have no wrapper div for the code-block styling */
+[data-theme="dark"] .rst-content section > pre {
+  background-color: var(--bg-code);
+  border: 1px solid var(--border-code);
+  border-radius: 6px;
+  color: var(--text-main);
+  margin: 1px 0 24px;
+}
+
+[data-theme="dark"] .rst-content section > pre strong {
+  color: var(--text-main);
 }
 
 /* Dark mode for buttons */
