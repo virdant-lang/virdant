@@ -9,13 +9,13 @@ use bstr::{BStr, BString, ByteSlice};
 use serde::Serialize;
 use tera::Tera;
 
-use crate::analysis::symbols::{SymbolKind, SymbolTable};
-use crate::common::PortDir;
-use crate::db::Db;
-use crate::package::{PackageId, PackageTable};
-use crate::syntax::ast::AstNode;
-use crate::syntax::parsing::Parsing;
-use crate::syntax::payload::AstNodePayload;
+use virdant::analysis::symbols::{SymbolKind, SymbolTable};
+use virdant::common::PortDir;
+use virdant::db::Db;
+use virdant::package::{PackageId, PackageTable};
+use virdant::syntax::ast::AstNode;
+use virdant::syntax::parsing::Parsing;
+use virdant::syntax::payload::AstNodePayload;
 
 // ---------------------------------------------------------------------------
 // Template context structs (Serializable)
@@ -613,8 +613,8 @@ fn render_moddef_page_with_sidebar(
     for child in node.children() {
         if let AstNodePayload::Socket(socket) = child.payload() {
             let role_str = match socket.role {
-                crate::common::SocketRole::Client => "client",
-                crate::common::SocketRole::Server => "server",
+                virdant::common::SocketRole::Client => "client",
+                virdant::common::SocketRole::Server => "server",
             };
             let ofness_node = child.child(1);
             let ofness_str = ofness_node.spelling().to_str_lossy().into_owned();

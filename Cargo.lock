@@ -1715,6 +1715,7 @@ dependencies = [
  "nix",
  "serde",
  "serde_json",
+ "tera",
  "tokio",
  "toml",
  "tower-lsp",
@@ -1735,7 +1736,6 @@ dependencies = [
  "nix",
  "paste",
  "serde",
- "tera",
 ]
 
 [[package]]

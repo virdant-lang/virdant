@@ -22,7 +22,6 @@ logos = "0.15.1"
 nix = { version = "0.31.2", features = ["term", "signal", "fs"], optional = true }
 paste = "1.0.15"
 serde = { version = "1", features = ["derive"] }
-tera = "1"
 
 [build-dependencies]
 lalrpop = { version = "0.23.1", git = "https://github.com/virdant-lang/lalrpop" }

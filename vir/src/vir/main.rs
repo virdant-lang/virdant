@@ -5,6 +5,8 @@
 use clap::CommandFactory;
 use clap::{Parser, Subcommand};
 
+mod docs;
+
 use bstr::{BStr, BString, ByteSlice};
 use colored::Colorize;
 use nix::unistd::execvp;
@@ -599,7 +601,7 @@ fn doc(args: &Args, open: bool) {
     }
 
     let out_dir = cwd.join("build").join("doc");
-    match virdant::docs::generate_docs(&db, &out_dir) {
+    match docs::generate_docs(&db, &out_dir) {
         Ok(()) => {
             println!("Wrote docs to {}", out_dir.to_string_lossy());
             if open {
