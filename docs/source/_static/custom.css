@@ -661,6 +661,19 @@ div.highlight:hover .copy-button {
   color: var(--link-color);
 }
 
+/* Footer layout: magnificat on the left, copyright/rev on the right */
+footer .virdant-footer-flex {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 2em;
+}
+
+footer .virdant-footer-meta {
+  text-align: right;
+  white-space: nowrap;
+}
+
 /* Dark mode for the horizontal rule */
 [data-theme="dark"] hr {
   border-color: var(--border-light);

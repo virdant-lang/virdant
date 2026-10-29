@@ -1,26 +1,29 @@
 {% extends "!footer.html" %}
 
 {% block contentinfo %}
-    <p>
-    {%- if show_copyright %}
-      {%- if hasdoc('copyright') %}
-        {%- trans path=pathto('copyright'), copyright=copyright|e %}&#169; <a href="{{ path }}">Copyright</a> {{ copyright }}.{% endtrans %}
-      {%- else %}
-        {%- trans copyright=copyright|e %}&#169; Copyright {{ copyright }}.{% endtrans %}
-      {%- endif %}
-    {%- endif %}
+    <div class="virdant-footer-flex">
+      <div class="virdant-footer-magnificat">
+        <em>My soul doth magnify the Lord</em><br>
+        <em>And my spirit hath rejoiced in God my Saviour</em>
+      </div>
+      <div class="virdant-footer-meta">
+        {%- if show_copyright %}
+          {%- if hasdoc('copyright') %}
+            {%- trans path=pathto('copyright'), copyright=copyright|e %}&#169; <a href="{{ path }}">Copyright</a> {{ copyright }}.{% endtrans %}
+          {%- else %}
+            {%- trans copyright=copyright|e %}&#169; Copyright {{ copyright }}.{% endtrans %}
+          {%- endif %}
+        {%- endif %}
 
-    {%- if virdant_commit %}
-      <span class="commit" style="float: right"><code>rev {{ virdant_commit|e }}</code></span>
-    {%- endif %}
+        {%- if virdant_commit %}
+          <br><span class="commit"><code>{{ virdant_commit|e }}</code></span>
+        {%- endif %}
 
-    {%- if last_updated %}
-      <span class="lastupdated">
-        {%- trans last_updated=last_updated|e %}Last updated on {{ last_updated }}.{% endtrans %}
-      </span>
-    {%- endif -%}
-      <br>
-      <em>My soul doth magnify the Lord</em><br>
-      <em>And my spirit hath rejoiced in God my Saviour</em>
-    </p>
+        {%- if last_updated %}
+          <br><span class="lastupdated">
+            {%- trans last_updated=last_updated|e %}Last updated on {{ last_updated }}.{% endtrans %}
+          </span>
+        {%- endif -%}
+      </div>
+    </div>
 {% endblock %}
