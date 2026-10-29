@@ -17,8 +17,8 @@ broken example fails `make test`.
 
 Notes:
 
-- `blink/` contains two packages (`blink` and `strobe`) because the
-  blink tutorial walks through a multi-package design; `testbench.sv`
+- `hello/` contains two packages (`hello` and `strobe`) because the
+  hello tutorial walks through a multi-package design; `testbench.sv`
   there is the simulator testbench shown in the getting-started guide.
 - `packages/` demonstrates imports across packages (`top` imports
   `buffer`).

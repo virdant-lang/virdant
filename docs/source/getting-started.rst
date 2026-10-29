@@ -13,68 +13,68 @@ You can install it by cloning the repository and running `make install`:
   $ cd virdant
   $ make install
 
-This will build Virdant from source (in release mode) and then copy the binaries to `$HOME/.local/virdant/bin`.
-Make sure that this directory is on your `$PATH`.
-
-.. note::
-
-   Unoptimized (debug) builds of the simulator are about 10x slower than release builds.
-   This repository opts its own dev builds into optimization (see `profile.dev.package.virdant` in the root `Cargo.toml`), so plain `cargo build`/`cargo run` is fine for running simulations here.
-   If you use `virdant` as a dependency in your own crate, add `[profile.dev.package.virdant] opt-level = 2` to your manifest (or build with `--release`) to get full simulation speed.
+This will build Virdant from source (in release mode) and then copy everything to `$HOME/.local/virdant`.
 
 
-Blinky
-------
-Tradition dictates that the first program that is written in any programming language should be Hello, World!
-In hardware projects, the equivalent of Hello, World! is to get an LED to blink on and off.
+.. warning::
 
+    You will need to add `$HOME/.local/virdant/bin` to your `$PATH`!
+    If you forget, you'll see `vir: command not found`.
+
+
+Running Hello World
+-------------------
 Create a new Virdant project by running:
 
 .. code-block:: console
   :caption: console
 
-  $ vir new blink
-  $ cd blink
+  $ vir new hello
+  $ cd hello
 
-This will create a new project in a subdirectory named `blink`.
-If we look at the design in `src/blink.vir` of the `blink` example project, we will see our blinking LED design:
+Next, we can run our project in the Virdant simulator.
 
-.. literalinclude:: /examples/blink/src/blink.vir
-   :caption: src/blink.vir
+.. code-block:: console
+  :caption: console
+
+  $ vir run
+  Hello, world!
+
+Oh! Why hello, Virdant!
+
+
+What Virdant Looks Like
+-----------------------
+Next, let's just glance at the source code.
+Open the file `src/top.vir` in the `hello` project you just created.
+You will see our hello world design.
+
+.. note::
+
+    In software, you may be used to talking about your "program".
+    But in hardware, we call them "designs".
+
+    And rather than a function called `main`, as you might be used to in programming,
+    the entry point to a hardware design is traditionally a module called `Top`
+
+We won't worry about how any of this works for now.
+The tutorial will teach you from scratch.
+Just get a feel for what Virdant looks like:
+
+.. literalinclude:: /examples/hello/src/top.vir
+   :caption: src/top.vir
    :language: virdant
+   :class: small-code
 
 
 Compiling to Verilog
 --------------------
-We can compile this design to Verilog with the following:
+You can compile Virdant to Verilog with the following:
 
 .. code-block:: console
   :caption: console
 
   $ vir build
 
-The result will be a new file called `build/top.sv`.
-
-To simulate the design, you need a Verilog testbench.
-Here is one which will run the design for 100 cycles:
-
-.. literalinclude:: /examples/blink/testbench.sv
-   :caption: testbench.sv
-   :language: verilog
-
-If you have `Icarus Verilog`_ installed, you can compile a simulator and run it with these commands:
-
-.. _Icarus Verilog: https://steveicarus.github.io/iverilog/
-
-.. code-block:: console
-  :caption: console
-
-  $ iverilog testbench.sv build/top.sv -o build/blink
-  $ ./build/blink
-  VCD info: dumpfile build/out.vcd opened for output.
-
-Finally, using a waveform viewer such as `GTK Wave`_, you can view the waveform:
-
-.. _GTK Wave: https://github.com/gtkwave/gtkwave
-
-.. image:: /_static/waveform.png
+We won't be using this feature for now.
+But I'll mention it for those who are experienced with hardware design.

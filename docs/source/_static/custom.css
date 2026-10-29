@@ -115,6 +115,25 @@ code, pre {
   padding: 1px 5px !important;
 }
 
+/* Used for when we want to present a lot of code at a smaller size, to focus on form, not content. */
+.small-code {
+  font-size: 0.9em;
+}
+
+/* The base code/pre rule sets an explicit font-size with !important, so the
+   inherited size from .small-code is overridden; re-apply it directly.
+   We use px instead of em so the size doesn't compound with the parent's
+   0.9em. */
+.small-code pre {
+  font-size: 14px !important;
+}
+
+@media (max-width: 900px) {
+  .small-code pre {
+    font-size: 11.5px !important;
+  }
+}
+
 /* Inline Virdant code with syntax highlighting */
 .vir-inline {
   background: var(--bg-code) !important;
@@ -158,6 +177,13 @@ code, pre {
 .literal-block-wrapper div[class^=highlight] {
   margin-bottom: 0 !important;
   border: 0 solid var(--border-code) !important;
+}
+
+/* For blocks with :class: small-code, Sphinx puts the class first in the class
+   attribute, so the ^=highlight selector above doesn't match; without this, the
+   .highlight-virdant 24px bottom margin shows up as a gap inside the wrapper. */
+.literal-block-wrapper div.small-code {
+  margin-bottom: 0 !important;
 }
 
 .highlight-virdant {

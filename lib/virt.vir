@@ -84,3 +84,195 @@ pub platform VirtVga {
     //> simulator recovers the polarity either way (from duty cycle).
     outgoing vga_vs : Bit default false
 }
+
+//> State machine of `UartSender`.
+//>
+//> `Idle` - the line idles high, waiting for a byte to send.
+//> `Start(pulse)` - sending the start bit, `pulse` cycles to go.
+//> `Data(bit, pulse)` - sending data bit `bit` (LSB first), `pulse`
+//> cycles to go.
+//> `Stop(pulse)` - sending the stop bit, `pulse` cycles to go.
+union type UartState {
+    Idle()
+    Start(pulse : Word[4])
+    Data(bit : Word[3], pulse : Word[4])
+    Stop(pulse : Word[4])
+}
+
+//> Hello World design module.
+//>
+//> Streams the message `Hello, world!\r\n` out of the UART, one byte
+//> per handshake with `sender`, then raises `exit` with code 0 once
+//> the last byte has been sent.
+pub mod Hello {
+    incoming clock : Clock
+
+    //> UART transmit data to the host (stdout).
+    outgoing tx : Bit {
+        it := sender.uart_tx
+    }
+
+    //> `@Valid(0)` once the whole message has been sent.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case char_index == 15 && sender.ready => @Valid(0)
+            else => @Invalid()
+        }
+    }
+
+    // Character lookup table holding the message.
+    mod char_rom of CharRom
+
+    // Serializes each message byte onto the `tx` line.
+    mod sender of UartSender
+
+    char_rom.index := char_index
+    sender.clock := clock
+    sender.data := char_rom.char
+    // Bytes are offered only after the boot quiet period (see below).
+    sender.data_valid := offer_byte
+
+    // Power-up quiet period.  The simulator trusts the first start bit
+    // only after the line has idled high for a while, so hold `tx`
+    // high for 256 cycles before sending anything.
+    reg boot : Word[8] on clock {
+        initial it <= 0
+        when {
+            case it != 255 {
+                it <= it + 1
+            }
+        }
+    }
+
+    wire boot_done : Bit {
+        it := boot == 255
+    }
+
+    // A byte is offered whenever we are out of the boot period and
+    // message bytes remain.
+    wire offer_byte : Bit {
+        it := boot_done && char_index < 15
+    }
+
+    // Index of the next message byte to send.  It advances every time
+    // `sender` accepts a byte (that is, on a `data_valid`/`ready`
+    // handshake) and stops at the end of the message.
+    reg char_index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case sender.ready && offer_byte {
+                it <= it + 1
+            }
+        }
+    }
+}
+
+//> Lookup table for the message `Hello, world!\r\n`.
+//>
+//> `index` selects one character of the message; `index` values past
+//> the end of the message never reach here, so the `else` arm is
+//> unreachable padding.
+mod CharRom {
+    incoming index : Word[4]
+    outgoing char : Word[8]
+
+    char := match index {
+        case 0  => 0x48 // 'H'
+        case 1  => 0x65 // 'e'
+        case 2  => 0x6c // 'l'
+        case 3  => 0x6c // 'l'
+        case 4  => 0x6f // 'o'
+        case 5  => 0x2c // ','
+        case 6  => 0x20 // ' '
+        case 7  => 0x77 // 'w'
+        case 8  => 0x6f // 'o'
+        case 9  => 0x72 // 'r'
+        case 10 => 0x6c // 'l'
+        case 11 => 0x64 // 'd'
+        case 12 => 0x21 // '!'
+        case 13 => 0x0d // CR
+        case 14 => 0x0a // LF
+        else    => 0x00
+    }
+}
+
+//> Byte-level UART transmitter: 8N1, LSB first.
+//>
+//> A byte is accepted (and latched) on a cycle when `data_valid` and
+//> `ready` are both high; `ready` is high only while idle.  The bit
+//> period is 9 clock cycles, which at the virtual board's 1 MHz clock
+//> is about 111 kbaud.  The `virt` simulator auto-bauds on the `tx`
+//> line, so the exact rate does not matter.
+mod UartSender {
+    incoming clock : Clock
+    incoming data : Word[8]
+    incoming data_valid : Bit
+
+    // A new byte is accepted only while idle.
+    outgoing ready : Bit {
+        it := accepting
+    }
+
+    // The line level for the current state: low start bit, eight data
+    // bits LSB first, high stop bit, and high while idle.
+    outgoing uart_tx : Bit {
+        it := tx_level
+    }
+
+    // Advance the state machine one bit period at a time.  Each state
+    // carries the number of cycles (`pulse`) remaining before the next
+    // transition; counting down from 8 to 0 gives the 9-cycle bit
+    // period.
+    reg state : UartState on clock {
+        initial it <= @Idle()
+        it <= match it : UartState {
+            case @Idle() when {
+                case data_valid => @Start(8)
+                else => @Idle()
+            }
+            case @Start(pulse) when {
+                case pulse == 0 => @Data(0, 8)
+                else => @Start(pulse - 1)
+            }
+            case @Data(bit, pulse) when {
+                case pulse > 0 => @Data(bit, pulse - 1)
+                case bit == 7 => @Stop(8)
+                else => @Data(bit + 1, 8)
+            }
+            case @Stop(pulse) when {
+                case pulse == 0 => @Idle()
+                else => @Stop(pulse - 1)
+            }
+        }
+    }
+
+    // A handshake happens on a cycle when `sender` is idle and a byte
+    // is being offered.
+    wire accepting : Bit {
+        it := match state {
+            case @Idle() => true
+            else => false
+        }
+    }
+
+    // Snapshot the byte on the accepting clock edge.  The line then
+    // reads from the snapshot, so `data` may change while sending.
+    reg latched_data : Word[8] on clock {
+        when {
+            case accepting && data_valid {
+                it <= data
+            }
+        }
+    }
+
+    // The line level for the current state: low start bit, eight data
+    // bits LSB first, high stop bit, and high while idle.
+    wire tx_level : Bit {
+        it := match state : UartState {
+            case @Idle() => true
+            case @Start(pulse) => false
+            case @Data(bit, pulse) => latched_data[dyn bit]
+            case @Stop(pulse) => true
+        }
+    }
+}
