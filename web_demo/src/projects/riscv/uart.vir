@@ -1,0 +1,297 @@
+import wishbone
+
+socket Uart {
+    cosi tx : Bit
+    soci rx : Bit
+}
+
+pub mod WbUart {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    server socket wb of wishbone::Wishbone {
+        it.err := it.cyc && it.stb && (!sel_valid || it.sel != 0b0001)
+        it.ack := it.cyc && it.stb && sel_valid
+
+        // ─── Read data mux ──────────────────────────────────────────────
+        // RBR : received byte in bits [7:0]
+        // LSR : bit 0 = DR (data ready), bit 5 = TEMT, bit 6 = THRE
+        it.dat_rd := match reg_sel {
+            case 0w2 => word(0w24, receiver.data)
+            case 1w2 => word(0w24, 0w1, sender.ready, sender.ready, 0w3, 0w1, rx_pending)
+            else     => dontcare
+        }
+    }
+
+    client socket uart of Uart
+
+    mod sender of UartSender {
+        it.clock := clock
+        it.reset := reset
+        uart.tx  := it.uart_tx
+
+        // ─── Transmitter control ────────────────────────────────────────
+        // Drive the byte and strobe from a THR write.
+        it.data       := wb.dat_wr[8..0]
+        it.data_valid := sel_thr && wb.cyc && wb.stb
+    }
+
+    mod receiver of UartReceiver {
+        it.clock   := clock
+        it.reset   := reset
+        it.uart_rx := uart.rx
+    }
+
+    // ─── Wishbone address decode ─────────────────────────────────────
+    // Byte addresses (word-aligned 32-bit access):
+    //   0x00 : RBR/THR   (read = receiver data, write = transmit data)
+    //   0x04 : LSR       (Line Status Register, read only)
+    wire reg_sel   : Word[2] { it := wb.adr[4..2] }
+    wire sel_rbr   : Bit { it     := reg_sel == 0w2 && !wb.we }
+    wire sel_thr   : Bit { it     := reg_sel == 0w2 &&  wb.we }
+    wire sel_lsr   : Bit { it     := reg_sel == 1w2 }
+    wire sel_valid : Bit { it     := sel_rbr || sel_thr || sel_lsr }
+
+    // ─── Receiver status (LSR bit 0: Data Ready) ───────────────────
+    // rx_pending latches high on receiver.data_valid and clears
+    // when software reads the RBR.
+    reg rx_pending : Bit on clock {
+        it <= when {
+            case reset => false
+            case receiver.data_valid => true
+            case sel_rbr && wb.cyc && wb.stb => false
+            else => it
+        }
+    }
+}
+
+//> UART transmitter (UartSender) and receiver (UartReceiver) at 115200 baud
+//> (divisor = 417 for a 48 MHz clock; 48e6 / 115200 ≈ 416.67).
+//>
+//> Both modules use compact encoded-state machines and shift registers
+//> to minimise hardware area.
+//>
+//> # UartSender
+//>
+//> - `clock`      : driving clock (12 MHz)
+//> - `reset`      : synchronous reset
+//> - `data`       : byte to transmit (sampled when `data_valid` is high)
+//> - `data_valid` : strobe that loads `data`
+//> - `ready`      : high when idle (accepting new data)
+//> - `uart_tx`    : serial output (idle high, start low, 8 data LSB-first, stop high)
+//>
+//> # UartReceiver
+//>
+//> - `clock`      : driving clock (12 MHz)
+//> - `reset`      : synchronous reset
+//> - `uart_rx`    : serial input
+//> - `data`       : received byte
+//> - `data_valid` : high for one cycle when `data` is valid
+
+//> FSM states shared by UartSender and UartReceiver.
+enum type UartFsmState {
+    Idle  = 0b00w2
+    Start = 0b01
+    Bit   = 0b10
+    Stop  = 0b11
+}
+
+mod ExampleTop {
+    incoming clock : Clock // 12MHz
+    incoming reset : Bit
+    outgoing fin   : Bit {
+        it            := cycle == 150000w32
+    }
+    mod sender of UartSender {
+        unused it.ready
+        unused it.uart_tx
+        it.clock      := clock
+        it.reset      := reset
+        it.data       := 65w8
+        it.data_valid := true
+    }
+    reg cycle      : Word[32] on clock {
+        it <= when {
+            case reset => 0w32
+            else => it + 1w32
+        }
+    }
+}
+
+mod UartSender {
+    incoming clock      : Clock // 12MHz
+    incoming reset      : Bit
+    incoming data       : Word[8]
+    incoming data_valid : Bit
+    outgoing ready      : Bit {
+        it := state == #Idle
+    }
+    outgoing uart_tx    : Bit {
+        it := uart_tx_reg
+    }
+
+    // Serial output register – directly drives uart_tx.
+    reg uart_tx_reg : Bit on clock {
+        it <= when {
+            case reset => true
+            case state == #Idle => true
+            case state == #Start => false
+            case state == #Bit => shift[0]
+            case state == #Stop => true
+            else => it
+        }
+    }
+
+    // Shift register – LSB (bit [0]) is the next bit to transmit.
+    // On entering Bit state the loaded byte is held here; at every bit
+    // boundary the register is shifted right by one, so [0] always
+    // contains the correct bit without any multiplexer cascade.
+    reg shift : Word[8] on clock {
+        it <= when {
+            case reset => 0w8
+            case state == #Idle && data_valid => data
+            case state == #Bit && pulse == 0w11 => word(0w1, it[8..1])
+            else => it
+        }
+    }
+
+    // --- FSM state ---
+    reg state : UartFsmState on clock {
+        it <= when {
+            case reset => #Idle
+            else match it {
+                case #Idle when {
+                    case data_valid => #Start
+                    else => it
+                }
+                case #Start when {
+                    case pulse == 0w11 => #Bit
+                    else => it
+                }
+                case #Bit when {
+                    case pulse == 0w11 && bitnum == 7w3 => #Stop
+                    else => it
+                }
+                case #Stop when {
+                    case pulse == 0w11 => #Idle
+                    else => it
+                }
+            }
+        }
+    }
+
+    // --- baud-rate pulse countdown (417 ≈ 48 MHz / 115200) ---
+    reg pulse : Word[11] on clock {
+        it <= when {
+            case reset => 0w11
+            case state == #Idle && data_valid => 417w11
+            case state == #Idle => 0w11
+            case state == #Start && it == 0w11 => 417w11
+            case state == #Start => it - 1
+            case state == #Bit && it == 0w11 => 417w11
+            case state == #Bit => it - 1
+            case state == #Stop && it == 0w11 => 0w11
+            case state == #Stop => it - 1
+            else => it
+        }
+    }
+
+    // --- bit counter ---
+    reg bitnum : Word[3] on clock {
+        it <= when {
+            case reset => 0w3
+            case state == #Start && pulse == 0w11 => 0w3
+            case state == #Bit && pulse == 0w11 && it < 7w3 => it + 1
+            else => it
+        }
+    }
+}
+
+mod UartReceiver {
+    incoming clock      : Clock // 12MHz
+    incoming reset      : Bit
+    incoming uart_rx    : Bit
+    outgoing data       : Word[8] {
+        it := shift
+    }
+    outgoing data_valid : Bit {
+        it := state == #Stop && pulse == 0w11
+    }
+
+    // --- FSM state ---
+    reg state : UartFsmState on clock {
+        it <= when {
+            case reset => #Idle
+            else match it {
+                case #Idle when {
+                    case uart_rx == false => #Start
+                    else => it
+                }
+                case #Start when {
+                    case pulse == 0w11 => #Bit
+                    else => it
+                }
+                case #Bit when {
+                    case pulse == 0w11 && bitnum == 7w3 => #Stop
+                    else => it
+                }
+                case #Stop when {
+                    case pulse == 0w11 => #Idle
+                    else => it
+                }
+            }
+        }
+    }
+
+    // --- baud-rate pulse countdown ---
+    // In the Idle state the start-bit detector uses a half-bit timeout (208
+    // ticks); afterwards the full bit period is 417 ticks.  The final bit
+    // uses a slightly shorter period (384 ticks) to avoid sampling past
+    // the stop-bit edge.
+    reg pulse : Word[11] on clock {
+        it <= when {
+            case reset => 0w11
+            else match state {
+                case #Idle when {
+                    case uart_rx == false => 208w11
+                    else => 0w11
+                }
+                case #Start when {
+                    case it == 0w11 => 417w11
+                    else => it - 1
+                }
+                case #Bit when {
+                    case it == 0w11 when {
+                        case bitnum < 7w3 => 417w11
+                        else => 384w11
+                    }
+                    else => it - 1
+                }
+                case #Stop when {
+                    case it == 0w11 => 0w11
+                    else => it - 1
+                }
+            }
+        }
+    }
+
+    // --- bit counter ---
+    reg bitnum : Word[3] on clock {
+        it <= when {
+            case reset => 0w3
+            case state == #Start && pulse == 0w11 => 0w3
+            case state == #Bit && pulse == 0w11 && it < 7w3 => it + 1
+            else => it
+        }
+    }
+
+    // Shift register – incoming bits are shifted in from the MSB side
+    // so that after 8 captures the byte is correctly assembled (LSB in [0]).
+    reg shift : Word[8] on clock {
+        it <= when {
+            case reset => 0w8
+            case state == #Bit && pulse == 0w11 => word(uart_rx, it[8..1])
+            else => it
+        }
+    }
+}

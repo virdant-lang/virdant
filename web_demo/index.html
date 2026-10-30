@@ -70,6 +70,21 @@
         <input id="set-localecho" type="checkbox" />
         <span>Local echo (for designs that don't echo input)</span>
       </label>
+      <div class="settings-field">
+        <span>SPI flash image</span>
+        <div id="set-flash">
+          <div id="set-flash-drop" title="Drag & drop a .bin file here, or click to browse">
+            <span id="set-flash-empty">Drop a .bin file here, or click to browse</span>
+            <span id="set-flash-info" hidden></span>
+          </div>
+          <button id="set-flash-unload" hidden title="Forget the loaded flash image">Unload</button>
+          <select id="set-flash-preset" title="Prepopulated flash binaries">
+            <option value="">Preset flash images…</option>
+          </select>
+          <input id="set-flash-file" type="file" accept=".bin,application/octet-stream" hidden />
+        </div>
+        <span class="flash-hint">Takes effect at the next Run (the flash is not reset mid-simulation).</span>
+      </div>
       <div id="settingsbuttons">
         <button id="set-reset">Reset files to default</button>
         <button id="set-close">Close</button>

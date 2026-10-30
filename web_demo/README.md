@@ -61,9 +61,14 @@ it), and `npm`.
   simulator is running and swaps back when it exits.
 - **Settings**: top module (default `top::Top`), disable real-time
   pacing (`--fps-no-cap`), and display the average clock frequency.
+  The settings also let you load a **SPI flash image**: drag & drop a
+  `.bin` file onto the drop zone (or click it to browse), unload it
+  again with the **Unload** button, or pick one of the prepopulated
+  binaries from `flash/` (served next to the built demo; see the
+  `Makefile`).  The loaded image applies at the next Run (the flash
+  device is created when the simulation starts, like the native
+  `--flash`); it is session-only and not persisted.
 
 ## Not yet supported
 
-- SPI flash image preload (the native `--flash`); the flash device
-  model itself is implemented, only the image upload is missing.
 - VCD traces.

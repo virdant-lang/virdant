@@ -1,0 +1,359 @@
+//! Control unit: instruction decode and pipeline control.
+//!
+//! This package defines the control-path enums (ALU source mux selects,
+//! register-file writeback source mux selects) and the main Control module
+//! that decodes opcode, funct3, funct7, and funct12 into all micro-architectural
+//! control signals.
+
+import opcode
+
+//> ALU A-operand source mux selector.
+pub enum type AluSourceA {
+    //> Operand A comes from register file port rs1.
+    Rs1 = 0b001w3
+    //> Operand A comes from the program counter.
+    Pc  = 0b010
+    //> Operand A comes from the CSR file read data.
+    Csr = 0b100
+}
+
+//> ALU B-operand source mux selector.
+pub enum type AluSourceB {
+    //> Operand B comes from register file port rs2.
+    Rs2 = 0b001w3
+    //> Operand B comes from the decoded immediate.
+    Imm = 0b010
+    //> Operand B comes from register file port rs1 (used for CSR ops).
+    Rs1 = 0b100
+}
+
+//> Register-file writeback data source mux selector.
+pub enum type RdSource {
+    //> Writeback comes from memory read data.
+    Mem       = 0b000001w6
+    //> Writeback comes from the decoded immediate.
+    Imm       = 0b000010w6
+    //> Writeback comes from PC + immediate (for AUIPC).
+    PcPlusImm = 0b000100w6
+    //> Writeback comes from PC + 4 (for JAL/JALR).
+    PcPlus4   = 0b001000w6
+    //> Writeback comes from the ALU result.
+    AluZ      = 0b010000w6
+    //> Writeback comes from CSR read data.
+    Csr       = 0b100000w6
+}
+
+//> Main control module.
+//>
+//> Decodes the instruction fields and generates all control signals for
+//> the datapath: ALU mux selects, register-file write enable, branch
+//> control, memory strobes, CSR access, and pipeline stall logic.
+pub mod Control {
+    //> Primary opcode from the instruction.
+    incoming opcode : opcode::Opcode
+    //> Function-3 field from the instruction.
+    incoming funct3 : Word[3]
+    //> Function-7 field from the instruction.
+    incoming funct7 : Word[7]
+    //> Function-12 field from the instruction (used for SYSTEM/CSR).
+    incoming funct12 : Word[12]
+    //> ALU zero/flag output (used for branch evaluation).
+    incoming alu_z : Word[32]
+
+    // Decode each opcode into control signals via individual match expressions.
+    // Each signal is driven by a match on `opcode`, with nested match/when
+    // for signals that depend on funct3, funct7, or system_op.
+    wire write_to_mem : Bit {
+        it := match opcode {
+            case #STORE => true
+            else => false
+        }
+    }
+
+    //> Memory write enable (high for STORE, low otherwise).
+    outgoing mem_write : Bit {
+        it := write_to_mem && stage != #Fetching
+    }
+    //> Register-file write enable.
+    outgoing rf_write : Bit {
+        it := match opcode {
+            case #BRANCH => false
+            case #FENCE => false
+            case #STORE => false
+            case #SYSTEM when {
+                case funct3 == 0b000 => false
+                else => true
+            }
+            else => true
+        }
+    }
+    //> CSR read/write enable.
+    outgoing csr_rw : Bit {
+        it := match opcode {
+            case #SYSTEM when {
+                case funct3 == 0b000 => false
+                else => true
+            }
+            else => false
+        }
+    }
+    //> Branch taken (for JAL, JALR, and conditional branches).
+    outgoing take_branch : Bit {
+        it := match opcode {
+            case #BRANCH => alu_z[0]
+            case #JALR => true
+            case #JAL => true
+            else => false
+        }
+    }
+    //> Selector for ALU A-operand mux.
+    outgoing alu_source_a : AluSourceA {
+        it := match opcode {
+            case #AUIPC => #Pc
+            case #SYSTEM when {
+                case funct3 == 0b000 => #Rs1
+                else => #Csr
+            }
+            else => #Rs1
+        }
+    }
+    //> Selector for ALU B-operand mux.
+    outgoing alu_source_b : AluSourceB {
+        it := match opcode {
+            case #BRANCH => #Rs2
+            case #JAL => #Rs2
+            case #JALR => #Imm
+            case #OP_IMM => #Imm
+            case #LUI => #Imm
+            case #AUIPC => #Imm
+            case #LOAD => #Imm
+            case #STORE => #Imm
+            case #FENCE => #Rs2
+            case #OP => #Rs2
+            case #SYSTEM when {
+                case funct3 == 0b000 => #Rs2
+                case funct3 == 0b001 || funct3 == 0b010 || funct3 == 0b011 => #Rs1
+                case funct3 == 0b101 || funct3 == 0b110 || funct3 == 0b111 => #Imm
+                else => #Rs2
+            }
+        }
+    }
+    //> Selector for register-file writeback mux.
+    outgoing rd_source : RdSource {
+        it := match opcode {
+            case #BRANCH => #AluZ
+            case #JALR => #PcPlus4
+            case #JAL => #PcPlus4
+            case #OP_IMM => #AluZ
+            case #OP => #AluZ
+            case #LUI => #Imm
+            case #AUIPC => #PcPlusImm
+            case #LOAD => #Mem
+            case #STORE => #AluZ
+            case #FENCE => #AluZ
+            case #SYSTEM when {
+                case funct3 == 0b000 => #AluZ
+                else => #Csr
+            }
+        }
+    }
+    //> ALU operation code (decoded from funct3/funct7).
+    outgoing alu_op : opcode::AluOpcode {
+        it := match opcode {
+            case #BRANCH match funct3 {
+                case 0 => #Eq
+                case 1 => #Neq
+                case 4 => #Lt
+                case 5 => #Gte
+                case 6 => #Ltu
+                case 7 => #Gteu
+                else   => #Add
+            }
+            case #JALR => #Zero
+            case #JAL => #Zero
+            case #OP_IMM => alu_op_from_funct37.op
+            case #OP => alu_op_from_funct37.op
+            case #LUI => #Zero
+            case #AUIPC => #Add
+            case #LOAD => #Add
+            case #STORE => #Add
+            case #FENCE => #Add
+            case #SYSTEM when {
+                case funct3 == 0b000 => #Add
+                case funct3 == 0b001 => #PassA
+                case funct3 == 0b010 => #Or
+                case funct3 == 0b011 => #Clear
+                case funct3 == 0b101 => #PassA
+                case funct3 == 0b110 => #Or
+                case funct3 == 0b111 => #Clear
+                else => #Add
+            }
+        }
+    }
+    //> CSR address (for CSR read/write instructions).
+    outgoing csr : Word[12] {
+        it := match opcode {
+            case #SYSTEM when {
+                case funct3 == 0b000 match system_op.op {
+                    case #Mret => 0x341w12
+                    case #Sret => 0w12
+                    else       => 0w12
+                }
+                else => funct12
+            }
+            else => dontcare
+        }
+    }
+
+    //> Decoder that maps funct3/funct7 to an ALU opcode for OP and OP-IMM.
+    mod alu_op_from_funct37 of AluOpFromFunct37 {
+        it.funct3 := funct3
+        it.funct7 := when {
+            case opcode == #OP => funct7
+            case opcode == #OP_IMM && (funct3 == 1 || funct3 == 5) => funct7
+            else => 0w7
+        }
+    }
+
+    //> Memory strobe: asserted when fetching, loading, or storing.
+    outgoing mem_strobe : Bit {
+        it := is_fetching || opcode == #LOAD || opcode == #STORE
+    }
+
+    mod system_op of SystemOpFromFunct12 {
+        it.funct12 := funct12
+    }
+
+    //> Byte-select mask for memory accesses.
+    //>
+    //> During fetch (Fetching stage), all 4 bytes are selected (0b1111).
+    //> During load/store, `funct3[1:0]` selects the width:
+    //>   00 → byte, 01 → halfword, 10 → word.
+    outgoing mem_sel : Word[4] {
+        it := when {
+            case stage == #Fetching => 0b1111w4
+            else match funct3[2..0] {
+                // SB: select byte lane based on address bits [1:0]
+                case 0b00 when {
+                    case alu_z[1] when {
+                        case alu_z[0] => 0b1000
+                        else => 0b0100
+                    }
+                    else when {
+                        case alu_z[0] => 0b0010
+                        else => 0b0001
+                    }
+                }
+                // SH: select halfword lane based on address bit [1]
+                case 0b01 when {
+                    case alu_z[1] => 0b1100
+                    else => 0b0011
+                }
+                case 0b10 => 0b1111  // SW : all 4 bytes
+                else      => dontcare
+            }
+        }
+    }
+
+    //> Unsigned load indicator: high for LBU, LHU; low for LB, LH, LW.
+    outgoing unsigned_load : Bit {
+        it := funct3[2]
+    }
+
+    //> Whether the current cycle is an instruction fetch.
+    wire is_fetching : Bit {
+        it := stage == #Fetching
+    }
+    //> Current CPU pipeline stage.
+    incoming stage : opcode::CpuStage
+
+    //> MRET instruction detected (used to gate CSR-based PC update).
+    outgoing is_mret : Bit {
+        it := opcode == #SYSTEM && funct3 == 0b000 && system_op.op == #Mret
+    }
+
+    //> Break instruction detected (ECALL or EBREAK).
+    //>
+    //> Only when funct3 == 0b000: CSR instructions (funct3 != 0) share the
+    //> SYSTEM opcode, and their funct12 must not be decoded as a system op
+    //> (dontcare would collide with #Ecall = 0x000 and halt the CPU).
+    outgoing is_break : Bit {
+        it := match opcode {
+            case #SYSTEM when {
+                case funct3 == 0b000 => system_op.op == #Ecall || system_op.op == #Ebreak
+                else => false
+            }
+            else => false
+        }
+    }
+
+    //> Memory acknowledge signal from the Wishbone bus.
+    incoming mem_ack : Bit
+
+    //> Pipeline stall signal.
+    //>
+    //> Stalls during Fetch if memory is not ready, or during Execute
+    //> if a LOAD is waiting on memory.
+    outgoing stall : Bit {
+        it := match stage {
+            case #Fetching => !mem_ack
+            case #Execute => opcode == #LOAD && !mem_ack
+            else => false
+        }
+    }
+}
+
+//> ALU opcode decoder from funct3 and funct7.
+//>
+//> Combines funct3[2:0] and funct7[5] to produce the correct
+//> `AluOpcode` for OP and OP-IMM instructions.  For OP-IMM,
+//> funct7 is forced to 0, disabling subtraction and right-arithmetic
+//> shifts.
+mod AluOpFromFunct37 {
+    //> Function-3 field (bits [14:12] of the instruction).
+    incoming funct3 : Word[3]
+    //> Function-7 field (bits [31:25] of the instruction).
+    //> For OP-IMM this is wired to 0.
+    incoming funct7 : Word[7]
+
+    //> Decoded ALU opcode.
+    outgoing op : opcode::AluOpcode {
+        it := match funct3 {
+            case 0 when {
+                case funct7[5] => #Sub
+                else => #Add
+            }
+            case 1 => #Sll
+            case 2 => #Lt
+            case 3 => #Ltu
+            case 4 => #Xor
+            case 5 when {
+                case funct7[5] => #Sra
+                else => #Srl
+            }
+            case 6 => #Or
+            case 7 => #And
+        }
+    }
+}
+
+//> System-opcode decoder from funct12.
+//>
+//> Maps the 12-bit funct12 field of a SYSTEM instruction to
+//> a `System` mnemonic (ECALL, EBREAK, WFI, MRET, SRET).
+mod SystemOpFromFunct12 {
+    //> Function-12 field (bits [31:20] of a SYSTEM instruction).
+    incoming funct12 : Word[12]
+
+    //> Decoded system operation.
+    outgoing op : opcode::System {
+        it := match funct12 {
+            case 0x000 => #Ecall
+            case 0x001 => #Ebreak
+            case 0x105 => #Wfi
+            case 0x302 => #Mret
+            case 0x102 => #Sret
+            else => dontcare
+        }
+    }
+}

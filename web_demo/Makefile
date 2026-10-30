@@ -19,6 +19,11 @@ wasm:
 
 build: node_modules wasm
 	npm run build
+	@# The preset flash binaries are served next to the built demo;
+	@# `flash/manifest.json` lists them for the settings dropdown.
+	mkdir -p dist/flash
+	cp flash/*.bin dist/flash/
+	node -e 'const fs=require("fs");const names=fs.readdirSync("flash").filter(f=>f.endsWith(".bin")).sort();fs.writeFileSync("dist/flash/manifest.json",JSON.stringify(names));'
 
 serve: build
 	npm run preview -- --port $(PORT) --strictPort

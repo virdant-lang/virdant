@@ -1,0 +1,73 @@
+//! Memory subsystem: Wishbone memory wrapper and external memory/CSR primitives.
+//!
+//! WbMem bridges a Wishbone bus to an internal Mem module.
+//! Mem is the addressable memory array (external).
+//! Csrs is the CSR register file (external).
+
+import wishbone
+
+//> Wishbone-attached memory.
+//>
+//> Wraps the external `Mem` primitive behind a Wishbone client socket.
+//> Converts Wishbone transactions into `Mem` read/write operations.
+pub mod WbMem {
+    //> Global clock.
+    incoming clock : Clock
+    //> Wishbone server socket accepting transactions from a master.
+    server socket wb of wishbone::Wishbone {
+        // Acknowledge every strobe immediately (single-cycle memory).
+        it.ack := it.stb
+        // No error responses.
+        it.err := false
+
+        unused it.sel
+    }
+
+    //> Internal memory array.
+    mod mem of Mem {
+        it.clock   := clock
+        it.addr    := wb.adr
+        it.data_in := wb.dat_wr
+        it.write   := wb.cyc && wb.stb && wb.we
+        wb.dat_rd  := it.data_out
+        it.read    := wb.cyc && wb.stb && !wb.we
+        it.sel     := wb.sel
+    }
+}
+
+//> External memory array.
+//>
+//> A flat 32-bit addressable memory. This is an `ext` module because it is
+//> implemented by an FPGA block RAM or similar primitive.
+ext mod Mem {
+    //> Global clock.
+    incoming clock : Clock
+    //> Read/write address.
+    incoming addr : Word[32]
+    //> Data read from `addr`.
+    outgoing data_out : Word[32]
+    //> Data to write into `addr` (used when `write` is high).
+    incoming data_in : Word[32]
+    //> Write enable.
+    incoming write : Bit
+    //> Read enable.
+    incoming read : Bit
+    incoming sel  : Word[4]
+}
+
+//> External CSR (control and status register) file.
+//>
+//> Provides read/write access to the machine-level CSRs.
+//> This is an `ext` module because the CSR storage is external.
+pub ext mod Csrs {
+    //> Global clock.
+    incoming clock : Clock
+    //> CSR address (12-bit, see `opcode::Csr`).
+    incoming addr : Word[12]
+    //> Data read from the selected CSR.
+    outgoing data_out : Word[32]
+    //> Data to write into the selected CSR.
+    incoming data_in : Word[32]
+    //> Write enable.
+    incoming write : Bit
+}

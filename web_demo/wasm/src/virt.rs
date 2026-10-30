@@ -200,11 +200,16 @@ pub struct SpiFlash {
 enum FlashState { Idle, Cmd, Addr, Data, Ignore }
 
 impl SpiFlash {
-    pub fn new() -> SpiFlash {
-        // No flash image preload yet (the native `--flash` option);
-        // the device starts erased, all `0xFF`.
+    /// Preload a flash image (like the native `--flash` option):
+    /// the bytes are copied to the start of the device, the remainder
+    /// stays erased (all `0xFF`).  Images larger than the device are
+    /// truncated, matching the native build.
+    pub fn with_image(image: &[u8]) -> SpiFlash {
+        let mut mem = vec![0xFF; FLASH_SIZE as usize];
+        let n = image.len().min(mem.len());
+        mem[..n].copy_from_slice(&image[..n]);
         SpiFlash {
-            mem: vec![0xFF; FLASH_SIZE as usize],
+            mem,
             state: FlashState::Idle,
             prev_cs: true,
             prev_ck: false,

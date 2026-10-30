@@ -1,0 +1,154 @@
+import wishbone
+
+//> SPI flash controller.
+//>
+//> This package provides an SPI master that reads from a SPI NOR flash
+//> using the standard 0x03 (READ) command, and a Spi socket definition.
+
+//> SPI flash controller FSM state.
+enum type State {
+    //> Idle: waiting for a read request.
+    Idle = 1w4
+    //> Send: transmitting the command and address to the flash.
+    Send = 2
+    //> Recv: receiving data from the flash.
+    Recv = 4
+    //> Done: data available for the requesting master.
+    Done = 8
+}
+
+//> SPI bus socket.
+//>
+//> Signals are from the master's perspective: cs (chip-select, active-low),
+//> clk (serial clock), do (master-out, slave-in), di (master-in, slave-out).
+socket Spi {
+    //> Chip-select (active-low).
+    cosi cs : Bit
+    //> Serial clock.
+    cosi clk : Bit
+    //> Master data output (MOSI).
+    cosi do : Bit
+    //> Slave data input (MISO).
+    soci di : Bit
+}
+
+pub mod WbSpiFlash {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    server socket wb of wishbone::Wishbone {
+        unused it.sel
+        unused it.dat_wr
+    }
+
+    client socket spi of Spi
+
+    mod spi_flash of SpiFlash {
+        it.spi :=: spi
+        it.clock := clock
+        it.reset := reset
+
+        // Word-aligned read address: the flash streams 4 bytes from the
+        // given address, and the master's lane select (wb.adr[1:0]) assumes
+        // the returned word starts at the word boundary — same convention
+        // as Mem (addr[15:2]).  Mask the low 2 bits accordingly.
+        it.addr := word(wb.adr[24..2], 0w2)
+        it.read_enable := wb.cyc && wb.stb
+
+        wb.dat_rd := it.read_data
+        wb.err := wb.cyc && wb.stb && wb.we
+        wb.ack := it.read_data_valid
+    }
+}
+
+
+//> SPI flash memory reader.
+//>
+//> Reads 32-bit words from an SPI NOR flash using the 0x03 command.
+//> Provides a simple memory-mapped read interface to an attached master.
+mod SpiFlash {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    client socket spi of Spi {
+        it.do := when {
+            case reset || state == #Idle || state == #Done => true
+            case state == #Send => buffer[31]
+            case state == #Recv => true
+            else => true
+        }
+        it.cs := when {
+            case reset || state == #Idle || state == #Done => true
+            case state == #Send || state == #Recv => false
+            else => true
+        }
+    }
+
+    incoming addr : Word[24]
+    incoming read_enable : Bit
+
+    outgoing read_data : Word[32] {
+        it := match state {
+            case #Done => word(buffer[8..0], buffer[16..8], buffer[24..16], buffer[32..24])
+            else => dontcare
+        }
+    }
+    outgoing read_data_valid : Bit {
+        it := state == #Done
+    }
+
+    reg state : State on clock {
+        it <= when {
+            case reset => #Idle
+            else match it {
+                case #Idle when {
+                    case read_enable => #Send
+                    else => it
+                }
+                case #Send when {
+                    case buffer_index == 31w5 && !half_clock => #Recv
+                    else => it
+                }
+                case #Recv when {
+                    case buffer_index == 31w5 && !half_clock => #Done
+                    else => it
+                }
+                case #Done => #Idle
+            }
+        }
+    }
+
+    reg buffer : Word[32] on clock {
+        it <= when {
+            case read_enable && state == #Idle => word(0x03w8, addr[24..0])
+            case !half_clock && state == #Send => word(it[31..0], 0w1)
+            case !half_clock && state == #Recv => word(it[31..0], spi.di)
+            case !half_clock => 0
+            else => it
+        }
+    }
+
+    reg buffer_index : Word[5] on clock {
+        it <= when {
+            case !half_clock && state == #Idle => 0
+            case !half_clock && state == #Send && it != 31w5 => it + 1
+            case !half_clock && state == #Send => 0
+            case !half_clock && state == #Recv && it != 31w5 => it + 1
+            case !half_clock && state == #Recv => 0
+            else => it
+        }
+    }
+
+    reg half_clock : Bit on clock {
+        it <= when {
+            case reset => false
+            case state == #Idle => true
+            else => !it
+        }
+    }
+
+    reg spi_clk_reg : Bit on clock {
+        spi.clk := it
+        it <= !it
+    }
+}

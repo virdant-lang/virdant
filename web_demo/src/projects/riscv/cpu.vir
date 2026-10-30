@@ -1,0 +1,221 @@
+//! This is the CPU core
+
+import rf
+import alu
+import control
+import idecode
+import wishbone
+
+//> A RISC-V CPU core
+//>
+//> 3-stage, non-pipelined RV32I processor
+pub mod Cpu {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    mod control of control::Control {
+        it.stage := stage
+    }
+
+    //> Wishbone bus client socket for instruction fetch and data access.
+    client socket mem of wishbone::Wishbone {
+        unused it.err
+
+        it.adr    := match stage {
+            case #Fetching => pc
+            case #Execute  => alu.z
+            else           => dontcare
+        }
+        it.sel    := control.mem_sel
+        it.dat_wr := match idecode.funct3[2..0] {
+            case 0b00 => word(rf.rs2_out[8..0], rf.rs2_out[8..0], rf.rs2_out[8..0], rf.rs2_out[8..0])
+            case 0b01 => word(rf.rs2_out[16..0], rf.rs2_out[16..0])
+            case 0b10 => rf.rs2_out
+            else      => dontcare
+        }
+        it.we     := control.mem_write
+        it.stb    := control.mem_strobe
+        it.cyc    := control.mem_strobe
+
+        control.mem_ack := it.ack
+    }
+
+    //> Program counter register.
+    //>
+    //> Reset to 0x20000000: execute-in-place from the SPI flash (the
+    //> virt platform maps flash offset 0 there).  Updated in the
+    //> Writeback stage: sequential increments by 4, or target address
+    //> for branches, JAL, JALR, MRET.
+    reg pc : Word[32] on clock {
+        it <= when {
+            case reset => 0x20000000w32
+            case stage == #Writeback when {
+                case idecode.opcode == #JALR => rf.rs1_out + idecode.imm
+                case control.take_branch => it + idecode.imm
+                case idecode.opcode == #JAL => it + idecode.imm
+                case control.is_mret => csrs.data_out
+                else => it + 4
+            }
+            else => it
+        }
+    }
+
+    //> Instruction word register. Fetched from memory in the Fetch stage.
+    reg instr : Word[32] on clock {
+        it <= when {
+            case !control.stall && stage == #Fetching => mem.dat_rd
+            else => it
+        }
+    }
+
+    //> Memory read-data buffer. Captured from the Wishbone bus in the Execute stage.
+    reg mem_buffer : Word[32] on clock {
+        it <= when {
+            case !control.stall && stage == #Execute => mem.dat_rd
+            else => it
+        }
+    }
+
+    //> Pipeline stage state machine.
+    //>
+    //> Transitions: Reset -> Fetching -> Execute -> Writeback -> (Breaked | Fetching).
+    //> Stalls when `control.stall` is asserted.
+    //>
+    //> Note: mem.adr is now driven combinatorially in the socket declaration,
+    //> NOT inside this block, to avoid a deadlock where stall gates the
+    //> address, which prevents ack, which keeps stall asserted.
+    reg stage : opcode::CpuStage on clock {
+        when {
+            case reset {
+                it <= #Reset
+            }
+            case !control.stall {
+                match it {
+                    case #Reset {
+                        it <= #Fetching
+                    }
+                    case #Fetching {
+                        it <= #Execute
+                    }
+                    case #Execute {
+                        it <= #Writeback
+                    }
+                    case #Writeback when {
+                        case control.is_break {
+                            it <= #Breaked
+                        }
+                        else {
+                            it <= #Fetching
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    //> Instruction decoder sub-module.
+    mod idecode of idecode::IDecode {
+        unused it.illegal_opcode
+
+        it.instr := instr
+
+        control.funct3  := it.funct3
+        control.funct7  := it.funct7
+        control.funct12 := it.funct12
+        control.opcode  := it.opcode
+    }
+
+    //> Register file sub-module.
+    mod rf of rf::Rf {
+        it.clock := clock
+        it.rd    := idecode.rd
+        it.rs1   := idecode.rs1
+        it.rs2   := when {
+            case stage == #Breaked => 10w5 // a0, the return code
+            else => idecode.rs2
+        }
+        it.write := control.rf_write && stage == #Writeback
+
+        it.rd_in := match control.rd_source {
+            case #Imm       => idecode.imm
+            case #PcPlusImm => pc + idecode.imm
+            case #PcPlus4   => pc + 4
+            case #Mem       => mem_buffer_shifted
+            case #AluZ      => alu.z
+            case #Csr       => csrs.data_out
+        }
+    }
+
+    //> Memory read-data alignment and sign/zero-extension.
+    //>
+    //> Selects the correct byte/halfword/word from `mem_buffer` based on
+    //> the load address alignment (`alu.z[1:0]`) and applies signed or
+    //> unsigned extension according to `funct3[2]`.
+    wire mem_buffer_shifted : Word[32] {
+        it := match idecode.funct3[2..0] {
+            case 0b00 when {
+                case control.unsigned_load => zext((match alu.z[2..0] {
+                    case 0 => mem_buffer[ 8.. 0]
+                    case 1 => mem_buffer[16.. 8]
+                    case 2 => mem_buffer[24..16]
+                    case 3 => mem_buffer[32..24]
+                }) : Word[8])
+                else => sext((match alu.z[2..0] {
+                    case 0 => mem_buffer[ 8.. 0]
+                    case 1 => mem_buffer[16.. 8]
+                    case 2 => mem_buffer[24..16]
+                    case 3 => mem_buffer[32..24]
+                }) : Word[8])
+            }
+            case 0b01 when {
+                case control.unsigned_load => zext((match alu.z[2..1] {
+                    case 0 => mem_buffer[16.. 0]
+                    case 1 => mem_buffer[32..16]
+                }) : Word[16])
+                else => sext((match alu.z[2..1] {
+                    case 0 => mem_buffer[16.. 0]
+                    case 1 => mem_buffer[32..16]
+                }) : Word[16])
+            }
+            case 0b10 => mem_buffer
+            case 0b11 => dontcare
+        }
+    }
+
+    //> ALU sub-module.
+    mod alu of alu::Alu {
+        it.op := control.alu_op
+
+        it.a := match control.alu_source_a {
+            case #Rs1 => rf.rs1_out
+            case #Pc => pc
+            case #Csr => csrs.data_out
+        }
+
+        it.b := match control.alu_source_b {
+            case #Rs2 => rf.rs2_out
+            case #Imm => idecode.imm
+            case #Rs1 => rf.rs1_out
+        }
+
+        control.alu_z := it.z
+    }
+
+    //> CSR file sub-module.
+    mod csrs of mem::Csrs {
+        it.clock   := clock
+        it.addr    := control.csr
+        it.write   := control.csr_rw && stage == #Execute
+        it.data_in := rf.rs1_out
+    }
+
+    //> Return code (register a0 value at the time of EBREAK).
+    outgoing return_code : Word[32] {
+        it := rf.rs2_out
+    }
+
+    //> Halted indicator: asserted when the CPU is in the Breaked state.
+    outgoing is_breaked : Bit {
+        it := stage == #Breaked
+    }
+}

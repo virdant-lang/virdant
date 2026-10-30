@@ -1,0 +1,83 @@
+//> NS8520 UART placeholder.
+//>
+//> Register map (each at a 3-bit offset from the base address):
+//>   reg_rbr_thr = 0x0   — Receiver buffer / Transmitter hold
+//>   reg_ier     = 0x1   — Interrupt enable
+//>   reg_iir_fcr = 0x2   — Interrupt ID / FIFO control
+//>   reg_lcr     = 0x3   — Line control
+//>   reg_mcr     = 0x4   — Modem control
+//>   reg_lsr     = 0x5   — Line status
+//>   reg_msr     = 0x6   — Modem status
+//>   reg_scr     = 0x7   — Scratch
+//>
+//> This module is a stub; all outputs are tied to false.
+
+mod Ns8520 {
+    //> A-channel valid (TileLink-style request valid).
+    incoming a_valid : Bit
+    //> A-channel ready (request ready).
+    outgoing a_ready : Bit {
+        it := false
+    }
+    //> A-channel opcode.
+    incoming a_opcode : Bit
+    //> A-channel parameter.
+    incoming a_param : Bit
+    //> A-channel size.
+    incoming a_size : Bit
+    //> A-channel source identifier.
+    incoming a_source : Bit
+    //> A-channel address.
+    incoming a_addr : Bit
+    //> A-channel byte mask.
+    incoming a_mask : Bit
+    //> A-channel write data.
+    incoming a_data : Bit
+
+    //> D-channel valid (TileLink-style response valid).
+    outgoing d_valid : Bit {
+        it := false
+    }
+    //> D-channel ready (response ready).
+    incoming d_ready : Bit
+
+    // Unused stub inputs.
+    unused a_valid
+    unused a_opcode
+    unused a_param
+    unused a_size
+    unused a_source
+    unused a_addr
+    unused a_mask
+    unused a_data
+    unused d_ready
+
+    //> D-channel opcode.
+    outgoing d_opcode : Bit {
+        it := false
+    }
+    //> D-channel parameter.
+    outgoing d_param : Bit {
+        it := false
+    }
+    //> D-channel size.
+    outgoing d_size : Bit {
+        it := false
+    }
+    //> D-channel source identifier.
+    outgoing d_source : Bit {
+        it := false
+    }
+    //> D-channel address.
+    outgoing d_addr : Bit {
+        it := false
+    }
+    //> D-channel byte mask.
+    outgoing d_mask : Bit {
+        it := false
+    }
+    //> D-channel read data.
+    outgoing d_data : Bit {
+        it := false
+    }
+}
