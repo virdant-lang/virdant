@@ -1,4 +1,4 @@
-.PHONY: build test clean install grammar docs release
+.PHONY: build test clean install grammar docs release push_web
 
 VIR    ?= $(CURDIR)/target/release/vir
 RUNNER ?= $(CURDIR)/target/release/vir-virtue
@@ -60,6 +60,10 @@ install: build
 
 docs:
 	$(MAKE) -C docs
+
+push_web:
+	$(MAKE) -C web_demo build
+	rsync -avz --delete web_demo/dist/ digitalocean:/root/projects/virdant/docs/build/html/web
 
 release: build
 	mkdir -p build/deb/virdant

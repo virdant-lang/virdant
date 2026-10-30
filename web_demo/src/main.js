@@ -10,7 +10,12 @@
 
 import init, { check as wasmCheck, VirtVm } from './wasm/virdant_web.js';
 import defaultTop from './default_top.vir?raw';
+import echoVir from './projects/echo.vir?raw';
 import { virdantLanguage } from './vir-language.js';
+
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
 
 import { EditorState, Compartment, StateEffect } from '@codemirror/state';
 import {
@@ -31,8 +36,7 @@ const editorHost = $('editorhost');
 const errorPanel = $('errorpanel');
 const consolePanelEl = $('consolepanel');
 const errorPanelEl = $('errorpanel');
-const consoleOut = $('consoleout');
-const consoleIn = $('consolein');
+const terminalEl = $('terminal');
 const runBtn = $('run');
 const stopBtn = $('stop');
 const keymapSelect = $('keymap');
@@ -41,51 +45,109 @@ const errCountEl = $('errcount');
 
 // ── Persistent state ─────────────────────────────────────────
 
+const LS_PROJECTS = 'virdant-web-demo:projects';
+const LS_CURRENT = 'virdant-web-demo:current';
 const LS_FILES = 'virdant-web-demo:files';
 const LS_ACTIVE = 'virdant-web-demo:active';
 const LS_KEYMAP = 'virdant-web-demo:keymap';
 const LS_SETTINGS = 'virdant-web-demo:settings';
 
-const defaultSettings = { top: 'top::Top', fpsNoCap: false, showFps: false };
+const defaultSettings = { fpsNoCap: false, showFps: false };
 
-function defaultFiles() {
+// Seed sources per well-known project name.
+function seedFiles(projectName) {
+  if (projectName === 'echo') {
+    return [{ name: 'echo.vir', text: echoVir }];
+  }
   return [{ name: 'top.vir', text: defaultTop }];
 }
 
-function loadState() {
-  let files = defaultFiles();
-  let active = 0;
+function seedTop(projectName) {
+  return projectName === 'echo' ? 'echo::Top' : 'top::Top';
+}
+
+function seedProjects() {
+  return ['hello', 'echo'].map((name) => ({
+    name,
+    files: seedFiles(name),
+    activeIdx: 0,
+    top: seedTop(name),
+  }));
+}
+
+function validProject(p) {
+  return p && typeof p.name === 'string' && Array.isArray(p.files) &&
+    p.files.length > 0 &&
+    p.files.every((f) => typeof f?.name === 'string' && typeof f?.text === 'string') &&
+    typeof p.top === 'string';
+}
+
+function loadProjects() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(LS_PROJECTS));
+    if (Array.isArray(stored) && stored.length > 0 && stored.every(validProject)) {
+      // Drop any stale serialized state fields defensively.
+      for (const p of stored) {
+        p.files = p.files.map((f) => ({ name: f.name, text: f.text }));
+        p.activeIdx = Math.min(Math.max(0, p.activeIdx || 0), p.files.length - 1);
+      }
+      return stored;
+    }
+  } catch { /* fall through to migration */ }
+
+  // Migrate the pre-projects single-project layout (LS_FILES/LS_ACTIVE
+  // plus the old settings' top field) into a project named "hello".
+  const projects = seedProjects();
   try {
     const stored = JSON.parse(localStorage.getItem(LS_FILES));
     if (Array.isArray(stored) && stored.length > 0 &&
         stored.every((f) => typeof f?.name === 'string' && typeof f?.text === 'string')) {
-      files = stored;
+      projects[0].files = stored;
+      const storedActive = parseInt(localStorage.getItem(LS_ACTIVE), 10);
+      if (Number.isInteger(storedActive) && storedActive >= 0 && storedActive < stored.length) {
+        projects[0].activeIdx = storedActive;
+      }
+      try {
+        const oldSettings = JSON.parse(localStorage.getItem(LS_SETTINGS));
+        if (typeof oldSettings?.top === 'string' && oldSettings.top) {
+          projects[0].top = oldSettings.top;
+        }
+      } catch { /* ignore */ }
     }
-  } catch { /* fall back to defaults */ }
-  const storedActive = parseInt(localStorage.getItem(LS_ACTIVE), 10);
-  if (Number.isInteger(storedActive) && storedActive >= 0 && storedActive < files.length) {
-    active = storedActive;
-  }
-  const keymap = localStorage.getItem(LS_KEYMAP) === 'vim' ? 'vim' : 'default';
-  let settings = { ...defaultSettings };
-  try {
-    const stored = JSON.parse(localStorage.getItem(LS_SETTINGS));
-    if (stored && typeof stored === 'object') settings = { ...settings, ...stored };
-  } catch { /* fall back to defaults */ }
-  return { files, activeIdx: active, keymap, settings };
+  } catch { /* ignore */ }
+  return projects;
 }
 
-function saveFiles() {
-  localStorage.setItem(LS_FILES, JSON.stringify(
-    files.map((f) => ({ name: f.name, text: f.text }))));
-  localStorage.setItem(LS_ACTIVE, String(activeIdx));
+function saveProjects() {
+  // Serialize only the durable fields: file records also carry
+  // live EditorState objects, which must never reach storage.
+  localStorage.setItem(LS_PROJECTS, JSON.stringify(
+    projects.map((p) => ({
+      name: p.name,
+      top: p.top,
+      activeIdx: p.activeIdx,
+      files: p.files.map((f) => ({ name: f.name, text: f.text })),
+    }))));
+  localStorage.setItem(LS_CURRENT, String(currentIdx));
 }
 function saveKeymap() { localStorage.setItem(LS_KEYMAP, keymap); }
 function saveSettings() { localStorage.setItem(LS_SETTINGS, JSON.stringify(settings)); }
 
 // ── Mutable app state ────────────────────────────────────────
 
-let { files, activeIdx, keymap, settings } = loadState();
+const projects = loadProjects();
+let currentIdx = Math.min(
+  Math.max(0, parseInt(localStorage.getItem(LS_CURRENT), 10) || 0),
+  projects.length - 1);
+// `files`/`activeIdx` mirror the current project (rebound on switch).
+let files = projects[currentIdx].files;
+let activeIdx = Math.min(projects[currentIdx].activeIdx, files.length - 1);
+let keymap = localStorage.getItem(LS_KEYMAP) === 'vim' ? 'vim' : 'default';
+let settings = { ...defaultSettings };
+try {
+  const stored = JSON.parse(localStorage.getItem(LS_SETTINGS));
+  if (stored && typeof stored === 'object') settings = { ...settings, ...stored };
+} catch { /* fall back to defaults */ }
 // Compartment generation: bumped when the keymap toggles; a stored
 // per-file state older than the current generation is rebuilt (its
 // doc and selection are kept; its undo history is not).
@@ -210,7 +272,7 @@ const view = new EditorView({
 function onEditorUpdate(update) {
   if (update.docChanged) {
     files[activeIdx].text = update.state.doc.toString();
-    saveFiles();
+    saveProjects();
     scheduleCheck();
   }
 }
@@ -232,8 +294,9 @@ function switchToFile(idx) {
     f.gen = compartmentGen;
   }
   view.setState(ensureState(f));
+  projects[currentIdx].activeIdx = idx;
   renderFileList();
-  saveFiles();
+  saveProjects();
   view.dispatch({ effects: refreshLint.of(null) });
   view.focus();
 }
@@ -290,11 +353,85 @@ function removeFile(idx) {
   }
   view.setState(ensureState(f));
   renderFileList();
-  saveFiles();
+  saveProjects();
   runCheckSoon();
 }
 
 $('addfile').addEventListener('click', addFile);
+
+// ── Projects ─────────────────────────────────────────────────
+
+const projectSelect = $('project');
+
+function renderProjectSelect() {
+  projectSelect.replaceChildren();
+  projects.forEach((p, i) => {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = p.name;
+    if (i === currentIdx) opt.selected = true;
+    projectSelect.append(opt);
+  });
+  $('removeproject').disabled = projects.length <= 1;
+}
+
+function switchProject(idx) {
+  if (idx === currentIdx) return;
+  if (vm) stopRun();
+  projects[currentIdx].activeIdx = activeIdx;
+  currentIdx = idx;
+  files = projects[currentIdx].files;
+  activeIdx = Math.min(projects[currentIdx].activeIdx, files.length - 1);
+  const f = files[activeIdx];
+  if (f.gen !== compartmentGen) {
+    f.state = null;
+  }
+  view.setState(ensureState(f));
+  renderProjectSelect();
+  renderFileList();
+  saveProjects();
+  view.dispatch({ effects: refreshLint.of(null) });
+  runCheckSoon();
+  view.focus();
+}
+
+function addProject() {
+  const name = prompt('New project name:');
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  if (projects.some((p) => p.name === trimmed)) {
+    alert(`A project named ${trimmed} already exists.`);
+    return;
+  }
+  projects.push({ name: trimmed, files: seedFiles('hello'), activeIdx: 0, top: seedTop('hello') });
+  switchProject(projects.length - 1);
+}
+
+function removeProject() {
+  if (projects.length <= 1) return;
+  const name = projects[currentIdx].name;
+  if (!confirm(`Delete project "${name}" and all its files?`)) return;
+  if (vm) stopRun();
+  projects.splice(currentIdx, 1);
+  currentIdx = Math.min(currentIdx, projects.length - 1);
+  files = projects[currentIdx].files;
+  activeIdx = Math.min(projects[currentIdx].activeIdx, files.length - 1);
+  const f = files[activeIdx];
+  if (f.gen !== compartmentGen) {
+    f.state = null;
+  }
+  view.setState(ensureState(f));
+  renderProjectSelect();
+  renderFileList();
+  saveProjects();
+  runCheckSoon();
+  view.focus();
+}
+
+projectSelect.addEventListener('change', () => switchProject(parseInt(projectSelect.value, 10)));
+$('addproject').addEventListener('click', addProject);
+$('removeproject').addEventListener('click', removeProject);
 
 // ── Checking (live) ──────────────────────────────────────────
 
@@ -402,29 +539,182 @@ function switchTab(tab) {
   $('tab-console').classList.toggle('active', !isErrors);
   errorPanelEl.hidden = !isErrors;
   consolePanelEl.hidden = isErrors;
-  if (!isErrors) consoleOut.scrollTop = consoleOut.scrollHeight;
+  if (!isErrors) fitTerminal();
 }
 
 $('tab-errors').addEventListener('click', () => switchTab('errors'));
 $('tab-console').addEventListener('click', () => switchTab('console'));
 
-// ── Console ──────────────────────────────────────────────────
+// ── Console (a real TTY, via xterm.js) ──────────────────────
+
+// The console is a terminal emulator attached to the design's UART:
+// the design's TX output is written straight in, and keystrokes go
+// straight out — like a serial console.  Two input modes:
+//
+//   - raw (default): every keystroke byte is forwarded as-is, and
+//     echo/editing is the design's job (the `echo` project does its
+//     own echo, so characters appear via the round trip).
+//   - local echo (Settings): the demo acts as the line discipline —
+//     it echoes and edits locally (backspace, Ctrl+U, history), and
+//     the design receives clean lines terminated by `\r` — for
+//     designs that do not echo their input.
+
+const term = new Terminal({
+  convertEol: true,
+  cursorBlink: true,
+  fontSize: 12,
+  fontFamily: '"JetBrains Mono", "Fira Mono", "SF Mono", Menlo, Consolas, monospace',
+  scrollback: 5000,
+  theme: {
+    background: '#191b20',
+    foreground: '#d7dae0',
+    cursor: '#4fb583',
+    cursorAccent: '#191b20',
+    selectionBackground: '#3a4150',
+  },
+});
+const fitAddon = new FitAddon();
+term.loadAddon(fitAddon);
+term.open(terminalEl);
+
+function fitTerminal() {
+  if (!consolePanelEl.hidden && terminalEl.clientWidth > 0) {
+    try { fitAddon.fit(); } catch { /* zero-size pane */ }
+  }
+}
+new ResizeObserver(fitTerminal).observe(terminalEl);
+
+const termEncoder = new TextEncoder();
+let pendingLine = '';
+let inputHistory = [];
+let historyIdx = null;
+
+function termSend(text) {
+  if (vm && !vm.is_finished()) vm.send_input(termEncoder.encode(text));
+}
+
+// If the design's last output left the cursor mid-row, start input
+// (or a re-render) on a fresh row so it cannot clobber the output.
+function ensureFreshLine() {
+  if (term.buffer.active.cursorX !== 0) term.write('\r\n');
+}
 
 function appendConsoleText(text) {
-  consoleOut.append(document.createTextNode(text));
-  consoleOut.scrollTop = consoleOut.scrollHeight;
+  term.write(text);
 }
 
 function appendConsoleLine(text) {
-  appendConsoleText(text + '\n');
+  term.write(`\x1b[2m${text}\x1b[0m\r\n`);
 }
 
-$('consolein-form').addEventListener('submit', (e) => {
-  e.preventDefault();
+// ── Raw mode: the design owns echo and line handling ────────
+
+function rawInput(data) {
+  for (const ch of data) {
+    if (ch === '\x03') {
+      // Ctrl+C: like `vir run`'s SIGINT, stop the simulation.
+      ensureFreshLine();
+      term.write('^C');
+      stopRun();
+      continue;
+    }
+    if (ch === '\r') {
+      // The design receives the authentic TTY Enter byte; give the
+      // local view a fresh row too (if the design echoes the `\r`,
+      // it is a harmless column reset on the now-empty row).
+      termSend(ch);
+      term.write('\r\n');
+      continue;
+    }
+    if (ch === '\x7f') {
+      // Backspace: forward the byte and erase locally.  (A design
+      // that echoes the DEL byte back is no-op'd by the terminal.)
+      termSend(ch);
+      term.write('\b \b');
+      continue;
+    }
+    termSend(ch);
+  }
+}
+
+// ── Line-discipline mode: the demo owns echo and editing ────
+
+function lineDiscipline(data) {
+  // Arrow keys arrive as complete escape sequences.
+  if (data.startsWith('\x1b')) {
+    if (data === '\x1b[A') historyNav(-1);
+    else if (data === '\x1b[B') historyNav(1);
+    return;
+  }
+  for (const ch of data) {
+    if (ch === '\r' || ch === '\n') {
+      submitLine();
+      continue;
+    }
+    if (ch === '\x7f') {
+      eraseChar();
+      continue;
+    }
+    if (ch === '\x15') {
+      // Ctrl+U: clear the line.
+      ensureFreshLine();
+      term.write('\r\x1b[2K');
+      pendingLine = '';
+      continue;
+    }
+    if (ch === '\x03') {
+      ensureFreshLine();
+      term.write('^C\r\n');
+      pendingLine = '';
+      stopRun();
+      continue;
+    }
+    if (ch < ' ') {
+      continue; // other control bytes are not line-discipline material
+    }
+    if (pendingLine.length === 0) ensureFreshLine();
+    pendingLine += ch;
+    term.write(ch);
+  }
+}
+
+function eraseChar() {
+  if (!pendingLine) return;
+  pendingLine = pendingLine.slice(0, -1);
+  term.write('\b \b');
+}
+
+function submitLine() {
+  term.write('\r\n');
+  const line = pendingLine;
+  pendingLine = '';
+  historyIdx = null;
+  if (line) {
+    inputHistory.push(line);
+    if (inputHistory.length > 100) inputHistory.shift();
+  }
+  termSend(line + '\r');
+}
+
+function historyNav(dir) {
+  if (!inputHistory.length) return;
+  if (historyIdx === null) {
+    if (dir > 0) return;
+    historyIdx = inputHistory.length - 1;
+  } else {
+    historyIdx += dir;
+    if (historyIdx >= inputHistory.length) historyIdx = null;
+    else if (historyIdx < 0) historyIdx = 0;
+  }
+  pendingLine = historyIdx === null ? '' : inputHistory[historyIdx];
+  ensureFreshLine();
+  term.write(`\r\x1b[2K${pendingLine}`);
+}
+
+term.onData((data) => {
   if (!vm || vm.is_finished()) return;
-  const text = consoleIn.value + '\n';
-  consoleIn.value = '';
-  vm.send_input(new TextEncoder().encode(text));
+  if (settings.localEcho) lineDiscipline(data);
+  else rawInput(data);
 });
 
 // ── Run / Stop ───────────────────────────────────────────────
@@ -432,12 +722,18 @@ $('consolein-form').addEventListener('submit', (e) => {
 function setRunning(running) {
   runBtn.hidden = running;
   stopBtn.hidden = !running;
-  consoleIn.disabled = !running;
   updateRunButton();
+  if (running) {
+    appendConsoleLine('(type to feed the design\'s UART rx — Ctrl+C stops)');
+    term.write('\r\n');
+    switchTab('console');
+    fitTerminal();
+    term.focus();
+  }
 }
 
 function clearConsole() {
-  consoleOut.replaceChildren();
+  term.reset();
   decoder = new TextDecoder('utf8');
 }
 
@@ -456,14 +752,14 @@ function startRun() {
   clearConsole();
   switchTab('console');
   try {
-    vm = VirtVm.create(buildPayload(), settings.top);
+    vm = VirtVm.create(buildPayload(), projects[currentIdx].top);
   } catch (e) {
     vm = null;
     appendConsoleLine(`⚠ Could not start the simulation: ${String(e)}`);
     setRunning(false);
     return;
   }
-  appendConsoleLine(`── running ${settings.top} on virt::Virt (${Number(vm.clock_hz()) / 1e6} MHz) ──`);
+  appendConsoleLine(`── running ${projects[currentIdx].top} on virt::Virt (${Number(vm.clock_hz()) / 1e6} MHz) ──`);
   runStartWall = performance.now();
   setRunning(true);
   rafId = requestAnimationFrame(runFrame);
@@ -571,16 +867,19 @@ keymapSelect.addEventListener('change', () => {
 const settingsModal = $('settingsmodal');
 
 function openSettings() {
-  $('set-top').value = settings.top;
+  $('set-top').value = projects[currentIdx].top;
   $('set-fpsnocap').checked = settings.fpsNoCap;
   $('set-showfps').checked = settings.showFps;
+  $('set-localecho').checked = settings.localEcho;
   settingsModal.hidden = false;
 }
 
 function closeSettings() {
-  settings.top = $('set-top').value.trim() || defaultSettings.top;
+  projects[currentIdx].top = $('set-top').value.trim() || seedTop(projects[currentIdx].name);
   settings.fpsNoCap = $('set-fpsnocap').checked;
   settings.showFps = $('set-showfps').checked;
+  settings.localEcho = $('set-localecho').checked;
+  saveProjects();
   saveSettings();
   settingsModal.hidden = true;
 }
@@ -595,13 +894,15 @@ window.addEventListener('keydown', (e) => {
 });
 
 $('set-reset').addEventListener('click', () => {
-  if (!confirm('Reset all files to the default project?')) return;
-  files = defaultFiles();
+  if (!confirm(`Reset all files of "${projects[currentIdx].name}" to the default?`)) return;
+  files = seedFiles(projects[currentIdx].name);
+  projects[currentIdx].files = files;
   activeIdx = 0;
+  projects[currentIdx].activeIdx = 0;
   for (const f of files) { f.state = null; f.gen = compartmentGen; }
   view.setState(ensureState(files[0]));
   renderFileList();
-  saveFiles();
+  saveProjects();
   runCheckSoon();
   settingsModal.hidden = true;
 });
@@ -631,9 +932,9 @@ splitter.addEventListener('mousedown', (e) => {
   document.body.style.userSelect = 'none';
   const onMove = (ev) => {
     const rect = appEl.getBoundingClientRect();
-    // The splitter's center follows the mouse: the 4px gutter sits
+    // The splitter's center follows the mouse: the 8px gutter sits
     // between the panes, so left width = mouse x − half the gutter.
-    setSplitPct(((ev.clientX - rect.left - 2) / rect.width) * 100);
+    setSplitPct(((ev.clientX - rect.left - 4) / rect.width) * 100);
   };
   const onUp = () => {
     splitter.classList.remove('dragging');
@@ -654,5 +955,6 @@ await init({
   module_or_path: new URL('./wasm/virdant_web_bg.wasm', import.meta.url),
 });
 
+renderProjectSelect();
 renderFileList();
 runCheck();

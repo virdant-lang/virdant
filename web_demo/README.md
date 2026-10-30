@@ -34,17 +34,29 @@ it), and `npm`.
 
 ## Using the demo
 
-- **Files**: add/remove files in the left sidebar.  Everything
-  (contents, open file, keymap, settings) persists in `localStorage`;
-  Settings has a "Reset files to default" button.
+- **Projects**: the selector at the top of the file sidebar switches
+  between projects (seeded with `hello` — the `Hello, world!` starter —
+  and `echo` — a UART echo server); `+` creates a project, `✕` deletes
+  the current one.  Each project keeps its own files, open file, and
+  top module; everything persists in `localStorage`.
+- **Files**: add/remove files below the project selector.  Everything
+  (projects, contents, open file, keymap, settings) persists in
+  `localStorage`; Settings has a "Reset files to default" button for
+  the current project.
 - **Errors tab**: live diagnostics (debounced re-check on every edit)
   with click-to-jump.  The Run button is greyed out while there are
   errors.
 - **Run** compiles all files linked against the `lib/` packages
   (embedded into the wasm binary at build time) and, if the design
-  checks clean, starts the VM.  UART TX output appears in the Console
-  tab; the console input line feeds the design's UART RX; the design's
-  `exit : Valid[Word[8]]` port ends the run with its code.
+  checks clean, starts the VM.  The Console tab is a real terminal
+  (xterm.js) attached to the design's UART: the design's TX output
+  streams in, and keystrokes go straight out.  Ctrl+C stops the run
+  (like `vir run`'s SIGINT); the `\r` banner of the `echo` project is
+  its boot marker.  Settings has "Local echo" for designs that do not
+  echo their own input: with it on, the demo acts as the line
+  discipline (local editing with backspace/Ctrl+U, arrow-key history,
+  lines sent on Enter); without it, raw bytes pass through and the
+  design owns echo and editing.
 - **Stop** stops a run early.  The Run/Stop button swaps while the
   simulator is running and swaps back when it exits.
 - **Settings**: top module (default `top::Top`), disable real-time

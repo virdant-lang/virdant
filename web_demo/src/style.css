@@ -29,7 +29,7 @@ body {
 #app {
   display: grid;
   /* Left (IDE) pane width is draggable via the #splitter column. */
-  grid-template-columns: var(--left-width, 56%) 4px 1fr;
+  grid-template-columns: var(--left-width, 56%) 8px 1fr;
   grid-template-rows: 1fr auto;
   height: 100vh;
 }
@@ -45,7 +45,7 @@ body {
 }
 
 #filesidebar {
-  width: 108px;
+  width: 130px;
   flex: none;
   background: var(--bg);
   border-right: 1px solid var(--border);
@@ -53,6 +53,41 @@ body {
   flex-direction: column;
   min-height: 0;
 }
+
+#projectbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+#project {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 3px 4px;
+  outline: none;
+}
+
+#projectbar button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 11px;
+  flex: none;
+}
+#projectbar button:hover:not(:disabled) { background: var(--bg-hover); }
+#projectbar button:disabled { opacity: 0.3; cursor: default; }
 
 #filesidebar-header {
   display: flex;
@@ -177,39 +212,16 @@ body {
   flex-direction: column;
 }
 
-#consoleout {
+#terminal {
   flex: 1;
-  overflow-y: auto;
-  padding: 10px 12px;
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-all;
+  min-height: 0;
+  padding: 6px 8px;
 }
-
-#consolein-form {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-top: 1px solid var(--border);
-  flex: none;
+#terminal .xterm,
+#terminal .xterm-viewport,
+#terminal .xterm-screen {
+  height: 100%;
 }
-#consolein-form .prompt { color: var(--accent); font-family: var(--mono); }
-#consolein {
-  flex: 1;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
-  padding: 5px 8px;
-  outline: none;
-}
-#consolein:focus { border-color: var(--accent-dim); }
-#consolein:disabled { opacity: 0.5; }
 
 /* Diagnostics list */
 
