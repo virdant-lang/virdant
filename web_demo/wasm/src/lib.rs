@@ -157,6 +157,13 @@ impl VirtVm {
     /// error is either a diagnostics JSON array (compile errors) or a
     /// plain message string.
     pub fn create(sources: &str, top: &str) -> Result<VirtVm, String> {
+        VirtVm::create_with_flash(sources, top, &[])
+    }
+
+    /// Like [`VirtVm::create`], but preloads the SPI flash device with
+    /// `flash` (the wasm equivalent of the native `--flash` option;
+    /// images larger than the 16 MiB device are truncated).
+    pub fn create_with_flash(sources: &str, top: &str, flash: &[u8]) -> Result<VirtVm, String> {
         console_error_panic_hook::set_once();
         let files = parse_sources(sources)?;
         let db = build_db(files);
@@ -240,7 +247,7 @@ impl VirtVm {
             spi_cs,
             spi_mosi,
             spi_miso,
-            flash: virt::SpiFlash::new(),
+            flash: virt::SpiFlash::with_image(flash),
         };
         sim.on_change(clock, Box::new(move |sim| {
             flash_stepper.step(sim);

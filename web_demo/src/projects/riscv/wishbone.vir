@@ -1,0 +1,110 @@
+//> Wishbone bus socket.
+//>
+//> Standard Wishbone B.4 signals for a 32-bit data bus.
+//> All signals are from the master's perspective.
+pub socket Wishbone {
+    //> Cycle start: the master asserts this for the duration of a bus transaction.
+    cosi cyc : Bit
+    //> Strobe: the master asserts this during the data phase.
+    cosi stb : Bit
+    //> Write enable: high for write, low for read.
+    cosi we : Bit
+    //> Address (32-bit byte address).
+    cosi adr : Word[32]
+    //> Write data.
+    cosi dat_wr : Word[32]
+    //> Byte-select mask (one hot per byte lane).
+    cosi sel : Word[4]
+
+    //> Acknowledge: the slave asserts this when the transfer is complete.
+    soci ack : Bit
+    //> Error: the slave asserts this on an error.
+    soci err : Bit
+    //> Read data.
+    soci dat_rd : Word[32]
+}
+
+//> Arbiter state: which master is being served by an arbiter.
+union type Serving {
+    //> No master currently being served.
+    Idle()
+    //> Serving master 0.
+    ServingClient0()
+    //> Serving master 1.
+    ServingClient1()
+}
+
+//> Round-robin priority state for the arbiter.
+union type Priority {
+    //> Client 0 has priority on the next tie.
+    Client0First()
+    //> Client 1 has priority on the next tie.
+    Client1First()
+}
+
+//> Server-select state: which slave is being served by a mux.
+union type SelState {
+    Server0()
+    Server1()
+    Server2()
+}
+
+pub mod WbMux13 {
+    client socket server_0 of Wishbone
+    client socket server_1 of Wishbone
+    client socket server_2 of Wishbone
+
+    //> Server socket for the upstream master.
+    //>
+    //> Routes strobe/cycle to the selected slave, broadcasts the
+    //> remaining master signals, muxes the response, and generates
+    //> an error on decode_err.
+    server socket client_0 of Wishbone {
+        server_0.cyc := it.cyc && serving == @Server0()
+        server_1.cyc := it.cyc && serving == @Server1()
+        server_2.cyc := it.cyc && serving == @Server2()
+
+        server_0.stb := it.stb && serving == @Server0()
+        server_1.stb := it.stb && serving == @Server1()
+        server_2.stb := it.stb && serving == @Server2()
+
+        it.err := server_0.err || server_1.err || server_2.err
+        it.ack := match serving {
+            case @Server0() => server_0.ack
+            case @Server1() => server_1.ack
+            case @Server2() => server_2.ack
+        }
+
+        server_0.we := it.we && serving == @Server0()
+        server_1.we := it.we && serving == @Server1()
+        server_2.we := it.we && serving == @Server2()
+
+        server_0.adr    := zext(it.adr[29..0])
+        server_1.adr    := zext(it.adr[29..0])
+        server_2.adr    := zext(it.adr[29..0])
+
+        server_0.sel    := it.sel
+        server_1.sel    := it.sel
+        server_2.sel    := it.sel
+
+        server_0.dat_wr := it.dat_wr
+        server_1.dat_wr := it.dat_wr
+        server_2.dat_wr := it.dat_wr
+
+        it.dat_rd := match serving {
+            case @Server0() => server_0.dat_rd
+            case @Server1() => server_1.dat_rd
+            case @Server2() => server_2.dat_rd
+        }
+    }
+
+    //> Registered slave-select state (used to mux read-data).
+    wire serving : SelState {
+        it := match client_0.adr[32..29] {
+            case 0b001 => @Server0()
+            case 0b010 => @Server1()
+            case 0b100 => @Server2()
+            else => dontcare
+        }
+    }
+}

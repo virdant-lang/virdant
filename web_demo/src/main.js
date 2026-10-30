@@ -9,8 +9,22 @@
 // State (files, keymap, settings) persists in localStorage.
 
 import init, { check as wasmCheck, VirtVm } from './wasm/virdant_web.js';
+
+// SPI flash: 16 MiB device (see `wasm/src/virt.rs`); larger images are
+// truncated, matching the native `--flash`.
+const FLASH_SIZE = 16 * 1024 * 1024;
 import defaultTop from './default_top.vir?raw';
 import echoVir from './projects/echo.vir?raw';
+// Every `.vir` file under `src/projects/riscv/` becomes a file of the
+// seeded `riscv` project; add files there and they show up automatically.
+const riscvSources = import.meta.glob('./projects/riscv/*.vir', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+});
+const riscvVirFiles = Object.entries(riscvSources)
+  .map(([path, text]) => ({ name: path.split('/').pop(), text }))
+  .sort((a, b) => a.name.localeCompare(b.name));
 import { virdantLanguage } from './vir-language.js';
 
 import { Terminal } from '@xterm/xterm';
@@ -59,15 +73,20 @@ function seedFiles(projectName) {
   if (projectName === 'echo') {
     return [{ name: 'echo.vir', text: echoVir }];
   }
+  if (projectName === 'riscv') {
+    return riscvVirFiles;
+  }
   return [{ name: 'top.vir', text: defaultTop }];
 }
 
 function seedTop(projectName) {
-  return projectName === 'echo' ? 'echo::Top' : 'top::Top';
+  if (projectName === 'echo') return 'echo::Top';
+  if (projectName === 'riscv') return 'top::Top';
+  return 'top::Top';
 }
 
 function seedProjects() {
-  return ['hello', 'echo'].map((name) => ({
+  return ['hello', 'echo', 'riscv'].map((name) => ({
     name,
     files: seedFiles(name),
     activeIdx: 0,
@@ -90,6 +109,13 @@ function loadProjects() {
       for (const p of stored) {
         p.files = p.files.map((f) => ({ name: f.name, text: f.text }));
         p.activeIdx = Math.min(Math.max(0, p.activeIdx || 0), p.files.length - 1);
+      }
+      // Add seed projects that didn't exist when this browser's state
+      // was saved (e.g. `riscv`), leaving user-modified projects alone.
+      for (const seed of seedProjects()) {
+        if (!stored.some((p) => p.name === seed.name)) {
+          stored.push(seed);
+        }
       }
       return stored;
     }
@@ -161,6 +187,11 @@ let vm = null;
 let runStartWall = 0;
 let rafId = 0;
 let decoder = new TextDecoder('utf8');
+
+// Flash image to preload at the next Run: `{ name, bytes: Uint8Array }`
+// or null.  Session-only (not persisted to localStorage — flash images
+// can be up to 16 MiB).
+let flashImage = null;
 
 const fileStem = (name) => name.replace(/\.vir$/, '');
 
@@ -752,7 +783,9 @@ function startRun() {
   clearConsole();
   switchTab('console');
   try {
-    vm = VirtVm.create(buildPayload(), projects[currentIdx].top);
+    vm = flashImage
+      ? VirtVm.create_with_flash(buildPayload(), projects[currentIdx].top, flashImage.bytes)
+      : VirtVm.create(buildPayload(), projects[currentIdx].top);
   } catch (e) {
     vm = null;
     appendConsoleLine(`⚠ Could not start the simulation: ${String(e)}`);
@@ -871,6 +904,8 @@ function openSettings() {
   $('set-fpsnocap').checked = settings.fpsNoCap;
   $('set-showfps').checked = settings.showFps;
   $('set-localecho').checked = settings.localEcho;
+  ensureFlashPresets();
+  renderFlash();
   settingsModal.hidden = false;
 }
 
@@ -906,6 +941,140 @@ $('set-reset').addEventListener('click', () => {
   runCheckSoon();
   settingsModal.hidden = true;
 });
+
+// ── Settings: SPI flash image ────────────────────────────────
+// The loaded image applies at the next Run (`create_with_flash`);
+// it is session-only (not persisted — images can be 16 MiB).
+
+const flashDrop = $('set-flash-drop');
+const flashEmpty = $('set-flash-empty');
+const flashInfo = $('set-flash-info');
+const flashUnload = $('set-flash-unload');
+const flashPreset = $('set-flash-preset');
+const flashFileInput = $('set-flash-file');
+
+function formatKiB(bytes) {
+  const kib = bytes / 1024;
+  return `${kib >= 100 ? Math.round(kib).toLocaleString('en-US') : kib.toFixed(1)} KiB`;
+}
+
+// Sync the dropzone/info display, the Unload button and the preset
+// select with the current `flashImage` (null = nothing loaded).
+function renderFlash() {
+  flashDrop.classList.remove('dragover');
+  flashInfo.classList.remove('error');
+  if (flashImage) {
+    flashEmpty.hidden = true;
+    flashInfo.hidden = false;
+    flashInfo.textContent = flashImage.truncated
+      ? `${flashImage.name} — ${formatKiB(flashImage.bytes.length)} (truncated to fit the 16 MiB flash)`
+      : `${flashImage.name} — ${formatKiB(flashImage.bytes.length)}`;
+    flashUnload.hidden = false;
+  } else {
+    flashEmpty.hidden = false;
+    flashInfo.hidden = true;
+    flashUnload.hidden = true;
+  }
+  flashPreset.value = (flashImage && flashImage.preset) || '';
+}
+
+function setFlashImage(name, bytes, preset) {
+  flashImage = { name, bytes, preset };
+  if (bytes.length > FLASH_SIZE) {
+    flashImage.truncated = true;
+    flashImage.bytes = bytes.slice(0, FLASH_SIZE);
+  }
+  renderFlash();
+}
+
+async function loadFlashFile(file) {
+  try {
+    setFlashImage(file.name, new Uint8Array(await file.arrayBuffer()), null);
+  } catch (e) {
+    showFlashError(`Could not read ${file.name}: ${e}`);
+  }
+}
+
+// Inline error in place of the info line; keeps the current image.
+function showFlashError(message) {
+  flashInfo.hidden = false;
+  flashEmpty.hidden = true;
+  flashInfo.classList.add('error');
+  flashInfo.textContent = `⚠ ${message}`;
+  flashPreset.value = (flashImage && flashImage.preset) || '';
+}
+
+// Click the dropzone to browse; a picked file replaces whatever was
+// loaded before (preset or upload alike).
+flashDrop.addEventListener('click', () => flashFileInput.click());
+flashFileInput.addEventListener('change', () => {
+  const file = flashFileInput.files?.[0];
+  if (file) loadFlashFile(file);
+  flashFileInput.value = '';
+});
+flashDrop.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  flashDrop.classList.add('dragover');
+});
+flashDrop.addEventListener('dragleave', () => flashDrop.classList.remove('dragover'));
+flashDrop.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const file = e.dataTransfer?.files?.[0];
+  if (file) loadFlashFile(file);
+  else renderFlash(); // clear the highlight, keep the current image
+});
+
+flashUnload.addEventListener('click', () => {
+  flashImage = null;
+  renderFlash();
+});
+
+// Preset flash binaries, served next to the built demo from
+// `web_demo/flash/` (copied into `dist/flash/` by the Makefile, along
+// with the generated `manifest.json`).  Selecting one loads it as if
+// the user had uploaded it, discarding the previous image.
+let flashPresets = null; // cached list of filenames, null until fetched
+async function ensureFlashPresets() {
+  if (flashPresets) return;
+  try {
+    const res = await fetch('flash/manifest.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const names = await res.json();
+    flashPresets = Array.isArray(names) ? names.filter((n) => typeof n === 'string' && n.endsWith('.bin')) : [];
+    for (const name of flashPresets) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      flashPreset.appendChild(opt);
+    }
+    if (flashPresets.length === 0) {
+      flashPreset.options[0].textContent = 'No preset flash images';
+      flashPreset.disabled = true;
+    }
+    renderFlash();
+  } catch (e) {
+    flashPresets = [];
+    flashPreset.options[0].textContent = 'Presets unavailable (not built in)';
+    flashPreset.disabled = true;
+  }
+}
+
+flashPreset.addEventListener('change', async () => {
+  const name = flashPreset.value;
+  if (!name) return;
+  try {
+    const res = await fetch(`flash/${encodeURIComponent(name)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    setFlashImage(name, new Uint8Array(await res.arrayBuffer()), name);
+  } catch (e) {
+    showFlashError(`Could not load preset ${name}: ${e}`);
+  }
+});
+
+// Dropping a file anywhere else would let the browser navigate away;
+// neutralize that (the dropzone above re-enables drops locally).
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', (e) => e.preventDefault());
 
 // ── Splitter (drag to resize the IDE / console split) ──────
 

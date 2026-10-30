@@ -1,0 +1,29 @@
+//> Register file (external module).
+//>
+//> A 32-entry × 32-bit register file with one write port (rd) and two
+//> read ports (rs1, rs2). Register x0 is hardwired to zero.
+//>
+//> This is an external (`ext`) module because it is implemented by a
+//> separate hardware primitive (e.g., FPGA block RAM or a synthesized
+//> register array).
+pub ext mod Rf {
+    //> Global clock.
+    incoming clock : Clock
+
+    //> Write destination register index (0–31).
+    incoming rd : Word[5]
+    //> First source register index (0–31).
+    incoming rs1 : Word[5]
+    //> Second source register index (0–31).
+    incoming rs2 : Word[5]
+
+    //> Data to write into `rd`.
+    incoming rd_in : Word[32]
+    //> Write-enable strobe: when high, `rd_in` is written into `rd` on the clock edge.
+    incoming write : Bit
+
+    //> Data read from `rs1` (zero if rs1 == 0).
+    outgoing rs1_out : Word[32]
+    //> Data read from `rs2` (zero if rs2 == 0).
+    outgoing rs2_out : Word[32]
+}

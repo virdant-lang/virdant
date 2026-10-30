@@ -1,0 +1,140 @@
+//> RISC-V opcode, ALU opcode, CPU stage, CSR, and system instruction definitions.
+//>
+//> This package defines the core enumerated types used throughout the CPU:
+//> instruction opcodes, ALU operations, pipeline stages, CSR addresses,
+//> and system-call/exception mnemonics.
+
+//> RISC-V 7-bit primary opcodes.
+//>
+//> These correspond to the `opcode` field (bits [6:0]) of a 32-bit instruction.
+pub enum type Opcode {
+    //> Branch instructions (BEQ, BNE, BLT, BGE, BLTU, BGEU).
+    BRANCH = 99w7
+    //> Jump-and-link register (JALR).
+    JALR   = 103
+    //> Jump-and-link (JAL).
+    JAL    = 111
+    //> Immediate ALU operations (ADDI, SLTI, XORI, ORI, ANDI, SLLI, SRLI, SRAI).
+    OP_IMM = 19
+    //> Register-register ALU operations (ADD, SUB, SLL, SLT, etc.).
+    OP     = 51
+    //> Load upper immediate (LUI).
+    LUI    = 55
+    //> Add upper immediate to PC (AUIPC).
+    AUIPC  = 23
+    //> Load instructions (LB, LH, LW, LBU, LHU).
+    LOAD   = 3
+    //> System instructions (ECALL, EBREAK, CSR accesses, MRET, SRET, WFI).
+    SYSTEM = 115
+    //> Store instructions (SB, SH, SW).
+    STORE  = 35
+    //> Fence instructions (FENCE, FENCE.I).
+    FENCE  = 15
+}
+
+//> ALU operation codes.
+//>
+//> These are internal micro-opcodes that the control unit emits to drive
+//> the ALU and shifter. They encode arithmetic, logical, comparison,
+//> and shift operations.
+pub enum type AluOpcode {
+    //> Zero result (used for JAL/JALR address generation).
+    Zero  = 0w8
+    //> Addition (ADD, ADDI, AUIPC, LOAD/STORE address).
+    Add   = 1
+    //> Subtraction (SUB).
+    Sub   = 2
+    //> Bitwise AND (AND, ANDI).
+    And   = 3
+    //> Bitwise OR (OR, ORI).
+    Or    = 4
+    //> Bitwise XOR (XOR, XORI).
+    Xor   = 5
+    //> Signed equal-to-zero test (BEQ).
+    Eq    = 6
+    //> Signed not-equal-to-zero test (BNE).
+    Neq   = 7
+    //> Signed less-than (SLT, BLT).
+    Lt    = 8
+    //> Signed greater-than-or-equal (BGE).
+    Gte   = 9
+    //> Unsigned less-than (SLTU, BLTU).
+    Ltu   = 10
+    //> Unsigned greater-than-or-equal (BGEU).
+    Gteu  = 11
+    //> Shift left logical (SLL, SLLI).
+    Sll   = 12
+    //> Bit clear: a & ~b (CSRRC).
+    Clear = 13
+    //> Pass A through unchanged (CSRRW, CSRRWI).
+    PassA = 14
+    //> Shift right logical (SRL, SRLI).
+    Srl   = 15
+    //> Shift right arithmetic (SRA, SRAI).
+    Sra   = 16
+}
+
+//> CPU pipeline stage.
+//>
+//> The core uses a 5-stage finite-state machine: Reset, Fetching, Execute,
+//> Writeback, and Breaked (halted on EBREAK).
+pub enum type CpuStage {
+    //> Power-on reset state.
+    Reset     = 0b00001w5
+    //> Instruction fetch from memory.
+    Fetching  = 0b00010
+    //> Execute the decoded instruction.
+    Execute   = 0b00100
+    //> Write results back to the register file.
+    Writeback = 0b01000
+    //> Halted after an EBREAK instruction.
+    Breaked   = 0b10000
+}
+
+//> RISC-V machine-level CSR addresses.
+//>
+//> Only the CSRs actually referenced by the core are listed.
+enum type Csr {
+    //> Machine status register.
+    MStatus   = 0x300w12
+    //> Machine ISA register.
+    MIsa      = 0x301
+    //> Machine interrupt-enable register.
+    MIe       = 0x304
+    //> Machine trap-vector base address.
+    MTvec     = 0x305
+    //> Machine scratch register.
+    MScratch  = 0x340
+    //> Machine exception program counter.
+    MEpc      = 0x341
+    //> Machine exception cause.
+    MCause    = 0x342
+    //> Machine trap value.
+    MTval     = 0x343
+    //> Machine interrupt pending.
+    MIp       = 0x344
+    //> Machine vendor ID (read-only).
+    MVendorId = 0xF11
+    //> Machine architecture ID (read-only).
+    MArchId   = 0xF12
+    //> Machine implementation ID (read-only).
+    MImpId    = 0xF13
+    //> Machine hart ID (read-only).
+    MHartId   = 0xF14
+}
+
+//> System-call and machine-mode exception/cause mnemonics.
+//>
+//> Mapped from the `funct12` field of SYSTEM instructions.
+pub enum type System {
+    //> Environment call (ECALL).
+    Ecall  = 0x000w12
+    //> Breakpoint (EBREAK).
+    Ebreak = 0x001
+    //> Wait for interrupt (WFI).
+    Wfi    = 0x105
+    //> Return from machine-mode trap (MRET).
+    Mret   = 0x302
+    //> Return from supervisor-mode trap (SRET, placeholder).
+    Sret   = 0x102
+}

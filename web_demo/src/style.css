@@ -353,7 +353,8 @@ body {
   gap: 14px;
 }
 #settingsbox h2 { margin: 0; font-size: 15px; }
-#settingsbox label {
+#settingsbox label,
+#settingsbox .settings-field {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -400,6 +401,56 @@ body {
 }
 #settingsbuttons button:hover { background: var(--bg-hover); }
 #set-reset { color: var(--warning) !important; }
+
+/* SPI flash image section */
+#set-flash {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#set-flash-drop {
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 10px;
+  text-align: center;
+}
+#set-flash-drop:hover { border-color: var(--accent-dim); color: var(--text); }
+#set-flash-drop.dragover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+#set-flash-info {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+#set-flash-info.error { color: var(--danger); }
+#set-flash-unload {
+  align-self: flex-start;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--danger);
+  border-radius: 5px;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+#set-flash-unload:hover { background: var(--bg-hover); }
+#set-flash-preset {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 5px 8px;
+}
+#set-flash-preset:disabled { color: var(--text-muted); cursor: default; }
+.flash-hint { color: var(--text-muted); font-size: 11px; }
 
 /* Scrollbars (webkit) */
 ::-webkit-scrollbar { width: 10px; height: 10px; }

@@ -4,9 +4,11 @@ import { defineConfig } from 'vite';
 // `vite build` emits a fully static `dist/`; `vite preview` serves it.
 export default defineConfig({
   // The demo is deployed under the docs site at /web (see the root
-  // Makefile's push_web target), so assets must be addressed relative
-  // to that base rather than the domain root.
-  base: '/web/',
+  // Makefile's push_web target), but must also work when served
+  // locally at the domain root.  A relative base gives `./assets/...`
+  // URLs, which are correct in both layouts because `dist/index.html`
+  // sits directly next to `assets/` in both.
+  base: './',
   build: {
     target: 'es2022',
   },

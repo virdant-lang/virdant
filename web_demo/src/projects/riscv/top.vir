@@ -1,0 +1,129 @@
+//! Top-level SoC wrapper.
+//!
+//! Targets the `virt::Virt` virtual FPGA (48 MHz, Verilator-simulated via
+//! the `virt` tool).  Instantiates the CPU core, a Wishbone-attached RAM,
+//! a UART, and an SPI flash controller, connected via a Wishbone address
+//! decoder with the following memory map:
+//!
+//!   0x2000_0000  SPI
+//!   0x4000_0000  UART
+//!   0x8000_0000  RAM
+//!
+//! The platform-facing `Top` declares only the `virt::Virt` ports; the
+//! socket bridging lives in `Soc`, since a `for`-moddef's own socket
+//! channels would otherwise count as ports in the platform port match.
+
+import cpu
+import mem
+import spi
+import uart
+import virt
+import wishbone
+
+//> SoC: CPU + RAM + UART + SPI flash behind a Wishbone mux.
+//>
+//> Bridges the children's socket channels to plain ports: the cosi
+//> channels (driven by the children) are forwarded to the outgoing pins,
+//> and the soci channels are driven from the incoming pins.
+mod Soc {
+    incoming clock : Clock {
+        cpu.clock := it
+        mem.clock := it
+        uart_dev.clock := it
+        spi_flash.clock := it
+    }
+
+    incoming rx : Bit
+    incoming spi_miso : Bit
+
+    outgoing tx : Bit { it := uart_dev.uart.tx }
+    outgoing spi_ck : Bit { it := spi_flash.spi.clk }
+    outgoing spi_cs : Bit { it := spi_flash.spi.cs }
+    outgoing spi_mosi : Bit { it := spi_flash.spi.do }
+
+    //> Exit request: when the CPU halts (ECALL/EBREAK — the riscv-tests
+    //> convention is `a7=93; a0=<code>; ecall`), report a0 as the exit
+    //> code (0 = success).
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case cpu.is_breaked => @Valid(cpu.return_code[8..0])
+            else => @Invalid()
+        }
+    }
+
+    // Drive the children's soci (slave-to-master) channels from the
+    // incoming platform pins.
+    uart_dev.uart.rx := rx
+    spi_flash.spi.di := spi_miso
+
+    //> Power-on reset: held high for the first 2^16 cycles (~1.4 ms at
+    //> 48 MHz) while the design settles, then released forever.
+    reg reset_counter : Word[16] on clock {
+        initial it <= 0xF
+        when {
+            case it != 0 {
+                it <= it - 1w16
+            }
+        }
+    }
+    wire reset : Reset { it := reset_counter != 0x0 }
+
+    cpu.reset := reset
+    uart_dev.reset := reset
+    spi_flash.reset := reset
+
+    reg cycle : Word[32] on clock {
+        it <= when {
+            case reset => 0w32
+            else => it + 1w32
+        }
+    }
+
+    //> CPU core instance.
+    mod cpu of cpu::Cpu
+
+    //> Wishbone address decoder.
+    //>
+    //> Routes transactions by comparing the top 3 address bits against
+    //> each slave's base:
+    //>   0x2 → SPI  (0x2000_0000)
+    //>   0x4 → UART (0x4000_0000)
+    //>   0x8 → RAM  (0x8000_0000)
+    //>
+    mod mux13 of wishbone::WbMux13 {
+        it.client_0 :=: cpu.mem
+
+        it.server_0 :=: spi_flash.wb
+        it.server_1 :=: uart_dev.wb
+        it.server_2 :=: mem.wb
+    }
+
+    //> RAM instance (Wishbone-attached).
+    mod mem of mem::WbMem
+
+    //> UART instance (Wishbone-attached).
+    mod uart_dev of uart::WbUart
+
+    //> SPI flash controller instance.
+    mod spi_flash of spi::WbSpiFlash
+}
+
+//> Top module: the outermost entity of the design.
+pub mod Top for virt::Virt {
+    incoming clock : Clock { soc.clock := it }
+
+    //> UART pins.
+    outgoing tx : Bit { it := soc.tx }
+    incoming rx : Bit { soc.rx := it }
+
+    //> SPI flash pins.
+    outgoing spi_ck : Bit { it := soc.spi_ck }
+    outgoing spi_cs : Bit { it := soc.spi_cs }
+    outgoing spi_mosi : Bit { it := soc.spi_mosi }
+    incoming spi_miso : Bit { soc.spi_miso := it }
+
+    //> Exit request (see Soc).
+    outgoing exit : Valid[Word[8]] { it := soc.exit }
+
+    mod soc of Soc
+}

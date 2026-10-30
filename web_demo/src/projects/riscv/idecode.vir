@@ -1,0 +1,97 @@
+//> Instruction decode module.
+//>
+//> Decodes a 32-bit RISC-V instruction into opcode, register indices,
+//> function fields, and the immediate value (sign-extended or zero-extended
+//> as appropriate for each instruction format).
+
+pub mod IDecode {
+    //> The 32-bit instruction word fetched from memory.
+    incoming instr : Word[32]
+
+    //> Destination register
+    outgoing rd : Word[5] {
+        it := instr[12..7]
+    }
+    //> First source register
+    outgoing rs1 : Word[5] {
+        it := instr[20..15]
+    }
+    //> Second source register
+    outgoing rs2 : Word[5] {
+        it := instr[25..20]
+    }
+
+    //> 3-bit function selector
+    outgoing funct3 : Word[3] {
+        it := instr[15..12]
+    }
+    //> 7-bit function selector
+    outgoing funct7 : Word[7] {
+        it := instr[32..25]
+    }
+    //> 12-bit function selector for CSR / SYSTEM instructions (`instr[31:20]`).
+    outgoing funct12 : Word[12] {
+        it := instr[32..20]
+    }
+
+    //> Decoded immediate value, sign- or zero-extended to 32 bits.
+    //>
+    //> Format depends on the opcode (I-type, S-type, B-type, J-type, U-type).
+    outgoing imm : Word[32] {
+        it := match opcode {
+            case #OP_IMM => sext(instr[32..20])
+            case #JALR   => sext(instr[32..20])
+            case #LOAD   => sext(instr[32..20])
+            case #LUI    => word(instr[32..12], 0w12)
+            case #AUIPC  => word(instr[32..12], 0w12)
+            case #STORE  => sext(word(instr[32..25], instr[12..7]))
+            case #BRANCH => sext(word(instr[31], instr[7], instr[31..25], instr[12..8], 0w1))
+            case #JAL    => sext(word(instr[31], instr[20..12], instr[20], instr[31..21], 0w1))
+            case #SYSTEM => sext(instr[20..15]) // CSR immediate field
+            else         => 0w32
+        }
+    }
+
+    wire opcode_bits : Word[7] {
+        it := instr[7..0]
+    }
+
+    //> Decoded 7-bit primary opcode (`instr[6:0]`).
+    outgoing wire opcode : opcode::Opcode {
+        it := match opcode_bits {
+            case 99 => #BRANCH
+            case 103 => #JALR
+            case 111 => #JAL
+            case 19 => #OP_IMM
+            case 51 => #OP
+            case 55 => #LUI
+            case 3 => #LOAD
+            case 115 => #SYSTEM
+            case 35 => #STORE
+            case 23 => #AUIPC
+            case 15 => #FENCE
+            else => #SYSTEM
+        }
+    }
+
+    //> Whether the opcode is illegal (not a recognized RISC-V primary opcode).
+    // Unused — kept for documentation / future exception support.
+    outgoing wire illegal_opcode : Bit {
+        unused it
+
+        it := match opcode_bits {
+            case 99 => false
+            case 103 => false
+            case 111 => false
+            case 19 => false
+            case 51 => false
+            case 55 => false
+            case 3 => false
+            case 115 => false
+            case 35 => false
+            case 23 => false
+            case 15 => false
+            else => true
+        }
+    }
+}
