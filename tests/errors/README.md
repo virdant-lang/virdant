@@ -25,9 +25,9 @@ the authority on the exact coverage of each family.
 ## Adding a test
 
 Add a directory under the subdirectory matching its diagnostic family
-(`errors/<feature>/X/` with `src/X.vir`, a `Virdant.toml`, and a
+(`errors/<feature>/X/` with `src/X.vir`, a `virdant.toml`, and a
 `test.toml` with `kind = "check"` and `expect = "error"`), or a project
-directory with its own `Virdant.toml` for multi-file tests. Add FileCheck
+directory with its own `virdant.toml` for multi-file tests. Add FileCheck
 directives asserting the exact diagnostic text and the standard
 `// CHECK: Check failed` trailer. No central list needs updating — the
 runner discovers any directory containing a `test.toml`.

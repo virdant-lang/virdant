@@ -187,7 +187,7 @@ fn print_top_level_help(exit_code: i32) -> ! {
     let width = rows.iter().map(|(_, name, _)| name.len()).max().unwrap_or(0);
 
     println!("Virdant Hardware Language Compiler\n");
-    println!("Usage: vir [OPTIONS] [COMMAND]\n");
+    println!("Usage: vir [COMMAND]\n");
     let mut current_group: Option<&str> = None;
     for (group, name, about) in &rows {
         if Some(*group) != current_group {

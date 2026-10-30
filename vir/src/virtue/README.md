@@ -33,7 +33,7 @@ Single-file language tests use a full project layout:
 
 ```
 tests/errors/typing/word_literals/
-├── Virdant.toml            [package] name = "word_literals"
+├── virdant.toml            [package] name = "word_literals"
 ├── src/word_literals.vir   the test source, with CHECK directives
 └── test.toml               kind, contract, description
 ```

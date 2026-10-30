@@ -41,8 +41,8 @@ fn main() {
 fn doc(location: &ProjectLocation, open: bool) {
     let cwd = location.resolve_cwd();
 
-    if !cwd.join("Virdant.toml").exists() {
-        eprintln!("No Virdant.toml found");
+    if common::project_manifest(&cwd).is_none() {
+        eprintln!("No virdant.toml found");
         std::process::exit(1);
     }
 

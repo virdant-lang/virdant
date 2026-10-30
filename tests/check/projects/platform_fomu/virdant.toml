@@ -2,4 +2,4 @@
 name = "platform_fomu"
 
 [prog]
-top = "Top"
+top = "top::Top"

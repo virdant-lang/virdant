@@ -8,7 +8,7 @@ cd "$TMPDIR_WORK"
 mkdir -p blink/src
 cd blink
 
-cat > Virdant.toml <<'EOF'
+cat > virdant.toml <<'EOF'
 [project]
 name = "blink"
 

@@ -1,6 +1,6 @@
 # tests/check/projects — project-style positive tests
 
-Each subdirectory is a full Virdant project: `Virdant.toml`, `src/`, and a
+Each subdirectory is a full Virdant project: `virdant.toml`, `src/`, and a
 `test.toml` (`kind = "check"`, `expect = "ok"`); the runner runs `vir check`
 in project mode. Discovery is automatic, so a new project is wired in
 without editing any list.

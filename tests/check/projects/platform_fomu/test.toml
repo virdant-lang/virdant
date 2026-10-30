@@ -1,4 +1,4 @@
 kind = "check"
-description = "Placeholder for a Fomu-target project. It has a `Virdant.toml` but no"
+description = "Placeholder for a Fomu-target project. It has a `virdant.toml` but no"
 expect = "ok"
 skip = "project has no src/ directory; never implemented"

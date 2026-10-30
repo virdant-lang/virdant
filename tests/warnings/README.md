@@ -14,5 +14,5 @@ Each file ends with a single `// CHECK: Check OK` trailer.
 
 To add a warning test, create a directory (`warnings/X/`) with
 `src/X.vir` (carrying the `// CHECK:` directives for the warning you
-expect), a `Virdant.toml`, and a `test.toml` with `kind = "check"` and
+expect), a `virdant.toml`, and a `test.toml` with `kind = "check"` and
 `expect = "ok"`; the runner picks it up automatically.

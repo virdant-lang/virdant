@@ -2,4 +2,4 @@
 name = "platform_default"
 
 [prog]
-top = "Top"
+top = "top::Top"

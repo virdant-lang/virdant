@@ -5,7 +5,7 @@ creates one:
 
 ```
 <example>/
-├── Virdant.toml    [project] name (plus [prog] top where the example has one)
+├── virdant.toml    [project] name (plus [prog] top where the example has one)
 ├── test.toml       kind = "check", expect = "ok" (run by the vir-virtue runner)
 └── src/            the example's packages (one package per .vir file)
 ```

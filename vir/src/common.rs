@@ -17,6 +17,32 @@ use virdant::diagnostics::DiagnosticLevel;
 use virdant::util::{check_db, db_from_dir, db_from_files};
 
 // ---------------------------------------------------------------------------
+// Project manifest (`virdant.toml`)
+// ---------------------------------------------------------------------------
+
+/// The project manifest filename.  `virdant.toml` is still accepted, but
+/// deprecated; [`project_manifest`] emits a warning when it is used.
+pub const PROJECT_MANIFEST: &str = "virdant.toml";
+
+/// Resolve the project manifest in `dir`: `virdant.toml` if present,
+/// else the deprecated `Virdant.toml` (with a deprecation warning to
+/// stderr).  Returns `None` when neither exists.
+pub fn project_manifest(dir: &Path) -> Option<PathBuf> {
+    let path = dir.join(PROJECT_MANIFEST);
+    if path.exists() {
+        return Some(path);
+    }
+    let legacy = dir.join("Virdant.toml");
+    if legacy.exists() {
+        eprintln!(
+            "Warning: 'Virdant.toml' is deprecated; rename it to 'virdant.toml'."
+        );
+        return Some(legacy);
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------
 // Project location (`-C` / `-F`)
 // ---------------------------------------------------------------------------
 
@@ -103,8 +129,8 @@ impl ProjectLocation {
 
         let cwd = self.resolve_cwd();
 
-        if !cwd.join("Virdant.toml").exists() {
-            eprintln!("No Virdant.toml found");
+        if project_manifest(&cwd).is_none() {
+            eprintln!("No virdant.toml found");
             std::process::exit(1);
         }
 
@@ -118,10 +144,10 @@ impl ProjectLocation {
     }
 }
 
-/// Read `[prog].<key>` from `Virdant.toml` in `cwd`, tolerating a
+/// Read `[prog].<key>` from `virdant.toml` in `cwd`, tolerating a
 /// missing file or missing keys.
 pub fn read_prog_key(cwd: &Path, key: &str) -> Option<String> {
-    let text = std::fs::read_to_string(cwd.join("Virdant.toml")).ok()?;
+    let text = std::fs::read_to_string(project_manifest(cwd)?).ok()?;
     let toml: toml::Value = toml::from_str(&text).ok()?;
     toml.get("prog")
         .and_then(|prog| prog.get(key))
@@ -129,9 +155,9 @@ pub fn read_prog_key(cwd: &Path, key: &str) -> Option<String> {
         .map(|s| s.to_owned())
 }
 
-/// Read `[project].name` from `Virdant.toml` in `cwd`.
+/// Read `[project].name` from `virdant.toml` in `cwd`.
 pub fn read_project_name(cwd: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(cwd.join("Virdant.toml")).ok()?;
+    let text = std::fs::read_to_string(project_manifest(cwd)?).ok()?;
     let toml: toml::Value = toml::from_str(&text).ok()?;
     toml.get("project")
         .and_then(|project| project.get("name"))

@@ -1,7 +1,7 @@
 # platforms
 
 Platform-related errors, as project-style tests (each directory has a
-`Virdant.toml`, `src/`, and a `test.toml`): platform-default port
+`virdant.toml`, `src/`, and a `test.toml`): platform-default port
 synthesis rules, `for <platform>` mismatches, and top-module
 instantiation rules.
 

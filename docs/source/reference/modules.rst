@@ -275,7 +275,7 @@ generics: ext mods do not support type parameters (use @parameter
 annotations instead)``.
 
 A generic module cannot be a top: the top module named by `[prog] top`
-in `Virdant.toml` must be a concrete instantiation, and a generic
+in `virdant.toml` must be a concrete instantiation, and a generic
 definition has none.  (`pub mod`s may be generic.)
 Building a project whose `[prog] top` names a generic module reports
 ``top module top::Fifo cannot have generic parameters: a top module must

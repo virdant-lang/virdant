@@ -26,7 +26,7 @@ the project containing a `test.toml` (the whole tree is searched;
 - `check/` — focused, positive compile-time tests. Files must compile with
   **no warnings at all** (the harness greps the output for `WARNING`).
   Flat `.vir` files exercise language features; `projects/` contains
-  project-style tests (each with its own `Virdant.toml`).
+  project-style tests (each with its own `virdant.toml`).
 - `sim/` — end-to-end behavioral tests: `vir build` + iverilog (or verilator)
   simulation of a testbench against the generated Verilog. Requires
   iverilog/verilator; see the toolchain policy below.
@@ -67,26 +67,26 @@ projects named after the test:
 
 ```
 tests/errors/typing/word_literals/
-├── Virdant.toml            [package] name = "word_literals"
+├── virdant.toml            [package] name = "word_literals"
 ├── src/word_literals.vir   the test source, with CHECK directives
 └── test.toml               kind = "check", expect, filecheck, description
 ```
 
 Project tests (`check/projects/`, `sim/`, `errors/platforms/`, …) keep
-their `Virdant.toml` + `src/` layout and get a `test.toml` describing
+their `virdant.toml` + `src/` layout and get a `test.toml` describing
 their kind (`check`, `sim`, …).
 
 ## Adding a test
 
 - A new diagnostic for language construct X: add
-  `errors/<feature>/X/` with `src/X.vir`, a `Virdant.toml`, and a
+  `errors/<feature>/X/` with `src/X.vir`, a `virdant.toml`, and a
   `test.toml` (`kind = "check"`, `expect = "error"`) with CHECKs for
   the exact diagnostic text, plus a `// CHECK: Check failed` trailer.
 - A regression that must compile cleanly: add `check/X/`
   (`expect = "ok_no_warnings"`), or a `check/projects/<name>/` project
   if it needs multiple files / a platform.
 - A behavioral test: add `sim/<name>/` with `src/top.vir`, `tb.sv`,
-  `Virdant.toml`, and a `test.toml` (`kind = "sim"`).
+  `virdant.toml`, and a `test.toml` (`kind = "sim"`).
 - A formatter change: add `format/<name>/` with the input `.vir` plus
   `<name>.golden.vir` (the golden file is the expected formatted
   output) and a `test.toml` (`kind = "format"`).

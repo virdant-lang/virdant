@@ -386,7 +386,7 @@ external tool runs, naming the variable.
 
 Building and Flashing
 ---------------------
-The `Virdant.toml` file selects which module `vir bitstream` synthesizes:
+The `virdant.toml` file selects which module `vir bitstream` synthesizes:
 
 .. code-block:: toml
 
@@ -474,8 +474,8 @@ output:
 
 .. note::
 
-   `vir new <project>` scaffolds a `Virdant.toml` and a `src/top.vir`.
-   The generated `Virdant.toml` sets `[prog] top`, but the generated
+   `vir new <project>` scaffolds a `virdant.toml` and a `src/top.vir`.
+   The generated `virdant.toml` sets `[prog] top`, but the generated
    `Top` module has a single `led : Bit` port and no `for` clause, so
    it is not yet bound to a board and will not build with `vir bitstream`
    as-is. Add a `for` clause (and matching platform ports) as shown

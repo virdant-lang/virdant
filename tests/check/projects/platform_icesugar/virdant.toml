@@ -2,4 +2,4 @@
 name = "platform_icesugar"
 
 [prog]
-top = "Top"
+top = "top::Top"

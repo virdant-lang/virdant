@@ -2,4 +2,4 @@
 name = "platform_icestick"
 
 [prog]
-top = "Top"
+top = "top::Top"

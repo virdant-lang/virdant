@@ -142,12 +142,12 @@ fn build(args: &Args) {
     } else {
         let cwd = resolve_cwd(args);
 
-        if !cwd.join("Virdant.toml").exists() {
-            eprintln!("No Virdant.toml found");
+        if common::project_manifest(&cwd).is_none() {
+            eprintln!("No virdant.toml found");
             std::process::exit(1);
         }
 
-        let virdant_toml_text = std::fs::read_to_string(cwd.join("Virdant.toml")).unwrap();
+        let virdant_toml_text = std::fs::read_to_string(common::project_manifest(&cwd).unwrap()).unwrap();
         let virtant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
         let _ = virtant_toml["project"]["name"].as_str().unwrap();
         let builddir = cwd.join("build");
@@ -302,12 +302,12 @@ fn compile(path: PathBuf) {
 
 fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: &Option<PathBuf>, cycles: &Option<u64>, verbose: bool) {
     let cwd = resolve_cwd(args);
-    if !cwd.join("Virdant.toml").exists() {
-        eprintln!("No Virdant.toml found");
+    if common::project_manifest(&cwd).is_none() {
+        eprintln!("No virdant.toml found");
         std::process::exit(1);
     }
     let Some(top_name) = read_prog_key(&cwd, "top") else {
-        eprintln!("Virdant.toml is missing [prog] top");
+        eprintln!("virdant.toml is missing [prog] top");
         std::process::exit(1);
     };
 
@@ -396,7 +396,7 @@ fn new_project(args: &Args, project: &str) {
     let toml_content = format!(
         "[project]\nname = \"{project}\"\n\n[prog]\ntop = \"top::Top\"\n"
     );
-    std::fs::write(project_dir.join("Virdant.toml"), toml_content).unwrap();
+    std::fs::write(project_dir.join(common::PROJECT_MANIFEST), toml_content).unwrap();
 
     let top_vir_content = include_str!("../../../assets/vir_new_top.vir");
     std::fs::write(project_dir.join("src").join("top.vir"), top_vir_content).unwrap();
@@ -448,17 +448,17 @@ struct BitstreamPlan {
 
 fn plan_bitstream(args: &Args) -> BitstreamPlan {
     let cwd = resolve_cwd(args);
-    if !cwd.join("Virdant.toml").exists() {
-        eprintln!("No Virdant.toml found");
+    if common::project_manifest(&cwd).is_none() {
+        eprintln!("No virdant.toml found");
         std::process::exit(1);
     }
 
     let project = read_project_name(&cwd).unwrap_or_else(|| {
-        eprintln!("Virdant.toml is missing [project] name");
+        eprintln!("virdant.toml is missing [project] name");
         std::process::exit(1);
     });
     let Some(top_name) = read_prog_key(&cwd, "top") else {
-        eprintln!("Virdant.toml is missing [prog] top");
+        eprintln!("virdant.toml is missing [prog] top");
         std::process::exit(1);
     };
 
@@ -668,7 +668,7 @@ fn verilog_top_name(
 
 /// Selects the on-board programmer for a resolved platform name.
 /// The platform is determined by the top module's `for` clause, so the
-/// programmer is inferred from it rather than configured in `Virdant.toml`.
+/// programmer is inferred from it rather than configured in `virdant.toml`.
 /// The tuple carries flags that go before the bitstream path (e.g. dfu-util's
 /// `-D`, which iceprog/icesprog do not need).
 fn programmer_for(platform: &str) -> (&'static str, &'static [&'static str]) {

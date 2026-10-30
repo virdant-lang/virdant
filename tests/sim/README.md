@@ -1,7 +1,7 @@
 # tests/sim — behavioral end-to-end tests
 
 Each subdirectory is a full Virdant project: `src/` Virdant sources,
-`Virdant.toml`, a SystemVerilog testbench (`tb.sv`), and a `test.toml`
+`virdant.toml`, a SystemVerilog testbench (`tb.sv`), and a `test.toml`
 (`kind = "sim"`). The runner runs `vir build` and then simulates the
 generated Verilog with iverilog (verilator for lint-only projects).
 These are the repository's behavioral
@@ -20,7 +20,7 @@ covers.
 ## Adding a new sim project
 
 - Create a new subdirectory under `tests/sim/` with the standard layout:
-  `src/`, `Virdant.toml`, a `tb.sv` testbench, and a `test.toml` with
+  `src/`, `virdant.toml`, a `tb.sv` testbench, and a `test.toml` with
   `kind = "sim"` (plus `simulator`/`flags`/`sources` when the defaults
   don't fit; see `vir/src/virtue/README.md`).
 - The runner runs `vir build` and then simulates the generated Verilog.

@@ -554,12 +554,19 @@ fn format_file(path: &Path, in_place: bool) -> bool {
     }
 }
 
-/// Walk up from `start` looking for a directory containing
-/// `Virdant.toml`.  Returns the path to that directory, or `None`.
+/// Walk up from `start` looking for a directory containing a project
+/// manifest (`virdant.toml`, or the deprecated `Virdant.toml`).  Returns
+/// the path to that directory, or `None`.
 fn find_project_root(start: &Path) -> Option<PathBuf> {
     let mut dir = Some(std::fs::canonicalize(start).unwrap_or_else(|_| start.to_path_buf()));
     while let Some(ref d) = dir {
+        if d.join("virdant.toml").exists() {
+            return Some(d.clone());
+        }
         if d.join("Virdant.toml").exists() {
+            eprintln!(
+                "Warning: 'Virdant.toml' is deprecated; rename it to 'virdant.toml'."
+            );
             return Some(d.clone());
         }
         dir = d.parent().map(|p| p.to_path_buf());
@@ -624,7 +631,7 @@ fn main() {
         let project_root = match find_project_root(&cwd) {
             Some(root) => root,
             None => {
-                eprintln!("No Virdant.toml found in any parent directory.");
+                eprintln!("No virdant.toml found in any parent directory.");
                 std::process::exit(1);
             }
         };

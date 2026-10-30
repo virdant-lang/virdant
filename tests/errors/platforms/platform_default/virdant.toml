@@ -2,4 +2,4 @@
 name = "platform_default_errors"
 
 [prog]
-top = "Top"
+top = "top::Top"
