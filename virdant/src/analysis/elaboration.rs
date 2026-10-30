@@ -100,6 +100,14 @@ impl SignalId {
     pub fn index(self) -> usize {
         self.0
     }
+
+    /// Rebuild a `SignalId` from its dense `index()`.  Only valid for
+    /// indices that came from a real `SignalId` (i.e. indices below
+    /// `Elaboration::components().len()`); used by the sim's bitmap-
+    /// backed dirty worklist, which stores indices and hands them back.
+    pub(crate) fn from_index(index: usize) -> SignalId {
+        SignalId(index)
+    }
 }
 
 impl Elaboration {

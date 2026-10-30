@@ -6,10 +6,10 @@
 //! `InitStrategy` (random by default), so even never-written registers
 //! and top-level incoming ports carry fully-defined bit patterns.
 
-use indexmap::IndexSet;
-
 use crate::analysis::elaboration::{Elaboration, SignalId};
 use crate::sim::sim::InitStrategy;
+
+use super::dirty::DirtyList;
 
 use super::*;
 
@@ -25,7 +25,7 @@ pub(super) struct State {
     /// Pending next-values for registers, densely indexed by
     /// `SignalId::index()` (`None` for non-registers).
     set_vals: Vec<Option<Value>>,
-    dirty: IndexSet<SignalId>,
+    dirty: DirtyList,
 }
 
 impl State {
@@ -55,7 +55,7 @@ impl State {
         State {
             vals,
             set_vals,
-            dirty: IndexSet::new(),
+            dirty: DirtyList::new(n_components),
         }
     }
 

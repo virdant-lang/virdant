@@ -373,20 +373,10 @@ impl Sim {
                 } else {
                     // orchestrator (flow + edge transfers + watchers) and
                     // would recurse re-entrantly into the loop we're in.
+                    // Edge detection reads the live value *before* the
+                    // write, so `old` is captured at this call site.
                     let old = self.state.get(update_signal_id);
-                    let rising = is_rising(&old, &new_value);
-                    self.state.set_val(update_signal_id, new_value);
-                    // If this signal is a clock wire that just had a
-                    // rising edge (e.g. a submodule port driven by `clk`),
-                    // transfer the registers it clocks — the same thing
-                    // `set()` does for the top-level clock.
-                    if rising {
-                        let m = self.circuit.clock_sensitivity_count(update_signal_id);
-                        for j in 0..m {
-                            let reg_id = self.circuit.clock_sensitivity_at(update_signal_id, j);
-                            self.state.transfer(reg_id);
-                        }
-                    }
+                    self.transfer_clock(update_signal_id, &old, new_value);
                 }
             }
         }
@@ -482,10 +472,18 @@ impl Sim {
         fired
     }
 
-    fn set_without_flow(&mut self, signal_id: SignalId, value: Value) {
-        let old = self.state.get(signal_id);
-        let rising = is_rising(&old, &value);
-        self.state.set_val(signal_id, value);
+    /// Clock-transfer commit primitive, shared by `flow`'s
+    /// mid-propagation path and `set_without_flow`: detect a rising
+    /// edge (`old` vs `new`), write `new` to `signal_id`'s val node,
+    /// and — if the write is a rising edge on a clock wire (e.g. a
+    /// submodule port driven by `clk`) — transfer the registers it
+    /// clocks, the same thing `set()` does for the top-level clock.
+    ///
+    /// Edge detection bases stay at the call sites: each reads the live
+    /// value *before* the write and hands it in as `old`.
+    fn transfer_clock(&mut self, signal_id: SignalId, old: &Value, new: Value) {
+        let rising = is_rising(old, &new);
+        self.state.set_val(signal_id, new);
         if rising {
             let n = self.circuit.clock_sensitivity_count(signal_id);
             for i in 0..n {
@@ -493,6 +491,11 @@ impl Sim {
                 self.state.transfer(reg_id);
             }
         }
+    }
+
+    fn set_without_flow(&mut self, signal_id: SignalId, value: Value) {
+        let old = self.state.get(signal_id);
+        self.transfer_clock(signal_id, &old, value);
     }
 
     pub fn get(&self, signal_id: SignalId) -> Value {
