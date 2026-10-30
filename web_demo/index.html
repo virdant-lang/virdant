@@ -4,12 +4,18 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Virdant Web Demo</title>
+  <link rel="icon" type="image/svg+xml" href="../_static/virdant-logo-white-round.svg" />
   <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
   <div id="app">
     <div id="left">
       <div id="filesidebar">
+        <div id="projectbar">
+          <select id="project" title="Project"></select>
+          <button id="addproject" title="New project">+</button>
+          <button id="removeproject" title="Delete this project">✕</button>
+        </div>
         <div id="filesidebar-header">
           <span>FILES</span>
           <button id="addfile" title="Add a file">+</button>
@@ -28,11 +34,7 @@
       </div>
       <div id="errorpanel" class="panel"></div>
       <div id="consolepanel" class="panel" hidden>
-        <div id="consoleout"></div>
-        <form id="consolein-form">
-          <span class="prompt">&gt;</span>
-          <input id="consolein" autocomplete="off" placeholder="type to feed the design's UART rx…" disabled />
-        </form>
+        <div id="terminal"></div>
       </div>
     </div>
 
@@ -63,6 +65,10 @@
       <label class="check">
         <input id="set-showfps" type="checkbox" />
         <span>Display average clock frequency (fps)</span>
+      </label>
+      <label class="check">
+        <input id="set-localecho" type="checkbox" />
+        <span>Local echo (for designs that don't echo input)</span>
       </label>
       <div id="settingsbuttons">
         <button id="set-reset">Reset files to default</button>

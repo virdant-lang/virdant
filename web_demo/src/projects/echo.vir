@@ -1,0 +1,296 @@
+//! UART echo server for the `virt::Virt` board.
+//!
+//! Every byte received on `rx` is echoed back on `tx`.  Runs forever
+//! (`exit` stays `@Invalid()`), so stop the simulation with the Stop
+//! button.
+
+import virt
+
+//> Echo server: bytes received on the UART are echoed back on `tx`.
+pub mod Top for virt::Virt {
+    incoming clock : Clock
+    incoming rx : Bit
+    incoming spi_miso : Bit
+    outgoing tx : Bit
+    outgoing exit : Valid[Word[8]]
+    outgoing spi_ck : Bit
+    outgoing spi_cs : Bit
+    outgoing spi_mosi : Bit
+
+    mod receiver of UartReceiver
+    mod sender of UartSender
+
+    unused spi_miso
+    unused sender.ready
+
+    tx := sender.uart_tx
+    exit := @Invalid()
+    spi_ck := true
+    spi_cs := true
+    spi_mosi := true
+
+    receiver.clock := clock
+    receiver.rx := rx
+
+    // Boot sequence: hold `tx` idle for a while, then transmit one
+    // invisible `0x00` byte.  Until the `virt` board has decoded one
+    // frame from the design, it only trusts start bits that follow a
+    // long idle period (its auto-baud gate), so rapid echoes would
+    // all be dropped; the banner frame confirms the design's bit
+    // period once, and every later frame is accepted.
+    reg boot : Word[7] on clock {
+        initial it <= 0
+        when {
+            case boot != 100 {
+                it <= it + 1
+            }
+        }
+    }
+
+    wire boot_done : Bit {
+        it := boot == 100
+    }
+
+    // The banner byte starts in the skid buffer (see below) and is
+    // offered once the boot quiet period has passed.  `\r` is used
+    // because its bit pattern transitions every few bits, which lets
+    // the board's auto-baud decoder measure the bit period and close
+    // the frame cleanly; a constant byte (e.g. `0x00`) would leave
+    // the frame open and swallow the echoes that follow.
+    reg held : Word[8] on clock {
+        initial it <= 0x0d
+    }
+
+    reg held_valid : Bit on clock {
+        initial it <= true
+        it <= mux(release, false, it)
+    }
+
+    // Skid buffer: the receiver's `data_valid` is a one-cycle pulse,
+    // but the sender only accepts on its (less frequent) idle cycles.
+    // Hold a byte until the sender is ready; while a byte is held it
+    // is offered (and released) instead of the live receiver wire.
+    wire capture : Bit {
+        it := receiver.data_valid && !held_valid && !sender.ready
+    }
+
+    wire release : Bit {
+        it := held_valid && boot_done && sender.ready
+    }
+
+    when {
+        case capture {
+            held <= receiver.data
+        }
+    }
+
+    sender.clock := clock
+    sender.data := mux(held_valid, held, receiver.data)
+    sender.data_valid := mux(held_valid, boot_done, true) && (held_valid || receiver.data_valid)
+}
+
+union type UartState {
+    Idle()
+    Start(pulse : Word[4])
+    Data(bit : Word[3], pulse : Word[4])
+    Stop(pulse : Word[4])
+}
+
+//> Byte-level UART transmitter: 8N1, LSB first.
+//>
+//> A byte is accepted (and latched) on a cycle when `data_valid` and
+//> `ready` are both high.  The bit period is 9 clock cycles, which at
+//> the virtual board's 1 MHz clock is about 111 kbaud; the `virt`
+//> simulator auto-bauds on the `tx` line, so the exact rate does not
+//> matter.
+//>
+//> A byte is also accepted on the final stop-bit cycle (`@Stop(0)`):
+//> the stop bit has been driven in full by then, and back-to-back
+//> frames keep the echo path exactly at the wire's byte rate.
+mod UartSender {
+    incoming clock : Clock
+    incoming data : Word[8]
+    incoming data_valid : Bit
+
+    // A new byte is accepted while idle, or on the last stop-bit
+    // cycle (see the module docs).
+    outgoing ready : Bit {
+        it := accepting
+    }
+
+    // The line level for the current state: low start bit, eight data
+    // bits LSB first, high stop bit, and high while idle.
+    outgoing uart_tx : Bit {
+        it := tx_level
+    }
+
+    // Advance the state machine one bit period at a time.  Each state
+    // carries the number of cycles (`pulse`) remaining before the next
+    // transition; counting down from 8 to 0 gives the 9-cycle bit
+    // period.
+    reg state : UartState on clock {
+        initial it <= @Idle()
+        it <= match it : UartState {
+            case @Idle() when {
+                case data_valid => @Start(8)
+                else => @Idle()
+            }
+            case @Start(pulse) when {
+                case pulse == 0 => @Data(0, 8)
+                else => @Start(pulse - 1)
+            }
+            case @Data(bit, pulse) when {
+                case pulse > 0 => @Data(bit, pulse - 1)
+                case bit == 7 => @Stop(8)
+                else => @Data(bit + 1, 8)
+            }
+            case @Stop(pulse) when {
+                case pulse == 0 && data_valid => @Start(8)
+                case pulse == 0 => @Idle()
+                else => @Stop(pulse - 1)
+            }
+        }
+    }
+
+    // A handshake happens on a cycle when the sender is idle or on
+    // its final stop-bit cycle, and a byte is being offered.
+    wire accepting : Bit {
+        it := match state : UartState {
+            case @Idle() => true
+            case @Stop(pulse) => pulse == 0
+            else => false
+        }
+    }
+
+    // Snapshot the byte on the accepting clock edge.  The line then
+    // reads from the snapshot, so `data` may change while sending.
+    // (During `@Stop(0)` the line reads high regardless, so the
+    // snapshot cannot disturb the byte in flight.)
+    reg latched_data : Word[8] on clock {
+        when {
+            case accepting && data_valid {
+                it <= data
+            }
+        }
+    }
+
+    // The line level for the current state: low start bit, eight data
+    // bits LSB first, high stop bit, and high while idle.
+    wire tx_level : Bit {
+        it := match state : UartState {
+            case @Idle() => true
+            case @Start(pulse) => false
+            case @Data(bit, pulse) => latched_data[dyn bit]
+            case @Stop(pulse) => true
+        }
+    }
+}
+
+union type RxState {
+    Idle()
+    Start(pulse : Word[4])
+    Data(bit : Word[3], pulse : Word[4])
+    Stop(pulse : Word[4])
+}
+
+//> Byte-level UART receiver: 8N1, LSB first.
+//>
+//> Samples `rx` one and a half bit periods after the falling start
+//> edge, then once per bit period.  The bit period is 9 clock cycles,
+//> matching the `UartSender` in this file.
+mod UartReceiver {
+    incoming clock : Clock
+    incoming rx : Bit
+
+    //> The most recently received byte; meaningful when `data_valid`.
+    outgoing data : Word[8] {
+        it := latched_data
+    }
+
+    //> High for one cycle when a complete byte has been received.
+    outgoing data_valid : Bit {
+        it := delivering
+    }
+
+    // Edge detector: a two-stage synchronizer on `rx`.  A start bit
+    // is a falling edge, seen as `rx_sync2` still high while
+    // `rx_sync1` has already gone low.  (A plain one-register
+    // `prev_rx` misses the very first edge: at the board's first
+    // clock edge its rx drive and this register's capture collide,
+    // and the register reads the post-edge value -- with the second
+    // stage the racy capture still yields the correct level.)
+    reg rx_sync1 : Bit on clock {
+        initial it <= true
+        it <= rx
+    }
+
+    reg rx_sync2 : Bit on clock {
+        initial it <= true
+        it <= rx_sync1
+    }
+
+    // Advance the state machine one bit period (9 cycles) at a time.
+    // After the start edge, `Start` waits 12 further cycles so the
+    // first sample lands on the first data bit's center; each `Data`
+    // state then lasts 9 cycles, keeping every later sample centered
+    // too.  The seventh data bit is sampled during `@Data(6, 0)`, so
+    // only a short `Stop` state remains before the byte is handed
+    // over -- back-to-back bytes leave no idle gap to catch up in.
+    reg state : RxState on clock {
+        initial it <= @Idle()
+        it <= match it : RxState {
+            case @Idle() when {
+                case !rx_sync1 && rx_sync2 => @Start(12)
+                else => @Idle()
+            }
+            case @Start(pulse) when {
+                case pulse == 0 => @Data(0, 8)
+                else => @Start(pulse - 1)
+            }
+            case @Data(bit, pulse) when {
+                case pulse > 0 => @Data(bit, pulse - 1)
+                case bit == 6 => @Stop(4)
+                else => @Data(bit + 1, 8)
+            }
+            case @Stop(pulse) when {
+                case pulse == 0 => @Idle()
+                else => @Stop(pulse - 1)
+            }
+        }
+    }
+
+    // Sample `rx` on the cycle each data bit begins: the start-bit
+    // offset above places those cycles on the bits' centers.
+    // NOTE: compare payloads with `==` in the arm body, not with a
+    // literal pattern like `@Start(0)` -- payload literal patterns do
+    // not filter (they match every payload).
+    wire sampling : Bit {
+        it := match state : RxState {
+            case @Start(pulse) => pulse == 0
+            case @Data(bit, pulse) => pulse == 0
+            else => false
+        }
+    }
+
+    // Shift each sampled bit in at the most significant position.
+    // Bits arrive LSB first, so after eight samples the first bit
+    // has shifted down into bit 0.  (NOTE: `it[8..1]` is bits 7 down
+    // to 1 -- Virdant bit slices are top-exclusive, unlike Verilog's.)
+    reg latched_data : Word[8] on clock {
+        initial it <= 0
+        when {
+            case sampling {
+                it <= word(rx, it[8..1])
+            }
+        }
+    }
+
+    // The cycle the receiver leaves the stop bit is when the byte is
+    // complete; `data` is stable by then.
+    wire delivering : Bit {
+        it := match state : RxState {
+            case @Stop(pulse) => pulse == 0
+            else => false
+        }
+    }
+}

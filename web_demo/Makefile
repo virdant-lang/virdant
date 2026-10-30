@@ -2,7 +2,7 @@ PORT ?= 8000
 
 # Serve the built demo (static, client-side-only) on $(PORT).
 # Example: `make serve` or `make serve PORT=8001`.
-.PHONY: serve build wasm node_modules all clean
+.PHONY: serve build wasm node_modules all clean push_web
 
 all: build
 
@@ -22,6 +22,9 @@ build: node_modules wasm
 
 serve: build
 	npm run preview -- --port $(PORT) --strictPort
+
+push_web: build
+	rsync -avz --delete dist/ digitalocean:/root/projects/virdant/docs/build/html/web
 
 clean:
 	rm -rf node_modules dist src/wasm wasm/target

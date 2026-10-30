@@ -3,6 +3,10 @@ import { defineConfig } from 'vite';
 // The web demo is a client-side-only SPA: no server code anywhere.
 // `vite build` emits a fully static `dist/`; `vite preview` serves it.
 export default defineConfig({
+  // The demo is deployed under the docs site at /web (see the root
+  // Makefile's push_web target), so assets must be addressed relative
+  // to that base rather than the domain root.
+  base: '/web/',
   build: {
     target: 'es2022',
   },
