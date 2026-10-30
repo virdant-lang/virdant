@@ -35,7 +35,7 @@ impl State {
         strategy: &InitStrategy,
     ) -> State {
         let n_components = elaboration.components().len();
-        let mut rng: u64 = initial_seed();
+        let mut rng: u64 = strategy.rng_seed();
         let mut vals: Vec<Value> = Vec::with_capacity(n_components);
         let mut set_vals: Vec<Option<Value>> = vec![None; n_components];
         for elab_component in elaboration.components() {
@@ -107,16 +107,6 @@ impl State {
     pub(super) fn set_reg(&mut self, signal_id: SignalId, value: Value) {
         self.set_vals[signal_id.index()] = Some(value);
     }
-}
-
-/// A seed for the random init strategy, derived from the wall clock so
-/// two runs see different uninitialized values.
-fn initial_seed() -> u64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(0x9E3779B97F4A7C15)
 }
 
 impl State {

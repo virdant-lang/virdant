@@ -31,14 +31,39 @@ pub enum InitStrategy {
     /// Pseudorandom bit patterns (seeded from the wall clock).
     #[default]
     Random,
+    /// Pseudorandom bit patterns, seeded from an explicit value: two
+    /// sims built with the same seed over the same design carry
+    /// bit-identical uninitialized values, so their traces are
+    /// directly comparable (differential testing).
+    Seeded(u64),
 }
 
 impl InitStrategy {
-    pub(super) fn value(&self, typ_id: TypeId, width: Width, rng: &mut u64) -> Value {
+    /// The seed for the uninitialized-value RNG: a fresh wall-clock
+    /// value for `Random`, the given value for `Seeded`.
+    pub(super) fn rng_seed(&self) -> u64 {
         match self {
-            InitStrategy::Random => Value::new(typ_id, BitPat::random(width, rng)),
+            InitStrategy::Random => initial_seed(),
+            InitStrategy::Seeded(seed) => *seed,
         }
     }
+
+    pub(super) fn value(&self, typ_id: TypeId, width: Width, rng: &mut u64) -> Value {
+        match self {
+            InitStrategy::Random | InitStrategy::Seeded(_) =>
+                Value::new(typ_id, BitPat::random(width, rng)),
+        }
+    }
+}
+
+/// A seed for the random init strategy, derived from the wall clock so
+/// two runs see different uninitialized values.
+fn initial_seed() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0x9E3779B97F4A7C15)
 }
 
 
@@ -594,6 +619,19 @@ impl Sim {
 
     pub fn children_of_root(&self) -> Vec<(SignalId, BString)> {
         self.children_with_prefix(b"top")
+    }
+
+    /// Every elaborated component as `(id, path)`, in elaboration
+    /// order.  Unlike `children_of`, this is the exhaustive flat list:
+    /// module instances are not themselves components, so a
+    /// `children_of` walk cannot reach components nested inside one
+    /// (e.g. `top.gcd.state`); this can.
+    pub fn components(&self) -> Vec<(SignalId, BString)> {
+        self.elaboration()
+            .components()
+            .iter()
+            .map(|comp| (comp.id(), comp.path().clone()))
+            .collect()
     }
 
     fn children_with_prefix(&self, prefix: &[u8]) -> Vec<(SignalId, BString)> {
