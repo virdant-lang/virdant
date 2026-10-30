@@ -87,11 +87,18 @@ struct Counters {
     xfer_samples: AtomicU64,
 
     /// Timed events popped and fired (`next_after_delay` returned
-    /// `Some`).  Two per clock cycle for an attached clock.
+    /// `Some`).  With free-running clocks on the fast path, these are
+    /// the user (`at`/`after`) events only: clock edges are stepped by
+    /// the run loop directly and counted in `clock_edges` instead.
     events_popped: AtomicU64,
+    /// Clock edges stepped by the run loop's free-running fast path
+    /// (`Sim::step_clock`): no heap push, no heap pop, no scheduler
+    /// dispatch.  One per half period per attached clock while no user
+    /// event beats the edge.
+    clock_edges: AtomicU64,
     /// Timed-heap pushes in `Scheduler::register` (`AfterDelay`
-    /// registrations).  Two per clock cycle for an attached clock
-    /// (the toggle re-arms itself).  Ticks the push sampler.
+    /// registrations).  One per user event; clock edges on the
+    /// free-running fast path do not push.  Ticks the push sampler.
     sched_push_calls: AtomicU64,
     /// Number of `flow` settlements.
     flow_calls: AtomicU64,
@@ -143,6 +150,7 @@ static COUNTERS: Counters = Counters {
     xfer_sample_ns: AtomicU64::new(0),
     xfer_samples: AtomicU64::new(0),
     events_popped: AtomicU64::new(0),
+    clock_edges: AtomicU64::new(0),
     sched_push_calls: AtomicU64::new(0),
     flow_calls: AtomicU64::new(0),
     dirty_pops: AtomicU64::new(0),
@@ -265,6 +273,13 @@ pub fn bump_events_popped() {
     COUNTERS.events_popped.fetch_add(1, Ordering::Relaxed);
 }
 
+/// Count a clock edge stepped by the run loop's free-running fast
+/// path (`Sim::step_clock`).
+#[inline]
+pub fn bump_clock_edge() {
+    COUNTERS.clock_edges.fetch_add(1, Ordering::Relaxed);
+}
+
 /// Count a dirty-list pop inside `flow`.
 #[inline]
 pub fn bump_dirty_pop() {
@@ -314,6 +329,7 @@ pub struct Snapshot {
     pub xfer_sample_ns: u64,
     pub xfer_samples: u64,
     pub events_popped: u64,
+    pub clock_edges: u64,
     pub sched_push_calls: u64,
     pub flow_calls: u64,
     pub dirty_pops: u64,
@@ -353,6 +369,7 @@ pub fn snapshot() -> Snapshot {
         xfer_sample_ns: COUNTERS.xfer_sample_ns.load(Ordering::Relaxed),
         xfer_samples: COUNTERS.xfer_samples.load(Ordering::Relaxed),
         events_popped: COUNTERS.events_popped.load(Ordering::Relaxed),
+        clock_edges: COUNTERS.clock_edges.load(Ordering::Relaxed),
         sched_push_calls: COUNTERS.sched_push_calls.load(Ordering::Relaxed),
         flow_calls: COUNTERS.flow_calls.load(Ordering::Relaxed),
         dirty_pops: COUNTERS.dirty_pops.load(Ordering::Relaxed),
@@ -385,6 +402,7 @@ pub fn reset() {
     COUNTERS.xfer_sample_ns.store(0, Ordering::Relaxed);
     COUNTERS.xfer_samples.store(0, Ordering::Relaxed);
     COUNTERS.events_popped.store(0, Ordering::Relaxed);
+    COUNTERS.clock_edges.store(0, Ordering::Relaxed);
     COUNTERS.sched_push_calls.store(0, Ordering::Relaxed);
     COUNTERS.flow_calls.store(0, Ordering::Relaxed);
     COUNTERS.dirty_pops.store(0, Ordering::Relaxed);

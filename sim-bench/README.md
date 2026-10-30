@@ -112,9 +112,12 @@ Columns (absolute time and per-cycle nanoseconds):
 
 - `run total`: the whole `Sim::run` call.
 - `scheduler`: time in `Scheduler::next_after_delay` (heap pop plus
-  time advance), per timed event.
+  time advance), per timed event.  Clock edges on the free-running
+  fast path do not enter the scheduler, so on a clock-dominated run
+  this column now attributes only user (`at`/`after`) events.
 - `sched push (est)`: time in `Scheduler::register`'s timed-heap push
-  (the re-arm half of every clock toggle), stride-256 sampled.
+  (user-event registrations; clock edges on the free-running fast
+  path do not push), stride-256 sampled.
 - `flow`: time in `Sim::flow` settlements (exact: one `Instant` pair
   per settlement).  Includes the driver evals and the in-flow
   `set_val` commits.
@@ -130,7 +133,9 @@ Columns (absolute time and per-cycle nanoseconds):
   scale-dependent phase (event dispatch, callback bookkeeping,
   lock/transfer glue, the run loop itself).
 
-The counts line is exact everywhere: events, pushes, dirty pops,
+The counts line is exact everywhere: events (timed `AfterDelay`
+dispatches; clock edges on the free-running fast path are counted
+separately as `clock_edges`), pushes, dirty pops,
 driver evals (VM vs interpreter fallback), set_val/transfers calls and
 actual writes, rising edges, watcher passes and fires.
 

@@ -210,7 +210,32 @@ impl Scheduler {
         entry.cb.callback.take()
     }
 
-    fn advance_to(&mut self, time_ps: u64) {
+    /// Peek the soonest timed entry without popping it: its
+    /// `(at_ps, seq)` pair.  `None` when the timed queue is empty.  The
+    /// run loop compares this against the free-running clocks' next
+    /// edges in the heap's own `(time, seq)` order, so ties between an
+    /// edge and a user event keep the sequence order the edge would
+    /// have had as a heap entry.
+    pub(super) fn peek_next_timed(&self) -> Option<(u64, u64)> {
+        self.timed.peek().map(|e| (e.at_ps, e.seq))
+    }
+
+    /// Allocate and return the next FIFO sequence number, the
+    /// tie-breaker the heap orders same-time entries by.  The
+    /// free-running clock fast path allocates one per re-armed edge so
+    /// its ordering against user events matches the heap-entry order
+    /// it replaced.
+    pub(super) fn alloc_seq(&mut self) -> u64 {
+        let seq = self.next_seq;
+        self.next_seq += 1;
+        seq
+    }
+
+    /// Move simulated time to `time_ps` without dispatching anything.
+    /// The free-running clock fast path calls this to park `time_ps` at
+    /// an edge before stepping it; the timed-event path advances inside
+    /// `next_after_delay`.
+    pub(super) fn advance_to(&mut self, time_ps: u64) {
         self.time_ps = time_ps;
     }
 }

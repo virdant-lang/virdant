@@ -1,8 +1,8 @@
 //! The `Sim` runtime: combinational propagation (`flow`), register
 //! transfer on clock edges, a `SimLock` for batching writes, clock
-//! attachment, and the `run` loop draining the scheduler, plus
-//! elaboration lookup and callback registration helpers (`at`,
-//! `after`, `on_change`, `on_clock`).
+//! attachment, and the `run` loop draining the scheduler and stepping
+//! free-running clock edges, plus elaboration lookup and callback
+//! registration helpers (`at`, `after`, `on_change`, `on_clock`).
 
 use crate::analysis::symbols::SymbolId;
 use crate::analysis::elaboration::{SignalId, Elaboration};
@@ -104,6 +104,10 @@ pub struct Sim {
     vm: vm::Vm,
     state: State,
     sched: Scheduler,
+    /// Free-running clocks registered by `attach_clock`.  Each edge is
+    /// stepped directly by the run loop when it beats every queued
+    /// user event; see `ClockHandle` and `Sim::run`.
+    clocks: Vec<ClockHandle>,
     /// Persistent watcher table (`on_change`/`on_clock`): registered
     /// once, swept in place at each settlement.  No per-fire
     /// re-registration, no queue rebuild.
@@ -114,6 +118,28 @@ pub struct Sim {
     /// dispatch happens exactly once per settlement, in the outermost
     /// unlock.
     dispatching: bool,
+}
+
+/// One free-running clock registered by `Sim::attach_clock`.
+///
+/// Replaces the self-re-arming `AfterDelay` toggle event the engine
+/// used to schedule per half period: the run loop steps an edge
+/// directly whenever it beats every queued user event, so a clock
+/// cycle costs no heap push (with its boxed-callback allocation), no
+/// heap pop, and no scheduler dispatch.
+///
+/// `next` is the pending edge's `(time_ps, seq)` pair, compared in the
+/// scheduler heap's own order — earliest time, then FIFO sequence —
+/// so a tie against a user event fires in exactly the order the edge
+/// would have had as a heap entry.  It is `None` only while the edge
+/// is being processed, mirroring the old heap state during the toggle
+/// callback: the popped entry was gone and the next one was registered
+/// only after the settlement, so a re-entrant `run()` from a
+/// settlement callback saw no pending edge for this clock.
+struct ClockHandle {
+    signal: SignalId,
+    half_period_ps: u64,
+    next: Option<(u64, u64)>,
 }
 
 /// How a watcher decides to fire.
@@ -221,6 +247,7 @@ impl Sim {
             program,
             vm: vm_pool,
             sched: Scheduler::new(),
+            clocks: Vec::new(),
             watchers: Vec::new(),
             dispatching: false,
         };
@@ -636,9 +663,17 @@ impl Sim {
     }
 
     /// Drive `signal` as a free-running square wave described by `clock`.
-    /// The signal is initialised low immediately and the first toggle is
-    /// scheduled `period_ps / 2` from now, so the first rising edge
-    /// happens at `now + period_ps / 2`.
+    /// The signal is initialised low immediately and the first rising
+    /// edge happens at `now + period_ps / 2`.
+    ///
+    /// The clock registers in the free-running clock table instead of
+    /// as a scheduler event: the run loop advances time and toggles the
+    /// signal directly whenever the next edge beats every queued user
+    /// event, skipping the per-half-period heap push/pop and callback
+    /// dispatch.  The edge keeps its old scheduler-event ordering
+    /// against user `at`/`after` events: deadline `now + half`, FIFO
+    /// sequence allocated after this settlement, exactly as the old
+    /// `after(half)` registration.
     pub fn attach_clock(&mut self, signal: SignalId, clock: Clock) {
         let half = clock.period_ps / 2;
         {
@@ -646,21 +681,34 @@ impl Sim {
             let mut lock = self.lock();
             lock.set(signal, Value::from_bool(typ_id, false));
         }
-        self.register_clock_toggle(signal, half);
+        let at_ps = self.sched.time_ps().saturating_add(half);
+        let seq = self.sched.alloc_seq();
+        self.clocks.push(ClockHandle {
+            signal,
+            half_period_ps: half,
+            next: Some((at_ps, seq)),
+        });
     }
 
     /// Drain the queue.  Order:
     ///   1. All `Event::StartOfSimulation` entries fire, in FIFO order.
-    ///   2. While the queue contains an `Event::AfterDelay` entry and
-    ///      `finish()` has not been requested: pop the soonest one (FIFO
-    ///      tiebreak), advance simulated time to its deadline, and fire
-    ///      it.  Each callback may itself register more entries and
-    ///      trigger `set()`s; value-change watchers are dispatched by
-    ///      the persistent watcher table at each settlement
-    ///      (`Sim::unlock`), not through the queue.
+    ///   2. While `finish()` has not been requested, repeatedly fire
+    ///      whichever comes next, free-running clock edge or
+    ///      `Event::AfterDelay` entry, compared in the heap's own
+    ///      `(time, seq)` order — so a tie between an edge and a user
+    ///      event keeps the sequence order the edge would have had as a
+    ///      heap entry.  Each callback may itself register more entries
+    ///      and trigger `set()`s; value-change watchers are dispatched
+    ///      by the persistent watcher table at each settlement
+    ///      (`Sim::unlock`), not through the queue.  An edge that beats
+    ///      every queued event is stepped directly (`Sim::step_clock`),
+    ///      without touching the heap.
     ///   3. All `Event::EndOfSimulation` entries fire, in FIFO order.
     /// Watchers (`on_change`/`on_clock`) persist across `run()` calls;
     /// only a watcher whose callback called `finish()` is removed.
+    /// Free-running clocks likewise persist: an edge armed at the end
+    /// of one `run()` is still pending when the next one starts, as it
+    /// was as a leftover heap entry.
     pub fn run(&mut self) -> Result<(), SimError> {
         // Total run-loop elapsed: the one timer that spans everything
         // below (see `sim::profile`).
@@ -672,7 +720,21 @@ impl Sim {
         }
 
         while !self.sched.is_shutdown_requested() {
-            if let Some(mut cb) = self.sched.next_after_delay() {
+            let event_next = self.sched.peek_next_timed();
+            let clock_next = self.next_clock_edge();
+            // The clock edge fires first when it beats the soonest
+            // queued user event in the heap's own `(time, seq)` order.
+            let clock_first = match (event_next, clock_next) {
+                (Some((t, s)), Some((_, (edge_ps, edge_seq)))) => {
+                    (edge_ps, edge_seq) < (t, s)
+                }
+                (None, Some(_)) => true,
+                _ => false,
+            };
+            if clock_first {
+                let (index, _) = clock_next.unwrap();
+                self.step_clock(index);
+            } else if let Some(mut cb) = self.sched.next_after_delay() {
                 cb(self);
             } else {
                 break;
@@ -684,6 +746,67 @@ impl Sim {
             cb(self);
         }
         Ok(())
+    }
+
+    /// The soonest pending edge across all free-running clocks, as
+    /// `(handle index, (time, seq))`, compared in the heap's `(time,
+    /// seq)` order so same-time edges fire in registration order,
+    /// exactly as they did as heap entries.  `None` when no clock has
+    /// a pending edge (every armed handle, or none at all).
+    fn next_clock_edge(&self) -> Option<(usize, (u64, u64))> {
+        let mut best: Option<(usize, (u64, u64))> = None;
+        for (i, handle) in self.clocks.iter().enumerate() {
+            if let Some(next) = handle.next {
+                best = match best {
+                    None => Some((i, next)),
+                    Some((_, best_next)) if next < best_next => Some((i, next)),
+                    _ => best,
+                };
+            }
+        }
+        best
+    }
+
+    /// Step one free-running clock edge through exactly the work the
+    /// old toggle callback did: advance `time_ps` to the edge, toggle
+    /// the signal through the same commit path (`set_without_flow` ->
+    /// `transfer_clock`, preserving rising-edge register transfer),
+    /// settle exactly as a `SimLock` drop (`unlock`: flow plus the
+    /// outermost dispatch sweep, `changed_since_dispatch` skip
+    /// included), then re-arm the next edge without touching the heap
+    /// or allocating.
+    ///
+    /// The handle is marked in-flight (no pending edge) across the
+    /// settlement, mirroring the old heap state: the popped toggle
+    /// entry was gone and the next one was only registered after the
+    /// settlement, so a re-entrant `run()` from a settlement callback
+    /// saw no pending edge for this clock.
+    fn step_clock(&mut self, index: usize) {
+        let (edge_ps, _seq) = self.clocks[index]
+            .next
+            .take()
+            .expect("stepping a clock edge that is not armed");
+        let signal = self.clocks[index].signal;
+        let half = self.clocks[index].half_period_ps;
+        self.sched.advance_to(edge_ps);
+        // The old callback's toggle: read the live value, flip it,
+        // commit through the lock's write path.  Toggling the live
+        // value (not a stored phase) keeps the behavior when another
+        // writer drove the signal between edges.
+        let current = self.state.get(signal);
+        let next = current.toggled();
+        self.set_without_flow(signal, next);
+        // The same settlement a `SimLock` drop runs.
+        self.unlock();
+        // Re-arm exactly as the old callback's `after(half)` did after
+        // the settlement: deadline `edge + half` (a settlement cannot
+        // move time), sequence allocated after any events the
+        // settlement's callbacks registered.
+        let at_ps = self.sched.time_ps().saturating_add(half);
+        let seq = self.sched.alloc_seq();
+        self.clocks[index].next = Some((at_ps, seq));
+        #[cfg(feature = "sim-profile")]
+        crate::sim::profile::bump_clock_edge();
     }
 
 }
@@ -859,20 +982,6 @@ impl Sim {
             _ => self.sched.register(event_cb),
         }
     }
-
-    /// Internal: schedule one half-period toggle for `clock`.  The callback
-    /// toggles the signal and re-arms itself for `half_period_ps` later.
-    fn register_clock_toggle(&mut self, clock: SignalId, half_period_ps: u64) {
-        self.after(half_period_ps, Box::new(move |sim| {
-            let current = sim.state.get(clock);
-            let next = current.toggled();
-            {
-                let mut lock = sim.lock();
-                lock.set(clock, next);
-            }
-            sim.register_clock_toggle(clock, half_period_ps);
-        }));
-    }
 }
 
 /// Intentionally-empty hook for tracing register transfers when
@@ -890,6 +999,7 @@ fn is_rising(old: &Value, new: &Value) -> bool {
 mod tests {
     use super::*;
     use crate::util::{check_db, db_from_dir_with_lib};
+    use std::cell::Cell;
     use std::path::Path;
 
     /// Build a settled `Sim` for the `tests/sim/gcd` design (its source
@@ -1054,5 +1164,157 @@ mod tests {
         }
         assert_eq!(*fire_fires.borrow(), 1, "a quiescent settlement must not re-fire");
         assert_eq!(*x_fires.borrow(), 1, "a quiescent settlement must not re-fire");
+    }
+
+    /// A `Write` sink over a shared buffer, so a test can attach the
+    /// VCD dumper and inspect the bytes it produced.
+    struct SharedSink(Rc<RefCell<Vec<u8>>>);
+
+    impl std::io::Write for SharedSink {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.borrow_mut().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Event interleaving between the free-running clock and user
+    /// `after` events: exact (tag, time) order of every dispatched
+    /// callback, captured from the pre-fast-path engine (where each
+    /// clock edge was a scheduler heap entry) on the same design and
+    /// seed.  Covers:
+    ///
+    /// - an `after` strictly between two edges (7500) fires there;
+    /// - an `after` registered later (7500) for an edge's exact time
+    ///   (10000) fires after that edge: the edge's heap entry was
+    ///   registered at 5000, so it holds the lower seq;
+    /// - an `after` registered from inside an edge's settlement (at
+    ///   5000) for the next edge's exact time (15000) fires BEFORE
+    ///   that edge: it holds the lower seq, because the clock re-arms
+    ///   only after its settlement;
+    /// - `finish()` from a rising-edge watcher stops the run cleanly
+    ///   with time parked at the last edge (15000).
+    #[test]
+    fn clock_and_after_events_interleave_like_the_heap_engine() {
+        let mut sim = gcd_sim();
+        let clock = sim.signal("top.clock");
+        sim.attach_clock(clock, Clock::with_period_ps(10_000));
+
+        let log: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+        let push = |log: &Rc<RefCell<Vec<String>>>, tag: &str, t: u64| {
+            log.borrow_mut().push(format!("{tag} {t}"));
+        };
+
+        {
+            let log_cb = log.clone();
+            let armed = Rc::new(Cell::new(false));
+            let armed_cb = armed.clone();
+            sim.on_clock(clock, Box::new(move |sim| {
+                push(&log_cb, "clock-rise", sim.now());
+                if !armed_cb.get() {
+                    armed_cb.set(true);
+                    let log2 = log_cb.clone();
+                    sim.after(10_000, Box::new(move |sim| {
+                        push(&log2, "watcher-after", sim.now());
+                    }));
+                }
+            }));
+        }
+        {
+            let log_cb = log.clone();
+            sim.at_start(Box::new(move |sim| {
+                push(&log_cb, "start", sim.now());
+            }));
+        }
+        {
+            let log_cb = log.clone();
+            sim.at_start(Box::new(move |sim| {
+                let log2 = log_cb.clone();
+                sim.after(7_500, Box::new(move |sim| {
+                    push(&log2, "between", sim.now());
+                    let log3 = log2.clone();
+                    sim.after(2_600, Box::new(move |sim| {
+                        push(&log3, "late", sim.now());
+                    }));
+                    let log3 = log2.clone();
+                    sim.after(2_500, Box::new(move |sim| {
+                        push(&log3, "tie-after", sim.now());
+                    }));
+                }));
+            }));
+        }
+        {
+            let rises: Rc<Cell<u64>> = Rc::new(Cell::new(0));
+            let rises_cb = rises.clone();
+            sim.on_clock(clock, Box::new(move |sim| {
+                let n = rises_cb.get() + 1;
+                rises_cb.set(n);
+                if n >= 2 {
+                    sim.finish();
+                }
+            }));
+        }
+
+        sim.run().unwrap();
+        let log = log.borrow();
+        let expected = [
+            "start 0",
+            "clock-rise 5000",
+            "between 7500",
+            "tie-after 10000",
+            "late 10100",
+            "watcher-after 15000",
+            "clock-rise 15000",
+        ];
+        for (got, want) in log.iter().zip(expected.iter()) {
+            assert_eq!(got, want, "dispatch order diverged from the heap engine");
+        }
+        assert_eq!(log.len(), expected.len(), "unexpected extra dispatches");
+        assert_eq!(sim.now(), 15_000, "finish() parks time at the last edge");
+    }
+
+    /// The VCD dump of a clocked run must be byte-identical to the
+    /// pre-fast-path engine's, timestamp lines included: the fast path
+    /// advances `time_ps` exactly where the heap-event engine did.
+    /// Golden captured from the pre-change engine on the gcd design,
+    /// seed 42, 16 rising edges, period 10000 ps.
+    #[test]
+    fn vcd_trace_is_byte_identical_to_the_heap_engine() {
+        let mut sim = gcd_sim();
+        let clock = sim.signal("top.clock");
+        let sink = SharedSink(Rc::new(RefCell::new(Vec::new())));
+        let sink_ref = sink.0.clone();
+        sim.attach_vcd(sink);
+        sim.attach_clock(clock, Clock::with_period_ps(10_000));
+
+        let rises: Rc<Cell<u64>> = Rc::new(Cell::new(0));
+        {
+            let rises_cb = rises.clone();
+            sim.on_clock(clock, Box::new(move |sim| {
+                let n = rises_cb.get() + 1;
+                rises_cb.set(n);
+                if n >= 16 {
+                    sim.finish();
+                }
+            }));
+        }
+        sim.run().unwrap();
+        assert_eq!(rises.get(), 16);
+
+        let golden_path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../sim-bench/golden/gcd.vcd");
+        let golden = std::fs::read(&golden_path).unwrap_or_else(|e| {
+            panic!(
+                "cannot read VCD golden {:?}: {e} (run the pre-change capture first)",
+                golden_path
+            )
+        });
+        assert_eq!(
+            sink_ref.borrow().as_slice(),
+            golden.as_slice(),
+            "VCD output diverged from the heap-event engine"
+        );
     }
 }
