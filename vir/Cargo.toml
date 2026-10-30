@@ -31,8 +31,8 @@ name = "vir"
 path = "src/vir/main.rs"
 
 [[bin]]
-name = "vir-lsp"
-path = "src/virlsp/main.rs"
+name = "vir-ls"
+path = "src/ls/main.rs"
 
 [[bin]]
 name = "vir-format"

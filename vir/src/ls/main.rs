@@ -1303,7 +1303,7 @@ fn dump_hover(workspace_dir: &std::path::Path, package_name: BString, linecol: L
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "vir-lsp", author, version, about)]
+#[command(name = "vir-ls", author, version, about)]
 struct Cli {
     /// Dump the arg-parse data as JSON and exit (hidden)
     #[arg(long, hide = true)]

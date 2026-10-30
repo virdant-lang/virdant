@@ -430,8 +430,8 @@ fn find_bin_in(dirs: &[PathBuf], bin_name: &str) -> Option<String> {
 }
 
 /// Discover the names of all `vir-*` binaries available on `$PATH`.
-/// For example, a binary named `vir-lsp` yields the subcommand name
-/// `lsp`.  Names are deduplicated and sorted.
+/// For example, a binary named `vir-ls` yields the subcommand name
+/// `ls`.  Names are deduplicated and sorted.
 pub fn discover_virtual_subcommands() -> Vec<String> {
     discover_virtual_subcommands_in(&path_dirs())
 }

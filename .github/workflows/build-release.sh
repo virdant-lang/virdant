@@ -39,9 +39,8 @@ build_one() {
   CARGO="cargo"
 
   # --- toolchain ---
-  # One build produces the `vir` dispatcher and all the standalone
-  # binaries (vir-lsp, vir-format, vir-doc, vir-inspect, vir-tutor,
-  # vir-virtue, vir-filecheck, vir-run-icarus), mirroring `make install`.
+  # One build produces the `vir` dispatcher and all the standalone binaries,
+  # mirroring `make install`.
   $CARGO build --release --target "$host" -p vir
   tc_stage="$(mktemp -d)"
   tc_dir="virdant-$VER-$host"
