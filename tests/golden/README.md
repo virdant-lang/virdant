@@ -9,7 +9,7 @@ Subdirectories group tests by feature area (e.g. generics). Each golden
 test's `test.toml` is bespoke — the typical pattern is a `kind =
 "golden"` entry that checks, builds, greps for the escaped FQN, and
 tail-diffs the generated Verilog against the reference via the `grep`
-and `diff` keys (see `virtue/README.md`).
+and `diff` keys (see `vir/src/virtue/README.md`).
 
 To add a golden test, create a new subdirectory with the source, the
 hand-expanded reference, and a `test.toml` following the existing

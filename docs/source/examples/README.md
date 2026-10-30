@@ -6,12 +6,12 @@ creates one:
 ```
 <example>/
 ├── Virdant.toml    [project] name (plus [prog] top where the example has one)
-├── test.toml       kind = "check", expect = "ok" (run by the virtue runner)
+├── test.toml       kind = "check", expect = "ok" (run by the vir-virtue runner)
 └── src/            the example's packages (one package per .vir file)
 ```
 
 These projects double as the live sources for the documentation: the
-tutorial pages `literalinclude` files from here, and the virtue test
+tutorial pages `literalinclude` files from here, and the vir-virtue test
 runner (see the root `Makefile`) runs `vir check` on every project, so a
 broken example fails `make test`.
 

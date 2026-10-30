@@ -22,7 +22,7 @@ covers.
 - Create a new subdirectory under `tests/sim/` with the standard layout:
   `src/`, `Virdant.toml`, a `tb.sv` testbench, and a `test.toml` with
   `kind = "sim"` (plus `simulator`/`flags`/`sources` when the defaults
-  don't fit; see `virtue/README.md`).
+  don't fit; see `vir/src/virtue/README.md`).
 - The runner runs `vir build` and then simulates the generated Verilog.
 - Put the assertions in the testbench (`tb.sv`); the runner only builds
   and runs the simulation.

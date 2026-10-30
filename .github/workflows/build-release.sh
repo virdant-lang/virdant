@@ -39,14 +39,15 @@ build_one() {
   CARGO="cargo"
 
   # --- toolchain ---
-  # One build produces vir, vir-lsp, and vir-format binaries.
+  # One build produces the `vir` dispatcher and all the standalone
+  # binaries (vir-lsp, vir-format, vir-doc, vir-inspect, vir-tutor,
+  # vir-virtue, vir-filecheck, vir-run-icarus), mirroring `make install`.
   $CARGO build --release --target "$host" -p vir
   tc_stage="$(mktemp -d)"
   tc_dir="virdant-$VER-$host"
   mkdir -p "$tc_stage/$tc_dir/bin" "$tc_stage/$tc_dir/lib"
   cp "target/$host/release/vir"        "$tc_stage/$tc_dir/bin/"
-  cp "target/$host/release/vir-lsp"    "$tc_stage/$tc_dir/bin/"
-  cp "target/$host/release/vir-format" "$tc_stage/$tc_dir/bin/"
+  cp "target/$host/release/vir-"*      "$tc_stage/$tc_dir/bin/"
   cp -r lib/*                           "$tc_stage/$tc_dir/lib/" 2>/dev/null || true
   tar -C "$tc_stage" -czf "release-assets/$tc_dir.tar.gz" "$tc_dir"
   rm -rf "$tc_stage"

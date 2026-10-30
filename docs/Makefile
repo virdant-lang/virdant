@@ -45,7 +45,7 @@ rustdocs:
 	cp -r ../virdant/target/doc/ $(BUILDDIR)/html/.
 
 # The examples under source/examples/ are full Virdant projects, each with
-# a test.toml, so the virtue runner (see the root Makefile) checks them.
+# a test.toml, so the vir-virtue runner (see the root Makefile) checks them.
 # This target is kept as a no-op for compatibility.
 test:
-	@echo "Examples are checked by the virtue runner (see source/examples/README.md)."
+	@echo "Examples are checked by the vir-virtue runner (see source/examples/README.md)."
