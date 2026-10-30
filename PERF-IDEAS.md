@@ -54,6 +54,33 @@ The differential harness in `sim-bench/` gates all of them.
    full event machinery. If the dirty set contains only signals with no
    combinational fanout, skip straight to the sweep. Precompute "has
    combinational fanout" once.
+
+   Measured verdict (post items 3, 5, and 10): do not land; redirect.
+   After the clock fast path, a falling edge's flow work is exactly one
+   dirty pop of the clock signal (probe and profiler counts agree: on
+   the stage-1 bench the rising edge pops clock, register, and output,
+   the falling edge pops only the clock, whose sensitivity list is
+   empty), so the flow loop has nothing to skip that costs more than
+   the pop. Four gate shapes were implemented and A/B'd, all
+   behavior-identical on the differential harness and tests: a scan
+   gate over the dirty stack in `flow`, an O(1) single-signal gate in
+   `flow`, the same gate at the top of `unlock`, and a layout-neutral
+   variant reading the sensitivity list length instead of a precomputed
+   `Vec<bool>`. Every shape held the stage-1 `vir run` rate below
+   baseline, consistently, by about 2 to 6 percent: the per-settlement
+   check costs as much as or more than the pop it saves. Instrumented
+   simprof shows a large apparent win (flow column 97 to 74 ns/cycle,
+   total 380 to 336 ns/cycle), but most of that is the saved per-
+   settlement `Instant` pair, an artifact of the instrument. The
+   falling edge's real remaining cost is the dispatch sweep (the
+   clock's own write raises `changed_since_dispatch`, so a full
+   watcher-table pass runs every falling edge) plus `step_clock` glue.
+   The redirect with actual headroom is a refinement of item 3: record
+   which signals changed since the last sweep (a bitset, not a bool)
+   and skip the sweep when no watched signal is in it. A `Change`
+   watcher on the clock must still fire on falling edges, so the
+   watched set must be part of the predicate, and the differential
+   harness gates it exactly as item 3 did.
 7. **Clock-only settlements.** Generalization of item 6: if a rising
    edge's only effect is transferring registers, several bookkeeping
    steps collapse. Needs a semantics-identity argument; the differential
