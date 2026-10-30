@@ -6,6 +6,10 @@ use clap::Parser;
 #[derive(Parser)]
 #[command(about = "The Virdant tutorial helper")]
 struct Args {
+    /// Suppress Git initialization for a freshly created workspace.
+    #[arg(long)]
+    no_git: bool,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -19,7 +23,7 @@ enum Command {
 fn main() {
     let args = Args::parse();
     match args.command {
-        None => new_workspace(),
+        None => new_workspace(args.no_git),
         Some(Command::Check) => check(),
     }
 }
@@ -43,6 +47,24 @@ fn tutorial_dir() -> PathBuf {
         dir = ancestor.parent().map(|p| p.to_path_buf());
     }
     panic!("Could not find tutorial directory")
+}
+
+fn initialize_git(project_dir: &Path, no_git: bool) {
+    // Git setup is opt-out, not forced: respect an existing repository
+    // in an ancestor and a missing/unavailable Git executable.
+    let cwd = std::env::current_dir().expect("Could not determine current directory");
+    if no_git || vircommon::has_git_ancestor(&cwd) || !vircommon::git_is_executable() {
+        return;
+    }
+
+    let status = std::process::Command::new("git")
+        .arg("init")
+        .current_dir(project_dir)
+        .status()
+        .unwrap_or_else(|_| panic!("Could not run git"));
+    if !status.success() {
+        panic!("git init failed");
+    }
 }
 
 fn vir_binary() -> PathBuf {
@@ -154,7 +176,7 @@ fn already_setup_error(marker: &str) -> ! {
     std::process::exit(1);
 }
 
-fn new_workspace() {
+fn new_workspace(no_git: bool) {
     let dest = PathBuf::from("tutorial");
     if dest.exists() {
         eprintln!("Welcome back!");
@@ -188,6 +210,8 @@ fn new_workspace() {
             tutorial_dir.join(TUTORIAL_MARKER),
             dest.join(TUTORIAL_MARKER),
         ).unwrap_or_else(|_| panic!("Could not copy the tutorial marker"));
+
+        initialize_git(&dest, no_git);
 
         eprintln!("Welcome to Virdant 🌱");
         eprintln!();

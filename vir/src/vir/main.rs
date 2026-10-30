@@ -100,7 +100,7 @@ fn main() {
         Command::Compile { path } => compile(path),
         Command::Build { } => build(&args),
         Command::Run { ref trace, fps_no_cap, fps, ref flash, ref cycles, verbose } => run(&args, trace, fps_no_cap, fps, flash, cycles, verbose),
-        Command::New { ref project } => new_project(&args, project),
+        Command::New { ref project, no_git } => new_project(&args, project, no_git),
         Command::Bitstream { } => { bitstream(&args); },
         Command::Synth { } => synth(&args),
         Command::Pnr { ref tries, ref seed, allow_timing_failure } => {
@@ -403,7 +403,7 @@ fn find_new_template_dir() -> Option<PathBuf> {
     None
 }
 
-fn new_project(args: &Args, project: &str) {
+fn new_project(args: &Args, project: &str, no_git: bool) {
     let cwd = resolve_cwd(args);
 
     let project_dir = cwd.join(project);
@@ -439,21 +439,10 @@ fn new_project(args: &Args, project: &str) {
     );
     std::fs::write(project_dir.join(common::PROJECT_MANIFEST), toml_content).unwrap();
 
-    // Walk up from cwd looking for an existing .git directory
-    let mut search = cwd.clone();
-    let mut found_git = false;
-    loop {
-        if search.join(".git").exists() {
-            found_git = true;
-            break;
-        }
-        match search.parent() {
-            Some(parent) => search = parent.to_path_buf(),
-            None => break,
-        }
-    }
-
-    if !found_git {
+    // Initialize Git only when explicitly allowed, no ancestor of the
+    // new project directory is already a Git repository, and Git is
+    // actually executable on `$PATH`.
+    if !no_git && !common::has_git_ancestor(&cwd) && common::git_is_executable() {
         let output = std::process::Command::new("git")
             .arg("init")
             .current_dir(&project_dir)

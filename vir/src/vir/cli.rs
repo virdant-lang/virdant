@@ -38,7 +38,7 @@ pub enum Command {
         cycles: Option<u64>,
         verbose: bool,
     },
-    New { project: String },
+    New { project: String, no_git: bool },
     Bitstream {},
     Synth {},
     Pnr { tries: u32, seed: u32, allow_timing_failure: bool },
@@ -77,7 +77,9 @@ fn command_filtered(listed_only: bool) -> ClapCommand {
                 .value_parser(value_parser!(u64)))
             .arg(Arg::new("verbose").short('v').long("verbose").action(ArgAction::SetTrue)),
         ClapCommand::new("new")
-            .arg(Arg::new("project").value_name("PROJECT").required(true)),
+            .arg(Arg::new("project").value_name("PROJECT").required(true))
+            .arg(Arg::new("no-git").long("no-git").action(ArgAction::SetTrue)
+                .help("Do not initialize a Git repository")),
         ClapCommand::new("bitstream"),
         ClapCommand::new("synth"),
         ClapCommand::new("pnr")
@@ -331,6 +333,7 @@ fn from_matches(matches: ArgMatches) -> Args {
         },
         Some(("new", m)) => Command::New {
             project: m.get_one::<String>("project").cloned().unwrap(),
+            no_git: m.get_flag("no-git"),
         },
         Some(("bitstream", _)) => Command::Bitstream {},
         Some(("pnr", m)) => Command::Pnr {

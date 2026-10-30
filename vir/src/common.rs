@@ -289,6 +289,32 @@ pub fn diagnostics_json(db: &Db) -> json::JsonValue {
 }
 
 // ---------------------------------------------------------------------------
+// Git workspace setup
+// ---------------------------------------------------------------------------
+
+/// Whether `git` can be executed via the process `$PATH`.
+pub fn git_is_executable() -> bool {
+    std::process::Command::new("git")
+        .arg("--version")
+        .output()
+        .is_ok()
+}
+
+/// Whether any ancestor of `start` already contains a `.git` directory.
+/// This deliberately does not inspect `start` itself: callers pass the
+/// parent directory of the project directory they are about to create.
+pub fn has_git_ancestor(start: &Path) -> bool {
+    let mut dir = Some(start.to_path_buf());
+    while let Some(ancestor) = dir {
+        if ancestor.join(".git").exists() {
+            return true;
+        }
+        dir = ancestor.parent().map(|parent| parent.to_path_buf());
+    }
+    false
+}
+
+// ---------------------------------------------------------------------------
 // Build directory
 // ---------------------------------------------------------------------------
 
