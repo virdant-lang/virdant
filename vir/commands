@@ -1,0 +1,33 @@
+# The list of vir commands.
+# This file is embedded into the `vir` binary at compile time.
+#
+# Syntax:
+# Blank lines and `#` lines are ignored; trailing whitespace is trimmed.
+# Lines ending in a colon specify a command group.
+# The remaining lines are commands, together with their help messages.
+# Commands are placed under the command group they belong to
+#
+# A "development command" is any command that is not listed here.
+# They are those intended for Virdant developers rather than
+# end users writing hardware: a convenience, test harness, or experimental tool.
+# They are not listed in the --help.
+
+Basic:
+new         Create a new Virdant project
+check       Check a Virdant project for problems
+run         Run your design in the Virdant simulator
+
+Tools:
+doc         Create documentation for your project
+format      Format your Virdant source files
+lsp         Virdant Language Server
+
+Flows:
+build       Compile your design to Verilog
+synth       Synthesize your design
+pnr         Place-and-route your design
+bitstream   Generate a bitstream for your FPGA
+upload      Upload your design to your FPGA
+
+Learning:
+tutor       Generate a workspace for the Virdant tutorial

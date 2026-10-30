@@ -34,7 +34,7 @@ fn command() -> clap::Command {
                 .value_name("VCD")
                 .value_parser(value_parser!(String)),
         );
-    common::add_project_args(&mut cmd);
+    common::add_project_args(&mut cmd, false);
     cmd
 }
 

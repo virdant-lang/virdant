@@ -22,7 +22,10 @@ use virdant::util::{check_db, db_from_dir, db_from_files};
 
 /// Add the project-location args (`-C/--cwd`, `-F/--virfile`) shared by
 /// the `vir` binaries to a command under construction.
-pub fn add_project_args(cmd: &mut ClapCommand) {
+///
+/// If `hide_virfile` is true, the `-F/--virfile` arg is hidden from help
+/// listings (it remains fully functional).
+pub fn add_project_args(cmd: &mut ClapCommand, hide_virfile: bool) {
     *cmd = std::mem::take(cmd)
         .arg(
             Arg::new("cwd")
@@ -37,6 +40,7 @@ pub fn add_project_args(cmd: &mut ClapCommand) {
                 .value_name("VIRFILE")
                 .value_parser(value_parser!(String))
                 .conflicts_with("cwd")
+                .hide(hide_virfile)
                 .help("Load .vir file(s) as a self-contained project (comma-separated, no spaces; exclusive with -C)"),
         );
 }

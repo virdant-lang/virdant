@@ -107,6 +107,25 @@ pub fn run_pnr(
     }
 }
 
+/// Runs only synthesis (yosys), writing the netlist to
+/// `<builddir>/<project>.json`.  This is the entry point for
+/// `vir synth`, the counterpart of `run_pnr` for `vir pnr`: together
+/// the two decompose `run_toolchain` into independently-runnable
+/// steps, so a netlist synthesized once can be placed-and-routed
+/// repeatedly (e.g. over several placer seeds) without re-running
+/// yosys.
+pub fn run_synth(
+    builddir: &Path,
+    project: &str,
+    top: &str,
+    toolchain: Toolchain,
+) -> Result<(), String> {
+    match toolchain {
+        Toolchain::Ice40 => synth_ice40(builddir, project, top),
+        Toolchain::Xilinx => synth_xilinx(builddir, project, top),
+    }
+}
+
 /// The directory per-seed attempt outputs live in:
 /// `<builddir>/nextpnr/`.
 fn attempts_dir(builddir: &Path) -> Result<PathBuf, String> {

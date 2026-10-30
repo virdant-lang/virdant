@@ -78,7 +78,7 @@ fn new_workspace() {
         eprintln!("Welcome back!");
         eprintln!();
         eprintln!("The tutorial is already set up for you.");
-        eprintln!("To start, go to ./tutorial/000_passsthrough/ and then:");
+        eprintln!("To start, go to tutorial/000_passsthrough/ and then:");
         eprintln!();
         eprintln!("  🌱 Read the README.md");
         eprintln!("  🌱 Work through src/passthrough.vir");
@@ -104,7 +104,7 @@ fn new_workspace() {
         eprintln!("Welcome to Virdant 🌱");
         eprintln!();
         eprintln!("The tutorial is ready for you.");
-        eprintln!("To start, go to ./tutorial/000_passsthrough/ and then:");
+        eprintln!("To start, go to tutorial/000_passsthrough/ and then:");
         eprintln!();
         eprintln!("  🌱 Read the README.md");
         eprintln!("  🌱 Work through src/passthrough.vir");

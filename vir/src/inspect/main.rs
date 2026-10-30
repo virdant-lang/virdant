@@ -86,7 +86,7 @@ fn command() -> ClapCommand {
         .subcommand(ClapCommand::new("elaborate")
             .about("Dump the elaborated design rooted at a top module")
             .arg(string_arg("top", "TOP")));
-    common::add_project_args(&mut cmd);
+    common::add_project_args(&mut cmd, false);
     cmd
 }
 

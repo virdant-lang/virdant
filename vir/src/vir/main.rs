@@ -28,27 +28,56 @@ use common::{copy_ext_dir, dump_diagnostic, dump_diagnostics, read_prog_key, rea
 // The `Args` struct and `Command` enum are defined in `cli`, built up
 // with the vanilla clap builder API (see `cli.rs`).
 
-// The list of "development" binaries lives in `dev_binaries.txt` (next to
-// this file), embedded at compile time and parsed lazily, once, on first use.
-fn dev_binaries() -> &'static Vec<String> {
-    static DEV_BINARIES: OnceLock<Vec<String>> = OnceLock::new();
-    static DEV_BINARIES_TXT: &str = include_str!("dev_binaries.txt");
-    DEV_BINARIES.get_or_init(|| {
-        DEV_BINARIES_TXT
-            .lines()
-            .map(|line| line.trim())
-            .filter(|line| !line.is_empty() && !line.starts_with('#'))
-            .map(|line| line.to_string())
-            .collect()
+// The command listing lives in the file `vir/commands` (from the project
+// root), embedded
+// into the binary at compile time and parsed lazily, once, on first use.
+// See the comments in that file for the format and its purpose: commands
+// are organized into groups, and any command not listed there is a
+// development command, hidden from help.
+struct CommandGroup {
+    name: String,
+    commands: Vec<CommandEntry>,
+}
+
+/// One command line from `vir/commands`: the command name and its
+/// help message (`None` if the line names the command only).
+struct CommandEntry {
+    name: String,
+    help: Option<String>,
+}
+
+fn command_groups() -> &'static Vec<CommandGroup> {
+    static COMMAND_GROUPS: OnceLock<Vec<CommandGroup>> = OnceLock::new();
+    static COMMANDS: &str = include_str!("../../commands");
+    COMMAND_GROUPS.get_or_init(|| {
+        let mut groups: Vec<CommandGroup> = Vec::new();
+        for line in COMMANDS.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some(name) = line.strip_suffix(':') {
+                groups.push(CommandGroup { name: name.trim().to_string(), commands: Vec::new() });
+            } else if let Some(group) = groups.last_mut() {
+                // A command line is the command name, optionally
+                // followed by its help message; whitespace separates
+                // them, and the help message is trimmed on either end.
+                let (name, help) = match line.split_once(char::is_whitespace) {
+                    Some((name, help)) => (name.to_string(), Some(help.trim().to_string())),
+                    None => (line.to_string(), None),
+                };
+                group.commands.push(CommandEntry { name, help });
+            }
+            // A command before any group header is ignored.
+        }
+        groups
     })
 }
 
-/// Returns `true` if `name` is a known development binary.
-///
-/// `name` is the subcommand/binary suffix form (e.g. `run-icarus`).
-#[allow(dead_code)]
-fn is_dev_binary(name: &str) -> bool {
-    dev_binaries().iter().any(|entry| entry == name)
+/// Returns `true` if `name` is listed in `vir/commands`.
+/// Unlisted commands are development commands and are hidden from help.
+fn is_listed_command(name: &str) -> bool {
+    command_groups().iter().any(|g| g.commands.iter().any(|c| c.name == name))
 }
 
 fn main() {
@@ -61,6 +90,7 @@ fn main() {
         Command::Run { ref trace, fps_no_cap, fps, ref flash, ref cycles, verbose } => run(&args, trace, fps_no_cap, fps, flash, cycles, verbose),
         Command::New { ref project } => new_project(&args, project),
         Command::Bitstream { } => { bitstream(&args); },
+        Command::Synth { } => synth(&args),
         Command::Pnr { ref tries, ref seed, allow_timing_failure } => {
             pnr(&args, *tries, *seed, allow_timing_failure)
         },
@@ -593,6 +623,20 @@ fn bitstream(args: &Args) -> String {
         });
 
     plan.platform_name
+}
+
+/// Synthesize only (`vir synth`): run yosys on the Verilog
+/// `plan_bitstream` emitted, leaving the netlist at
+/// `build/<project>.json` for `vir pnr` to place-and-route.  The
+/// counterpart of `pnr`, for when the netlist is what you want
+/// (e.g. to inspect it, or to re-run PnR separately).
+fn synth(args: &Args) {
+    let plan = plan_bitstream(args);
+    virdant::build::run_synth(&plan.builddir, &plan.project, &plan.verilog_top, plan.toolchain)
+        .unwrap_or_else(|e| {
+            eprintln!("Toolchain error: {e}");
+            std::process::exit(1);
+        });
 }
 
 /// Place-and-route (and pack) an already-synthesized design
