@@ -16,8 +16,28 @@ if vir-tutor > /dev/null 2>&1; then
     exit 1
 fi
 
-# `vir tutor check` outside of a lesson directory fails.
+# Running `vir tutor` inside the created workspace fails.
 cd tutorial
+if vir-tutor > /dev/null 2>&1; then
+    echo "Expected 'vir tutor' to fail inside the tutorial workspace" >&2
+    exit 1
+fi
+vir-tutor 2>&1 | grep -q "already set up"
+cd 000_passthrough
+
+# Running `vir tutor` inside a lesson directory (or deeper) also fails.
+if vir-tutor > /dev/null 2>&1; then
+    echo "Expected 'vir tutor' to fail inside a lesson directory" >&2
+    exit 1
+fi
+cd src
+if vir-tutor > /dev/null 2>&1; then
+    echo "Expected 'vir tutor' to fail inside a lesson's subdirectory" >&2
+    exit 1
+fi
+cd ../..
+
+# `vir tutor check` outside of a lesson directory fails.
 if vir-tutor check > /dev/null 2>&1; then
     echo "Expected 'vir tutor check' to fail outside a lesson directory" >&2
     exit 1

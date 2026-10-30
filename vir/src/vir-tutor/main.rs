@@ -72,6 +72,76 @@ fn list_lessons(dir: &Path) -> Vec<(u32, String)> {
     lessons
 }
 
+/// Marker file for the tutorial workspace itself.
+const TUTORIAL_MARKER: &str = "tutorial.toml";
+
+/// Marker file for a Virdant project (such as a tutorial lesson).
+const PROJECT_MARKER: &str = "virdant.toml";
+
+/// If `dir` contains a marker file, return which one.
+fn find_marker(dir: &Path) -> Option<&'static str> {
+    if dir.join(TUTORIAL_MARKER).exists() {
+        Some(TUTORIAL_MARKER)
+    } else if dir.join(PROJECT_MARKER).exists() {
+        Some(PROJECT_MARKER)
+    } else {
+        None
+    }
+}
+
+/// Refuse to run `vir tutor` where a tutorial or Virdant project already
+/// exists: in the current directory, any of its ancestors, or any of its
+/// immediate subdirectories.  This keeps `vir tutor` from being run a
+/// second time inside the `tutorial/` workspace it creates.
+fn guard_against_existing_setup() {
+    let cwd = std::env::current_dir().expect("Could not determine current directory");
+
+    // The current directory and each of its ancestors.
+    let mut dir = Some(cwd);
+    while let Some(d) = dir {
+        if let Some(marker) = find_marker(&d) {
+            already_setup_error(marker);
+        }
+        dir = d.parent().map(|parent| parent.to_path_buf());
+    }
+
+    // Immediate subdirectories.  This catches running `vir tutor` at the
+    // root of a tutorial workspace, where the markers live down inside
+    // the lesson directories.
+    if let Ok(entries) = std::fs::read_dir(".") {
+        for entry in entries.flatten() {
+            if entry.file_type().map(|ty| ty.is_dir()).unwrap_or(false) {
+                if let Some(marker) = find_marker(&entry.path()) {
+                    already_setup_error(marker);
+                }
+            }
+        }
+    }
+}
+
+fn already_setup_error(marker: &str) -> ! {
+    eprintln!("Welcome back!");
+    eprintln!();
+    if marker == TUTORIAL_MARKER {
+        eprintln!("A Virdant tutorial is already set up here.");
+        eprintln!();
+        eprintln!("To start, go to 000_passsthrough/ and then:");
+        eprintln!();
+        eprintln!("  🌱 Read the README.md");
+        eprintln!("  🌱 Work through src/passthrough.vir");
+        eprintln!("  🌱 Have fun!");
+    } else {
+        eprintln!("There is already a Virdant project here.");
+        eprintln!("Go to a fresh directory and run `vir tutor` there.");
+    }
+    eprintln!();
+    eprintln!("If you get stuck or have questions:");
+    eprintln!();
+    eprintln!("  🌱 Visit the Virdant website: https://virdant.org/");
+    eprintln!("  🌱 Join us at on Discord: https://discord.com/invite/F9trwvHPf6");
+    std::process::exit(1);
+}
+
 fn new_workspace() {
     let dest = PathBuf::from("tutorial");
     if dest.exists() {
@@ -92,6 +162,8 @@ fn new_workspace() {
         eprintln!("Please enjoy learning Virdant!");
         std::process::exit(1);
     } else {
+        guard_against_existing_setup();
+
         let tutorial_dir = tutorial_dir();
         let lessons = list_lessons(&tutorial_dir);
         let Some((num, name)) = lessons.first() else {
