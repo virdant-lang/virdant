@@ -7,13 +7,11 @@ use clap::Parser;
 #[command(about = "The Virdant tutorial helper")]
 struct Args {
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(clap::Subcommand)]
 enum Command {
-    /// Create a new tutorial workspace
-    New,
     /// Check the current lesson
     Check,
 }
@@ -21,8 +19,8 @@ enum Command {
 fn main() {
     let args = Args::parse();
     match args.command {
-        Command::New => new(),
-        Command::Check => check(),
+        None => new_workspace(),
+        Some(Command::Check) => check(),
     }
 }
 
@@ -74,22 +72,51 @@ fn list_lessons(dir: &Path) -> Vec<(u32, String)> {
     lessons
 }
 
-fn new() {
+fn new_workspace() {
     let dest = PathBuf::from("tutorial");
     if dest.exists() {
-        eprintln!("Error: tutorial/ already exists");
+        eprintln!("Welcome back!");
+        eprintln!();
+        eprintln!("The tutorial is already set up for you.");
+        eprintln!("To start, go to ./tutorial/000_passsthrough/ and then:");
+        eprintln!();
+        eprintln!("  🌱 Read the README.md");
+        eprintln!("  🌱 Work through src/passthrough.vir");
+        eprintln!("  🌱 Have fun!");
+        eprintln!();
+        eprintln!("If you get stuck or have questions:");
+        eprintln!();
+        eprintln!("  🌱 Visit the Virdant website: https://virdant.org/");
+        eprintln!("  🌱 Join us at on Discord: https://discord.com/invite/F9trwvHPf6");
+        eprintln!();
+        eprintln!("Please enjoy learning Virdant!");
         std::process::exit(1);
+    } else {
+        let tutorial_dir = tutorial_dir();
+        let lessons = list_lessons(&tutorial_dir);
+        let Some((num, name)) = lessons.first() else {
+            panic!("Could not find any lessons in {tutorial_dir:?}");
+        };
+        let first_dirname = format!("{num:03}_{name}");
+
+        copy_dir(&tutorial_dir.join(&first_dirname), &dest.join(&first_dirname));
+
+        eprintln!("Welcome to Virdant 🌱");
+        eprintln!();
+        eprintln!("The tutorial is ready for you.");
+        eprintln!("To start, go to ./tutorial/000_passsthrough/ and then:");
+        eprintln!();
+        eprintln!("  🌱 Read the README.md");
+        eprintln!("  🌱 Work through src/passthrough.vir");
+        eprintln!("  🌱 Have fun!");
+        eprintln!();
+        eprintln!("If you get stuck or have questions:");
+        eprintln!();
+        eprintln!("  🌱 Visit the Virdant website: https://virdant.org/");
+        eprintln!("  🌱 Join us at on Discord: https://discord.com/invite/F9trwvHPf6");
+        eprintln!();
+        eprintln!("Please enjoy learning Virdant!");
     }
-
-    let tutorial_dir = tutorial_dir();
-    let lessons = list_lessons(&tutorial_dir);
-    let Some((num, name)) = lessons.first() else {
-        panic!("Could not find any lessons in {tutorial_dir:?}");
-    };
-    let first_dirname = format!("{num:03}_{name}");
-
-    copy_dir(&tutorial_dir.join(&first_dirname), &dest.join(&first_dirname));
-    println!("tutorial/ created");
 }
 
 fn check() {

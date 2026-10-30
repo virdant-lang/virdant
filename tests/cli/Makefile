@@ -7,4 +7,5 @@ test:
 	bash new_run_flags.sh $(WORKDIR) > /dev/null
 	bash new_compile.sh $(WORKDIR) > /dev/null
 	bash new_bitstream.sh $(WORKDIR) > /dev/null 2>&1
+	bash new_tutor.sh $(WORKDIR) > /dev/null 2>&1
 	rm -rf $(WORKDIR)
