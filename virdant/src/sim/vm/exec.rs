@@ -6,10 +6,12 @@
 //! control-flow forms set `ip` directly.
 //!
 //! `Load` is the only instruction that touches the engine's state
-//! (raw bits out of `State`); `Ret`/`RetWide` are the only places
-//! `Value`s are constructed, tagged from the `Program`'s per-driver
-//! `TypeId`/width.  Everything between is bit arithmetic over the
-//! driver's frame: no allocation on the 64-bit-and-narrower path.
+//! (raw bits out of `State`); `Ret` hands back raw result bits (the
+//! bits-only commit path compares raw integers, `RunOut::into_value`
+//! applies the `Program`'s per-driver `TypeId`/width tag) and
+//! `RetWide` is the only place a `Value` is constructed.  Everything
+//! between is bit arithmetic over the driver's frame: no allocation
+//! on the 64-bit-and-narrower path.
 //!
 //! The `BinOp`/`UnOp` semantics below transcribe `eval.rs`'s
 //! `eval_binop`/`eval_unop` exactly (see the checklist in
@@ -18,9 +20,10 @@
 //! slot's static width.
 
 use crate::analysis::elaboration::SignalId;
-use crate::common::{BinOp, UnOp};
+use crate::common::{BinOp, UnOp, Width};
 use crate::sim::bits::BitPat;
 use crate::sim::eval::Value;
+use crate::sim::layout::TypeId;
 use crate::sim::vm::frame::{Frame, Vm};
 use crate::sim::vm::isa::{Dst, Ins, Program, Src, Truthiness};
 
@@ -83,19 +86,23 @@ fn write_pat(frame: &mut Frame, dst: Dst, pat: BitPat) {
 
 impl Vm {
     /// Execute the compiled driver of component `comp` to completion,
-    /// reading live values out of `state`.  The caller writes the
-    /// returned `Value` through `State::set_val`/`set_reg` (with its
-    /// clock-edge detection), exactly as it does for the interpreter.
+    /// reading live values out of `state`, and hand back the terminal
+    /// result in its commit-shaped form (see [`RunOut`]).  The caller
+    /// commits raw narrow bits through the bits-only path
+    /// (`State::set_val_bits`/`set_reg_bits`, with the caller's
+    /// clock-edge detection) and wide `Value`s through
+    /// `State::set_val`/`set_reg`, exactly as it does for the
+    /// interpreter.
     ///
     /// Panics when `comp` has no compiled driver (the caller must
     /// route fallback drivers to the interpreter), and on `Trap` —
     /// the lazy failure `Method`/`Fn`/`StrLit` evaluation has today.
-    pub(in crate::sim) fn run<S: VmState>(&mut self, program: &Program, state: &S, comp: SignalId) -> Value {
+    pub(in crate::sim) fn run_out<S: VmState>(&mut self, program: &Program, state: &S, comp: SignalId) -> RunOut {
         let idx = comp.index();
         let range = program.entry[idx]
-            .unwrap_or_else(|| panic!("Vm::run: component {idx} has no compiled driver (must be routed to the interpreter fallback)"));
+            .unwrap_or_else(|| panic!("Vm::run_out: component {idx} has no compiled driver (must be routed to the interpreter fallback)"));
         let typ = program.driver_typs[idx]
-            .unwrap_or_else(|| panic!("Vm::run: component {idx} has no compiled driver"));
+            .unwrap_or_else(|| panic!("Vm::run_out: component {idx} has no compiled driver"));
         let ret_width = program.driver_widths[idx];
         let frame = &mut self.frames[idx];
         let mut ip = range.start as usize;
@@ -407,14 +414,45 @@ impl Vm {
                      (Method/Fn/StrLit), the same lazy failure the interpreter has"
                 ),
                 Ins::Ret { src } => {
-                    let bits = frame.narrow[*src as usize];
-                    return Value::from_u64(typ, ret_width, bits);
+                    // Masked to the driver's width, exactly as
+                    // `Value::from_u64` masks: the bits-only commit
+                    // path compares these raw against masked stored
+                    // bits, so the masks must agree.
+                    let bits = frame.narrow[*src as usize] & narrow_mask(ret_width);
+                    return RunOut::Bits { typ, width: ret_width, bits };
                 }
                 Ins::RetWide { src } => {
                     let bits = frame.wide[*src as usize].clone();
-                    return Value::new(typ, bits);
+                    return RunOut::Tagged(Value::new(typ, bits));
                 }
             }
+        }
+    }
+}
+
+/// What one driver run produced, shaped for the commit paths
+/// (PERF-IDEAS item 10): narrow (`Ret`) results carry raw bits plus
+/// the tag a `Value` would carry — the bits-only commit path compares
+/// raw integers and tags a `Value` only when it actually writes — and
+/// already-tagged results stay `Value`s.
+pub(in crate::sim) enum RunOut {
+    /// A narrow (<= 64-bit) result: raw result bits (masked to
+    /// `width`) plus the driver's `TypeId`/width, the tag
+    /// [`Value::from_u64`] applies when a `Value` is finally needed.
+    Bits { typ: TypeId, width: Width, bits: u64 },
+    /// An already-tagged `Value`: a wide (`RetWide`) terminal result,
+    /// or (at the `eval_driver` seam) a constant-unit skip or an
+    /// interpreter-fallback result.
+    Tagged(Value),
+}
+
+impl RunOut {
+    /// The tagged `Value` this result carries: the old `Vm::run`'s
+    /// exact result.
+    pub(in crate::sim) fn into_value(self) -> Value {
+        match self {
+            RunOut::Bits { typ, width, bits } => Value::from_u64(typ, width, bits),
+            RunOut::Tagged(value) => value,
         }
     }
 }
@@ -532,7 +570,8 @@ mod tests {
         let mut program = program;
         program.entry[0] = Some(CodeRange { start: 0, len: program.code.len() as Ip });
         let mut vm = Vm::new(&program);
-        vm.run(&program, &TestState { narrow: test_state() }, SignalId::from_index(0))
+        vm.run_out(&program, &TestState { narrow: test_state() }, SignalId::from_index(0))
+            .into_value()
     }
 
     fn test_state() -> Vec<u64> {
@@ -919,14 +958,24 @@ mod tests {
             fallback_counts: [0; 3],
         };
         let mut vm = Vm::new(&program);
-        let value = vm.run(
+        let value = vm.run_out(
             &program,
             &TestState { narrow: test_state() },
             SignalId::from_index(0),
         );
-        assert_eq!(value.typ_id(), typ_id);
-        assert_eq!(value.width(), 4);
-        assert_eq!(value.to_u64(), 0b1010);
+        match value {
+            RunOut::Bits { typ, width, bits } => {
+                assert_eq!(typ, typ_id);
+                assert_eq!(width, 4);
+                assert_eq!(bits, 0b1010);
+                // `into_value` tags the raw bits exactly as `Ret` used to.
+                let value = RunOut::Bits { typ, width, bits }.into_value();
+                assert_eq!(value.typ_id(), typ_id);
+                assert_eq!(value.width(), 4);
+                assert_eq!(value.to_u64(), 0b1010);
+            }
+            RunOut::Tagged(_) => panic!("narrow driver must hand back raw bits"),
+        }
     }
 
     #[test]
@@ -954,11 +1003,17 @@ mod tests {
             fallback_counts: [0; 3],
         };
         let mut vm = Vm::new(&program);
-        let value = vm.run(
+        let out = vm.run_out(
             &program,
             &TestState { narrow: test_state() },
             SignalId::from_index(0),
         );
+        // Wide drivers stay on the `Value` path: the terminal result
+        // is already the tagged `Value`.
+        let value = match out {
+            RunOut::Tagged(value) => value,
+            RunOut::Bits { .. } => panic!("wide driver must not hand back raw bits"),
+        };
         assert_eq!(value.width(), 100);
         assert!(value.get_bit(70));
         assert!(value.get_bit(3));
@@ -992,7 +1047,7 @@ mod tests {
             fallback_counts: [1, 0, 0],
         };
         let mut vm = Vm::new(&program);
-        let _ = vm.run(
+        let _ = vm.run_out(
             &program,
             &TestState { narrow: test_state() },
             SignalId::from_index(0),

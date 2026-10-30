@@ -12,10 +12,11 @@
 //!   carries the immediates it needs for its own masking). Reads may
 //!   therefore assume the bits above a slot's width are zero; no
 //!   extra masking is done at read time.
-//! * `Value`s are constructed only at `Ret`/`RetWide` (and in the
-//!   interpreter fallback). The frame holds raw `u64` narrow slots
-//!   and `BitPat` wide slots, so the 64-bit-and-narrower path
-//!   performs no allocation.
+//! * `Value`s are constructed only at `RetWide` (and in the
+//!   interpreter fallback); `Ret` hands back raw bits, tagged only
+//!   when a `Value` is finally needed (see `vm::exec::RunOut`). The
+//!   frame holds raw `u64` narrow slots and `BitPat` wide slots, so
+//!   the 64-bit-and-narrower path performs no allocation.
 //!
 //! The whole ISA is emitted by the compiler, including the
 //! control-flow forms (`Jmp`, `BrTruthy`, `TestTag`, `TestTagWide`,

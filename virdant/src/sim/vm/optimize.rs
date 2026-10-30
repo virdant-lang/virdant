@@ -1701,7 +1701,7 @@ mod tests {
             fallback_counts: [0; 3],
         };
         let mut vm = Vm::new(&program);
-        let value = vm.run(&program, &state, SignalId::from_index(0));
+        let value = vm.run_out(&program, &state, SignalId::from_index(0)).into_value();
         let _ = ret_slot;
         (value, ins)
     }

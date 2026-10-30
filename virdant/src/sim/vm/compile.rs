@@ -1376,7 +1376,7 @@ mod tests {
                     continue;
                 };
                 let new_value = if program.has_driver(id) {
-                    let vm_value = vm.run(&program, &state, id);
+                    let vm_value = vm.run_out(&program, &state, id).into_value();
                     let context = Context::context_for_component(&circuit, &state, id);
                     let expected: Value = expr.eval(&context);
                     assert_eq!(
@@ -1588,7 +1588,7 @@ mod tests {
             let context = Context::context_for_component(&circuit, &state, id);
             let expected: Value = expr.eval(&context);
             if program.has_driver(id) {
-                let vm_value = vm.run(&program, &state, id);
+                let vm_value = vm.run_out(&program, &state, id).into_value();
                 assert_eq!(
                     vm_value,
                     expected,

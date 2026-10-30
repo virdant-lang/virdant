@@ -16,5 +16,5 @@ mod optimize;
 
 pub(in crate::sim) use compile::compile_program;
 pub(in crate::sim) use frame::Vm;
-pub(in crate::sim) use exec::VmState;
+pub(in crate::sim) use exec::{RunOut, VmState};
 pub(in crate::sim) use isa::Program;

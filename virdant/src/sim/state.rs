@@ -7,11 +7,42 @@
 //! and top-level incoming ports carry fully-defined bit patterns.
 
 use crate::analysis::elaboration::{Elaboration, SignalId};
+use crate::common::Width;
+use crate::sim::layout::TypeId;
 use crate::sim::sim::InitStrategy;
 
 use super::dirty::DirtyList;
 
 use super::*;
+
+/// A register's pending next-value (`State::set_vals`).  Narrow
+/// pending values store raw bits plus the tag (`TypeId`/width) the
+/// committed `Value` will carry, so the transfer loop compares raw
+/// integers against the stored bits and tags a `Value` only on an
+/// actual write (PERF-IDEAS item 10); wide pending values keep the
+/// `Value` representation.
+#[derive(Clone, Debug)]
+enum Pending {
+    /// Not a register: no pending next-value.
+    None,
+    /// A narrow (<= 64-bit) pending next-value: raw bits (masked to
+    /// `width`) plus the type tag and width of the committed `Value`.
+    Bits { typ: TypeId, width: Width, bits: u64 },
+    /// A wide pending next-value.
+    Value(Value),
+}
+
+impl Pending {
+    /// Decompose a pending `Value`: narrow values become raw bits
+    /// (the transfer loop compares raw integers against them), wide
+    /// ones stay as-is.
+    fn from_value(value: Value) -> Pending {
+        match value.as_narrow() {
+            Some((width, bits)) => Pending::Bits { typ: value.typ_id(), width, bits },
+            None => Pending::Value(value),
+        }
+    }
+}
 
 /// Live circuit values and the propagation worklist.  Everything
 /// mutated by combinational propagation, register transfers, and
@@ -23,8 +54,8 @@ use super::*;
 pub(super) struct State {
     vals: Vec<Value>,
     /// Pending next-values for registers, densely indexed by
-    /// `SignalId::index()` (`None` for non-registers).
-    set_vals: Vec<Option<Value>>,
+    /// `SignalId::index()` (`Pending::None` for non-registers).
+    set_vals: Vec<Pending>,
     dirty: DirtyList,
     /// Settlement-level "some stored value changed since the last
     /// watcher sweep that observed everything".  The watcher sweep can
@@ -51,7 +82,7 @@ impl State {
         let n_components = elaboration.components().len();
         let mut rng: u64 = strategy.rng_seed();
         let mut vals: Vec<Value> = Vec::with_capacity(n_components);
-        let mut set_vals: Vec<Option<Value>> = vec![None; n_components];
+        let mut set_vals: Vec<Pending> = vec![Pending::None; n_components];
         for elab_component in elaboration.components() {
             let elab_component_id = elab_component.id();
             let typ = elab_component.typ();
@@ -61,8 +92,11 @@ impl State {
             vals.push(strategy.value(typ_id, width, &mut rng));
 
             if elab_component.is_reg() {
-                set_vals[elab_component_id.index()] =
-                    Some(strategy.value(typ_id, width, &mut rng));
+                // Draw order matters: two independent draws per
+                // register (the live value above, the pending value
+                // here), so seeded traces stay reproducible.
+                let pending = strategy.value(typ_id, width, &mut rng);
+                set_vals[elab_component_id.index()] = Pending::from_value(pending);
             }
         }
 
@@ -99,19 +133,48 @@ impl State {
         // rather than per call: a ~26 ns `Instant` read would distort
         // a ~5 ns transfer (see `sim::profile`).  Calls are counted in
         // bulk by the caller; only actual writes are counted here.
-        let new_value = self.set_vals[component_id.index()]
-            .as_ref()
-            .expect("transfer: component has no pending register value")
-            .clone();
-        super::sim::debug_transfer(component_id, &new_value);
-        if self.vals[component_id.index()] == new_value {
-            return;
+        match &self.set_vals[component_id.index()] {
+            Pending::Bits { typ, width, bits } => {
+                // Narrow transfer (PERF-IDEAS item 10): compare raw
+                // integers against the stored bits and construct the
+                // pending `Value` only on an actual write.  The raw
+                // compare is exact against a narrow stored value of
+                // the same width and tag; any other stored shape falls
+                // back to the tagged `Value` compare, so the
+                // dirty/changed protocol sees exactly the same change
+                // events as the `Value` path.
+                let stored = &self.vals[component_id.index()];
+                let unchanged = match stored.as_narrow() {
+                    Some((stored_width, stored_bits)) => {
+                        stored_width == *width && stored.typ_id() == *typ && stored_bits == *bits
+                    }
+                    None => *stored != Value::from_u64(*typ, *width, *bits),
+                };
+                if unchanged {
+                    return;
+                }
+                let new_value = Value::from_u64(*typ, *width, *bits);
+                super::sim::debug_transfer(component_id, &new_value);
+                self.vals[component_id.index()] = new_value;
+                #[cfg(feature = "sim-profile")]
+                crate::sim::profile::bump_transfer_write();
+                self.dirty.insert(component_id);
+                self.changed_since_dispatch = true;
+            }
+            Pending::Value(pending) => {
+                let new_value = pending.clone();
+                super::sim::debug_transfer(component_id, &new_value);
+                if self.vals[component_id.index()] == new_value {
+                    return;
+                }
+                self.vals[component_id.index()] = new_value;
+                #[cfg(feature = "sim-profile")]
+                crate::sim::profile::bump_transfer_write();
+                self.dirty.insert(component_id);
+                self.changed_since_dispatch = true;
+            }
+            Pending::None => panic!("transfer: component has no pending register value"),
         }
-        self.vals[component_id.index()] = new_value;
-        #[cfg(feature = "sim-profile")]
-        crate::sim::profile::bump_transfer_write();
-        self.dirty.insert(component_id);
-        self.changed_since_dispatch = true;
     }
 
     /// Internal write: store `value` at `signal_id`'s val node and mark
@@ -139,8 +202,50 @@ impl State {
         self.changed_since_dispatch = true;
     }
 
+    /// The bits-only write primitive (PERF-IDEAS item 10):
+    /// `set_val`'s raw-integer twin for narrow drivers.  The compare
+    /// is against the stored value's raw bits and the tagged `Value`
+    /// is constructed only on an actual write.  The raw compare is
+    /// exact against a narrow stored value of the same width and tag;
+    /// any other stored shape (wide value, width or tag mismatch)
+    /// falls back to the tagged `Value` compare, so the dirty-list
+    /// protocol and the `changed_since_dispatch` flag see exactly the
+    /// same change events as `set_val`.
+    pub(super) fn set_val_bits(&mut self, signal_id: SignalId, typ: TypeId, width: Width, bits: u64) {
+        // Sampled timing, not per-call `Instant`: same per-driver-path
+        // rule as `set_val` above (see `sim::profile`).  The tick
+        // also counts the call.
+        #[cfg(feature = "sim-profile")]
+        let _profile_sample = crate::sim::profile::sample_set_val();
+        let idx = signal_id.index();
+        let unchanged = match self.vals[idx].as_narrow() {
+            Some((stored_width, stored_bits)) => {
+                stored_width == width && self.vals[idx].typ_id() == typ && stored_bits == bits
+            }
+            None => self.vals[idx] == Value::from_u64(typ, width, bits),
+        };
+        if unchanged {
+            return;
+        }
+        self.vals[idx] = Value::from_u64(typ, width, bits);
+        #[cfg(feature = "sim-profile")]
+        crate::sim::profile::bump_set_val_write();
+        self.dirty.insert(signal_id);
+        self.changed_since_dispatch = true;
+    }
+
     pub(super) fn set_reg(&mut self, signal_id: SignalId, value: Value) {
-        self.set_vals[signal_id.index()] = Some(value);
+        self.set_vals[signal_id.index()] = Pending::from_value(value);
+    }
+
+    /// The bits-only pending write (PERF-IDEAS item 10): `set_reg`'s
+    /// raw twin for narrow drivers.  The caller already knows the
+    /// driver's `TypeId`/width, so the pending next-value stores raw
+    /// bits without building a `Value`; `transfer` compares raw
+    /// integers against the stored bits and tags a `Value` only on an
+    /// actual write.
+    pub(super) fn set_reg_bits(&mut self, signal_id: SignalId, typ: TypeId, width: Width, bits: u64) {
+        self.set_vals[signal_id.index()] = Pending::Bits { typ, width, bits };
     }
 }
 
@@ -177,5 +282,147 @@ impl crate::sim::vm::VmState for State {
 
     fn wide_bits(&self, signal_id: SignalId) -> crate::sim::bits::BitPat {
         self.get(signal_id).bitpat()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sim::bits::BitPat;
+    use crate::sim::layout::{TypeInterner, TypeLayoutIndex};
+    use crate::types::Type;
+
+    /// Intern `typ` into a fresh layout index (the tag construction
+    /// needs, nothing more).
+    fn interner_with(typ: &Type) -> (TypeLayoutIndex, TypeId) {
+        let mut interner = TypeInterner::new();
+        let id = interner.intern(typ);
+        (TypeLayoutIndex::from_parts(Default::default(), interner), id)
+    }
+
+    /// A hand-built two-signal `State`: signal 0's live value is
+    /// `val0`, its pending register next-value is `pending0`, and
+    /// signal 1 is a plain (non-register) signal carrying a filler
+    /// `Bit` value.
+    fn state_with(val0: Value, pending0: Pending) -> State {
+        let (_layouts, bit_typ) = interner_with(&Type::Bit);
+        State {
+            vals: vec![val0, Value::from_bool(bit_typ, false)],
+            set_vals: vec![pending0, Pending::None],
+            dirty: DirtyList::new(2),
+            changed_since_dispatch: false,
+        }
+    }
+
+    /// The bits-only write primitive commits a narrow value only on an
+    /// actual raw-bits change: a same-bits write is a full no-op (no
+    /// write, no dirty insert, no changed flag) and a changed write
+    /// lands the same bits `set_val` would have written.
+    #[test]
+    fn set_val_bits_commits_narrow_values_only_on_change() {
+        let (_layouts, typ) = interner_with(&Type::Word(8));
+        let initial = Value::new(typ, BitPat::from_u64(8, 0b1010));
+        let mut state = state_with(initial, Pending::None);
+        let signal = SignalId::from_index(0);
+
+        // Same bits: no write, no dirty, no changed-since-dispatch.
+        state.set_val_bits(signal, typ, 8, 0b1010);
+        assert_eq!(state.get(signal).to_u64(), 0b1010);
+        assert!(state.pop_dirty().is_none(), "same-bits write must not dirty");
+        assert!(!state.changed_since_dispatch());
+
+        // Changed bits: raw compare writes, dirties, raises the flag.
+        state.set_val_bits(signal, typ, 8, 0b0101);
+        assert_eq!(state.get(signal).to_u64(), 0b0101);
+        assert_eq!(state.pop_dirty(), Some(signal));
+        assert!(state.changed_since_dispatch());
+    }
+
+    /// The raw compare includes the type tag: a write whose tag
+    /// differs from the stored value's is a change event, exactly as
+    /// the tagged `Value` compare (`set_val`) would see it.  `Bit` and
+    /// `Clock` are distinct one-bit types, so the two tags differ at
+    /// equal width and bits.
+    #[test]
+    fn set_val_bits_raw_compare_includes_the_tag() {
+        let mut interner = TypeInterner::new();
+        let bit_typ = interner.intern(&Type::Bit);
+        let clock_typ = interner.intern(&Type::Clock);
+        let _layouts = TypeLayoutIndex::from_parts(Default::default(), interner);
+        let mut state = state_with(Value::from_bool(bit_typ, true), Pending::None);
+        let signal = SignalId::from_index(0);
+
+        // Same bits, different tag: a change (tag mismatch), matching
+        // `set_val`'s `Value` equality.
+        state.set_val_bits(signal, clock_typ, 1, 1);
+        assert_eq!(state.pop_dirty(), Some(signal));
+        assert_eq!(state.get(signal).typ_id(), clock_typ);
+    }
+
+    /// A wide stored value falls back to the tagged `Value` compare:
+    /// the commit still happens on real change and stays silent on an
+    /// equal write, exactly as `set_val` behaves.
+    #[test]
+    fn set_val_bits_falls_back_to_value_compare_for_wide_stored_values() {
+        let (_layouts, typ) = interner_with(&Type::Word(100));
+        let mut state = state_with(Value::new(typ, BitPat::from_u64(100, 0x1234)), Pending::None);
+        let signal = SignalId::from_index(0);
+
+        // Same low bits: the tagged compare says equal, no write.
+        state.set_val_bits(signal, typ, 100, 0x1234);
+        assert!(state.pop_dirty().is_none());
+
+        // Different low bits: the tagged compare says changed, write.
+        state.set_val_bits(signal, typ, 100, 0x4321);
+        assert_eq!(state.pop_dirty(), Some(signal));
+        assert_eq!(state.get(signal).to_u64(), 0x4321);
+    }
+
+    /// Narrow pending bits transfer through the raw compare: the
+    /// pending `Value` is only constructed on an actual write, and a
+    /// same-bits retransfer is a no-op (the worklist cannot cycle).
+    #[test]
+    fn transfer_commits_narrow_pending_bits_only_on_change() {
+        let (_layouts, typ) = interner_with(&Type::Word(8));
+        let mut state = state_with(
+            Value::new(typ, BitPat::from_u64(8, 0b1010)),
+            Pending::Bits { typ, width: 8, bits: 0b0101 },
+        );
+        let signal = SignalId::from_index(0);
+
+        state.transfer(signal);
+        assert_eq!(state.get(signal).to_u64(), 0b0101);
+        assert_eq!(state.pop_dirty(), Some(signal));
+        assert!(state.changed_since_dispatch());
+
+        // Retransferring the same pending bits writes nothing.
+        state.clear_changed_since_dispatch();
+        state.transfer(signal);
+        assert!(state.pop_dirty().is_none());
+        assert!(!state.changed_since_dispatch());
+    }
+
+    /// Wide pending values keep the `Value` representation and
+    /// transfer through the old clone-and-`Value`-compare path, with
+    /// the same write-only-on-change behavior.
+    #[test]
+    fn transfer_moves_wide_pending_values_through_the_value_path() {
+        let (_layouts, typ) = interner_with(&Type::Word(100));
+        let mut state = state_with(
+            Value::new(typ, BitPat::from_u64(100, 1)),
+            Pending::Value(Value::new(typ, BitPat::from_u64(100, 2))),
+        );
+        let signal = SignalId::from_index(0);
+
+        state.transfer(signal);
+        assert_eq!(state.get(signal).to_u64(), 2);
+        assert_eq!(state.pop_dirty(), Some(signal));
+        assert!(state.changed_since_dispatch());
+
+        // A same-value retransfer is a no-op.
+        state.clear_changed_since_dispatch();
+        state.transfer(signal);
+        assert!(state.pop_dirty().is_none());
+        assert!(!state.changed_since_dispatch());
     }
 }

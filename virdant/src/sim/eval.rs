@@ -147,6 +147,18 @@ impl Value {
         }
     }
 
+    /// The raw bits and width when the value is stored in the narrow
+    /// (<= 64-bit) representation: `None` for wide values.  The
+    /// bits-only commit path (PERF-IDEAS item 10) compares raw
+    /// integers against these instead of building and comparing
+    /// `Value`s.
+    pub(crate) fn as_narrow(&self) -> Option<(Width, u64)> {
+        match &self.0 {
+            InternalValue::Small { width, bits, .. } => Some((*width, *bits)),
+            InternalValue::Big { .. } => None,
+        }
+    }
+
     /// The low 64 bits (truncated).
     pub fn to_u64(&self) -> u64 {
         match &self.0 {

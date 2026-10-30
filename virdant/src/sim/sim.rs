@@ -293,13 +293,25 @@ impl Sim {
     /// Initial expressions still always run on the interpreter
     /// (construction-time only; see `apply_initials`).
     fn eval_driver(&mut self, comp: SignalId) -> Value {
+        self.eval_driver_out(comp).into_value()
+    }
+
+    /// One driver run shaped for `flow`'s commit paths (PERF-IDEAS
+    /// item 10): a narrow (<= 64-bit) VM-compiled result comes back as
+    /// raw bits plus the driver's `TypeId`/width — the bits-only
+    /// commit path compares raw integers and tags a `Value` only on an
+    /// actual write — while everything else (wide results, the
+    /// interpreter fallback, constant-unit skips) comes back as the
+    /// tagged `Value` the old path built.
+    fn eval_driver_out(&mut self, comp: SignalId) -> vm::RunOut {
         // Constant-unit skip (synthesis graft 2): a driver the
         // optimizer folded entirely to a constant commits that value
-        // directly, `flow`/`flow_all` skip the run.
+        // directly, `flow`/`flow_all` skip the run.  Constants stay on
+        // the `Value` path: the folded value is already built.
         if let Some(value) = self.program.const_value(comp).cloned() {
             #[cfg(feature = "sim-profile")]
             crate::sim::profile::bump_const_skip();
-            return value;
+            return vm::RunOut::Tagged(value);
         }
         // Sampled timing, not per-call `Instant`: a read costs ~20 ns,
         // more than some drivers, so only every 256th eval is timed
@@ -307,13 +319,13 @@ impl Sim {
         #[cfg(feature = "sim-profile")]
         let _profile_sample = crate::sim::profile::sample_eval();
         if self.program.has_driver(comp) {
-            self.vm.run(&self.program, &self.state, comp)
+            self.vm.run_out(&self.program, &self.state, comp)
         } else {
             #[cfg(feature = "sim-profile")]
             crate::sim::profile::bump_eval_interp();
             let expr = self.circuit.exprs[comp.index()].clone().unwrap();
             let context = Context::context_for_component(&self.circuit, &self.state, comp);
-            expr.eval(&context)
+            vm::RunOut::Tagged(expr.eval(&context))
         }
     }
 
@@ -452,21 +464,51 @@ impl Sim {
                 // drivers resolved by the elaboration): the value is a
                 // copy of the peer's.  Edge detection below applies to
                 // alias copies too (e.g. a clock routed through a bare
-                // reference or a socket connection).
-                let new_value = if let Some(peer_id) = self.circuit.aliases[update_signal_id.index()] {
-                    self.state.get(peer_id)
+                // reference or a socket connection).  Alias copies stay
+                // on the `Value` commit path: the peer's `Value` is
+                // already built, and alias copies are not the per-driver
+                // hot path the bits-only path targets.
+                if let Some(peer_id) = self.circuit.aliases[update_signal_id.index()] {
+                    let new_value = self.state.get(peer_id);
+                    if self.circuit.registers[update_signal_id.index()] {
+                        self.state.set_reg(update_signal_id, new_value);
+                    } else {
+                        let old = self.state.get(update_signal_id);
+                        self.transfer_clock(update_signal_id, &old, new_value);
+                    }
                 } else {
-                    self.eval_driver(update_signal_id)
-                };
-                if self.circuit.registers[update_signal_id.index()] {
-                    self.state.set_reg(update_signal_id, new_value);
-                } else {
-                    // orchestrator (flow + edge transfers + watchers) and
-                    // would recurse re-entrantly into the loop we're in.
-                    // Edge detection reads the live value *before* the
-                    // write, so `old` is captured at this call site.
-                    let old = self.state.get(update_signal_id);
-                    self.transfer_clock(update_signal_id, &old, new_value);
+                    match self.eval_driver_out(update_signal_id) {
+                        vm::RunOut::Bits { typ, width, bits } => {
+                            if self.circuit.registers[update_signal_id.index()] {
+                                // A register's driver computes its
+                                // *next* value; the current value only
+                                // changes on a clock edge.  Narrow
+                                // registers store the pending next-value
+                                // as raw bits (`State::set_reg_bits`),
+                                // compared raw at transfer time.
+                                self.state.set_reg_bits(update_signal_id, typ, width, bits);
+                            } else {
+                                // The bits-only commit path for narrow
+                                // drivers: edge detection from the
+                                // pre-write live value, then a
+                                // raw-integer compare in
+                                // `State::set_val_bits`.
+                                self.transfer_clock_bits(update_signal_id, typ, width, bits);
+                            }
+                        }
+                        vm::RunOut::Tagged(new_value) => {
+                            if self.circuit.registers[update_signal_id.index()] {
+                                self.state.set_reg(update_signal_id, new_value);
+                            } else {
+                                // orchestrator (flow + edge transfers + watchers) and
+                                // would recurse re-entrantly into the loop we're in.
+                                // Edge detection reads the live value *before* the
+                                // write, so `old` is captured at this call site.
+                                let old = self.state.get(update_signal_id);
+                                self.transfer_clock(update_signal_id, &old, new_value);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -616,6 +658,44 @@ impl Sim {
             None
         };
         self.state.set_val(signal_id, new);
+        if rising {
+            let n = self.circuit.clock_sensitivity_count(signal_id);
+            for i in 0..n {
+                let reg_id = self.circuit.clock_sensitivity_at(signal_id, i);
+                self.state.transfer(reg_id);
+            }
+            #[cfg(feature = "sim-profile")]
+            crate::sim::profile::bump_transfers(n as u64);
+        }
+    }
+
+    /// The narrow bits-only commit path (PERF-IDEAS item 10):
+    /// `transfer_clock`'s raw-integer twin for narrow drivers.  The
+    /// same sequence, no `Value`s until a write: edge detection from
+    /// the pre-write live value (the same predicate `is_rising`
+    /// applies, over pre-extracted parts), the write through
+    /// `State::set_val_bits` (a raw compare; the tagged `Value` is
+    /// built only on an actual write), and the rising-edge
+    /// register-transfer loop.  Narrow registers' transfers themselves
+    /// compare raw bits (`State::transfer`'s bits path).
+    fn transfer_clock_bits(&mut self, signal_id: SignalId, typ: TypeId, width: Width, bits: u64) {
+        // Edge detection reads the live value *before* the write, the
+        // same bases `transfer_clock` uses.
+        let rising = {
+            let old = self.state.peek(signal_id);
+            is_rising_bits(old.width(), old.get_bit(0), bits & 1 == 1)
+        };
+        // Rising edges on clock wires are the per-cycle heartbeat:
+        // one per cycle for a single-clock design.  The sampler tick
+        // doubles as the rising-edge count, and every 8th edge's
+        // transfer loop (set_val + the register transfers) is timed.
+        #[cfg(feature = "sim-profile")]
+        let _profile_sample = if rising {
+            crate::sim::profile::sample_xfer_loop()
+        } else {
+            None
+        };
+        self.state.set_val_bits(signal_id, typ, width, bits);
         if rising {
             let n = self.circuit.clock_sensitivity_count(signal_id);
             for i in 0..n {
@@ -989,10 +1069,19 @@ impl Sim {
 pub fn debug_transfer(_id: crate::analysis::elaboration::SignalId, _v: &Value) {
 }
 
+/// 0→1 transition on a 1-bit signal, over pre-extracted parts: the
+/// shared predicate behind `is_rising` (the `Value` commit path) and
+/// `transfer_clock_bits`'s raw-bits path (the new side there is the
+/// raw result bits, whose bit 0 is what [`Value::get_bit`] would read
+/// on the masked narrow value).
+fn is_rising_bits(old_width: Width, old_bit0: bool, new_bit0: bool) -> bool {
+    old_width == 1 && !old_bit0 && new_bit0
+}
+
 /// 0→1 transition on a 1-bit signal.  Keeps `set()`'s edge detection
 /// safe on non-clock (and multi-bit) signals.
 fn is_rising(old: &Value, new: &Value) -> bool {
-    old.width() == 1 && !old.get_bit(0) && new.get_bit(0)
+    is_rising_bits(old.width(), old.get_bit(0), new.get_bit(0))
 }
 
 #[cfg(test)]
@@ -1164,6 +1253,93 @@ mod tests {
         }
         assert_eq!(*fire_fires.borrow(), 1, "a quiescent settlement must not re-fire");
         assert_eq!(*x_fires.borrow(), 1, "a quiescent settlement must not re-fire");
+    }
+
+    /// The bits-only commit path end to end (PERF-IDEAS item 10):
+    /// narrow drivers commit through the raw compare
+    /// (`transfer_clock_bits` + `State::set_val_bits`), the narrow
+    /// `state` register stores raw pending bits (`State::set_reg_bits`)
+    /// and transfers through the raw compare, and the dirty-list
+    /// protocol sees exactly the real change events: `top.valid`'s
+    /// `on_change` watcher fires once per actual value transition and
+    /// never on a same-value re-commit, even though the narrow drivers
+    /// are re-evaluated every cycle.
+    #[test]
+    fn narrow_bits_commit_path_runs_gcd_to_completion() {
+        let mut sim = gcd_sim();
+        let clock = sim.signal("top.clock");
+        let clock_typ = sim.component_type_id(clock);
+        let reset = sim.signal("top.reset");
+        let reset_typ = sim.component_type_id(reset);
+        let fire = sim.signal("top.fire");
+        let fire_typ = sim.component_type_id(fire);
+        let x = sim.signal("top.x");
+        let x_typ = sim.component_type_id(x);
+        let y = sim.signal("top.y");
+        let y_typ = sim.component_type_id(y);
+        let result = sim.signal("top.result");
+        let valid = sim.signal("top.valid");
+
+        let mut settle = |sim: &mut Sim, high: bool| {
+            let mut lock = sim.lock();
+            lock.set(clock, Value::from_bool(clock_typ, high));
+        };
+
+        // Drive the inputs: gcd(9, 6) = 3, with reset held for the
+        // first edge so the seeded-random register state starts at
+        // `Idle`.
+        {
+            let mut lock = sim.lock();
+            lock.set(reset, Value::from_bool(reset_typ, true));
+            lock.set(fire, Value::from_bool(fire_typ, true));
+            lock.set(x, Value::new(x_typ, BitPat::from_u64(8, 9)));
+            lock.set(y, Value::new(y_typ, BitPat::from_u64(8, 6)));
+        }
+
+        // First rising edge: reset transfers `state` to `Idle`, so
+        // `result`/`valid` are 0/false from here on.
+        settle(&mut sim, true);
+        assert_eq!(sim.get(result).to_u64(), 0);
+        assert!(!sim.get(valid).get_bit(0));
+
+        // Deassert reset: the pending next-value recomputes to
+        // `Running(9, 6)` (Idle + fire), transferred at the next edge.
+        {
+            let mut lock = sim.lock();
+            lock.set(reset, Value::from_bool(reset_typ, false));
+        }
+
+        // Watch the alias copy of the narrow `valid` driver's output:
+        // the driver is re-evaluated and re-committed every cycle, and
+        // only the two real transitions (false->true at Done, true->false
+        // back at Idle) may fire.
+        let fires = Rc::new(RefCell::new(0u32));
+        {
+            let count = fires.clone();
+            sim.on_change(valid, Box::new(move |_sim| {
+                *count.borrow_mut() += 1;
+            }));
+        }
+
+        // Rising-edge sequence for `state`: Running(9,6), Running(3,6),
+        // Running(3,3), Running(0,3), Running(3,0), Done(3), Idle.  The
+        // register driver re-evaluates on the clock edges, so the first
+        // edge after deasserting reset still commits the `Idle` pending.
+        for _ in 0..6 {
+            settle(&mut sim, true);
+            settle(&mut sim, false);
+        }
+        // Eighth rising edge after Idle: `Done(3)`.
+        settle(&mut sim, true);
+        assert_eq!(sim.get(result).to_u64(), 3, "gcd(9, 6) = 3");
+        assert!(sim.get(valid).get_bit(0));
+        assert_eq!(*fires.borrow(), 1, "the false->true transition fires once");
+        settle(&mut sim, false);
+        // Ninth: `Done` returns to `Idle`.
+        settle(&mut sim, true);
+        assert_eq!(sim.get(result).to_u64(), 0);
+        assert!(!sim.get(valid).get_bit(0));
+        assert_eq!(*fires.borrow(), 2, "the true->false transition fires once");
     }
 
     /// A `Write` sink over a shared buffer, so a test can attach the
