@@ -54,8 +54,7 @@ install: build
 	mkdir -p ${HOME}/.local/virdant/bin
 	mkdir -p ${HOME}/.local/virdant/lib
 	mkdir -p ${HOME}/.local/virdant/tutorial
-	cp ./target/release/vir ${HOME}/.local/virdant/bin/
-	cp ./target/release/vir-* ${HOME}/.local/virdant/bin/
+	find ./target/release -maxdepth 1 -type f -executable -name 'vir*' -exec cp {} ${HOME}/.local/virdant/bin/ \;
 	cp -r ./lib/* ${HOME}/.local/virdant/lib/
 	cp -r ./tutorial/* ${HOME}/.local/virdant/tutorial/
 
