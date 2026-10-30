@@ -11,13 +11,20 @@ anywhere — the built output under `dist/` is fully static.
   compiler library (check path, diagnostics as JSON) and ports the
   `virt::Virt` board from `vir/src/vir/virt.rs` to wasm: the Unix
   shell (stdin thread, termios, SIGINT, `thread::sleep` pacing) is
-  replaced by shared byte buffers drained/filled from JS and a rAF
-  loop that paces the simulated clock against wall time.
-- `src/wasm/` — wasm-bindgen output (generated; do not edit).
+  replaced by shared byte buffers drained/filled from JS and a
+  pacing loop that schedules `Sim::run_until` chunks against wall
+  time.
 - `src/main.js`, `index.html`, `src/style.css` — the SPA: CodeMirror 6
   editor on the left (file sidebar with add/remove, Default or Vim
   keybindings), an Errors/Console tabbed panel on the right, and a
   Run/Stop/Settings bar along the bottom.
+- `src/sim-worker.js` — a Web Worker that owns the running simulator:
+  the wasm VM, the step loop, the real-time pacing and adaptive
+  chunk sizing all live there, so the main thread stays free for
+  editing and rendering while a design runs.  The worker talks to
+  `main.js` via `postMessage` (protocol documented in the file
+  header).
+- `src/wasm/` — wasm-bindgen output (generated; do not edit).
 - `src/vir-language.js` — a small Virdant syntax-highlighting mode.
 - `src/default_top.vir` — copy of `assets/new/src/top.vir`, the
   starting file.

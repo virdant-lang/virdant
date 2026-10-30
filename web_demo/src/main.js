@@ -8,7 +8,7 @@
 //
 // State (files, keymap, settings) persists in localStorage.
 
-import init, { check as wasmCheck, VirtVm } from './wasm/virdant_web.js';
+import init, { check as wasmCheck } from './wasm/virdant_web.js';
 
 // SPI flash: 16 MiB device (see `wasm/src/virt.rs`); larger images are
 // truncated, matching the native `--flash`.
@@ -182,10 +182,16 @@ let compartmentGen = 0;
 let diagnosticsByFile = new Map();
 let hasErrors = true;
 
-// VM state (null when not running).
-let vm = null;
+// The simulator runs in a Web Worker (`sim-worker.js`): the wasm VM,
+// the step loop and the real-time pacing all live there, so the main
+// thread stays free for editing/rendering while a design runs.  The
+// worker reports back via postMessage (see the protocol documented
+// there); UART input and Stop go the other way the same way.
+const simWorker = new Worker(new URL('./sim-worker.js', import.meta.url), { type: 'module' });
+let running = false;   // a simulation is stepping in the worker
+let starting = false;  // a create request is in flight
 let runStartWall = 0;
-let rafId = 0;
+let runCycles = 0;
 let decoder = new TextDecoder('utf8');
 
 // Flash image to preload at the next Run: `{ name, bytes: Uint8Array }`
@@ -408,7 +414,7 @@ function renderProjectSelect() {
 
 function switchProject(idx) {
   if (idx === currentIdx) return;
-  if (vm) stopRun();
+  stopRun();
   projects[currentIdx].activeIdx = activeIdx;
   currentIdx = idx;
   files = projects[currentIdx].files;
@@ -443,7 +449,7 @@ function removeProject() {
   if (projects.length <= 1) return;
   const name = projects[currentIdx].name;
   if (!confirm(`Delete project "${name}" and all its files?`)) return;
-  if (vm) stopRun();
+  stopRun();
   projects.splice(currentIdx, 1);
   currentIdx = Math.min(currentIdx, projects.length - 1);
   files = projects[currentIdx].files;
@@ -467,11 +473,22 @@ $('removeproject').addEventListener('click', removeProject);
 // ── Checking (live) ──────────────────────────────────────────
 
 let checkTimer = 0;
+// While a simulation is running, live re-checks are deferred (the
+// synchronous wasm check would compete with the simulator); once the
+// run ends, one check catches up with all pending edits.
+let checkPending = false;
+function deferCheckWhileRunning() {
+  if (!running && !starting) return false;
+  checkPending = true;
+  return true;
+}
 function scheduleCheck() {
+  if (deferCheckWhileRunning()) return;
   clearTimeout(checkTimer);
   checkTimer = setTimeout(runCheck, 400);
 }
 function runCheckSoon() {
+  if (deferCheckWhileRunning()) return;
   clearTimeout(checkTimer);
   checkTimer = setTimeout(runCheck, 0);
 }
@@ -553,7 +570,7 @@ function jumpToDiagnostic(d) {
 }
 
 function updateRunButton() {
-  runBtn.disabled = hasErrors || vm !== null;
+  runBtn.disabled = hasErrors || running || starting;
 }
 
 function showFatal(message) {
@@ -621,7 +638,7 @@ let inputHistory = [];
 let historyIdx = null;
 
 function termSend(text) {
-  if (vm && !vm.is_finished()) vm.send_input(termEncoder.encode(text));
+  if (running) simWorker.postMessage({ type: 'input', bytes: termEncoder.encode(text) });
 }
 
 // If the design's last output left the cursor mid-row, start input
@@ -743,23 +760,30 @@ function historyNav(dir) {
 }
 
 term.onData((data) => {
-  if (!vm || vm.is_finished()) return;
+  if (!running) return;
   if (settings.localEcho) lineDiscipline(data);
   else rawInput(data);
 });
 
 // ── Run / Stop ───────────────────────────────────────────────
 
-function setRunning(running) {
-  runBtn.hidden = running;
-  stopBtn.hidden = !running;
+function setRunning(nowRunning) {
+  runBtn.hidden = nowRunning;
+  stopBtn.hidden = !nowRunning;
   updateRunButton();
-  if (running) {
+  if (nowRunning) {
     appendConsoleLine('(type to feed the design\'s UART rx — Ctrl+C stops)');
     term.write('\r\n');
     switchTab('console');
     fitTerminal();
     term.focus();
+  } else {
+    fpsReadout.textContent = '';
+    // Catch up with edits made while the run deferred live re-checks.
+    if (checkPending) {
+      checkPending = false;
+      runCheckSoon();
+    }
   }
 }
 
@@ -768,13 +792,8 @@ function clearConsole() {
   decoder = new TextDecoder('utf8');
 }
 
-function pumpOutput() {
-  const bytes = vm.take_output();
-  if (bytes.length) appendConsoleText(decoder.decode(bytes, { stream: true }));
-}
-
 function startRun() {
-  if (vm) return;
+  if (running || starting) return;
   const res = runCheck();
   if (!res || !res.ok) {
     switchTab('errors');
@@ -782,61 +801,83 @@ function startRun() {
   }
   clearConsole();
   switchTab('console');
-  try {
-    vm = flashImage
-      ? VirtVm.create_with_flash(buildPayload(), projects[currentIdx].top, flashImage.bytes)
-      : VirtVm.create(buildPayload(), projects[currentIdx].top);
-  } catch (e) {
-    vm = null;
-    appendConsoleLine(`⚠ Could not start the simulation: ${String(e)}`);
-    setRunning(false);
-    return;
-  }
-  appendConsoleLine(`── running ${projects[currentIdx].top} on virt::Virt (${Number(vm.clock_hz()) / 1e6} MHz) ──`);
-  runStartWall = performance.now();
-  setRunning(true);
-  rafId = requestAnimationFrame(runFrame);
-}
-
-const FPS_NOCAP_CHUNK = 100_000n;
-const FRAME_BUDGET_MS = 12;
-// When pacing to wall time, forgive debt: a design heavier than
-// real-time runs flat out instead of chasing an ever-growing deficit
-// (matching `vir run`, which simply stops sleeping when it can't
-// keep up).
-const MAX_PACED_CHUNK = 250_000n;
-
-function runFrame(now) {
-  if (!vm) return;
-  const clockHz = Number(vm.clock_hz());
-  const periodNs = 1e9 / clockHz;
-  if (settings.fpsNoCap) {
-    // Spend most of the frame's budget simulating in chunks, so a
-    // heavy design runs at full wasm speed while the UI stays alive.
-    const deadline = performance.now() + FRAME_BUDGET_MS;
-    do {
-      vm.step(FPS_NOCAP_CHUNK);
-      if (vm.is_finished()) break;
-    } while (performance.now() < deadline);
+  starting = true;
+  updateRunButton();
+  const msg = {
+    type: 'create',
+    payload: buildPayload(),
+    top: projects[currentIdx].top,
+    fpsNoCap: settings.fpsNoCap,
+  };
+  if (flashImage) {
+    // Copy before transferring: the loaded image must survive a stop.
+    msg.flash = flashImage.bytes.slice().buffer;
+    simWorker.postMessage(msg, [msg.flash]);
   } else {
-    const elapsedNs = (now - runStartWall) * 1e6;
-    const target = BigInt(Math.floor(elapsedNs / periodNs));
-    const deficit = target - vm.cycles();
-    if (deficit > 0n) vm.step(deficit < MAX_PACED_CHUNK ? deficit : MAX_PACED_CHUNK);
+    simWorker.postMessage(msg);
   }
-  pumpOutput();
-  if (settings.showFps) updateFpsReadout(now);
-  if (vm.is_finished()) {
-    finishRun();
-    return;
-  }
-  rafId = requestAnimationFrame(runFrame);
 }
 
-function updateFpsReadout(now) {
-  const cycles = Number(vm.cycles());
-  const secs = (now - runStartWall) / 1000;
-  const mhz = secs > 0 ? cycles / secs / 1e6 : 0;
+// ── Worker messages (the sim lives in sim-worker.js) ─────────
+
+simWorker.onmessage = (e) => {
+  const m = e.data;
+  switch (m.type) {
+    case 'created':
+      starting = false;
+      runStartWall = performance.now();
+      runCycles = 0;
+      appendConsoleLine(`── running ${projects[currentIdx].top} on virt::Virt (${m.clockHz / 1e6} MHz) ──`);
+      setRunning(true);
+      break;
+    case 'output':
+      appendConsoleText(decoder.decode(new Uint8Array(m.buf), { stream: true }));
+      break;
+    case 'progress':
+      runCycles = m.cycles;
+      if (settings.showFps) updateFpsReadout();
+      break;
+    case 'finished':
+      runCycles = m.cycles;
+      appendConsoleLine(`\n── exited with code ${m.exitCode} after ${m.cycles} cycles ──`);
+      if (settings.showFps) {
+        const secs = (performance.now() - runStartWall) / 1000;
+        if (m.cycles > 0 && secs > 0) {
+          appendConsoleLine(`Average clock frequency: ${formatMhz(m.cycles / secs / 1e6)} MHz`);
+        }
+      }
+      starting = false;
+      setRunning(false);
+      break;
+    case 'stopped':
+      runCycles = m.cycles;
+      appendConsoleLine(`\n── stopped after ${m.cycles} cycles ──`);
+      starting = false;
+      setRunning(false);
+      break;
+    case 'create-error':
+      starting = false;
+      setRunning(false);
+      appendConsoleLine(`⚠ Could not start the simulation: ${m.message}`);
+      break;
+    case 'error':
+      starting = false;
+      setRunning(false);
+      appendConsoleLine(`⚠ Simulation failed: ${m.message}`);
+      break;
+  }
+};
+
+simWorker.onerror = (e) => {
+  // Worker-level failure (e.g. the wasm failed to load).
+  starting = false;
+  setRunning(false);
+  appendConsoleLine(`⚠ Simulator worker crashed: ${e.message || e}`);
+};
+
+function updateFpsReadout() {
+  const secs = (performance.now() - runStartWall) / 1000;
+  const mhz = secs > 0 ? runCycles / secs / 1e6 : 0;
   fpsReadout.textContent = `${formatMhz(mhz)} MHz (avg)`;
 }
 
@@ -844,29 +885,9 @@ function formatMhz(mhz) {
   return mhz.toFixed(4).replace(/\.?0+$/, '') || '0';
 }
 
-function finishRun() {
-  pumpOutput();
-  const cycles = Number(vm.cycles());
-  appendConsoleLine(`\n── exited with code ${vm.exit_code()} after ${cycles} cycles ──`);
-  if (settings.showFps) {
-    const secs = (performance.now() - runStartWall) / 1000;
-    if (cycles > 0 && secs > 0) {
-      appendConsoleLine(`Average clock frequency: ${formatMhz(cycles / secs / 1e6)} MHz`);
-    }
-  }
-  vm = null;
-  fpsReadout.textContent = '';
-  setRunning(false);
-}
-
 function stopRun() {
-  if (!vm) return;
-  cancelAnimationFrame(rafId);
-  pumpOutput();
-  appendConsoleLine(`\n── stopped after ${Number(vm.cycles())} cycles ──`);
-  vm = null;
-  fpsReadout.textContent = '';
-  setRunning(false);
+  if (!running && !starting) return;
+  simWorker.postMessage({ type: 'stop' });
 }
 
 runBtn.addEventListener('click', startRun);
@@ -914,6 +935,7 @@ function closeSettings() {
   settings.fpsNoCap = $('set-fpsnocap').checked;
   settings.showFps = $('set-showfps').checked;
   settings.localEcho = $('set-localecho').checked;
+  if (running && simWorker) simWorker.postMessage({ type: 'config', fpsNoCap: settings.fpsNoCap });
   saveProjects();
   saveSettings();
   settingsModal.hidden = true;
