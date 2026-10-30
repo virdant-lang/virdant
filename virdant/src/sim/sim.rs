@@ -547,6 +547,34 @@ impl Sim {
         Ok(())
     }
 
+    /// Bounded variant of [`Sim::run`] for incremental drivers (the
+    /// wasm web demo): behaves like `run`, but stops dispatching once
+    /// simulation time reaches `end_ps` (or earlier, if `finish()` is
+    /// requested or the queue starves).  End-of-simulation callbacks
+    /// are left queued: unlike `run`, the run may be resumed with a
+    /// later `run_until` (or concluded with `run`).  Start-of-simula-
+    /// tion callbacks fire on the first call only.
+    ///
+    /// NOTE: like `run`, a `finish()` requested inside a callback is
+    /// reset by the next call's start-of-simulation drain; callers
+    /// that must not resume after `finish()` should track that
+    /// themselves.
+    pub fn run_until(&mut self, end_ps: u64) -> Result<(), SimError> {
+        let start_callbacks = self.sched.drain_lifecycle(|e| matches!(e, Event::StartOfSimulation));
+        for mut cb in start_callbacks {
+            cb(self);
+        }
+
+        while !self.sched.is_shutdown_requested() {
+            if let Some(mut cb) = self.sched.next_after_delay_until(end_ps) {
+                cb(self);
+            } else {
+                break;
+            }
+        }
+        Ok(())
+    }
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////

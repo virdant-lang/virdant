@@ -11,13 +11,14 @@ use bstr::ByteSlice as _;
 use crate::common::{Width, WordValue};
 use crate::db::Db;
 use crate::diagnostics::{Diagnostic, DiagnosticLevel};
-#[cfg(not(target_arch = "wasm32"))]
 use crate::common::source::Source;
-#[cfg(not(target_arch = "wasm32"))]
 use crate::package::PackageTable;
 
-#[cfg(not(target_arch = "wasm32"))]
-fn db_from_name_text_pairs(files: Vec<(BString, BString)>) -> Db {
+/// Construct a `Db` from in-memory (package name, text) pairs.
+/// This is the filesystem-free entry point used on wasm (where the
+/// web demo drives the compiler from editor buffers); the `load_*`
+/// helpers below reuse it for the fs-backed constructors.
+pub fn db_from_mem(files: Vec<(BString, BString)>) -> Db {
     let mut db = Db::new();
 
     let deduped: indexmap::IndexMap<BString, BString> = files.into_iter().collect();
@@ -74,7 +75,7 @@ fn load_vir_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Vec<(BString, BSt
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
-    db_from_name_text_pairs(load_vir_dir(source_dir))
+    db_from_mem(load_vir_dir(source_dir))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -82,7 +83,7 @@ pub fn db_from_dir_with_lib<P, Q>(source_dir: P, lib_dir: Q) -> Db
 where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
     let mut files = load_lib_dir(lib_dir);
     files.extend(load_source_dir(source_dir));
-    db_from_name_text_pairs(files)
+    db_from_mem(files)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -110,7 +111,7 @@ where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
         files.push(Source::load_file(source_file.into()));
     }
 
-    db_from_name_text_pairs(files)
+    db_from_mem(files)
 }
 
 pub fn min_word_width(value: WordValue) -> Width {

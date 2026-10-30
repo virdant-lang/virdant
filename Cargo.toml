@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["virdant", "vir"]
+exclude = ["web_demo/wasm"]
 
 # The simulator is allocation- and compute-bound; at the default
 # dev opt-level 0 it runs ~10x slower than release. Optimize just the

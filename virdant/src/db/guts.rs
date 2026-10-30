@@ -62,6 +62,20 @@ impl<'d> Builder<'d> {
     }
 }
 
+/// Time a query build for the trace.  On wasm there is no `Instant`,
+/// so the trace records a zero duration.
+#[cfg(not(target_arch = "wasm32"))]
+fn query_timing<R>(f: impl FnOnce() -> R) -> (R, std::time::Duration) {
+    let start = std::time::Instant::now();
+    let result = f();
+    (result, start.elapsed())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn query_timing<R>(f: impl FnOnce() -> R) -> (R, std::time::Duration) {
+    (f(), std::time::Duration::ZERO)
+}
+
 impl Db {
     pub fn new() -> Self {
         Db {
@@ -85,10 +99,9 @@ impl Db {
                 location,
             });
             drop(call_stack);
-            let start = std::time::Instant::now();
-            let mut cached_val = query.clone().build(self);
-            // Time elapsed building the query
-            let duration = start.elapsed();
+            // Time the query build for the trace.  On wasm there is
+            // no `Instant`, so the trace records a zero duration.
+            let (mut cached_val, duration) = query_timing(|| query.clone().build(self));
             cached_val.duration = duration;
             self.call_stack.lock().unwrap().pop();
             {

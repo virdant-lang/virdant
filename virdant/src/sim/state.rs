@@ -110,13 +110,27 @@ impl State {
 }
 
 /// A seed for the random init strategy, derived from the wall clock so
-/// two runs see different uninitialized values.
+/// two runs see different uninitialized values.  On wasm there is no
+/// wall clock: seed from JS-provided entropy (see `web_demo/wasm`),
+/// falling back to a fixed constant.
 fn initial_seed() -> u64 {
+    cfg_if_time_seed()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn cfg_if_time_seed() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(0x9E3779B97F4A7C15)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn cfg_if_time_seed() -> u64 {
+    // No wall clock on wasm; a fixed seed keeps runs reproducible.
+    // (JS-driven variability can be added later via `InitStrategy`.)
+    0x9E3779B97F4A7C15
 }
 
 impl State {

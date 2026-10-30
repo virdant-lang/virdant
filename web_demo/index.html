@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Virdant Web Demo</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="left">
+      <div id="filesidebar">
+        <div id="filesidebar-header">
+          <span>FILES</span>
+          <button id="addfile" title="Add a file">+</button>
+        </div>
+        <ul id="filelist"></ul>
+      </div>
+      <div id="editorhost"></div>
+    </div>
+
+    <div id="splitter" title="Drag to resize"></div>
+
+    <div id="right">
+      <div id="tabs">
+        <button class="tab active" id="tab-errors" data-tab="errors">Errors <span id="errcount"></span></button>
+        <button class="tab" id="tab-console" data-tab="console">Console</button>
+      </div>
+      <div id="errorpanel" class="panel"></div>
+      <div id="consolepanel" class="panel" hidden>
+        <div id="consoleout"></div>
+        <form id="consolein-form">
+          <span class="prompt">&gt;</span>
+          <input id="consolein" autocomplete="off" placeholder="type to feed the design's UART rx…" disabled />
+        </form>
+      </div>
+    </div>
+
+    <div id="bottombar">
+      <button id="run">Run</button>
+      <button id="stop" hidden>Stop</button>
+      <label class="keymap-label" for="keymap">Keys</label>
+      <select id="keymap">
+        <option value="default">Default</option>
+        <option value="vim">Vim</option>
+      </select>
+      <button id="settings">Settings</button>
+      <span id="fpsreadout"></span>
+    </div>
+  </div>
+
+  <div id="settingsmodal" hidden>
+    <div id="settingsbox">
+      <h2>Settings</h2>
+      <label>
+        <span>Top module</span>
+        <input id="set-top" type="text" spellcheck="false" />
+      </label>
+      <label class="check">
+        <input id="set-fpsnocap" type="checkbox" />
+        <span>Disable real-time pacing (<code>--fps-no-cap</code>)</span>
+      </label>
+      <label class="check">
+        <input id="set-showfps" type="checkbox" />
+        <span>Display average clock frequency (fps)</span>
+      </label>
+      <div id="settingsbuttons">
+        <button id="set-reset">Reset files to default</button>
+        <button id="set-close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

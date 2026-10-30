@@ -1,0 +1,27 @@
+[package]
+name = "virdant-web"
+version = "0.4.0"
+edition = "2024"
+rust-version = "1.88"
+
+# The wasm backend of the web demo: drives the `virdant` compiler
+# library from editor buffers and simulates the `virt::Virt` board in
+# the browser.  Kept out of the root workspace (see the workspace
+# `exclude` in the root Cargo.toml) so native builds never pull in
+# wasm-bindgen.
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+virdant = { path = "../../virdant" }
+bstr = "1.12.0"
+wasm-bindgen = "=0.2.104"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+console_error_panic_hook = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1

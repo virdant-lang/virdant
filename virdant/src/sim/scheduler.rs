@@ -151,6 +151,32 @@ impl Scheduler {
         }
     }
 
+    /// Like [`Scheduler::next_after_delay`], but only pops events due
+    /// at or before `limit_ps`; returns `None` when the earliest
+    /// pending event lies beyond the limit (leaving it queued), so an
+    /// incremental driver can resume the run later.
+    pub(super) fn next_after_delay_until(&mut self, limit_ps: u64) -> Option<Callback> {
+        let idx = self.queue
+            .iter()
+            .enumerate()
+            .filter_map(|(i, q)| match q.cb.event {
+                Event::AfterDelay { at_ps } if at_ps <= limit_ps => Some((i, at_ps, q.seq)),
+                _ => None,
+            })
+            .min_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)))
+            .map(|(i, _, _)| i);
+
+        if let Some(idx) = idx {
+            let mut entry = self.queue.remove(idx);
+            if let Event::AfterDelay { at_ps } = entry.cb.event {
+                self.advance_to(at_ps);
+            }
+            entry.cb.callback.take()
+        } else {
+            None
+        }
+    }
+
     fn advance_to(&mut self, time_ps: u64) {
         self.time_ps = time_ps;
     }
