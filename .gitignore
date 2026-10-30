@@ -16,3 +16,6 @@ conversations
 TODO.txt
 
 tmp.*
+
+.audit/
+.pi/
