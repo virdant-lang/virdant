@@ -1,0 +1,16 @@
+// With exactly one Clock-typed component in the module (`clock`), the
+// `on` clause is optional on `reg` declarations: `count` is implicitly
+// clocked by `clock`, as if the user had written
+// `reg count : Word[4] on clock`.
+pub mod Top {
+    incoming clock : Clock
+    outgoing out : Word[4]
+
+    reg count : Word[4] {
+        initial it <= 0
+    }
+
+    count <= count + 1
+
+    out := count
+}

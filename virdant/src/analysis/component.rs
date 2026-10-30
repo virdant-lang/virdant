@@ -11,6 +11,7 @@ use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::Location;
 use crate::analysis::symbols::{Symbol, SymbolId, SymbolKind};
+use crate::common::source::Region;
 use crate::db::Builder;
 use crate::package::PackageId;
 use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
@@ -26,6 +27,16 @@ pub struct ComponentAnalysis {
     moddef: SymbolId,
     components: Vec<(BString, Component)>,
     diagnostics: Vec<Diagnostic>,
+    /// The module's implicit clock.  When the module declares *exactly
+    /// one* component whose resolved type is the builtin `Clock`,
+    /// `reg`/`outgoing reg` components may omit their `on <CLOCK>`
+    /// clause, and it is as if the user had written
+    /// `on <the_one_clock>`.  This holds that component's id.  `None`
+    /// when the module declares zero or more than one Clock-typed
+    /// component (or is not a mod definition).  Only components declared
+    /// by the module itself count; submodule instance ports, socket
+    /// channels, and platform-synthesized ports do not.
+    implicit_clock: Option<ComponentId>,
 
     references: IndexMap<Location, (ComponentId, ReferenceKind)>,
 }
@@ -165,6 +176,12 @@ impl ComponentAnalysis {
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         self.diagnostics.clone()
     }
+
+    /// The module's implicit clock, if it declares exactly one
+    /// Clock-typed component (see the field docs).
+    pub fn implicit_clock(&self) -> Option<ComponentId> {
+        self.implicit_clock
+    }
 }
 
 fn drives_channel(role: SocketRole, dir: ChannelDir) -> bool {
@@ -246,8 +263,18 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
         moddef,
         components: vec![],
         diagnostics: vec![],
+        implicit_clock: None,
         references: IndexMap::new(),
     };
+
+    // Implicit-clock bookkeeping (resolved once the module's own
+    // components have all been walked):
+    // - ids of the module's own components whose resolved type is the
+    //   builtin `Clock`;
+    // - regs/outgoing-regs written without an `on` clause, which need
+    //   one unless the module has a unique implicit clock.
+    let mut clock_ids: Vec<ComponentId> = vec![];
+    let mut regs_without_on: Vec<(BString, Region)> = vec![];
 
     let symboltable = builder.get_symboltable();
     let location = symboltable.symbol(moddef).location();
@@ -294,14 +321,22 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     id,
                     path: path.clone(),
                     location: stmt.location(),
-                    typ,
+                    typ: typ.clone(),
                     flow,
                     kind: Some(component_kind),
                     synthetic: false,
                     default_expr: None,
                 };
+                if matches!(component_kind, ComponentKind::Reg | ComponentKind::OutgoingReg)
+                    && stmt.clock().is_none()
+                {
+                    regs_without_on.push((path.clone(), stmt.region()));
+                }
                 if !components_seen.contains(&path) {
                     components_seen.insert(path.clone());
+                    if typ.as_ref() == Some(&Type::Clock) {
+                        clock_ids.push(id);
+                    }
                     component_analysis.components.push((path.clone(), component));
                 }
             }
@@ -589,6 +624,21 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 }
             }
             _ => (),
+        }
+    }
+
+    // Resolve the implicit clock now that the module's own components
+    // have all been walked.  With exactly one Clock-typed component,
+    // regs may omit their `on` clause and are implicitly clocked by it;
+    // otherwise every reg still requires an explicit `on` clause.
+    if clock_ids.len() == 1 {
+        component_analysis.implicit_clock = clock_ids.pop();
+    } else {
+        for (component, region) in regs_without_on {
+            component_analysis.diagnostics.push(Diagnostic::new(
+                region,
+                diagnostics::MissingOnClause { component },
+            ));
         }
     }
 

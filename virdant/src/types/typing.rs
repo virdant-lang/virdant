@@ -270,10 +270,16 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
     if let AstNodePayload::ModDef(moddef) = node.payload() && !moddef.is_ext {
         // Unused varibles and read from sink warnings
         let component_analysis = component_analysis.as_ref().unwrap();
+        // When this module declares exactly one Clock-typed component,
+        // regs may omit their `on` clause and are implicitly clocked by
+        // it.  That implicit use is not written as an expression (no
+        // `on <CLOCK>` reference exists to record a use location), so
+        // the implicit clock is exempt from the unused-signal warning.
         for (path, component) in component_analysis.components() {
             if component.can_source()
                 && !use_locations.contains_key(&path)
                 && !component.synthetic()
+                && component_analysis.implicit_clock() != Some(component.id())
                 && !matches!(
                     component.kind(),
                     Some(ComponentKind::OutgoingReg)

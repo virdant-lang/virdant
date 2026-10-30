@@ -1,0 +1,2 @@
+kind = "sim"
+description = "With exactly one Clock-typed component, a reg with no `on` clause is implicitly clocked by it."
