@@ -12,6 +12,7 @@ mod compile;
 mod exec;
 mod frame;
 mod isa;
+mod optimize;
 
 pub(in crate::sim) use compile::compile_program;
 pub(in crate::sim) use frame::Vm;

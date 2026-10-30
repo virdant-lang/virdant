@@ -26,6 +26,7 @@ use crate::analysis::elaboration::SignalId;
 use crate::analysis::symbols::SymbolId;
 use crate::common::{BinOp, UnOp, Width};
 use crate::sim::bits::BitPat;
+use crate::sim::eval::Value;
 use crate::sim::layout::{TypeId, TypeLayoutIndex};
 
 pub(super) type Ip = u32;
@@ -312,7 +313,7 @@ pub(super) enum Ins {
 
 /// Where an instruction writes its result. `Narrow` slots are raw
 /// `u64` frame entries; `Wide` slots are `BitPat` frame entries.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Dst {
     Narrow(SlotN),
     Wide(SlotW),
@@ -396,6 +397,12 @@ pub(in crate::sim) struct Program {
     pub(super) driver_widths: Vec<Width>,
     /// Type layouts, shared with the `Circuit`.
     pub(super) layouts: TypeLayoutIndex,
+    /// `const_values[component]`, the driver's folded-to-constant
+    /// value, when the optimizer reduced the whole driver to one
+    /// constant.  The constant-unit skip (synthesis graft 2): the
+    /// executor path commits this value directly without running the
+    /// bytecode.
+    pub(super) const_values: Vec<Option<Value>>,
     /// Per-reason counts of drivers that fell back (indices are
     /// `FallbackReason` discriminants).  Read by the debug-only
     /// fallback log at `Sim::new`.
@@ -406,6 +413,13 @@ pub(in crate::sim) struct Program {
 impl Program {
     pub(in crate::sim) fn has_driver(&self, comp: SignalId) -> bool {
         self.entry[comp.index()].is_some()
+    }
+
+    /// The driver's folded-to-constant value, when the optimizer
+    /// reduced the whole driver to one constant (the constant-unit
+    /// skip: the executor commits it without running the driver).
+    pub(in crate::sim) fn const_value(&self, comp: SignalId) -> Option<&Value> {
+        self.const_values.get(comp.index()).and_then(|v| v.as_ref())
     }
 
     /// Debug-build counts of drivers that fell back, by reason (the

@@ -1,0 +1,66 @@
+// Optimizer-pass test design: every driver here is either entirely
+// constant (the constant-unit skip commits it without running) or has
+// a constant-condition branch the folder must propagate through.  The
+// differential check compares the VM's result with the interpreter's
+// on every driver, so a fold that changed semantics fails loudly.
+
+pub mod Top {
+    incoming clock : Clock
+    incoming reset : Reset
+    incoming din   : Word[8]
+    outgoing fin   : Word[8]
+
+    unused clock
+    unused reset
+    unused din
+
+    // Entirely constant drivers: the whole stream folds to one Const.
+    wire all_const : Word[8] {
+        it := 3w8 & 5w8
+        unused it
+    }
+
+    wire all_const_add : Word[8] {
+        it := zext(3w4) + 4w8
+        unused it
+    }
+
+    wire all_const_ctor : Valid[Word[8]] {
+        it := @Valid(7w8)
+        unused it
+    }
+
+    wire all_const_splice : Word[12] {
+        it := word(3w8, 5w4)
+        unused it
+    }
+
+    // Constant-condition branch: the mux lowers to a `when` whose
+    // condition folds, so one arm is unreachable (and the dispatch
+    // becomes an unconditional jump).
+    wire const_cond : Word[8] {
+        it := mux(true, 10w8, 20w8)
+        unused it
+    }
+
+    wire const_cond_nested : Word[8] {
+        it := mux(false, 1w8, mux(true, 2w8, 3w8))
+        unused it
+    }
+
+    // A constant branch whose arms are themselves constant: the whole
+    // driver folds through the branch to a single Const.
+    wire const_branch_const_arms : Word[8] {
+        it := mux(false, zext(1w4), zext(2w4))
+        unused it
+    }
+
+    // Constant condition with a data-dependent arm: only the taken
+    // arm survives.
+    wire const_cond_live_arm : Word[8] {
+        it := mux(true, din, 20w8)
+        unused it
+    }
+
+    fin := 0w8
+}

@@ -74,6 +74,7 @@ use crate::analysis::Location;
 use crate::common::{BinOp, UnOp, Width};
 use crate::sim::bits::BitPat;
 use crate::sim::circuit::Circuit;
+use crate::sim::eval::Value;
 use crate::sim::expr::{Expr, ExprPayload, Referent};
 use crate::sim::layout::{CtorGeometry, TypeId, TypeLayoutIndex};
 use crate::sim::payload;
@@ -81,6 +82,7 @@ use crate::sim::vm::isa::{
     CodeRange, Dst, FALLBACK_REASONS, FallbackReason, FrameLayout, Ins, Ip, Program, SlotN, SlotW,
     Src, Truthiness,
 };
+use crate::sim::vm::optimize::optimize_driver;
 
 /// Mask with the low `width` bits set (assumes `width <= 64`).
 fn mask(width: Width) -> u64 {
@@ -1171,6 +1173,29 @@ fn src_of(dst: Dst) -> Src {
     }
 }
 
+/// Recognize a driver whose optimized stream folds entirely to a
+/// constant: the shape `Const/Zero/WideConst` immediately followed by
+/// the `Ret` reading exactly that slot.  The optimizer's DCE removes
+/// everything between the constant and the `Ret`, so this shape is
+/// the canonical "constant driver" after optimization.
+fn detect_constant_driver(code: &[Ins], typ: TypeId, ret_width: Width) -> Option<Value> {
+    if code.len() != 2 {
+        return None;
+    }
+    match (&code[0], &code[1]) {
+        (Ins::Const { bits, dst }, Ins::Ret { src }) if dst == src => {
+            Some(Value::from_u64(typ, ret_width, *bits))
+        }
+        (Ins::Zero { dst, .. }, Ins::Ret { src }) if dst == &Dst::Narrow(*src) => {
+            Some(Value::from_u64(typ, ret_width, 0))
+        }
+        (Ins::WideConst { bits, dst }, Ins::RetWide { src }) if dst == src => {
+            Some(Value::new(typ, bits.clone()))
+        }
+        _ => None,
+    }
+}
+
 /// Lower every driven component into one `Program`.
 pub(in crate::sim) fn compile_program(circuit: &Circuit) -> Program {
     let n = circuit.elaboration.components().len();
@@ -1179,6 +1204,7 @@ pub(in crate::sim) fn compile_program(circuit: &Circuit) -> Program {
     let mut frames: Vec<FrameLayout> = vec![FrameLayout::default(); n];
     let mut driver_typs: Vec<Option<TypeId>> = vec![None; n];
     let mut driver_widths: Vec<Width> = vec![0; n];
+    let mut const_values: Vec<Option<Value>> = vec![None; n];
     let mut fallback_counts = [0usize; FALLBACK_REASONS];
 
     for comp in circuit.elaboration.components() {
@@ -1196,6 +1222,19 @@ pub(in crate::sim) fn compile_program(circuit: &Circuit) -> Program {
             Dst::Narrow(src) => compiler.code.push(Ins::Ret { src }),
             Dst::Wide(src) => compiler.code.push(Ins::RetWide { src }),
         }
+        // Optimizer passes: constant folding / branch propagation,
+        // then peephole DCE + slot fusion + CSE, all per driver,
+        // inside one `CodeRange`, never across drivers.  They rewrite
+        // `Ins` sequences within the existing opcode set.
+        optimize_driver(&mut compiler.code);
+        // Constant-unit skip (synthesis graft 2): a driver whose
+        // program folds entirely to a constant value commits that
+        // value directly without executing.
+        let const_value = detect_constant_driver(
+            &compiler.code,
+            expr.typ_id(),
+            root.width,
+        );
         let start = code.len() as Ip;
         // The lowering computes jump targets against the driver's own
         // instruction vector (base 0); the linked program addresses
@@ -1213,6 +1252,7 @@ pub(in crate::sim) fn compile_program(circuit: &Circuit) -> Program {
         };
         driver_typs[id.index()] = Some(expr.typ_id());
         driver_widths[id.index()] = root.width;
+        const_values[id.index()] = const_value;
     }
 
     let program = Program {
@@ -1221,6 +1261,7 @@ pub(in crate::sim) fn compile_program(circuit: &Circuit) -> Program {
         frames,
         driver_typs,
         driver_widths,
+        const_values,
         layouts: circuit.type_layout_index.clone(),
         fallback_counts,
     };
@@ -1483,5 +1524,93 @@ mod tests {
     #[test]
     fn differential_i2c_open_drain() {
         differential_check("i2c_open_drain");
+    }
+
+    // Optimizer-focused design: constant drivers (the constant-unit
+    // skip), constant-condition branches, and folds through nested
+    // muxes.  Besides the differential equivalence, every driver
+    // here must still lower (no fallback) and the entirely-constant
+    // drivers must be detected as constant.
+    #[test]
+    fn differential_optimize() {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let source = manifest.join("../tests/sim/optimize/src");
+        let lib = manifest.join("../lib");
+        let db = db_from_dir_with_lib(&source, lib);
+        if let Err(diagnostics) = check_db(&db) {
+            for diag in diagnostics.iter() {
+                eprintln!("{diag:?}");
+            }
+            panic!("differential_optimize: project failed to build");
+        }
+        let stems: Vec<bstr::BString> = std::fs::read_dir(&source)
+            .expect("differential_optimize: project src dir")
+            .filter_map(|entry| {
+                let path = entry.ok()?.path();
+                if path.extension()?.to_str()? == "vir" {
+                    Some(path.file_stem()?.to_string_lossy().into_owned().into_bytes().into())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let symboltable = db.get_symboltable();
+        let Some(top) = symboltable
+            .items()
+            .into_iter()
+            .filter(|item| item.kind() == crate::analysis::symbols::SymbolKind::ModDef)
+            .find(|item| {
+                let fqn = item.fqn();
+                let mut parts = fqn.rsplit_str(b"::");
+                match (parts.next(), parts.next()) {
+                    (Some(_name), Some(stem)) => stems.iter().any(|s| s == stem),
+                    _ => false,
+                }
+            })
+        else {
+            panic!("differential_optimize: no top-level ModDef");
+        };
+
+        let circuit = Circuit::new(&db, top.id());
+        let program = compile_program(&circuit);
+        let mut vm = Vm::new(&program);
+        let mut state = State::new(
+            circuit.elaboration.as_ref(),
+            &circuit.type_layout_index,
+            &InitStrategy::Seeded(42),
+        );
+        let mut const_drivers = 0usize;
+        for comp in circuit.elaboration.components() {
+            let id = comp.id();
+            let Some(expr) = circuit.exprs[id.index()].clone() else {
+                continue;
+            };
+            let context = Context::context_for_component(&circuit, &state, id);
+            let expected: Value = expr.eval(&context);
+            if program.has_driver(id) {
+                let vm_value = vm.run(&program, &state, id);
+                assert_eq!(
+                    vm_value,
+                    expected,
+                    "differential_optimize: driver {:?} differs",
+                    comp.path()
+                );
+            }
+            if program.const_value(id).is_some() {
+                const_drivers += 1;
+                assert_eq!(
+                    program.const_value(id).unwrap(),
+                    &expected,
+                    "differential_optimize: constant-unit skip value for {:?} differs",
+                    comp.path()
+                );
+            }
+        }
+        // The design's all-constant wires must have been recognized
+        // by the constant-unit skip.
+        assert!(
+            const_drivers >= 4,
+            "differential_optimize: only {const_drivers} constant drivers detected"
+        );
     }
 }

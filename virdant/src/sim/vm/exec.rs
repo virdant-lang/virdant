@@ -35,7 +35,7 @@ pub(in crate::sim) trait VmState {
 }
 
 /// `(1 << width) - 1` for `width < 64`; `u64::MAX` for `width >= 64`.
-pub(super) fn narrow_mask(width: u16) -> u64 {
+pub(in crate::sim) fn narrow_mask(width: u16) -> u64 {
     if width >= 64 { u64::MAX } else { (1u64 << width) - 1 }
 }
 
@@ -427,7 +427,7 @@ impl Vm {
 ///   their operands;
 /// * comparisons treat the operand bits as zero-extended machine
 ///   words (same as the interpreter's `Small` path).
-fn bin_narrow(op: BinOp, width: u16, a: u64, b: u64) -> u64 {
+pub(super) fn bin_narrow(op: BinOp, width: u16, a: u64, b: u64) -> u64 {
     let m = narrow_mask(width);
     match op {
         BinOp::Add => a.wrapping_add(b) & m,
@@ -449,7 +449,7 @@ fn bin_narrow(op: BinOp, width: u16, a: u64, b: u64) -> u64 {
 
 /// Wide binary op: delegates to the retained `BitPat` ops (the
 /// interpreter's Big path).  Comparison/logical results are 1-bit.
-fn bin_wide(op: BinOp, a: &BitPat, b: &BitPat) -> BitPat {
+pub(super) fn bin_wide(op: BinOp, a: &BitPat, b: &BitPat) -> BitPat {
     match op {
         BinOp::Add => a.add(b),
         BinOp::Sub => a.sub(b),
@@ -470,7 +470,7 @@ fn bin_wide(op: BinOp, a: &BitPat, b: &BitPat) -> BitPat {
 
 /// Narrow unary op (transcribes `eval_unop`'s Small path; `Not`
 /// yields a 1-bit result).
-fn un_narrow(op: UnOp, width: u16, a: u64) -> u64 {
+pub(super) fn un_narrow(op: UnOp, width: u16, a: u64) -> u64 {
     let m = narrow_mask(width);
     match op {
         UnOp::Neg => a.wrapping_neg() & m,
@@ -526,6 +526,7 @@ mod tests {
             driver_typs: vec![Some(typ_id)],
             driver_widths: vec![ret_width],
             layouts,
+            const_values: vec![None],
             fallback_counts: [0; 3],
         };
         let mut program = program;
@@ -914,6 +915,7 @@ mod tests {
             driver_typs: vec![Some(typ_id)],
             driver_widths: vec![4],
             layouts,
+            const_values: vec![None],
             fallback_counts: [0; 3],
         };
         let mut vm = Vm::new(&program);
@@ -948,6 +950,7 @@ mod tests {
             driver_typs: vec![Some(typ_id)],
             driver_widths: vec![100],
             layouts,
+            const_values: vec![None],
             fallback_counts: [0; 3],
         };
         let mut vm = Vm::new(&program);
@@ -985,6 +988,7 @@ mod tests {
             driver_typs: vec![None],
             driver_widths: vec![0],
             layouts,
+            const_values: vec![None],
             fallback_counts: [1, 0, 0],
         };
         let mut vm = Vm::new(&program);

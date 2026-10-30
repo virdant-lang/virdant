@@ -266,6 +266,12 @@ impl Sim {
     /// Initial expressions still always run on the interpreter
     /// (construction-time only; see `apply_initials`).
     fn eval_driver(&mut self, comp: SignalId) -> Value {
+        // Constant-unit skip (synthesis graft 2): a driver the
+        // optimizer folded entirely to a constant commits that value
+        // directly, `flow`/`flow_all` skip the run.
+        if let Some(value) = self.program.const_value(comp).cloned() {
+            return value;
+        }
         if self.program.has_driver(comp) {
             self.vm.run(&self.program, &self.state, comp)
         } else {
