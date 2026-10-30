@@ -17,9 +17,10 @@
 //!   and `BitPat` wide slots, so the 64-bit-and-narrower path
 //!   performs no allocation.
 //!
-//! Control-flow instructions (`Jmp`, `BrTruthy`, `TestTag`,
-//! `TestTagWide`, `TestBits`, `TestBit`) are part of the ISA but not
-//! yet emitted: the `when`/`match` lowering is a later unit.
+//! The whole ISA is emitted by the compiler, including the
+//! control-flow forms (`Jmp`, `BrTruthy`, `TestTag`, `TestTagWide`,
+//! `TestBits`, `TestBit`, `Extract`) that the `when`/`match`
+//! lowering transcribes `eval_when`/`eval_match` with.
 
 use crate::analysis::elaboration::SignalId;
 use crate::analysis::symbols::SymbolId;
@@ -68,25 +69,22 @@ pub(super) enum Ins {
         dst: Dst,
         width: Width,
     },
-    /// Unconditional jump.
-    /// Not yet emitted: the when/match lowering lands in a later unit.
-    #[allow(dead_code)]
+    /// Unconditional jump (arm convergence and fall-through to the
+    /// else/hold path in the `when`/`match` lowering).
     Jmp {
         to: Ip,
     },
     /// Branch if the 1-bit `cond` slot is truthy (`kind`: `Bit` —
-    /// nonzero bit; `NonZero`, any nonzero bit pattern).
-    /// Not yet emitted: the when/match lowering lands in a later unit.
-    #[allow(dead_code)]
+    /// nonzero bit; `NonZero`, any nonzero bit pattern).  The
+    /// `when`/`match` lowering emits one per condition / match test.
     BrTruthy {
         cond: SlotN,
         kind: Truthiness,
         to: Ip,
     },
     /// Match-arm tag test against a narrow subject: the bits at
-    /// `tag_lo` (masked by `tag_mask`) must equal `tag`.
-    /// Not yet emitted: the when/match lowering lands in a later unit.
-    #[allow(dead_code)]
+    /// `tag_lo` (masked by `tag_mask`) must equal `tag`.  Transcribes
+    /// `decode_ctor`'s tag read (`bits.slice(0, tag_width) == tag`).
     TestTag {
         subj: SlotN,
         tag_lo: u16,
@@ -94,17 +92,16 @@ pub(super) enum Ins {
         tag: u64,
         next_if_match: Ip,
     },
-    /// Match-arm tag test against a wide subject.
-    /// Not yet emitted: the when/match lowering lands in a later unit.
-    #[allow(dead_code)]
+    /// Match-arm tag test against a wide subject: the tag pattern's
+    /// bits must equal the subject's low bits.
     TestTagWide {
         subj: SlotW,
         tag: BitPat,
         next_if_match: Ip,
     },
-    /// Extract a sub-field of a narrow subject: bits `lo..lo+width`.
-    /// Not yet emitted: the when/match lowering lands in a later unit.
-    #[allow(dead_code)]
+    /// Extract a sub-field of a narrow subject: bits `lo..lo+width`
+    /// (the `when`/`match` lowering uses it to bind pattern payloads
+    /// and to test padding bits).
     Extract {
         subj: SlotN,
         lo: u16,
@@ -113,8 +110,6 @@ pub(super) enum Ins {
     },
     /// Extract a sub-field of a wide subject. The result may be
     /// narrow or wide depending on the extracted type's width.
-    /// Not yet emitted: the when/match lowering lands in a later unit.
-    #[allow(dead_code)]
     ExtractWide {
         subj: SlotW,
         lo: u16,
@@ -122,19 +117,15 @@ pub(super) enum Ins {
         dst: Dst,
     },
     /// Pattern test: the subject's bits must equal `value` (already
-    /// masked to the subject's width; `X`/`?` patterns are not
-    /// representable here, those need the match lowering).
-    /// Not yet emitted: the when/match lowering lands in a later unit.
-    #[allow(dead_code)]
+    /// masked to the subject's width).  Emitted for `WordLit` match
+    /// arms on narrow subjects and for the padding-validity check.
     TestBits {
         subj: SlotN,
         value: u64,
         next_if_match: Ip,
     },
-    /// Pattern test on a single bit: `1`/`0` only (`X`/`?` need the
-    /// match lowering).
-    /// Not yet emitted: the when/match lowering lands in a later unit.
-    #[allow(dead_code)]
+    /// Pattern test on a single bit: `1`/`0` only.  Emitted for
+    /// `BitLit` match arms.
     TestBit {
         subj: SlotN,
         bit: bool,
@@ -270,17 +261,14 @@ pub(super) enum Ins {
         out_width: Width,
         dst: Dst,
     },
-    /// A no-op move between narrow slots (used where the compiler
-    /// needs a distinct result slot).
-    /// Not yet emitted: the when/match lowering lands in a later unit.
-    #[allow(dead_code)]
+    /// A no-op move between narrow slots (the `when`/`match` lowering
+    /// converges each arm's value onto the shared result slot with
+    /// it; slot fusion in the optimizer removes most of them).
     Move {
         src: SlotN,
         dst: SlotN,
     },
-    /// A no-op move between wide slots.
-    /// Not yet emitted: the when/match lowering lands in a later unit.
-    #[allow(dead_code)]
+    /// A no-op move between wide slots (same role as `Move`).
     MoveWide {
         src: SlotW,
         dst: SlotW,
@@ -338,7 +326,6 @@ pub(super) enum Src {
 }
 
 /// How a condition slot is tested by `BrTruthy`.
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Truthiness {
     /// A 1-bit value: truthy iff the bit is nonzero.
@@ -369,13 +356,20 @@ pub(super) struct FrameLayout {
 /// Why a driver could not be compiled to bytecode and must run on
 /// the interpreter. The fallback is temporary: later units remove it
 /// driver by driver until `entry` is total.
+///
+/// After the `when`/`match` lowering, only `Unsupported` is emitted;
+/// `When` and `Match` remain so the fallback log's reason indices
+/// stay stable while the fallback exists.
+#[allow(dead_code)] // the retired When/Match reasons
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::sim) enum FallbackReason {
-    /// The driver contains a `when` subtree (lowering lands in the
-    /// next unit).
+    /// The driver contains a `when` subtree.  No longer emitted by the
+    /// `when` lowering; kept so the fallback log's reason indices stay
+    /// stable while the fallback exists.
     When = 0,
-    /// The driver contains a `match` subtree (lowering lands in the
-    /// next unit).
+    /// The driver contains a `match` subtree.  No longer emitted by
+    /// the `match` lowering; kept so the fallback log's reason indices
+    /// stay stable while the fallback exists.
     Match = 1,
     /// The driver contains a construct this unit's lowering cannot
     /// represent (defensive; should not occur in well-typed designs).
@@ -437,6 +431,7 @@ impl Program {
             for ip in range.start..end {
                 let ins = &self.code[ip as usize];
                 ins.validate_slots(&frame);
+                ins.validate_targets(range);
             }
             match &self.code[end as usize - 1] {
                 Ins::Ret { .. } | Ins::RetWide { .. } | Ins::Trap => {}
@@ -447,6 +442,46 @@ impl Program {
 }
 
 impl Ins {
+    /// Shift every jump target by `base`: the lowering computes
+    /// targets against its own per-driver instruction vector (base
+    /// 0); linking addresses them absolutely in the concatenated
+    /// program.
+    pub(super) fn rebase_targets(&mut self, base: Ip) {
+        let add = |to: &mut Ip| *to += base;
+        match self {
+            Ins::Jmp { to } => add(to),
+            Ins::BrTruthy { to, .. } => add(to),
+            Ins::TestTag { next_if_match, .. }
+            | Ins::TestTagWide { next_if_match, .. }
+            | Ins::TestBits { next_if_match, .. }
+            | Ins::TestBit { next_if_match, .. } => add(next_if_match),
+            _ => {}
+        }
+    }
+
+    /// Check that every jump target of this instruction stays inside
+    /// its own driver's `CodeRange` (the executor never crosses a
+    /// driver boundary).
+    pub(super) fn validate_targets(&self, range: CodeRange) {
+        let check = |to: Ip| {
+            assert!(
+                to >= range.start && to < range.start + range.len,
+                "jump target {to} outside range {}..{}",
+                range.start,
+                range.start + range.len
+            );
+        };
+        match self {
+            Ins::Jmp { to } => check(*to),
+            Ins::BrTruthy { to, .. } => check(*to),
+            Ins::TestTag { next_if_match, .. }
+            | Ins::TestTagWide { next_if_match, .. }
+            | Ins::TestBits { next_if_match, .. }
+            | Ins::TestBit { next_if_match, .. } => check(*next_if_match),
+            _ => {}
+        }
+    }
+
     /// Check that every slot reference in this instruction fits its
     /// frame layout.
     fn validate_slots(&self, frame: &FrameLayout) {

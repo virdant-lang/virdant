@@ -767,8 +767,14 @@ for the shared core.
 ## Open questions
 
 - Do nested match patterns (payload constraints inside a pattern) occur
-  in practice? Verify against `tests/` before landing the `match`
-  lowering. `Extract` may need a recursive form.
+  in practice? ANSWERED (when/match lowering unit): NO.  The `Pat` IR
+  (`sim/payload.rs`) is flat (`Ctor` with variable bindings only,
+  `WordLit`, `BitLit`, `Else`); `convert_pattern` cannot represent
+  payload constraints, and source that looks nested (fifo's
+  `case @Valid(in_data) match write[2..0] {...}`) parses as a `Ctor`
+  arm whose body is a nested `match` expression.  One `Extract` per
+  bound variable is the complete binding rule; no recursive form
+  needed.
 - Frame memory is O(sum of slots) resident, one frame per driven
   component. Check the largest internal design before deleting the
   interpreter.

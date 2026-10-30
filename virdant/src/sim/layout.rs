@@ -162,8 +162,7 @@ pub(super) struct CtorGeometry {
     /// declaration order.  The first parameter sits at the MSB end
     /// of the payload area: parameter `k` occupies bits
     /// `[tag_width + sum_{j>k} w_j, tag_width + sum_{j>=k} w_j)`.
-    /// Consumed by the `when`/`match` lowering (next unit).
-    #[allow(dead_code)]
+    /// Consumed by the `match` lowering's `Extract` emission.
     pub params: Vec<(Width, Width)>,
 }
 
