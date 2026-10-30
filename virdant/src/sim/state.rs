@@ -114,3 +114,17 @@ impl State {
         self.dirty.clear();
     }
 }
+
+/// The executor's view of engine state: raw bits out of the live
+/// value tables.  Narrow reads never allocate (`Value::Small` is an
+/// inline `u64`); wide reads clone the `BitPat`, as the interpreter
+/// did for Big values.
+impl crate::sim::vm::VmState for State {
+    fn narrow_bits(&self, signal_id: SignalId) -> u64 {
+        self.get(signal_id).to_u64()
+    }
+
+    fn wide_bits(&self, signal_id: SignalId) -> crate::sim::bits::BitPat {
+        self.get(signal_id).bitpat()
+    }
+}

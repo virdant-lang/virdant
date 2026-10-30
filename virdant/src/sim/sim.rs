@@ -14,6 +14,7 @@ use crate::sim::eval::{Context, Value};
 use crate::sim::layout::{TypeId, TypeLayoutIndex};
 use crate::sim::scheduler::{Callback, Event, EventCallback, Scheduler};
 use crate::sim::state::State;
+use crate::sim::vm;
 use crate::types::Type;
 use std::cell::RefCell;
 use std::io::Write;
@@ -96,6 +97,11 @@ impl<'a> Drop for SimLock<'a> {
 
 pub struct Sim {
     circuit: Circuit,
+    /// Compiled drivers: one code range per component whose driver
+    /// lowered to bytecode (`None` = interpreter fallback).
+    program: vm::Program,
+    /// The frame pool backing `program`'s drivers.
+    vm: vm::Vm,
     state: State,
     sched: Scheduler,
     /// Persistent watcher table (`on_change`/`on_clock`): registered
@@ -193,10 +199,27 @@ impl std::fmt::Debug for Sim {
 impl Sim {
     pub fn new(db: &Db, top: SymbolId, strategy: InitStrategy) -> Sim {
         let circuit = Circuit::new(db, top);
+        let program = vm::compile_program(&circuit);
+        // Debug-build visibility into how much of the design still
+        // runs on the interpreter (temporary fallback, see vm::compile).
+        #[cfg(debug_assertions)]
+        {
+            let counts = program.fallback_counts();
+            let total: usize = counts.iter().sum();
+            if total > 0 {
+                eprintln!(
+                    "sim: {} driver(s) fell back to the interpreter (when: {}, match: {}, unsupported: {})",
+                    total, counts[0], counts[1], counts[2]
+                );
+            }
+        }
+        let vm_pool = vm::Vm::new(&program);
 
         let mut sim = Sim {
             state: State::new(circuit.elaboration.as_ref(), &circuit.type_layout_index, &strategy),
             circuit,
+            program,
+            vm: vm_pool,
             sched: Scheduler::new(),
             watchers: Vec::new(),
             dispatching: false,
@@ -232,6 +255,24 @@ impl Sim {
 
     pub(super) fn type_layout_index(&self) -> &TypeLayoutIndex {
         &self.circuit.type_layout_index
+    }
+
+    /// The per-driver execution seam: compiled bytecode when the
+    /// driver lowered to the VM, the interpreter otherwise.
+    ///
+    /// The fallback is temporary, later units delete it driver by
+    /// driver as they land the remaining lowering, so every
+    /// interpreter dispatch flows through exactly this one place.
+    /// Initial expressions still always run on the interpreter
+    /// (construction-time only; see `apply_initials`).
+    fn eval_driver(&mut self, comp: SignalId) -> Value {
+        if self.program.has_driver(comp) {
+            self.vm.run(&self.program, &self.state, comp)
+        } else {
+            let expr = self.circuit.exprs[comp.index()].clone().unwrap();
+            let context = Context::context_for_component(&self.circuit, &self.state, comp);
+            expr.eval(&context)
+        }
     }
 
     /// Decode a value whose type is a union or enum into the
@@ -287,11 +328,10 @@ impl Sim {
                 .map(|c| c.id())
                 .collect();
             for signal_id in ids {
-                let Some(expr) = self.circuit.exprs[signal_id.index()].clone() else {
+                if self.circuit.exprs[signal_id.index()].is_none() {
                     continue;
-                };
-                let context = Context::context_for_component(&self.circuit, &self.state, signal_id);
-                let new_value = expr.eval(&context);
+                }
+                let new_value = self.eval_driver(signal_id);
                 if self.circuit.registers[signal_id.index()] {
                     // A register's driver computes its *next* value; the
                     // current value only changes on a clock edge.
@@ -363,10 +403,7 @@ impl Sim {
                 let new_value = if let Some(peer_id) = self.circuit.aliases[update_signal_id.index()] {
                     self.state.get(peer_id)
                 } else {
-                    let expr = self.circuit.exprs[update_signal_id.index()].clone().unwrap();
-                    let context = Context::context_for_component(&self.circuit, &self.state, update_signal_id);
-                    let v = expr.eval(&context);
-                    v
+                    self.eval_driver(update_signal_id)
                 };
                 if self.circuit.registers[update_signal_id.index()] {
                     self.state.set_reg(update_signal_id, new_value);

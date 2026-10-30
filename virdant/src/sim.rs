@@ -10,6 +10,7 @@ mod scheduler;
 mod sim;
 mod state;
 mod vcd;
+mod vm;
 
 pub use sim::{Clock, Ctor, InitStrategy, Sim};
 pub use bits::BitPat;
