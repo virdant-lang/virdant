@@ -139,24 +139,21 @@ impl PackageAnalysis {
 
 
 
-    fn add_item_expr_roots(&mut self, parsing: Arc<Parsing>, node: AstNode<'_>) {
+    fn add_item_expr_roots(&mut self, _parsing: Arc<Parsing>, node: AstNode<'_>) {
         if matches!(node.payload(), AstNodePayload::ModDef(_)) {
             if node.contains_errors() {
                 return;
             }
+            // The `on <CLOCK>` clause of a reg is optional when the module
+            // declares exactly one Clock-typed component (the implicit
+            // clock); whether it is missing is decided by the component
+            // analysis, which resolves the component types.
             for child_node in node.children() {
                 match child_node.payload() {
                     AstNodePayload::Component(component) => {
                         if component.kind == ComponentKind::Reg || component.kind == ComponentKind::OutgoingReg {
                             if let Some(clock_expr) = child_node.clock() {
                                 self.expr_roots.push(clock_expr.id());
-                            } else {
-                                self.diagnostics.push(Diagnostic::new(
-                                    child_node.region(),
-                                    diagnostics::MissingOnClause {
-                                        component: parsing.string(component.name).into(),
-                                    },
-                                ));
                             }
                         }
                         for child in child_node.children() {

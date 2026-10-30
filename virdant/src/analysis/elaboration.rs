@@ -252,6 +252,24 @@ fn elaborate_module(
     // platform ports not in this set are appended after the walk.
     let mut handled: IndexSet<BString> = IndexSet::new();
 
+    // Implicit-clock rule: if this module declares *exactly one*
+    // Clock-typed component, `reg`/`outgoing reg` components may omit
+    // their `on <CLOCK>` clause, and it is as if the user had written
+    // `on <the_one_clock>`.  Any other number of Clock-typed components
+    // (zero or more than one) requires an explicit `on` clause (reported
+    // by the package analysis).
+    //
+    // The clock component may be declared after the reg in the source,
+    // so implicit clocks are resolved after this module's statements are
+    // walked: `pending_implicit_clocks` holds (component index, clock
+    // name) pairs to patch once every component of this module is in
+    // `components`.
+    let implicit_clock = component_analysis
+        .implicit_clock()
+        .and_then(|id| component_analysis.component(id))
+        .map(|component| component.path());
+    let mut pending_implicit_clocks: Vec<(usize, BString)> = vec![];
+
     for stmt in item_ast.children() {
         match stmt.payload() {
             AstNodePayload::Component(component) => {
@@ -307,6 +325,15 @@ fn elaborate_module(
                             .position(|c| c.path == full_path)
                             .map(SignalId)
                     })
+                } else if (component.kind == ComponentKind::Reg
+                    || component.kind == ComponentKind::OutgoingReg)
+                    && let Some(implicit_clock_name) = &implicit_clock
+                {
+                    // The reg omitted its `on` clause and this module has a
+                    // unique implicit clock: defer resolution until every
+                    // component of this module has been accumulated.
+                    pending_implicit_clocks.push((components.len(), implicit_clock_name.clone()));
+                    None
                 } else {
                     None
                 };
@@ -541,6 +568,19 @@ fn elaborate_module(
                 );
             }
             _ => {}
+        }
+    }
+
+    // Resolve deferred implicit clocks now that every component of this
+    // module is in `components`, regardless of declaration order.
+    for (reg_index, clock_name) in pending_implicit_clocks {
+        let full_path: BString = format!("{prefix}.{clock_name}").into();
+        if let Some(clock_id) = components
+            .iter()
+            .position(|c| c.path == full_path)
+            .map(SignalId)
+        {
+            components[reg_index].clock = Some(clock_id);
         }
     }
 

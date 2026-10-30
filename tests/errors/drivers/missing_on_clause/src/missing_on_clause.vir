@@ -1,4 +1,10 @@
-mod M {
+// The `on` clause is optional on `reg` declarations when the module
+// declares *exactly one* Clock-typed component (it is as if the user
+// had written `on <the_one_clock>`).  With zero or more than one
+// Clock-typed components, an explicit `on` clause is still required.
+
+// Exactly one Clock-typed component: the `on` clause is optional.
+mod OneClock {
     incoming clock : Clock
 
     reg data_buf : Word[8]
@@ -6,5 +12,24 @@ mod M {
     data_buf <= 0
 }
 
+// Zero Clock-typed components: `on` is still required.
+mod NoClocks {
+    reg data_buf : Word[8]
+
+    data_buf <= 0
+}
+
+// More than one Clock-typed component: ambiguous, `on` is still required.
+mod TwoClocks {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+
+    reg data_buf : Word[8]
+
+    data_buf <= 0
+}
+
 // CHECK: Missing on clause for reg data_buf
-// CHECK-NOT: for reg M
+// CHECK: Missing on clause for reg data_buf
+// CHECK-NOT: Missing on clause for reg OneClock
+// CHECK: Check failed

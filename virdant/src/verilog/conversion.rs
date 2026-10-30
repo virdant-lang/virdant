@@ -28,6 +28,18 @@ use crate::util::parse_word_literal;
 /// Must be one of: "x", "z", "0", "1".
 const PADDING_FILL: &str = "1";
 
+/// The clock a reg is clocked by: either an explicit `on <EXPR>` clause,
+/// or — when the module declares exactly one Clock-typed component —
+/// that component as the implicit `on` (it is as if the user had written
+/// `on <the_one_clock>`).
+#[derive(Clone)]
+enum ClockSource {
+    /// The AstNodeId of the explicit `on <EXPR>` clause expression.
+    Explicit(AstNodeId),
+    /// The local name of the module's unique Clock-typed component.
+    Implicit(String),
+}
+
 /// Accumulates Verilog elements (regs, always blocks) generated as side-effects of
 /// converting expressions that cannot be expressed inline (e.g., `match` → `casez`).
 struct ExprScheduler {
@@ -442,8 +454,14 @@ impl<'d> Converter<'d> {
 
         let mut scheduler = ExprScheduler::new();
         let mut elements: Vec<verilog::Element> = vec![];
-        // reg name -> AstNodeId of its explicit `on clock` expression (if present)
-        let mut sequential_regs: IndexMap<String, AstNodeId> = IndexMap::new();
+        // reg name -> the clock it is clocked by: an explicit `on <EXPR>`
+        // clause, or — when this module declares exactly one Clock-typed
+        // component — that component as the implicit `on`.
+        let mut sequential_regs: IndexMap<String, ClockSource> = IndexMap::new();
+        let implicit_clock: Option<String> = component_analysis
+            .implicit_clock()
+            .and_then(|id| component_analysis.component(id))
+            .map(|component| component.path().to_str_lossy().into_owned());
 
         // Gather ports using get_ports_of, substituting the mono
         // instantiation's type arguments when converting a generic def.
@@ -491,7 +509,9 @@ impl<'d> Converter<'d> {
                             let children = stmt.children();
                             let clock_child = children.iter().skip(2).find(|c| !matches!(c.payload(), AstNodePayload::It));
                             if let Some(clock_node) = clock_child {
-                                sequential_regs.insert(name.clone(), clock_node.id());
+                                sequential_regs.insert(name.clone(), ClockSource::Explicit(clock_node.id()));
+                            } else if let Some(implicit_clock_name) = &implicit_clock {
+                                sequential_regs.insert(name.clone(), ClockSource::Implicit(implicit_clock_name.clone()));
                             }
                             // No internal reg element — the port declaration suffices.
                         }
@@ -500,7 +520,7 @@ impl<'d> Converter<'d> {
                             let clock_child = children.iter().skip(2).find(|c| !matches!(c.payload(), AstNodePayload::It));
                             if let Some(clock_node) = clock_child {
                                 // Wire with explicit `on clock` — treat exactly like a Reg.
-                                sequential_regs.insert(name.clone(), clock_node.id());
+                                sequential_regs.insert(name.clone(), ClockSource::Explicit(clock_node.id()));
                                 elements.push(verilog::Element::Reg(verilog::Reg {
                                     name: valid_verilog_name(&name),
                                     width,
@@ -519,7 +539,9 @@ impl<'d> Converter<'d> {
                             let children = stmt.children();
                             let clock_child = children.iter().skip(2).find(|c| !matches!(c.payload(), AstNodePayload::It));
                             if let Some(clock_node) = clock_child {
-                                sequential_regs.insert(name.clone(), clock_node.id());
+                                sequential_regs.insert(name.clone(), ClockSource::Explicit(clock_node.id()));
+                            } else if let Some(implicit_clock_name) = &implicit_clock {
+                                sequential_regs.insert(name.clone(), ClockSource::Implicit(implicit_clock_name.clone()));
                             }
                             elements.push(verilog::Element::Reg(verilog::Reg {
                                 name: valid_verilog_name(&name),
@@ -634,11 +656,11 @@ impl<'d> Converter<'d> {
                 // For latched-driver wires without an explicit `on clock`, infer the clock
                 // from any sequential reg already found in this module.
                 let latched = driver.driver_type() == DriverType::Latched;
-                let clock_id_opt = sequential_regs.get(&path).copied().or_else(|| {
-                    if latched { sequential_regs.values().copied().next() } else { None }
+                let clock_source = sequential_regs.get(&path).cloned().or_else(|| {
+                    if latched { sequential_regs.values().next().cloned() } else { None }
                 });
 
-                if let Some(clock_id) = clock_id_opt {
+                if let Some(clock_source) = clock_source {
                     // If this is a latched-driver wire not yet in sequential_regs, upgrade
                     // its Wire element to a Reg element so the Verilog declaration is correct.
                     if !sequential_regs.contains_key(&path) {
@@ -657,9 +679,18 @@ impl<'d> Converter<'d> {
                             }
                         }
                     }
-                    let clock_node = parsing.ast_node(clock_id);
-                    let clock_type = self.node_type(package, &clock_node).unwrap();
-                    let clock_expr = self.convert_expr(package, clock_node, &clock_type, self.db, &mut scheduler);
+                    let clock_expr = match &clock_source {
+                        ClockSource::Explicit(clock_id) => {
+                            let clock_node = parsing.ast_node(*clock_id);
+                            let clock_type = self.node_type(package, &clock_node).unwrap();
+                            self.convert_expr(package, clock_node, &clock_type, self.db, &mut scheduler)
+                        }
+                        ClockSource::Implicit(implicit_clock_name) => {
+                            verilog::Expr::Reference(verilog::expr::Reference {
+                                name: valid_verilog_name(implicit_clock_name),
+                            })
+                        }
+                    };
                     scheduler.in_sequential = true;
                     let stmts = match driver {
                         Driver::When(driver_when) if driver_when.driver_type == DriverType::Latched => {

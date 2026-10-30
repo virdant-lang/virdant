@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "With exactly one Clock-typed component, `on` is optional on `reg` declarations and it is as if the user had written `on <the_one_clock>`."
+filecheck = "src/implicit_on_clause.vir"

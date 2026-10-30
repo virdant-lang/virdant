@@ -1,0 +1,33 @@
+// With exactly one Clock-typed component in the module, the `on` clause
+// is optional on `reg` declarations: it is as if the user had written
+// `on <the_one_clock>`.  This covers regs with it-block drivers, bare
+// regs driven at module level, and outgoing regs.
+//
+// CHECK: Check OK
+
+mod ImplicitOn {
+    incoming clock : Clock
+    incoming inp : Word[8]
+    outgoing out : Word[8]
+
+    // Reg with an it-block driver, no `on` clause.
+    reg data_buf : Word[8] {
+        it <= inp
+    }
+
+    // Bare reg driven at module level, no `on` clause.
+    reg counter : Word[8]
+    counter <= counter + 1
+
+    // Outgoing reg, no `on` clause.
+    outgoing reg oreg : Word[4]
+    oreg <= trunc(inp)
+
+    // An explicit `on` clause still refers to the same clock and is
+    // unaffected by the implicit rule.
+    reg explicit : Word[8] on clock {
+        it <= data_buf
+    }
+
+    out := data_buf + counter + zext(oreg) + explicit
+}

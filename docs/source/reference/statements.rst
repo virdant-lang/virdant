@@ -337,7 +337,25 @@ The `on` clause associates a register with a clock signal.
 
 The expression after `on` must evaluate to a value of type `Clock`.
 
-Every `reg` declaration must have an `on` clause.
+Every `reg` declaration must have an `on` clause,
+unless the module declares *exactly one* component of type `Clock`.
+In that case the `on` clause is optional on every `reg` declaration,
+and an omitted `on` clause is equivalent to writing `on` with that
+component:
+
+.. code-block:: virdant
+
+    mod Counter {
+        incoming clock : Clock
+
+        // No `on` clause needed: `clock` is the module's only
+        // Clock-typed component.
+        reg count : Word[8]
+        count <= count + 1
+    }
+
+If the module declares zero or more than one component of type `Clock`,
+every `reg` declaration needs an explicit `on` clause.
 
 
 it Block
