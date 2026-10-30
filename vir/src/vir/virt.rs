@@ -180,6 +180,9 @@ pub fn run(db: &Db, top: SymbolId, clock_hz: u64, opts: VirtOptions) -> i32 {
     }));
 
     let _ = sim.run();
+    // Sync the shared counter from the exact per-cycle count, so the
+    // report below is exact however the run ended.
+    FPS_CYCLES.store(cycles.get(), Ordering::Relaxed);
     restore_term();
     report_fps();
 
@@ -289,9 +292,19 @@ impl PerCycle {
         // decode allocates (heap `BitPat` + layout slot clones), so
         // skip it unless the port's raw value changed since the
         // last cycle — it stays `@Invalid()` for virtually the
-        // whole run.
+        // whole run.  For values at most 64 bits wide (the contract
+        // type is `Valid[Word[8]]`, 9 bits), comparing the raw bits
+        // through `to_u64` is exact and cheaper than the full
+        // `Value` compare; wider values keep the full compare.
         let exit_value = sim.get(self.exit);
-        if self.prev_exit.as_ref() != Some(&exit_value) {
+        let exit_unchanged = match &self.prev_exit {
+            Some(prev) if prev.width() <= 64 => {
+                prev.to_u64() == exit_value.to_u64()
+            }
+            Some(prev) => prev == &exit_value,
+            None => false,
+        };
+        if !exit_unchanged {
             if let Some(code) = decode_exit(sim, &exit_value) {
                 self.uart_tx.flush();
                 self.exit_code.set(Some(code));
@@ -301,7 +314,13 @@ impl PerCycle {
         }
 
         self.cycles.set(self.cycles.get() + 1);
-        FPS_CYCLES.store(self.cycles.get(), Ordering::Relaxed);
+        // The shared counter is only read at exit (natural or
+        // SIGINT), so store it every 1000th cycle; the run loop
+        // syncs it from the exact count before reporting, and the
+        // SIGINT report may trail by up to 999 cycles.
+        if self.cycles.get() % 1000 == 0 {
+            FPS_CYCLES.store(self.cycles.get(), Ordering::Relaxed);
+        }
         if self.cycles.get() >= self.max_cycles {
             self.uart_tx.flush();
             sim.finish();
