@@ -112,43 +112,41 @@ const TUTORIAL_MARKER: &str = "tutorial.toml";
 /// Marker file for a Virdant project (such as a tutorial lesson).
 const PROJECT_MARKER: &str = "virdant.toml";
 
-/// If `dir` contains a marker file, return which one.
-fn find_marker(dir: &Path) -> Option<&'static str> {
-    if dir.join(TUTORIAL_MARKER).exists() {
-        Some(TUTORIAL_MARKER)
-    } else if dir.join(PROJECT_MARKER).exists() {
-        Some(PROJECT_MARKER)
-    } else {
-        None
-    }
-}
-
 /// Refuse to run `vir tutor` where a tutorial or Virdant project already
-/// exists: in the current directory, any of its ancestors, or any of its
-/// immediate subdirectories.  This keeps `vir tutor` from being run a
-/// second time inside the `tutorial/` workspace it creates.
+/// exists: in the current directory or any of its ancestors.  This keeps
+/// `vir tutor` from being run a second time inside the `tutorial/`
+/// workspace it creates.  Re-running `vir tutor` in the parent of an
+/// existing workspace is handled by the `dest.exists()` check in
+/// `new_workspace`.  Child directories are deliberately not checked: a
+/// stray Virdant project somewhere below the current directory should
+/// not block starting a tutorial here.
 fn guard_against_existing_setup() {
     let cwd = std::env::current_dir().expect("Could not determine current directory");
 
-    // The current directory and each of its ancestors.
-    let mut dir = Some(cwd);
-    while let Some(d) = dir {
-        if let Some(marker) = find_marker(&d) {
-            already_setup_error(marker);
+    let ancestors = || {
+        let mut dir = Some(cwd.clone());
+        std::iter::from_fn(move || {
+            let d = dir.clone()?;
+            dir = d.parent().map(|parent| parent.to_path_buf());
+            Some(d)
+        })
+    };
+
+    // Check for the tutorial marker first, across ALL ancestors.  Each
+    // lesson of a tutorial workspace is itself a Virdant project with its
+    // own `virdant.toml`, so a nearest-marker-first walk started inside a
+    // lesson would report the generic project message instead of
+    // "A Virdant tutorial is already set up here."
+    for d in ancestors() {
+        if d.join(TUTORIAL_MARKER).exists() {
+            already_setup_error(TUTORIAL_MARKER);
         }
-        dir = d.parent().map(|parent| parent.to_path_buf());
     }
 
-    // Immediate subdirectories.  This catches running `vir tutor` at the
-    // root of a tutorial workspace, where the markers live down inside
-    // the lesson directories.
-    if let Ok(entries) = std::fs::read_dir(".") {
-        for entry in entries.flatten() {
-            if entry.file_type().map(|ty| ty.is_dir()).unwrap_or(false) {
-                if let Some(marker) = find_marker(&entry.path()) {
-                    already_setup_error(marker);
-                }
-            }
+    // Then check for a plain Virdant project.
+    for d in ancestors() {
+        if d.join(PROJECT_MARKER).exists() {
+            already_setup_error(PROJECT_MARKER);
         }
     }
 }
