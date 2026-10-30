@@ -89,3 +89,63 @@ What it does *not* prove: equivalence on designs outside the case list,
 on other seeds, on timing/callback semantics not observable at the
 per-cycle dump point, or on performance.  Extend the case list (or add
 stimulus-driving cases) as coverage needs grow.
+
+## Phase attribution: `virdant/examples/simprof.rs`
+
+Kernel profilers (`perf`, gdb) are blocked in the common sandbox, so
+phase attribution comes from the `sim-profile` cargo feature: counters
+in the engine itself (`virdant/src/sim/profile.rs`), compiled out to
+zero cost when the feature is off.  `simprof` drives a design the same
+way `simtrace` does (seeded init, free-running clock on `top.clock`,
+N cycles) and prints the phase table:
+
+```sh
+cargo build --release -p virdant --example simprof --features sim-profile
+target/release/examples/simprof --project build/simprof-bench/stages-1 \
+    --cycles 100000 --seed 42
+```
+
+Flags: `--project DIR` (required), `--cycles N` (default 100000),
+`--seed S` (default 0).
+
+Columns (absolute time and per-cycle nanoseconds):
+
+- `run total`: the whole `Sim::run` call.
+- `scheduler`: time in `Scheduler::next_after_delay` (heap pop plus
+  time advance), per timed event.
+- `sched push (est)`: time in `Scheduler::register`'s timed-heap push
+  (the re-arm half of every clock toggle), stride-256 sampled.
+- `flow`: time in `Sim::flow` settlements (exact: one `Instant` pair
+  per settlement).  Includes the driver evals and the in-flow
+  `set_val` commits.
+- `eval (est)`: time in `eval_driver`, stride-256 sampled.  A
+  breakdown of `flow`, not an addition to it.
+- `commit (est)`: time in `State::set_val` (all callers) plus the
+  rising-edge register-transfer loops in `Sim::transfer_clock`
+  (stride-256 and stride-8 sampled respectively).  The in-flow
+  `set_val` part overlaps `flow`.
+- `sweep`: time in `Sim::dispatch_pass` (watcher-table sweeps), exact.
+- `floor`: run total minus scheduler, push, sweep, flow, and measured
+  commit work: the per-cycle cost not attributed to any measured
+  scale-dependent phase (event dispatch, callback bookkeeping,
+  lock/transfer glue, the run loop itself).
+
+The counts line is exact everywhere: events, pushes, dirty pops,
+driver evals (VM vs interpreter fallback), set_val/transfers calls and
+actual writes, rising edges, watcher passes and fires.
+
+Rules for reading the numbers:
+
+- Numbers are only meaningful phase-vs-phase within one run.  Each
+  timed or sampled entry carries roughly two `Instant` reads (the
+  printed `read_cal` is the calibrated single-read interval); with the
+  feature on the whole run is slower than without it, and the `floor`
+  row inherits the instrument's own per-entry cost (the notes line
+  prints the timed entries per cycle).  Never compare absolute times
+  across feature settings or across instruments.
+- Sampled rows are estimates: per-call = `max(0, mean sample interval
+  - read_cal)`, scaled by the exact call count.  They are exact for
+  homogeneous calls and approximate otherwise; a category with very
+  few samples is noise.
+- To rank an optimization, run simprof before and after with the same
+  design, seed, and cycle count, and compare phase-vs-phase.

@@ -19,3 +19,9 @@ serde = { version = "1", features = ["derive"] }
 
 [build-dependencies]
 lalrpop = { version = "0.23.1", git = "https://github.com/virdant-lang/lalrpop" }
+
+[features]
+# In-process simulator phase-attribution counters (see
+# `virdant/src/sim/profile.rs` and `sim-bench/README.md`).  Compiles
+# out to zero cost when off.
+sim-profile = []

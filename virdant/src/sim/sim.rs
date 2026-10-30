@@ -270,11 +270,20 @@ impl Sim {
         // optimizer folded entirely to a constant commits that value
         // directly, `flow`/`flow_all` skip the run.
         if let Some(value) = self.program.const_value(comp).cloned() {
+            #[cfg(feature = "sim-profile")]
+            crate::sim::profile::bump_const_skip();
             return value;
         }
+        // Sampled timing, not per-call `Instant`: a read costs ~20 ns,
+        // more than some drivers, so only every 256th eval is timed
+        // (see `sim::profile`).  The tick also counts the eval.
+        #[cfg(feature = "sim-profile")]
+        let _profile_sample = crate::sim::profile::sample_eval();
         if self.program.has_driver(comp) {
             self.vm.run(&self.program, &self.state, comp)
         } else {
+            #[cfg(feature = "sim-profile")]
+            crate::sim::profile::bump_eval_interp();
             let expr = self.circuit.exprs[comp.index()].clone().unwrap();
             let context = Context::context_for_component(&self.circuit, &self.state, comp);
             expr.eval(&context)
@@ -394,9 +403,15 @@ impl Sim {
             let reg_signal_id = self.circuit.clock_sensitivity_at(signal_id, i);
             self.state.transfer(reg_signal_id);
         }
+        #[cfg(feature = "sim-profile")]
+        crate::sim::profile::bump_transfers(m as u64);
     }
 
     fn flow(&mut self) {
+        // Phase-granularity timing only: one `Instant` pair per
+        // settlement, never per driver (see `sim::profile`).
+        #[cfg(feature = "sim-profile")]
+        let _profile_phase = crate::sim::profile::time_flow();
         while let Some(signal_id) = self.state.pop_dirty() {
             let n = self.circuit.sensitivity_count(signal_id);
             for i in 0..n {
@@ -476,6 +491,10 @@ impl Sim {
     /// callback fired (the circuit state may have changed; the caller
     /// sweeps again).
     fn dispatch_pass(&mut self) -> bool {
+        // One `Instant` pair per sweep pass; the pass itself covers the
+        // whole watcher table, so the read cost stays proportionate.
+        #[cfg(feature = "sim-profile")]
+        let _profile_phase = crate::sim::profile::time_dispatch();
         let mut fired = false;
         let mut i = 0;
         while i < self.watchers.len() {
@@ -504,6 +523,8 @@ impl Sim {
             }
             if fire {
                 fired = true;
+                #[cfg(feature = "sim-profile")]
+                crate::sim::profile::bump_watcher_fire();
                 let callback = self.watchers[i].callback.clone();
                 (callback.borrow_mut())(self);
                 if self.sched.is_shutdown_requested() {
@@ -526,6 +547,16 @@ impl Sim {
     /// value *before* the write and hands it in as `old`.
     fn transfer_clock(&mut self, signal_id: SignalId, old: &Value, new: Value) {
         let rising = is_rising(old, &new);
+        // Rising edges on clock wires are the per-cycle heartbeat:
+        // one per cycle for a single-clock design.  The sampler tick
+        // doubles as the rising-edge count, and every 8th edge's
+        // transfer loop (set_val + the register transfers) is timed.
+        #[cfg(feature = "sim-profile")]
+        let _profile_sample = if rising {
+            crate::sim::profile::sample_xfer_loop()
+        } else {
+            None
+        };
         self.state.set_val(signal_id, new);
         if rising {
             let n = self.circuit.clock_sensitivity_count(signal_id);
@@ -533,6 +564,8 @@ impl Sim {
                 let reg_id = self.circuit.clock_sensitivity_at(signal_id, i);
                 self.state.transfer(reg_id);
             }
+            #[cfg(feature = "sim-profile")]
+            crate::sim::profile::bump_transfers(n as u64);
         }
     }
 
@@ -598,6 +631,10 @@ impl Sim {
     /// Watchers (`on_change`/`on_clock`) persist across `run()` calls;
     /// only a watcher whose callback called `finish()` is removed.
     pub fn run(&mut self) -> Result<(), SimError> {
+        // Total run-loop elapsed: the one timer that spans everything
+        // below (see `sim::profile`).
+        #[cfg(feature = "sim-profile")]
+        let _profile_phase = crate::sim::profile::time_run();
         let start_callbacks = self.sched.drain_lifecycle(|e| matches!(e, Event::StartOfSimulation));
         for mut cb in start_callbacks {
             cb(self);

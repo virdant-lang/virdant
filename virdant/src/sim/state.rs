@@ -71,10 +71,19 @@ impl State {
     }
 
     pub(super) fn pop_dirty(&mut self) -> Option<SignalId> {
-        self.dirty.pop()
+        let popped = self.dirty.pop();
+        #[cfg(feature = "sim-profile")]
+        if popped.is_some() {
+            crate::sim::profile::bump_dirty_pop();
+        }
+        popped
     }
 
     pub(super) fn transfer(&mut self, component_id: SignalId) {
+        // Timed (sampled) at the `transfer_clock` rising-edge loop
+        // rather than per call: a ~26 ns `Instant` read would distort
+        // a ~5 ns transfer (see `sim::profile`).  Calls are counted in
+        // bulk by the caller; only actual writes are counted here.
         let new_value = self.set_vals[component_id.index()]
             .as_ref()
             .expect("transfer: component has no pending register value")
@@ -84,6 +93,8 @@ impl State {
             return;
         }
         self.vals[component_id.index()] = new_value;
+        #[cfg(feature = "sim-profile")]
+        crate::sim::profile::bump_transfer_write();
         self.dirty.insert(component_id);
     }
 
@@ -97,10 +108,17 @@ impl State {
     /// one propagation pass — re-marking an unchanged signal dirty would
     /// cycle the worklist forever.
     pub(super) fn set_val(&mut self, signal_id: SignalId, value: Value) {
+        // Sampled timing, not per-call `Instant`: same per-driver-path
+        // rule as `transfer` above (see `sim::profile`).  The tick
+        // also counts the call.
+        #[cfg(feature = "sim-profile")]
+        let _profile_sample = crate::sim::profile::sample_set_val();
         if self.vals[signal_id.index()] == value {
             return;
         }
         self.vals[signal_id.index()] = value;
+        #[cfg(feature = "sim-profile")]
+        crate::sim::profile::bump_set_val_write();
         self.dirty.insert(signal_id);
     }
 

@@ -6,6 +6,8 @@ mod eval;
 mod expr;
 mod layout;
 mod payload;
+#[cfg(feature = "sim-profile")]
+pub mod profile;
 mod scheduler;
 mod sim;
 mod state;

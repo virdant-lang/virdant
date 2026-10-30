@@ -146,6 +146,11 @@ impl Scheduler {
         self.next_seq += 1;
         match event_cb.event {
             Event::AfterDelay { at_ps } => {
+                // Sampled, not per-call `Instant`: the push is this
+                // module's own addition, and keeping it cheap keeps
+                // the derived floor clean.  The tick also counts it.
+                #[cfg(feature = "sim-profile")]
+                let _profile_sample = crate::sim::profile::sample_sched_push();
                 self.timed.push(TimedEntry { at_ps, seq, cb: event_cb });
             }
             Event::StartOfSimulation | Event::EndOfSimulation => {
@@ -192,10 +197,16 @@ impl Scheduler {
     /// advance simulated time to its deadline, and return its callback.
     /// `None` when the timed queue is empty.
     pub(super) fn next_after_delay(&mut self) -> Option<Callback> {
+        // Phase-granularity timing only: one `Instant` pair per event
+        // dispatch (see `sim::profile`).
+        #[cfg(feature = "sim-profile")]
+        let _profile_phase = crate::sim::profile::time_sched();
         let mut entry = self.timed.pop()?;
         if let Event::AfterDelay { at_ps } = entry.cb.event {
             self.advance_to(at_ps);
         }
+        #[cfg(feature = "sim-profile")]
+        crate::sim::profile::bump_events_popped();
         entry.cb.callback.take()
     }
 
