@@ -24,7 +24,7 @@ use virdant::common::PortDir;
 use virdant::analysis::symbols::SymbolKind;
 
 use common::{
-    copy_ext_dir, dump_diagnostic, dump_diagnostics, read_prog_key, read_prog_key_from,
+    copy_ext_dir, copy_tree, dump_diagnostic, dump_diagnostics, read_prog_key, read_prog_key_from,
     read_project_name_from,
 };
 
@@ -386,6 +386,23 @@ fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: 
     std::process::exit(exit_code);
 }
 
+fn find_new_template_dir() -> Option<PathBuf> {
+    // Walk up from the executable's directory, mirroring the runtime
+    // asset discovery used by `vir tutor`.  In a development checkout
+    // this reaches the repository root; in an installed layout it
+    // reaches the directory containing the bundled `assets/` tree.
+    let exe = std::env::current_exe().ok()?;
+    let mut dir = exe.parent().map(|p| p.to_path_buf());
+    while let Some(ancestor) = dir {
+        let candidate = ancestor.join("assets").join("new");
+        if candidate.is_dir() {
+            return std::fs::canonicalize(&candidate).ok().or(Some(candidate));
+        }
+        dir = ancestor.parent().map(|p| p.to_path_buf());
+    }
+    None
+}
+
 fn new_project(args: &Args, project: &str) {
     let cwd = resolve_cwd(args);
 
@@ -398,13 +415,29 @@ fn new_project(args: &Args, project: &str) {
 
     std::fs::create_dir_all(project_dir.join("src")).unwrap();
 
+    // Seed the project from the bundled `assets/new` template when it is
+    // available.  Fall back to the compile-time embedded starter file if
+    // the runtime template directory is not found.
+    if let Some(template_dir) = find_new_template_dir() {
+        if let Err(err) = copy_tree(&template_dir, &project_dir) {
+            eprintln!(
+                "Could not copy template {} to {}: {err}",
+                template_dir.display(),
+                project_dir.display()
+            );
+            std::process::exit(1);
+        }
+    } else {
+        let top_vir_content = include_str!("../../../assets/vir_new_top.vir");
+        std::fs::write(project_dir.join("src").join("top.vir"), top_vir_content).unwrap();
+    }
+
+    // The template is generic; stamp the user's chosen project name into
+    // the manifest after the template files are in place.
     let toml_content = format!(
         "[project]\nname = \"{project}\"\n\n[prog]\ntop = \"top::Top\"\n"
     );
     std::fs::write(project_dir.join(common::PROJECT_MANIFEST), toml_content).unwrap();
-
-    let top_vir_content = include_str!("../../../assets/vir_new_top.vir");
-    std::fs::write(project_dir.join("src").join("top.vir"), top_vir_content).unwrap();
 
     // Walk up from cwd looking for an existing .git directory
     let mut search = cwd.clone();

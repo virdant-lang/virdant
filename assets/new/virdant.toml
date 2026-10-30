@@ -1,0 +1,5 @@
+[project]
+name = "new"
+
+[prog]
+top = "top::Top"

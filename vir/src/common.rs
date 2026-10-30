@@ -321,7 +321,7 @@ pub fn copy_ext_dir(builddir: &Path) {
     println!("Copied {} to {}", extdir.display(), target.display());
 }
 
-fn copy_tree(source: &Path, target: &Path) -> std::io::Result<()> {
+pub fn copy_tree(source: &Path, target: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(target)?;
     for entry in std::fs::read_dir(source)? {
         let entry = entry?;
