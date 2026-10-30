@@ -60,7 +60,7 @@ pub fn run_toolchain(
 ) -> Result<(), String> {
     match toolchain {
         Toolchain::Ice40 => {
-            synth_ice40(builddir, project, top)?;
+            synth_ice40(builddir, project, top, part)?;
             pnr_ice40(builddir, project, top, part, freq_mhz, opts)?;
             pack_ice40(builddir, project)
         }
@@ -118,10 +118,11 @@ pub fn run_synth(
     builddir: &Path,
     project: &str,
     top: &str,
+    part: Option<&BString>,
     toolchain: Toolchain,
 ) -> Result<(), String> {
     match toolchain {
-        Toolchain::Ice40 => synth_ice40(builddir, project, top),
+        Toolchain::Ice40 => synth_ice40(builddir, project, top, part),
         Toolchain::Xilinx => synth_xilinx(builddir, project, top),
     }
 }
@@ -189,9 +190,12 @@ pub fn flash_bitstream(
 }
 
 /// Synthesis for ice40: yosys `synth_ice40`, writing
-/// `<builddir>/<project>.json`.
-fn synth_ice40(builddir: &Path, project: &str, top: &str) -> Result<(), String> {
+/// `<builddir>/<project>.json`.  The abc9 `-device` family (`hx`/`lp`/
+/// `u`) is derived from the platform's `@part` chip so the abc9 timing
+/// model matches the part being targeted.
+fn synth_ice40(builddir: &Path, project: &str, top: &str, part: Option<&BString>) -> Result<(), String> {
     let builddir = builddir.to_path_buf();
+    let device = abc9_device(part)?;
 
     // Write yosys script
     let sv_files = glob_sv_files(&builddir);
@@ -200,7 +204,7 @@ fn synth_ice40(builddir: &Path, project: &str, top: &str) -> Result<(), String> 
         .collect();
     let project_json = builddir.join(format!("{project}.json"));
     let script_content = format!(
-        "read_verilog -I {} {}; synth_ice40 -top {top} -json {}",
+        "read_verilog -I {} {}; synth_ice40 -device {device} -top {top} -json {}",
         builddir.to_string_lossy(),
         sv_list.join(" "),
         project_json.to_string_lossy(),
@@ -607,6 +611,18 @@ fn chip_flag(part: Option<&BString>) -> Result<String, String> {
             "Unknown ice40 chip '{chip}' in @part (expected one of: {})",
             ICE40_CHIPS.join(", "),
         ))
+    }
+}
+
+/// The abc9 `-device` family (`hx`/`lp`/`u`) yosys `synth_ice40`
+/// optimizes timing for, derived from the `@part` chip the same way
+/// `chip_flag` does (including its `up5k` default when `@part` is
+/// absent).
+fn abc9_device(part: Option<&BString>) -> Result<&'static str, String> {
+    match chip_flag(part)? {
+        chip if chip.starts_with("hx") => Ok("hx"),
+        chip if chip.starts_with("lp") => Ok("lp"),
+        _ => Ok("u"),
     }
 }
 

@@ -625,7 +625,7 @@ fn bitstream(args: &Args) -> String {
 /// (e.g. to inspect it, or to re-run PnR separately).
 fn synth(args: &Args) {
     let plan = plan_bitstream(args);
-    virdant::build::run_synth(&plan.builddir, &plan.project, &plan.verilog_top, plan.toolchain)
+    virdant::build::run_synth(&plan.builddir, &plan.project, &plan.verilog_top, plan.part.as_ref(), plan.toolchain)
         .unwrap_or_else(|e| {
             eprintln!("Toolchain error: {e}");
             std::process::exit(1);
