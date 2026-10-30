@@ -4,11 +4,16 @@ This file collects candidate speedups for the Virdant simulator beyond
 the VM redesign specified in `DESIGN.md`. The ranking evidence is
 measured, not estimated:
 
-- The fixed per-cycle floor is about 175 ns after the VM redesign. It
-  bounds small designs (the one-stage bench runs at 5.4-6.4 MHz).
-- The marginal cost per driver is about 5 ns per stage per cycle at the
-  512-stage bench point. State bookkeeping around each driver dominates
-  it, not the driver's computation.
+- The fixed per-cycle floor is about 175 ns after the VM redesign (the
+  profiler measures scheduler ~50 ns, flow machinery ~105 ns, sweep
+  ~75 ns per cycle on the one-stage bench, which runs at about 4.9 MHz).
+- On the fully active 512-stage bench, the marginal cost is about 50 ns
+  per stage per cycle: about 12 ns of bytecode evaluation per driver run
+  (each stage runs twice per cycle, once for its own change and once for
+  its predecessor's), and the rest is bookkeeping: the transfer loop,
+  `set_val` writes, dirty pops, and the flow loop itself. An earlier
+  bench design converged to a fixed point and hid all of this; the
+  generator now guarantees every register changes every cycle.
 
 Every idea should be judged by item 1 before and after implementation.
 The differential harness in `sim-bench/` gates all of them.
