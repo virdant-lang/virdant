@@ -12,7 +12,7 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command as ClapCommand, value_parser};
 use std::collections::HashSet;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
 use crate::common::{add_project_args, ProjectLocation};
@@ -48,32 +48,25 @@ pub enum Command {
 
 /// Assemble the full `vir` command line interface.
 pub fn command() -> ClapCommand {
-    let mut cmd = ClapCommand::new("vir")
-        .about("Virdant Hardware Language")
-        // Provide our own version flag so that `-v` (lowercase) works
-        // alongside `-V`/`--version`; clap's built-in version flag only
-        // registers the uppercase `-V` short. `ArgAction::Version` still
-        // requires `.version()` to be set, and `disable_version_flag`
-        // only suppresses the automatic flag, not the version string.
-        .disable_version_flag(true)
-        .version(crate::version_string())
-        .arg(Arg::new("version")
-            .short('v').long("version")
-            .action(ArgAction::Version)
-            .help("Print version information"))
-        .arg(Arg::new("version_upper")
-            .short('V')
-            .action(ArgAction::Version)
-            .hide(true))
-        .arg_required_else_help(true)
-        .subcommand(ClapCommand::new("version"))
-        .subcommand(ClapCommand::new("check"))
-        .subcommand(ClapCommand::new("compile")
+    command_filtered(false)
+}
+
+/// Assemble the `vir` command line interface, attaching only commands
+/// listed in `vir/commands` when `listed_only` is true.
+///
+/// Completion generation uses this: clap_complete does not skip
+/// hidden subcommands when generating scripts, and clap offers no
+/// removal API, so unlisted commands are simply never attached.
+fn command_filtered(listed_only: bool) -> ClapCommand {
+    let mut subs: Vec<ClapCommand> = vec![
+        ClapCommand::new("version"),
+        ClapCommand::new("check"),
+        ClapCommand::new("compile")
             .arg(Arg::new("path").value_name("PATH")
                 .value_parser(value_parser!(PathBuf))
-                .required(true)))
-        .subcommand(ClapCommand::new("build"))
-        .subcommand(ClapCommand::new("run")
+                .required(true)),
+        ClapCommand::new("build"),
+        ClapCommand::new("run")
             .arg(Arg::new("trace").long("trace").num_args(0..=1)
                 .default_missing_value("trace.vcd"))
             .arg(Arg::new("fps-no-cap").long("fps-no-cap").action(ArgAction::SetTrue))
@@ -82,33 +75,86 @@ pub fn command() -> ClapCommand {
                 .value_parser(value_parser!(PathBuf)))
             .arg(Arg::new("cycles").long("cycles").num_args(1)
                 .value_parser(value_parser!(u64)))
-            .arg(Arg::new("verbose").short('v').long("verbose").action(ArgAction::SetTrue)))
-        .subcommand(ClapCommand::new("new")
-            .arg(Arg::new("project").value_name("PROJECT").required(true)))
-        .subcommand(ClapCommand::new("bitstream"))
-        .subcommand(ClapCommand::new("synth"))
-        .subcommand(ClapCommand::new("pnr")
+            .arg(Arg::new("verbose").short('v').long("verbose").action(ArgAction::SetTrue)),
+        ClapCommand::new("new")
+            .arg(Arg::new("project").value_name("PROJECT").required(true)),
+        ClapCommand::new("bitstream"),
+        ClapCommand::new("synth"),
+        ClapCommand::new("pnr")
             .arg(Arg::new("tries").long("tries").num_args(1)
                 .value_parser(value_parser!(u32)).default_value("1"))
             .arg(Arg::new("seed").long("seed").num_args(1)
                 .value_parser(value_parser!(u32)).default_value("1"))
-            .arg(Arg::new("allow-timing-failure").long("allow-timing-failure").action(ArgAction::SetTrue)))
-        .subcommand(ClapCommand::new("upload")
+            .arg(Arg::new("allow-timing-failure").long("allow-timing-failure").action(ArgAction::SetTrue)),
+        ClapCommand::new("upload")
             .arg(Arg::new("tries").long("tries").num_args(1)
                 .value_parser(value_parser!(u32)).default_value("1"))
             .arg(Arg::new("seed").long("seed").num_args(1)
                 .value_parser(value_parser!(u32)).default_value("1"))
-            .arg(Arg::new("allow-timing-failure").long("allow-timing-failure").action(ArgAction::SetTrue)));
+            .arg(Arg::new("allow-timing-failure").long("allow-timing-failure").action(ArgAction::SetTrue)),
+        ClapCommand::new("completion")
+            .about("Generate shell completion scripts")
+            .arg(Arg::new("shell").value_name("SHELL")
+                .required(true)
+                .value_parser(value_parser!(clap_complete::shells::Shell))),
+    ];
+    if listed_only {
+        subs.retain(|sub| crate::is_listed_command(sub.get_name()));
+    }
+
+    let mut cmd = ClapCommand::new("vir")
+        .about("Virdant Hardware Language")
+        // Provide our own version flag so that `-v` works;
+        // clap's built-in version flag registers the uppercase short
+        // instead. `ArgAction::Version` still requires `.version()`
+        // to be set, and `disable_version_flag` only suppresses the
+        // automatic flag, not the version string.
+        .disable_version_flag(true)
+        .version(crate::version_string())
+        .arg_required_else_help(true);
+    // The completion tree keeps only the listed subcommands, and drops
+    // the plumbing flags (`-v`/`--version`, `-C`, `-F`, and the
+    // automatic help flag): clap_complete would otherwise suggest them
+    // even though they are not part of a command's core usage.
+    if !listed_only {
+        cmd = cmd
+            .disable_help_flag(false)
+            .disable_help_subcommand(false)
+            .arg(Arg::new("version")
+                .short('v').long("version")
+                .action(ArgAction::Version)
+                .help("Print version information"));
+    } else {
+        cmd = cmd
+            .disable_help_flag(true)
+            .disable_help_subcommand(true);
+    }
+    for sub in subs {
+        // In the completion tree, drop the automatic help flag from
+        // every subcommand (`-h`/`--help`).
+        let sub = if listed_only {
+            sub.disable_help_flag(true)
+        } else {
+            sub
+        };
+        cmd = cmd.subcommand(sub);
+    }
 
     // Register dynamically-discovered `vir-*` companion binaries as
     // virtual subcommands, collecting their remaining args verbatim.
+    // Companion binaries get the same filter as the static list: a
+    // `vir-*` binary is attached only if its name is listed in
+    // `vir/commands`.
     for name in discover_virtual_subcommands() {
-        cmd = cmd.subcommand(virtual_subcommand(&name));
+        if listed_only && !crate::is_listed_command(&name) {
+            continue;
+        }
+        cmd = cmd.subcommand(virtual_subcommand(&name, !listed_only));
     }
 
     // Set each subcommand's description from `vir/commands` — the
-    // single source of command help text — and hide any subcommand not
-    // listed there (it is a development command: keep it fully
+    // single source of command help text — and hide any subcommand
+    // that `is_listed_command` does not cover (keep it fully
     // functional, but hidden from clap's help, so error messages and
     // suggestions never leak it either). Top-level help is rendered
     // separately, with groups, by `print_top_level_help`.
@@ -127,7 +173,11 @@ pub fn command() -> ClapCommand {
         };
     }
 
-    add_project_args(&mut cmd, true);
+    // Project-location args (`-C`/`-F`) are parse plumbing: attach
+    // them only to the full tree, not the completion tree.
+    if !listed_only {
+        add_project_args(&mut cmd, true);
+    }
 
     cmd
 }
@@ -211,8 +261,53 @@ pub fn parse() -> Args {
         }
     }
 
+    // Handle `vir completion <SHELL>` before regular parsing: print the
+    // completion script to stdout and exit.  This runs before
+    // `ProjectLocation` resolution, so completions can be generated
+    // outside a project, and before dispatch, so `completion` is never
+    // mistaken for a `vir-completion` companion binary.  The subcommand
+    // is still registered in `command()` above, so it shows up in
+    // `--help`-driven listings and typo suggestions.
+    handle_completion_subcommand(&argv);
+
     let matches = command().get_matches_from(argv);
     from_matches(matches)
+}
+
+/// Print the usage message for `vir completion` and exit.
+fn completion_usage(exit_code: i32) -> ! {
+    eprintln!("usage: vir completion <bash|zsh|fish|powershell|elvish>");
+    std::process::exit(exit_code)
+}
+
+/// If the command line is `vir completion ...`, generate the shell
+/// completion script and exit; otherwise do nothing.
+fn handle_completion_subcommand(argv: &[OsString]) {
+    if argv.len() < 2 || argv[1] != OsStr::new("completion") {
+        return;
+    }
+    if argv.len() == 2 {
+        completion_usage(2);
+    }
+    match argv[2].to_str() {
+        Some("-h") | Some("--help") => completion_usage(0),
+        Some("bash") => write_completion(clap_complete::shells::Shell::Bash),
+        Some("zsh") => write_completion(clap_complete::shells::Shell::Zsh),
+        Some("fish") => write_completion(clap_complete::shells::Shell::Fish),
+        Some("powershell") => write_completion(clap_complete::shells::Shell::PowerShell),
+        Some("elvish") => write_completion(clap_complete::shells::Shell::Elvish),
+        _ => completion_usage(2),
+    }
+}
+
+/// Write the completion script for `shell` to stdout and exit.
+fn write_completion(shell: clap_complete::shells::Shell) -> ! {
+    // Omit commands not listed in `vir/commands`: clap_complete does
+    // not skip hidden subcommands, and unlisted commands are kept out
+    // of anything user-visible.
+    let mut cmd = command_filtered(true);
+    clap_complete::generate(shell, &mut cmd, "vir", &mut std::io::stdout());
+    std::process::exit(0)
 }
 
 fn from_matches(matches: ArgMatches) -> Args {
@@ -278,11 +373,20 @@ fn from_matches(matches: ArgMatches) -> Args {
 /// captured and passed through to the binary, and the `virtual_args`
 /// positional swallows everything after the subcommand name,
 /// hyphen-leading values included.
-fn virtual_subcommand(name: &str) -> ClapCommand {
-    ClapCommand::new(name.to_owned())
+fn virtual_subcommand(name: &str, with_args: bool) -> ClapCommand {
+    let cmd = ClapCommand::new(name.to_owned())
         .about(format!("Run the `vir-{name}` companion binary"))
-        .disable_help_flag(true)
-        .arg(
+        .disable_help_flag(true);
+    // The `virtual_args` positional is hidden: help output is disabled so
+    // that flags like `--help` are captured and passed through to the
+    // binary, and the positional swallows everything after the subcommand
+    // name, hyphen-leading values included.  It is only attached when
+    // `with_args` is set: completion scripts should not suggest hidden
+    // args, and nothing else about the subcommand depends on it.
+    if !with_args {
+        return cmd;
+    }
+    cmd.arg(
             Arg::new("virtual_args")
                 .num_args(0..)
                 .value_parser(value_parser!(OsString))

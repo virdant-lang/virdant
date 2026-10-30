@@ -13,24 +13,25 @@
 # They are not listed in the --help.
 
 Basic:
-new         Create a new Virdant project
-check       Check a Virdant project for problems
-run         Run your design in the Virdant simulator
+    new         Create a new Virdant project
+    check       Check a Virdant project for problems
+    run         Run your design in the Virdant simulator
 
 Tools:
-doc         Create documentation for your project
-format      Format your Virdant source files
-lsp         Virdant Language Server
+    doc         Create documentation for your project
+    format      Format your Virdant source files
+    lsp         Virdant Language Server
+    completion  Generate shell completion scripts
 
 Flows:
-build       Compile your design to Verilog
-synth       Synthesize your design
-pnr         Place-and-route your design
-bitstream   Generate a bitstream for your FPGA
-upload      Upload your design to your FPGA
+    build       Compile your design to Verilog
+    synth       Synthesize your design
+    pnr         Place-and-route your design
+    bitstream   Generate a bitstream for your FPGA
+    upload      Upload your design to your FPGA
 
 About:
-version     Print version information
+    version     Print version information
 
 Learning:
-tutor       Generate a workspace for the Virdant tutorial
+    tutor       Generate a workspace for the Virdant tutorial
