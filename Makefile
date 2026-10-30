@@ -53,10 +53,10 @@ clean:
 install: build
 	mkdir -p ${HOME}/.local/virdant/bin
 	mkdir -p ${HOME}/.local/virdant/lib
-	mkdir -p ${HOME}/.local/virdant/tutorial
+	mkdir -p ${HOME}/.local/virdant/assets
 	find ./target/release -maxdepth 1 -type f -executable -name 'vir*' -exec cp {} ${HOME}/.local/virdant/bin/ \;
 	cp -r ./lib/* ${HOME}/.local/virdant/lib/
-	cp -r ./tutorial/* ${HOME}/.local/virdant/tutorial/
+	cp -r ./assets/* ${HOME}/.local/virdant/assets/
 
 docs:
 	$(MAKE) -C docs
@@ -69,7 +69,7 @@ release: build
 	cp -r ./target/release/vir     build/deb/virdant/usr/local/bin/
 	cp -r ./target/release/vir-ls build/deb/virdant/usr/local/bin/
 	cp -r ./lib                    build/deb/virdant/usr/lib/virdant
-	cp -r ./tutorial               build/deb/virdant/usr/lib/virdant
+	cp -r ./assets                 build/deb/virdant/usr/lib/virdant/
 	VERSION=$$(git branch --show-current); \
 	echo "Package: virdant"                                   > build/deb/virdant/DEBIAN/control; \
 	echo "Version: $${VERSION#v}"                             >> build/deb/virdant/DEBIAN/control; \

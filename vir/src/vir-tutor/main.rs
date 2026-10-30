@@ -26,11 +26,23 @@ fn main() {
 
 fn tutorial_dir() -> PathBuf {
     let exe = std::env::current_exe().expect("Could not determine current executable");
-    let root = exe.parent().unwrap().parent().unwrap();
-    let tutorial = root.join("tutorial");
-    std::fs::canonicalize(&tutorial).unwrap_or_else(|_| {
-        panic!("Could not find tutorial directory {tutorial:?}")
-    })
+    // Walk up from the executable's directory looking for the bundled
+    // tutorial.  It lives at `assets/tutorial` in the repository and is
+    // installed as `assets/tutorial` beneath the installation root
+    // (for example, `~/.local/virdant`).  Keep the bare `tutorial` path
+    // as a fallback for installs made before the assets directory was
+    // bundled as a unit.
+    let mut dir = exe.parent().map(|p| p.to_path_buf());
+    while let Some(ancestor) = dir {
+        for candidate in ["assets/tutorial", "tutorial"] {
+            let tutorial = ancestor.join(candidate);
+            if tutorial.is_dir() {
+                return std::fs::canonicalize(&tutorial).unwrap_or(tutorial);
+            }
+        }
+        dir = ancestor.parent().map(|p| p.to_path_buf());
+    }
+    panic!("Could not find tutorial directory")
 }
 
 fn vir_binary() -> PathBuf {
@@ -172,6 +184,10 @@ fn new_workspace() {
         let first_dirname = format!("{num:03}_{name}");
 
         copy_dir(&tutorial_dir.join(&first_dirname), &dest.join(&first_dirname));
+        std::fs::copy(
+            tutorial_dir.join(TUTORIAL_MARKER),
+            dest.join(TUTORIAL_MARKER),
+        ).unwrap_or_else(|_| panic!("Could not copy the tutorial marker"));
 
         eprintln!("Welcome to Virdant 🌱");
         eprintln!();

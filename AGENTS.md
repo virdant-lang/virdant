@@ -4,7 +4,7 @@
 # Codebase organization
 * Documentation for agents (ie, for you) are in `agents/`
 * Documentation for humans are in `docs/`
-* Examples of Virdant code can be found in `tests/` and `tutorial/`.
+* Examples of Virdant code can be found in `tests/` and `assets/tutorial/`.
 
 # Tips
 * Load the Virdant skill if you ever have to work with Virdant code.
