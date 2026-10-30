@@ -35,6 +35,27 @@ pub fn is_valid_package_name(name: &BStr) -> bool {
     }
 }
 
+/// Construct a `Db` from in-memory (package name, text) pairs.
+/// This is the filesystem-free entry point used on wasm (where the
+/// web demo drives the compiler from editor buffers); the fs-backed
+/// constructors in `vircommon::load` reuse the same shape for files
+/// read from disk.
+pub fn db_from_mem(files: Vec<(BString, BString)>) -> Db {
+    use crate::common::source::Source;
+    use crate::package::PackageTable;
+
+    let mut db = Db::new();
+
+    let deduped: indexmap::IndexMap<BString, BString> = files.into_iter().collect();
+    db.set_packages(PackageTable::new(deduped.keys().cloned().collect()));
+    let packages = db.get_packages();
+    for (name, text) in deduped {
+        let package = packages.id(name.as_bstr()).expect("package missing from table");
+        db.set_source(package, Source::new(package, text));
+    }
+    db
+}
+
 pub fn min_word_width(value: WordValue) -> Width {
     if value == 0 {
         0
