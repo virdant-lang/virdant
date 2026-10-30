@@ -1,0 +1,14 @@
+# The list of "development" binaries.
+# This file is embedded into the `vir` binary at compile time.
+#
+# A "development binary" is one intended for Virdant developers rather than
+# end users writing hardware: a convenience, test harness, or experimental tool.
+#
+# Syntax: blank lines and `#` lines are ignored; trailing whitespace is
+# trimmed.
+
+compile
+filecheck
+inspect
+run-icarus
+virtue

@@ -16,6 +16,7 @@ use bstr::{BStr, BString, ByteSlice};
 use nix::unistd::execvp;
 use virdant::util::{check_db, db_from_dir, db_from_files};
 use std::ffi::{CString, OsString};
+use std::sync::OnceLock;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use virdant::db::Db;
@@ -26,6 +27,29 @@ use common::{copy_ext_dir, dump_diagnostic, dump_diagnostics, read_prog_key, rea
 
 // The `Args` struct and `Command` enum are defined in `cli`, built up
 // with the vanilla clap builder API (see `cli.rs`).
+
+// The list of "development" binaries lives in `dev_binaries.txt` (next to
+// this file), embedded at compile time and parsed lazily, once, on first use.
+fn dev_binaries() -> &'static Vec<String> {
+    static DEV_BINARIES: OnceLock<Vec<String>> = OnceLock::new();
+    static DEV_BINARIES_TXT: &str = include_str!("dev_binaries.txt");
+    DEV_BINARIES.get_or_init(|| {
+        DEV_BINARIES_TXT
+            .lines()
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .map(|line| line.to_string())
+            .collect()
+    })
+}
+
+/// Returns `true` if `name` is a known development binary.
+///
+/// `name` is the subcommand/binary suffix form (e.g. `run-icarus`).
+#[allow(dead_code)]
+fn is_dev_binary(name: &str) -> bool {
+    dev_binaries().iter().any(|entry| entry == name)
+}
 
 fn main() {
     let args = cli::parse();
