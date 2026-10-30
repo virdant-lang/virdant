@@ -8,6 +8,9 @@
 
 use crate::analysis::elaboration::{Elaboration, SignalId};
 use crate::common::Width;
+
+/// One bit per `SignalId::index()` word in `State::changed_signals`.
+const CHANGE_WORD_BITS: usize = 64;
 use crate::sim::layout::TypeId;
 use crate::sim::sim::InitStrategy;
 
@@ -57,20 +60,43 @@ pub(super) struct State {
     /// `SignalId::index()` (`Pending::None` for non-registers).
     set_vals: Vec<Pending>,
     dirty: DirtyList,
-    /// Settlement-level "some stored value changed since the last
-    /// watcher sweep that observed everything".  The watcher sweep can
-    /// be skipped entirely when this is false: a watcher fires only on
-    /// a value change (`Change`) or a 0→1 transition of bit 0
-    /// (`ClockRising`), and both require the signal's stored value to
-    /// have changed, so nothing can fire over values nobody wrote to.
-    /// Set by the two write primitives below exactly when a write
-    /// happens (they already detect change internally), cleared by the
-    /// outermost `unlock` after its quiescent sweep pass and by
-    /// `flow_all` (construction's full-network pass, before any
-    /// watcher exists).  Not the same thing as `dirty`: the worklist
-    /// drains during `flow`, so it is empty at dispatch time by
-    /// construction and cannot serve as the predicate.
+    /// "Some stored value changed since the last sweep pass that
+    /// observed everything".  The watcher sweep can be skipped
+    /// entirely when this is false: a watcher fires only on a value
+    /// change (`Change`) or a 0→1 transition of bit 0 (`ClockRising`),
+    /// and both require the signal's stored value to have changed, so
+    /// nothing can fire over values nobody wrote to.  Set by the two
+    /// write primitives below exactly when a write happens (they
+    /// already detect change internally), consumed by each sweep pass
+    /// together with the per-signal set (writes landing while the pass
+    /// runs re-raise it for the next pass) and by `flow_all`
+    /// (construction's full-network pass, before any watcher exists).
+    /// Not the same thing as `dirty`: the worklist drains during
+    /// `flow`, so it is empty at dispatch time by construction and
+    /// cannot serve as the predicate.
     changed_since_dispatch: bool,
+    /// The per-signal detail of `changed_since_dispatch`: one bit per
+    /// `SignalId::index()`, set by the same write primitives at the
+    /// same time as the bool above (a write marks both or neither) and
+    /// cleared together with it.  Each sweep pass of the unlock's
+    /// sweep-and-fire loop consumes the set at its start, after
+    /// queueing the changed signals' buckets: the pass then visits
+    /// exactly the watchers whose signals somebody actually wrote
+    /// since the previous pass started — the settlement pass plus
+    /// every callback-driven write since — and any write landing while
+    /// the pass runs re-marks the set for the next pass.  A watcher
+    /// can only fire (or need its last-seen value refreshed) over a
+    /// signal that was written, so visiting fewer buckets than the
+    /// whole table changes nothing observable.
+    changed_signals: Vec<u64>,
+    /// The popcount of `changed_signals`, maintained incrementally by
+    /// `mark_changed` (one increment per newly-marked signal) and reset
+    /// with it.  O(1) size reads for the dispatch loop's quiescence
+    /// check and the per-pass strategy switch — the loop compares the
+    /// count against the watcher table two or three times per pass, so
+    /// re-counting the bitset (one `count_ones` per word) would cost
+    /// real time on wide designs.
+    changed_count: usize,
 }
 
 impl State {
@@ -105,6 +131,8 @@ impl State {
             set_vals,
             dirty: DirtyList::new(n_components),
             changed_since_dispatch: false,
+            changed_signals: vec![0; n_components.div_ceil(CHANGE_WORD_BITS)],
+            changed_count: 0,
         }
     }
 
@@ -158,8 +186,7 @@ impl State {
                 self.vals[component_id.index()] = new_value;
                 #[cfg(feature = "sim-profile")]
                 crate::sim::profile::bump_transfer_write();
-                self.dirty.insert(component_id);
-                self.changed_since_dispatch = true;
+                self.mark_changed(component_id);
             }
             Pending::Value(pending) => {
                 let new_value = pending.clone();
@@ -170,8 +197,7 @@ impl State {
                 self.vals[component_id.index()] = new_value;
                 #[cfg(feature = "sim-profile")]
                 crate::sim::profile::bump_transfer_write();
-                self.dirty.insert(component_id);
-                self.changed_since_dispatch = true;
+                self.mark_changed(component_id);
             }
             Pending::None => panic!("transfer: component has no pending register value"),
         }
@@ -198,8 +224,7 @@ impl State {
         self.vals[signal_id.index()] = value;
         #[cfg(feature = "sim-profile")]
         crate::sim::profile::bump_set_val_write();
-        self.dirty.insert(signal_id);
-        self.changed_since_dispatch = true;
+        self.mark_changed(signal_id);
     }
 
     /// The bits-only write primitive (PERF-IDEAS item 10):
@@ -230,7 +255,25 @@ impl State {
         self.vals[idx] = Value::from_u64(typ, width, bits);
         #[cfg(feature = "sim-profile")]
         crate::sim::profile::bump_set_val_write();
+        self.mark_changed(signal_id);
+    }
+
+    /// Record an actual write: queue it for `flow` and raise both
+    /// dispatch predicates.  The bool and the bitset are set and
+    /// cleared together, so the bool stays the O(1) "did anything
+    /// change" gate and the bitset the "which signals changed" detail
+    /// the bucketed sweep dispatches over.
+    fn mark_changed(&mut self, signal_id: SignalId) {
         self.dirty.insert(signal_id);
+        let index = signal_id.index();
+        let word = index / CHANGE_WORD_BITS;
+        let bit = 1 << (index % CHANGE_WORD_BITS);
+        // Only a newly-marked signal grows the set: re-marking a signal
+        // that is already pending must not double-count it.
+        if self.changed_signals[word] & bit == 0 {
+            self.changed_signals[word] |= bit;
+            self.changed_count += 1;
+        }
         self.changed_since_dispatch = true;
     }
 
@@ -261,13 +304,60 @@ impl State {
         self.changed_since_dispatch
     }
 
-    /// Record that the sweep has observed everything: only correct
-    /// immediately after a quiescent `dispatch_pass` (every watcher's
-    /// `last` was brought up to the live value and no callback ran) or
-    /// after `flow_all` (no watcher exists yet).  Any later actual
-    /// write re-raises the flag.
+    /// The number of signals with an actual write since the last
+    /// `dispatch_pass` started (or since the last clear): the dispatch
+    /// loop's quiescence check and the per-pass strategy switch.  When
+    /// the changed set is smaller than the watcher table, the dispatch
+    /// walks the changed signals' buckets; when it matches or exceeds
+    /// the table (every register in a long chain changes each cycle),
+    /// the dispatch walks the whole table directly — queueing a set of
+    /// buckets no smaller than the table it replaces would only add
+    /// cost.
+    pub(super) fn changed_signal_count(&self) -> usize {
+        self.changed_count
+    }
+
+    /// Iterate the signals with an actual write since the last
+    /// `dispatch_pass` started (or since the last clear), in index
+    /// order.  The per-signal predicate for the bucketed watcher
+    /// sweep: a watcher fires only over a signal somebody actually
+    /// wrote, and its last-seen value needs refreshing only then, so
+    /// the sweep visits exactly these signals' buckets and no others.
+    ///
+    /// The walk skips directly between set bits (`trailing_zeros`),
+    /// never scanning unset bits: the cost is proportional to the
+    /// number of changed signals, not the size of the bitset.
+    pub(super) fn changed_signal_ids(&self) -> impl Iterator<Item = SignalId> + '_ {
+        self.changed_signals
+            .iter()
+            .enumerate()
+            .flat_map(move |(word, &bits)| {
+                let mut bits = bits;
+                std::iter::from_fn(move || {
+                    if bits == 0 {
+                        None
+                    } else {
+                        let bit = bits.trailing_zeros();
+                        bits &= !(1 << bit);
+                        Some(SignalId::from_index(word * CHANGE_WORD_BITS + bit as usize))
+                    }
+                })
+            })
+    }
+
+    /// Consume the changed-set: empties the per-signal bitset (and the
+    /// whole-table skip flag, which tracks the same events).  A
+    /// `dispatch_pass` calls this at its start, after queueing the
+    /// changed signals' buckets: the pass then observes exactly those
+    /// watchers, and any write that lands while it runs (watcher
+    /// callbacks and their nested settlements) re-marks the set for the
+    /// next pass.  `flow_all` calls it at construction (no watcher
+    /// exists yet).  Any later actual write re-raises the flag and
+    /// re-marks the signal's bit.
     pub(super) fn clear_changed_since_dispatch(&mut self) {
         self.changed_since_dispatch = false;
+        self.changed_signals.iter_mut().for_each(|word| *word = 0);
+        self.changed_count = 0;
     }
 }
 
@@ -311,6 +401,8 @@ mod tests {
             set_vals: vec![pending0, Pending::None],
             dirty: DirtyList::new(2),
             changed_since_dispatch: false,
+            changed_signals: vec![0; 1],
+            changed_count: 0,
         }
     }
 

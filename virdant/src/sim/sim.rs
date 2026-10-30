@@ -112,6 +112,24 @@ pub struct Sim {
     /// once, swept in place at each settlement.  No per-fire
     /// re-registration, no queue rebuild.
     watchers: Vec<Watcher>,
+    /// Watchers bucketed by the signal they observe:
+    /// Watcher buckets, densely indexed by the observed signal's
+    /// index: `watcher_buckets[signal_index]` lists the registration
+    /// indices (into `watchers`) of every watcher observing that
+    /// signal, in registration order.  Built by `on_change`/`on_clock`
+    /// (registration appends to the table and to the signal's bucket)
+    /// and rebuilt after the shutdown retain prunes dead entries, so
+    /// the buckets always cover exactly the live table.  A dispatch
+    /// pass visits only the buckets of signals that changed since the
+    /// last sweep (or the table itself, when the changed set
+    /// outnumbers the table), so the sweep cost follows what could
+    /// actually fire, not the table size.
+    watcher_buckets: Vec<Vec<usize>>,
+    /// Reusable queue of registration indices for one bucket-walk
+    /// dispatch pass: the union of the changed signals' buckets,
+    /// sorted ascending.  Cleared and refilled each pass, never
+    /// reallocated.
+    dispatch_queue: Vec<usize>,
     /// True while the watcher dispatch loop is running.  A nested
     /// `unlock()` (a callback's own `lock()`/`set()`/`unlock()`) must
     /// only settle the circuit (`flow`), never re-sweep the table —
@@ -249,6 +267,8 @@ impl Sim {
             sched: Scheduler::new(),
             clocks: Vec::new(),
             watchers: Vec::new(),
+            watcher_buckets: Vec::new(),
+            dispatch_queue: Vec::new(),
             dispatching: false,
         };
 
@@ -537,7 +557,7 @@ impl Sim {
         }
 
         // Skip the sweep entirely when no stored value has changed
-        // since the last sweep that observed everything: a watcher
+        // since the last sweep pass that observed everything: a watcher
         // fires only on a value change (`Change`) or a 0→1 transition
         // of bit 0 (`ClockRising`), and both require the observed
         // signal's stored value to have changed, so a settlement with
@@ -545,31 +565,28 @@ impl Sim {
         // `State`'s two write primitives (`set_val`, `transfer`) on
         // every actual write, including `set_without_flow` (via
         // `transfer_clock`) and the register transfers inside this
-        // sweep's own callbacks, and cleared again below, after the
-        // quiescent pass has re-observed every watcher.
+        // sweep's own callbacks; each sweep pass consumes it together
+        // with the per-signal changed set.
         if self.state.changed_since_dispatch() {
             self.dispatching = true;
             // Sweep-and-fire loop: each pass fires, in registration
             // order, every watcher whose observed value differs from the
-            // last value it saw.  Callbacks may drive signals (settled
-            // by their nested flow-only unlocks) or register more
-            // watchers; if any callback fired, sweep again until a full
-            // pass fires nothing — cascades still settle within this
-            // same unlock, without nested sweeps.  The loop runs to
-            // quiescence even past `finish()`: watchers firing after the
-            // shutdown request die instead of persisting (as the old
-            // re-arm check did), but their final cascades still fire.
-            loop {
-                if !self.dispatch_pass() {
-                    break;
-                }
+            // last value it saw — visiting only the watchers whose
+            // signals were actually written since the previous pass
+            // started.  Callbacks may drive signals (settled by their
+            // nested flow-only unlocks) or register more watchers; the
+            // loop ends when the changed set is empty, i.e. when a pass
+            // has observed everything with no fresh writes — the same
+            // quiescence the old fired-until-nothing loop reached,
+            // without re-walking watchers over changes they already
+            // observed.  The loop runs to quiescence even past
+            // `finish()`: watchers firing after the shutdown request die
+            // instead of persisting (as the old re-arm check did), but
+            // their final cascades still fire.
+            while self.state.changed_signal_count() != 0 {
+                self.dispatch_pass();
             }
             self.dispatching = false;
-            // The pass that broke the loop fired nothing and brought
-            // every watcher's last-seen value up to the live value, so
-            // it has observed everything; the next settlement may skip
-            // its sweep unless a write happens first.
-            self.state.clear_changed_since_dispatch();
         }
 
         // Watchers whose callback ran after `finish()` was requested do
@@ -580,60 +597,148 @@ impl Sim {
         // table is unchanged either way.
         if self.sched.is_shutdown_requested() {
             self.watchers.retain(|w| w.alive);
+            self.rebuild_buckets();
         }
     }
 
-    /// One sweep-and-fire pass over the watcher table, in registration
-    /// order.  Each watcher compares the live value against its own
-    /// last-seen value; watchers that observe a change fire (for
-    /// `ClockRising`, only on a 0→1 transition of bit 0), each updating
-    /// its own last-seen value as it fires.  Returns true when any
-    /// callback fired (the circuit state may have changed; the caller
-    /// sweeps again).
-    fn dispatch_pass(&mut self) -> bool {
-        // One `Instant` pair per sweep pass; the pass itself covers the
-        // whole watcher table, so the read cost stays proportionate.
+    /// One sweep-and-fire pass over the watcher table.  Only the
+    /// watchers whose observed signal has an actual write pending
+    /// since the previous pass started are visited, in registration
+    /// order.  Each visited watcher compares the live value against
+    /// its own last-seen value; watchers that observe a change fire
+    /// (for `ClockRising`, only on a 0→1 transition of bit 0), each
+    /// updating its own last-seen value as it fires.
+    ///
+    /// Order-equivalence with the old whole-table sweep: a watcher can
+    /// only fire (or need its `last` refreshed) over a signal someone
+    /// actually wrote since the watcher's last observation, and every
+    /// write marks its signal in the changed set.  So the fired
+    /// watchers are exactly the whole-table sweep's, and both walks go
+    /// in ascending registration index: the bucket walk sorts the
+    /// union of the changed signals' buckets; the table walk goes in
+    /// table order.  Firing order among simultaneously-changed
+    /// watchers is therefore identical to the unbucketed sweep,
+    /// including when watchers on different signals change in the same
+    /// settlement.
+    ///
+    /// The pass consumes the changed set at its start: it observes the
+    /// watchers whose signals somebody wrote since the previous pass
+    /// started, and any write landing while it runs (callbacks and
+    /// their nested settlements) re-marks the set for the next pass.
+    /// Two strategies, chosen per pass by whichever set is smaller:
+    /// the bucket walk visits the changed signals' buckets (cost
+    /// proportional to the changed signals with watchers), collapsing
+    /// the sweep toward watcher-fire cost on designs where few signals
+    /// change per settlement; the table walk visits every watcher and
+    /// pays the value compare (cost proportional to the table), which
+    /// is the cheaper side on chain designs where most signals change
+    /// every cycle but few have watchers.  Never worse than the old
+    /// whole-table sweep, which paid a full value compare per table
+    /// entry per pass.
+    fn dispatch_pass(&mut self) {
+        // One `Instant` pair per sweep pass; the pass covers only the
+        // changed signals' buckets or the table, so the read cost stays
+        // proportionate to what could actually fire.
         #[cfg(feature = "sim-profile")]
         let _profile_phase = crate::sim::profile::time_dispatch();
-        let mut fired = false;
-        let mut i = 0;
-        while i < self.watchers.len() {
-            // Decide (and observe) with immutable access, then act, so
-            // the callback call below can take `&mut self`.  Watchers
-            // registered by callbacks during this pass append to the
-            // table and are visited here too; their `last` starts at the
-            // current value, so they first fire on a later transition.
-            let (fire, observed) = {
-                let watcher = &self.watchers[i];
-                let current = self.state.peek(watcher.signal);
-                if *current == watcher.last {
-                    (false, None)
-                } else {
-                    let fire = match watcher.kind {
-                        WatchKind::Change => true,
-                        WatchKind::ClockRising => {
-                            !watcher.last.get_bit(0) && current.get_bit(0)
-                        }
-                    };
-                    (fire, Some(current.clone()))
-                }
-            };
-            if let Some(value) = observed {
-                self.watchers[i].last = value;
-            }
-            if fire {
-                fired = true;
-                #[cfg(feature = "sim-profile")]
-                crate::sim::profile::bump_watcher_fire();
-                let callback = self.watchers[i].callback.clone();
-                (callback.borrow_mut())(self);
-                if self.sched.is_shutdown_requested() {
-                    self.watchers[i].alive = false;
+        if self.state.changed_signal_count() < self.watchers.len() {
+            // Bucket walk: visit only the changed signals' buckets, in
+            // registration order (ascending index across buckets and
+            // within each).
+            self.dispatch_queue.clear();
+            for signal_id in self.state.changed_signal_ids() {
+                let index = signal_id.index();
+                if let Some(bucket) = self.watcher_buckets.get(index) {
+                    self.dispatch_queue.extend_from_slice(bucket);
                 }
             }
-            i += 1;
+            self.dispatch_queue.sort_unstable();
+            // The queue now covers every watcher whose signal was
+            // written since the previous pass started.  Consuming the
+            // set here, before any callback runs, lets the pass's own
+            // writes re-mark it for the next pass; the dispatch loop
+            // ends when the set is empty, since a pass over an empty
+            // set would observe nothing.
+            self.state.clear_changed_since_dispatch();
+            let mut table_len = self.watchers.len();
+            let mut qi = 0;
+            while qi < self.dispatch_queue.len() {
+                let i = self.dispatch_queue[qi];
+                qi += 1;
+                self.dispatch_visit(i);
+                // Watchers registered by callbacks during this pass are
+                // visited at the end of this same pass: their indices
+                // are larger than every queued one, so the queue stays
+                // ascending and registration order is preserved —
+                // exactly as the whole-table sweep did.
+                while table_len < self.watchers.len() {
+                    self.dispatch_queue.push(table_len);
+                    table_len += 1;
+                }
+            }
+        } else {
+            // Table walk: every watcher, in table (registration) order
+            // — the old whole-table sweep, which is cheaper than
+            // queueing a changed set no smaller than the table.
+            self.state.clear_changed_since_dispatch();
+            let mut i = 0;
+            while i < self.watchers.len() {
+                self.dispatch_visit(i);
+                i += 1;
+            }
         }
-        fired
+    }
+
+    /// Visit one watcher: compare the live value against its own
+    /// last-seen value and fire if it observed a change.  Watchers
+    /// registered by callbacks during the pass are appended to the
+    /// table by the registration methods and picked up by the caller's
+    /// walk; their `last` starts at the current value, so they first
+    /// fire on a later transition.
+    fn dispatch_visit(&mut self, i: usize) {
+        // Decide (and observe) with immutable access, then act, so the
+        // callback call below can take `&mut self`.
+        let (fire, observed) = {
+            let watcher = &self.watchers[i];
+            let current = self.state.peek(watcher.signal);
+            if *current == watcher.last {
+                (false, None)
+            } else {
+                let fire = match watcher.kind {
+                    WatchKind::Change => true,
+                    WatchKind::ClockRising => {
+                        !watcher.last.get_bit(0) && current.get_bit(0)
+                    }
+                };
+                (fire, Some(current.clone()))
+            }
+        };
+        if let Some(value) = observed {
+            self.watchers[i].last = value;
+        }
+        if fire {
+            #[cfg(feature = "sim-profile")]
+            crate::sim::profile::bump_watcher_fire();
+            let callback = self.watchers[i].callback.clone();
+            (callback.borrow_mut())(self);
+            if self.sched.is_shutdown_requested() {
+                self.watchers[i].alive = false;
+            }
+        }
+    }
+
+    /// Rebuild `watcher_buckets` from the live table: called after the
+    /// shutdown retain prunes dead watchers, so the buckets keep
+    /// covering exactly the table, in registration order.
+    fn rebuild_buckets(&mut self) {
+        self.watcher_buckets.clear();
+        for (index, watcher) in self.watchers.iter().enumerate() {
+            let idx = watcher.signal.index();
+            if self.watcher_buckets.len() <= idx {
+                self.watcher_buckets.resize(idx + 1, Vec::new());
+            }
+            self.watcher_buckets[idx].push(index);
+        }
     }
 
     /// Clock-transfer commit primitive, shared by `flow`'s
@@ -1023,6 +1128,12 @@ impl Sim {
             alive: true,
             callback: Rc::new(RefCell::new(cb)),
         });
+        let index = self.watchers.len() - 1;
+        let idx = signal.index();
+        if self.watcher_buckets.len() <= idx {
+            self.watcher_buckets.resize(idx + 1, Vec::new());
+        }
+        self.watcher_buckets[idx].push(index);
     }
 
     /// Register `cb` to fire every time `clock`'s value has a rising edge
@@ -1045,6 +1156,12 @@ impl Sim {
             alive: true,
             callback: Rc::new(RefCell::new(cb)),
         });
+        let index = self.watchers.len() - 1;
+        let idx = clock.index();
+        if self.watcher_buckets.len() <= idx {
+            self.watcher_buckets.resize(idx + 1, Vec::new());
+        }
+        self.watcher_buckets[idx].push(index);
     }
 
     /// Register a callback by raw [`EventCallback`] — the uniform API
@@ -1253,6 +1370,180 @@ mod tests {
         }
         assert_eq!(*fire_fires.borrow(), 1, "a quiescent settlement must not re-fire");
         assert_eq!(*x_fires.borrow(), 1, "a quiescent settlement must not re-fire");
+    }
+
+    /// Bucketed dispatch keeps registration order across different
+    /// signals: two watchers observing different signals, both changed
+    /// by the same settlement, fire in registration order — for both
+    /// registration orders, so the test pins order to registration,
+    /// not to signal identity or bucket visit order.
+    #[test]
+    fn watchers_on_different_signals_fire_in_registration_order() {
+        let run_phase = |register_fire_first: bool| -> Vec<&'static str> {
+            let mut sim = gcd_sim();
+            let fire = sim.signal("top.fire");
+            let x = sim.signal("top.x");
+            let fire_typ = sim.component_type_id(fire);
+            let x_typ = sim.component_type_id(x);
+
+            let order: Rc<RefCell<Vec<&'static str>>> = Rc::new(RefCell::new(Vec::new()));
+            let fire_watcher = {
+                let order = order.clone();
+                Box::new(move |_sim: &mut Sim| {
+                    order.borrow_mut().push("fire");
+                })
+            };
+            let x_watcher = {
+                let order = order.clone();
+                Box::new(move |_sim: &mut Sim| {
+                    order.borrow_mut().push("x");
+                })
+            };
+            if register_fire_first {
+                sim.on_change(fire, fire_watcher);
+                sim.on_change(x, x_watcher);
+            } else {
+                sim.on_change(x, x_watcher);
+                sim.on_change(fire, fire_watcher);
+            }
+
+            // One settlement changes both signals: a single dispatch
+            // pass fires both, in registration order.
+            let fire_val = sim.get(fire).get_bit(0);
+            let x_val = sim.get(x).to_u64();
+            {
+                let mut lock = sim.lock();
+                lock.set(fire, Value::from_bool(fire_typ, !fire_val));
+                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_val ^ 0xFF)));
+            }
+
+            // A second settlement toggles both again: the order holds.
+            let fire_val = sim.get(fire).get_bit(0);
+            let x_val = sim.get(x).to_u64();
+            {
+                let mut lock = sim.lock();
+                lock.set(fire, Value::from_bool(fire_typ, !fire_val));
+                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_val ^ 0xFF)));
+            }
+
+            order.borrow().clone()
+        };
+
+        assert_eq!(
+            run_phase(true),
+            vec!["fire", "x", "fire", "x"],
+            "fire registered first: the pass fires in registration order"
+        );
+        assert_eq!(
+            run_phase(false),
+            vec!["x", "fire", "x", "fire"],
+            "x registered first: the pass fires in registration order"
+        );
+    }
+
+    /// A `Change` watcher on the clock signal fires on every value
+    /// change, including falling edges: the bucketed sweep visits the
+    /// clock's bucket on any write to it, so the opposite-direction
+    /// edge (which a `ClockRising` watcher ignores) still fires a
+    /// `Change` watcher watching the same signal.
+    #[test]
+    fn on_change_watcher_on_clock_fires_on_falling_edges() {
+        let mut sim = gcd_sim();
+        let clock = sim.signal("top.clock");
+        let clock_typ = sim.component_type_id(clock);
+
+        let fires = Rc::new(RefCell::new(0u32));
+        {
+            let count = fires.clone();
+            sim.on_change(clock, Box::new(move |_sim| {
+                *count.borrow_mut() += 1;
+            }));
+        }
+
+        let initial_high = sim.get(clock).get_bit(0);
+        let mut settle = |sim: &mut Sim, high: bool| {
+            let mut lock = sim.lock();
+            lock.set(clock, Value::from_bool(clock_typ, high));
+        };
+
+        // Drive to the opposite of the seeded initial value: one
+        // change, one fire (the edge direction depends on the seed).
+        settle(&mut sim, !initial_high);
+        assert_eq!(*fires.borrow(), 1, "the first change must fire");
+
+        // Drive back: the opposite-direction edge (falling when the
+        // initial value was high) fires a Change watcher too.
+        settle(&mut sim, initial_high);
+        assert_eq!(
+            *fires.borrow(),
+            2,
+            "the opposite-direction edge must fire a Change watcher"
+        );
+
+        // A same-value write is not a change: no fire.
+        settle(&mut sim, initial_high);
+        assert_eq!(*fires.borrow(), 2, "a same-value write must not fire");
+    }
+
+    /// Unregister edge case: a watcher whose callback calls `finish()`
+    /// is pruned from the table (and its bucket rebuilt) at the end of
+    /// the unlock, while watchers on other signals survive it and keep
+    /// firing.  The surviving watcher's own later fire then dies to the
+    /// post-shutdown rule (watchers firing after the shutdown request
+    /// do not persist), so a final settlement of its signal fires
+    /// nothing.
+    #[test]
+    fn finish_prunes_only_the_calling_watcher_and_rebuilds_buckets() {
+        let mut sim = gcd_sim();
+        let fire = sim.signal("top.fire");
+        let x = sim.signal("top.x");
+        let fire_typ = sim.component_type_id(fire);
+        let x_typ = sim.component_type_id(x);
+
+        let x_fires = Rc::new(RefCell::new(0u32));
+        {
+            let count = x_fires.clone();
+            sim.on_change(x, Box::new(move |_sim| {
+                *count.borrow_mut() += 1;
+            }));
+        }
+        {
+            sim.on_change(fire, Box::new(move |sim| {
+                sim.finish();
+            }));
+        }
+
+        // The fire watcher fires, calls finish(), and is pruned; the
+        // x watcher (registered earlier, on another signal) survives
+        // the retain and the bucket rebuild.
+        let fire_initial = sim.get(fire).get_bit(0);
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, !fire_initial));
+        }
+        let x_initial = sim.get(x).to_u64();
+        {
+            let mut lock = sim.lock();
+            lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_initial ^ 0xFF)));
+        }
+        assert_eq!(
+            *x_fires.borrow(),
+            1,
+            "the surviving watcher must still fire after the finish() prune and bucket rebuild"
+        );
+
+        // The survivor's next fire runs after the shutdown request, so
+        // it dies (existing post-finish semantics): no third fire.
+        let x_now = sim.get(x).to_u64();
+        {
+            let mut lock = sim.lock();
+            lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_now ^ 0xFF)));
+        }
+        assert_eq!(
+            *x_fires.borrow(),
+            1,
+            "a watcher firing after the shutdown request must not persist"
+        );
     }
 
     /// The bits-only commit path end to end (PERF-IDEAS item 10):
