@@ -26,6 +26,20 @@ pub(super) struct State {
     /// `SignalId::index()` (`None` for non-registers).
     set_vals: Vec<Option<Value>>,
     dirty: DirtyList,
+    /// Settlement-level "some stored value changed since the last
+    /// watcher sweep that observed everything".  The watcher sweep can
+    /// be skipped entirely when this is false: a watcher fires only on
+    /// a value change (`Change`) or a 0→1 transition of bit 0
+    /// (`ClockRising`), and both require the signal's stored value to
+    /// have changed, so nothing can fire over values nobody wrote to.
+    /// Set by the two write primitives below exactly when a write
+    /// happens (they already detect change internally), cleared by the
+    /// outermost `unlock` after its quiescent sweep pass and by
+    /// `flow_all` (construction's full-network pass, before any
+    /// watcher exists).  Not the same thing as `dirty`: the worklist
+    /// drains during `flow`, so it is empty at dispatch time by
+    /// construction and cannot serve as the predicate.
+    changed_since_dispatch: bool,
 }
 
 impl State {
@@ -56,6 +70,7 @@ impl State {
             vals,
             set_vals,
             dirty: DirtyList::new(n_components),
+            changed_since_dispatch: false,
         }
     }
 
@@ -96,6 +111,7 @@ impl State {
         #[cfg(feature = "sim-profile")]
         crate::sim::profile::bump_transfer_write();
         self.dirty.insert(component_id);
+        self.changed_since_dispatch = true;
     }
 
     /// Internal write: store `value` at `signal_id`'s val node and mark
@@ -120,6 +136,7 @@ impl State {
         #[cfg(feature = "sim-profile")]
         crate::sim::profile::bump_set_val_write();
         self.dirty.insert(signal_id);
+        self.changed_since_dispatch = true;
     }
 
     pub(super) fn set_reg(&mut self, signal_id: SignalId, value: Value) {
@@ -130,6 +147,22 @@ impl State {
 impl State {
     pub(super) fn clear_dirty(&mut self) {
         self.dirty.clear();
+    }
+
+    /// True when some stored value changed since the last sweep that
+    /// observed every watcher (or since construction): the predicate
+    /// that lets `unlock` skip the watcher sweep entirely.
+    pub(super) fn changed_since_dispatch(&self) -> bool {
+        self.changed_since_dispatch
+    }
+
+    /// Record that the sweep has observed everything: only correct
+    /// immediately after a quiescent `dispatch_pass` (every watcher's
+    /// `last` was brought up to the live value and no callback ran) or
+    /// after `flow_all` (no watcher exists yet).  Any later actual
+    /// write re-raises the flag.
+    pub(super) fn clear_changed_since_dispatch(&mut self) {
+        self.changed_since_dispatch = false;
     }
 }
 

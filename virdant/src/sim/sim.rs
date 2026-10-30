@@ -381,6 +381,11 @@ impl Sim {
             }
         }
         self.state.clear_dirty();
+        // Construction's full-network pass has observed every value,
+        // and no watcher exists yet (watchers registered later capture
+        // the live value at registration time), so the first
+        // settlement's sweep-skip predicate starts clean.
+        self.state.clear_changed_since_dispatch();
     }
 
     pub fn tick(&mut self, signal_id: SignalId) {
@@ -443,6 +448,11 @@ impl Sim {
     /// Settle the circuit after a batch of writes: propagate (`flow`),
     /// then dispatch value-change watchers.
     ///
+    /// The sweep is skipped entirely when no stored value has changed
+    /// since the last sweep that observed everything (see
+    /// `State::changed_since_dispatch`): no watcher can fire over
+    /// values nobody wrote to.
+    ///
     /// Dispatch is single-phase and non-reentrant: a nested `unlock()`
     /// (from a watcher callback's own `lock()`/`set()`/`unlock()`) only
     /// runs `flow()`; the sweep happens exactly once, in the outermost
@@ -457,27 +467,48 @@ impl Sim {
             return;
         }
 
-        self.dispatching = true;
-        // Sweep-and-fire loop: each pass fires, in registration order,
-        // every watcher whose observed value differs from the last value
-        // it saw.  Callbacks may drive signals (settled by their nested
-        // flow-only unlocks) or register more watchers; if any callback
-        // fired, sweep again until a full pass fires nothing — cascades
-        // still settle within this same unlock, without nested sweeps.
-        // The loop runs to quiescence even past `finish()`: watchers
-        // firing after the shutdown request die instead of persisting
-        // (as the old re-arm check did), but their final cascades still
-        // fire.
-        loop {
-            if !self.dispatch_pass() {
-                break;
+        // Skip the sweep entirely when no stored value has changed
+        // since the last sweep that observed everything: a watcher
+        // fires only on a value change (`Change`) or a 0→1 transition
+        // of bit 0 (`ClockRising`), and both require the observed
+        // signal's stored value to have changed, so a settlement with
+        // no actual write cannot fire anything.  The flag is raised by
+        // `State`'s two write primitives (`set_val`, `transfer`) on
+        // every actual write, including `set_without_flow` (via
+        // `transfer_clock`) and the register transfers inside this
+        // sweep's own callbacks, and cleared again below, after the
+        // quiescent pass has re-observed every watcher.
+        if self.state.changed_since_dispatch() {
+            self.dispatching = true;
+            // Sweep-and-fire loop: each pass fires, in registration
+            // order, every watcher whose observed value differs from the
+            // last value it saw.  Callbacks may drive signals (settled
+            // by their nested flow-only unlocks) or register more
+            // watchers; if any callback fired, sweep again until a full
+            // pass fires nothing — cascades still settle within this
+            // same unlock, without nested sweeps.  The loop runs to
+            // quiescence even past `finish()`: watchers firing after the
+            // shutdown request die instead of persisting (as the old
+            // re-arm check did), but their final cascades still fire.
+            loop {
+                if !self.dispatch_pass() {
+                    break;
+                }
             }
+            self.dispatching = false;
+            // The pass that broke the loop fired nothing and brought
+            // every watcher's last-seen value up to the live value, so
+            // it has observed everything; the next settlement may skip
+            // its sweep unless a write happens first.
+            self.state.clear_changed_since_dispatch();
         }
-        self.dispatching = false;
 
         // Watchers whose callback ran after `finish()` was requested do
         // not survive into a subsequent `run()` (the old one-shot queue
-        // achieved this by skipping the re-register step).
+        // achieved this by skipping the re-register step).  Skipped
+        // sweeps cannot affect it: a watcher only becomes dead inside
+        // `dispatch_pass`, and a skipped sweep runs no callback, so the
+        // table is unchanged either way.
         if self.sched.is_shutdown_requested() {
             self.watchers.retain(|w| w.alive);
         }
@@ -853,4 +884,175 @@ pub fn debug_transfer(_id: crate::analysis::elaboration::SignalId, _v: &Value) {
 /// safe on non-clock (and multi-bit) signals.
 fn is_rising(old: &Value, new: &Value) -> bool {
     old.width() == 1 && !old.get_bit(0) && new.get_bit(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::util::{check_db, db_from_dir_with_lib};
+    use std::path::Path;
+
+    /// Build a settled `Sim` for the `tests/sim/gcd` design (its source
+    /// file is `top.vir`, so the ModDef symbol path is `top::Top`).
+    fn gcd_sim() -> Sim {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let source = manifest.join("../tests/sim/gcd/src");
+        let lib = manifest.join("../lib");
+        let db = db_from_dir_with_lib(&source, &lib);
+        if let Err(diagnostics) = check_db(&db) {
+            for diag in diagnostics.iter() {
+                eprintln!("{diag:?}");
+            }
+            panic!("gcd test design failed to build");
+        }
+        let symboltable = db.get_symboltable();
+        let top = symboltable.resolve(b"top::Top".into()).unwrap();
+        Sim::new(&db, top.id(), InitStrategy::Seeded(42))
+    }
+
+    /// The sweep-skip predicate, witnessed by callback counts: a real
+    /// value change fires a `Change` watcher exactly once, and a
+    /// lock/unlock that writes the same value (a settlement whose
+    /// `changed_since_dispatch` flag stays down, so the sweep is
+    /// skipped entirely) fires nothing.
+    #[test]
+    fn watcher_fires_on_change_and_skips_quiescent_settlements() {
+        let mut sim = gcd_sim();
+        let fire = sim.signal("top.fire");
+        let fire_typ = sim.component_type_id(fire);
+        let initial_high = sim.get(fire).get_bit(0);
+
+        let fires = Rc::new(RefCell::new(0u32));
+        {
+            let count = fires.clone();
+            sim.on_change(fire, Box::new(move |_sim| {
+                *count.borrow_mut() += 1;
+            }));
+        }
+
+        // A real change: drive fire to the opposite of its seeded
+        // initial value.
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, !initial_high));
+        }
+        assert_eq!(*fires.borrow(), 1, "a real value change must fire the watcher");
+
+        // A settlement with no actual write: the sweep is skipped, so
+        // the watcher cannot fire again.
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, !initial_high));
+        }
+        assert_eq!(*fires.borrow(), 1, "a same-value write must not fire the watcher");
+
+        // A second real change fires again; repeating it does not.
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, initial_high));
+        }
+        assert_eq!(*fires.borrow(), 2, "a second real change must fire again");
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, initial_high));
+        }
+        assert_eq!(*fires.borrow(), 2, "a repeated same-value write must not fire");
+    }
+
+    /// `ClockRising` watchers under the skip: the first settlement
+    /// drives the clock low (no fire: no change or a falling edge),
+    /// the second is a real rising edge (one fire), the third writes
+    /// the same high value (sweep skipped, no fire), the fourth is a
+    /// falling edge (observed but no fire), the fifth is a second
+    /// rising edge (one more fire).  Rising edges also transfer the
+    /// gcd registers, exercising `transfer`'s flag updates.
+    #[test]
+    fn on_clock_watcher_fires_only_on_rising_edges() {
+        let mut sim = gcd_sim();
+        let clock = sim.signal("top.clock");
+        let clock_typ = sim.component_type_id(clock);
+
+        let rises = Rc::new(RefCell::new(0u32));
+        {
+            let count = rises.clone();
+            sim.on_clock(clock, Box::new(move |_sim| {
+                *count.borrow_mut() += 1;
+            }));
+        }
+
+        let mut settle = |sim: &mut Sim, high: bool| {
+            let mut lock = sim.lock();
+            lock.set(clock, Value::from_bool(clock_typ, high));
+        };
+
+        settle(&mut sim, false);
+        assert_eq!(*rises.borrow(), 0, "driving low must not fire an on_clock watcher");
+
+        settle(&mut sim, true);
+        assert_eq!(*rises.borrow(), 1, "a rising edge must fire exactly once");
+
+        settle(&mut sim, true);
+        assert_eq!(*rises.borrow(), 1, "a same-value write must not fire again");
+
+        settle(&mut sim, false);
+        assert_eq!(*rises.borrow(), 1, "a falling edge must not fire");
+
+        settle(&mut sim, true);
+        assert_eq!(*rises.borrow(), 2, "a second rising edge must fire once more");
+    }
+
+    /// A watcher callback that drives a signal during the sweep: the
+    /// fire watcher fires on the settlement's change and drives `x`,
+    /// whose own watcher fires within the same unlock (the dispatching
+    /// loop re-sweeps after the nested flow-only unlock re-settled the
+    /// driven write).  A later quiescent unlock (same fire value) fires
+    /// neither: the flag was cleared by the quiescent pass and the
+    /// no-op settlement skips the sweep.
+    #[test]
+    fn watcher_cascade_settles_within_one_unlock() {
+        let mut sim = gcd_sim();
+        let fire = sim.signal("top.fire");
+        let x = sim.signal("top.x");
+        let fire_typ = sim.component_type_id(fire);
+        let x_typ = sim.component_type_id(x);
+        let initial_high = sim.get(fire).get_bit(0);
+
+        // Pre-drive x to a known value so the cascade write below is
+        // guaranteed to be a real change regardless of the seeded init.
+        {
+            let mut lock = sim.lock();
+            lock.set(x, Value::new(x_typ, BitPat::from_u64(8, 5)));
+        }
+
+        let fire_fires = Rc::new(RefCell::new(0u32));
+        let x_fires = Rc::new(RefCell::new(0u32));
+        {
+            let count = fire_fires.clone();
+            sim.on_change(fire, Box::new(move |sim| {
+                *count.borrow_mut() += 1;
+                let mut lock = sim.lock();
+                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, 6)));
+            }));
+        }
+        {
+            let count = x_fires.clone();
+            sim.on_change(x, Box::new(move |_sim| {
+                *count.borrow_mut() += 1;
+            }));
+        }
+
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, !initial_high));
+        }
+        assert_eq!(*fire_fires.borrow(), 1, "the fire change must fire its watcher");
+        assert_eq!(*x_fires.borrow(), 1, "the cascade-driven x change must fire too");
+
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, !initial_high));
+        }
+        assert_eq!(*fire_fires.borrow(), 1, "a quiescent settlement must not re-fire");
+        assert_eq!(*x_fires.borrow(), 1, "a quiescent settlement must not re-fire");
+    }
 }
