@@ -1303,18 +1303,21 @@ fn dump_hover(workspace_dir: &std::path::Path, package_name: BString, linecol: L
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "vir-ls", author, version, about)]
+#[command(name = "vir-ls", author, version, about, subcommand_required = true, arg_required_else_help = true)]
 struct Cli {
     /// Dump the arg-parse data as JSON and exit (hidden)
     #[arg(long, hide = true)]
     help_json: bool,
 
     #[command(subcommand)]
-    command: Option<Command>,
+    command: Command,
 }
 
 #[derive(Subcommand, Debug)]
 enum Command {
+    /// Run the language server
+    Serve {},
+
     /// Dump hover information for a given location
     Hover {
         /// Location as <file_or_package>:<line>:<col>
@@ -1365,13 +1368,13 @@ async fn main() {
     }
 
     match cli.command {
-        None => {
+        Command::Serve {} => {
             let stdin = tokio::io::stdin();
             let stdout = tokio::io::stdout();
             let (service, socket) = LspService::new(|client| Backend::new(client));
             Server::new(stdin, stdout, socket).serve(service).await;
         }
-        Some(Command::Hover { location }) => {
+        Command::Hover { location } => {
             match parse_hover_location(&location) {
                 Ok((workspace_dir, package, linecol)) => {
                     dump_hover(&workspace_dir, package, linecol);
