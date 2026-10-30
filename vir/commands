@@ -29,5 +29,8 @@ pnr         Place-and-route your design
 bitstream   Generate a bitstream for your FPGA
 upload      Upload your design to your FPGA
 
+About:
+version     Print version information
+
 Learning:
 tutor       Generate a workspace for the Virdant tutorial

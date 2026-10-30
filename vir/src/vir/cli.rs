@@ -26,6 +26,7 @@ pub struct Args {
 
 #[derive(Debug, PartialEq)]
 pub enum Command {
+    Version {},
     Check {},
     Compile { path: PathBuf },
     Build {},
@@ -49,18 +50,30 @@ pub enum Command {
 pub fn command() -> ClapCommand {
     let mut cmd = ClapCommand::new("vir")
         .about("Virdant Hardware Language")
+        // Provide our own version flag so that `-v` (lowercase) works
+        // alongside `-V`/`--version`; clap's built-in version flag only
+        // registers the uppercase `-V` short. `ArgAction::Version` still
+        // requires `.version()` to be set, and `disable_version_flag`
+        // only suppresses the automatic flag, not the version string.
+        .disable_version_flag(true)
+        .version(crate::version_string())
+        .arg(Arg::new("version")
+            .short('v').long("version")
+            .action(ArgAction::Version)
+            .help("Print version information"))
+        .arg(Arg::new("version_upper")
+            .short('V')
+            .action(ArgAction::Version)
+            .hide(true))
         .arg_required_else_help(true)
-        .subcommand(ClapCommand::new("check")
-            .about("Check a Virdant project for problems"))
+        .subcommand(ClapCommand::new("version"))
+        .subcommand(ClapCommand::new("check"))
         .subcommand(ClapCommand::new("compile")
-            .about("Compile a Virdant project to Verilog")
             .arg(Arg::new("path").value_name("PATH")
                 .value_parser(value_parser!(PathBuf))
                 .required(true)))
-        .subcommand(ClapCommand::new("build")
-            .about("Build the project"))
+        .subcommand(ClapCommand::new("build"))
         .subcommand(ClapCommand::new("run")
-            .about("Run the project in the simulator")
             .arg(Arg::new("trace").long("trace").num_args(0..=1)
                 .default_missing_value("trace.vcd"))
             .arg(Arg::new("fps-no-cap").long("fps-no-cap").action(ArgAction::SetTrue))
@@ -71,21 +84,16 @@ pub fn command() -> ClapCommand {
                 .value_parser(value_parser!(u64)))
             .arg(Arg::new("verbose").short('v').long("verbose").action(ArgAction::SetTrue)))
         .subcommand(ClapCommand::new("new")
-            .about("Create a new Virdant project")
             .arg(Arg::new("project").value_name("PROJECT").required(true)))
-        .subcommand(ClapCommand::new("bitstream")
-            .about("Generate a bitstream"))
-        .subcommand(ClapCommand::new("synth")
-            .about("Synthesize your design"))
+        .subcommand(ClapCommand::new("bitstream"))
+        .subcommand(ClapCommand::new("synth"))
         .subcommand(ClapCommand::new("pnr")
-            .about("Place-and-route")
             .arg(Arg::new("tries").long("tries").num_args(1)
                 .value_parser(value_parser!(u32)).default_value("1"))
             .arg(Arg::new("seed").long("seed").num_args(1)
                 .value_parser(value_parser!(u32)).default_value("1"))
             .arg(Arg::new("allow-timing-failure").long("allow-timing-failure").action(ArgAction::SetTrue)))
         .subcommand(ClapCommand::new("upload")
-            .about("Upload to device")
             .arg(Arg::new("tries").long("tries").num_args(1)
                 .value_parser(value_parser!(u32)).default_value("1"))
             .arg(Arg::new("seed").long("seed").num_args(1)
@@ -98,12 +106,12 @@ pub fn command() -> ClapCommand {
         cmd = cmd.subcommand(virtual_subcommand(&name));
     }
 
-    // Sync each subcommand's description with its help message from
-    // `vir/commands`, and hide any subcommand not listed there (it is
-    // a development command: keep it fully functional, but hidden from
-    // clap's help, so error messages and suggestions never leak it
-    // either). Top-level help is rendered separately, with groups, by
-    // `print_top_level_help`.
+    // Set each subcommand's description from `vir/commands` — the
+    // single source of command help text — and hide any subcommand not
+    // listed there (it is a development command: keep it fully
+    // functional, but hidden from clap's help, so error messages and
+    // suggestions never leak it either). Top-level help is rendered
+    // separately, with groups, by `print_top_level_help`.
     for sub in cmd.get_subcommands_mut() {
         // clap's builder methods consume `self`, so swap through
         // `mem::take` to modify the subcommand in place.
@@ -124,21 +132,6 @@ pub fn command() -> ClapCommand {
     cmd
 }
 
-/// Descriptions of the built-in subcommands, used as fallbacks when
-/// rendering the custom grouped top-level help for commands that have
-/// no help message in `vir/commands`. Keep in sync with `command()`.
-const BUILTIN_ABOUTS: &[(&str, &str)] = &[
-    ("check", "Typecheck a Virdant project"),
-    ("compile", "Compile a Virdant project to Verilog"),
-    ("build", "Build the project"),
-    ("run", "Run the project on hardware/simulator"),
-    ("new", "Scaffold a new project"),
-    ("bitstream", "Generate a bitstream"),
-    ("synth", "Synthesize your design"),
-    ("pnr", "Place-and-route"),
-    ("upload", "Upload to device"),
-];
-
 /// The help message for command `name` as written in `vir/commands`.
 fn commands_help(name: &str) -> Option<String> {
     crate::command_groups().iter()
@@ -147,16 +140,17 @@ fn commands_help(name: &str) -> Option<String> {
 }
 
 /// The help-line description of subcommand `name`: its help message
-/// from `vir/commands` when present, else the `BUILTIN_ABOUTS`
-/// fallback, else the virtual-companion text.
-fn about_of(name: &str) -> String {
+/// from `vir/commands`, else the virtual-companion text for a
+/// discovered `vir-*` binary, else empty (a command listed in
+/// `vir/commands` without a help message).
+fn about_of(name: &str, discovered: &[String]) -> String {
     if let Some(help) = commands_help(name) {
         return help;
     }
-    if let Some((_, about)) = BUILTIN_ABOUTS.iter().find(|(n, _)| *n == name) {
-        return about.to_string();
+    if discovered.iter().any(|n| n == name) {
+        return format!("Run the `vir-{name}` companion binary");
     }
-    format!("Run the `vir-{name}` companion binary")
+    String::new()
 }
 
 /// Print the top-level help with command groups (driven by
@@ -167,10 +161,10 @@ fn about_of(name: &str) -> String {
 /// actual argument parsing.
 fn print_top_level_help(exit_code: i32) -> ! {
     let discovered = discover_virtual_subcommands();
-    let exists = |name: &str| {
-        BUILTIN_ABOUTS.iter().any(|(n, _)| *n == name)
-            || discovered.iter().any(|n| n == name)
-    };
+    // A command exists if `command` actually assembles a subcommand
+    // for it: a built-in or a discovered `vir-*` companion.
+    let cmd = command();
+    let exists = |name: &str| cmd.find_subcommand(name).is_some();
 
     // (group, name, about) rows in `vir/commands` order, deduplicated
     // (first group wins), listing only commands that actually exist.
@@ -181,12 +175,12 @@ fn print_top_level_help(exit_code: i32) -> ! {
             if !seen.insert(entry.name.clone()) || !exists(&entry.name) {
                 continue;
             }
-            rows.push((&group.name, &entry.name, about_of(&entry.name)));
+            rows.push((&group.name, &entry.name, about_of(&entry.name, &discovered)));
         }
     }
     let width = rows.iter().map(|(_, name, _)| name.len()).max().unwrap_or(0);
 
-    println!("Virdant Hardware Language Compiler\n");
+    println!("Virdant Hardware Language\n");
     println!("Usage: vir [COMMAND]\n");
     let mut current_group: Option<&str> = None;
     for (group, name, about) in &rows {
@@ -225,6 +219,7 @@ fn from_matches(matches: ArgMatches) -> Args {
     let location = ProjectLocation::from_matches(&matches);
 
     let command = match matches.subcommand() {
+        Some(("version", _)) => Command::Version {},
         Some(("check", _)) => Command::Check {},
         Some(("compile", m)) => Command::Compile {
             path: m.get_one::<PathBuf>("path").cloned().unwrap(),

@@ -31,6 +31,12 @@ use common::{
 // The `Args` struct and `Command` enum are defined in `cli`, built up
 // with the vanilla clap builder API (see `cli.rs`).
 
+/// The version string baked in at compile time by `vir/build.rs`, e.g.
+/// `v0.4.0 (29ace3e 2026-10-29)`.
+pub fn version_string() -> &'static str {
+    env!("VIR_VERSION_STRING")
+}
+
 // The command listing lives in the file `vir/commands` (from the project
 // root), embedded
 // into the binary at compile time and parsed lazily, once, on first use.
@@ -87,6 +93,9 @@ fn main() {
     let args = cli::parse();
 
     match args.command {
+        Command::Version {} => {
+            println!("vir {}", version_string());
+        }
         Command::Check { } => check(&args),
         Command::Compile { path } => compile(path),
         Command::Build { } => build(&args),
