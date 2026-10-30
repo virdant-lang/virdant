@@ -24,22 +24,44 @@ use virdant::util::{check_db, db_from_dir, db_from_files};
 /// deprecated; [`project_manifest`] emits a warning when it is used.
 pub const PROJECT_MANIFEST: &str = "virdant.toml";
 
+/// Whether the `Virdant.toml` deprecation warning has been printed in
+/// this process; the warning is emitted at most once.
+static MANIFEST_DEPRECATION_WARNED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// Resolve the project manifest in `dir`: `virdant.toml` if present,
 /// else the deprecated `Virdant.toml` (with a deprecation warning to
-/// stderr).  Returns `None` when neither exists.
+/// stderr, printed at most once per process).  Returns `None` when
+/// neither exists.
 pub fn project_manifest(dir: &Path) -> Option<PathBuf> {
+    use std::sync::atomic::Ordering;
+
     let path = dir.join(PROJECT_MANIFEST);
     if path.exists() {
         return Some(path);
     }
     let legacy = dir.join("Virdant.toml");
     if legacy.exists() {
-        eprintln!(
-            "Warning: 'Virdant.toml' is deprecated; rename it to 'virdant.toml'."
-        );
+        if !MANIFEST_DEPRECATION_WARNED.swap(true, Ordering::Relaxed) {
+            eprintln!(
+                "Warning: 'Virdant.toml' is deprecated; rename it to 'virdant.toml'."
+            );
+        }
         return Some(legacy);
     }
     None
+}
+
+/// Resolve the project manifest in `dir`, exiting with an error when
+/// neither `virdant.toml` nor the deprecated `Virdant.toml` exists.
+pub fn project_manifest_or_exit(dir: &Path) -> PathBuf {
+    match project_manifest(dir) {
+        Some(path) => path,
+        None => {
+            eprintln!("No virdant.toml found");
+            std::process::exit(1);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -129,10 +151,7 @@ impl ProjectLocation {
 
         let cwd = self.resolve_cwd();
 
-        if project_manifest(&cwd).is_none() {
-            eprintln!("No virdant.toml found");
-            std::process::exit(1);
-        }
+        project_manifest_or_exit(&cwd);
 
         let src_dir = cwd.join("src");
         if !src_dir.is_dir() {
@@ -147,7 +166,13 @@ impl ProjectLocation {
 /// Read `[prog].<key>` from `virdant.toml` in `cwd`, tolerating a
 /// missing file or missing keys.
 pub fn read_prog_key(cwd: &Path, key: &str) -> Option<String> {
-    let text = std::fs::read_to_string(project_manifest(cwd)?).ok()?;
+    read_prog_key_from(&project_manifest(cwd)?, key)
+}
+
+/// Like [`read_prog_key`], but reads from an already-resolved manifest
+/// path (so the deprecation warning is not re-emitted).
+pub fn read_prog_key_from(manifest: &Path, key: &str) -> Option<String> {
+    let text = std::fs::read_to_string(manifest).ok()?;
     let toml: toml::Value = toml::from_str(&text).ok()?;
     toml.get("prog")
         .and_then(|prog| prog.get(key))
@@ -157,7 +182,13 @@ pub fn read_prog_key(cwd: &Path, key: &str) -> Option<String> {
 
 /// Read `[project].name` from `virdant.toml` in `cwd`.
 pub fn read_project_name(cwd: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(project_manifest(cwd)?).ok()?;
+    read_project_name_from(&project_manifest(cwd)?)
+}
+
+/// Like [`read_project_name`], but reads from an already-resolved
+/// manifest path (so the deprecation warning is not re-emitted).
+pub fn read_project_name_from(manifest: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(manifest).ok()?;
     let toml: toml::Value = toml::from_str(&text).ok()?;
     toml.get("project")
         .and_then(|project| project.get("name"))

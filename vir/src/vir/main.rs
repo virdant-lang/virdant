@@ -23,7 +23,10 @@ use virdant::db::Db;
 use virdant::common::PortDir;
 use virdant::analysis::symbols::SymbolKind;
 
-use common::{copy_ext_dir, dump_diagnostic, dump_diagnostics, read_prog_key, read_project_name};
+use common::{
+    copy_ext_dir, dump_diagnostic, dump_diagnostics, read_prog_key, read_prog_key_from,
+    read_project_name_from,
+};
 
 // The `Args` struct and `Command` enum are defined in `cli`, built up
 // with the vanilla clap builder API (see `cli.rs`).
@@ -142,12 +145,8 @@ fn build(args: &Args) {
     } else {
         let cwd = resolve_cwd(args);
 
-        if common::project_manifest(&cwd).is_none() {
-            eprintln!("No virdant.toml found");
-            std::process::exit(1);
-        }
-
-        let virdant_toml_text = std::fs::read_to_string(common::project_manifest(&cwd).unwrap()).unwrap();
+        let virdant_toml_text =
+            std::fs::read_to_string(common::project_manifest_or_exit(&cwd)).unwrap();
         let virtant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
         let _ = virtant_toml["project"]["name"].as_str().unwrap();
         let builddir = cwd.join("build");
@@ -302,11 +301,8 @@ fn compile(path: PathBuf) {
 
 fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: &Option<PathBuf>, cycles: &Option<u64>, verbose: bool) {
     let cwd = resolve_cwd(args);
-    if common::project_manifest(&cwd).is_none() {
-        eprintln!("No virdant.toml found");
-        std::process::exit(1);
-    }
-    let Some(top_name) = read_prog_key(&cwd, "top") else {
+    let manifest = common::project_manifest_or_exit(&cwd);
+    let Some(top_name) = read_prog_key_from(&manifest, "top") else {
         eprintln!("virdant.toml is missing [prog] top");
         std::process::exit(1);
     };
@@ -448,16 +444,13 @@ struct BitstreamPlan {
 
 fn plan_bitstream(args: &Args) -> BitstreamPlan {
     let cwd = resolve_cwd(args);
-    if common::project_manifest(&cwd).is_none() {
-        eprintln!("No virdant.toml found");
-        std::process::exit(1);
-    }
+    let manifest = common::project_manifest_or_exit(&cwd);
 
-    let project = read_project_name(&cwd).unwrap_or_else(|| {
+    let project = read_project_name_from(&manifest).unwrap_or_else(|| {
         eprintln!("virdant.toml is missing [project] name");
         std::process::exit(1);
     });
-    let Some(top_name) = read_prog_key(&cwd, "top") else {
+    let Some(top_name) = read_prog_key_from(&manifest, "top") else {
         eprintln!("virdant.toml is missing [prog] top");
         std::process::exit(1);
     };

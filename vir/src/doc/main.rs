@@ -41,10 +41,7 @@ fn main() {
 fn doc(location: &ProjectLocation, open: bool) {
     let cwd = location.resolve_cwd();
 
-    if common::project_manifest(&cwd).is_none() {
-        eprintln!("No virdant.toml found");
-        std::process::exit(1);
-    }
+    common::project_manifest_or_exit(&cwd);
 
     let source_dir = cwd.join("src");
     if !source_dir.is_dir() {
