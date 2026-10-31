@@ -61,7 +61,7 @@ pub mod Top[W : Type] {
         it.req := h.out
     }
 
-    reg r : Word[8] on clk {
+    reg r : Word[8] {
         it <= c.rsp
     }
     out := r

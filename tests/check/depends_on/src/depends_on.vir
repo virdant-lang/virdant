@@ -33,7 +33,7 @@ mod Internal {
     incoming inp  : Word[8] on clk
 
     // reg stores the input value.
-    reg stored : Word[8] on clk
+    reg stored : Word[8]
     stored <= inp
 
     // outgoing wire depends on the register via dependson,

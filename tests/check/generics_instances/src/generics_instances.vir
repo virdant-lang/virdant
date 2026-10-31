@@ -28,7 +28,7 @@ mod Slave[W : Type] {
 mod Reg[T : Type] {
     incoming clk : Clock
     incoming d : T
-    reg slot : T on clk {
+    reg slot : T {
         it <= d
     }
     outgoing q : T

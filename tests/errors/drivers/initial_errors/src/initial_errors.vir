@@ -12,14 +12,14 @@ mod InitialErrors {
     initial w <= 0
 
     // Multiple initial statements for the same register.
-    reg r : Word[8] on clock
+    reg r : Word[8]
     initial r <= 1
     // CHECK: multiple initial statements for register r
     initial r <= 2
     r <= r + 1
 
     // `initial` inside a `when` block.
-    reg s : Word[8] on clock
+    reg s : Word[8]
     when {
         case cond {
             // CHECK: initial statement for s must not appear inside a when/match block

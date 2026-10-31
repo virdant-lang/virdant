@@ -20,10 +20,10 @@ pub mod Top {
     // `when` inside a `match` case: `count` is driven in both arms, `phase`
     // only in the `else` arm.  The `phase` transition must be guarded by
     // `count == 0`.
-    reg count : Word[4] on clock {
+    reg count : Word[4] {
         initial it <= 3
     }
-    reg phase : Phase on clock {
+    reg phase : Phase {
         initial it <= #Wait
     }
 
@@ -47,10 +47,10 @@ pub mod Top {
     // Top-level `when` with the same shape: `busy` is driven in both arms,
     // `done` only in the `else` arm.  The `done` assignment must be guarded
     // by `!go`.
-    reg busy : Bit on clock {
+    reg busy : Bit {
         initial it <= false
     }
-    reg done : Bit on clock {
+    reg done : Bit {
         initial it <= false
     }
     unused busy

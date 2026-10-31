@@ -1,6 +1,6 @@
 mod Foo {
     incoming clock : Clock
-    reg r : Bit on clock {
+    reg r : Bit {
         unused it
     }
 

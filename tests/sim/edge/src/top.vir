@@ -6,7 +6,7 @@ pub mod Top {
 
     unused reset
 
-    reg last : Bit on clock {
+    reg last : Bit {
         it <= inp
     }
 

@@ -28,7 +28,7 @@ mod Slave[W : Type] {
 mod Reg[T : Type] {
     incoming clk : Clock
     incoming d : T
-    reg slot : T on clk {
+    reg slot : T {
         it <= d
     }
     outgoing q : T
@@ -45,7 +45,7 @@ enum type Opt[T : Type] {
 mod Tagged[T : Type] {
     incoming clk : Clock
     incoming d : T
-    reg best : Opt[T] on clk {
+    reg best : Opt[T] {
         it <= @Some(d)
     }
     outgoing o : Opt[T]

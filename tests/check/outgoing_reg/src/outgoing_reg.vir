@@ -11,7 +11,7 @@ mod OutgoingRegUnused {
 
     // This outgoing reg is driven but never read inside the module.
     // No "Unused signal" warning should be produced.
-    outgoing reg out : Word[8] on clock
+    outgoing reg out : Word[8]
 
     when {
         case reset {

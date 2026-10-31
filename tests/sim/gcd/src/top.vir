@@ -35,7 +35,7 @@ mod Gcd {
     outgoing result : Word[8]
     outgoing valid: Bit
 
-    reg state : State on clock {
+    reg state : State {
         when {
             case reset {
                 it <= @Idle()

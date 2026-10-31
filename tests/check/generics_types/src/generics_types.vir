@@ -27,7 +27,7 @@ pub mod Top {
     incoming b     : Bit
 
     // Generic struct as a reg type: driven, flattened, field-projected.
-    reg pair : Pair[Word[4], Bit] on clock {
+    reg pair : Pair[Word[4], Bit] {
         it <= ${
             fst = a,
             snd = b,

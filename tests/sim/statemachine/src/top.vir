@@ -29,8 +29,8 @@ pub mod Top {
     outgoing red         : Bit // red    vehicle light
     outgoing walk_signal : Bit // walk   pedestrian signal
 
-    reg phase : Phase   on clock
-    reg timer : Word[8] on clock
+    reg phase : Phase
+    reg timer : Word[8]
 
     // -- Output decode ----------------------------------------------------
     // Each output is true exactly when the controller is in the matching

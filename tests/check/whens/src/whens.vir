@@ -14,7 +14,7 @@ mod When {
         }
     }
 
-    reg r : Bit on clock {
+    reg r : Bit {
         when {
             case inp1 {
                 it <= true
@@ -39,7 +39,7 @@ mod Fine {
     incoming reset : Reset
     outgoing out : Word[3]
 
-    reg start : Word[3] on clock {
+    reg start : Word[3] {
         it <= when {
             case reset => 0
             else => it

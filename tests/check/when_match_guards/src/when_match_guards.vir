@@ -18,7 +18,7 @@ mod TestSubmoduleWhen {
     }
 
     outgoing r_out : Word[2]
-    reg r : Word[2] on clock {
+    reg r : Word[2] {
         match sel {
             case 0w2 {
                 it <= 0w2
@@ -42,7 +42,7 @@ mod TestMatchWhen {
     incoming stage : Word[2]
     incoming flag : Bit
 
-    reg r : Word[2] on clock {
+    reg r : Word[2] {
         match stage {
             case 0w2 {
                 it <= 0w2

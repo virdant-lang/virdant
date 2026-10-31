@@ -5,7 +5,7 @@ pub mod Top {
     outgoing data : Word[8]
     outgoing done : Bit
 
-    reg counter : Word[8] on clock {
+    reg counter : Word[8] {
         when {
             case reset {
                 it <= 0

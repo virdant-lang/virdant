@@ -11,7 +11,7 @@ pub mod Top {
     sender.reset := reset
     sender.data := 65w8
     sender.data_valid := true
-    reg cycle : Word[32] on clock
+    reg cycle : Word[32]
     cycle <= mux(reset, 0w32, cycle + 1w32)
 }
 
@@ -23,10 +23,10 @@ mod UartSender {
     outgoing ready      : Bit
     outgoing uart_tx    : Bit
 
-    reg uart_tx_reg : Bit on clock
+    reg uart_tx_reg : Bit
     uart_tx := uart_tx_reg
 
-    reg latched_data : Word[8] on clock
+    reg latched_data : Word[8]
 
 //    reg state : UartState on clock
 
@@ -35,9 +35,9 @@ mod UartSender {
     //   0b01 = @Start
     //   0b10 = @Bit
     //   0b11 = @Stop
-    reg state  : Word[2] on clock
-    reg pulse  : Word[11] on clock
-    reg bitnum : Word[3] on clock
+    reg state  : Word[2]
+    reg pulse  : Word[11]
+    reg bitnum : Word[3]
 
     ready := state == 0w2
 

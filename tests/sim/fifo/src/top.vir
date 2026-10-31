@@ -49,10 +49,10 @@ mod Fifo {
         }
     }
 
-    reg slot0 : Word[8] on clock
-    reg slot1 : Word[8] on clock
-    reg slot2 : Word[8] on clock
-    reg slot3 : Word[8] on clock
+    reg slot0 : Word[8]
+    reg slot1 : Word[8]
+    reg slot2 : Word[8]
+    reg slot3 : Word[8]
 
     wire is_full : Bit {
         it := read_is_write && different_lap
@@ -84,7 +84,7 @@ mod Fifo {
         }
     }
 
-    reg read : Word[3] on clock {
+    reg read : Word[3] {
         when {
             case reset {
                 it <= 0
@@ -95,7 +95,7 @@ mod Fifo {
         }
     }
 
-    reg write : Word[3] on clock {
+    reg write : Word[3] {
         when {
             case reset {
                 it <= 0

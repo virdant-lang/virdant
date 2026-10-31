@@ -7,12 +7,12 @@ mod Initial {
     outgoing out : Word[8]
 
     // Basic `initial` alongside a normal latched driver.
-    reg counter : Word[3] on clock
+    reg counter : Word[3]
     initial counter <= 7
     counter <= counter - 1
 
     // `initial it` inside the reg's it-block.
-    reg down : Word[4] on clock {
+    reg down : Word[4] {
         initial it <= 9
         when {
             case it > 0 {
@@ -22,17 +22,17 @@ mod Initial {
     }
 
     // A Bit-typed initial value.
-    reg flag : Bit on clock {
+    reg flag : Bit {
         initial it <= true
         it <= !it
     }
 
     // A reg without an `initial` defaults to 0.
-    reg plain : Word[8] on clock
+    reg plain : Word[8]
     plain <= inp
 
     // `initial` on an `outgoing reg`.
-    outgoing reg oreg : Word[8] on clock {
+    outgoing reg oreg : Word[8] {
         initial it <= 0xff
         it <= inp
     }

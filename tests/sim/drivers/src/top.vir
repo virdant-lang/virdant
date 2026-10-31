@@ -9,7 +9,7 @@ pub mod Top {
 
     outgoing out : Bit
 
-    reg state : State on clock
+    reg state : State
     when {
         case reset {
             state <= #Off
@@ -31,7 +31,7 @@ pub mod Top {
         }
     }
 
-    reg r : Bit on clock
+    reg r : Bit
     unused r
 
     when {

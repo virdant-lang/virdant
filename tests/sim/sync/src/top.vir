@@ -5,7 +5,7 @@ pub mod Top {
     incoming inp_async : Bit
     outgoing out_sync : Bit
 
-    outgoing reg cycle_count : Word[8] on clock {
+    outgoing reg cycle_count : Word[8] {
         it <= mux(reset, 0w8, it + 1)
     }
 

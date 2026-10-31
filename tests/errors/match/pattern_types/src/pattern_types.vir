@@ -14,7 +14,7 @@ union type MyUnion {
 
 mod WordPatOnEnum {
     incoming clock : Clock
-    reg r : Bit on clock
+    reg r : Bit
     unused r
     match #Off : State {
         case #On  { r <= true }
@@ -27,7 +27,7 @@ mod WordPatOnEnum {
 mod EnumPatOnWord {
     incoming clock : Clock
     incoming x    : Word[2]
-    reg r : Bit on clock
+    reg r : Bit
     unused r
     match x {
         case 0 { r <= true }
@@ -42,7 +42,7 @@ mod EnumPatOnWord {
 mod CtorPatOnWord {
     incoming clock : Clock
     incoming x    : Word[2]
-    reg r : Bit on clock
+    reg r : Bit
     unused r
     match x {
         case 0 { r <= true }
@@ -56,7 +56,7 @@ mod CtorPatOnWord {
 
 mod BitPatOnEnum {
     incoming clock : Clock
-    reg r : Bit on clock
+    reg r : Bit
     unused r
     match #Off : State {
         case #On  { r <= true }

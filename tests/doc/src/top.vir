@@ -8,7 +8,7 @@ mod Top {
 
     outgoing led : Bit
 
-    reg counter : Word[32] on clock
+    reg counter : Word[32]
     counter <= counter + 1
 
     led := counter[21]
