@@ -646,7 +646,9 @@ impl CycleSchedule {
     /// the pattern, e.g. a one-off external write, must not consume a
     /// phase slot).  `bits` is the live dirty-set bitmap at full
     /// worklist width, compared element-wise against the phase's.
-    pub(in crate::sim) fn match_phase(&self, len: usize, bits: &[u64]) -> Option<&[u32]> {
+    /// Returns the matched phase's position (the JIT's batch functions
+    /// are indexed by it) together with the phase's driver list.
+    pub(in crate::sim) fn match_phase(&self, len: usize, bits: &[u64]) -> Option<(usize, &[u32])> {
         debug_assert_eq!(self.state, CycleState::Active);
         let phase = self.phases.get(self.pos)?;
         if phase.len != len || phase.bits.len() != bits.len() {
@@ -655,7 +657,7 @@ impl CycleSchedule {
         if phase.bits.as_ref() != bits {
             return None;
         }
-        Some(&phase.drivers)
+        Some((self.pos, &phase.drivers))
     }
 
     /// The settlement matched and replayed: advance to the next
@@ -668,6 +670,14 @@ impl CycleSchedule {
             self.pos = 0;
             self.stale = 0;
         }
+    }
+
+    /// The drivers of the phase at `pos` (the JIT's batch replay reads
+    /// the list through this accessor; see `Sim::jit_phase_replay`).
+    /// Panics when `pos` is out of range — only called for a phase that
+    /// just matched.
+    pub(in crate::sim) fn phase_drivers(&self, pos: usize) -> &[u32] {
+        &self.phases[pos].drivers
     }
 
     /// The active settlement did not match its phase: count it toward
@@ -1107,11 +1117,11 @@ mod tests {
             .collect();
         cs.activate(phases);
 
-        assert_eq!(cs.match_phase(3, &rising), Some([10u32, 11, 12].as_slice()));
+        assert_eq!(cs.match_phase(3, &rising), Some((0, [10u32, 11, 12].as_slice())));
         cs.advance();
-        assert_eq!(cs.match_phase(4, &falling), Some([].as_slice()));
+        assert_eq!(cs.match_phase(4, &falling), Some((1, [].as_slice())));
         cs.advance(); // wrapped back to phase 0
-        assert_eq!(cs.match_phase(3, &rising), Some([10u32, 11, 12].as_slice()));
+        assert_eq!(cs.match_phase(3, &rising), Some((0, [10u32, 11, 12].as_slice())));
 
         // A different set with the same length rejects.
         assert_eq!(cs.match_phase(3, &cycle_bits(&[0, 1, 3])), None);
@@ -1121,13 +1131,13 @@ mod tests {
         // is still checked against phase 0.
         cs.note_miss();
         cs.note_miss();
-        assert_eq!(cs.match_phase(3, &rising), Some([10u32, 11, 12].as_slice()));
+        assert_eq!(cs.match_phase(3, &rising), Some((0, [10u32, 11, 12].as_slice())));
 
         // A below-floor length never matches: no phase can exist below
         // the engagement floor (phases are built only from recorded
         // entries), and the refusal must not consume the pointer.
         assert_eq!(cs.match_phase(1, &cycle_bits(&[5])), None);
-        assert_eq!(cs.match_phase(3, &rising), Some([10u32, 11, 12].as_slice()));
+        assert_eq!(cs.match_phase(3, &rising), Some((0, [10u32, 11, 12].as_slice())));
     }
 
     /// The chain's mixed stream, end to end: rising = 513 dirty
@@ -1155,12 +1165,12 @@ mod tests {
         // The falling edge arrives between rising edges: below the
         // floor it must not match and must not consume the pointer.
         assert_eq!(cs.match_phase(1, &falling_bits), None);
-        assert_eq!(cs.match_phase(513, &rising_bits), Some(drivers.as_slice()));
+        assert_eq!(cs.match_phase(513, &rising_bits), Some((0, drivers.as_slice())));
         cs.advance();
         // The next cycle: falling excluded again, rising replays
         // phase 0 once more.
         assert_eq!(cs.match_phase(1, &falling_bits), None);
-        assert_eq!(cs.match_phase(513, &rising_bits), Some(drivers.as_slice()));
+        assert_eq!(cs.match_phase(513, &rising_bits), Some((0, drivers.as_slice())));
         cs.advance();
     }
 

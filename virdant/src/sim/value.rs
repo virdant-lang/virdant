@@ -54,6 +54,49 @@ impl PartialEq for Value {
 impl Eq for Value {}
 
 impl Value {
+    /// The narrow-value store's addressing constants for the JIT's
+    /// direct state reads (`sim::vm::jit`): the byte stride between
+    /// consecutive components' live values in `State::vals` (exactly
+    /// `size_of::<Value>()` — `Vec` element strides), and the offset of
+    /// the `Small` variant's `bits` field within that stride.  A
+    /// component whose type width is at most 64 always stores the
+    /// `Small` variant — every constructor narrows that way
+    /// (`Value::new`, `from_u64`, `from_bool`, and the init strategy
+    /// all route through the same width test) — so such a component's
+    /// live bits sit at a fixed address for the whole engine's
+    /// lifetime, which is what the compiled phase code addresses.
+    /// Wider components store `Big` and are heap-backed: the JIT's
+    /// phase eligibility refuses any `Load` of one.
+    ///
+    /// The offset is found by probe, not assumed: a `Small` value with
+    /// a distinctive 8-byte pattern is scanned for the pattern's byte
+    /// offset, so any `repr(Rust)` layout the compiler picks (field
+    /// reordering, niche-encoded discriminants) is measured, never
+    /// guessed.  `typ` only tags the probe value; the layout does not
+    /// depend on which type it names.
+    #[cfg(feature = "jit")]
+    pub(crate) fn jit_layout(typ: TypeId) -> (usize, usize) {
+        const MAGIC: u64 = 0x5A5A_A5A5_3C3C_C3C3;
+        let v = Value::from_u64(typ, 64, MAGIC);
+        let size = std::mem::size_of::<Value>();
+        let base = &v as *const Value as *const u8;
+        let mut offset = None;
+        for i in 0..=(size - 8) {
+            let mut word = 0u64;
+            for b in 0..8 {
+                // Aligned byte-wise read of the value's own bytes: no
+                // unaligned load, no write, valid for the probe's scope.
+                word |= (unsafe { *base.add(i + b) } as u64) << (8 * b);
+            }
+            if word == MAGIC {
+                offset = Some(i);
+                break;
+            }
+        }
+        let offset = offset.expect("Value layout probe: Small.bits pattern not found");
+        (size, offset)
+    }
+
     pub fn new(typ: TypeId, bits: BitPat) -> Value {
         if bits.width() <= 64 {
             Value(InternalValue::Small {
@@ -197,3 +240,35 @@ impl Value {
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sim::layout::TypeInterner;
+    use crate::types::Type;
+
+    /// The JIT's direct-state-read invariant, exercised end to end:
+    /// two `Small` values in a `Vec` — the engine's exact storage
+    /// shape (`State::vals`) — read back through the probed stride and
+    /// offset give exactly each value's bits.  This is the addressing
+    /// contract `vm::jit`'s compiled code relies on; the probe must
+    /// track whatever layout the compiler picked, not assume one.
+    #[cfg(feature = "jit")]
+    #[test]
+    fn jit_layout_probe_addresses_small_bits_correctly() {
+        let mut interner = TypeInterner::new();
+        let typ = interner.intern(&Type::Word(64));
+        let magic0: u64 = 0x1234_5678_9abc_def0;
+        let magic1: u64 = 0x0f1e_2d3c_4b5a_6978;
+        let vals = vec![
+            Value::from_u64(typ, 64, magic0),
+            Value::from_u64(typ, 64, magic1),
+        ];
+        let (stride, off) = Value::jit_layout(typ);
+        assert_eq!(stride, std::mem::size_of::<Value>());
+        let base = vals.as_ptr() as *const u8;
+        let read = |i: usize| unsafe { *(base.add(i * stride + off) as *const u64) };
+        assert_eq!(read(0), magic0);
+        assert_eq!(read(1), magic1);
+    }
+}

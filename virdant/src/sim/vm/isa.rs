@@ -404,6 +404,19 @@ impl Program {
     /// The driver's folded-to-constant value, when the optimizer
     /// reduced the whole driver to one constant (the constant-unit
     /// skip: the executor commits it without running the driver).
+    /// The driven component's commit shape: the `TypeId` and width its
+    /// `Ret` result carries (the same pair the interpreter's `RunOut::
+    /// Bits` hands the commit path).  Panics when `comp` has no driver.
+    #[cfg(feature = "jit")]
+    pub(in crate::sim) fn driver_out(&self, comp: SignalId) -> (TypeId, Width) {
+        let idx = comp.index();
+        (
+            self.driver_typs[idx]
+                .unwrap_or_else(|| panic!("driver_out: component {idx} has no driver")),
+            self.driver_widths[idx],
+        )
+    }
+
     pub(in crate::sim) fn const_value(&self, comp: SignalId) -> Option<&Value> {
         self.const_values.get(comp.index()).and_then(|v| v.as_ref())
     }

@@ -163,6 +163,17 @@ struct Counters {
     /// Stage C: times a repeating settlement pattern was detected and
     /// promoted to the replay schedule.
     cycle_activations: AtomicU64,
+    /// JIT v2: replay phases batch-compiled to one native function per
+    /// phase (counted at schedule activation, in `vm::jit`).
+    jit_phases_compiled: AtomicU64,
+    /// JIT v2: settlement replays executed through a batch-compiled
+    /// phase (one native call per settlement instead of the
+    /// per-driver interpreter loop).
+    jit_phase_calls: AtomicU64,
+    /// JIT v2: settlement replays whose matched phase had no compiled
+    /// batch function and fell back to the per-driver interpreter
+    /// loop.  Zero when the phase pattern's phases all compiled.
+    jit_phase_fallbacks: AtomicU64,
 }
 
 static COUNTERS: Counters = Counters {
@@ -202,6 +213,9 @@ static COUNTERS: Counters = Counters {
     cycle_replays: AtomicU64::new(0),
     cycle_aborts: AtomicU64::new(0),
     cycle_activations: AtomicU64::new(0),
+    jit_phases_compiled: AtomicU64::new(0),
+    jit_phase_calls: AtomicU64::new(0),
+    jit_phase_fallbacks: AtomicU64::new(0),
 };
 
 /// Scoped timer for one engine phase; accumulates the elapsed time
@@ -400,6 +414,28 @@ pub fn bump_cycle_activation() {
     COUNTERS.cycle_activations.fetch_add(1, Ordering::Relaxed);
 }
 
+/// JIT v2: count one replay phase batch-compiled to a native function
+/// (called per qualifying phase at schedule activation).
+#[inline]
+pub fn bump_jit_phase_compiled() {
+    COUNTERS.jit_phases_compiled.fetch_add(1, Ordering::Relaxed);
+}
+
+/// JIT v2: count one settlement replay executed through a
+/// batch-compiled phase (one native call for all of the phase's
+/// drivers).
+#[inline]
+pub fn bump_jit_phase_call() {
+    COUNTERS.jit_phase_calls.fetch_add(1, Ordering::Relaxed);
+}
+
+/// JIT v2: count one matched settlement replay whose phase had no
+/// compiled batch function (per-driver interpreter replay).
+#[inline]
+pub fn bump_jit_phase_fallback() {
+    COUNTERS.jit_phase_fallbacks.fetch_add(1, Ordering::Relaxed);
+}
+
 /// A consistent copy of every counter, taken by [`snapshot`].  Plain
 /// integers: the caller formats them (and derives the sampled
 /// estimates; see the estimator formula in the module docs).
@@ -441,6 +477,9 @@ pub struct Snapshot {
     pub cycle_replays: u64,
     pub cycle_aborts: u64,
     pub cycle_activations: u64,
+    pub jit_phases_compiled: u64,
+    pub jit_phase_calls: u64,
+    pub jit_phase_fallbacks: u64,
 }
 
 impl Snapshot {
@@ -491,6 +530,9 @@ pub fn snapshot() -> Snapshot {
         cycle_replays: COUNTERS.cycle_replays.load(Ordering::Relaxed),
         cycle_aborts: COUNTERS.cycle_aborts.load(Ordering::Relaxed),
         cycle_activations: COUNTERS.cycle_activations.load(Ordering::Relaxed),
+        jit_phases_compiled: COUNTERS.jit_phases_compiled.load(Ordering::Relaxed),
+        jit_phase_calls: COUNTERS.jit_phase_calls.load(Ordering::Relaxed),
+        jit_phase_fallbacks: COUNTERS.jit_phase_fallbacks.load(Ordering::Relaxed),
     }
 }
 
@@ -533,4 +575,7 @@ pub fn reset() {
     COUNTERS.cycle_replays.store(0, Ordering::Relaxed);
     COUNTERS.cycle_aborts.store(0, Ordering::Relaxed);
     COUNTERS.cycle_activations.store(0, Ordering::Relaxed);
+    COUNTERS.jit_phases_compiled.store(0, Ordering::Relaxed);
+    COUNTERS.jit_phase_calls.store(0, Ordering::Relaxed);
+    COUNTERS.jit_phase_fallbacks.store(0, Ordering::Relaxed);
 }

@@ -194,6 +194,26 @@ pub struct Sim {
     /// the post-settlement record calls (`None`: nothing to record
     /// this settlement).
     cycle_captured: Option<usize>,
+    /// The JIT's phase-eligibility table (`jit` feature): one flag per
+    /// component, true when the component's type width is at most 64
+    /// and its live value therefore always stores the inline `Small`
+    /// variant (see `value::Value::jit_layout`).  Only `Load`s of
+    /// narrow components can be compiled to direct state reads; a
+    /// `Load` of a wide component is heap-backed and refuses the phase.
+    /// Kept at the struct's tail (with `cycle_jit`) so the jit feature
+    /// does not shift the hot-path fields' offsets: the feature-on
+    /// build's inactive cost must stay at the non-jit build's level.
+    #[cfg(feature = "jit")]
+    signal_narrow: Vec<bool>,
+    /// The batch-compiled replay phases (`jit` feature), rebuilt at
+    /// every schedule activation.  The compiled functions bake the
+    /// state-store and frame pointers, both stable for the engine's
+    /// whole lifetime (see `vm::jit`'s addressing invariants).  Only
+    /// read while the schedule is `Active`: a deactivate clears the
+    /// schedule's phases, so a stale list is never used, and the next
+    /// activation replaces this wholesale.
+    #[cfg(feature = "jit")]
+    cycle_jit: Option<vm::PhaseJit>,
 }
 
 /// One free-running clock registered by `Sim::attach_clock`.
@@ -317,6 +337,19 @@ impl Sim {
                         && circuit.clock_sensitivity_count(signal_id) == 0)
             })
             .collect();
+        // The JIT's phase-eligibility table: one flag per component,
+        // true when the component's type width is at most 64 and its
+        // live value therefore always stores the inline `Small` variant
+        // (see `value::Value::jit_layout`).  Only `Load`s of narrow
+        // components can be compiled to direct state reads; a `Load` of
+        // a wide component is heap-backed and refuses the phase.
+        #[cfg(feature = "jit")]
+        let signal_narrow: Vec<bool> = (0..n_components)
+            .map(|i| {
+                let typ = circuit.elaboration.component(SignalId::from_index(i)).typ();
+                circuit.type_layout_index.type_width(&typ) <= 64
+            })
+            .collect();
         let mut sim = Sim {
             state: State::new(circuit.elaboration.as_ref(), &circuit.type_layout_index, &strategy),
             circuit,
@@ -336,6 +369,17 @@ impl Sim {
             visits_scratch: Vec::new(),
             cycle_scratch: Vec::new(),
             cycle_captured: None,
+            #[cfg(feature = "jit")]
+            signal_narrow,
+            #[cfg(feature = "jit")]
+            // The batch-compiled replay phases, rebuilt at every
+            // schedule activation (the compiled functions bake the
+            // state-store and frame pointers, both stable for the
+            // engine's lifetime — see `vm::jit`).  Only read while the
+            // schedule is `Active`, so a stale list after a deactivate
+            // (which clears the phases) is never used; the next
+            // activation replaces it wholesale.
+            cycle_jit: None,
         };
 
         sim.apply_initials();
@@ -827,14 +871,34 @@ impl Sim {
                     // the schedule's tolerance).
                     return false;
                 }
-                let matched = {
+                let matched_pos = {
                     let bits = self.state.dirty_bits();
-                    self.cycle_schedule.match_phase(len, bits)
+                    self.cycle_schedule.match_phase(len, bits).map(|(pos, _)| pos)
                 };
-                if let Some(drivers) = matched {
+                if let Some(pos) = matched_pos {
                     #[cfg(feature = "sim-profile")]
                     crate::sim::profile::bump_cycle_replay();
-                    for &d in drivers {
+                    // JIT v2: a batch-compiled phase evaluates all of
+                    // its drivers in ONE native call (see
+                    // `jit_phase_replay`); phases that did not compile
+                    // keep the interpreter loop below.  The split is
+                    // per phase, never per driver.  Kept out of line so
+                    // this function's machine code stays at the non-jit
+                    // build's size.
+                    #[cfg(feature = "jit")]
+                    if Self::jit_phase_replay(
+                        &self.circuit,
+                        &self.program,
+                        &mut self.state,
+                        &mut self.cycle_schedule,
+                        self.cycle_jit.as_mut().unwrap(),
+                        pos,
+                    ) {
+                        return true;
+                    }
+                    #[cfg(all(feature = "jit", feature = "sim-profile"))]
+                    crate::sim::profile::bump_jit_phase_fallback();
+                    for &d in self.cycle_schedule.phase_drivers(pos) {
                         Self::eval_and_commit_split(
                             &self.circuit,
                             &self.program,
@@ -911,6 +975,36 @@ impl Sim {
                 Some(phases) => {
                     #[cfg(feature = "sim-profile")]
                     crate::sim::profile::bump_cycle_activation();
+                    // JIT v2: compile the activated phases now, before
+                    // installing them — one native function per
+                    // qualifying phase; non-qualifying phases keep the
+                    // interpreter replay.  The compiled functions bake
+                    // engine-owned pointers that are stable for the
+                    // engine's whole lifetime (see `vm::jit`'s
+                    // addressing invariants), and are only reachable
+                    // while the schedule is `Active`, so replacing this
+                    // at the next activation is sound.
+                    #[cfg(feature = "jit")]
+                    {
+                        // The narrow-store addressing constants (the
+                        // stride between live values and the offset of
+                        // the `Small` variant's bits): probed once per
+                        // activation against any component's type (the
+                        // layout does not depend on which type names
+                        // the probe value).  See `Value::jit_layout`.
+                        let (stride, bits_off) = crate::sim::value::Value::jit_layout(
+                            self.component_type_id(SignalId::from_index(0)),
+                        );
+                        self.cycle_jit = Some(vm::build_phases(
+                            &self.program,
+                            &phases,
+                            &mut self.vm,
+                            self.state.jit_vals_base(),
+                            stride,
+                            bits_off,
+                            &self.signal_narrow,
+                        ));
+                    }
                     self.cycle_schedule.activate(phases);
                 }
                 None => self.cycle_schedule.note_activation_failure(),
@@ -1056,6 +1150,77 @@ impl Sim {
         }
     }
 
+    /// JIT v2's batch replay (`jit` feature): run the phase's
+    /// batch-compiled native function — one call evaluates all of the
+    /// phase's drivers, reading the live state store directly (no
+    /// gather, no per-driver indirect calls, no per-eval checks) — then
+    /// commit each result through the same per-driver commit body the
+    /// interpreter uses (`commit_driver_bits`).  Returns false when the
+    /// phase has no compiled function (the caller falls through to the
+    /// unchanged interpreter replay).
+    ///
+    /// Sound: the phase is terminal (validated by the recorder), so its
+    /// input bits are frozen for the whole settlement and computing all
+    /// drivers before any commit is exactly what the interleaved
+    /// interpreter computes.  Takes the engine's fields as disjoint
+    /// borrows (the caller holds the schedule's driver list live
+    /// through the phase check) and stays out of line, out of
+    /// `cycle_settlement`'s machine code, so the feature-on build's
+    /// inactive footprint matches the non-jit build's.
+    #[cfg(feature = "jit")]
+    #[inline(never)]
+    fn jit_phase_replay(
+        circuit: &Circuit,
+        program: &vm::Program,
+        state: &mut State,
+        schedule: &mut vm::CycleSchedule,
+        jit: &mut vm::PhaseJit,
+        pos: usize,
+    ) -> bool {
+        if !jit.is_compiled(pos) {
+            return false;
+        }
+        #[cfg(feature = "sim-profile")]
+        crate::sim::profile::bump_jit_phase_call();
+        let drivers = schedule.phase_drivers(pos);
+        let results = jit.run(pos);
+        for (k, &d) in drivers.iter().enumerate() {
+            let comp = SignalId::from_index(d as usize);
+            let (typ, width) = program.driver_out(comp);
+            Self::commit_driver_bits(circuit, state, comp, typ, width, results[k]);
+        }
+        state.clear_dirty();
+        schedule.advance();
+        true
+    }
+
+    /// The bits-only commit body for one driver's computed raw bits,
+    /// shared by the interpreter path and the JIT's batch path: a
+    /// register commits its pending next-value (`State::set_reg_bits`,
+    /// compared raw at transfer time); a combinational driver takes the
+    /// bits-only commit path (`transfer_clock_bits_split`: edge
+    /// detection from the pre-write live value, then a raw-integer
+    /// compare in `State::set_val_bits`).  Extracted verbatim from
+    /// `eval_and_commit_split`'s `RunOut::Bits` arm so the JIT's batch
+    /// results commit through the exact protocol the interpreter's
+    /// would.
+    #[inline(always)]
+    fn commit_driver_bits(
+        circuit: &Circuit,
+        state: &mut State,
+        comp: SignalId,
+        typ: TypeId,
+        width: Width,
+        bits: u64,
+    ) -> bool {
+        if circuit.registers[comp.index()] {
+            state.set_reg_bits(comp, typ, width, bits);
+            false
+        } else {
+            Self::transfer_clock_bits_split(circuit, state, comp, typ, width, bits)
+        }
+    }
+
     /// `eval_and_commit`'s commit body over pre-split field borrows
     /// (see `eval_driver_out_split`); no epoch machinery.
     #[inline]
@@ -1081,23 +1246,10 @@ impl Sim {
         } else {
             match Self::eval_driver_out_split(program, vm, state, comp) {
                 vm::RunOut::Bits { typ, width, bits } => {
-                    if circuit.registers[comp.index()] {
-                        // A register's driver computes its
-                        // *next* value; the current value only
-                        // changes on a clock edge.  Narrow
-                        // registers store the pending next-value
-                        // as raw bits (`State::set_reg_bits`),
-                        // compared raw at transfer time.
-                        state.set_reg_bits(comp, typ, width, bits);
-                        false
-                    } else {
-                        // The bits-only commit path for narrow
-                        // drivers: edge detection from the
-                        // pre-write live value, then a
-                        // raw-integer compare in
-                        // `State::set_val_bits`.
-                        Self::transfer_clock_bits_split(circuit, state, comp, typ, width, bits)
-                    }
+                    // The bits-only commit path: identical for the
+                    // interpreter's and the JIT's raw bits (see
+                    // `commit_driver_bits`).
+                    Self::commit_driver_bits(circuit, state, comp, typ, width, bits)
                 }
                 vm::RunOut::Tagged(new_value) => {
                     if circuit.registers[comp.index()] {

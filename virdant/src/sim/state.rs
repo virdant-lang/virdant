@@ -163,6 +163,18 @@ impl State {
         }
     }
 
+    /// The narrow-value store's base address, for the JIT's direct
+    /// state reads (`sim::vm::jit`; see `value::Value::jit_layout` for
+    /// the stride/offset invariants).  `State::vals` is allocated at
+    /// exactly `n_components` in `State::new` and afterwards only ever
+    /// written in place — it never reallocates — so the compiled phase
+    /// code can bake this pointer in for the engine's whole lifetime.
+    /// Read-only: the compiled code never writes engine state.
+    #[cfg(feature = "jit")]
+    pub(super) fn jit_vals_base(&self) -> *const u8 {
+        self.vals.as_ptr() as *const u8
+    }
+
     pub(super) fn get(&self, signal_id: SignalId) -> Value {
         self.vals[signal_id.index()].clone()
     }

@@ -188,6 +188,12 @@ mod table {
             snap.cycle_activations,
         );
         println!(
+            "          jit_v2: compiled={} calls={} fallbacks={} (jit_phases_compiled/jit_phase_calls/jit_phase_fallbacks)",
+            snap.jit_phases_compiled,
+            snap.jit_phase_calls,
+            snap.jit_phase_fallbacks,
+        );
+        println!(
             "          flow_calls={} (dirty_pops/flow_calls = {:.1} avg entry size)",
             snap.flow_calls,
             if snap.flow_calls > 0 { snap.dirty_pops as f64 / snap.flow_calls as f64 } else { 0.0 },
