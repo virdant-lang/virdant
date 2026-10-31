@@ -136,6 +136,19 @@ pub fn run(db: &Db, top: SymbolId, clock_hz: u64, opts: VirtOptions) -> i32 {
         }
     });
 
+    // One-time board setup that allocates (the 16 MiB flash image)
+    // happens BEFORE the FPS clock starts: the `--fps` report measures
+    // the run's sustained clock rate, not startup work, and on a
+    // design that runs only a few thousand cycles a multi-millisecond
+    // allocation inside the window would dominate the reported number.
+    let mut flash_stepper = FlashStepper {
+        spi_ck,
+        spi_cs,
+        spi_mosi,
+        spi_miso,
+        flash: SpiFlash::new(opts.flash.as_ref(), opts.verbose),
+    };
+
     let start = Instant::now();
     FPS_START.lock().unwrap().replace(start);
     FPS_REPORT.store(opts.fps, Ordering::Relaxed);
@@ -145,13 +158,6 @@ pub fn run(db: &Db, top: SymbolId, clock_hz: u64, opts: VirtOptions) -> i32 {
     let cycles: Rc<Cell<u64>> = Rc::new(Cell::new(0));
     let max_cycles = opts.cycles.unwrap_or(u64::MAX);
     let fps_no_cap = opts.fps_no_cap;
-    let mut flash_stepper = FlashStepper {
-        spi_ck,
-        spi_cs,
-        spi_mosi,
-        spi_miso,
-        flash: SpiFlash::new(opts.flash.as_ref(), opts.verbose),
-    };
     let mut per_cycle = PerCycle {
         tx,
         rx,
@@ -345,7 +351,13 @@ fn decode_exit(sim: &Sim, value: &Value) -> Option<i32> {
 // ─────────────────────────────────────────────────────────────
 
 struct SpiFlash {
-    mem: Vec<u8>,
+    /// The loaded flash image, or `None` for the default all-`0xFF`
+    /// device.  `None` avoids materializing (allocating and memsetting)
+    /// the full 16 MiB array when no image was given: the model is
+    /// read-only (only the `0x03` READ command is emulated), so the
+    /// default device's reads are indistinguishable from a real
+    /// all-`0xFF` array without storing one.
+    image: Option<Vec<u8>>,
     state: FlashState,
     prev_cs: bool,
     prev_ck: bool,
@@ -364,15 +376,17 @@ enum FlashState { Idle, Cmd, Addr, Data, Ignore }
 
 impl SpiFlash {
     fn new(flash_path: Option<&PathBuf>, verbose: bool) -> SpiFlash {
-        let mut mem = vec![0xFF; FLASH_SIZE as usize];
+        let mut image = None;
         if let Some(path) = flash_path {
             match std::fs::read(path) {
                 Ok(bytes) => {
+                    let mut mem = vec![0xFF; FLASH_SIZE as usize];
                     let n = bytes.len().min(mem.len());
                     mem[..n].copy_from_slice(&bytes[..n]);
                     if verbose {
                         eprintln!("virt: loaded {n} bytes from {}", path.display());
                     }
+                    image = Some(mem);
                 }
                 Err(e) => {
                     eprintln!("virt: cannot open flash image {}: {e}", path.display());
@@ -381,7 +395,7 @@ impl SpiFlash {
             }
         }
         SpiFlash {
-            mem,
+            image,
             state: FlashState::Idle,
             prev_cs: true,
             prev_ck: false,
@@ -440,8 +454,7 @@ impl SpiFlash {
                         self.addr = (self.addr << 1) | (bit as u32);
                         self.addr_bits += 1;
                         if self.addr_bits == 24 {
-                            let a = self.addr & (FLASH_SIZE as u32 - 1);
-                            self.tx_byte = self.mem[a as usize];
+                            self.tx_byte = self.byte_at(self.addr);
                             self.tx_bits = 0;
                             self.state = FlashState::Data;
                         }
@@ -455,7 +468,7 @@ impl SpiFlash {
                 if self.tx_bits == 8 {
                     self.tx_bits = 0;
                     self.addr = (self.addr + 1) & (FLASH_SIZE as u32 - 1); // auto-increment, wraps
-                    self.tx_byte = self.mem[self.addr as usize];
+                    self.tx_byte = self.byte_at(self.addr);
                 }
             }
         }
@@ -467,6 +480,15 @@ impl SpiFlash {
 
     fn miso_active(&self) -> bool {
         self.state == FlashState::Data
+    }
+
+    /// One read byte: the loaded image where one exists, `0xFF`
+    /// (the device's erased value) where it does not.  The address is
+    /// masked to the device size, matching the array it replaces.
+    fn byte_at(&self, addr: u32) -> u8 {
+        self.image.as_ref().map_or(0xFF, |mem| {
+            mem[(addr & (FLASH_SIZE as u32 - 1)) as usize]
+        })
     }
 }
 
