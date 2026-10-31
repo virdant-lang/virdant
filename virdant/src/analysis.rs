@@ -2,6 +2,8 @@
 //! and their key result types
 
 pub mod component;
+pub mod cones;
+pub mod deps;
 pub mod location;
 pub mod package;
 pub mod symbols;

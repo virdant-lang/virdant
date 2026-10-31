@@ -136,6 +136,9 @@ fn run_command(argv: &[String], cwd: &Path, extra_path: Option<&Path>) -> StepRe
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
     if let Some(extra) = extra_path {
+        // Appended (not prepended): tools like iverilog are sensitive to
+        // PATH ordering, and fresh companion binaries are refreshed into
+        // the install directory by `make install` anyway.
         let old = std::env::var_os("PATH").unwrap_or_default();
         let new = std::env::join_paths(
             std::env::split_paths(&old).chain(std::iter::once(extra.to_path_buf())),
@@ -215,7 +218,10 @@ fn expand_glob(cwd: &Path, pattern: &str) -> Vec<String> {
 
 fn run_check(env: &Env, test: &Test) -> Outcome {
     let dir = env.test_dir(test);
-    let argv = vec![env.vir.to_string_lossy().to_string(), test.check_cfg.command.clone()];
+    // The command is `vir <words>...`: split on whitespace so commands can
+    // take arguments (e.g. `cones top::Top`).
+    let mut argv: Vec<String> = vec![env.vir.to_string_lossy().to_string()];
+    argv.extend(test.check_cfg.command.split_whitespace().map(str::to_owned));
     let step = run_command(&argv, &dir, Some(&env.root.join("target/release")));
     let steps = vec![step];
     let merged = steps[0].merged();

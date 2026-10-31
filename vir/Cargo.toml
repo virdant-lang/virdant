@@ -54,6 +54,10 @@ path = "src/inspect/main.rs"
 name = "vir-run-icarus"
 path = "src/run_icarus/main.rs"
 
+[[bin]]
+name = "vir-cones"
+path = "src/cones/main.rs"
+
 # The Virdant test runner (formerly the `virtue` crate): a pure
 # orchestrator that links nothing from the compiler; see
 # src/virtue/README.md.

@@ -1,0 +1,51 @@
+// Design for the `vir cones --svg` regression test (same dataflow as
+// tests/check/cones): `a` reads `mid` (which reads `d` and `a` itself);
+// `b` reads `a`; `c` reads `d`; the submodule register `leaf.q` reads
+// `leaf.x`, driven by `mid` from the parent; `sum` is fed by `b`+`c`,
+// `y_out` by `leaf.q`.
+
+pub mod Top {
+    incoming clock : Clock
+    incoming reset : Bit
+    incoming d : Word[8]
+    outgoing y_out : Word[8]
+    outgoing sum : Word[8]
+
+    wire mid : Word[8] {
+        it := d + a
+    }
+
+    mod leaf of Leaf {
+        it.clock := clock
+        it.reset := reset
+        it.x := mid
+        y_out := it.y
+    }
+
+    reg a : Word[8] on clock {
+        it <= mux(reset, 0w8, mid)
+    }
+
+    reg b : Word[8] on clock {
+        it <= mux(reset, 0w8, a + 1w8)
+    }
+
+    reg c : Word[8] on clock {
+        it <= mux(reset, 0w8, d)
+    }
+
+    sum := b + c
+}
+
+mod Leaf {
+    incoming clock : Clock
+    incoming reset : Bit
+    incoming x : Word[8]
+    outgoing y : Word[8]
+
+    reg q : Word[8] on clock {
+        it <= mux(reset, 0w8, x)
+    }
+
+    y := q
+}

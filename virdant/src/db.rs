@@ -16,6 +16,7 @@ use bstr::BString;
 use indexmap::IndexSet;
 use indexmap::IndexMap;
 
+use crate::analysis::cones::Cones;
 use crate::analysis::dependency::DependencyGraph;
 use crate::analysis::component::Component;
 use crate::analysis::component::ComponentId;
@@ -75,6 +76,7 @@ queries! {
     Check() -> Arc<Vec<Diagnostic>>;
     TypeIndex() -> Arc<TypeIndex>;
     Elaboration(top: SymbolId) -> Arc<Elaboration>;
+    Cones(top: SymbolId) -> Arc<Cones>;
     PortsOf(symbol_id: SymbolId) -> Arc<Vec<Port>>;
     StructFields(symbol_id: SymbolId) -> Vec<StructField>;
 }
@@ -125,6 +127,7 @@ impl Query {
             crate::queries::check : Check();
             crate::types::signature::build_ctor_signature : CtorSignature(ctor_symbol_id);
             crate::analysis::elaboration::build_elaboration : Elaboration(top);
+            crate::analysis::cones::build_cones : Cones(top);
             crate::analysis::ports::build_ports_of : PortsOf(symbol_id);
             crate::analysis::structs::build_struct_fields : StructFields(symbol_id);
         )
@@ -166,5 +169,6 @@ db_getter!(get_location_region : LocationRegion(location: Location) -> Region);
 db_getter!(check : Check() -> Arc<Vec<Diagnostic>>);
 db_getter!(get_ctor_signature : CtorSignature(ctor_symbol_id: SymbolId) -> Arc<Signature>);
 db_getter!(get_elaboration : Elaboration(top: SymbolId) -> Arc<Elaboration>);
+db_getter!(get_cones : Cones(top: SymbolId) -> Arc<Cones>);
 db_getter!(get_ports_of : PortsOf(symbol_id: SymbolId) -> Arc<Vec<Port>>);
 db_getter!(get_struct_fields : StructFields(symbol_id: SymbolId) -> Vec<StructField>);

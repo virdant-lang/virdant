@@ -1,0 +1,29 @@
+// CHECK directives over the SVG dumped to stdout by `vir cones --svg=-`.
+// One node box per register and per top-level port, arrows in the
+// direction of data flow, one box color per node kind.  Directives are
+// matched in order, mirroring the SVG's own ordering: header, title,
+// legend, edges, then node boxes.
+
+CHECK: <?xml version="1.0" encoding="UTF-8"?>
+CHECK: <svg xmlns="http://www.w3.org/2000/svg"
+CHECK: Cones of 'top::Top'
+
+// The legend names the three node kinds:
+CHECK: >register</text>
+CHECK: >incoming port</text>
+CHECK: >outgoing port</text>
+
+// Edges carry the arrowhead marker:
+CHECK: marker-end="url(#arrow)"
+
+// Every register and every top-level port is a node, in elaboration
+// order (ports first, then the submodule's register, then the rest):
+CHECK: >top.clock</text>
+CHECK: >top.reset</text>
+CHECK: >top.d</text>
+CHECK: >top.y_out</text>
+CHECK: >top.sum</text>
+CHECK: >top.leaf.q</text>
+CHECK: >top.a</text>
+CHECK: >top.b</text>
+CHECK: >top.c</text>

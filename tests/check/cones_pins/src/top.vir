@@ -1,0 +1,68 @@
+// Regression test for `vir cones`: ports of the top module are cone
+// endpoints and get cone entries of their own; for a platform-bound top
+// they are exactly the platform's pins.  The `command` in test.toml runs
+// `vir cones top::Top`; the CHECK directives below assert the dump.
+//
+// Dataflow: the input pin `sw` feeds register `r` and (through `w`) the
+// output pin `led`; `r` feeds `w`, which feeds `led`.
+
+platform Pins {
+    @pin(0)
+    incoming clock : Clock
+
+    @pin(1)
+    incoming sw : Bit
+
+    @pin(2)
+    outgoing led : Bit
+}
+
+pub mod Top for Pins {
+    incoming clock : Clock
+    incoming sw : Bit
+    outgoing led : Bit
+
+    wire w : Bit {
+        it := sw && r
+    }
+
+    reg r : Bit on clock {
+        it <= sw
+    }
+
+    led := w
+}
+
+// CHECK: Cones of 'top::Top' (4 signals, 1 register, 3 ports)
+//
+// `clock` is never read as data (only via the `on` clause):
+// CHECK: top.clock : incoming port
+// CHECK-NEXT:   backward cone (what feeds top.clock through combinational logic):
+// CHECK-NEXT:     (none)
+// CHECK-NEXT:   forward cone (what top.clock feeds through combinational logic):
+// CHECK-NEXT:     (none)
+//
+// The input pin `sw` is a pure source; it feeds `r` directly and `led`
+// through `w`:
+// CHECK: top.sw : incoming port
+// CHECK-NEXT:   backward cone (what feeds top.sw through combinational logic):
+// CHECK-NEXT:     (none)
+// CHECK-NEXT:   forward cone (what top.sw feeds through combinational logic):
+// CHECK-NEXT:     top.r
+// CHECK-NEXT:     top.led (port)
+//
+// The output pin `led` is a pure sink fed by `r` and `sw`:
+// CHECK: top.led : outgoing port
+// CHECK-NEXT:   backward cone (what feeds top.led through combinational logic):
+// CHECK-NEXT:     top.sw (port)
+// CHECK-NEXT:     top.r
+// CHECK-NEXT:   forward cone (what top.led feeds through combinational logic):
+// CHECK-NEXT:     (none)
+//
+// The register's backward cone grounds out in the input pin `sw`, and
+// its forward cone grounds out in the output pin `led`:
+// CHECK: top.r : reg on top.clock
+// CHECK-NEXT:   backward cone (what feeds top.r through combinational logic):
+// CHECK-NEXT:     top.sw (port)
+// CHECK-NEXT:   forward cone (what top.r feeds through combinational logic):
+// CHECK-NEXT:     top.led (port)
