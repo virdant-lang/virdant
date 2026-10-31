@@ -152,6 +152,16 @@ pub struct Sim {
     /// `finish()` pruning — the `clear()` call sites), because the
     /// driver order depends on the circuit's sensitivity structure.
     schedule_cache: vm::ScheduleCache,
+    /// Stage C: the deep-cycle schedule — the recorded settlement
+    /// sequence (each phase: dirty-set bitmap + topological driver
+    /// list) replayed straight-line while a design's cycle-relevant
+    /// settlement sequence repeats exactly.  Soundness and the
+    /// replay/abort contract are documented on `vm::schedule::
+    /// CycleSchedule`; the flow-time integration is at the top of
+    /// `flow`.  Placed next to `schedule_cache` so the inactive
+    /// per-settlement state load shares the cache line the stage-B
+    /// machinery already touches.
+    cycle_schedule: vm::CycleSchedule,
     /// Stage B: per-driver terminality, precomputed once.  A driver is
     /// terminal when its commit cannot start propagation: a register
     /// (its driver writes only the pending next-value, which is never
@@ -174,6 +184,16 @@ pub struct Sim {
     /// loop, moved into the cache on insert, reused across
     /// settlements without reallocation.
     visits_scratch: Vec<(u32, u32)>,
+    /// Stage C scratch: the settlement's entry dirty-set bitmap, copied
+    /// at `flow` entry while the recorder is capturing (the dynamic
+    /// loop consumes the worklist, so the entry set must be snapshotted
+    /// before it drains).  Reused across settlements.
+    cycle_scratch: Vec<u64>,
+    /// Stage C: the settlement's captured entry dirty length, set by
+    /// `cycle_settlement` while the recorder is armed and consumed by
+    /// the post-settlement record calls (`None`: nothing to record
+    /// this settlement).
+    cycle_captured: Option<usize>,
 }
 
 /// One free-running clock registered by `Sim::attach_clock`.
@@ -310,9 +330,12 @@ impl Sim {
             dispatching: false,
             last_run: vec![0; n_components],
             schedule_cache: vm::ScheduleCache::new(),
+            cycle_schedule: vm::CycleSchedule::new(),
             is_terminal,
             stack_key_scratch: Vec::new(),
             visits_scratch: Vec::new(),
+            cycle_scratch: Vec::new(),
+            cycle_captured: None,
         };
 
         sim.apply_initials();
@@ -544,6 +567,32 @@ impl Sim {
             && self.program.topo_schedule().is_some();
         let settlement_base = self.state.epoch_clock();
 
+        // Stage C: the deep-cycle replay.  While a recorded settlement
+        // sequence (the design's recurring cycle) keeps matching, each
+        // settlement is checked against its phase's exact dirty-set
+        // bitmap — no worklist pops, no signature hashing, no per-
+        // settlement cache lookup — and executed as straight-line code:
+        // the phase's drivers (the union of the dirty signals'
+        // sensitivity lists) evaluate once each with no epoch
+        // machinery.  See `vm::schedule::CycleSchedule` for the
+        // soundness proof and the replay/abort contract: a mismatch
+        // falls through to the unchanged stage-B/dynamic path below
+        // (the phase pointer stays put), and the machinery records
+        // instead while a pattern is still being detected.  The
+        // recorder's give-up guard bounds the inactive cost: a design
+        // whose settlements never form a repeating pattern records for
+        // a bounded warm-up, then pays one state load per settlement.
+        //
+        // The machinery lives in `cycle_settlement`, not here: the
+        // inline footprint of this prologue is the hot path's entire
+        // inactive cost (measured: an inline replay loop cost hello
+        // ~10% with the schedule never engaging, purely from code
+        // layout), so `flow` keeps one load and one predicted branch
+        // and the helpers keep the rest out of line.
+        if self.cycle_schedule.state() != vm::CycleState::Off && self.cycle_settlement() {
+            return;
+        }
+
         // Stage B: cached straight-line settlement schedule.  The cache
         // key is the worklist's insertion-order sequence.  On a hit, the
         // stored visit sequence is replayed through the same
@@ -579,7 +628,13 @@ impl Sim {
             && self.state.dirty_len() <= vm::ScheduleCache::MAX_SETTLEMENT
         {
         let stack_view = self.state.dirty_stack();
-        let cached_visits = self.schedule_cache.lookup(stack_view);
+        // Scoped so the timer measures the lookup itself, not the
+        // replay the hit path runs afterward.
+        let cached_visits = {
+            #[cfg(feature = "sim-profile")]
+            let _profile_lookup = crate::sim::profile::time_cache_lookup();
+            self.schedule_cache.lookup(stack_view)
+        };
         if let Some(visits) = cached_visits {
             #[cfg(feature = "sim-profile")]
             crate::sim::profile::bump_schedule_cache_hit();
@@ -616,7 +671,15 @@ impl Sim {
                     );
                 }
             }
+            #[cfg(feature = "sim-profile")]
+            let _profile_clear = crate::sim::profile::time_cache_clear();
             self.state.clear_dirty();
+            // The stage-B hit is a replayable settlement (its entry was
+            // cached only from a terminal settlement), so the recorder
+            // takes it into the history ring unconditionally.
+            if let Some(len) = self.cycle_captured.take() {
+                self.record_cycle_settlement(len, true);
+            }
             return;
         }
         #[cfg(feature = "sim-profile")]
@@ -724,6 +787,167 @@ impl Sim {
                 self.schedule_cache.insert(key, value);
             }
         }
+        if let Some(len) = self.cycle_captured.take() {
+            // `cachable` is the replayability verdict for in-bounds
+            // settlements (every visited driver terminal); below-gate
+            // settlements are recorded unvalidated and validated at
+            // activation, where their tiny unions make the check cheap.
+            self.record_cycle_settlement(len, cachable);
+        }
+    }
+
+    /// Stage C's per-settlement work, kept out of `flow`'s inline
+    /// footprint (see the call site's comment): replay the expected
+    /// phase when the entry dirty set matches it, or snapshot the
+    /// entry dirty set while the recorder is armed.
+    #[inline(never)]
+    #[inline(never)]
+    fn cycle_settlement(&mut self) -> bool {
+        match self.cycle_schedule.state() {
+            vm::CycleState::Active => {
+                let matched = {
+                    let bits = self.state.dirty_bits();
+                    self.cycle_schedule.match_phase(self.state.dirty_len(), bits)
+                };
+                if let Some(drivers) = matched {
+                    #[cfg(feature = "sim-profile")]
+                    crate::sim::profile::bump_cycle_replay();
+                    for &d in drivers {
+                        Self::eval_and_commit_split(
+                            &self.circuit,
+                            &self.program,
+                            &mut self.vm,
+                            &mut self.state,
+                            SignalId::from_index(d as usize),
+                        );
+                    }
+                    self.state.clear_dirty();
+                    self.cycle_schedule.advance();
+                    return true;
+                }
+                #[cfg(feature = "sim-profile")]
+                crate::sim::profile::bump_cycle_abort();
+                self.cycle_schedule.note_miss();
+                false
+            }
+            vm::CycleState::Recording => {
+                // Snapshot the entry dirty set for the recorder: the
+                // dynamic loop below consumes the worklist, so the set
+                // must be captured before it drains.  The capture is
+                // the recorder's only steady per-settlement cost (one
+                // worklist-width bitmap copy) and stops entirely once
+                // the give-up guard fires.
+                let len = self.state.dirty_len();
+                self.cycle_scratch.clear();
+                self.cycle_scratch.extend_from_slice(self.state.dirty_bits());
+                self.cycle_schedule.note_capture();
+                self.cycle_captured = Some(len);
+                false
+            }
+            vm::CycleState::Off => false,
+        }
+    }
+
+    /// Feed one completed settlement into the deep-cycle recorder and
+    /// run its period detector.  `replayable` is the settlement's
+    /// terminality verdict (a stage-B hit is replayable by
+    /// construction; the dynamic path's `cachable` flag is the
+    /// verdict otherwise).  A detected period builds the phases
+    /// (union of sensitivity lists per phase, terminality-validated)
+    /// and activates the replay schedule.
+    #[inline(never)]
+    #[inline(never)]
+    fn record_cycle_settlement(&mut self, entry_len: usize, replayable: bool) {
+        // The give-up guard may have fired at the capture site (this
+        // settlement's snapshot tripped REC_LIMIT): the recorder is off
+        // and nothing is recorded.
+        if self.cycle_schedule.state() != vm::CycleState::Recording {
+            return;
+        }
+        // In-bounds settlements with a non-terminal visit can never be
+        // replayed (their worklist grows data-dependently); recording
+        // them would only teach the detector an unusable pattern.
+        // Below-gate settlements are recorded unvalidated: their dirty
+        // sets are tiny, so the activation-time union walk is cheap.
+        if !replayable && entry_len >= vm::ScheduleCache::MIN_SETTLEMENT {
+            return;
+        }
+        match self.cycle_schedule.record(entry_len, &self.cycle_scratch) {
+            Ok(()) => {}
+            Err(entries) => match self.build_cycle_phases(&entries) {
+                Some(phases) => {
+                    #[cfg(feature = "sim-profile")]
+                    crate::sim::profile::bump_cycle_activation();
+                    self.cycle_schedule.activate(phases);
+                }
+                None => self.cycle_schedule.note_activation_failure(),
+            },
+        }
+    }
+
+    /// Build the deep-cycle phases from the recorder's detected
+    /// pattern, or `None` when the pattern is not replayable.
+    ///
+    /// Each phase's driver list is the union of its dirty signals'
+    /// sensitivity lists — the settlement's eval set (see the
+    /// soundness comment on `vm::schedule::CycleSchedule`).  Every
+    /// driver must be terminal: a non-terminal driver's commit can
+    /// start propagation, which grows the worklist in a way the
+    /// straight-line replay could not reproduce.  The order is
+    /// topological when the design has a static schedule, ascending
+    /// component index otherwise; the order is unobservable (inputs
+    /// are frozen for the whole settlement), so both are sound.
+    #[inline(never)]
+    #[inline(never)]
+    fn build_cycle_phases(&self, entries: &[(usize, Vec<u64>)]) -> Option<Vec<vm::Phase>> {
+        let n = self.circuit.elaboration.components().len();
+        let mut marked: Vec<bool> = vec![false; n];
+        let mut phases = Vec::with_capacity(entries.len());
+        for (len, bits) in entries {
+            // Activation gate: the phase check compares the full
+            // worklist-width bitmap, so a phase whose bitmap is wide
+            // relative to its dirty count would cost more per replayed
+            // settlement than the machinery it replaces.  Such a design
+            // (sparse activity over a huge component space) keeps the
+            // dynamic path.
+            if bits.len() > 4 * len + 16 {
+                return None;
+            }
+            let mut drivers: Vec<u32> = Vec::new();
+            for (w, &word) in bits.iter().enumerate() {
+                let mut word = word;
+                while word != 0 {
+                    let bit = word.trailing_zeros();
+                    word &= word - 1;
+                    let signal = SignalId::from_index(w * 64 + bit as usize);
+                    let count = self.circuit.sensitivity_count(signal);
+                    for i in 0..count {
+                        let d = self.circuit.sensitivity_at(signal, i).index();
+                        if !marked[d] {
+                            marked[d] = true;
+                            drivers.push(d as u32);
+                        }
+                    }
+                }
+            }
+            if drivers.iter().any(|&d| !self.is_terminal[d as usize]) {
+                return None;
+            }
+            if let Some(schedule) = self.program.topo_schedule() {
+                drivers.sort_by_key(|&d| schedule.pos(d as usize));
+            } else {
+                drivers.sort_unstable();
+            }
+            for &d in &drivers {
+                marked[d as usize] = false;
+            }
+            phases.push(vm::Phase {
+                bits: bits.clone().into_boxed_slice(),
+                len: *len,
+                drivers: drivers.into_boxed_slice(),
+            });
+        }
+        Some(phases)
     }
 
     /// Evaluate one driven component and commit the result: the shared
@@ -1214,6 +1438,9 @@ impl Sim {
         // change.  `finish()` prunes dead watchers, invalidating the
         // structural invariants the cached driver order relies on.
         self.schedule_cache.clear();
+        // Stage C: the deep-cycle phases are functions of the same
+        // structural invariants.
+        self.cycle_schedule.reset();
     }
 
     /// Drive `signal` as a free-running square wave described by `clock`.
@@ -1513,6 +1740,9 @@ impl Sim {
         // (the visited-driver set for a given worklist is a function of
         // the structural sensitivity, not just the dirty set).
         self.schedule_cache.clear();
+        // Stage C: the deep-cycle phases are functions of the same
+        // structural invariants.
+        self.cycle_schedule.reset();
     }
 
     /// Register `cb` to fire every time `clock`'s value has a rising edge
@@ -1528,6 +1758,7 @@ impl Sim {
     /// table: it does not survive into a subsequent `run()`.
     pub fn on_clock(&mut self, clock: SignalId, cb: Callback) {
         self.schedule_cache.clear();
+        self.cycle_schedule.reset();
         let last = self.state.get(clock);
         self.watchers.push(Watcher {
             signal: clock,

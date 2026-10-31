@@ -19,4 +19,4 @@ pub(in crate::sim) use compile::{compile_initial_value, compile_program};
 pub(in crate::sim) use frame::Vm;
 pub(in crate::sim) use exec::{RunOut, VmState};
 pub(in crate::sim) use isa::Program;
-pub(in crate::sim) use schedule::ScheduleCache;
+pub(in crate::sim) use schedule::{CycleSchedule, CycleState, Phase, ScheduleCache};

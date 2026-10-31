@@ -187,6 +187,14 @@ impl State {
         self.dirty.stack()
     }
 
+    /// The settlement's dirty-set bitmap (one bit per signal index,
+    /// full worklist width): read at `flow` entry, where it is exactly
+    /// the settlement's dirty set.  The deep-cycle replay's soundness
+    /// key — see `vm::schedule::CycleSchedule`.
+    pub(super) fn dirty_bits(&self) -> &[u64] {
+        self.dirty.bits()
+    }
+
     pub(super) fn pop_dirty(&mut self) -> Option<SignalId> {
         let popped = self.dirty.pop();
         #[cfg(feature = "sim-profile")]

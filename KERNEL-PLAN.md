@@ -1,9 +1,47 @@
 # Scheduled Kernel Plan
 
-Status: **stage B landed** (`791047e`), verified with paired A/B by the
-coordinator (the worker shipped gates but no perf evidence; coordinator
-measured it). Stage C (deep-cycle fusion) is the remaining kernel stage,
-gated on a go/no-go with stage B's numbers on the table.
+Status: **stage C landed** (deep-cycle replay). Stage B (`791047e`) and
+stage A (`dce68b5`) beneath it. Stage C's measured results below; the
+plan text retains the original stage-by-stage analysis.
+
+## Stage C measured results (paired A/B, interleaved pairs, one cargo session)
+
+Mechanism: the recorder watches every eligible settlement's dirty-set
+bitmap; when the last P signatures exactly repeat the P before them
+(hash pre-filter, exact verification), the pattern promotes to the
+replay schedule — a sequence of phases, each (dirty-set bitmap,
+topological driver list).  An active settlement checks its phase's
+bitmap (full-width, element-wise — exact, not hashed) and executes the
+phase's drivers once each with no worklist, no signature hashing, no
+per-settlement cache lookup, and no epoch machinery.  Mismatch falls
+through to the unchanged stage-B/dynamic path; structural changes
+(watcher registration, `finish()`) reset everything.  Soundness is per
+settlement and structural (see `vm::schedule::CycleSchedule`): for a
+terminal settlement the committed outcome is a pure function of the
+entry dirty set, so any settlement whose set matches a phase replays
+correctly whatever produced the set.
+
+| bench | stage B (234acb9) | stage C | verdict |
+|---|---|---|---|
+| s=1 | ~339 ns/cyc | ~341 ns/cyc | flat (inside ±2-3%); engages (2 replays/cycle, pops 100002→5) |
+| s=512 chain | ~15236 ns/cyc | ~13205 ns/cyc | **−13.3%, 5/5 pairs** (12991-13525 vs 14901-15614) |
+| hello | ~422 ns/cyc | ~420 ns/cyc | flat; never engages (phase build refuses its settlements; recorder off after 4 failures) |
+| riscv | ~1392 ns/cyc | ~1389 ns/cyc | flat (inside ±7%); recorder gives up after 1024 captures, then one state load per settlement |
+
+Counters on the chain: 2 replays/cycle, 0 aborts, 1 activation,
+epoch_skips 51.1M → 1022 (the replay never attempts the provably-no-op
+repeat visits), driver_evals unchanged at 51.3M (the same real
+evaluations — the soundness prediction), dirty_pops 100513 → 516.
+
+Worker-process note: an early `std::env::var` debug probe left in
+`flow` cost ~45 ns/cycle on hello and survived every intermediate
+measurement; it is gone from the shipped tree, and hello's flat pairs
+above are from the clean build.
+
+Stage B's riscv +1.8% codegen cost is untouched: stage C adds no code
+to the dynamic loop (its machinery is out-of-line helpers gated behind
+one state load), so the regression is neither recovered nor worsened
+by this stage.
 
 ## Stage B measured results (coordinator, interleaved pairs)
 

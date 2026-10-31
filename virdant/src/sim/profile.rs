@@ -154,6 +154,15 @@ struct Counters {
     /// TEMPORARY (stage-B decomposition): elapsed in the hit path's
     /// bulk dirty-state clear.
     cache_clear_ns: AtomicU64,
+    /// Stage C: settlements replayed from the deep-cycle schedule
+    /// (straight-line, no worklist/signature/lookup machinery).
+    cycle_replays: AtomicU64,
+    /// Stage C: settlements that did not match the deep-cycle
+    /// schedule's expected phase and fell through to the dynamic path.
+    cycle_aborts: AtomicU64,
+    /// Stage C: times a repeating settlement pattern was detected and
+    /// promoted to the replay schedule.
+    cycle_activations: AtomicU64,
 }
 
 static COUNTERS: Counters = Counters {
@@ -190,6 +199,9 @@ static COUNTERS: Counters = Counters {
     schedule_cache_misses: AtomicU64::new(0),
     cache_lookup_ns: AtomicU64::new(0),
     cache_clear_ns: AtomicU64::new(0),
+    cycle_replays: AtomicU64::new(0),
+    cycle_aborts: AtomicU64::new(0),
+    cycle_activations: AtomicU64::new(0),
 };
 
 /// Scoped timer for one engine phase; accumulates the elapsed time
@@ -367,6 +379,27 @@ pub fn bump_schedule_cache_miss() {
     COUNTERS.schedule_cache_misses.fetch_add(1, Ordering::Relaxed);
 }
 
+/// Count a settlement replayed straight-line from the deep-cycle
+/// schedule (stage C): no worklist, no signature, no cache lookup.
+#[inline]
+pub fn bump_cycle_replay() {
+    COUNTERS.cycle_replays.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Count a settlement that did not match the deep-cycle schedule's
+/// expected phase and fell through to the dynamic path.
+#[inline]
+pub fn bump_cycle_abort() {
+    COUNTERS.cycle_aborts.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Count a detected repeating settlement pattern promoted to the
+/// deep-cycle replay schedule.
+#[inline]
+pub fn bump_cycle_activation() {
+    COUNTERS.cycle_activations.fetch_add(1, Ordering::Relaxed);
+}
+
 /// A consistent copy of every counter, taken by [`snapshot`].  Plain
 /// integers: the caller formats them (and derives the sampled
 /// estimates; see the estimator formula in the module docs).
@@ -405,6 +438,9 @@ pub struct Snapshot {
     pub schedule_cache_misses: u64,
     pub cache_lookup_ns: u64,
     pub cache_clear_ns: u64,
+    pub cycle_replays: u64,
+    pub cycle_aborts: u64,
+    pub cycle_activations: u64,
 }
 
 impl Snapshot {
@@ -452,6 +488,9 @@ pub fn snapshot() -> Snapshot {
         schedule_cache_misses: COUNTERS.schedule_cache_misses.load(Ordering::Relaxed),
         cache_lookup_ns: COUNTERS.cache_lookup_ns.load(Ordering::Relaxed),
         cache_clear_ns: COUNTERS.cache_clear_ns.load(Ordering::Relaxed),
+        cycle_replays: COUNTERS.cycle_replays.load(Ordering::Relaxed),
+        cycle_aborts: COUNTERS.cycle_aborts.load(Ordering::Relaxed),
+        cycle_activations: COUNTERS.cycle_activations.load(Ordering::Relaxed),
     }
 }
 
@@ -491,4 +530,7 @@ pub fn reset() {
     COUNTERS.schedule_cache_misses.store(0, Ordering::Relaxed);
     COUNTERS.cache_lookup_ns.store(0, Ordering::Relaxed);
     COUNTERS.cache_clear_ns.store(0, Ordering::Relaxed);
+    COUNTERS.cycle_replays.store(0, Ordering::Relaxed);
+    COUNTERS.cycle_aborts.store(0, Ordering::Relaxed);
+    COUNTERS.cycle_activations.store(0, Ordering::Relaxed);
 }

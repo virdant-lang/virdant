@@ -70,6 +70,15 @@ impl DirtyList {
         &self.stack
     }
 
+    /// The dirty-set bitmap: one bit per signal index, set exactly for
+    /// the signals currently in the worklist.  Read at settlement
+    /// entry (before any pops), where it is the settlement's dirty
+    /// set — the deep-cycle replay's soundness key.  Consumers trim
+    /// with `top_words` (a backward scan, off the hot path).
+    pub(super) fn bits(&self) -> &[u64] {
+        &self.bits
+    }
+
     /// True when `signal_id` is currently in the worklist.
     ///
     /// No runtime caller today (the watcher-sweep pre-filter that would

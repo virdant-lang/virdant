@@ -182,6 +182,12 @@ mod table {
             snap.schedule_cache_misses,
         );
         println!(
+            "          stage_c: replays={} aborts={} activations={} (cycle_replays/cycle_aborts/cycle_activations)",
+            snap.cycle_replays,
+            snap.cycle_aborts,
+            snap.cycle_activations,
+        );
+        println!(
             "          flow_calls={} (dirty_pops/flow_calls = {:.1} avg entry size)",
             snap.flow_calls,
             if snap.flow_calls > 0 { snap.dirty_pops as f64 / snap.flow_calls as f64 } else { 0.0 },

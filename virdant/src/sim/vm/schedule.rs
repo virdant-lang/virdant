@@ -393,6 +393,360 @@ fn hash_stack(stack: &[u32]) -> u64 {
     hash
 }
 
+/// Soundness of the deep-cycle replay (stage C).
+///
+/// The stage-B cache replays a *single settlement*; this schedule
+/// replays a recorded *sequence* of settlements — the recurring
+/// settlement pattern of a design's cycle — straight-line: no worklist
+/// pops, no signature hashing, no per-settlement cache lookup.  The
+/// soundness contract is per settlement and purely structural:
+///
+/// For a settlement whose every visited driver is terminal (the same
+/// `is_terminal` condition the stage-B cache gates on), the dynamic
+/// loop's committed outcome is a pure function of the settlement's
+/// entry dirty *set*:
+///
+/// 1. *The visited-driver set is the union of the dirty signals'
+///    sensitivity lists.*  Every pop gathers its signal's sensitivity
+///    list.  A terminal driver's commit cannot trigger a visit:
+///    registers write only the pending next-value (never a live
+///    value, never dirty), and a no-fanout output's sensitivity list
+///    is empty, so its pop gathers nothing.  No mid-settlement pop
+///    gathers anything, so the visited set is exactly
+///    `∪ sens(s) for s in S`.
+/// 2. *Input values are frozen for the whole settlement.*  The only
+///    mid-settlement writes are the visited drivers' own commits, and
+///    no visited driver reads another's output (terminal ⟹ no driver
+///    reader).  Every evaluation of a driver therefore computes the
+///    same value, and the settlement's committed state is
+///    order-independent — which is why the replay may run the drivers
+///    in its own canonical (topological) order.
+/// 3. *Each driver in the union evaluates exactly once in the dynamic
+///    loop, and every repeat visit is a provable no-op.*  A driver's
+///    first visit always evaluates: its last-eval snapshot predates
+///    this settlement's base (the snapshot was taken in an earlier
+///    settlement and the write counter is monotonic), so the skip
+///    gate's freshness condition fails.  Every repeat visit skips:
+///    only entry-dirty signals trigger visits (see 1), so the
+///    trigger's write epoch is at most the settlement base, which is
+///    at most the driver's this-settlement last-eval snapshot.  Both
+///    the evaluated visits and the skipped ones reduce to one
+///    commit of `f(entry values)` per driver — the same commit the
+///    replay makes.
+/// 4. *Therefore* executing each driver of `∪ sens(S)` exactly once,
+///    in any order, with no epoch machinery, commits exactly the
+///    dynamic loop's outcome — including the no-op reads of
+///    constant-folded drivers and the alias-copy commits, which run
+///    through the same `eval_and_commit_split` body the dynamic loop
+///    uses.  The replay verifies the entry dirty set (exact bitmap
+///    equality, plus the length) before executing, so any settlement
+///    whose dirty set matches a phase's replays correctly, whatever
+///    produced the set: external writes via `set_val`, watcher
+///    callbacks, nested `unlock()`s, register transfers all flow
+///    through the same per-settlement check.  A settlement whose
+///    dirty set does not match runs the unchanged dynamic path.
+///
+/// The schedule never re-derives `last_run` stamps; after a replay
+/// they are stale (older than the dynamic loop would have left them),
+/// and stale snapshots can only make a later dynamic settlement's
+/// skip gate *fail* (it requires `last_run[d] >= settlement_base`),
+/// i.e. evaluate where the dynamic loop would have skipped a provable
+/// no-op — correct, merely slower, and only until one dynamic
+/// settlement re-stamps the visited drivers.
+///
+/// *Key.*  The phase's dirty-set bitmap is an exact set identity — not
+/// a hash: the check compares the full worklist-width bitmaps
+/// element-wise (a memcmp-shaped compare), so two different dirty
+/// sets can never compare equal.  (The worklist's insertion
+/// *order* is deliberately not part of the key: by (1)-(3) the
+/// committed outcome of a terminal settlement is order-independent,
+/// so any insertion order with the same set replays identically.)
+/// The bitmap is stored at full worklist width, mostly zeros, so the
+/// compare needs no trim bookkeeping in the worklist itself; an
+/// activation gate refuses phases whose bitmap is wide relative to
+/// their dirty count (a sparse design with many signals would pay
+/// more in the compare than the machinery it replaces).
+///
+/// *Detection.*  While the schedule is inactive, every eligible
+/// settlement records its dirty-set signature into a bounded history
+/// ring.  After each record, the detector looks for the smallest
+/// period `P` such that the last `P` signatures repeat the `P` before
+/// them (exact, after a hash pre-filter): the pattern's first repeat
+/// promotes it to the replay schedule.  The promotion is only an
+/// optimization decision — every replay is still verified against its
+/// phase's exact dirty set, so a wrong or stale detection degrades to
+/// the dynamic path, never to a wrong trace.
+///
+/// *Perturbations.*  Anything that changes a settlement's dirty set
+/// (external writes, watcher-driven callbacks, structural changes)
+/// breaks the phase check and falls through to the dynamic path.
+/// Structural changes (watcher registration, `finish()` pruning) also
+/// reset the recorder: the phase driver lists are functions of the
+/// circuit's sensitivity structure.  A driver evaluation that drew
+/// from the VM's RNG would make evaluation order observable, so
+/// phases are refused if any visited driver's bytecode is not a pure
+/// function of signal values — the VM ISA has no such instruction
+/// (evals are pure), so no check is needed today, and the phase build
+/// re-validates terminality from the live circuit at activation.
+
+/// The recorded straight-line program for one settlement of the
+/// recurring pattern.
+#[derive(Debug)]
+pub(in crate::sim) struct Phase {
+    /// The settlement's entry dirty-set bitmap at full worklist width
+    /// (mostly zero words).  Exact set identity (see the soundness
+    /// comment).
+    pub(in crate::sim) bits: Box<[u64]>,
+    /// The settlement's entry `dirty_len`: the cheap pre-check before
+    /// the word compare.
+    pub(in crate::sim) len: usize,
+    /// The drivers to evaluate, in topological order: the union of the
+    /// dirty signals' sensitivity lists — the settlement's eval set
+    /// (one evaluation per driver; see the soundness comment).
+    pub(in crate::sim) drivers: Box<[u32]>,
+}
+
+/// The deep-cycle schedule: a recorded sequence of settlement phases,
+/// replayed straight-line while the design's settlement sequence
+/// keeps matching it.
+#[derive(Debug)]
+pub(in crate::sim) struct CycleSchedule {
+    /// The recorded phase sequence; the current phase is
+    /// `phases[pos]`.
+    phases: Vec<Phase>,
+    /// Index of the phase the *next* settlement must match.
+    pos: usize,
+    /// `RECORDING`: every eligible settlement is recorded into the
+    /// history ring and the detector runs.  `ACTIVE`: settlements are
+    /// matched against `phases[pos]` and replayed on a match.
+    /// `OFF`: the recorder gave up (a design whose settlements never
+    /// repeat pays nothing); re-enabled only by a structural change.
+    state: CycleState,
+    /// Settlements handled since the last full phase wrap.  The
+    /// active-path thrash guard: a schedule that never completes its
+    /// cycle (the design's pattern moved on) deactivates and the
+    /// recorder re-arms.
+    stale: usize,
+    /// The recorder's history ring: the last recorded settlements'
+    /// signatures, oldest first.
+    history: std::collections::VecDeque<HistoryEntry>,
+    /// Eligible settlements captured since the last activation.  The
+    /// recording give-up guard: a design whose settlements never form
+    /// a repeating pattern stops recording.  Counts *captures* (every
+    /// settlement snapshotted while recording), not only accepted
+    /// records — a design whose in-bounds settlements are all
+    /// non-replayable would otherwise capture forever without ever
+    /// advancing the guard.
+    record_streak: usize,
+    /// Detections whose phase build failed the terminality validation.
+    failures: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::sim) enum CycleState {
+    Recording,
+    Active,
+    Off,
+}
+
+/// One recorded settlement signature in the history ring.
+#[derive(Debug)]
+struct HistoryEntry {
+    len: usize,
+    /// FNV-1a over the full dirty-set bitmap (plus `len`): the
+    /// detector's cheap pre-filter.  A hash match is verified exactly
+    /// before any activation, so collisions cost one compare, never a
+    /// wrong schedule.
+    hash: u64,
+    /// The dirty-set bitmap at full worklist width.
+    bits: Box<[u64]>,
+}
+
+impl CycleSchedule {
+    /// History ring capacity: the detector needs `2 * MAX_PERIOD`
+    /// consecutive signatures to confirm a period.
+    pub(in crate::sim) const MAX_PERIOD: usize = 16;
+    const HIST_CAP: usize = 2 * Self::MAX_PERIOD;
+
+    /// Eligible settlements recorded without an activation before the
+    /// recorder stops trying (bounded warm-up cost: a design whose
+    /// settlements never repeat pays the recording for at most this
+    /// many settlements, then one branch per settlement).
+    pub(in crate::sim) const REC_LIMIT: usize = 1024;
+
+    /// A recording settlement the detection refused this many times
+    /// (its phases fail the terminality validation) disables the
+    /// recorder: re-detecting the same non-replayable pattern every
+    /// cycle would pay the union-of-sensitivity-lists build forever.
+    const MAX_ACTIVATION_FAILURES: u32 = 4;
+
+    pub(in crate::sim) fn new() -> CycleSchedule {
+        CycleSchedule {
+            phases: Vec::new(),
+            pos: 0,
+            state: CycleState::Recording,
+            stale: 0,
+            history: std::collections::VecDeque::new(),
+            record_streak: 0,
+            failures: 0,
+        }
+    }
+
+    /// The deep-cycle machinery's state for this settlement.
+    #[inline]
+    pub(in crate::sim) fn state(&self) -> CycleState {
+        self.state
+    }
+
+    /// The phase the next settlement must match, or `None` when it
+    /// does not: the caller falls through to the unchanged dynamic
+    /// path (the pointer stays put — a settlement that is not part of
+    /// the pattern, e.g. a one-off external write, must not consume a
+    /// phase slot).  `bits` is the live dirty-set bitmap at full
+    /// worklist width, compared element-wise against the phase's.
+    pub(in crate::sim) fn match_phase(&self, len: usize, bits: &[u64]) -> Option<&[u32]> {
+        debug_assert_eq!(self.state, CycleState::Active);
+        let phase = self.phases.get(self.pos)?;
+        if phase.len != len || phase.bits.len() != bits.len() {
+            return None;
+        }
+        if phase.bits.as_ref() != bits {
+            return None;
+        }
+        Some(&phase.drivers)
+    }
+
+    /// The settlement matched and replayed: advance to the next
+    /// phase, wrapping at the end of the pattern (a full cycle) and
+    /// resetting the thrash guard.
+    pub(in crate::sim) fn advance(&mut self) {
+        debug_assert_eq!(self.state, CycleState::Active);
+        self.pos += 1;
+        if self.pos == self.phases.len() {
+            self.pos = 0;
+            self.stale = 0;
+        }
+    }
+
+    /// The active settlement did not match its phase: count it toward
+    /// the thrash guard.  Deactivation re-arms the recorder with a
+    /// clean history so a changed pattern is re-detected.
+    pub(in crate::sim) fn note_miss(&mut self) {
+        debug_assert_eq!(self.state, CycleState::Active);
+        self.stale += 1;
+        if self.stale > self.phases.len() * 8 + 32 {
+            self.deactivate();
+        }
+    }
+
+    fn deactivate(&mut self) {
+        self.state = CycleState::Recording;
+        self.phases.clear();
+        self.pos = 0;
+        self.stale = 0;
+        self.history.clear();
+        self.record_streak = 0;
+    }
+
+    /// Snapshot the entry dirty-set bitmap for the recorder (the
+    /// capture site calls this once per captured settlement): counts
+    /// toward the recording give-up guard, which fires after
+    /// `REC_LIMIT` captures without an activation.
+    pub(in crate::sim) fn note_capture(&mut self) {
+        debug_assert_eq!(self.state, CycleState::Recording);
+        self.record_streak += 1;
+        if self.record_streak > Self::REC_LIMIT {
+            self.state = CycleState::Off;
+        }
+    }
+
+    /// Record one eligible settlement's signature and run the period
+    /// detector.  `Ok(())` when nothing fired; `Err(entries)` returns
+    /// the detected pattern's signatures (the last `P` entries) for
+    /// the caller to build phases from — the caller's activation can
+    /// still fail (non-terminal visited drivers), which the caller
+    /// reports through `note_activation_failure`.
+    pub(in crate::sim) fn record(&mut self, len: usize, bits: &[u64]) -> Result<(), Vec<(usize, Vec<u64>)>> {
+        debug_assert_eq!(self.state, CycleState::Recording);
+        let hash = hash_words(bits, len);
+        if self.history.len() == Self::HIST_CAP {
+            self.history.pop_front();
+        }
+        self.history.push_back(HistoryEntry { len, hash, bits: bits.into() });
+        // Period detection: the smallest P whose last P signatures
+        // repeat the P before them.  The hash filter is exact-safe:
+        // equal signatures hash equal, so a true period is never
+        // missed; a hash match is verified element-wise before
+        // returning.
+        for period in 1..=Self::MAX_PERIOD.min(self.history.len() / 2) {
+            let n = self.history.len();
+            let (recent, earlier) = (
+                self.history.range(n - period..).rev(),
+                self.history.range(n - 2 * period..n - period).rev(),
+            );
+            if recent.zip(earlier).all(|(a, b)| {
+                a.hash == b.hash && a.len == b.len && a.bits.as_ref() == b.bits.as_ref()
+            }) {
+                let entries: Vec<(usize, Vec<u64>)> = self
+                    .history
+                    .range(n - period..)
+                    .map(|e| (e.len, e.bits.to_vec()))
+                    .collect();
+                // Reset the recording streak: a fresh schedule starts a
+                // fresh give-up budget.
+                self.record_streak = 0;
+                return Err(entries);
+            }
+        }
+        Ok(())
+    }
+
+    /// The caller built the phases and the schedule is live.
+    pub(in crate::sim) fn activate(&mut self, phases: Vec<Phase>) {
+        debug_assert_eq!(self.state, CycleState::Recording);
+        self.phases = phases;
+        self.pos = 0;
+        self.stale = 0;
+        self.state = CycleState::Active;
+    }
+
+    /// The detected pattern failed the caller's validation (a phase's
+    /// visited drivers are not all terminal): count it.  The pattern
+    /// cannot ever replay, so repeated detections would only repeat
+    /// the failed build; enough failures stop the recorder.
+    pub(in crate::sim) fn note_activation_failure(&mut self) {
+        self.record_streak = 0;
+        self.history.clear();
+        self.failures += 1;
+        if self.failures >= Self::MAX_ACTIVATION_FAILURES {
+            self.state = CycleState::Off;
+        }
+    }
+
+    /// Structural change (watcher registration, driver set change,
+    /// `finish()` pruning): the phase driver lists are functions of
+    /// the circuit's sensitivity structure, so everything is dropped.
+    pub(in crate::sim) fn reset(&mut self) {
+        self.phases = Vec::new();
+        self.pos = 0;
+        self.stale = 0;
+        self.state = CycleState::Recording;
+        self.history.clear();
+        self.record_streak = 0;
+    }
+}
+
+/// FNV-1a over the dirty-set bitmap words, salted with the dirty
+/// length so differing lengths with word-equal tails hash differently.
+fn hash_words(bits: &[u64], len: usize) -> u64 {
+    let mut hash: u64 = 0xcbf29ce484222325 ^ (len as u64).wrapping_mul(0x100000001b3);
+    for &w in bits {
+        hash ^= w;
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -593,5 +947,172 @@ mod tests {
         // same 1-entry worklist also did nothing.
         cache.insert(vec![9u32], vec![(9u32, 2u32)]);
         assert_eq!(cache.lookup(&[9u32]), None);
+    }
+
+    // ------------------------------------------------------------------
+    // Stage C: the deep-cycle schedule.
+
+    /// Dirty-set bitmap for a set of signal indexes, trimmed to the
+    /// highest set word (the `DirtyList::bits`/`top` representation).
+    fn cycle_bits(idxs: &[usize]) -> Vec<u64> {
+        let top = idxs.iter().max().map(|i| i / 64 + 1).unwrap_or(0);
+        let mut bits = vec![0u64; top];
+        for &i in idxs {
+            bits[i / 64] |= 1 << (i % 64);
+        }
+        bits
+    }
+
+    fn phase_of(bits: &[u64], len: usize, drivers: &[u32]) -> Phase {
+        Phase { bits: bits.into(), len, drivers: drivers.into() }
+    }
+
+    /// The detector fires on the first exact repetition: a period-2
+    /// pattern (the s512 shape — one big rising settlement, one
+    /// 1-signal falling settlement) is detected on its second cycle.
+    #[test]
+    fn cycle_detects_a_period_two_pattern_on_its_second_repeat() {
+        let mut cs = CycleSchedule::new();
+        let rising = cycle_bits(&[0, 1, 2]);
+        let falling = cycle_bits(&[7]);
+        assert!(cs.record(3, &rising).is_ok());
+        assert!(cs.record(1, &falling).is_ok());
+        // One period is not enough (and a period-1 check correctly
+        // rejects: rising != falling).
+        assert!(cs.record(3, &rising).is_ok());
+        // The second full cycle completes the pattern.
+        let entries = cs.record(1, &falling).unwrap_err();
+        assert_eq!(entries, vec![(3, rising.clone()), (1, falling.clone())]);
+    }
+
+    /// Same dirty set, different insertion order: the same bitmap, so
+    /// the detection and the replay check are order-blind — which is
+    /// the soundness contract (the committed outcome of a terminal
+    /// settlement is order-independent).
+    #[test]
+    fn cycle_signatures_are_set_identities_not_insertion_orders() {
+        let mut cs = CycleSchedule::new();
+        // Two settlements whose dirty sets are identical (their
+        // insertion orders differ, which the bitmap does not record):
+        // the period-1 pattern is detected on the second repeat.
+        let a = cycle_bits(&[3, 9]);
+        assert!(cs.record(2, &a).is_ok());
+        let entries = cs.record(2, &a).unwrap_err();
+        assert_eq!(entries, vec![(2, a.clone())]);
+    }
+
+    /// The replay check is an exact set identity: a matching dirty set
+    /// replays its phase's driver list; a different set or length falls
+    /// through without consuming the phase pointer.
+    #[test]
+    fn cycle_match_is_exact_and_mismatches_keep_the_pointer() {
+        let mut cs = CycleSchedule::new();
+        let rising = cycle_bits(&[0, 1, 2]);
+        let falling = cycle_bits(&[7]);
+        cs.record(3, &rising).unwrap();
+        cs.record(1, &falling).unwrap();
+        cs.record(3, &rising).unwrap();
+        let entries = cs.record(1, &falling).unwrap_err();
+        let phases: Vec<Phase> = entries
+            .iter()
+            .map(|&(len, ref bits)| match len {
+                3 => phase_of(bits, 3, &[10, 11, 12]),
+                _ => phase_of(bits, 1, &[]),
+            })
+            .collect();
+        cs.activate(phases);
+
+        assert_eq!(cs.match_phase(3, &rising), Some([10u32, 11, 12].as_slice()));
+        cs.advance();
+        assert_eq!(cs.match_phase(1, &falling), Some([].as_slice()));
+        cs.advance(); // wrapped back to phase 0
+        assert_eq!(cs.match_phase(3, &rising), Some([10u32, 11, 12].as_slice()));
+
+        // A different set with the same length rejects.
+        assert_eq!(cs.match_phase(3, &cycle_bits(&[0, 1, 3])), None);
+        // A different length rejects even with a word-equal bitmap.
+        assert_eq!(cs.match_phase(2, &rising), None);
+        // Neither mismatch consumed the pointer: the next settlement
+        // is still checked against phase 0.
+        cs.note_miss();
+        cs.note_miss();
+        assert_eq!(cs.match_phase(3, &rising), Some([10u32, 11, 12].as_slice()));
+    }
+
+    /// The active-path thrash guard: a schedule that never completes
+    /// its cycle deactivates and re-arms the recorder.
+    #[test]
+    fn cycle_deactivates_when_the_pattern_never_wraps() {
+        let mut cs = CycleSchedule::new();
+        let a = cycle_bits(&[0]);
+        cs.activate(vec![phase_of(&a, 1, &[1])]);
+        // phases.len() * 8 + 32 misses are tolerated; one more
+        // deactivates.
+        for _ in 0..(8 + 32) {
+            cs.note_miss();
+        }
+        assert_eq!(cs.state(), CycleState::Active);
+        cs.note_miss();
+        assert_eq!(cs.state(), CycleState::Recording);
+    }
+
+    /// The recording give-up guard counts captures (not just accepted
+    /// records), so a design whose in-bounds settlements are all
+    /// non-replayable stops paying the capture after the limit.
+    #[test]
+    fn cycle_recorder_gives_up_after_the_capture_limit() {
+        let mut cs = CycleSchedule::new();
+        for i in 0..CycleSchedule::REC_LIMIT {
+            cs.note_capture();
+            assert_eq!(cs.state(), CycleState::Recording, "capture {i}");
+        }
+        cs.note_capture();
+        assert_eq!(cs.state(), CycleState::Off);
+    }
+
+    /// A detected pattern whose phases fail the terminality validation
+    /// is reported back; the failure that reaches the limit stops the
+    /// recorder (the same pattern would otherwise be re-detected and
+    /// re-rejected every cycle, paying the union walk forever).  Each
+    /// failure clears the history, so the next round re-detects from
+    /// scratch.
+    #[test]
+    fn cycle_repeated_activation_failures_disable_the_recorder() {
+        let mut cs = CycleSchedule::new();
+        for round in 1..CycleSchedule::MAX_ACTIVATION_FAILURES {
+            assert!(cs.record(1, &a_fixed()).is_ok(), "round {round} first");
+            assert!(cs.record(1, &a_fixed()).is_err(), "round {round} detects");
+            cs.note_activation_failure();
+            assert_eq!(cs.state(), CycleState::Recording, "failure {round}");
+        }
+        // The failure that reaches the limit disables the recorder.
+        assert!(cs.record(1, &a_fixed()).is_ok());
+        assert!(cs.record(1, &a_fixed()).is_err());
+        cs.note_activation_failure();
+        assert_eq!(cs.state(), CycleState::Off);
+    }
+
+    fn a_fixed() -> Vec<u64> {
+        cycle_bits(&[0])
+    }
+
+    /// A structural change re-arms everything: a gave-up recorder
+    /// records again, and an active schedule forgets its phases.
+    #[test]
+    fn cycle_reset_rearms_after_give_up_and_after_activation() {
+        let mut cs = CycleSchedule::new();
+        for _ in 0..=CycleSchedule::REC_LIMIT {
+            cs.note_capture();
+        }
+        assert_eq!(cs.state(), CycleState::Off);
+        cs.reset();
+        assert_eq!(cs.state(), CycleState::Recording);
+
+        let a = cycle_bits(&[0]);
+        cs.activate(vec![phase_of(&a, 1, &[1])]);
+        assert_eq!(cs.state(), CycleState::Active);
+        cs.reset();
+        assert_eq!(cs.state(), CycleState::Recording);
+        assert!(cs.phases.is_empty(), "phases dropped");
     }
 }
