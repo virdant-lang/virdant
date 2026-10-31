@@ -1,0 +1,5 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "SVG rendering of the cone network (`vir cones --svg=-`)."
+command = "cones --svg=- top::Top"
+filecheck = "svg.check"

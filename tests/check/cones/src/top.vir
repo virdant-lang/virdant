@@ -1,0 +1,151 @@
+// Regression test for `vir cones`: combinational cones of an elaborated
+// design, for every register and every top-level port.  The `command` in
+// test.toml runs `vir cones top::Top`; the CHECK directives below assert
+// the dump.
+//
+// Dataflow: `a` reads `mid` (which reads `d` and `a` itself); `b` reads
+// `a`; `c` reads only the top-level input `d`; the submodule register
+// `leaf.q` reads `leaf.x`, which is driven by `mid` from the parent.
+// The top module has no platform binding, so its ports are still
+// boundary endpoints (every top-level port is), just not "pins".
+
+pub mod Top {
+    incoming clock : Clock
+    incoming reset : Bit
+    incoming d : Word[8]
+    outgoing y_out : Word[8]
+    outgoing sum : Word[8]
+
+    wire mid : Word[8] {
+        it := d + a
+    }
+
+    mod leaf of Leaf {
+        it.clock := clock
+        it.reset := reset
+        it.x := mid
+        y_out := it.y
+    }
+
+    reg a : Word[8] on clock {
+        it <= mux(reset, 0w8, mid)
+    }
+
+    reg b : Word[8] on clock {
+        it <= mux(reset, 0w8, a + 1w8)
+    }
+
+    reg c : Word[8] on clock {
+        it <= mux(reset, 0w8, d)
+    }
+
+    sum := b + c
+}
+
+mod Leaf {
+    incoming clock : Clock
+    incoming reset : Bit
+    incoming x : Word[8]
+    outgoing y : Word[8]
+
+    reg q : Word[8] on clock {
+        it <= mux(reset, 0w8, x)
+    }
+
+    y := q
+}
+
+// Signals are listed in elaboration order: the top module's ports first
+// (the submodule's components elaborate where `mod leaf` is declared),
+// then the registers.  Each port gets its own cone entry, just like the
+// registers.
+//
+// CHECK: Cones of 'top::Top' (9 signals, 4 registers, 5 ports)
+//
+// `clock` is never read as data (only via `on` clauses), so both cones
+// are empty:
+// CHECK: top.clock : incoming port
+// CHECK-NEXT:   backward cone (what feeds top.clock through combinational logic):
+// CHECK-NEXT:     (none)
+// CHECK-NEXT:   forward cone (what top.clock feeds through combinational logic):
+// CHECK-NEXT:     (none)
+//
+// `reset` is a pure source: nothing feeds it, and it gates all four
+// registers (three directly, `leaf.q` through `leaf.reset`):
+// CHECK: top.reset : incoming port
+// CHECK-NEXT:   backward cone (what feeds top.reset through combinational logic):
+// CHECK-NEXT:     (none)
+// CHECK-NEXT:   forward cone (what top.reset feeds through combinational logic):
+// CHECK-NEXT:     top.c
+// CHECK-NEXT:     top.b
+// CHECK-NEXT:     top.a
+// CHECK-NEXT:     top.leaf.q
+//
+// `d` feeds `c` directly and `a`/`leaf.q` through `mid`:
+// CHECK: top.d : incoming port
+// CHECK-NEXT:   backward cone (what feeds top.d through combinational logic):
+// CHECK-NEXT:     (none)
+// CHECK-NEXT:   forward cone (what top.d feeds through combinational logic):
+// CHECK-NEXT:     top.c
+// CHECK-NEXT:     top.a
+// CHECK-NEXT:     top.leaf.q
+//
+// `y_out` is a pure sink fed by the submodule register `leaf.q` (through
+// `leaf.y`):
+// CHECK: top.y_out : outgoing port
+// CHECK-NEXT:   backward cone (what feeds top.y_out through combinational logic):
+// CHECK-NEXT:     top.leaf.q
+// CHECK-NEXT:   forward cone (what top.y_out feeds through combinational logic):
+// CHECK-NEXT:     (none)
+//
+// `sum` is a pure sink fed by `b` and `c`:
+// CHECK: top.sum : outgoing port
+// CHECK-NEXT:   backward cone (what feeds top.sum through combinational logic):
+// CHECK-NEXT:     top.b
+// CHECK-NEXT:     top.c
+// CHECK-NEXT:   forward cone (what top.sum feeds through combinational logic):
+// CHECK-NEXT:     (none)
+//
+// `leaf.q` is fed by `a` (through the `leaf.x` port driven from the
+// parent's `mid`) and by the `reset` input port (through `leaf.reset`);
+// `d` reaches it through `mid`.  Its forward cone grounds out at the
+// `y_out` output port:
+// CHECK: top.leaf.q : reg on top.leaf.clock
+// CHECK-NEXT:   backward cone (what feeds top.leaf.q through combinational logic):
+// CHECK-NEXT:     top.reset
+// CHECK-NEXT:     top.d
+// CHECK-NEXT:     top.a
+// CHECK-NEXT:   forward cone (what top.leaf.q feeds through combinational logic):
+// CHECK-NEXT:     top.y_out
+//
+// `a` reads itself (through `mid`), and feeds `b` and — through `leaf.x` —
+// the submodule register `leaf.q`.  Its forward cone stops at `leaf.q`:
+// `leaf.q`'s own output path continues to `y_out`, but that passes
+// through the register `leaf.q`, so it belongs to `leaf.q`'s cone:
+// CHECK: top.a : reg on top.clock
+// CHECK-NEXT:   backward cone (what feeds top.a through combinational logic):
+// CHECK-NEXT:     top.reset
+// CHECK-NEXT:     top.d
+// CHECK-NEXT:     top.a
+// CHECK-NEXT:   forward cone (what top.a feeds through combinational logic):
+// CHECK-NEXT:     top.b
+// CHECK-NEXT:     top.a
+// CHECK-NEXT:     top.leaf.q
+//
+// `b` is fed by `a` and by the `reset` port, and its forward cone
+// grounds out at the `sum` output port:
+// CHECK: top.b : reg on top.clock
+// CHECK-NEXT:   backward cone (what feeds top.b through combinational logic):
+// CHECK-NEXT:     top.reset
+// CHECK-NEXT:     top.a
+// CHECK-NEXT:   forward cone (what top.b feeds through combinational logic):
+// CHECK-NEXT:     top.sum
+//
+// `c` is fed by the `reset` and `d` input ports, and its forward cone
+// grounds out at `sum`:
+// CHECK: top.c : reg on top.clock
+// CHECK-NEXT:   backward cone (what feeds top.c through combinational logic):
+// CHECK-NEXT:     top.reset
+// CHECK-NEXT:     top.d
+// CHECK-NEXT:   forward cone (what top.c feeds through combinational logic):
+// CHECK-NEXT:     top.sum

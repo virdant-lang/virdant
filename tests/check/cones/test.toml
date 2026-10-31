@@ -1,0 +1,5 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Combinational cones of registers and top-level ports of an elaborated design."
+command = "cones top::Top"
+filecheck = "src/top.vir"
