@@ -162,6 +162,17 @@ The differential harness in `sim-bench/` gates all of them.
 21. **Multi-clock pipelining.** Independent clock domains could settle
     concurrently with a merge at shared signals. The merge logic is the
     hard part.
+    Both items 20 and 21 are explicitly out of scope for the current
+    plan (decided during the VM-sim rewrite, recorded here so future
+    readers do not reintroduce them casually). Threading threatens the
+    determinism contract the differential gates rely on, conflicts with
+    the single-owner `&mut Sim` design, and complicates the
+    `wasm32-unknown-unknown` build: wasm threads require
+    `SharedArrayBuffer`, which browsers only expose under cross-origin
+    isolation (COOP/COEP headers), so a threaded engine would fail on
+    plain static hosting like the web demo's. The current performance
+    path (removing per-cycle bookkeeping) is the wasm-compatible one.
+
 22. **Fix the profiling environment upstream.** `sysctl
     kernel.perf_event_paranoid=1` on the host would let `perf record`
     turn items 5-16 from hypotheses into a ranked list.
