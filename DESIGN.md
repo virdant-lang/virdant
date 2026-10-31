@@ -714,10 +714,29 @@ The differential harness (`sim-bench/`) is the gate for every unit:
 - `bash sim-bench/check.sh` recaptures and diffs. Every migration unit
   must pass it twice before landing.
 
+Provenance note: the five bench-stage goldens were recaptured from the
+new engine after the bench-generator fix (the original chain design
+converged to a fixed point, so its goldens did not exercise change
+detection). Old-vs-new byte equivalence is therefore pinned by the
+`gcd` and `new-hello` golden traces and VCD, which were captured before
+that fix and never recaptured.
+
 Performance gates: at least 5x the baseline at both scaling points
 (s=1 at 4.5 MHz, s=512 at 0.33 MHz), with actuals reported and the
 limiting factor named. `make test` stays green throughout. The old
 interpreter was deleted with unit 6, so one engine ships.
+
+Outcome note (added at run close): the gate's baseline numbers turned
+out to be unmeasurable as written. The 512-stage baseline design
+converged to a fixed point, so 0.33 MHz measured almost no per-stage
+work, and the goldens were recaptured on the redesigned chain, changing
+the workload. The apples-to-apples final paired A/B (same bench, base
+`6e9644a` binary vs rewrite binary, interleaved runs) measured s=1
+2.08 to 5.34 MHz (2.6x), hello 0.186 to 0.343 MHz (1.84x), and the
+active 512-stage chain 0.0051 to 0.0490 MHz (9.6x). The 5x intent is
+met on the large-design point and not on the small benches; the
+limiting factor on small designs is the per-cycle dispatch and flow
+floor, named from the profiler's phase attribution.
 
 ## Migration sequence
 
