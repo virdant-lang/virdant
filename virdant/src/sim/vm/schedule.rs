@@ -472,7 +472,18 @@ fn hash_stack(stack: &[u32]) -> u64 {
 /// ring.  After each record, the detector looks for the smallest
 /// period `P` such that the last `P` signatures repeat the `P` before
 /// them (exact, after a hash pre-filter): the pattern's first repeat
-/// promotes it to the replay schedule.  The promotion is only an
+/// promotes it to the replay schedule.  Settlements below the
+/// engagement floor (`MIN_ENGAGEMENT`) are excluded from the stream:
+/// `record` refuses them, so the history ring is recorded-only by
+/// construction, and a below-floor settlement is transparent to the
+/// phase cursor — it neither matches nor misses nor advances — so the
+/// recorded order is the order the phases are consumed in.  (Had a
+/// below-floor settlement been recorded, the detected pattern could
+/// contain a phase the cursor can never consume: the active path
+/// skips below-floor settlements before the match, so the cursor
+/// would misalign on every cycle.  Recorded-only is what makes the
+/// exclusion sound by construction rather than by measurement.)
+/// The promotion is only an
 /// optimization decision — every replay is still verified against its
 /// phase's exact dirty set, so a wrong or stale detection degrades to
 /// the dynamic path, never to a wrong trace.
@@ -530,13 +541,15 @@ pub(in crate::sim) struct CycleSchedule {
     /// The recorder's history ring: the last recorded settlements'
     /// signatures, oldest first.
     history: std::collections::VecDeque<HistoryEntry>,
-    /// Eligible settlements captured since the last activation.  The
-    /// recording give-up guard: a design whose settlements never form
-    /// a repeating pattern stops recording.  Counts *captures* (every
-    /// settlement snapshotted while recording), not only accepted
-    /// records — a design whose in-bounds settlements are all
-    /// non-replayable would otherwise capture forever without ever
-    /// advancing the guard.
+    /// Settlements seen since the last activation.  The recording
+    /// give-up guard: a design whose settlements never form a
+    /// repeating pattern stops recording.  Counts every settlement
+    /// seen while recording — captured (above the engagement floor) or
+    /// below-floor-skipped, which still pays the recording state's
+    /// prologue — not only accepted records: a design whose
+    /// settlements are all below the floor or all non-replayable must
+    /// reach the Off steady state instead of paying the prologue
+    /// forever.
     record_streak: usize,
     /// Detections whose phase build failed the terminality validation.
     failures: u32,
@@ -563,6 +576,35 @@ struct HistoryEntry {
 }
 
 impl CycleSchedule {
+    /// The engagement floor: a settlement whose entry dirty-set is
+    /// smaller than this never engages the deep-cycle machinery — not
+    /// recorded, not replayed — and takes the unchanged dynamic path.
+    ///
+    /// Measured derivation: on the s=1 bench (settlements of 2 and 1
+    /// dirty signals) the machinery's replay bookkeeping — the exact
+    /// bitmap check, the phase bookkeeping, the record calls — cost
+    /// ~2 ns per replay more than the 1-2 worklist pops it replaced,
+    /// a consistent +1.7% regression.  That bookkeeping is roughly
+    /// settlement-length independent, while the pops it replaces scale
+    /// with the dirty length, so settlements of 3+ dirty signals are
+    /// at worst break-even and the chain's 513-dirty rising
+    /// settlements win big.  A below-floor settlement keeps the
+    /// dynamic path, which is exact stage-B behavior.
+    ///
+    /// The floor is a performance decision, never a soundness one —
+    /// the per-settlement replay check stays exact regardless.  But
+    /// excluding settlements from *recording* is what keeps the mixed
+    /// stream correct by construction: the history ring and the phase
+    /// sequence are indexed over recorded settlements only, and a
+    /// below-floor settlement is transparent to the phase cursor in
+    /// every state — it neither records, matches, advances, nor
+    /// misses — so a pattern detected over the recorded subsequence is
+    /// consumed in exactly that order, whatever below-floor
+    /// settlements interleave between its phases (the chain's
+    /// [513-dirty rising, 1-dirty falling] cycle records as a
+    /// period-1 stream of identical rising signatures).
+    pub(in crate::sim) const MIN_ENGAGEMENT: usize = 3;
+
     /// History ring capacity: the detector needs `2 * MAX_PERIOD`
     /// consecutive signatures to confirm a period.
     pub(in crate::sim) const MAX_PERIOD: usize = 16;
@@ -665,9 +707,16 @@ impl CycleSchedule {
     /// the detected pattern's signatures (the last `P` entries) for
     /// the caller to build phases from — the caller's activation can
     /// still fail (non-terminal visited drivers), which the caller
-    /// reports through `note_activation_failure`.
+    /// reports through `note_activation_failure`.  A below-floor
+    /// settlement is refused and never enters the history ring: the
+    /// caller gates them before the capture, so this is defense in
+    /// depth, but it is what keeps the history ring recorded-only by
+    /// construction (see `MIN_ENGAGEMENT`).
     pub(in crate::sim) fn record(&mut self, len: usize, bits: &[u64]) -> Result<(), Vec<(usize, Vec<u64>)>> {
         debug_assert_eq!(self.state, CycleState::Recording);
+        if len < Self::MIN_ENGAGEMENT {
+            return Ok(());
+        }
         let hash = hash_words(bits, len);
         if self.history.len() == Self::HIST_CAP {
             self.history.pop_front();
@@ -701,9 +750,17 @@ impl CycleSchedule {
         Ok(())
     }
 
-    /// The caller built the phases and the schedule is live.
+    /// The caller built the phases and the schedule is live.  Phases
+    /// are built from recorded entries only, so every phase's length
+    /// is above the engagement floor — a below-floor settlement can
+    /// therefore never match a phase (its length differs from every
+    /// phase's), which is what makes the excluded stream replay-safe.
     pub(in crate::sim) fn activate(&mut self, phases: Vec<Phase>) {
         debug_assert_eq!(self.state, CycleState::Recording);
+        debug_assert!(
+            phases.iter().all(|p| p.len >= Self::MIN_ENGAGEMENT),
+            "phases are built from recorded entries, all above the engagement floor",
+        );
         self.phases = phases;
         self.pos = 0;
         self.stale = 0;
@@ -968,21 +1025,49 @@ mod tests {
     }
 
     /// The detector fires on the first exact repetition: a period-2
-    /// pattern (the s512 shape — one big rising settlement, one
-    /// 1-signal falling settlement) is detected on its second cycle.
+    /// pattern of two above-floor settlements is detected on its
+    /// second repeat.  (The s512 chain's recorded stream is period-1:
+    /// its 1-dirty falling edge sits below the engagement floor and is
+    /// excluded — see the mixed-stream tests below.)
     #[test]
     fn cycle_detects_a_period_two_pattern_on_its_second_repeat() {
         let mut cs = CycleSchedule::new();
+        let first = cycle_bits(&[0, 1, 2]);
+        let second = cycle_bits(&[7, 9, 11]);
+        assert!(cs.record(3, &first).is_ok());
+        assert!(cs.record(3, &second).is_ok());
+        // One period is not enough (and a period-1 check correctly
+        // rejects: first != second).
+        assert!(cs.record(3, &first).is_ok());
+        // The second full cycle completes the pattern.
+        let entries = cs.record(3, &second).unwrap_err();
+        assert_eq!(entries, vec![(3, first.clone()), (3, second.clone())]);
+    }
+
+    /// The engagement floor, mixed stream: a recorded/unrecorded
+    /// alternating stream.  The history ring is recorded-only by
+    /// construction (`record` refuses below-floor lengths), so period
+    /// detection runs over the recorded subsequence alone: the two
+    /// identical above-floor signatures promote on the second repeat,
+    /// with entries from the recorded subsequence only.  (Without the
+    /// floor, the interleaved history would promote as a period-2
+    /// mixed pattern — [(1, falling), (3, rising)] — whose falling
+    /// phase the replay cursor could then never consume: the active
+    /// path skips below-floor settlements before the match, so the
+    /// cursor would misalign on every cycle.  Recorded-only keeps the
+    /// detected pattern consistent with the cursor by construction.)
+    #[test]
+    fn cycle_floor_excludes_below_floor_settlements_from_detection() {
+        let mut cs = CycleSchedule::new();
         let rising = cycle_bits(&[0, 1, 2]);
         let falling = cycle_bits(&[7]);
+        assert!(cs.record(1, &falling).is_ok(), "below floor: refused");
         assert!(cs.record(3, &rising).is_ok());
-        assert!(cs.record(1, &falling).is_ok());
-        // One period is not enough (and a period-1 check correctly
-        // rejects: rising != falling).
-        assert!(cs.record(3, &rising).is_ok());
-        // The second full cycle completes the pattern.
-        let entries = cs.record(1, &falling).unwrap_err();
-        assert_eq!(entries, vec![(3, rising.clone()), (1, falling.clone())]);
+        assert!(cs.record(1, &falling).is_ok(), "below floor: refused");
+        // The history holds only the rising signature: the second
+        // rising repeats it and the period-1 pattern promotes.
+        let entries = cs.record(3, &rising).unwrap_err();
+        assert_eq!(entries, vec![(3, rising.clone())]);
     }
 
     /// Same dirty set, different insertion order: the same bitmap, so
@@ -995,10 +1080,10 @@ mod tests {
         // Two settlements whose dirty sets are identical (their
         // insertion orders differ, which the bitmap does not record):
         // the period-1 pattern is detected on the second repeat.
-        let a = cycle_bits(&[3, 9]);
-        assert!(cs.record(2, &a).is_ok());
-        let entries = cs.record(2, &a).unwrap_err();
-        assert_eq!(entries, vec![(2, a.clone())]);
+        let a = cycle_bits(&[3, 9, 12]);
+        assert!(cs.record(3, &a).is_ok());
+        let entries = cs.record(3, &a).unwrap_err();
+        assert_eq!(entries, vec![(3, a.clone())]);
     }
 
     /// The replay check is an exact set identity: a matching dirty set
@@ -1008,23 +1093,23 @@ mod tests {
     fn cycle_match_is_exact_and_mismatches_keep_the_pointer() {
         let mut cs = CycleSchedule::new();
         let rising = cycle_bits(&[0, 1, 2]);
-        let falling = cycle_bits(&[7]);
+        let falling = cycle_bits(&[7, 9, 11, 13]);
         cs.record(3, &rising).unwrap();
-        cs.record(1, &falling).unwrap();
+        cs.record(4, &falling).unwrap();
         cs.record(3, &rising).unwrap();
-        let entries = cs.record(1, &falling).unwrap_err();
+        let entries = cs.record(4, &falling).unwrap_err();
         let phases: Vec<Phase> = entries
             .iter()
             .map(|&(len, ref bits)| match len {
                 3 => phase_of(bits, 3, &[10, 11, 12]),
-                _ => phase_of(bits, 1, &[]),
+                _ => phase_of(bits, 4, &[]),
             })
             .collect();
         cs.activate(phases);
 
         assert_eq!(cs.match_phase(3, &rising), Some([10u32, 11, 12].as_slice()));
         cs.advance();
-        assert_eq!(cs.match_phase(1, &falling), Some([].as_slice()));
+        assert_eq!(cs.match_phase(4, &falling), Some([].as_slice()));
         cs.advance(); // wrapped back to phase 0
         assert_eq!(cs.match_phase(3, &rising), Some([10u32, 11, 12].as_slice()));
 
@@ -1037,6 +1122,46 @@ mod tests {
         cs.note_miss();
         cs.note_miss();
         assert_eq!(cs.match_phase(3, &rising), Some([10u32, 11, 12].as_slice()));
+
+        // A below-floor length never matches: no phase can exist below
+        // the engagement floor (phases are built only from recorded
+        // entries), and the refusal must not consume the pointer.
+        assert_eq!(cs.match_phase(1, &cycle_bits(&[5])), None);
+        assert_eq!(cs.match_phase(3, &rising), Some([10u32, 11, 12].as_slice()));
+    }
+
+    /// The chain's mixed stream, end to end: rising = 513 dirty
+    /// signals (above the floor), falling = 1 (below).  With falling
+    /// excluded, the recorder sees a stream of identical rising
+    /// signatures — period 1.  After activation, the arriving rising
+    /// settlement keys to its phase in order; the excluded falling
+    /// settlement never matches (no phase can exist below the floor)
+    /// and never consumes the phase pointer, so the next rising
+    /// settlement still keys to phase 0.
+    #[test]
+    fn cycle_chain_pattern_replays_across_excluded_settlements() {
+        let mut cs = CycleSchedule::new();
+        let rising: Vec<usize> = (0..513).collect();
+        let rising_bits = cycle_bits(&rising);
+        let falling_bits = cycle_bits(&[600]);
+        assert!(cs.record(513, &rising_bits).is_ok());
+        assert!(cs.record(1, &falling_bits).is_ok(), "below floor: refused");
+        let entries = cs.record(513, &rising_bits).unwrap_err();
+        assert_eq!(entries, vec![(513, rising_bits.clone())]);
+
+        let drivers: Vec<u32> = (0..513).map(|i| i as u32).collect();
+        cs.activate(vec![phase_of(&rising_bits, 513, &drivers)]);
+
+        // The falling edge arrives between rising edges: below the
+        // floor it must not match and must not consume the pointer.
+        assert_eq!(cs.match_phase(1, &falling_bits), None);
+        assert_eq!(cs.match_phase(513, &rising_bits), Some(drivers.as_slice()));
+        cs.advance();
+        // The next cycle: falling excluded again, rising replays
+        // phase 0 once more.
+        assert_eq!(cs.match_phase(1, &falling_bits), None);
+        assert_eq!(cs.match_phase(513, &rising_bits), Some(drivers.as_slice()));
+        cs.advance();
     }
 
     /// The active-path thrash guard: a schedule that never completes
@@ -1044,8 +1169,8 @@ mod tests {
     #[test]
     fn cycle_deactivates_when_the_pattern_never_wraps() {
         let mut cs = CycleSchedule::new();
-        let a = cycle_bits(&[0]);
-        cs.activate(vec![phase_of(&a, 1, &[1])]);
+        let a = cycle_bits(&[0, 1, 2]);
+        cs.activate(vec![phase_of(&a, 3, &[1])]);
         // phases.len() * 8 + 32 misses are tolerated; one more
         // deactivates.
         for _ in 0..(8 + 32) {
@@ -1080,20 +1205,20 @@ mod tests {
     fn cycle_repeated_activation_failures_disable_the_recorder() {
         let mut cs = CycleSchedule::new();
         for round in 1..CycleSchedule::MAX_ACTIVATION_FAILURES {
-            assert!(cs.record(1, &a_fixed()).is_ok(), "round {round} first");
-            assert!(cs.record(1, &a_fixed()).is_err(), "round {round} detects");
+            assert!(cs.record(3, &a_fixed()).is_ok(), "round {round} first");
+            assert!(cs.record(3, &a_fixed()).is_err(), "round {round} detects");
             cs.note_activation_failure();
             assert_eq!(cs.state(), CycleState::Recording, "failure {round}");
         }
         // The failure that reaches the limit disables the recorder.
-        assert!(cs.record(1, &a_fixed()).is_ok());
-        assert!(cs.record(1, &a_fixed()).is_err());
+        assert!(cs.record(3, &a_fixed()).is_ok());
+        assert!(cs.record(3, &a_fixed()).is_err());
         cs.note_activation_failure();
         assert_eq!(cs.state(), CycleState::Off);
     }
 
     fn a_fixed() -> Vec<u64> {
-        cycle_bits(&[0])
+        cycle_bits(&[0, 1, 2])
     }
 
     /// A structural change re-arms everything: a gave-up recorder
@@ -1108,8 +1233,8 @@ mod tests {
         cs.reset();
         assert_eq!(cs.state(), CycleState::Recording);
 
-        let a = cycle_bits(&[0]);
-        cs.activate(vec![phase_of(&a, 1, &[1])]);
+        let a = cycle_bits(&[0, 1, 2]);
+        cs.activate(vec![phase_of(&a, 3, &[1])]);
         assert_eq!(cs.state(), CycleState::Active);
         cs.reset();
         assert_eq!(cs.state(), CycleState::Recording);

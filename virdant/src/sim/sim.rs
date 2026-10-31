@@ -582,6 +582,13 @@ impl Sim {
         // recorder's give-up guard bounds the inactive cost: a design
         // whose settlements never form a repeating pattern records for
         // a bounded warm-up, then pays one state load per settlement.
+        // The engagement floor keeps trivially small settlements out
+        // of the machinery in every state: below
+        // `vm::CycleSchedule::MIN_ENGAGEMENT` dirty signals the replay
+        // bookkeeping costs more than the 1-2 pops it would replace
+        // (measured +1.7% on the s=1 bench), so such a settlement is
+        // neither recorded nor replayed and the dynamic path below is
+        // unchanged stage-B behavior for it.
         //
         // The machinery lives in `cycle_settlement`, not here: the
         // inline footprint of this prologue is the hot path's entire
@@ -589,7 +596,8 @@ impl Sim {
         // ~10% with the schedule never engaging, purely from code
         // layout), so `flow` keeps one load and one predicted branch
         // and the helpers keep the rest out of line.
-        if self.cycle_schedule.state() != vm::CycleState::Off && self.cycle_settlement() {
+        let cycle_armed = self.cycle_schedule.state() != vm::CycleState::Off;
+        if cycle_armed && self.cycle_settlement() {
             return;
         }
 
@@ -628,13 +636,7 @@ impl Sim {
             && self.state.dirty_len() <= vm::ScheduleCache::MAX_SETTLEMENT
         {
         let stack_view = self.state.dirty_stack();
-        // Scoped so the timer measures the lookup itself, not the
-        // replay the hit path runs afterward.
-        let cached_visits = {
-            #[cfg(feature = "sim-profile")]
-            let _profile_lookup = crate::sim::profile::time_cache_lookup();
-            self.schedule_cache.lookup(stack_view)
-        };
+        let cached_visits = self.schedule_cache.lookup(stack_view);
         if let Some(visits) = cached_visits {
             #[cfg(feature = "sim-profile")]
             crate::sim::profile::bump_schedule_cache_hit();
@@ -671,14 +673,17 @@ impl Sim {
                     );
                 }
             }
-            #[cfg(feature = "sim-profile")]
-            let _profile_clear = crate::sim::profile::time_cache_clear();
             self.state.clear_dirty();
             // The stage-B hit is a replayable settlement (its entry was
             // cached only from a terminal settlement), so the recorder
-            // takes it into the history ring unconditionally.
-            if let Some(len) = self.cycle_captured.take() {
-                self.record_cycle_settlement(len, true);
+            // takes it into the history ring unconditionally.  Gated on
+            // the same arming check the prologue made: when the recorder
+            // is off no capture can exist (it is only taken while the
+            // recorder is armed), so the tail load is pure waste.
+            if cycle_armed {
+                if let Some(len) = self.cycle_captured.take() {
+                    self.record_cycle_settlement(len, true);
+                }
             }
             return;
         }
@@ -787,27 +792,44 @@ impl Sim {
                 self.schedule_cache.insert(key, value);
             }
         }
-        if let Some(len) = self.cycle_captured.take() {
-            // `cachable` is the replayability verdict for in-bounds
-            // settlements (every visited driver terminal); below-gate
-            // settlements are recorded unvalidated and validated at
-            // activation, where their tiny unions make the check cheap.
-            self.record_cycle_settlement(len, cachable);
+        // Gated on the prologue's arming check (see the hit-path tail):
+        // when the recorder is off, no capture exists, so this is a
+        // plain register test instead of an Option load from memory.
+        if cycle_armed {
+            if let Some(len) = self.cycle_captured.take() {
+                // `cachable` is the replayability verdict for in-bounds
+                // settlements (every visited driver terminal).
+                self.record_cycle_settlement(len, cachable);
+            }
         }
     }
 
     /// Stage C's per-settlement work, kept out of `flow`'s inline
     /// footprint (see the call site's comment): replay the expected
     /// phase when the entry dirty set matches it, or snapshot the
-    /// entry dirty set while the recorder is armed.
-    #[inline(never)]
+    /// entry dirty set while the recorder is armed.  Settlements below
+    /// the engagement floor (`vm::CycleSchedule::MIN_ENGAGEMENT`) are
+    /// excluded from the machinery in every state: the dynamic path
+    /// below is unchanged stage-B behavior for them, and they are
+    /// transparent to the pattern cursor — no capture, no match, no
+    /// advance, and no miss (see `vm::schedule::CycleSchedule`).
     #[inline(never)]
     fn cycle_settlement(&mut self) -> bool {
         match self.cycle_schedule.state() {
             vm::CycleState::Active => {
+                let len = self.state.dirty_len();
+                if len < vm::CycleSchedule::MIN_ENGAGEMENT {
+                    // Below the engagement floor: the unchanged dynamic
+                    // path.  No match attempt — and no miss: an excluded
+                    // settlement must not count toward the thrash guard
+                    // (the chain's 1-dirty falling edge arrives between
+                    // rising-edge replays every cycle and must not drain
+                    // the schedule's tolerance).
+                    return false;
+                }
                 let matched = {
                     let bits = self.state.dirty_bits();
-                    self.cycle_schedule.match_phase(self.state.dirty_len(), bits)
+                    self.cycle_schedule.match_phase(len, bits)
                 };
                 if let Some(drivers) = matched {
                     #[cfg(feature = "sim-profile")]
@@ -831,13 +853,24 @@ impl Sim {
                 false
             }
             vm::CycleState::Recording => {
+                let len = self.state.dirty_len();
+                if len < vm::CycleSchedule::MIN_ENGAGEMENT {
+                    // Below the engagement floor: nothing is captured
+                    // or recorded — the dynamic path below is exact
+                    // stage-B behavior for this settlement, and it is
+                    // transparent to the pattern cursor.  It still
+                    // counts toward the give-up guard: an all-tiny
+                    // design must reach the recorder-off steady state
+                    // instead of paying this prologue forever.
+                    self.cycle_schedule.note_capture();
+                    return false;
+                }
                 // Snapshot the entry dirty set for the recorder: the
                 // dynamic loop below consumes the worklist, so the set
                 // must be captured before it drains.  The capture is
                 // the recorder's only steady per-settlement cost (one
                 // worklist-width bitmap copy) and stops entirely once
                 // the give-up guard fires.
-                let len = self.state.dirty_len();
                 self.cycle_scratch.clear();
                 self.cycle_scratch.extend_from_slice(self.state.dirty_bits());
                 self.cycle_schedule.note_capture();
@@ -856,7 +889,6 @@ impl Sim {
     /// (union of sensitivity lists per phase, terminality-validated)
     /// and activates the replay schedule.
     #[inline(never)]
-    #[inline(never)]
     fn record_cycle_settlement(&mut self, entry_len: usize, replayable: bool) {
         // The give-up guard may have fired at the capture site (this
         // settlement's snapshot tripped REC_LIMIT): the recorder is off
@@ -864,12 +896,13 @@ impl Sim {
         if self.cycle_schedule.state() != vm::CycleState::Recording {
             return;
         }
-        // In-bounds settlements with a non-terminal visit can never be
-        // replayed (their worklist grows data-dependently); recording
-        // them would only teach the detector an unusable pattern.
-        // Below-gate settlements are recorded unvalidated: their dirty
-        // sets are tiny, so the activation-time union walk is cheap.
-        if !replayable && entry_len >= vm::ScheduleCache::MIN_SETTLEMENT {
+        // Settlements with a non-terminal visit can never be replayed
+        // (their worklist grows data-dependently); recording them would
+        // only teach the detector an unusable pattern.  Below-floor
+        // settlements never reach this function at all: the capture
+        // site skips them, so `cycle_captured` — and with it this call
+        // — only exists for above-floor settlements.
+        if !replayable {
             return;
         }
         match self.cycle_schedule.record(entry_len, &self.cycle_scratch) {
@@ -897,7 +930,6 @@ impl Sim {
     /// topological when the design has a static schedule, ascending
     /// component index otherwise; the order is unobservable (inputs
     /// are frozen for the whole settlement), so both are sound.
-    #[inline(never)]
     #[inline(never)]
     fn build_cycle_phases(&self, entries: &[(usize, Vec<u64>)]) -> Option<Vec<vm::Phase>> {
         let n = self.circuit.elaboration.components().len();
