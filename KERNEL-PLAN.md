@@ -23,7 +23,7 @@ correctly whatever produced the set.
 
 | bench | stage B (234acb9) | stage C | verdict |
 |---|---|---|---|
-| s=1 | ~339 ns/cyc | ~341 ns/cyc | flat (inside ±2-3%); engages (2 replays/cycle, pops 100002→5) |
+| s=1 | ~339 ns/cyc | ~341 ns/cyc | worker: flat; **coordinator: +1.7% consistent (5/5 pairs + ABBA ×6, 275→280 ns/cyc)** — replay bookkeeping on trivial 1-2-dirty settlements; fix unit launched |
 | s=512 chain | ~15236 ns/cyc | ~13205 ns/cyc | **−13.3%, 5/5 pairs** (12991-13525 vs 14901-15614) |
 | hello | ~422 ns/cyc | ~420 ns/cyc | flat; never engages (phase build refuses its settlements; recorder off after 4 failures) |
 | riscv | ~1392 ns/cyc | ~1389 ns/cyc | flat (inside ±7%); recorder gives up after 1024 captures, then one state load per settlement |
@@ -37,6 +37,15 @@ Worker-process note: an early `std::env::var` debug probe left in
 `flow` cost ~45 ns/cycle on hello and survived every intermediate
 measurement; it is gone from the shipped tree, and hello's flat pairs
 above are from the clean build.
+
+Coordinator verification (merged tree `fa4147e`): re-ran gates ×2 (ALL
+PASS), 100 virdant tests, workspace 120, `make test` green; re-measured
+all four benches with own interleaved pairs — s512 **−13.0%** (15.6k→13.6k,
+5/5, tight), hello/riscv flat, s1 **+1.7% consistent** (worker's "flat"
+was inside its ±2-3% band but 5/5 directional; phase split: flow +4.0,
+floor +4.3 instrument, sweep −0.8, i.e. ~+2 ns/replay of bookkeeping on
+trivial settlements).  Also confirmed the worker's disclosure items: the
+wired cache-lookup timers and the removed debug probe.
 
 Stage B's riscv +1.8% codegen cost is untouched: stage C adds no code
 to the dynamic loop (its machinery is out-of-line helpers gated behind
