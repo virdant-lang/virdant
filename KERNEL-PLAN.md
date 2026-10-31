@@ -1,7 +1,31 @@
 # Scheduled Kernel Plan
 
-Status: **the scheduled kernel is CLOSED at stage C** — the endgame unit
-(whole-cycle compiled program) fired the null exit clause: after stage C
+Status: **the scheduled kernel is CLOSED at stage C — plus the Cranelift JIT tier landed on top** (`94dca36`, feature-gated, coordinator-verified).
+
+## JIT v2 measured results (batch-level, coordinator ABBA ×4-8 per bench)
+
+The `jit` cargo feature compiles each qualifying replay phase into ONE
+native function (state base + frame pointers baked at compile time,
+`fn(out: *mut u64)`, commit in Rust per driver). Chain: eval collapsed
+(51.3M interpreter evals → ~1k native batch work per 100k cycles);
+**13.85k → 7.75k ns/cyc (−44%, 8/8 ABBA samples, no overlap)**; s1
+(280→281), hello (417→421), riscv (1428→1435) flat — they never qualify
+and pay zero. Gates green in BOTH configurations (default 122 workspace
+tests, jit 123; byte-identical traces ×2 each). Feature-off remains
+byte-for-byte previous behavior; cranelift 0.135 pinned (rust-version
+1.95.0; 0.137 needs rustc 1.97 and must not return); not available on
+wasm32 hosts (web demo keeps the interpreter — by design).
+
+Caveat worth knowing: the replay (and therefore the JIT) only engages
+when the design's settlement pattern repeats. On the chain bench that
+holds for seed 42 (the check.sh seed) but NOT for simprof's default
+seed 0, where the registers drift into a fixed point (prev = 0xFFFFFFFF
+makes `it + prev + 1 ≡ it mod 2³²`) and the recorder gives up. Designs
+with stable per-cycle behavior get the JIT; chaotic ones keep the
+dynamic engine at no cost.
+
+Endgame unit (whole-cycle compiled program) fired the null exit clause:
+after stage C
 the chain's remaining capturable machinery is ~2.5-5.5% of the cycle
 (below the 10% bar), and the one design with large machinery (riscv) is
 structurally unqualifiable (registers clocked by combinational internal
