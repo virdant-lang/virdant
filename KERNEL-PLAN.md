@@ -1,8 +1,8 @@
 # Scheduled Kernel Plan
 
-Status: **stage C landed** (deep-cycle replay). Stage B (`791047e`) and
-stage A (`dce68b5`) beneath it. Stage C's measured results below; the
-plan text retains the original stage-by-stage analysis.
+Status: **stage C landed and closed** — floor fix `f599211` merged
+(coordinator-verified; final numbers below). Stage B (`791047e`) and
+stage A (`dce68b5`) beneath it.
 
 ## Stage C measured results (paired A/B, interleaved pairs, one cargo session)
 
@@ -23,10 +23,10 @@ correctly whatever produced the set.
 
 | bench | stage B (234acb9) | stage C | verdict |
 |---|---|---|---|
-| s=1 | ~339 ns/cyc | ~341 ns/cyc | worker: flat; **coordinator: +1.7% consistent (5/5 pairs + ABBA ×6, 275→280 ns/cyc)** — replay bookkeeping on trivial 1-2-dirty settlements; fix unit launched |
-| s=512 chain | ~15236 ns/cyc | ~13205 ns/cyc | **−13.3%, 5/5 pairs** (12991-13525 vs 14901-15614) |
-| hello | ~422 ns/cyc | ~420 ns/cyc | flat; never engages (phase build refuses its settlements; recorder off after 4 failures) |
-| riscv | ~1392 ns/cyc | ~1389 ns/cyc | flat (inside ±7%); recorder gives up after 1024 captures, then one state load per settlement |
+| s=1 | ~274 ns/cyc | ~280 ns/cyc | pre-fix: **+1.7% consistent** (replay bookkeeping on trivial 1-2-dirty settlements). After floor fix `f599211`: **+1.0% consistent residual** (273.5→276.3 median, 15 ABBA pairs) — better than pre-fix but not zero; inside the ±2% bar. Mechanism: the per-settlement prologue (state check + dirty-length compare) stage B's capture path did not have. Worker's "s1 flat" claim was optimistic; recorded honestly. |
+| s=512 chain | ~15300 ns/cyc | ~13290 ns/cyc | **−13.1% vs stage B after the floor fix** (coordinator ABBA ×9: B 13120-13703 vs A 14755-15443); win fully retained — the floor's giveback on the 1-dirty falling edge is nil (it is cheaper dynamic than replayed), and warm-up is faster (period-1 detection once the falling edge is excluded) |
+| hello | ~412 ns/cyc | ~413 ns/cyc | flat (coordinator ABBA ×4); never engages (phase build refuses its settlements; recorder off after 4 failures) |
+| riscv | ~1348-1397 ns/cyc | ~1360-1398 ns/cyc | flat (coordinator ABBA ×4, inside noise); recorder gives up after 1024 captures, then one state load per settlement |
 
 Counters on the chain: 2 replays/cycle, 0 aborts, 1 activation,
 epoch_skips 51.1M → 1022 (the replay never attempts the provably-no-op
@@ -37,6 +37,28 @@ Worker-process note: an early `std::env::var` debug probe left in
 `flow` cost ~45 ns/cycle on hello and survived every intermediate
 measurement; it is gone from the shipped tree, and hello's flat pairs
 above are from the clean build.
+
+## Floor fix (`f599211`) — what it does and what it cost
+
+`CycleSchedule::MIN_ENGAGEMENT = 3` (schedule.rs:606). Settlements whose
+entry dirty-set length is below 3 are excluded from recording **and**
+from replay in every state: no capture entry, no match attempt, no
+phase advance, no miss — fully transparent to the pattern cursor, so
+the recorded sequence is just the sub-sequence of above-floor
+settlements and the period-1 rising pattern on the chain detects
+sooner. Below-floor settlements still feed the give-up guard in
+Recording (all-tiny designs still reach recorder-off) but not the
+thrash guard in Active (the chain's 1-dirty falling edge must not
+drain tolerance). Two soundness tests added; gates green on the
+merged tree (check.sh ×2, 102 virdant tests, workspace clean, make
+test).
+
+Worker deviations, accepted after review: (1) the stage-C instrument
+timer pairs were removed from the committed tree — they fired only in
+stage C binaries, so they had biased the s1 comparison by the
+instrument's own per-pair cost; (2) `cycle_captured.take()` tails are
+gated on the same armed-state check as the prologue (provably no-ops
+when disarmed).
 
 Coordinator verification (merged tree `fa4147e`): re-ran gates ×2 (ALL
 PASS), 100 virdant tests, workspace 120, `make test` green; re-measured
@@ -161,7 +183,10 @@ validated and unit-tested. Trigger-epoch skip in the unchanged dynamic
 loop. Measured: −20% on the 512-stage chain, evals halved (30.7M →
 15.4M/100k cycles); even on s=1; noise-level on riscv/hello.
 
-### Stage B — cached straight-line schedule (IN FLIGHT, worker `db985adf`)
+### Stage B — cached straight-line schedule (DONE, commit `791047e`;
+coordinator-verified: chain −13.8%, s1/hello flat, riscv +1.8% inside
+the bar — see measured results above). The text below is the original
+brief, kept for the record.
 At settlement entry, hash the dirty-set (signature). Cache hit → execute
 the *stored, precompiled visit order* for exactly that dirty-set: no pops,
 no gathering, no loop. Miss → run the dynamic loop once, then insert.
@@ -199,7 +224,17 @@ the first few cycles and then everything is a hit.
 - Estimate: 3-5 h (null exit possible in 1.5-2 h; hard-soundness case
   longer).
 
-### Stage C — whole-cycle straight-line compilation (THE ENDGAME, not started)
+### Stage C — deep-cycle replay (LANDED as `fa4147e` + floor fix
+`f599211`, coordinator-verified — see measured results above). NOTE: the
+shipped shape is NOT the whole-cycle compilation originally sketched
+below. What actually shipped: a recorder watches settlement dirty-set
+signatures; when the last P exactly repeat, the pattern promotes to a
+replay schedule of precompiled phases (dirty bitmap + topo driver list)
+executed with no worklist/hash/epoch machinery, with a thrash guard,
+bounds pre-check, and engagement floor. The original endgame sketch is
+kept below for the record; the remaining unshipped idea (inlining all
+driver bytecode into one cycle-level program) is still the ceiling if
+another big step is ever wanted.
 Compile the entire netlist into one straight-line program: each driver's
 bytecode becomes an inlined chunk; the chunks are ordered topologically;
 one call computes a full clock cycle. What disappears entirely: the
