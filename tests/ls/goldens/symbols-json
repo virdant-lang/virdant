@@ -1,0 +1,1 @@
+[{"col":1,"end_col":2,"end_line":4,"file":"src/types.vir","kind":"structdef","line":1,"name":"Vector","package":"types"},{"col":1,"end_col":2,"end_line":10,"file":"src/types.vir","kind":"enumdef","line":6,"name":"Color","package":"types"},{"col":1,"end_col":2,"end_line":22,"file":"src/types.vir","kind":"moddef","line":12,"name":"Base","package":"types"}]

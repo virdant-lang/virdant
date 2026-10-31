@@ -1,0 +1,22 @@
+pub struct type Vector {
+    elements : Word[16]
+    scale : Bit
+}
+
+pub enum type Color {
+    Red   = 0w2
+    Green = 1w2
+    Blue  = 2w2
+}
+
+pub mod Base {
+    incoming clock : Clock
+    incoming data : Word[32]
+    outgoing result : Word[32]
+
+    reg state : Word[32] on clock {
+        it <= data
+    }
+
+    result := state
+}

@@ -1,0 +1,1 @@
+{"components":[{"kind":"incoming","path":"clock","synthetic":false,"type":"Clock"},{"kind":"incoming","path":"data","synthetic":false,"type":"Word[32]"},{"kind":"outgoing","path":"result","synthetic":false,"type":"Word[32]"},{"kind":"reg","path":"state","synthetic":false,"type":"Word[32]"}],"found":true,"moddef":"types::Base"}

@@ -9,6 +9,8 @@
 # Tips
 * Load the Virdant skill if you ever have to work with Virdant code.
 * To test everything, use `make test`
+* `vir` CLI commands are either baked into the `vir` binary,
+  or else `vir ${FOO}` is resolved to `vir-${FOO}`
 * After changing `virdant.lalrpop`, run `make grammar` to regenerate `GRAMMAR.txt`
 * NEVER run rustfmt (Rust), black (Python), or any other automatic code formatter without ASKING first.
 

@@ -1,0 +1,5 @@
+Components of types::Base:
+  incoming   clock : Clock
+  incoming   data : Word[32]
+  outgoing   result : Word[32]
+  reg        state : Word[32]

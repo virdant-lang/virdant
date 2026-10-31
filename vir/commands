@@ -20,7 +20,7 @@ Basic:
 Tools:
     doc         Create documentation for your project
     format      Format your Virdant source files
-    lsp         Virdant Language Server
+    ls          Virdant Language Server
     completion  Generate shell completion scripts
 
 Flows:

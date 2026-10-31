@@ -1,0 +1,36 @@
+//! Cross-file reference fixture: imports the `types` package and
+//! references `Base` and `Vector` so `references` has hits.  `Top`
+//! itself carries all four component kinds (incoming, outgoing, reg,
+//! wire) so `components` sees them all in one moddef.
+
+import types
+
+mod Top {
+    incoming clock : Clock
+    incoming input_data : Word[32]
+    outgoing final_result : Word[32]
+
+    mod b of types::Base {
+        it.clock := clock
+        it.data := input_data
+    }
+
+    reg last : Word[32] on clock {
+        it <= input_data
+    }
+
+    wire vec_ref : types::Vector {
+        it := ${ elements = 1024w16, scale = true }
+    }
+
+    final_result := last + b.result
+    unused vec_ref
+}
+
+// A second `Base` (in the top package, while types::Base also exists)
+// makes the bare name `Base` resolve ambiguously; the ambiguity JSON
+// shapes are pinned in the goldens.
+mod Base {
+    incoming clock : Clock
+    unused clock
+}

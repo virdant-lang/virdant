@@ -48,10 +48,10 @@ fn load_lib_dir<P: Into<std::path::PathBuf>>(lib_dir: P) -> Vec<(BString, BStrin
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn load_source_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Vec<(BString, BString)> {
+fn try_load_source_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> std::io::Result<Vec<(BString, BString)>> {
     let source_dir: std::path::PathBuf = source_dir.into();
     let mut filepaths: Vec<std::path::PathBuf> = std::fs::read_dir(&source_dir)
-        .expect(&format!("Could not open directory: {source_dir:?}"))
+        .map_err(|e| std::io::Error::new(e.kind(), format!("Could not open directory: {source_dir:?}: {e}")))?
         .filter_map(|entry| entry.ok().map(|entry| entry.path()))
         .filter(|filepath| match filepath.extension() {
             Some(ext) => ext.to_string_lossy() == "vir",
@@ -59,7 +59,12 @@ fn load_source_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Vec<(BString, 
         })
         .collect();
     filepaths.sort();
-    filepaths.into_iter().map(Source::load_file).collect()
+    Ok(filepaths.into_iter().map(Source::load_file).collect())
+}
+
+fn load_source_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Vec<(BString, BString)> {
+    try_load_source_dir(source_dir)
+        .unwrap_or_else(|e| panic!("{e}"))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -75,6 +80,26 @@ fn load_vir_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Vec<(BString, BSt
 #[cfg(not(target_arch = "wasm32"))]
 pub fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
     db_from_name_text_pairs(load_vir_dir(source_dir))
+}
+
+/// Fallible variant of [`db_from_dir`]: the same whole-project `Db`
+/// (standard library plus source directory), but an unreadable source
+/// directory is an `Err` instead of a panic.  The `vir ls` CLI treats
+/// the error as a tool failure (exit 2); the `vir ls serve` LSP server
+/// catches it and degrades to a library-only `Db` with a warning,
+/// matching the warn-and-continue behavior its pre-`vir ls` inline
+/// loader had.
+pub fn try_db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> std::io::Result<Db> {
+    let mut files = load_lib_dir(crate::LIB_DIR.as_path());
+    files.extend(try_load_source_dir(source_dir)?);
+    Ok(db_from_name_text_pairs(files))
+}
+
+/// The library half of [`db_from_dir`]: builtin.vir, ice40.vir, ...
+/// Used as the degraded fallback when the LSP server cannot read the
+/// project's source directory (see [`try_db_from_dir`]).
+pub fn db_from_lib_dir() -> Db {
+    db_from_name_text_pairs(load_lib_dir(crate::LIB_DIR.as_path()))
 }
 
 #[cfg(not(target_arch = "wasm32"))]

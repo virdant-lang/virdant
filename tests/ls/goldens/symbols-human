@@ -1,0 +1,3 @@
+structdef  types.Vector  [[1:1-4:2]]
+enumdef    types.Color  [[6:1-10:2]]
+moddef     types.Base  [[12:1-22:2]]

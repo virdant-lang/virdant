@@ -1,0 +1,1 @@
+error   bad.vir [8:12]  Wrong type: Expected Word[8] but found Bit

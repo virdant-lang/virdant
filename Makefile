@@ -34,6 +34,13 @@ test: virdant/target/lib build
 	@echo
 	cargo test
 	@echo
+	@echo
+	@echo "########################################"
+	@echo "# RUNNING TESTS IN tests/ls/"
+	@echo "########################################"
+	@echo
+	bash tests/ls/run.sh
+	@echo
 	@echo "########################################"
 	@echo "# RUNNING TESTS IN tests/"
 	@echo "########################################"
@@ -41,7 +48,7 @@ test: virdant/target/lib build
 	$(RUNNER)
 	@echo
 	@echo "########################################"
-	@echo "# RUNNER TESTS PASS"
+	@echo "# ALL TESTS PASS"
 	@echo "########################################"
 
 test_cli: install

@@ -1,0 +1,1 @@
+[{"col":12,"end_col":22,"end_line":8,"file":"src/bad.vir","level":"error","line":8,"message":"Wrong type: Expected Word[8] but found Bit"}]

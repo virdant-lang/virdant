@@ -2,16 +2,20 @@
 //! go-to-definition, and diagnostics by maintaining an analysis `Db`.
 
 use std::os::unix::ffi::OsStrExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use clap::{CommandFactory, Parser, Subcommand};
 
 use bstr::{BString, ByteSlice as _};
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexSet;
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
+
+// The CLI query subcommands return a plain text error (unlike the LSP
+// handlers, which use `tower_lsp::jsonrpc::Result`).
+type CliResult<T> = std::result::Result<T, String>;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 use serde_json::json;
 
@@ -25,6 +29,13 @@ use virdant::db::{Builder, Db};
 
 #[path = "../common/help_json.rs"]
 mod help_json;
+
+// The language-query core shared by the LSP handlers and the CLI query
+// subcommands below.
+mod queries;
+use queries::{NameResolution, Project};
+use queries::type_to_source;
+
 use virdant::package::{PackageId, PackageTable};
 use virdant::common::source::{LineCol, Source, SourceOffset, Span};
 use virdant::syntax::ast::{AstNode, AstNodeId, item_children, match_arm_children};
@@ -60,52 +71,21 @@ fn new_db() -> Db {
 fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
     // Load every *.vir in the standard library directory (builtin.vir,
     // ice40.vir, ...) so that `import` can resolve platform libraries, then
-    // every *.vir in the source directory.  Mirrors `util::load_lib_dir`:
-    // loading is not scoping, only `import` brings items into scope.
-    let mut lib_paths: Vec<std::path::PathBuf> = std::fs::read_dir(LIB_DIR.as_path())
-        .unwrap_or_else(|e| panic!("Could not open library directory {LIB_DIR:?}: {e}"))
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|filepath| matches!(filepath.extension(), Some(ext) if ext.to_string_lossy() == "vir"))
-        .collect();
-    // Deterministic package ordering regardless of read_dir order.
-    lib_paths.sort();
-    let mut files: IndexMap<BString, BString> = lib_paths
-        .into_iter()
-        .map(Source::load_file)
-        .collect();
-
+    // every *.vir in the source directory.  The loading logic lives in
+    // `virdant::util`, shared with the CLI queries — but the LSP server
+    // must not die on an unreadable source directory, so it uses the
+    // fallible `try_db_from_dir` and degrades to a warning plus the
+    // library-only Db.  That is the same warn-and-continue behavior the
+    // pre-`vir ls` inline loader here had; the CLI keeps strict error
+    // handling on top of the same fallible loader.
     let source_dir = source_dir.into();
-    match std::fs::read_dir(&source_dir) {
-        Ok(entries) => {
-            for filepath in entries {
-                let filepath = match filepath {
-                    Ok(filepath) => filepath.path(),
-                    Err(_) => continue,
-                };
-                match filepath.extension() {
-                    Some(ext) if ext.to_string_lossy() == "vir" => (),
-                    _ => continue,
-                }
-                let (name, text) = Source::load_file(filepath);
-                files.insert(name, text);
-            }
-        }
+    match virdant::util::try_db_from_dir(&source_dir) {
+        Ok(db) => db,
         Err(e) => {
-            eprintln!(
-                "warning: cannot read source directory {}: {e}",
-                source_dir.display(),
-            );
+            eprintln!("warning: cannot read source directory {}: {e}", source_dir.display());
+            virdant::util::db_from_lib_dir()
         }
     }
-
-    let mut db = Db::new();
-    db.set_packages(PackageTable::new(files.keys().cloned().collect()));
-    let packages = db.get_packages();
-    for (name, text) in files {
-        let package = packages.id(name.as_bstr()).expect("package missing from table");
-        db.set_source(package, Source::new(package, text));
-    }
-    db
 }
 
 fn db_is_empty(db: &Db) -> bool {
@@ -278,101 +258,10 @@ impl LanguageServer for Backend {
         let state = self.state.lock().await;
         let db = &state.db;
         let package = uri_to_package(db, &uri);
-        let parsing = db.get_parsing(package);
 
-        let Some(node_id) = parsing.at(linecol) else {
-            return Ok(None);
-        };
-        let node = parsing.ast_node(node_id);
-
-        self.client
-            .log_message(MessageType::INFO, &format!("NODE: {:?}", node.summary()))
-            .await;
-
-        let target_loc = match node.payload() {
-            AstNodePayload::Ofness(ofness) => {
-                // Resolve the item this Ofness names (e.g. `Gcd` in `mod gcd of Gcd`).
-                let symboltable = db.get_symboltable();
-                let packages = db.get_packages();
-                let item_pkg: Option<PackageId> = match ofness.package {
-                    Some(pkg) => packages.id(parsing.string(pkg)),
-                    None => Some(package),
-                };
-                let item_name = parsing.string(ofness.name);
-                self.client
-                    .log_message(MessageType::INFO, &format!("item_name: {item_name:?}"))
-                    .await;
-                item_pkg.and_then(|pkg| symboltable.resolve_item(item_name, pkg))
-                    .map(|sym| sym.location())
-            }
-            AstNodePayload::Path(path_payload) => {
-                // Walk up the AST to find the module that contains this path.
-                let mut current_id = node_id;
-                loop {
-                    let n = parsing.ast_node(current_id);
-                    if n.is_item() { break; }
-                    match n.parent().map(|p| p.id()) {
-                        Some(id) => current_id = id,
-                        None => return Ok(None),
-                    }
-                }
-                let current = parsing.ast_node(current_id);
-                let item_name = parsing.string(current.name().unwrap());
-                let symboltable = db.get_symboltable();
-                let Some(item_symbol) = symboltable.resolve_item_in_package(item_name, package) else {
-                    return Ok(None);
-                };
-                // Resolve the path string to a component in that module's analysis.
-                let component_analysis = db.get_component_analysis(item_symbol.id);
-                let path_str = parsing.string(path_payload.path);
-                component_analysis.resolve(path_str)
-                    .map(|comp| comp.location())
-            }
-            AstNodePayload::ExprReference => {
-                // ExprReference wraps a Path child; node.path() extracts its interned string.
-                let Some(path_interned) = node.path() else { return Ok(None); };
-                // Walk up to the enclosing module item.
-                let mut current_id = node_id;
-                loop {
-                    let n = parsing.ast_node(current_id);
-                    if n.is_item() { break; }
-                    match n.parent().map(|p| p.id()) {
-                        Some(id) => current_id = id,
-                        None => return Ok(None),
-                    }
-                }
-                let current = parsing.ast_node(current_id);
-                let item_name = parsing.string(current.name().unwrap());
-                let symboltable = db.get_symboltable();
-                let Some(item_symbol) = symboltable.resolve_item_in_package(item_name, package) else {
-                    return Ok(None);
-                };
-                let component_analysis = db.get_component_analysis(item_symbol.id);
-                let path_str = parsing.string(path_interned);
-                component_analysis.resolve(path_str)
-                    .map(|comp| comp.location())
-            }
-            AstNodePayload::Type(_) => {
-                // A Type node's first child is always an Ofness carrying the type name.
-                let ofness_node = node.child(0);
-                self.client
-                    .log_message(MessageType::INFO, &format!("ofness_node = {:?}", ofness_node.summary()))
-                    .await;
-                let AstNodePayload::Ofness(ofness) = ofness_node.payload() else { return Ok(None); };
-                let symboltable = db.get_symboltable();
-                let packages = db.get_packages();
-                let item_pkg: Option<PackageId> = match ofness.package {
-                    Some(pkg) => packages.id(parsing.string(pkg)),
-                    None => Some(package),
-                };
-                let item_name = parsing.string(ofness.name);
-                item_pkg.and_then(|pkg| symboltable.resolve_item(item_name, pkg))
-                    .map(|sym| sym.location())
-            }
-            _ => None,
-        };
-
-        let Some(target_loc) = target_loc else {
+        // Definition resolution is shared with the `vir ls definition`
+        // CLI query; see queries::resolve_definition_at.
+        let Some(target_loc) = queries::resolve_definition_at(db, package, linecol) else {
             return Ok(None);
         };
 
@@ -1126,46 +1015,6 @@ fn find_enclosing_moddef<'p>(parsing: &'p Parsing, node_id: AstNodeId) -> Option
     }
 }
 
-/// Renders a `Type` as Virdant source syntax, qualifying user-defined
-/// types with their defining package when that package is neither the
-/// destination module's own package nor already imported there.
-fn type_to_source(db: &Db, module_package: PackageId, typ: &Type) -> String {
-    match typ {
-        Type::Bit => "Bit".to_string(),
-        Type::Clock => "Clock".to_string(),
-        Type::Reset => "Reset".to_string(),
-        Type::Word(width) => format!("Word[{width}]"),
-        Type::Param(_) => "?".to_string(),
-        Type::Usual(symbol_id, args) => {
-            let symbol = db.get_symboltable().symbol(*symbol_id);
-            let def_package = symbol.location.package();
-            let name = symbol.name.to_str_lossy().into_owned();
-            let qualified = if def_package == module_package || def_package == db.get_packages().builtin() {
-                name
-            } else {
-                let imported = db.get_package_analysis(module_package)
-                    .imports()
-                    .contains(&def_package);
-                if imported {
-                    name
-                } else {
-                    let pkg_name = db.get_packages().name(def_package).to_str_lossy().into_owned();
-                    format!("{pkg_name}::{name}")
-                }
-            };
-            if args.is_empty() {
-                qualified
-            } else {
-                let args: Vec<String> = args
-                    .iter()
-                    .map(|arg| type_to_source(db, module_package, arg))
-                    .collect();
-                format!("{}[{}]", qualified, args.join(", "))
-            }
-        }
-    }
-}
-
 fn parse_word_literal_value(literal: &str) -> u64 {
     let trimmed = if let Some((value, _width)) = literal.split_once('w') {
         value.to_string()
@@ -1273,60 +1122,17 @@ fn escape_markdown(text: impl AsRef<str>) -> String {
     escaped
 }
 
-fn dump_hover(workspace_dir: &std::path::Path, package_name: BString, linecol: LineCol) {
-    let db = db_from_dir(workspace_dir);
-    let Some(package) = db.get_packages().id(package_name.as_bstr()) else {
-        eprintln!(
-            "error: package {} not found in workspace {}",
-            package_name.to_str_lossy(),
-            workspace_dir.display(),
-        );
-        return;
-    };
-    let parsing = db.get_parsing(package);
+// ---------------------------------------------------------------------------
+// CLI query subcommands
+// ---------------------------------------------------------------------------
 
-    if let Some(node_id) = parsing.at(linecol) {
-        let node = parsing.ast_node(node_id);
+// The CLI query surface shares its query core with the LSP handlers
+// (see queries.rs): every subcommand below renders the same data the
+// server serves, as human text or JSON.
 
-        println!("Spelling : {}", node.spelling());
-        println!("Summary  : {}", node.summary());
-        println!("Package  : {}", package_name.to_str_lossy());
-        println!("Location : {:?}", node.id());
-
-        if node.is_expr() {
-            let typof = db.get_typeof(node.location()).ok();
-            println!("Typeof   : {:?}", typof);
-        }
-    } else {
-        println!("No node at {} {linecol:?}", package_name.to_str_lossy());
-    }
-}
-
-#[derive(Parser, Debug)]
-#[command(name = "vir-ls", author, version, about, subcommand_required = true, arg_required_else_help = true)]
-struct Cli {
-    /// Dump the arg-parse data as JSON and exit (hidden)
-    #[arg(long, hide = true)]
-    help_json: bool,
-
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Subcommand, Debug)]
-enum Command {
-    /// Run the language server
-    Serve {},
-
-    /// Dump hover information for a given location
-    Hover {
-        /// Location as <file_or_package>:<line>:<col>
-        /// e.g. temp/top.vir:10:5 or top:10:5
-        location: String,
-    },
-}
-
-fn parse_hover_location(location: &str) -> std::result::Result<(std::path::PathBuf, BString, LineCol), String> {
+/// Parses a CLI location argument in the `<file_or_package>:<line>:<col>`
+/// format (1-based, matching how `vir` reports diagnostics).
+fn parse_cli_location(location: &str) -> CliResult<(String, usize, usize)> {
     let parts: Vec<&str> = location.rsplitn(3, ':').collect();
     if parts.len() != 3 {
         return Err(format!(
@@ -1339,24 +1145,484 @@ fn parse_hover_location(location: &str) -> std::result::Result<(std::path::PathB
     let line: usize = parts[1]
         .parse()
         .map_err(|_| format!("Invalid line number: {:?}", parts[1]))?;
-    let file_or_package = parts[2];
+    Ok((parts[2].to_string(), line, col))
+}
 
-    let (workspace_dir, package) = if Path::new(file_or_package).extension().map_or(false, |ext| ext == "vir") {
-        let path = Path::new(file_or_package);
-        let workspace = path.parent().unwrap_or(Path::new(".")).to_path_buf();
-        let pkg = path
-            .file_stem()
-            .map(|stem| BString::from(stem.as_bytes()))
-            .ok_or_else(|| format!("Invalid file path: {file_or_package:?}"))?;
-        (workspace, pkg)
+/// Standard project discovery from a directory: a manifest project when
+/// `virdant.toml` (or deprecated `Virdant.toml`) is found there, else an
+/// ad-hoc source directory when the directory directly contains `*.vir`
+/// files (the pre-existing `vir ls hover <file>` behavior), else a
+/// missing-project error.
+fn project_for_dir(dir: &Path) -> CliResult<Project> {
+    if vircommon::project_manifest(dir).is_some() {
+        return Project::from_project_dir(dir);
+    }
+    let has_sources = std::fs::read_dir(dir)
+        .map_err(|e| format!("Cannot read directory {}: {e}", dir.display()))?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .any(|path| matches!(path.extension(), Some(ext) if ext == "vir"));
+    if has_sources {
+        Project::from_source_dir(dir)
     } else {
-        let workspace = std::env::current_dir()
-            .map_err(|e| format!("Cannot determine current directory: {e}"))?;
-        let pkg = BString::from(file_or_package.as_bytes());
-        (workspace, pkg)
+        Err(format!("No virdant.toml found in {}", dir.display()))
+    }
+}
+
+/// The project for a `.vir` file location: standard discovery when an
+/// ancestor of the file has a manifest, else the file's directory as an
+/// ad-hoc source directory.
+fn project_for_file_dir(source_dir: &Path) -> CliResult<Project> {
+    let mut ancestor = Some(source_dir.to_path_buf());
+    while let Some(dir) = ancestor {
+        if vircommon::project_manifest(&dir).is_some() {
+            return Project::from_project_dir(&dir);
+        }
+        ancestor = dir.parent().map(|parent| parent.to_path_buf());
+    }
+    Project::from_source_dir(source_dir)
+}
+
+/// Resolves a `<file_or_package>:<line>:<col>` location argument against
+/// the project dir: the file part may be a `.vir` path (resolved
+/// relative to the project dir) or a bare package name.  Returns the
+/// loaded project, the package id (when it exists in the project), and
+/// the 1-based line/col.
+fn resolve_location(dir: &Path, location: &str) -> CliResult<(Project, Option<PackageId>, LineCol)> {
+    let (file_or_package, line, col) = parse_cli_location(location)?;
+    let linecol = LineCol::new(line, col);
+
+    let is_file = Path::new(&file_or_package).extension().map_or(false, |ext| ext == "vir");
+    let (package_name, source_dir) = if is_file {
+        let path = if Path::new(&file_or_package).is_absolute() {
+            PathBuf::from(&file_or_package)
+        } else {
+            dir.join(&file_or_package)
+        };
+        if !path.is_file() {
+            return Err(format!("File not found: {}", path.display()));
+        }
+        let stem = path.file_stem().unwrap().to_string_lossy().into_owned();
+        let parent = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+        (stem, parent)
+    } else {
+        (file_or_package.clone(), dir.to_path_buf())
     };
 
-    Ok((workspace_dir, package, LineCol::new(line, col)))
+    let project = if is_file {
+        project_for_file_dir(&source_dir)?
+    } else {
+        project_for_dir(dir)?
+    };
+
+    let package = project.db.get_packages().id(BString::from(package_name.as_bytes()).as_bstr());
+
+    // File-location fallback: when the manifest project does not contain
+    // the package (e.g. a stdlib file or a stray source), retry loading
+    // the file's directory as an ad-hoc source directory.
+    let (project, package) = match package {
+        Some(package) => (project, Some(package)),
+        None if is_file => {
+            let project = Project::from_source_dir(&source_dir)?;
+            let package = project.db.get_packages().id(BString::from(package_name.as_bytes()).as_bstr());
+            (project, package)
+        }
+        None => (project, None),
+    };
+
+    Ok((project, package, linecol))
+}
+
+fn run_hover(dir: &Path, location: &str, json: bool) -> CliResult<()> {
+    let (project, package, linecol) = resolve_location(dir, location)?;
+
+    let Some(package) = package else {
+        if json {
+            println!("{}", json!({ "found": false }));
+        } else {
+            println!("No package found for {location} in {}", dir.display());
+        }
+        return Ok(());
+    };
+
+    let Some(hover) = queries::hover_at(&project.db, package, linecol) else {
+        if json {
+            println!("{}", json!({ "found": false }));
+        } else {
+            println!("No node at {location}");
+        }
+        return Ok(());
+    };
+
+    let package_name = project.db.get_packages().name(package).to_str_lossy().into_owned();
+    if json {
+        let mut value = json!({
+            "found": true,
+            "package": package_name,
+            "spelling": hover.spelling,
+            "summary": hover.summary,
+        });
+        if let Some(typ) = hover.typof_source {
+            value["type"] = json!(typ);
+        }
+        println!("{value}");
+    } else {
+        println!("Spelling : {}", hover.spelling);
+        println!("Summary  : {}", hover.summary);
+        println!("Package  : {package_name}");
+        // The node's source span (1-based, like diagnostics), not the
+        // internal AstNodeId debug form.
+        println!(
+            "Location : {}:{}:{}",
+            project.file_json_path(package),
+            hover.span.start().line(),
+            hover.span.start().col(),
+        );
+        match (&hover.typof_source, &hover.typof_debug) {
+            (Some(source), _) => println!("Typeof   : {source}"),
+            (None, Some(debug)) => println!("Typeof   : {debug}"),
+            (None, None) => {}
+        }
+    }
+    Ok(())
+}
+
+fn run_definition(dir: &Path, target: &str, json: bool) -> CliResult<()> {
+    // The target is either a location or a (possibly qualified) name.
+    let (definitions, ambiguous) = if parse_cli_location(target).is_ok() {
+        let (project, package, linecol) = resolve_location(dir, target)?;
+        let definitions = match package {
+            None => vec![],
+            Some(package) => match queries::resolve_definition_at(&project.db, package, linecol) {
+                Some(location) => vec![queries::location_json(&project, location)],
+                None => vec![],
+            },
+        };
+        (definitions, false)
+    } else {
+        let project = project_for_dir(dir)?;
+        match queries::resolve_name(&project.db, target) {
+            NameResolution::Found(symbol) =>
+                (vec![queries::location_json(&project, symbol.location())], false),
+            NameResolution::Ambiguous(symbols) => (
+                symbols.iter().map(|symbol| queries::location_json(&project, symbol.location())).collect(),
+                true,
+            ),
+            NameResolution::NotFound => (vec![], false),
+        }
+    };
+
+    let found = !definitions.is_empty();
+    if json {
+        println!("{}", json!({ "found": found, "ambiguous": ambiguous, "definitions": definitions }));
+    } else if definitions.is_empty() {
+        println!("No definition found for {target}");
+    } else {
+        for definition in &definitions {
+            println!("{} {}:{}", definition["file"], definition["line"], definition["col"]);
+        }
+    }
+    Ok(())
+}
+
+/// The JSON form of a reference scan: the canonical location shape plus
+/// the reference kind.
+fn references_json(project: &Project, symbol: &virdant::analysis::symbols::Symbol) -> Vec<serde_json::Value> {
+    queries::references(&project.db, symbol)
+        .into_iter()
+        .map(|reference| {
+            let mut value = queries::location_json(project, reference.location);
+            value["kind"] = json!(reference.kind);
+            value
+        })
+        .collect()
+}
+
+fn run_references(dir: &Path, target: &str, json: bool) -> CliResult<()> {
+    let (found, ambiguous, references) = if parse_cli_location(target).is_ok() {
+        let (project, package, linecol) = resolve_location(dir, target)?;
+        match package.and_then(|package| queries::resolve_symbol_at(&project.db, package, linecol)) {
+            Some(symbol) => (true, false, references_json(&project, &symbol)),
+            None => (false, false, vec![]),
+        }
+    } else {
+        let project = project_for_dir(dir)?;
+        match queries::resolve_name(&project.db, target) {
+            NameResolution::Found(symbol) => (true, false, references_json(&project, &symbol)),
+            NameResolution::Ambiguous(symbols) => (false, true, vec![
+                // An ambiguous target has no single reference set.
+                json!({ "ambiguous": symbols.iter().map(|symbol| symbol.fqn().to_str_lossy().into_owned()).collect::<Vec<_>>() })
+            ]),
+            NameResolution::NotFound => (false, false, vec![]),
+        }
+    };
+
+    if json {
+        println!("{}", json!({ "found": found, "ambiguous": ambiguous, "references": references }));
+    } else if !found && ambiguous {
+        println!("Ambiguous name {target}");
+    } else if references.is_empty() {
+        println!("No references found for {target}");
+    } else {
+        for reference in &references {
+            println!("{} {}:{}  [{}]", reference["file"], reference["line"], reference["col"], reference["kind"]);
+        }
+    }
+    Ok(())
+}
+
+fn run_diagnostics(dir: &Path, json: bool) -> CliResult<()> {
+    let project = project_for_dir(dir)?;
+    let diagnostics = queries::diagnostics(&project.db);
+    if json {
+        let diagnostics: Vec<serde_json::Value> = diagnostics.iter().map(|diag| {
+            let mut value = queries::span_json(&project, diag.package, diag.span);
+            value["level"] = json!(diag.level);
+            value["message"] = json!(diag.message);
+            value
+        }).collect();
+        println!("{}", json!(diagnostics));
+    } else {
+        for diag in &diagnostics {
+            let packages = project.db.get_packages();
+            let package = packages.name(diag.package).to_str_lossy().into_owned();
+            println!(
+                "{:6}  {}.vir [{}:{}]  {}",
+                diag.level,
+                package,
+                diag.span.start().line(),
+                diag.span.start().col(),
+                diag.message,
+            );
+        }
+    }
+    Ok(())
+}
+
+fn run_symbols(dir: &Path, package: Option<&str>, json: bool) -> CliResult<()> {
+    let project = project_for_dir(dir)?;
+    let package_id = match package {
+        Some(package) => {
+            let package_id = project.db.get_packages().id(BString::from(package.as_bytes()).as_bstr());
+            if package_id.is_none() {
+                if json {
+                    println!("[]");
+                } else {
+                    println!("No package named {package} in {}", dir.display());
+                }
+                return Ok(());
+            }
+            package_id
+        }
+        None => None,
+    };
+
+    let symbols = queries::symbols(&project.db, package_id);
+    if json {
+        let symbols: Vec<serde_json::Value> = symbols.iter().map(|symbol| {
+            let mut value = queries::location_json(&project, symbol.location);
+            value["kind"] = json!(symbol.kind);
+            value["name"] = json!(symbol.name);
+            value["package"] = json!(project.db.get_packages().name(symbol.package).to_str_lossy());
+            value
+        }).collect();
+        println!("{}", json!(symbols));
+    } else {
+        for symbol in &symbols {
+            let packages = project.db.get_packages();
+            let package_name = packages.name(symbol.package).to_str_lossy().into_owned();
+            let parsing = project.db.get_parsing(symbol.package);
+            let node = parsing.ast_node(symbol.location.ast_node_id());
+            println!("{:9}  {}.{}  [{}]", symbol.kind, package_name, symbol.name, node.span());
+        }
+    }
+    Ok(())
+}
+
+fn run_components(dir: &Path, moddef: &str, json: bool) -> CliResult<()> {
+    let project = project_for_dir(dir)?;
+    let symbol = match queries::resolve_name(&project.db, moddef) {
+        NameResolution::Found(symbol) => symbol,
+        NameResolution::Ambiguous(symbols) => {
+            let names: Vec<String> = symbols.iter()
+                .map(|symbol| symbol.fqn().to_str_lossy().into_owned())
+                .collect();
+            if json {
+                println!("{}", json!({ "found": false, "ambiguous": names, "components": [] }));
+            } else {
+                println!("Ambiguous name {moddef}: {}", names.join(", "));
+            }
+            return Ok(());
+        }
+        NameResolution::NotFound => {
+            if json {
+                println!("{}", json!({ "found": false, "components": [] }));
+            } else {
+                println!("No item named {moddef} in {}", dir.display());
+            }
+            return Ok(());
+        }
+    };
+
+    if !matches!(symbol.kind(), virdant::analysis::symbols::SymbolKind::ModDef | virdant::analysis::symbols::SymbolKind::Platform) {
+        let fqn = symbol.fqn().to_str_lossy();
+        if json {
+            println!("{}", json!({ "found": false, "components": [], "error": format!("{fqn} is not a module or platform") }));
+        } else {
+            println!("{fqn} is not a module or platform");
+        }
+        return Ok(());
+    }
+
+    let components = queries::components(&project.db, &symbol);
+    if json {
+        let components: Vec<serde_json::Value> = components.iter().map(|component| {
+            json!({
+                "path": component.path,
+                "kind": component.kind,
+                "type": component.typ,
+                "synthetic": component.synthetic,
+            })
+        }).collect();
+        println!("{}", json!({ "found": true, "moddef": symbol.fqn().to_str_lossy(), "components": components }));
+    } else {
+        println!("Components of {}:", symbol.fqn().to_str_lossy());
+        for component in &components {
+            let kind = component.kind.unwrap_or("socket");
+            let typ = component.typ.as_deref().unwrap_or("?");
+            let synthetic = if component.synthetic { " (synthetic)" } else { "" };
+            println!("  {:9}  {} : {}{}", kind, component.path, typ, synthetic);
+        }
+    }
+    Ok(())
+}
+
+fn run_type_of(dir: &Path, location: &str, json: bool) -> CliResult<()> {
+    let (project, package, linecol) = resolve_location(dir, location)?;
+    let Some(package) = package else {
+        if json {
+            println!("{}", json!({ "found": false }));
+        } else {
+            println!("No package found for {location} in {}", dir.display());
+        }
+        return Ok(());
+    };
+
+    let Some(info) = queries::typeof_at(&project.db, package, linecol) else {
+        if json {
+            println!("{}", json!({ "found": false }));
+        } else {
+            println!("No node at {location}");
+        }
+        return Ok(());
+    };
+
+    match info.typ {
+        Some(typ) => {
+            if json {
+                println!("{}", json!({ "found": true, "type": typ }));
+            } else {
+                println!("Type of {location}: {typ}");
+            }
+        }
+        None => {
+            let error = info.error.unwrap_or_default();
+            if json {
+                println!("{}", json!({ "found": false, "error": error }));
+            } else {
+                println!("No type at {location}: {error}");
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Parser, Debug)]
+#[command(name = "vir-ls", author, version, about, subcommand_required = true, arg_required_else_help = true)]
+struct Cli {
+    /// Dump the arg-parse data as JSON and exit (hidden)
+    #[arg(long, hide = true)]
+    help_json: bool,
+
+    /// Project directory (default: the current directory)
+    #[arg(short = 'C', long = "dir", global = true)]
+    dir: Option<std::path::PathBuf>,
+
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Run the language server
+    Serve {},
+
+    /// Hover information at a source location
+    Hover {
+        /// Location as <file_or_package>:<line>:<col>
+        /// e.g. src/top.vir:10:5 or top:10:5
+        location: String,
+
+        /// Render the output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// The definition of the item at a location, or of a name
+    Definition {
+        /// <file_or_package>:<line>:<col> or a name (e.g. Foo::Bar)
+        target: String,
+
+        /// Render the output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Locations that reference the target
+    References {
+        /// A name (e.g. Foo::Bar) or <file_or_package>:<line>:<col>
+        target: String,
+
+        /// Render the output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Project diagnostics (exits 0 even when errors are reported)
+    Diagnostics {
+        /// Render the output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Items (moddef, structdef, ...) in one package or the whole project
+    Symbols {
+        /// Restrict to one package (default: all packages)
+        package: Option<String>,
+
+        /// Render the output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// A module's components (incoming/outgoing/reg/wire/...)
+    Components {
+        /// A module definition name (optionally qualified: pkg::ModDef)
+        moddef: String,
+
+        /// Render the output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// The type of the expression at a location
+    TypeOf {
+        /// Location as <file_or_package>:<line>:<col>
+        location: String,
+
+        /// Render the output as JSON
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[tokio::main]
@@ -1367,24 +1633,48 @@ async fn main() {
         help_json::dump(&Cli::command());
     }
 
-    match cli.command {
+    // The project directory: -C/--dir when given, else the current
+    // directory.  All queries resolve their targets against it.
+    let dir: PathBuf = match &cli.dir {
+        Some(dir) => match std::fs::canonicalize(dir) {
+            Ok(path) => path,
+            Err(e) => {
+                eprintln!("error: cannot resolve directory {}: {e}", dir.display());
+                std::process::exit(2);
+            }
+        },
+        None => match std::env::current_dir() {
+            Ok(path) => path,
+            Err(e) => {
+                eprintln!("error: cannot determine current directory: {e}");
+                std::process::exit(2);
+            }
+        },
+    };
+
+    let result = match cli.command {
         Command::Serve {} => {
             let stdin = tokio::io::stdin();
             let stdout = tokio::io::stdout();
             let (service, socket) = LspService::new(|client| Backend::new(client));
             Server::new(stdin, stdout, socket).serve(service).await;
+            Ok(())
         }
-        Command::Hover { location } => {
-            match parse_hover_location(&location) {
-                Ok((workspace_dir, package, linecol)) => {
-                    dump_hover(&workspace_dir, package, linecol);
-                }
-                Err(msg) => {
-                    eprintln!("error: {msg}");
-                    std::process::exit(2);
-                }
-            }
-        }
+        Command::Hover { location, json } => run_hover(&dir, &location, json),
+        Command::Definition { target, json } => run_definition(&dir, &target, json),
+        Command::References { target, json } => run_references(&dir, &target, json),
+        Command::Diagnostics { json } => run_diagnostics(&dir, json),
+        Command::Symbols { package, json } => run_symbols(&dir, package.as_deref(), json),
+        Command::Components { moddef, json } => run_components(&dir, &moddef, json),
+        Command::TypeOf { location, json } => run_type_of(&dir, &location, json),
+    };
+
+    // Exit-code contract: exit 2 only when the tool could not run (bad
+    // args, missing project, internal failure); a query that ran but
+    // found nothing exits 0 with the answer in its output.
+    if let Err(msg) = result {
+        eprintln!("error: {msg}");
+        std::process::exit(2);
     }
 }
 
