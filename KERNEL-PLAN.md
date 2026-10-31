@@ -1,6 +1,21 @@
 # Scheduled Kernel Plan
 
-Status: stage B in flight (worker `db985adf`, launched from user go/no-go "just do the kernel schedule work").
+Status: **stage B landed** (`791047e`), verified with paired A/B by the
+coordinator (the worker shipped gates but no perf evidence; coordinator
+measured it). Stage C (deep-cycle fusion) is the remaining kernel stage,
+gated on a go/no-go with stage B's numbers on the table.
+
+## Stage B measured results (coordinator, interleaved pairs)
+
+| bench | stage A (dce68b5) | stage B (791047e) | verdict |
+|---|---|---|---|
+| s=1 | 280.9 ns/cyc | 279.8 ns/cyc | flat (cache eligible but marginal) |
+| s=512 chain | 18,097 ns/cyc | 15,598 ns/cyc | **−13.8%, all 3 pairs** |
+| hello | 417.5 ns/cyc | 417.4 ns/cyc | flat (thrash guard disables cache; misses=0 recorded) |
+| riscv | 1364 ns/cyc | 1388 ns/cyc | +1.8%, 8/8 pairs; cache never engages (misses=0), identical work counts — hot-loop codegen cost, inside the ±2% bar; recovery candidate if it persists |
+
+Gates on the merged tree: `sim-bench/check.sh` ×2 ALL PASS, `cargo test
+-p virdant` 93 passed, workspace 113 passed, `make test` green.
 
 ---
 
