@@ -537,9 +537,9 @@ impl Sim {
     /// Settle the circuit after a batch of writes: propagate (`flow`),
     /// then dispatch value-change watchers.
     ///
-    /// The sweep is skipped entirely when no stored value has changed
-    /// since the last sweep that observed everything (see
-    /// `State::changed_since_dispatch`): no watcher can fire over
+    /// The sweep is skipped entirely when no watched signal's stored
+    /// value has changed since the last sweep that observed everything
+    /// (see `State::changed_since_dispatch`): no watcher can fire over
     /// values nobody wrote to.
     ///
     /// Dispatch is single-phase and non-reentrant: a nested `unlock()`
@@ -556,17 +556,20 @@ impl Sim {
             return;
         }
 
-        // Skip the sweep entirely when no stored value has changed
-        // since the last sweep pass that observed everything: a watcher
-        // fires only on a value change (`Change`) or a 0→1 transition
-        // of bit 0 (`ClockRising`), and both require the observed
-        // signal's stored value to have changed, so a settlement with
-        // no actual write cannot fire anything.  The flag is raised by
-        // `State`'s two write primitives (`set_val`, `transfer`) on
-        // every actual write, including `set_without_flow` (via
-        // `transfer_clock`) and the register transfers inside this
-        // sweep's own callbacks; each sweep pass consumes it together
-        // with the per-signal changed set.
+        // Skip the sweep entirely when no watched signal's stored value
+        // has changed since the last sweep pass that observed
+        // everything: a watcher fires only on a value change (`Change`)
+        // or a 0→1 transition of bit 0 (`ClockRising`), and both
+        // require the observed signal's stored value to have changed,
+        // so a settlement with no write to a watched signal cannot fire
+        // anything.  The flag is raised by `State`'s two write
+        // primitives (`set_val`, `transfer`) on every write to a
+        // watched signal (watched-only marking: unwatched signals have
+        // no watcher to observe them, so their writes skip the
+        // changed-set bookkeeping entirely), including
+        // `set_without_flow` (via `transfer_clock`) and the register
+        // transfers inside this sweep's own callbacks; each sweep pass
+        // consumes it together with the per-signal changed set.
         if self.state.changed_since_dispatch() {
             self.dispatching = true;
             // Sweep-and-fire loop: each pass fires, in registration
@@ -612,7 +615,9 @@ impl Sim {
     /// Order-equivalence with the old whole-table sweep: a watcher can
     /// only fire (or need its `last` refreshed) over a signal someone
     /// actually wrote since the watcher's last observation, and every
-    /// write marks its signal in the changed set.  So the fired
+    /// write to a watched signal marks its signal in the changed set
+    /// (watched-only marking: unwatched signals have no watcher, so
+    /// they never need an entry).  So the fired
     /// watchers are exactly the whole-table sweep's, and both walks go
     /// in ascending registration index: the bucket walk sorts the
     /// union of the changed signals' buckets; the table walk goes in
@@ -627,7 +632,8 @@ impl Sim {
     /// their nested settlements) re-marks the set for the next pass.
     /// Two strategies, chosen per pass by whichever set is smaller:
     /// the bucket walk visits the changed signals' buckets (cost
-    /// proportional to the changed signals with watchers), collapsing
+    /// proportional to the watched signals that changed — the set
+    /// carries watched signals only), collapsing
     /// the sweep toward watcher-fire cost on designs where few signals
     /// change per settlement; the table walk visits every watcher and
     /// pays the value compare (cost proportional to the table), which
@@ -732,12 +738,20 @@ impl Sim {
     /// covering exactly the table, in registration order.
     fn rebuild_buckets(&mut self) {
         self.watcher_buckets.clear();
+        // The prune may have dropped a signal's last watcher: rebuild
+        // the watched flags alongside the buckets, so watched-only
+        // marking keeps covering exactly the signals the live table
+        // observes.  The changed set is empty here (the sweep loop
+        // exits only when the set is empty), so no stale bit for a
+        // newly-unwatched signal survives the rebuild.
+        self.state.clear_watched();
         for (index, watcher) in self.watchers.iter().enumerate() {
             let idx = watcher.signal.index();
             if self.watcher_buckets.len() <= idx {
                 self.watcher_buckets.resize(idx + 1, Vec::new());
             }
             self.watcher_buckets[idx].push(index);
+            self.state.set_watched(watcher.signal, true);
         }
     }
 
@@ -1134,6 +1148,11 @@ impl Sim {
             self.watcher_buckets.resize(idx + 1, Vec::new());
         }
         self.watcher_buckets[idx].push(index);
+        // Watched-only marking: from here on, writes to this signal pay
+        // the changed-set bookkeeping (and this watcher can fire).  A
+        // write before registration could not have been observed anyway:
+        // `last` starts at the live value.
+        self.state.set_watched(signal, true);
     }
 
     /// Register `cb` to fire every time `clock`'s value has a rising edge
@@ -1162,6 +1181,8 @@ impl Sim {
             self.watcher_buckets.resize(idx + 1, Vec::new());
         }
         self.watcher_buckets[idx].push(index);
+        // Watched-only marking, as in `on_change`.
+        self.state.set_watched(clock, true);
     }
 
     /// Register a callback by raw [`EventCallback`] — the uniform API
@@ -1543,6 +1564,73 @@ mod tests {
             *x_fires.borrow(),
             1,
             "a watcher firing after the shutdown request must not persist"
+        );
+    }
+
+    /// Watched-only marking must not lose fires: a watcher on `x`
+    /// still fires on every one of `x`'s transitions even though each
+    /// settlement also writes `fire`, an unwatched signal whose writes
+    /// no longer touch the changed set.  A watched signal's write is
+    /// marked regardless of what else the settlement does, so the
+    /// watcher's fires are exactly the whole-table sweep's.
+    #[test]
+    fn watcher_fires_alongside_unwatched_signal_writes() {
+        let mut sim = gcd_sim();
+        let fire = sim.signal("top.fire");
+        let x = sim.signal("top.x");
+        let fire_typ = sim.component_type_id(fire);
+        let x_typ = sim.component_type_id(x);
+
+        let fires = Rc::new(RefCell::new(0u32));
+        {
+            let count = fires.clone();
+            sim.on_change(x, Box::new(move |_sim| {
+                *count.borrow_mut() += 1;
+            }));
+        }
+
+        // Each settlement writes both signals: `fire` (unwatched) and
+        // `x` (watched).  The watcher fires once per settlement, once
+        // per real change of `x` — the unwatched signal's write in the
+        // same settlement neither suppresses nor delays it.
+        for i in 0..3u32 {
+            let x_val = sim.get(x).to_u64();
+            let fire_val = sim.get(fire).get_bit(0);
+            {
+                let mut lock = sim.lock();
+                lock.set(fire, Value::from_bool(fire_typ, !fire_val));
+                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_val ^ 0xFF)));
+            }
+            assert_eq!(*fires.borrow(), i + 1, "settlement {} must fire the x watcher once", i);
+        }
+    }
+
+    /// Zero-watcher designs skip the changed-set bookkeeping entirely:
+    /// with no watcher anywhere, every write leaves the changed set
+    /// empty (the sweep-skip gate stays down and the dispatch loop
+    /// never runs), while the circuit still settles normally.
+    #[test]
+    fn zero_watcher_design_leaves_the_changed_set_empty() {
+        let mut sim = gcd_sim();
+        let fire = sim.signal("top.fire");
+        let fire_typ = sim.component_type_id(fire);
+
+        // A settlement with no watcher anywhere: the circuit still
+        // settles, and the changed set stays empty.
+        let initial = sim.get(fire).get_bit(0);
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, !initial));
+        }
+        assert_eq!(sim.get(fire).get_bit(0), !initial, "the write must land");
+        assert!(
+            !sim.state.changed_since_dispatch(),
+            "no watcher: a write must not raise the sweep-skip gate"
+        );
+        assert_eq!(
+            sim.state.changed_signal_count(),
+            0,
+            "no watcher: a write must not touch the changed set"
         );
     }
 

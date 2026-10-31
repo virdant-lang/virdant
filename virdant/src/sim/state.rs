@@ -60,25 +60,28 @@ pub(super) struct State {
     /// `SignalId::index()` (`Pending::None` for non-registers).
     set_vals: Vec<Pending>,
     dirty: DirtyList,
-    /// "Some stored value changed since the last sweep pass that
-    /// observed everything".  The watcher sweep can be skipped
-    /// entirely when this is false: a watcher fires only on a value
-    /// change (`Change`) or a 0→1 transition of bit 0 (`ClockRising`),
-    /// and both require the signal's stored value to have changed, so
-    /// nothing can fire over values nobody wrote to.  Set by the two
-    /// write primitives below exactly when a write happens (they
-    /// already detect change internally), consumed by each sweep pass
-    /// together with the per-signal set (writes landing while the pass
-    /// runs re-raise it for the next pass) and by `flow_all`
-    /// (construction's full-network pass, before any watcher exists).
-    /// Not the same thing as `dirty`: the worklist drains during
-    /// `flow`, so it is empty at dispatch time by construction and
-    /// cannot serve as the predicate.
+    /// "Some watched signal's stored value changed since the last
+    /// sweep pass that observed everything".  The watcher sweep can be
+    /// skipped entirely when this is false: a watcher fires only on a
+    /// value change (`Change`) or a 0→1 transition of bit 0
+    /// (`ClockRising`), both require the observed signal's stored
+    /// value to have changed, and the observed signal is watched by
+    /// construction, so nothing can fire over a settlement in which no
+    /// watched signal was written.  Set by the two write primitives
+    /// below exactly when a write to a watched signal happens (they
+    /// already detect change internally; unwatched writes leave this
+    /// and the per-signal set untouched — see `watched`), consumed by
+    /// each sweep pass together with the per-signal set (writes
+    /// landing while the pass runs re-raise it for the next pass) and
+    /// by `flow_all` (construction's full-network pass, before any
+    /// watcher exists).  Not the same thing as `dirty`: the worklist
+    /// drains during `flow`, so it is empty at dispatch time by
+    /// construction and cannot serve as the predicate.
     changed_since_dispatch: bool,
     /// The per-signal detail of `changed_since_dispatch`: one bit per
     /// `SignalId::index()`, set by the same write primitives at the
-    /// same time as the bool above (a write marks both or neither) and
-    /// cleared together with it.  Each sweep pass of the unlock's
+    /// same time as the bool above (a write to a watched signal marks
+    /// both or neither) and cleared together with it.  Each sweep pass of the unlock's
     /// sweep-and-fire loop consumes the set at its start, after
     /// queueing the changed signals' buckets: the pass then visits
     /// exactly the watchers whose signals somebody actually wrote
@@ -97,6 +100,16 @@ pub(super) struct State {
     /// re-counting the bitset (one `count_ones` per word) would cost
     /// real time on wide designs.
     changed_count: usize,
+    /// Whether any watcher observes each signal, indexed by
+    /// `SignalId::index()`: `Sim` sets it at watcher registration and
+    /// rebuilds it from the surviving table after pruning.  The
+    /// changed-set bookkeeping in `mark_changed` is gated on this
+    /// flag: the dispatch sweep visits only watchers, and a watcher's
+    /// signal is watched by construction, so a write to an unwatched
+    /// signal never needs a changed-set entry — on designs where most
+    /// signals have no watcher (or none do at all), marking becomes a
+    /// single flag read instead of bitset work on every write.
+    watched: Vec<bool>,
 }
 
 impl State {
@@ -130,6 +143,7 @@ impl State {
             vals,
             set_vals,
             dirty: DirtyList::new(n_components),
+            watched: vec![false; n_components],
             changed_since_dispatch: false,
             changed_signals: vec![0; n_components.div_ceil(CHANGE_WORD_BITS)],
             changed_count: 0,
@@ -258,23 +272,31 @@ impl State {
         self.mark_changed(signal_id);
     }
 
-    /// Record an actual write: queue it for `flow` and raise both
-    /// dispatch predicates.  The bool and the bitset are set and
-    /// cleared together, so the bool stays the O(1) "did anything
-    /// change" gate and the bitset the "which signals changed" detail
-    /// the bucketed sweep dispatches over.
+    /// Record an actual write: queue it for `flow` and, for watched
+    /// signals, raise both dispatch predicates.  The dirty insert is
+    /// unconditional (propagation still needs every real write), but
+    /// the changed set is touched only when the signal has a watcher:
+    /// the dispatch sweep visits only watchers, and a watcher's signal
+    /// is watched by construction, so a write to an unwatched signal
+    /// can never need a changed-set entry.  For watched signals the
+    /// bool and the bitset are set and cleared together, so the bool
+    /// stays the O(1) "did any watched signal change" gate and the
+    /// bitset the "which watched signals changed" detail the bucketed
+    /// sweep dispatches over.
     fn mark_changed(&mut self, signal_id: SignalId) {
         self.dirty.insert(signal_id);
         let index = signal_id.index();
-        let word = index / CHANGE_WORD_BITS;
-        let bit = 1 << (index % CHANGE_WORD_BITS);
-        // Only a newly-marked signal grows the set: re-marking a signal
-        // that is already pending must not double-count it.
-        if self.changed_signals[word] & bit == 0 {
-            self.changed_signals[word] |= bit;
-            self.changed_count += 1;
+        if self.watched[index] {
+            let word = index / CHANGE_WORD_BITS;
+            let bit = 1 << (index % CHANGE_WORD_BITS);
+            // Only a newly-marked signal grows the set: re-marking a
+            // signal that is already pending must not double-count it.
+            if self.changed_signals[word] & bit == 0 {
+                self.changed_signals[word] |= bit;
+                self.changed_count += 1;
+            }
+            self.changed_since_dispatch = true;
         }
-        self.changed_since_dispatch = true;
     }
 
     pub(super) fn set_reg(&mut self, signal_id: SignalId, value: Value) {
@@ -317,12 +339,14 @@ impl State {
         self.changed_count
     }
 
-    /// Iterate the signals with an actual write since the last
+    /// Iterate the watched signals with an actual write since the last
     /// `dispatch_pass` started (or since the last clear), in index
     /// order.  The per-signal predicate for the bucketed watcher
     /// sweep: a watcher fires only over a signal somebody actually
     /// wrote, and its last-seen value needs refreshing only then, so
     /// the sweep visits exactly these signals' buckets and no others.
+    /// Unwatched signals are absent from the set by construction (see
+    /// `watched`), which is exactly right: no watcher observes them.
     ///
     /// The walk skips directly between set bits (`trailing_zeros`),
     /// never scanning unset bits: the cost is proportional to the
@@ -352,12 +376,26 @@ impl State {
     /// watchers, and any write that lands while it runs (watcher
     /// callbacks and their nested settlements) re-marks the set for the
     /// next pass.  `flow_all` calls it at construction (no watcher
-    /// exists yet).  Any later actual write re-raises the flag and
-    /// re-marks the signal's bit.
+    /// exists yet).  Any later write to a watched signal re-raises the
+    /// flag and re-marks the signal's bit.
     pub(super) fn clear_changed_since_dispatch(&mut self) {
         self.changed_since_dispatch = false;
         self.changed_signals.iter_mut().for_each(|word| *word = 0);
         self.changed_count = 0;
+    }
+
+    /// Mark `signal_id` as observed by at least one watcher (or drop
+    /// that claim): `Sim` sets it at registration and rebuilds the
+    /// flags from the surviving table after pruning.  `mark_changed`
+    /// gates the changed-set bookkeeping on this flag.
+    pub(super) fn set_watched(&mut self, signal_id: SignalId, watched: bool) {
+        self.watched[signal_id.index()] = watched;
+    }
+
+    /// Clear every watched flag: the prelude to a rebuild from the
+    /// surviving watcher table after a prune.
+    pub(super) fn clear_watched(&mut self) {
+        self.watched.iter_mut().for_each(|flag| *flag = false);
     }
 }
 
@@ -393,13 +431,16 @@ mod tests {
     /// A hand-built two-signal `State`: signal 0's live value is
     /// `val0`, its pending register next-value is `pending0`, and
     /// signal 1 is a plain (non-register) signal carrying a filler
-    /// `Bit` value.
+    /// `Bit` value.  Signal 0 is watched (the write tests assert the
+    /// changed-set protocol over it); signal 1 is not, which the
+    /// watched-only marking test below leans on.
     fn state_with(val0: Value, pending0: Pending) -> State {
         let (_layouts, bit_typ) = interner_with(&Type::Bit);
         State {
             vals: vec![val0, Value::from_bool(bit_typ, false)],
             set_vals: vec![pending0, Pending::None],
             dirty: DirtyList::new(2),
+            watched: vec![true, false],
             changed_since_dispatch: false,
             changed_signals: vec![0; 1],
             changed_count: 0,
@@ -516,5 +557,32 @@ mod tests {
         state.transfer(signal);
         assert!(state.pop_dirty().is_none());
         assert!(!state.changed_since_dispatch());
+    }
+
+    /// Watched-only marking: a write to an unwatched signal queues
+    /// propagation (the dirty insert is unconditional) but leaves the
+    /// changed set untouched — no bit, no count, no sweep-skip gate —
+    /// while the same write to a watched signal raises everything.
+    #[test]
+    fn mark_changed_tracks_only_watched_signals() {
+        let (_layouts, typ) = interner_with(&Type::Word(8));
+        let mut state = state_with(Value::new(typ, BitPat::from_u64(8, 0b1010)), Pending::None);
+        let watched_signal = SignalId::from_index(0);
+        let unwatched_signal = SignalId::from_index(1);
+
+        // Unwatched signal: the write lands (propagation still needs
+        // it) but the changed set stays untouched.
+        state.set_val(unwatched_signal, Value::new(typ, BitPat::from_u64(8, 0b1111)));
+        assert_eq!(state.pop_dirty(), Some(unwatched_signal), "the dirty insert is unconditional");
+        assert!(!state.changed_since_dispatch(), "unwatched write must not raise the gate");
+        assert_eq!(state.changed_signal_count(), 0, "unwatched write must not touch the set");
+        assert_eq!(state.changed_signal_ids().count(), 0, "unwatched write must not enter the walk");
+
+        // Watched signal: the same write raises everything.
+        state.set_val(watched_signal, Value::new(typ, BitPat::from_u64(8, 0b1111)));
+        assert_eq!(state.pop_dirty(), Some(watched_signal));
+        assert!(state.changed_since_dispatch());
+        assert_eq!(state.changed_signal_count(), 1);
+        assert_eq!(state.changed_signal_ids().collect::<Vec<_>>(), vec![watched_signal]);
     }
 }
