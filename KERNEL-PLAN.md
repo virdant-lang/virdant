@@ -1,8 +1,20 @@
 # Scheduled Kernel Plan
 
-Status: **stage C landed and closed** — floor fix `f599211` merged
-(coordinator-verified; final numbers below). Stage B (`791047e`) and
-stage A (`dce68b5`) beneath it.
+Status: **the scheduled kernel is CLOSED at stage C** — the endgame unit
+(whole-cycle compiled program) fired the null exit clause: after stage C
+the chain's remaining capturable machinery is ~2.5-5.5% of the cycle
+(below the 10% bar), and the one design with large machinery (riscv) is
+structurally unqualifiable (registers clocked by combinational internal
+signals — a static whole-cycle program would change committed register
+values). No commit; tree clean at `262bf53`. The decomposition also
+corrected this plan's own 1.4x estimate: it double-counted the
+rising-edge transfer loop (~5.3k, real commit work) and sampler bias as
+machinery — true machinery is ~0.3-0.7k, and eval+commit ~9.8-10.3k of a
+~12.85k cycle is irreducible real work. See Part VI for the full
+decomposition.
+
+Stage C (`fa4147e` + `f599211`), stage B (`791047e`), stage A
+(`dce68b5`) beneath it.
 
 ## Stage C measured results (paired A/B, interleaved pairs, one cargo session)
 
@@ -309,3 +321,64 @@ before it becomes a claim.
 - Transcript audit: `.audit/transcript-audit.md`
 - Scope decisions recorded in `PERF-IDEAS.md` items 20/21 (no threading,
   no push/PR — deliverable is local commits on `sim-vm-rewrite` only).
+
+---
+
+## Part VI — Endgame unit: null result and the honest ledger (CLOSED)
+
+The whole-cycle compiled-program unit (the Verilator-style endgame) was
+launched with an explicit exit clause: if the phase-1 decomposition
+showed the remaining machinery below ~10% of the cycle on every bench,
+report the null and stop. It fired.
+
+Measured decomposition after stage C (temporary per-component timers,
+instrument self-cost ~280 ns/cyc corrected by interval arithmetic):
+
+| component (512-stage chain) | ns/cycle | share | verdict |
+|---|---|---|---|
+| driver evaluation (513 VM evals) | ~4400-4850 | ~35% | irreducible real work |
+| commit: clock toggle + 512 register transfers | ~5280-5470 | ~41% | irreducible real work (512 transfers × ~10.3 ns) |
+| rising-replay ceremony (prologue, match, advance, clear) | ~90-400 | ~1-3% | capturable remainder |
+| falling-edge settlement (1 dirty, dynamic) | ~28 | <0.5% | capturable |
+| watcher sweep (2 passes, updates last even when not firing) | ~40-56 | ~0.4% | mostly irreducible |
+| step_clock glue + run-loop glue | ~200-250 | ~2% | capturable |
+
+**Total capturable ≈ 300-700 ns ≈ 2.5-5.5%** — below the 10% bar and at
+the edge of the ±2% build-lottery noise band.
+
+Key correction to this plan's own estimate: the "~3.6k machinery → 1.4x
+ceiling" figure double-counted the rising-edge register-transfer loop
+(~5.3k, real commit work) and sampled-estimator bias as machinery.
+Measured eval+commit is ~9.8-10.3k of a ~12.85k true cycle; machinery is
+~0.3-0.7k, not 3.6k. The 1.4x endgame did not exist after stage C; the
+honest headroom is ~3-6%.
+
+riscv: structurally unqualifiable. The design runs 21 register transfers
+per cycle across ~14 mid-settlement rising events (registers clocked by
+combinationally driven internal signals). A mid-settlement transfer
+commits the pending value at the moment of the rise; reproducing that
+requires the exact dynamic visit/transfer sequence — which is precisely
+the stage C recorder mechanism, and it already gave up there (1024
+captures, non-repeating 1→15 growth). A static whole-cycle program would
+change committed register values on such designs; correctness-by-
+construction forbids it. hello: non-terminal combinational tails, never
+engages any schedule — same disqualification. s1: machinery ~40-60 ns,
+absolute prize ~50 ns, not a target.
+
+Qualification condition the compile would have needed (for the record):
+single primary free-running clock; every register clocked only by a
+primary input signal (the soundness-critical clause that excludes
+riscv); acyclic TopoSchedule; runtime guards (empty dirty set at edge
+entry, no pending user event before the cycle's last edge, no structural
+change). The chain qualifies — and on the chain the prize measures
+~3-6%.
+
+No commit; all instrumentation reverted; tree clean at `262bf53`; gates
+re-verified green (check.sh ×2, virdant 102, workspace 122, make test).
+
+**Follow-up lever named by the decomposition (out of scope for the
+scheduled kernel):** inside the VM interpreter — chain eval ~8.8
+ns/eval sampled for `it + prev + 1w32`, dispatch/frame overhead of ~10
+bytecode ops. Fused dispatch / superinstructions is the remaining
+engine-level lever, and it is a different unit from the scheduled
+kernel.
