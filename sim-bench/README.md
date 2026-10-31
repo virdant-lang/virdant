@@ -136,7 +136,7 @@ Columns (absolute time and per-cycle nanoseconds):
 The counts line is exact everywhere: events (timed `AfterDelay`
 dispatches; clock edges on the free-running fast path are counted
 separately as `clock_edges`), pushes, dirty pops,
-driver evals (VM vs interpreter fallback), set_val/transfers calls and
+driver evals (all on the compiled VM), set_val/transfers calls and
 actual writes, rising edges, watcher passes and fires.
 
 Rules for reading the numbers:

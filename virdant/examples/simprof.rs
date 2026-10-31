@@ -168,14 +168,12 @@ mod table {
         row("floor", floor_ns(snap, push_est, commit_est));
         println!();
         println!(
-            "  counts: events={} clock_edges={} pushes={} dirty_pops={} driver_evals={} (vm={} interp={} const_skip={})",
+            "  counts: events={} clock_edges={} pushes={} dirty_pops={} driver_evals={} (all vm, interp counter retired) const_skip={}",
             snap.events_popped,
             snap.clock_edges,
             snap.sched_push_calls,
             snap.dirty_pops,
             snap.evals_total,
-            snap.evals_vm(),
-            snap.evals_interp,
             snap.const_skips,
         );
         println!(

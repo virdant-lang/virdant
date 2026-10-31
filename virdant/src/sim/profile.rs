@@ -104,12 +104,10 @@ struct Counters {
     flow_calls: AtomicU64,
     /// Dirty-list pops inside `flow` (changed signals propagated).
     dirty_pops: AtomicU64,
-    /// Driver evals executed in `eval_driver`, both engines.  Ticks
-    /// the eval sampler, so it counts construction-time `flow_all`
-    /// evals too.
+    /// Driver evals executed in `eval_driver`, all on the compiled VM
+    /// (the interpreter fallback is gone).  Ticks the eval sampler, so
+    /// it counts construction-time `flow_all` evals too.
     evals_total: AtomicU64,
-    /// Of `evals_total`, how many ran on the interpreter fallback.
-    evals_interp: AtomicU64,
     /// `eval_driver` calls answered from the constant-fold table
     /// without running any engine.
     const_skips: AtomicU64,
@@ -155,7 +153,6 @@ static COUNTERS: Counters = Counters {
     flow_calls: AtomicU64::new(0),
     dirty_pops: AtomicU64::new(0),
     evals_total: AtomicU64::new(0),
-    evals_interp: AtomicU64::new(0),
     const_skips: AtomicU64::new(0),
     set_val_calls: AtomicU64::new(0),
     set_val_writes: AtomicU64::new(0),
@@ -255,12 +252,6 @@ sampler!(sample_set_val, set_val_calls, commit_sample_ns, commit_samples, SAMPLE
 sampler!(sample_sched_push, sched_push_calls, push_sample_ns, push_samples, SAMPLE_MASK);
 sampler!(sample_xfer_loop, rising_edges, xfer_sample_ns, xfer_samples, LOOP_SAMPLE_MASK);
 
-/// Count a driver eval that ran on the interpreter fallback.
-#[inline]
-pub fn bump_eval_interp() {
-    COUNTERS.evals_interp.fetch_add(1, Ordering::Relaxed);
-}
-
 /// Count an `eval_driver` call answered from the constant-fold table.
 #[inline]
 pub fn bump_const_skip() {
@@ -334,7 +325,6 @@ pub struct Snapshot {
     pub flow_calls: u64,
     pub dirty_pops: u64,
     pub evals_total: u64,
-    pub evals_interp: u64,
     pub const_skips: u64,
     pub set_val_calls: u64,
     pub set_val_writes: u64,
@@ -346,10 +336,11 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
-    /// Driver evals that ran on the compiled VM: total executed evals
-    /// minus the interpreter-fallback ones.
+    /// Every executed driver eval ran on the compiled VM (the
+    /// interpreter fallback is gone), so `evals_total` is the VM
+    /// count.
     pub fn evals_vm(&self) -> u64 {
-        self.evals_total.saturating_sub(self.evals_interp)
+        self.evals_total
     }
 }
 
@@ -374,7 +365,6 @@ pub fn snapshot() -> Snapshot {
         flow_calls: COUNTERS.flow_calls.load(Ordering::Relaxed),
         dirty_pops: COUNTERS.dirty_pops.load(Ordering::Relaxed),
         evals_total: COUNTERS.evals_total.load(Ordering::Relaxed),
-        evals_interp: COUNTERS.evals_interp.load(Ordering::Relaxed),
         const_skips: COUNTERS.const_skips.load(Ordering::Relaxed),
         set_val_calls: COUNTERS.set_val_calls.load(Ordering::Relaxed),
         set_val_writes: COUNTERS.set_val_writes.load(Ordering::Relaxed),
@@ -407,7 +397,6 @@ pub fn reset() {
     COUNTERS.flow_calls.store(0, Ordering::Relaxed);
     COUNTERS.dirty_pops.store(0, Ordering::Relaxed);
     COUNTERS.evals_total.store(0, Ordering::Relaxed);
-    COUNTERS.evals_interp.store(0, Ordering::Relaxed);
     COUNTERS.const_skips.store(0, Ordering::Relaxed);
     COUNTERS.set_val_calls.store(0, Ordering::Relaxed);
     COUNTERS.set_val_writes.store(0, Ordering::Relaxed);

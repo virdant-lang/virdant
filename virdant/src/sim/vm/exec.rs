@@ -22,7 +22,7 @@
 use crate::analysis::elaboration::SignalId;
 use crate::common::{BinOp, UnOp, Width};
 use crate::sim::bits::BitPat;
-use crate::sim::eval::Value;
+use crate::sim::value::Value;
 use crate::sim::layout::TypeId;
 use crate::sim::vm::frame::{Frame, Vm};
 use crate::sim::vm::isa::{Dst, Ins, Program, Src, Truthiness};
@@ -91,16 +91,16 @@ impl Vm {
     /// commits raw narrow bits through the bits-only path
     /// (`State::set_val_bits`/`set_reg_bits`, with the caller's
     /// clock-edge detection) and wide `Value`s through
-    /// `State::set_val`/`set_reg`, exactly as it does for the
-    /// interpreter.
+    /// `State::set_val`/`set_reg`, exactly as the interpreter's
+    /// result was committed.
     ///
-    /// Panics when `comp` has no compiled driver (the caller must
-    /// route fallback drivers to the interpreter), and on `Trap` —
-    /// the lazy failure `Method`/`Fn`/`StrLit` evaluation has today.
+    /// Panics when `comp` has no compiled driver, and on `Trap`,
+    /// the lazy failure `Method`/`Fn`/`StrLit` evaluation has always
+    /// had.
     pub(in crate::sim) fn run_out<S: VmState>(&mut self, program: &Program, state: &S, comp: SignalId) -> RunOut {
         let idx = comp.index();
         let range = program.entry[idx]
-            .unwrap_or_else(|| panic!("Vm::run_out: component {idx} has no compiled driver (must be routed to the interpreter fallback)"));
+            .unwrap_or_else(|| panic!("Vm::run_out: component {idx} has no compiled driver"));
         let typ = program.driver_typs[idx]
             .unwrap_or_else(|| panic!("Vm::run_out: component {idx} has no compiled driver"));
         let ret_width = program.driver_widths[idx];
@@ -119,7 +119,8 @@ impl Vm {
                     ip += 1;
                 }
                 Ins::LoadUnresolved { dst } => {
-                    // `Context::get`'s fallback: a width-1 zero value.
+                    // A missing referent: a width-1 zero value (the old
+                    // interpreter's `Context::get` fallback).
                     frame.narrow[*dst as usize] = 0;
                     ip += 1;
                 }
@@ -441,8 +442,7 @@ pub(in crate::sim) enum RunOut {
     /// [`Value::from_u64`] applies when a `Value` is finally needed.
     Bits { typ: TypeId, width: Width, bits: u64 },
     /// An already-tagged `Value`: a wide (`RetWide`) terminal result,
-    /// or (at the `eval_driver` seam) a constant-unit skip or an
-    /// interpreter-fallback result.
+    /// or (at the `eval_driver` seam) a constant-unit skip result.
     Tagged(Value),
 }
 
@@ -565,7 +565,6 @@ mod tests {
             driver_widths: vec![ret_width],
             layouts,
             const_values: vec![None],
-            fallback_counts: [0; 3],
         };
         let mut program = program;
         program.entry[0] = Some(CodeRange { start: 0, len: program.code.len() as Ip });
@@ -955,7 +954,6 @@ mod tests {
             driver_widths: vec![4],
             layouts,
             const_values: vec![None],
-            fallback_counts: [0; 3],
         };
         let mut vm = Vm::new(&program);
         let value = vm.run_out(
@@ -1000,7 +998,6 @@ mod tests {
             driver_widths: vec![100],
             layouts,
             const_values: vec![None],
-            fallback_counts: [0; 3],
         };
         let mut vm = Vm::new(&program);
         let out = vm.run_out(
@@ -1030,27 +1027,5 @@ mod tests {
             1,
         );
         let _ = value;
-    }
-
-    #[test]
-    #[should_panic(expected = "no compiled driver")]
-    fn run_panics_on_fallback_drivers() {
-        let (layouts, _typ_id) = interner_with(&Type::Bit);
-        let program = Program {
-            code: Vec::new().into_boxed_slice(),
-            entry: vec![None],
-            frames: vec![FrameLayout::default()],
-            driver_typs: vec![None],
-            driver_widths: vec![0],
-            layouts,
-            const_values: vec![None],
-            fallback_counts: [1, 0, 0],
-        };
-        let mut vm = Vm::new(&program);
-        let _ = vm.run_out(
-            &program,
-            &TestState { narrow: test_state() },
-            SignalId::from_index(0),
-        );
     }
 }

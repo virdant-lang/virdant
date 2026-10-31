@@ -18,15 +18,14 @@
 //!    into `Program::code`, fill `entry`/`frames`/`driver_typs`, and
 //!    validate in debug builds.
 //!
-//! Drivers whose `Expr` contains a construct this unit does not lower
-//! fall back to the interpreter: `Program::entry` is `None` for them
-//! and `Sim`'s per-driver execution seam routes them to `Context`-
-//! based evaluation.  This fallback is temporary, later units delete
-//! it as they land the remaining lowering, so it lives behind exactly
-//! one seam (`Sim::eval_driver`) plus the reason counts logged at
-//! `Sim::new`.  After the `when`/`match` unit the only remaining
-//! fallback reason is `Unsupported` (defensive width/shape checks that
-//! preserve the interpreter's panic timing).
+//! Every driven component lowers to bytecode: there is no interpreter
+//! fallback and no unlowered construct.  The conditions the lowering
+//! checks (operand width equality, range bounds, ctor geometry) are
+//! invariants the type checker already enforces; a violation panics at
+//! compile time (fail fast, instead of the old interpreter's eval-time
+//! panic), and the one shape the ISA could not express (a dynamic index
+//! wider than 64 bits) lowers by extracting the index's low 64 bits
+//! first, exactly what the interpreter's `to_u64` read.
 //!
 //! ## Op-to-`eval_*` mapping checklist (synthesis graft 5)
 //!
@@ -74,12 +73,12 @@ use crate::analysis::Location;
 use crate::common::{BinOp, UnOp, Width};
 use crate::sim::bits::BitPat;
 use crate::sim::circuit::Circuit;
-use crate::sim::eval::Value;
+use crate::sim::value::Value;
 use crate::sim::expr::{Expr, ExprPayload, Referent};
 use crate::sim::layout::{CtorGeometry, TypeId, TypeLayoutIndex};
 use crate::sim::payload;
 use crate::sim::vm::isa::{
-    CodeRange, Dst, FALLBACK_REASONS, FallbackReason, FrameLayout, Ins, Ip, Program, SlotN, SlotW,
+    CodeRange, Dst, FrameLayout, Ins, Ip, Program, SlotN, SlotW,
     Src, Truthiness,
 };
 use crate::sim::vm::optimize::optimize_driver;
@@ -99,9 +98,7 @@ struct VVal {
     width: Width,
 }
 
-/// Per-driver lowering context.  `fallback` is set on the first
-/// unlowered construct; after that the driver is discarded
-/// (`Program::entry` stays `None`) and the interpreter runs it.
+/// Per-driver lowering context.
 struct DriverCompiler<'a> {
     layouts: &'a TypeLayoutIndex,
     elaboration: &'a Elaboration,
@@ -118,7 +115,6 @@ struct DriverCompiler<'a> {
     n_narrow: u16,
     n_wide: u16,
     wide_widths: Vec<Width>,
-    fallback: Option<FallbackReason>,
 }
 
 impl<'a> DriverCompiler<'a> {
@@ -128,6 +124,18 @@ impl<'a> DriverCompiler<'a> {
             // IndexMap-style last insert wins.
             referents.insert(referent.clone(), *target);
         }
+        DriverCompiler::with_referents(circuit, referents)
+    }
+
+    /// A compiler with an *empty* referent table: every reference
+    /// lowers to `LoadUnresolved` (a width-1 zero), matching the old
+    /// empty-`Context` semantics for `initial` expressions.  Used by
+    /// `compile_initial_value`.
+    fn new_for_constant(circuit: &'a Circuit) -> DriverCompiler<'a> {
+        DriverCompiler::with_referents(circuit, HashMap::new())
+    }
+
+    fn with_referents(circuit: &'a Circuit, referents: HashMap<Referent, SignalId>) -> DriverCompiler<'a> {
         DriverCompiler {
             layouts: &circuit.type_layout_index,
             elaboration: &circuit.elaboration,
@@ -137,7 +145,6 @@ impl<'a> DriverCompiler<'a> {
             n_narrow: 0,
             n_wide: 0,
             wide_widths: Vec::new(),
-            fallback: None,
         }
     }
 
@@ -152,15 +159,6 @@ impl<'a> DriverCompiler<'a> {
     fn signal_value_width(&self, signal: SignalId) -> Width {
         let typ = self.elaboration.component(signal).typ();
         self.layouts.type_width(&typ)
-    }
-
-    /// Record an unlowered construct and return a dummy value handle
-    /// (never executed: the whole driver falls back).
-    fn fallback(&mut self, reason: FallbackReason) -> VVal {
-        if self.fallback.is_none() {
-            self.fallback = Some(reason);
-        }
-        VVal { dst: Dst::Narrow(0), width: 0 }
     }
 
     fn alloc_narrow(&mut self) -> SlotN {
@@ -188,12 +186,6 @@ impl<'a> DriverCompiler<'a> {
     }
 
     fn compile_expr(&mut self, expr: &Expr) -> VVal {
-        // Short-circuit after the first unlowered construct: the
-        // driver is discarded, so just stop emitting.
-        if self.fallback.is_some() {
-            return VVal { dst: Dst::Narrow(0), width: 0 };
-        }
-
         match expr.payload() {
             ExprPayload::Reference(reference) => {
                 // A pattern-bound variable (`Referent::Location`):
@@ -314,17 +306,23 @@ impl<'a> DriverCompiler<'a> {
             ExprPayload::IndexDyn(index_dyn) => {
                 let subj = self.compile_expr(&index_dyn.subject);
                 let index = self.compile_expr(&index_dyn.index);
-                if index.width > 64 {
-                    // The interpreter reads `idx_val.to_u64()`, only
-                    // its low 64 bits.  A wide index slot cannot be
-                    // read into the narrow index operand without
-                    // another instruction; fall back.
-                    return self.fallback(FallbackReason::Unsupported);
-                }
                 let dst = Dst::Narrow(self.alloc_narrow());
-let index_slot = match index.dst {
+                // The interpreter reads the index through `to_u64()`:
+                // only its low 64 bits.  A wide index slot is reduced
+                // to those 64 bits with one `Extract`, so the executed
+                // semantics are identical.
+                let index_slot = match index.dst {
                     Dst::Narrow(i) => i,
-                    Dst::Wide(_) => unreachable!("index width checked above"),
+                    Dst::Wide(s) => {
+                        let reduced = self.alloc_narrow();
+                        self.code.push(Ins::ExtractWide {
+                            subj: s,
+                            lo: 0,
+                            width: 64,
+                            dst: Dst::Narrow(reduced),
+                        });
+                        reduced
+                    }
                 };
                 match subj.dst {
                     Dst::Narrow(s) => self.code.push(Ins::IndexDyn {
@@ -351,9 +349,15 @@ let index_slot = match index.dst {
                 let lo = index_range.index_lo;
                 let hi = index_range.index_hi;
                 if lo > hi || hi > subj.width {
-                    // The interpreter asserts these (`Value::slice`);
-                    // fall back so it panics exactly as before.
-                    return self.fallback(FallbackReason::Unsupported);
+                    // Typing rejects out-of-bounds ranges
+                    // (`infer_index_range`); reaching here means a
+                    // typing bug.  The interpreter used to panic at
+                    // eval time (`Value::slice`); panic at compile
+                    // time instead.
+                    panic!(
+                        "compile: out-of-bounds range index {hi}..{lo} on a {width}-bit subject (typing invariant violated)",
+                        width = subj.width,
+                    );
                 }
                 let dst = self.slot_for(hi - lo);
                 match (subj.dst, dst) {
@@ -457,9 +461,15 @@ let index_slot = match index.dst {
         let lhs = self.compile_expr(lhs_expr);
         let rhs = self.compile_expr(rhs_expr);
         if lhs.width != rhs.width {
-            // The interpreter asserts operand-width equality on every
-            // binop path; fall back so it panics exactly as before.
-            return self.fallback(FallbackReason::Unsupported);
+            // Typing requires equal operand types (hence widths,
+            // `compatible_typs`); the interpreter used to assert this
+            // at eval time.  Reaching here means a typing bug; panic
+            // at compile time instead.
+            panic!(
+                "compile: binop operand width mismatch ({lw} vs {rw}) (typing invariant violated)",
+                lw = lhs.width,
+                rw = rhs.width,
+            );
         }
         let operand_width = lhs.width;
         let comparison =
@@ -484,7 +494,7 @@ let index_slot = match index.dst {
             }
             // Operand widths are equal, so the slot classes must
             // agree; a mixed pair means the width check was bypassed.
-            _ => return self.fallback(FallbackReason::Unsupported),
+            _ => unreachable!("equal-width binop operands share a slot class"),
         }
         VVal { dst, width: result_width }
     }
@@ -529,14 +539,26 @@ let index_slot = match index.dst {
         };
         if geom.tag_width > 64 {
             // `encode_ctor`'s tag arithmetic is a `u64`; a wider tag
-            // area panics there.  Fall back so it panics as before.
-            return self.fallback(FallbackReason::Unsupported);
+            // area needs over 2^64 constructors of one type, which the
+            // type system cannot express.  The interpreter used to
+            // panic there at eval time; panic at compile time instead.
+            panic!(
+                "compile: constructor tag area of {w} bits exceeds u64 arithmetic (unrepresentable type)",
+                w = geom.tag_width,
+            );
         }
         let payload_width: u64 = arg_vals.iter().map(|v| v.width as u64).sum();
         if payload_width + geom.tag_width as u64 > geom.total_width as u64 {
-            // `encode_ctor` asserts on `set_bit` out of range; fall
-            // back so the interpreter panics exactly as before.
-            return self.fallback(FallbackReason::Unsupported);
+            // Typing sizes ctor args to their parameters, so the
+            // payload fits by construction; the interpreter used to
+            // assert this at eval time (`set_bit` out of range).
+            // Reaching here means a typing bug; panic at compile time.
+            panic!(
+                "compile: constructor payload of {pw} bits plus {tw}-bit tag overflows the {tot}-bit type (typing invariant violated)",
+                pw = payload_width,
+                tw = geom.tag_width,
+                tot = geom.total_width,
+            );
         }
         // Argument k sits at bit offset tag_width + sum_{j>k} w_j
         // (first argument at the MSB end of the payload area).
@@ -601,12 +623,11 @@ let index_slot = match index.dst {
         match dst {
             Dst::Narrow(d) => {
                 if wide_parts {
-                    // A wide value spliced into a narrow result: the
-                    // interpreter truncates the whole concat to
-                    // `total_width` via `zext_to`; the splice
-                    // instruction reads wide slots only via their low
-                    // 64 bits.  Fall back (pathological casts only).
-                    return self.fallback(FallbackReason::Unsupported);
+                    // A wide value spliced into a narrow result: typing
+                    // makes the concat node at least as wide as its
+                    // widest argument, so this cannot occur in typed
+                    // code (the interpreter truncated via `zext_to`).
+                    unreachable!("narrow splice with a wide part (typing invariant violated)");
                 }
                 let spliced: Vec<(Src, u16, u16)> = parts
                     .iter()
@@ -753,7 +774,13 @@ let index_slot = match index.dst {
         temps: &[VVal],
     ) -> VVal {
         if temps.iter().any(|t| t.width != temps[0].width) {
-            return self.fallback(FallbackReason::Unsupported);
+            // Typing makes every `when` arm the node's type, so all
+            // widths agree by construction; the interpreter used to
+            // run each path at its own width.  Reaching here means a
+            // typing bug; panic at compile time.
+            panic!(
+                "compile: `when` arms have unequal widths (typing invariant violated)"
+            );
         }
         let width = temps[0].width;
         let result = self.slot_for(width);
@@ -833,15 +860,28 @@ let index_slot = match index.dst {
                     if geom.tag_width > 64 {
                         // The tag read (`bits.slice(0, tag_width).
                         // to_u64()`) is a `u64` compare; a wider tag
-                        // area has no u64 tag.  Fall back.
-                        return self.fallback(FallbackReason::Unsupported);
+                        // area needs over 2^64 constructors of one
+                        // type, which the type system cannot express.
+                        // The interpreter used to fall back; panic at
+                        // compile time instead.
+                        panic!(
+                            "compile: constructor tag area of {w} bits exceeds u64 arithmetic (unrepresentable type)",
+                            w = geom.tag_width,
+                        );
                     }
                     if subj.width < geom.total_width {
                         // `decode_ctor` slices the subject's bits up to
-                        // the type's total width; a narrower value
-                        // panics there (`BitPat::slice`).  Fall back so
-                        // the interpreter panics exactly as before.
-                        return self.fallback(FallbackReason::Unsupported);
+                        // the type's total width; the subject carries
+                        // the match node's type, so its value is at
+                        // least that wide by construction.  Reaching
+                        // here means a typing bug; panic at compile
+                        // time (the interpreter panicked in
+                        // `BitPat::slice` at eval time).
+                        panic!(
+                            "compile: match subject of {w} bits is narrower than its {tot}-bit match type (typing invariant violated)",
+                            w = subj.width,
+                            tot = geom.total_width,
+                        );
                     }
                     dispatched.push((i, pattern));
                     geometry.push(Some(geom));
@@ -1110,7 +1150,13 @@ let index_slot = match index.dst {
         temps: &[VVal],
     ) -> VVal {
         if temps.iter().any(|t| t.width != temps[0].width) {
-            return self.fallback(FallbackReason::Unsupported);
+            // Typing makes every match arm the match node's type, so
+            // all widths agree by construction; the interpreter used
+            // to run each path at its own width.  Reaching here means
+            // a typing bug; panic at compile time.
+            panic!(
+                "compile: `match` arms have unequal widths (typing invariant violated)"
+            );
         }
         let width = temps[0].width;
         let result = self.slot_for(width);
@@ -1186,8 +1232,13 @@ fn detect_constant_driver(code: &[Ins], typ: TypeId, ret_width: Width) -> Option
         (Ins::Const { bits, dst }, Ins::Ret { src }) if dst == src => {
             Some(Value::from_u64(typ, ret_width, *bits))
         }
-        (Ins::Zero { dst, .. }, Ins::Ret { src }) if dst == &Dst::Narrow(*src) => {
+        (Ins::Zero { dst, width }, Ins::Ret { src }) if dst == &Dst::Narrow(*src) => {
             Some(Value::from_u64(typ, ret_width, 0))
+        }
+        // A wide all-zero constant (`Ins::Zero` with a wide dst): no
+        // `ZeroWide` form exists, so the pattern is `Zero` + `RetWide`.
+        (Ins::Zero { width, .. }, Ins::RetWide { .. }) if *width > 64 => {
+            Some(Value::new(typ, BitPat::zeros(*width)))
         }
         (Ins::WideConst { bits, dst }, Ins::RetWide { src }) if dst == src => {
             Some(Value::new(typ, bits.clone()))
@@ -1205,7 +1256,6 @@ pub(in crate::sim) fn compile_program(circuit: &Circuit) -> Program {
     let mut driver_typs: Vec<Option<TypeId>> = vec![None; n];
     let mut driver_widths: Vec<Width> = vec![0; n];
     let mut const_values: Vec<Option<Value>> = vec![None; n];
-    let mut fallback_counts = [0usize; FALLBACK_REASONS];
 
     for comp in circuit.elaboration.components() {
         let id = comp.id();
@@ -1214,10 +1264,6 @@ pub(in crate::sim) fn compile_program(circuit: &Circuit) -> Program {
         };
         let mut compiler = DriverCompiler::new(circuit, id);
         let root = compiler.compile_expr(&expr);
-        if let Some(reason) = compiler.fallback {
-            fallback_counts[reason as usize] += 1;
-            continue;
-        }
         match root.dst {
             Dst::Narrow(src) => compiler.code.push(Ins::Ret { src }),
             Dst::Wide(src) => compiler.code.push(Ins::RetWide { src }),
@@ -1263,7 +1309,6 @@ pub(in crate::sim) fn compile_program(circuit: &Circuit) -> Program {
         driver_widths,
         const_values,
         layouts: circuit.type_layout_index.clone(),
-        fallback_counts,
     };
     if cfg!(debug_assertions) {
         program.validate();
@@ -1271,346 +1316,28 @@ pub(in crate::sim) fn compile_program(circuit: &Circuit) -> Program {
     program
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use bstr::ByteSlice;
-    use crate::sim::eval::{Context, Value};
-    use crate::sim::state::State;
-    use crate::sim::vm::frame::Vm;
-    use crate::sim::sim::InitStrategy;
-    use crate::util::{check_db, db_from_dir_with_lib};
-    use std::path::Path;
-
-    /// Differential check on a real design: compile every driver,
-    /// settle the whole network through the executor (the same
-    /// fixpoint `Sim::flow_all` runs), then assert every VM-driven
-    /// value equals what the interpreter would compute on the settled
-    /// state, i.e. the VM and the interpreter agree exactly on every
-    /// driver this unit lowered.
-    fn differential_check(project: &str) {
-        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let source = manifest.join(format!("../tests/sim/{project}/src"));
-        let lib = manifest.join("../lib");
-        let db = db_from_dir_with_lib(&source, lib);
-        if let Err(diagnostics) = check_db(&db) {
-            for diag in diagnostics.iter() {
-                eprintln!("{diag:?}");
-            }
-            panic!("differential_check({project}): project failed to build");
-        }
-        // The projects under test each have exactly one top-level
-        // `ModDef` (its fqn is `<file stem>::<mod name>`); resolve it
-        // by the file stems in the project's src directory, which
-        // excludes builtin ModDefs (their fqns are `<builtin package>::
-        // <name>`, and matching on the two-segment shape alone picks
-        // `builtin::Sync` first).
-        let stems: Vec<bstr::BString> = std::fs::read_dir(&source)
-            .expect("differential_check: project src dir")
-            .filter_map(|entry| {
-                let path = entry.ok()?.path();
-                if path.extension()?.to_str()? == "vir" {
-                    Some(path.file_stem()?.to_string_lossy().into_owned().into_bytes().into())
-                } else {
-                    None
-                }
-            })
-            .collect();
-        let symboltable = db.get_symboltable();
-        let Some(top) = symboltable
-            .items()
-            .into_iter()
-            .filter(|item| item.kind() == crate::analysis::symbols::SymbolKind::ModDef)
-            .find(|item| {
-                let fqn = item.fqn();
-                let mut parts = fqn.rsplit_str(b"::");
-                match (parts.next(), parts.next()) {
-                    // rsplit yields the last segment first.
-                    (Some(_name), Some(stem)) => stems.iter().any(|s| s == stem),
-                    _ => false,
-                }
-            })
-        else {
-            panic!("differential_check({project}): no top-level ModDef");
-        };
-
-        let circuit = Circuit::new(&db, top.id());
-        let program = compile_program(&circuit);
-        if cfg!(debug_assertions) {
-            program.validate();
-        }
-        // The when/match unit's deliverable: no driver on these real
-        // designs may still fall back for a when/match reason (the
-        // counts are always computed; the accessor is debug-only).
-        #[cfg(debug_assertions)]
-        {
-            let counts = program.fallback_counts();
-            assert_eq!(
-                counts[FallbackReason::When as usize] + counts[FallbackReason::Match as usize],
-                0,
-                "differential_check({project}): when/match fallbacks remain: {counts:?}"
-            );
-        }
-        let mut vm = Vm::new(&program);
-        let mut state = State::new(
-            circuit.elaboration.as_ref(),
-            &circuit.type_layout_index,
-            &InitStrategy::Seeded(42),
-        );
-
-        // Settle to a fixpoint through the executor, mirroring
-        // `Sim::flow_all` (drivers, then alias copies, until no
-        // change).  Differential: on every pass, every VM driver's
-        // result must equal the interpreter's evaluation of the same
-        // driver on the same pre-settle state (the interpreter is the
-        // oracle; comparing against the *stored* signal value would
-        // be apples-to-oranges for registers, whose live value only
-        // moves on clock transfer).
-        let mut checked = std::collections::HashSet::new();
-        loop {
-            let mut changed = false;
-            for comp in circuit.elaboration.components() {
-                let id = comp.id();
-                let expr = circuit.exprs[id.index()].clone();
-                let Some(expr) = expr else {
-                    continue;
-                };
-                let new_value = if program.has_driver(id) {
-                    let vm_value = vm.run_out(&program, &state, id).into_value();
-                    let context = Context::context_for_component(&circuit, &state, id);
-                    let expected: Value = expr.eval(&context);
-                    assert_eq!(
-                        vm_value,
-                        expected,
-                        "differential_check({}): driver {:?} differs",
-                        project,
-                        comp.path()
-                    );
-                    checked.insert(id);
-                    vm_value
-                } else {
-                    let context = Context::context_for_component(&circuit, &state, id);
-                    expr.eval(&context)
-                };
-                if circuit.registers[id.index()] {
-                    state.set_reg(id, new_value);
-                } else if state.get(id) != new_value {
-                    state.set_val(id, new_value);
-                    changed = true;
-                }
-            }
-            for comp in circuit.elaboration.components() {
-                if let Some(source) = circuit.aliases[comp.id().index()] {
-                    let value = state.get(source);
-                    if state.get(comp.id()) != value {
-                        state.set_val(comp.id(), value);
-                        changed = true;
-                    }
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
-        state.clear_dirty();
-
-        // Projects whose drivers all fall back (When/Match) simply
-        // check nothing here, the fallback counts report covers
-        // them; value equivalence is claimed only for lowered
-        // drivers.
-        if checked.is_empty() {
-            eprintln!("differential_check({project}): no compiled drivers (all fell back)");
-        }
+/// Lower a register's constant `initial` expression to its value.
+///
+/// `initial` expressions are constant by construction, so they compile
+/// through the exact driver pipeline (lowering with an *empty*
+/// referent table, i.e. the bindings an empty eval context produced,
+/// then the optimizer), and the optimized stream must have folded entirely
+/// to one constant (`Const`/`Zero`/`WideConst` + `Ret`).  A constant
+/// expression that does not fold (e.g. it reaches a `Trap`) is an
+/// optimizer/lowering gap, not a runtime fallback: panic with the
+/// signal's path instead.
+pub(in crate::sim) fn compile_initial_value(circuit: &Circuit, expr: &Expr) -> Value {
+    let mut compiler = DriverCompiler::new_for_constant(circuit);
+    let root = compiler.compile_expr(expr);
+    match root.dst {
+        Dst::Narrow(src) => compiler.code.push(Ins::Ret { src }),
+        Dst::Wide(src) => compiler.code.push(Ins::RetWide { src }),
     }
-
-    #[test]
-    fn differential_basics() {
-        differential_check("basics");
-    }
-
-    #[test]
-    fn differential_gcd() {
-        differential_check("gcd");
-    }
-
-    #[test]
-    fn differential_valid() {
-        differential_check("valid");
-    }
-
-    #[test]
-    fn differential_lfsr() {
-        differential_check("lfsr");
-    }
-
-    #[test]
-    fn differential_literals() {
-        differential_check("literals");
-    }
-
-    // `typedefs` is not differential-tested here: its drivers use
-    // struct field projections (`color->green`), which `driver_to_expr`
-    // cannot convert (`ExprField` is unrepresentable in the `Expr`
-    // IR), so `Circuit::new` panics on it before any lowering runs.
-    // That is an `Expr` IR gap outside this unit's scope.
-
-    #[test]
-    fn differential_when_guard() {
-        differential_check("when_guard");
-    }
-
-    // `fifo` is not differential-tested here: it is a server-socket
-    // design whose settlement this harness's simplified `flow_all`
-    // loop cannot replicate (the real `Sim::flow` leaves socket
-    // internals in states this loop does not reproduce, and the
-    // interpreter oracle panics on them).  Its match lowering is
-    // still covered structurally: the same shapes (`match` on a
-    // `Word` with `WordLit` arms, nested `match` bodies) occur in
-    // `drivers`, `statemachine`, and `gcd`, which do settle.
-
-    #[test]
-    fn differential_edge() {
-        differential_check("edge");
-    }
-
-    #[test]
-    fn differential_drivers() {
-        differential_check("drivers");
-    }
-
-    #[test]
-    fn differential_dontcare() {
-        differential_check("dontcare");
-    }
-
-    #[test]
-    fn differential_sockets() {
-        differential_check("sockets");
-    }
-
-    #[test]
-    fn differential_submod_socket() {
-        differential_check("submod_socket");
-    }
-
-    #[test]
-    fn differential_sync() {
-        differential_check("sync");
-    }
-
-    #[test]
-    fn differential_statemachine() {
-        differential_check("statemachine");
-    }
-
-    #[test]
-    fn differential_pipe() {
-        differential_check("pipe");
-    }
-
-    #[test]
-    fn differential_generics_mod() {
-        differential_check("generics_mod");
-    }
-
-    // When/match-heavy designs added with the when/match lowering:
-    // i2c_open_drain exercises the incomplete-when owner-hold arm,
-    // uart deep `mux` chains.
-    #[test]
-    fn differential_uart() {
-        differential_check("uart");
-    }
-
-    #[test]
-    fn differential_i2c_open_drain() {
-        differential_check("i2c_open_drain");
-    }
-
-    // Optimizer-focused design: constant drivers (the constant-unit
-    // skip), constant-condition branches, and folds through nested
-    // muxes.  Besides the differential equivalence, every driver
-    // here must still lower (no fallback) and the entirely-constant
-    // drivers must be detected as constant.
-    #[test]
-    fn differential_optimize() {
-        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let source = manifest.join("../tests/sim/optimize/src");
-        let lib = manifest.join("../lib");
-        let db = db_from_dir_with_lib(&source, lib);
-        if let Err(diagnostics) = check_db(&db) {
-            for diag in diagnostics.iter() {
-                eprintln!("{diag:?}");
-            }
-            panic!("differential_optimize: project failed to build");
-        }
-        let stems: Vec<bstr::BString> = std::fs::read_dir(&source)
-            .expect("differential_optimize: project src dir")
-            .filter_map(|entry| {
-                let path = entry.ok()?.path();
-                if path.extension()?.to_str()? == "vir" {
-                    Some(path.file_stem()?.to_string_lossy().into_owned().into_bytes().into())
-                } else {
-                    None
-                }
-            })
-            .collect();
-        let symboltable = db.get_symboltable();
-        let Some(top) = symboltable
-            .items()
-            .into_iter()
-            .filter(|item| item.kind() == crate::analysis::symbols::SymbolKind::ModDef)
-            .find(|item| {
-                let fqn = item.fqn();
-                let mut parts = fqn.rsplit_str(b"::");
-                match (parts.next(), parts.next()) {
-                    (Some(_name), Some(stem)) => stems.iter().any(|s| s == stem),
-                    _ => false,
-                }
-            })
-        else {
-            panic!("differential_optimize: no top-level ModDef");
-        };
-
-        let circuit = Circuit::new(&db, top.id());
-        let program = compile_program(&circuit);
-        let mut vm = Vm::new(&program);
-        let mut state = State::new(
-            circuit.elaboration.as_ref(),
-            &circuit.type_layout_index,
-            &InitStrategy::Seeded(42),
-        );
-        let mut const_drivers = 0usize;
-        for comp in circuit.elaboration.components() {
-            let id = comp.id();
-            let Some(expr) = circuit.exprs[id.index()].clone() else {
-                continue;
-            };
-            let context = Context::context_for_component(&circuit, &state, id);
-            let expected: Value = expr.eval(&context);
-            if program.has_driver(id) {
-                let vm_value = vm.run_out(&program, &state, id).into_value();
-                assert_eq!(
-                    vm_value,
-                    expected,
-                    "differential_optimize: driver {:?} differs",
-                    comp.path()
-                );
-            }
-            if program.const_value(id).is_some() {
-                const_drivers += 1;
-                assert_eq!(
-                    program.const_value(id).unwrap(),
-                    &expected,
-                    "differential_optimize: constant-unit skip value for {:?} differs",
-                    comp.path()
-                );
-            }
-        }
-        // The design's all-constant wires must have been recognized
-        // by the constant-unit skip.
-        assert!(
-            const_drivers >= 4,
-            "differential_optimize: only {const_drivers} constant drivers detected"
-        );
-    }
+    optimize_driver(&mut compiler.code);
+    detect_constant_driver(&compiler.code, expr.typ_id(), root.width).unwrap_or_else(|| {
+        panic!(
+            "compile_initial_value: constant initial expression did not fold to a constant (optimizer/lowering gap at {loc:?})",
+            loc = expr.location(),
+        )
+    })
 }

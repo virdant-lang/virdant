@@ -10,10 +10,10 @@ use crate::common::{ComponentKind, Width};
 use crate::db::Db;
 use crate::sim::bits::BitPat;
 use crate::sim::circuit::Circuit;
-use crate::sim::eval::{Context, Value};
 use crate::sim::layout::{TypeId, TypeLayoutIndex};
 use crate::sim::scheduler::{Callback, Event, EventCallback, Scheduler};
 use crate::sim::state::State;
+use crate::sim::value::Value;
 use crate::sim::vm;
 use crate::types::Type;
 use std::cell::RefCell;
@@ -97,8 +97,8 @@ impl<'a> Drop for SimLock<'a> {
 
 pub struct Sim {
     circuit: Circuit,
-    /// Compiled drivers: one code range per component whose driver
-    /// lowered to bytecode (`None` = interpreter fallback).
+    /// Compiled drivers: one code range per driven component.  Every
+    /// driver lowers to bytecode; there is no interpreter fallback.
     program: vm::Program,
     /// The frame pool backing `program`'s drivers.
     vm: vm::Vm,
@@ -244,19 +244,6 @@ impl Sim {
     pub fn new(db: &Db, top: SymbolId, strategy: InitStrategy) -> Sim {
         let circuit = Circuit::new(db, top);
         let program = vm::compile_program(&circuit);
-        // Debug-build visibility into how much of the design still
-        // runs on the interpreter (temporary fallback, see vm::compile).
-        #[cfg(debug_assertions)]
-        {
-            let counts = program.fallback_counts();
-            let total: usize = counts.iter().sum();
-            if total > 0 {
-                eprintln!(
-                    "sim: {} driver(s) fell back to the interpreter (when: {}, match: {}, unsupported: {})",
-                    total, counts[0], counts[1], counts[2]
-                );
-            }
-        }
         let vm_pool = vm::Vm::new(&program);
 
         let mut sim = Sim {
@@ -279,8 +266,10 @@ impl Sim {
 
     /// Set every register with an `initial` statement to its initial value
     /// (registers without one keep their `InitStrategy` value).
-    /// `initial` expressions are constant, so they are evaluated in an
-    /// empty context; propagation happens in the following `flow_all`.
+    /// `initial` expressions are constant, so they are lowered and folded
+    /// to a constant value exactly like a driver body, with no referent
+    /// bindings (the same bindings an empty eval context produced);
+    /// propagation happens in the following `flow_all`.
     fn apply_initials(&mut self) {
         let initials: Vec<(SignalId, Arc<crate::sim::expr::Expr>)> = self
             .circuit
@@ -292,9 +281,8 @@ impl Sim {
             return;
         }
 
-        let context = Context::new(vec![], self.circuit.type_layout_index.clone());
         for (signal_id, expr) in initials {
-            let value = expr.eval(&context);
+            let value = vm::compile_initial_value(&self.circuit, &expr);
             self.state.set_val(signal_id, value);
         }
         self.flow();
@@ -304,25 +292,19 @@ impl Sim {
         &self.circuit.type_layout_index
     }
 
-    /// The per-driver execution seam: compiled bytecode when the
-    /// driver lowered to the VM, the interpreter otherwise.
-    ///
-    /// The fallback is temporary, later units delete it driver by
-    /// driver as they land the remaining lowering, so every
-    /// interpreter dispatch flows through exactly this one place.
-    /// Initial expressions still always run on the interpreter
-    /// (construction-time only; see `apply_initials`).
+    /// The per-driver execution seam: every driven component runs
+    /// compiled bytecode.  There is exactly one dispatch point, so a
+    /// future change to driver execution has one place to land.
     fn eval_driver(&mut self, comp: SignalId) -> Value {
         self.eval_driver_out(comp).into_value()
     }
 
     /// One driver run shaped for `flow`'s commit paths (PERF-IDEAS
     /// item 10): a narrow (<= 64-bit) VM-compiled result comes back as
-    /// raw bits plus the driver's `TypeId`/width — the bits-only
+    /// raw bits plus the driver's `TypeId`/width, and the bits-only
     /// commit path compares raw integers and tags a `Value` only on an
-    /// actual write — while everything else (wide results, the
-    /// interpreter fallback, constant-unit skips) comes back as the
-    /// tagged `Value` the old path built.
+    /// actual write; everything else (wide results, constant-unit
+    /// skips) comes back as the tagged `Value`.
     fn eval_driver_out(&mut self, comp: SignalId) -> vm::RunOut {
         // Constant-unit skip (synthesis graft 2): a driver the
         // optimizer folded entirely to a constant commits that value
@@ -341,11 +323,7 @@ impl Sim {
         if self.program.has_driver(comp) {
             self.vm.run_out(&self.program, &self.state, comp)
         } else {
-            #[cfg(feature = "sim-profile")]
-            crate::sim::profile::bump_eval_interp();
-            let expr = self.circuit.exprs[comp.index()].clone().unwrap();
-            let context = Context::context_for_component(&self.circuit, &self.state, comp);
-            vm::RunOut::Tagged(expr.eval(&context))
+            panic!("eval_driver_out: component {comp:?} has no compiled driver");
         }
     }
 

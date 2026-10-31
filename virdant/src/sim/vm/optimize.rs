@@ -1651,7 +1651,7 @@ mod tests {
     use super::*;
     use crate::analysis::elaboration::SignalId;
     use crate::common::BinOp;
-    use crate::sim::eval::Value;
+    use crate::sim::value::Value;
     use crate::sim::vm::exec::VmState;
     use crate::sim::vm::frame::Vm;
     use crate::sim::vm::isa::{CodeRange, FrameLayout, Program};
@@ -1698,7 +1698,6 @@ mod tests {
             driver_widths: vec![8],
             layouts,
             const_values: vec![None],
-            fallback_counts: [0; 3],
         };
         let mut vm = Vm::new(&program);
         let value = vm.run_out(&program, &state, SignalId::from_index(0)).into_value();

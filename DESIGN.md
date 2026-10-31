@@ -187,12 +187,14 @@ Answers.
 
 ## Why rewrite the simulator
 
-The current simulator interprets driver expressions directly. Each driven
-component carries an `Expr` tree (a 28-variant interpreter AST in
-`sim/expr.rs`). On every fanout edge of every changed signal, `Sim::flow`
-walks one tree and evaluates it under a freshly built `Context`.
+The simulator this rewrite replaced interpreted driver expressions
+directly. Each driven component carried an `Expr` tree (a 28-variant
+interpreter AST in `sim/expr.rs`). On every fanout edge of every changed
+signal, `Sim::flow` walked one tree and evaluated it under a freshly
+built `Context`.
 
-Measured on a release build (`vir run --fps-no-cap`, commit `60a0880`):
+Measured on a release build (`vir run --fps-no-cap`, commit `60a0880`,
+before the rewrite):
 
 - A one-stage generated register chain sustains about 4.5 MHz. An
   eight-stage chain sustains the same rate. The cost is a fixed per-cycle
@@ -350,7 +352,8 @@ pub(super) enum Ins {
     AnyWide { subj: SlotW, dst: SlotN },
     AllWide { subj: SlotW, dst: SlotN },
 
-    // Unsupported payloads panic lazily, as the interpreter does today.
+    // Unsupported payloads panic lazily (`todo!()`), as the old
+    // interpreter did.
     Trap,
 
     // Terminator.
@@ -371,10 +374,10 @@ Design notes:
 - `Load` and `Ret` are the only instructions that know `State` and
   `Value` exist. Everything between them is pure bit arithmetic and is
   testable without a simulator.
-- `Trap` covers `Method`, `Fn`, and `StrLit` payloads, which are
-  `todo!()` in the interpreter today. The panic stays lazy: a design
+- `Trap` covers `Method`, `Fn`, and `StrLit` payloads, which were
+  `todo!()` in the interpreter. The panic stays lazy: a design
   whose never-taken branch contains a `Method` still simulates, exactly
-  as it does now.
+  as it always has.
 
 ## The instruction set by example
 
@@ -498,7 +501,7 @@ pub(super) struct CodeRange { start: Ip, len: u32 }
 
 pub(super) struct Program {
     code: Box<[Ins]>,                      // all drivers, concatenated
-    entry: Vec<Option<CodeRange>>,         // per SignalId; None means fallback
+    entry: Vec<Option<CodeRange>>,         // per SignalId; None = no driver expression
     frames: Vec<FrameLayout>,              // per SignalId
     driver_typs: Vec<TypeId>,              // the tag Ret attaches
 }
@@ -515,10 +518,12 @@ Slot indices are valid only inside their own component's frame. The
 executor indexes `frames[comp.index()]`, so nothing can express a
 cross-component slot reference.
 
-A driver whose `Expr` contains a construct the compiler does not lower
-compiles to `entry = None`, and `flow` evaluates that driver with the
-existing interpreter. This fallback is a migration device. It disappears
-when the lowering is complete and the interpreter is deleted.
+Every driven component lowers to bytecode. The temporary interpreter
+fallback is gone: there is no unlowered construct. Conditions that would
+once have routed a driver back to the interpreter (operand width
+equality, range bounds, ctor geometry) are type-checker invariants, and
+the compiler panics at compile time if one is violated. The interpreter
+(`sim/eval.rs`) is deleted; `Value` lives in `sim/value.rs`.
 
 ## The executor
 
@@ -661,12 +666,11 @@ change means walking that table.
 
 | File | Status | Owns |
 |---|---|---|
-| `sim.rs` | keep | Public re-exports; unchanged surface |
 | `sim/sim.rs` | keep, edit | `Sim`, `SimLock`, watchers, `attach_clock`. `flow` calls `Vm::run` |
 | `sim/circuit.rs` | keep, edit | Construction tables. `exprs` replaced by `program: Program` |
 | `sim/expr.rs` | keep | Compiler-only IR (`driver_to_expr`) |
-| `sim/eval.rs` | delete last | `Context` and the interpreter. `Value` moves to `sim/value.rs` |
-| `sim/value.rs` | new | `Value`, `InternalValue`, moved verbatim |
+| `sim/eval.rs` | deleted (unit 6) | Was `Context` and the interpreter |
+| `sim/value.rs` | landed (unit 6) | `Value`, `InternalValue`, moved verbatim |
 | `sim/state.rs` | keep, edit | `vals`, `set_vals`, `transfer`, `set_val`. Dirty list replaced |
 | `sim/dirty.rs` | landed | `DirtyList` bitmap + LIFO stack |
 | `sim/scheduler.rs` | landed | Min-heap timed queue, FIFO lifecycle queue |
@@ -713,9 +717,7 @@ The differential harness (`sim-bench/`) is the gate for every unit:
 Performance gates: at least 5x the baseline at both scaling points
 (s=1 at 4.5 MHz, s=512 at 0.33 MHz), with actuals reported and the
 limiting factor named. `make test` stays green throughout. The old
-interpreter stays in tree only while the harness needs it, then is
-deleted in the same sequence that lands the final verification, so one
-engine ships.
+interpreter was deleted with unit 6, so one engine ships.
 
 ## Migration sequence
 
@@ -726,10 +728,10 @@ Each unit lands as one commit on `sim-vm-rewrite`, gated by the harness.
 | 0 | Bench generator (`sim-bench/gen.py`) | landed, 97c262e |
 | 1 | Harness: `Seeded`, `simtrace`, goldens, `check.sh` | landed, 2c021da |
 | 2 | `DirtyList`, heap scheduler, `transfer_clock` | landed, 7cff4f2 |
-| 3 | ISA, compiler, executor, `flow` wiring, fallback | in progress |
-| 4 | `when` and `match` lowering; fallback shrinks | pending |
-| 5 | Optimizer passes 1-3 | pending |
-| 6 | Delete the interpreter; `Value` moves to `value.rs` | pending |
+| 3 | ISA, compiler, executor, `flow` wiring, fallback | landed (77c552b) |
+| 4 | `when` and `match` lowering; fallback shrinks | landed (2f78a04) |
+| 5 | Optimizer passes 1-3 | landed (2525535) |
+| 6 | Delete the interpreter; `Value` moves to `value.rs` | landed |
 | 7 | Final perf report against both baseline points | pending |
 
 ## Alternatives considered
@@ -776,8 +778,10 @@ for the shared core.
   bound variable is the complete binding rule; no recursive form
   needed.
 - Frame memory is O(sum of slots) resident, one frame per driven
-  component. Check the largest internal design before deleting the
-  interpreter.
+  component. ANSWERED (interpreter-deletion unit): moot now that the
+  interpreter is gone; the frames are the only per-component state and
+  the s=512 bench (30.7M driver evals/run) stays within its measured
+  envelope.
 - If profiles later show the per-operation width mask matters,
   precompute per-slot masks (a graft deliberately deferred).
 - Topological work ordering stays documented headroom. Revisit only with

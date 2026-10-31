@@ -34,7 +34,7 @@ impl Frame {
 
 /// The frame pool: one frame per elaborated component, densely
 /// indexed by `SignalId::index()`.  Frames for undriven components
-/// (and for drivers that fell back to the interpreter) are empty.
+/// are empty.
 pub(in crate::sim) struct Vm {
     pub(super) frames: Vec<Frame>,
 }

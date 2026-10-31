@@ -1,7 +1,7 @@
 //! The VM instruction set for the compiled simulator.
 //!
 //! This is a pure data module: `Ins`, `Dst`, `Src`, `Truthiness`,
-//! `CodeRange`, `FrameLayout`, `Program`, and `FallbackReason`. The
+//! `CodeRange`, `FrameLayout`, and `Program`. The
 //! executor (`vm::exec`) interprets `Ins` against a `Frame`; the
 //! compiler (`vm::compile`) produces `Program`s.
 //!
@@ -12,11 +12,11 @@
 //!   carries the immediates it needs for its own masking). Reads may
 //!   therefore assume the bits above a slot's width are zero; no
 //!   extra masking is done at read time.
-//! * `Value`s are constructed only at `RetWide` (and in the
-//!   interpreter fallback); `Ret` hands back raw bits, tagged only
-//!   when a `Value` is finally needed (see `vm::exec::RunOut`). The
-//!   frame holds raw `u64` narrow slots and `BitPat` wide slots, so
-//!   the 64-bit-and-narrower path performs no allocation.
+//! * `Value`s are constructed only at `RetWide`; `Ret` hands back raw
+//!   bits, tagged only when a `Value` is finally needed (see
+//!   `vm::exec::RunOut`). The frame holds raw `u64` narrow slots and
+//!   `BitPat` wide slots, so the 64-bit-and-narrower path performs no
+//!   allocation.
 //!
 //! The whole ISA is emitted by the compiler, including the
 //! control-flow forms (`Jmp`, `BrTruthy`, `TestTag`, `TestTagWide`,
@@ -27,7 +27,7 @@ use crate::analysis::elaboration::SignalId;
 use crate::analysis::symbols::SymbolId;
 use crate::common::{BinOp, UnOp, Width};
 use crate::sim::bits::BitPat;
-use crate::sim::eval::Value;
+use crate::sim::value::Value;
 use crate::sim::layout::{TypeId, TypeLayoutIndex};
 
 pub(super) type Ip = u32;
@@ -48,10 +48,10 @@ pub(super) enum Ins {
         dst: Dst,
     },
     /// A referent that `compute_resolved_referents` could not resolve:
-    /// today it evaluates as `Context::get`'s fallback, a width-1
-    /// zero value, re-tagged with the reading node's type.  Preserved
-    /// here as a constant, with the per-eval `eprintln!` moved to
-    /// compile time (once, not per eval).
+    /// it evaluates as a width-1 zero value, re-tagged with the
+    /// reading node's type (the old interpreter's `Context::get`
+    /// fallback, preserved here as a constant, with the per-eval
+    /// `eprintln!` moved to compile time (once, not per eval).
     LoadUnresolved {
         dst: SlotN,
     },
@@ -355,43 +355,19 @@ pub(super) struct FrameLayout {
     pub(super) wide_widths: Box<[Width]>,
 }
 
-/// Why a driver could not be compiled to bytecode and must run on
-/// the interpreter. The fallback is temporary: later units remove it
-/// driver by driver until `entry` is total.
-///
-/// After the `when`/`match` lowering, only `Unsupported` is emitted;
-/// `When` and `Match` remain so the fallback log's reason indices
-/// stay stable while the fallback exists.
-#[allow(dead_code)] // the retired When/Match reasons
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(in crate::sim) enum FallbackReason {
-    /// The driver contains a `when` subtree.  No longer emitted by the
-    /// `when` lowering; kept so the fallback log's reason indices stay
-    /// stable while the fallback exists.
-    When = 0,
-    /// The driver contains a `match` subtree.  No longer emitted by
-    /// the `match` lowering; kept so the fallback log's reason indices
-    /// stay stable while the fallback exists.
-    Match = 1,
-    /// The driver contains a construct this unit's lowering cannot
-    /// represent (defensive; should not occur in well-typed designs).
-    Unsupported = 2,
-}
-
-pub(in crate::sim) const FALLBACK_REASONS: usize = 3;
-
-/// A compiled program: one code range per driver that lowered to
-/// bytecode, plus per-driver frames. `entry` is `None` for drivers
-/// that fell back to the interpreter.
+/// A compiled program: one code range per driven component, plus
+/// per-driver frames.  `entry` is `None` only for components without a
+/// driver expression.
 pub(in crate::sim) struct Program {
     pub(super) code: Box<[Ins]>,
-    /// `entry[component]`, the driver's code range, if it compiled.
+    /// `entry[component]`, the driver's code range, if the component
+    /// has a driver.
     pub(super) entry: Vec<Option<CodeRange>>,
     /// `frames[component]`, the frame layout for the driver, valid
     /// iff `entry` is `Some`.
     pub(super) frames: Vec<FrameLayout>,
     /// `driver_typs[component]`, the `TypeId` the driver's `Ret`
-    /// attaches to its value (`None` for fallback drivers).
+    /// attaches to its value (`None` for undriven components).
     pub(super) driver_typs: Vec<Option<TypeId>>,
     /// `driver_widths[component]`, the driver value's width (used
     /// for debug validation only).
@@ -404,11 +380,6 @@ pub(in crate::sim) struct Program {
     /// executor path commits this value directly without running the
     /// bytecode.
     pub(super) const_values: Vec<Option<Value>>,
-    /// Per-reason counts of drivers that fell back (indices are
-    /// `FallbackReason` discriminants).  Read by the debug-only
-    /// fallback log at `Sim::new`.
-    #[cfg_attr(not(debug_assertions), allow(dead_code))]
-    pub(super) fallback_counts: [usize; FALLBACK_REASONS],
 }
 
 impl Program {
@@ -421,15 +392,6 @@ impl Program {
     /// skip: the executor commits it without running the driver).
     pub(in crate::sim) fn const_value(&self, comp: SignalId) -> Option<&Value> {
         self.const_values.get(comp.index()).and_then(|v| v.as_ref())
-    }
-
-    /// Debug-build counts of drivers that fell back, by reason (the
-    /// fallback log at `Sim::new` reads it).  The counts themselves
-    /// are always computed; the accessor is debug-only because only
-    /// the debug log consumes it.
-    #[cfg(debug_assertions)]
-    pub(in crate::sim) fn fallback_counts(&self) -> &[usize; FALLBACK_REASONS] {
-        &self.fallback_counts
     }
 
     /// Debug validation: every range is in bounds and ends in a
