@@ -1698,6 +1698,7 @@ mod tests {
             driver_widths: vec![8],
             layouts,
             const_values: vec![None],
+            schedule: None,
         };
         let mut vm = Vm::new(&program);
         let value = vm.run_out(&program, &state, SignalId::from_index(0)).into_value();

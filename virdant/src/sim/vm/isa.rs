@@ -29,6 +29,7 @@ use crate::common::{BinOp, UnOp, Width};
 use crate::sim::bits::BitPat;
 use crate::sim::value::Value;
 use crate::sim::layout::{TypeId, TypeLayoutIndex};
+use crate::sim::vm::schedule;
 
 pub(super) type Ip = u32;
 pub(super) type SlotN = u16;
@@ -380,9 +381,22 @@ pub(in crate::sim) struct Program {
     /// executor path commits this value directly without running the
     /// bytecode.
     pub(super) const_values: Vec<Option<Value>>,
+    /// The static combinational schedule (stage A of the scheduled
+    /// kernel): per-driver input-signal lists plus a topological driver
+    /// order, built from the compiled drivers.  `None` when the design's
+    /// combinational graph has a cycle (or no drivers at all): `flow`
+    /// keeps the dynamic worklist path, the safety net for any graph.
+    pub(super) schedule: Option<schedule::TopoSchedule>,
 }
 
 impl Program {
+    /// The static combinational schedule, when the design's driver
+    /// graph is acyclic; `None` sends `flow` down the dynamic worklist
+    /// path.
+    pub(in crate::sim) fn topo_schedule(&self) -> Option<&schedule::TopoSchedule> {
+        self.schedule.as_ref()
+    }
+
     pub(in crate::sim) fn has_driver(&self, comp: SignalId) -> bool {
         self.entry[comp.index()].is_some()
     }
@@ -414,6 +428,13 @@ impl Program {
                 Ins::Ret { .. } | Ins::RetWide { .. } | Ins::Trap => {}
                 other => panic!("Program::validate: range for component {comp_idx} does not end in Ret/RetWide/Trap: {other:?}"),
             }
+        }
+        // The static schedule's internal consistency (stage A data
+        // model, stage B's foundation): `order` a permutation, `pos`
+        // its inverse, every driver expression scheduled.
+        if let Some(schedule) = &self.schedule {
+            let has_expr: Vec<bool> = self.entry.iter().map(|e| e.is_some()).collect();
+            schedule.validate(self.entry.len(), &has_expr);
         }
     }
 }

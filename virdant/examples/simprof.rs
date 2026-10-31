@@ -168,13 +168,19 @@ mod table {
         row("floor", floor_ns(snap, push_est, commit_est));
         println!();
         println!(
-            "  counts: events={} clock_edges={} pushes={} dirty_pops={} driver_evals={} (all vm, interp counter retired) const_skip={}",
+            "  counts: events={} clock_edges={} pushes={} dirty_pops={} driver_evals={} (all vm, interp counter retired) const_skip={} epoch_skips={}",
             snap.events_popped,
             snap.clock_edges,
             snap.sched_push_calls,
             snap.dirty_pops,
             snap.evals_total,
             snap.const_skips,
+            snap.epoch_skips,
+        );
+        println!(
+            "          flow_calls={} (dirty_pops/flow_calls = {:.1} avg entry size)",
+            snap.flow_calls,
+            if snap.flow_calls > 0 { snap.dirty_pops as f64 / snap.flow_calls as f64 } else { 0.0 },
         );
         println!(
             "          set_val={}/{} transfers={}/{} rising_edges={} watcher_passes={} watcher_fires={}",
@@ -200,10 +206,12 @@ mod table {
             if cycles > 0 { entries as f64 / cycles as f64 } else { 0.0 },
         );
         println!(
-            "  build: flow={:.2} ms eval_est={:.2} ms",
+            "  build: flow={:.2} ms eval_est={:.2} ms topo_designs={} topo_fallbacks={}",
             build.flow_ns as f64 / 1e6,
             build.evals_total as f64 * build.eval_sample_ns as f64
                 / build.eval_samples.max(1) as f64 / 1e6,
+            build.topo_designs,
+            build.topo_fallbacks,
         );
     }
 }

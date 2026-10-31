@@ -565,6 +565,7 @@ mod tests {
             driver_widths: vec![ret_width],
             layouts,
             const_values: vec![None],
+            schedule: None,
         };
         let mut program = program;
         program.entry[0] = Some(CodeRange { start: 0, len: program.code.len() as Ip });
@@ -954,6 +955,7 @@ mod tests {
             driver_widths: vec![4],
             layouts,
             const_values: vec![None],
+            schedule: None,
         };
         let mut vm = Vm::new(&program);
         let value = vm.run_out(
@@ -998,6 +1000,7 @@ mod tests {
             driver_widths: vec![100],
             layouts,
             const_values: vec![None],
+            schedule: None,
         };
         let mut vm = Vm::new(&program);
         let out = vm.run_out(

@@ -1,5 +1,6 @@
 //! The compiled-sim VM: ISA (`isa`), per-driver compiler (`compile`),
-//! pooled frames (`frame`), and executor (`exec`).
+//! pooled frames (`frame`), executor (`exec`), and the static
+//! combinational schedule (`schedule`).
 //!
 //! Everything here is internal to `sim`: the public surface (`Sim`,
 //! `Value`, ...) is unchanged.  `Sim` owns a `Program` (compiled
@@ -12,6 +13,7 @@ mod exec;
 mod frame;
 mod isa;
 mod optimize;
+mod schedule;
 
 pub(in crate::sim) use compile::{compile_initial_value, compile_program};
 pub(in crate::sim) use frame::Vm;

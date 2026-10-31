@@ -136,8 +136,15 @@ Columns (absolute time and per-cycle nanoseconds):
 The counts line is exact everywhere: events (timed `AfterDelay`
 dispatches; clock edges on the free-running fast path are counted
 separately as `clock_edges`), pushes, dirty pops,
-driver evals (all on the compiled VM), set_val/transfers calls and
-actual writes, rising edges, watcher passes and fires.
+driver evals (all on the compiled VM), change-epoch skips (`epoch_skips`:
+driver visits within a settlement whose triggering signal was not
+re-written since the driver's last evaluation this settlement - a
+repeat visit is a provably no-op re-commit; see
+`virdant/src/sim/vm/schedule.rs`), set_val/transfers calls and
+actual writes, rising edges, watcher passes and fires.  The `build:`
+line reports how many designs compiled with a static combinational
+schedule (`topo_designs`) or fell back to the pure dynamic worklist
+because their driver graph has a cycle (`topo_fallbacks`).
 
 Rules for reading the numbers:
 

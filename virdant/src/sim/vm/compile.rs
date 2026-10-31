@@ -82,6 +82,7 @@ use crate::sim::vm::isa::{
     Src, Truthiness,
 };
 use crate::sim::vm::optimize::optimize_driver;
+use crate::sim::vm::schedule;
 
 /// Mask with the low `width` bits set (assumes `width <= 64`).
 fn mask(width: Width) -> u64 {
@@ -1256,6 +1257,13 @@ pub(in crate::sim) fn compile_program(circuit: &Circuit) -> Program {
     let mut driver_typs: Vec<Option<TypeId>> = vec![None; n];
     let mut driver_widths: Vec<Width> = vec![0; n];
     let mut const_values: Vec<Option<Value>> = vec![None; n];
+    // Per-driver input-signal lists for the static schedule (stage A):
+    // the signals each driver's optimized bytecode actually loads,
+    // deduped.  Scanning the optimized stream (not the AST referents)
+    // keeps the list exact after constant folding and dead-load
+    // elimination, which is what lets the flow-time epoch check skip a
+    // driver the AST sensitivity lists would still reach.
+    let mut reads: Vec<Vec<u32>> = vec![Vec::new(); n];
 
     for comp in circuit.elaboration.components() {
         let id = comp.id();
@@ -1273,6 +1281,20 @@ pub(in crate::sim) fn compile_program(circuit: &Circuit) -> Program {
         // inside one `CodeRange`, never across drivers.  They rewrite
         // `Ins` sequences within the existing opcode set.
         optimize_driver(&mut compiler.code);
+        // The static schedule's per-driver input list: every signal the
+        // optimized bytecode loads (`Load` is the only instruction that
+        // reads engine state), deduped.
+        let mut loads: Vec<u32> = compiler
+            .code
+            .iter()
+            .filter_map(|ins| match ins {
+                Ins::Load { signal, .. } => Some(signal.index() as u32),
+                _ => None,
+            })
+            .collect();
+        loads.sort_unstable();
+        loads.dedup();
+        reads[id.index()] = loads;
         // Constant-unit skip (synthesis graft 2): a driver whose
         // program folds entirely to a constant value commits that
         // value directly without executing.
@@ -1301,6 +1323,52 @@ pub(in crate::sim) fn compile_program(circuit: &Circuit) -> Program {
         const_values[id.index()] = const_value;
     }
 
+    // Socket-connection aliases are copy drivers: the sink's "bytecode"
+    // reads exactly its peer.
+    for sink_idx in 0..n {
+        if let Some(peer) = circuit.aliases[sink_idx] {
+            reads[sink_idx] = vec![peer.index() as u32];
+        }
+    }
+
+    // The static schedule (stage A): a driver node per component with a
+    // driver expression or an alias peer; only combinational drivers
+    // propagate (a register's commit writes only the pending
+    // next-value, never a live value mid-flow, so a register is a graph
+    // source, never a cycle member).  A cyclic graph leaves the
+    // schedule off: `flow` keeps the dynamic worklist path.
+    let mut is_driver = vec![false; n];
+    let mut propagates = vec![false; n];
+    for idx in 0..n {
+        let driven = entry[idx].is_some() || circuit.aliases[idx].is_some();
+        is_driver[idx] = driven;
+        propagates[idx] = driven && !circuit.registers[idx];
+    }
+    let reads: Vec<Box<[u32]>> = reads.into_iter().map(|v| v.into_boxed_slice()).collect();
+    let schedule = schedule::TopoSchedule::build(n, &is_driver, &propagates, &reads);
+    #[cfg(feature = "sim-profile")]
+    match &schedule {
+        Some(_) => crate::sim::profile::bump_topo_design(),
+        None => crate::sim::profile::bump_topo_fallback(),
+    }
+    // Debug check of the topological property against the same edge
+    // definition the build consumed: every propagating input's producer
+    // must sit at a strictly smaller schedule position than its reader.
+    if cfg!(debug_assertions) {
+        if let Some(schedule) = &schedule {
+            for d in 0..n {
+                for &s in &*reads[d] {
+                    if propagates[s as usize] {
+                        assert!(
+                            schedule.pos(s as usize) < schedule.pos(d),
+                            "schedule: input {s} of driver {d} is not topologically ordered"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     let program = Program {
         code: code.into_boxed_slice(),
         entry,
@@ -1308,6 +1376,7 @@ pub(in crate::sim) fn compile_program(circuit: &Circuit) -> Program {
         driver_typs,
         driver_widths,
         const_values,
+        schedule,
         layouts: circuit.type_layout_index.clone(),
     };
     if cfg!(debug_assertions) {

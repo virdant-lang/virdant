@@ -136,6 +136,14 @@ pub struct Sim {
     /// dispatch happens exactly once per settlement, in the outermost
     /// unlock.
     dispatching: bool,
+    /// Per-driver last-eval epoch (see `vm::schedule` and
+    /// `State::epoch`): `last_run[component]` is the write-counter
+    /// snapshot a driver's last evaluation was taken against.  A repeat
+    /// visit whose trigger epoch predates it is skipped: the driver
+    /// already observed that write, so its committed output is the
+    /// value it would recompute.  Zero-initialized, then primed to the
+    /// construction-time write count after `flow_all`.
+    last_run: Vec<u64>,
 }
 
 /// One free-running clock registered by `Sim::attach_clock`.
@@ -246,6 +254,7 @@ impl Sim {
         let program = vm::compile_program(&circuit);
         let vm_pool = vm::Vm::new(&program);
 
+        let n_components = circuit.elaboration.components().len();
         let mut sim = Sim {
             state: State::new(circuit.elaboration.as_ref(), &circuit.type_layout_index, &strategy),
             circuit,
@@ -257,10 +266,21 @@ impl Sim {
             watcher_buckets: Vec::new(),
             dispatch_queue: Vec::new(),
             dispatching: false,
+            last_run: vec![0; n_components],
         };
 
         sim.apply_initials();
         sim.flow_all();
+        // Prime the last-eval epochs: `flow_all` ran every
+        // driver to a fixpoint over the settled values, so each driver's
+        // committed output already reflects every write up to now; any
+        // later write carries a larger epoch and forces re-evaluation.
+        let priming_epoch = sim.state.epoch_clock();
+        if let Some(schedule) = sim.program.topo_schedule() {
+            for &driver in schedule.order() {
+                sim.last_run[driver as usize] = priming_epoch;
+            }
+        }
         sim
     }
 
@@ -306,11 +326,25 @@ impl Sim {
     /// actual write; everything else (wide results, constant-unit
     /// skips) comes back as the tagged `Value`.
     fn eval_driver_out(&mut self, comp: SignalId) -> vm::RunOut {
+        Self::eval_driver_out_split(&self.program, &mut self.vm, &self.state, comp)
+    }
+
+    /// `eval_driver_out` over pre-split field borrows: `flow` holds
+    /// the circuit as an immutable borrow while committing per driver,
+    /// so the per-driver seam must work through disjoint
+    /// `program`/`vm`/`state` borrows instead of `&mut self` methods.
+    #[inline]
+    fn eval_driver_out_split(
+        program: &vm::Program,
+        vm: &mut vm::Vm,
+        state: &State,
+        comp: SignalId,
+    ) -> vm::RunOut {
         // Constant-unit skip (synthesis graft 2): a driver the
         // optimizer folded entirely to a constant commits that value
         // directly, `flow`/`flow_all` skip the run.  Constants stay on
         // the `Value` path: the folded value is already built.
-        if let Some(value) = self.program.const_value(comp).cloned() {
+        if let Some(value) = program.const_value(comp).cloned() {
             #[cfg(feature = "sim-profile")]
             crate::sim::profile::bump_const_skip();
             return vm::RunOut::Tagged(value);
@@ -320,8 +354,8 @@ impl Sim {
         // (see `sim::profile`).  The tick also counts the eval.
         #[cfg(feature = "sim-profile")]
         let _profile_sample = crate::sim::profile::sample_eval();
-        if self.program.has_driver(comp) {
-            self.vm.run_out(&self.program, &self.state, comp)
+        if program.has_driver(comp) {
+            vm.run_out(program, state, comp)
         } else {
             panic!("eval_driver_out: component {comp:?} has no compiled driver");
         }
@@ -454,58 +488,176 @@ impl Sim {
         // settlement, never per driver (see `sim::profile`).
         #[cfg(feature = "sim-profile")]
         let _profile_phase = crate::sim::profile::time_flow();
+        // The write counter at settlement start: the base the change-
+        // epoch skip's already-evaluated gate compares against (see
+        // `eval_and_commit`).  The skip runs only when the settlement
+        // enters `flow` with a worklist large enough for repeat driver
+        // visits to be possible (see `EPOCH_CHECK_MIN_DIRTY`); smaller
+        // settlements keep the plain loop.
+        let epoch_checks = self.state.dirty_len() >= EPOCH_CHECK_MIN_DIRTY
+            && self.program.topo_schedule().is_some();
+        let settlement_base = self.state.epoch_clock();
         while let Some(signal_id) = self.state.pop_dirty() {
             let n = self.circuit.sensitivity_count(signal_id);
             for i in 0..n {
                 let update_signal_id = self.circuit.sensitivity_at(signal_id, i);
-                // Aliases (socket connections `:=:`, and bare-reference
-                // drivers resolved by the elaboration): the value is a
-                // copy of the peer's.  Edge detection below applies to
-                // alias copies too (e.g. a clock routed through a bare
-                // reference or a socket connection).  Alias copies stay
-                // on the `Value` commit path: the peer's `Value` is
-                // already built, and alias copies are not the per-driver
-                // hot path the bits-only path targets.
-                if let Some(peer_id) = self.circuit.aliases[update_signal_id.index()] {
-                    let new_value = self.state.get(peer_id);
-                    if self.circuit.registers[update_signal_id.index()] {
-                        self.state.set_reg(update_signal_id, new_value);
-                    } else {
-                        let old = self.state.get(update_signal_id);
-                        self.transfer_clock(update_signal_id, &old, new_value);
-                    }
+                // The branch is loop-invariant, so the gated-off path
+                // is the plain one-call commit with no epoch machinery
+                // in sight.
+                if epoch_checks {
+                    Self::eval_and_commit(
+                        &self.circuit,
+                        &self.program,
+                        &mut self.vm,
+                        &mut self.state,
+                        &mut self.last_run,
+                        settlement_base,
+                        signal_id,
+                        update_signal_id,
+                    );
                 } else {
-                    match self.eval_driver_out(update_signal_id) {
-                        vm::RunOut::Bits { typ, width, bits } => {
-                            if self.circuit.registers[update_signal_id.index()] {
-                                // A register's driver computes its
-                                // *next* value; the current value only
-                                // changes on a clock edge.  Narrow
-                                // registers store the pending next-value
-                                // as raw bits (`State::set_reg_bits`),
-                                // compared raw at transfer time.
-                                self.state.set_reg_bits(update_signal_id, typ, width, bits);
-                            } else {
-                                // The bits-only commit path for narrow
-                                // drivers: edge detection from the
-                                // pre-write live value, then a
-                                // raw-integer compare in
-                                // `State::set_val_bits`.
-                                self.transfer_clock_bits(update_signal_id, typ, width, bits);
-                            }
-                        }
-                        vm::RunOut::Tagged(new_value) => {
-                            if self.circuit.registers[update_signal_id.index()] {
-                                self.state.set_reg(update_signal_id, new_value);
-                            } else {
-                                // orchestrator (flow + edge transfers + watchers) and
-                                // would recurse re-entrantly into the loop we're in.
-                                // Edge detection reads the live value *before* the
-                                // write, so `old` is captured at this call site.
-                                let old = self.state.get(update_signal_id);
-                                self.transfer_clock(update_signal_id, &old, new_value);
-                            }
-                        }
+                    Self::eval_and_commit_split(
+                        &self.circuit,
+                        &self.program,
+                        &mut self.vm,
+                        &mut self.state,
+                        update_signal_id,
+                    );
+                }
+            }
+        }
+    }
+
+    /// Evaluate one driven component and commit the result: the shared
+    /// per-driver body of the flow loop.
+    ///
+    /// Aliases (socket connections `:=:`, and bare-reference drivers
+    /// resolved by the elaboration): the value is a copy of the peer's.
+    /// Edge detection below applies to alias copies too (e.g. a clock
+    /// routed through a bare reference or a socket connection).  Alias
+    /// copies stay on the `Value` commit path: the peer's `Value` is
+    /// already built, and alias copies are not the per-driver hot path
+    /// the bits-only path targets.
+    ///
+    /// On a scheduled design (see `vm::schedule`), and when the caller
+    /// enabled the check for this settlement (`epoch_checks`: the
+    /// worklist was large enough at entry for repeat visits to be
+    /// possible - see `EPOCH_CHECK_MIN_DIRTY`), the change-epoch skip
+    /// runs first: a driver already evaluated within this settlement
+    /// whose triggering signal has not been re-written since that
+    /// evaluation would recommit the output it already committed, so
+    /// the visit is dropped.  The skipped eval is a provable no-op,
+    /// not a heuristic: every actual write to one of the driver's real
+    /// inputs pops that input and re-triggers the driver, so quiescence
+    /// still implies every driver's stored value equals its function of
+    /// the settled inputs.  With the check disabled the visit is the
+    /// plain pre-schedule behavior, bit for bit.
+    ///
+    /// Returns whether the component's live value was actually written
+    /// (register pending-writes, epoch skips, and no-change commits do
+    /// not count).
+    fn eval_and_commit(
+        circuit: &Circuit,
+        program: &vm::Program,
+        vm: &mut vm::Vm,
+        state: &mut State,
+        last_run: &mut [u64],
+        settlement_base: u64,
+        trigger: SignalId,
+        comp: SignalId,
+    ) -> bool {
+        let d = comp.index();
+        if let Some(schedule) = program.topo_schedule() {
+            // Change-epoch skip.  `settlement_base` (the write counter
+            // at this settlement's start) gates the check to drivers
+            // already evaluated within this settlement: their last-run
+            // snapshot postdates every pre-settlement write, so the
+            // only write a re-evaluation could newly observe is one
+            // that happened after that snapshot, and the trigger's
+            // epoch says whether this visit carries one.  A driver with
+            // exactly one bytecode input is excluded from the check
+            // entirely: it is triggered only by that signal, so any
+            // repeat visit implies the signal was re-written after the
+            // last evaluation (fresh epoch) and the check could never
+            // skip; dropping it keeps the common single-reader visit at
+            // one extra load and compare.
+            if last_run[d] >= settlement_base
+                && schedule.inputs(d).len() != 1
+                && state.epoch_at(trigger.index()) <= last_run[d]
+            {
+                #[cfg(feature = "sim-profile")]
+                crate::sim::profile::bump_epoch_skip();
+                return false;
+            }
+            // Snapshot the write counter before the run: the driver's
+            // own commit (a rising clock edge transfers registers,
+            // possibly signals this same driver reads) must not mark
+            // itself up-to-date against them.
+            let epoch_snapshot = state.epoch_clock();
+            let wrote = Self::eval_and_commit_split(circuit, program, vm, state, comp);
+            last_run[d] = epoch_snapshot;
+            wrote
+        } else {
+            Self::eval_and_commit_split(circuit, program, vm, state, comp)
+        }
+    }
+
+    /// `eval_and_commit`'s commit body over pre-split field borrows
+    /// (see `eval_driver_out_split`); no epoch machinery.
+    #[inline]
+    fn eval_and_commit_split(
+        circuit: &Circuit,
+        program: &vm::Program,
+        vm: &mut vm::Vm,
+        state: &mut State,
+        comp: SignalId,
+    ) -> bool {
+        if let Some(peer_id) = circuit.aliases[comp.index()] {
+            let new_value = state.get(peer_id);
+            if circuit.registers[comp.index()] {
+                // A register's pending next-value only commits at a
+                // clock edge: copying the peer writes no live value and
+                // starts no propagation.
+                state.set_reg(comp, new_value);
+                false
+            } else {
+                let old = state.get(comp);
+                Self::transfer_clock_split(circuit, state, comp, &old, new_value)
+            }
+        } else {
+            match Self::eval_driver_out_split(program, vm, state, comp) {
+                vm::RunOut::Bits { typ, width, bits } => {
+                    if circuit.registers[comp.index()] {
+                        // A register's driver computes its
+                        // *next* value; the current value only
+                        // changes on a clock edge.  Narrow
+                        // registers store the pending next-value
+                        // as raw bits (`State::set_reg_bits`),
+                        // compared raw at transfer time.
+                        state.set_reg_bits(comp, typ, width, bits);
+                        false
+                    } else {
+                        // The bits-only commit path for narrow
+                        // drivers: edge detection from the
+                        // pre-write live value, then a
+                        // raw-integer compare in
+                        // `State::set_val_bits`.
+                        Self::transfer_clock_bits_split(circuit, state, comp, typ, width, bits)
+                    }
+                }
+                vm::RunOut::Tagged(new_value) => {
+                    if circuit.registers[comp.index()] {
+                        state.set_reg(comp, new_value);
+                        false
+                    } else {
+                        // The tagged commit path must not call `set`
+                        // (the orchestrator: flow + edge transfers +
+                        // watchers), which would recurse re-entrantly
+                        // into the loop we're in.  Edge detection reads
+                        // the live value *before* the write, so `old`
+                        // is captured at this call site.
+                        let old = state.get(comp);
+                        Self::transfer_clock_split(circuit, state, comp, &old, new_value)
                     }
                 }
             }
@@ -742,7 +894,17 @@ impl Sim {
     ///
     /// Edge detection bases stay at the call sites: each reads the live
     /// value *before* the write and hands it in as `old`.
-    fn transfer_clock(&mut self, signal_id: SignalId, old: &Value, new: Value) {
+    ///
+    /// Split-field form (circuit and state instead of `&mut self`): the
+    /// flow loop calls this while the circuit is borrowed immutably.
+    #[inline]
+    fn transfer_clock_split(
+        circuit: &Circuit,
+        state: &mut State,
+        signal_id: SignalId,
+        old: &Value,
+        new: Value,
+    ) -> bool {
         let rising = is_rising(old, &new);
         // Rising edges on clock wires are the per-cycle heartbeat:
         // one per cycle for a single-clock design.  The sampler tick
@@ -754,16 +916,17 @@ impl Sim {
         } else {
             None
         };
-        self.state.set_val(signal_id, new);
+        let wrote = state.set_val(signal_id, new);
         if rising {
-            let n = self.circuit.clock_sensitivity_count(signal_id);
+            let n = circuit.clock_sensitivity_count(signal_id);
             for i in 0..n {
-                let reg_id = self.circuit.clock_sensitivity_at(signal_id, i);
-                self.state.transfer(reg_id);
+                let reg_id = circuit.clock_sensitivity_at(signal_id, i);
+                state.transfer(reg_id);
             }
             #[cfg(feature = "sim-profile")]
             crate::sim::profile::bump_transfers(n as u64);
         }
+        wrote
     }
 
     /// The narrow bits-only commit path (PERF-IDEAS item 10):
@@ -775,11 +938,22 @@ impl Sim {
     /// built only on an actual write), and the rising-edge
     /// register-transfer loop.  Narrow registers' transfers themselves
     /// compare raw bits (`State::transfer`'s bits path).
-    fn transfer_clock_bits(&mut self, signal_id: SignalId, typ: TypeId, width: Width, bits: u64) {
+    ///
+    /// Split-field form (circuit and state instead of `&mut self`): the
+    /// flow loop calls this while the circuit is borrowed immutably.
+    #[inline]
+    fn transfer_clock_bits_split(
+        circuit: &Circuit,
+        state: &mut State,
+        signal_id: SignalId,
+        typ: TypeId,
+        width: Width,
+        bits: u64,
+    ) -> bool {
         // Edge detection reads the live value *before* the write, the
         // same bases `transfer_clock` uses.
         let rising = {
-            let old = self.state.peek(signal_id);
+            let old = state.peek(signal_id);
             is_rising_bits(old.width(), old.get_bit(0), bits & 1 == 1)
         };
         // Rising edges on clock wires are the per-cycle heartbeat:
@@ -792,21 +966,22 @@ impl Sim {
         } else {
             None
         };
-        self.state.set_val_bits(signal_id, typ, width, bits);
+        let wrote = state.set_val_bits(signal_id, typ, width, bits);
         if rising {
-            let n = self.circuit.clock_sensitivity_count(signal_id);
+            let n = circuit.clock_sensitivity_count(signal_id);
             for i in 0..n {
-                let reg_id = self.circuit.clock_sensitivity_at(signal_id, i);
-                self.state.transfer(reg_id);
+                let reg_id = circuit.clock_sensitivity_at(signal_id, i);
+                state.transfer(reg_id);
             }
             #[cfg(feature = "sim-profile")]
             crate::sim::profile::bump_transfers(n as u64);
         }
+        wrote
     }
 
     fn set_without_flow(&mut self, signal_id: SignalId, value: Value) {
         let old = self.state.get(signal_id);
-        self.transfer_clock(signal_id, &old, value);
+        Self::transfer_clock_split(&self.circuit, &mut self.state, signal_id, &old, value);
     }
 
     pub fn get(&self, signal_id: SignalId) -> Value {
@@ -1185,6 +1360,20 @@ impl Sim {
 pub fn debug_transfer(_id: crate::analysis::elaboration::SignalId, _v: &Value) {
 }
 
+/// The dirty-set size at a settlement's start above which the
+/// change-epoch skip runs (see `eval_and_commit`).  The skip's win is
+/// the dedup of repeat driver visits, which requires several drivers
+/// sharing inputs inside one settlement - the dirty-set size at entry
+/// is the cheap predictor of that.  Below the threshold the check is
+/// measured pure overhead (its skipped-eval count is exactly zero on
+/// every bench design: per-edge settlements do not revisit drivers),
+/// so those settlements run the plain loop, bit-for-bit the
+/// pre-schedule behavior.  Measured crossover: dense-chain settlements
+/// enter with hundreds of pending changes and dedup half their evals;
+/// per-edge settlements enter with at most a few dozen and never skip.
+/// 32 separates the two regimes with margin on both sides.
+const EPOCH_CHECK_MIN_DIRTY: usize = 32;
+
 /// 0→1 transition on a 1-bit signal, over pre-extracted parts: the
 /// shared predicate behind `is_rising` (the `Value` commit path) and
 /// `transfer_clock_bits`'s raw-bits path (the new side there is the
@@ -1206,6 +1395,7 @@ mod tests {
     use crate::util::{check_db, db_from_dir_with_lib};
     use std::cell::Cell;
     use std::path::Path;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     /// Build a settled `Sim` for the `tests/sim/gcd` design (its source
     /// file is `top.vir`, so the ModDef symbol path is `top::Top`).
@@ -1849,5 +2039,142 @@ mod tests {
             golden.as_slice(),
             "VCD output diverged from the heap-event engine"
         );
+    }
+
+    /// Materialize a generated chain design (the `sim-bench/gen.py`
+    /// shape: `Word[32]` registers chained with `+`, every register
+    /// changing on every cycle) in a fresh temp directory, and build a
+    /// seeded `Sim` over it.  The per-test directory name carries a
+    /// process-unique counter so parallel test threads never collide.
+    fn chain_sim(stages: usize) -> Sim {
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "virdant-chain-test-{}-{}-{stages}",
+            std::process::id(),
+            SEQ.fetch_add(1, Ordering::Relaxed),
+        ));
+        let src_dir = dir.join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        let mut regs = String::new();
+        for i in 0..stages {
+            if i == 0 {
+                regs.push_str("    reg r0 : Word[32] on clock {\n        it <= it + 1w32\n    }\n");
+            } else {
+                regs.push_str(&format!(
+                    "    reg r{i} : Word[32] on clock {{\n        it <= it + r{} + 1w32\n    }}\n",
+                    i - 1
+                ));
+            }
+        }
+        let top_vir = format!(
+            "//! Generated test bench: {stages}-stage register chain.\n\npub mod Top for virt::Virt {{\n    incoming clock : Clock\n\n    outgoing tx : Bit\n\n{regs}    tx := r0[0]\n}}\n"
+        );
+        std::fs::write(src_dir.join("top.vir"), top_vir).unwrap();
+        std::fs::write(
+            dir.join("virdant.toml"),
+            "[project]\nname = \"chain\"\n\n[prog]\ntop = \"top::Top\"\n",
+        )
+        .unwrap();
+
+        let lib = Path::new(env!("CARGO_MANIFEST_DIR")).join("../lib");
+        let db = db_from_dir_with_lib(&src_dir, &lib);
+        if let Err(diagnostics) = check_db(&db) {
+            for diag in diagnostics.iter() {
+                eprintln!("{diag:?}");
+            }
+            panic!("chain test design failed to build");
+        }
+        let symboltable = db.get_symboltable();
+        let top = symboltable.resolve(b"top::Top".into()).unwrap();
+        Sim::new(&db, top.id(), InitStrategy::Seeded(42))
+    }
+
+    /// The static combinational schedule engages on acyclic designs
+    /// (both a real fixture and a generated chain) and is absent only
+    /// when the driver graph cannot be ordered; the epoch machinery in
+    /// `flow` is live exactly then.
+    #[test]
+    fn static_schedule_engages_on_acyclic_designs() {
+        let sim = gcd_sim();
+        assert!(
+            sim.program.topo_schedule().is_some(),
+            "gcd's driver graph is acyclic, so the schedule must engage"
+        );
+        let sim = chain_sim(4);
+        assert!(
+            sim.program.topo_schedule().is_some(),
+            "the chain's driver graph is acyclic, so the schedule must engage"
+        );
+    }
+
+    /// The change-epoch skip, witnessed by the profiler counters (runs
+    /// under `--features sim-profile`): in one rising-edge settlement
+    /// of the 32-stage chain, every register's driver is visited twice
+    /// (once for its own transfer's pop, once for its predecessor's),
+    /// but the second visit's trigger epoch predates the driver's
+    /// first evaluation this settlement, so exactly the repeat visits
+    /// are skipped: 33 driver evals (32 register drivers + tx), 31
+    /// skips.  The chain is 32 stages on purpose: the settlement must
+    /// enter `flow` above `EPOCH_CHECK_MIN_DIRTY` for the check to run
+    /// at all (small settlements keep the plain loop).  The falling
+    /// edge visits nothing, and the next rising edge re-evaluates
+    /// everything (the skip never carries across settlements), while
+    /// the register values advance exactly as the chain defines.
+    #[test]
+    #[cfg(feature = "sim-profile")]
+    fn epoch_skip_dedups_repeat_driver_visits_within_a_settlement() {
+        let mut sim = chain_sim(32);
+        assert!(sim.program.topo_schedule().is_some());
+        let clock = sim.signal("top.clock");
+        let clock_typ = sim.component_type_id(clock);
+        let regs: Vec<SignalId> =
+            (0..32).map(|i| sim.signal(format!("top.r{i}").as_bytes())).collect();
+
+        let before: Vec<u64> = regs.iter().map(|&r| sim.get(r).to_u64()).collect();
+
+        let settle = |sim: &mut Sim, high: bool| {
+            let mut lock = sim.lock();
+            lock.set(clock, Value::from_bool(clock_typ, high));
+        };
+
+        // Warm-up settlement (drives the clock low; may be a no-op
+        // write), then measure the rising edge alone.
+        settle(&mut sim, false);
+        crate::sim::profile::reset();
+        settle(&mut sim, true);
+        let snap = crate::sim::profile::snapshot();
+        assert_eq!(snap.evals_total, 33, "32 register drivers + tx, each once");
+        assert_eq!(snap.epoch_skips, 31, "each driver's repeat visit is skipped");
+        // Word[32] arithmetic wraps at 32 bits.
+        const M32: u64 = 0xFFFF_FFFF;
+        assert_eq!(sim.get(regs[0]).to_u64(), (before[0] + 1) & M32, "r0 advanced by one");
+        assert_eq!(
+            sim.get(regs[1]).to_u64(),
+            (before[1] + before[0] + 1) & M32,
+            "r1 = r1 + r0 + 1 over the pre-edge values"
+        );
+        assert_eq!(
+            sim.get(regs[3]).to_u64(),
+            (before[3] + before[2] + 1) & M32,
+            "r3 = r3 + r2 + 1 over the pre-edge values"
+        );
+
+        // Falling edge: the clock's write has no AST reader, so no
+        // driver is visited at all.
+        crate::sim::profile::reset();
+        settle(&mut sim, false);
+        let snap = crate::sim::profile::snapshot();
+        assert_eq!(snap.evals_total, 0, "no driver reads the clock by AST reference");
+        assert_eq!(snap.epoch_skips, 0);
+
+        // Second rising edge: the transfer re-dirties every register,
+        // so every driver is re-evaluated - the skip is strictly a
+        // within-settlement dedup and never carries across settlements.
+        crate::sim::profile::reset();
+        settle(&mut sim, true);
+        let snap = crate::sim::profile::snapshot();
+        assert_eq!(snap.evals_total, 33, "the next settlement re-evaluates every driver");
+        assert_eq!(snap.epoch_skips, 31);
+        assert_eq!(sim.get(regs[0]).to_u64(), (before[0] + 2) & M32, "r0 advanced again");
     }
 }

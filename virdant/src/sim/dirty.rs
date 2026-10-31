@@ -47,6 +47,11 @@ impl DirtyList {
         self.stack.push(index as u32);
     }
 
+    /// The number of signals currently in the worklist.
+    pub(super) fn len(&self) -> usize {
+        self.stack.len()
+    }
+
     /// Pop the most recently inserted still-present signal, or `None`
     /// when the worklist is empty.  Order is identical to
     /// `IndexSet::pop` on the old dirty set.

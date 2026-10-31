@@ -132,6 +132,16 @@ struct Counters {
     dispatch_passes: AtomicU64,
     /// Watcher callbacks that fired.
     watcher_fires: AtomicU64,
+    /// Designs whose compiled program carries a static combinational
+    /// schedule (acyclic driver graph); compile-time, once per `Sim`.
+    topo_designs: AtomicU64,
+    /// Designs whose driver graph has a combinational cycle, so the
+    /// static schedule was refused and `flow` keeps the dynamic
+    /// worklist path; compile-time, once per `Sim`.
+    topo_fallbacks: AtomicU64,
+    /// Static-path driver visits skipped because every input's
+    /// change-epoch predates the driver's last evaluation.
+    epoch_skips: AtomicU64,
 }
 
 static COUNTERS: Counters = Counters {
@@ -161,6 +171,9 @@ static COUNTERS: Counters = Counters {
     rising_edges: AtomicU64::new(0),
     dispatch_passes: AtomicU64::new(0),
     watcher_fires: AtomicU64::new(0),
+    topo_designs: AtomicU64::new(0),
+    topo_fallbacks: AtomicU64::new(0),
+    epoch_skips: AtomicU64::new(0),
 };
 
 /// Scoped timer for one engine phase; accumulates the elapsed time
@@ -302,6 +315,26 @@ pub fn bump_watcher_fire() {
     COUNTERS.watcher_fires.fetch_add(1, Ordering::Relaxed);
 }
 
+/// Count a design whose compiled program carries a static
+/// combinational schedule.
+#[inline]
+pub fn bump_topo_design() {
+    COUNTERS.topo_designs.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Count a design whose driver graph is cyclic: no static schedule,
+/// the dynamic worklist path stays.
+#[inline]
+pub fn bump_topo_fallback() {
+    COUNTERS.topo_fallbacks.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Count one driver visit skipped by the change-epoch check.
+#[inline]
+pub fn bump_epoch_skip() {
+    COUNTERS.epoch_skips.fetch_add(1, Ordering::Relaxed);
+}
+
 /// A consistent copy of every counter, taken by [`snapshot`].  Plain
 /// integers: the caller formats them (and derives the sampled
 /// estimates; see the estimator formula in the module docs).
@@ -333,6 +366,9 @@ pub struct Snapshot {
     pub rising_edges: u64,
     pub dispatch_passes: u64,
     pub watcher_fires: u64,
+    pub topo_designs: u64,
+    pub topo_fallbacks: u64,
+    pub epoch_skips: u64,
 }
 
 impl Snapshot {
@@ -373,6 +409,9 @@ pub fn snapshot() -> Snapshot {
         rising_edges: COUNTERS.rising_edges.load(Ordering::Relaxed),
         dispatch_passes: COUNTERS.dispatch_passes.load(Ordering::Relaxed),
         watcher_fires: COUNTERS.watcher_fires.load(Ordering::Relaxed),
+        topo_designs: COUNTERS.topo_designs.load(Ordering::Relaxed),
+        topo_fallbacks: COUNTERS.topo_fallbacks.load(Ordering::Relaxed),
+        epoch_skips: COUNTERS.epoch_skips.load(Ordering::Relaxed),
     }
 }
 
@@ -405,4 +444,7 @@ pub fn reset() {
     COUNTERS.rising_edges.store(0, Ordering::Relaxed);
     COUNTERS.dispatch_passes.store(0, Ordering::Relaxed);
     COUNTERS.watcher_fires.store(0, Ordering::Relaxed);
+    COUNTERS.topo_designs.store(0, Ordering::Relaxed);
+    COUNTERS.topo_fallbacks.store(0, Ordering::Relaxed);
+    COUNTERS.epoch_skips.store(0, Ordering::Relaxed);
 }

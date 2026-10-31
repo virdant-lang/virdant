@@ -110,6 +110,17 @@ pub(super) struct State {
     /// signals have no watcher (or none do at all), marking becomes a
     /// single flag read instead of bitset work on every write.
     watched: Vec<bool>,
+    /// `epochs[signal]`: the value of `epoch_clock` at the signal's
+    /// most recent real write (0 = never written since construction).
+    /// Bumped by `mark_changed`, the one funnel every real write goes
+    /// through, so the counter total-orders every stored-value change.
+    /// This is the flow-time change record: a repeat visit whose
+    /// trigger epoch predates a driver's last evaluation implies the
+    /// driver already observed that write (see `vm::schedule`).
+    epochs: Vec<u64>,
+    /// Monotonic write counter backing `epochs`: incremented once per
+    /// real write, in write order.
+    epoch_clock: u64,
 }
 
 impl State {
@@ -147,6 +158,8 @@ impl State {
             changed_since_dispatch: false,
             changed_signals: vec![0; n_components.div_ceil(CHANGE_WORD_BITS)],
             changed_count: 0,
+            epochs: vec![0; n_components],
+            epoch_clock: 0,
         }
     }
 
@@ -161,6 +174,12 @@ impl State {
         &self.vals[signal_id.index()]
     }
 
+    /// The number of signals currently in the propagation worklist:
+    /// the settlement-size gate reads it once at `flow` entry.
+    pub(super) fn dirty_len(&self) -> usize {
+        self.dirty.len()
+    }
+
     pub(super) fn pop_dirty(&mut self) -> Option<SignalId> {
         let popped = self.dirty.pop();
         #[cfg(feature = "sim-profile")]
@@ -170,7 +189,27 @@ impl State {
         popped
     }
 
-    pub(super) fn transfer(&mut self, component_id: SignalId) {
+    /// The epoch of the signal at component index `index` (the static
+    /// flow path works in indexes): the global write counter's value at
+    /// the signal's most recent real write, 0 if never written.  See
+    /// `epochs`.
+    pub(super) fn epoch_at(&self, index: usize) -> u64 {
+        self.epochs[index]
+    }
+
+    /// The current value of the global write counter.  A driver's
+    /// last-eval snapshot is taken from this immediately before the
+    /// driver runs: any input written later carries a larger epoch and
+    /// forces re-evaluation; any input written earlier is already
+    /// reflected in the output the driver committed.
+    pub(super) fn epoch_clock(&self) -> u64 {
+        self.epoch_clock
+    }
+
+    pub(super) fn transfer(&mut self, component_id: SignalId) -> bool {
+        // Returns whether the live value was actually written: the
+        // flow loop expands a driver's fanout only on a real
+        // write.
         // Timed (sampled) at the `transfer_clock` rising-edge loop
         // rather than per call: a ~26 ns `Instant` read would distort
         // a ~5 ns transfer (see `sim::profile`).  Calls are counted in
@@ -193,7 +232,7 @@ impl State {
                     None => *stored != Value::from_u64(*typ, *width, *bits),
                 };
                 if unchanged {
-                    return;
+                    return false;
                 }
                 let new_value = Value::from_u64(*typ, *width, *bits);
                 super::sim::debug_transfer(component_id, &new_value);
@@ -201,17 +240,19 @@ impl State {
                 #[cfg(feature = "sim-profile")]
                 crate::sim::profile::bump_transfer_write();
                 self.mark_changed(component_id);
+                true
             }
             Pending::Value(pending) => {
                 let new_value = pending.clone();
                 super::sim::debug_transfer(component_id, &new_value);
                 if self.vals[component_id.index()] == new_value {
-                    return;
+                    return false;
                 }
                 self.vals[component_id.index()] = new_value;
                 #[cfg(feature = "sim-profile")]
                 crate::sim::profile::bump_transfer_write();
                 self.mark_changed(component_id);
+                true
             }
             Pending::None => panic!("transfer: component has no pending register value"),
         }
@@ -226,19 +267,20 @@ impl State {
     /// for `flow`, which may evaluate a component several times within
     /// one propagation pass — re-marking an unchanged signal dirty would
     /// cycle the worklist forever.
-    pub(super) fn set_val(&mut self, signal_id: SignalId, value: Value) {
+    pub(super) fn set_val(&mut self, signal_id: SignalId, value: Value) -> bool {
         // Sampled timing, not per-call `Instant`: same per-driver-path
         // rule as `transfer` above (see `sim::profile`).  The tick
         // also counts the call.
         #[cfg(feature = "sim-profile")]
         let _profile_sample = crate::sim::profile::sample_set_val();
         if self.vals[signal_id.index()] == value {
-            return;
+            return false;
         }
         self.vals[signal_id.index()] = value;
         #[cfg(feature = "sim-profile")]
         crate::sim::profile::bump_set_val_write();
         self.mark_changed(signal_id);
+        true
     }
 
     /// The bits-only write primitive (PERF-IDEAS item 10):
@@ -250,7 +292,7 @@ impl State {
     /// falls back to the tagged `Value` compare, so the dirty-list
     /// protocol and the `changed_since_dispatch` flag see exactly the
     /// same change events as `set_val`.
-    pub(super) fn set_val_bits(&mut self, signal_id: SignalId, typ: TypeId, width: Width, bits: u64) {
+    pub(super) fn set_val_bits(&mut self, signal_id: SignalId, typ: TypeId, width: Width, bits: u64) -> bool {
         // Sampled timing, not per-call `Instant`: same per-driver-path
         // rule as `set_val` above (see `sim::profile`).  The tick
         // also counts the call.
@@ -264,12 +306,13 @@ impl State {
             None => self.vals[idx] == Value::from_u64(typ, width, bits),
         };
         if unchanged {
-            return;
+            return false;
         }
         self.vals[idx] = Value::from_u64(typ, width, bits);
         #[cfg(feature = "sim-profile")]
         crate::sim::profile::bump_set_val_write();
         self.mark_changed(signal_id);
+        true
     }
 
     /// Record an actual write: queue it for `flow` and, for watched
@@ -284,6 +327,8 @@ impl State {
     /// bitset the "which watched signals changed" detail the bucketed
     /// sweep dispatches over.
     fn mark_changed(&mut self, signal_id: SignalId) {
+        self.epoch_clock += 1;
+        self.epochs[signal_id.index()] = self.epoch_clock;
         self.dirty.insert(signal_id);
         let index = signal_id.index();
         if self.watched[index] {
@@ -444,6 +489,8 @@ mod tests {
             changed_since_dispatch: false,
             changed_signals: vec![0; 1],
             changed_count: 0,
+            epochs: vec![0, 0],
+            epoch_clock: 0,
         }
     }
 
