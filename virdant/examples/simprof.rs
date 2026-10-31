@@ -164,11 +164,13 @@ mod table {
         row("flow", snap.flow_ns);
         row("  eval (est)", eval_est);
         row("  commit (est)", commit_est);
+        row("  cache lookup", snap.cache_lookup_ns);
+        row("  cache clear", snap.cache_clear_ns);
         row("sweep", snap.dispatch_ns);
         row("floor", floor_ns(snap, push_est, commit_est));
         println!();
         println!(
-            "  counts: events={} clock_edges={} pushes={} dirty_pops={} driver_evals={} (all vm, interp counter retired) const_skip={} epoch_skips={}",
+            "  counts: events={} clock_edges={} pushes={} dirty_pops={} driver_evals={} (all vm, interp counter retired) const_skip={} epoch_skips={} sched_cache_hits={} sched_cache_misses={}",
             snap.events_popped,
             snap.clock_edges,
             snap.sched_push_calls,
@@ -176,6 +178,8 @@ mod table {
             snap.evals_total,
             snap.const_skips,
             snap.epoch_skips,
+            snap.schedule_cache_hits,
+            snap.schedule_cache_misses,
         );
         println!(
             "          flow_calls={} (dirty_pops/flow_calls = {:.1} avg entry size)",

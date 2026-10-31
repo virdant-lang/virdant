@@ -180,6 +180,13 @@ impl State {
         self.dirty.len()
     }
 
+    /// The worklist's insertion-order signal-index sequence: the
+    /// settlement's dirty-set signature (the cached straight-line
+    /// schedule's key).
+    pub(super) fn dirty_stack(&self) -> &[u32] {
+        self.dirty.stack()
+    }
+
     pub(super) fn pop_dirty(&mut self) -> Option<SignalId> {
         let popped = self.dirty.pop();
         #[cfg(feature = "sim-profile")]
@@ -188,6 +195,7 @@ impl State {
         }
         popped
     }
+
 
     /// The epoch of the signal at component index `index` (the static
     /// flow path works in indexes): the global write counter's value at

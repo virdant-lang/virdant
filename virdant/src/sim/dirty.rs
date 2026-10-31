@@ -63,6 +63,13 @@ impl DirtyList {
         Some(SignalId::from_index(index))
     }
 
+    /// The worklist's insertion-order stack (most recent last): the
+    /// settlement-entry sequence the cached straight-line schedule keys
+    /// off.  Read-only view for the cache's signature computation.
+    pub(super) fn stack(&self) -> &[u32] {
+        &self.stack
+    }
+
     /// True when `signal_id` is currently in the worklist.
     ///
     /// No runtime caller today (the watcher-sweep pre-filter that would

@@ -144,6 +144,36 @@ pub struct Sim {
     /// value it would recompute.  Zero-initialized, then primed to the
     /// construction-time write count after `flow_all`.
     last_run: Vec<u64>,
+    /// Stage B: cached straight-line settlement schedules, keyed by the
+    /// settlement's dirty-set signature.  On a cache hit, `flow` executes
+    /// the precompiled driver order directly instead of the dynamic
+    /// pop/gather/epoch-check loop.  The cache is invalidated on every
+    /// structural change (watcher registration/deregistration,
+    /// `finish()` pruning — the `clear()` call sites), because the
+    /// driver order depends on the circuit's sensitivity structure.
+    schedule_cache: vm::ScheduleCache,
+    /// Stage B: per-driver terminality, precomputed once.  A driver is
+    /// terminal when its commit cannot start propagation: a register
+    /// (its driver writes only the pending next-value, which is never
+    /// dirty), or a combinational driver/alias sink whose output signal
+    /// has no driver reader and clocks no register.  A settlement whose
+    /// every driver is terminal cannot grow its worklist, so the cached
+    /// straight-line schedule (which replays the dynamic loop's first
+    /// visits) is sound for it.
+    is_terminal: Vec<bool>,
+    /// Stage B scratch: the settlement's insert key (the worklist's
+    /// insertion-order sequence) is copied here on the miss path and
+    /// cloned into the cache only when the settlement actually gets
+    /// cached — so a settlement that never inserts (a design whose
+    /// settlements are never terminal, or a below-`MIN_SETTLEMENT`
+    /// worklist) allocates nothing.  The buffer's capacity is reused
+    /// across settlements.
+    stack_key_scratch: Vec<u32>,
+    /// Stage B scratch: the recorded visit sequence.  Same discipline
+    /// as `stack_key_scratch`: filled during the miss path's dynamic
+    /// loop, moved into the cache on insert, reused across
+    /// settlements without reallocation.
+    visits_scratch: Vec<(u32, u32)>,
 }
 
 /// One free-running clock registered by `Sim::attach_clock`.
@@ -255,6 +285,18 @@ impl Sim {
         let vm_pool = vm::Vm::new(&program);
 
         let n_components = circuit.elaboration.components().len();
+        // Stage B terminality: a settlement whose every driver is
+        // terminal cannot grow its worklist, so its evaluation sequence
+        // is a pure function of the worklist order and is cacheable.
+        // See `vm::schedule::ScheduleCache` for the soundness proof.
+        let is_terminal: Vec<bool> = (0..n_components)
+            .map(|i| {
+                let signal_id = SignalId::from_index(i);
+                circuit.registers[i]
+                    || (circuit.sensitivity_count(signal_id) == 0
+                        && circuit.clock_sensitivity_count(signal_id) == 0)
+            })
+            .collect();
         let mut sim = Sim {
             state: State::new(circuit.elaboration.as_ref(), &circuit.type_layout_index, &strategy),
             circuit,
@@ -267,6 +309,10 @@ impl Sim {
             dispatch_queue: Vec::new(),
             dispatching: false,
             last_run: vec![0; n_components],
+            schedule_cache: vm::ScheduleCache::new(),
+            is_terminal,
+            stack_key_scratch: Vec::new(),
+            visits_scratch: Vec::new(),
         };
 
         sim.apply_initials();
@@ -497,10 +543,142 @@ impl Sim {
         let epoch_checks = self.state.dirty_len() >= EPOCH_CHECK_MIN_DIRTY
             && self.program.topo_schedule().is_some();
         let settlement_base = self.state.epoch_clock();
+
+        // Stage B: cached straight-line settlement schedule.  The cache
+        // key is the worklist's insertion-order sequence.  On a hit, the
+        // stored visit sequence is replayed through the same
+        // eval/commit machinery the dynamic loop used — including the
+        // epoch check, so a repeat visit is skipped exactly as the
+        // dynamic loop would skip it — and the pop/gather machinery is
+        // skipped entirely.  The lookup borrows the live worklist view
+        // (no key copy), and the replay iterates the stored sequence
+        // through the cache slice — `eval_and_commit` takes disjoint
+        // `&Sim`-field borrows, so no visit-list copy is needed either.
+        // The only allocation is on the miss path, which copies the
+        // stack once as the insert key (the dynamic loop consumes the
+        // worklist it keys off).
+        // Thrash guard: a design whose settlements never repeat would
+        // pay the fixed per-settlement machinery (stack view, lookup,
+        // capture, recording branches) every settlement for nothing —
+        // measured at ~8 ns/cycle on hello.  After
+        // `DISABLE_AFTER_MISSES` consecutive eligible misses the cache
+        // disables itself and the flow below degrades to exactly the
+        // stage-A dynamic loop; a structural change (which clears the
+        // cache anyway) is the only re-enable.  Disabling is purely a
+        // performance decision: the plain dynamic loop is always
+        // correct.
+        let cache_engaged = !self.schedule_cache.is_disabled();
+        let mut cachable = false;
+        if cache_engaged {
+        // The bounds gate sits before the lookup: a settlement too
+        // small (or too large) to ever be cached pays no lookup at all
+        // — the s1 bench's 1-entry falling-edge worklist was paying the
+        // lookup's hash + probe every cycle for a result it could never
+        // use.
+        if vm::ScheduleCache::MIN_SETTLEMENT <= self.state.dirty_len()
+            && self.state.dirty_len() <= vm::ScheduleCache::MAX_SETTLEMENT
+        {
+        let stack_view = self.state.dirty_stack();
+        let cached_visits = self.schedule_cache.lookup(stack_view);
+        if let Some(visits) = cached_visits {
+            #[cfg(feature = "sim-profile")]
+            crate::sim::profile::bump_schedule_cache_hit();
+            // The replay cannot push a signal whose visit the dynamic
+            // loop would have gathered (the cache only stores terminal
+            // settlements: a terminal driver's commit can dirty a
+            // no-fanout signal, but that signal's sensitivity list is
+            // empty, so its pop gathers nothing).  Wiping the worklist
+            // after the replay therefore leaves exactly the dynamic
+            // loop's end state: an empty worklist with every signal's
+            // propagation done by the replayed visits.  The bulk clear
+            // replaces the dynamic loop's per-pop machinery.
+            for &(trigger_index, driver_index) in visits {
+                let trigger = SignalId::from_index(trigger_index as usize);
+                let comp = SignalId::from_index(driver_index as usize);
+                if epoch_checks {
+                    Self::eval_and_commit(
+                        &self.circuit,
+                        &self.program,
+                        &mut self.vm,
+                        &mut self.state,
+                        &mut self.last_run,
+                        settlement_base,
+                        trigger,
+                        comp,
+                    );
+                } else {
+                    Self::eval_and_commit_split(
+                        &self.circuit,
+                        &self.program,
+                        &mut self.vm,
+                        &mut self.state,
+                        comp,
+                    );
+                }
+            }
+            self.state.clear_dirty();
+            return;
+        }
+        #[cfg(feature = "sim-profile")]
+        crate::sim::profile::bump_schedule_cache_miss();
+        // Count the miss toward the thrash guard.  Only in-bounds
+        // settlements count: a 1-entry settlement never engages the
+        // cache, so it must not disable a cache a neighboring
+        // settlement is hitting (s1).
+        self.schedule_cache.note_miss();
+
+        // Miss: run the dynamic loop, recording the visit sequence for
+        // the cache as it goes.  The cached schedule is only sound when
+        // the settlement's visit sequence is a pure function of the
+        // worklist order — i.e. when every visited driver is terminal
+        // (a register, whose commit writes only the pending next-value,
+        // or a driver whose output has no fanout, whose commit cannot
+        // trigger further visits).  A settlement containing any
+        // non-terminal driver can grow its worklist in a data-dependent
+        // way, so replaying a recorded sequence for a future settlement
+        // with the same signature could differ from the dynamic loop.
+        // See `vm::schedule::ScheduleCache` for the soundness proof.
+        // The insert key is the entry worklist's insertion-order
+        // sequence: the dynamic loop below consumes the worklist it keys
+        // off, so the sequence is captured here, on the miss path only,
+        // into a reused scratch buffer — no allocation after the first
+        // settlement of each length, because the cache's `insert` clones
+        // the key, and only when the settlement actually gets cached.
+        // The capture itself is gated to the cache's length bounds, so
+        // a settlement that can never be cached (a 1-entry falling-edge
+        // worklist) does not even pay the memcpy.
+        self.stack_key_scratch.clear();
+        self.stack_key_scratch.extend_from_slice(stack_view);
+        // Recording is live only while the settlement can still be
+        // cached: the first non-terminal visit both stops the recording
+        // and drops the terminality test for the rest of the settlement,
+        // so a design whose settlements are never terminal (hello's
+        // combinational tails) pays at most a prefix's worth of
+        // bookkeeping per settlement.
+        // The scratch is cleared unconditionally at recording start: a
+        // settlement that recorded a visit prefix and then hit a
+        // non-terminal visit must not leak that prefix into the NEXT
+        // settlement's insert — the stored sequence would replay a
+        // visit that never belonged to it (a soundness bug the benches
+        // never caught, since none of the seven check.sh designs mix a
+        // dead-with-prefix settlement next to a cachable one).
+        self.visits_scratch.clear();
+        cachable = true;
+        }
+        }
         while let Some(signal_id) = self.state.pop_dirty() {
             let n = self.circuit.sensitivity_count(signal_id);
             for i in 0..n {
                 let update_signal_id = self.circuit.sensitivity_at(signal_id, i);
+                if cachable {
+                    let driver = update_signal_id.index();
+                    if self.is_terminal[driver] {
+                        self.visits_scratch
+                            .push((signal_id.index() as u32, driver as u32));
+                    } else {
+                        cachable = false;
+                    }
+                }
                 // The branch is loop-invariant, so the gated-off path
                 // is the plain one-call commit with no epoch machinery
                 // in sight.
@@ -524,6 +702,26 @@ impl Sim {
                         update_signal_id,
                     );
                 }
+            }
+        }
+        if cachable && !self.visits_scratch.is_empty() {
+            // Only cache terminal settlements that actually evaluated
+            // something: a settlement with no visits replays to nothing,
+            // so caching it only evicts a real schedule through a slot
+            // collision (falling-edge worklists are exactly that).
+            // Sort the stored visits by the driver's static topological
+            // position (see `vm::schedule::ScheduleCache` for why the
+            // order is unobservable within a terminal settlement).
+            if let Some(schedule) = self.program.topo_schedule() {
+                self.visits_scratch
+                    .sort_by_key(|&(_, driver)| schedule.pos(driver as usize));
+                // The two allocations a cacheable settlement ever pays:
+                // the key clone and the visits move into the cache.  Both
+                // happen only here, once per inserted schedule; the hit
+                // path and the recurring miss path allocate nothing.
+                let key = self.stack_key_scratch.clone();
+                let value = std::mem::take(&mut self.visits_scratch);
+                self.schedule_cache.insert(key, value);
             }
         }
     }
@@ -1012,6 +1210,10 @@ impl Sim {
     /// and does not survive into a subsequent `run()`.
     pub fn finish(&mut self) {
         self.sched.request_shutdown();
+        // Stage B: clear the settlement schedule cache on structural
+        // change.  `finish()` prunes dead watchers, invalidating the
+        // structural invariants the cached driver order relies on.
+        self.schedule_cache.clear();
     }
 
     /// Drive `signal` as a free-running square wave described by `clock`.
@@ -1306,6 +1508,11 @@ impl Sim {
         // write before registration could not have been observed anyway:
         // `last` starts at the live value.
         self.state.set_watched(signal, true);
+        // Stage B: the cache is keyed on the circuit's sensitivity
+        // structure, which watcher registration/deregistration changes
+        // (the visited-driver set for a given worklist is a function of
+        // the structural sensitivity, not just the dirty set).
+        self.schedule_cache.clear();
     }
 
     /// Register `cb` to fire every time `clock`'s value has a rising edge
@@ -1320,6 +1527,7 @@ impl Sim {
     /// If `cb` calls `sim.finish()`, the watcher is removed from the
     /// table: it does not survive into a subsequent `run()`.
     pub fn on_clock(&mut self, clock: SignalId, cb: Callback) {
+        self.schedule_cache.clear();
         let last = self.state.get(clock);
         self.watchers.push(Watcher {
             signal: clock,

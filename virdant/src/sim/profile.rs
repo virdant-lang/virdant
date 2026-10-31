@@ -142,6 +142,18 @@ struct Counters {
     /// Static-path driver visits skipped because every input's
     /// change-epoch predates the driver's last evaluation.
     epoch_skips: AtomicU64,
+    /// Settlements that entered `flow` and hit the cached straight-line
+    /// schedule (the dynamic loop was replaced by the replay).
+    schedule_cache_hits: AtomicU64,
+    /// Settlements that entered `flow` with no cached straight-line
+    /// schedule for their dirty-set signature: the dynamic loop ran.
+    schedule_cache_misses: AtomicU64,
+    /// TEMPORARY (stage-B decomposition): elapsed inside the cached
+    /// schedule's lookup, summed over hits and misses.
+    cache_lookup_ns: AtomicU64,
+    /// TEMPORARY (stage-B decomposition): elapsed in the hit path's
+    /// bulk dirty-state clear.
+    cache_clear_ns: AtomicU64,
 }
 
 static COUNTERS: Counters = Counters {
@@ -174,6 +186,10 @@ static COUNTERS: Counters = Counters {
     topo_designs: AtomicU64::new(0),
     topo_fallbacks: AtomicU64::new(0),
     epoch_skips: AtomicU64::new(0),
+    schedule_cache_hits: AtomicU64::new(0),
+    schedule_cache_misses: AtomicU64::new(0),
+    cache_lookup_ns: AtomicU64::new(0),
+    cache_clear_ns: AtomicU64::new(0),
 };
 
 /// Scoped timer for one engine phase; accumulates the elapsed time
@@ -216,6 +232,8 @@ phase_timer!(time_run, run_ns);
 phase_timer!(time_sched, sched_ns);
 phase_timer!(time_flow, flow_ns, flow_calls);
 phase_timer!(time_dispatch, dispatch_ns, dispatch_passes);
+phase_timer!(time_cache_lookup, cache_lookup_ns);
+phase_timer!(time_cache_clear, cache_clear_ns);
 
 /// Scoped sampled timer for per-driver-path work; accumulates the raw
 /// interval (unscaled) and one sample count on drop.  Created only by
@@ -335,6 +353,20 @@ pub fn bump_epoch_skip() {
     COUNTERS.epoch_skips.fetch_add(1, Ordering::Relaxed);
 }
 
+/// Count a settlement that hit the cached straight-line schedule and
+/// skipped the dynamic pop/gather loop.
+#[inline]
+pub fn bump_schedule_cache_hit() {
+    COUNTERS.schedule_cache_hits.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Count a settlement whose dirty-set signature missed the cached
+/// straight-line schedule and ran the dynamic loop.
+#[inline]
+pub fn bump_schedule_cache_miss() {
+    COUNTERS.schedule_cache_misses.fetch_add(1, Ordering::Relaxed);
+}
+
 /// A consistent copy of every counter, taken by [`snapshot`].  Plain
 /// integers: the caller formats them (and derives the sampled
 /// estimates; see the estimator formula in the module docs).
@@ -369,6 +401,10 @@ pub struct Snapshot {
     pub topo_designs: u64,
     pub topo_fallbacks: u64,
     pub epoch_skips: u64,
+    pub schedule_cache_hits: u64,
+    pub schedule_cache_misses: u64,
+    pub cache_lookup_ns: u64,
+    pub cache_clear_ns: u64,
 }
 
 impl Snapshot {
@@ -412,6 +448,10 @@ pub fn snapshot() -> Snapshot {
         topo_designs: COUNTERS.topo_designs.load(Ordering::Relaxed),
         topo_fallbacks: COUNTERS.topo_fallbacks.load(Ordering::Relaxed),
         epoch_skips: COUNTERS.epoch_skips.load(Ordering::Relaxed),
+        schedule_cache_hits: COUNTERS.schedule_cache_hits.load(Ordering::Relaxed),
+        schedule_cache_misses: COUNTERS.schedule_cache_misses.load(Ordering::Relaxed),
+        cache_lookup_ns: COUNTERS.cache_lookup_ns.load(Ordering::Relaxed),
+        cache_clear_ns: COUNTERS.cache_clear_ns.load(Ordering::Relaxed),
     }
 }
 
@@ -447,4 +487,8 @@ pub fn reset() {
     COUNTERS.topo_designs.store(0, Ordering::Relaxed);
     COUNTERS.topo_fallbacks.store(0, Ordering::Relaxed);
     COUNTERS.epoch_skips.store(0, Ordering::Relaxed);
+    COUNTERS.schedule_cache_hits.store(0, Ordering::Relaxed);
+    COUNTERS.schedule_cache_misses.store(0, Ordering::Relaxed);
+    COUNTERS.cache_lookup_ns.store(0, Ordering::Relaxed);
+    COUNTERS.cache_clear_ns.store(0, Ordering::Relaxed);
 }
