@@ -3,8 +3,13 @@
 VIR    ?= $(CURDIR)/target/release/vir
 RUNNER ?= $(CURDIR)/target/release/vir-virtue
 
+# The simulator ships with the Cranelift JIT backend enabled by default
+# (`virdant/jit`); designs whose cycle pattern never repeats fall back to
+# the interpreter replay path at zero cost, so the flag is always safe.
+VIR_FEATURES ?= virdant/jit
+
 build: virdant/target/lib
-	cargo build --release -p vir
+	cargo build --release -p vir --features $(VIR_FEATURES)
 
 # Cargo's build script places generated artifacts in OUT_DIR, which has the
 # concrete form: target/<profile>/build/<crate>-<hash>/out/foo.grammar
