@@ -1,0 +1,93 @@
+// Tests for let terminator style mismatches.  The grammar accepts both
+// `=> <expr>` bodies and `{ ... }` block bodies for `let` in both
+// statement and expression position; the style pass flags the
+// mismatches: `{` means "this scope performs", `=>` means "this scope
+// produces".
+//
+// Note: expression-position `let` tests are not included yet; the
+// typechecker has no `let` path and panics on a `Let` expr root, so
+// those are blocked until typing support lands.
+
+// A statement `let` whose body is a `=> <expr>` value: the binding's
+// scope performs, so it must terminate in a block.
+mod StmtLetArrow {
+    incoming a : Word[8]
+    outgoing out : Word[8]
+
+    // CHECK: For a `let` used as a statement, use `{ ... }` instead of `=>`
+    let x = a => x
+
+    out := a
+}
+
+// A `let` inside a statement `when` arm whose body is a `=> <expr>`
+// value: the arm's let is still in statement position.
+mod StmtWhenArmLetArrow {
+    incoming a : Bit
+    incoming b : Word[8]
+    outgoing out : Word[8]
+
+    when {
+        case a {
+            // CHECK: For a `let` used as a statement, use `{ ... }` instead of `=>`
+            let x = b => x
+        }
+    }
+
+    out := b
+}
+
+// A statement `let` whose block body is a single bare expression: the
+// scope produces a value it discards, so it must use `=>` (or contain
+// statements).
+mod StmtLetExprBlock {
+    incoming a : Word[8]
+    outgoing out : Word[8]
+
+    // CHECK: For a `let` used as a statement, use `{ ... }` instead of `=>`
+    let x = a {
+        x
+    }
+
+    out := a
+}
+
+// A statement `let` chained into a bare `when` body: the chained form
+// is legal in both contexts, so the style pass flags nothing.
+mod StmtLetWhen {
+    incoming a : Bit
+    incoming b : Word[8]
+    outgoing out : Word[8]
+
+    // CHECK-NOT: For a `let` used as
+    let x = b when {
+        case a {
+        }
+        else {
+        }
+    }
+
+    out := b
+}
+
+// A statement `let` chained into a bare `match` body: same as above.
+mod StmtLetMatch {
+    incoming a : Word[8]
+    incoming t : StyleE
+    outgoing out : Word[8]
+
+    // CHECK-NOT: For a `let` used as
+    let x = a match t {
+        case #A {
+        }
+        else {
+        }
+    }
+
+    out := a
+}
+
+enum type StyleE {
+    A
+    B
+}

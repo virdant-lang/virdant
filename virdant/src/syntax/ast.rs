@@ -38,6 +38,41 @@ impl<'p> AstNode<'p> {
         self.id
     }
 
+    /// The `LetBinding` nodes of a `Let`: every child except the last
+    /// (the body).
+    pub fn let_bindings(&self) -> Vec<AstNode<'p>> {
+        let children = self.children();
+        let mut bindings = children;
+        bindings.pop();
+        bindings
+    }
+
+    /// The body of a `Let` (the last child): an `ArmBlock` (statement
+    /// form), an `Expr` (`=>` form), or a `When`/`Match` (chained form).
+    pub fn let_body(&self) -> Option<AstNode<'p>> {
+        self.children().pop()
+    }
+
+    /// Whether this `Let` node's body is an `ArmBlock` (the statement
+    /// form, which performs rather than produces a value).
+    pub fn let_is_statement(&self) -> bool {
+        self.let_body()
+            .is_some_and(|body| matches!(body.payload(), AstNodePayload::ArmBlock))
+    }
+
+    /// The name of a `LetBinding` node.
+    pub fn let_binding_name(&self) -> Option<InternedString> {
+        match &self.payload {
+            AstNodePayload::LetBinding(binding) => Some(binding.name.clone()),
+            _ => None,
+        }
+    }
+
+    /// The RHS `Expr` of a `LetBinding` node (its last child).
+    pub fn let_binding_expr(&self) -> Option<AstNode<'p>> {
+        self.children().pop()
+    }
+
     pub fn parsing(&self) -> &Parsing {
         self.parsing
     }
@@ -183,6 +218,8 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ArmBlock => format!("ArmBlock"),
             AstNodePayload::When => format!("When"),
             AstNodePayload::Match => format!("Match"),
+            AstNodePayload::Let => format!("Let"),
+            AstNodePayload::LetBinding(let_binding) => format!("LetBinding {}", parsing.string(let_binding.name.clone())),
             AstNodePayload::ModDefStmtUnused => format!("ModDefStmtUnused"),
             AstNodePayload::Annotations(_) => format!("Annotations"),
             AstNodePayload::Annotation(annotation) => format!("Annotation {}", parsing.string(annotation.name.clone())),
@@ -393,6 +430,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprParen |
             AstNodePayload::When |
             AstNodePayload::Match |
+            AstNodePayload::Let |
             AstNodePayload::ExprBitLit(_) |
             AstNodePayload::ExprWordLit(_) |
             AstNodePayload::ExprStrLit(_) |

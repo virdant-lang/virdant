@@ -91,6 +91,21 @@ ModDefStmt :=
       ModDefStmtCore
     | When
     | Match
+    | Let
+
+Let :=
+      "let" LetBindingList ArmBlock
+    | "let" LetBindingList "=>" Expr
+    | "let" LetBindingList When
+    | "let" LetBindingList Match
+
+LetBindingList :=
+      LetBinding
+    | LetBindingList "," LetBinding
+
+LetBinding :=
+      Ident ":" Type "=" Expr
+    | Ident "=" Expr
 
 ModDefStmtComponent :=
       DocString? Annotations "incoming" Ident ":" Type OnClause? ItBlock?
@@ -129,10 +144,12 @@ WhenArm :=
     | "case" Expr ArmBlock
     | "case" Expr When
     | "case" Expr Match
+    | "case" Expr Let
     | "else" "=>" Expr
     | "else" ArmBlock
     | "else" When
     | "else" Match
+    | "else" Let
 
 Match := "match" Expr "{" MatchArm* "}"
 
@@ -141,10 +158,12 @@ MatchArm :=
     | "case" Pat ArmBlock
     | "case" Pat When
     | "case" Pat Match
+    | "case" Pat Let
     | "else" "=>" Expr
     | "else" ArmBlock
     | "else" When
     | "else" Match
+    | "else" Let
 
 ModDefStmtUnused := "unused" Path
 
@@ -161,6 +180,7 @@ Type := Ofness GenericsParams?
 Expr :=
       When
     | Match
+    | Let
     | ExprStruct
     | ExprBinOpLogical
 
@@ -361,6 +381,7 @@ Tokens:
   "incoming"
   "initial"
   "it"
+  "let"
   "match"
   "mod"
   "net"

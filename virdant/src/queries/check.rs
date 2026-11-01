@@ -70,10 +70,11 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     let type_index = builder.get_type_index();
     diagnostics.extend(type_index.diagnostics());
 
-    // Arm-style validation runs before the driver checks so that
-    // style-mismatch arms are reported with their own diagnostic
-    // rather than as missing drivers.
-    check_when_match_style(builder, &mut diagnostics);
+    // Terminator-style validation for `when`/`match` arms and `let`
+    // bodies runs before the driver checks so that style-mismatch
+    // scopes are reported with their own diagnostic rather than as
+    // missing drivers.
+    check_terminator_style(builder, &mut diagnostics);
 
     for item in symboltable.items() {
         // Platform items are unvalidated data (they have no drivers
@@ -174,12 +175,15 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     Arc::new(diagnostics)
 }
 
-/// Check the arm style of every `when`/`match` against its context:
-/// a when/match used as an expression takes value arms (`=> <expr>`),
-/// while one used as a statement takes statement arms (`{ <stmts> }`).
-/// The grammar accepts both forms everywhere; this pass reports the
-/// mismatches as errors.
-fn check_when_match_style(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+/// Check the terminator style of every scope-bearing construct —
+/// `when`/`match` arms and `let` bodies — against its context,
+/// enforcing the invariant: `{` means "this scope performs"; `=>`
+/// means "this scope produces".  A `when`/`match`/`let` used as an
+/// expression must terminate in a value (`=> <expr>`, or a chained
+/// bare `when`/`match`); one used as a statement must terminate in a
+/// block or a chained `when`/`match`.  The grammar accepts both forms
+/// everywhere; this pass reports the mismatches as errors.
+fn check_terminator_style(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
     let symboltable = builder.get_symboltable();
     for item in symboltable.items() {
         if item.kind != SymbolKind::ModDef {
@@ -188,20 +192,62 @@ fn check_when_match_style(builder: &mut Builder, diagnostics: &mut Vec<Diagnosti
         let location = item.location();
         let parsing = builder.get_parsing(location.package());
         let node = parsing.ast_node(location.ast_node_id());
-        check_when_match_style_in(&node, diagnostics);
+        check_terminator_style_in(&node, diagnostics);
     }
 }
 
-fn check_when_match_style_in(
+/// Which construct a checked terminator belongs to.  The style rule is
+/// shared; this only selects the diagnostic payloads.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ScopeOwner {
+    /// A `when`/`match` arm.
+    Arm,
+    /// A `let` binding scope.
+    Let,
+}
+
+/// The two ways a terminator can violate the style invariant.
+#[derive(Clone, Copy)]
+enum ScopeViolation {
+    /// A `{ ... }` terminator in expression position: the scope
+    /// performs where it must produce.
+    BlockInExpression,
+    /// A value (`=> <expr>`) terminator in statement position: the
+    /// scope produces where it must perform.
+    ValueInStatement,
+}
+
+fn scope_violation_payload(
+    owner: ScopeOwner,
+    violation: ScopeViolation,
+) -> DiagnosticPayload {
+    match (owner, violation) {
+        (ScopeOwner::Arm, ScopeViolation::BlockInExpression) => {
+            DiagnosticPayload::ArmBlockNeedsArrow
+        }
+        (ScopeOwner::Arm, ScopeViolation::ValueInStatement) => {
+            DiagnosticPayload::ArmNeedsBlock
+        }
+        (ScopeOwner::Let, ScopeViolation::BlockInExpression) => {
+            DiagnosticPayload::LetBlockNeedsArrow
+        }
+        (ScopeOwner::Let, ScopeViolation::ValueInStatement) => {
+            DiagnosticPayload::LetArrowNeedsBlock
+        }
+    }
+}
+
+fn check_terminator_style_in(
     node: &crate::syntax::ast::AstNode<'_>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let payload = node.payload();
-    if matches!(payload, AstNodePayload::When | AstNodePayload::Match) {
-        let is_expression = node.is_expression_position();
-        let children = node.children();
-        let arms: Vec<(Option<crate::syntax::ast::AstNode<'_>>, crate::syntax::ast::AstNode<'_>)> =
-            if matches!(payload, AstNodePayload::When) {
+    match node.payload() {
+        AstNodePayload::When | AstNodePayload::Match => {
+            let is_expression = node.is_expression_position();
+            let children = node.children();
+            let arms: Vec<
+                (Option<crate::syntax::ast::AstNode<'_>>, crate::syntax::ast::AstNode<'_>),
+            > = if matches!(node.payload(), AstNodePayload::When) {
                 crate::syntax::ast::when_arm_children(&children)
                     .into_iter()
                     .map(|(guard, body)| (guard.cloned(), body.clone()))
@@ -212,48 +258,98 @@ fn check_when_match_style_in(
                     .map(|(pat, body)| (pat.cloned(), body.clone()))
                     .collect()
             };
-        for (_guard, body) in arms {
-            match body.payload() {
-                // `{ <stmts> }`: statements always fit either context.
-                // `{ <expr> }` (a single bare expression) is the
-                // mismatch to report.
-                AstNodePayload::ArmBlock => {
-                    let block_children = body.children();
-                    if block_children.len() == 1
-                        && block_children[0].is_expr()
-                        && !matches!(
-                            block_children[0].payload(),
-                            AstNodePayload::When | AstNodePayload::Match
-                        )
-                    {
-                        diagnostics.push(Diagnostic::new(
-                            body.region(),
-                            if is_expression {
-                                DiagnosticPayload::ArmBlockNeedsArrow
-                            } else {
-                                DiagnosticPayload::ArmNeedsBlock
-                            },
-                        ));
-                    }
-                }
-                // A bare `When`/`Match` arm body is indistinguishable
-                // from `=> <when/match>` after parsing, and is legal
-                // in both contexts; skip it.
-                AstNodePayload::When | AstNodePayload::Match => {}
-                // Any other expression body comes from a `=>` arm: a
-                // value, which only fits expression context.
-                _ if body.is_expr() && !is_expression => {
-                    diagnostics.push(Diagnostic::new(
-                        body.region(),
-                        DiagnosticPayload::ArmNeedsBlock,
-                    ));
-                }
-                _ => {}
+            for (_guard, body) in arms {
+                check_terminator_body(&body, is_expression, ScopeOwner::Arm, diagnostics);
             }
         }
+        AstNodePayload::Let => {
+            let is_expression = node.is_expression_position();
+            if let Some(body) = node.let_body() {
+                check_terminator_body(&body, is_expression, ScopeOwner::Let, diagnostics);
+            }
+        }
+        _ => {}
     }
     for child in node.children() {
-        check_when_match_style_in(&child, diagnostics);
+        check_terminator_style_in(&child, diagnostics);
+    }
+}
+
+/// Check one terminator (a `when`/`match` arm body or a `let` body)
+/// against the enclosing construct's position.
+fn check_terminator_body(
+    body: &crate::syntax::ast::AstNode<'_>,
+    is_expression: bool,
+    owner: ScopeOwner,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let block_children = body.children();
+    let single_child = block_children.first();
+    // A single child that is itself a scope-bearing construct (`when`,
+    // `match`, or `let`): the chained form, legal in both contexts.
+    // `Let` is an `is_expr` node, so it must be excluded explicitly —
+    // otherwise a block whose only statement is a `let` would look
+    // like a single-expression block.
+    let is_single_scope_form = single_child.is_some_and(|c| {
+        matches!(
+            c.payload(),
+            AstNodePayload::When | AstNodePayload::Match | AstNodePayload::Let
+        )
+    });
+    // A single-expression block that is not itself a chained
+    // `when`/`match`/`let`: the expression form written inside braces.
+    let is_single_expr_block =
+        single_child.is_some_and(|c| c.is_expr()) && !is_single_scope_form;
+
+    match body.payload() {
+        AstNodePayload::ArmBlock => {
+            if is_single_scope_form {
+                // `{ when { ... } }` / `{ match { ... } }` /
+                // `{ let ... }`: a chained scope wrapped in braces.
+                // Treated as the chain form, which is legal in both
+                // contexts; the idiomatic fix (dropping the braces) is
+                // left to the user.  The inner scope's own terminator
+                // style is checked when the walker reaches it.
+            } else if is_expression {
+                // A block terminator in expression position performs
+                // where the scope must produce.  For arms, blocks that
+                // cannot produce a value are also reported by the
+                // typechecker (`check_arm_block`), so the style pass
+                // only reports the single-expression form, which the
+                // typechecker would otherwise accept by unwrapping it;
+                // `let` bodies have no typechecker path yet, so the
+                // style pass reports every block form.
+                if is_single_expr_block || owner == ScopeOwner::Let {
+                    diagnostics.push(Diagnostic::new(
+                        body.region(),
+                        scope_violation_payload(owner, ScopeViolation::BlockInExpression),
+                    ));
+                }
+            } else if is_single_expr_block {
+                // A single bare expression wrapped in braces performs
+                // nothing; report it as a value terminator in
+                // statement position.
+                diagnostics.push(Diagnostic::new(
+                    body.region(),
+                    scope_violation_payload(owner, ScopeViolation::ValueInStatement),
+                ));
+            }
+        }
+        // A bare `when`/`match`/`let` terminator is the chained form,
+        // which is legal in both contexts.  A bare `let` arm body is
+        // neither a value nor a block at the arm level; its own
+        // terminator style is checked when the walker reaches the let
+        // itself (with the let inheriting the arm's position).
+        AstNodePayload::When | AstNodePayload::Match | AstNodePayload::Let => {}
+        // Any other expression terminator comes from a `=>` scope: a
+        // value, which only fits expression context.
+        _ if body.is_expr() && !is_expression => {
+            diagnostics.push(Diagnostic::new(
+                body.region(),
+                scope_violation_payload(owner, ScopeViolation::ValueInStatement),
+            ));
+        }
+        _ => {}
     }
 }
 

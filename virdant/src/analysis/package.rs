@@ -204,6 +204,13 @@ impl PackageAnalysis {
                     AstNodePayload::Annotations(_) => (),
                     // A generic parameter declaration list on a mod def.
                     AstNodePayload::Generics => (),
+                    // A `let` statement.  The terminator-style pass
+                    // validates its form independently of expr-root
+                    // collection; binding RHS expressions and body
+                    // statements are not yet wired into the expr-root
+                    // and driver-analysis passes (a later step of the
+                    // `let` feature), so they are inert here.
+                    AstNodePayload::Let => (),
                     _ => unreachable!("{:?}", child_node.summary()),
                 }
             }

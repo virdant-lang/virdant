@@ -1,0 +1,76 @@
+// Positive tests for `let` terminator style: statement-form lets and
+// chained let-when/let-match bodies in statement position must pass
+// the terminator-style pass.  (Expression-position lets are blocked on
+// the typing and driver-analysis passes gaining `let` support, so only
+// statement forms are exercised here.)
+//
+// Note: references inside a `let` are not yet wired into the typing
+// pass (let bodies produce no expr roots), so every component
+// referenced inside a `let` is also referenced by a driver below, and
+// let bodies are empty to avoid missing-driver diagnostics.
+// CHECK: Check OK
+
+pub mod StmtLet {
+    incoming a : Word[8]
+    outgoing out : Word[8]
+
+    let x = a {
+    }
+
+    out := a
+}
+
+pub mod StmtLetWhen {
+    incoming a : Bit
+    incoming b : Word[8]
+    outgoing out : Word[8]
+    outgoing flag : Bit
+
+    let x = b when {
+        case a {
+        }
+        else {
+        }
+    }
+
+    out := b
+    flag := a
+}
+
+pub mod StmtLetMatch {
+    incoming a : Word[8]
+    incoming t : StyleE
+    outgoing out : Word[8]
+    outgoing echo : StyleE
+
+    let x = a match t {
+        case #A {
+        }
+        else {
+        }
+    }
+
+    out := a
+    echo := t
+}
+
+pub mod StmtWhenArmLet {
+    incoming a : Bit
+    incoming b : Word[8]
+    outgoing out : Word[8]
+
+    when {
+        case a let x = b {
+        }
+
+        else {
+        }
+    }
+
+    out := b
+}
+
+pub enum type StyleE {
+    A
+    B
+}

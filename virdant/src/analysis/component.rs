@@ -755,6 +755,24 @@ pub(crate) fn is_shadowed_by_pattern(
                     }
                 }
             }
+            AstNodePayload::Let => {
+                // A `let` binding shadows module-level components of the
+                // same name within its scope.  The scope of binding `i` is
+                // the bodies of bindings `i+1..` and the let's body; the
+                // RHS of binding `i` sees only bindings `0..i`.
+                let bindings = parent.let_bindings();
+                let scope_limit = bindings
+                    .iter()
+                    .position(|b| b.id() == child_id)
+                    .unwrap_or(bindings.len());
+                for binding in bindings.iter().take(scope_limit) {
+                    if let Some(binding_name) = binding.let_binding_name() {
+                        if parsing.string(binding_name) == name {
+                            return true;
+                        }
+                    }
+                }
+            }
             _ => {}
         }
         if parent.is_item() {
@@ -994,6 +1012,24 @@ fn collect_references(
                             component_analysis,
                             Some(name_with_context.as_bstr()),
                         );
+                    }
+                }
+            }
+            AstNodePayload::Let => {
+                // Walk each binding's RHS expression and the let's body.
+                // References inside a binding's scope are skipped when
+                // shadowed by a binding name (`is_shadowed_by_pattern`
+                // handles the `let` scoping rules).
+                for binding in stmt.let_bindings() {
+                    if let Some(rhs) = binding.let_binding_expr() {
+                        collect_references_in_expr(&rhs, component_analysis, it_context);
+                    }
+                }
+                if let Some(body) = stmt.let_body() {
+                    if matches!(body.payload(), AstNodePayload::ArmBlock) {
+                        collect_references(&body.children(), component_analysis, it_context);
+                    } else {
+                        collect_references(&[body.clone()], component_analysis, it_context);
                     }
                 }
             }

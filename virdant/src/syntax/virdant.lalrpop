@@ -355,6 +355,63 @@ ModDefStmt: AstNodeId = {
     <stmt:ModDefStmtCore> => stmt,
     <w:When> => w,
     <m:Match> => m,
+    <l:Let> => l,
+}
+
+Let: AstNodeId = {
+    <ll:@L> "let" <bindings:LetBindingList> <body:ArmBlock> <rr:@R> => {
+        let payload = AstNodePayload::Let;
+        let span = parser.span(ll, rr);
+        let num_children = (bindings.len() as u16) + 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "let" <bindings:LetBindingList> "=>" <body:Expr> <rr:@R> => {
+        let payload = AstNodePayload::Let;
+        let span = parser.span(ll, rr);
+        let num_children = (bindings.len() as u16) + 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "let" <bindings:LetBindingList> <body:When> <rr:@R> => {
+        let payload = AstNodePayload::Let;
+        let span = parser.span(ll, rr);
+        let num_children = (bindings.len() as u16) + 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> "let" <bindings:LetBindingList> <body:Match> <rr:@R> => {
+        let payload = AstNodePayload::Let;
+        let span = parser.span(ll, rr);
+        let num_children = (bindings.len() as u16) + 1;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+LetBindingList: Vec<AstNodeId> = {
+    <binding:LetBinding> => vec![binding],
+    <mut bindings:LetBindingList> "," <binding:LetBinding> => {
+        bindings.push(binding);
+        bindings
+    },
+}
+
+LetBinding: AstNodeId = {
+    <ll:@L> <name:Ident> ":" <typ:Type> "=" <expr:Expr> <rr:@R> => {
+        let payload = AstNodePayload::LetBinding(payload::LetBinding { name });
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <name:Ident> "=" <expr:Expr> <rr:@R> => {
+        let payload = AstNodePayload::LetBinding(payload::LetBinding { name });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
 }
 
 ModDefStmtComponent: AstNodeId = {
@@ -577,10 +634,12 @@ WhenArm: u16 = {
     "case" Expr ArmBlock => 2,
     "case" Expr When => 2,
     "case" Expr Match => 2,
+    "case" Expr Let => 2,
     "else" "=>" Expr => 1,
     "else" ArmBlock => 1,
     "else" When => 1,
     "else" Match => 1,
+    "else" Let => 1,
 }
 
 Match: AstNodeId = {
@@ -598,10 +657,12 @@ MatchArm: u16 = {
     "case" Pat ArmBlock => 2,
     "case" Pat When => 2,
     "case" Pat Match => 2,
+    "case" Pat Let => 2,
     "else" "=>" Expr => 1,
     "else" ArmBlock => 1,
     "else" When => 1,
     "else" Match => 1,
+    "else" Let => 1,
 }
 
 ModDefStmtUnused: AstNodeId = {
@@ -668,6 +729,7 @@ Type: AstNodeId = {
 Expr: AstNodeId = {
     <e:When> => e,
     <e:Match> => e,
+    <e:Let> => e,
     <e:ExprStruct> => e,
     <e:ExprBinOpLogical> => e,
 }
@@ -1208,6 +1270,7 @@ extern {
         "else" => Token::KwElse,
         "when" => Token::KwWhen,
         "match" => Token::KwMatch,
+        "let" => Token::KwLet,
         "case" => Token::KwCase,
         "unused" => Token::KwUnused,
         "initial" => Token::KwInitial,

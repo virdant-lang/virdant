@@ -31,6 +31,8 @@ pub enum AstNodePayload {
     ModDefStmtBlock,
     When,
     Match,
+    Let,
+    LetBinding(LetBinding),
     ArmBlock,
     ModDefStmtUnused,
     ModDefStmtDependsOn,
@@ -94,6 +96,8 @@ impl AstNodePayload {
     pub fn kind(&self) -> &str {
         match self {
             AstNodePayload::Error => "Error",
+            AstNodePayload::Let => "Let",
+            AstNodePayload::LetBinding(_) => "LetBinding",
             AstNodePayload::Package(_) => "Package",
             AstNodePayload::Import(_import) => "Import",
             AstNodePayload::ModDef(_mod_def) => "ModDef",
@@ -270,6 +274,19 @@ pub struct Driver {
 pub struct Submodule {
     pub name: InternedString,
     pub doc_string: Option<InternedString>,
+}
+
+/// A `let` statement/expression (`let x = e { ... }` or `let x = e => ...`).
+/// Children: one `LetBinding` node per binding, then the body
+/// (`ArmBlock`, `Expr`, `When`, or `Match`).
+#[derive(Clone, Debug)]
+pub struct Let;
+
+/// One binding of a `let`: the binding's name. Children: optional
+/// `Type` node (type ascription), then the RHS `Expr`.
+#[derive(Clone, Debug)]
+pub struct LetBinding {
+    pub name: InternedString,
 }
 
 #[derive(Clone, Debug)]

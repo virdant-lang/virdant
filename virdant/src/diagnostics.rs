@@ -145,6 +145,14 @@ pub enum DiagnosticPayload {
     /// as a statement; the idiomatic arm form is `case <cond> { <stmts> }`
     /// with driver statements.
     ArmNeedsBlock,
+    /// A `let` binding's body is a block (`{ ... }`) but the `let` is
+    /// used in an expression position, where the binding's scope must
+    /// produce a value (`=> <expr>`).
+    LetBlockNeedsArrow,
+    /// A `let` binding's body produces a value (`=> <expr>`) but the
+    /// `let` is used in a statement position, where the binding's scope
+    /// must perform driver statements (`{ <stmts> }`).
+    LetArrowNeedsBlock,
     /// A module's `for` clause names an item which is not a platform.
     ExpectedPlatform(ExpectedPlatform),
     /// A module's port set is missing a port required by its platform.
@@ -753,6 +761,12 @@ impl Diagnostic {
             }
             DiagnosticPayload::ArmNeedsBlock => {
                 "For statement-based conditionals, use `{ ... }` instead of `=>`".into()
+            }
+            DiagnosticPayload::LetBlockNeedsArrow => {
+                "For a `let` used as an expression, use `=>` instead of `{ ... }`".into()
+            }
+            DiagnosticPayload::LetArrowNeedsBlock => {
+                "For a `let` used as a statement, use `{ ... }` instead of `=>`".into()
             }
             DiagnosticPayload::RedundantUnused(d) => format!("Redundant `unused`: {}", d.path).into(),
             DiagnosticPayload::RedundantDriver(d) => format!("Redundant driver: {}", d.path).into(),
