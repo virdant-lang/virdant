@@ -58,6 +58,7 @@ impl Typing {
                 }
             }
             AstNodePayload::ExprBinOp(_expr_bin_op) => self.infer_binop(builder, context, node),
+            AstNodePayload::Let => self.infer_let(builder, context, node),
             AstNodePayload::ExprUnOp(expr_un_op) => {
                 self.infer_unop(builder, context, node, expr_un_op.op)
             }
@@ -146,6 +147,73 @@ impl Typing {
     fn infer_str<'p>(&mut self, _node: &AstNode<'p>) -> Result<Option<Type>, ()> {
         // TODO
         Ok(None)
+    }
+
+    /// Infer an expression-position `let` without an expected type:
+    /// check each binding's RHS (annotating it in this pass and
+    /// registering the beta-reduction cache), then infer the body's
+    /// type.
+    fn infer_let<'p>(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        node: &AstNode<'p>,
+    ) -> Result<Option<Type>, ()> {
+        for binding in node.let_bindings() {
+            let Some(rhs) = binding.let_binding_expr() else { continue };
+            // The RHS's expected type: the ascribed type for typed
+            // bindings, or (untyped) the expected type at the binding's
+            // first use in the body — the same query that types the
+            // binding RHS's own expr root.
+            let result = match builder
+                .get_expected_type(crate::types::ExprRoot::new(rhs.location()))
+            {
+                Some(expected_rhs) => {
+                    let result = self.check(builder, context.clone(), &rhs, &expected_rhs);
+                    self.let_attempts
+                        .insert(rhs.id(), if result.is_ok() { Some(expected_rhs) } else { None });
+                    result
+                }
+                None => match self.infer(builder, context.clone(), &rhs) {
+                    // `infer` annotates the RHS node itself when it
+                    // succeeds — no extra annotation here, or the node
+                    // would be annotated twice.
+                    Ok(Some(typ)) => {
+                        self.let_attempts.insert(rhs.id(), Some(typ));
+                        Ok(())
+                    }
+                    Ok(None) => {
+                        self.flag_cant_infer(&rhs);
+                        self.let_attempts.insert(rhs.id(), None);
+                        Err(())
+                    }
+                    Err(()) => {
+                        self.let_attempts.insert(rhs.id(), None);
+                        Err(())
+                    }
+                },
+            };
+            if result.is_err() {
+                return Err(());
+            }
+        }
+
+        let Some(body) = node.let_body() else {
+            self.flag_unknown(node, "let without a body");
+            return Err(());
+        };
+        if matches!(body.payload(), AstNodePayload::ArmBlock) {
+            // A `{`-performs body produces no value to infer.
+            self.flag_unknown(node, "let block performs; it produces no value to infer");
+            return Err(());
+        }
+        match self.infer(builder, context, &body)? {
+            Some(typ) => {
+                self.annotate(node, &typ);
+                Ok(Some(typ))
+            }
+            None => Ok(None),
+        }
     }
 
     fn infer_binop<'p>(
@@ -702,6 +770,23 @@ impl Typing {
                 // root (derived from the binding's first usage).  Uses
                 // of components inside the RHS are already recorded by
                 // the RHS root's own typing.
+                //
+                // The binding's RHS may already have been checked in
+                // this pass (`check_let`/`infer_let` check every binding
+                // before the body): reuse the recorded type rather than
+                // re-entering the RHS's own typing query — for a `let`
+                // nested inside the current expression, that query's
+                // expr root is this very pass, and re-entering it would
+                // recurse forever.
+                if let Some(cached) = self.let_attempts.get(&rhs.id()).cloned() {
+                    return match cached {
+                        Some(typ) => {
+                            self.annotate(&node, &typ);
+                            Ok(Some(typ))
+                        }
+                        None => Err(()),
+                    };
+                }
                 match builder.get_typeof(rhs.location()) {
                     Ok(typ) => {
                         self.annotate(&node, &typ);

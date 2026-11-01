@@ -33,6 +33,12 @@ pub struct Typing {
     item: Symbol,
     exprroot: ExprRoot,
     typs: IndexMap<AstNodeId, Type>,
+    /// Cache of let-binding beta-reduction checks within this pass,
+    /// keyed by the RHS expression node.  Each expression is annotated
+    /// exactly once, so the RHS of a `let` binding must be checked at
+    /// most once per pass: the first use of the binding checks it, and
+    /// later uses reuse the recorded result (`None` = the check failed).
+    let_attempts: IndexMap<AstNodeId, Option<Type>>,
     diagnostics: Vec<Diagnostic>,
     use_locations: IndexMap<BString, Vec<Location>>, // TODO should be use for Referents
     tags: IndexMap<Location, Tag>,
@@ -626,6 +632,7 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
         item: item.clone(),
         exprroot: exprroot.clone(),
         typs: IndexMap::new(),
+        let_attempts: IndexMap::new(),
         diagnostics,
         use_locations: IndexMap::new(),
         tags: IndexMap::new(),

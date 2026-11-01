@@ -20,11 +20,38 @@ impl Typing {
         // type, and annotate the reference with it.  This runs before
         // inference so that width-less literals in the binding (e.g.
         // `let x = 0`) take their width from the usage site.
+        //
+        // Each expression is annotated exactly once, so the RHS is
+        // checked at most once per pass: the first use of the binding
+        // checks it, and later uses reuse the recorded result instead
+        // of re-traversing (and re-annotating) the shared RHS nodes.
         if matches!(node.payload(), AstNodePayload::ExprReference) {
             if let Some(name_path) = node.path() {
                 let name = node.parsing().string(name_path);
                 if let Some(rhs) = crate::syntax::ast::resolve_let_binding(node, name) {
+                    if let Some(cached) = self.let_attempts.get(&rhs.id()).cloned() {
+                        return match cached {
+                            Some(rhs_typ) => {
+                                if !Self::compatible_typs(&rhs_typ, expected_typ) {
+                                    self.flag_wrong_type(node, expected_typ, &rhs_typ);
+                                    Err(())
+                                } else {
+                                    self.annotate(node, expected_typ);
+                                    Ok(())
+                                }
+                            }
+                            None => Err(()),
+                        };
+                    }
                     let result = self.check(builder, context, &rhs, expected_typ);
+                    self.let_attempts.insert(
+                        rhs.id(),
+                        if result.is_ok() {
+                            Some(expected_typ.clone())
+                        } else {
+                            None
+                        },
+                    );
                     self.annotate(node, expected_typ);
                     return result;
                 }
@@ -61,22 +88,7 @@ impl Typing {
                 }
             }
             AstNodePayload::ExprIndexRange(_expr_index_range) => Ok(()), // TODO
-            AstNodePayload::Let => {
-                // The grammar accepts a `let` in expression position,
-                // but the typing and driver-analysis passes have no
-                // `let` path yet (the `let` feature is still rolling
-                // out).  Report it as an error here rather than falling
-                // into the catch-all below: an expression-position
-                // `let` used to panic the whole process (including
-                // `vir-ls`) on any file that contained one.
-                self.diagnostics.push(Diagnostic::new(
-                    node.region(),
-                    diagnostics::Unknown {
-                        message: "let expressions are not supported yet; use a statement `let` or a `when`/`match` expression instead".into(),
-                    },
-                ));
-                Err(())
-            }
+            AstNodePayload::Let => self.check_let(builder, context, node, expected_typ),
             _ => unreachable!("Can't typecheck {:?}", node.summary()),
         }
     }
@@ -96,6 +108,83 @@ impl Typing {
         } else {
             Err(())
         }
+    }
+
+    /// Check an expression-position `let`: each binding's RHS is
+    /// checked in this pass — annotating its subtree and registering
+    /// it in the beta-reduction cache so references in the body reuse
+    /// it — then the body is checked against the let's expected type.
+    fn check_let<'p>(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        node: &AstNode<'p>,
+        expected_typ: &Type,
+    ) -> Result<(), ()> {
+        for binding in node.let_bindings() {
+            let Some(rhs) = binding.let_binding_expr() else { continue };
+            // If the RHS was already checked in this pass (e.g. by
+            // `infer_let` running before `check` dispatches here),
+            // reuse that result instead of re-checking: each
+            // expression is annotated exactly once.
+            if let Some(cached) = self.let_attempts.get(&rhs.id()).cloned() {
+                if cached.is_none() {
+                    return Err(());
+                }
+                continue;
+            }
+            // The RHS's expected type: the ascribed type for typed
+            // bindings, or (untyped) the expected type at the binding's
+            // first use in the body — the same query that types the
+            // binding RHS's own expr root.
+            let result = match builder
+                .get_expected_type(crate::types::ExprRoot::new(rhs.location()))
+            {
+                Some(expected_rhs) => {
+                    let result = self.check(builder, context.clone(), &rhs, &expected_rhs);
+                    self.let_attempts
+                        .insert(rhs.id(), if result.is_ok() { Some(expected_rhs) } else { None });
+                    result
+                }
+                None => match self.infer(builder, context.clone(), &rhs) {
+                    // `infer` annotates the RHS node itself when it
+                    // succeeds — no extra annotation here, or the node
+                    // would be annotated twice.
+                    Ok(Some(typ)) => {
+                        self.let_attempts.insert(rhs.id(), Some(typ));
+                        Ok(())
+                    }
+                    Ok(None) => {
+                        self.flag_cant_infer(&rhs);
+                        self.let_attempts.insert(rhs.id(), None);
+                        Err(())
+                    }
+                    Err(()) => {
+                        self.let_attempts.insert(rhs.id(), None);
+                        Err(())
+                    }
+                },
+            };
+            if result.is_err() {
+                return Err(());
+            }
+        }
+
+        let Some(body) = node.let_body() else {
+            self.flag_unknown(node, "let without a body");
+            return Err(());
+        };
+        if matches!(body.payload(), AstNodePayload::ArmBlock) {
+            // A `{`-performs body produces no value in expression
+            // position; the terminator-style pass reports it
+            // (`LetBlockNeedsArrow`).  Check it as a block anyway so
+            // any inner errors are still reported.
+            self.check_arm_block(builder, context, &body, expected_typ)?;
+        } else {
+            self.check(builder, context, &body, expected_typ)?;
+        }
+        self.annotate(node, expected_typ);
+        Ok(())
     }
 
     fn check_when<'p>(

@@ -207,6 +207,12 @@ fn expected_type_at_reference(builder: &mut Builder, reference: &AstNode<'_>) ->
             let (_param_name, param_typ) = sig.parameters.get(idx)?;
             Some(crate::types::substitute::substitute(param_typ, &args))
         }
+        AstNodePayload::ExprAs => {
+            // `expr : Type`: the ascription's type is the expected
+            // type of the expression it wraps.
+            let typ_node = parent.child(1);
+            builder.get_type_at(typ_node.location()).ok()
+        }
         AstNodePayload::ExprParen => expected_type_at_reference(builder, &parent),
         _ => None,
     }

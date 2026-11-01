@@ -1,0 +1,3 @@
+kind = "check"
+description = "A `let` binding referenced multiple times within one `when` expression must not re-check its RHS (each expr is annotated exactly once)."
+expect = "ok"

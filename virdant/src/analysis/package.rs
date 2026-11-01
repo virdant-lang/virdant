@@ -435,26 +435,22 @@ impl PackageAnalysis {
     fn add_expr_when_match_roots(&mut self, expr_node: AstNode<'_>) {
         match expr_node.payload() {
             AstNodePayload::When => {
-                // When children: [guard_0?, body_0, guard_1?, body_1, ...]
+                // When children: [guard_0?, body_0, guard_1?, body_1, ...].
+                // Use the positional arm iterator: an `else` arm's body is
+                // also an expression, so "first child is an expr" cannot
+                // distinguish a case guard from an else body (a trailing
+                // `else when {...}`/`else match {...}` body would
+                // otherwise be misclassified as a guard and pushed as an
+                // expr root with a guard's expected type).
+                use crate::syntax::ast::when_arm_children;
                 let children = expr_node.children();
-                let mut idx = 0;
-                while let Some(first) = children.get(idx) {
-                    if first.is_expr() {
-                        // case arm: guard + body
-                        self.expr_roots.push(first.id());
-                        self.add_expr_when_match_roots(first.clone());
-                        if let Some(body) = children.get(idx + 1) {
-                            if body.is_expr() {
-                                self.add_expr_when_match_roots(body.clone());
-                            }
-                        }
-                        idx += 2;
-                    } else {
-                        // else arm: body only
-                        if first.is_expr() {
-                            self.add_expr_when_match_roots(first.clone());
-                        }
-                        idx += 1;
+                for (guard, body) in when_arm_children(&children) {
+                    if let Some(guard) = guard {
+                        self.expr_roots.push(guard.id());
+                        self.add_expr_when_match_roots(guard.clone());
+                    }
+                    if body.is_expr() {
+                        self.add_expr_when_match_roots(body.clone());
                     }
                 }
             }
