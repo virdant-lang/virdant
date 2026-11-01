@@ -13,11 +13,11 @@ with their types and directions.
 .. code-block:: grammar
 
     SocketDef :=
-        DocString Annotations "socket" Ident Generics? "{" SocketDefStmt* "}"
+        DocString? Annotations "pub"? "socket" Ident Generics? "{" SocketDefStmt* "}"
 
     SocketDefStmt :=
-        DocString Annotations "cosi" Ident ":" Type
-        | DocString Annotations "soci" Ident ":" Type
+        DocString? Annotations "cosi" Ident ":" Type
+        | DocString? Annotations "soci" Ident ":" Type
 
 .. code-block:: virdant
 
@@ -73,8 +73,8 @@ Each instance must specify its role: `client` or `server`.
 .. code-block:: grammar
 
     ModDefStmtSocket :=
-        DocString Annotations "client" "socket" Ident "of" Ofness GenericsParams? ItBlock?
-        | DocString Annotations "server" "socket" Ident "of" Ofness GenericsParams? ItBlock?
+        DocString? Annotations "client" "socket" Ident "of" Ofness GenericsParams? ItBlock?
+        | DocString? Annotations "server" "socket" Ident "of" Ofness GenericsParams? ItBlock?
 
 .. code-block:: virdant
 
@@ -289,7 +289,7 @@ handshake channel.
 
 .. code-block:: virdant
 
-    socket Pipe[T : Type] {
+    pub socket Pipe[T : Type] {
         cosi data  : Valid[T]
         soci ready : Bit
     }

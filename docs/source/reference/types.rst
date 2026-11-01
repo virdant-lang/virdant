@@ -94,7 +94,7 @@ Unlike `Clock`, `Bit`, and `Word[n]`, which are built into the compiler,
 
 .. code-block:: virdant
 
-    enum type Valid[T : Type] {
+    pub enum type Valid[T : Type] {
         Invalid
         Valid(value : T)
     }
@@ -431,7 +431,7 @@ The builtin `Valid[T]` type is exactly such a generic payload enum
 
 .. code-block:: virdant
 
-    enum type Valid[T : Type] {
+    pub enum type Valid[T : Type] {
         Invalid
         Valid(value : T)
     }

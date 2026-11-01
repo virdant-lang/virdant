@@ -12,14 +12,20 @@ ports, components, instances, and control flow.
 
 .. code-block:: grammar
 
-    ModDefStmt :=
+    ModDefStmtCore :=
         ModDefStmtComponent
         | ModDefStmtDriver
         | ModDefStmtInstance
         | ModDefStmtSocket
-        | ModDefStmtMatch
         | ModDefStmtUnused
+        | ModDefStmtInitial
         | ModDefStmtDependsOn
+
+    ModDefStmt :=
+        ModDefStmtCore
+        | When
+        | Match
+        | Let
 
 The order of statements within a module body does not matter.
 Virdant processes the module body as a set of declarations, not as a sequence
@@ -34,14 +40,14 @@ They are declared with a direction, a name, and a type.
 .. code-block:: grammar
 
     ModDefStmtComponent :=
-        DocString Annotations "incoming" Ident ":" Type OnClause? ItBlock?
-        | DocString Annotations "outgoing" Ident ":" Type DefaultClause? OnClause? ItBlock?
-        | DocString Annotations "bus" Ident ":" Type ItBlock?
-        | DocString Annotations "net" Ident ":" Type ItBlock?
-        | DocString Annotations "outgoing" "wire" Ident ":" Type DefaultClause? OnClause? ItBlock?
-        | DocString Annotations "outgoing" "reg" Ident ":" Type DefaultClause? OnClause? ItBlock?
-        | DocString Annotations "wire" Ident ":" Type OnClause? ItBlock?
-        | DocString Annotations "reg" Ident ":" Type OnClause? ItBlock?
+        DocString? Annotations "incoming" Ident ":" Type OnClause? ItBlock?
+        | DocString? Annotations "outgoing" Ident ":" Type DefaultClause? OnClause? ItBlock?
+        | DocString? Annotations "bus" Ident ":" Type ItBlock?
+        | DocString? Annotations "net" Ident ":" Type ItBlock?
+        | DocString? Annotations "outgoing" "wire" Ident ":" Type DefaultClause? OnClause? ItBlock?
+        | DocString? Annotations "outgoing" "reg" Ident ":" Type DefaultClause? OnClause? ItBlock?
+        | DocString? Annotations "wire" Ident ":" Type OnClause? ItBlock?
+        | DocString? Annotations "reg" Ident ":" Type OnClause? ItBlock?
 
     DefaultClause := "default" Expr
 
@@ -200,7 +206,7 @@ Module instances allow you to compose larger designs from smaller modules.
 .. code-block:: grammar
 
     ModDefStmtInstance :=
-        DocString Annotations "mod" Ident "of" Ofness GenericsParams? ItBlock?
+        DocString? Annotations "mod" Ident "of" Ofness GenericsParams? ItBlock?
 
 .. code-block:: virdant
 
@@ -386,8 +392,8 @@ Sockets provide a way to group related ports and connect them as a unit.
 .. code-block:: grammar
 
     ModDefStmtSocket :=
-        DocString Annotations "client" "socket" Ident "of" Ofness ItBlock?
-        | DocString Annotations "server" "socket" Ident "of" Ofness ItBlock?
+        DocString? Annotations "client" "socket" Ident "of" Ofness GenericsParams? ItBlock?
+        | DocString? Annotations "server" "socket" Ident "of" Ofness GenericsParams? ItBlock?
 
 .. code-block:: virdant
 
@@ -408,27 +414,48 @@ Match statements enable pattern-based conditional logic in module bodies.
 
 .. code-block:: grammar
 
-    ModDefStmtMatch :=
-        "match" Expr "{" ModDefStmtMatchArm* "}"
+    Match := "match" Expr "{" MatchArm* "}"
 
-    ModDefStmtMatchArm :=
-        "case" Pat "=>" ModDefStmtBlock
-        | "else" "=>" ModDefStmtBlock
+    MatchArm :=
+        "case" Pat "=>" Expr
+        | "case" Pat ArmBlock
+        | "case" Pat When
+        | "case" Pat Match
+        | "case" Pat Let
+        | "else" "=>" Expr
+        | "else" ArmBlock
+        | "else" When
+        | "else" Match
+        | "else" Let
+
+    ArmBlock :=
+        "{" ModDefStmt* "}"
+        | "{" ArmBlockExpr "}"
 
 .. code-block:: virdant
 
+    enum type StateE {
+        Idle
+        Run
+        Halt
+    }
+
+    reg state : StateE on clock
+    reg r : Word[8] on clock
+    outgoing out : Word[8]
+
     match state {
-        case #Idle => {
-            r <= 0
-            out := ready
+        case #Idle {
+            r <= 0w8
+            out := 0w8
+            state <= #Run
         }
-        case #Active => {
-            r <= r + 1
-            out := busy
+        case #Run {
+            r <= r + 1w8
+            out := r
         }
-        else => {
-            r <= r
-            out := idle
+        else {
+            out := 0w8
         }
     }
 
@@ -488,8 +515,15 @@ The `on` clause associates a register with a clock signal.
 
     reg r : Word[8] on clock
 
-Every register must have exactly one `on` clause.
 The clock signal referenced in the `on` clause must be of type `Clock`.
+
+Every `reg` declaration must have an `on` clause,
+unless the module declares *exactly one* component of type `Clock`.
+In that case the `on` clause is optional on every `reg` declaration,
+and an omitted `on` clause is equivalent to writing `on` with that
+component (see :doc:`statements`).
+If the module declares zero or more than one component of type `Clock`,
+every `reg` declaration needs an explicit `on` clause.
 
 The register latches its input value on the rising edge of the named clock.
 All registers driven by the same clock form a single clock domain.

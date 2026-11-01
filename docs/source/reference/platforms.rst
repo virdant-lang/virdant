@@ -19,7 +19,7 @@ preceded by a documentation comment (`//>`) and annotations.
 .. code-block:: grammar
 
     PlatformDef :=
-        DocString Annotations "platform" Ident "{" PlatformStmt* "}"
+        DocString? Annotations "platform" Ident "{" PlatformStmt* "}"
 
     PlatformStmt :=
         ModDefStmtComponent
@@ -40,7 +40,7 @@ as-is. See `Platform Defaults`_ below.
 
     @fpga("ice40")
     @part("up5k-sg48")
-    platform IceSugar {
+    pub platform IceSugar {
         @pin(35) incoming clock : Clock
         @pin(39) outgoing led   : Bit
     }
@@ -81,7 +81,7 @@ clause, written after the module name and before the body:
 .. code-block:: grammar
 
     ModDef :=
-        DocString Annotations "pub"? "ext"? "mod" Ident ForClause? "{" ModDefStmt* "}"
+        DocString? Annotations "pub"? "ext"? "mod" Ident ForClause? Generics? "{" ModDefStmt* "}"
 
     ForClause :=
         "for" Ofness
@@ -219,7 +219,7 @@ It currently defines two boards, the iCESugar and the iCEstick:
     //> Lattice iCE40-UP5K, SG48 package, programmed over USB.
     @fpga("ice40")
     @part("up5k-sg48")
-    platform IceSugar {
+    pub platform IceSugar {
         //> Primary 12 MHz clock on pin 35.
         @period_ns("83.33")
         @pin(35)

@@ -8,9 +8,25 @@ destructure values and bind their components to names.
     Pat :=
         "#" Ident
         | "@" Ident
-        | "@" Ident "(" ArgList ")"
+        | "@" Ident "(" PatList ")"
         | WordLit
         | BitLit
+        | Ident
+        | "dontcare"
+
+The `#`, `@`, and literal patterns described below are the fully
+supported forms.
+The grammar also admits bare `Ident` and `dontcare` patterns, but the
+match-coverage checker does not yet handle them correctly, so they are
+not recommended for use yet.
+
+.. _patlist:
+
+.. code-block:: grammar
+
+    PatList :=
+        (Pat ",")+ Pat ","?
+        | Pat ","?
 
 
 Enum Patterns
@@ -88,7 +104,7 @@ optionally binding the variant's associated data to names.
 
     Pat :=
         "@" Ident
-        | "@" Ident "(" ArgList ")"
+        | "@" Ident "(" PatList ")"
 
 The `@` syntax selects a variant of a union type.
 
@@ -124,7 +140,7 @@ optional values:
 
 .. code-block:: grammar
 
-    Pat := "@" "Valid" "(" ArgList ")" | "@" "Invalid" "(" ")"
+    Pat := "@" "Valid" "(" PatList ")" | "@" "Invalid" "(" ")"
 
 * `@Valid(x)` matches a valid value and binds the inner value to `x`.
 * `@Invalid()` matches an invalid (absent) value.
@@ -242,11 +258,11 @@ instead of a single expression.
 .. code-block:: virdant
 
     match union_val {
-        case @Foo() => {
+        case @Foo() {
             out := 0
             flag := true
         }
-        case @Bar(x) => {
+        case @Bar(x) {
             out := x
             flag := false
         }

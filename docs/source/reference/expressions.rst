@@ -14,32 +14,34 @@ The full expression grammar, from highest to lowest precedence:
 
 .. code-block:: grammar
 
-    Expr :=
-        ExprWhen | ExprMatch | ExprLet | ExprStruct | ExprBinOpLogical
+    Expr := When | Match | Let | ExprStruct | ExprBinOpLogical
 
-    ExprWhen         := "when" "{" ExprWhenArm* "}"
-    ExprWhenArm      := "case" Expr "=>" Expr
-                        | "case" Expr ModDefStmtBlock
-                        | "case" Expr ExprWhen
-                        | "case" Expr ExprMatch
-                        | "case" Expr ExprLet
-                        | "else" "=>" Expr
-                        | "else" ModDefStmtBlock
-                        | "else" ExprWhen
-                        | "else" ExprMatch
-                        | "else" ExprLet
-    ExprMatch        := "match" Expr "{" ExprMatchArm* "}"
-    ExprMatchArm     := "case" Pat "=>" Expr
-                        | "case" Pat ModDefStmtBlock
-                        | "case" Pat ExprWhen
-                        | "case" Pat ExprMatch
-                        | "case" Pat ExprLet
-                        | "else" "=>" Expr
-                        | "else" ModDefStmtBlock
-                        | "else" ExprWhen
-                        | "else" ExprMatch
-                        | "else" ExprLet
-    ExprLet          := "let" LetBindingList ( ModDefStmtBlock | "=>" Expr | ExprWhen | ExprMatch )
+    When := "when" "{" WhenArm* "}"
+    WhenArm      := "case" Expr "=>" Expr
+                    | "case" Expr ArmBlock
+                    | "case" Expr When
+                    | "case" Expr Match
+                    | "case" Expr Let
+                    | "else" "=>" Expr
+                    | "else" ArmBlock
+                    | "else" When
+                    | "else" Match
+                    | "else" Let
+    Match        := "match" Expr "{" MatchArm* "}"
+    MatchArm     := "case" Pat "=>" Expr
+                    | "case" Pat ArmBlock
+                    | "case" Pat When
+                    | "case" Pat Match
+                    | "case" Pat Let
+                    | "else" "=>" Expr
+                    | "else" ArmBlock
+                    | "else" When
+                    | "else" Match
+                    | "else" Let
+    Let          := "let" LetBindingList ArmBlock
+                    | "let" LetBindingList "=>" Expr
+                    | "let" LetBindingList When
+                    | "let" LetBindingList Match
     LetBindingList   := LetBinding | LetBindingList "," LetBinding
     LetBinding       := Ident ":" Type "=" Expr | Ident "=" Expr
     ExprStruct       := "$" "{" AssignList "}"
@@ -48,14 +50,15 @@ The full expression grammar, from highest to lowest precedence:
     ExprBinOpAdditive:= ExprBinOpAdditive ( "+" | "-" | "&" | "|" | "^" ) ExprUnOp | ExprUnOp
     ExprUnOp         := ( "-" | "~" | "!" ) ExprUnOp | "tap" Path | ExprAscription
     ExprAscription   := ExprPrimary ":" Type | ExprPrimary
-    ExprPrimary      := Ofness "(" ArgList ")"
+    ExprPrimary      := Ofness "(" ArgList? ")"
                        | ExprPrimary "->" Ident
                        | ExprPrimary "[" Index "]"
                        | ExprPrimary "[" Index ".." Index "]"
                        | ExprPrimary "[" "dyn" Expr "]"
-                       | "@" Ident "(" ArgList ")"
+                       | "@" Ident "(" ArgList? ")"
                        | ExprAtom
     ExprAtom         := Path | WordLit | BitLit | "Str" | "#" Ident | "@" Ident | "?" | "dontcare" | "(" Expr ")"
+    Index            := "Nat"
 
 
 Precedence and Associativity
@@ -153,7 +156,7 @@ Struct values are constructed using the `$` syntax.
 .. code-block:: virdant
 
     wire color : Color
-    color := ${ red = 0, red = 0, blue = 0 }
+    color := ${ red = 0, green = 0, blue = 0 }
 
 Fields may be assigned in any order.
 All fields must be assigned.
@@ -238,7 +241,7 @@ Union values are constructed using the `@` syntax with the variant name.
 .. code-block:: grammar
 
     ExprPrimary :=
-        "@" Ident "(" ArgList ")"
+        "@" Ident "(" ArgList? ")"
 
 For a variant with no associated data, use empty parentheses:
 
@@ -276,18 +279,19 @@ When expressions select between two or more branches based on conditions.
 
 .. code-block:: grammar
 
-    ExprWhen :=
-        "when" "{" ExprWhenArm* "}"
+    When := "when" "{" WhenArm* "}"
 
-    ExprWhenArm :=
+    WhenArm :=
         "case" Expr "=>" Expr
-        | "case" Expr ModDefStmtBlock
-        | "case" Expr ExprWhen
-        | "case" Expr ExprMatch
+        | "case" Expr ArmBlock
+        | "case" Expr When
+        | "case" Expr Match
+        | "case" Expr Let
         | "else" "=>" Expr
-        | "else" ModDefStmtBlock
-        | "else" ExprWhen
-        | "else" ExprMatch
+        | "else" ArmBlock
+        | "else" When
+        | "else" Match
+        | "else" Let
 
 .. code-block:: virdant
 
@@ -312,7 +316,7 @@ The `when` expression requires an `else` arm.
 
 Arm Syntax
 ~~~~~~~~~~
-Each arm may use one of four forms:
+Each arm may use one of five forms:
 
 1. Bare expression: `case cond => expr`
 2. Block: `case cond { stmts }`
@@ -331,11 +335,11 @@ In expression position, a `let` must produce a value with `=>`:
 
 .. code-block:: grammar
 
-    ExprLet :=
-        "let" LetBindingList "=>" Expr
-        | "let" LetBindingList ModDefStmtBlock
-        | "let" LetBindingList ExprWhen
-        | "let" LetBindingList ExprMatch
+    Let :=
+        "let" LetBindingList ArmBlock
+        | "let" LetBindingList "=>" Expr
+        | "let" LetBindingList When
+        | "let" LetBindingList Match
 
 .. code-block:: virdant
 
@@ -360,18 +364,19 @@ Match expressions perform pattern matching on a value.
 
 .. code-block:: grammar
 
-    ExprMatch :=
-        "match" Expr "{" ExprMatchArm* "}"
+    Match := "match" Expr "{" MatchArm* "}"
 
-    ExprMatchArm :=
+    MatchArm :=
         "case" Pat "=>" Expr
-        | "case" Pat ModDefStmtBlock
-        | "case" Pat ExprWhen
-        | "case" Pat ExprMatch
+        | "case" Pat ArmBlock
+        | "case" Pat When
+        | "case" Pat Match
+        | "case" Pat Let
         | "else" "=>" Expr
-        | "else" ModDefStmtBlock
-        | "else" ExprWhen
-        | "else" ExprMatch
+        | "else" ArmBlock
+        | "else" When
+        | "else" Match
+        | "else" Let
 
 .. code-block:: virdant
 
@@ -391,13 +396,14 @@ If no `else` arm is present, the match must be exhaustive.
 
 Arm Syntax
 ~~~~~~~~~~
-Each arm may use one of four forms:
+Each arm may use one of five forms:
 
 1. Bare expression: `case pat => expr`
 2. Block: `case pat { stmts }`
    (blocks must contain a single expression to be valid in expression context)
 3. Nested `when`: `case pat when { ... }`
 4. Nested `match`: `case pat match expr { ... }`
+5. Let binding: `case pat let x = expr => ...`
 
 The same forms apply to the `else` arm.
 
@@ -412,8 +418,8 @@ function call syntax.
 .. code-block:: grammar
 
     ExprPrimary :=
-        Ofness "(" ArgList ")"
-        | "@" Ident "(" ArgList ")"
+        Ofness "(" ArgList? ")"
+        | "@" Ident "(" ArgList? ")"
 
 .. code-block:: virdant
 

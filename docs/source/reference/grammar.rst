@@ -112,15 +112,16 @@ Keywords
 --------
 The following words are reserved as keywords and may not be used as identifiers:
 
-.. code-block::
+.. code-block:: text
 
-    builtin  case     client   cosi     default    dependson
-    dontcare dyn      else     enum     ext        false
-    for      import   incoming initial  it         let
-    match    mod      net      of       on         outgoing
-    platform pub      reg      server   soci       socket
-    struct   tap      true     type     union      unused
-    when     wire
+    builtin   bus       case      client    cosi      default
+    dependson dontcare  dyn       else      enum      export
+    ext       false     fn        for       if        import
+    incoming  initial   it        let       match     mod
+    net       of        on        outgoing  platform  pub
+    reg       server    soci      socket    submod    struct
+    tap       true      type      union     unused    when
+    width     wire
 
 
 Literals

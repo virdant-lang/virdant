@@ -73,7 +73,7 @@ Here are two ordinary comments from inside the `Strobe` module:
 
 .. literalinclude:: /examples/blink/src/strobe.vir
     :language: virdant
-    :lines: 24-25
+    :lines: 22-23
     :dedent:
 
 Match and When Chaining
@@ -86,7 +86,7 @@ It's inside of this `when` block:
 
 .. literalinclude:: /examples/blink/src/strobe.vir
     :language: virdant
-    :lines: 21-27
+    :lines: 19-27
     :dedent:
 
 Normally, we have a `=>` after each `case` and after the `else` in a `when` block.

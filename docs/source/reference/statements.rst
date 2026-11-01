@@ -10,9 +10,10 @@ The full set of module body statements includes:
 * Driver statements (assignments)
 * Instance declarations
 * Socket instance declarations
-* Conditional statements (when)
+* Conditional statements (`when`)
 * Match statements
 * Let bindings
+* Dependency declarations (`dependson`)
 * Unused declarations
 * Initial declarations
 
@@ -28,14 +29,14 @@ Component declarations introduce named signals into a module.
 .. code-block:: grammar
 
     ModDefStmtComponent :=
-        DocString Annotations "incoming" Ident ":" Type OnClause? ItBlock?
-        | DocString Annotations "outgoing" Ident ":" Type DefaultClause? OnClause? ItBlock?
-        | DocString Annotations "bus" Ident ":" Type ItBlock?
-        | DocString Annotations "net" Ident ":" Type ItBlock?
-        | DocString Annotations "outgoing" "wire" Ident ":" Type DefaultClause? OnClause? ItBlock?
-        | DocString Annotations "outgoing" "reg" Ident ":" Type DefaultClause? OnClause? ItBlock?
-        | DocString Annotations "wire" Ident ":" Type OnClause? ItBlock?
-        | DocString Annotations "reg" Ident ":" Type OnClause? ItBlock?
+        DocString? Annotations "incoming" Ident ":" Type OnClause? ItBlock?
+        | DocString? Annotations "outgoing" Ident ":" Type DefaultClause? OnClause? ItBlock?
+        | DocString? Annotations "bus" Ident ":" Type ItBlock?
+        | DocString? Annotations "net" Ident ":" Type ItBlock?
+        | DocString? Annotations "outgoing" "wire" Ident ":" Type DefaultClause? OnClause? ItBlock?
+        | DocString? Annotations "outgoing" "reg" Ident ":" Type DefaultClause? OnClause? ItBlock?
+        | DocString? Annotations "wire" Ident ":" Type OnClause? ItBlock?
+        | DocString? Annotations "reg" Ident ":" Type OnClause? ItBlock?
 
     DefaultClause := "default" Expr
 
@@ -173,7 +174,7 @@ Instance declarations instantiate a submodule inside the current module.
 .. code-block:: grammar
 
     ModDefStmtInstance :=
-        DocString Annotations "mod" Ident "of" Ofness ItBlock?
+        DocString? Annotations "mod" Ident "of" Ofness GenericsParams? ItBlock?
 
 The instance name must be unique within the enclosing module.
 Ports on the instance are accessed via dot notation.
@@ -204,8 +205,8 @@ Socket instances declare either a client or server role for a socket type.
 .. code-block:: grammar
 
     ModDefStmtSocket :=
-        DocString Annotations "client" "socket" Ident "of" Ofness ItBlock?
-        | DocString Annotations "server" "socket" Ident "of" Ofness ItBlock?
+        DocString? Annotations "client" "socket" Ident "of" Ofness GenericsParams? ItBlock?
+        | DocString? Annotations "server" "socket" Ident "of" Ofness GenericsParams? ItBlock?
 
 .. code-block:: virdant
 
@@ -223,17 +224,23 @@ statements depending on conditions.
 
 .. code-block:: grammar
 
-    ModDefStmtWhen := "when" "{" ModDefStmtWhenArm* "}"
+    When := "when" "{" WhenArm* "}"
 
-    ModDefStmtWhenArm :=
+    WhenArm :=
         "case" Expr "=>" Expr
-        | "case" Expr ModDefStmtBlock
-        | "case" Expr ModDefStmtWhen
-        | "case" Expr ModDefStmtMatch
+        | "case" Expr ArmBlock
+        | "case" Expr When
+        | "case" Expr Match
+        | "case" Expr Let
         | "else" "=>" Expr
-        | "else" ModDefStmtBlock
-        | "else" ModDefStmtWhen
-        | "else" ModDefStmtMatch
+        | "else" ArmBlock
+        | "else" When
+        | "else" Match
+        | "else" Let
+
+    ArmBlock :=
+        "{" ModDefStmt* "}"
+        | "{" ArmBlockExpr "}"
 
 .. code-block:: virdant
 
@@ -247,7 +254,6 @@ statements depending on conditions.
             state := #Active
         }
         else {
-            r <= r
             state := #Idle
         }
     }
@@ -258,7 +264,7 @@ though it is recommended for completeness.
 
 Arm Syntax
 ~~~~~~~~~~
-Each arm may use one of four forms:
+Each arm may use one of five forms:
 
 1. Bare expression: `case cond => expr` (rarely used in statement context)
 2. Block: `case cond { stmts }`
@@ -279,39 +285,54 @@ Match statements perform pattern-based dispatch in the module body.
 
 .. code-block:: grammar
 
-    ModDefStmtMatch :=
-        "match" Expr "{" ModDefStmtMatchArm* "}"
+    Match := "match" Expr "{" MatchArm* "}"
 
-    ModDefStmtMatchArm :=
+    MatchArm :=
         "case" Pat "=>" Expr
-        | "case" Pat ModDefStmtBlock
-        | "case" Pat ModDefStmtWhen
-        | "case" Pat ModDefStmtMatch
+        | "case" Pat ArmBlock
+        | "case" Pat When
+        | "case" Pat Match
+        | "case" Pat Let
         | "else" "=>" Expr
-        | "else" ModDefStmtBlock
-        | "else" ModDefStmtWhen
-        | "else" ModDefStmtMatch
+        | "else" ArmBlock
+        | "else" When
+        | "else" Match
+        | "else" Let
+
+    ArmBlock :=
+        "{" ModDefStmt* "}"
+        | "{" ArmBlockExpr "}"
 
 .. code-block:: virdant
 
+    enum type StateE {
+        Idle
+        Run
+        Halt
+    }
+
+    reg state : StateE on clock
+    reg r : Word[8] on clock
+    outgoing out : Word[8]
+
     match state {
-        case #Idle => {
-            r <= 0
-            out := ready
+        case #Idle {
+            r <= 0w8
+            out := 0w8
+            state <= #Run
         }
-        case #Active => {
-            r <= r + 1
-            out := busy
+        case #Run {
+            r <= r + 1w8
+            out := r
         }
-        else => {
-            r <= r
-            out := idle
+        else {
+            out := 0w8
         }
     }
 
 Arm Syntax
 ~~~~~~~~~~
-Each arm may use one of four forms:
+Each arm may use one of five forms:
 
 1. Bare expression: `case pat => expr` (rarely used in statement context)
 2. Block: `case pat { stmts }`
