@@ -1,0 +1,3 @@
+kind = "run"
+description = "Count to 5 in 5 cycles"
+cycle_limit = 5

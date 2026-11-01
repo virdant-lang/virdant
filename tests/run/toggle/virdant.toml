@@ -1,0 +1,5 @@
+[project]
+name = "toggle"
+
+[prog]
+top = "toggle::Toggle"

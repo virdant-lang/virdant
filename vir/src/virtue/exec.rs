@@ -115,6 +115,7 @@ pub fn run_test(env: &Env, test: &Test) -> Outcome {
     let outcome = match test.kind {
         Kind::Check => run_check(env, test),
         Kind::Sim => run_sim(env, test),
+        Kind::Run => run_run(env, test),
         Kind::Format => run_format(env, test),
         Kind::Golden => run_golden(env, test),
         Kind::Doc => run_doc(env, test),
@@ -363,6 +364,96 @@ fn run_sim(env: &Env, test: &Test) -> Outcome {
         filecheck_stderr: None,
         steps,
         duration: Duration::from_secs(0),
+    }
+}
+
+// --- kind = "run" ---------------------------------------------------------------
+
+/// Run `vir run` on the test's project.  The test passes iff the
+/// command exits 0; any nonzero exit (or a spawn failure) fails it.
+fn run_run(env: &Env, test: &Test) -> Outcome {
+    let dir = env.test_dir(test);
+    let target_release = env.root.join("target/release");
+    let mut argv = vec![env.vir.to_string_lossy().to_string(), "run".to_string()];
+    if let Some(cycles) = test.run_cfg.cycle_limit {
+        argv.push(format!("--cycles={cycles}"));
+    }
+    // `--trace` (with no value) makes `vir run` write the board's VCD
+    // to `build/trace.vcd` for the golden comparison below.
+    if test.run_cfg.trace {
+        let _ = std::fs::create_dir_all(dir.join("build"));
+        argv.push("--trace=build/trace.vcd".to_string());
+    }
+    argv.extend(test.run_cfg.args.iter().cloned());
+
+    let step = run_command(&argv, &dir, Some(&target_release));
+    let steps = vec![step];
+
+    if steps[0].code != Some(0) {
+        let desc = steps[0].exit_description();
+        return fail(steps, format!("vir run failed ({desc})"), None);
+    }
+
+    if test.run_cfg.trace {
+        return check_trace(&dir, steps);
+    }
+
+    Outcome {
+        status: Status::Pass,
+        failure: None,
+        filecheck_stderr: None,
+        steps,
+        duration: Duration::from_secs(0),
+    }
+}
+
+/// `trace = true`: compare the VCD written by `vir run --trace`
+/// against the golden file.  The comparison is semantic (see
+/// `vcd::parse`/`vcd::Dump::diff`): it checks the value history of
+/// every variable — each variable's sequence of (time, value) change
+/// points — rather than the raw bytes, so changes to VCD emission
+/// (identifier codes, scope layout, ordering, header text, no-op
+/// timestamps) do not cause false failures.
+fn check_trace(dir: &Path, steps: Vec<StepResult>) -> Outcome {
+    let golden = dir.join("trace.golden.vcd");
+    let actual = dir.join("build/trace.vcd");
+
+    let read = |path: &Path| -> Option<String> {
+        std::fs::read(path).ok().map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+    };
+    let (Some(golden_text), Some(actual_text)) = (read(&golden), read(&actual)) else {
+        let missing = if !golden.exists() {
+            format!("missing golden trace {}", golden.display())
+        } else {
+            format!("{} did not produce a trace", steps[0].command)
+        };
+        return fail(steps, missing, None);
+    };
+
+    let parsed = |text: &str, what: &str| -> Result<super::vcd::Dump, String> {
+        super::vcd::parse(text).map_err(|e| format!("{what}: {e}"))
+    };
+    let (golden_dump, actual_dump) = match (
+        parsed(&golden_text, "trace.golden.vcd"),
+        parsed(&actual_text, "build/trace.vcd"),
+    ) {
+        (Ok(g), Ok(a)) => (g, a),
+        (Err(e), _) | (_, Err(e)) => return fail(steps, e, None),
+    };
+
+    match super::vcd::diff(&actual_dump, &golden_dump) {
+        Ok(()) => Outcome {
+            status: Status::Pass,
+            failure: None,
+            filecheck_stderr: None,
+            steps,
+            duration: Duration::from_secs(0),
+        },
+        Err(why) => fail(
+            steps,
+            format!("VCD trace differs from trace.golden.vcd: {why}"),
+            None,
+        ),
     }
 }
 

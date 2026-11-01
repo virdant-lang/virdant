@@ -1,0 +1,4 @@
+kind = "run"
+description = "Toggle a bit every cycle for 32 cycles (0, 1, 0, 1, ...), checked against a golden VCD"
+cycle_limit = 32
+trace = true

@@ -23,6 +23,7 @@ pub struct Test {
     pub kind: Kind,
     pub check_cfg: CheckCfg,
     pub sim_cfg: SimCfg,
+    pub run_cfg: RunCfg,
     pub format_cfg: FormatCfg,
     pub golden_cfg: GoldenCfg,
     pub doc_cfg: DocCfg,
@@ -34,6 +35,8 @@ pub enum Kind {
     Check,
     /// `vir build` + iverilog / verilator simulation.
     Sim,
+    /// `vir run` on a project; the test passes iff `vir run` exits 0.
+    Run,
     /// `vir format` compared against a golden file.
     Format,
     /// `vir build` output compared against a reference.
@@ -72,6 +75,20 @@ pub struct SimCfg {
     pub sources: Option<Vec<String>>,
     /// verilator only: pass `--lint-only` (default true for verilator).
     pub lint_only: bool,
+}
+
+/// `kind = "run"` configuration: extra arguments passed to `vir run`.
+#[derive(Debug, Clone)]
+pub struct RunCfg {
+    /// Arguments appended after `vir run` (default none).
+    pub args: Vec<String>,
+    /// Pass `--cycles=N` to `vir run`: stop the board after N emulated
+    /// clock cycles (exit code 124).  None runs without a limit.
+    pub cycle_limit: Option<u64>,
+    /// Run `vir run --trace` and compare the VCD it writes
+    /// (`build/trace.vcd`) byte for byte against `trace.golden.vcd`
+    /// in the test directory.
+    pub trace: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -142,6 +159,7 @@ pub(crate) fn test_stub(name: &str, description: &str) -> Test {
             sources: None,
             lint_only: false,
         },
+        run_cfg: RunCfg { args: vec![], cycle_limit: None, trace: false },
         format_cfg: FormatCfg {
             input: std::path::PathBuf::from("input.vir"),
             golden: std::path::PathBuf::from("golden.vir"),
@@ -169,6 +187,10 @@ struct TestToml {
     flags: Option<Vec<String>>,
     sources: Option<Vec<String>>,
     lint_only: Option<bool>,
+    // kind = "run"
+    run_args: Option<Vec<String>>,
+    cycle_limit: Option<u64>,
+    trace: Option<bool>,
     // kind = "format"
     input: Option<PathBuf>,
     golden: Option<PathBuf>,
@@ -223,12 +245,13 @@ pub fn parse_test_toml(dir: &Path, text: &str) -> Result<Test, String> {
     let kind = match raw.kind.as_str() {
         "check" => Kind::Check,
         "sim" => Kind::Sim,
+        "run" => Kind::Run,
         "format" => Kind::Format,
         "golden" => Kind::Golden,
         "doc" => Kind::Doc,
         other => {
             return Err(format!(
-                "{}: unknown kind {:?} (use check | sim | format | golden | doc)",
+                "{}: unknown kind {:?} (use check | sim | run | format | golden | doc)",
                 dir.join("test.toml").display(),
                 other
             ))
@@ -278,6 +301,12 @@ pub fn parse_test_toml(dir: &Path, text: &str) -> Result<Test, String> {
         lint_only: raw.lint_only.unwrap_or(true),
     };
 
+    let run_cfg = RunCfg {
+        args: raw.run_args.clone().unwrap_or_default(),
+        cycle_limit: raw.cycle_limit,
+        trace: raw.trace.unwrap_or(false),
+    };
+
     let format_cfg = FormatCfg {
         input: raw.input.clone().unwrap_or_else(|| PathBuf::from("input.vir")),
         golden: raw.golden.clone().unwrap_or_else(|| PathBuf::from("golden.vir")),
@@ -301,6 +330,7 @@ pub fn parse_test_toml(dir: &Path, text: &str) -> Result<Test, String> {
         kind,
         check_cfg,
         sim_cfg,
+        run_cfg,
         format_cfg,
         golden_cfg,
         doc_cfg,

@@ -10,7 +10,7 @@
 //!   vir-virtue                     run all tests
 //!   vir-virtue <test> ...          run only the named tests
 //!   vir-virtue --list              list all tests
-//!   vir-virtue --suite sim         run one suite
+//!   vir-virtue --suite tests/sim   run tests under this path prefix
 //!   vir-virtue --filter substr     run matching tests
 //!   vir-virtue --filecheck <file>  standalone FileCheck mode
 
@@ -27,6 +27,7 @@ mod discovery;
 mod exec;
 mod filecheck;
 mod output;
+mod vcd;
 
 use discovery::Test;
 use exec::{Env, Status};
@@ -57,7 +58,8 @@ struct Args {
     #[arg(long)]
     filecheck: bool,
 
-    /// Run only one suite (top-level group of the test path, e.g. `sim`)
+    /// Run only tests whose name starts with this path prefix
+    /// (e.g. `tests/sim` or `tests/sim/pipe`)
     #[arg(long)]
     suite: Option<String>,
 
@@ -76,6 +78,10 @@ struct Args {
     /// Stop on the first failure (drain in-flight tests, print test.log)
     #[arg(long, alias = "ff")]
     fail_fast: bool,
+
+    /// On a failed run, print every failing test's log to stderr
+    #[arg(short = 'v', long)]
+    verbose: bool,
 
     /// Dump the arg-parse data as JSON and exit (hidden)
     #[arg(long, hide = true)]
@@ -165,9 +171,16 @@ fn run_all(args: Args) -> Result<(), RunErr> {
     let selected: Vec<usize> = {
         let mut sel: Vec<usize> = (0..tests.len()).collect();
         if let Some(suite) = &args.suite {
-            sel.retain(|&i| suite_of(&tests[i]) == Some(suite.as_str()));
+            // A path prefix over the full test name, always ending at a
+            // directory boundary: `tests/run` selects `tests/run/counter`
+            // but not `tests/runaway/...`.
+            let prefix = format!("{}/", suite.trim_end_matches('/'));
+            sel.retain(|&i| {
+                let name = &tests[i].name;
+                name == suite.as_str() || name.starts_with(&prefix)
+            });
             if sel.is_empty() {
-                return Err(RunErr::Fatal(format!("no tests in suite `{suite}`")));
+                return Err(RunErr::Fatal(format!("no tests under `{suite}`")));
             }
         }
         if let Some(filter) = &args.filter {
@@ -246,15 +259,7 @@ fn run_all(args: Args) -> Result<(), RunErr> {
         })
         .clamp(1, 1024);
 
-    run_suite(&env, &selected_tests, jobs, args.fail_fast).map_err(|e| e)
-}
-
-fn suite_of(test: &Test) -> Option<&str> {
-    // The suite is the test path's top-level group: for the conventional
-    // tests/ tree that's the verification layer (check, errors, sim, ...);
-    // elsewhere it's the first directory component.
-    let name = test.name.strip_prefix("tests/").unwrap_or(&test.name);
-    name.split('/').next()
+    run_suite(&env, &selected_tests, jobs, args.fail_fast, args.verbose).map_err(|e| e)
 }
 
 fn find_on_path(binary: &str) -> bool {
@@ -269,7 +274,7 @@ fn find_on_path(binary: &str) -> bool {
 }
 
 /// Dispatch in canonical order, thread-per-test, and render output.
-fn run_suite(env: &Env, tests: &[Test], jobs: usize, fail_fast: bool) -> Result<(), RunErr> {
+fn run_suite(env: &Env, tests: &[Test], jobs: usize, fail_fast: bool, verbose: bool) -> Result<(), RunErr> {
     let start = Instant::now();
     let mut display = output::Display::open(tests, jobs);
     let spinner_base = Instant::now();
@@ -356,17 +361,30 @@ fn run_suite(env: &Env, tests: &[Test], jobs: usize, fail_fast: bool) -> Result<
     let wall = start.elapsed();
     display.finish(tests, &log_paths, wall);
 
-    let failed_at: Option<usize> = display
+    let failed: Vec<usize> = display
         .statuses()
         .iter()
-        .position(|s| matches!(s, Some(Status::Fail)));
-    if let Some(idx) = failed_at {
+        .enumerate()
+        .filter_map(|(i, s)| matches!(s, Some(Status::Fail)).then_some(i))
+        .collect();
+    if let Some(&idx) = failed.first() {
         if fail_fast {
             // Print the canonical-earliest failure's test.log to stderr.
             if let Some(path) = &log_paths[idx] {
                 let full = env.root.join(path);
                 if let Ok(log) = std::fs::read_to_string(&full) {
                     eprintln!("\n{}", log);
+                }
+            }
+        }
+        if verbose {
+            // Print every failing test's log to stderr, in test order.
+            for &i in &failed {
+                if let Some(path) = &log_paths[i] {
+                    let full = env.root.join(path);
+                    if let Ok(log) = std::fs::read_to_string(&full) {
+                        eprintln!("\n=== {} ===\n{}", tests[i].name, log);
+                    }
                 }
             }
         }

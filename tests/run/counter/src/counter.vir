@@ -1,0 +1,25 @@
+// A minimal `kind = "run"` test: counts from 0 to 0xf on the
+// virt::Virt platform, then requests simulator exit with code 0.
+
+import virt
+
+pub mod Counter for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> The current count, 0 through 0xf.
+    reg count : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> `@Valid(0)` once the count reaches 0xf; while `@Invalid()`,
+    //> the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case count == 0x5 => @Valid(0)
+            case count > 0x5 => @Valid(1)
+            else => @Invalid()
+        }
+    }
+}

@@ -1,0 +1,32 @@
+// A `kind = "run"` test with a golden VCD: toggles a bit on every
+// clock edge for 32 cycles, then requests simulator exit with code 0.
+// The VCD written by `vir run --trace` is compared against
+// trace.golden.vcd by the test runner.
+
+import virt
+
+pub mod Toggle for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Toggles on every clock edge: 0, 1, 0, 1, ...
+    reg toggle : Bit on clock {
+        initial it <= false
+        it <= !it
+    }
+
+    //> Cycles elapsed since reset, 0 through 32.
+    reg cycle : Word[6] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> `@Valid(0)` once 32 cycles have elapsed; while `@Invalid()`,
+    //> the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case cycle == 32 => @Valid(0)
+            else => @Invalid()
+        }
+    }
+}
