@@ -805,6 +805,15 @@ footer .virdant-footer-meta {
   border-color: var(--border-code);
 }
 
+/* Dark mode for plain-text code blocks (code-block:: text, e.g. the
+   "reports:" diagnostics).  These blocks contain no token spans, so
+   their text inherits theme.css's light-theme body color (#404040),
+   which is illegible on the dark code background.  Token spans keep
+   their own colors; only unspanned text picks this up. */
+[data-theme="dark"] .rst-content div[class^=highlight] pre {
+  color: var(--text-code);
+}
+
 [data-theme="dark"] .rst-content pre.literal-block {
   border-color: var(--border-code);
 }

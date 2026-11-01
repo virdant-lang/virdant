@@ -1,0 +1,25 @@
+//! blink: an LED blinker built on the strobe package.
+//! The `led` toggles each time the strobe fires.
+
+import strobe
+
+pub mod Blink {
+    incoming clock : Clock
+    incoming reset : Bit
+
+    outgoing reg led : Bit {
+        // Toggle the LED on each strobe pulse.
+        when {
+            case strobe0.strobe {
+                it <= !it
+            }
+        }
+    }
+
+    mod strobe0 of strobe::Strobe {
+        it.clock := clock
+        it.reset := reset
+
+        it.period := 6_000_000
+    }
+}
