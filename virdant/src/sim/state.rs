@@ -26,6 +26,15 @@ pub(super) struct State {
     /// `SignalId::index()` (`None` for non-registers).
     set_vals: Vec<Option<Value>>,
     dirty: IndexSet<SignalId>,
+    /// Registers already transferred during the current settlement's
+    /// clock-edge handling.  A register commits at most once per
+    /// settlement: when the source clock rises directly (`set`), its
+    /// alias copies (a submodule clock port driven by a bare reference
+    /// or a socket connection) rise again later in the same `flow` —
+    /// by which time the register's pending has already been
+    /// recomputed with post-edge values, and committing it a second
+    /// time would clobber the value sampled at the edge.
+    committed: IndexSet<SignalId>,
 }
 
 impl State {
@@ -56,6 +65,7 @@ impl State {
             vals,
             set_vals,
             dirty: IndexSet::new(),
+            committed: IndexSet::new(),
         }
     }
 
@@ -75,6 +85,15 @@ impl State {
     }
 
     pub(super) fn transfer(&mut self, component_id: SignalId) {
+        // At most one commit per register per settlement.  Inserting
+        // even when the pending equals the current value matters: the
+        // pending may be recomputed (with post-edge values) later in
+        // the same settlement, and only the committed flag keeps that
+        // recomputed pending from being committed by a late alias-edge
+        // detection.
+        if !self.committed.insert(component_id) {
+            return;
+        }
         let new_value = self.set_vals[component_id.index()]
             .as_ref()
             .expect("transfer: component has no pending register value")
@@ -122,5 +141,12 @@ fn initial_seed() -> u64 {
 impl State {
     pub(super) fn clear_dirty(&mut self) {
         self.dirty.clear();
+    }
+
+    /// Reset the per-settlement commit markers.  Called when a
+    /// settlement's `flow` reaches quiescence, so the next settlement
+    /// (with its own clock edges) starts fresh.
+    pub(super) fn clear_committed(&mut self) {
+        self.committed.clear();
     }
 }

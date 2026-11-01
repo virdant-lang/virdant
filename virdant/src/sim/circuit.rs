@@ -122,6 +122,19 @@ impl Circuit {
             sensitivities.entry(*source).or_default().insert(*sink);
         }
 
+        // Clock domains: a submodule's clock port is typically driven by a
+        // bare reference (`it.clock := clock`) or a socket connection, which
+        // the elaboration records as an alias of the parent's clock.  One
+        // real edge must transfer every register in the whole alias-closure
+        // domain at once — each register sampling its pre-edge pending
+        // before any post-edge combinational change (e.g. a `fire = !busy`
+        // handshake wire falling) propagates.  So extend each signal's
+        // clock-sensitivity list with the registers of every clock that
+        // transitively aliases to it; duplicate commits within one
+        // settlement (the alias copy rises again mid-`flow`) are suppressed
+        // by `State::transfer`'s per-settlement committed set.
+        let clock_sensitivities = build_clock_domains(&clock_sensitivities, &aliases, &elaboration);
+
         // Densify the dataflow tables: index each `Vec` by
         // `SignalId::index()`, preserving insertion order so propagation
         // order is unchanged.
@@ -300,6 +313,72 @@ fn build_sensitivities(
         }
     }
     sens
+}
+
+/// Extend the per-clock register map into per-signal clock *domains*
+/// across alias edges.
+///
+/// `clock_sensitivities` maps each clock component to the registers that
+/// list it in their `on` clause (`ElaboratedComponent::clock()` is already
+/// resolved during elaboration).  `aliases` maps each alias sink (a bare
+/// reference driver like `it.clock := clock`, or a socket connection) to
+/// its source.
+///
+/// For every signal, the result is the union of the register sets of the
+/// signal itself plus every signal that transitively aliases *to* it —
+/// so a rising edge detected anywhere in the domain transfers the whole
+/// domain's registers.  The reverse direction (sinks, not sources) is the
+/// one that matters: the edge is committed at the source clock (directly
+/// in `Sim::set_without_flow`), while the sinks are alias copies that
+/// rise again later inside `flow`.
+fn build_clock_domains(
+    clock_sensitivities: &IndexMap<SignalId, IndexSet<SignalId>>,
+    aliases: &IndexMap<SignalId, SignalId>,
+    elaboration: &Elaboration,
+) -> IndexMap<SignalId, IndexSet<SignalId>> {
+    // Reverse alias adjacency: source -> the sinks that copy it.
+    let mut alias_sinks: IndexMap<SignalId, IndexSet<SignalId>> = IndexMap::new();
+    for (sink, source) in aliases {
+        alias_sinks.entry(*source).or_default().insert(*sink);
+    }
+
+    let mut domains: IndexMap<SignalId, IndexSet<SignalId>> = IndexMap::new();
+    for component in elaboration.components() {
+        // Only two kinds of signal can carry a nonempty domain: one that
+        // is itself clocked by registers (a clock), or one that some
+        // alias sink copies from (an alias source).  Everything else
+        // keeps an empty domain, as before.
+        let id = component.id();
+        if !clock_sensitivities.contains_key(&id) && !alias_sinks.contains_key(&id) {
+            continue;
+        }
+
+        // Alias closure of this signal: itself plus everything that
+        // transitively aliases to it (guarded against cycles).
+        let mut visited: IndexSet<SignalId> = IndexSet::new();
+        let mut queue: Vec<SignalId> = vec![component.id()];
+        while let Some(current) = queue.pop() {
+            if !visited.insert(current) {
+                continue;
+            }
+            if let Some(sinks) = alias_sinks.get(&current) {
+                for sink in sinks {
+                    queue.push(*sink);
+                }
+            }
+        }
+
+        let mut regs: IndexSet<SignalId> = IndexSet::new();
+        for signal in &visited {
+            if let Some(set) = clock_sensitivities.get(signal) {
+                regs.extend(set.iter().copied());
+            }
+        }
+        if !regs.is_empty() {
+            domains.insert(id, regs);
+        }
+    }
+    domains
 }
 
 /// Map each clock component to the set of registers that list it in their `on` clause.

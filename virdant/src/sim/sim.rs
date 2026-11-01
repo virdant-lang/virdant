@@ -365,6 +365,10 @@ impl Sim {
                 }
             }
         }
+        // The settlement has reached quiescence.  Reset the per-settlement
+        // commit markers so the next settlement's clock edges (including
+        // alias-domain edges detected mid-`flow`) commit fresh.
+        self.state.clear_committed();
     }
 
     /// Settle the circuit after a batch of writes: propagate (`flow`),
