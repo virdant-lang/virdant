@@ -15,7 +15,7 @@ and function definitions.
         | SocketDef
         | FnDef
 
-Each item may be preceded by a documentation comment (`///`).
+Each item may be preceded by a documentation comment (`//>`).
 Items may be made visible to other packages with the `pub` keyword.
 
 

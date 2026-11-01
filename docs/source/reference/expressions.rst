@@ -15,31 +15,38 @@ The full expression grammar, from highest to lowest precedence:
 .. code-block:: grammar
 
     Expr :=
-        ExprWhen | ExprMatch | ExprStruct | ExprBinOpLogical
+        ExprWhen | ExprMatch | ExprLet | ExprStruct | ExprBinOpLogical
 
     ExprWhen         := "when" "{" ExprWhenArm* "}"
     ExprWhenArm      := "case" Expr "=>" Expr
                         | "case" Expr ModDefStmtBlock
                         | "case" Expr ExprWhen
                         | "case" Expr ExprMatch
+                        | "case" Expr ExprLet
                         | "else" "=>" Expr
                         | "else" ModDefStmtBlock
                         | "else" ExprWhen
                         | "else" ExprMatch
+                        | "else" ExprLet
     ExprMatch        := "match" Expr "{" ExprMatchArm* "}"
     ExprMatchArm     := "case" Pat "=>" Expr
                         | "case" Pat ModDefStmtBlock
                         | "case" Pat ExprWhen
                         | "case" Pat ExprMatch
+                        | "case" Pat ExprLet
                         | "else" "=>" Expr
                         | "else" ModDefStmtBlock
                         | "else" ExprWhen
                         | "else" ExprMatch
+                        | "else" ExprLet
+    ExprLet          := "let" LetBindingList ( ModDefStmtBlock | "=>" Expr | ExprWhen | ExprMatch )
+    LetBindingList   := LetBinding | LetBindingList "," LetBinding
+    LetBinding       := Ident ":" Type "=" Expr | Ident "=" Expr
     ExprStruct       := "$" "{" AssignList "}"
     ExprBinOpLogical := ExprBinOpLogical ( "&&" | "||" | "^^" ) ExprBinOpCompare | ExprBinOpCompare
     ExprBinOpCompare := ExprBinOpCompare ( "<" | "<=" | ">" | ">=" | "==" | "!=" ) ExprBinOpAdditive | ExprBinOpAdditive
     ExprBinOpAdditive:= ExprBinOpAdditive ( "+" | "-" | "&" | "|" | "^" ) ExprUnOp | ExprUnOp
-    ExprUnOp         := ( "-" | "~" | "!" ) ExprUnOp | ExprAscription
+    ExprUnOp         := ( "-" | "~" | "!" ) ExprUnOp | "tap" Path | ExprAscription
     ExprAscription   := ExprPrimary ":" Type | ExprPrimary
     ExprPrimary      := Ofness "(" ArgList ")"
                        | ExprPrimary "->" Ident
@@ -312,8 +319,39 @@ Each arm may use one of four forms:
    (blocks must contain a single expression to be valid in expression context)
 3. Nested `when`: `case cond when { ... }`
 4. Nested `match`: `case cond match expr { ... }`
+5. Let binding: `case cond let x = expr => ...`
 
 The same forms apply to the `else` arm.
+
+
+Let Expressions
+---------------
+A `let` expression binds names to values for use within a scope.
+In expression position, a `let` must produce a value with `=>`:
+
+.. code-block:: grammar
+
+    ExprLet :=
+        "let" LetBindingList "=>" Expr
+        | "let" LetBindingList ModDefStmtBlock
+        | "let" LetBindingList ExprWhen
+        | "let" LetBindingList ExprMatch
+
+.. code-block:: virdant
+
+    out := let scaled = a + a => scaled + b
+
+Bindings may be untyped (the type is inferred) or carry an explicit
+type, and several bindings may be given in a comma-separated list:
+
+.. code-block:: virdant
+
+    out := let lo = a, hi : Word[8] = b => hi + lo
+
+The terminator-style rule is the same as for statement `let`s
+(see :doc:`statements`): `=>` means the scope produces a value, `{`
+means the scope performs statements. In expression position, the `=>`
+form is the idiomatic one.
 
 
 Match Expressions
@@ -480,6 +518,8 @@ Unary Operators
       - Bitwise NOT (invert all bits)
     * - `! expr`
       - Logical NOT (for `Bit` values)
+    * - `tap path`
+      - Read a tristate `bus` or `net`, asserting it is driven
 
 Unary operators have the highest precedence and are right-associative.
 
@@ -493,6 +533,25 @@ Unary operators have the highest precedence and are right-associative.
 
     wire not_bit : Bit
     not_bit := !ready
+
+
+The tap Operator
+~~~~~~~~~~~~~~~~
+`tap` reads a tristate component (`bus` or `net`, see :doc:`modules`).
+Because a tristate net may be floating, a plain reference to one is a
+compile error (``NetReadWithoutTap``); `tap` asserts that the net is
+driven at the point of the read and evaluates to the net's value:
+
+.. code-block:: virdant
+
+    net sda : Bit
+    sda #- true
+
+    seen := tap sda
+
+Applying `tap` to anything other than a `bus` or `net` is an error
+(``TapNotOnNet``). Like the other unary operators, `tap` has the
+highest precedence and is right-associative.
 
 
 Binary Operators

@@ -12,6 +12,7 @@ The full set of module body statements includes:
 * Socket instance declarations
 * Conditional statements (when)
 * Match statements
+* Let bindings
 * Unused declarations
 * Initial declarations
 
@@ -29,6 +30,8 @@ Component declarations introduce named signals into a module.
     ModDefStmtComponent :=
         DocString Annotations "incoming" Ident ":" Type OnClause? ItBlock?
         | DocString Annotations "outgoing" Ident ":" Type DefaultClause? OnClause? ItBlock?
+        | DocString Annotations "bus" Ident ":" Type ItBlock?
+        | DocString Annotations "net" Ident ":" Type ItBlock?
         | DocString Annotations "outgoing" "wire" Ident ":" Type DefaultClause? OnClause? ItBlock?
         | DocString Annotations "outgoing" "reg" Ident ":" Type DefaultClause? OnClause? ItBlock?
         | DocString Annotations "wire" Ident ":" Type OnClause? ItBlock?
@@ -55,6 +58,7 @@ Component declarations introduce named signals into a module.
     }
 
 For a detailed description of each component type, see :doc:`modules`.
+Tristate components (`bus` and `net`) are described in :doc:`modules`.
 
 
 Driver Statements
@@ -66,6 +70,9 @@ Driver statements assign values to components.
     ModDefStmtDriver :=
         Path ":=" Expr
         | Path "<=" Expr
+        | Path "#=" Expr
+        | Path "#-" Expr
+        | Path "#=#" Path
         | Path ":=:" Path
 
 Combinational assignment :=
@@ -103,6 +110,60 @@ The `:=:` operator connects two signals bidirectionally.
 Both sides of `:=:` must be socket instances of compatible socket types.
 The operator connects every port in the socket, respecting the direction
 of each port relative to each instance.
+
+
+Tristate Drivers
+~~~~~~~~~~~~~~~~
+Three driver operators work on tristate components (`bus` and `net`,
+see :doc:`modules`). Unlike `:=` and `<=`, they carry a *strength*,
+and a tristate component may have any number of drivers.
+
+Tristate drive `#=`
+^^^^^^^^^^^^^^^^^^^
+The `#=` operator drives a bus or net at full strength.
+If the driver is guarded by a `when` or `match` arm that does not fire,
+the component is undriven in that case and floats (high impedance):
+
+.. code-block:: virdant
+
+    bus sda : Bit {
+        when {
+            case pull {
+                it #= false      // drive low strongly
+            }
+            // no `else`: when not pulling, the line floats
+        }
+    }
+
+Weak drive `#-`
+^^^^^^^^^^^^^^^
+The `#-` operator drives a bus or net *weakly*, like a pull resistor.
+Any strong driver (`#=`) overrides a weak one on the same net.
+In generated Verilog, a weak drive is emitted as
+`assign (weak1, weak0) ...`:
+
+.. code-block:: virdant
+
+    net sda : Bit
+    sda #- true          // weak pull-up: idle-high
+
+Net attachment `#=#`
+^^^^^^^^^^^^^^^^^^^^
+The `#=#` operator attaches a submodule's `bus` port to a `bus` or
+`net` in the current module, joining them into one electrically shared
+line. Both operands must be paths to tristate components:
+
+.. code-block:: virdant
+
+    net sda : Bit
+    mod master of Participant
+    master.sda #=# sda
+
+When several drivers share a net, a strong driver wins over weak ones;
+if no driver is active, the net floats.
+A `when` or `match` guarding only tristate drivers does not need to be
+exhaustive: an undriven case leaves the net floating rather than
+holding its previous value.
 
 
 Instance Declarations
@@ -203,6 +264,7 @@ Each arm may use one of four forms:
 2. Block: `case cond { stmts }`
 3. Nested `when`: `case cond when { ... }`
 4. Nested `match`: `case cond match expr { ... }`
+5. Let binding: `case cond let x = expr { ... }`
 
 The same forms apply to the `else` arm.
 
@@ -255,6 +317,7 @@ Each arm may use one of four forms:
 2. Block: `case pat { stmts }`
 3. Nested `when`: `case pat when { ... }`
 4. Nested `match`: `case pat match expr { ... }`
+5. Let binding: `case pat let x = expr { ... }`
 
 The same forms apply to the `else` arm.
 
@@ -263,6 +326,96 @@ If no `else` arm is present and the match is not exhaustive,
 the compiler will report an error.
 
 For more details on patterns, see :doc:`patterns`.
+
+
+Let Bindings
+------------
+A `let` statement binds names to values for use within a scope.
+Bindings may be untyped (the type is inferred) or carry an explicit type,
+and several bindings may be given in a comma-separated list:
+
+.. code-block:: grammar
+
+    Let :=
+        "let" LetBindingList ArmBlock
+        | "let" LetBindingList "=>" Expr
+        | "let" LetBindingList When
+        | "let" LetBindingList Match
+
+    LetBindingList :=
+        LetBinding
+        | LetBindingList "," LetBinding
+
+    LetBinding :=
+        Ident ":" Type "=" Expr
+        | Ident "=" Expr
+
+.. code-block:: virdant
+
+    let x = a {
+        out := x + x
+    }
+
+    let y : Word[8] = a + b {
+        out := y
+    }
+
+    let lo = a, hi = b {
+        out := hi + lo
+    }
+
+A `let` may be chained directly into a `when` or `match`, in which case
+the bindings are in scope throughout the chained arms:
+
+.. code-block:: virdant
+
+    let x = a match op {
+        case #Add {
+            out := x + b
+        }
+        else {
+            out := x
+        }
+    }
+
+A `let` may also appear as the body of a `when` or `match` arm
+(`case cond let x = expr { ... }`).
+
+
+Terminator Style
+~~~~~~~~~~~~~~~~
+A `let` body may be either a block (`{ ... }`) or a value (`=> expr`).
+The two spellings carry intent, and the compiler enforces the pairing:
+
+* `{` means *this scope performs*: it runs driver statements.
+* `=>` means *this scope produces*: it evaluates to a value.
+
+A `let` used as a statement must terminate in a block; a `let` used as
+an expression must produce a value with `=>`. A statement `let` whose
+block contains nothing but a single bare expression is also flagged,
+since the scope produces a value that is then discarded:
+
+.. code-block:: virdant
+
+    // Error: a statement `let` must use `{ ... }` instead of `=>`
+    let x = a => x
+
+    // OK
+    let x = a {
+        out := x
+    }
+
+The chained forms (`let ... when { ... }` and `let ... match { ... }`)
+are legal in both statement and expression position and are never
+flagged by the style check.
+
+.. note::
+
+   Support for `let` in the type inference and driver analysis passes is
+   still being rolled out.
+   Until it lands, components referenced inside a `let` body must also be
+   referenced or driven elsewhere in the module, and let-bound names are
+   not yet visible outside the binding's scope.
 
 
 The Unused Statement

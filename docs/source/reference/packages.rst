@@ -45,7 +45,7 @@ current package.
 
 .. code-block:: virdant
 
-    /// top.vir
+    // top.vir
     import buffer
 
     mod Top {
@@ -101,7 +101,7 @@ Only items marked with the `pub` modifier are visible to other packages.
 
 .. code-block:: virdant
 
-    /// buffer.vir
+    // buffer.vir
     pub mod Buffer {
         incoming clock : Clock
         incoming inp : Word[8]

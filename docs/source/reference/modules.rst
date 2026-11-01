@@ -36,6 +36,8 @@ They are declared with a direction, a name, and a type.
     ModDefStmtComponent :=
         DocString Annotations "incoming" Ident ":" Type OnClause? ItBlock?
         | DocString Annotations "outgoing" Ident ":" Type DefaultClause? OnClause? ItBlock?
+        | DocString Annotations "bus" Ident ":" Type ItBlock?
+        | DocString Annotations "net" Ident ":" Type ItBlock?
         | DocString Annotations "outgoing" "wire" Ident ":" Type DefaultClause? OnClause? ItBlock?
         | DocString Annotations "outgoing" "reg" Ident ":" Type DefaultClause? OnClause? ItBlock?
         | DocString Annotations "wire" Ident ":" Type OnClause? ItBlock?
@@ -107,6 +109,58 @@ A register may have an associated block for additional statements:
 
 Inside the register's block, the special identifier `it` refers to the
 register itself.
+
+
+Tristate Nets
+-------------
+Tristate components model wires that more than one driver can drive,
+where undriven means *floating* (high impedance) rather than
+holding a value. There are two kinds:
+
+* `bus` declares a bidirectional port. It is visible to the parent
+  module, and it appears as an `inout` port in generated Verilog.
+* `net` declares an internal tristate net. It is not a port; it is
+  visible only within the module.
+
+.. code-block:: virdant
+
+    mod Participant {
+        incoming pull : Bit
+
+        bus sda : Bit {
+            when {
+                case pull {
+                    it #= false
+                }
+            }
+        }
+    }
+
+A `bus` or `net` may not have an `on` clause or a `default` clause.
+It may have an `it` block, which is the usual place to put its drivers.
+
+Reading a tristate component is different from reading a wire or
+register: because the value may be floating, a plain reference is a
+compile error (``NetReadWithoutTap``). Reads must go through the `tap`
+operator, which asserts that the net is driven at that point:
+
+.. code-block:: virdant
+
+    seen := tap sda
+
+See :doc:`statements` for the tristate driver operators (`#=`, `#-`,
+and `#=#`) and :doc:`expressions` for `tap`.
+
+Tristate components may have any number of drivers. When several drivers
+are active at once, a strong driver (`#=`) wins over weak ones (`#-`);
+if no driver is active, the net floats. A `when` or `match` guarding
+only tristate drivers does not need to be exhaustive: an undriven case
+leaves the net floating rather than holding its previous value.
+
+In generated Verilog, a `bus` port becomes an `inout wire`, a strong
+drive becomes a plain `assign`, a weak drive becomes
+`assign (weak1, weak0)`, and `#=#` becomes a `tran` connecting the two
+sides.
 
 
 Assignments
