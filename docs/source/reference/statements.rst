@@ -273,6 +273,7 @@ Each arm may use one of five forms:
 5. Let binding: `case cond let x = expr { ... }`
 
 The same forms apply to the `else` arm.
+A `let` arm body follows the same terminator rules as any other `let`.
 
 Conditional statements are different from `when` expressions:
 statements can contain declarations, assignments, instances, and other
@@ -341,6 +342,7 @@ Each arm may use one of five forms:
 5. Let binding: `case pat let x = expr { ... }`
 
 The same forms apply to the `else` arm.
+A `let` arm body follows the same terminator rules as any other `let`.
 
 The `else` arm is optional but recommended for catch-all behavior.
 If no `else` arm is present and the match is not exhaustive,
@@ -385,6 +387,27 @@ and several bindings may be given in a comma-separated list:
         out := hi + lo
     }
 
+Bindings are ordered: each binding may reference the bindings before
+it, and a later binding shadows an earlier one of the same name.
+
+.. code-block:: virdant
+
+    let lo = a, hi = b + lo {
+        out := hi
+    }
+
+Within its body, a bound name shadows any component of the same name.
+The innermost binding wins: a match arm's pattern variables shadow
+`let` bindings from outside the match, while a `let` written inside
+the arm shadows the arm's pattern variables. Nothing outside a `let`'s
+body can see its bindings.
+
+For untyped bindings, the binding's type is inferred from its first
+use in the body. A widthless literal RHS must therefore be anchored by
+a use site that fixes its width: `let expire = it == 0w11` infers
+`Word[11]` from the comparison, while an unanchored `let x = 0` has no
+width to infer from and reports `CantInfer`.
+
 A `let` may be chained directly into a `when` or `match`, in which case
 the bindings are in scope throughout the chained arms:
 
@@ -411,10 +434,12 @@ The two spellings carry intent, and the compiler enforces the pairing:
 * `{` means *this scope performs*: it runs driver statements.
 * `=>` means *this scope produces*: it evaluates to a value.
 
-A `let` used as a statement must terminate in a block; a `let` used as
-an expression must produce a value with `=>`. A statement `let` whose
-block contains nothing but a single bare expression is also flagged,
-since the scope produces a value that is then discarded:
+A `let` used as a statement must *perform*: its body is a block, or a
+chained `when`/`match` whose arms perform. A `let` used as an
+expression must *produce*: its body is a `=>` value, or a chained
+`when`/`match` whose arms produce. A statement `let` whose block
+contains nothing but a single bare expression is also flagged, since
+the scope produces a value that is then discarded:
 
 .. code-block:: virdant
 

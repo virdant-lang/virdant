@@ -326,12 +326,16 @@ Each arm may use one of five forms:
 5. Let binding: `case cond let x = expr => ...`
 
 The same forms apply to the `else` arm.
+A `let` arm body follows the same terminator rules as any other `let`.
 
 
 Let Expressions
 ---------------
-A `let` expression binds names to values for use within a scope.
-In expression position, a `let` must produce a value with `=>`:
+A `let` expression binds immutable names to values for use within a
+scope. In expression position, the body must *produce* a value: either
+with `=>`, or by chaining directly into a `when` or `match` whose arms
+produce values. Only the `{ ... }` block form is a style error here,
+since a block performs rather than produces:
 
 .. code-block:: grammar
 
@@ -345,12 +349,28 @@ In expression position, a `let` must produce a value with `=>`:
 
     out := let scaled = a + a => scaled + b
 
+    // Chained form: also legal in expression position.
+    out := let done = a == 0w8 when {
+        case done => 0w8
+        else => 0w8
+    }
+
 Bindings may be untyped (the type is inferred) or carry an explicit
 type, and several bindings may be given in a comma-separated list:
 
 .. code-block:: virdant
 
     out := let lo = a, hi : Word[8] = b => hi + lo
+
+Bindings are ordered: each binding may reference the bindings before
+it. Within the body, a bound name shadows any component of the same
+name, and the innermost binding wins: a match arm's pattern variables
+shadow `let` bindings from outside the match, while a `let` written
+inside the arm shadows the arm's pattern variables.
+
+For untyped bindings, the binding's type is inferred from its first
+use in the body: a widthless literal RHS must be anchored by a use
+site that fixes its width.
 
 The terminator-style rule is the same as for statement `let`s
 (see :doc:`statements`): `=>` means the scope produces a value, `{`
@@ -406,6 +426,7 @@ Each arm may use one of five forms:
 5. Let binding: `case pat let x = expr => ...`
 
 The same forms apply to the `else` arm.
+A `let` arm body follows the same terminator rules as any other `let`.
 
 For more details on patterns, see :doc:`patterns`.
 
