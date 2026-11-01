@@ -316,9 +316,13 @@ fn check_terminator_body(
                 // cannot produce a value are also reported by the
                 // typechecker (`check_arm_block`), so the style pass
                 // only reports the single-expression form, which the
-                // typechecker would otherwise accept by unwrapping it;
-                // `let` bodies have no typechecker path yet, so the
-                // style pass reports every block form.
+                // typechecker would otherwise accept by unwrapping it.
+                // For `let` bodies the style pass reports every block
+                // form: its `LetBlockNeedsArrow` diagnostic suggests
+                // the `=>` fix directly, which is more actionable than
+                // the typechecker's generic block error (which
+                // `check_let` also emits for multi-statement and
+                // empty blocks).
                 if is_single_expr_block || owner == ScopeOwner::Let {
                     diagnostics.push(Diagnostic::new(
                         body.region(),

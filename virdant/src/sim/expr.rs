@@ -576,6 +576,22 @@ fn convert_ast_expr(db: &Db, loc: Location, env: &[Type], types: &mut TypeIntern
             let subject = convert_ast_expr(db, node.child(0).location(), env, types);
             ExprPayload::As(payload::As { subject })
         }
+        AstNodePayload::Let => {
+            // An expression-position `let` evaluates to its body: the
+            // bindings are pure, so every reference to a bound name
+            // beta-reduces to the binding's RHS (handled when the
+            // reference nodes themselves are converted, see
+            // `resolve_let_binding` at the top of this function), and
+            // the `let` node itself contributes nothing but its
+            // body's value.  Typing annotates the body with the same
+            // type as the `let`, so the converted body already
+            // carries the right type.
+            let body = node.let_body().expect("expression-position `let` without a body");
+            if matches!(body.payload(), AstNodePayload::ArmBlock) {
+                unreachable!("statement-form `let` (ArmBlock body) cannot appear in expression position");
+            }
+            return convert_ast_expr(db, body.location(), env, types);
+        }
         AstNodePayload::ExprHole => ExprPayload::Hole(payload::Hole {}),
         AstNodePayload::ExprDontcare => ExprPayload::Dontcare(payload::Dontcare {}),
         other => unreachable!("expected expression node, got {:?}", other.kind()),

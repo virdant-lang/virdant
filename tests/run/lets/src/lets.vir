@@ -60,13 +60,36 @@ pub mod LetTest for virt::Virt {
         }
     }
 
+    // Expression-position `let` with a `when` body and multiple
+    // bindings.
+
+    // Expression-position `let` with a `match` body: the binding is
+    // used inside the match's arms.
+
+    // Nested expression-position `let`s: the inner binding shadows the
+    // outer one, so the body sees `!a` (false), and the `else` arm is
+    // taken.  Without shadowing, `p` would be `a` (true) and the
+    // `case` arm would win instead.
+    wire i : Bit {
+        it := let p = a when {
+            case true => let p = !a when {
+                case p => false
+                else => true
+            }
+            else => false
+        }
+    }
+
+    // A later binding of an expression-position `let` referring to an
+    // earlier one.
+
     // making sure that the test doesn't pass if success
     // passes due to a bug below
     wire success_wire : Bit {
-        it := a && b && c && d && e && f
+        it := a && b && c && d && e && f && i
     }
 
-    let success = a && b && c && d && e && f when {
+    let success = a && b && c && d && e && f && i when {
         case success && success_wire {
             exit := @Valid(0)
         }

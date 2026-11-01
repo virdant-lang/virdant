@@ -578,14 +578,12 @@ impl Typing {
         if block_children.is_empty() {
             self.flag_unknown(body, "Empty block not allowed in expression position");
             Err(())
-        } else if block_children.len() == 1
-            && block_children[0].is_expr()
-            && !matches!(
-                block_children[0].payload(),
-                AstNodePayload::When | AstNodePayload::Match
-            )
-        {
-            // Single bare-expression block: unwrap and check it.
+        } else if block_children.len() == 1 && block_children[0].is_expr() {
+            // Single-expression block: unwrap and check it.  A single
+            // `when`/`match`/`let` child is the chained scope form,
+            // which the terminator-style pass treats as legal in both
+            // contexts; check it against the expected type like any
+            // other expression.
             self.check(builder, context, &block_children[0], expected_typ)
         } else {
             self.flag_unknown(body, "Block with statements not allowed in expression position");
