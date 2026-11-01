@@ -1,0 +1,3 @@
+[package]
+name = "let_in_match_arm"
+version = "1.0.0"

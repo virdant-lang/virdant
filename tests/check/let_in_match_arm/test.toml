@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Expression-position `let` bindings inside `match`/`when` arm bodies: the untyped binding's expected type flows from a ctor payload without re-entering the enclosing expression's typing query (regression for a query-cycle stack overflow in `vir check`)."
+filecheck = "src/let_in_match_arm.vir"

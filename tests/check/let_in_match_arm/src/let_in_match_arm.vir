@@ -1,0 +1,91 @@
+// Regression test: an expression-position `let` as a `match`/`when`
+// arm body used to abort `vir check` with a native stack overflow.
+// Typing the untyped binding's RHS queried the expected type at the
+// binding's first use; when that use is a ctor payload, the query
+// re-entered the `Typing` result of the very expression being built,
+// recursing forever.  The ctor's expected type is now derived from
+// syntax alone.
+//
+// CHECK: Check OK
+
+pub union type St {
+    Idle()
+    Step(value : Word[8])
+    Done(result : Word[8])
+}
+
+//> An untyped `let` in a `match` arm body, whose first use is a ctor
+//> payload, in a match driving a reg.
+pub mod LetInMatchArm {
+    incoming clock : Clock
+
+    reg value : Word[8] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    reg state : St on clock {
+        initial it <= @Idle()
+        it <= match it : St {
+            case @Idle() =>
+                let result = value + 1 when {
+                    case value == 255 => @Done(result)
+                    else => @Step(result)
+                }
+            case @Step(result) =>
+                let done = result == value when {
+                    case done => @Done(result)
+                    else => @Step(result)
+                }
+            case @Done(result) => @Done(result)
+        }
+    }
+
+    outgoing out : St {
+        it := state
+    }
+}
+
+//> A width-less literal binding whose only use is a ctor payload: the
+//> binding's width must flow from the ctor signature's parameter type.
+pub mod LetWidthlessLiteral {
+    incoming clock : Clock
+
+    reg state : St on clock {
+        initial it <= @Idle()
+        it <= match it : St {
+            case @Idle() =>
+                let seeded = 0 when {
+                    case true => @Step(seeded)
+                    else => @Idle()
+                }
+            case @Step(seeded) => @Step(seeded)
+            case @Done(result) => @Done(result)
+        }
+    }
+
+    outgoing out : Word[8] {
+        it := 0
+    }
+}
+
+//> The same chained form with a `when` arm body instead of `match`.
+pub mod LetInWhenArm {
+    incoming clock : Clock
+
+    reg flag : Bit on clock {
+        initial it <= false
+        it <= when {
+            case true =>
+                let all = true when {
+                    case it => true
+                    else => false
+                }
+            else => false
+        }
+    }
+
+    outgoing out : Bit {
+        it := flag
+    }
+}

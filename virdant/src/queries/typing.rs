@@ -179,6 +179,74 @@ fn find_first_reference<'p>(node: &AstNode<'p>, name: &BStr) -> Option<AstNode<'
     None
 }
 
+/// The expected type of an expression-position scope form — a `when`,
+/// a `match`, or a `let` — derived purely from the syntax of its
+/// ancestors, without querying any `Typing` result.
+///
+/// This backs the ctor-payload branch of [`expected_type_at_reference`]:
+/// when the expected type of an untyped `let` binding flows from its
+/// first use, that use can sit inside the very expression root whose
+/// typing is still being built, so any query that re-enters `Typing`
+/// here would recurse forever (the query cache only stores finished
+/// results).  Walking the ancestors instead terminates: a scope's arm
+/// body inherits the scope's expected type, and the scope's own
+/// expected type is ultimately fixed by the driver, initial statement,
+/// or platform default clause it feeds.
+fn scope_expected_type(builder: &mut Builder, node: &AstNode<'_>) -> Option<Type> {
+    let parent = node.parent()?;
+    match parent.payload() {
+        // `node` is an arm body of an enclosing `when`: a guard must be
+        // `Bit`; a body inherits the `when`'s own expected type.
+        AstNodePayload::When => {
+            let children = parent.children();
+            let is_guard = crate::syntax::ast::when_arm_children(&children)
+                .into_iter()
+                .any(|(guard, _)| guard.is_some_and(|g| g.id() == node.id()));
+            if is_guard {
+                Some(Type::Bit)
+            } else {
+                scope_expected_type(builder, &parent)
+            }
+        }
+        // `node` is an arm body of an enclosing `match`: the subject is
+        // unconstrained; a body inherits the match's expected type.
+        AstNodePayload::Match => {
+            if parent.child(0).id() == node.id() {
+                None
+            } else {
+                scope_expected_type(builder, &parent)
+            }
+        }
+        // `node` is the body of an enclosing `let`: an
+        // expression-position `let` inherits its own expected type; a
+        // statement `let`'s body is not a value expression, so stop.
+        AstNodePayload::Let => {
+            if parent.is_expression_position() {
+                scope_expected_type(builder, &parent)
+            } else {
+                None
+            }
+        }
+        // Parentheses are transparent for expected types.
+        AstNodePayload::ExprParen => scope_expected_type(builder, &parent),
+        // An ascription fixes the expected type of what it wraps.
+        AstNodePayload::ExprAs => {
+            let typ_node = parent.child(1);
+            builder.get_type_at(typ_node.location()).ok()
+        }
+        // The scope feeds a driver, an initial statement, or a platform
+        // `default` clause: its expected type is fixed there, which
+        // `build_expected_type` computes (the scope node itself is that
+        // clause's expression root).
+        AstNodePayload::Driver(_)
+        | AstNodePayload::InitialDriver
+        | AstNodePayload::DefaultClause => {
+            build_expected_type(builder, ExprRoot::new(node.location()))
+        }
+        _ => None,
+    }
+}
+
 /// The type a reference node must have at its usage site: the expected
 /// type flows through parentheses and constructor payloads (the ctor's
 /// parameter type at the reference's position); a reference that is
@@ -194,7 +262,16 @@ fn expected_type_at_reference(builder: &mut Builder, reference: &AstNode<'_>) ->
         AstNodePayload::ExprCtor(expr_ctor) => {
             // `@Ctor(payload, ...)`: the payload's expected type is the
             // ctor signature's parameter type at its position.
-            let ctor_typ = builder.get_typeof(parent.location()).ok()?;
+            //
+            // The ctor's type is derived from the syntax of its
+            // ancestors (see `scope_expected_type`), not from a
+            // `get_typeof` query: that query re-enters `Typing` for the
+            // enclosing expression root, which — when this expected
+            // type is being computed for an untyped `let` binding
+            // while that same root's typing is still being built — is
+            // an infinite query recursion (the cache only stores
+            // finished results).
+            let ctor_typ = scope_expected_type(builder, &parent)?;
             let Type::Usual(typedef_id, args) = ctor_typ else { return None };
             let ctor_name = parent.parsing().string(expr_ctor.ctor);
             let symboltable = builder.get_symboltable();
