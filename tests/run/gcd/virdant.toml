@@ -1,0 +1,5 @@
+[project]
+name = "gcd"
+
+[prog]
+top = "gcd::GcdTest"

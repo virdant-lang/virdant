@@ -1,0 +1,319 @@
+//! Self-checking `kind = "run"` test for a Euclidean GCD.
+//!
+//! A `Gcd` unit computes `gcd(x, y)` by repeated subtraction while a
+//! harness top drives it through a table of 32 vectors: zeros, ones,
+//! equal operands, swapped orders, worst-case runtimes, and coprime
+//! pairs.  Each result is compared against a golden value and every
+//! check is ANDed into a running `all_ok`; the simulator exits with
+//! code 0 only if all 32 vectors passed, and 1 otherwise.
+
+import virt
+
+//> State machine of the `Gcd` unit.
+//>
+//> `Idle` - waiting for a `fire` pulse.
+//> `Running(x, y)` - subtracting: `x <= x - y` or `y <= y - x`.
+//> `Done(result)` - holding `result` and `valid` until the next `fire`.
+union type GcdState {
+    Idle()
+    Running(x : Word[8], y : Word[8])
+    Done(result : Word[8])
+}
+
+//> Euclidean GCD computed by repeated subtraction.
+//>
+//> Assert `fire` for one cycle with the operands on `x` and `y`;
+//> `valid` then rises with the result and holds until the next `fire`.
+//> Zeros are handled: `gcd(0, n) = gcd(n, 0) = n` and `gcd(0, 0) = 0`.
+mod Gcd {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> First operand, sampled when `fire` is high.
+    incoming x : Word[8]
+
+    //> Second operand, sampled when `fire` is high.
+    incoming y : Word[8]
+
+    //> One-cycle pulse: load `x` and `y` and start computing.
+    incoming fire : Bit
+
+    //> Gcd of the most recently fired operands, meaningful with `valid`.
+    outgoing result : Word[8]
+
+    //> High while the result of the last `fire` is held.
+    outgoing valid : Bit
+
+    reg state : GcdState on clock {
+        initial it <= @Idle()
+        it <= match it : GcdState {
+            case @Idle() => mux(fire, @Running(x, y), @Idle())
+            case @Running(x, y) =>
+                mux(y == 0, @Done(x),
+                mux(x == 0, @Done(y),
+                mux(x < y, @Running(y - x, x),
+                @Running(x - y, y))))
+            case @Done(result) => mux(fire, @Running(x, y), @Done(result))
+        }
+    }
+
+    match state {
+        case @Done(r) {
+            result := r
+            valid := true
+        }
+        else {
+            result := 0
+            valid := false
+        }
+    }
+}
+
+pub mod GcdTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last vector checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod gcd of Gcd {
+        it.clock := clock
+        it.x := vec_x
+        it.y := vec_y
+        it.fire := fire
+    }
+
+    //> High while a vector is being computed: from the cycle after a
+    //> `fire` until `gcd` raises `valid`.
+    reg busy : Bit on clock {
+        initial it <= false
+        it <= !gcd.valid
+    }
+
+    //> Index of the vector under test, 0 through 31.
+    reg index : Word[5] on clock {
+        initial it <= 0
+        when {
+            case checking {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the cycle `gcd` reports `valid`.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && gcd.result == expected
+            }
+        }
+    }
+
+    //> Rises one cycle after the last vector is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case checking {
+                it <= true
+            }
+        }
+    }
+
+    //> High on the cycle a vector is checked.
+    wire checking : Bit {
+        it := busy && gcd.valid
+    }
+
+    //> Load the next vector whenever we are not busy.
+    wire fire : Bit {
+        it := !busy
+    }
+
+    wire vec_x : Word[8]
+    wire vec_y : Word[8]
+
+    //> Test-vector table: `vec_x`, `vec_y`, and the golden `expected`
+    //> result, selected by `index`.  The 32 cases exactly cover
+    //> `Word[5]`, so the match is exhaustive.
+    wire expected : Word[8]
+
+    match index {
+        // Corner cases: zero operands.
+        case 0 {
+            vec_x := 0
+            vec_y := 0
+            expected := 0
+        }
+        case 1 {
+            vec_x := 0
+            vec_y := 5
+            expected := 5
+        }
+        case 2 {
+            vec_x := 5
+            vec_y := 0
+            expected := 5
+        }
+        case 3 {
+            vec_x := 0
+            vec_y := 255
+            expected := 255
+        }
+        case 4 {
+            vec_x := 255
+            vec_y := 0
+            expected := 255
+        }
+        // Ones and equal operands.
+        case 5 {
+            vec_x := 1
+            vec_y := 1
+            expected := 1
+        }
+        case 6 {
+            vec_x := 1
+            vec_y := 255
+            expected := 1
+        }
+        case 7 {
+            vec_x := 255
+            vec_y := 1
+            expected := 1
+        }
+        case 8 {
+            vec_x := 7
+            vec_y := 7
+            expected := 7
+        }
+        case 9 {
+            vec_x := 255
+            vec_y := 255
+            expected := 255
+        }
+        // Both orders of asymmetric pairs.
+        case 10 {
+            vec_x := 12
+            vec_y := 15
+            expected := 3
+        }
+        case 11 {
+            vec_x := 15
+            vec_y := 12
+            expected := 3
+        }
+        case 12 {
+            vec_x := 6
+            vec_y := 4
+            expected := 2
+        }
+        case 13 {
+            vec_x := 4
+            vec_y := 6
+            expected := 2
+        }
+        case 14 {
+            vec_x := 48
+            vec_y := 18
+            expected := 6
+        }
+        case 15 {
+            vec_x := 18
+            vec_y := 48
+            expected := 6
+        }
+        case 16 {
+            vec_x := 100
+            vec_y := 75
+            expected := 25
+        }
+        case 17 {
+            vec_x := 75
+            vec_y := 100
+            expected := 25
+        }
+        case 18 {
+            vec_x := 56
+            vec_y := 98
+            expected := 14
+        }
+        case 19 {
+            vec_x := 98
+            vec_y := 56
+            expected := 14
+        }
+        case 20 {
+            vec_x := 255
+            vec_y := 85
+            expected := 85
+        }
+        case 21 {
+            vec_x := 85
+            vec_y := 255
+            expected := 85
+        }
+        // Powers of two.
+        case 22 {
+            vec_x := 64
+            vec_y := 48
+            expected := 16
+        }
+        case 23 {
+            vec_x := 48
+            vec_y := 64
+            expected := 16
+        }
+        case 24 {
+            vec_x := 128
+            vec_y := 96
+            expected := 32
+        }
+        case 25 {
+            vec_x := 255
+            vec_y := 128
+            expected := 1
+        }
+        // Coprime pairs: consecutive Fibonacci numbers, consecutive
+        // maximum values, and assorted others.  These also give the
+        // worst-case runtimes (hundreds of subtractions each).
+        case 26 {
+            vec_x := 21
+            vec_y := 13
+            expected := 1
+        }
+        case 27 {
+            vec_x := 144
+            vec_y := 89
+            expected := 1
+        }
+        case 28 {
+            vec_x := 255
+            vec_y := 254
+            expected := 1
+        }
+        case 29 {
+            vec_x := 169
+            vec_y := 65
+            expected := 13
+        }
+        case 30 {
+            vec_x := 99
+            vec_y := 98
+            expected := 1
+        }
+        case 31 {
+            vec_x := 240
+            vec_y := 168
+            expected := 24
+        }
+    }
+}

@@ -9,6 +9,9 @@
 # Tests
 * To test everything, use `make test`
 * When testing fails, check the log files in `build/tests/`
+* When a test runs a simulation (`vir run` or `iverilog`),
+  place an upper bound on the number of cycles,
+  and when possible, set a tight limit
 
 # Tips
 * Load the Virdant skill if you ever have to work with Virdant code.
