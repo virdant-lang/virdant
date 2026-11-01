@@ -5,7 +5,7 @@
 
 import types
 
-mod Top {
+pub mod Top {
     incoming clock : Clock
     incoming input_data : Word[32]
     outgoing final_result : Word[32]
@@ -30,7 +30,7 @@ mod Top {
 // A second `Base` (in the top package, while types::Base also exists)
 // makes the bare name `Base` resolve ambiguously; the ambiguity JSON
 // shapes are pinned in the goldens.
-mod Base {
+pub mod Base {
     incoming clock : Clock
     unused clock
 }

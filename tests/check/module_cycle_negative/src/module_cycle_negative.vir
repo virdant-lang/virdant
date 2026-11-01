@@ -2,7 +2,7 @@
 // A -> B, A -> C, B -> D.  No back edges.
 
 // CHECK-NOT: Module cycle
-mod A {
+pub mod A {
     mod b of B
     mod c of C
 }

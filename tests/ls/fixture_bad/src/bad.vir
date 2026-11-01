@@ -1,7 +1,7 @@
 //! A deliberately invalid fixture: drives the `diagnostics` query on a
 //! project with errors (`vir ls diagnostics` must still exit 0).
 
-mod Bad {
+pub mod Bad {
     incoming inp : Word[8]
     outgoing out : Word[8]
 

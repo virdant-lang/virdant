@@ -3,7 +3,7 @@
 // It is an output port, so it is used externally.
 
 // CHECK: Check OK
-mod OutgoingRegUnused {
+pub mod OutgoingRegUnused {
     incoming clock : Clock
     incoming reset : Reset
 

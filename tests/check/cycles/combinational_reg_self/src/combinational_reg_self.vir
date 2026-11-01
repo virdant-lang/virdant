@@ -9,7 +9,7 @@
 // RedundantDriver warning, so the identity self-assignment below is
 // written as a zero-offset add.)
 
-mod RegSelfAssign {
+pub mod RegSelfAssign {
     incoming clock : Clock
     incoming inp : Word[8]
     outgoing out : Word[8]

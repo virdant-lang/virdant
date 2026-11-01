@@ -1,5 +1,5 @@
 // Positive test: dynamic word indexing should compile without errors.
-mod GoodIndexing {
+pub mod GoodIndexing {
     incoming arr : Word[8]
     incoming idx : Word[3]
     outgoing out : Bit
@@ -8,7 +8,7 @@ mod GoodIndexing {
 }
 
 // Word[1] indexed by Word[0] (2^0 = 1).
-mod IndexByZero {
+pub mod IndexByZero {
     incoming arr : Word[1]
     incoming idx : Word[0]
     outgoing out : Bit
@@ -17,7 +17,7 @@ mod IndexByZero {
 }
 
 // Constant index parsed as dynamic, arr: Word[8], 5 fits in Word[3].
-mod IndexByConstant {
+pub mod IndexByConstant {
     incoming arr : Word[8]
     outgoing out : Bit
 

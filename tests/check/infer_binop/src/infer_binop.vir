@@ -4,7 +4,7 @@
 
 // CHECK: Check OK
 
-mod AddInferFromRhs {
+pub mod AddInferFromRhs {
     incoming a : Word[4]
     outgoing out : Word[4] {
         // Only the RHS is inferrable; the LHS literal is checked
@@ -13,7 +13,7 @@ mod AddInferFromRhs {
     }
 }
 
-mod AddInferFromLhs {
+pub mod AddInferFromLhs {
     incoming a : Word[4]
     outgoing out : Word[4] {
         // Only the LHS is inferrable; the RHS literal is checked
@@ -22,7 +22,7 @@ mod AddInferFromLhs {
     }
 }
 
-mod AddInferBoth {
+pub mod AddInferBoth {
     incoming a : Word[4]
     incoming b : Word[4]
     outgoing out : Word[4] {
@@ -31,7 +31,7 @@ mod AddInferBoth {
     }
 }
 
-mod SubInferFromRhs {
+pub mod SubInferFromRhs {
     incoming a : Word[4]
     outgoing out : Word[4] {
         // Only the RHS is inferrable; the LHS literal is checked
@@ -40,7 +40,7 @@ mod SubInferFromRhs {
     }
 }
 
-mod CmpInferFromRhs {
+pub mod CmpInferFromRhs {
     incoming a : Word[4]
     outgoing out : Bit {
         // Only the RHS is inferrable; the LHS literal is checked
@@ -49,14 +49,14 @@ mod CmpInferFromRhs {
     }
 }
 
-mod CmpInferFromLhs {
+pub mod CmpInferFromLhs {
     incoming a : Word[4]
     outgoing out : Bit {
         it := a > 0
     }
 }
 
-mod CmpInferBoth {
+pub mod CmpInferBoth {
     incoming a : Word[4]
     incoming b : Word[4]
     outgoing out : Bit {
@@ -65,7 +65,7 @@ mod CmpInferBoth {
 }
 
 // `Bit` and `Reset` are mutually compatible operands.
-mod BitResetOperands {
+pub mod BitResetOperands {
     incoming r : Reset
     outgoing out : Bit {
         it := r | true

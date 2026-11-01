@@ -5,7 +5,7 @@
 //
 // CHECK: Check OK
 
-mod ImplicitOn {
+pub mod ImplicitOn {
     incoming clock : Clock
     incoming inp : Word[8]
     outgoing out : Word[8]

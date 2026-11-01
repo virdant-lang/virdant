@@ -10,7 +10,7 @@ mod ClockDiv {
     }
 }
 
-mod ClockDivTest {
+pub mod ClockDivTest {
     incoming clock : Clock
 
     mod clock_div of ClockDiv {

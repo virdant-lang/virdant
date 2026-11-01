@@ -1,5 +1,5 @@
 // CHECK: Check OK
-mod T {
+pub mod T {
     incoming c : Bit
     outgoing bad : Word[8] {
         it := word(mux(c, 4w4, 4w4), 4w4)

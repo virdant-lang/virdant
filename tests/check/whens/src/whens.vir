@@ -1,5 +1,5 @@
 // CHECK: Check OK
-mod When {
+pub mod When {
     incoming clock : Clock
     incoming inp1 : Bit
 
@@ -34,7 +34,7 @@ mod When {
     }
 }
 
-mod Fine {
+pub mod Fine {
     incoming clock : Clock
     incoming reset : Reset
     outgoing out : Word[3]

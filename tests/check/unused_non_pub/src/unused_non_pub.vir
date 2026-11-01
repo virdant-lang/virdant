@@ -1,0 +1,41 @@
+// An unused non-`pub` item warns at the declaration site.
+//
+// A non-`pub` item that is never referenced is dead code (or the
+// author forgot to use it): the warning is emitted where the item is
+// declared, naming the item.
+//
+// `pub` items are exempt: they exist to be referenced from other
+// packages, and cross-package use is the caller's concern, not the
+// declaring package's.
+//
+// Mod defs are also exempt. Virdant has no fixed entry point: any mod
+// that is never instantiated is a potential `--top` target, so an
+// uninstantiated mod is not necessarily dead code.
+
+// CHECK: Item `UnusedStruct` is unused and not `pub`
+struct type UnusedStruct {
+    x : Word[8]
+}
+
+// This struct is referenced below, so no warning.
+struct type UsedStruct {
+    x : Word[8]
+}
+
+// CHECK: Item `UnusedMod` is unused and not `pub`
+mod UnusedMod {
+    incoming inp : Word[8]
+    outgoing out : Word[8]
+    out := inp
+}
+
+// CHECK: Check OK
+pub mod Top {
+    incoming inp : Word[8]
+    outgoing out : Word[8]
+
+    wire used : UsedStruct
+    used := ${ x = inp }
+
+    out := used->x
+}

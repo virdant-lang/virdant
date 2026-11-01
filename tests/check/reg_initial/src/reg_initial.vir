@@ -1,7 +1,7 @@
 // Tests the `initial` statement for declaring register initial values.
 
 // CHECK: Check OK
-mod Initial {
+pub mod Initial {
     incoming clock : Clock
     incoming inp : Word[8]
     outgoing out : Word[8]

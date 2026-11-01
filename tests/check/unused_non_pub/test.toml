@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok"
+description = "An unused non-`pub` item warns at the declaration site."
+filecheck = "src/unused_non_pub.vir"

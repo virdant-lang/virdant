@@ -16,7 +16,7 @@ ext mod PLL {
 }
 
 // Standalone `dependson` at the mod level (outside an it-block).
-ext mod ExternalMux {
+pub ext mod ExternalMux {
     incoming sel     : Bit
     incoming a       : Bit
     incoming b       : Bit

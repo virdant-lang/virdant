@@ -139,6 +139,7 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     crate::queries::pubcheck::check_pub_visibility(builder, &mut diagnostics);
     crate::queries::pubcheck::check_pub_surface(builder, &mut diagnostics);
     crate::queries::pubcheck::check_for_mods_pub(builder, &mut diagnostics);
+    crate::queries::pubcheck::check_unused_non_pub(builder, &mut diagnostics);
 
     // Check for recursive module instantiations.
     check_mod_cycles(builder, &mut diagnostics);

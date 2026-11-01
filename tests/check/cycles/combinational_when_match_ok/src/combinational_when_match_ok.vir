@@ -3,7 +3,7 @@
 // inside their arms to the guarded/matched components, but they do
 // not by themselves create combinational loops.
 
-mod WhenOk {
+pub mod WhenOk {
     wire a : Bit
     wire b : Bit
 
@@ -19,7 +19,7 @@ mod WhenOk {
     unused b
 }
 
-mod MatchOk {
+pub mod MatchOk {
     wire sel : Bit
     wire out : Bit
 
@@ -42,7 +42,7 @@ union type St {
     Done(result : Bit)
 }
 
-mod PatternShadowOk {
+pub mod PatternShadowOk {
     outgoing result : Bit
 
     wire state : St
