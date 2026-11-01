@@ -15,6 +15,22 @@ impl Typing {
         node: &AstNode<'p>,
         expected_typ: &Type,
     ) -> Result<(), ()> {
+        // A reference to a `let`-bound name beta-reduces: check the
+        // binding's RHS expression against the usage site's expected
+        // type, and annotate the reference with it.  This runs before
+        // inference so that width-less literals in the binding (e.g.
+        // `let x = 0`) take their width from the usage site.
+        if matches!(node.payload(), AstNodePayload::ExprReference) {
+            if let Some(name_path) = node.path() {
+                let name = node.parsing().string(name_path);
+                if let Some(rhs) = crate::syntax::ast::resolve_let_binding(node, name) {
+                    let result = self.check(builder, context, &rhs, expected_typ);
+                    self.annotate(node, expected_typ);
+                    return result;
+                }
+            }
+        }
+
         if let Some(actual_typ) = self.infer(builder, context.clone(), node)? {
             if !Self::compatible_typs(&actual_typ, expected_typ) {
                 self.flag_wrong_type(node, expected_typ, &actual_typ);
@@ -45,6 +61,22 @@ impl Typing {
                 }
             }
             AstNodePayload::ExprIndexRange(_expr_index_range) => Ok(()), // TODO
+            AstNodePayload::Let => {
+                // The grammar accepts a `let` in expression position,
+                // but the typing and driver-analysis passes have no
+                // `let` path yet (the `let` feature is still rolling
+                // out).  Report it as an error here rather than falling
+                // into the catch-all below: an expression-position
+                // `let` used to panic the whole process (including
+                // `vir-ls`) on any file that contained one.
+                self.diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::Unknown {
+                        message: "let expressions are not supported yet; use a statement `let` or a `when`/`match` expression instead".into(),
+                    },
+                ));
+                Err(())
+            }
             _ => unreachable!("Can't typecheck {:?}", node.summary()),
         }
     }

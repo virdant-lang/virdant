@@ -1,0 +1,5 @@
+[project]
+name = "lets"
+
+[prog]
+top = "lets::LetTest"

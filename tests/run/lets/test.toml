@@ -1,0 +1,4 @@
+kind = "run"
+description = "Exercise the `let` statement feature"
+cycle_limit = 1
+trace = false

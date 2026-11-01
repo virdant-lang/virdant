@@ -1,0 +1,20 @@
+// Regression test: a `let` binding shadowing a pattern-bound variable
+// must not accidentally pull unrelated names into scope.  Here the let
+// binds `value` over the pattern's `value`, and the body then
+// references `x`, which is not bound anywhere — the checker must flag
+// `x` as undefined.
+
+pub mod Top {
+    outgoing e : Bit {
+        match @Valid(2) : Valid[Word[8]] {
+            case @Invalid() {
+                it := false
+            }
+            case @Valid(value) let value : Word[8] = 3 {
+                // CHECK: Unknown component x
+                it := x == 3
+            }
+        }
+    }
+}
+// CHECK: Check failed

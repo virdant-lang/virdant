@@ -695,6 +695,31 @@ impl Typing {
                 } else {
                     Err(())
                 }
+            } else if let Some(rhs) = crate::syntax::ast::resolve_let_binding(&node, path) {
+                // A reference to a `let`-bound name in an inference-only
+                // context (no expected type flows here): use the type
+                // the binding's RHS was annotated with by its own expr
+                // root (derived from the binding's first usage).  Uses
+                // of components inside the RHS are already recorded by
+                // the RHS root's own typing.
+                match builder.get_typeof(rhs.location()) {
+                    Ok(typ) => {
+                        self.annotate(&node, &typ);
+                        Ok(Some(typ))
+                    }
+                    Err(_) => {
+                        self.diagnostics.push(Diagnostic::new(
+                            node.region(),
+                            diagnostics::Todo {
+                                message: format!(
+                                    "Can't infer the type of let binding `{}`; annotate it (`let {} : T = ...`) or use it where a type is expected",
+                                    path_str.to_str_lossy(), path_str.to_str_lossy(),
+                                ).into(),
+                            },
+                        ));
+                        Err(())
+                    }
+                }
             } else {
                 self.flag_unknown(node, format!("Unknown component {}", path));
                 Err(())

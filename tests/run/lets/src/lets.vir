@@ -1,0 +1,77 @@
+// A `kind = "run"` test exercising the `let` statement feature, with
+// corner cases: untyped and typed bindings, multi-binding lists where
+// later bindings see earlier ones, nested lets, `let` as the body of
+// `when`/`match` arms, `let` with `when`/`match` bodies, and shadowing
+// in sibling arms.  Then the simulator exits with code 0.
+
+import virt
+
+pub mod LetTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    wire a : Bit
+    let x = 0w0 {
+        a := x == 0
+    }
+
+    wire b : Bit
+    let x = 1w2,
+        y = 2w2 {
+            b := x + y == 3
+    }
+
+    wire c : Bit
+    let x = 1 : Word[2],
+        y = 2w2 {
+            c := x + y == 3
+    }
+
+    wire d : Bit {
+        match @Valid(0) : Valid[Word[8]] {
+            case @Invalid() {
+                it := false
+            }
+            case @Valid(value) let x = 10w8 {
+                it := x == 10
+            }
+        }
+    }
+
+    wire e : Bit {
+        match @Valid(2) : Valid[Word[8]] {
+            case @Invalid() {
+                it := false
+            }
+            case @Valid(value) let value = 3w8 {
+                it := value == 3
+            }
+        }
+    }
+
+    wire f : Bit {
+        match @Valid(5) : Valid[Word[8]] {
+            case @Invalid() {
+                it := false
+            }
+            case @Valid(a) let b = a {
+                it := a == 5
+            }
+        }
+    }
+
+    // making sure that the test doesn't pass if success
+    // passes due to a bug below
+    wire success_wire : Bit {
+        it := a && b && c && d && e && f
+    }
+
+    let success = a && b && c && d && e && f when {
+        case success && success_wire {
+            exit := @Valid(0)
+        }
+        else {
+            exit := @Invalid()
+        }
+    }
+}

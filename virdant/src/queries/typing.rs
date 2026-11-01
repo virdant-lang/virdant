@@ -3,11 +3,12 @@
 //! context (`Bit` for `when` guards, `Clock` for reg drivers, LHS
 //! component type for drivers and `initial` statements, inherited through `when`/`match` arms).
 
-use bstr::ByteSlice;
+use bstr::{BStr, ByteSlice};
 use crate::analysis::symbols::SymbolId;
 use crate::types::{ExprRoot, Type, TypingContext};
 use crate::common::ComponentKind;
 use crate::db::Builder;
+use crate::syntax::ast::AstNode;
 use crate::syntax::payload::AstNodePayload;
 
 pub(crate) fn build_typing_context(builder: &mut Builder, item: SymbolId) -> TypingContext {
@@ -90,6 +91,29 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
             let component_analysis = builder.get_component_analysis(moddef.id());
             component_analysis.type_of(lhs_path.as_bstr())
         }
+        AstNodePayload::LetBinding(_) => {
+            // A `let` binding's RHS: typed against the binding's
+            // ascribed type when there is one.  For an untyped binding,
+            // the expected type flows back from the binding's first
+            // usage in the let's body (beta-reduction: the usage site's
+            // expected type is the binding's type).
+            let bindings_children = parent_node.children();
+            if bindings_children.len() == 2 {
+                let typ_node = &bindings_children[0];
+                return builder.get_type_at(typ_node.location()).ok();
+            }
+            let Some(binding_name) = parent_node.let_binding_name() else { return None };
+            let name = parsing.string(binding_name).to_owned();
+            let Some(let_node) = parent_node.parent() else { return None };
+            let Some(body) = let_node.let_body() else { return None };
+            let first_use = find_first_reference(&body, name.as_bstr())?;
+            expected_type_at_reference(builder, &first_use)
+        }
+        AstNodePayload::Let => {
+            // A statement `let`'s `=>`-form body is a discarded value
+            // expression with no expected type from its parent.
+            None
+        }
         AstNodePayload::When => {
             // Guard expressions must be Bit.
             // Body expressions inherit the expected type from the When
@@ -135,5 +159,55 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
             todo!("Can't build expected type for: {:?} at {:?} (parent node is {:?})",
                 exprroot, node.region(), parent_node.summary());
         }
+    }
+}
+
+/// Find the first `ExprReference` to `name` in a subtree (pre-order).
+fn find_first_reference<'p>(node: &AstNode<'p>, name: &BStr) -> Option<AstNode<'p>> {
+    if matches!(node.payload(), AstNodePayload::ExprReference) {
+        if let Some(path) = node.path() {
+            if node.parsing().string(path) == name {
+                return Some(node.clone());
+            }
+        }
+    }
+    for child in node.children() {
+        if let Some(found) = find_first_reference(&child, name) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+/// The type a reference node must have at its usage site: the expected
+/// type flows through parentheses and constructor payloads (the ctor's
+/// parameter type at the reference's position); a reference that is
+/// itself a driver RHS inherits the driven component's type.
+fn expected_type_at_reference(builder: &mut Builder, reference: &AstNode<'_>) -> Option<Type> {
+    let parent = reference.parent()?;
+    match parent.payload() {
+        AstNodePayload::Driver(_) | AstNodePayload::InitialDriver => {
+            // The reference is the whole driver RHS: its expected type
+            // is the driven component's type.
+            build_expected_type(builder, ExprRoot::new(reference.location()))
+        }
+        AstNodePayload::ExprCtor(expr_ctor) => {
+            // `@Ctor(payload, ...)`: the payload's expected type is the
+            // ctor signature's parameter type at its position.
+            let ctor_typ = builder.get_typeof(parent.location()).ok()?;
+            let Type::Usual(typedef_id, args) = ctor_typ else { return None };
+            let ctor_name = parent.parsing().string(expr_ctor.ctor);
+            let symboltable = builder.get_symboltable();
+            let ctor_symbol = symboltable.slot(typedef_id, ctor_name)?;
+            let sig = builder.get_ctor_signature(ctor_symbol.id());
+            let idx = parent
+                .children()
+                .iter()
+                .position(|c| c.id().0 == reference.id().0)?;
+            let (_param_name, param_typ) = sig.parameters.get(idx)?;
+            Some(crate::types::substitute::substitute(param_typ, &args))
+        }
+        AstNodePayload::ExprParen => expected_type_at_reference(builder, &parent),
+        _ => None,
     }
 }

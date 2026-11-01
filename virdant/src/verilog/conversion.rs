@@ -1488,6 +1488,20 @@ impl<'d> Converter<'d> {
                 if let Some(subst_expr) = scheduler.subst.get(&path_str) {
                     return subst_expr.clone();
                 }
+                // Check if this reference is a `let`-bound name: it
+                // beta-reduces to the binding's RHS expression, which
+                // carries its own annotations (via its expr root).
+                if let Some(name_interned) = node.path() {
+                    let name = node.parsing.string(name_interned);
+                    if let Some(rhs) = crate::syntax::ast::resolve_let_binding(&node, name) {
+                        let rhs_typ = self
+                            .db
+                            .get_typeof(rhs.location())
+                            .map(|t| self.mono_substitute(t))
+                            .unwrap_or_else(|_| typ.clone());
+                        return self.convert_expr(package, rhs, &rhs_typ, db, scheduler);
+                    }
+                }
                 verilog::Expr::Reference(verilog::expr::Reference {
                     name: valid_verilog_name(&path_str),
                 })

@@ -181,10 +181,14 @@ pub(crate) fn build_driver_analysis(
             continue;
         }
         let Some(expr_location) = component.default_expr() else { continue };
-        drivers
-            .entry(component.id())
-            .or_default()
-            .push(Driver::Expr(DriverType::Continuous, expr_location));
+        // The platform default is a *default*: it applies only when the
+        // design provides no driver of its own for the synthesized port
+        // (e.g. a driver written inside a `let` body).  When the design
+        // does drive the port, the default is overridden, not merged.
+        let entry = drivers.entry(component.id()).or_default();
+        if entry.is_empty() {
+            entry.push(Driver::Expr(DriverType::Continuous, expr_location));
+        }
     }
 
 //    driver_analysis.dump(&component_analysis);
@@ -717,6 +721,25 @@ fn collect_block_drivers(
                         arms,
                         else_clause,
                     }));
+                }
+            }
+            AstNodePayload::Let => {
+                // A `let` is a pure scoping construct: it contributes no
+                // drivers itself, and its body's drivers belong to the
+                // enclosing context (unlike a `when`/`match` arm, the
+                // block is not conditional).  References to the bound
+                // names resolve later, at the typing/sim/Verilog
+                // frontiers, by beta-reduction to the binding's RHS.
+                let Some(body) = stmt.let_body() else { continue };
+                let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
+                    collect_block_drivers(body.children(), component_analysis, it_context, in_conditional, initials)
+                } else {
+                    // `when`/`match` bodies recurse as a single statement.
+                    collect_block_drivers(vec![body], component_analysis, it_context, in_conditional, initials)
+                };
+                diagnostics.append(&mut body_diags);
+                for (comp_id, mut drivers) in body_drivers {
+                    result.entry(comp_id).or_default().append(&mut drivers);
                 }
             }
             _ => {}

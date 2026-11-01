@@ -318,9 +318,23 @@ fn mono_type(db: &Db, loc: &Location, env: &[Type]) -> Type {
 }
 
 fn convert_ast_expr(db: &Db, loc: Location, env: &[Type], types: &mut TypeInterner) -> Arc<Expr> {
-    let typ = mono_type(db, &loc, env);
     let parsing = db.get_parsing(loc.package());
     let node = parsing.ast_node(loc.ast_node_id());
+
+    // A reference to a `let`-bound name beta-reduces to its binding's
+    // RHS expression: the binding adds no netlist node of its own.
+    // The RHS's own expr root supplies the annotations (widths), so
+    // the spliced subtree converts with correct types.
+    if matches!(node.payload(), AstNodePayload::ExprReference) {
+        if let Some(name_path) = node.path() {
+            let name = parsing.string(name_path);
+            if let Some(rhs) = crate::syntax::ast::resolve_let_binding(&node, name) {
+                return convert_ast_expr(db, rhs.location(), env, types);
+            }
+        }
+    }
+
+    let typ = mono_type(db, &loc, env);
 
     let payload = match node.payload() {
         AstNodePayload::ExprReference => {
@@ -424,7 +438,11 @@ fn convert_ast_expr(db: &Db, loc: Location, env: &[Type], types: &mut TypeIntern
         }
         AstNodePayload::ExprWordLit(lit) => {
             let s = parsing.string(lit.literal).to_str_lossy().into_owned();
-            let width = if let Type::Word(w) = &typ { *w } else { unreachable!() };
+            // The typing phase normally annotates word literals with
+            // their expected width.  If the annotation is missing (the
+            // `mono_type` fallback is `Type::Bit`), fall back to 1 bit
+            // rather than panicking.
+            let width = if let Type::Word(w) = &typ { *w } else { 1 };
             ExprPayload::WordLit(payload::WordLit { width, value: parse_word_value(&s) })
         }
         AstNodePayload::ExprStrLit(lit) => {

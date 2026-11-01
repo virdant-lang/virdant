@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Regression: a let binding shadowing a pattern variable must not resolve unrelated names; `x` in the let body is undefined and must be flagged"
+filecheck = "src/undefined_let.vir"

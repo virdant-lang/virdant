@@ -204,13 +204,41 @@ impl PackageAnalysis {
                     AstNodePayload::Annotations(_) => (),
                     // A generic parameter declaration list on a mod def.
                     AstNodePayload::Generics => (),
-                    // A `let` statement.  The terminator-style pass
-                    // validates its form independently of expr-root
-                    // collection; binding RHS expressions and body
-                    // statements are not yet wired into the expr-root
-                    // and driver-analysis passes (a later step of the
-                    // `let` feature), so they are inert here.
-                    AstNodePayload::Let => (),
+                    // A `let` statement: each binding's RHS expression
+                    // is an expr root (it types the binding — for untyped
+                    // bindings the expected type is derived from the
+                    // binding's first usage in the body, see
+                    // `build_expected_type`), and the body's statements
+                    // contribute their own expr roots like any block.
+                    AstNodePayload::Let => {
+                        for binding in child_node.let_bindings() {
+                            if let Some(rhs) = binding.let_binding_expr() {
+                                self.expr_roots.push(rhs.id());
+                            }
+                        }
+                        if let Some(body) = child_node.let_body() {
+                            match body.payload() {
+                                AstNodePayload::ArmBlock => {
+                                    self.add_moddefstmt_block_expr_roots(&body);
+                                }
+                                AstNodePayload::When => {
+                                    self.add_moddefstmtwhen_expr_roots(body);
+                                }
+                                AstNodePayload::Match => {
+                                    self.add_moddefstmtmatch_expr_roots(body);
+                                }
+                                _ => {
+                                    // The `=>`-form body is a bare
+                                    // expression: it is an expr root of
+                                    // its own (unconstrained — a statement
+                                    // `let` discards its value).
+                                    if body.is_expr() {
+                                        self.expr_roots.push(body.id());
+                                    }
+                                }
+                            }
+                        }
+                    }
                     _ => unreachable!("{:?}", child_node.summary()),
                 }
             }
@@ -272,6 +300,34 @@ impl PackageAnalysis {
                 AstNodePayload::Match => {
                     self.add_moddefstmtmatch_expr_roots(body.clone());
                 }
+                AstNodePayload::Let => {
+                    // A `let` as an arm body: its bindings' RHSs are
+                    // expr roots, and its body block is processed like
+                    // any other statement block.
+                    for binding in body.let_bindings() {
+                        if let Some(rhs) = binding.let_binding_expr() {
+                            self.expr_roots.push(rhs.id());
+                        }
+                    }
+                    if let Some(let_body) = body.let_body() {
+                        match let_body.payload() {
+                            AstNodePayload::ArmBlock => {
+                                self.add_moddefstmt_block_expr_roots(&let_body);
+                            }
+                            AstNodePayload::When => {
+                                self.add_moddefstmtwhen_expr_roots(let_body);
+                            }
+                            AstNodePayload::Match => {
+                                self.add_moddefstmtmatch_expr_roots(let_body);
+                            }
+                            _ => {
+                                if let_body.is_expr() {
+                                    self.expr_roots.push(let_body.id());
+                                }
+                            }
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -296,6 +352,34 @@ impl PackageAnalysis {
                 AstNodePayload::Match => {
                     self.add_moddefstmtmatch_expr_roots(body.clone());
                 }
+                AstNodePayload::Let => {
+                    // A `let` as an arm body: its bindings' RHSs are
+                    // expr roots, and its body block is processed like
+                    // any other statement block.
+                    for binding in body.let_bindings() {
+                        if let Some(rhs) = binding.let_binding_expr() {
+                            self.expr_roots.push(rhs.id());
+                        }
+                    }
+                    if let Some(let_body) = body.let_body() {
+                        match let_body.payload() {
+                            AstNodePayload::ArmBlock => {
+                                self.add_moddefstmt_block_expr_roots(&let_body);
+                            }
+                            AstNodePayload::When => {
+                                self.add_moddefstmtwhen_expr_roots(let_body);
+                            }
+                            AstNodePayload::Match => {
+                                self.add_moddefstmtmatch_expr_roots(let_body);
+                            }
+                            _ => {
+                                if let_body.is_expr() {
+                                    self.expr_roots.push(let_body.id());
+                                }
+                            }
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -315,6 +399,33 @@ impl PackageAnalysis {
                 }
                 AstNodePayload::Match => {
                     self.add_moddefstmtmatch_expr_roots(stmt);
+                }
+                AstNodePayload::Let => {
+                    // A `let` nested inside a driver block or when/match
+                    // arm: same treatment as at moddef level.
+                    for binding in stmt.let_bindings() {
+                        if let Some(rhs) = binding.let_binding_expr() {
+                            self.expr_roots.push(rhs.id());
+                        }
+                    }
+                    if let Some(body) = stmt.let_body() {
+                        match body.payload() {
+                            AstNodePayload::ArmBlock => {
+                                self.add_moddefstmt_block_expr_roots(&body);
+                            }
+                            AstNodePayload::When => {
+                                self.add_moddefstmtwhen_expr_roots(body);
+                            }
+                            AstNodePayload::Match => {
+                                self.add_moddefstmtmatch_expr_roots(body);
+                            }
+                            _ => {
+                                if body.is_expr() {
+                                    self.expr_roots.push(body.id());
+                                }
+                            }
+                        }
+                    }
                 }
                 _ => {}
             }

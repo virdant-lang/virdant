@@ -81,9 +81,13 @@ impl<'p> AstNode<'p> {
         self.parsing.source[self.span()].as_bstr()
     }
 
-    pub fn parent(&self) -> Option<AstNode<'_>> {
+    /// The parent node, tied to the parsing's lifetime (not the
+    /// borrow of `self`): every field of `AstNode` is a copyable
+    /// handle, so the returned node does not depend on `&self`.
+    pub fn parent(&self) -> Option<AstNode<'p>> {
+        let parsing = self.parsing;
         if let Some(parent) = &self.parent {
-            Some(self.parsing.ast_node(*parent))
+            Some(parsing.ast_node(*parent))
         } else {
             None
         }
@@ -739,5 +743,57 @@ pub(crate) fn annotation_arg_value(node: &AstNode<'_>, parsing: &Parsing) -> Opt
             Some(AnnotationValue::Bool(lit.literal))
         }
         _ => None,
+    }
+}
+
+/// Resolve a reference to a `let`-bound name: walk up from `start`
+/// through the AST, checking each enclosing `Let`'s bindings for
+/// `name`.  A binding's scope is the let's body ("written to its
+/// right"), so a reference inside a binding's own RHS sees only the
+/// *earlier* bindings of that same let.  Bindings shadow outer scopes
+/// innermost-first.  Returns the RHS `Expr` node of the innermost
+/// matching binding, or `None` when the name is not let-bound here.
+pub fn resolve_let_binding<'p>(
+    start: &AstNode<'p>,
+    name: &BStr,
+) -> Option<AstNode<'p>> {
+    let mut current = start.clone();
+    // The innermost `LetBinding` on the ancestor path, when the
+    // reference sits inside a binding's own RHS.
+    let mut binding_on_path: Option<AstNodeId> = None;
+    loop {
+        let parent = current.parent()?;
+        match parent.payload() {
+            AstNodePayload::LetBinding(_) => {
+                binding_on_path = Some(parent.id());
+            }
+            AstNodePayload::Let => {
+                let bindings = parent.let_bindings();
+                let in_scope: Vec<AstNode<'p>> = match &binding_on_path {
+                    Some(bind_id) => {
+                        // The reference is inside one of this let's
+                        // binding RHS expressions: only the bindings
+                        // *before* it are in scope.
+                        let idx = bindings
+                            .iter()
+                            .position(|b| b.id().0 == bind_id.0)
+                            .unwrap_or(0);
+                        bindings[..idx].to_vec()
+                    }
+                    None => bindings,
+                };
+                for binding in in_scope {
+                    let matches_name = binding
+                        .let_binding_name()
+                        .is_some_and(|n| binding.parsing().string(n) == name);
+                    if matches_name {
+                        return binding.let_binding_expr();
+                    }
+                }
+                binding_on_path = None;
+            }
+            _ => {}
+        }
+        current = parent;
     }
 }
