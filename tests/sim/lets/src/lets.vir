@@ -1,0 +1,71 @@
+// Icarus simulation test for the `let` statement feature, covering the
+// same corner cases as `tests/run/lets`: untyped and typed bindings,
+// multi-binding lists where later bindings see earlier ones, nested
+// lets, `let` as the body of `when`/`match` arms, and shadowing in
+// sibling arms.  Each case drives a wire the testbench asserts on.
+
+pub mod Top {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    unused clock
+    unused reset
+
+    // Untyped binding, inferred from its use.
+    wire a : Bit
+    let x = 0w1 {
+        a := x == 0
+    }
+
+    // Multi-binding list: later bindings see earlier ones.
+    wire b : Bit
+    let x = 1w2,
+        y = 2w2 {
+            b := x + y == 3
+    }
+
+    // Typed binding mixed with an untyped one.
+    wire c : Bit
+    let x = 1 : Word[2],
+        y = 2w2 {
+            c := x + y == 3
+    }
+
+    // `let` as a match-arm body: binding scoped to the arm.
+    wire d : Bit {
+        match @Valid(0) : Valid[Word[8]] {
+            case @Invalid() {
+                it := false
+            }
+            case @Valid(value) let x = 10w8 {
+                it := x == 10
+            }
+        }
+    }
+
+    // A let binding shadowing the pattern-bound variable.
+    wire e : Bit {
+        match @Valid(2) : Valid[Word[8]] {
+            case @Invalid() {
+                it := false
+            }
+            case @Valid(value) let value = 3w8 {
+                // The let shadows the pattern's `value`; this checks
+                // the shadowed (let-bound) value, not the pattern one.
+                it := value == 3
+            }
+        }
+    }
+
+    // Nested lets: an inner let inside an outer let's body.
+    wire f : Bit
+    let p = 1w2 {
+        let q = 2w2 {
+            f := p + q == 3
+        }
+    }
+
+    outgoing done : Bit {
+        it := a && b && c && d && e && f
+    }
+}

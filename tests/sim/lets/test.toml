@@ -1,0 +1,2 @@
+kind = "sim"
+description = "Icarus simulation of the `let` statement feature: untyped and typed bindings, multi-binding lists, nested lets, lets as when/match arm bodies, and shadowing"

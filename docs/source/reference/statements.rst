@@ -430,14 +430,6 @@ The chained forms (`let ... when { ... }` and `let ... match { ... }`)
 are legal in both statement and expression position and are never
 flagged by the style check.
 
-.. note::
-
-   Support for `let` in the type inference and driver analysis passes is
-   still being rolled out.
-   Until it lands, components referenced inside a `let` body must also be
-   referenced or driven elsewhere in the module, and let-bound names are
-   not yet visible outside the binding's scope.
-
 
 The Unused Statement
 --------------------

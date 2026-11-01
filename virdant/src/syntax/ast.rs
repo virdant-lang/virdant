@@ -797,3 +797,79 @@ pub fn resolve_let_binding<'p>(
         current = parent;
     }
 }
+
+/// What a name binding resolves to: either a `let` binding's RHS
+/// expression, or a pattern-bound variable.
+#[derive(Clone, Debug)]
+pub enum NameBinding<'p> {
+    Let(AstNode<'p>),
+    Pattern,
+}
+
+/// Resolve the innermost binding for `name` visible at `start`.
+///
+/// Two kinds of bindings can be in scope: `let` bindings (found by
+/// walking the ancestor chain exactly as in [`resolve_let_binding`])
+/// and pattern-bound variables, whose scope begins at the `match`
+/// node owning the pattern (passed by the caller as `pattern_scope`).
+///
+/// The lexically innermost binding wins.  Walk the ancestor chain
+/// from the reference outward and return at the first node that
+/// establishes a binding for `name`: a `Let` whose bindings (subject
+/// to the binding-on-path scope rule) contain `name`, or the
+/// `pattern_scope` match node.  In particular, a `let` inside a match
+/// arm shadows the arm's pattern variables, while a pattern binding
+/// shadows `let` bindings from outside the match.
+pub fn resolve_binding<'p>(
+    start: &AstNode<'p>,
+    name: &BStr,
+    pattern_scope: Option<AstNodeId>,
+) -> Option<NameBinding<'p>> {
+    let mut current = start.clone();
+    // The innermost `LetBinding` on the ancestor path, when the
+    // reference sits inside a binding's own RHS.
+    let mut binding_on_path: Option<AstNodeId> = None;
+    loop {
+        let parent = current.parent()?;
+        if pattern_scope.is_some_and(|scope| scope == parent.id()) {
+            // The match node owning the pattern binding is reached
+            // before any let binding: the pattern binding is the
+            // innermost one.
+            return Some(NameBinding::Pattern);
+        }
+        match parent.payload() {
+            AstNodePayload::LetBinding(_) => {
+                binding_on_path = Some(parent.id());
+            }
+            AstNodePayload::Let => {
+                let bindings = parent.let_bindings();
+                let in_scope: Vec<AstNode<'p>> = match &binding_on_path {
+                    Some(bind_id) => {
+                        // The reference is inside one of this let's
+                        // binding RHS expressions: only the bindings
+                        // *before* it are in scope.
+                        let idx = bindings
+                            .iter()
+                            .position(|b| b.id() == *bind_id)
+                            .unwrap_or(0);
+                        bindings[..idx].to_vec()
+                    }
+                    None => bindings,
+                };
+                for binding in in_scope {
+                    let matches_name = binding
+                        .let_binding_name()
+                        .is_some_and(|n| binding.parsing().string(n) == name);
+                    if matches_name {
+                        if let Some(rhs) = binding.let_binding_expr() {
+                            return Some(NameBinding::Let(rhs));
+                        }
+                    }
+                }
+                binding_on_path = None;
+            }
+            _ => {}
+        }
+        current = parent;
+    }
+}

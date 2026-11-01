@@ -47,6 +47,11 @@ struct ExprScheduler {
     extra_elements: Vec<verilog::Element>,
     /// Substitution map: bound pattern-variable names → their Verilog extraction expressions.
     subst: IndexMap<String, verilog::Expr>,
+    /// For each pattern-bound name in `subst`, the AST node id of the
+    /// `match` node whose arm pattern bound it.  This lets a `let`
+    /// binding shadow the pattern variable (and vice versa) by
+    /// lexical scope.
+    subst_scope: IndexMap<String, AstNodeId>,
     /// Statements to be prepended into the current sequential always block (collected from
     /// match expressions encountered while `in_sequential` is true).
     sequential_stmts: Vec<verilog::Stmt>,
@@ -60,8 +65,18 @@ impl ExprScheduler {
             counter: 0,
             extra_elements: vec![],
             subst: IndexMap::new(),
+            subst_scope: IndexMap::new(),
             sequential_stmts: vec![],
             in_sequential: false,
+        }
+    }
+
+    /// Remove the substitution entries (and their scope registrations)
+    /// recorded for a match arm's bound pattern variables.
+    fn remove_bound_keys(&mut self, bound_keys: &[String]) {
+        for key in bound_keys {
+            self.subst.shift_remove(key);
+            self.subst_scope.shift_remove(key);
         }
     }
 
@@ -980,7 +995,7 @@ impl<'d> Converter<'d> {
             let mut bound_keys: Vec<String> = vec![];
             let pattern = self.build_case_pattern(&pat_node, &subject_expr, &subject_typ, scheduler, &mut bound_keys);
             let arm_stmts = self.convert_latched_driver_to_stmts(package, sub_driver, typ, path, scheduler);
-            for key in &bound_keys { scheduler.subst.shift_remove(key); }
+            scheduler.remove_bound_keys(&bound_keys);
             case_items.push(verilog::CaseItem { pattern, stmts: arm_stmts });
         }
 
@@ -1019,6 +1034,42 @@ impl<'d> Converter<'d> {
         let subject_expr = self.convert_expr(package, subject_node, &subject_typ, db, scheduler);
         let temp_name = scheduler.fresh_temp_name("match");
         let result_width = type_width(typ, db);
+
+        // If the subject is a compile-time constant, statically select the
+        // matching arm and emit it as a continuous assignment.  An
+        // `always @(*)` casez over a constant subject has no sensitivities
+        // and would never trigger in Icarus (or any simulator).
+        if let Some(subject_bits) = const_bits_of_expr(&subject_expr) {
+            let mut winner: Option<verilog::Expr> = None;
+            for (pat_loc, sub_driver) in &driver_match.arms {
+                let pat_parsing = db.get_parsing(pat_loc.package());
+                let pat_node = pat_parsing.ast_node(pat_loc.ast_node_id());
+                let mut bound_keys: Vec<String> = vec![];
+                let pattern = self.build_case_pattern(&pat_node, &subject_expr, &subject_typ, scheduler, &mut bound_keys);
+                if case_pattern_matches(&pattern, &subject_bits) {
+                    let arm_expr = self.convert_driver_to_expr(package, sub_driver, typ, net, scheduler);
+                    scheduler.remove_bound_keys(&bound_keys);
+                    winner = Some(arm_expr);
+                    break;
+                } else {
+                    scheduler.remove_bound_keys(&bound_keys);
+                }
+            }
+            let selected = match winner {
+                Some(arm_expr) => arm_expr,
+                None => match &driver_match.else_clause {
+                    Some(else_driver) => self.convert_driver_to_expr(package, else_driver, typ, net, scheduler),
+                    None => verilog::Expr::XLit(verilog::expr::XLit { width: result_width }),
+                },
+            };
+            scheduler.push(verilog::Element::Wire(verilog::Wire {
+                name: temp_name.clone(),
+                width: result_width,
+                expr: Some(selected),
+            }));
+            return verilog::Expr::Reference(verilog::expr::Reference { name: temp_name });
+        }
+
         let mut case_items: Vec<verilog::CaseItem> = vec![];
         let mut has_else = false;
 
@@ -1028,7 +1079,7 @@ impl<'d> Converter<'d> {
             let mut bound_keys: Vec<String> = vec![];
             let pattern = self.build_case_pattern(&pat_node, &subject_expr, &subject_typ, scheduler, &mut bound_keys);
             let arm_expr = self.convert_driver_to_expr(package, sub_driver, typ, net, scheduler);
-            for key in &bound_keys { scheduler.subst.shift_remove(key); }
+            scheduler.remove_bound_keys(&bound_keys);
             case_items.push(verilog::CaseItem {
                 pattern,
                 stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
@@ -1168,7 +1219,7 @@ impl<'d> Converter<'d> {
                 _ => unreachable!("expected pattern node"),
             };
             let body_expr = self.convert_expr(package, body, typ, db, scheduler);
-            for key in &bound_keys { scheduler.subst.shift_remove(key); }
+            scheduler.remove_bound_keys(&bound_keys);
             case_items.push(verilog::CaseItem {
                 pattern,
                 stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
@@ -1222,6 +1273,9 @@ impl<'d> Converter<'d> {
                 // Ident patterns match everything and bind the entire subject to the variable.
                 let var_name = pat_node.parsing.string(pat_ident.name).to_str_lossy().into_owned();
                 scheduler.subst.insert(var_name.clone(), subject_expr.clone());
+                if let Some(scope) = pat_node.parent() {
+                    scheduler.subst_scope.insert(var_name.clone(), scope.id());
+                }
                 bound_keys.push(var_name);
                 let width = type_width(subject_typ, self.db);
                 verilog::CasePattern::PatternLit(verilog::PatternLit {
@@ -1290,6 +1344,9 @@ impl<'d> Converter<'d> {
                 index_lo: Box::new(constant_index_expr(lo)),
             });
             scheduler.subst.insert(var_name.clone(), slice_expr);
+            if let Some(scope) = pat_node.parent() {
+                scheduler.subst_scope.insert(var_name.clone(), scope.id());
+            }
             bound_keys.push(var_name);
         }
         // Build casez pattern: ?'s for payload, exact binary tag at LSB
@@ -1484,22 +1541,35 @@ impl<'d> Converter<'d> {
                         current_id = parent_id;
                     }
                 }
-                // Check if this reference is a pattern-bound variable substitution.
-                if let Some(subst_expr) = scheduler.subst.get(&path_str) {
-                    return subst_expr.clone();
-                }
-                // Check if this reference is a `let`-bound name: it
-                // beta-reduces to the binding's RHS expression, which
+                // Check whether this reference is bound by a pattern
+                // variable substitution or a `let` binding: it
+                // beta-reduces to the binding's expression, which
                 // carries its own annotations (via its expr root).
-                if let Some(name_interned) = node.path() {
+                // When both are in scope, the lexically innermost
+                // binding wins: a `let` inside the match arm shadows
+                // the pattern variable, while a pattern binding
+                // shadows `let`s from outside the match.
+                let binding = node.path().and_then(|name_interned| {
                     let name = node.parsing.string(name_interned);
-                    if let Some(rhs) = crate::syntax::ast::resolve_let_binding(&node, name) {
+                    crate::syntax::ast::resolve_binding(
+                        &node,
+                        name,
+                        scheduler.subst_scope.get(&path_str).copied(),
+                    )
+                });
+                match binding {
+                    Some(crate::syntax::ast::NameBinding::Let(rhs)) => {
                         let rhs_typ = self
                             .db
                             .get_typeof(rhs.location())
                             .map(|t| self.mono_substitute(t))
                             .unwrap_or_else(|_| typ.clone());
                         return self.convert_expr(package, rhs, &rhs_typ, db, scheduler);
+                    }
+                    Some(crate::syntax::ast::NameBinding::Pattern) | None => {
+                        if let Some(subst_expr) = scheduler.subst.get(&path_str) {
+                            return subst_expr.clone();
+                        }
                     }
                 }
                 verilog::Expr::Reference(verilog::expr::Reference {
@@ -1657,6 +1727,70 @@ impl<'d> Converter<'d> {
                 let subject_expr = self.convert_expr(package, subject, &subject_typ, db, scheduler);
                 let temp_name = scheduler.fresh_temp_name("match");
                 let result_width = type_width(typ, db);
+
+                // If the subject is a compile-time constant, statically select
+                // the matching arm and emit it as a continuous assignment.
+                // An `always @(*)` casez over a constant subject has no
+                // sensitivities and would never trigger in Icarus.
+                if let Some(subject_bits) = const_bits_of_expr(&subject_expr) {
+                    let mut winner: Option<verilog::Expr> = None;
+                    let mut idx = 1;
+                    while idx < children.len() && winner.is_none() {
+                        let (pat, body) = if children[idx].is_pat() {
+                            let pat = children[idx].clone();
+                            let body = children[idx + 1].clone();
+                            idx += 2;
+                            (Some(pat), body)
+                        } else {
+                            let body = children[idx].clone();
+                            idx += 1;
+                            (None, body)
+                        };
+
+                        let mut bound_keys: Vec<String> = vec![];
+                        let pattern = match pat.as_ref().map(|p| p.payload()) {
+                            None => { verilog::CasePattern::Default }
+                            Some(AstNodePayload::PatEnumerant(_)) => {
+                                let pat = pat.unwrap();
+                                self.build_enumerant_case_pattern(&pat, &subject_typ)
+                            }
+                            Some(AstNodePayload::PatCtor(_)) => {
+                                let pat = pat.unwrap();
+                                self.build_ctor_case_pattern(&pat, &subject_expr, &subject_typ, scheduler, &mut bound_keys)
+                            }
+                            Some(AstNodePayload::PatWordLit(pat_word_lit)) => {
+                                let pat = pat.unwrap();
+                                let literal = pat.parsing.string(pat_word_lit.literal).to_str_lossy().into_owned();
+                                let (value, _lit_width) = parse_word_literal(&literal);
+                                let width = type_width(&subject_typ, db);
+                                let pat_str = format!("{:0>width$b}", value, width = width as usize);
+                                verilog::CasePattern::PatternLit(verilog::PatternLit { width, radix: Radix::Bin, pattern: pat_str })
+                            }
+                            Some(AstNodePayload::PatBitLit(pat_bit_lit)) => {
+                                let pat_str = if pat_bit_lit.literal { "1".to_string() } else { "0".to_string() };
+                                verilog::CasePattern::PatternLit(verilog::PatternLit { width: 1, radix: Radix::Bin, pattern: pat_str })
+                            }
+                            _ => unreachable!("expected pattern node"),
+                        };
+                        if case_pattern_matches(&pattern, &subject_bits) {
+                            // Convert body with pattern-variable substitutions in scope
+                            let body_expr = self.convert_expr(package, body, typ, db, scheduler);
+                            scheduler.remove_bound_keys(&bound_keys);
+                            winner = Some(body_expr);
+                        } else {
+                            scheduler.remove_bound_keys(&bound_keys);
+                        }
+                    }
+                    let selected = winner
+                        .unwrap_or_else(|| verilog::Expr::XLit(verilog::expr::XLit { width: result_width }));
+                    scheduler.push(verilog::Element::Wire(verilog::Wire {
+                        name: temp_name.clone(),
+                        width: result_width,
+                        expr: Some(selected),
+                    }));
+                    return verilog::Expr::Reference(verilog::expr::Reference { name: temp_name });
+                }
+
                 let mut case_items: Vec<verilog::CaseItem> = vec![];
                 let mut has_else = false;
                 let mut idx = 1;
@@ -1700,9 +1834,7 @@ impl<'d> Converter<'d> {
                     // Convert body with pattern-variable substitutions in scope
                     let body_expr = self.convert_expr(package, body, typ, db, scheduler);
                     // Remove pattern-variable substitutions
-                    for key in &bound_keys {
-                        scheduler.subst.shift_remove(key);
-                    }
+                    scheduler.remove_bound_keys(&bound_keys);
                     case_items.push(verilog::CaseItem {
                         pattern,
                         stmts: vec![verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
@@ -2467,6 +2599,92 @@ fn constant_word_expr(width: Width, value: WordValue) -> verilog::Expr {
 
 fn constant_index_expr(index: Width) -> verilog::Expr {
     constant_word_expr(32, u64::from(index))
+}
+
+/// Evaluate a Verilog IR expression to a constant bit string (MSB-first),
+/// or `None` if it is not a compile-time constant (or contains x/z bits).
+fn const_bits_of_expr(expr: &verilog::Expr) -> Option<String> {
+    match expr {
+        verilog::Expr::WordLit(word_lit) => {
+            let mask = if word_lit.width >= 64 { u64::MAX } else { (1u64 << word_lit.width) - 1 };
+            let value = word_lit.value & mask;
+            Some(format!("{:0>width$b}", value, width = word_lit.width as usize))
+        }
+        verilog::Expr::BitLit(bit_lit) => {
+            Some(if bit_lit.value { "1".to_string() } else { "0".to_string() })
+        }
+        verilog::Expr::Concat(concat) => {
+            let mut bits = String::new();
+            for e in &concat.exprs {
+                bits.push_str(&const_bits_of_expr(e)?);
+            }
+            Some(bits)
+        }
+        verilog::Expr::Repeat(repeat) => {
+            let count_bits = const_bits_of_expr(&repeat.count)?;
+            let count = u32::from_str_radix(&count_bits, 2).ok()? as usize;
+            let mut base = String::new();
+            for e in &repeat.exprs {
+                base.push_str(&const_bits_of_expr(e)?);
+            }
+            Some(base.repeat(count))
+        }
+        verilog::Expr::IndexRange(index_range) => {
+            let subject_bits = const_bits_of_expr(&index_range.subject)?;
+            let width = subject_bits.len();
+            let hi = parse_index_expr(&index_range.index_hi)? as usize;
+            let lo = parse_index_expr(&index_range.index_lo)? as usize;
+            if hi >= width || lo > hi {
+                return None;
+            }
+            // MSB-first: bit `width-1` is at char index 0.
+            let start = width - 1 - hi;
+            let end = width - 1 - lo;
+            Some(subject_bits[start..=end].to_string())
+        }
+        verilog::Expr::Index(index) => {
+            let subject_bits = const_bits_of_expr(&index.subject)?;
+            let width = subject_bits.len();
+            let idx = parse_index_expr(&index.index)? as usize;
+            if idx >= width {
+                return None;
+            }
+            Some(subject_bits[width - 1 - idx..=width - 1 - idx].to_string())
+        }
+        _ => None,
+    }
+}
+
+/// Parse a constant index expression (a `WordLit`).
+fn parse_index_expr(expr: &verilog::Expr) -> Option<WordValue> {
+    match expr {
+        verilog::Expr::WordLit(word_lit) => Some(word_lit.value),
+        _ => None,
+    }
+}
+
+/// Statically check whether a `casez` pattern matches a constant subject
+/// bit string.  `?` wildcards match anything; the subject zero-extends on
+/// the left when the pattern is wider than the subject.
+fn case_pattern_matches(pattern: &verilog::CasePattern, subject_bits: &str) -> bool {
+    match pattern {
+        verilog::CasePattern::Default => true,
+        verilog::CasePattern::PatternLit(pattern_lit) => {
+            // LSB-aligned comparison.
+            let pattern_bits = &pattern_lit.pattern;
+            for (i, pc) in pattern_bits.chars().rev().enumerate() {
+                let sc = subject_bits.chars().rev().nth(i).unwrap_or('0');
+                if pc == '?' {
+                    continue;
+                }
+                if pc != sc {
+                    return false;
+                }
+            }
+            true
+        }
+        verilog::CasePattern::Expr(_) => false,
+    }
 }
 
 /// The expression filling `width` bits of unused payload above a ctor's
