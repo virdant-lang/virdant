@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Empty socket defs (no channels) are legal; `:=:` connecting two empty socket instances must pass"
+filecheck = "src/empty_socket.vir"

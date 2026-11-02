@@ -269,7 +269,7 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
         let mut already_unused: IndexSet<BString> = IndexSet::new();
         collect_unused(node.clone(), &mut use_locations, &mut already_unused, &mut diagnostics);
         if let Some(component_analysis) = &component_analysis {
-            collect_bidirectional_drivers(node.clone(), &mut use_locations, component_analysis, &mut diagnostics);
+            collect_bidirectional_drivers(builder, symbol_id, node.clone(), &mut use_locations, component_analysis, &mut diagnostics);
         }
     }
 
@@ -426,6 +426,8 @@ fn collect_unused(
 
 
 fn collect_bidirectional_drivers(
+    builder: &mut Builder,
+    item: SymbolId,
     node: AstNode<'_>,
     use_locations: &mut IndexMap<BString, IndexSet<Location>>,
     component_analysis: &crate::analysis::component::ComponentAnalysis,
@@ -489,7 +491,22 @@ fn collect_bidirectional_drivers(
                         }
                     }
 
-                    if !is_socket_prefix {
+                    // An empty socket (no channels) registers no
+                    // components, so a connection side naming the socket
+                    // instance itself (`baz.foo`) fails the prefix check
+                    // even though it is a valid socket reference.
+                    // Resolve it structurally: if the path names a socket
+                    // instance, accept it (there is simply nothing to
+                    // connect or mark used).
+                    let is_socket_instance = !is_socket_prefix
+                        && crate::queries::check::resolve_mono_socket(
+                            builder,
+                            item,
+                            resolved_path.as_bstr(),
+                        )
+                        .is_some();
+
+                    if !is_socket_prefix && !is_socket_instance {
                         // The resolved path is neither a direct component nor a
                         // socket prefix; generate an error.
                         // Use original path if it was an "it" reference
@@ -524,7 +541,7 @@ fn collect_bidirectional_drivers(
     }
 
     for child in node.children() {
-        collect_bidirectional_drivers(child, use_locations, component_analysis, diagnostics);
+        collect_bidirectional_drivers(builder, item, child, use_locations, component_analysis, diagnostics);
     }
 }
 

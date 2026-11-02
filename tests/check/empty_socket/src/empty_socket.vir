@@ -1,0 +1,24 @@
+// A socket def with no channels is legal.  Connecting two empty socket
+// instances with `:=:` must not report "Unknown component" — there are
+// simply no channels to route (and none can go missing, since the
+// socketdefs agree).
+//
+// CHECK-NOT: Check failed
+
+socket Empty {
+}
+
+mod Left {
+    client socket peer of Empty
+}
+
+mod Right {
+    server socket peer of Empty
+}
+
+pub mod Top {
+    mod left of Left
+    mod right of Right
+
+    left.peer :=: right.peer
+}

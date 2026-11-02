@@ -755,7 +755,7 @@ fn rewrite_connection_side(
 /// A socket instance resolved at a `:=:` connection side, together
 /// with its mono identity: the socketdef and its type arguments
 /// (composed through the enclosing submodule instances).
-struct MonoSocket {
+pub(crate) struct MonoSocket {
     socketdef: SymbolId,
     args: Vec<crate::types::Type>,
     rendered: BString,
@@ -766,7 +766,7 @@ struct MonoSocket {
 /// (composing written type arguments with the enclosing instance's
 /// arguments), then find the socket instance named by the last path
 /// segment in the innermost module.
-fn resolve_mono_socket(
+pub(crate) fn resolve_mono_socket(
     builder: &mut Builder,
     item: SymbolId,
     path: &bstr::BStr,
