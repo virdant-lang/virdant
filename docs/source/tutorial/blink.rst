@@ -76,31 +76,31 @@ Here are two ordinary comments from inside the `Strobe` module:
     :lines: 22-23
     :dedent:
 
-Match and When Chaining
+Match and If Chaining
 -----------------------
 The actual code for this package is very simple, I think.
 Hopefully you feel this way too.
 
 There's only one tiny detail I want to point out to you.
-It's inside of this `when` block:
+It's inside of this `if` block:
 
 .. literalinclude:: /examples/blink/src/strobe.vir
     :language: virdant
     :lines: 19-27
     :dedent:
 
-Normally, we have a `=>` after each `case` and after the `else` in a `when` block.
+Normally, we have a `=>` after each `when` and after the `else` in an `if` block.
 However, here, we do not.
 
-If a `case` or `else` contains a `match` block,
+If a `when` or `else` contains a `match` block,
 we may write it joined together like this and elide the `=>`.
 This is called `match` block chaining.
 
-This actually works for `when` statements too.
-But then we call it `when` block chaining instead.
+This actually works for `if` statements too.
+But then we call it `if` block chaining instead.
 
 When we do this, we write the `when` or `match` statement on the same line.
-This lets the `case` and `else` statements nest neatly,
+This lets the `when` and `else` statements nest neatly,
 with only one level of indentation.
 
 
@@ -128,10 +128,10 @@ But if we want to make sure of it, we could have written it with the help of a `
 
     //> `counter` repeatedly counts down from `period` to 0.
     reg counter : Word[24] on clock {
-        it <= when {
-            case reset => period_minus_one
+        it <= if {
+            when reset => period_minus_one
             else match it {
-                case 0 => period_minus_one  // loop when we get to 0
+                with 0 => period_minus_one  // loop when we get to 0
                 else   => it - 1            // otherwise, decrement
             }
         }
@@ -203,7 +203,7 @@ which is the last thing we'll look at in this chapter.
 
 Registers Hold their Value
 --------------------------
-Let's zoom in closely on the `when` statement for `led`:
+Let's zoom in closely on the `if` statement for `led`:
 
 .. literalinclude:: /examples/blink/src/blink.vir
     :language: virdant
@@ -212,18 +212,18 @@ Let's zoom in closely on the `when` statement for `led`:
 
 Do you notice something's missing?
 
-When we learned about `when` blocks earlier,
+When we learned about `if` blocks earlier,
 they always had an `else` statement.
 They *needed* to have one, or else Virdant would give you an error.
 But this one doesn't.
 
 Weird.
 
-When a `when` block is used as an expression, they must handle all cases.
+When an `if` block is used as an expression, it must handle all cases.
 Otherwise, we wouldn't know what value they should take in the cases you didn't cover.
-That means `when` blocks need an `else` block... when used as expressions.
+That means `if` blocks need an `else` block... when used as expressions.
 
-But here, `when` is being used to guard against a latched driver: `it <= !it`,
+But here, the `if` block is being used to guard against a latched driver: `it <= !it`,
 and `it` refers to a `led`, which is a register.
 
 On any given clock cycle, if a register is not driven with `<=`,
@@ -233,8 +233,8 @@ It's equivalent to the following:
 
 .. code-block:: virdant
 
-    when {
-        case strobe_timer.pulse {
+    if {
+        when strobe_timer.pulse {
             it <= !it
         }
         else {

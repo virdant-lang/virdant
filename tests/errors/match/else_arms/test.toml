@@ -1,4 +1,4 @@
 kind = "check"
 expect = "error"
-description = "MatchCoverage: `else` arm followed by another `case`."
+description = "MatchCoverage: `else` arm followed by another `with`."
 filecheck = "src/else_arms.vir"

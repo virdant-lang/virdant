@@ -14,33 +14,33 @@ The full expression grammar, from highest to lowest precedence:
 
 .. code-block:: grammar
 
-    Expr := When | Match | Let | ExprStruct | ExprBinOpLogical
+    Expr := If | Match | Let | ExprStruct | ExprBinOpLogical
 
-    When := "when" "{" WhenArm* "}"
-    WhenArm      := "case" Expr "=>" Expr
-                    | "case" Expr ArmBlock
-                    | "case" Expr When
-                    | "case" Expr Match
-                    | "case" Expr Let
+    If := "if" "{" IfArm* "}"
+    IfArm        := "when" Expr "=>" Expr
+                    | "when" Expr ArmBlock
+                    | "when" Expr If
+                    | "when" Expr Match
+                    | "when" Expr Let
                     | "else" "=>" Expr
                     | "else" ArmBlock
-                    | "else" When
+                    | "else" If
                     | "else" Match
                     | "else" Let
     Match        := "match" Expr "{" MatchArm* "}"
-    MatchArm     := "case" Pat "=>" Expr
-                    | "case" Pat ArmBlock
-                    | "case" Pat When
-                    | "case" Pat Match
-                    | "case" Pat Let
+    MatchArm     := "with" Pat "=>" Expr
+                    | "with" Pat ArmBlock
+                    | "with" Pat If
+                    | "with" Pat Match
+                    | "with" Pat Let
                     | "else" "=>" Expr
                     | "else" ArmBlock
-                    | "else" When
+                    | "else" If
                     | "else" Match
                     | "else" Let
     Let          := "let" LetBindingList ArmBlock
                     | "let" LetBindingList "=>" Expr
-                    | "let" LetBindingList When
+                    | "let" LetBindingList If
                     | "let" LetBindingList Match
     LetBindingList   := LetBinding | LetBindingList "," LetBinding
     LetBinding       := Ident ":" Type "=" Expr | Ident "=" Expr
@@ -273,57 +273,57 @@ The builtin Valid type also uses the `@` constructor syntax:
 For more details, see the :doc:`types` chapter on Valid[T].
 
 
-When Expressions
-----------------
-When expressions select between two or more branches based on conditions.
+If Expressions
+--------------
+If expressions select between two or more branches based on conditions.
 
 .. code-block:: grammar
 
-    When := "when" "{" WhenArm* "}"
+    If := "if" "{" IfArm* "}"
 
-    WhenArm :=
-        "case" Expr "=>" Expr
-        | "case" Expr ArmBlock
-        | "case" Expr When
-        | "case" Expr Match
-        | "case" Expr Let
+    IfArm :=
+        "when" Expr "=>" Expr
+        | "when" Expr ArmBlock
+        | "when" Expr If
+        | "when" Expr Match
+        | "when" Expr Let
         | "else" "=>" Expr
         | "else" ArmBlock
-        | "else" When
+        | "else" If
         | "else" Match
         | "else" Let
 
 .. code-block:: virdant
 
     wire max : Word[8]
-    max := when {
-        case a > b => a
+    max := if {
+        when a > b => a
         else => b
     }
 
-    // Multi-branch when
+    // Multi-branch if
     wire sel : Word[8]
-    sel := when {
-        case op == 0 => a & b
-        case op == 1 => a | b
-        case op == 2 => a + b
+    sel := if {
+        when op == 0 => a & b
+        when op == 1 => a | b
+        when op == 2 => a + b
         else => a - b
     }
 
 All branches must have the same type.
 Each condition must be of type `Bit`.
-The `when` expression requires an `else` arm.
+The `if` expression requires an `else` arm.
 
 Arm Syntax
 ~~~~~~~~~~
-Each arm may use one of five forms:
+Each `when` clause may use one of five forms:
 
-1. Bare expression: `case cond => expr`
-2. Block: `case cond { stmts }`
+1. Bare expression: `when cond => expr`
+2. Block: `when cond { stmts }`
    (blocks must contain a single expression to be valid in expression context)
-3. Nested `when`: `case cond when { ... }`
-4. Nested `match`: `case cond match expr { ... }`
-5. Let binding: `case cond let x = expr => ...`
+3. Nested `if`: `when cond if { ... }`
+4. Nested `match`: `when cond match expr { ... }`
+5. Let binding: `when cond let x = expr => ...`
 
 The same forms apply to the `else` arm.
 A `let` arm body follows the same terminator rules as any other `let`.
@@ -333,7 +333,7 @@ Let Expressions
 ---------------
 A `let` expression binds immutable names to values for use within a
 scope. In expression position, the body must *produce* a value: either
-with `=>`, or by chaining directly into a `when` or `match` whose arms
+with `=>`, or by chaining directly into an `if` or `match` whose arms
 produce values. Only the `{ ... }` block form is a style error here,
 since a block performs rather than produces:
 
@@ -342,7 +342,7 @@ since a block performs rather than produces:
     Let :=
         "let" LetBindingList ArmBlock
         | "let" LetBindingList "=>" Expr
-        | "let" LetBindingList When
+        | "let" LetBindingList If
         | "let" LetBindingList Match
 
 .. code-block:: virdant
@@ -350,8 +350,8 @@ since a block performs rather than produces:
     out := let scaled = a + a => scaled + b
 
     // Chained form: also legal in expression position.
-    out := let done = a == 0w8 when {
-        case done => 0w8
+    out := let done = a == 0w8 if {
+        when done => 0w8
         else => 0w8
     }
 
@@ -387,14 +387,14 @@ Match expressions perform pattern matching on a value.
     Match := "match" Expr "{" MatchArm* "}"
 
     MatchArm :=
-        "case" Pat "=>" Expr
-        | "case" Pat ArmBlock
-        | "case" Pat When
-        | "case" Pat Match
-        | "case" Pat Let
+        "with" Pat "=>" Expr
+        | "with" Pat ArmBlock
+        | "with" Pat If
+        | "with" Pat Match
+        | "with" Pat Let
         | "else" "=>" Expr
         | "else" ArmBlock
-        | "else" When
+        | "else" If
         | "else" Match
         | "else" Let
 
@@ -402,9 +402,9 @@ Match expressions perform pattern matching on a value.
 
     wire decoded : Word[8]
     decoded := match op {
-        case #OP     => 1
-        case #OP_IMM => 2
-        case #LOAD   => 3
+        with #OP     => 1
+        with #OP_IMM => 2
+        with #LOAD   => 3
         else         => 0
     }
 
@@ -416,14 +416,14 @@ If no `else` arm is present, the match must be exhaustive.
 
 Arm Syntax
 ~~~~~~~~~~
-Each arm may use one of five forms:
+Each `with` arm may use one of five forms:
 
-1. Bare expression: `case pat => expr`
-2. Block: `case pat { stmts }`
+1. Bare expression: `with pat => expr`
+2. Block: `with pat { stmts }`
    (blocks must contain a single expression to be valid in expression context)
-3. Nested `when`: `case pat when { ... }`
-4. Nested `match`: `case pat match expr { ... }`
-5. Let binding: `case pat let x = expr => ...`
+3. Nested `if`: `with pat if { ... }`
+4. Nested `match`: `with pat match expr { ... }`
+5. Let binding: `with pat let x = expr => ...`
 
 The same forms apply to the `else` arm.
 A `let` arm body follows the same terminator rules as any other `let`.
@@ -466,12 +466,12 @@ Returns `a` if `cond` is true, otherwise returns `b`.
     out := mux(enable, data, 0)
 
     // Equivalent to:
-    out := when {
-        case enable => data
+    out := if {
+        when enable => data
         else => 0
     }
 
-The `mux` function is desugared to a `when` expression during compilation.
+The `mux` function is desugared to an `if` expression during compilation.
 All three arguments must be provided:
 
 - `cond` must be of type `Bit`

@@ -2,7 +2,7 @@
 //! register (`reg` / `outgoing reg`), and each register may have at most
 //! one `initial` statement. Emits `InitialForNonReg`, `InitialMultiple`.
 //!
-//! Placement (`InitialInsideWhenMatch`) and resolution
+//! Placement (`InitialInsideIfMatch`) and resolution
 //! (`UnresolvedComponent`) errors are reported during driver analysis.
 
 use std::sync::Arc;

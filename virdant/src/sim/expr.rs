@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bstr::{BString, ByteSlice};
 
 use crate::analysis::component::ComponentId;
-use crate::analysis::drivers::{Driver, DriverWhen, DriverMatch};
+use crate::analysis::drivers::{Driver, DriverIf, DriverMatch};
 use crate::common::WordValue;
 use crate::db::Db;
 use crate::sim::payload;
@@ -30,7 +30,7 @@ pub struct Expr {
 pub enum ExprPayload {
     Reference(payload::Reference),
     Paren(payload::Paren),
-    When(payload::When),
+    If(payload::If),
     Match(payload::Match),
     BitLit(payload::BitLit),
     WordLit(payload::WordLit),
@@ -100,7 +100,7 @@ pub fn driver_to_expr(db: &Db, driver: &Driver, component_typ: &Type, env: &[Typ
         Driver::Expr(_, loc) => convert_ast_expr(db, loc.clone(), env, types),
         Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are resolved into aliases, not simulation"),
         Driver::Absent => unreachable!("Absent drivers only appear inside when clauses"),
-        Driver::When(driver_when) => convert_driver_when(db, driver_when, component_typ, env, types),
+        Driver::If(driver_if) => convert_driver_if(db, driver_if, component_typ, env, types),
         Driver::Match(driver_match) => convert_driver_match(db, driver_match, component_typ, env, types),
     }
 }
@@ -204,16 +204,16 @@ fn convert_pattern(
     }
 }
 
-fn convert_driver_when(db: &Db, driver_when: &DriverWhen, component_typ: &Type, env: &[Type], types: &mut TypeInterner) -> Arc<Expr> {
-    let location = match driver_when.clauses.first() {
+fn convert_driver_if(db: &Db, driver_if: &DriverIf, component_typ: &Type, env: &[Type], types: &mut TypeInterner) -> Arc<Expr> {
+    let location = match driver_if.clauses.first() {
         Some((cond_loc, _)) => cond_loc.clone(),
-        None => driver_when.else_clause.as_ref()
+        None => driver_if.else_clause.as_ref()
             .and_then(|else_driver| else_driver.location())
-            .expect("when driver has no clauses and no else clause"),
+            .expect("if driver has no clauses and no else clause"),
     };
 
     let mut branches: Vec<(Arc<Expr>, Arc<Expr>)> = Vec::new();
-    for (cond_loc, sub_driver) in &driver_when.clauses {
+    for (cond_loc, sub_driver) in &driver_if.clauses {
         let cond = convert_ast_expr(db, cond_loc.clone(), env, types);
         let body = match sub_driver.as_ref() {
             // The component is not driven in this clause: it holds its
@@ -225,7 +225,7 @@ fn convert_driver_when(db: &Db, driver_when: &DriverWhen, component_typ: &Type, 
         branches.push((cond, body));
     }
 
-    let else_branch = match &driver_when.else_clause {
+    let else_branch = match &driver_if.else_clause {
         Some(else_driver) => driver_to_expr(db, else_driver.as_ref(), component_typ, env, types),
         // No else clause: the component holds its current value.
         None => self_reference(location.clone(), component_typ, types),
@@ -233,7 +233,7 @@ fn convert_driver_when(db: &Db, driver_when: &DriverWhen, component_typ: &Type, 
 
     let typ = else_branch.typ.clone();
     let typ_id = types.intern(&typ);
-    Arc::new(Expr { location, typ, typ_id, payload: ExprPayload::When(payload::When { branches, else_branch }) })
+    Arc::new(Expr { location, typ, typ_id, payload: ExprPayload::If(payload::If { branches, else_branch }) })
 }
 
 // Recursively build `If` branches from the flat [cond, then, cond, then, ..., else] child list.
@@ -268,7 +268,7 @@ fn resolve_pattern_binding(
         let parent = parsing.ast_node(parent_id);
         match parent.payload() {
             AstNodePayload::Match => {
-                // Children: [subject, arm_0, arm_1, ...] where each `case` arm contributes
+                // Children: [subject, arm_0, arm_1, ...] where each `with` arm contributes
                 // (pattern, body) and each `else` arm contributes (body) only.
                 let children = parent.children();
                 for (pat_opt, body) in match_arm_children(&children) {
@@ -392,10 +392,10 @@ fn convert_ast_expr(db: &Db, loc: Location, env: &[Type], types: &mut TypeIntern
             let child_loc = node.child(0).location();
             ExprPayload::Paren(payload::Paren { subject: convert_ast_expr(db, child_loc, env, types) })
         }
-        AstNodePayload::When => {
-            use crate::syntax::ast::when_arm_children;
+        AstNodePayload::If => {
+            use crate::syntax::ast::if_arm_children;
             let children = node.children();
-            let arms = when_arm_children(&children);
+            let arms = if_arm_children(&children);
             let mut branches: Vec<(Arc<Expr>, Arc<Expr>)> = Vec::new();
             let mut else_branch_opt: Option<Arc<Expr>> = None;
 
@@ -409,8 +409,8 @@ fn convert_ast_expr(db: &Db, loc: Location, env: &[Type], types: &mut TypeIntern
                 }
             }
 
-            let else_branch = else_branch_opt.expect("when must have else arm");
-            ExprPayload::When(payload::When { branches, else_branch })
+            let else_branch = else_branch_opt.expect("if must have else arm");
+            ExprPayload::If(payload::If { branches, else_branch })
         }
         AstNodePayload::Match => {
             let children = node.children();
@@ -508,9 +508,9 @@ fn convert_ast_expr(db: &Db, loc: Location, env: &[Type], types: &mut TypeIntern
                     }
                     Primitive::Mux => {
                         assert!(args.len() == 3, "mux expects exactly 3 arguments");
-                        // mux(cond, a, b) -> when { case cond => a; else => b }
+                        // mux(cond, a, b) -> if { when cond => a; else => b }
                         let branches = vec![(args[0].clone(), args[1].clone())];
-                        ExprPayload::When(payload::When {
+                        ExprPayload::If(payload::If {
                             branches,
                             else_branch: args[2].clone(),
                         })

@@ -3,8 +3,8 @@ mod Top {
     incoming reset : Bit
 
     reg counter : Word[8] on clock
-    counter <= when {
-        case reset => 0
+    counter <= if {
+        when reset => 0
         else => counter + 1
     }
 }

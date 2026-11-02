@@ -7,10 +7,10 @@
 pub mod Top {
     outgoing e : Bit {
         match @Valid(2) : Valid[Word[8]] {
-            case @Invalid() {
+            with @Invalid() {
                 it := false
             }
-            case @Valid(value) let value : Word[8] = 3 {
+            with @Valid(value) let value : Word[8] = 3 {
                 // CHECK: Unknown component x
                 it := x == 3
             }

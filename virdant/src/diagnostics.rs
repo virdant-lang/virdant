@@ -86,7 +86,7 @@ pub enum DiagnosticPayload {
     Todo(Todo),
     /// A `match` does not cover every value of its subject.
     MatchNotExhaustive(MatchNotExhaustive),
-    /// A `case` arm overlaps with an earlier `case` arm.
+    /// A `with` arm overlaps with an earlier `with` arm.
     MatchOverlappingArm(MatchOverlappingArm),
     /// A docstring (`//>` or `//!`) whose content does not start with a space.
     /// The convention is `//> text` or `//! text`, not `//>text` or `//!text`.
@@ -114,8 +114,8 @@ pub enum DiagnosticPayload {
     InitialForNonReg(InitialForNonReg),
     /// A register has more than one `initial` statement.
     InitialMultiple(InitialMultiple),
-    /// An `initial` statement appears inside a `when` or `match` block.
-    InitialInsideWhenMatch(InitialInsideWhenMatch),
+    /// An `initial` statement appears inside an `if` or `match` block.
+    InitialInsideIfMatch(InitialInsideIfMatch),
     /// A combinational loop was detected in a module's dependency graph.
     /// All edges in the cycle are combinational, which would causal, which would cause
     /// simulation to never converge.
@@ -141,7 +141,7 @@ pub enum DiagnosticPayload {
     ItNotInItBlock,
     CantInfer,
     WrongArgCount,
-    /// The `else` arm covers no values not already covered by earlier `case` arms.
+    /// The `else` arm covers no values not already covered by earlier `with` arms.
     MatchRedundantElse,
     /// A `match` has more than one `else` arm.
     MatchMultipleElse,
@@ -151,13 +151,13 @@ pub enum DiagnosticPayload {
     EnumUnknownWidth,
     /// A driver block is empty.
     EmptyDriverBlock,
-    /// A `when`/`match` arm uses a `{ ... }` block for a value where the
-    /// when/match is used as an expression; the idiomatic arm form is
-    /// `case <cond> => <expr>`.
+    /// An `if`/`match` arm uses a `{ ... }` block for a value where the
+    /// if/match is used as an expression; the idiomatic arm form is
+    /// `when <cond> => <expr>` (or `with <pat> => <expr>`).
     ArmBlockNeedsArrow,
-    /// A `when`/`match` arm produces a value where the when/match is used
-    /// as a statement; the idiomatic arm form is `case <cond> { <stmts> }`
-    /// with driver statements.
+    /// An `if`/`match` arm produces a value where the if/match is used
+    /// as a statement; the idiomatic arm form is `when <cond> { <stmts> }`
+    /// (or `with <pat> { <stmts> }`) with driver statements.
     ArmNeedsBlock,
     /// A `let` binding's body is a block (`{ ... }`) but the `let` is
     /// used in an expression position, where the binding's scope must
@@ -458,7 +458,7 @@ pub struct InitialMultiple {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InitialInsideWhenMatch {
+pub struct InitialInsideIfMatch {
     pub target: BString,
 }
 
@@ -819,9 +819,9 @@ impl Diagnostic {
             DiagnosticPayload::InitialMultiple(d) => {
                 format!("multiple initial statements for register {}", d.target).into()
             }
-            DiagnosticPayload::InitialInsideWhenMatch(d) => {
+            DiagnosticPayload::InitialInsideIfMatch(d) => {
                 format!(
-                    "initial statement for {} must not appear inside a when/match block",
+                    "initial statement for {} must not appear inside an if/match block",
                     d.target,
                 ).into()
             }
@@ -1025,7 +1025,7 @@ from_diagnostic! {
     InvalidWordIndexWidth, IndexNotWordType, RedundantUnused, RedundantDriver,
     CombinationalLoop, DependsonCycle, DependsonBadCarrier, DependsonBadEntry,
     DependsonUndeclared, DependsonUnused,
-    InitialForNonReg, InitialMultiple, InitialInsideWhenMatch,
+    InitialForNonReg, InitialMultiple, InitialInsideIfMatch,
     ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,
     PlatformPortTypeMismatch, DefaultOutsidePlatformPort, NotYetImplemented, TypeArgCount,
     TypeArgKind, UnknownKind,

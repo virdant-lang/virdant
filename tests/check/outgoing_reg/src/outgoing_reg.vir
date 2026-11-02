@@ -13,11 +13,11 @@ pub mod OutgoingRegUnused {
     // No "Unused signal" warning should be produced.
     outgoing reg out : Word[8]
 
-    when {
-        case reset {
+    if {
+        when reset {
             out <= 0
         }
-        case inp {
+        when inp {
             out <= 1
         }
     }

@@ -7,10 +7,10 @@ mod MatchLoop {
     wire w : Bit
 
     match w {
-        case true {
+        with true {
             w := false
         }
-        case false {
+        with false {
             w := true
         }
     }

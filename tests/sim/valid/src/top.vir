@@ -10,8 +10,8 @@ pub mod Top {
 
     wire foo : Word[8] {
         it := match @Valid(3) : Valid[Word[8]] {
-            case @Invalid() => 0
-            case @Valid(n)  => n
+            with @Invalid() => 0
+            with @Valid(n)  => n
         }
     }
 

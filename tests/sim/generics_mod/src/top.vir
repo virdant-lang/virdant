@@ -77,8 +77,8 @@ pub mod Top {
     outgoing out4 : Word[4]
     out8 := s.busif.rsp
     out4 := match t4.o {
-        case @Some(v) => v
-        case #None => 0
+        with @Some(v) => v
+        with #None => 0
     }
     unused r4.q
 }

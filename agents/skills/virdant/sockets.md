@@ -79,13 +79,13 @@ its channels via `it`.
 ```virdant
 server socket inp of Pipe {
     it.ready := match out_data {
-        case @Valid(dontcare) => true
-        case @Invalid() => !is_full
+        with @Valid(dontcare) => true
+        with @Invalid() => !is_full
     }
 
-    when {
-        case inp_fires match it.data {
-            case @Valid(in_data) { ... }
+    if {
+        when inp_fires match it.data {
+            with @Valid(in_data) { ... }
         }
     }
 }

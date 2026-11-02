@@ -114,8 +114,8 @@ pub mod Hello {
 
     //> `@Valid(0)` once the whole message has been sent.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case char_index == 15 && sender.ready => @Valid(0)
+        it := if {
+            when char_index == 15 && sender.ready => @Valid(0)
             else => @Invalid()
         }
     }
@@ -137,8 +137,8 @@ pub mod Hello {
     // high for 256 cycles before sending anything.
     reg boot : Word[8] on clock {
         initial it <= 0
-        when {
-            case it != 255 {
+        if {
+            when it != 255 {
                 it <= it + 1
             }
         }
@@ -159,8 +159,8 @@ pub mod Hello {
     // handshake) and stops at the end of the message.
     reg char_index : Word[4] on clock {
         initial it <= 0
-        when {
-            case sender.ready && offer_byte {
+        if {
+            when sender.ready && offer_byte {
                 it <= it + 1
             }
         }
@@ -177,21 +177,21 @@ mod CharRom {
     outgoing char : Word[8] dependson index
 
     char := match index {
-        case 0  => 0x48 // 'H'
-        case 1  => 0x65 // 'e'
-        case 2  => 0x6c // 'l'
-        case 3  => 0x6c // 'l'
-        case 4  => 0x6f // 'o'
-        case 5  => 0x2c // ','
-        case 6  => 0x20 // ' '
-        case 7  => 0x77 // 'w'
-        case 8  => 0x6f // 'o'
-        case 9  => 0x72 // 'r'
-        case 10 => 0x6c // 'l'
-        case 11 => 0x64 // 'd'
-        case 12 => 0x21 // '!'
-        case 13 => 0x0d // CR
-        case 14 => 0x0a // LF
+        with 0  => 0x48 // 'H'
+        with 1  => 0x65 // 'e'
+        with 2  => 0x6c // 'l'
+        with 3  => 0x6c // 'l'
+        with 4  => 0x6f // 'o'
+        with 5  => 0x2c // ','
+        with 6  => 0x20 // ' '
+        with 7  => 0x77 // 'w'
+        with 8  => 0x6f // 'o'
+        with 9  => 0x72 // 'r'
+        with 10 => 0x6c // 'l'
+        with 11 => 0x64 // 'd'
+        with 12 => 0x21 // '!'
+        with 13 => 0x0d // CR
+        with 14 => 0x0a // LF
         else    => 0x00
     }
 }
@@ -226,21 +226,21 @@ mod UartSender {
     reg state : UartState on clock {
         initial it <= @Idle()
         it <= match it : UartState {
-            case @Idle() when {
-                case data_valid => @Start(8)
+            with @Idle() if {
+                when data_valid => @Start(8)
                 else => @Idle()
             }
-            case @Start(pulse) when {
-                case pulse == 0 => @Data(0, 8)
+            with @Start(pulse) if {
+                when pulse == 0 => @Data(0, 8)
                 else => @Start(pulse - 1)
             }
-            case @Data(bit, pulse) when {
-                case pulse > 0 => @Data(bit, pulse - 1)
-                case bit == 7 => @Stop(8)
+            with @Data(bit, pulse) if {
+                when pulse > 0 => @Data(bit, pulse - 1)
+                when bit == 7 => @Stop(8)
                 else => @Data(bit + 1, 8)
             }
-            case @Stop(pulse) when {
-                case pulse == 0 => @Idle()
+            with @Stop(pulse) if {
+                when pulse == 0 => @Idle()
                 else => @Stop(pulse - 1)
             }
         }
@@ -250,7 +250,7 @@ mod UartSender {
     // is being offered.
     wire accepting : Bit {
         it := match state {
-            case @Idle() => true
+            with @Idle() => true
             else => false
         }
     }
@@ -258,8 +258,8 @@ mod UartSender {
     // Snapshot the byte on the accepting clock edge.  The line then
     // reads from the snapshot, so `data` may change while sending.
     reg latched_data : Word[8] on clock {
-        when {
-            case accepting && data_valid {
+        if {
+            when accepting && data_valid {
                 it <= data
             }
         }
@@ -269,10 +269,10 @@ mod UartSender {
     // bits LSB first, high stop bit, and high while idle.
     wire tx_level : Bit {
         it := match state : UartState {
-            case @Idle() => true
-            case @Start(pulse) => false
-            case @Data(bit, pulse) => latched_data[dyn bit]
-            case @Stop(pulse) => true
+            with @Idle() => true
+            with @Start(pulse) => false
+            with @Data(bit, pulse) => latched_data[dyn bit]
+            with @Stop(pulse) => true
         }
     }
 }

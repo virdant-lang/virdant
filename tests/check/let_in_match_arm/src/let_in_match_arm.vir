@@ -1,4 +1,4 @@
-// Regression test: an expression-position `let` as a `match`/`when`
+// Regression test: an expression-position `let` as a `match`/`if`
 // arm body used to abort `vir check` with a native stack overflow.
 // Typing the untyped binding's RHS queried the expected type at the
 // binding's first use; when that use is a ctor payload, the query
@@ -27,17 +27,17 @@ pub mod LetInMatchArm {
     reg state : St on clock {
         initial it <= @Idle()
         it <= match it : St {
-            case @Idle() =>
-                let result = value + 1 when {
-                    case value == 255 => @Done(result)
+            with @Idle() =>
+                let result = value + 1 if {
+                    when value == 255 => @Done(result)
                     else => @Step(result)
                 }
-            case @Step(result) =>
-                let done = result == value when {
-                    case done => @Done(result)
+            with @Step(result) =>
+                let done = result == value if {
+                    when done => @Done(result)
                     else => @Step(result)
                 }
-            case @Done(result) => @Done(result)
+            with @Done(result) => @Done(result)
         }
     }
 
@@ -54,13 +54,13 @@ pub mod LetWidthlessLiteral {
     reg state : St on clock {
         initial it <= @Idle()
         it <= match it : St {
-            case @Idle() =>
-                let seeded = 0 when {
-                    case true => @Step(seeded)
+            with @Idle() =>
+                let seeded = 0 if {
+                    when true => @Step(seeded)
                     else => @Idle()
                 }
-            case @Step(seeded) => @Step(seeded)
-            case @Done(result) => @Done(result)
+            with @Step(seeded) => @Step(seeded)
+            with @Done(result) => @Done(result)
         }
     }
 
@@ -69,16 +69,16 @@ pub mod LetWidthlessLiteral {
     }
 }
 
-//> The same chained form with a `when` arm body instead of `match`.
+//> The same chained form with an `if` arm body instead of `match`.
 pub mod LetInWhenArm {
     incoming clock : Clock
 
     reg flag : Bit on clock {
         initial it <= false
-        it <= when {
-            case true =>
-                let all = true when {
-                    case it => true
+        it <= if {
+            when true =>
+                let all = true if {
+                    when it => true
                     else => false
                 }
             else => false

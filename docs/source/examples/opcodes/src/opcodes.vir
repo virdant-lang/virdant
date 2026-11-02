@@ -13,10 +13,10 @@ mod Alu {
     outgoing r : Word[8] dependson a, b, op
 
     r := match op {
-        case #and => a & b
-        case #or  => a | b
-        case #xor => a ^ b
-        case #add => a + b
-        case #sub => a - b
+        with #and => a & b
+        with #or  => a | b
+        with #xor => a ^ b
+        with #add => a + b
+        with #sub => a - b
     }
 }

@@ -14,8 +14,8 @@ pub mod Initial {
     // `initial it` inside the reg's it-block.
     reg down : Word[4] {
         initial it <= 9
-        when {
-            case it > 0 {
+        if {
+            when it > 0 {
                 it <= it - 1
             }
         }

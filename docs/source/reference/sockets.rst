@@ -369,12 +369,12 @@ consumer asserts readiness, and a top module connects the two with
         outgoing valid : Bit
         outgoing data : Word[8]
         valid := match consumer.data {
-            case @Valid(dontcare) => true
-            case @Invalid() => false
+            with @Valid(dontcare) => true
+            with @Invalid() => false
         }
         data := match consumer.data {
-            case @Valid(payload) => payload
-            case @Invalid() => 0
+            with @Valid(payload) => payload
+            with @Invalid() => 0
         }
     }
 

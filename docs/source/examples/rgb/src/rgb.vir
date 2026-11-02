@@ -16,10 +16,10 @@ mod Top {
     reg color : Color on clock
     color <=
         match counter {
-            case 0 => ${ red = 0, green = 0, blue = 0 }
-            case 1 => ${ red = 255, green = 0, blue = 0 }
-            case 2 => ${ red = 0, green = 255, blue = 0 }
-            case 3 => ${ red = 0, green = 0, blue = 255 }
+            with 0 => ${ red = 0, green = 0, blue = 0 }
+            with 1 => ${ red = 255, green = 0, blue = 0 }
+            with 2 => ${ red = 0, green = 255, blue = 0 }
+            with 3 => ${ red = 0, green = 0, blue = 255 }
         }
 
     redness := color->red

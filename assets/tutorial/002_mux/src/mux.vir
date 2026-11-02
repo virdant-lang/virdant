@@ -19,10 +19,10 @@ mod Mux3 {
     incoming select_c : Bit
 
     outgoing out : Word[8] dependson a, b, c, select_a, select_b, select_c {
-        it := when {
-            case select_a => a
-            case select_b => b
-            case select_c => c
+        it := if {
+            when select_a => a
+            when select_b => b
+            when select_c => c
             else => 0
         }
     }
@@ -38,10 +38,10 @@ mod Mux4 {
 
     outgoing out : Word[8] dependson a, b, c, d, select {
         it := match select {
-            case 0 => a
-            case 1 => b
-            case 2 => c
-            case 3 => d
+            with 0 => a
+            with 1 => b
+            with 2 => c
+            with 3 => d
         }
     }
 }

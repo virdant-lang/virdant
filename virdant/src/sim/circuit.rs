@@ -414,12 +414,12 @@ fn collect_locations_inner(driver: &Driver, locs: &mut Vec<Location>) {
         Driver::Expr(_, loc) => locs.push(loc.clone()),
         Driver::Bidirectional(_) => {}
         Driver::Absent => {}
-        Driver::When(driver_when) => {
-            for (cond_loc, sub_driver) in &driver_when.clauses {
+        Driver::If(driver_if) => {
+            for (cond_loc, sub_driver) in &driver_if.clauses {
                 locs.push(cond_loc.clone());
                 collect_locations_inner(sub_driver, locs);
             }
-            if let Some(else_driver) = &driver_when.else_clause {
+            if let Some(else_driver) = &driver_if.else_clause {
                 collect_locations_inner(else_driver, locs);
             }
         }
@@ -505,7 +505,7 @@ fn collect_referents_inner(expr: &Expr, out: &mut Vec<Referent>) {
     match expr.payload() {
         ExprPayload::Reference(r)       => out.push(r.referent.clone()),
         ExprPayload::Paren(p)           => collect_referents_inner(&p.subject, out),
-        ExprPayload::When(w)            => {
+        ExprPayload::If(w)            => {
             for (cond, body) in &w.branches {
                 collect_referents_inner(cond, out);
                 collect_referents_inner(body, out);

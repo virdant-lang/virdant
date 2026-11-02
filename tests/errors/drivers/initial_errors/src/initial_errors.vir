@@ -18,11 +18,11 @@ mod InitialErrors {
     initial r <= 2
     r <= r + 1
 
-    // `initial` inside a `when` block.
+    // `initial` inside an `if` block.
     reg s : Word[8]
-    when {
-        case cond {
-            // CHECK: initial statement for s must not appear inside a when/match block
+    if {
+        when cond {
+            // CHECK: initial statement for s must not appear inside an if/match block
             initial s <= 3
             s <= s + 1
         }

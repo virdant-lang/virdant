@@ -6,8 +6,8 @@ pub mod Top {
     outgoing done : Bit
 
     reg counter : Word[8] {
-        when {
-            case reset {
+        if {
+            when reset {
                 it <= 0
             }
             else {

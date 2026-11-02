@@ -1033,12 +1033,12 @@ fn collect_references(
                     }
                 }
             }
-            AstNodePayload::When => {
+            AstNodePayload::If => {
                 let children = stmt.children();
                 let mut idx = 0;
                 while let Some(first) = children.get(idx) {
                     if first.is_expr() {
-                        // case arm: guard + body
+                        // when arm: guard + body
                         collect_references_in_expr(first, component_analysis, it_context);
                         if let Some(body) = children.get(idx + 1) {
                             if matches!(body.payload(), AstNodePayload::ArmBlock) {
@@ -1048,7 +1048,7 @@ fn collect_references(
                                     it_context,
                                 );
                             } else {
-                                // nested when/match or bare expr - recurse as single stmt
+                                // nested if/match or bare expr - recurse as single stmt
                                 collect_references(&[body.clone()], component_analysis, it_context);
                             }
                         }
@@ -1084,7 +1084,7 @@ fn collect_references(
                             );
                         }
                         _ => {
-                            // For When, Match and other
+                            // For If, Match and other
                             // non-block bodies, pass the body node itself so
                             // the appropriate handler processes guards etc.
                             collect_references(

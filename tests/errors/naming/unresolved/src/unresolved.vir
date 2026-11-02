@@ -48,10 +48,10 @@ mod UnresolvedComponent {
 
     // CHECK: Unresolved component c
     match #zero : Val {
-        case #zero {
+        with #zero {
             c := 0
         }
-        case #one {
+        with #one {
             c := 1
         }
     }

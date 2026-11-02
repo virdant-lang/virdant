@@ -1,7 +1,7 @@
 // Icarus simulation test for the `let` statement feature, covering the
 // same corner cases as `tests/run/lets`: untyped and typed bindings,
 // multi-binding lists where later bindings see earlier ones, nested
-// lets, `let` as the body of `when`/`match` arms, and shadowing in
+// lets, `let` as the body of `if`/`match` arms, and shadowing in
 // sibling arms.  Each case drives a wire the testbench asserts on.
 
 pub mod Top {
@@ -34,10 +34,10 @@ pub mod Top {
     // `let` as a match-arm body: binding scoped to the arm.
     wire d : Bit {
         match @Valid(0) : Valid[Word[8]] {
-            case @Invalid() {
+            with @Invalid() {
                 it := false
             }
-            case @Valid(value) let x = 10w8 {
+            with @Valid(value) let x = 10w8 {
                 it := x == 10
             }
         }
@@ -46,10 +46,10 @@ pub mod Top {
     // A let binding shadowing the pattern-bound variable.
     wire e : Bit {
         match @Valid(2) : Valid[Word[8]] {
-            case @Invalid() {
+            with @Invalid() {
                 it := false
             }
-            case @Valid(value) let value = 3w8 {
+            with @Valid(value) let value = 3w8 {
                 // The let shadows the pattern's `value`; this checks
                 // the shadowed (let-bound) value, not the pattern one.
                 it := value == 3

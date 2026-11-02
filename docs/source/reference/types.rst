@@ -121,8 +121,8 @@ Values of type `Valid[T]` are deconstructed using `match`:
 
     wire got_it : Bit
     got_it := match v1 {
-        case @Valid(x) => x
-        case @Invalid() => false
+        with @Valid(x) => x
+        with @Invalid() => false
     }
 
 The `Valid[T]` type is useful for representing handshake signals,
@@ -244,8 +244,8 @@ Union values are deconstructed using `match` expressions:
 
     wire result : MyEnum
     result := match u {
-        case @Foo()   => #Baz
-        case @Bar(x)  => x
+        with @Foo()   => #Baz
+        with @Bar(x)  => x
     }
 
 Union types must be matched exhaustively.
@@ -314,10 +314,10 @@ They may be matched in `match` expressions:
 
     wire decoded : Word[8]
     decoded := match op {
-        case #Add => 1
-        case #Sub => 2
-        case #And => 3
-        case #Or  => 4
+        with #Add => 1
+        with #Sub => 2
+        with #And => 3
+        with #Or  => 4
     }
 
 Enum types also participate in the `word()` and `any()` builtin functions.
@@ -411,15 +411,15 @@ Using `#Name` on an enumerant that carries parameters is an error:
 
 reports ``Ctor Some requires arguments: use @Some(...)``.
 
-Payload enumerants are matched with `case @Name(pattern)`, which binds the
+Payload enumerants are matched with `with @Name(pattern)`, which binds the
 parameters to names inside the arm:
 
 .. code-block:: virdant
 
     wire inner : Word[4]
     inner := match o1 {
-        case @Some(v) => v
-        case #None    => 0
+        with @Some(v) => v
+        with #None    => 0
     }
 
 Matching an enum exhaustively requires covering every enumerant, with or

@@ -143,12 +143,12 @@ wire word_x : Word[8] {
 `dontcare` can be assigned to any wire (of any type) and to outgoing
 ports.
 
-It's especially useful as the RHS of `when` and `match` cases where the value is irrelevant or unused.
+It's especially useful as the RHS of `if` and `match` arms where the value is irrelevant or unused.
 
 ## `mux()` ternary selector
 
 `mux(sel, a, b)` returns `a` when `sel` is true and `b` when `sel` is false.
-Use it for simple ternary selection instead of a `when` expression.
+Use it for simple ternary selection instead of a `if` expression.
 
 ```virdant
 r <= mux(reset, 0, r + 1)
@@ -201,16 +201,16 @@ The slice `x[8..2]` keeps the top 6 bits (discarding bits 1..0).
 
 ### Variable-distance shifts
 
-Variable-distance shifts require a `when` or `match` expression:
+Variable-distance shifts require an `if` or `match` expression:
 
 ```virdant
 // x is Word[8], shift left by a variable amount (0..3)
 reg result : Word[8] on clock {
     it <= match shift_amount {
-        case 0 => x
-        case 1 => word(x[8..1], 0w1)
-        case 2 => word(x[8..2], 0w2)
-        case 3 => word(x[8..3], 0w3)
+        with 0 => x
+        with 1 => word(x[8..1], 0w1)
+        with 2 => word(x[8..2], 0w2)
+        with 3 => word(x[8..3], 0w3)
     }
 }
 ```

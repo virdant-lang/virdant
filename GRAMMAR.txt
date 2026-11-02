@@ -92,14 +92,14 @@ ModDefStmtCore :=
 
 ModDefStmt :=
       ModDefStmtCore
-    | When
+    | If
     | Match
     | Let
 
 Let :=
       "let" LetBindingList ArmBlock
     | "let" LetBindingList "=>" Expr
-    | "let" LetBindingList When
+    | "let" LetBindingList If
     | "let" LetBindingList Match
 
 LetBindingList :=
@@ -140,31 +140,31 @@ ModDefStmtSocket :=
       DocString? Annotations "client" "socket" Ident "of" Ofness GenericsParams? ItBlock?
     | DocString? Annotations "server" "socket" Ident "of" Ofness GenericsParams? ItBlock?
 
-When := "when" "{" WhenArm* "}"
+If := "if" "{" IfArm* "}"
 
-WhenArm :=
-      "case" Expr "=>" Expr
-    | "case" Expr ArmBlock
-    | "case" Expr When
-    | "case" Expr Match
-    | "case" Expr Let
+IfArm :=
+      "when" Expr "=>" Expr
+    | "when" Expr ArmBlock
+    | "when" Expr If
+    | "when" Expr Match
+    | "when" Expr Let
     | "else" "=>" Expr
     | "else" ArmBlock
-    | "else" When
+    | "else" If
     | "else" Match
     | "else" Let
 
 Match := "match" Expr "{" MatchArm* "}"
 
 MatchArm :=
-      "case" Pat "=>" Expr
-    | "case" Pat ArmBlock
-    | "case" Pat When
-    | "case" Pat Match
-    | "case" Pat Let
+      "with" Pat "=>" Expr
+    | "with" Pat ArmBlock
+    | "with" Pat If
+    | "with" Pat Match
+    | "with" Pat Let
     | "else" "=>" Expr
     | "else" ArmBlock
-    | "else" When
+    | "else" If
     | "else" Match
     | "else" Let
 
@@ -179,7 +179,7 @@ Kind := Ident
 Type := Ofness GenericsParams?
 
 Expr :=
-      When
+      If
     | Match
     | Let
     | ExprStruct
@@ -366,7 +366,6 @@ Tokens:
   "^^"
   "builtin"
   "bus"
-  "case"
   "client"
   "cosi"
   "default"
@@ -378,6 +377,7 @@ Tokens:
   "ext"
   "false"
   "for"
+  "if"
   "import"
   "incoming"
   "initial"
@@ -403,6 +403,7 @@ Tokens:
   "unused"
   "when"
   "wire"
+  "with"
   "{"
   "|"
   "||"

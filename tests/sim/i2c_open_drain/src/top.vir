@@ -11,8 +11,8 @@ mod Participant {
     incoming pull : Bit
 
     bus sda : Bit {
-        when {
-            case pull {
+        if {
+            when pull {
                 it #= false
             }
         }

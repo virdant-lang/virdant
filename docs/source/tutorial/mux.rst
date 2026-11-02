@@ -47,22 +47,22 @@ but the final result is decided by which has priority.
 (Here, `a` has priority over `b` which has priority over `c`).
 
 
-When Blocks
+If Blocks
 -----------
-In Virdant, we use `when` blocks to represent priority muxes.
+In Virdant, we use `if` blocks to represent priority muxes.
 
 .. literalinclude:: /examples/mux3/src/mux3.vir
     :language: virdant
     :lines: 11-16
     :dedent:
 
-Inside a `when` block is a number of `case` statements.
+Inside an `if` block is a number of `when` clauses.
 
-The syntax `case select_a => a` means:
+The syntax `when select_a => a` means:
 "if `select_a` is `true`, then the result is `a`"
 
-The condition for each `case` is tested in order until one is found.
-Otherwise, the value of the `when` block is given by the `else` clause.
+The condition for each `when` clause is tested in order until one is found.
+Otherwise, the value of the `if` block is given by the `else` clause.
 
 
 4-Way Multiplexer
@@ -88,14 +88,14 @@ the `match` block:
     :lines: 10-15
     :dedent:
 
-The syntax `match select` looks at `select` and then compares it for equality against each `case`.
+The syntax `match select` looks at `select` and then compares it for equality against each `with` arm.
 When it finds one that matches, the result of the `match` block becomes the value to the right of the `=>`.
 
-One nice thing about `match` is that it prevents you from forgetting to cover every case.
-If you forget a case, Virdant will help you out with an error.
+One nice thing about `match` is that it prevents you from forgetting to cover every value.
+If you forget an arm, Virdant will help you out with an error.
 
 `match` statements also produce efficient hardware,
-which the cases are tested in parallel.
+where the arms are tested in parallel.
 
 
 Conditionals in Virdant
@@ -103,7 +103,7 @@ Conditionals in Virdant
 And so we have seen three different ways to express conditional logic in Virdant:
 
 * the `mux` primitive, for simple two-way selections
-* `when` blocks, for priority chains of conditions
+* `if` blocks, for priority chains of conditions
 * `match` blocks, for comparing a value against all its possible values in parallel
 
 These each give you a different way to express yourself in Virdant.

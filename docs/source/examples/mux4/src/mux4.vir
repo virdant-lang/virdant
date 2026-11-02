@@ -8,10 +8,10 @@ mod Mux4 {
 
     outgoing out : Word[8] dependson a, b, c, d, select {
         it := match select {
-            case 0 => a
-            case 1 => b
-            case 2 => c
-            case 3 => d
+            with 0 => a
+            with 1 => b
+            with 2 => c
+            with 3 => d
         }
     }
 }

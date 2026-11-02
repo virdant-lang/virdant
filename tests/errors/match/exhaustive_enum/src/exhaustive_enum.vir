@@ -14,8 +14,8 @@ mod MissingEnumVariant {
     unused out
     // CHECK: not covered: #Blue
     out := match c {
-        case #Red   => true
-        case #Green => false
+        with #Red   => true
+        with #Green => false
     }
 }
 

@@ -14,7 +14,7 @@ mod MatchVarPattern {
 
     unused clock
     out := match x {
-        case y   => y
+        with y   => y
     }
 }
 
@@ -25,8 +25,8 @@ mod MatchCtorBitPat {
 
     unused clock
     out := match u {
-        case @Nothing()   => false
-        case @Pair(true, false) => true
+        with @Nothing()   => false
+        with @Pair(true, false) => true
         else              => false
     }
 }
@@ -38,8 +38,8 @@ mod MatchCtorMixPat {
 
     unused clock
     out := match u {
-        case @Nothing()   => false
-        case @Pair(x, false) => x
+        with @Nothing()   => false
+        with @Pair(x, false) => x
         else              => false
     }
 }

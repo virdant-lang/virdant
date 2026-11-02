@@ -25,10 +25,10 @@ pub mod Top {
     opcode := cast(opcode_bits)
 
     out := match opcode {
-        case #Add => x + y
-        case #Sub => x - y
-        case #And => x & y
-        case #Or  => x | y
+        with #Add => x + y
+        with #Sub => x - y
+        with #And => x & y
+        with #Or  => x | y
     }
 
     color := ${

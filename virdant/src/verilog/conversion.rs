@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use bstr::ByteSlice;
 
-use crate::analysis::drivers::{Driver, DriverWhen, DriverMatch};
+use crate::analysis::drivers::{Driver, DriverIf, DriverMatch};
 use crate::analysis::location::Location;
 use crate::analysis::symbols::{Symbol, SymbolId, SymbolTable};
 use crate::common::{self, ComponentKind, DriverType, Radix, TypeScheme, Width, WordValue};
@@ -708,8 +708,8 @@ impl<'d> Converter<'d> {
                     };
                     scheduler.in_sequential = true;
                     let stmts = match driver {
-                        Driver::When(driver_when) if driver_when.driver_type == DriverType::Latched => {
-                            self.convert_latched_driver_when_to_stmts(package, driver_when, &typ, &path, &mut scheduler)
+                        Driver::If(driver_if) if driver_if.driver_type == DriverType::Latched => {
+                            self.convert_latched_driver_when_to_stmts(package, driver_if, &typ, &path, &mut scheduler)
                         }
                         Driver::Match(driver_match) if driver_match.driver_type == DriverType::Latched => {
                             self.convert_driver_match_to_stmts(package, driver_match, &typ, &path, &mut scheduler)
@@ -812,12 +812,12 @@ impl<'d> Converter<'d> {
             }
             Driver::Bidirectional(_) => vec![],
             Driver::Absent => vec![],
-            Driver::When(driver_when) => {
+            Driver::If(driver_if) => {
                 let mut holes = vec![];
-                for (_, sub_driver) in &driver_when.clauses {
+                for (_, sub_driver) in &driver_if.clauses {
                     holes.extend(self.collect_driver_holes(sub_driver));
                 }
-                if let Some(else_driver) = &driver_when.else_clause {
+                if let Some(else_driver) = &driver_if.else_clause {
                     holes.extend(self.collect_driver_holes(else_driver));
                 }
                 holes
@@ -836,7 +836,7 @@ impl<'d> Converter<'d> {
     }
 
     /// Convert a `Driver` tree to a single `verilog::Expr` (for combinational / Continuous drivers).
-    /// `Driver::When` becomes a right-associative ternary chain (`cond ? then : else`).
+    /// `Driver::If` becomes a right-associative ternary chain (`cond ? then : else`).
     fn convert_driver_to_expr(
         &self,
         package: PackageId,
@@ -853,7 +853,7 @@ impl<'d> Converter<'d> {
             }
             Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are emitted directly, not via convert_driver_to_expr"),
             Driver::Absent => self.driver_default_expr(typ, net),
-            Driver::When(driver_when) => self.convert_driver_when_to_expr(package, driver_when, typ, net, scheduler),
+            Driver::If(driver_if) => self.convert_driver_when_to_expr(package, driver_if, typ, net, scheduler),
             Driver::Match(driver_match) => self.convert_driver_match_to_expr(package, driver_match, typ, net, scheduler),
         }
     }
@@ -879,14 +879,14 @@ impl<'d> Converter<'d> {
             }
             Driver::Bidirectional(_) => Strength::Strong,
             Driver::Absent => Strength::Weak,
-            Driver::When(driver_when) => {
+            Driver::If(driver_if) => {
                 let mut strength = Strength::Weak;
-                for (_, sub_driver) in &driver_when.clauses {
+                for (_, sub_driver) in &driver_if.clauses {
                     if self.driver_strength(sub_driver) == Strength::Strong {
                         strength = Strength::Strong;
                     }
                 }
-                if let Some(else_driver) = &driver_when.else_clause {
+                if let Some(else_driver) = &driver_if.else_clause {
                     if self.driver_strength(else_driver) == Strength::Strong {
                         strength = Strength::Strong;
                     }
@@ -913,17 +913,17 @@ impl<'d> Converter<'d> {
     fn convert_driver_when_to_expr(
         &self,
         package: PackageId,
-        driver_when: &DriverWhen,
+        driver_if: &DriverIf,
         typ: &Type,
         net: bool,
         scheduler: &mut ExprScheduler,
     ) -> verilog::Expr {
-        let else_expr = match &driver_when.else_clause {
+        let else_expr = match &driver_if.else_clause {
             Some(else_driver) => self.convert_driver_to_expr(package, else_driver, typ, net, scheduler),
             None => self.driver_default_expr(typ, net),
         };
 
-        driver_when.clauses.iter().rev().fold(else_expr, |acc, (cond_loc, sub_driver)| {
+        driver_if.clauses.iter().rev().fold(else_expr, |acc, (cond_loc, sub_driver)| {
             let cond_parsing = self.db.get_parsing(cond_loc.package());
             let cond_node = cond_parsing.ast_node(cond_loc.ast_node_id());
             let cond_type = self.node_type(package, &cond_node).unwrap_or(Type::Bit);
@@ -938,24 +938,24 @@ impl<'d> Converter<'d> {
         })
     }
 
-    /// Convert a `Latched Driver::When` tree into a chain of procedural `Stmt::If` blocks
+    /// Convert a `Latched Driver::If` tree into a chain of procedural `Stmt::If` blocks
     /// with non-blocking assignments.  When there is no else clause, no else branch is emitted.
     fn convert_latched_driver_when_to_stmts(
         &self,
         package: PackageId,
-        driver_when: &DriverWhen,
+        driver_if: &DriverIf,
         typ: &Type,
         path: &str,
         scheduler: &mut ExprScheduler,
     ) -> Vec<verilog::Stmt> {
         // Else stmts (empty when there is no else clause).
-        let else_stmts = match &driver_when.else_clause {
+        let else_stmts = match &driver_if.else_clause {
             Some(else_driver) => self.convert_latched_driver_to_stmts(package, else_driver, typ, path, scheduler),
             None => vec![],
         };
 
         // Build right-associative Stmt::If chain from last clause to first.
-        driver_when.clauses.iter().rev().fold(else_stmts, |acc_else, (cond_loc, sub_driver)| {
+        driver_if.clauses.iter().rev().fold(else_stmts, |acc_else, (cond_loc, sub_driver)| {
             let cond_parsing = self.db.get_parsing(cond_loc.package());
             let cond_node = cond_parsing.ast_node(cond_loc.ast_node_id());
             let cond_type = self.node_type(package, &cond_node).unwrap_or(Type::Bit);
@@ -1150,8 +1150,8 @@ impl<'d> Converter<'d> {
             // No assignment here: inside a clocked always block, emitting
             // nothing means the register holds its value.
             Driver::Absent => vec![],
-            Driver::When(driver_when) => {
-                self.convert_latched_driver_when_to_stmts(package, driver_when, typ, path, scheduler)
+            Driver::If(driver_if) => {
+                self.convert_latched_driver_when_to_stmts(package, driver_if, typ, path, scheduler)
             }
             Driver::Match(driver_match) => {
                 self.convert_driver_match_to_stmts(package, driver_match, typ, path, scheduler)
@@ -1607,7 +1607,7 @@ impl<'d> Converter<'d> {
                     width: self.node_width(package, &node),
                 })
             }
-            AstNodePayload::When => {
+            AstNodePayload::If => {
                 let children = node.children();
                 self.convert_when_expr(package, &children, typ, scheduler)
             }
@@ -2031,9 +2031,9 @@ impl<'d> Converter<'d> {
         scheduler: &mut ExprScheduler,
     ) -> verilog::Expr {
         // Children are encoded by the parser as flat sequences:
-        //   case arm  => 2 children (guard, body)
+        //   when arm  => 2 children (guard, body)
         //   else arm  => 1 child  (body)
-        // We process in pairs for case arms; a single remaining child is the else body.
+        // We process in pairs for when arms; a single remaining child is the else body.
         //
         // Build a right-associative ternary chain
         let mut clauses: Vec<(verilog::Expr, verilog::Expr)> = vec![];
@@ -2053,9 +2053,9 @@ impl<'d> Converter<'d> {
                 if block_children.len() == 1 && block_children[0].is_expr() {
                     self.convert_expr(package, block_children[0].clone(), typ, self.db, scheduler)
                 } else {
-                    panic!("when arm body block with multiple statements in expr context")
+                    panic!("if arm body block with multiple statements in expr context")
                 }
-            } else if matches!(body.payload(), AstNodePayload::When) {
+            } else if matches!(body.payload(), AstNodePayload::If) {
                 self.convert_when_expr(package, &body.children(), typ, scheduler)
             } else if matches!(body.payload(), AstNodePayload::Match) {
                 let body_type = self.node_type(package, body).unwrap();
@@ -2063,7 +2063,7 @@ impl<'d> Converter<'d> {
             } else if body.is_expr() {
                 self.convert_expr(package, body.clone(), typ, self.db, scheduler)
             } else {
-                panic!("unexpected when arm body: {:?}", body.payload())
+                panic!("unexpected if arm body: {:?}", body.payload())
             };
             clauses.push((guard_expr, body_expr));
             idx += 2;
@@ -2076,9 +2076,9 @@ impl<'d> Converter<'d> {
                 if block_children.len() == 1 && block_children[0].is_expr() {
                     self.convert_expr(package, block_children[0].clone(), typ, self.db, scheduler)
                 } else {
-                    panic!("when arm else body block with multiple statements in expr context")
+                    panic!("if arm else body block with multiple statements in expr context")
                 }
-            } else if matches!(remainder.payload(), AstNodePayload::When) {
+            } else if matches!(remainder.payload(), AstNodePayload::If) {
                 self.convert_when_expr(package, &remainder.children(), typ, scheduler)
             } else if matches!(remainder.payload(), AstNodePayload::Match) {
                 let body_type = self.node_type(package, remainder).unwrap();
@@ -2086,7 +2086,7 @@ impl<'d> Converter<'d> {
             } else if remainder.is_expr() {
                 self.convert_expr(package, remainder.clone(), typ, self.db, scheduler)
             } else {
-                panic!("unexpected when else arm body: {:?}", remainder.payload())
+                panic!("unexpected if else arm body: {:?}", remainder.payload())
             });
         }
 

@@ -47,18 +47,18 @@ mod Gcd {
     reg state : GcdState on clock {
         initial it <= @Idle()
         it <= match it : GcdState {
-            case @Idle() => mux(fire, @Running(x, y), @Idle())
-            case @Running(x, y) =>
+            with @Idle() => mux(fire, @Running(x, y), @Idle())
+            with @Running(x, y) =>
                 mux(y == 0, @Done(x),
                 mux(x == 0, @Done(y),
                 mux(x < y, @Running(y - x, x),
                 @Running(x - y, y))))
-            case @Done(result) => mux(fire, @Running(x, y), @Done(result))
+            with @Done(result) => mux(fire, @Running(x, y), @Done(result))
         }
     }
 
     match state {
-        case @Done(r) {
+        with @Done(r) {
             result := r
             valid := true
         }
@@ -77,8 +77,8 @@ pub mod GcdTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -100,8 +100,8 @@ pub mod GcdTest for virt::Virt {
     //> Index of the vector under test, 0 through 31.
     reg index : Word[5] on clock {
         initial it <= 0
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it + 1
             }
         }
@@ -111,8 +111,8 @@ pub mod GcdTest for virt::Virt {
     //> folds its verdict in on the cycle `gcd` reports `valid`.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && gcd.result == expected
             }
         }
@@ -122,8 +122,8 @@ pub mod GcdTest for virt::Virt {
     //> exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= true
             }
         }
@@ -149,135 +149,135 @@ pub mod GcdTest for virt::Virt {
 
     match index {
         // Corner cases: zero operands.
-        case 0 {
+        with 0 {
             vec_x := 0
             vec_y := 0
             expected := 0
         }
-        case 1 {
+        with 1 {
             vec_x := 0
             vec_y := 5
             expected := 5
         }
-        case 2 {
+        with 2 {
             vec_x := 5
             vec_y := 0
             expected := 5
         }
-        case 3 {
+        with 3 {
             vec_x := 0
             vec_y := 255
             expected := 255
         }
-        case 4 {
+        with 4 {
             vec_x := 255
             vec_y := 0
             expected := 255
         }
         // Ones and equal operands.
-        case 5 {
+        with 5 {
             vec_x := 1
             vec_y := 1
             expected := 1
         }
-        case 6 {
+        with 6 {
             vec_x := 1
             vec_y := 255
             expected := 1
         }
-        case 7 {
+        with 7 {
             vec_x := 255
             vec_y := 1
             expected := 1
         }
-        case 8 {
+        with 8 {
             vec_x := 7
             vec_y := 7
             expected := 7
         }
-        case 9 {
+        with 9 {
             vec_x := 255
             vec_y := 255
             expected := 255
         }
         // Both orders of asymmetric pairs.
-        case 10 {
+        with 10 {
             vec_x := 12
             vec_y := 15
             expected := 3
         }
-        case 11 {
+        with 11 {
             vec_x := 15
             vec_y := 12
             expected := 3
         }
-        case 12 {
+        with 12 {
             vec_x := 6
             vec_y := 4
             expected := 2
         }
-        case 13 {
+        with 13 {
             vec_x := 4
             vec_y := 6
             expected := 2
         }
-        case 14 {
+        with 14 {
             vec_x := 48
             vec_y := 18
             expected := 6
         }
-        case 15 {
+        with 15 {
             vec_x := 18
             vec_y := 48
             expected := 6
         }
-        case 16 {
+        with 16 {
             vec_x := 100
             vec_y := 75
             expected := 25
         }
-        case 17 {
+        with 17 {
             vec_x := 75
             vec_y := 100
             expected := 25
         }
-        case 18 {
+        with 18 {
             vec_x := 56
             vec_y := 98
             expected := 14
         }
-        case 19 {
+        with 19 {
             vec_x := 98
             vec_y := 56
             expected := 14
         }
-        case 20 {
+        with 20 {
             vec_x := 255
             vec_y := 85
             expected := 85
         }
-        case 21 {
+        with 21 {
             vec_x := 85
             vec_y := 255
             expected := 85
         }
         // Powers of two.
-        case 22 {
+        with 22 {
             vec_x := 64
             vec_y := 48
             expected := 16
         }
-        case 23 {
+        with 23 {
             vec_x := 48
             vec_y := 64
             expected := 16
         }
-        case 24 {
+        with 24 {
             vec_x := 128
             vec_y := 96
             expected := 32
         }
-        case 25 {
+        with 25 {
             vec_x := 255
             vec_y := 128
             expected := 1
@@ -285,32 +285,32 @@ pub mod GcdTest for virt::Virt {
         // Coprime pairs: consecutive Fibonacci numbers, consecutive
         // maximum values, and assorted others.  These also give the
         // worst-case runtimes (hundreds of subtractions each).
-        case 26 {
+        with 26 {
             vec_x := 21
             vec_y := 13
             expected := 1
         }
-        case 27 {
+        with 27 {
             vec_x := 144
             vec_y := 89
             expected := 1
         }
-        case 28 {
+        with 28 {
             vec_x := 255
             vec_y := 254
             expected := 1
         }
-        case 29 {
+        with 29 {
             vec_x := 169
             vec_y := 65
             expected := 13
         }
-        case 30 {
+        with 30 {
             vec_x := 99
             vec_y := 98
             expected := 1
         }
-        case 31 {
+        with 31 {
             vec_x := 240
             vec_y := 168
             expected := 24

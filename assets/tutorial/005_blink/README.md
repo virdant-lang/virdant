@@ -33,12 +33,12 @@ pub mod Strobe {
     //> `counter` repeatedly counts down from `period` to 0.
     //> When it reaches 0, it starts over and asserts `pulse`.
     reg counter : Word[24] on clock {
-        it <= when {
-            case reset => period - 1
+        it <= if {
+            when reset => period - 1
             else match it {
                 // loop when we get to 0
                 // otherwise, decrement
-                case 0 => period - 1
+                with 0 => period - 1
                 else   => it - 1
             }
         }
@@ -104,38 +104,38 @@ Here are two ordinary comments from inside the `Strobe` module:
                 // otherwise, decrement
 ```
 
-## Match and When Chaining
+## Match and If Chaining
 
 The actual code for this package is very simple, I think.
 Hopefully you feel this way too.
 
 There's only one tiny detail I want to point out to you.
-It's inside of this `when` block:
+It's inside of this `if` block:
 
 ```virdant
-        it <= when {
-            case reset => period - 1
+        it <= if {
+            when reset => period - 1
             else match it {
                 // loop when we get to 0
                 // otherwise, decrement
-                case 0 => period - 1
+                with 0 => period - 1
                 else   => it - 1
             }
         }
 ```
 
-Normally, we have a `=>` after each `case` and after the `else` in a `when` block.
+Normally, we have a `=>` after each `when` and after the `else` in an `if` block.
 However, here, we do not.
 
-If a `case` or `else` contains a `match` block,
+If a `when` or `else` contains a `match` block,
 we may write it joined together like this and elide the `=>`.
 This is called `match` block chaining.
 
-This actually works for `when` statements too.
-But then we call it `when` block chaining instead.
+This actually works for `if` statements too.
+But then we call it `if` block chaining instead.
 
 When we do this, we write the `when` or `match` statement on the same line.
-This lets the `case` and `else` statements nest neatly,
+This lets the `when` and `else` statements nest neatly,
 with only one level of indentation.
 
 ## Wires
@@ -161,10 +161,10 @@ But if we want to make sure of it, we could have written it with the help of a `
 
     //> `counter` repeatedly counts down from `period` to 0.
     reg counter : Word[24] on clock {
-        it <= when {
-            case reset => period_minus_one
+        it <= if {
+            when reset => period_minus_one
             else match it {
-                case 0 => period_minus_one  // loop when we get to 0
+                with 0 => period_minus_one  // loop when we get to 0
                 else   => it - 1            // otherwise, decrement
             }
         }
@@ -196,8 +196,8 @@ mod Blink {
     //> `led` is the LED output.
     //> It flips on every strobe pulse.
     outgoing reg led : Bit on clock {
-        when {
-            case strobe_timer.pulse {
+        if {
+            when strobe_timer.pulse {
                 it <= !it
             }
         }
@@ -249,8 +249,8 @@ It is an `outgoing reg`:
     //> `led` is the LED output.
     //> It flips on every strobe pulse.
     outgoing reg led : Bit on clock {
-        when {
-            case strobe_timer.pulse {
+        if {
+            when strobe_timer.pulse {
                 it <= !it
             }
         }
@@ -266,11 +266,11 @@ which is the last thing we'll look at in this chapter.
 
 ## Registers Hold their Value
 
-Let's zoom in closely on the `when` statement for `led`:
+Let's zoom in closely on the `if` statement for `led`:
 
 ```virdant
-        when {
-            case strobe_timer.pulse {
+        if {
+            when strobe_timer.pulse {
                 it <= !it
             }
         }
@@ -278,16 +278,16 @@ Let's zoom in closely on the `when` statement for `led`:
 
 Do you notice something's missing?
 
-When we learned about `when` blocks earlier,
+When we learned about `if` blocks earlier,
 they always had an `else` statement.
 They *needed* to have one, or else Virdant would give you an error.
 But this one doesn't.
 
 Weird.
 
-When a `when` block is used as an expression, they must handle all cases.
+When a `if` block is used as an expression, they must handle all cases.
 Otherwise, we wouldn't know what value they should take in the cases you didn't cover.
-That means `when` blocks need an `else` block... when used as expressions.
+That means `if` blocks need an `else` block... when used as expressions.
 
 But here, `when` is being used to guard against a latched driver: `it <= !it`,
 and `it` refers to a `led`, which is a register.
@@ -298,8 +298,8 @@ it simply keeps whatever value it had on the previous cycle.
 It's equivalent to the following:
 
 ```virdant
-    when {
-        case strobe_timer.pulse {
+    if {
+        when strobe_timer.pulse {
             it <= !it
         }
         else {

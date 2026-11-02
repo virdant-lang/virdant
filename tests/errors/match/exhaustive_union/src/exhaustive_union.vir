@@ -13,7 +13,7 @@ mod MissingUnionCtor {
     unused out
     // CHECK: not covered: @Bar
     out := match u {
-        case @Foo() => true
+        with @Foo() => true
     }
 }
 

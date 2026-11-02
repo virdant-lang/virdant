@@ -1,7 +1,7 @@
 //! The `AstNode` handle (borrowing a `Parsing`) plus `AstNodeId`, with
 //! accessors for parent/children, payload, region/span, names, paths,
 //! docstrings, driver targets, and annotation data, plus
-//! `match_arm_children`/`when_arm_children` iterators.
+//! `match_arm_children`/`if_arm_children` iterators.
 
 use bstr::{BStr, BString, ByteSlice};
 
@@ -48,7 +48,7 @@ impl<'p> AstNode<'p> {
     }
 
     /// The body of a `Let` (the last child): an `ArmBlock` (statement
-    /// form), an `Expr` (`=>` form), or a `When`/`Match` (chained form).
+    /// form), an `Expr` (`=>` form), or an `If`/`Match` (chained form).
     pub fn let_body(&self) -> Option<AstNode<'p>> {
         self.children().pop()
     }
@@ -220,7 +220,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Submodule(_module) => format!("Module"),
             AstNodePayload::ModDefStmtBlock => format!("ModDefStmtBlock"),
             AstNodePayload::ArmBlock => format!("ArmBlock"),
-            AstNodePayload::When => format!("When"),
+            AstNodePayload::If => format!("If"),
             AstNodePayload::Match => format!("Match"),
             AstNodePayload::Let => format!("Let"),
             AstNodePayload::LetBinding(let_binding) => format!("LetBinding {}", parsing.string(let_binding.name.clone())),
@@ -455,7 +455,7 @@ impl<'p> AstNode<'p> {
         matches!(self.payload(),
             AstNodePayload::ExprReference |
             AstNodePayload::ExprParen |
-            AstNodePayload::When |
+            AstNodePayload::If |
             AstNodePayload::Match |
             AstNodePayload::Let |
             AstNodePayload::ExprBitLit(_) |
@@ -489,14 +489,14 @@ impl<'p> AstNode<'p> {
         )
     }
 
-    /// Whether this `When`/`Match` node is used as an *expression*
+    /// Whether this `If`/`Match` node is used as an *expression*
     /// (the RHS of a driver, an operand, a guard, a `match` subject, an
-    /// arm body of an enclosing expression-position `when`/`match`)
+    /// arm body of an enclosing expression-position `if`/`match)`
     /// rather than as a *statement* (a direct statement of a module
     /// body, an It-block, or the statement list of an arm block).
     ///
-    /// A bare `When`/`Match` arm body (written without `=>` and without
-    /// braces) inherits the position of its enclosing `When`/`Match`.
+    /// A bare `If`/`Match` arm body (written without `=>` and without
+    /// braces) inherits the position of its enclosing `If`/`Match`.
     pub fn is_expression_position(&self) -> bool {
         let parsing = self.parsing;
         let mut node_id = self.id;
@@ -510,11 +510,11 @@ impl<'p> AstNode<'p> {
                 | AstNodePayload::ModDefStmtBlock
                 | AstNodePayload::It
                 | AstNodePayload::ArmBlock => return false,
-                AstNodePayload::When => {
+                AstNodePayload::If => {
                     // A guard is in expression position; a bare arm body
-                    // inherits the enclosing when's position.
+                    // inherits the enclosing if's position.
                     let children = parent.children();
-                    let is_guard = when_arm_children(&children)
+                    let is_guard = if_arm_children(&children)
                         .into_iter()
                         .any(|(guard, _)| guard.is_some_and(|g| g.id() == node_id));
                     if is_guard {
@@ -538,7 +538,7 @@ impl<'p> AstNode<'p> {
     pub fn subject(&self) -> Option<AstNode<'_>> {
         match &self.payload {
             AstNodePayload::ExprParen => Some(self.child(0)),
-            AstNodePayload::When => None,
+            AstNodePayload::If => None,
             AstNodePayload::Match => Some(self.child(0)),
             AstNodePayload::ExprUnOp(_expr_un_op) => Some(self.child(0)),
             AstNodePayload::ExprField(_) => Some(self.child(0)),
@@ -666,11 +666,11 @@ impl std::fmt::Debug for AstNodeId {
 /// Iterate the arms of a `match` node (either `ModDefStmtMatch` or `ExprMatch`).
 ///
 /// `children` must be the children slice of a match node: index 0 is the subject,
-/// and the remainder consists of arms.  Each `case Pat => body` arm contributes
+/// and the remainder consists of arms.  Each `with Pat => body` arm contributes
 /// two consecutive children (pattern, body); each `else => body` arm contributes
 /// a single child (body) because the grammar omits the pattern node.
 ///
-/// Yields `(Some(pat_node), body_node)` for `case` arms and `(None, body_node)` for
+/// Yields `(Some(pat_node), body_node)` for `with` arms and `(None, body_node)` for
 /// `else` arms, in source order.
 pub fn match_arm_children<'a, 'p>(
     children: &'a [AstNode<'p>],
@@ -691,16 +691,16 @@ pub fn match_arm_children<'a, 'p>(
     out
 }
 
-/// Iterate the arms of a `when` node (either `ModDefStmtWhen` or `ExprWhen`).
+/// Iterate the arms of an `if` node (each arm a `when` clause or an `else`).
 ///
-/// `children` must be the children slice of a when node (no subject, just arms).
-/// Each `case Expr => body` arm contributes two consecutive children (guard, body);
+/// `children` must be the children slice of an if node (no subject, just arms).
+/// Each `when Expr => body` arm contributes two consecutive children (guard, body);
 /// each `else => body` arm contributes a single child (body) because the grammar
 /// omits the guard node.
 ///
-/// Yields `(Some(guard_node), body_node)` for `case` arms and `(None, body_node)` for
+/// Yields `(Some(guard_node), body_node)` for `when` arms and `(None, body_node)` for
 /// `else` arms, in source order.
-pub fn when_arm_children<'a, 'p>(
+pub fn if_arm_children<'a, 'p>(
     children: &'a [AstNode<'p>],
 ) -> Vec<(Option<&'a AstNode<'p>>, &'a AstNode<'p>)> {
     let mut out = Vec::new();
@@ -708,7 +708,7 @@ pub fn when_arm_children<'a, 'p>(
     while let Some(first) = children.get(idx) {
         // Check if there's a next child
         if let Some(body) = children.get(idx + 1) {
-            // There is a next child, so this is a case arm (guard + body)
+            // There is a next child, so this is a when arm (guard + body)
             out.push((Some(first), body));
             idx += 2;
         } else {

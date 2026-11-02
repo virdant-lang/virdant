@@ -35,10 +35,10 @@ pub mod Top {
     // -- Output decode ----------------------------------------------------
     // Each output is true exactly when the controller is in the matching
     // phase; the one-hot encoding makes these single-bit mask operations.
-    green       := match phase { case #Green  => true else => false }
-    yellow      := match phase { case #Yellow => true else => false }
-    red         := match phase { case #Red    => true else => false }
-    walk_signal := match phase { case #Walk   => true else => false }
+    green       := match phase { with #Green  => true else => false }
+    yellow      := match phase { with #Yellow => true else => false }
+    red         := match phase { with #Red    => true else => false }
+    walk_signal := match phase { with #Walk   => true else => false }
 
     // -- Next-state logic (combinational) ---------------------------------
     // Compute the successor phase from the current phase and walk_req.
@@ -47,29 +47,29 @@ pub mod Top {
     // conditions that arise when two clocked blocks read each other.
     wire next_phase : Phase
     next_phase := match phase {
-        case #Green  => #Yellow
-        case #Yellow => #Red
-        case #Red    => mux(walk_req, #Walk, #Green)
-        case #Walk   => #Red
+        with #Green  => #Yellow
+        with #Yellow => #Red
+        with #Red    => mux(walk_req, #Walk, #Green)
+        with #Walk   => #Red
     }
 
     // Map the incoming phase to its countdown duration.
     wire next_timer : Word[8]
     next_timer := match next_phase {
-        case #Green  => 10
-        case #Yellow => 3
-        case #Red    => 8
-        case #Walk   => 5
+        with #Green  => 10
+        with #Yellow => 3
+        with #Red    => 8
+        with #Walk   => 5
     }
 
     // -- Register update logic ---------------------------------------------
-    when {
-        case reset {
+    if {
+        when reset {
             // Start in Red so vehicles halt immediately on power-up.
             phase <= #Red
             timer <= 8
         }
-        case timer == 0 {
+        when timer == 0 {
             // Timer expired — latch the pre-computed successor values.
             phase <= next_phase
             timer <= next_timer

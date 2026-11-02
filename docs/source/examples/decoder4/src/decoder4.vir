@@ -3,10 +3,10 @@ mod Decoder4 {
 
     outgoing out : Word[4] dependson inp {
         it := match inp {
-            case 0 => 0b0001
-            case 1 => 0b0010
-            case 2 => 0b0100
-            case 3 => 0b1000
+            with 0 => 0b0001
+            with 1 => 0b0010
+            with 2 => 0b0100
+            with 3 => 0b1000
         }
     }
 }

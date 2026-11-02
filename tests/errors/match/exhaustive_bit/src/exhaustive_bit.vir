@@ -1,11 +1,11 @@
-// MatchCoverage: Bit subject with only `case true`, no `false`.
+// MatchCoverage: Bit subject with only `with true`, no `false`.
 
 mod MissingBitCase {
     incoming b : Bit
     outgoing out : Bit dependson b
     // CHECK: Non-exhaustive match on Bit: not covered: false
     out := match b {
-        case true => false
+        with true => false
     }
 }
 

@@ -10,7 +10,7 @@ The full set of module body statements includes:
 * Driver statements (assignments)
 * Instance declarations
 * Socket instance declarations
-* Conditional statements (`when`)
+* Conditional statements (`if`)
 * Match statements
 * Let bindings
 * Unused declarations
@@ -117,14 +117,14 @@ and a tristate component may have any number of drivers.
 Tristate drive `#=`
 ^^^^^^^^^^^^^^^^^^^
 The `#=` operator drives a bus or net at full strength.
-If the driver is guarded by a `when` or `match` arm that does not fire,
+If the driver is guarded by a `when` or `with` arm that does not fire,
 the component is undriven in that case and floats (high impedance):
 
 .. code-block:: virdant
 
     bus sda : Bit {
-        when {
-            case pull {
+        if {
+            when pull {
                 it #= false      // drive low strongly
             }
             // no `else`: when not pulling, the line floats
@@ -157,8 +157,8 @@ line. Both operands must be paths to tristate components:
 
 When several drivers share a net, a strong driver wins over weak ones;
 if no driver is active, the net floats.
-A `when` or `match` guarding only tristate drivers does not need to be
-exhaustive: an undriven case leaves the net floating rather than
+An `if` or `match` guarding only tristate drivers does not need to be
+exhaustive: an undriven arm leaves the net floating rather than
 holding its previous value.
 
 
@@ -219,17 +219,17 @@ statements depending on conditions.
 
 .. code-block:: grammar
 
-    When := "when" "{" WhenArm* "}"
+    If := "if" "{" IfArm* "}"
 
-    WhenArm :=
-        "case" Expr "=>" Expr
-        | "case" Expr ArmBlock
-        | "case" Expr When
-        | "case" Expr Match
-        | "case" Expr Let
+    IfArm :=
+        "when" Expr "=>" Expr
+        | "when" Expr ArmBlock
+        | "when" Expr If
+        | "when" Expr Match
+        | "when" Expr Let
         | "else" "=>" Expr
         | "else" ArmBlock
-        | "else" When
+        | "else" If
         | "else" Match
         | "else" Let
 
@@ -239,12 +239,12 @@ statements depending on conditions.
 
 .. code-block:: virdant
 
-    when {
-        case reset {
+    if {
+        when reset {
             r <= 0
             state := #Idle
         }
-        case enable {
+        when enable {
             r <= r + 1
             state := #Active
         }
@@ -259,20 +259,20 @@ though it is recommended for completeness.
 
 Arm Syntax
 ~~~~~~~~~~
-Each arm may use one of five forms:
+Each `when` clause may use one of five forms:
 
-1. Bare expression: `case cond => expr` (rarely used in statement context)
-2. Block: `case cond { stmts }`
-3. Nested `when`: `case cond when { ... }`
-4. Nested `match`: `case cond match expr { ... }`
-5. Let binding: `case cond let x = expr { ... }`
+1. Bare expression: `when cond => expr` (rarely used in statement context)
+2. Block: `when cond { stmts }`
+3. Nested `if`: `when cond if { ... }`
+4. Nested `match`: `when cond match expr { ... }`
+5. Let binding: `when cond let x = expr { ... }`
 
 The same forms apply to the `else` arm.
 A `let` arm body follows the same terminator rules as any other `let`.
 
-Conditional statements are different from `when` expressions:
+Conditional statements are different from `if` expressions:
 statements can contain declarations, assignments, instances, and other
-module body constructs, while `when` expressions only compute values.
+module body constructs, while `if` expressions only compute values.
 
 
 Match Statements
@@ -284,14 +284,14 @@ Match statements perform pattern-based dispatch in the module body.
     Match := "match" Expr "{" MatchArm* "}"
 
     MatchArm :=
-        "case" Pat "=>" Expr
-        | "case" Pat ArmBlock
-        | "case" Pat When
-        | "case" Pat Match
-        | "case" Pat Let
+        "with" Pat "=>" Expr
+        | "with" Pat ArmBlock
+        | "with" Pat If
+        | "with" Pat Match
+        | "with" Pat Let
         | "else" "=>" Expr
         | "else" ArmBlock
-        | "else" When
+        | "else" If
         | "else" Match
         | "else" Let
 
@@ -312,12 +312,12 @@ Match statements perform pattern-based dispatch in the module body.
     outgoing out : Word[8]
 
     match state {
-        case #Idle {
+        with #Idle {
             r <= 0w8
             out := 0w8
             state <= #Run
         }
-        case #Run {
+        with #Run {
             r <= r + 1w8
             out := r
         }
@@ -328,13 +328,13 @@ Match statements perform pattern-based dispatch in the module body.
 
 Arm Syntax
 ~~~~~~~~~~
-Each arm may use one of five forms:
+Each `with` arm may use one of five forms:
 
-1. Bare expression: `case pat => expr` (rarely used in statement context)
-2. Block: `case pat { stmts }`
-3. Nested `when`: `case pat when { ... }`
-4. Nested `match`: `case pat match expr { ... }`
-5. Let binding: `case pat let x = expr { ... }`
+1. Bare expression: `with pat => expr` (rarely used in statement context)
+2. Block: `with pat { stmts }`
+3. Nested `if`: `with pat if { ... }`
+4. Nested `match`: `with pat match expr { ... }`
+5. Let binding: `with pat let x = expr { ... }`
 
 The same forms apply to the `else` arm.
 A `let` arm body follows the same terminator rules as any other `let`.
@@ -357,7 +357,7 @@ and several bindings may be given in a comma-separated list:
     Let :=
         "let" LetBindingList ArmBlock
         | "let" LetBindingList "=>" Expr
-        | "let" LetBindingList When
+        | "let" LetBindingList If
         | "let" LetBindingList Match
 
     LetBindingList :=
@@ -403,13 +403,13 @@ a use site that fixes its width: `let expire = it == 0w11` infers
 `Word[11]` from the comparison, while an unanchored `let x = 0` has no
 width to infer from and reports `CantInfer`.
 
-A `let` may be chained directly into a `when` or `match`, in which case
+A `let` may be chained directly into an `if` or `match`, in which case
 the bindings are in scope throughout the chained arms:
 
 .. code-block:: virdant
 
     let x = a match op {
-        case #Add {
+        with #Add {
             out := x + b
         }
         else {
@@ -417,8 +417,8 @@ the bindings are in scope throughout the chained arms:
         }
     }
 
-A `let` may also appear as the body of a `when` or `match` arm
-(`case cond let x = expr { ... }`).
+A `let` may also appear as the body of a `when` or `with` arm
+(`when cond let x = expr { ... }`).
 
 
 Terminator Style
@@ -430,9 +430,9 @@ The two spellings carry intent, and the compiler enforces the pairing:
 * `=>` means *this scope produces*: it evaluates to a value.
 
 A `let` used as a statement must *perform*: its body is a block, or a
-chained `when`/`match` whose arms perform. A `let` used as an
+chained `if`/`match` whose arms perform. A `let` used as an
 expression must *produce*: its body is a `=>` value, or a chained
-`when`/`match` whose arms produce. A statement `let` whose block
+`if`/`match` whose arms produce. A statement `let` whose block
 contains nothing but a single bare expression is also flagged, since
 the scope produces a value that is then discarded:
 
@@ -446,7 +446,7 @@ the scope produces a value that is then discarded:
         out := x
     }
 
-The chained forms (`let ... when { ... }` and `let ... match { ... }`)
+The chained forms (`let ... if { ... }` and `let ... match { ... }`)
 are legal in both statement and expression position and are never
 flagged by the style check.
 
@@ -490,8 +490,8 @@ starts up (for example, after an FPGA is configured).
         reg counter : Word[3] on clock {
             initial it <= 7
 
-            when {
-                case it > 0 {
+            if {
+                when it > 0 {
                     it <= it - 1
                 }
             }
@@ -505,7 +505,7 @@ A register without an `initial` statement starts at 0 in the generated Verilog.
 An `initial` statement is not a driver:
 a register with an `initial` statement still needs its usual `<=` driver.
 Each register may have at most one `initial` statement,
-and `initial` may not appear inside a `when` or `match` block.
+and `initial` may not appear inside an `if` or `match` block.
 
 
 on Clause

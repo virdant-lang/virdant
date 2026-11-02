@@ -10,8 +10,8 @@ mod Top {
     wire current_max : Word[8]
     current_max := mux(max_seen_reg < inp, inp, max_seen_reg)
 
-    max_seen_reg <= when {
-        case reset => 0
+    max_seen_reg <= if {
+        when reset => 0
         else => current_max
     }
 

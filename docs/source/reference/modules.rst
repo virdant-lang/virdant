@@ -23,7 +23,7 @@ ports, components, instances, and control flow.
 
     ModDefStmt :=
         ModDefStmtCore
-        | When
+        | If
         | Match
         | Let
 
@@ -107,8 +107,8 @@ A register may have an associated block for additional statements:
 .. code-block:: virdant
 
     reg counter : Word[8] on clock {
-        it <= when {
-            case reset => 0
+        it <= if {
+            when reset => 0
             else => it + 1
         }
     }
@@ -134,8 +134,8 @@ holding a value. There are two kinds:
         incoming pull : Bit
 
         bus sda : Bit {
-            when {
-                case pull {
+            if {
+                when pull {
                     it #= false
                 }
             }
@@ -159,8 +159,8 @@ and `#=#`) and :doc:`expressions` for `tap`.
 
 Tristate components may have any number of drivers. When several drivers
 are active at once, a strong driver (`#=`) wins over weak ones (`#-`);
-if no driver is active, the net floats. A `when` or `match` guarding
-only tristate drivers does not need to be exhaustive: an undriven case
+if no driver is active, the net floats. An `if` or `match` guarding
+only tristate drivers does not need to be exhaustive: an undriven arm
 leaves the net floating rather than holding its previous value.
 
 In generated Verilog, a `bus` port becomes an `inout wire`, a strong
@@ -417,14 +417,14 @@ Match statements enable pattern-based conditional logic in module bodies.
     Match := "match" Expr "{" MatchArm* "}"
 
     MatchArm :=
-        "case" Pat "=>" Expr
-        | "case" Pat ArmBlock
-        | "case" Pat When
-        | "case" Pat Match
-        | "case" Pat Let
+        "with" Pat "=>" Expr
+        | "with" Pat ArmBlock
+        | "with" Pat If
+        | "with" Pat Match
+        | "with" Pat Let
         | "else" "=>" Expr
         | "else" ArmBlock
-        | "else" When
+        | "else" If
         | "else" Match
         | "else" Let
 
@@ -445,12 +445,12 @@ Match statements enable pattern-based conditional logic in module bodies.
     outgoing out : Word[8]
 
     match state {
-        case #Idle {
+        with #Idle {
             r <= 0w8
             out := 0w8
             state <= #Run
         }
-        case #Run {
+        with #Run {
             r <= r + 1w8
             out := r
         }
@@ -459,7 +459,7 @@ Match statements enable pattern-based conditional logic in module bodies.
         }
     }
 
-The `else` arm catches any value not matched by the preceding `case` arms.
+The `else` arm catches any value not matched by the preceding `with` arms.
 If no `else` arm is present, the match must be exhaustive.
 
 
@@ -492,8 +492,8 @@ For an instance `it` refers to the instance.
 .. code-block:: virdant
 
     reg counter : Word[8] on clock {
-        it <= when {
-            case reset => 0
+        it <= if {
+            when reset => 0
             else => it + 1
         }
     }

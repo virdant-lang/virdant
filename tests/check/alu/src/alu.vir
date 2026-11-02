@@ -25,40 +25,40 @@ pub mod Alu {
         it.a      := a
         it.amount := b[5..0]
         it.dir    := match op {
-            case #Sll => #ShiftLeftLogical
-            case #Srl => #ShiftRightLogical
-            case #Sra => #ShiftRightArithmetic
+            with #Sll => #ShiftLeftLogical
+            with #Srl => #ShiftRightLogical
+            with #Sra => #ShiftRightArithmetic
             else => dontcare
         }
     }
 
     wire adder : Word[32] {
         it := a + (match op {
-            case #Add => b
-            case #Sub => ~b + 1
+            with #Add => b
+            with #Sub => ~b + 1
             else => dontcare
         })
     }
 
     // Main ALU output: result selected by `op`.
     z := match op {
-        case #Add => adder
-        case #Sub => adder
-        case #And => a & b
-        case #Or  => a | b
-        case #Xor => a ^ b
-        case #Eq  => zext(a == b)
-        case #Neq => zext(a != b)
-        case #Lt  => mux(a[31] ^ b[31], zext(a[31]), zext(a < b))
-        case #Gte => mux(a[31] ^ b[31], zext(b[31]), zext(a >= b))
-        case #Zero => 0
-        case #Ltu => zext(a < b)
-        case #Gteu => zext(a >= b)
-        case #Clear => a & (~b)
-        case #PassA => a
-        case #Sll => shifter.z
-        case #Srl => shifter.z
-        case #Sra => shifter.z
+        with #Add => adder
+        with #Sub => adder
+        with #And => a & b
+        with #Or  => a | b
+        with #Xor => a ^ b
+        with #Eq  => zext(a == b)
+        with #Neq => zext(a != b)
+        with #Lt  => mux(a[31] ^ b[31], zext(a[31]), zext(a < b))
+        with #Gte => mux(a[31] ^ b[31], zext(b[31]), zext(a >= b))
+        with #Zero => 0
+        with #Ltu => zext(a < b)
+        with #Gteu => zext(a >= b)
+        with #Clear => a & (~b)
+        with #PassA => a
+        with #Sll => shifter.z
+        with #Srl => shifter.z
+        with #Sra => shifter.z
     }
 }
 
@@ -152,9 +152,9 @@ mod Shifter {
 
     // Final shifted output selected by `dir`.
     z := match dir {
-        case #ShiftLeftLogical => sll_16
-        case #ShiftRightLogical => srl_16
-        case #ShiftRightArithmetic => sra_16
+        with #ShiftLeftLogical => sll_16
+        with #ShiftRightLogical => srl_16
+        with #ShiftRightArithmetic => sra_16
     }
 }
 

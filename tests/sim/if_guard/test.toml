@@ -1,0 +1,2 @@
+kind = "sim"
+description = "Regression test for the 'lost when-clause guard' compiler bug."

@@ -5,19 +5,19 @@ Virdant has two styles of conditional and match logic:
 and *statement-level* (used inside a module or driver block to drive multiple
 targets selectively).
 
-## Statement-level `when`
+## Statement-level `if`
 
 When you need to drive *multiple* targets under the same set of conditions,
-use a statement-level `when` block instead of repeating the same `when`
+use a statement-level `if` block instead of repeating the same `if`
 expression for each target.
 
 ```virdant
-when {
-    case reset {
+if {
+    when reset {
         phase <= #Red
         timer <= 8
     }
-    case timer == 0 {
+    when timer == 0 {
         phase <= next_phase
         timer <= next_timer
     }
@@ -27,9 +27,9 @@ when {
 }
 ```
 
-Each arm's body is a block of zero or more driver statements (`:=`, `<=`, nested `when`, nested `match`).
+Each arm's body is a block of zero or more driver statements (`:=`, `<=`, nested `if`, nested `match`).
 Arms are evaluated in order; the first matching arm fires.
-If no `case` matches and no `else` is present, nothing happens (registers hold, wires are unassigned).
+If no `when` clause matches and no `else` is present, nothing happens (registers hold, wires are unassigned).
 
 ## Statement-level `match`
 
@@ -38,11 +38,11 @@ targets.
 
 ```virdant
 match priority {
-    case @Client0First() => {
+    with @Client0First() => {
         idle_grant_0 := client_0.a_valid
         idle_grant_1 := client_1.a_valid && !client_0.a_valid
     }
-    case @Client1First() => {
+    with @Client1First() => {
         idle_grant_0 := client_0.a_valid && !client_1.a_valid
         idle_grant_1 := client_1.a_valid
     }
@@ -60,37 +60,37 @@ Prefer the **statement** form when:
 - You are writing a top-level register-update section where multiple registers change together.
 
 Do not mix both forms for the same logic.
-If you use a statement-level `when`, drive all related targets inside it.
+If you use a statement-level `if`, drive all related targets inside it.
 If you use per-target expressions, keep them all as expressions.
 
 ## Direct chaining also applies at statement level
 
 The rule about removing unnecessary `=>` (see `./driver-blocks.md`) also
-applies inside statement-level `when` and `match` arms.
+applies inside statement-level `if` and `match` arms.
 
 ```virdant
 // GOOD: direct chaining
-when {
-    case reset {
+if {
+    when reset {
         priority <= @Client0First()
     }
-    case d_done match serving {
-        case @ServingClient0() {
+    when d_done match serving {
+        with @ServingClient0() {
             priority <= @Client1First()
         }
-        case @ServingClient1() {
+        with @ServingClient1() {
             priority <= @Client0First()
         }
     }
 }
 
 // BAD: unnecessary => before nested match
-when {
-    case reset {
+if {
+    when reset {
         priority <= @Client0First()
     }
-    case d_done => match serving {
-        case @ServingClient0() {
+    when d_done => match serving {
+        with @ServingClient0() {
             priority <= @Client1First()
         }
     }

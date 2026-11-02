@@ -65,19 +65,19 @@ pub mod Top {
     // The client's payload appears on the server side, unwrapped here
     // where the type arguments are concrete.
     valid8 := match s8.data {
-        case @Valid(dontcare) => true
-        case @Invalid() => false
+        with @Valid(dontcare) => true
+        with @Invalid() => false
     }
     data8 := match s8.data {
-        case @Valid(v) => v
-        case @Invalid() => 0
+        with @Valid(v) => v
+        with @Invalid() => 0
     }
     valid4 := match s4.data {
-        case @Valid(dontcare) => true
-        case @Invalid() => false
+        with @Valid(dontcare) => true
+        with @Invalid() => false
     }
     data4 := match s4.data {
-        case @Valid(v) => v
-        case @Invalid() => 0
+        with @Valid(v) => v
+        with @Invalid() => 0
     }
 }

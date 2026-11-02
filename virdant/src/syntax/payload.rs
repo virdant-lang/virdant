@@ -29,7 +29,7 @@ pub enum AstNodePayload {
     InitialDriver,
     Submodule(Submodule),
     ModDefStmtBlock,
-    When,
+    If,
     Match,
     Let,
     LetBinding(LetBinding),
@@ -115,7 +115,7 @@ impl AstNodePayload {
             AstNodePayload::InitialDriver => "InitialDriver",
             AstNodePayload::Submodule(_module) => "Module",
             AstNodePayload::ModDefStmtBlock => "ModDefStmtBlock",
-            AstNodePayload::When => "When",
+            AstNodePayload::If => "If",
             AstNodePayload::Match => "Match",
             AstNodePayload::ArmBlock => "ArmBlock",
             AstNodePayload::ModDefStmtUnused => "ModDefStmtUnused",
@@ -278,7 +278,7 @@ pub struct Submodule {
 
 /// A `let` statement/expression (`let x = e { ... }` or `let x = e => ...`).
 /// Children: one `LetBinding` node per binding, then the body
-/// (`ArmBlock`, `Expr`, `When`, or `Match`).
+/// (`ArmBlock`, `Expr`, `If`, or `Match`).
 #[derive(Clone, Debug)]
 pub struct Let;
 

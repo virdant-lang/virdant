@@ -9,18 +9,18 @@ mod Arbiter {
     outgoing grant1 : Bit dependson reset, req0, req1
 
     reg client0_priority : Bit on clock {
-        it <= when {
-            case reset => true
+        it <= if {
+            when reset => true
             else => !it
         }
     }
 
-    when {
-        case reset {
+    if {
+        when reset {
             grant0 := false
             grant1 := false
         }
-        case client0_priority {
+        when client0_priority {
             grant0 := req0
             grant1 := req1 && !req0
         }

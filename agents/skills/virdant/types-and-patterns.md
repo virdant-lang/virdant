@@ -29,10 +29,10 @@ Match on enum variants with `#`:
 
 ```virdant
 out := match phase {
-    case #Green  => x + y
-    case #Yellow => 2
-    case #Red    => 0
-    case #Walk   => 5
+    with #Green  => x + y
+    with #Yellow => 2
+    with #Red    => 0
+    with #Walk   => 5
 }
 ```
 
@@ -130,10 +130,10 @@ Each arm introduces variables for the payload fields.
 
 ```virdant
 ready := match state {
-    case @Idle() => true
-    case @Start(pulse) => false
-    case @Bit(bit, pulse) => false
-    case @Stop(pulse) => false
+    with @Idle() => true
+    with @Start(pulse) => false
+    with @Bit(bit, pulse) => false
+    with @Stop(pulse) => false
 }
 ```
 
@@ -141,7 +141,7 @@ The `else` arm catches any unlisted variant:
 
 ```virdant
 valid := match state {
-    case @Done(result) => true
+    with @Done(result) => true
     else => false
 }
 ```
@@ -154,8 +154,8 @@ Concrete sub-patterns match exact values:
 
 ```virdant
 out := match u {
-    case @Nothing()         => false
-    case @Pair(true, false) => true
+    with @Nothing()         => false
+    with @Pair(true, false) => true
     else                    => false
 }
 ```
@@ -165,8 +165,8 @@ in the arm's expression:
 
 ```virdant
 out := match u {
-    case @Nothing()         => false
-    case @Pair(x, false)    => x
+    with @Nothing()         => false
+    with @Pair(x, false)    => x
     else                    => false
 }
 ```
@@ -184,8 +184,8 @@ v1 := @Valid(true)
 v1 := @Invalid()
 
 got_it := match v1 {
-    case @Valid(x) => x
-    case @Invalid() => false
+    with @Valid(x) => x
+    with @Invalid() => false
 }
 ```
 

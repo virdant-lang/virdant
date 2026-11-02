@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "if_drivers"
+filecheck = "src/if_drivers.vir"

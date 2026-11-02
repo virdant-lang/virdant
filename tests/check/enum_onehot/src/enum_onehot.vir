@@ -46,7 +46,7 @@ pub mod MatchCheck {
     incoming t : Trio
     outgoing isB : Bit dependson t
 
-    isB := match t { case #B => true else => false }
+    isB := match t { with #B => true else => false }
 }
 
 // CHECK: Check OK

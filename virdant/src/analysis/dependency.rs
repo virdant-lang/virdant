@@ -17,7 +17,7 @@ use crate::analysis::component::ComponentId;
 use crate::analysis::symbols::SymbolId;
 use crate::common::{ComponentKind, DriverType, Flow};
 use crate::db::Builder;
-use crate::syntax::ast::{match_arm_children, when_arm_children, AstNode};
+use crate::syntax::ast::{match_arm_children, if_arm_children, AstNode};
 use crate::syntax::payload::AstNodePayload;
 
 // ---------------------------------------------------------------------------
@@ -138,12 +138,12 @@ pub(crate) fn build_dependency_graph(
 // Collect edges from drivers
 // ---------------------------------------------------------------------------
 
-/// Walk all driver statements and their sub-structures (when, match) to
+/// Walk all driver statements and their sub-structures (if, match) to
 /// record edges from the target component to each component referenced
 /// in the RHS expression.
 ///
 /// `cond_refs` carries the components referenced by the guards/subjects
-/// of the enclosing `when`/`match` statements: every driver inside an
+/// of the enclosing `if`/`match` statements: every driver inside an
 /// arm depends not only on its RHS but also on the arm's condition, so
 /// a driver target that appears in its own guard forms a
 /// combinational loop.
@@ -187,7 +187,7 @@ fn collect_driver_edges(
                 }
 
                 // The target also depends on every guard/subject of the
-                // enclosing `when`/`match` statements.
+                // enclosing `if`/`match` statements.
                 for cond in cond_refs {
                     add_edge(edges, target_component.id(), *cond, edge_kind);
                 }
@@ -321,12 +321,12 @@ fn collect_driver_edges(
                     }
                 }
             }
-            AstNodePayload::When => {
+            AstNodePayload::If => {
                 let children = stmt.children();
-                for (guard, body) in when_arm_children(&children) {
-                    // A `case` arm's drivers also depend on the guard's
+                for (guard, body) in if_arm_children(&children) {
+                    // A `when` arm's drivers also depend on the guard's
                     // referenced components; an `else` arm only on the
-                    // conditions of enclosing `when`/`match` statements.
+                    // conditions of enclosing `if`/`match` statements.
                     let mut arm_cond_refs: Vec<ComponentId> =
                         cond_refs.to_vec();
                     if let Some(guard_node) = guard {
@@ -556,7 +556,7 @@ fn add_edge(
     kind: EdgeKind,
 ) {
     // Self-loops are allowed: a driver whose target appears in its own
-    // RHS or in the guard of an enclosing `when`/`match` genuinely
+    // RHS or in the guard of an enclosing `if`/`match` genuinely
     // depends on itself, and the combinational cycle check uses those
     // self-loops to report one-component loops.
     edges

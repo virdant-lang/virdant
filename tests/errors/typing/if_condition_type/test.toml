@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "if_condition_type"
+filecheck = "src/if_condition_type.vir"

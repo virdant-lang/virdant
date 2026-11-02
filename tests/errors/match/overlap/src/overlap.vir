@@ -3,8 +3,8 @@ mod OverlapIdent {
     outgoing out : Bit dependson b
     // CHECK: Overlapping match arm: x
     out := match b {
-        case true  => false
-        case x => true
+        with true  => false
+        with x => true
     }
 }
 
@@ -13,22 +13,22 @@ mod OverlapDontcare {
     outgoing out : Bit dependson b
     // CHECK: Overlapping match arm
     out := match b {
-        case true  => false
-        case dontcare => true
+        with true  => false
+        with dontcare => true
     }
 }
 
 
-// MatchCoverage: duplicated `case true` arm on a Bit subject.
+// MatchCoverage: duplicated `with true` arm on a Bit subject.
 
 mod OverlapBit {
     incoming b : Bit
     outgoing out : Bit dependson b
     // CHECK: Overlapping match arm: true
     out := match b {
-        case true  => false
-        case false => true
-        case true  => true
+        with true  => false
+        with false => true
+        with true  => true
     }
 }
 
@@ -48,9 +48,9 @@ mod OverlapUnion {
     unused out
     // CHECK: Overlapping match arm: @Foo
     out := match u {
-        case @Foo() => true
-        case @Bar(x) => x
-        case @Foo() => false
+        with @Foo() => true
+        with @Bar(x) => x
+        with @Foo() => false
     }
 }
 
@@ -62,11 +62,11 @@ mod OverlapWord {
     outgoing out : Bit dependson x
     // CHECK: Overlapping match arm: 0
     out := match x {
-        case 0 => true
-        case 1 => false
-        case 2 => true
-        case 3 => false
-        case 0 => false
+        with 0 => true
+        with 1 => false
+        with 2 => true
+        with 3 => false
+        with 0 => false
     }
 }
 

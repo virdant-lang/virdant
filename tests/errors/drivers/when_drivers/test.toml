@@ -1,4 +1,0 @@
-kind = "check"
-expect = "error"
-description = "when_drivers"
-filecheck = "src/when_drivers.vir"

@@ -24,8 +24,8 @@ pub mod Toggle for virt::Virt {
     //> `@Valid(0)` once 32 cycles have elapsed; while `@Invalid()`,
     //> the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case cycle == 32 => @Valid(0)
+        it := if {
+            when cycle == 32 => @Valid(0)
             else => @Invalid()
         }
     }

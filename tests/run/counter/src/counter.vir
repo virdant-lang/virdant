@@ -16,9 +16,9 @@ pub mod Counter for virt::Virt {
     //> `@Valid(0)` once the count reaches 0xf; while `@Invalid()`,
     //> the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case count == 0x5 => @Valid(0)
-            case count > 0x5 => @Valid(1)
+        it := if {
+            when count == 0x5 => @Valid(0)
+            when count > 0x5 => @Valid(1)
             else => @Invalid()
         }
     }

@@ -44,14 +44,14 @@ pub mod Top {
     // A generic enum instantiated at two different arguments in one module.
     wire opt_word : Option[Word[4]]
     opt_word := match b {
-        case true => @Some(a)
-        case false => #None
+        with true => @Some(a)
+        with false => #None
     }
 
     wire opt_bit : Option[Bit]
     opt_bit := match b {
-        case true => #None
-        case false => @Some(false)
+        with true => #None
+        with false => @Some(false)
     }
 
     // A generic union.
@@ -68,19 +68,19 @@ pub mod Top {
     o_fst      := pair->fst
     o_snd      := pair->snd
     o_nested   := match nested {
-        case @Valid(p) => p->fst
-        case @Invalid() => 0
+        with @Valid(p) => p->fst
+        with @Invalid() => 0
     }
     o_opt_word := match opt_word {
-        case @Some(w) => zext(w)
-        case #None => 0
+        with @Some(w) => zext(w)
+        with #None => 0
     }
     o_opt_bit  := match opt_bit {
-        case @Some(x) => x
-        case #None => false
+        with @Some(x) => x
+        with #None => false
     }
     o_either   := match either {
-        case @Left(w) => zext(w)
-        case @Right(x) => zext(word(false, x))
+        with @Left(w) => zext(w)
+        with @Right(x) => zext(word(false, x))
     }
 }

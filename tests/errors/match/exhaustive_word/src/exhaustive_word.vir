@@ -5,9 +5,9 @@ mod WordNeedsElse {
     outgoing out : Bit dependson x
     // CHECK: Non-exhaustive match
     out := match x {
-        case 0 => true
-        case 1 => false
-        case 2 => true
+        with 0 => true
+        with 1 => false
+        with 2 => true
     }
 }
 

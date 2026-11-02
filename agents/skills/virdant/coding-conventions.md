@@ -90,10 +90,9 @@ And similarly, the correct ways to write `if` and `match` expressions are:
 
 .. code-block:: virdant
 
-  if condition {
-      0
-  } else {
-      1
+  if {
+      when condition => 0
+      else => 1
   }
 
 and
@@ -101,8 +100,8 @@ and
 .. code-block:: virdant
 
   match maybe_data {
-      case @Invalid() => 0
-      case @Valid(payload) => payload
+      with @Invalid() => 0
+      with @Valid(payload) => payload
   }
 
 
@@ -120,10 +119,9 @@ The first is to write it inline, as if the driver is part of the expression:
 
 .. code-block:: virdant
 
-  counter <= if reset {
-      0
-  } else {
-      counter + 1
+  counter <= if {
+      when reset => 0
+      else => counter + 1
   }
 
 
@@ -132,10 +130,9 @@ Or if it makes it clearer, with a newline and an extra layer of indentation:
 .. code-block:: virdant
 
   counter <=
-      if reset {
-          0
-      } else {
-          counter + 1
+      if {
+          when reset => 0
+          else => counter + 1
       }
 
 The expression for each arm of a match expression follows a similar rule:
@@ -145,8 +142,8 @@ Inline:
 .. code-block:: virdant
 
   match maybe_data {
-      case @Invalid() => 0
-      case @Valid(payload) => payload
+      with @Invalid() => 0
+      with @Valid(payload) => payload
   }
 
 
@@ -155,13 +152,12 @@ Newline and extra indentation:
 .. code-block:: virdant
 
   match maybe_data {
-      case @Invalid() =>
-          if default_payload {
-              default_payload
-          } else {
-              0
+      with @Invalid() =>
+          if {
+              when default_payload => default_payload
+              else => 0
           }
-      case @Valid(payload) => payload
+      with @Valid(payload) => payload
   }
 
 

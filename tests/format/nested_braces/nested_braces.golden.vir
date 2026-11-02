@@ -8,8 +8,8 @@ mod Nested {
 
     outgoing chosen : Word[8]
     chosen := match data {
-        case 0 => 1
-        case 1 => 2
-        case 2 => 3
+        with 0 => 1
+        with 1 => 2
+        with 2 => 3
     }
 }

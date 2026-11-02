@@ -10,11 +10,11 @@ pub mod Top {
     outgoing out : Bit
 
     reg state : State
-    when {
-        case reset {
+    if {
+        when reset {
             state <= #Off
         }
-        case state == #Off {
+        when state == #Off {
             state <= #On
         }
         else {
@@ -23,10 +23,10 @@ pub mod Top {
     }
 
     match state {
-        case #On {
+        with #On {
             out := true
         }
-        case #Off {
+        with #Off {
             out := false
         }
     }
@@ -34,13 +34,13 @@ pub mod Top {
     reg r : Bit
     unused r
 
-    when {
-        case reset {
+    if {
+        when reset {
             r <= true
         }
         else {
             match #Off : State {
-                case #On {
+                with #On {
                     r <= false
                 }
             }

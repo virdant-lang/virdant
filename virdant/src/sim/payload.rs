@@ -23,7 +23,7 @@ pub struct Paren {
 }
 
 #[derive(Debug)]
-pub struct When {
+pub struct If {
     pub branches: Vec<(Arc<Expr>, Arc<Expr>)>,
     pub else_branch: Arc<Expr>,
 }

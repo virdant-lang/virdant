@@ -4,13 +4,13 @@ mod CaseCont {
     outgoing out : Word[8]
 
     out := match val {
-        case 0 =>
+        with 0 =>
             1w8
-        case 1 =>
+        with 1 =>
             2w8
-        case 2 =>
+        with 2 =>
             3w8
-        case 3 =>
+        with 3 =>
             4w8
     }
 }

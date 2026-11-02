@@ -1,4 +1,4 @@
 kind = "check"
 expect = "ok_no_warnings"
-description = "Statement-form lets and chained let-when/let-match bodies pass the terminator-style pass."
+description = "Statement-form lets and chained let-if/let-match bodies pass the terminator-style pass."
 filecheck = "src/lets.vir"

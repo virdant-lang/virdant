@@ -1,7 +1,7 @@
 //! Implements the bidirectional type-checking pass of the `Typing`
 //! engine, verifying an expression conforms to an expected type,
 //! dispatching over AST node payloads for each expression form (paren,
-//! when, match, fn, ctor, struct, etc.).
+//! if, match, fn, ctor, struct, etc.).
 
 use super::*;
 use crate::util::parse_word_literal;
@@ -69,7 +69,7 @@ impl Typing {
 
         match node.payload() {
             AstNodePayload::ExprParen                => self.check_paren(builder, context, node, expected_typ),
-            AstNodePayload::When                     => self.check_when(builder, context, node, expected_typ),
+            AstNodePayload::If                     => self.check_if(builder, context, node, expected_typ),
             AstNodePayload::ExprWordLit(_)           => self.check_word_lit(node, expected_typ),
             AstNodePayload::ExprIndex(expr_index)    => self.check_index(builder, context, node, expr_index.index, expected_typ),
             AstNodePayload::ExprHole                 => self.check_hole(node, expected_typ),
@@ -187,17 +187,17 @@ impl Typing {
         Ok(())
     }
 
-    fn check_when<'p>(
+    fn check_if<'p>(
         &mut self,
         builder: &mut Builder,
         context: TypingContext,
         node: &AstNode<'p>,
         expected_typ: &Type,
     ) -> Result<(), ()> {
-        use crate::syntax::ast::when_arm_children;
+        use crate::syntax::ast::if_arm_children;
 
         let children = node.children();
-        let arms = when_arm_children(&children);
+        let arms = if_arm_children(&children);
 
         let mut has_else = false;
         let mut err = false;
@@ -215,7 +215,7 @@ impl Typing {
                 AstNodePayload::ArmBlock => {
                     err |= self.check_arm_block(builder, context.clone(), body, expected_typ).is_err();
                 }
-                AstNodePayload::When | AstNodePayload::Match => {
+                AstNodePayload::If | AstNodePayload::Match => {
                     // Nested conditional - recurse
                     err |= self.check(builder, context.clone(), body, expected_typ).is_err();
                 }
@@ -232,7 +232,7 @@ impl Typing {
 
         // In expression context, require else arm
         if !has_else {
-            self.flag_unknown(node, "when expression requires else arm");
+            self.flag_unknown(node, "if expression requires else arm");
             err = true;
         }
 
@@ -561,9 +561,9 @@ impl Typing {
         Ok(())
     }
 
-    /// Type-check a `when`/`match` arm body written as a `{ ... }`
+    /// Type-check an `if`/`match` arm body written as a `{ ... }`
     /// block.  A block containing a single bare expression is a style
-    /// error reported by the when/match style pass; its expression is
+    /// error reported by the if/match style pass; its expression is
     /// still checked here against the expected type so any additional
     /// type mismatch is also reported.  Empty blocks and statement
     /// blocks cannot produce a value in expression position.
@@ -580,7 +580,7 @@ impl Typing {
             Err(())
         } else if block_children.len() == 1 && block_children[0].is_expr() {
             // Single-expression block: unwrap and check it.  A single
-            // `when`/`match`/`let` child is the chained scope form,
+            // `if`/`match`/`let` child is the chained scope form,
             // which the terminator-style pass treats as legal in both
             // contexts; check it against the expected type like any
             // other expression.

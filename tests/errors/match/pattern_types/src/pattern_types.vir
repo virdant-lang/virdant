@@ -1,5 +1,5 @@
 // Regression: arm patterns in a statement-level match must agree with the
-// subject type.  Before this was caught, `case 0 => { ... }` on an enum
+// subject type.  Before this was caught, `with 0 => { ... }` on an enum
 // subject was silently ignored by both the typing pass and the
 // match-coverage analysis.
 
@@ -17,10 +17,10 @@ mod WordPatOnEnum {
     reg r : Bit
     unused r
     match #Off : State {
-        case #On  { r <= true }
-        case #Off { r <= false }
+        with #On  { r <= true }
+        with #Off { r <= false }
         // CHECK: which is not a Word type
-        case 0    { r <= false }
+        with 0    { r <= false }
     }
 }
 
@@ -30,12 +30,12 @@ mod EnumPatOnWord {
     reg r : Bit
     unused r
     match x {
-        case 0 { r <= true }
-        case 1 { r <= false }
-        case 2 { r <= true }
-        case 3 { r <= false }
+        with 0 { r <= true }
+        with 1 { r <= false }
+        with 2 { r <= true }
+        with 3 { r <= false }
         // CHECK: PatEnumerant expects an enum type
-        case #On { r <= false }
+        with #On { r <= false }
     }
 }
 
@@ -45,12 +45,12 @@ mod CtorPatOnWord {
     reg r : Bit
     unused r
     match x {
-        case 0 { r <= true }
-        case 1 { r <= false }
-        case 2 { r <= true }
-        case 3 { r <= false }
+        with 0 { r <= true }
+        with 1 { r <= false }
+        with 2 { r <= true }
+        with 3 { r <= false }
         // CHECK: Unresolved constructor Foo
-        case @Foo() { r <= false }
+        with @Foo() { r <= false }
     }
 }
 
@@ -59,10 +59,10 @@ mod BitPatOnEnum {
     reg r : Bit
     unused r
     match #Off : State {
-        case #On  { r <= true }
-        case #Off { r <= false }
+        with #On  { r <= true }
+        with #Off { r <= false }
         // CHECK: Wrong type
-        case true { r <= false }
+        with true { r <= false }
     }
 }
 

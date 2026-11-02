@@ -1,8 +1,0 @@
-mod CantWhenClock {
-    incoming clock : Clock
-
-    // CHECK: Expected Bit but found Clock
-    when {
-        case clock {}
-    }
-}

@@ -1,5 +1,5 @@
 //! Performs `DriverAnalysis`, extracting the driver assigned to each
-//! component (simple expressions, bidirectional assignments, `when`
+//! component (simple expressions, bidirectional assignments, `if`
 //! conditionals, `match` drivers), recording driver type/location and
 //! reporting diagnostics.
 
@@ -34,11 +34,11 @@ pub struct DriverAnalysis {
 pub enum Driver {
     Expr(DriverType, Location),
     Bidirectional(Location),
-    When(DriverWhen),
+    If(DriverIf),
     Match(DriverMatch),
     /// A `when`-clause position in which the component is *not* driven.
     ///
-    /// `collect_block_drivers` builds one `Driver::When` per driven component,
+    /// `collect_block_drivers` builds one `Driver::If` per driven component,
     /// so a clause that assigns to some other component must still be
     /// represented for this one, or the clause's guard is silently dropped
     /// (making later clauses and the `else` arm unconditional). Lowering
@@ -52,7 +52,7 @@ impl Driver {
         match self {
             Driver::Expr(dt, _) => *dt,
             Driver::Bidirectional(_) => DriverType::Continuous,
-            Driver::When(driver_when) => driver_when.driver_type,
+            Driver::If(driver_if) => driver_if.driver_type,
             Driver::Match(driver_match) => driver_match.driver_type,
             // `Absent` never appears at the top level and is skipped by
             // driver-type inference; this value is never observed.
@@ -64,7 +64,7 @@ impl Driver {
         match self {
             Driver::Expr(_, loc) => Some(loc.clone()),
             Driver::Bidirectional(loc) => Some(loc.clone()),
-            Driver::When(driver_when) => driver_when.clauses.first().map(|(loc, _)| loc.clone()),
+            Driver::If(driver_if) => driver_if.clauses.first().map(|(loc, _)| loc.clone()),
             Driver::Match(driver_match) => Some(driver_match.subject.clone()),
             Driver::Absent => None,
         }
@@ -72,7 +72,7 @@ impl Driver {
 }
 
 #[derive(Debug, Clone)]
-pub struct DriverWhen {
+pub struct DriverIf {
     pub driver_type: DriverType,
     pub clauses: Vec<(Location, Box<Driver>)>,
     pub else_clause: Option<Box<Driver>>,
@@ -128,14 +128,14 @@ fn dump_driver(driver: &Driver, level: usize) {
     match driver {
         Driver::Expr(driver_type, loc) => eprintln!("{pad} {driver_type:?}{loc:?}"),
         Driver::Bidirectional(loc) => eprintln!("{pad} Bidirectional{loc:?}"),
-        Driver::When(driver_when) => {
-            for (i, (cond_loc, sub_driver)) in driver_when.clauses.iter().enumerate() {
-                let keyword = if i == 0 { "when case" } else { "when case" };
-                eprintln!("{pad}{keyword} {cond_loc:?}:");
+        Driver::If(driver_if) => {
+            eprintln!("{pad}if:");
+            for (cond_loc, sub_driver) in driver_if.clauses.iter() {
+                eprintln!("{pad}  when {cond_loc:?}:");
                 dump_driver(sub_driver, level + 1);
             }
-            if let Some(else_driver) = &driver_when.else_clause {
-                eprintln!("{pad}when else:");
+            if let Some(else_driver) = &driver_if.else_clause {
+                eprintln!("{pad}  else:");
                 dump_driver(else_driver, level + 1);
             }
         }
@@ -293,7 +293,7 @@ fn collect_block_drivers(
                 if is_initial && in_conditional {
                     diagnostics.push(Diagnostic::new(
                         stmt.region(),
-                        diagnostics::InitialInsideWhenMatch {
+                        diagnostics::InitialInsideIfMatch {
                             target: target_str,
                         },
                     ));
@@ -581,9 +581,9 @@ fn collect_block_drivers(
                     }
                 }
             }
-            AstNodePayload::When => {
+            AstNodePayload::If => {
                 // Children: [guard_0?, body_0, guard_1?, body_1, ...]
-                // case arms have guard + body (2 children), else arms have only body (1 child)
+                // when arms have guard + body (2 children), else arms have only body (1 child)
                 let children = stmt.children();
                 let mut clause_drivers: Vec<(Location, IndexMap<ComponentId, Vec<Driver>>)> = vec![];
                 let mut else_drivers: IndexMap<ComponentId, Vec<Driver>> = IndexMap::new();
@@ -591,13 +591,13 @@ fn collect_block_drivers(
                 let mut idx = 0;
                 while let Some(first) = children.get(idx) {
                     if first.is_expr() {
-                        // case arm: guard + body
+                        // when arm: guard + body
                         let guard = first;
                         if let Some(body) = children.get(idx + 1) {
                             let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
                                 collect_block_drivers(body.children(), component_analysis, it_context, true, initials)
                             } else {
-                                // nested when/match or bare expr - recurse as single stmt
+                                // nested if/match or bare expr - recurse as single stmt
                                 collect_block_drivers(vec![body.clone()], component_analysis, it_context, true, initials)
                             };
                             diagnostics.append(&mut body_diags);
@@ -627,7 +627,7 @@ fn collect_block_drivers(
                 }
                 all_components.extend(else_drivers.keys().copied());
 
-                // Build a Driver::When for each driven component and merge into the result.
+                // Build a Driver::If for each driven component and merge into the result.
                 // Every clause is kept, even those that do not drive this component:
                 // they lower to `Absent`, which preserves the clause's guard
                 // (hold / X) instead of dropping it and making later clauses
@@ -655,7 +655,7 @@ fn collect_block_drivers(
                         .or_else(|| else_clause.as_ref().map(|d| d.driver_type()))
                         .unwrap_or(DriverType::Continuous);
 
-                    result.entry(comp_id).or_default().push(Driver::When(DriverWhen {
+                    result.entry(comp_id).or_default().push(Driver::If(DriverIf {
                         driver_type,
                         clauses,
                         else_clause,
@@ -663,7 +663,7 @@ fn collect_block_drivers(
                 }
             }
             AstNodePayload::Match => {
-                // Children: [subject, arm_0, arm_1, ...] where each `case` arm contributes
+                // Children: [subject, arm_0, arm_1, ...] where each `with` arm contributes
                 // (pattern, block) and each `else` arm contributes (block) only.
                 let children = stmt.children();
                 let subject = &children[0];
@@ -677,7 +677,7 @@ fn collect_block_drivers(
                     let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
                         collect_block_drivers(body.children(), component_analysis, it_context, true, initials)
                     } else {
-                        // nested when/match or bare expr - recurse as single stmt
+                        // nested if/match or bare expr - recurse as single stmt
                         collect_block_drivers(vec![body.clone()], component_analysis, it_context, true, initials)
                     };
                     diagnostics.append(&mut body_diags);
@@ -726,7 +726,7 @@ fn collect_block_drivers(
             AstNodePayload::Let => {
                 // A `let` is a pure scoping construct: it contributes no
                 // drivers itself, and its body's drivers belong to the
-                // enclosing context (unlike a `when`/`match` arm, the
+                // enclosing context (unlike an `if`/`match` arm, the
                 // block is not conditional).  References to the bound
                 // names resolve later, at the typing/sim/Verilog
                 // frontiers, by beta-reduction to the binding's RHS.
@@ -734,7 +734,7 @@ fn collect_block_drivers(
                 let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
                     collect_block_drivers(body.children(), component_analysis, it_context, in_conditional, initials)
                 } else {
-                    // `when`/`match` bodies recurse as a single statement.
+                    // `if`/`match` bodies recurse as a single statement.
                     collect_block_drivers(vec![body], component_analysis, it_context, in_conditional, initials)
                 };
                 diagnostics.append(&mut body_diags);

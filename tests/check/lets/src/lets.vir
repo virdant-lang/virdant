@@ -1,5 +1,5 @@
 // Positive tests for `let` terminator style: statement-form lets and
-// chained let-when/let-match bodies in statement position must pass
+// chained let-if/let-match bodies in statement position must pass
 // the terminator-style pass.  (Expression-position lets are blocked on
 // the typing and driver-analysis passes gaining `let` support, so only
 // statement forms are exercised here.)
@@ -26,8 +26,8 @@ pub mod StmtLetWhen {
     outgoing out : Word[8] dependson b
     outgoing flag : Bit dependson a
 
-    let x = b when {
-        case a {
+    let x = b if {
+        when a {
         }
         else {
         }
@@ -44,7 +44,7 @@ pub mod StmtLetMatch {
     outgoing echo : StyleE dependson t
 
     let x = a match t {
-        case #A {
+        with #A {
         }
         else {
         }
@@ -59,8 +59,8 @@ pub mod StmtWhenArmLet {
     incoming b : Word[8]
     outgoing out : Word[8] dependson b
 
-    when {
-        case a let x = b {
+    if {
+        when a let x = b {
         }
 
         else {

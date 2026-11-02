@@ -4,24 +4,24 @@ mod Fifo {
 
     server socket inp of Pipe[Word[8]] {
         it.ready := match out_data {
-            case @Valid(dontcare) => true
-            case @Invalid() => !is_full
+            with @Valid(dontcare) => true
+            with @Invalid() => !is_full
         }
 
-        when {
-            case inp_fires {
+        if {
+            when inp_fires {
                 match it.data {
-                    case @Valid(in_data) match write[2..0] {
-                        case 0 {
+                    with @Valid(in_data) match write[2..0] {
+                        with 0 {
                             slot0 <= in_data
                         }
-                        case 1 {
+                        with 1 {
                             slot1 <= in_data
                         }
-                        case 2 {
+                        with 2 {
                             slot2 <= in_data
                         }
-                        case 3 {
+                        with 3 {
                             slot3 <= in_data
                         }
                     }
@@ -35,16 +35,16 @@ mod Fifo {
     }
 
     wire out_data : Valid[Word[8]] {
-        it := when {
-            case is_empty match inp.data {
-                case @Valid(data) => @Valid(data)
-                case @Invalid() => @Invalid()
+        it := if {
+            when is_empty match inp.data {
+                with @Valid(data) => @Valid(data)
+                with @Invalid() => @Invalid()
             }
             else match read[2..0] {
-                case 0 => @Valid(slot0)
-                case 1 => @Valid(slot1)
-                case 2 => @Valid(slot2)
-                case 3 => @Valid(slot3)
+                with 0 => @Valid(slot0)
+                with 1 => @Valid(slot1)
+                with 2 => @Valid(slot2)
+                with 3 => @Valid(slot3)
             }
         }
     }
@@ -72,35 +72,35 @@ mod Fifo {
 
     wire out_fires : Bit {
         it := match out_data {
-            case @Valid(dontcare) => out.ready
-            case @Invalid() => false
+            with @Valid(dontcare) => out.ready
+            with @Invalid() => false
         }
     }
 
     wire inp_fires : Bit {
         it := match inp.data {
-            case @Valid(dontcare) => !is_full || out_fires
-            case @Invalid() => false
+            with @Valid(dontcare) => !is_full || out_fires
+            with @Invalid() => false
         }
     }
 
     reg read : Word[3] {
-        when {
-            case reset {
+        if {
+            when reset {
                 it <= 0
             }
-            case out_fires {
+            when out_fires {
                 it <= it + 1
             }
         }
     }
 
     reg write : Word[3] {
-        when {
-            case reset {
+        if {
+            when reset {
                 it <= 0
             }
-            case inp_fires {
+            when inp_fires {
                 it <= it + 1
             }
         }

@@ -1,13 +1,13 @@
-// MatchCoverage: `else` arm followed by another `case`.
+// MatchCoverage: `else` arm followed by another `with`.
 
 mod ElseNotLast {
     incoming x : Word[8]
     outgoing out : Bit dependson x
     // CHECK: else arm must be the last arm of the match
     out := match x {
-        case 0 => true
+        with 0 => true
         else   => false
-        case 1 => true
+        with 1 => true
     }
 }
 
@@ -19,7 +19,7 @@ mod MultipleElse {
     outgoing out : Bit dependson x
     // CHECK: Multiple else arms in match
     out := match x {
-        case 0 => true
+        with 0 => true
         else   => false
         else   => true
     }
@@ -42,9 +42,9 @@ mod RedundantElse {
     unused out
     // CHECK: Redundant else arm
     out := match c {
-        case #Red   => true
-        case #Green => false
-        case #Blue  => true
+        with #Red   => true
+        with #Green => false
+        with #Blue  => true
         else        => false
     }
 }

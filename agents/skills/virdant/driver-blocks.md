@@ -27,7 +27,7 @@ mod Foo {
 
 Push in drivers
 ---------------
-Generally speaking, prefer nested drivers inside of `when` and `match` blocks like this:
+Generally speaking, prefer nested drivers inside of `if` and `match` blocks like this:
 
 ```virdant
 mod Foo {
@@ -36,12 +36,12 @@ mod Foo {
     incoming data  : Valid[Bit]
 
     reg bar : Bit on clock {
-        when {
-            case cond1 {
+        if {
+            when cond1 {
                 it <= true
             }
             else match data {
-                case @Valid(b) {
+                with @Valid(b) {
                     it <= b
                 }
             }
@@ -59,10 +59,10 @@ mod Foo {
     incoming data  : Valid[Bit]
 
     reg bar : Bit on clock {
-        it <= when {
-            case cond1 => true
+        it <= if {
+            when cond1 => true
             else => match data {
-                case @Valid(b) => b
+                with @Valid(b) => b
                 else => it
             }
         }
@@ -79,8 +79,8 @@ mod Foo {
     incoming cond1 : Bit
 
     reg bar : Bit on clock {
-        it <= when {
-            case cond1 => false
+        it <= if {
+            when cond1 => false
             else => true
         }
     }
@@ -112,8 +112,8 @@ mod Foo {
     incoming cond2 : Bit
 
     reg bar : Bit on clock {
-        when {
-            case cond1 {
+        if {
+            when cond1 {
                 it <= cond2
             }
             else {
@@ -133,8 +133,8 @@ mod Foo {
     incoming cond2 : Bit
 
     reg bar : Bit on clock {
-        when {
-            case cond1 {
+        if {
+            when cond1 {
                 it <= cond2
             }
         }
@@ -142,28 +142,28 @@ mod Foo {
 }
 ```
 
-A `when` block with no arms matching simply leaves the register unchanged,
+An `if` block with no arms matching simply leaves the register unchanged,
 so the `else { it <= it }` is unnecessary noise.
 
 
-Remove unnecessary `=>` when chaining when/match blocks
+Remove unnecessary `=>` when chaining if/match blocks
 --------------------------------------------------------
-When the body of a `when` or `match` arm is itself a `when` or `match` block,
+When the body of a `when` or `with` arm is itself an `if` or `match` block,
 the grammar lets you chain directly without writing `=>`.
 
 Prefer this (direct chaining, no `=>`):
 
 ```virdant
-state <= when {
-    case reset => @Idle()
+state <= if {
+    when reset => @Idle()
     else match state {
-        case @Idle() => @Running(x, y)
-        case @Running(x, y) when {
-            case y == 0 => @Done(x)
-            case x < y => @Running(y - x, x)
+        with @Idle() => @Running(x, y)
+        with @Running(x, y) if {
+            when y == 0 => @Done(x)
+            when x < y => @Running(y - x, x)
             else => @Running(x - y, y)
         }
-        case @Done(result) => @Idle()
+        with @Done(result) => @Idle()
     }
 }
 ```
@@ -171,28 +171,28 @@ state <= when {
 over this (unnecessary `=>`):
 
 ```virdant
-state <= when {
-    case reset => @Idle()
+state <= if {
+    when reset => @Idle()
     else => match state {
-        case @Idle() => @Running(x, y)
-        case @Running(x, y) => when {
-            case y == 0 => @Done(x)
-            case x < y => @Running(y - x, x)
+        with @Idle() => @Running(x, y)
+        with @Running(x, y) => if {
+            when y == 0 => @Done(x)
+            when x < y => @Running(y - x, x)
             else => @Running(x - y, y)
         }
-        case @Done(result) => @Idle()
+        with @Done(result) => @Idle()
     }
 }
 ```
 
 The direct form applies to all four combinations:
 
-- `case ... when { ... }`
-- `case ... match { ... }`
-- `else when { ... }`
+- `when ... if { ... }`
+- `when ... match { ... }`
+- `else if { ... }`
 - `else match { ... }`
 
-It works for statement-level and expression-level when/match.
+It works for statement-level and expression-level if/match.
 The extra `=>` adds noise without changing meaning,
 so leave it out.
 
@@ -201,15 +201,15 @@ This also applies inside `match` arms:
 ```virdant
 // BAD: unnecessary => before nested when
 reg_state <= match state {
-    case @Foo() => when {
-        case cond => value
+    with @Foo() => if {
+        when cond => value
     }
 }
 
 // GOOD: direct chaining
 reg_state <= match state {
-    case @Foo() when {
-        case cond => value
+    with @Foo() if {
+        when cond => value
     }
 }
 ```
@@ -254,5 +254,5 @@ Rules:
 - The value must be a constant (no component references).
 - `initial` is NOT a driver; the register still needs its `<=` driver.
 - At most one `initial` per register.
-- `initial` may not appear inside a `when` or `match` block.
+- `initial` may not appear inside an `if` or `match` block.
 - Registers without `initial` start at 0 in Verilog (X in the simulator).

@@ -1,6 +1,6 @@
 Arbiter
 =======
-In this next example, we will demonstrate a more interesting use of `when` expressions.
+In this next example, we will demonstrate a more interesting use of `if` expressions.
 We will also see the pattern for resetting a register.
 
 `Arbiter` is a circuit which allows two clients to ask for access to a device,
@@ -58,7 +58,7 @@ Resets and Round-Robin
     :dedent:
     :lines: 11-16
 
-We see that the first case is `case reset`.
+We see that the first `when` clause is `when reset`.
 It is a very common pattern which gives a value to the register
 when `reset` is asserted.
 In effect, it gives `client0_priority` its initial value.
@@ -87,14 +87,14 @@ and it just flips back and forth each cycle until it's reset again.
 
 The Heart of the Arbiter
 ------------------------
-The heart of `Arbiter` is this `when` block:
+The heart of `Arbiter` is this `if` block:
 
 .. literalinclude:: /examples/arbiter/src/arbiter.vir
     :language: virdant
     :dedent:
     :lines: 18-31
 
-This `when` block is responsible for driving the values of `grant0` and `grant1`,
+This `if` block is responsible for driving the values of `grant0` and `grant1`,
 which indicate to each client if it has been given access to the device.
 It does so based on `req0` and `req1`, which tell us which of our clients want access
 on this cycle.
@@ -111,17 +111,17 @@ and technically on `reset` as well.
     Each block knows when it should change.
 
 
-Drivers in When Blocks
+Drivers in If Blocks
 ----------------------
-This `when` block is different than the others we've seen before.
+This `if` block is different than the others we've seen before.
 
-Rather than a single expression, each arm of this `when` block is a block of drivers.
+Rather than a single expression, each arm of this `if` block is a block of drivers.
 This is very handy!
 It's often the case in a module that two or more signals are determined
 based on the same conditions.
-This style of `when` block allows you to group them together.
+This style of `if` block allows you to group them together.
 
-The first `case` occurs on a reset.
+The first `when` clause occurs on a reset.
 This tells us that upon reset, neither client is granted access:
 
 .. literalinclude:: /examples/arbiter/src/arbiter.vir
@@ -129,7 +129,7 @@ This tells us that upon reset, neither client is granted access:
     :dedent:
     :lines: 19-22
 
-The second `case` handles when client 0 has priority.
+The second `when` clause handles when client 0 has priority.
 In this case, we grant access to client 0 if it asks.
 We grant access to client 1 if it asks but client 0 hasn't asked,
 using the `&&` operator (logical AND):

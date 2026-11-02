@@ -37,12 +37,12 @@ mod SpiController {
 
     reg state : SpiState on clock
 
-    state <= when {
-        case reset => #Idle
+    state <= if {
+        when reset => #Idle
         else match state {
-            case #Idle  => mux(valid, #Set, #Idle)
-            case #Set   => #Tick
-            case #Tick  => mux(bits == 7, #Idle, #Set)
+            with #Idle  => mux(valid, #Set, #Idle)
+            with #Set   => #Tick
+            with #Tick  => mux(bits == 7, #Idle, #Set)
         }
     }
 
@@ -50,8 +50,8 @@ mod SpiController {
     reg buffer : Word[8] on clock
 
     buffer <= match state {
-        case #Idle => mux(valid, data, buffer)
-        case #Tick => word(buffer[7..0], 0w1)
+        with #Idle => mux(valid, data, buffer)
+        with #Tick => word(buffer[7..0], 0w1)
         else => buffer
     }
 
@@ -59,8 +59,8 @@ mod SpiController {
     reg bits  : Word[3] on clock
 
     bits <= match state {
-        case #Idle => 0
-        case #Tick => bits + 1
+        with #Idle => 0
+        with #Tick => bits + 1
         else => bits
     }
 }
@@ -196,34 +196,34 @@ This is done with a driver that uses `when` and `match` expressions:
 ```virdant
     reg state : SpiState on clock
 
-    state <= when {
-        case reset => #Idle
+    state <= if {
+        when reset => #Idle
         else match state {
-            case #Idle  => mux(valid, #Set, #Idle)
-            case #Set   => #Tick
-            case #Tick  => mux(bits == 7, #Idle, #Set)
+            with #Idle  => mux(valid, #Set, #Idle)
+            with #Set   => #Tick
+            with #Tick  => mux(bits == 7, #Idle, #Set)
         }
     }
 ```
 
-We see a `when` expression at the top which handles the reset logic.
+We see a `if` expression at the top which handles the reset logic.
 Resetting the controller puts it into `#Idle` mode.
 
 Next, inside the `else` branch, we see a `match` expression which looks at `state`.
-Inside, we see several `case`s, some with `mux` expressions.
+Inside, we see several `when` clauses, some with `mux` expressions.
 
 So in total, this code says:
 
   "Look at the current `state` and then, on the next cycle, transition to the appropriate next state."
 
-Notice how each case uses `mux` expressions to decide the next state.
-For example, in the `#Idle` case, we transition to `#Set` if `valid` is true, otherwise stay in `#Idle`.
+Notice how each arm uses `mux` expressions to decide the next state.
+For example, in the `#Idle` arm, we transition to `#Set` if `valid` is true, otherwise stay in `#Idle`.
 
 This pattern of using expressions to describe state transitions is cleaner than
 using imperative statement blocks.
 
 Note that this behavior *only* works for `<=` (latched drivers).
-When using `:=` (continuous drivers), we must *always* have full case coverage.
+When using `:=` (continuous drivers), we must *always* have full coverage.
 Virdant will flag an error if you forget.
 
 > **Note**
@@ -252,8 +252,8 @@ The definition of `buffer` itself comes a bit later:
     reg buffer : Word[8] on clock
 
     buffer <= match state {
-        case #Idle => mux(valid, data, buffer)
-        case #Tick => word(buffer[7..0], 0w1)
+        with #Idle => mux(valid, data, buffer)
+        with #Tick => word(buffer[7..0], 0w1)
         else => buffer
     }
 ```

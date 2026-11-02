@@ -44,10 +44,10 @@ The `#` syntax selects a named enumerant of an enum type.
 
     wire decoded : Word[8]
     decoded := match op {
-        case #OP     => 0x33
-        case #OP_IMM => 0x13
-        case #LOAD   => 0x03
-        case #STORE  => 0x23
+        with #OP     => 0x33
+        with #OP_IMM => 0x13
+        with #LOAD   => 0x03
+        with #STORE  => 0x23
     }
 
 The pattern `#OP` matches only the `OP` enumerant of the enum type.
@@ -69,8 +69,8 @@ For how payload enumerants are declared, see :doc:`types`.
 
     wire inner : Word[4]
     inner := match opt {
-        case @Some(v) => v   // `v` is bound to the payload of `Some`.
-        case #None    => 0
+        with @Some(v) => v   // `v` is bound to the payload of `Some`.
+        with #None    => 0
     }
 
 The pattern list matches the enumerant's parameters positionally.
@@ -84,8 +84,8 @@ matched with an empty constructor pattern `@Name()`:
 
     wire tagged : Bit
     tagged := match opt {
-        case @Some(_) => true
-        case @None()  => false
+        with @Some(_) => true
+        with @None()  => false
     }
 
 Using `#Name` on an enumerant that carries parameters is an error;
@@ -114,8 +114,8 @@ For a variant with no associated data:
 
     wire result : Bit
     result := match maybe {
-        case @Nothing() => false
-        case @Just(_)   => true
+        with @Nothing() => false
+        with @Just(_)   => true
     }
 
 For a variant with associated data, the pattern binds each field to a name:
@@ -124,8 +124,8 @@ For a variant with associated data, the pattern binds each field to a name:
 
     wire decoded : MyEnum
     decoded := match u {
-        case @Foo()      => #Baz
-        case @Bar(x)     => x
+        with @Foo()      => #Baz
+        with @Bar(x)     => x
     }
 
 The bound names behave like variables that are in scope only within the
@@ -149,8 +149,8 @@ optional values:
 
     wire got_it : Bit
     got_it := match v {
-        case @Valid(x) => x
-        case @Invalid() => false
+        with @Valid(x) => x
+        with @Invalid() => false
     }
 
 These patterns are checked against the `Valid[T]` type by the compiler.
@@ -176,10 +176,10 @@ Literal patterns match a value against a specific constant.
 
     wire parity : Bit
     parity := match 2w2 {
-        case 0 => false
-        case 1 => true
-        case 2 => false
-        case 3 => true
+        with 0 => false
+        with 1 => true
+        with 2 => false
+        with 3 => true
     }
 
 Literal patterns support both `Bit` literals (`true`, `false`) and
@@ -207,8 +207,8 @@ be covered with their constructor pattern (``@Some(v)``, not ``#Some``).
     // Error: missing variant 'Done'
     wire next : State
     next := match state {
-        case #Idle => #Busy
-        case #Busy => #Done
+        with #Idle => #Busy
+        with #Busy => #Done
     }
 
 For union types, exhaustiveness is checked by ensuring every variant appears
@@ -222,10 +222,10 @@ In such cases, an `else` arm should be used as a catch-all.
 
     wire parity : Bit
     parity := match 2w2 {
-        case 0 => false
-        case 1 => true
-        case 2 => false
-        case 3 => true
+        with 0 => false
+        with 1 => true
+        with 2 => false
+        with 3 => true
     }
     // All 4 values of Word[2] are covered, so this is exhaustive
 
@@ -233,18 +233,18 @@ In such cases, an `else` arm should be used as a catch-all.
 The else Arm
 ------------
 Both `match` expressions and `match` statements support an `else` arm
-that matches any value not covered by the preceding `case` arms.
+that matches any value not covered by the preceding `with` arms.
 
 .. code-block:: virdant
 
     wire decoded : Word[8]
     decoded := match op {
-        case #OP     => 1
-        case #OP_IMM => 2
+        with #OP     => 1
+        with #OP_IMM => 2
         else => 0
     }
 
-The `else` arm must appear last, after all `case` arms.
+The `else` arm must appear last, after all `with` arms.
 Only one `else` arm is allowed per match.
 
 
@@ -258,15 +258,15 @@ instead of a single expression.
 .. code-block:: virdant
 
     match union_val {
-        case @Foo() {
+        with @Foo() {
             out := 0
             flag := true
         }
-        case @Bar(x) {
+        with @Bar(x) {
             out := x
             flag := false
         }
     }
 
 Inside the arm body, bindings from the pattern (like `x` in the
-`@Bar(x)` case) are available as read-only values.
+`@Bar(x)` arm) are available as read-only values.

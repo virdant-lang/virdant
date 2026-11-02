@@ -1,0 +1,49 @@
+// CHECK: Check OK
+pub mod When {
+    incoming clock : Clock
+    incoming inp1 : Bit
+
+    outgoing out1 : Bit dependson inp1 {
+        if {
+            when inp1 {
+                it := true
+            }
+            else {
+                it := false
+            }
+        }
+    }
+
+    reg r : Bit {
+        if {
+            when inp1 {
+                it <= true
+            }
+        }
+
+        unused it
+    }
+
+    incoming inp2 : Bit
+
+    outgoing out2 : Bit dependson inp2 {
+        it := if {
+            when inp2 => false
+            else => true
+        }
+    }
+}
+
+pub mod Fine {
+    incoming clock : Clock
+    incoming reset : Reset
+    outgoing out : Word[3]
+
+    reg start : Word[3] {
+        it <= if {
+            when reset => 0
+            else => it
+        }
+    }
+    out := start
+}

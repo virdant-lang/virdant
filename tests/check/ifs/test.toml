@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "ifs"
+filecheck = "src/ifs.vir"

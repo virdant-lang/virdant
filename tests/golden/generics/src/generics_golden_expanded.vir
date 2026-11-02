@@ -27,8 +27,8 @@ pub mod Top {
 
     wire opt : Opt
     opt := match b {
-        case true => @Some(a)
-        case false => #None
+        with true => @Some(a)
+        with false => #None
     }
 
     wire either : Either
@@ -39,11 +39,11 @@ pub mod Top {
     outgoing o_either : Word[5] dependson a
     o_fst := pair->fst
     o_opt := match opt {
-        case @Some(w) => zext(w)
-        case #None => 0
+        with @Some(w) => zext(w)
+        with #None => 0
     }
     o_either := match either {
-        case @Left(w) => zext(w)
-        case @Right(x) => zext(word(false, x))
+        with @Left(w) => zext(w)
+        with @Right(x) => zext(word(false, x))
     }
 }

@@ -14,7 +14,7 @@ use crate::diagnostics;
 use crate::diagnostics::Diagnostic;
 use crate::package::{PackageId, PackageTable};
 use crate::common::source::Region;
-use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children, when_arm_children};
+use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children, if_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 
@@ -192,8 +192,8 @@ impl PackageAnalysis {
                     AstNodePayload::BidirectionalDriver => (),
                     AstNodePayload::Ofness(_) => (),
 
-                    AstNodePayload::When => {
-                        self.add_moddefstmtwhen_expr_roots(child_node);
+                    AstNodePayload::If => {
+                        self.add_moddefstmtif_expr_roots(child_node);
                     }
                     AstNodePayload::Match => {
                         self.add_moddefstmtmatch_expr_roots(child_node);
@@ -221,8 +221,8 @@ impl PackageAnalysis {
                                 AstNodePayload::ArmBlock => {
                                     self.add_moddefstmt_block_expr_roots(&body);
                                 }
-                                AstNodePayload::When => {
-                                    self.add_moddefstmtwhen_expr_roots(body);
+                                AstNodePayload::If => {
+                                    self.add_moddefstmtif_expr_roots(body);
                                 }
                                 AstNodePayload::Match => {
                                     self.add_moddefstmtmatch_expr_roots(body);
@@ -279,14 +279,14 @@ impl PackageAnalysis {
         }
     }
 
-    fn add_moddefstmtwhen_expr_roots(&mut self, when_node: AstNode<'_>) {
+    fn add_moddefstmtif_expr_roots(&mut self, if_node: AstNode<'_>) {
         // Only the guard expressions are expr roots (each must be a
         // Bit).  Arm bodies may be blocks (recurse into their
-        // statements) or nested when/match (recurse); bare `=>`-arm
-        // expression bodies are style errors flagged by the when/match
+        // statements) or nested if/match (recurse); bare `=>`-arm
+        // expression bodies are style errors flagged by the if/match
         // style pass and are not expr roots.
-        let children = when_node.children();
-        for (guard, body) in when_arm_children(&children) {
+        let children = if_node.children();
+        for (guard, body) in if_arm_children(&children) {
             if let Some(guard) = guard {
                 self.expr_roots.push(guard.id());
             }
@@ -294,8 +294,8 @@ impl PackageAnalysis {
                 AstNodePayload::ArmBlock => {
                     self.add_moddefstmt_block_expr_roots(body);
                 }
-                AstNodePayload::When => {
-                    self.add_moddefstmtwhen_expr_roots(body.clone());
+                AstNodePayload::If => {
+                    self.add_moddefstmtif_expr_roots(body.clone());
                 }
                 AstNodePayload::Match => {
                     self.add_moddefstmtmatch_expr_roots(body.clone());
@@ -314,8 +314,8 @@ impl PackageAnalysis {
                             AstNodePayload::ArmBlock => {
                                 self.add_moddefstmt_block_expr_roots(&let_body);
                             }
-                            AstNodePayload::When => {
-                                self.add_moddefstmtwhen_expr_roots(let_body);
+                            AstNodePayload::If => {
+                                self.add_moddefstmtif_expr_roots(let_body);
                             }
                             AstNodePayload::Match => {
                                 self.add_moddefstmtmatch_expr_roots(let_body);
@@ -334,9 +334,9 @@ impl PackageAnalysis {
     }
 
     fn add_moddefstmtmatch_expr_roots(&mut self, match_node: AstNode<'_>) {
-        // Children: [subject, arm_0, arm_1, ...] where each `case` arm contributes
+        // Children: [subject, arm_0, arm_1, ...] where each `with` arm contributes
         // (pattern, body) and each `else` arm contributes (body) only.
-        // Body can be a block, a when, or a match.
+        // Body can be a block, an if, or a match.
         let children = match_node.children();
         // The subject expression is an expr root.
         self.expr_roots.push(children[0].id());
@@ -346,8 +346,8 @@ impl PackageAnalysis {
                 AstNodePayload::ArmBlock => {
                     self.add_moddefstmt_block_expr_roots(body);
                 }
-                AstNodePayload::When => {
-                    self.add_moddefstmtwhen_expr_roots(body.clone());
+                AstNodePayload::If => {
+                    self.add_moddefstmtif_expr_roots(body.clone());
                 }
                 AstNodePayload::Match => {
                     self.add_moddefstmtmatch_expr_roots(body.clone());
@@ -366,8 +366,8 @@ impl PackageAnalysis {
                             AstNodePayload::ArmBlock => {
                                 self.add_moddefstmt_block_expr_roots(&let_body);
                             }
-                            AstNodePayload::When => {
-                                self.add_moddefstmtwhen_expr_roots(let_body);
+                            AstNodePayload::If => {
+                                self.add_moddefstmtif_expr_roots(let_body);
                             }
                             AstNodePayload::Match => {
                                 self.add_moddefstmtmatch_expr_roots(let_body);
@@ -392,16 +392,16 @@ impl PackageAnalysis {
                     let driver_expr = stmt.driver().unwrap();
                     self.expr_roots.push(driver_expr.id());
                     // Trace into When/Match nodes inside the driver expression
-                    self.add_expr_when_match_roots(driver_expr);
+                    self.add_expr_if_match_roots(driver_expr);
                 }
-                AstNodePayload::When => {
-                    self.add_moddefstmtwhen_expr_roots(stmt);
+                AstNodePayload::If => {
+                    self.add_moddefstmtif_expr_roots(stmt);
                 }
                 AstNodePayload::Match => {
                     self.add_moddefstmtmatch_expr_roots(stmt);
                 }
                 AstNodePayload::Let => {
-                    // A `let` nested inside a driver block or when/match
+                    // A `let` nested inside a driver block or if/match
                     // arm: same treatment as at moddef level.
                     for binding in stmt.let_bindings() {
                         if let Some(rhs) = binding.let_binding_expr() {
@@ -413,8 +413,8 @@ impl PackageAnalysis {
                             AstNodePayload::ArmBlock => {
                                 self.add_moddefstmt_block_expr_roots(&body);
                             }
-                            AstNodePayload::When => {
-                                self.add_moddefstmtwhen_expr_roots(body);
+                            AstNodePayload::If => {
+                                self.add_moddefstmtif_expr_roots(body);
                             }
                             AstNodePayload::Match => {
                                 self.add_moddefstmtmatch_expr_roots(body);
@@ -432,25 +432,25 @@ impl PackageAnalysis {
         }
     }
 
-    fn add_expr_when_match_roots(&mut self, expr_node: AstNode<'_>) {
+    fn add_expr_if_match_roots(&mut self, expr_node: AstNode<'_>) {
         match expr_node.payload() {
-            AstNodePayload::When => {
+            AstNodePayload::If => {
                 // When children: [guard_0?, body_0, guard_1?, body_1, ...].
                 // Use the positional arm iterator: an `else` arm's body is
                 // also an expression, so "first child is an expr" cannot
                 // distinguish a case guard from an else body (a trailing
-                // `else when {...}`/`else match {...}` body would
+                // `else if {...}`/`else match {...}` body would
                 // otherwise be misclassified as a guard and pushed as an
                 // expr root with a guard's expected type).
-                use crate::syntax::ast::when_arm_children;
+                use crate::syntax::ast::if_arm_children;
                 let children = expr_node.children();
-                for (guard, body) in when_arm_children(&children) {
+                for (guard, body) in if_arm_children(&children) {
                     if let Some(guard) = guard {
                         self.expr_roots.push(guard.id());
-                        self.add_expr_when_match_roots(guard.clone());
+                        self.add_expr_if_match_roots(guard.clone());
                     }
                     if body.is_expr() {
-                        self.add_expr_when_match_roots(body.clone());
+                        self.add_expr_if_match_roots(body.clone());
                     }
                 }
             }
@@ -459,11 +459,11 @@ impl PackageAnalysis {
                 let children = expr_node.children();
                 // The subject expression is an expr root
                 self.expr_roots.push(children[0].id());
-                self.add_expr_when_match_roots(children[0].clone());
+                self.add_expr_if_match_roots(children[0].clone());
                 // Each arm is either (pattern, body) or (body) for else
                 for (_pat_opt, body) in match_arm_children(&children) {
                     if body.is_expr() {
-                        self.add_expr_when_match_roots(body.clone());
+                        self.add_expr_if_match_roots(body.clone());
                     }
                 }
             }
@@ -471,7 +471,7 @@ impl PackageAnalysis {
                 // Recurse into all children to find nested When/Match
                 for child in expr_node.children() {
                     if child.is_expr() {
-                        self.add_expr_when_match_roots(child);
+                        self.add_expr_if_match_roots(child);
                     }
                 }
             }

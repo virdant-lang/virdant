@@ -12,8 +12,8 @@ pub mod Top {
     opt := #Some
     outgoing out : Bit
     out := match opt {
-        case #Some => true
-        case #None => false
+        with #Some => true
+        with #None => false
     }
 }
 

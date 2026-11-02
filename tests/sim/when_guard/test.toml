@@ -1,2 +1,0 @@
-kind = "sim"
-description = "Regression test for the 'lost when-arm guard' compiler bug."

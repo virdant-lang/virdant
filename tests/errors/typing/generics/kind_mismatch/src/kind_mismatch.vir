@@ -14,8 +14,8 @@ pub mod Top2 {
     incoming inp : Valid[8]
     outgoing out : Word[8] dependson inp
     out := match inp {
-        case @Valid(v) => v
-        case @Invalid() => 0
+        with @Valid(v) => v
+        with @Invalid() => 0
     }
 }
 

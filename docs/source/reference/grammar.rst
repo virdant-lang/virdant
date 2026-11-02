@@ -114,14 +114,14 @@ The following words are reserved as keywords and may not be used as identifiers:
 
 .. code-block:: text
 
-    builtin   bus       case      client    cosi      default
-    dependson dontcare  dyn       else      enum      export
-    ext       false     fn        for       if        import
-    incoming  initial   it        let       match     mod
-    net       of        on        outgoing  platform  pub
-    reg       server    soci      socket    submod    struct
-    tap       true      type      union     unused    when
-    width     wire
+    builtin   bus       client    cosi      default   dependson
+    dontcare  dyn       else      enum      export    ext
+    false     fn        for       if        import    incoming
+    initial   it        let       match     mod       net
+    of        on        outgoing  platform  pub       reg
+    server    soci      socket    submod    struct    tap
+    true      type      union     unused    when      width
+    wire      with
 
 
 Literals

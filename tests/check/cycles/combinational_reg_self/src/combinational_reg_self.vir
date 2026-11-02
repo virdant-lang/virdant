@@ -27,8 +27,8 @@ pub mod RegSelfAssign {
 
     // Guard on itself inside its own reg block.
     reg guarded : Word[8] {
-        when {
-            case it == 0 {
+        if {
+            when it == 0 {
                 it <= inp
             }
             else {
@@ -40,7 +40,7 @@ pub mod RegSelfAssign {
     // Match subject on itself inside its own reg block.
     reg matched : Word[8] {
         match it {
-            case 0w8 {
+            with 0w8 {
                 it <= inp
             }
             else {
@@ -52,8 +52,8 @@ pub mod RegSelfAssign {
     // Cross-referencing regs: each guards on the other and drives
     // from the other. All edges are sequential, so no loop.
     reg a : Word[4] {
-        when {
-            case b == 0w4 {
+        if {
+            when b == 0w4 {
                 it <= 0w4
             }
             else {
@@ -62,8 +62,8 @@ pub mod RegSelfAssign {
         }
     }
     reg b : Word[4] {
-        when {
-            case a == 0w4 {
+        if {
+            when a == 0w4 {
                 it <= 15w4
             }
             else {
@@ -83,11 +83,11 @@ pub mod RegSelfAssign {
     next := pipelined + 1
     pipelined <= next
 
-    // A reg appearing in the guard of a combinational when: the wire
+    // A reg appearing in the guard of a combinational if: the wire
     // depends on the reg, but the reg's own drivers stay sequential.
     wire w : Word[8]
-    when {
-        case counter == 0 {
+    if {
+        when counter == 0 {
             w := 0
         }
         else {

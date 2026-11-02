@@ -1,7 +1,7 @@
 // A `kind = "run"` test exercising the `let` statement feature, with
 // corner cases: untyped and typed bindings, multi-binding lists where
 // later bindings see earlier ones, nested lets, `let` as the body of
-// `when`/`match` arms, `let` with `when`/`match` bodies, and shadowing
+// `if`/`match` arms, `let` with `if`/`match` bodies, and shadowing
 // in sibling arms.  Then the simulator exits with code 0.
 
 import virt
@@ -29,10 +29,10 @@ pub mod LetTest for virt::Virt {
 
     wire d : Bit {
         match @Valid(0) : Valid[Word[8]] {
-            case @Invalid() {
+            with @Invalid() {
                 it := false
             }
-            case @Valid(value) let x = 10w8 {
+            with @Valid(value) let x = 10w8 {
                 it := x == 10
             }
         }
@@ -40,10 +40,10 @@ pub mod LetTest for virt::Virt {
 
     wire e : Bit {
         match @Valid(2) : Valid[Word[8]] {
-            case @Invalid() {
+            with @Invalid() {
                 it := false
             }
-            case @Valid(value) let value = 3w8 {
+            with @Valid(value) let value = 3w8 {
                 it := value == 3
             }
         }
@@ -51,16 +51,16 @@ pub mod LetTest for virt::Virt {
 
     wire f : Bit {
         match @Valid(5) : Valid[Word[8]] {
-            case @Invalid() {
+            with @Invalid() {
                 it := false
             }
-            case @Valid(a) let b = a {
+            with @Valid(a) let b = a {
                 it := a == 5
             }
         }
     }
 
-    // Expression-position `let` with a `when` body and multiple
+    // Expression-position `let` with an `if` body and multiple
     // bindings.
 
     // Expression-position `let` with a `match` body: the binding is
@@ -69,11 +69,11 @@ pub mod LetTest for virt::Virt {
     // Nested expression-position `let`s: the inner binding shadows the
     // outer one, so the body sees `!a` (false), and the `else` arm is
     // taken.  Without shadowing, `p` would be `a` (true) and the
-    // `case` arm would win instead.
+    // `when` arm would win instead.
     wire i : Bit {
-        it := let p = a when {
-            case true => let p = !a when {
-                case p => false
+        it := let p = a if {
+            when true => let p = !a if {
+                when p => false
                 else => true
             }
             else => false
@@ -89,8 +89,8 @@ pub mod LetTest for virt::Virt {
         it := a && b && c && d && e && f && i
     }
 
-    let success = a && b && c && d && e && f && i when {
-        case success && success_wire {
+    let success = a && b && c && d && e && f && i if {
+        when success && success_wire {
             exit := @Valid(0)
         }
         else {

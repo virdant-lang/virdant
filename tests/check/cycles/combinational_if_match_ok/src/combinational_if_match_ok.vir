@@ -1,0 +1,54 @@
+// CHECK: Check OK
+// `when` guards and `match` subjects add dependencies from drivers
+// inside their arms to the guarded/matched components, but they do
+// not by themselves create combinational loops.
+
+pub mod WhenOk {
+    wire a : Bit
+    wire b : Bit
+
+    a := false
+    if {
+        when a {
+            b := true
+        }
+        else {
+            b := false
+        }
+    }
+    unused b
+}
+
+pub mod MatchOk {
+    wire sel : Bit
+    wire out : Bit
+
+    sel := false
+    match sel {
+        with true {
+            out := false
+        }
+        else {
+            out := true
+        }
+    }
+    unused out
+}
+
+// A pattern-bound variable shadows a component of the same name, so a
+// reference to it inside the arm must not create a (self-)dependency
+// edge on the component.
+union type St {
+    Done(result : Bit)
+}
+
+pub mod PatternShadowOk {
+    outgoing result : Bit
+
+    wire state : St
+    state := @Done(true)
+
+    result := match state {
+        with @Done(result) => result
+    }
+}

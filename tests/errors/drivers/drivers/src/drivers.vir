@@ -111,8 +111,8 @@ mod TwoDriversAcrossSections {
     incoming reset : Bit
     outgoing out  : Bit dependson reset
 
-    when {
-        case reset {
+    if {
+        when reset {
             out := true
         }
         else {
@@ -122,14 +122,14 @@ mod TwoDriversAcrossSections {
 
     reg r : Bit
 
-    when {
-        case reset {
+    if {
+        when reset {
             r <= true
         }
     }
 
-    when {
-        case !reset {
+    if {
+        when !reset {
             // CHECK: Multiple drivers for r
             r <= false
         }
@@ -139,8 +139,8 @@ mod TwoDriversAcrossSections {
     reg s : Bit
     s <= true
 
-    when {
-        case reset {
+    if {
+        when reset {
             s <= false
         }
     }
@@ -149,8 +149,8 @@ mod TwoDriversAcrossSections {
     wire t : Bit
     t := true
 
-    when {
-        case reset {
+    if {
+        when reset {
             t := false
         }
     }
@@ -159,7 +159,7 @@ mod TwoDriversAcrossSections {
     u := false
 
     match #On : Status {
-        case #On {
+        with #On {
         }
         else {
             u := true

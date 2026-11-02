@@ -1,7 +1,7 @@
 //! Builds the per-item `TypingContext` (component path/type bindings)
 //! and computes the expected type for an `ExprRoot` from its parent
 //! context (`Bit` for `when` guards, `Clock` for reg drivers, LHS
-//! component type for drivers and `initial` statements, inherited through `when`/`match` arms).
+//! component type for drivers and `initial` statements, inherited through `if`/`match` arms).
 
 use bstr::{BStr, ByteSlice};
 use crate::analysis::symbols::SymbolId;
@@ -51,7 +51,7 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
         AstNodePayload::Driver(_) | AstNodePayload::InitialDriver => {
             let mut lhs_path = parsing.string(parent_node.child(0).path().unwrap()).to_owned();
 
-            // Walk up through any enclosing ModDefStmtBlocks and ModDefStmtWhens
+            // Walk up through any enclosing ModDefStmtBlocks and If/Match nodes
             // to find the containing item (ModDef). Loop over AstNodeId (Copy)
             // to avoid holding overlapping borrows on the AstNode.
             let mut ancestor_id = parent_node.parent().unwrap().id();
@@ -114,14 +114,14 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
             // expression with no expected type from its parent.
             None
         }
-        AstNodePayload::When => {
+        AstNodePayload::If => {
             // Guard expressions must be Bit.
             // Body expressions inherit the expected type from the When
             // itself (only reachable when the When is in expression
             // position; in statement position only guards are expr
             // roots).
             let children = parent_node.children();
-            let is_guard = crate::syntax::ast::when_arm_children(&children)
+            let is_guard = crate::syntax::ast::if_arm_children(&children)
                 .into_iter()
                 .any(|(guard, _)| guard.is_some_and(|g| g.id() == node.id()));
             if is_guard {
@@ -179,7 +179,7 @@ fn find_first_reference<'p>(node: &AstNode<'p>, name: &BStr) -> Option<AstNode<'
     None
 }
 
-/// The expected type of an expression-position scope form — a `when`,
+/// The expected type of an expression-position scope form — an `if`,
 /// a `match`, or a `let` — derived purely from the syntax of its
 /// ancestors, without querying any `Typing` result.
 ///
@@ -195,11 +195,11 @@ fn find_first_reference<'p>(node: &AstNode<'p>, name: &BStr) -> Option<AstNode<'
 fn scope_expected_type(builder: &mut Builder, node: &AstNode<'_>) -> Option<Type> {
     let parent = node.parent()?;
     match parent.payload() {
-        // `node` is an arm body of an enclosing `when`: a guard must be
-        // `Bit`; a body inherits the `when`'s own expected type.
-        AstNodePayload::When => {
+        // `node` is an arm body of an enclosing `if`: a guard must be
+        // `Bit`; a body inherits the `if`'s own expected type.
+        AstNodePayload::If => {
             let children = parent.children();
-            let is_guard = crate::syntax::ast::when_arm_children(&children)
+            let is_guard = crate::syntax::ast::if_arm_children(&children)
                 .into_iter()
                 .any(|(guard, _)| guard.is_some_and(|g| g.id() == node.id()));
             if is_guard {

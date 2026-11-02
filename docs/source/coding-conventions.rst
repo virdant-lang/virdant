@@ -67,12 +67,12 @@ So we write the following:
       // ...
   }
 
-And similarly, the correct ways to write `when` and `match` expressions are:
+And similarly, the correct ways to write `if` and `match` expressions are:
 
 .. code-block:: virdant
 
-  when {
-      case condition => 0
+  if {
+      when condition => 0
       else => 1
   }
 
@@ -81,8 +81,8 @@ and
 .. code-block:: virdant
 
   match maybe_data {
-      case @Invalid() => 0
-      case @Valid(payload) => payload
+      with @Invalid() => 0
+      with @Valid(payload) => payload
   }
 
 
@@ -94,14 +94,14 @@ When writing driver statements, if the expression on the right-hand side is shor
 
    out := is_valid && counter[3]
 
-If an expression is longer, especially if it contains a `when` or `match` expression, it may be written in one of two ways.
+If an expression is longer, especially if it contains an `if` or `match` expression, it may be written in one of two ways.
 
 The first is to write it inline, as if the driver is part of the expression:
 
 .. code-block:: virdant
 
-  counter <= when {
-      case reset => 0
+  counter <= if {
+      when reset => 0
       else => counter + 1
   }
 
@@ -111,8 +111,8 @@ Or if it makes it clearer, with a newline and an extra layer of indentation:
 .. code-block:: virdant
 
   counter <=
-      when {
-          case reset => 0
+      if {
+          when reset => 0
           else => counter + 1
       }
 
@@ -123,8 +123,8 @@ Inline:
 .. code-block:: virdant
 
   match maybe_data {
-      case @Invalid() => 0
-      case @Valid(payload) => payload
+      with @Invalid() => 0
+      with @Valid(payload) => payload
   }
 
 
@@ -133,10 +133,10 @@ Newline and extra indentation:
 .. code-block:: virdant
 
   match maybe_data {
-      case @Invalid() =>
-          when {
-              case default_payload => default_payload
+      with @Invalid() =>
+          if {
+              when default_payload => default_payload
               else => 0
           }
-      case @Valid(payload) => payload
+      with @Valid(payload) => payload
   }

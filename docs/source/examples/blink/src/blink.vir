@@ -9,8 +9,8 @@ pub mod Blink {
 
     outgoing reg led : Bit {
         // Toggle the LED on each strobe pulse.
-        when {
-            case strobe0.strobe {
+        if {
+            when strobe0.strobe {
                 it <= !it
             }
         }

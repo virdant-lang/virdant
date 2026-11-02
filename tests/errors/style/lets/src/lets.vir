@@ -20,15 +20,15 @@ mod StmtLetArrow {
     out := a
 }
 
-// A `let` inside a statement `when` arm whose body is a `=> <expr>`
+// A `let` inside a statement `if` arm whose body is a `=> <expr>`
 // value: the arm's let is still in statement position.
 mod StmtWhenArmLetArrow {
     incoming a : Bit
     incoming b : Word[8]
     outgoing out : Word[8] dependson b
 
-    when {
-        case a {
+    if {
+        when a {
             // CHECK: For a `let` used as a statement, use `{ ... }` instead of `=>`
             let x = b => x
         }
@@ -52,7 +52,7 @@ mod StmtLetExprBlock {
     out := a
 }
 
-// A statement `let` chained into a bare `when` body: the chained form
+// A statement `let` chained into a bare `if` body: the chained form
 // is legal in both contexts, so the style pass flags nothing.
 mod StmtLetWhen {
     incoming a : Bit
@@ -60,8 +60,8 @@ mod StmtLetWhen {
     outgoing out : Word[8] dependson b
 
     // CHECK-NOT: For a `let` used as
-    let x = b when {
-        case a {
+    let x = b if {
+        when a {
         }
         else {
         }
@@ -78,7 +78,7 @@ mod StmtLetMatch {
 
     // CHECK-NOT: For a `let` used as
     let x = a match t {
-        case #A {
+        with #A {
         }
         else {
         }

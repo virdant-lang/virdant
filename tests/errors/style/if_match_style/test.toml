@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Tests for if/match arm style mismatches."
+filecheck = "src/if_match_style.vir"

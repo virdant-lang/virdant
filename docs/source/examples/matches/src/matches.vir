@@ -9,7 +9,7 @@ mod Top {
 
     out :=
         match inp {
-            case @Nothing() => 0
-            case @Something(payload) => payload
+            with @Nothing() => 0
+            with @Something(payload) => payload
         }
 }

@@ -36,25 +36,25 @@ mod Gcd {
     outgoing valid: Bit
 
     reg state : State {
-        when {
-            case reset {
+        if {
+            when reset {
                 it <= @Idle()
             }
             else {
                 it <= match it : State {
-                    case @Idle() => mux(fire, @Running(x, y), @Idle())
-                    case @Running(x, y) =>
+                    with @Idle() => mux(fire, @Running(x, y), @Idle())
+                    with @Running(x, y) =>
                         mux(y == 0, @Done(x),
                         mux(x < y, @Running(y - x, x),
                         @Running(x - y, y)))
-                    case @Done(result) => @Idle()
+                    with @Done(result) => @Idle()
                 }
             }
         }
     }
 
     match state {
-        case @Done(r) {
+        with @Done(r) {
             result := r
             valid := true
         }

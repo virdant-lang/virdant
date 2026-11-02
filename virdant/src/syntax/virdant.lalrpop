@@ -368,7 +368,7 @@ ModDefStmtCore: AstNodeId = {
 
 ModDefStmt: AstNodeId = {
     <stmt:ModDefStmtCore> => stmt,
-    <w:When> => w,
+    <w:If> => w,
     <m:Match> => m,
     <l:Let> => l,
 }
@@ -388,7 +388,7 @@ Let: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> "let" <bindings:LetBindingList> <body:When> <rr:@R> => {
+    <ll:@L> "let" <bindings:LetBindingList> <body:If> <rr:@R> => {
         let payload = AstNodePayload::Let;
         let span = parser.span(ll, rr);
         let num_children = (bindings.len() as u16) + 1;
@@ -634,9 +634,9 @@ ModDefStmtSocket: AstNodeId = {
     },
 }
 
-When: AstNodeId = {
-    <ll:@L> "when" "{" <arms:WhenArm*> "}" <rr:@R> => {
-        let payload = AstNodePayload::When;
+If: AstNodeId = {
+    <ll:@L> "if" "{" <arms:IfArm*> "}" <rr:@R> => {
+        let payload = AstNodePayload::If;
         let span = parser.span(ll, rr);
         let num_children = arms.into_iter().sum::<u16>();
 
@@ -644,15 +644,15 @@ When: AstNodeId = {
     },
 }
 
-WhenArm: u16 = {
-    "case" Expr "=>" Expr => 2,
-    "case" Expr ArmBlock => 2,
-    "case" Expr When => 2,
-    "case" Expr Match => 2,
-    "case" Expr Let => 2,
+IfArm: u16 = {
+    "when" Expr "=>" Expr => 2,
+    "when" Expr ArmBlock => 2,
+    "when" Expr If => 2,
+    "when" Expr Match => 2,
+    "when" Expr Let => 2,
     "else" "=>" Expr => 1,
     "else" ArmBlock => 1,
-    "else" When => 1,
+    "else" If => 1,
     "else" Match => 1,
     "else" Let => 1,
 }
@@ -668,14 +668,14 @@ Match: AstNodeId = {
 }
 
 MatchArm: u16 = {
-    "case" Pat "=>" Expr => 2,
-    "case" Pat ArmBlock => 2,
-    "case" Pat When => 2,
-    "case" Pat Match => 2,
-    "case" Pat Let => 2,
+    "with" Pat "=>" Expr => 2,
+    "with" Pat ArmBlock => 2,
+    "with" Pat If => 2,
+    "with" Pat Match => 2,
+    "with" Pat Let => 2,
     "else" "=>" Expr => 1,
     "else" ArmBlock => 1,
-    "else" When => 1,
+    "else" If => 1,
     "else" Match => 1,
     "else" Let => 1,
 }
@@ -732,7 +732,7 @@ Type: AstNodeId = {
 }
 
 Expr: AstNodeId = {
-    <e:When> => e,
+    <e:If> => e,
     <e:Match> => e,
     <e:Let> => e,
     <e:ExprStruct> => e,
@@ -1274,9 +1274,9 @@ extern {
         "it" => Token::KwIt,
         "else" => Token::KwElse,
         "when" => Token::KwWhen,
+        "with" => Token::KwWith,
         "match" => Token::KwMatch,
         "let" => Token::KwLet,
-        "case" => Token::KwCase,
         "unused" => Token::KwUnused,
         "initial" => Token::KwInitial,
         "true" => Token::KwTrue,

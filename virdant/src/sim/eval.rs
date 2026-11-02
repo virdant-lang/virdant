@@ -343,7 +343,7 @@ impl Expr {
                 self.val_value(value)
             }
             ExprPayload::Paren(paren) => paren.subject.eval(context),
-            ExprPayload::When(when) => self.eval_when(context, when),
+            ExprPayload::If(when) => self.eval_when(context, when),
             ExprPayload::Match(match_) => self.eval_match(context, match_),
             ExprPayload::BitLit(bit_lit) => self.val_bool(bit_lit.value),
             ExprPayload::WordLit(word_lit) => {
@@ -402,7 +402,7 @@ impl Expr {
     /// The first truthy branch wins; an untruthy condition falls through
     /// to the next branch (Verilog ternary semantics without X: every
     /// condition is a fully-defined bit pattern).
-    fn eval_when(&self, context: &Context, when: &payload::When) -> Value {
+    fn eval_when(&self, context: &Context, when: &payload::If) -> Value {
         for (cond, body) in &when.branches {
             let cond_val = cond.eval(context);
             if Self::truthy(&cond_val) {
