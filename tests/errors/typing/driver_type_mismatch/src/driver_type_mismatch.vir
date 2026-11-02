@@ -1,7 +1,7 @@
 mod Foo {
     incoming inp0 : Word[8]
 
-    outgoing out0 : Word[7]
+    outgoing out0 : Word[7] dependson inp0
     outgoing out1 : Word[7]
     outgoing out2 : Bit
     outgoing out3 : Word[7]
@@ -27,7 +27,7 @@ mod Foo {
 
 mod TruncWider {
     incoming x : Word[4]
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson x
 
     // CHECK: Cannot truncate Word[4] to the larger type Word[8]
 

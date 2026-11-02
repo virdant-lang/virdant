@@ -7,12 +7,12 @@ pub struct type Pair {
 
 mod Priv {
     incoming inp : Word[8]
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson inp
     out := inp
 }
 
 pub mod Lib {
     incoming inp : Word[8]
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson inp
     out := inp
 }

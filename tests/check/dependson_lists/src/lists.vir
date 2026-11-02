@@ -1,0 +1,54 @@
+// `dependson` is a list on a component declaration: the module's
+// declaration of which `incoming` ports the port may combinationally
+// depend on. It does not *create* a dependency.
+
+// CHECK: Check OK
+
+ext mod External {
+    incoming inp : Bit
+    outgoing out : Bit dependson inp
+}
+
+pub mod Top {
+    incoming inp : Bit
+    incoming inp_0 : Bit
+    incoming inp_1 : Bit
+    incoming clk : Clock
+
+    // Single entry.
+    outgoing out : Bit dependson inp {
+        it := inp
+    }
+
+    // Multiple entries, comma separated.
+    outgoing out_1 : Bit dependson inp_0, inp_1 {
+        it := inp_0 && inp_1
+    }
+
+    // `outgoing wire` may carry the list the same way.
+    outgoing wire w : Bit dependson inp {
+        it := inp
+    }
+
+    // A port whose only dependency flows through a declared
+    // `outgoing wire` needs the wire's entries declared too.
+    outgoing via_wire : Bit dependson inp
+    via_wire := w
+
+    // An `outgoing reg` never carries the list and never needs one:
+    // a registered output cannot change in the same cycle.
+    outgoing reg regged : Bit on clk {
+        it <= inp
+    }
+
+    // A constant-driven port needs no list at all.
+    outgoing constant : Bit
+    constant := true
+
+    // An ext-mod port's declaration is trusted without looking inside.
+    wire ext_out : Bit
+    mod external of External
+    external.inp := inp
+    ext_out := external.out
+    unused ext_out
+}

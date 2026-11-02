@@ -26,7 +26,7 @@ pub struct type Layer2 {
 
 pub mod Top {
     incoming inp : Word[8]
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson inp
 
     // A pub mod's port type must be transitively pub.
     incoming c : Priv

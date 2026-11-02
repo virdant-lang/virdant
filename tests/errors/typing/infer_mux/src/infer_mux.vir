@@ -4,7 +4,7 @@
 
 mod MuxArmMismatch {
     incoming c : Bit
-    outgoing out : Word[4]
+    outgoing out : Word[4] dependson c
     // Both arms are inferrable but incompatible.
     // CHECK: Wrong type: Expected Word[4] but found Word[6]
     out := mux(c, 4w4, 6w6)
@@ -12,7 +12,7 @@ mod MuxArmMismatch {
 
 mod MuxCondWrongType {
     incoming x : Word[4]
-    outgoing out : Word[4]
+    outgoing out : Word[4] dependson x
     // The condition must be a Bit.
     // CHECK: Wrong type: Expected Bit but found Word[4]
     out := mux(x, 4w4, 4w4)
@@ -20,7 +20,7 @@ mod MuxCondWrongType {
 
 mod MuxArmCheckedAgainstInferredArm {
     incoming c : Bit
-    outgoing out : Word[4]
+    outgoing out : Word[4] dependson c
     // The first arm is inferrable; the second arm is checked against
     // Word[4] and does not fit.
     // CHECK: Wrong type: Expected Word[4] but found Word[6]
@@ -29,7 +29,7 @@ mod MuxArmCheckedAgainstInferredArm {
 
 mod MuxCheckedAgainstExpected {
     incoming x : Word[4]
-    outgoing out : Word[4]
+    outgoing out : Word[4] dependson x
     // Neither arm is inferrable, so the mux falls back to being
     // checked against the expected type: the condition is checked
     // first (and fails), then both arms are checked against Word[4]

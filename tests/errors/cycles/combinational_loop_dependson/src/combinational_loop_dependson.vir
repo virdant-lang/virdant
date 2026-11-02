@@ -1,30 +1,16 @@
-// Combinational loop via `dependson` statements.
-// a dependson b, b dependson c, c dependson a creates a cycle.
+// Cycles in the `dependson` relation.
+//
+// `dependson` declares *potential* combinational dependencies.  The
+// cycle check runs over the potentiality graph: local drivers, local
+// declarations, socket obligations, and the declarations of submodule
+// instances.  A cycle is an error even when no actual comb path
+// exists today, because a designer must be free to make any declared
+// dependency actual without breaking clients.
 
-// CHECK: Combinational loop detected
-mod Loop {
-    wire a : Word[8] on clk
-    wire b : Word[8] on clk
-    wire c : Word[8] on clk
-
-    unused a
-    unused b
-    unused c
-
-    // Real drivers so each signal has a value.
-    a := 1
-    b := 2
-    c := 3
-
-    // Dependson creates combinational edges a <- b <- c <- a.
-    // The driver edges (a from literal 1, etc.) are self-looping
-    // and get skipped.  The dependson edges form the cycle.
-    a dependson b
-    b dependson c
-    c dependson a
-}
-
-// CHECK: Combinational loop detected
+// A two-module cycle composed from the submodule declarations and the
+// parent's glue drivers.
+//
+// CHECK: Cycle in the `dependson` relation
 mod Loop2 {
     mod loop_a of LoopA
     mod loop_b of LoopB
@@ -35,19 +21,63 @@ mod Loop2 {
 
 mod LoopA {
     incoming inp : Bit
-    outgoing out : Bit {
+    outgoing out : Bit dependson inp {
         it := inp
     }
 }
 
 mod LoopB {
     incoming inp : Bit
-    outgoing out : Bit {
+    outgoing out : Bit dependson inp {
         it := w
     }
     wire w : Bit {
         it := inp
     }
+}
+
+// A three-module cycle: the declarations chain through two instances
+// and close on the parent's glue driver.
+//
+// CHECK: Cycle in the `dependson` relation
+mod Loop3 {
+    mod a of LoopA
+    mod b of LoopB
+    mod c of LoopC
+
+    a.inp := c.out
+    b.inp := a.out
+    c.inp := b.out
+}
+
+mod LoopC {
+    incoming inp : Bit
+    outgoing out : Bit dependson inp {
+        it := inp
+    }
+}
+
+// A socket-link cycle: both sides of the socket declare same-cycle
+// response (`cosi req dependson ack` for the client, `soci ack
+// dependson req` for the server), which composes into a cycle at the
+// module containing both instances.
+//
+// CHECK: Cycle in the `dependson` relation
+socket PingPong {
+    cosi req : Bit dependson ack
+    soci ack : Bit dependson req
+}
+
+mod SocketLoop {
+    client socket c of PingPong
+    server socket s of PingPong
+
+    // The link alone drives every channel; the cycle comes purely
+    // from the two `dependson` lists in `PingPong`.
+    c :=: s
+
+    unused c.ack
+    unused s.req
 }
 
 // CHECK: Check failed

@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "The `dependson` statement form is removed: `dependson` is only a list on component and channel declarations."
+filecheck = "src/statement_form.vir"

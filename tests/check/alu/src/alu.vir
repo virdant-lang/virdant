@@ -15,7 +15,7 @@ pub mod Alu {
     //> Second ALU operand (typically rs2 or immediate).
     incoming b : Word[32]
     //> ALU result.
-    outgoing z : Word[32]
+    outgoing z : Word[32] dependson a, b, op
 
     //> ALU operation selector (see `opcode::AluOpcode`).
     incoming op : AluOpcode
@@ -86,7 +86,7 @@ mod Shifter {
     //> Shift amount (0–31).
     incoming amount : Word[5]
     //> Shifted result.
-    outgoing z : Word[32]
+    outgoing z : Word[32] dependson dir, a, amount
 
     // TODO; This could be written with let blocks.
 

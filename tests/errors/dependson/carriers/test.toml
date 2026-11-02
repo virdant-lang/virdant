@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Tests for `dependson` carrier-kind errors: list parsed on any component, rejected by the checker."
+filecheck = "src/carriers.vir"

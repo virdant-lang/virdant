@@ -15,7 +15,7 @@ use crate::analysis::component::Component;
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::component::ComponentId;
 use crate::analysis::symbols::SymbolId;
-use crate::common::{DriverType, Flow};
+use crate::common::{ComponentKind, DriverType, Flow};
 use crate::db::Builder;
 use crate::syntax::ast::{match_arm_children, when_arm_children, AstNode};
 use crate::syntax::payload::AstNodePayload;
@@ -23,6 +23,13 @@ use crate::syntax::payload::AstNodePayload;
 // ---------------------------------------------------------------------------
 // Data structures
 // ---------------------------------------------------------------------------
+
+/// A `let` environment: bound name -> the components referenced by the
+/// binding's RHS (beta-reduced through earlier bindings).  References
+/// to a bound name inside the `let`'s body contribute edges to the
+/// binding's references instead of the name itself (which is not a
+/// component).
+pub(crate) type LetEnv = IndexMap<BString, Vec<ComponentId>>;
 
 /// A dependency graph over the signals of a single module.
 #[derive(Debug, Clone)]
@@ -96,15 +103,33 @@ pub(crate) fn build_dependency_graph(
         &mut edges,
         None,
         &[],
-    );
-
-    // 2. Edges from `dependson` statements.
-    collect_dependson_edges(
-        &item_ast.children(),
-        &component_analysis,
-        &mut edges,
         None,
     );
+
+    // 2. Edges from platform `default <EXPR>` drivers: a synthesized
+    // outgoing port has no driver statement in the module's own AST;
+    // its driver is the platform's default expression, which may
+    // reference components.
+    for (_path, component) in component_analysis.components() {
+        if !component.synthetic() {
+            continue;
+        }
+        if component.kind() != Some(ComponentKind::Outgoing) {
+            continue;
+        }
+        let Some(expr_location) = component.default_expr() else { continue };
+        let expr_parsing = builder.get_parsing(expr_location.package());
+        let expr_node = expr_parsing.ast_node(expr_location.ast_node_id());
+        collect_references_in_expr(
+            &expr_node,
+            &component_analysis,
+            &mut edges,
+            component.id(),
+            EdgeKind::Combinational,
+            None,
+            None,
+        );
+    }
 
     Arc::new(DependencyGraph { nodes, edges })
 }
@@ -122,12 +147,14 @@ pub(crate) fn build_dependency_graph(
 /// arm depends not only on its RHS but also on the arm's condition, so
 /// a driver target that appears in its own guard forms a
 /// combinational loop.
+#[allow(clippy::too_many_arguments)]
 fn collect_driver_edges(
     stmts: &[AstNode<'_>],
     component_analysis: &ComponentAnalysis,
     edges: &mut IndexMap<ComponentId, Vec<DependencyEdge>>,
     it_context: Option<&BStr>,
     cond_refs: &[ComponentId],
+    let_env: Option<&LetEnv>,
 ) {
     for stmt in stmts {
         match stmt.payload() {
@@ -155,6 +182,7 @@ fn collect_driver_edges(
                         target_component.id(),
                         edge_kind,
                         it_context,
+                        let_env,
                     );
                 }
 
@@ -192,22 +220,26 @@ fn collect_driver_edges(
                     else {
                         continue;
                     };
+                    // A socket link transfers values along each channel:
+                    // the receiving side (Source flow: the side that reads
+                    // the channel) combinationally depends on the driving
+                    // side (Sink flow: the side that drives the channel).
+                    // For cosi the client drives and the server reads; for
+                    // soci the server drives and the client reads.
                     match (lhs_component.flow(), rhs_component.flow()) {
                         (Flow::Source, Flow::Sink) => {
-                            // Cosi: server := client, so server depends on client.
                             add_edge(
                                 edges,
-                                rhs_component.id(),
                                 lhs_component.id(),
+                                rhs_component.id(),
                                 EdgeKind::Combinational,
                             );
                         }
                         (Flow::Sink, Flow::Source) => {
-                            // Soci: client := server, so client depends on server.
                             add_edge(
                                 edges,
-                                lhs_component.id(),
                                 rhs_component.id(),
+                                lhs_component.id(),
                                 EdgeKind::Combinational,
                             );
                         }
@@ -236,6 +268,7 @@ fn collect_driver_edges(
                             edges,
                             Some(name_with_context.as_bstr()),
                             cond_refs,
+                            let_env,
                         );
                     }
                 }
@@ -259,6 +292,7 @@ fn collect_driver_edges(
                             edges,
                             Some(name_with_context.as_bstr()),
                             cond_refs,
+                            let_env,
                         );
                     }
                 }
@@ -282,6 +316,7 @@ fn collect_driver_edges(
                             edges,
                             Some(name_with_context.as_bstr()),
                             cond_refs,
+                            let_env,
                         );
                     }
                 }
@@ -299,6 +334,7 @@ fn collect_driver_edges(
                             guard_node,
                             component_analysis,
                             it_context,
+                            let_env,
                         ));
                     }
                     let body_stmts = if matches!(
@@ -315,6 +351,7 @@ fn collect_driver_edges(
                         edges,
                         it_context,
                         &arm_cond_refs,
+                        let_env,
                     );
                 }
             }
@@ -327,6 +364,7 @@ fn collect_driver_edges(
                         subject,
                         component_analysis,
                         it_context,
+                        let_env,
                     ));
                 }
                 for (_pat_opt, body) in match_arm_children(&children) {
@@ -344,6 +382,7 @@ fn collect_driver_edges(
                         edges,
                         it_context,
                         &arm_cond_refs,
+                        let_env,
                     );
                 }
             }
@@ -354,6 +393,46 @@ fn collect_driver_edges(
                     edges,
                     it_context,
                     cond_refs,
+                    let_env,
+                );
+            }
+            AstNodePayload::Let => {
+                // A `let` is a pure scoping construct: it contributes
+                // no drivers itself, and its body's drivers belong to
+                // the enclosing context (the block is not
+                // conditional).  References to the bound names are
+                // beta-reduced to the binding's RHS references, so
+                // drivers inside the body record their dependencies on
+                // the RHS's components (transitively, through chained
+                // bindings).
+                let bindings = stmt.let_bindings();
+                let mut env: LetEnv = IndexMap::new();
+                for binding in &bindings {
+                    let Some(rhs) = binding.let_binding_expr() else { continue };
+                    let refs = collect_cond_refs_in_expr(
+                        &rhs,
+                        component_analysis,
+                        it_context,
+                        Some(&env),
+                    );
+                    if let Some(name) = binding.let_binding_name() {
+                        let name: BString = binding.parsing.string(name).to_owned();
+                        env.insert(name, refs);
+                    }
+                }
+                let Some(body) = stmt.let_body() else { return };
+                let body_stmts = if matches!(body.payload(), AstNodePayload::ArmBlock) {
+                    body.children()
+                } else {
+                    vec![body]
+                };
+                collect_driver_edges(
+                    &body_stmts,
+                    component_analysis,
+                    edges,
+                    it_context,
+                    cond_refs,
+                    Some(&env),
                 );
             }
             _ => {}
@@ -369,6 +448,7 @@ fn collect_cond_refs_in_expr(
     expr: &AstNode<'_>,
     component_analysis: &ComponentAnalysis,
     it_context: Option<&BStr>,
+    let_env: Option<&LetEnv>,
 ) -> Vec<ComponentId> {
     let parsing = expr.parsing;
     let mut out: Vec<ComponentId> = vec![];
@@ -379,6 +459,15 @@ fn collect_cond_refs_in_expr(
             if let Some(path) = node.path() {
                 let mut name = parsing.string(path).to_owned();
                 resolve_it_path_simple(&mut name, it_context);
+                // A `let`-bound name beta-reduces to its binding's
+                // references.  Checked first: the binding is the
+                // innermost declaration of the name.
+                if let Some(env) = let_env {
+                    if let Some(refs) = env.get(name.as_bstr()) {
+                        out.extend(refs.iter().copied());
+                        continue;
+                    }
+                }
                 // References shadowed by a match-arm pattern binding name
                 // the pattern variable, not a component.
                 if crate::analysis::component::is_shadowed_by_pattern(
@@ -411,6 +500,7 @@ fn collect_references_in_expr(
     target: ComponentId,
     edge_kind: EdgeKind,
     it_context: Option<&BStr>,
+    let_env: Option<&LetEnv>,
 ) {
     let parsing = expr.parsing;
     let mut stack: Vec<crate::syntax::ast::AstNodeId> = vec![expr.id()];
@@ -420,6 +510,19 @@ fn collect_references_in_expr(
             if let Some(path) = node.path() {
                 let mut name = parsing.string(path).to_owned();
                 resolve_it_path_simple(&mut name, it_context);
+                // A `let`-bound name beta-reduces to its binding's
+                // references.  Checked first: the binding is the
+                // innermost declaration of the name (it also shadows
+                // module components of the same name, and any pattern
+                // binding the name is bound under).
+                if let Some(env) = let_env {
+                    if let Some(refs) = env.get(name.as_bstr()) {
+                        for dependee in refs {
+                            add_edge(edges, target, *dependee, edge_kind);
+                        }
+                        continue;
+                    }
+                }
                 // References shadowed by a match-arm pattern binding name
                 // the pattern variable, not a component.
                 if crate::analysis::component::is_shadowed_by_pattern(
@@ -438,181 +541,6 @@ fn collect_references_in_expr(
         }
         for child in node.children() {
             stack.push(child.id());
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Collect edges from `dependson`
-// ---------------------------------------------------------------------------
-
-/// Walk all `dependson` statements and add combinational edges.
-fn collect_dependson_edges(
-    stmts: &[AstNode<'_>],
-    component_analysis: &ComponentAnalysis,
-    edges: &mut IndexMap<ComponentId, Vec<DependencyEdge>>,
-    it_context: Option<&BStr>,
-) {
-    for stmt in stmts {
-        match stmt.payload() {
-            AstNodePayload::ModDefStmtDependsOn => {
-                let parsing = stmt.parsing;
-                let lhs_node = stmt.child(0);
-                let rhs_node = stmt.child(1);
-
-                // Resolve LHS (the dependent).
-                let lhs_component =
-                    resolve_path_component(&lhs_node, parsing, component_analysis, it_context);
-                // Resolve RHS (the dependee).
-                let rhs_component =
-                    resolve_path_component(&rhs_node, parsing, component_analysis, it_context);
-
-                if let (Some(dependent), Some(dependee)) = (lhs_component, rhs_component) {
-                    add_edge(
-                        edges,
-                        dependent.id(),
-                        dependee.id(),
-                        EdgeKind::Combinational,
-                    );
-                }
-            }
-            AstNodePayload::Submodule(submodule) => {
-                let name = stmt.parsing.string(submodule.name);
-                let children = stmt.children();
-                if children.len() == 2 {
-                    let it_block = &children[1];
-                    if matches!(it_block.payload(), AstNodePayload::It) {
-                        let block = &it_block.children()[0];
-                        let name_with_context = if let Some(ctx) = it_context {
-                            let mut new_name = BString::from(ctx);
-                            new_name.push(b'.');
-                            new_name.extend_from_slice(name);
-                            new_name
-                        } else {
-                            BString::from(name)
-                        };
-                        collect_dependson_edges(
-                            &block.children(),
-                            component_analysis,
-                            edges,
-                            Some(name_with_context.as_bstr()),
-                        );
-                    }
-                }
-            }
-            AstNodePayload::Socket(socket) => {
-                let name = stmt.parsing.string(socket.name);
-                for child in stmt.children() {
-                    if matches!(child.payload(), AstNodePayload::It) {
-                        let block = &child.children()[0];
-                        let name_with_context = if let Some(ctx) = it_context {
-                            let mut new_name = BString::from(ctx);
-                            new_name.push(b'.');
-                            new_name.extend_from_slice(name);
-                            new_name
-                        } else {
-                            BString::from(name)
-                        };
-                        collect_dependson_edges(
-                            &block.children(),
-                            component_analysis,
-                            edges,
-                            Some(name_with_context.as_bstr()),
-                        );
-                    }
-                }
-            }
-            AstNodePayload::Component(component) => {
-                let name = stmt.parsing.string(component.name);
-                for child in stmt.children() {
-                    if matches!(child.payload(), AstNodePayload::It) {
-                        let block = &child.children()[0];
-                        let name_with_context = if let Some(ctx) = it_context {
-                            let mut new_name = BString::from(ctx);
-                            new_name.push(b'.');
-                            new_name.extend_from_slice(name);
-                            new_name
-                        } else {
-                            BString::from(name)
-                        };
-                        collect_dependson_edges(
-                            &block.children(),
-                            component_analysis,
-                            edges,
-                            Some(name_with_context.as_bstr()),
-                        );
-                    }
-                }
-            }
-            AstNodePayload::When => {
-                let children = stmt.children();
-                let mut idx = 0;
-                while let Some(first) = children.get(idx) {
-                    if first.is_expr() {
-                        if let Some(body) = children.get(idx + 1) {
-                            let body_stmts = if matches!(
-                                body.payload(),
-                                AstNodePayload::ArmBlock
-                            ) {
-                                body.children()
-                            } else {
-                                vec![body.clone()]
-                            };
-                            collect_dependson_edges(
-                                &body_stmts,
-                                component_analysis,
-                                edges,
-                                it_context,
-                            );
-                        }
-                        idx += 2;
-                    } else {
-                        let body_stmts = if matches!(
-                            first.payload(),
-                            AstNodePayload::ArmBlock
-                        ) {
-                            first.children()
-                        } else {
-                            vec![first.clone()]
-                        };
-                        collect_dependson_edges(
-                            &body_stmts,
-                            component_analysis,
-                            edges,
-                            it_context,
-                        );
-                        idx += 1;
-                    }
-                }
-            }
-            AstNodePayload::Match => {
-                let children = stmt.children();
-                for (_pat_opt, body) in match_arm_children(&children) {
-                    let body_stmts = if matches!(
-                        body.payload(),
-                        AstNodePayload::ArmBlock
-                    ) {
-                        body.children()
-                    } else {
-                        vec![body.clone()]
-                    };
-                    collect_dependson_edges(
-                        &body_stmts,
-                        component_analysis,
-                        edges,
-                        it_context,
-                    );
-                }
-            }
-            AstNodePayload::ModDefStmtBlock => {
-                collect_dependson_edges(
-                    &stmt.children(),
-                    component_analysis,
-                    edges,
-                    it_context,
-                );
-            }
-            _ => {}
         }
     }
 }

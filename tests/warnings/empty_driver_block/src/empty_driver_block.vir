@@ -9,7 +9,7 @@ mod ComponentModule {
     }
 
     // CHECK: Empty driver block
-    outgoing b : Bit {
+    outgoing b : Bit dependson a {
     }
 }
 

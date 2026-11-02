@@ -2,7 +2,7 @@
 pub mod GoodIndexing {
     incoming arr : Word[8]
     incoming idx : Word[3]
-    outgoing out : Bit
+    outgoing out : Bit dependson arr, idx
 
     out := arr[dyn idx]
 }
@@ -11,7 +11,7 @@ pub mod GoodIndexing {
 pub mod IndexByZero {
     incoming arr : Word[1]
     incoming idx : Word[0]
-    outgoing out : Bit
+    outgoing out : Bit dependson arr, idx
 
     out := arr[dyn idx]
 }
@@ -19,7 +19,7 @@ pub mod IndexByZero {
 // Constant index parsed as dynamic, arr: Word[8], 5 fits in Word[3].
 pub mod IndexByConstant {
     incoming arr : Word[8]
-    outgoing out : Bit
+    outgoing out : Bit dependson arr
 
     out := arr[5]
 }

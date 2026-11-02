@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok"
+description = "Tests for the DependsonUnused warning: over-declared `dependson` entries; justification via another port's declared potential."
+filecheck = "src/dependson_unused.vir"

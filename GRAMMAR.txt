@@ -75,8 +75,12 @@ BuiltinDef := DocString? Annotations "pub"? "builtin" "type" Ident Generics? "{"
 SocketDef := DocString? Annotations "pub"? "socket" Ident Generics? "{" SocketDefStmt* "}"
 
 SocketDefStmt :=
-      DocString? Annotations "cosi" Ident ":" Type
-    | DocString? Annotations "soci" Ident ":" Type
+      DocString? Annotations "cosi" Ident ":" Type DependsonList?
+    | DocString? Annotations "soci" Ident ":" Type DependsonList?
+
+DependsonList := "dependson" DependsonPathList
+
+DependsonPathList := (Path ",")* Path
 
 ModDefStmtCore :=
       ModDefStmtComponent
@@ -85,7 +89,6 @@ ModDefStmtCore :=
     | ModDefStmtSocket
     | ModDefStmtUnused
     | ModDefStmtInitial
-    | ModDefStmtDependsOn
 
 ModDefStmt :=
       ModDefStmtCore
@@ -108,14 +111,14 @@ LetBinding :=
     | Ident "=" Expr
 
 ModDefStmtComponent :=
-      DocString? Annotations "incoming" Ident ":" Type OnClause? ItBlock?
-    | DocString? Annotations "outgoing" Ident ":" Type DefaultClause? OnClause? ItBlock?
-    | DocString? Annotations "bus" Ident ":" Type ItBlock?
-    | DocString? Annotations "net" Ident ":" Type ItBlock?
-    | DocString? Annotations "outgoing" "wire" Ident ":" Type DefaultClause? OnClause? ItBlock?
-    | DocString? Annotations "outgoing" "reg" Ident ":" Type DefaultClause? OnClause? ItBlock?
-    | DocString? Annotations "wire" Ident ":" Type OnClause? ItBlock?
-    | DocString? Annotations "reg" Ident ":" Type OnClause? ItBlock?
+      DocString? Annotations "incoming" Ident ":" Type DependsonList? OnClause? ItBlock?
+    | DocString? Annotations "outgoing" Ident ":" Type DependsonList? DefaultClause? OnClause? ItBlock?
+    | DocString? Annotations "bus" Ident ":" Type DependsonList? ItBlock?
+    | DocString? Annotations "net" Ident ":" Type DependsonList? ItBlock?
+    | DocString? Annotations "outgoing" "wire" Ident ":" Type DependsonList? DefaultClause? OnClause? ItBlock?
+    | DocString? Annotations "outgoing" "reg" Ident ":" Type DependsonList? DefaultClause? OnClause? ItBlock?
+    | DocString? Annotations "wire" Ident ":" Type DependsonList? OnClause? ItBlock?
+    | DocString? Annotations "reg" Ident ":" Type DependsonList? OnClause? ItBlock?
 
 OnClause := "on" Expr
 
@@ -168,8 +171,6 @@ MatchArm :=
 ModDefStmtUnused := "unused" Path
 
 ModDefStmtInitial := "initial" Path "<=" Expr
-
-ModDefStmtDependsOn := Path "dependson" Path
 
 ModDefStmtBlock := "{" ModDefStmt* "}"
 

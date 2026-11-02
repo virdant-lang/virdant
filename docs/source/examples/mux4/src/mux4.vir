@@ -6,7 +6,7 @@ mod Mux4 {
 
     incoming select : Word[2]
 
-    outgoing out : Word[8] {
+    outgoing out : Word[8] dependson a, b, c, d, select {
         it := match select {
             case 0 => a
             case 1 => b

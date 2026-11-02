@@ -27,9 +27,9 @@ pub mod WidthCheck {
     incoming t : Trio
     incoming q : Quad
     incoming e : Explicit
-    outgoing t3 : Word[3]
-    outgoing q4 : Word[4]
-    outgoing e2 : Word[2]
+    outgoing t3 : Word[3] dependson t
+    outgoing q4 : Word[4] dependson q
+    outgoing e2 : Word[2] dependson e
 
     // The word() conversion pins the width of each enum type:
     // these assignments only fit when the widths are exactly 3, 4, and 2.
@@ -44,7 +44,7 @@ pub mod WidthCheck {
 
 pub mod MatchCheck {
     incoming t : Trio
-    outgoing isB : Bit
+    outgoing isB : Bit dependson t
 
     isB := match t { case #B => true else => false }
 }

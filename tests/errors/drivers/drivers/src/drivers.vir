@@ -82,7 +82,7 @@ ext mod Ext {
 
 mod Int {
     incoming inp : Bit
-    outgoing out : Bit
+    outgoing out : Bit dependson inp
 
     out := inp
 }
@@ -109,7 +109,7 @@ mod MissingSocketConnect {
 mod TwoDriversAcrossSections {
     incoming clock : Clock
     incoming reset : Bit
-    outgoing out  : Bit
+    outgoing out  : Bit dependson reset
 
     when {
         case reset {

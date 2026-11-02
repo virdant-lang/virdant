@@ -4,7 +4,7 @@
 pub mod Fifo[T : Type] {
     incoming clk : Clock
     incoming d : T
-    outgoing q : T
+    outgoing q : T dependson d
     q := d
 }
 

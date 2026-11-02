@@ -1,6 +1,6 @@
 mod OverlapIdent {
     incoming b : Bit
-    outgoing out : Bit
+    outgoing out : Bit dependson b
     // CHECK: Overlapping match arm: x
     out := match b {
         case true  => false
@@ -10,7 +10,7 @@ mod OverlapIdent {
 
 mod OverlapDontcare {
     incoming b : Bit
-    outgoing out : Bit
+    outgoing out : Bit dependson b
     // CHECK: Overlapping match arm
     out := match b {
         case true  => false
@@ -23,7 +23,7 @@ mod OverlapDontcare {
 
 mod OverlapBit {
     incoming b : Bit
-    outgoing out : Bit
+    outgoing out : Bit dependson b
     // CHECK: Overlapping match arm: true
     out := match b {
         case true  => false
@@ -59,7 +59,7 @@ mod OverlapUnion {
 
 mod OverlapWord {
     incoming x : Word[2]
-    outgoing out : Bit
+    outgoing out : Bit dependson x
     // CHECK: Overlapping match arm: 0
     out := match x {
         case 0 => true

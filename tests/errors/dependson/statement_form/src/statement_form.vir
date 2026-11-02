@@ -1,0 +1,11 @@
+// `dependson` used to be a statement (`lhs dependson rhs`); it is now a
+// list on component declarations only.  The statement form is a
+// syntax error.
+
+// CHECK: Syntax Error: Unexpected token: "dependson"
+ext mod Foo {
+    incoming clk_in : Clock
+    outgoing clk_out : Clock
+
+    clk_out dependson clk_in
+}

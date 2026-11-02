@@ -10,7 +10,7 @@ mod HalfAdder {
   incoming a : Bit
    incoming b : Bit
 
-    outgoing sum : Bit
+    outgoing sum : Bit dependson a, b
 
   // comment-only lines are exempt at any indentation
  // even one space is fine for comments

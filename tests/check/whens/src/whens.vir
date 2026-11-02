@@ -3,7 +3,7 @@ pub mod When {
     incoming clock : Clock
     incoming inp1 : Bit
 
-    outgoing out1 : Bit {
+    outgoing out1 : Bit dependson inp1 {
         when {
             case inp1 {
                 it := true
@@ -26,7 +26,7 @@ pub mod When {
 
     incoming inp2 : Bit
 
-    outgoing out2 : Bit {
+    outgoing out2 : Bit dependson inp2 {
         it := when {
             case inp2 => false
             else => true

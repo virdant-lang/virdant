@@ -16,8 +16,8 @@ pub mod Top {
     incoming x : Word[8]
     incoming y : Word[8]
 
-    outgoing out : Word[8]
-    outgoing red : Word[8]
+    outgoing out : Word[8] dependson opcode_bits, x, y
+    outgoing red : Word[8] dependson x
 
     wire color : Color
 
@@ -41,6 +41,6 @@ pub mod Top {
 
     // Field projections in infer-only positions (binop operands):
     // `->` must be inferable, not just checkable.
-    outgoing inferred : Word[8]
+    outgoing inferred : Word[8] dependson x
     inferred := color->red + color->green
 }

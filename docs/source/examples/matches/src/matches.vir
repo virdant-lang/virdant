@@ -5,7 +5,7 @@ union type MaybeWord {
 
 mod Top {
     incoming inp : MaybeWord
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson inp
 
     out :=
         match inp {

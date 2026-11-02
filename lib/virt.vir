@@ -174,7 +174,7 @@ pub mod Hello {
 //> unreachable padding.
 mod CharRom {
     incoming index : Word[4]
-    outgoing char : Word[8]
+    outgoing char : Word[8] dependson index
 
     char := match index {
         case 0  => 0x48 // 'H'

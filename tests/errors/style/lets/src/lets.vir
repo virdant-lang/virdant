@@ -12,7 +12,7 @@
 // scope performs, so it must terminate in a block.
 mod StmtLetArrow {
     incoming a : Word[8]
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson a
 
     // CHECK: For a `let` used as a statement, use `{ ... }` instead of `=>`
     let x = a => x
@@ -25,7 +25,7 @@ mod StmtLetArrow {
 mod StmtWhenArmLetArrow {
     incoming a : Bit
     incoming b : Word[8]
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson b
 
     when {
         case a {
@@ -42,7 +42,7 @@ mod StmtWhenArmLetArrow {
 // statements).
 mod StmtLetExprBlock {
     incoming a : Word[8]
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson a
 
     // CHECK: For a `let` used as a statement, use `{ ... }` instead of `=>`
     let x = a {
@@ -57,7 +57,7 @@ mod StmtLetExprBlock {
 mod StmtLetWhen {
     incoming a : Bit
     incoming b : Word[8]
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson b
 
     // CHECK-NOT: For a `let` used as
     let x = b when {
@@ -74,7 +74,7 @@ mod StmtLetWhen {
 mod StmtLetMatch {
     incoming a : Word[8]
     incoming t : StyleE
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson a
 
     // CHECK-NOT: For a `let` used as
     let x = a match t {

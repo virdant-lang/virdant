@@ -199,7 +199,7 @@ impl PackageAnalysis {
                         self.add_moddefstmtmatch_expr_roots(child_node);
                     }
                     AstNodePayload::ModDefStmtUnused => (),
-                    AstNodePayload::ModDefStmtDependsOn => (),
+                    AstNodePayload::DependsonList => (),
                     AstNodePayload::Error => (), // TODO should we even have error nodes at this point?
                     AstNodePayload::Annotations(_) => (),
                     // A generic parameter declaration list on a mod def.

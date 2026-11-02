@@ -21,7 +21,7 @@ mod BadTypeName {
 // contribute any additional syntax errors of its own.
 mod ValidNeighbor {
     incoming data : Word[8]
-    outgoing out  : Word[8]
+    outgoing out  : Word[8] dependson data
     // CHECK-NOT: Unresolved type
     out := data
 }

@@ -2,7 +2,7 @@
 
 pub mod Top {
     incoming inp : Word[Bit]
-    outgoing out : Bit
+    outgoing out : Bit dependson inp
     out := inp[0]
 }
 
@@ -12,7 +12,7 @@ pub mod Top {
 
 pub mod Top2 {
     incoming inp : Valid[8]
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson inp
     out := match inp {
         case @Valid(v) => v
         case @Invalid() => 0
@@ -30,7 +30,7 @@ struct type S[X : Foo] {
 
 pub mod Top3 {
     incoming inp : Bit
-    outgoing out : Bit
+    outgoing out : Bit dependson inp
     out := inp
 }
 

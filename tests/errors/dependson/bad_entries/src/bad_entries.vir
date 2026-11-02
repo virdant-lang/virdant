@@ -1,0 +1,35 @@
+// `dependson` entries must resolve to the module's own `incoming`
+// ports. Entries naming outgoing ports, internal signals, submodule
+// paths, or unresolvable names are errors.
+
+// CHECK: Bad `dependson` entry `out_b`: is not an `incoming` port of this module
+// CHECK: Bad `dependson` entry `w`: is not an `incoming` port of this module
+// CHECK: Bad `dependson` entry `sub.out`: is not an `incoming` port of this module
+// CHECK: Bad `dependson` entry `nowhere`: could not be resolved to a component of this module
+mod BadEntries {
+    incoming inp : Bit
+    outgoing out_a : Bit dependson inp, out_b, w, sub.out, nowhere
+    out_a := inp
+    outgoing out_b : Bit dependson inp
+    out_b := inp
+    wire w : Bit on inp
+    w := inp
+
+    outgoing out_b2 : Bit dependson inp
+    out_b2 := inp
+    unused out_a
+    unused out_b
+    unused w
+    unused out_b2
+    unused inp
+
+    mod sub of Sub
+    sub.inp := inp
+    unused sub.out
+}
+
+mod Sub {
+    incoming inp : Bit
+    outgoing out : Bit dependson inp
+    out := inp
+}

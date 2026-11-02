@@ -5,7 +5,7 @@
 mod AddOperandMismatch {
     incoming a : Word[4]
     incoming b : Word[6]
-    outgoing out : Word[4]
+    outgoing out : Word[4] dependson a, b
     // Both operands are inferrable but incompatible.
     // CHECK: Wrong type: Expected Word[4] but found Word[6]
     out := a + b
@@ -14,7 +14,7 @@ mod AddOperandMismatch {
 mod CmpOperandMismatch {
     incoming a : Word[4]
     incoming b : Word[6]
-    outgoing out : Bit
+    outgoing out : Bit dependson a, b
     // Both operands are inferrable but incompatible.
     // CHECK: Wrong type: Expected Word[4] but found Word[6]
     out := a == b
@@ -22,7 +22,7 @@ mod CmpOperandMismatch {
 
 mod AddRhsCheckedAgainstLhs {
     incoming a : Word[4]
-    outgoing out : Word[4]
+    outgoing out : Word[4] dependson a
     // Only the LHS is inferrable; the RHS hole is checked against
     // Word[4].
     // CHECK: Unfilled hole: ? : Word[4]
@@ -31,7 +31,7 @@ mod AddRhsCheckedAgainstLhs {
 
 mod AddLhsCheckedAgainstRhs {
     incoming a : Word[6]
-    outgoing out : Word[6]
+    outgoing out : Word[6] dependson a
     // Only the RHS is inferrable; the LHS hole is checked against
     // Word[6].
     // CHECK: Unfilled hole: ? : Word[6]

@@ -1,0 +1,45 @@
+// An unused `dependson` entry: the port declares it may depend on an
+// `incoming` that it does not (and cannot potentially) depend on.  A
+// warning, not an error.
+
+// CHECK: Unused `dependson`: `out` declares it may depend on `unused_inp` but does not
+mod Unused {
+    incoming inp : Bit
+    incoming unused_inp : Bit
+    outgoing out : Bit dependson inp, unused_inp {
+        it := inp
+    }
+    unused unused_inp
+}
+
+// A declaration is justified by another port's declared potential
+// flowing through it: `out` reads `ow`, and `ow` declares it may
+// depend on `inp`, so `out dependson inp` is not unused.  (`ow`'s own
+// entry is unused here — its driver is a constant — and warns.)
+//
+// CHECK: `ow` declares it may depend on `inp` but does not
+// CHECK-NOT: `out` declares it may depend
+mod JustifiedByOther {
+    incoming inp : Bit
+    outgoing ow : Bit dependson inp
+    outgoing out : Bit dependson inp
+    ow := true
+    out := ow
+}
+
+// An `ext mod`'s declarations cannot be justified by looking inside
+// (there is no inside), so ext mods never get unused warnings.
+//
+// CHECK-NOT: declares it may depend
+pub ext mod External {
+    incoming inp : Bit
+    incoming extra : Bit
+    outgoing out : Bit dependson inp, extra
+}
+
+pub mod Top {
+    incoming inp : Bit
+    outgoing ok : Bit
+    ok := true
+    unused inp
+}

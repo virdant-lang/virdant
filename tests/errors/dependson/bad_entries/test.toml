@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Tests for bad `dependson` entries: entries must resolve to the module's own incoming ports."
+filecheck = "src/bad_entries.vir"

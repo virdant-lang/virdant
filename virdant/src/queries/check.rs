@@ -146,9 +146,21 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     check_mod_cycles(builder, &mut diagnostics);
 
     // Check for combinational loops in module dependency graphs.
-    // The check runs bottom-up per module in submodule-inclusion order,
-    // stitching per-module graphs along the instance tree.
+    // The check runs over each module's potentiality graph: local
+    // actual edges plus declared edges (its own and its immediate
+    // submodule instances').
     diagnostics.extend(builder.get_combinational_cycle_check().iter().cloned());
+
+    // `dependson` contract checks: carrier kinds, entry legality,
+    // exhaustiveness, and unused entries, per module; entry legality per
+    // socketdef.
+    for item in symboltable.items() {
+        if item.kind == SymbolKind::ModDef {
+            let dependson_analysis = builder.get_dependson_analysis(item.id());
+            diagnostics.extend(dependson_analysis.diagnostics());
+        }
+    }
+    crate::queries::dependson::check_socketdefs(builder, &mut diagnostics);
 
     // `ReferencedWhileNotPub` warnings are emitted once per cross-package
     // reference to a non-`pub` item, from several independent analyses.

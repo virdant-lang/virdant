@@ -13,7 +13,6 @@ The full set of module body statements includes:
 * Conditional statements (`when`)
 * Match statements
 * Let bindings
-* Dependency declarations (`dependson`)
 * Unused declarations
 * Initial declarations
 
@@ -29,14 +28,10 @@ Component declarations introduce named signals into a module.
 .. code-block:: grammar
 
     ModDefStmtComponent :=
-        DocString? Annotations "incoming" Ident ":" Type OnClause? ItBlock?
-        | DocString? Annotations "outgoing" Ident ":" Type DefaultClause? OnClause? ItBlock?
-        | DocString? Annotations "bus" Ident ":" Type ItBlock?
-        | DocString? Annotations "net" Ident ":" Type ItBlock?
-        | DocString? Annotations "outgoing" "wire" Ident ":" Type DefaultClause? OnClause? ItBlock?
-        | DocString? Annotations "outgoing" "reg" Ident ":" Type DefaultClause? OnClause? ItBlock?
-        | DocString? Annotations "wire" Ident ":" Type OnClause? ItBlock?
-        | DocString? Annotations "reg" Ident ":" Type OnClause? ItBlock?
+        DocString? Annotations ("incoming" | "outgoing" | "bus" | "net"
+                                | "outgoing" "wire" | "outgoing" "reg"
+                                | "wire" | "reg") Ident ":" Type
+                               DependsonList? DefaultClause? OnClause? ItBlock?
 
     DefaultClause := "default" Expr
 

@@ -29,7 +29,7 @@ mod GoodTypes {
     incoming clk  : Clock
     incoming data : Word[8]
     incoming flag : Bit
-    outgoing out  : Bit
+    outgoing out  : Bit dependson flag
     // CHECK-NOT: Unresolved type
     out := flag
 }
@@ -72,8 +72,8 @@ mod HalfAdder {
     incoming a : Bit
     incoming b : Bit
 
-    outgoing sum : Bit
-    outgoing carry_out : Bit
+    outgoing sum : Bit dependson a, b
+    outgoing carry_out : Bit dependson a, b
 
     // sum is true when one of a and b is true (but not both)
     sum := a ^^ b
@@ -131,7 +131,7 @@ mod UnknownSubcomponent {
 mod Top {
     // CHECK: Unresolved type Foo
     incoming foo : Foo
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson foo
     out := foo->bar
 }
 // CHECK: Check failed

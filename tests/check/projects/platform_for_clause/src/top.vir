@@ -22,7 +22,7 @@ platform PlatformB {
 // FPGA-specific module with for clause
 pub mod ModuleA for PlatformA {
     incoming data : Bit
-    outgoing result : Bit
+    outgoing result : Bit dependson data
 
     result := data
 }
@@ -41,7 +41,7 @@ mod Top {
     incoming data : Bit
     incoming clock : Clock
 
-    outgoing fpga_result : Bit
+    outgoing fpga_result : Bit dependson data
     outgoing asic_result : Bit
 
     mod fpga_inst of ModuleA

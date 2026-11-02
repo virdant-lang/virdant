@@ -13,7 +13,7 @@ mod HasUnusedPort {
 // An incoming port that IS read should produce no Unused signal warning.
 mod UsedPort {
     incoming data : Word[8]
-    outgoing out  : Word[8]
+    outgoing out  : Word[8] dependson data
     // CHECK-NOT: Unused signal data
     out := data
 }
@@ -39,8 +39,8 @@ mod UsedOutgoingWire {
 mod HalfAdder {
     incoming a : Bit
     incoming b : Bit
-    outgoing sum : Bit
-    outgoing carry : Bit
+    outgoing sum : Bit dependson a, b
+    outgoing carry : Bit dependson a, b
     sum := a ^^ b
     carry := a && b
 }
@@ -108,7 +108,7 @@ mod ExplicitUnused {
 // A sub-module with an outgoing wire port.
 mod WireSource {
     incoming a : Bit
-    outgoing wire s : Bit { it := a }
+    outgoing wire s : Bit dependson a { it := a }
 }
 
 // Reading the sub-module's outgoing wire — no warning for it.

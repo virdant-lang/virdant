@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Tests for socket `dependson` obligations: applied in the driving role, inert in the receiving role, exempt from the unused warning, and enforced for exhaustiveness."
+filecheck = "src/socket_obligations.vir"

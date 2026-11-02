@@ -7,7 +7,7 @@ struct type Box[T : Type] {
 
 pub mod Top {
     incoming inp : Box[Bit]
-    outgoing out : Bit
+    outgoing out : Bit dependson inp
     out := inp->value
 }
 

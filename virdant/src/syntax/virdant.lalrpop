@@ -321,20 +321,36 @@ SocketDef: AstNodeId = {
 }
 
 SocketDefStmt: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "cosi" <name:Ident> ":" Type <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "cosi" <name:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <rr:@R> => {
         let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Cosi, doc_string: docstring });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + 1u16;
+        let num_children: u16 = 1u16 + 1u16 + if dependson_list.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "soci" <name:Ident> ":" Type <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "soci" <name:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <rr:@R> => {
         let payload = AstNodePayload::Channel(payload::Channel { name, dir: ChannelDir::Soci, doc_string: docstring });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + 1u16;
+        let num_children: u16 = 1u16 + 1u16 + if dependson_list.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
+}
+
+/// A `dependson` list: `dependson <path>, <path>, ...`.
+/// The node's children are one `Path` node per entry, in written order.
+DependsonList: AstNodeId = {
+    <ll:@L> "dependson" <paths:DependsonPathList> <rr:@R> => {
+        let payload = AstNodePayload::DependsonList;
+        let span = parser.span(ll, rr);
+        let num_children: u16 = paths.try_into().unwrap();
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+DependsonPathList: usize = {
+    <start:(Path ",")*> <last:Path> => start.len() + 1,
 }
 
 ModDefStmtCore: AstNodeId = {
@@ -344,7 +360,6 @@ ModDefStmtCore: AstNodeId = {
     <socket:ModDefStmtSocket> => socket,
     <unused_:ModDefStmtUnused> => unused_,
     <initial:ModDefStmtInitial> => initial,
-    <dependson:ModDefStmtDependsOn> => dependson,
     <ll:@L> <error:!> <rr:@R> => {
         let span = parser.span(ll, rr);
         parser.add_error_node(span, error)
@@ -415,91 +430,91 @@ LetBinding: AstNodeId = {
 }
 
 ModDefStmtComponent: AstNodeId = {
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "incoming" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "incoming" <ident:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Incoming,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + 1u16 + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
+        let num_children: u16 = 1u16 + 1u16 + if dependson_list.is_none() { 0u16 } else { 1u16 } + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" <ident:Ident> ":" <typ:Type> <default:DefaultClause?> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" <ident:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <default:DefaultClause?> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Outgoing,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + 1u16 + if default.is_none() { 0u16 } else { 1u16 } + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
+        let num_children: u16 = 1u16 + 1u16 + if dependson_list.is_none() { 0u16 } else { 1u16 } + if default.is_none() { 0u16 } else { 1u16 } + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "bus" <ident:Ident> ":" <typ:Type> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "bus" <ident:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Bus,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + 1u16 + if it.is_none() { 0u16 } else { 1u16 };
+        let num_children: u16 = 1u16 + 1u16 + if dependson_list.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "net" <ident:Ident> ":" <typ:Type> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "net" <ident:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Net,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + 1u16 + if it.is_none() { 0u16 } else { 1u16 };
+        let num_children: u16 = 1u16 + 1u16 + if dependson_list.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" "wire" <ident:Ident> ":" <typ:Type> <default:DefaultClause?> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" "wire" <ident:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <default:DefaultClause?> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::OutgoingWire,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + 1u16 + if default.is_none() { 0u16 } else { 1u16 } + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
+        let num_children: u16 = 1u16 + 1u16 + if dependson_list.is_none() { 0u16 } else { 1u16 } + if default.is_none() { 0u16 } else { 1u16 } + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" "reg" <ident:Ident> ":" <typ:Type> <default:DefaultClause?> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "outgoing" "reg" <ident:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <default:DefaultClause?> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::OutgoingReg,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + 1u16 + if default.is_none() { 0u16 } else { 1u16 } + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
+        let num_children: u16 = 1u16 + 1u16 + if dependson_list.is_none() { 0u16 } else { 1u16 } + if default.is_none() { 0u16 } else { 1u16 } + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "wire" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "wire" <ident:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Wire,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + 1u16 + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
+        let num_children: u16 = 1u16 + 1u16 + if dependson_list.is_none() { 0u16 } else { 1u16 } + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
-    <docstring:DocString?> <annotations:Annotations> <ll:@L> "reg" <ident:Ident> ":" <typ:Type> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "reg" <ident:Ident> ":" <typ:Type> <dependson_list:DependsonList?> <on:OnClause?> <it:ItBlock?> <rr:@R> => {
         let payload = AstNodePayload::Component(payload::Component {
             name: ident,
             kind: ComponentKind::Reg,
             doc_string: docstring,
         });
         let span = parser.span(ll, rr);
-        let num_children: u16 = 1u16 + 1u16 + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
+        let num_children: u16 = 1u16 + 1u16 + if dependson_list.is_none() { 0u16 } else { 1u16 } + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
 
         parser.add_node(payload, span, num_children)
     },
@@ -678,16 +693,6 @@ ModDefStmtUnused: AstNodeId = {
 ModDefStmtInitial: AstNodeId = {
     <ll:@L> "initial" <lhs:Path> "<=" <rhs:Expr> <rr:@R> => {
         let payload = AstNodePayload::InitialDriver;
-        let span = parser.span(ll, rr);
-        let num_children = 2;
-
-        parser.add_node(payload, span, num_children)
-    },
-}
-
-ModDefStmtDependsOn: AstNodeId = {
-    <ll:@L> <lhs:Path> "dependson" <rhs:Path> <rr:@R> => {
-        let payload = AstNodePayload::ModDefStmtDependsOn;
         let span = parser.span(ll, rr);
         let num_children = 2;
 

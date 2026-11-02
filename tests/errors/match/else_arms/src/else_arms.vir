@@ -2,7 +2,7 @@
 
 mod ElseNotLast {
     incoming x : Word[8]
-    outgoing out : Bit
+    outgoing out : Bit dependson x
     // CHECK: else arm must be the last arm of the match
     out := match x {
         case 0 => true
@@ -16,7 +16,7 @@ mod ElseNotLast {
 
 mod MultipleElse {
     incoming x : Word[8]
-    outgoing out : Bit
+    outgoing out : Bit dependson x
     // CHECK: Multiple else arms in match
     out := match x {
         case 0 => true

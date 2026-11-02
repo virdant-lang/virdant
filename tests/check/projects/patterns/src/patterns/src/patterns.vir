@@ -10,7 +10,7 @@ union type MyUnion {
 mod MatchVarPattern {
     incoming clock : Clock
     incoming x     : Word[8]
-    outgoing out   : Word[8]
+    outgoing out   : Word[8] dependson x
 
     unused clock
     out := match x {
@@ -21,7 +21,7 @@ mod MatchVarPattern {
 mod MatchCtorBitPat {
     incoming clock : Clock
     incoming u     : MyUnion
-    outgoing out   : Bit
+    outgoing out   : Bit dependson u
 
     unused clock
     out := match u {
@@ -34,7 +34,7 @@ mod MatchCtorBitPat {
 mod MatchCtorMixPat {
     incoming clock : Clock
     incoming u     : MyUnion
-    outgoing out   : Bit
+    outgoing out   : Bit dependson u
 
     unused clock
     out := match u {

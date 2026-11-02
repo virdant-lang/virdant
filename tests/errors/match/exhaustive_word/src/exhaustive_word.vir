@@ -2,7 +2,7 @@
 
 mod WordNeedsElse {
     incoming x : Word[8]
-    outgoing out : Bit
+    outgoing out : Bit dependson x
     // CHECK: Non-exhaustive match
     out := match x {
         case 0 => true

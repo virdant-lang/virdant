@@ -60,10 +60,10 @@ pub mod Top {
 
     outgoing o_fst      : Word[4]
     outgoing o_snd      : Bit
-    outgoing o_nested   : Word[4]
-    outgoing o_opt_word : Word[5]
-    outgoing o_opt_bit  : Bit
-    outgoing o_either   : Word[5]
+    outgoing o_nested   : Word[4] dependson a, b
+    outgoing o_opt_word : Word[5] dependson a, b
+    outgoing o_opt_bit  : Bit dependson b
+    outgoing o_either   : Word[5] dependson a
 
     o_fst      := pair->fst
     o_snd      := pair->snd

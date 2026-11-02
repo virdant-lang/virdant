@@ -1,47 +1,58 @@
-//! Detects combinational loops by building, per module, a "stitched"
-//! graph of the module's combinational edges plus its submodule
-//! instances' graphs, reporting each loop once at the module whose
-//! local edge closes the cycle.
+//! Detects combinational loops over each module's *potentiality graph*.
+//!
+//! The potentiality graph of a module contains:
+//!
+//! * *Local actual edges*: the module's own driver-derived
+//!   combinational edges (including socket-link edges from `:=:`).
+//! * *Local declared edges*: the module's own `dependson` lists (on
+//!   `outgoing`/`outgoing wire` components) and its socket-obligation
+//!   edges (from socketdef channel lists, in the driving role).
+//! * *Imported declared edges*: each immediate submodule instance's
+//!   declared edges and socket obligations, prefixed with the instance
+//!   name. The parent never looks inside a child: the child's
+//!   declarations are its boundary contract.
+//!
+//! Sequential (`reg`) edges are never traversed: a clock edge breaks
+//! potentiality.
+//!
+//! A cycle is an error regardless of whether the actual comb path
+//! exists today: `dependson` declares *potential*, and a designer must
+//! be free to make any declared dependency actual at any time without
+//! breaking clients.
+//!
+//! Each loop is reported once, at the module whose *local* edge closes
+//! the cycle: a cycle living entirely inside a submodule is reported
+//! there, and a cycle that spans a parent and its children is reported
+//! at the parent (which is the only module that sees all of its edges).
 
 use std::sync::Arc;
 
-use bstr::ByteSlice;
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::dependency::EdgeKind;
-use crate::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
+use crate::analysis::symbols::{SymbolId, SymbolKind};
 use crate::common::graph::{Graph, VertIndex};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic};
-use crate::package::{PackageId, PackageTable};
-use crate::syntax::ast::AstNode;
-use crate::syntax::payload::AstNodePayload;
 
-/// A module's dependency graph stitched together with its immediate
-/// submodule instances' already-built stitched graphs.
-///
-/// All paths are local to the module's own namespace (no `top.` prefix).
-/// A submodule instance `inst of S` contributes `S`'s stitched graph with
-/// every path prefixed by `inst.`, which unifies with the parent's
-/// `inst.port` port components at the instance boundary.
-struct StitchedGraph {
+/// A module's potentiality graph: all edges (local + imported), keyed
+/// by source path -> dependee paths, plus the subset of edges that are
+/// local to the module.
+struct PotentialityGraph {
     /// All edges (local + imported), keyed by source path -> dependee paths.
     edges: IndexMap<bstr::BString, Vec<bstr::BString>>,
     /// Edges local to this module (a subset of `edges`). A cycle is
     /// "created" by this module iff it uses at least one local edge;
     /// cycles living entirely inside a submodule are reported there.
     local_edges: Vec<(bstr::BString, bstr::BString)>,
+    /// The local *actual* edges (driver-derived): a cycle all of whose
+    /// edges are actual is a genuine combinational loop
+    /// (`CombinationalLoop`); a cycle containing any declared edge
+    /// (local declared, socket obligation, or imported) is a cycle in
+    /// the *potentiality* of the design (`DependsonCycle`).
+    actual_edges: IndexSet<(bstr::BString, bstr::BString)>,
 }
 
-/// Detect combinational loops by checking each module bottom-up in
-/// submodule-inclusion order.
-///
-/// For each module `M`, build a stitched graph over `M`'s local component
-/// paths: `M`'s own combinational edges plus each immediate submodule
-/// instance's already-built stitched graph (paths prefixed by the instance
-/// name). A cycle is reported at `M` iff it uses at least one edge local
-/// to `M`, so each loop is reported exactly once, at the module that
-/// closes it.
 pub(crate) fn build_combinational_cycle_check(
     builder: &mut Builder,
 ) -> Arc<Vec<Diagnostic>> {
@@ -53,38 +64,55 @@ pub(crate) fn build_combinational_cycle_check(
         .map(|item| item.id())
         .collect();
 
-    // Submodule-inclusion order: leaves before parents. If the
-    // instantiation graph has a cycle, fall back to symboltable order
-    // (best-effort; `check_mod_cycles` diagnoses the instantiation cycle).
-    let order = inclusion_order(builder, &moddefs);
-
-    let mut stitched: IndexMap<SymbolId, StitchedGraph> = IndexMap::new();
     let mut diagnostics: Vec<Diagnostic> = vec![];
 
-    for &moddef in &order {
-        let graph = build_stitched(builder, moddef, &stitched);
+    // Order does not affect correctness: each module's potentiality
+    // graph is self-contained (local edges plus children's
+    // declarations), and the local-edge reporting policy below
+    // deduplicates cycles across the module tree. Moddefs are checked
+    // in symboltable order.
+    for &moddef in &moddefs {
+        let graph = build_potentiality(builder, moddef);
         check_module(builder, moddef, &graph, &mut diagnostics);
-        stitched.insert(moddef, graph);
     }
 
     Arc::new(diagnostics)
 }
 
-/// Build the stitched combinational graph for `moddef`, using the
-/// already-built stitched graphs of its immediate submodule instances.
-fn build_stitched(
+/// Build the potentiality graph for `moddef`.
+fn build_potentiality(
     builder: &mut Builder,
     moddef: SymbolId,
-    stitched: &IndexMap<SymbolId, StitchedGraph>,
-) -> StitchedGraph {
+) -> PotentialityGraph {
     let dep_graph = builder.get_dependency_graph(moddef);
     let component_analysis = builder.get_component_analysis(moddef);
-    let symboltable = builder.get_symboltable();
+    let dependson_analysis = builder.get_dependson_analysis(moddef);
 
     let mut edges: IndexMap<bstr::BString, Vec<bstr::BString>> = IndexMap::new();
     let mut local_edges: Vec<(bstr::BString, bstr::BString)> = vec![];
+    let mut actual_edges: IndexSet<(bstr::BString, bstr::BString)> = IndexSet::new();
 
-    // 1. M's own combinational edges (local).
+    let add_local = |edges: &mut IndexMap<bstr::BString, Vec<bstr::BString>>,
+                         local_edges: &mut Vec<(bstr::BString, bstr::BString)>,
+                         actual_edges: &mut IndexSet<(bstr::BString, bstr::BString)>,
+                         source: &bstr::BString,
+                         target: &bstr::BString,
+                         actual: bool| {
+        edges
+            .entry(source.clone())
+            .or_default()
+            .push(target.clone());
+        let key = (source.clone(), target.clone());
+        if actual {
+            actual_edges.insert(key.clone());
+        }
+        local_edges.push(key);
+    };
+
+    // 1. M's own driver-derived combinational edges (local actual).
+    // Self-loops (src_path == dep_path) are kept: a driver whose
+    // target appears in its own RHS or in an enclosing guard is a
+    // genuine one-component combinational loop.
     for (source, edge_list) in dep_graph.edges() {
         let Some(src_comp) = component_analysis.component(*source) else {
             continue;
@@ -98,65 +126,52 @@ fn build_stitched(
                 continue;
             };
             let dep_path = dep_comp.path();
-            // Self-loops (src_path == dep_path) are kept: a driver whose
-            // target appears in its own RHS or in an enclosing guard is
-            // a genuine one-component combinational loop.
-            edges
-                .entry(src_path.clone())
-                .or_default()
-                .push(dep_path.clone());
-            local_edges.push((src_path.clone(), dep_path.clone()));
+            add_local(
+                &mut edges,
+                &mut local_edges,
+                &mut actual_edges,
+                &src_path,
+                &dep_path,
+                true,
+            );
         }
     }
 
-    // 2. Imported edges from immediate submodule instances.
-    let location = symboltable.symbol(moddef).location();
-    let parsing = builder.get_parsing(location.package());
-    let packages = builder.get_packages();
-    let moddef_node_id = builder.get_symbol_ast(moddef);
-    let moddef_node = parsing.ast_node(moddef_node_id);
-
-    for stmt in moddef_node.children() {
-        let AstNodePayload::Submodule(submodule) = stmt.payload() else {
-            continue;
-        };
-        let inst_name = parsing.string(submodule.name);
-        let Some(child_id) =
-            resolve_submodule_moddef(&stmt, &parsing, &location, &symboltable, &packages)
-        else {
-            continue;
-        };
-        let Some(child_graph) = stitched.get(&child_id) else {
-            // Submodule not yet built (instantiation cycle). Best-effort.
-            continue;
-        };
-        for (src, deps) in &child_graph.edges {
-            let src_full: bstr::BString =
-                format!("{}.{}", inst_name.to_str_lossy(), src.to_str_lossy())
-                    .into();
-            for dep in deps {
-                let dep_full: bstr::BString = format!(
-                    "{}.{}",
-                    inst_name.to_str_lossy(),
-                    dep.to_str_lossy()
-                )
-                .into();
-                edges
-                    .entry(src_full.clone())
-                    .or_default()
-                    .push(dep_full);
-            }
-        }
+    // 2. M's own declared edges: `dependson` lists and socket
+    //    obligations (local declared).
+    for (source, target) in dependson_analysis
+        .declared_edges()
+        .iter()
+        .chain(dependson_analysis.socket_edges())
+    {
+        add_local(
+            &mut edges,
+            &mut local_edges,
+            &mut actual_edges,
+            source,
+            target,
+            false,
+        );
     }
 
-    StitchedGraph { edges, local_edges }
+    // 3. Imported declared edges from immediate submodule instances.
+    for (source, target) in dependson_analysis.imported_edges() {
+        edges
+            .entry(source.clone())
+            .or_default()
+            .push(target.clone());
+        // Imported edges are never local: a cycle closed only by
+        // imported edges belongs to the child (which reports it).
+    }
+
+    PotentialityGraph { edges, local_edges, actual_edges }
 }
 
 /// Report a cycle at `moddef` iff one of its local edges closes a cycle.
 fn check_module(
     builder: &mut Builder,
     moddef: SymbolId,
-    graph: &StitchedGraph,
+    graph: &PotentialityGraph,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     // Build a Graph<BString> over all edges (local + imported) for the
@@ -198,106 +213,44 @@ fn check_module(
                 comps
             };
 
+            // The cycle is an actual combinational loop iff every one
+            // of its edges is driver-derived; any declared edge makes
+            // it a cycle in the *potentiality* of the design.
+            let mut edges_of_cycle: Vec<(bstr::BString, bstr::BString)> = vec![];
+            if u == v {
+                edges_of_cycle.push((u.clone(), v.clone()));
+            } else {
+                let mut nodes: Vec<&bstr::BString> = vec![u, v];
+                for vi in &path {
+                    nodes.push(&comb_graph[*vi]);
+                }
+                for window in nodes.windows(2) {
+                    edges_of_cycle.push((window[0].clone(), window[1].clone()));
+                }
+            }
+            let all_actual = edges_of_cycle
+                .iter()
+                .all(|edge| graph.actual_edges.contains(edge));
+
             let region = moddef_region(builder, moddef);
-            diagnostics.push(Diagnostic::new(
-                region,
-                diagnostics::CombinationalLoop {
-                    components: comps,
-                },
-            ));
+            if all_actual {
+                diagnostics.push(Diagnostic::new(
+                    region,
+                    diagnostics::CombinationalLoop {
+                        components: comps,
+                    },
+                ));
+            } else {
+                diagnostics.push(Diagnostic::new(
+                    region,
+                    diagnostics::DependsonCycle {
+                        components: comps,
+                    },
+                ));
+            }
             return;
         }
     }
-}
-
-/// Return the ModDefs in submodule-inclusion order (leaves before parents).
-///
-/// Uses a DFS post-order traversal so that modules not in any instantiation
-/// cycle are processed after their submodules. Back-edges (instantiation
-/// cycles) are skipped: a cyclic submodule won't be in `stitched` when its
-/// parent is processed, so the parent imports it best-effort.
-/// `check_mod_cycles` diagnoses instantiation cycles separately.
-fn inclusion_order(builder: &mut Builder, moddefs: &[SymbolId]) -> Vec<SymbolId> {
-    let symboltable = builder.get_symboltable();
-
-    // Adjacency: parent -> child ModDefs it instantiates.
-    let mut adj: IndexMap<SymbolId, Vec<SymbolId>> = IndexMap::new();
-    for &m in moddefs {
-        adj.entry(m).or_default();
-    }
-    let packages = builder.get_packages();
-    for &parent in moddefs {
-        let location = symboltable.symbol(parent).location();
-        let parsing = builder.get_parsing(location.package());
-        let node_id = builder.get_symbol_ast(parent);
-        let node = parsing.ast_node(node_id);
-        for stmt in node.children() {
-            if let AstNodePayload::Submodule(_) = stmt.payload() {
-                if let Some(child) =
-                    resolve_submodule_moddef(&stmt, &parsing, &location, &symboltable, &packages)
-                {
-                    adj.entry(parent).or_default().push(child);
-                }
-            }
-        }
-    }
-
-    // DFS post-order: children before parents. State: 0 = unvisited,
-    // 1 = visiting (on the current stack), 2 = done.
-    let mut state: IndexMap<SymbolId, u8> = IndexMap::new();
-    let mut order: Vec<SymbolId> = vec![];
-    for &start in moddefs {
-        visit(start, &adj, &mut state, &mut order);
-    }
-    order
-}
-
-/// DFS visitor for `inclusion_order`. Skips back-edges (state == 1), so
-/// instantiation cycles don't cause infinite recursion.
-fn visit(
-    node: SymbolId,
-    adj: &IndexMap<SymbolId, Vec<SymbolId>>,
-    state: &mut IndexMap<SymbolId, u8>,
-    order: &mut Vec<SymbolId>,
-) {
-    match state.get(&node).copied().unwrap_or(0) {
-        2 => return, // already done
-        1 => return, // on the current stack: back-edge (instantiation cycle)
-        _ => {}
-    }
-    state.insert(node, 1);
-    if let Some(children) = adj.get(&node) {
-        for &child in children {
-            visit(child, adj, state, order);
-        }
-    }
-    state.insert(node, 2);
-    order.push(node);
-}
-
-/// Resolve a `Submodule` statement's `of` clause to the instantiated
-/// ModDef's `SymbolId`, if it is a ModDef.
-fn resolve_submodule_moddef(
-    stmt: &AstNode<'_>,
-    parsing: &crate::syntax::parsing::Parsing,
-    location: &crate::analysis::Location,
-    symboltable: &SymbolTable,
-    packages: &PackageTable,
-) -> Option<SymbolId> {
-    let ofness_node = stmt.child(1);
-    let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
-        return None;
-    };
-    let target_package: Option<PackageId> = match ofness.package {
-        Some(pkg) => packages.id(parsing.string(pkg)),
-        None => Some(location.package()),
-    };
-    let target_name = parsing.string(ofness.name);
-    let target_symbol = target_package.and_then(|pkg| symboltable.resolve_item(target_name, pkg))?;
-    if target_symbol.kind() != SymbolKind::ModDef {
-        return None;
-    }
-    Some(target_symbol.id())
 }
 
 /// The region of `moddef`'s ModDef node, for the diagnostic.

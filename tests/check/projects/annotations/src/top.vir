@@ -15,7 +15,7 @@ mod Top {
     incoming data : Bit
 
     @keep
-    outgoing result : Bit
+    outgoing result : Bit dependson data
 
     result := data
 }

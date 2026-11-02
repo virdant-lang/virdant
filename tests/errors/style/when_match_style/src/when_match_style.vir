@@ -11,7 +11,7 @@ enum type StyleE {
 // bare-expression blocks: the arms must use `=>` instead.
 mod ExprWhenBlockArm {
     incoming a : Bit
-    outgoing out : Bit
+    outgoing out : Bit dependson a
     // CHECK: For expression-based conditionals, use `=>` instead of `{ ... }`
     // CHECK: For expression-based conditionals, use `=>` instead of `{ ... }`
     out := when {
@@ -28,7 +28,7 @@ mod ExprWhenBlockArm {
 // blocks: the arms must use `=>` instead.
 mod ExprMatchBlockArm {
     incoming t : StyleE
-    outgoing out : Bit
+    outgoing out : Bit dependson t
     // CHECK: For expression-based conditionals, use `=>` instead of `{ ... }
     // CHECK: For expression-based conditionals, use `=>` instead of `{ ... }
     out := match t {
@@ -46,7 +46,7 @@ mod ExprMatchBlockArm {
 // statements in `{ ... }` instead.
 mod StmtWhenArrowArm {
     incoming a : Bit
-    outgoing out : Bit
+    outgoing out : Bit dependson a
     // CHECK: For statement-based conditionals, use `{ ... }` instead of `=>`
     // CHECK: For statement-based conditionals, use `{ ... }` instead of `=>`
     when {
@@ -61,7 +61,7 @@ mod StmtWhenArrowArm {
 // error as `=>` arms.
 mod StmtWhenExprBlock {
     incoming a : Bit
-    outgoing out : Bit
+    outgoing out : Bit dependson a
     // CHECK: For statement-based conditionals, use `{ ... }` instead of `=>`
     when {
         case a {

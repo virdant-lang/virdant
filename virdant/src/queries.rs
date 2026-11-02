@@ -4,6 +4,7 @@ pub mod check;
 pub mod check_drivers;
 pub mod check_initial;
 pub mod combinational_cycles;
+pub mod dependson;
 pub mod match_coverage;
 pub mod parsing;
 pub mod pubcheck;

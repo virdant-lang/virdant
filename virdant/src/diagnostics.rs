@@ -120,6 +120,20 @@ pub enum DiagnosticPayload {
     /// All edges in the cycle are combinational, which would causal, which would cause
     /// simulation to never converge.
     CombinationalLoop(CombinationalLoop),
+    /// A cycle in the `dependson` relation (potentiality graph): the
+    /// declared comb dependencies close a loop even if no actual comb
+    /// path exists today.
+    DependsonCycle(DependsonCycle),
+    /// `dependson` used on a component kind that may not carry it.
+    DependsonBadCarrier(DependsonBadCarrier),
+    /// A `dependson` entry does not resolve to a legal dependee.
+    DependsonBadEntry(DependsonBadEntry),
+    /// An `outgoing` port has an actual/potential combinational
+    /// dependency on an `incoming` port it does not declare.
+    DependsonUndeclared(DependsonUndeclared),
+    /// An `outgoing` port declares a `dependson` entry it does not (and
+    /// cannot potentially) depend on. Warning: an unused `dependson`.
+    DependsonUnused(DependsonUnused),
     ImportNotAtTopError,
     InvalidIndentation,
     TrailingSpaces,
@@ -451,6 +465,35 @@ pub struct InitialInsideWhenMatch {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CombinationalLoop {
     pub components: Vec<BString>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DependsonCycle {
+    pub components: Vec<BString>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DependsonBadCarrier {
+    pub component: BString,
+    pub reason: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DependsonBadEntry {
+    pub entry: BString,
+    pub reason: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DependsonUndeclared {
+    pub port: BString,
+    pub missing: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DependsonUnused {
+    pub port: BString,
+    pub entry: BString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -792,6 +835,40 @@ impl Diagnostic {
                         .join(" -> "),
                 ).into()
             }
+            DiagnosticPayload::DependsonCycle(d) => {
+                format!(
+                    "Cycle in the `dependson` relation: {}",
+                    d.components
+                        .iter()
+                        .map(|c| String::from_utf8_lossy(c).into_owned())
+                        .collect::<Vec<_>>()
+                        .join(" -> "),
+                ).into()
+            }
+            DiagnosticPayload::DependsonBadCarrier(d) => {
+                format!(
+                    "`dependson` is not allowed on `{}`: {}",
+                    d.component, d.reason,
+                ).into()
+            }
+            DiagnosticPayload::DependsonBadEntry(d) => {
+                format!(
+                    "Bad `dependson` entry `{}`: {}",
+                    d.entry, d.reason,
+                ).into()
+            }
+            DiagnosticPayload::DependsonUndeclared(d) => {
+                format!(
+                    "`{}` could combinationally depend on `{}` but does not declare it; add `{}` to `{}`'s `dependson`",
+                    d.port, d.missing, d.missing, d.port,
+                ).into()
+            }
+            DiagnosticPayload::DependsonUnused(d) => {
+                format!(
+                    "Unused `dependson`: `{}` declares it may depend on `{}` but does not",
+                    d.port, d.entry,
+                ).into()
+            }
             DiagnosticPayload::ExpectedPlatform(d) => format!("Expected a platform: {} is not a platform", d.item).into(),
             DiagnosticPayload::PlatformMissingPort(d) => format!("Module is missing port {} required by platform {}", d.port, d.platform).into(),
             DiagnosticPayload::PlatformExtraPort(d) => format!("Module has port {} which platform {} does not declare", d.port, d.platform).into(),
@@ -904,6 +981,7 @@ impl Diagnostic {
             | DiagnosticPayload::EmptyDriverBlock
             | DiagnosticPayload::RedundantDriver(_)
             | DiagnosticPayload::TrailingSpaces
+            | DiagnosticPayload::DependsonUnused(_)
             | DiagnosticPayload::ReferencedWhileNotPub(_)
             | DiagnosticPayload::UnusedNonPub(_) => DiagnosticLevel::Warning,
             DiagnosticPayload::Todo(_) => DiagnosticLevel::Info,
@@ -945,7 +1023,9 @@ from_diagnostic! {
     CantTruncate, Todo, MatchNotExhaustive, MatchOverlappingArm, InvalidDocstring,
     DuplicateEnumValue, EnumPartiallySpecified, IndexOutOfBounds, IndexRangeOutOfBounds, InvalidIndexRange,
     InvalidWordIndexWidth, IndexNotWordType, RedundantUnused, RedundantDriver,
-    CombinationalLoop, InitialForNonReg, InitialMultiple, InitialInsideWhenMatch,
+    CombinationalLoop, DependsonCycle, DependsonBadCarrier, DependsonBadEntry,
+    DependsonUndeclared, DependsonUnused,
+    InitialForNonReg, InitialMultiple, InitialInsideWhenMatch,
     ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,
     PlatformPortTypeMismatch, DefaultOutsidePlatformPort, NotYetImplemented, TypeArgCount,
     TypeArgKind, UnknownKind,

@@ -10,7 +10,7 @@ mod Alu {
     incoming a : Word[8]
     incoming b : Word[8]
     incoming op : AluOp
-    outgoing r : Word[8]
+    outgoing r : Word[8] dependson a, b, op
 
     r := match op {
         case #and => a & b

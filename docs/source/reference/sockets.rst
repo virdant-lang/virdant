@@ -382,3 +382,32 @@ The :vir:`:=:` connection joins the two socket instances port by port:
 the producer's :vir:`@Valid(d)` payload appears on the consumer's
 :vir:`pipe.data`, and the consumer's readiness flows back to the producer's
 :vir:`pipe.ready`.
+
+The `dependson` List on Channels
+--------------------------------
+A socket channel may carry a `dependson` list, naming channels of the
+opposite direction word of the same socket:
+
+.. code-block:: virdant
+
+    socket Wishbone {
+        cosi cyc : Bit
+        cosi stb : Bit
+        soci ack : Bit dependson cyc, stb
+    }
+
+When the socket is instantiated in the channel's driving role (`client`
+for `cosi` channels, `server` for `soci` channels), the list places the
+same obligation on the containing module as if the `dependson` were
+declared on the resulting port: the module's drive on that channel may
+combinationally depend on its reads of the listed channels.  In the
+receiving role the list is inert.
+
+Unlike `dependson` on module ports, a socket channel's list never
+produces an unused warning when the drive does not exercise it:
+protocols such as Wishbone and TileLink support same-cycle responses but
+also arbitrary delays, so the declared potential may legitimately stay
+dormant.  It is still part of the contract: the containing module must
+not drive the channel with anything outside the declared set, and cycles
+in the composed `dependson` relation (for example, both sides of a link
+declaring same-cycle responses) are errors.  See :doc:`modules`.

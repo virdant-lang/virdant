@@ -7,7 +7,7 @@ struct type Pair[A : Type, B : Type] {
 
 pub mod Top {
     incoming inp : Pair[Bit]
-    outgoing out : Bit
+    outgoing out : Bit dependson inp
     out := inp->fst
 }
 

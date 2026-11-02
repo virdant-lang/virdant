@@ -12,7 +12,7 @@
 
 pub mod StmtLet {
     incoming a : Word[8]
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson a
 
     let x = a {
     }
@@ -23,8 +23,8 @@ pub mod StmtLet {
 pub mod StmtLetWhen {
     incoming a : Bit
     incoming b : Word[8]
-    outgoing out : Word[8]
-    outgoing flag : Bit
+    outgoing out : Word[8] dependson b
+    outgoing flag : Bit dependson a
 
     let x = b when {
         case a {
@@ -40,8 +40,8 @@ pub mod StmtLetWhen {
 pub mod StmtLetMatch {
     incoming a : Word[8]
     incoming t : StyleE
-    outgoing out : Word[8]
-    outgoing echo : StyleE
+    outgoing out : Word[8] dependson a
+    outgoing echo : StyleE dependson t
 
     let x = a match t {
         case #A {
@@ -57,7 +57,7 @@ pub mod StmtLetMatch {
 pub mod StmtWhenArmLet {
     incoming a : Bit
     incoming b : Word[8]
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson b
 
     when {
         case a let x = b {

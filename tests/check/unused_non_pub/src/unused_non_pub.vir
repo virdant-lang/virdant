@@ -25,14 +25,14 @@ struct type UsedStruct {
 // CHECK: Item `UnusedMod` is unused and not `pub`
 mod UnusedMod {
     incoming inp : Word[8]
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson inp
     out := inp
 }
 
 // CHECK: Check OK
 pub mod Top {
     incoming inp : Word[8]
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson inp
 
     wire used : UsedStruct
     used := ${ x = inp }

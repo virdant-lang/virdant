@@ -227,7 +227,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ModDefStmtUnused => format!("ModDefStmtUnused"),
             AstNodePayload::Annotations(_) => format!("Annotations"),
             AstNodePayload::Annotation(annotation) => format!("Annotation {}", parsing.string(annotation.name.clone())),
-            AstNodePayload::ModDefStmtDependsOn => format!("ModDefStmtDependsOn"),
+            AstNodePayload::DependsonList => format!("DependsonList"),
             AstNodePayload::Socket(_socket) => format!("Socket"),
             AstNodePayload::Field(_field) => format!("Field"),
             AstNodePayload::Ctor(_ctor) => format!("Ctor"),
@@ -394,7 +394,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Component(component) => {
                 if component.kind == ComponentKind::Reg || component.kind == ComponentKind::OutgoingReg {
                     for child in self.children().into_iter().skip(2) {
-                        if matches!(child.payload(), AstNodePayload::It | AstNodePayload::DefaultClause) {
+                        if matches!(child.payload(), AstNodePayload::It | AstNodePayload::DefaultClause | AstNodePayload::DependsonList) {
                             continue;
                         }
                         return Some(child);
@@ -403,6 +403,29 @@ impl<'p> AstNode<'p> {
                 None
             }
             _ => None
+        }
+    }
+
+    /// The `dependson <PATH>, ...` list of a component declaration or
+    /// socketdef channel, if present. The list node's children are one
+    /// `Path` node per entry, in written order.
+    pub fn dependson_list(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::Component(_) | AstNodePayload::Channel(_) => {
+                self.children().into_iter().find(|child| {
+                    matches!(child.payload(), AstNodePayload::DependsonList)
+                })
+            }
+            _ => None,
+        }
+    }
+
+    /// The entry `Path` nodes of this component's/channel's `dependson`
+    /// list, in written order. Empty when there is no list.
+    pub fn dependson_entries(&self) -> Vec<AstNode<'_>> {
+        match self.dependson_list() {
+            Some(list) => list.children(),
+            None => vec![],
         }
     }
 

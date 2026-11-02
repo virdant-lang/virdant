@@ -1,0 +1,35 @@
+// `dependson` is accepted by the grammar on any component declaration,
+// but the checker rejects it everywhere except `outgoing` and
+// `outgoing wire`.
+
+// CHECK: `dependson` is not allowed on `outreg`: a registered output (`outgoing reg`) cannot change in the same cycle
+// CHECK: `dependson` is not allowed on `r`: internal signals may not declare `dependson`; only `outgoing` and `outgoing wire` may
+// CHECK: `dependson` is not allowed on `w`: internal signals may not declare `dependson`; only `outgoing` and `outgoing wire` may
+// CHECK: `dependson` is not allowed on `b`: `bus` is tristate; `dependson` on tristate components is not yet supported
+// CHECK: `dependson` is not allowed on `in2`: `incoming` ports may not declare `dependson`
+mod Carriers {
+    incoming clk : Clock
+    incoming inp : Word[8] on clk
+
+    outgoing reg outreg : Word[8] dependson inp on clk {
+        it <= inp
+    }
+
+    reg r : Word[8] dependson inp on clk {
+        it <= inp
+    }
+
+    wire w : Word[8] dependson inp on clk
+    w := inp
+
+    bus b : Word[8] dependson inp
+    b #=# inp
+
+    incoming in2 : Bit dependson inp
+    unused in2
+
+    unused outreg
+    unused r
+    unused w
+    unused b
+}

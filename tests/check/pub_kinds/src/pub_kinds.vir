@@ -34,7 +34,7 @@ struct type Hidden {
 
 mod Helper {
     incoming inp : Word[8]
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson inp
     out := inp + 1w8
 }
 

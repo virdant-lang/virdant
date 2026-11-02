@@ -57,6 +57,7 @@ queries! {
     CheckDrivers(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>;
     CheckInitial(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>;
     DependencyGraph(symbol_id: SymbolId) -> Arc<DependencyGraph>;
+    DependsonAnalysis(symbol_id: SymbolId) -> Arc<crate::queries::dependson::DependsonAnalysis>;
     CombinationalCycleCheck() -> Arc<Vec<Diagnostic>>;
     MatchCoverage(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>;
     TypeDefs() -> Arc<Vec<TypeDef>>;
@@ -104,6 +105,7 @@ impl Query {
             crate::analysis::component::build_component : Component(component_id);
             crate::analysis::drivers::build_driver_analysis : DriverAnalysis(symbol_id);
             crate::analysis::dependency::build_dependency_graph : DependencyGraph(symbol_id);
+            crate::queries::dependson::build_dependson_analysis : DependsonAnalysis(symbol_id);
             crate::queries::combinational_cycles::build_combinational_cycle_check : CombinationalCycleCheck();
             crate::queries::check_drivers : CheckDrivers(symbol_id);
             crate::queries::check_initial : CheckInitial(symbol_id);
@@ -145,6 +147,7 @@ db_getter!(get_symbol_ast : SymbolAst(symbol_id: SymbolId) -> AstNodeId);
 db_getter!(get_component : Component(component_id: ComponentId) -> Arc<Component>);
 db_getter!(get_driver_analysis : DriverAnalysis(symbol_id: SymbolId) -> Arc<DriverAnalysis>);
 db_getter!(get_dependency_graph : DependencyGraph(symbol_id: SymbolId) -> Arc<DependencyGraph>);
+db_getter!(get_dependson_analysis : DependsonAnalysis(symbol_id: SymbolId) -> Arc<crate::queries::dependson::DependsonAnalysis>);
 db_getter!(get_combinational_cycle_check : CombinationalCycleCheck() -> Arc<Vec<Diagnostic>>);
 db_getter!(check_drivers : CheckDrivers(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>);
 db_getter!(check_initial : CheckInitial(symbol_id: SymbolId) -> Arc<Vec<Diagnostic>>);

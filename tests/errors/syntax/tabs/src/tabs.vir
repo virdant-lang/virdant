@@ -10,8 +10,8 @@ mod HalfAdder {
 	incoming a : Bit
 	incoming b : Bit
 
-	outgoing sum : Bit
-	outgoing carry : Bit
+	outgoing sum : Bit dependson a, b
+	outgoing carry : Bit dependson a, b
 
 	// sum is true when exactly one of a and b is true
 	sum := a ^^ b

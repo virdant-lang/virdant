@@ -2,7 +2,7 @@
 
 mod MissingBitCase {
     incoming b : Bit
-    outgoing out : Bit
+    outgoing out : Bit dependson b
     // CHECK: Non-exhaustive match on Bit: not covered: false
     out := match b {
         case true => false

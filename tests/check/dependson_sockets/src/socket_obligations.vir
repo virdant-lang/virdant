@@ -1,0 +1,67 @@
+// Socket channels may declare `dependson` too.  A list on a `cosi`
+// channel applies when the socket is instantiated as a `client`, and a
+// list on a `soci` channel as a `server`; it places the same
+// obligation on the containing module as if the `dependson` were
+// declared on the resulting port.  In the receiving role the list is
+// inert.
+
+// CHECK: Check OK
+
+// The server's acknowledgement may combinationally depend on its
+// reads of the request channel.
+socket Respond {
+    cosi req : Bit
+    soci ack : Bit dependson req
+}
+
+// The client's request may combinationally depend on its reads of the
+// response channel.
+socket Wish {
+    cosi req : Bit dependson ack
+    soci ack : Bit
+}
+
+// The server obligation is satisfied: `it.ack` really does depend on
+// `it.req`.
+mod Server {
+    server socket s of Respond {
+        it.ack := it.req
+    }
+}
+
+// The client obligation is declared even though the drive does not
+// actually read `ack` today: socket obligations are exempt from the
+// unused warning ( Wishbone and TL support arbitrary delays).
+mod Client {
+    client socket c of Wish {
+        it.req := true
+    }
+    unused c.ack
+}
+
+// In the receiving role, a list is inert: `Respond`'s `soci ack`
+// list says nothing about a `client` instantiation, and `Wish`'s
+// `cosi req` list says nothing about a `server` instantiation.
+mod InertServer {
+    server socket w of Wish {
+        it.ack := true
+    }
+    unused w.req
+}
+
+pub mod Top {
+    incoming x : Bit
+    outgoing out : Bit dependson x
+
+    mod srv of Server
+    srv.s.req := x
+    out := srv.s.ack
+
+    mod cli of Client
+    cli.c.ack := x
+    unused cli.c.req
+
+    mod inrt of InertServer
+    inrt.w.req := x
+    unused inrt.w.ack
+}

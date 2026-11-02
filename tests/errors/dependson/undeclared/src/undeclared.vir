@@ -1,0 +1,86 @@
+// The declared `dependson` set must be exhaustive: every `incoming`
+// port an `outgoing` port can combinationally depend on — directly,
+// through wires, or through submodule declarations — must be listed.
+// Absence of a list is an empty declaration.
+
+// CHECK: `out` could combinationally depend on `inp` but does not declare it
+mod Direct {
+    incoming inp : Bit
+    outgoing out : Bit
+    out := inp
+}
+
+// CHECK: `out` could combinationally depend on `sel` but does not declare it
+mod ThroughWire {
+    incoming inp : Word[8]
+    incoming sel : Bit
+    wire muxed : Word[8] on sel
+    muxed := mux(sel, inp, inp)
+    outgoing out : Word[8] dependson inp
+    out := muxed
+}
+
+// CHECK: `out` could combinationally depend on `inp` but does not declare it
+// CHECK: `out` could combinationally depend on `sel` but does not declare it
+mod ThroughInstance {
+    incoming inp : Bit
+    incoming sel : Bit
+    outgoing out : Bit
+
+    mod sub of Sub
+    sub.inp := inp
+    sub.sel := sel
+
+    out := sub.out
+}
+
+mod Sub {
+    incoming inp : Bit
+    incoming sel : Bit
+    outgoing out : Bit dependson inp, sel {
+        it := mux(sel, inp, inp)
+    }
+}
+
+// CHECK: `out` could combinationally depend on `inp` but does not declare it
+// Through a submodule's socket obligation: `out` reads the submodule's
+// `cosi` channel, whose drive may depend on the socket's `soci`
+// channel (declared in the socketdef), which the parent drives from
+// `inp`.
+mod ThroughObligation {
+    incoming inp : Bit
+    outgoing out : Bit
+
+    mod child of ObligChild
+    child.c.rsp := inp
+
+    out := child.c.req
+}
+
+socket ReqPipe {
+    cosi req : Bit dependson rsp
+    soci rsp : Bit
+}
+
+mod ObligChild {
+    client socket c of ReqPipe {
+        it.req := it.rsp
+    }
+}
+
+// An `outgoing reg` is never exhaustiveness-checked: registered
+// outputs cannot change in the same cycle.
+mod Registered {
+    incoming clk : Clock
+    incoming inp : Bit
+    outgoing reg out : Bit on clk {
+        it <= inp
+    }
+}
+
+pub mod Top {
+    incoming inp : Bit
+    outgoing ok : Bit
+    ok := true
+    unused inp
+}

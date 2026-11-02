@@ -4,7 +4,7 @@ mod Mux2 {
 
     incoming select : Bit
 
-    outgoing out : Word[8] {
+    outgoing out : Word[8] dependson a, b, select {
         it := mux(select, a, b)
     }
 }
@@ -18,7 +18,7 @@ mod Mux3 {
     incoming select_b : Bit
     incoming select_c : Bit
 
-    outgoing out : Word[8] {
+    outgoing out : Word[8] dependson a, b, c, select_a, select_b, select_c {
         it := when {
             case select_a => a
             case select_b => b
@@ -36,7 +36,7 @@ mod Mux4 {
 
     incoming select : Word[2]
 
-    outgoing out : Word[8] {
+    outgoing out : Word[8] dependson a, b, c, d, select {
         it := match select {
             case 0 => a
             case 1 => b

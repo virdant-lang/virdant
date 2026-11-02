@@ -8,7 +8,7 @@ mod Foo {
     //>Baz
     // CHECK: Doccomment must be followed by a space
     incoming inp : Bit
-    outgoing out : Bit
+    outgoing out : Bit dependson inp
     out := inp
 }
 

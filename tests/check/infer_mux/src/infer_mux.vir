@@ -1,7 +1,7 @@
 // CHECK: Check OK
 pub mod T {
     incoming c : Bit
-    outgoing bad : Word[8] {
+    outgoing bad : Word[8] dependson c {
         it := word(mux(c, 4w4, 4w4), 4w4)
     }
 }

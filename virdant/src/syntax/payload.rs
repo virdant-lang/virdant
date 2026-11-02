@@ -35,7 +35,7 @@ pub enum AstNodePayload {
     LetBinding(LetBinding),
     ArmBlock,
     ModDefStmtUnused,
-    ModDefStmtDependsOn,
+    DependsonList,
     Socket(Socket),
 
     Annotations(AnnotationsPayload),
@@ -119,7 +119,7 @@ impl AstNodePayload {
             AstNodePayload::Match => "Match",
             AstNodePayload::ArmBlock => "ArmBlock",
             AstNodePayload::ModDefStmtUnused => "ModDefStmtUnused",
-            AstNodePayload::ModDefStmtDependsOn => "ModDefStmtDependsOn",
+            AstNodePayload::DependsonList => "DependsonList",
             AstNodePayload::Socket(_socket) => "Socket",
             AstNodePayload::Annotations(_) => "Annotations",
             AstNodePayload::Annotation(_) => "Annotation",

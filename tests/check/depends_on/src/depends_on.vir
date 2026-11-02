@@ -1,29 +1,23 @@
-// Test: `dependson` annotations on external and internal modules.
+// Test: `dependson` lists on external and internal modules.
 //
-// `dependson` declares combinational dependencies that the compiler
-// cannot otherwise see (for `ext mod`) or that serve as interface
-// documentation (for regular `mod`).
+// `dependson` declares the combinational dependencies a port *may*
+// have on the module's `incoming` ports.
 
 // CHECK: Check OK
 
 // External PLL: the internal verilog routes clk_in to clk_out.
-// The `dependson` annotation tells Virdant about this dependency.
+// The `dependson` list declares that clk_out may depend on clk_in.
 ext mod PLL {
     incoming clk_in  : Clock
-    outgoing clk_out : Clock {
-        it dependson clk_in
-    }
+    outgoing clk_out : Clock dependson clk_in
 }
 
-// Standalone `dependson` at the mod level (outside an it-block).
+// External mux with several declared dependencies.
 pub ext mod ExternalMux {
     incoming sel     : Bit
     incoming a       : Bit
     incoming b       : Bit
-    outgoing result  : Bit
-    result dependson sel
-    result dependson a
-    result dependson b
+    outgoing result  : Bit dependson sel, a, b
 }
 
 // Internal module: `dependson` on an outgoing wire documents the
@@ -36,10 +30,9 @@ mod Internal {
     reg stored : Word[8]
     stored <= inp
 
-    // outgoing wire depends on the register via dependson,
-    // plus has a real driver that resolves the value.
+    // outgoing wire reads only the register (a clock edge in
+    // between), so it needs no `dependson` list.
     outgoing out_val : Word[8] on clk {
-        it dependson stored
         it := stored
     }
 }

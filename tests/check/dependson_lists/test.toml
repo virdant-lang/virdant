@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Tests for `dependson` lists: single and multiple entries, on outgoing and outgoing wire, on socket channels, on ext mods."
+filecheck = "src/lists.vir"

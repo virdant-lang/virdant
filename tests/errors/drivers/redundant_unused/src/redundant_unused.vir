@@ -70,8 +70,8 @@ mod TwoDifferentPaths {
 mod HalfAdder {
     incoming a : Bit
     incoming b : Bit
-    outgoing sum : Bit
-    outgoing carry_out : Bit
+    outgoing sum : Bit dependson a, b
+    outgoing carry_out : Bit dependson a, b
 
     sum := a ^ b
     carry_out := a & b
