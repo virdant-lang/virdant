@@ -500,7 +500,10 @@ starts up (for example, after an FPGA is configured).
 
 The target must be a `reg` or `outgoing reg`,
 and the value should be a constant expression of the register's type.
-A register without an `initial` statement starts at 0 in the generated Verilog.
+A register without an `initial` statement starts at an unspecified value.
+The Virdant simulator chooses a pseudorandom bit pattern for it,
+so do not rely on the power-on value of a register
+without an `initial` statement.
 
 An `initial` statement is not a driver:
 a register with an `initial` statement still needs its usual `<=` driver.

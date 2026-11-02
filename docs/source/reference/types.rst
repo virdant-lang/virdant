@@ -350,8 +350,8 @@ of the enum type is the number of enumerants.
 
 One-hot is the default for two reasons:
 
-* The all-zeros word is never a valid enumerant, so a zero-initialized
-  register or an uninitialized wire can never be confused with a
+* The all-zeros word is never a valid enumerant, so a signal that has
+  been explicitly initialized to zero can never be confused with a
   legitimate enum value.
 * Testing which enumerant a signal holds, and comparing it against a
   constant, only requires checking a single bit.

@@ -255,4 +255,6 @@ Rules:
 - `initial` is NOT a driver; the register still needs its `<=` driver.
 - At most one `initial` per register.
 - `initial` may not appear inside an `if` or `match` block.
-- Registers without `initial` start at 0 in Verilog (X in the simulator).
+- Registers without `initial` start at an unspecified value: the simulator
+  gives them a pseudorandom bit pattern. If a register's power-on value
+  matters, give it an explicit `initial` statement.

@@ -1,5 +1,0 @@
-[project]
-name = "reg-no-initial-zero"
-
-[prog]
-top = "reg-no-initial-zero::RegNoInitialTest"

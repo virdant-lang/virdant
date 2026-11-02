@@ -1,3 +1,0 @@
-kind = "run"
-description = "Register without `initial` reads 0 after reset"
-cycle_limit = 4
