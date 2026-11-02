@@ -1,0 +1,6 @@
+kind = "check"
+expect = "error"
+description = "A `:=:` joins two distinct socket instances of the same mono socket. When both sides name the same instance (same item name, parameterization fixed by its declaration), the connection is degenerate and must be rejected."
+filecheck = "src/socket_connect_self.vir"
+
+skip = "Sockets need addressing"

@@ -1,0 +1,37 @@
+// A `:=:` joins two distinct socket instances of the same mono socket.
+// When both sides name the same instance -- the same item name, with
+// the parameterization its declaration fixes -- the connection is
+// degenerate: every channel would be wired to itself, and the
+// elaborator would silently drop the connection.  This must be a hard
+// error, reported in terms of the instance's mono socket identity.
+
+socket Link[T : Type] {
+    cosi data : T
+    soci ready : Bit
+}
+
+mod Client {
+    client socket pipe of Link[Word[8]] {
+        it.data := 7w8
+        unused it.ready
+    }
+}
+
+mod Server {
+    server socket pipe of Link[Word[8]] {
+        it.ready := true
+        unused it.data
+    }
+}
+
+pub mod Top {
+    mod master of Client
+    mod slave of Server
+
+    slave.pipe :=: slave.pipe
+    master.pipe :=: master.pipe
+}
+
+// CHECK: Cannot connect slave.pipe to itself (socket_connect_self::Link[Word[8]]): `:=:` must join two distinct socket instances
+// CHECK: Cannot connect master.pipe to itself (socket_connect_self::Link[Word[8]]): `:=:` must join two distinct socket instances
+// CHECK: Check failed

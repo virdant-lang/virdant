@@ -1,0 +1,6 @@
+kind = "check"
+expect = "error"
+description = "A socket connection is a point-to-point link: each socket instance may participate in only one `:=:` connection. A socket connected to two different peers would leave its sink channels driven by two sources (or its source channels fanned out to two sinks)."
+filecheck = "src/socket_connect_multiple.vir"
+
+skip = "Sockets need addressing"

@@ -1,0 +1,43 @@
+// A socket connection is a point-to-point link.  Each socket instance
+// may participate in only one `:=:` connection: a socket connected to
+// two different peers would leave its sink channels driven by two
+// sources (or its source channels fanned out to two sinks).  The
+// elaborator resolves connections by aliasing the sink channel to its
+// source, so a repeated socket would silently drop one of the links.
+
+socket Qux {
+}
+
+mod Src {
+    client socket qux of Qux
+}
+
+mod Src2 {
+    client socket qux of Qux
+}
+
+mod Sink {
+    server socket qux of Qux
+}
+
+mod Sink2 {
+    server socket qux of Qux
+}
+
+pub mod Top {
+    mod src of Src
+    mod src2 of Src2
+    mod sink of Sink
+    mod sink2 of Sink2
+
+    // One source fanned out to two sinks:
+    src.qux :=: sink.qux
+    src.qux :=: sink2.qux
+
+    // One sink driven by two sources:
+    sink.qux :=: src2.qux
+}
+
+// CHECK: Socket src.qux is connected more than once: each socket instance may participate in only one `:=:` connection
+// CHECK: Socket sink.qux is connected more than once: each socket instance may participate in only one `:=:` connection
+// CHECK: Check failed
