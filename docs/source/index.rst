@@ -8,6 +8,7 @@ The Virdant Hardware Language
 
     getting-started
     tutorial/index
+    tools/index
     principles
     coding-conventions
     reference/index
@@ -28,6 +29,7 @@ Virdant allows hardware engineers to design complex digital systems with confide
 Ready to get started?
 ---------------------
 * :doc:`Getting Started <getting-started>`: Learn how to set up the Virdant compiler and write your first design.
+* :doc:`The Tutorial <tutorial/index>`: Learn Virdant from scratch through a series of examples.
 * :doc:`Core Principles <principles>`: Understand the philosophy behind Virdant's design.
 * `Discord <https://discord.gg/F9trwvHPf6>`_: Join me on Discord.
 
