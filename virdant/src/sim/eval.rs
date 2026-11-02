@@ -585,7 +585,11 @@ impl Expr {
     }
 
     /// Evaluate a struct literal: concatenate the fields' bits, first
-    /// field at the MSB end (struct layouts carry no tag).
+    /// field at the LSB end (struct layouts carry no tag).  This
+    /// matches the struct packing used by the Verilog backend and by
+    /// `ExprField` projection, where the first declared field occupies
+    /// the lowest bits; `concat_msb_first` accumulates above the bits
+    /// collected so far, so the fields are consumed in reverse.
     fn eval_struct(&self, context: &Context, struct_: &payload::Struct) -> Value {
         let field_values: Vec<BitPat> = struct_
             .fields
@@ -593,7 +597,7 @@ impl Expr {
             .map(|(_, field)| field.eval(context).bitpat())
             .collect();
         let mut bits = BitPat::zeros(0);
-        for value in field_values {
+        for value in field_values.into_iter().rev() {
             bits = bits.concat_msb_first(&value);
         }
         self.val(bits.zext_to(self.width_of_typ(context)))

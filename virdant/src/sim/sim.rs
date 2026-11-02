@@ -262,6 +262,20 @@ impl Sim {
                 .map(|c| c.id())
                 .collect();
             for signal_id in ids {
+                // Alias-driven components (bare-reference drivers and
+                // socket connections) have no expr of their own: their
+                // value is a copy of the peer's.  A register in this
+                // position must still get its pending staged here —
+                // otherwise it would carry the random `InitStrategy`
+                // pending into the first clock edge (the dirty-driven
+                // `flow` only restages it when the peer's value changes,
+                // which may not happen before the first edge).
+                if let Some(peer_id) = self.circuit.aliases[signal_id.index()] {
+                    if self.circuit.registers[signal_id.index()] {
+                        self.state.set_reg(signal_id, self.state.get(peer_id));
+                    }
+                    continue;
+                }
                 let Some(expr) = self.circuit.exprs[signal_id.index()].clone() else {
                     continue;
                 };

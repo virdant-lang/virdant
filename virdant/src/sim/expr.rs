@@ -546,10 +546,20 @@ fn convert_ast_expr(db: &Db, loc: Location, env: &[Type], types: &mut TypeIntern
             ExprPayload::Enumerant(payload::Enumerant { symbol_id })
         }
         AstNodePayload::ExprStruct => {
-            let field_locs: Vec<Location> = node.children().iter().map(|c| c.location()).collect();
+            // Each child of a struct literal is an `Assign` node
+            // (`field = value`); the value expression is the Assign's
+            // sole child.  (The grammar also admits a degenerate
+            // bare-expression child, which carries no field name and is
+            // skipped, mirroring the other backends.)
             let mut fields: Vec<(BString, Arc<Expr>)> = Vec::new();
-            for (i, l) in field_locs.into_iter().enumerate() {
-                fields.push((format!("{i}").into(), convert_ast_expr(db, l, env, types)));
+            for child in node.children() {
+                let AstNodePayload::Assign(assign) = child.payload() else {
+                    continue;
+                };
+                let field_name = parsing.string(assign.name).to_owned();
+                let value_loc = child.child(0).location();
+                let value = convert_ast_expr(db, value_loc, env, types);
+                fields.push((field_name, value));
             }
             ExprPayload::Struct(payload::Struct { fields })
         }
@@ -571,6 +581,44 @@ fn convert_ast_expr(db: &Db, loc: Location, env: &[Type], types: &mut TypeIntern
             let (index_hi, index_lo) = (range.index_hi, range.index_lo);
             let subject = convert_ast_expr(db, child_loc, env, types);
             ExprPayload::IndexRange(payload::IndexRange { subject, index_hi, index_lo })
+        }
+        AstNodePayload::ExprField(field) => {
+            // Field projection on a struct: lower to an exclusive bit
+            // range over the subject.  Struct packing puts the FIRST
+            // field in the LOWEST bits (matching the Verilog backend's
+            // `ExprField` bit-offset arithmetic, which accumulates
+            // bit_offset from 0 through the field list).
+            let subject_loc = node.child(0).location();
+            let subject_typ = mono_type(db, &subject_loc, env);
+            let Type::Usual(typedef_symbol_id, type_args) = &subject_typ else {
+                unreachable!("ExprField subject must have a struct type, got {subject_typ:?}");
+            };
+            let field_name = parsing.string(field.field);
+            let mut bit_offset: crate::common::Width = 0;
+            let mut field_width: crate::common::Width = 0;
+            let mut found = false;
+            for struct_field in db.get_struct_fields(*typedef_symbol_id) {
+                let Some(field_typ) = &struct_field.typ else { continue };
+                let current_width =
+                    crate::types::width::type_width(&mut { db }, &substitute(field_typ, type_args));
+                if struct_field.name.as_bstr() == field_name {
+                    field_width = current_width;
+                    found = true;
+                    break;
+                }
+                bit_offset += current_width;
+            }
+            assert!(
+                found,
+                "field {} not found in struct type {subject_typ:?}",
+                field_name.to_str_lossy(),
+            );
+            let subject = convert_ast_expr(db, subject_loc, env, types);
+            ExprPayload::IndexRange(payload::IndexRange {
+                subject,
+                index_hi: bit_offset + field_width,
+                index_lo: bit_offset,
+            })
         }
         AstNodePayload::ExprAs => {
             let subject = convert_ast_expr(db, node.child(0).location(), env, types);
