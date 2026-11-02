@@ -2019,6 +2019,22 @@ impl<'d> Converter<'d> {
                     })
                 }
             }
+            AstNodePayload::Let => {
+                // An expression-position `let` evaluates to its body: the
+                // bindings are pure, so every reference to a bound name
+                // beta-reduces to the binding's RHS (handled when the
+                // reference nodes themselves are converted, see the
+                // `ExprReference` arm above), and the `let` node itself
+                // contributes nothing but its body's value.  Typing
+                // annotates the body with the same type as the `let`,
+                // so the converted body already carries the right type.
+                let body = node.let_body().expect("expression-position `let` without a body");
+                if matches!(body.payload(), AstNodePayload::ArmBlock) {
+                    panic!("statement-form `let` (ArmBlock body) cannot appear in expression position");
+                }
+                let body_type = self.node_type(package, &body).unwrap_or_else(|| typ.clone());
+                self.convert_expr(package, body, &body_type, self.db, scheduler)
+            }
             _ => panic!("unsupported expr in conversion: {}", node.summary()),
         }
     }

@@ -55,7 +55,11 @@ module Tb;
         // Nested lets: an inner let inside an outer let's body.
         if (dut.f !== 1'b1) $fatal(1, "Assertion failed: f (let p = 1w2 { let q = 2w2; p + q == 3 })");
 
-        if (dut.done !== 1'b1) $fatal(1, "Assertion failed: done (a && b && c && d && e && f)");
+        // Expression-position `let` as a driver RHS (regression for
+        // "unsupported expr in conversion: Let").
+        if (dut.g !== 8'h02) $fatal(1, "Assertion failed: g (it := let y = 1w8 => y + y)");
+
+        if (dut.done !== 1'b1) $fatal(1, "Assertion failed: done (a && b && c && d && e && f && g)");
 
         $display("DONE");
         $finish;
@@ -69,7 +73,8 @@ module Tb;
             if (dut.d !== 1'b1) $fatal(1, "Assertion failed: d (let x = 10w8 in a match arm; x == 10)");
             if (dut.e !== 1'b1) $fatal(1, "Assertion failed: e (let value = 3w8 shadows the pattern's value; value == 3)");
             if (dut.f !== 1'b1) $fatal(1, "Assertion failed: f (let p = 1w2 { let q = 2w2; p + q == 3 })");
-            if (dut.done !== 1'b1) $fatal(1, "Assertion failed: done (a && b && c && d && e && f)");
+            if (dut.g !== 8'h02) $fatal(1, "Assertion failed: g (it := let y = 1w8 => y + y)");
+            if (dut.done !== 1'b1) $fatal(1, "Assertion failed: done (a && b && c && d && e && f && g)");
         end
     end
 endmodule

@@ -1,8 +1,10 @@
 // Icarus simulation test for the `let` statement feature, covering the
 // same corner cases as `tests/run/lets`: untyped and typed bindings,
 // multi-binding lists where later bindings see earlier ones, nested
-// lets, `let` as the body of `if`/`match` arms, and shadowing in
-// sibling arms.  Each case drives a wire the testbench asserts on.
+// lets, `let` as the body of `if`/`match` arms, shadowing in
+// sibling arms, and the expression-position `let` form
+// (`let x = e => body` as an expression).  Each case drives a wire
+// the testbench asserts on.
 
 pub mod Top {
     incoming clock : Clock
@@ -65,7 +67,16 @@ pub mod Top {
         }
     }
 
+    // Expression-position `let`: the `let x = e => body` form used as
+    // an expression, here the RHS of a driver.  Regression test for a
+    // `vir build` panic ("unsupported expr in conversion: Let"): the
+    // Verilog converter must reduce the let to its body and
+    // beta-reduce references to the binding.
+    wire g : Word[8] {
+        it := let y = 1w8 => y + y
+    }
+
     outgoing done : Bit {
-        it := a && b && c && d && e && f
+        it := a && b && c && d && e && f && (g == 2w8)
     }
 }
