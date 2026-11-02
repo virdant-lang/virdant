@@ -1,0 +1,5 @@
+[project]
+name = "slice-of-incoming"
+
+[prog]
+top = "slice-of-incoming::SliceOfIncomingTest"

@@ -1,0 +1,3 @@
+kind = "run"
+description = "Statement-level nesting: when inside when inside match, three deep; every path asserted"
+cycle_limit = 16

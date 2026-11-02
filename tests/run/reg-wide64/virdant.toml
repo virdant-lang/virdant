@@ -1,0 +1,5 @@
+[project]
+name = "reg-wide64"
+
+[prog]
+top = "reg-wide64::RegWide64Test"

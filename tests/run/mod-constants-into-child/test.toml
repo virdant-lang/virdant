@@ -1,0 +1,4 @@
+kind = "run"
+description = "Child module inputs driven by literals (it.threshold := 7); assert the child uses the constants"
+cycle_limit = 20
+trace = false

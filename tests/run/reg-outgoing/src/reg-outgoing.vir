@@ -1,0 +1,110 @@
+//! Self-checking `kind = "run"` test for an `outgoing reg` driven
+//! directly, with no intermediate wire.
+//!
+//! A `Counter` declares its output as an `outgoing reg` and drives it
+//! in the register's own driver block: the counter free-runs 0, 1, 2,
+//! ... and wraps modulo 16.  The harness top asserts the counter's
+//! behavior by checking, on every cycle after a warm-up period, that
+//! the value equals the value of one cycle earlier plus one; twenty
+//! consecutive checks also prove the wraparound.  Each verdict is
+//! folded into a running `all_ok`; the simulator exits with code 0
+//! only if all 20 checks passed, and 1 otherwise.
+
+import virt
+
+//> Free-running counter whose output is an `outgoing reg` driven
+//> directly in its own driver block -- no intermediate wire.
+mod Counter {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Counts 0, 1, 2, ... and wraps modulo 16.  The driver lives on
+    //> the `outgoing reg` itself, so the value is registered right at
+    //> the module boundary.
+    outgoing reg count : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+}
+
+pub mod RegOutgoingTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Instance under test.
+    mod counter of Counter {
+        it.clock := clock
+    }
+
+    //> Warm-up countdown: idle for the first 8 cycles so the
+    //> simulator's first-edge commit cannot make the test
+    //> nondeterministic.  Wraps around to reach 8 no matter where it
+    //> starts, then saturates there.
+    reg warmup : Word[8] on clock {
+        initial it <= 0
+        when {
+            case it != 8 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> High once the warm-up period is over and checks may fold.
+    wire warmed_up : Bit {
+        it := warmup == 8
+    }
+
+    //> Previous value of `counter.count`: each check compares the
+    //> current count against the count of one cycle earlier.
+    reg prev : Word[4] on clock {
+        initial it <= 0
+        it <= counter.count
+    }
+
+    //> High on every cycle where a check is due.
+    wire checking : Bit {
+        it := warmed_up && !finished
+    }
+
+    //> Number of checks folded so far.  Freezes at 19, the cycle the
+    //> last (20th) check folds in.
+    reg checks : Word[5] on clock {
+        initial it <= 0
+        when {
+            case checking && it != 19 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Rises as the 20th (last) check folds in, freezing the fold and
+    //> validating `exit` on the next cycle.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case checking && checks == 19 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in while `checking`.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && counter.count == prev + 1
+            }
+        }
+    }
+}

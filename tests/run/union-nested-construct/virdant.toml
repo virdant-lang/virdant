@@ -1,0 +1,5 @@
+[project]
+name = "union-nested-construct"
+
+[prog]
+top = "union-nested-construct::UnionNestedTest"

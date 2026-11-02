@@ -1,0 +1,5 @@
+[project]
+name = "literal-word1"
+
+[prog]
+top = "literal-word1::LiteralWord1Test"

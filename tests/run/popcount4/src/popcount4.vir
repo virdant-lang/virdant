@@ -1,0 +1,141 @@
+//! Self-checking `kind = "run"` test for population count of a
+//! 4-bit word via nested word/match.
+//!
+//! A `Popcount4` unit counts the set bits of a `Word[4]` by matching
+//! on the two high bits (`word(x[3], x[2])`) and, inside each arm, a
+//! nested match on the two low bits (`word(x[1], x[0])`).  A harness
+//! top walks all 16 inputs and asserts the count for each one; the
+//! simulator exits with code 0 only if all 16 checks passed, and 1
+//! otherwise.
+
+import virt
+
+//> Counts the set bits of a 4-bit word.
+//>
+//> The count is computed with a match on the two high bits of `x`,
+//> each arm of which contains a nested match on the two low bits.
+mod Popcount4 {
+    //> The 4-bit word whose set bits are counted.
+    incoming x : Word[4]
+
+    //> The two high bits of `x`, most-significant first.
+    wire high : Word[2] {
+        it := word(x[3], x[2])
+    }
+
+    //> The two low bits of `x`, most-significant first.
+    wire low : Word[2] {
+        it := word(x[1], x[0])
+    }
+
+    //> Number of set bits in `x`, 0 through 4.
+    outgoing count : Word[3] {
+        it := match high {
+            case 0 => match low {
+                case 0 => 0
+                case 1 => 1
+                case 2 => 1
+                case 3 => 2
+            }
+            case 1 => match low {
+                case 0 => 1
+                case 1 => 2
+                case 2 => 2
+                case 3 => 3
+            }
+            case 2 => match low {
+                case 0 => 1
+                case 1 => 2
+                case 2 => 2
+                case 3 => 3
+            }
+            case 3 => match low {
+                case 0 => 2
+                case 1 => 3
+                case 2 => 3
+                case 3 => 4
+            }
+        }
+    }
+}
+
+pub mod Popcount4Test for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all 16 inputs checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod popcount of Popcount4 {
+        it.x := index
+    }
+
+    //> The input currently under test, 0 through 15.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Rises the cycle after the last input (15) has been checked,
+    //> freezing `all_ok` so the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 15 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the cycle the input is under test.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && popcount.count == expected
+            }
+        }
+    }
+
+    //> High while an input is under test.
+    wire checking : Bit {
+        it := !finished
+    }
+
+    //> Golden population count for the input selected by `index`.
+    //> The 16 cases exactly cover `Word[4]`, so the match is
+    //> exhaustive.
+    wire expected : Word[3]
+
+    // Expected counts for inputs 0 through 15.
+    match index {
+        case 0 { expected := 0 }
+        case 1 { expected := 1 }
+        case 2 { expected := 1 }
+        case 3 { expected := 2 }
+        case 4 { expected := 1 }
+        case 5 { expected := 2 }
+        case 6 { expected := 2 }
+        case 7 { expected := 3 }
+        case 8 { expected := 1 }
+        case 9 { expected := 2 }
+        case 10 { expected := 2 }
+        case 11 { expected := 3 }
+        case 12 { expected := 2 }
+        case 13 { expected := 3 }
+        case 14 { expected := 3 }
+        case 15 { expected := 4 }
+    }
+}

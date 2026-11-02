@@ -1,0 +1,4 @@
+kind = "run"
+description = "Two instances of the same module with different wiring behave independently"
+cycle_limit = 20
+trace = false

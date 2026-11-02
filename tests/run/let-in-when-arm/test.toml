@@ -1,0 +1,4 @@
+kind = "run"
+description = "`let` as the body of a statement-level `when` arm"
+cycle_limit = 4
+trace = false

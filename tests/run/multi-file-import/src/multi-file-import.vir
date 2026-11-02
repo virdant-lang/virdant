@@ -1,0 +1,71 @@
+//! Self-checking `kind = "run"` test for multi-file imports: the
+//! `Counter` module lives in `counter.vir` (a separate package) and is
+//! instantiated here by its plain module name after `import counter`.
+//!
+//! The harness drives the imported `Counter` with `limit = 4` (so it
+//! cycles 0, 1, 2, 3, 4, 0, ...) for eight cycles, checks the count
+//! against a golden value every cycle, and exits with code 0 only if
+//! every check passed.
+
+import virt
+import counter
+
+pub mod MultiFileImportTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    // The module under test, imported from `counter.vir` and
+    // instantiated by its plain module name.
+    mod dut of Counter {
+        it.clock := clock
+        it.limit := 4
+    }
+
+    //> Cycles elapsed, 0 through 7.
+    reg cycle : Word[3] {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdict for the current cycle.
+    reg all_ok : Bit {
+        initial it <= true
+        it <= it && dut.count == expected
+    }
+
+    //> Rises one cycle after the last checked cycle, so that the exit
+    //> code sees the final `all_ok`.
+    reg finished : Bit {
+        initial it <= false
+        when {
+            case cycle == 7 {
+                it <= true
+            }
+        }
+    }
+
+    //> Golden count for each cycle: `cycle` while counting up 0..4,
+    //> then wrapping back to 0 once the counter reached `limit`.
+    wire expected : Word[4]
+
+    match cycle {
+        case 0 { expected := 0 }
+        case 1 { expected := 1 }
+        case 2 { expected := 2 }
+        case 3 { expected := 3 }
+        case 4 { expected := 4 }
+        case 5 { expected := 0 }
+        case 6 { expected := 1 }
+        case 7 { expected := 2 }
+    }
+}

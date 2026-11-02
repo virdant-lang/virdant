@@ -1,0 +1,105 @@
+//! Self-checking `kind = "run"` test for `mux(sel, a, b)` on `Bit`s.
+//!
+//! Two operand wires with distinct values (`a = true`, `b = false`)
+//! are selected under both `sel` values, so a swapped-argument bug
+//! would be caught.  Each selection is checked both against the
+//! golden operand form and against its literal expected `Bit`, and
+//! the swapped operand order `mux(sel, b, a)` is checked too.  Every
+//! check is folded into a running `all_ok`; the simulator exits with
+//! code 0 only if every check passed, and 1 otherwise.
+
+import virt
+
+pub mod MuxBitTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every `mux()` check passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> The two `sel` values under test.
+    wire sel_true : Bit {
+        it := true
+    }
+
+    //> The two `sel` values under test.
+    wire sel_false : Bit {
+        it := false
+    }
+
+    //> First operand.  Chosen distinct from `b` so that a swapped
+    //> argument would be caught.
+    wire a : Bit {
+        it := true
+    }
+
+    //> Second operand.
+    wire b : Bit {
+        it := false
+    }
+
+    //> `mux(sel, a, b)` must return `a` when `sel` is true.
+    wire ok_sel_true_picks_a : Bit {
+        it := mux(sel_true, a, b) == a
+    }
+
+    //> `mux(sel, a, b)` must return `b` when `sel` is false.
+    wire ok_sel_false_picks_b : Bit {
+        it := mux(sel_false, a, b) == b
+    }
+
+    //> `mux(true, a, b)` must be the literal `true` (`a`).
+    wire ok_sel_true_literal : Bit {
+        it := mux(sel_true, a, b) == true
+    }
+
+    //> `mux(false, a, b)` must be the literal `false` (`b`).
+    wire ok_sel_false_literal : Bit {
+        it := mux(sel_false, a, b) == false
+    }
+
+    //> Literal `sel` must work as well as a wire `sel`.
+    wire ok_const_sel_true : Bit {
+        it := mux(true, a, b) == a
+    }
+
+    //> Literal `sel` must work as well as a wire `sel`.
+    wire ok_const_sel_false : Bit {
+        it := mux(false, a, b) == b
+    }
+
+    //> Swapped operand order: `mux(sel, b, a)` must return `b` when
+    //> `sel` is true.
+    wire ok_swapped_sel_true : Bit {
+        it := mux(sel_true, b, a) == b
+    }
+
+    //> Swapped operand order: `mux(sel, b, a)` must return `a` when
+    //> `sel` is false.
+    wire ok_swapped_sel_false : Bit {
+        it := mux(sel_false, b, a) == a
+    }
+
+    //> Running AND of every check so far.  Power-on true; the check
+    //> verdicts fold in on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && ok_sel_true_picks_a && ok_sel_false_picks_b
+            && ok_sel_true_literal && ok_sel_false_literal
+            && ok_const_sel_true && ok_const_sel_false
+            && ok_swapped_sel_true && ok_swapped_sel_false
+    }
+
+    //> Rises on the first clock edge, so that `exit` never observes
+    //> the vacuous power-on `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

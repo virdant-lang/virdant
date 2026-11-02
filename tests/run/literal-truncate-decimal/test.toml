@@ -1,0 +1,4 @@
+kind = "run"
+description = "Decimal literals whose values fit the inferred width: 15 fits Word[4]; 16 doesn't and is a compile error (DoesntFit), so the fitting values are asserted"
+cycle_limit = 3
+trace = false

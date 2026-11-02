@@ -1,0 +1,199 @@
+//! Self-checking `kind = "run"` test for a wide enum: more than eight
+//! variants living on a `Word[8]` backing.
+//!
+//! A ten-variant `Opcode` enum, every enumerant pinned to an 8-bit
+//! value, is cast down to `Word[8]` and each variant's bit pattern is
+//! compared against its declared encoding.  The round trip is checked
+//! the other way too: selected `Word[8]` patterns are cast back into
+//! the enum and matched, so a cast bug that aliases one variant onto
+//! another cannot hide.  Every verdict is folded into a running
+//! `all_ok`; the simulator exits with code 0 only if all checks
+//! passed, and 1 otherwise.
+
+import virt
+
+//> A ten-variant opcode: more enumerants than fit in three bits, so
+//> the backing must be at least `Word[4]`; the explicit `w8` values
+//> pin the backing at `Word[8]`.  `Halt` sits at a sparse encoding
+//> far away from the sequential block, so a pattern-mangling cast
+//> cannot alias it onto a neighbor.
+enum type Opcode {
+    Nop   = 0w8
+    Load  = 1w8
+    Store = 2w8
+    Add   = 3w8
+    Sub   = 4w8
+    And   = 5w8
+    Or    = 6w8
+    Xor   = 7w8
+    Shift = 8w8
+    Halt  = 200w8
+}
+
+pub mod EnumWideTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Each enum variant, bound to a typed wire so the variant's
+    //> type is known.
+    wire op_nop : Opcode {
+        it := #Nop
+    }
+
+    wire op_load : Opcode {
+        it := #Load
+    }
+
+    wire op_store : Opcode {
+        it := #Store
+    }
+
+    wire op_add : Opcode {
+        it := #Add
+    }
+
+    wire op_sub : Opcode {
+        it := #Sub
+    }
+
+    wire op_and : Opcode {
+        it := #And
+    }
+
+    wire op_or : Opcode {
+        it := #Or
+    }
+
+    wire op_xor : Opcode {
+        it := #Xor
+    }
+
+    wire op_shift : Opcode {
+        it := #Shift
+    }
+
+    wire op_halt : Opcode {
+        it := #Halt
+    }
+
+    //> `cast()` of each variant down to its underlying `Word[8]`, the
+    //> width every enumerant was declared with.
+    wire nop_bits : Word[8] {
+        it := cast(op_nop)
+    }
+
+    wire load_bits : Word[8] {
+        it := cast(op_load)
+    }
+
+    wire store_bits : Word[8] {
+        it := cast(op_store)
+    }
+
+    wire add_bits : Word[8] {
+        it := cast(op_add)
+    }
+
+    wire sub_bits : Word[8] {
+        it := cast(op_sub)
+    }
+
+    wire and_bits : Word[8] {
+        it := cast(op_and)
+    }
+
+    wire or_bits : Word[8] {
+        it := cast(op_or)
+    }
+
+    wire xor_bits : Word[8] {
+        it := cast(op_xor)
+    }
+
+    wire shift_bits : Word[8] {
+        it := cast(op_shift)
+    }
+
+    wire halt_bits : Word[8] {
+        it := cast(op_halt)
+    }
+
+    //> Every cast must produce the variant's declared 8-bit pattern.
+    wire forward_ok : Bit {
+        it := nop_bits == 0
+            && load_bits == 1
+            && store_bits == 2
+            && add_bits == 3
+            && sub_bits == 4
+            && and_bits == 5
+            && or_bits == 6
+            && xor_bits == 7
+            && shift_bits == 8
+            && halt_bits == 200
+    }
+
+    //> Casting the sparse `Halt` encoding back up must decode to
+    //> `#Halt` and to nothing else, so the full ten-arm match has no
+    //> `else` arm to catch mistakes.
+    wire halt_roundtrip : Bit {
+        it := match cast(200w8 : Word[8]) : Opcode {
+            case #Nop   => false
+            case #Load  => false
+            case #Store => false
+            case #Add   => false
+            case #Sub   => false
+            case #And   => false
+            case #Or    => false
+            case #Xor   => false
+            case #Shift => false
+            case #Halt  => true
+        }
+    }
+
+    //> Casting the top of the sequential block back up must decode to
+    //> `#Shift`, the variant whose encoding is `8w8`.
+    wire shift_roundtrip : Bit {
+        it := match cast(8w8 : Word[8]) : Opcode {
+            case #Nop   => false
+            case #Load  => false
+            case #Store => false
+            case #Add   => false
+            case #Sub   => false
+            case #And   => false
+            case #Or    => false
+            case #Xor   => false
+            case #Shift => true
+            case #Halt  => false
+        }
+    }
+
+    //> All checks must hold.
+    wire checks_ok : Bit {
+        it := forward_ok
+            && halt_roundtrip
+            && shift_roundtrip
+    }
+
+    //> Running AND of every check.  Power-on true; the checks fold in
+    //> on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && checks_ok
+    }
+
+    //> Rises on the first clock edge, after the checks are folded
+    //> into `all_ok`, so the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

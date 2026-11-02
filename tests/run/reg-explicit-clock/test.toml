@@ -1,0 +1,4 @@
+kind = "run"
+description = "A reg explicitly clocked by asclock(bit) from a Bit advances once per rising edge of that Bit, in two derived domains"
+cycle_limit = 24
+trace = false

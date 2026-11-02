@@ -1,0 +1,135 @@
+//! Self-checking `kind = "run"` test for statement-level `when` arm
+//! ordering semantics.
+//!
+//! A `WhenOrder` unit drives two outputs from a statement-level `when`
+//! whose two `case` arms overlap: with `a` and `b` both high, both arms
+//! match, and only the FIRST arm fires.  The harness walks all four
+//! `(a, b)` vectors, compares `sel` and `tag` against golden values,
+//! ANDs every verdict into a running `all_ok`, and exits with code 0
+//! only if all 4 vectors passed, and 1 otherwise.
+
+import virt
+
+//> Statement-level `when` with two overlapping case arms.
+//>
+//> Arms are evaluated in order; the first matching arm fires and the
+//> remaining arms are skipped.  With `a` and `b` both high, both `case`
+//> arms match, but only the first arm's body runs: `sel` becomes 1 and
+//> `tag` becomes true.  The `else` arm fires only when neither `a` nor
+//> `b` is high.
+mod WhenOrder {
+    //> First condition: its arm comes first in the `when`.
+    incoming a : Bit
+
+    //> Second condition: its arm also matches when `a` is high.
+    incoming b : Bit
+
+    //> Which arm fired: 1 for the first arm, 2 for the second, 0 for
+    //> `else`.  Both-high must read 1 — the first arm's value.
+    outgoing sel : Word[2]
+
+    //> Mirrors the first arm only: true if (and only if) the first arm
+    //> fired, false from the second arm and from `else`.
+    outgoing tag : Bit
+
+    when {
+        case a {
+            sel := 1
+            tag := true
+        }
+        case b {
+            sel := 2
+            tag := false
+        }
+        else {
+            sel := 0
+            tag := false
+        }
+    }
+}
+
+pub mod StmtWhenOrderTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all 4 vectors checked out; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod dut of WhenOrder {
+        it.a := a
+        it.b := b
+    }
+
+    //> First condition under test this cycle: high bit of `index`.
+    wire a : Bit {
+        it := index[1]
+    }
+
+    //> Second condition under test this cycle: low bit of `index`.
+    wire b : Bit {
+        it := index[0]
+    }
+
+    //> Index of the vector under test, cycling 0 through 3.
+    reg index : Word[2] on clock {
+        initial it <= 0
+        it <= index + 1
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdicts in on the cycle its vector is on the inputs.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && (dut.sel == expected_sel) && (dut.tag == expected_tag)
+    }
+
+    //> Golden `sel` for the vector under test.  Vector 3 (`a` and `b`
+    //> both high) is the ordering assertion: the first arm's value 1,
+    //> not the second arm's value 2.
+    wire expected_sel : Word[2]
+
+    //> Golden `tag` for the vector under test.
+    wire expected_tag : Bit
+
+    match index {
+        case 0 {
+            expected_sel := 0
+            expected_tag := false
+        }
+        case 1 {
+            expected_sel := 2
+            expected_tag := false
+        }
+        case 2 {
+            expected_sel := 1
+            expected_tag := true
+        }
+        case 3 {
+            expected_sel := 1
+            expected_tag := true
+        }
+    }
+
+    //> Number of vectors checked so far, 0 through 4.  Holds at 4 so
+    //> that `finished` stays high.
+    reg checked : Word[3] on clock {
+        initial it <= 0
+        when {
+            case checked != 4 {
+                it <= checked + 1
+            }
+        }
+    }
+
+    //> Rises once all 4 vectors have been checked, so that the exit
+    //> code sees the final `all_ok`.
+    wire finished : Bit {
+        it := checked == 4
+    }
+}

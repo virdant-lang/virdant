@@ -1,0 +1,70 @@
+//! Self-checking `kind = "run"` test for double negation on `Bit`.
+//!
+//! `!!x` applied twice to a wire must round-trip back to `x`.  Both
+//! constant wire vectors (`true` and `false`, exhausting the `Bit`
+//! domain) are checked combinationally and folded into a running
+//! `all_ok`; the simulator exits with code 0 only if every check
+//! passed, and 1 otherwise.
+
+import virt
+
+pub mod BitDoubleNegation for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every round-trip check passed; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Wire vector under test: the constant `true`.
+    wire x_true : Bit {
+        it := true
+    }
+
+    //> Wire vector under test: the constant `false`.
+    wire x_false : Bit {
+        it := false
+    }
+
+    //> `!!x` must equal `x` for the `true` vector.
+    wire ok_true : Bit {
+        it := !!x_true == x_true
+    }
+
+    //> `!!x` must equal `x` for the `false` vector.
+    wire ok_false : Bit {
+        it := !!x_false == x_false
+    }
+
+    //> Double negation of an explicit `!true` must round-trip to
+    //> `false` (i.e. `!!(!true) == !true`).
+    wire ok_negated_true : Bit {
+        it := !!(!true) == !true
+    }
+
+    //> Double negation of an explicit `!false` must round-trip to
+    //> `true` (i.e. `!!(!false) == !false`).
+    wire ok_negated_false : Bit {
+        it := !!(!false) == !false
+    }
+
+    //> Running AND of every check so far.  Power-on true; the check
+    //> verdicts fold in on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && ok_true && ok_false && ok_negated_true && ok_negated_false
+    }
+
+    //> Rises on the first clock edge, so that `exit` never observes
+    //> the vacuous power-on `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

@@ -1,0 +1,123 @@
+//! Nested slices: `x[8..2][3..1]`.  The top slice index is exclusive
+//! at each level: the inner slice `x[8..2]` of a `Word[8]` is a
+//! `Word[6]` holding bits 7..2 of the input, and the outer slice
+//! `[3..1]` takes bits 3..1 of that intermediate (also with an
+//! exclusive top), giving a `Word[2]` holding original bits 4..3.
+//! The fixed vector `0b10110101` yields intermediate `0b101101` and
+//! nested-slice result `0b10`, values that differ from the
+//! neighbouring inclusive-top (`[3..0]`) and retained-bit readings, so
+//! a wrong bound convention or a wrong level offset cannot pass by
+//! accident.  Every check is ANDed into a running `all_ok`; the
+//! simulator exits with code 0 only if all checks passed, and 1
+//! otherwise.
+
+import virt
+
+pub mod SliceOfSliceTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every slice check passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Fixed test vector: bits 4..3 are `1`, `0` while the
+    //> surrounding bits differ, so the nested-slice result `0b10`
+    //> cannot be confused with a mis-bound or mis-offset slice.
+    wire x : Word[8] {
+        it := 0b10110101
+    }
+
+    //> The inner slice under test: `Word[6]`, bits 7..2 of `x`.
+    wire inner : Word[6] {
+        it := x[8..2]
+    }
+
+    //> The nested slice under test: `Word[2]`, bits 3..1 of `inner`
+    //> (exclusive top), that is original bits 4..3 of `x`.
+    wire sliced : Word[2] {
+        it := x[8..2][3..1]
+    }
+
+    //> The nested slice must agree with slicing the intermediate wire
+    //> in two steps: `inner[3..1]`.
+    wire check_two_step : Bit {
+        it := sliced == inner[3..1]
+    }
+
+    //> Golden value: the intermediate `inner` is bits 7..2 of
+    //> `0b10110101` reassembled by hand, and its bits 2..1 (the
+    //> nested-slice bits) are `1`, `0`.
+    wire check_golden_inner : Bit {
+        it := inner == 0b101101
+    }
+
+    //> Per-bit identity for the inner slice: `inner` bit `i` must be
+    //> the corresponding original bit `x[7 - i]`, in order, with no
+    //> reversal and no shift between the levels.
+    wire check_perbit_inner : Bit {
+        it := inner == word(x[7], x[6], x[5], x[4], x[3], x[2])
+    }
+
+    //> Golden value for the nested slice: original bits 4..3 of the
+    //> vector, reassembled by hand.
+    wire check_golden_sliced : Bit {
+        it := sliced == 0b10
+    }
+
+    //> Per-bit identity: nested-slice bit `i` must be the
+    //> corresponding original bit (`x[4]`, `x[3]`), in order, with no
+    //> reversal and no off-by-one between the levels.
+    wire check_perbit_sliced : Bit {
+        it := sliced == word(x[4], x[3])
+    }
+
+    //> The outer top index is exclusive: a wrong inclusive-top bound
+    //> would yield `inner[3..2]` (`0b11`), which must not be the
+    //> result.
+    wire check_outer_exclusive : Bit {
+        it := sliced != 0b11
+    }
+
+    //> The outer bottom index must be 1: the one-window-down
+    //> neighbor `inner[2..0]` (`0b01`) must not be the result.
+    wire check_not_shifted : Bit {
+        it := sliced != inner[2..0]
+    }
+
+    //> The inner top index is exclusive: bits 1..0 of `x` must be
+    //> dropped by `x[8..2]`, so the LSB of `inner` is `x[2]`, not
+    //> `x[1]` (which the shifted `x[8..1]` reading would give).
+    wire check_inner_exclusive : Bit {
+        it := inner[0] == x[2]
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdicts.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check_two_step && check_golden_inner && check_perbit_inner && check_golden_sliced && check_perbit_sliced && check_outer_exclusive && check_not_shifted && check_inner_exclusive
+    }
+
+    //> Cycle counter used to time the exit.
+    reg count : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Rises one cycle after the last cycle is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case count == 3 {
+                it <= true
+            }
+        }
+    }
+}

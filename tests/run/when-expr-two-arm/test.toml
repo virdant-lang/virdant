@@ -1,0 +1,4 @@
+kind = "run"
+description = "a two-arm `when` used as an expression on the right-hand side of a driver, with both branches asserted"
+cycle_limit = 12
+trace = false

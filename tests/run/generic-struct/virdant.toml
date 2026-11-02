@@ -1,0 +1,5 @@
+[project]
+name = "generic-struct"
+
+[prog]
+top = "generic-struct::Top"

@@ -1,0 +1,4 @@
+kind = "run"
+description = "wire driver-block form (`wire w : T { it := expr }`) vs bare form (`w := expr`) for the same logic: both forms produce identical results"
+cycle_limit = 5
+trace = false

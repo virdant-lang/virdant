@@ -1,0 +1,121 @@
+//! Self-checking `kind = "run"` test for instantiating two different
+//! modules in one parent.
+//!
+//! The harness owns `AddStep` and `DoubleStep`, two distinct child
+//! modules, and clocks both from the same top-level clock.  On every
+//! checked cycle after power-on, the first child advances by one and
+//! the second advances by two.  The test therefore checks not only
+//! that both module instances work, but that their separate logic and
+//! wiring stay independent.
+
+import virt
+
+//> A child module whose state advances by one on every clock edge.
+mod AddStep {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Current count.
+    outgoing count : Word[8]
+
+    reg value : Word[8] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    count := value
+}
+
+//> A distinct child module whose state advances by two on every clock edge.
+mod DoubleStep {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Current count.
+    outgoing count : Word[8]
+
+    reg value : Word[8] on clock {
+        initial it <= 0
+        it <= it + 2
+    }
+
+    count := value
+}
+
+pub mod ModTwoModsTest for virt::Virt {
+    //> Primary clock shared by both child instances.
+    incoming clock : Clock {
+        adder.clock := it
+        doubler.clock := it
+    }
+
+    //> First, distinct child module.
+    mod adder of AddStep
+
+    //> Second, distinct child module.
+    mod doubler of DoubleStep
+
+    //> `@Valid(0)` after the last cycle checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Number of elapsed cycles.
+    reg cycle_num : Word[5] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Value of `adder.count` on the previous cycle.
+    reg prev_adder : Word[8] on clock {
+        initial it <= 0
+        it <= adder.count
+    }
+
+    //> Value of `doubler.count` on the previous cycle.
+    reg prev_doubler : Word[8] on clock {
+        initial it <= 0
+        it <= doubler.count
+    }
+
+    //> False on cycle 0, where the previous values have not yet been
+    //> sampled.
+    reg started : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> This cycle's check: the two different children changed by
+    //> their own increments since the previous cycle.
+    wire check_ok : Bit {
+        it := (adder.count == prev_adder + 1) &&
+            (doubler.count == prev_doubler + 2)
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> after the first folds its verdict in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case started {
+                it <= it && check_ok
+            }
+        }
+    }
+
+    //> Rises one cycle after the last check, so that the exit code
+    //> sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case cycle_num == 8 {
+                it <= true
+            }
+        }
+    }
+}

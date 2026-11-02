@@ -1,0 +1,94 @@
+// A `kind = "run"` test comparing a slice of one word with a slice of
+// another: `a[4..1] == b[4..1]` and `a[8..4] < b[8..4]`, over both
+// equal and unequal vectors.  Slice top indices are exclusive, so
+// `a[4..1]` is bits 3, 2, 1 (a `Word[3]`) and `a[8..4]` is bits 7..4
+// (a `Word[4]`).  The simulator exits with code 0 only if every check
+// passes.
+
+import virt
+
+pub mod SliceCompareTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Equal vectors in the compared slice: bits 3..1 of both words
+    //> are 0b101, but the words differ elsewhere (bit 4).
+    wire a0 : Word[8] {
+        it := 0b0001_1010
+    }
+
+    wire b0 : Word[8] {
+        it := 0b0000_1010
+    }
+
+    //> Unequal vectors in the compared slice: bits 3..1 are 0b101 vs
+    //> 0b100.
+    wire a1 : Word[8] {
+        it := 0b0001_1010
+    }
+
+    wire b1 : Word[8] {
+        it := 0b0001_1000
+    }
+
+    //> Upper nibbles 2 vs 4, so `a2[8..4] < b2[8..4]` holds.
+    wire a2 : Word[8] {
+        it := 0b0010_0000
+    }
+
+    wire b2 : Word[8] {
+        it := 0b0100_0000
+    }
+
+    //> Upper nibbles 4 vs 2, so `a3[8..4] < b3[8..4]` fails.
+    wire a3 : Word[8] {
+        it := 0b0100_0000
+    }
+
+    wire b3 : Word[8] {
+        it := 0b0010_0000
+    }
+
+    //> Slices of equal vectors compare equal.
+    wire check_eq_equal : Bit {
+        it := a0[4..1] == b0[4..1]
+    }
+
+    //> Slices of unequal vectors do not compare equal.
+    wire check_eq_unequal : Bit {
+        it := !(a1[4..1] == b1[4..1])
+    }
+
+    //> The `<` comparison holds on this vector.
+    wire check_lt_true : Bit {
+        it := a2[8..4] < b2[8..4]
+    }
+
+    //> The `<` comparison fails on this vector.
+    wire check_lt_false : Bit {
+        it := !(a3[8..4] < b3[8..4])
+    }
+
+    //> Golden slice values: a mis-computed slice (off-by-one at the
+    //> exclusive top index, wrong width, etc.) cannot slip through.
+    //> `a0` is 0b00011010, so `a0[4..1]` is bits 3..1 = 0b101 and
+    //> `a0[8..4]` is bits 7..4 = 0b0001.
+    wire check_slice_value : Bit {
+        it := a0[4..1] == 0b101 && a0[8..4] == 0b0001
+    }
+
+    //> AND of every check: true only if all slices compared as
+    //> expected.
+    wire success_wire : Bit {
+        it := check_eq_equal && check_eq_unequal && check_lt_true && check_lt_false && check_slice_value
+    }
+
+    let ok = success_wire when {
+        case ok {
+            exit := @Valid(0)
+        }
+        else {
+            exit := @Invalid()
+        }
+    }
+}

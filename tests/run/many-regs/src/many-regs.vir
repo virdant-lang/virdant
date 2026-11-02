@@ -1,0 +1,181 @@
+// A self-checking `kind = "run"` test for codegen fan-out of
+// always-blocks: sixteen registers in one module, all driven from a
+// single statement `when` block.  Each register starts at its own
+// initial value (0 through 15) and advances by its own distinct
+// increment (1 through 16) on every enabled cycle, so after N enabled
+// cycles register `ri` reads `i + N * (i+1)` (mod 256).  The bank is
+// checked at two checkpoints, cycles 5 and 15, against hand-computed
+// golden values; every verdict is folded into a running `all_ok`, and
+// the simulator exits with code 0 only if both checkpoints passed.
+
+import virt
+
+pub mod ManyRegsTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once both checkpoints have passed; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case cycle == 16 => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Cycles elapsed, 0 through 16.  Stops at 16 so `exit` goes
+    //> `@Valid` and the bank under test stays frozen at its final
+    //> values.
+    reg cycle : Word[5] on clock {
+        initial it <= 0
+        when {
+            case cycle < 16 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> High while the bank under test is still counting: falls at
+    //> cycle 15, so the register values checked on that cycle hold.
+    wire run : Bit {
+        it := cycle < 15
+    }
+
+    //> Register 0 of the bank: starts at 0, +1 per enabled cycle.
+    reg r0 : Word[8] on clock {
+        initial it <= 0
+    }
+
+    //> Register 1 of the bank: starts at 1, +2 per enabled cycle.
+    reg r1 : Word[8] on clock {
+        initial it <= 1
+    }
+
+    //> Register 2 of the bank: starts at 2, +3 per enabled cycle.
+    reg r2 : Word[8] on clock {
+        initial it <= 2
+    }
+
+    //> Register 3 of the bank: starts at 3, +4 per enabled cycle.
+    reg r3 : Word[8] on clock {
+        initial it <= 3
+    }
+
+    //> Register 4 of the bank: starts at 4, +5 per enabled cycle.
+    reg r4 : Word[8] on clock {
+        initial it <= 4
+    }
+
+    //> Register 5 of the bank: starts at 5, +6 per enabled cycle.
+    reg r5 : Word[8] on clock {
+        initial it <= 5
+    }
+
+    //> Register 6 of the bank: starts at 6, +7 per enabled cycle.
+    reg r6 : Word[8] on clock {
+        initial it <= 6
+    }
+
+    //> Register 7 of the bank: starts at 7, +8 per enabled cycle.
+    reg r7 : Word[8] on clock {
+        initial it <= 7
+    }
+
+    //> Register 8 of the bank: starts at 8, +9 per enabled cycle.
+    reg r8 : Word[8] on clock {
+        initial it <= 8
+    }
+
+    //> Register 9 of the bank: starts at 9, +10 per enabled cycle.
+    reg r9 : Word[8] on clock {
+        initial it <= 9
+    }
+
+    //> Register 10 of the bank: starts at 10, +11 per enabled cycle.
+    reg r10 : Word[8] on clock {
+        initial it <= 10
+    }
+
+    //> Register 11 of the bank: starts at 11, +12 per enabled cycle.
+    reg r11 : Word[8] on clock {
+        initial it <= 11
+    }
+
+    //> Register 12 of the bank: starts at 12, +13 per enabled cycle.
+    reg r12 : Word[8] on clock {
+        initial it <= 12
+    }
+
+    //> Register 13 of the bank: starts at 13, +14 per enabled cycle.
+    reg r13 : Word[8] on clock {
+        initial it <= 13
+    }
+
+    //> Register 14 of the bank: starts at 14, +15 per enabled cycle.
+    reg r14 : Word[8] on clock {
+        initial it <= 14
+    }
+
+    //> Register 15 of the bank: starts at 15, +16 per enabled cycle.
+    reg r15 : Word[8] on clock {
+        initial it <= 15
+    }
+
+    // The sixteen registers under test, driven from this one
+    // statement `when` block.  Each enabled cycle, every register
+    // advances by its own distinct increment; on any other cycle no
+    // arm matches and every register holds.
+    when {
+        case run {
+            r0 <= r0 + 1
+            r1 <= r1 + 2
+            r2 <= r2 + 3
+            r3 <= r3 + 4
+            r4 <= r4 + 5
+            r5 <= r5 + 6
+            r6 <= r6 + 7
+            r7 <= r7 + 8
+            r8 <= r8 + 9
+            r9 <= r9 + 10
+            r10 <= r10 + 11
+            r11 <= r11 + 12
+            r12 <= r12 + 13
+            r13 <= r13 + 14
+            r14 <= r14 + 15
+            r15 <= r15 + 16
+        }
+    }
+
+    //> Golden check of the whole bank at each checkpoint.  After N
+    //> enabled cycles register `ri` reads `i + N * (i+1)`: 5 gives
+    //> 5, 11, 17, ... 95 and 15 gives 15, 31, 47, ... 255.  (No
+    //> multiplication in the language, so the golden values are
+    //> spelled out.)  True on every non-checkpoint cycle.
+    wire checks : Bit {
+        when {
+            case cycle == 5 {
+                it := r0 == 5 && r1 == 11 && r2 == 17 && r3 == 23
+                    && r4 == 29 && r5 == 35 && r6 == 41 && r7 == 47
+                    && r8 == 53 && r9 == 59 && r10 == 65 && r11 == 71
+                    && r12 == 77 && r13 == 83 && r14 == 89 && r15 == 95
+            }
+            case cycle == 15 {
+                it := r0 == 15 && r1 == 31 && r2 == 47 && r3 == 63
+                    && r4 == 79 && r5 == 95 && r6 == 111 && r7 == 127
+                    && r8 == 143 && r9 == 159 && r10 == 175 && r11 == 191
+                    && r12 == 207 && r13 == 223 && r14 == 239 && r15 == 255
+            }
+            else {
+                it := true
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each
+    //> checkpoint's verdict folds in on the clock edge after it.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && checks
+    }
+}

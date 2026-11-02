@@ -1,0 +1,3 @@
+kind = "run"
+description = "Toggle flop: a register that flips every cycle, asserted as a period-2 square wave"
+cycle_limit = 24

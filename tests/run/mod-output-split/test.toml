@@ -1,0 +1,4 @@
+kind = "run"
+description = "Child output consumed by both a parent output and a parent register agree"
+cycle_limit = 20
+trace = false

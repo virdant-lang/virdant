@@ -1,0 +1,147 @@
+//! Self-checking `kind = "run"` test for two sockets of the same type
+//! in one module, wired to different peers.
+//!
+//! The harness module `Stim` declares two `Link` sockets, `inp` and
+//! `out`, and wires each to its own server peer: `inp` to `peer_a`
+//! (answers `req + 1`) and `out` to `peer_b` (answers `req + 2`).
+//! The two request streams are kept 100 apart on every cycle, so a
+//! crossed wire or a leaked value can never coincide with the
+//! expected one.  The harness asserts on every checked cycle that
+//! each response returns through its own socket with only its own
+//! peer's transform applied, and that the two responses differ --
+//! i.e. data driven on one socket never appears on the other.
+
+import virt
+
+//> Request/response socket: the client drives `req`, the server
+//> answers with `rsp`.
+socket Link {
+    cosi req : Word[8]
+    soci rsp : Word[8]
+}
+
+//> First peer: answers every request with `req + 1`.
+mod PeerPlusOne {
+    server socket link of Link {
+        it.rsp := it.req + 1w8
+    }
+}
+
+//> Second peer: answers every request with `req + 2`.
+mod PeerPlusTwo {
+    server socket link of Link {
+        it.rsp := it.req + 2w8
+    }
+}
+
+//> Self-checking harness: owns two sockets of the same type, `inp`
+//> and `out`, wired to two different peers.
+mod Stim {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once every cycle's checks have passed;
+    //> `@Valid(1)` if any check failed.  While `@Invalid()`, the
+    //> simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case done => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> First of the two same-type sockets; wired to `peer_a`.
+    client socket inp of Link {
+        it.req := req_a
+    }
+
+    //> Second of the two same-type sockets; wired to `peer_b`.
+    client socket out of Link {
+        it.req := req_b
+    }
+
+    //> Request driven on the `inp` socket, advancing every cycle.
+    reg req_a : Word[8] on clock {
+        initial it <= 0
+        it <= it + 1w8
+    }
+
+    //> Request driven on the `out` socket: always exactly 100 away
+    //> from `req_a`, so no value ever appears on both sockets.
+    wire req_b : Word[8] {
+        it := req_a + 100w8
+    }
+
+    //> The `inp` response must be `peer_a`'s transform of `inp.req`
+    //> and nothing else; a crossed wire would return
+    //> `req_a + 2w8` instead.
+    wire inp_ok : Bit {
+        it := inp.rsp == req_a + 1w8
+    }
+
+    //> The `out` response must be `peer_b`'s transform of `out.req`
+    //> and nothing else; a crossed wire would return
+    //> `req_b + 1w8` instead.
+    wire out_ok : Bit {
+        it := out.rsp == req_b + 2w8
+    }
+
+    //> No cross-talk: data on one socket must not appear on the
+    //> other, so the two responses must always differ.
+    wire no_crosstalk : Bit {
+        it := inp.rsp != out.rsp
+    }
+
+    //> Cycles elapsed since reset, 0 through 31.
+    reg cycles : Word[5] on clock {
+        initial it <= 0
+        it <= it + 1w5
+    }
+
+    //> Rises once 24 cycles have been checked; freezes `all_ok` and
+    //> lets `exit` become `@Valid`.
+    reg done : Bit on clock {
+        initial it <= false
+        when {
+            case cycles == 24w5 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds all three verdicts in until `done`.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !done {
+                it <= it && inp_ok && out_ok && no_crosstalk
+            }
+        }
+    }
+}
+
+pub mod SocketTwoSameTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Forwards the verdict computed by the harness.
+    outgoing exit : Valid[Word[8]] {
+        it := stim.exit
+    }
+
+    mod stim of Stim {
+        it.clock := clock
+    }
+
+    //> First peer, bulk-connected to the harness's `inp` socket.
+    mod peer_a of PeerPlusOne
+
+    //> Second peer, bulk-connected to the harness's `out` socket.
+    mod peer_b of PeerPlusTwo
+
+    // The two same-type sockets cross to their own peers through two
+    // bulk connects; crossing either pair would fail the checks.
+    stim.inp :=: peer_a.link
+    stim.out :=: peer_b.link
+}

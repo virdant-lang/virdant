@@ -1,0 +1,4 @@
+kind = "run"
+description = "`&`/`|`/`^` on Word[8] operands driven by the testbench: all-zeros, all-ones, complementary, and mixed patterns"
+cycle_limit = 16
+trace = false

@@ -1,0 +1,5 @@
+[project]
+name = "two-phase-handshake"
+
+[prog]
+top = "two-phase-handshake::TwoPhaseTest"

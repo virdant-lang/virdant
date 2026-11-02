@@ -1,0 +1,3 @@
+kind = "run"
+description = "Register with an intermittent `when` driver holds its value on unmatched cycles"
+cycle_limit = 24

@@ -1,0 +1,4 @@
+kind = "run"
+description = "4-entry quarter-wave sine LUT selected by 2-bit index via match"
+cycle_limit = 6
+trace = false

@@ -1,0 +1,3 @@
+kind = "run"
+description = "Stream splitter: demuxes one Pipe input stream to two outputs by a header route bit; asserts each item lands on exactly the right output and nothing is dropped"
+cycle_limit = 32

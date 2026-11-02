@@ -1,0 +1,164 @@
+//! Self-checking `kind = "run"` test for a 4-slot memory built from
+//! four `Word[8]` registers with a 2-bit address decoded by `match`
+//! (the fifo's write-decode pattern, generalized).  The harness writes
+//! a distinct value to each slot, reads it back, and ANDs every
+//! readback comparison into `all_ok`; the simulator exits with code 0
+//! only if all four slots checked out, and 1 otherwise.
+
+import virt
+
+//> 4-slot memory: one `Word[8]` register per slot, addressed by a
+//> 2-bit address.  Writes decode the address with a statement-level
+//> `match` (the fifo write-decode pattern); reads decode it with an
+//> expression-level `match`.
+mod MemSlicedRegs {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Slot address, used by both the write path and the read path.
+    incoming addr : Word[2]
+
+    //> Data written into the addressed slot while `write` is high.
+    incoming wdata : Word[8]
+
+    //> Write strobe: when high, `wdata` goes into the addressed slot.
+    incoming write : Bit
+
+    //> Current contents of the addressed slot.
+    outgoing rdata : Word[8] {
+        it := match addr {
+            case 0 => slot0
+            case 1 => slot1
+            case 2 => slot2
+            case 3 => slot3
+        }
+    }
+
+    reg slot0 : Word[8] on clock {
+        initial it <= 0
+        when {
+            case write match addr {
+                case 0 {
+                    it <= wdata
+                }
+            }
+        }
+    }
+
+    reg slot1 : Word[8] on clock {
+        initial it <= 0
+        when {
+            case write match addr {
+                case 1 {
+                    it <= wdata
+                }
+            }
+        }
+    }
+
+    reg slot2 : Word[8] on clock {
+        initial it <= 0
+        when {
+            case write match addr {
+                case 2 {
+                    it <= wdata
+                }
+            }
+        }
+    }
+
+    reg slot3 : Word[8] on clock {
+        initial it <= 0
+        when {
+            case write match addr {
+                case 3 {
+                    it <= wdata
+                }
+            }
+        }
+    }
+}
+
+pub mod MemSlicedRegsTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every slot checked out; `@Valid(1)` if any
+    //> readback mismatched.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod mem of MemSlicedRegs {
+        it.clock := clock
+        it.addr := slot
+        it.wdata := value
+        it.write := writing
+    }
+
+    //> Step counter, 0 through 7: two steps per slot.  Even steps
+    //> assert the write strobe; odd steps read the just-written slot
+    //> back and check it.  `slot` is `step[3..1]`, `writing` is
+    //> `!step[0]`.
+    reg step : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every readback check so far.  Power-on true;
+    //> each read phase folds its verdict in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case reading {
+                it <= it && mem.rdata == value
+            }
+        }
+    }
+
+    //> Rises the cycle after the last read phase, so that `exit` sees
+    //> the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case step == 7 {
+                it <= true
+            }
+        }
+    }
+
+    //> High on even steps: the write phase of the current slot.
+    wire writing : Bit {
+        it := !step[0]
+    }
+
+    //> High on odd steps: the read-back phase of the current slot.
+    wire reading : Bit {
+        it := step[0]
+    }
+
+    //> Slot under test, 0 through 3.
+    wire slot : Word[2] {
+        it := step[3..1]
+    }
+
+    //> Test-vector table: the value written to (and expected back
+    //> from) each slot.  The four cases exactly cover `Word[2]`, so
+    //> the match is exhaustive.
+    wire value : Word[8] {
+        it := match slot {
+            case 0 => 10
+            case 1 => 171
+            case 2 => 85
+            case 3 => 255
+        }
+    }
+}

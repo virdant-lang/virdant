@@ -1,0 +1,3 @@
+kind = "run"
+description = "PWM: duty-cycle register against a free-running counter; pulse widths asserted cycle-by-cycle over several periods at four duty settings"
+cycle_limit = 52

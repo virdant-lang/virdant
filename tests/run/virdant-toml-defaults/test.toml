@@ -1,0 +1,4 @@
+kind = "run"
+description = "Minimal virdant.toml (name and top only): a trivial counter design must build and run through the default runner path"
+cycle_limit = 12
+trace = false

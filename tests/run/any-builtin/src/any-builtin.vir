@@ -1,0 +1,86 @@
+//! Self-checking `kind = "run"` test for the `any()` builtin.
+//!
+//! `any(x)` must be true iff at least one bit of `x` is set, i.e. it
+//! must agree with `x != 0`.  Three constant wire vectors are checked
+//! combinationally — the zero word, `0x01` (only LSB set), and `0x80`
+//! (only MSB set) — each both against the golden `x != 0` form and
+//! against its literal expected `Bit`.  Every check is folded into a
+//! running `all_ok`; the simulator exits with code 0 only if every
+//! check passed, and 1 otherwise.
+
+import virt
+
+pub mod AnyBuiltinTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every `any()` check passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Wire vector under test: the zero word.
+    wire x_zero : Word[8] {
+        it := 0x00
+    }
+
+    //> Wire vector under test: only the LSB set.
+    wire x_lsb : Word[8] {
+        it := 0x01
+    }
+
+    //> Wire vector under test: only the MSB set.
+    wire x_msb : Word[8] {
+        it := 0x80
+    }
+
+    //> `any()` must agree with `x != 0` for the zero word.
+    wire ok_zero : Bit {
+        it := any(x_zero) == (x_zero != 0)
+    }
+
+    //> `any()` must agree with `x != 0` for the LSB-set word.
+    wire ok_lsb : Bit {
+        it := any(x_lsb) == (x_lsb != 0)
+    }
+
+    //> `any()` must agree with `x != 0` for the MSB-set word.
+    wire ok_msb : Bit {
+        it := any(x_msb) == (x_msb != 0)
+    }
+
+    //> `any(0)` must be false.
+    wire ok_zero_false : Bit {
+        it := any(x_zero) == false
+    }
+
+    //> `any(0x01)` must be true.
+    wire ok_lsb_true : Bit {
+        it := any(x_lsb) == true
+    }
+
+    //> `any(0x80)` must be true: `any` must see the MSB, not just the
+    //> low bits.
+    wire ok_msb_true : Bit {
+        it := any(x_msb) == true
+    }
+
+    //> Running AND of every check so far.  Power-on true; the check
+    //> verdicts fold in on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && ok_zero && ok_lsb && ok_msb
+            && ok_zero_false && ok_lsb_true && ok_msb_true
+    }
+
+    //> Rises on the first clock edge, so that `exit` never observes
+    //> the vacuous power-on `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

@@ -1,0 +1,3 @@
+kind = "run"
+description = "Statement-level when: two overlapping case arms, first matching arm wins"
+cycle_limit = 8

@@ -1,0 +1,4 @@
+kind = "run"
+description = "Same `let` name reused in sibling `match` arms"
+cycle_limit = 6
+trace = false

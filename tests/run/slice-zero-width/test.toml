@@ -1,0 +1,4 @@
+kind = "run"
+description = "x[2..2] is Word[0]; word(x[2..2], y) has the width of y and equals y -- the empty word vanishes in concatenation"
+cycle_limit = 1
+trace = false

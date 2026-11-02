@@ -1,0 +1,4 @@
+kind = "run"
+description = "8-stage combinational wire chain, each stage `it := prev + 1`; asserts every stage converges to `start + i` within a cycle"
+cycle_limit = 10
+trace = false

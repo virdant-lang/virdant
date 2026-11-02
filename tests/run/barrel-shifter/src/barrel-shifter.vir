@@ -1,0 +1,147 @@
+// Self-checking `kind = "run"` test for an 8-bit barrel shifter built
+// from 3 stages of conditional `word()` shifts.
+//
+//! A `BarrelShifter` unit logically left-shifts an 8-bit word by a
+//! 3-bit amount using three stages of conditional `word()` shifts
+//! (by 4, 2, then 1).  The test top instantiates eight shifters, one
+//! per shift amount, over a constant stimulus word and compares each
+//! result against its golden value.  Every verdict is folded into a
+//! running `all_ok`; the simulator exits with code 0 only if all 8
+//! amounts passed, and 1 otherwise.
+
+import virt
+
+//> 8-bit logical left barrel shifter built from 3 stages of
+//> conditional `word()` shifts.
+mod BarrelShifter {
+    //> Word to shift.
+    incoming x : Word[8]
+
+    //> Shift amount, 0 through 7.
+    incoming s : Word[3]
+
+    //> `x` shifted left by `s`; bits shifted out are lost.
+    outgoing shifted : Word[8]
+
+    //> Stage for the shift-amount bit weighting 4.
+    wire stage4 : Word[8] {
+        it := mux(s[2], word(x[4..0], 0w4), x)
+    }
+
+    //> Stage for the shift-amount bit weighting 2.
+    wire stage2 : Word[8] {
+        it := mux(s[1], word(stage4[6..0], 0w2), stage4)
+    }
+
+    //> Stage for the shift-amount bit weighting 1.
+    wire stage1 : Word[8] {
+        it := mux(s[0], word(stage2[7..0], 0w1), stage2)
+    }
+
+    shifted := stage1
+}
+
+pub mod BarrelShifterTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every shift amount checked out; `@Valid(1)`
+    //> if any check failed.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    // One shifter instance per shift amount, all over the same
+    // constant stimulus word.
+    mod shifter0 of BarrelShifter {
+        it.x := stimulus
+        it.s := 0w3
+    }
+
+    mod shifter1 of BarrelShifter {
+        it.x := stimulus
+        it.s := 1w3
+    }
+
+    mod shifter2 of BarrelShifter {
+        it.x := stimulus
+        it.s := 2w3
+    }
+
+    mod shifter3 of BarrelShifter {
+        it.x := stimulus
+        it.s := 3w3
+    }
+
+    mod shifter4 of BarrelShifter {
+        it.x := stimulus
+        it.s := 4w3
+    }
+
+    mod shifter5 of BarrelShifter {
+        it.x := stimulus
+        it.s := 5w3
+    }
+
+    mod shifter6 of BarrelShifter {
+        it.x := stimulus
+        it.s := 6w3
+    }
+
+    mod shifter7 of BarrelShifter {
+        it.x := stimulus
+        it.s := 7w3
+    }
+
+    //> The constant word under test.
+    wire stimulus : Word[8] {
+        it := 0b1011_0010
+    }
+
+    //> Per-amount verdicts against the golden values.
+    wire check0 : Bit {
+        it := shifter0.shifted == 0b1011_0010
+    }
+
+    wire check1 : Bit {
+        it := shifter1.shifted == 0b0110_0100
+    }
+
+    wire check2 : Bit {
+        it := shifter2.shifted == 0b1100_1000
+    }
+
+    wire check3 : Bit {
+        it := shifter3.shifted == 0b1001_0000
+    }
+
+    wire check4 : Bit {
+        it := shifter4.shifted == 0b0010_0000
+    }
+
+    wire check5 : Bit {
+        it := shifter5.shifted == 0b0100_0000
+    }
+
+    wire check6 : Bit {
+        it := shifter6.shifted == 0b1000_0000
+    }
+
+    wire check7 : Bit {
+        it := shifter7.shifted == 0b0000_0000
+    }
+
+    //> Running AND of every check.  Power-on true.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check0 && check1 && check2 && check3 && check4 && check5 && check6 && check7
+    }
+
+    //> Purely combinational test: finished immediately.
+    wire finished : Bit {
+        it := true
+    }
+}

@@ -1,0 +1,113 @@
+//> Four-channel socket: two client-out/server-in request channels
+//> and two server-out/client-in response channels.  Each channel
+//> carries its own stream so that swapping any two of the four wires
+//> breaks at least one check.
+socket Quad {
+    cosi req_a : Word[8]
+    cosi req_b : Word[8]
+    soci rsp_a : Word[8]
+    soci rsp_b : Word[8]
+}
+
+//> Server side: answers each request channel with a channel-distinct
+//> transform (`+1` on `req_a`, `+2` on `req_b`) so the two responses
+//> are never interchangeable.
+mod QuadServer {
+    server socket link of Quad {
+        it.rsp_a := it.req_a + 1w8
+        it.rsp_b := it.req_b + 2w8
+    }
+}
+
+//> Self-checking harness: drives the two request channels through the
+//> client socket and checks both responses coming back.
+mod Stim {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once every cycle's four-channel check has passed;
+    //> `@Valid(1)` if any check failed.  While `@Invalid()`, the
+    //> simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case done => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Client end of the socket under test: `req_a` and `req_b` go out,
+    //> `rsp_a` and `rsp_b` come back.
+    client socket drv of Quad {
+        it.req_a := req_a
+        it.req_b := req_b
+    }
+
+    //> Cycle counter driving the test vectors.
+    reg count : Word[8] on clock {
+        initial it <= 0
+        when {
+            case !done {
+                it <= it + 1w8
+            }
+        }
+    }
+
+    //> First request channel: counts up from zero.
+    wire req_a : Word[8] {
+        it := count
+    }
+
+    //> Second request channel: kept 100 away from `req_a` on every
+    //> cycle, so no two request wires ever carry the same value.
+    wire req_b : Word[8] {
+        it := count + 100w8
+    }
+
+    //> True when both responses arrived back through their own
+    //> channels with the expected channel-distinct transform applied.
+    wire ok : Bit {
+        it := drv.rsp_a == req_a + 1w8 && drv.rsp_b == req_b + 2w8
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds its verdict in until `done`.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !done {
+                it <= it && ok
+            }
+        }
+    }
+
+    //> Rises once 32 cycles have been checked; freezes `all_ok` and
+    //> lets `exit` become `@Valid`.
+    reg done : Bit on clock {
+        initial it <= false
+        when {
+            case count == 31w8 {
+                it <= true
+            }
+        }
+    }
+}
+
+pub mod SocketMultiChannelTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Forwards the verdict computed by the harness.
+    outgoing exit : Valid[Word[8]] {
+        it := stim.exit
+    }
+
+    mod stim of Stim {
+        it.clock := clock
+    }
+
+    mod dut of QuadServer
+
+    // The four-channel socket crosses between harness and server
+    // through one bulk connect.
+    stim.drv :=: dut.link
+}

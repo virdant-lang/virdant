@@ -1,0 +1,4 @@
+kind = "run"
+description = "Type ascription on sub-expressions: `(1 + 2) : Word[4]` and `word(a, b) : Word[4]`"
+cycle_limit = 3
+trace = false

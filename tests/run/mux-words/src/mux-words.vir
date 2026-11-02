@@ -1,0 +1,101 @@
+//! Self-checking `kind = "run"` test for `mux()` on `Word[8]` operands.
+//!
+//! `cond` toggles every cycle so both values drive the selection.
+//! Each cycle `mux(cond, hi_word, lo_word)` is asserted three ways:
+//! against a `when`-expression golden, against the operand it must
+//! equal for the current `cond`, and against a second `mux()` whose
+//! operands are computed word expressions.  Every verdict is folded
+//! into a running `all_ok`; the simulator exits with code 0 only if
+//! both `cond` values checked out, and 1 otherwise.
+
+import virt
+
+pub mod MuxWordsTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every `mux()` selection checked out; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Condition under test: false on power-on, then toggled every
+    //> cycle so both values drive `mux()`.
+    reg cond : Bit on clock {
+        initial it <= false
+        it <= !it
+    }
+
+    //> The two `Word[8]` operands between which `mux()` selects.
+    wire hi_word : Word[8] {
+        it := 0xA5
+    }
+
+    //> The other operand: distinct from `hi_word` in every bit.
+    wire lo_word : Word[8] {
+        it := 0x3C
+    }
+
+    //> The `mux()` selection under test.
+    wire picked : Word[8] {
+        it := mux(cond, hi_word, lo_word)
+    }
+
+    //> Golden selector: the same choice written as a `when`
+    //> expression.  `mux()` must agree with it.
+    wire golden : Word[8] {
+        it := when {
+            case cond => hi_word
+            else => lo_word
+        }
+    }
+
+    //> `mux()` must agree with the `when`-expression golden.
+    wire check_golden : Bit {
+        it := picked == golden
+    }
+
+    //> When `cond` is true, `mux()` must pick the first operand.
+    wire check_true : Bit {
+        it := !cond || picked == 0xA5w8
+    }
+
+    //> When `cond` is false, `mux()` must pick the second operand.
+    wire check_false : Bit {
+        it := cond || picked == 0x3Cw8
+    }
+
+    //> A second `mux()` whose operands are computed word expressions
+    //> rather than plain literals.
+    wire picked_sum : Word[8] {
+        it := mux(cond, 0x0Fw8 + 0x01w8, 0x20w8 - 0x02w8)
+    }
+
+    //> The computed operands must round-trip through `mux()` exactly.
+    wire check_sum : Bit {
+        it := picked_sum == mux(cond, 0x10w8, 0x1Ew8)
+    }
+
+    //> Running AND of every check.  Power-on true; the checks fold in
+    //> on every clock edge, covering both `cond` values.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check_golden && check_true && check_false && check_sum
+    }
+
+    //> Rises after both `cond` values have been folded into
+    //> `all_ok`, so the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case cond {
+                it <= true
+            }
+        }
+    }
+}

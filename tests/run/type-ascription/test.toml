@@ -1,0 +1,4 @@
+kind = "run"
+description = "Type ascription: `0w8 : Word[8]`, `@Valid(3) : Valid[Word[8]]`, `15 : Word[4]` in wire drivers, operands, and reg drivers"
+cycle_limit = 3
+trace = false

@@ -1,0 +1,280 @@
+//! Self-checking `kind = "run"` test for a register of `Valid[Word[8]]`.
+//!
+//! A `ValidReg` unit holds `reg v : Valid[Word[8]]`: it is written
+//! `@Valid(d)` while `en` is high and holds its value otherwise.  A
+//! harness top walks a table of 16 stimulus steps -- idle warm-up
+//! cycles, a load that re-establishes a known value, back-to-back
+//! loads, holds with deliberately conflicting `d` values (the payload
+//! must survive every hold untouched), and a zero payload (distinct
+//! from `Invalid`) -- and checks `q` against a golden
+//! `Valid[Word[8]]` one cycle after every step from the first load
+//! on.  Each verdict is folded into a running `all_ok`; the simulator
+//! exits with code 0 only if all 14 checks passed, and 1 otherwise.
+
+import virt
+
+//> Register of `Valid[Word[8]]`: loads `@Valid(d)` while `en` is
+//> high, holds its previous value (payload included) otherwise.
+mod ValidReg {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Load enable: when high, `v` is written `@Valid(d)` on the next
+    //> clock edge.
+    incoming en : Bit
+
+    //> Payload captured on the next clock edge while `en` is high;
+    //> ignored otherwise.
+    incoming d : Word[8]
+
+    //> Current register value, `Valid` or `Invalid` with payload.
+    outgoing q : Valid[Word[8]]
+
+    reg v : Valid[Word[8]] on clock {
+        initial it <= @Invalid()
+        when {
+            case en {
+                it <= @Valid(d)
+            }
+        }
+    }
+
+    q := v
+}
+
+pub mod ValidRegTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last step checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod dut of ValidReg {
+        it.clock := clock
+        it.en := en
+        it.d := d
+    }
+
+    //> Warm-up cycle counter: counts 0, 1, 2, 3 and then saturates.
+    //> Checks only start once warm-up is over (and after the first
+    //> load has re-established a known register value), so simulator
+    //> start-up randomness cannot leak into a verdict.
+    reg warm : Word[2] on clock {
+        initial it <= 0
+        when {
+            case warm != 3 {
+                it <= warm + 1
+            }
+        }
+    }
+
+    //> Index of the stimulus step currently being applied; free-runs
+    //> through 0..15 and wraps.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Lags `index` by one cycle: at any cycle after the first it
+    //> holds the step applied the cycle before, selecting the golden
+    //> `q` to check against.
+    reg check_index : Word[4] on clock {
+        initial it <= 0
+        it <= index
+    }
+
+    //> Rises at the end of the final check (step 15), freezing the
+    //> fold and validating `exit` on the next cycle.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case checking && check_index == 15 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the cycle after its step is applied.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && step_ok
+            }
+        }
+    }
+
+    //> High on every cycle where a check is due: from the cycle after
+    //> warm-up (the first post-load check) through the final check
+    //> of step 15.
+    wire checking : Bit {
+        it := warm == 3 && !finished
+    }
+
+    wire en : Bit
+    wire d : Word[8]
+
+    // Stimulus table: the load enable and payload for each of the 16
+    // steps, selected by `index`.  The 16 cases exactly cover
+    // `Word[4]`, so the match is exhaustive.
+    match index {
+        // Idle warm-up cycles before any stimulus.
+        case 0 {
+            en := false
+            d := 0x00
+        }
+        case 1 {
+            en := false
+            d := 0x00
+        }
+        // First load: re-establishes a known `@Valid` value whatever
+        // the register happened to hold during warm-up.
+        case 2 {
+            en := true
+            d := 0xA5
+        }
+        // Back-to-back load: each edge captures the new payload.
+        case 3 {
+            en := true
+            d := 0x3C
+        }
+        // Holds with conflicting data: `en` is low, so the payload
+        // must be preserved even though `d` keeps changing.
+        case 4 {
+            en := false
+            d := 0xFF
+        }
+        case 5 {
+            en := false
+            d := 0x01
+        }
+        // Load a zero payload: `@Valid(0x00)` is distinct from
+        // `@Invalid()`.
+        case 6 {
+            en := true
+            d := 0x00
+        }
+        // Hold while `Valid` with a zero payload.
+        case 7 {
+            en := false
+            d := 0xFF
+        }
+        // Two more loads, then a hold.
+        case 8 {
+            en := true
+            d := 0x5A
+        }
+        case 9 {
+            en := true
+            d := 0xA5
+        }
+        case 10 {
+            en := false
+            d := 0x99
+        }
+        case 11 {
+            en := false
+            d := 0x66
+        }
+        // A final load followed by two holds.
+        case 12 {
+            en := true
+            d := 0xC3
+        }
+        case 13 {
+            en := false
+            d := 0xBD
+        }
+        case 14 {
+            en := false
+            d := 0x3C
+        }
+        case 15 {
+            en := false
+            d := 0x7E
+        }
+    }
+
+    wire expected : Valid[Word[8]]
+
+    // Golden values: `expected[i]` is the `q` the register must show
+    // on the cycle after step `i` is applied.  Exhaustive over
+    // `Word[4]`; cases 0 and 1 are warm-up holds and are never
+    // checked (see `warm`).
+    match check_index {
+        case 0 {
+            expected := @Invalid()
+        }
+        case 1 {
+            expected := @Invalid()
+        }
+        case 2 {
+            expected := @Valid(0xA5)
+        }
+        case 3 {
+            expected := @Valid(0x3C)
+        }
+        case 4 {
+            expected := @Valid(0x3C)
+        }
+        case 5 {
+            expected := @Valid(0x3C)
+        }
+        case 6 {
+            expected := @Valid(0x00)
+        }
+        case 7 {
+            expected := @Valid(0x00)
+        }
+        case 8 {
+            expected := @Valid(0x5A)
+        }
+        case 9 {
+            expected := @Valid(0xA5)
+        }
+        case 10 {
+            expected := @Valid(0xA5)
+        }
+        case 11 {
+            expected := @Valid(0xA5)
+        }
+        case 12 {
+            expected := @Valid(0xC3)
+        }
+        case 13 {
+            expected := @Valid(0xC3)
+        }
+        case 14 {
+            expected := @Valid(0xC3)
+        }
+        case 15 {
+            expected := @Valid(0xC3)
+        }
+    }
+
+    //> Verdict for the current check: `dut.q` must be the same
+    //> variant as `expected`, and when both are `@Valid`, carry the
+    //> same payload.
+    wire step_ok : Bit {
+        it := match dut.q {
+            case @Valid(q_d) =>
+                match expected {
+                    case @Valid(e_d) => q_d == e_d
+                    else => false
+                }
+            case @Invalid() =>
+                match expected {
+                    case @Invalid() => true
+                    else => false
+                }
+        }
+    }
+}

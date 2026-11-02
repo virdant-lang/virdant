@@ -1,0 +1,3 @@
+kind = "run"
+description = "Shift-left-and-insert: shift <= word(shift[3..0], serial_in) with cycle-by-cycle golden checks"
+cycle_limit = 24

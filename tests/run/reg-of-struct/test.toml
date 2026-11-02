@@ -1,0 +1,4 @@
+kind = "run"
+description = "`reg c : Color { it <= ... }` register of struct type with field-wise updates; assert fields"
+cycle_limit = 6
+trace = false

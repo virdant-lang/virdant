@@ -1,0 +1,95 @@
+//! Self-checking `kind = "run"` test for a modulo counter.
+//!
+//! A `CounterMod10` counts 0 through 9 and wraps back to 0 - a
+//! non-power-of-2 modulus.  The harness remembers the previous cycle's
+//! count and, on every cycle after the first, checks that the counter
+//! incremented by exactly one with the wrap landing on 0 after 9, so
+//! the period is exactly 10.  Every verdict is ANDed into a running
+//! `all_ok`; the simulator exits with code 0 only if all 25 checked
+//! cycles passed, and 1 otherwise.
+
+import virt
+
+//> Counter that wraps at a non-power-of-2 modulus.
+//>
+//> Counts 0, 1, ..., 9, then wraps back to 0 on the next cycle.
+mod CounterMod10 {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Current count, 0 through 9.
+    outgoing count : Word[4]
+
+    reg value : Word[4] on clock {
+        initial it <= 0
+        it <= mux(it == 9, 0, it + 1)
+    }
+
+    count := value
+}
+
+pub mod CounterModuloTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last cycle checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod counter of CounterMod10 {
+        it.clock := clock
+    }
+
+    //> Value of `counter.count` on the previous cycle.
+    reg prev : Word[4] on clock {
+        initial it <= 0
+        it <= counter.count
+    }
+
+    //> Number of elapsed cycles.
+    reg cycle_num : Word[5] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> after the first folds its verdict in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case started {
+                it <= it && check_ok
+            }
+        }
+    }
+
+    //> Rises one cycle after the last check, so that the exit code
+    //> sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case cycle_num == 25 {
+                it <= true
+            }
+        }
+    }
+
+    //> False on cycle 0, where `prev` holds no previous count yet.
+    reg started : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> This cycle's check: the count must be the previous count plus
+    //> one, wrapping 9 back to 0 - i.e. the wrap happens after
+    //> exactly 10 counts.
+    wire check_ok : Bit {
+        it := counter.count == mux(prev == 9, 0, prev + 1)
+    }
+}

@@ -1,0 +1,96 @@
+//! Self-checking `kind = "run"` test for a two-arm `when` used as an
+//! expression.
+//!
+//! `when { case c => a else => b }` sits on the right-hand side of a
+//! wire driver: `out` must be `0xa` on cycles where the selector `sel`
+//! is high and `0x5` where it is low.  `sel` alternates every cycle, so
+//! both branches are exercised and each cycle's verdict is checked
+//! against the expected value for that branch.  Dedicated registers
+//! record that each branch was actually taken at least once, so a test
+//! that only ever hit one arm could not pass.  Every verdict is ANDed
+//! into a running `all_ok`; the simulator exits with code 0 only if all
+//! checks passed and both branches were hit, and 1 otherwise.
+
+import virt
+
+pub mod WhenTwoArmTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed and both branches were hit;
+    //> `@Valid(1)` otherwise.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok && saw_true && saw_false, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Alternating selector: low on cycle 0, then toggles every cycle,
+    //> so the `case` and `else` branches of the `when` expression are
+    //> taken alternately.
+    reg sel : Bit on clock {
+        initial it <= false
+        it <= !it
+    }
+
+    // Free-running cycle counter.
+    reg phase : Word[8] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Target of the two-arm `when` expression: `0xa` when `sel` is
+    //> high, `0x5` when `sel` is low.
+    wire out : Word[4] {
+        it := when {
+            case sel => 0xaw4
+            else => 0x5w4
+        }
+    }
+
+    //> The `case` branch is in effect on `sel`-high cycles: then `out`
+    //> must carry the `case` value.  Vacuously true on `sel`-low
+    //> cycles.
+    wire check_case_branch : Bit {
+        it := !sel || out == 0xaw4
+    }
+
+    //> The `else` branch is in effect on `sel`-low cycles: then `out`
+    //> must carry the `else` value.  Vacuously true on `sel`-high
+    //> cycles.
+    wire check_else_branch : Bit {
+        it := sel || out == 0x5w4
+    }
+
+    //> Latches that the `case` branch was taken at least once.
+    reg saw_true : Bit on clock {
+        initial it <= false
+        it <= it || sel
+    }
+
+    //> Latches that the `else` branch was taken at least once.
+    reg saw_false : Bit on clock {
+        initial it <= false
+        it <= it || !sel
+    }
+
+    //> Running AND of every per-cycle verdict so far.  Power-on true;
+    //> each cycle folds in the current checks.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check_case_branch && check_else_branch
+    }
+
+    //> Rises one cycle after the last cycle is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case phase == 6 {
+                it <= true
+            }
+        }
+    }
+}

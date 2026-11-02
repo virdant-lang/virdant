@@ -1,0 +1,78 @@
+// Self-checking `kind = "run"` test for converting a `Valid[T]` to a
+// `{payload, flag}` pair via `match`.
+//
+// Two `Valid[Word[8]]` sources are converted, one per variant: a
+// `@Valid(42)` value and an `@Invalid()` value.  Each is matched into
+// a payload wire and a flag wire (the flag is high exactly when the
+// source is `@Valid`).  The test asserts that the `@Valid` source
+// yields flag high with payload 42, and that the `@Invalid()` source
+// yields flag low with the fallback payload 0; the simulator exits
+// with code 0 only if every check passed, and 1 otherwise.
+
+import virt
+
+pub mod ValidToWordTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case ok => @Valid(0)
+            else => @Invalid()
+        }
+    }
+
+    //> The `Valid[T]` under test in the `@Valid` variant, carrying
+    //> payload 42.
+    wire v : Valid[Word[8]] {
+        it := @Valid(42w8)
+    }
+
+    //> The `Valid[T]` under test in the `@Invalid()` variant.
+    wire inv : Valid[Word[8]] {
+        it := @Invalid()
+    }
+
+    //> Payload half of the `{payload, flag}` pair for `v`, extracted
+    //> by `match`: the bound payload when `@Valid`, 0 otherwise.
+    wire payload : Word[8] {
+        it := match v {
+            case @Valid(x) => x
+            case @Invalid() => 0w8
+        }
+    }
+
+    //> Flag half of the `{payload, flag}` pair for `v`, extracted by
+    //> `match`: high exactly when `v` is `@Valid`.
+    wire flag : Bit {
+        it := match v {
+            case @Valid(x) => true
+            case @Invalid() => false
+        }
+    }
+
+    //> Payload half of the pair for `inv`: no payload exists, so the
+    //> `@Invalid()` arm's fallback 0 must come out.
+    wire inv_payload : Word[8] {
+        it := match inv {
+            case @Valid(x) => x
+            case @Invalid() => 0w8
+        }
+    }
+
+    //> Flag half of the pair for `inv`: low.
+    wire inv_flag : Bit {
+        it := match inv {
+            case @Valid(x) => true
+            case @Invalid() => false
+        }
+    }
+
+    //> Every assertion of the test: both halves of the pair for both
+    //> variants of the source.
+    wire ok : Bit {
+        it := flag && !inv_flag && payload == 42w8 && inv_payload == 0w8
+    }
+}

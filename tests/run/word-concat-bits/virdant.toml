@@ -1,0 +1,5 @@
+[project]
+name = "word-concat-bits"
+
+[prog]
+top = "word-concat-bits::WordConcatBitsTest"

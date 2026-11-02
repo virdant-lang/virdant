@@ -1,0 +1,3 @@
+kind = "run"
+description = "Module with two sockets of the same type (inp, out) wired to different peers; assert no cross-talk"
+cycle_limit = 40

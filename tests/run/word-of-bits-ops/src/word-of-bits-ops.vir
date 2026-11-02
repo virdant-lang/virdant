@@ -1,0 +1,204 @@
+// Self-checking `kind = "run"` test for word operators (`+`, `-`, `&`,
+// `|`, `^`, `==`, `!=`, `<`, `>`, `<=`, `>=`) whose operands are built
+// with `word(...)` from individual `Bit` values rather than read from
+// word literals.  Every check compares the computed result against the
+// expected literal, folds into `success`, and the simulator exits with
+// code 0 only if every check passed, and 1 otherwise.
+
+import virt
+
+pub mod WordOfBitsOpsTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case success => @Valid(0)
+            else => @Invalid()
+        }
+    }
+
+    //> Bit operands for A = 0b1011 = 0xb (most-significant first).
+    wire a3 : Bit
+    a3 := true
+
+    wire a2 : Bit
+    a2 := false
+
+    wire a1 : Bit
+    a1 := true
+
+    wire a0 : Bit
+    a0 := true
+
+    //> Bit operands for B = 0b0110 = 0x6.
+    wire b3 : Bit
+    b3 := false
+
+    wire b2 : Bit
+    b2 := true
+
+    wire b1 : Bit
+    b1 := true
+
+    wire b0 : Bit
+    b0 := false
+
+    //> Bit operands for C = 0b1011 = 0xb, an independently declared
+    //> copy of A's bit pattern (for the equality checks).
+    wire c3 : Bit
+    c3 := true
+
+    wire c2 : Bit
+    c2 := false
+
+    wire c1 : Bit
+    c1 := true
+
+    wire c0 : Bit
+    c0 := true
+
+    //> Word operands assembled from the bits above with `word(...)`.
+    wire wordA : Word[4]
+    wordA := word(a3, a2, a1, a0)
+
+    wire wordB : Word[4]
+    wordB := word(b3, b2, b1, b0)
+
+    wire wordC : Word[4]
+    wordC := word(c3, c2, c1, c0)
+
+    //> 0xb + 0x6 = 0x11 wraps to 0x1 in Word[4]: the carry out of the
+    //> top bit is dropped.
+    wire add_wrap : Bit
+    add_wrap := wordA + wordB == 0x1w4
+
+    //> 0x6 + 0x6 = 0xc: the largest sum that does not wrap here.
+    wire add_no_wrap : Bit
+    add_no_wrap := wordB + wordB == 0xcw4
+
+    //> 0x6 - 0xb = -5 wraps to 0xb: the borrow wraps modulo 2^4.
+    wire sub_wrap : Bit
+    sub_wrap := wordB - wordA == 0xbw4
+
+    //> 0xb - 0x6 = 0x5: a plain non-underflowing subtraction.
+    wire sub_no_wrap : Bit
+    sub_no_wrap := wordA - wordB == 0x5w4
+
+    //> 0xb & 0x6 = 0b1011 & 0b0110 = 0b0010 = 0x2.
+    wire and_check : Bit
+    and_check := wordA & wordB == 0x2w4
+
+    //> 0xb | 0x6 = 0b1011 | 0b0110 = 0b1111 = 0xf.
+    wire or_check : Bit
+    or_check := wordA | wordB == 0xfw4
+
+    //> 0xb ^ 0x6 = 0b1011 ^ 0b0110 = 0b1101 = 0xd.
+    wire xor_check : Bit
+    xor_check := wordA ^ wordB == 0xdw4
+
+    //> Two independently built words with the same bit pattern are
+    //> equal.
+    wire eq_check : Bit
+    eq_check := wordA == wordC
+
+    //> Words built from different bit patterns are unequal.
+    wire ne_check : Bit
+    ne_check := wordA != wordB
+
+    //> 0x6 < 0xb and 0xb > 0x6: unsigned comparison of `word(...)`-
+    //> built operands.
+    wire lt_check : Bit
+    lt_check := wordB < wordA
+
+    wire gt_check : Bit
+    gt_check := wordA > wordB
+
+    //> Boundary comparisons on an equal pair: both `<=` and `>=` hold
+    //> when the two operands have the same bits.
+    wire le_check : Bit
+    le_check := wordB <= wordB
+
+    wire ge_check : Bit
+    ge_check := wordB >= wordB
+
+    //> Word[1] arithmetic: word(true) + word(true) wraps to
+    //> word(false) modulo 2.
+    wire one_bit_add_wrap : Bit
+    one_bit_add_wrap := word(true) + word(true) == word(false)
+
+    //> Eight-bit operands from bits: E = 0b1010_0101 = 0xa5 and
+    //> F = 0b0101_1010 = 0x5a are bitwise complements, so their AND
+    //> is 0 and their OR is 0xff.
+    wire e7 : Bit
+    e7 := true
+
+    wire e6 : Bit
+    e6 := false
+
+    wire e5 : Bit
+    e5 := true
+
+    wire e4 : Bit
+    e4 := false
+
+    wire e3 : Bit
+    e3 := false
+
+    wire e2 : Bit
+    e2 := true
+
+    wire e1 : Bit
+    e1 := false
+
+    wire e0 : Bit
+    e0 := true
+
+    wire f7 : Bit
+    f7 := false
+
+    wire f6 : Bit
+    f6 := true
+
+    wire f5 : Bit
+    f5 := false
+
+    wire f4 : Bit
+    f4 := true
+
+    wire f3 : Bit
+    f3 := true
+
+    wire f2 : Bit
+    f2 := false
+
+    wire f1 : Bit
+    f1 := true
+
+    wire f0 : Bit
+    f0 := false
+
+    wire wordE : Word[8]
+    wordE := word(e7, e6, e5, e4, e3, e2, e1, e0)
+
+    wire wordF : Word[8]
+    wordF := word(f7, f6, f5, f4, f3, f2, f1, f0)
+
+    //> 0xa5 & 0x5a = 0x00: disjoint bit patterns AND to zero.
+    wire wide_and_check : Bit
+    wide_and_check := wordE & wordF == 0x00w8
+
+    //> 0xa5 | 0x5a = 0xff: complementary bit patterns OR to all ones.
+    wire wide_or_check : Bit
+    wide_or_check := wordE | wordF == 0xffw8
+
+    //> 0xa5 + 0x5a = 0xff: the wide add does not wrap.
+    wire wide_add_check : Bit
+    wide_add_check := wordE + wordF == 0xffw8
+
+    //> AND of every check; the exit verdict.
+    wire success : Bit
+    success := add_wrap && add_no_wrap && sub_wrap && sub_no_wrap && and_check && or_check && xor_check && eq_check && ne_check && lt_check && gt_check && le_check && ge_check && one_bit_add_wrap && wide_and_check && wide_or_check && wide_add_check
+}

@@ -1,0 +1,4 @@
+kind = "run"
+description = "Match `else` arm catches an unused enum encoding"
+cycle_limit = 5
+trace = false

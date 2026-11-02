@@ -1,0 +1,3 @@
+kind = "run"
+description = "Socket between two modules that each register their side of the link (same clock domain); asserts one-cycle delay on each side of the handshake"
+cycle_limit = 64

@@ -1,0 +1,4 @@
+kind = "run"
+description = "Three levels of chained when/match blocks without =>"
+cycle_limit = 6
+trace = false

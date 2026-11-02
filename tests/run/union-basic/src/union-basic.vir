@@ -1,0 +1,96 @@
+// Self-checking `kind = "run"` test for a two-variant union with
+// payloads: values are constructed with `@Variant(args)`, routed
+// through a `match`, and the payloads are extracted and compared
+// against the values originally constructed.  A register alternates
+// between the two variants every cycle, so both variants round-trip
+// repeatedly.  The test asserts that the extracted payloads equal the
+// constructed values, that exactly one variant is active per cycle,
+// that both variants get exercised, and that no mismatch is ever
+// observed, then exits with code 0.
+
+import virt
+
+//> The two-variant union under test.  Both variants carry payloads.
+union type Shape {
+    Rect(w : Word[4], h : Word[4])
+    Tri(base : Word[4])
+}
+
+pub mod UnionBasicTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Alternates `@Rect(5, 3)` -> `@Tri(9)` -> `@Rect(5, 3)` ...,
+    //> constructed with `@Variant(args)` each time, so both variants
+    //> round-trip every two cycles.
+    reg state : Shape on clock {
+        initial it <= @Rect(5w4, 3w4)
+        it <= match it {
+            case @Rect(w, h) => @Tri(9w4)
+            case @Tri(base) => @Rect(5w4, 3w4)
+        }
+    }
+
+    //> Payloads extracted by a statement-level `match` on `state`.
+    wire a : Word[4]
+    wire b : Word[4]
+    wire on_rect : Bit
+    wire on_tri : Bit
+    match state {
+        case @Rect(w, h) {
+            a := w
+            b := h
+            on_rect := true
+            on_tri := false
+        }
+        case @Tri(base) {
+            a := base
+            b := 0w4
+            on_rect := false
+            on_tri := true
+        }
+    }
+
+    //> Round-trip check: the extracted payloads must equal the values
+    //> that were constructed, whichever variant is active.
+    wire ok : Bit {
+        it := (on_rect && a == 5w4 && b == 3w4)
+            || (on_tri && a == 9w4)
+    }
+
+    //> Exactly one variant must be active every cycle.
+    wire onehot : Bit {
+        it := on_rect != on_tri
+    }
+
+    //> Sticky record of which variants have been seen: bit 0 for
+    //> `@Rect`, bit 1 for `@Tri`.
+    reg seen : Word[2] on clock {
+        initial it <= 0w2
+        it <= match state {
+            case @Rect(w, h) => it | 1w2
+            case @Tri(base) => it | 2w2
+        }
+    }
+
+    //> Both variants exercised.
+    wire done : Bit {
+        it := seen == 3w2
+    }
+
+    //> Latches a mismatch the moment one occurs.
+    reg failed : Bit on clock {
+        initial it <= false
+        it <= it || !ok || !onehot
+    }
+
+    //> `@Valid(0)` once both variants round-tripped without mismatch;
+    //> `@Valid(1)` on any mismatch; `@Invalid()` while still waiting.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case failed => @Valid(1)
+            case done => @Valid(0)
+            else => @Invalid()
+        }
+    }
+}

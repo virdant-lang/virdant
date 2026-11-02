@@ -1,0 +1,218 @@
+//! Self-checking `kind = "run"` test for a statement-level `match` on
+//! a union type, driving different registers per variant.
+//!
+//! A command schedule walks an `Op` union through `@Add(3)`,
+//! `@Idle()`, `@Add(10)`, `@Sub(5)`, `@Clear()`, `@Sub(1)`, `@Idle()`,
+//! and `@Add(100)`.  A statement-level `match` on `cmd` gives each
+//! variant its own register (or registers) to drive: `@Add(a)` bumps
+//! `count` by `a` and `adds`, `@Sub(a)` drops `count` by `a` and bumps
+//! `subs`, `@Clear()` zeroes `count` and bumps `clears`, and `@Idle()`
+//! has an empty arm that drives nothing, so every register holds.
+//! Untaken arms leave their registers undriven.  The harness checks
+//! `count` against an independently computed golden value on every
+//! checked cycle, then asserts the final `count` and each variant's
+//! visit counter at the end of the walk.  The exit code is 0 only if
+//! every check passed, and 1 otherwise.
+
+import virt
+
+//> Command for the register bank under test.
+//> `@Add(a)` - add `a` to `count` and bump `adds`.
+//> `@Sub(a)` - subtract `a` from `count` (wrapping modulo 256) and
+//>   bump `subs`.
+//> `@Clear()` - zero `count` and bump `clears`.
+//> `@Idle()` - hold every register for one cycle.
+union type Op {
+    Add(a : Word[8])
+    Sub(a : Word[8])
+    Clear()
+    Idle()
+}
+
+pub mod StmtMatchUnionTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Step counter selecting the command: runs 0 through 8, one step
+    //> per clock edge, then freezes so the walk holds on `@Idle()`
+    //> for the rest of the run.
+    reg step : Word[4] on clock {
+        initial it <= 0
+        when {
+            case step < 8 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> The command currently applied: a pure function of `step`,
+    //> written as an expression `match` constructing `@Variant(args)`
+    //> values.
+    wire cmd : Op {
+        it := match step {
+            case 0 => @Add(3)
+            case 1 => @Idle()
+            case 2 => @Add(10)
+            case 3 => @Sub(5)
+            case 4 => @Clear()
+            case 5 => @Sub(1)
+            case 6 => @Idle()
+            case 7 => @Add(100)
+            else => @Idle()
+        }
+    }
+
+    //> The register under test: driven only by the statement-level
+    //> `match` on `cmd` below.
+    reg count : Word[8] {
+        initial it <= 0
+    }
+
+    //> Bumped once per `@Add` step (3 expected).
+    reg adds : Word[8] {
+        initial it <= 0
+    }
+
+    //> Bumped once per `@Sub` step (2 expected).
+    reg subs : Word[8] {
+        initial it <= 0
+    }
+
+    //> Bumped once per `@Clear` step (1 expected).
+    reg clears : Word[8] {
+        initial it <= 0
+    }
+
+    // Statement-level `match` on the union: each variant drives only
+    // its own register(s), and the empty `@Idle()` arm drives
+    // nothing, so every register holds through idle steps.
+    match cmd {
+        case @Add(a) {
+            count <= count + a
+            adds <= adds + 1
+        }
+        case @Sub(a) {
+            count <= count - a
+            subs <= subs + 1
+        }
+        case @Clear() {
+            count <= 0
+            clears <= clears + 1
+        }
+        case @Idle() {
+        }
+    }
+
+    //> Number of clock edges so far, frozen at 9.
+    reg cycles : Word[4] on clock {
+        initial it <= 0
+        when {
+            case cycles < 9 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Golden value `count` must show during each cycle, derived
+    //> independently from the command schedule: `expect_count` during
+    //> cycle `k` is the count after `k` clock edges.
+    wire expect_count : Word[8]
+
+    // Golden table for `count`.  Cycle 8 settles at 99 (255 + 100
+    // wraps modulo 256), and step is frozen on `@Idle()` from then
+    // on, so the `else` cycles are all holds.
+    match cycles {
+        // Power-on: unchecked, `count` shows its initial value.
+        case 0 {
+            expect_count := 0
+        }
+        // Cycle 0 applied `@Add(3)`.
+        case 1 {
+            expect_count := 3
+        }
+        // Cycle 1 applied `@Idle()`: hold.
+        case 2 {
+            expect_count := 3
+        }
+        // Cycle 2 applied `@Add(10)`.
+        case 3 {
+            expect_count := 13
+        }
+        // Cycle 3 applied `@Sub(5)`.
+        case 4 {
+            expect_count := 8
+        }
+        // Cycle 4 applied `@Clear()`.
+        case 5 {
+            expect_count := 0
+        }
+        // Cycle 5 applied `@Sub(1)`: 0 - 1 wraps to 255.
+        case 6 {
+            expect_count := 255
+        }
+        // Cycle 6 applied `@Idle()`: hold.
+        case 7 {
+            expect_count := 255
+        }
+        // Cycle 7 applied `@Add(100)`: 255 + 100 wraps to 99.
+        else {
+            expect_count := 99
+        }
+    }
+
+    //> True on every checked cycle: after the two warm-up cycles
+    //> (cycles 0 and 1) and before the final fold at cycle 8.
+    wire checking : Bit {
+        it := cycles >= 2 && cycles < 8 && !finished
+    }
+
+    //> High during cycle 8, when the walk is complete and the variant
+    //> counters are final.
+    wire done : Bit {
+        it := cycles == 8
+    }
+
+    //> End-of-walk assert: the final `count` plus each variant's
+    //> visit counter (3 adds, 2 subs, 1 clear).
+    wire end_ok : Bit {
+        it := count == 99
+            && adds == 3
+            && subs == 2
+            && clears == 1
+    }
+
+    //> Running AND of every check so far.  Power-on true; checked
+    //> cycles fold in the `count` verdict, and the final cycle folds
+    //> in the end-of-walk verdict.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && count == expect_count
+            }
+            case done {
+                it <= it && end_ok
+            }
+        }
+    }
+
+    //> Rises at the end of the final cycle, so the exit code sees the
+    //> final `all_ok` on the next cycle.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case done {
+                it <= true
+            }
+        }
+    }
+}

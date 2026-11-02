@@ -1,0 +1,5 @@
+[project]
+name = "union-basic"
+
+[prog]
+top = "union-basic::UnionBasicTest"

@@ -1,0 +1,223 @@
+//! Self-checking `kind = "run"` test for the doubly-optional type
+//! `Valid[Valid[Word[4]]]`: double wrap and double unwrap.
+//!
+//! Every representable Valid/Invalid combination is exercised: both
+//! layers `@Valid`, outer `@Valid` with inner `@Invalid()`, and outer
+//! `@Invalid()`.  Each candidate is double-unwrapped as two sequential
+//! single-step unwraps (outer layer, then middle layer) and the
+//! unwrapped middle layer is double-wrapped again to check the
+//! round-trip.  The test also asserts the `@Invalid()` arms do not
+//! sneak, and that an all-zero payload is not confused with
+//! `@Invalid()`.  Verdicts are ANDed into a `fail_bits` bitmask; the
+//! simulator exits with code 0 only if every check passed, and with
+//! the bitmask (nonzero) otherwise.
+
+import virt
+
+pub mod ValidNestedTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Candidates: both layers valid with payloads `0x5` and `0`;
+    //> only the inner layer invalid; the outer layer invalid.
+    wire vv : Valid[Valid[Word[4]]] {
+        it := @Valid(@Valid(0x5))
+    }
+    wire vv0 : Valid[Valid[Word[4]]] {
+        it := @Valid(@Valid(0))
+    }
+    wire vi : Valid[Valid[Word[4]]] {
+        it := @Valid(@Invalid())
+    }
+    wire iv : Valid[Valid[Word[4]]] {
+        it := @Invalid()
+    }
+
+    //> Double unwrap of `vv`: first the outer layer, then the middle
+    //> layer, whose payload must be `0x5`.
+    wire vv_ok : Bit {
+        match vv : Valid[Valid[Word[4]]] {
+            case @Valid(mid_vv0) {
+                match mid_vv0 : Valid[Word[4]] {
+                    case @Valid(x) {
+                        it := x == 0x5
+                    }
+                    case @Invalid() {
+                        it := false
+                    }
+                }
+            }
+            case @Invalid() {
+                it := false
+            }
+        }
+    }
+
+    //> The all-zero payload must unwrap as `0`, not be misread as
+    //> `@Invalid()`.
+    wire vv0_ok : Bit {
+        match vv0 : Valid[Valid[Word[4]]] {
+            case @Valid(mid_vv1) {
+                match mid_vv1 : Valid[Word[4]] {
+                    case @Valid(x) {
+                        it := x == 0
+                    }
+                    case @Invalid() {
+                        it := false
+                    }
+                }
+            }
+            case @Invalid() {
+                it := false
+            }
+        }
+    }
+
+    //> Double unwrap of `vi`: outer `@Valid`, middle `@Invalid()`.
+    wire vi_ok : Bit {
+        match vi : Valid[Valid[Word[4]]] {
+            case @Valid(mid_vi0) {
+                match mid_vi0 : Valid[Word[4]] {
+                    case @Invalid() {
+                        it := true
+                    }
+                    case @Valid(x) {
+                        it := false
+                    }
+                }
+            }
+            case @Invalid() {
+                it := false
+            }
+        }
+    }
+
+    //> Double unwrap of `iv`: outer `@Invalid()` (which carries no
+    //> payload, so the middle Valid/Invalid distinction collapses).
+    wire iv_ok : Bit {
+        match iv : Valid[Valid[Word[4]]] {
+            case @Invalid() {
+                it := true
+            }
+            case @Valid(mid_iv) {
+                it := false
+            }
+        }
+    }
+
+    //> Negative guard: `vi` must not reach a valid middle-layer
+    //> payload.
+    wire vi_sneak : Bit {
+        match vi : Valid[Valid[Word[4]]] {
+            case @Valid(mid_vi1) {
+                match mid_vi1 : Valid[Word[4]] {
+                    case @Valid(x) {
+                        it := true
+                    }
+                    case @Invalid() {
+                        it := false
+                    }
+                }
+            }
+            case @Invalid() {
+                it := false
+            }
+        }
+    }
+
+    //> Negative guard: `iv` must not unwrap to a middle layer at all.
+    wire iv_sneak : Bit {
+        match iv : Valid[Valid[Word[4]]] {
+            case @Valid(mid_iv0) {
+                it := true
+            }
+            case @Invalid() {
+                it := false
+            }
+        }
+    }
+
+    //> Single unwrap of each candidate: the middle layer as a plain
+    //> `Valid[Word[4]]`.
+    wire mid_vv : Valid[Word[4]] {
+        it := match vv : Valid[Valid[Word[4]]] {
+            case @Valid(inner) => inner
+            else => @Invalid()
+        }
+    }
+    wire mid_vi : Valid[Word[4]] {
+        it := match vi : Valid[Valid[Word[4]]] {
+            case @Valid(inner) => inner
+            else => @Invalid()
+        }
+    }
+
+    //> Double wrap round-trip: wrapping the unwrapped middle layer of
+    //> `vv` again must double-unwrap back to the payload `0x5`.
+    wire vv_rewrapped : Valid[Valid[Word[4]]] {
+        it := @Valid(mid_vv)
+    }
+    wire vv_rewrap_ok : Bit {
+        match vv_rewrapped : Valid[Valid[Word[4]]] {
+            case @Valid(mid_vv2) {
+                match mid_vv2 : Valid[Word[4]] {
+                    case @Valid(x) {
+                        it := x == 0x5
+                    }
+                    case @Invalid() {
+                        it := false
+                    }
+                }
+            }
+            case @Invalid() {
+                it := false
+            }
+        }
+    }
+
+    //> Double wrap round-trip of an invalid middle layer: wrapping
+    //> `mid_vi` again must preserve the middle `@Invalid()` after a
+    //> double unwrap.
+    wire vi_rewrapped : Valid[Valid[Word[4]]] {
+        it := @Valid(mid_vi)
+    }
+    wire vi_rewrap_ok : Bit {
+        match vi_rewrapped : Valid[Valid[Word[4]]] {
+            case @Valid(mid_vi2) {
+                match mid_vi2 : Valid[Word[4]] {
+                    case @Invalid() {
+                        it := true
+                    }
+                    case @Valid(x) {
+                        it := false
+                    }
+                }
+            }
+            case @Invalid() {
+                it := false
+            }
+        }
+    }
+
+    //> Diagnostic bitmask: bit0 = double unwrap of `@Valid(@Valid(0x5))`
+    //> failed; bit1 = zero payload not unwrapped as `0`; bit2 = double
+    //> unwrap of `@Valid(@Invalid())` failed; bit3 = double unwrap of
+    //> `@Invalid()` failed; bit4 = `@Valid(@Invalid())` reached a
+    //> middle-layer payload; bit5 = `@Invalid()` unwrapped to a middle
+    //> layer; bit6 = double wrap/unwrap round-trip of a valid middle
+    //> failed; bit7 = double wrap/unwrap round-trip of an invalid
+    //> middle failed.
+    wire fail_bits : Word[8] {
+        it := word(!vv_ok, !vv0_ok, !vi_ok, !iv_ok,
+                    vi_sneak, iv_sneak, !vv_rewrap_ok, !vi_rewrap_ok)
+    }
+
+    //> `@Valid(0)` when every check passed; `@Valid(fail_bits)`
+    //> otherwise.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case fail_bits == 0 => @Valid(0)
+            else => @Valid(fail_bits)
+        }
+    }
+}

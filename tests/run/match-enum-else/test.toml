@@ -1,0 +1,4 @@
+kind = "run"
+description = "Enum match with else catching the remaining variants, asserted every cycle"
+cycle_limit = 8
+trace = false

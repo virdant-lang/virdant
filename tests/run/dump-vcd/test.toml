@@ -1,0 +1,4 @@
+kind = "run"
+description = "A single-cycle pulse amid idle cycles, checked in-design and against a golden VCD"
+cycle_limit = 10
+trace = true

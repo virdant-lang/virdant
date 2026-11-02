@@ -1,0 +1,9 @@
+[project]
+name = "edge-both"
+
+[prog]
+top = "edge-both::EdgeBothTest"
+kind = "run"
+description = "Any-edge detector (`last != inp`)"
+cycle_limit = 20
+trace = false

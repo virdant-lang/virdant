@@ -1,0 +1,18 @@
+//! External RAM declared for the `extmod-into-virdant-child` test.
+//!
+//! `vir run` simulates this `ext mod` with the simulator's `mem::Mem`
+//! builtin (64 KiB RAM: registered writes with byte-lane enables,
+//! combinational reads); the hand-written Verilog the declaration
+//! stands for lives in `ext/Mem.sv`.
+
+//> Hand-written Verilog RAM: registered writes with byte-lane
+//> enables, combinational reads.
+pub ext mod Mem {
+    incoming clock : Clock
+    incoming addr : Word[16]
+    incoming data_in : Word[32]
+    incoming read : Bit
+    incoming write : Bit
+    incoming sel : Word[4]
+    outgoing data_out : Word[32]
+}

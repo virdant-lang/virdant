@@ -1,0 +1,73 @@
+$timescale 1ps $end
+$scope module top $end
+$var wire 1 % all_ok $end
+$var wire 1 ! clock $end
+$var wire 4 # cycle $end
+$var wire 10 " exit $end
+$var wire 1 $ pulse $end
+$var wire 1 ' rx $end
+$var wire 1 ( spi_ck $end
+$var wire 1 ) spi_cs $end
+$var wire 1 + spi_miso $end
+$var wire 1 * spi_mosi $end
+$var wire 1 & tx $end
+$upscope $end
+$enddefinitions $end
+#0
+$dumpvars
+1%
+1!
+b0000 #
+b0000000001 "
+0$
+0'
+1(
+1)
+1+
+1*
+1&
+$end
+1'
+0+
+0!
+#500000
+1!
+b0001 #
+#1000000
+0!
+#1500000
+1!
+b0010 #
+#2000000
+0!
+#2500000
+1!
+b0011 #
+1$
+#3000000
+0!
+#3500000
+1!
+b0100 #
+0$
+#4000000
+0!
+#4500000
+1!
+b0101 #
+#5000000
+0!
+#5500000
+1!
+b0110 #
+#6000000
+0!
+#6500000
+1!
+b0111 #
+#7000000
+0!
+#7500000
+1!
+b1000 #
+b0000000010 "

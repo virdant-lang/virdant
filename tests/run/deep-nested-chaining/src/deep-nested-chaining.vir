@@ -1,0 +1,119 @@
+// A self-checking `kind = "run"` test for three levels of chained
+// `when`/`match` blocks without `=>`.  The FSM register is driven by
+// `when { case ... match { case ... when { ... } } }`, with the
+// nested blocks attached directly to their arms instead of after an
+// extra `=>`.  A statement-position copy of the same shape drives a
+// check wire, and the simulator exits with code 0 only if the FSM
+// walked 0 -> 1 -> 2 -> 3 and held there.
+
+import virt
+
+pub mod DeepNestedChainingTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the chained FSM has been checked through
+    //> cycle 4; `@Valid(1)` if any check failed.  While `@Invalid()`,
+    //> the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case step == 5 => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> FSM stepping 0 -> 1 -> 2 -> 3 and then holding, driven entirely
+    //> by direct chaining: the outer arm's body is a `match` block, the
+    //> matched arm's body is a `when` block, and no arm carries an
+    //> `=>` in front of its nested block.  Each level advances only on
+    //> its own cycle, so a stuck or skipped transition fails a check.
+    reg state : Word[2] on clock {
+        initial it <= 0w2
+        it <= when {
+            case it == 0w2 match it {
+                case 0 when {
+                    case step == 0 => 1w2
+                    else => it
+                }
+                else => it
+            }
+            case it == 1w2 when {
+                case step == 1 => 2w2
+                else => it
+            }
+            else when {
+                case step == 2 => 3w2
+                else => it
+            }
+        }
+    }
+
+    //> Cycle counter, stopping at 5 so that `exit` goes `@Valid`.
+    reg step : Word[3] on clock {
+        initial it <= 0
+        when {
+            case step < 5 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check.  Power-on true; each cycle's
+    //> verdict folds in on the clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && sequence_ok && hold_ok && probe
+    }
+
+    //> Value the FSM should show at cycle `step`: `step` while
+    //> climbing, then 3.
+    wire expected : Word[2] {
+        it := match step : Word[3] {
+            case 0 => 0w2
+            case 1 => 1w2
+            case 2 => 2w2
+            else => 3w2
+        }
+    }
+
+    wire sequence_ok : Bit {
+        it := state == expected
+    }
+
+    //> Expression-position chaining check: `case ... when { ... }` and
+    //> `else when { ... }` without `=>`.  True exactly when `state` is
+    //> 3 from cycle 3 onward and still below 3 before that.
+    wire hold_ok : Bit {
+        it := match state {
+            case 3 when {
+                case step >= 3 => true
+                else => false
+            }
+            else when {
+                case step < 3 => true
+                else => false
+            }
+        }
+    }
+
+    //> Statement-position chaining check: `when { case ... match {
+    //> case ... when { ... } } }` with driver statements inside.
+    //> Goes high on cycle 4 only if the FSM has settled at 3.
+    wire probe : Bit {
+        when {
+            case step == 4 match state {
+                case 3 when {
+                    case true {
+                        it := true
+                    }
+                }
+                else {
+                    it := false
+                }
+            }
+            else {
+                it := true
+            }
+        }
+    }
+}

@@ -1,0 +1,3 @@
+kind = "run"
+description = "Vending machine coin FSM: nickel/dime inputs, dispense at 15, returns change"
+cycle_limit = 70

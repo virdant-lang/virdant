@@ -1,0 +1,4 @@
+kind = "run"
+description = "Socket with two cosi and two soci channels; assert all four wired correctly (any two swapped wires fail)"
+cycle_limit = 40
+trace = false

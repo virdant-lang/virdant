@@ -1,0 +1,3 @@
+kind = "run"
+description = "An `ext mod` (hand-written Verilog RAM, modeled by the simulator's mem::Mem builtin) feeding a regular Virdant child module's input: writes four words through the ext boundary, reads them back through the child, and asserts the cross-boundary dataflow."
+cycle_limit = 12

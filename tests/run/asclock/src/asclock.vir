@@ -1,0 +1,117 @@
+//! Self-checking `kind = "run"` test for `asclock(bit_sig)`: a `Bit`
+//! reinterpreted as a `Clock`.
+//!
+//! A `BitClockCounter` toggles a `Bit` register on the platform clock
+//! and uses `asclock` on that `Bit` to clock a counter register.  The
+//! harness tracks the expected counter value from the platform
+//! clock's phase and checks, at every other platform edge (when the
+//! derived clock domain has settled), that the counter advanced once
+//! per rising edge of the `Bit`.  Every check is ANDed into a running
+//! `all_ok`; the simulator exits with code 0 only if all checks
+//! passed, and 1 otherwise.
+
+import virt
+
+//> Counter clocked by a `Bit` reinterpreted as a `Clock` via
+//> `asclock`: it must advance once on every rising edge of the `Bit`.
+mod BitClockCounter {
+    //> Platform clock, driving the `Bit` that becomes the derived clock.
+    incoming clock : Clock
+
+    //> The `Bit` used as a clock: toggles every platform cycle, so it
+    //> rises on every other platform edge.
+    reg tick : Bit on clock {
+        initial it <= false
+        it <= !it
+    }
+
+    //> The derived clock: `tick` reinterpreted as a `Clock`.
+    wire derived_clock : Clock {
+        it := asclock(tick)
+    }
+
+    //> Counter clocked on the derived clock: one increment per
+    //> rising edge of `tick`.
+    reg count : Word[16] on derived_clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    outgoing count_out : Word[16] {
+        it := count
+    }
+}
+
+pub mod AscClockTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every check passed; `@Valid(1)` if any check
+    //> failed or no check ever ran.  `@Invalid()` while running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok && saw_check, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod dut of BitClockCounter {
+        it.clock := clock
+    }
+
+    //> True at platform edges where `tick` rises (every other edge,
+    //> starting with the first).
+    reg tick_will_rise : Bit on clock {
+        initial it <= true
+        it <= !it
+    }
+
+    //> Number of platform edges so far.
+    reg step : Word[16] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Expected value of `count`: one increment per `tick` rise, so
+    //> it advances at the same edges `tick_will_rise` marks.
+    reg expected : Word[16] on clock {
+        initial it <= 0
+        it <= it + mux(tick_will_rise, 1, 0)
+    }
+
+    //> High on even-numbered platform edges: `count` changed at the
+    //> previous edge and is guaranteed settled now, so this is the
+    //> race-free sampling point.
+    wire checking : Bit {
+        it := !tick_will_rise
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the settled platform edges.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && dut.count_out == expected
+            }
+        }
+    }
+
+    //> Set once a check has actually run, guarding against a vacuous
+    //> pass if the `checking` case never fired.
+    reg saw_check : Bit on clock {
+        initial it <= false
+        when {
+            case checking {
+                it <= true
+            }
+        }
+    }
+
+    //> Rises one edge after the last check, so that the exit code
+    //> sees the final `all_ok` and `saw_check`.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= step == 10
+    }
+}

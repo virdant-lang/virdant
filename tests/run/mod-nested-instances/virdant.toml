@@ -1,0 +1,5 @@
+[project]
+name = "mod-nested-instances"
+
+[prog]
+top = "mod-nested-instances::ModNestedTest"

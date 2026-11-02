@@ -1,0 +1,3 @@
+kind = "run"
+description = "Forwarding block fans one incoming clock out to two submodule counters"
+cycle_limit = 25

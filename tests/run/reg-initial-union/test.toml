@@ -1,0 +1,3 @@
+kind = "run"
+description = "Union register with `initial it <= @Idle()` power-on value"
+cycle_limit = 3

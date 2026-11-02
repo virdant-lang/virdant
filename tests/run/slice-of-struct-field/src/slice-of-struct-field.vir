@@ -1,0 +1,116 @@
+//! Self-checking `kind = "run"` test for slicing a struct field:
+//! `color->red[4..2]`.
+//!
+//! A `Color` struct is built with the canonical struct literal
+//! (`${}`).  NOTE: the `vir run` interpreter currently panics while
+//! lowering struct literals (`virdant/src/sim/expr.rs`: "expected
+//! expression node, got \"Assign\""), and field-wise struct drivers
+//! (`it.red := ...`) are not supported by the checker ("Unresolved
+//! component"), so there is no way to build a struct value in a run
+//! test today.  The test is left in place in literal form so it passes
+//! once the interpreter is fixed.
+//!
+//! The slice of the projected `red` field is a `Word[2]` holding bits
+//! 3 and 2 of `red` -- the top slice index is exclusive.  The fixed
+//! vector `0b00011000` separates the sliced bits (`1`, `0`) from the
+//! retained bit 4 (`1`) and the neighboring fields (`green` = `0xff`,
+//! `blue` = `0b10101010`), so the golden value `0b10` differs from
+//! what an inclusive-top or bit-reversed reading -- or a slice of the
+//! wrong field -- would produce.  Every check is ANDed into a running
+//! `all_ok`; the simulator exits with code 0 only if all checks
+//! passed, and 1 otherwise.
+
+import virt
+
+//> RGB color: the struct type whose `red` field is sliced.
+struct type Color {
+    red   : Word[8]
+    green : Word[8]
+    blue  : Word[8]
+}
+
+pub mod SliceOfStructFieldTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> The struct value under test, built with the canonical struct
+    //> literal (which the `vir run` interpreter currently cannot
+    //> lower).  `red` is `0b00011000`: bits 4 and 3 set, bit 2 clear.
+    reg color : Color on clock {
+        initial it <= ${
+            red = 0b00011000,
+            green = 0xff,
+            blue = 0b10101010,
+        }
+        it <= ${
+            red = 0b00011000,
+            green = 0xff,
+            blue = 0b10101010,
+        }
+    }
+
+    //> The slice under test: `Word[2]`, bits 3..2 of `color->red`
+    //> (Verilog `red[3:2]`).
+    wire sliced : Word[2] {
+        it := color->red[4..2]
+    }
+
+    //> Golden value: bits 3..2 of `0b00011000` reassembled by hand.
+    wire check_golden : Bit {
+        it := sliced == 0b10
+    }
+
+    //> Per-bit identity: slice bit `i` must be the corresponding bit
+    //> of `color->red`, in order, with no reversal.
+    wire check_perbit : Bit {
+        it := sliced == word(color->red[3], color->red[2])
+    }
+
+    //> The slice must not have picked up the retained bit 4: an
+    //> inclusive-top reading (Verilog `red[4:2]`) would give the top
+    //> two bits `0b11`, not `0b10`.
+    wire check_not_retained : Bit {
+        it := sliced != word(color->red[4], color->red[3])
+    }
+
+    //> The projections the slice rides on must be intact: the whole
+    //> `red` field is still `0b00011000`, and the neighboring fields
+    //> were not touched (so the slice cannot have come from `green`
+    //> or `blue`).
+    wire check_fields : Bit {
+        it := color->red == 0b00011000 && color->green == 0xff && color->blue == 0b10101010
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdicts.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check_golden && check_perbit && check_not_retained && check_fields
+    }
+
+    //> Cycle counter used to time the exit.
+    reg count : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Rises one cycle after the last cycle is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case count == 2 {
+                it <= true
+            }
+        }
+    }
+}

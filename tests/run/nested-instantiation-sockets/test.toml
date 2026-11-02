@@ -1,0 +1,3 @@
+kind = "run"
+description = "Grandparent bulk-connects a socket between its child and grandchild (mid.a :=: top_port, mid.b :=: leaf); assert data crosses both hops"
+cycle_limit = 40

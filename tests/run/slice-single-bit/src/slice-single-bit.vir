@@ -1,0 +1,118 @@
+//! Self-checking `kind = "run"` test for a single-bit slice.
+//!
+//! The slice `x[3..2]` of a `Word[4]` covers exactly one bit -- bit 2
+//! -- because the top slice index is exclusive, so the slice acts as a
+//! single bit.  The test drives `x` through two vectors in which bit 2
+//! is known and every other bit is its complement: `0b0100` (bit 2 is
+//! 1, all other bits 0) and `0b1011` (bit 2 is 0, all other bits 1).
+//! The golden verdict therefore picks out bit 2 uniquely: if the slice
+//! read bit 3, 1, or 0 instead, both rows would fail.  The slice is
+//! also checked against `word(x[2])` to pin its position without any
+//! literal.  Each row's verdict is folded into a running `all_ok`; the
+//! simulator exits with code 0 only if every row passed, and 1
+//! otherwise.
+
+import virt
+
+pub mod SliceSingleBitTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every slice check passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Next vector row to load, 0 or 1.  Holds at 1 so the last row
+    //> stays in place while the exit settles.
+    wire next : Word[1] {
+        it := mux(index == 1, index, index + 1)
+    }
+
+    //> Word under test, driven one row ahead by the sequencer so it
+    //> always holds the vector of row `index`: `0b0100` (bit 2 set)
+    //> for row 0, `0b1011` (bit 2 clear) for row 1.
+    reg x : Word[4] on clock {
+        initial it <= 0b0100
+        it <= match next {
+            case 0 => 0b0100
+            case 1 => 0b1011
+        }
+    }
+
+    //> The slice under test: exactly one bit, bit 2 of `x`.  The
+    //> `Word[1]` ascription is itself a check that the top slice
+    //> index is exclusive and the slice is not two bits wide.
+    wire sliced : Word[1] {
+        it := x[3..2]
+    }
+
+    //> Golden expectation for row `index`: bit 2 of the row's vector,
+    //> reassembled by hand (`1` for `0b0100`, `0` for `0b1011`).
+    wire exp : Word[1]
+
+    //> The slice must be exactly bit 2: reassembling it from the
+    //> original word with `word(x[2])` must give the same value, in
+    //> either row.
+    wire check_bit2 : Bit {
+        it := sliced == word(x[2])
+    }
+
+    //> The slice must match the golden verdict for the row under
+    //> test.  Because every non-bit-2 bit is the complement of bit 2
+    //> in both vectors, this fails if the slice read bit 3, bit 1, or
+    //> bit 0 instead.
+    wire check_golden : Bit {
+        it := sliced == exp
+    }
+
+    //> Per-row verdict.
+    wire ok : Bit {
+        it := check_bit2 && check_golden
+    }
+
+    //> Truth-table row under test, 0 or 1.
+    reg index : Word[1] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= next
+            }
+        }
+    }
+
+    //> Rises the cycle after row 1 is checked, so that `exit` sees
+    //> the final fold into `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 1 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every row's verdict.  Power-on true; each cycle
+    //> before `finished` folds its verdict in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !finished {
+                it <= it && ok
+            }
+        }
+    }
+
+    match index {
+        case 0 {
+            exp := 1w1
+        }
+        case 1 {
+            exp := 0w1
+        }
+    }
+}

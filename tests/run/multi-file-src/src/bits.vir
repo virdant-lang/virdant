@@ -1,0 +1,18 @@
+//! Cross-file helper package for the `multi-file-src` test.
+//!
+//! Defines the module that the other two source files (`adder` and
+//! `comparator`) reuse.  Being `pub` makes it visible outside this
+//! package, which is exactly what the cross-file imports under test
+//! rely on.
+
+//> Zero-extends a 4-bit word into an 8-bit word.  Visible to the
+//> other source files of the project via `import bits`.
+pub mod Widen {
+    //> 4-bit operand to be zero-extended.
+    incoming x : Word[4]
+
+    //> `x` zero-extended to 8 bits.
+    outgoing y : Word[8] {
+        it := zext(x)
+    }
+}

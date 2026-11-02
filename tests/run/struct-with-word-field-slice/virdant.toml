@@ -1,0 +1,5 @@
+[project]
+name = "struct-with-word-field-slice"
+
+[prog]
+top = "struct-with-word-field-slice::StructFieldSliceTest"

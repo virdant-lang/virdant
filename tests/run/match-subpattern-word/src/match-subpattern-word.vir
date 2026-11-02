@@ -1,0 +1,125 @@
+//! A self-checking `kind = "run"` test for sub-patterns on a word
+//! payload: `case @Some(0) => ...` matches only when the payload is
+//! zero.  Four vectors of `Opt[Word[4]]` values walk past a match
+//! with the concrete sub-pattern `@Some(0)`, plus a control match
+//! with a variable sub-pattern `@Some(x)`; every verdict is compared
+//! against an expected table and the simulator exits with code 0 only
+//! if all four vectors passed.
+
+import virt
+
+//> Optional value of `T`: either `@None()` or `@Some(value)`.
+union type Opt[T : Type] {
+    None()
+    Some(value : T)
+}
+
+pub mod MatchSubpatternWord for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Index of the vector under test, 0 through 3.
+    reg index : Word[2] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Goes high once the last vector (index 3) has been checked, so
+    //> `all_ok` stops folding and the exit code settles.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 3 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on every cycle before `finished`.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !finished {
+                it <= it && check_ok
+            }
+        }
+    }
+
+    //> The union value under test, selected by `index`:
+    //> `@Some(0)`, `@Some(1)`, `@Some(15)`, `@None()`.
+    wire opt : Opt[Word[4]]
+
+    //> Expected verdict of the `@Some(0)` match for this vector.
+    wire exp_match : Bit
+
+    //> Expected unwrap of this vector through the variable
+    //> sub-pattern `@Some(x)` (`@None()` unwraps to `0`).
+    wire exp_val : Word[4]
+
+    match index {
+        // The only vector that `case @Some(0)` must match.
+        case 0 {
+            opt := @Some(0)
+            exp_match := true
+            exp_val := 0
+        }
+        // Nonzero payloads: the concrete sub-pattern must reject.
+        case 1 {
+            opt := @Some(1)
+            exp_match := false
+            exp_val := 1
+        }
+        // Maximal nonzero payload: the concrete sub-pattern must
+        // reject (so the match is not just matching every `@Some`).
+        case 2 {
+            opt := @Some(15)
+            exp_match := false
+            exp_val := 15
+        }
+        // The other variant: neither match may take the `@Some` arms.
+        case 3 {
+            opt := @None()
+            exp_match := false
+            exp_val := 0
+        }
+    }
+
+    //> Concrete sub-pattern on the word payload: matches only when
+    //> the payload is zero.
+    wire matched : Bit {
+        it := match opt {
+            case @Some(0) => true
+            else => false
+        }
+    }
+
+    //> Variable sub-pattern control: binds the payload whatever it
+    //> is, so any discrepancy with `matched` localizes the failure to
+    //> the concrete zero sub-pattern itself.
+    wire unwrapped : Word[4] {
+        it := match opt {
+            case @Some(x) => x
+            case @None() => 0
+        }
+    }
+
+    //> This cycle's verdict against the expected table.
+    wire check_ok : Bit {
+        it := matched == exp_match && unwrapped == exp_val
+    }
+
+    //> `@Valid(0)` after every vector checked out; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+}

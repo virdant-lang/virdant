@@ -1,0 +1,4 @@
+kind = "run"
+description = "Child input driven from a parent register (hierarchy crossing a clocked boundary); assert the child sees the registered value, one cycle after the raw stimulus"
+cycle_limit = 20
+trace = false

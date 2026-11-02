@@ -1,0 +1,268 @@
+//! Self-checking `kind = "run"` test for old-value (NBA) register semantics.
+//!
+//! The register under test is written with a self-reference on the RHS
+//! from inside a `when` arm -- `it <= it + 1` -- so on every enabled
+//! cycle the register is being written *and* read.  A checker observes
+//! `q` on exactly those cycles: it must still show the *old* value on
+//! the cycle the write is applied, and the new value only from the
+//! next cycle on.  The harness walks a table of 16 stimulus steps --
+//! idle warm-up cycles (so simulator start-up randomness cannot leak
+//! into a verdict), a load of a known value, five enabled increments,
+//! a hold, then seven more enabled increments -- and checks `q`
+//! against a golden value one cycle after every step from the load on.
+//! Each verdict is folded into a running `all_ok`; the simulator exits
+//! with code 0 only if all 14 checks passed, and 1 otherwise.
+
+import virt
+
+//> Counter whose register is written from a `when` arm using its own
+//> old value on the RHS.
+mod SelfRefCounter {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> When high, the register advances by one on the next clock edge.
+    incoming en : Bit
+
+    //> When high, the register is synchronously loaded with zero.
+    incoming load : Bit
+
+    //> Current register value: the *old* value on any cycle where a
+    //> write is being applied.
+    outgoing q : Word[4]
+
+    reg count : Word[4] on clock {
+        initial it <= 0
+        when {
+            case load {
+                it <= 0
+            }
+            case en {
+                it <= it + 1
+            }
+        }
+    }
+
+    q := count
+}
+
+pub mod RegReadOldValueTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last step checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod dut of SelfRefCounter {
+        it.clock := clock
+        it.en := en
+        it.load := load
+    }
+
+    //> Warm-up cycle counter: counts 0, 1, 2, 3 and then saturates.
+    //> Checks only start once warm-up is over and the load has
+    //> re-established a known register value, so simulator start-up
+    //> randomness cannot leak into a verdict.
+    reg warm : Word[2] on clock {
+        initial it <= 0
+        when {
+            case warm != 3 {
+                it <= warm + 1
+            }
+        }
+    }
+
+    //> Index of the stimulus step currently being applied; free-runs
+    //> through 0..15 and wraps.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Lags `index` by one cycle: at any cycle after the first it
+    //> holds the step applied the cycle before, selecting the golden
+    //> `q` to check against.
+    reg check_index : Word[4] on clock {
+        initial it <= 0
+        it <= index
+    }
+
+    //> Rises at the end of the final check (step 15), freezing the
+    //> fold and validating `exit` on the next cycle.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case checking && check_index == 15 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the cycle after its step is applied.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && dut.q == expected
+            }
+        }
+    }
+
+    //> High on every cycle where a check is due: from the cycle after
+    //> warm-up (the first post-load check) through the final check of
+    //> step 15.  The `check_index >= 2` guard keeps an early
+    //> warm-up counter from checking before the load has landed.
+    wire checking : Bit {
+        it := warm == 3 && check_index >= 2 && !finished
+    }
+
+    wire en : Bit
+    wire load : Bit
+
+    // Stimulus table: the enable and load for each of the 16 steps,
+    // selected by `index`.  The 16 cases exactly cover `Word[4]`, so
+    // the match is exhaustive.
+    match index {
+        // Idle warm-up cycles before any stimulus.
+        case 0 {
+            en := false
+            load := false
+        }
+        case 1 {
+            en := false
+            load := false
+        }
+        // Load a known value: re-establishes a known register state
+        // whatever the register happened to hold during warm-up.
+        case 2 {
+            en := false
+            load := true
+        }
+        // Enabled cycles: on each of these, `count` is being written
+        // (`it <= it + 1`) while `q` must still show the old value.
+        case 3 {
+            en := true
+            load := false
+        }
+        case 4 {
+            en := true
+            load := false
+        }
+        case 5 {
+            en := true
+            load := false
+        }
+        case 6 {
+            en := true
+            load := false
+        }
+        case 7 {
+            en := true
+            load := false
+        }
+        // Hold: with `en` low nothing is written, and `q` keeps
+        // showing the same (old) value.
+        case 8 {
+            en := false
+            load := false
+        }
+        case 9 {
+            en := true
+            load := false
+        }
+        case 10 {
+            en := true
+            load := false
+        }
+        case 11 {
+            en := true
+            load := false
+        }
+        case 12 {
+            en := true
+            load := false
+        }
+        case 13 {
+            en := true
+            load := false
+        }
+        case 14 {
+            en := true
+            load := false
+        }
+        case 15 {
+            en := true
+            load := false
+        }
+    }
+
+    wire expected : Word[4]
+
+    // Golden values: `expected[i]` is the `q` the register must show
+    // on the cycle after step `i` is applied.  Exhaustive over
+    // `Word[4]`; cases 0 and 1 are warm-up holds and are never
+    // checked (see `checking`).  For every enabled step the check
+    // verifies the *old*-value read: on the cycle a step is applied,
+    // `q` still shows the pre-write value, and only the cycle after
+    // does it show the incremented value.  Step 2 loads zero; steps
+    // 3..7 increment 0 -> 5; step 8 holds at 5; steps 9..15 increment
+    // 5 -> 12.
+    match check_index {
+        case 0 {
+            expected := 0
+        }
+        case 1 {
+            expected := 0
+        }
+        case 2 {
+            expected := 0
+        }
+        case 3 {
+            expected := 1
+        }
+        case 4 {
+            expected := 2
+        }
+        case 5 {
+            expected := 3
+        }
+        case 6 {
+            expected := 4
+        }
+        case 7 {
+            expected := 5
+        }
+        case 8 {
+            expected := 5
+        }
+        case 9 {
+            expected := 6
+        }
+        case 10 {
+            expected := 7
+        }
+        case 11 {
+            expected := 8
+        }
+        case 12 {
+            expected := 9
+        }
+        case 13 {
+            expected := 10
+        }
+        case 14 {
+            expected := 11
+        }
+        case 15 {
+            expected := 12
+        }
+    }
+}

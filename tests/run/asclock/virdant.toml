@@ -1,0 +1,5 @@
+[project]
+name = "asclock"
+
+[prog]
+top = "asclock::AscClockTest"

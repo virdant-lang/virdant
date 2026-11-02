@@ -1,0 +1,4 @@
+kind = "run"
+description = "full-width slice: x[8..0] is the whole word, assert identity"
+cycle_limit = 3
+trace = false

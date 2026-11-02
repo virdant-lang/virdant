@@ -1,0 +1,89 @@
+//! Self-checking `kind = "run"` test for a single-variant enum, the
+//! degenerate enum case.
+//!
+//! A one-variant `Solo` enum with a nonzero encoding is constructed
+//! from its `#Only` literal, matched on, cast to its underlying
+//! `Word[2]` bit pattern, and reconstructed from that pattern with
+//! `cast()`.  Every verdict is folded into a running `all_ok`; the
+//! simulator exits with code 0 only if all checks passed, and 1
+//! otherwise.
+
+import virt
+
+//> Degenerate enum with a single variant carrying a nonzero
+//> encoding, so a match on the variant is distinguishable from the
+//> all-zero pattern.
+enum type Solo {
+    Only = 1w2
+}
+
+pub mod EnumOneVariantTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Construct the sole variant from its literal, bound to a typed
+    //> wire so the enum type is pinned down.
+    wire only : Solo {
+        it := #Only
+    }
+
+    //> The variant must equal its own literal, in both operand
+    //> orders.
+    wire only_eq_literal : Bit {
+        it := only == #Only && #Only == only
+    }
+
+    //> Matching on a single-variant enum: the `#Only` arm must be
+    //> taken and its body evaluated.
+    wire matched_only : Bit {
+        it := match only : Solo {
+            case #Only => true
+        }
+    }
+
+    //> `cast()` from the enum down to its underlying `Word[2]` must
+    //> preserve the declared encoding.
+    wire cast_bits_ok : Bit {
+        it := cast(only) == 1w2
+    }
+
+    //> `cast()` from the underlying `Word[2]` back up must yield the
+    //> sole variant, and matching on the result must again take the
+    //> `#Only` arm.
+    wire cast_roundtrip_ok : Bit {
+        it := match cast(1w2 : Word[2]) : Solo {
+            case #Only => true
+        }
+    }
+
+    //> All checks must behave as asserted.
+    wire checks_ok : Bit {
+        it := only_eq_literal
+            && matched_only
+            && cast_bits_ok
+            && cast_roundtrip_ok
+    }
+
+    //> Running AND of every check.  Power-on true; the checks fold in
+    //> on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && checks_ok
+    }
+
+    //> Rises on the first clock edge, after the checks are folded
+    //> into `all_ok`, so the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

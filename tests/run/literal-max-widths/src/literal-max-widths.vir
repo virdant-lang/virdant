@@ -1,0 +1,138 @@
+//! Self-checking `kind = "run"` test for word literals at boundary
+//! widths.
+//!
+//! Exercises `Word[1]`, `Word[2]`, `Word[32]`, and `Word[64]` literals
+//! written in decimal, binary, and hexadecimal, including the all-ones
+//! maximum value at each width (e.g. `0xffffffffffffffffw64`).  Every
+//! literal is round-tripped through codegen: the generated simulator
+//! must reproduce the exact written value, checked with `==`
+//! comparisons.  Every check is folded into a running `all_ok`; the
+//! simulator exits with code 0 only if all checks passed, and 1
+//! otherwise.
+
+import virt
+
+pub mod LiteralMaxWidths for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last check passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && w1_ok && w1max_ok && w1bin_ok
+            && w2_ok && w2max_ok && w2bin_ok
+            && w32_ok && w32max_ok && w32dec_ok
+            && w64_ok && w64max_ok && w64dec_ok
+            && roundtrip_ok
+    }
+
+    //> Rises on the first clock edge, after the checks have folded
+    //> into `all_ok`, so that the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> Word[1] literals: the smallest boundary width.
+    wire w1 : Word[1]
+    w1 := 1w1
+
+    //> Word[1] maximum, written in hex.
+    wire w1max : Word[1]
+    w1max := 0x1w1
+
+    //> Word[1] maximum, written in binary.
+    wire w1bin : Word[1]
+    w1bin := 0b1w1
+
+    //> Word[2] literals.
+    wire w2 : Word[2]
+    w2 := 2w2
+
+    //> Word[2] maximum, written in hex.
+    wire w2max : Word[2]
+    w2max := 0x3w2
+
+    //> Word[2] maximum, written in binary.
+    wire w2bin : Word[2]
+    w2bin := 0b11w2
+
+    //> Word[32] literal, written in hex with underscore separators.
+    wire w32 : Word[32]
+    w32 := 0xcafe_babew32
+
+    //> Word[32] maximum.
+    wire w32max : Word[32]
+    w32max := 0xffffffffw32
+
+    //> Word[32] literal, written in decimal with separators.
+    wire w32dec : Word[32]
+    w32dec := 100_000w32
+
+    //> Word[64] literal, written in hex with underscore separators.
+    wire w64 : Word[64]
+    w64 := 0x0123_4567_89ab_cdefw64
+
+    //> Word[64] maximum, the spec's example literal.
+    wire w64max : Word[64]
+    w64max := 0xffffffffffffffffw64
+
+    //> Word[64] literal, written in decimal.
+    wire w64dec : Word[64]
+    w64dec := 1000000000000w64
+
+    wire w1_ok : Bit
+    w1_ok := w1 == 1
+
+    wire w1max_ok : Bit
+    w1max_ok := w1max == 0x1w1
+
+    wire w1bin_ok : Bit
+    w1bin_ok := w1bin == 0b1
+
+    wire w2_ok : Bit
+    w2_ok := w2 == 2
+
+    wire w2max_ok : Bit
+    w2max_ok := w2max == 0x3w2
+
+    wire w2bin_ok : Bit
+    w2bin_ok := w2bin == 0b11
+
+    wire w32_ok : Bit
+    w32_ok := w32 == 0xcafe_babew32
+
+    wire w32max_ok : Bit
+    w32max_ok := w32max == 0xffffffffw32
+
+    wire w32dec_ok : Bit
+    w32dec_ok := w32dec == 100_000
+
+    wire w64_ok : Bit
+    w64_ok := w64 == 0x0123_4567_89ab_cdefw64
+
+    wire w64max_ok : Bit
+    w64max_ok := w64max == 0xffffffffffffffffw64
+
+    wire w64dec_ok : Bit
+    w64dec_ok := w64dec == 1000000000000
+
+    //> Round-trip of the widest literal through arithmetic and slicing:
+    //> `0xffffffffffffffffw64 + 0w64` must stay all-ones, and its top
+    //> and bottom bytes must slice out as `0xff`.
+    wire roundtrip_ok : Bit
+    roundtrip_ok := (w64max + 0w64) == 0xffffffffffffffffw64
+        && w64max[8..0] == 0xffw8
+        && w64max[64..56] == 0xffw8
+}

@@ -1,0 +1,53 @@
+//! Cross-file comparison package for the `multi-file-src` test.
+//!
+//! Defines the equality checker that the harness top instantiates.
+//! It widens its 4-bit operand through the shared `bits::Widen`
+//! module from `bits.vir` and compares the widened value against an
+//! 8-bit operand using a package-private helper, proving that an
+//! imported cross-file module and a package-private helper can both
+//! feed one outgoing verdict.
+
+import bits
+
+//> Package-private helper: inequality of an 8-bit pair.  Only usable
+//> inside this package; the harness top never references it.
+mod Ne {
+    //> First 8-bit operand.
+    incoming x : Word[8]
+
+    //> Second 8-bit operand.
+    incoming y : Word[8]
+
+    //> `x != y`.
+    outgoing out : Bit {
+        it := x != y
+    }
+}
+
+//> Cross-file equality check: widens the 4-bit operand with the
+//> shared `bits::Widen` module, then compares the widened value
+//> against the 8-bit operand via the package-private `Ne` helper,
+//> negated into an equality verdict.
+pub mod Equal {
+    //> 4-bit operand, zero-extended by `bits::Widen`.
+    incoming x : Word[4]
+
+    //> 8-bit operand to compare against.
+    incoming y : Word[8]
+
+    //> True iff `zext(x) == y`.
+    outgoing eq : Bit
+
+    //> Shared cross-file module, instantiated from `bits.vir`.
+    mod wide_x of bits::Widen {
+        it.x := x
+    }
+
+    //> Package-private helper: `wide_x.y != y`.
+    mod ne of Ne {
+        it.x := wide_x.y
+        it.y := y
+    }
+
+    eq := !ne.out
+}

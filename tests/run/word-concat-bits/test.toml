@@ -1,0 +1,4 @@
+kind = "run"
+description = "word(b3, b2, b1, b0) builds Word[4] from Bits, most-significant first; exact bit layout asserted over TB-driven vectors 0b1010, 0b0101, 0b1000"
+cycle_limit = 10
+trace = false

@@ -1,0 +1,5 @@
+[project]
+name = "mem-sliced-regs"
+
+[prog]
+top = "mem-sliced-regs::MemSlicedRegsTest"

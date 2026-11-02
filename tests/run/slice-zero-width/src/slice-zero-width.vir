@@ -1,0 +1,64 @@
+//! Self-checking `kind = "run"` test for the zero-width slice.
+//!
+//! The slice `x[2..2]` is a `Word[0]` -- an empty word.  Driven
+//! through `word()`, the empty word must vanish in concatenation:
+//! `word(x[2..2], y)` has the width of `y` and equals `y`.  The fixed
+//! vector `y = 0b10` separates the concatenated bits (`1`, `0`) from
+//! what a bit-reversed or widened concatenation would produce.  Every
+//! check is ANDed into a single `all_ok` verdict; the simulator exits
+//! with code 0 only if all checks passed, and 1 otherwise.
+
+import virt
+
+pub mod SliceZeroWidthTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case all_ok => @Valid(0)
+            else => @Invalid()
+        }
+    }
+
+    //> Fixed test vector for the sliced word: `x[2..2]` takes no bits
+    //> from it either way.
+    wire x : Word[3] {
+        it := 0b011
+    }
+
+    //> Fixed test vector for the surviving operand: `0b10` distinguishes
+    //> the concatenated bits from a bit-reversed reading.
+    wire y : Word[2] {
+        it := 0b10
+    }
+
+    //> The zero-width slice under test: `Word[0]`.
+    wire empty : Word[0] {
+        it := x[2..2]
+    }
+
+    //> The concatenation under test: must have the width of `y`
+    //> (checked by this wire's declared type) and equal `y`.
+    wire cat : Word[2] {
+        it := word(empty, y)
+    }
+
+    //> The empty word must vanish: `word(empty, y)` equals `y`.
+    wire check_vanishes : Bit {
+        it := cat == y
+    }
+
+    //> Per-bit identity: the concatenation's only bits are exactly
+    //> `y`'s bits, in order, with no reversal.
+    wire check_perbit : Bit {
+        it := cat == word(y[1], y[0])
+    }
+
+    //> All checks ANDed together; drives the exit code.
+    wire all_ok : Bit {
+        it := check_vanishes && check_perbit
+    }
+}

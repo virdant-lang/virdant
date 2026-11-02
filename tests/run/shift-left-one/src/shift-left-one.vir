@@ -1,0 +1,182 @@
+// Self-checking `kind = "run"` test for shifting a `Word[8]` by 1 in
+// both directions.
+//
+//! A `ShiftOne` unit shifts combinationally with `word()` and bit
+//! slices (Virdant has no `<<`/`>>` operators): left by 1 is
+//! `word(x[7..0], 0w1)` — the top slice index is exclusive, so the
+//! slice keeps bits 7..0 and the original top bit is shifted out and
+//! lost — and right by 1 is `word(0w1, x[8..1])`, which keeps bits
+//! 7..1 and drops the bottom bit.  A
+//! harness top drives it through a table of 16 vectors: zero, one,
+//! the extremes, alternating patterns, and values whose top bit
+//! (left shift) or bottom bit (right shift) is shifted out and lost.
+//! Each result is compared against a golden value and every check is
+//! ANDed into a running `all_ok`; the simulator exits with code 0
+//! only if all 16 vectors passed, and 1 otherwise.
+
+import virt
+
+//> Shifts the operand by 1 bit in each direction using `word()` and
+//> bit slices.
+mod ShiftOne {
+    //> Value to shift.
+    incoming x : Word[8]
+
+    //> `x` shifted left by 1: drop the top bit (shifted out and
+    //> lost) and append a 0 at the bottom.
+    outgoing left1 : Word[8] {
+        it := word(x[7..0], 0w1)
+    }
+
+    //> `x` shifted right by 1: prepend a 0 at the top and drop the
+    //> bottom bit (shifted out and lost).
+    outgoing right1 : Word[8] {
+        it := word(0w1, x[8..1])
+    }
+}
+
+pub mod ShiftLeftOneTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last vector checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod shifter of ShiftOne {
+        it.x := vec_x
+    }
+
+    //> Index of the vector under test, 0 through 15.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdicts for the current vector.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && shifter.left1 == expected_left && shifter.right1 == expected_right
+    }
+
+    //> Rises one cycle after the last vector is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 15 {
+                it <= true
+            }
+        }
+    }
+
+    wire vec_x : Word[8]
+    wire expected_left : Word[8]
+    wire expected_right : Word[8]
+
+    // Test-vector table: `vec_x` and the golden `expected_left` /
+    // `expected_right` results, selected by `index`.  The 16 cases
+    // exactly cover `Word[4]`, so the match is exhaustive.
+    match index {
+        // Zero shifts to zero in both directions.
+        case 0 {
+            vec_x := 0x00
+            expected_left := 0x00
+            expected_right := 0x00
+        }
+        // Right shift loses the bottom bit.
+        case 1 {
+            vec_x := 0x01
+            expected_left := 0x02
+            expected_right := 0x00
+        }
+        // Left shift loses the top bit.
+        case 2 {
+            vec_x := 0x80
+            expected_left := 0x00
+            expected_right := 0x40
+        }
+        // Both shifts lose a bit.
+        case 3 {
+            vec_x := 0xFF
+            expected_left := 0xFE
+            expected_right := 0x7F
+        }
+        // Alternating patterns.
+        case 4 {
+            vec_x := 0xAA
+            expected_left := 0x54
+            expected_right := 0x55
+        }
+        case 5 {
+            vec_x := 0x55
+            expected_left := 0xAA
+            expected_right := 0x2A
+        }
+        // Top and bottom bits set: both shifts drop a 1.
+        case 6 {
+            vec_x := 0x81
+            expected_left := 0x02
+            expected_right := 0x40
+        }
+        // All ones below the top bit.
+        case 7 {
+            vec_x := 0x7F
+            expected_left := 0xFE
+            expected_right := 0x3F
+        }
+        // Nibbles at the bottom and at the top.
+        case 8 {
+            vec_x := 0x0F
+            expected_left := 0x1E
+            expected_right := 0x07
+        }
+        case 9 {
+            vec_x := 0xF0
+            expected_left := 0xE0
+            expected_right := 0x78
+        }
+        // Assorted mixed patterns.
+        case 10 {
+            vec_x := 0xC3
+            expected_left := 0x86
+            expected_right := 0x61
+        }
+        case 11 {
+            vec_x := 0x3C
+            expected_left := 0x78
+            expected_right := 0x1E
+        }
+        case 12 {
+            vec_x := 0x99
+            expected_left := 0x32
+            expected_right := 0x4C
+        }
+        case 13 {
+            vec_x := 0x66
+            expected_left := 0xCC
+            expected_right := 0x33
+        }
+        case 14 {
+            vec_x := 0x5A
+            expected_left := 0xB4
+            expected_right := 0x2D
+        }
+        case 15 {
+            vec_x := 0xA5
+            expected_left := 0x4A
+            expected_right := 0x52
+        }
+    }
+}

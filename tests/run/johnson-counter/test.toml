@@ -1,0 +1,3 @@
+kind = "run"
+description = "4-bit Johnson (twisted ring) counter: asserts the 2N-state sequence"
+cycle_limit = 10

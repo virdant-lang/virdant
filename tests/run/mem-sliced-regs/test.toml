@@ -1,0 +1,3 @@
+kind = "run"
+description = "4-slot memory as four Word[8] regs with a 2-bit address decoded by match; writes then reads back each slot"
+cycle_limit = 12

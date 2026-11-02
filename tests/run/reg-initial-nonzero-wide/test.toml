@@ -1,0 +1,3 @@
+kind = "run"
+description = "`initial` on Word[16] with the large constant 0xbeef"
+cycle_limit = 4

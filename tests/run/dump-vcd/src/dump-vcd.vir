@@ -1,0 +1,44 @@
+//! Self-checking `kind = "run"` test for a single-cycle pulse.
+//!
+//! The design asserts `pulse` high for exactly one cycle (cycle 3)
+//! amid otherwise idle cycles.  Cycle-by-cycle sampling checks the
+//! pulse against the expected waveform and folds every verdict into a
+//! running `all_ok`; the simulator exits with code 0 only if every
+//! cycle matched.  `trace = true` additionally compares the waveform
+//! against a golden VCD, so the test also verifies the cycle-by-cycle
+//! waveform-sensitive behavior through the `vir run --trace` output.
+
+import virt
+
+pub mod DumpVcd for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all 8 cycles checked out; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case cycle == 8 => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Cycles elapsed since reset, 0 through 8.
+    reg cycle : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> One-cycle pulse: high only during cycle 3.
+    reg pulse : Bit on clock {
+        initial it <= false
+        it <= cycle == 2
+    }
+
+    //> Stays high only while `pulse` has matched the expected waveform
+    //> on every cycle so far.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && (pulse == (cycle == 3))
+    }
+}

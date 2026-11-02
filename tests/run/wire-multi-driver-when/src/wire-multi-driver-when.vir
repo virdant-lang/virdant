@@ -1,0 +1,186 @@
+//! Self-checking `kind = "run"` test for a wire driven from both arms
+//! of a statement `when`.
+//!
+//! A `WireMultiDriverWhen` unit has a `picked` wire with a driver in
+//! each arm of one statement `when`: the `case` arm drives it with
+//! `a + b` and the `else` arm drives it with `a - b`.  The `when` is
+//! total — every arm assigns `picked` — so the wire has a value on
+//! every cycle.  A harness top walks 8 vectors, four through each
+//! arm, compares `picked` (via the `result` outgoing) against golden
+//! values, ANDs every verdict into a running `all_ok`, and exits with
+//! code 0 only if all 8 vectors passed and both arms were exercised,
+//! and 1 otherwise.
+
+import virt
+
+//> Unit under test: a wire driven from both arms of a statement
+//> `when`.
+mod WireMultiDriverWhen {
+    //> First operand.
+    incoming a : Word[8]
+
+    //> Second operand.
+    incoming b : Word[8]
+
+    //> Arm selector: high runs the `case` arm, low the `else` arm.
+    incoming sel : Bit
+
+    //> Value carried by the multi-driver wire under test.
+    outgoing result : Word[8]
+
+    //> Wire with a driver in each arm of the statement `when` below.
+    //> Being a wire, the `when` must be total: every arm assigns it.
+    wire picked : Word[8]
+
+    // Both arms drive `picked`: `case` computes the sum, `else` the
+    // wrapping difference.  Evaluated in order; `else` catches every
+    // cycle where `sel` is low.
+    when {
+        case sel {
+            picked := a + b
+        }
+        else {
+            picked := a - b
+        }
+    }
+
+    result := picked
+}
+
+pub mod WireMultiDriverTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all vectors checked out and both arms were
+    //> exercised; `@Valid(1)` if any check failed.  While
+    //> `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod dut of WireMultiDriverWhen {
+        it.a := a
+        it.b := b
+        it.sel := sel
+    }
+
+    //> First operand under test this cycle.
+    wire a : Word[8]
+
+    //> Second operand under test this cycle.
+    wire b : Word[8]
+
+    //> Arm selector under test this cycle.
+    wire sel : Bit
+
+    //> Golden `picked` value for the vector under test.
+    wire expected : Word[8]
+
+    // Test-vector table.  Even indices run the `case` (`sel` high)
+    // arm, odd indices the `else` (`sel` low) arm; the wraparound
+    // pairs catch width and sign mistakes in either arm.
+    match index {
+        case 0 {
+            a := 3
+            b := 4
+            sel := true
+            expected := 7
+        }
+        case 1 {
+            a := 3
+            b := 4
+            sel := false
+            expected := 255
+        }
+        case 2 {
+            a := 0
+            b := 0
+            sel := true
+            expected := 0
+        }
+        case 3 {
+            a := 0
+            b := 0
+            sel := false
+            expected := 0
+        }
+        case 4 {
+            a := 255
+            b := 1
+            sel := true
+            expected := 0
+        }
+        case 5 {
+            a := 255
+            b := 1
+            sel := false
+            expected := 254
+        }
+        case 6 {
+            a := 200
+            b := 100
+            sel := true
+            expected := 44
+        }
+        case 7 {
+            a := 100
+            b := 200
+            sel := false
+            expected := 156
+        }
+    }
+
+    //> Index of the vector under test, cycling 0 through 7.  The 8
+    //> cases exactly cover `Word[3]`, so the match is exhaustive.
+    reg index : Word[3] on clock {
+        initial it <= 0
+        it <= index + 1
+    }
+
+    //> Latched high once a `case`-arm vector has been on the inputs.
+    reg saw_case : Bit on clock {
+        initial it <= false
+        when {
+            case sel {
+                it <= true
+            }
+        }
+    }
+
+    //> Latched high once an `else`-arm vector has been on the inputs.
+    reg saw_else : Bit on clock {
+        initial it <= false
+        when {
+            case !sel {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdict for the vector on the inputs.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && (dut.result == expected)
+    }
+
+    //> Number of vectors checked so far, 0 through 8.  Holds at 8 so
+    //> that `finished` stays high.
+    reg checked : Word[4] on clock {
+        initial it <= 0
+        when {
+            case checked != 8 {
+                it <= checked + 1
+            }
+        }
+    }
+
+    //> Rises once all 8 vectors have been checked AND both arms were
+    //> exercised, so that the exit code sees the final `all_ok`.
+    wire finished : Bit {
+        it := (checked == 8) && saw_case && saw_else
+    }
+}

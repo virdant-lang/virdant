@@ -1,0 +1,110 @@
+//! Self-checking `kind = "run"` test for `unused` on a socket member.
+//!
+//! A server module implements only part of its socket port: it drives
+//! the `data` response channel and never consumes the `addr` request
+//! channel, which it suppresses with `unused mem.addr`.  The harness
+//! client drives `addr` through many changing values and asserts that
+//! the used channel (`data`) still crosses the bulk connect with its
+//! expected value on every cycle.
+
+//> Socket under test: a memory-style request (`addr`, client to
+//> server) and response (`data`, server to client) pair.
+socket Mem {
+    cosi addr : Word[16]
+    soci data : Word[8]
+}
+
+//> Server that drives only some channels of its socket port: `data`
+//> is driven to a fixed value, while `addr` is deliberately ignored
+//> and suppressed with `unused mem.addr`.
+mod Memory {
+    //> Server end of the socket: only the response channel is driven.
+    server socket mem of Mem {
+        it.data := 10w8
+    }
+
+    // The request channel is intentionally never consumed.
+    unused mem.addr
+}
+
+//> Self-checking harness: drives `addr` through 16 distinct values
+//> and checks the used response channel on every cycle.
+mod Stim {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once every cycle's check has passed; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case done => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Client end of the socket under test: `addr` goes out, `data`
+    //> comes back.
+    client socket drv of Mem {
+        it.addr := count
+    }
+
+    //> Cycle counter driving `addr`; cycles through 0 to 15 so the
+    //> request channel carries many distinct values that must never
+    //> leak into the response.
+    reg count : Word[16] on clock {
+        initial it <= 0
+        when {
+            case !done {
+                it <= it + 1w16
+            }
+        }
+    }
+
+    //> True when the used response channel arrived back through the
+    //> bulk connect with the server's fixed value.
+    wire ok : Bit {
+        it := drv.data == 10w8
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds its verdict in until `done`.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !done {
+                it <= it && ok
+            }
+        }
+    }
+
+    //> Rises once 16 cycles have been checked; freezes `all_ok` and
+    //> lets `exit` become `@Valid`.
+    reg done : Bit on clock {
+        initial it <= false
+        when {
+            case count == 15w16 {
+                it <= true
+            }
+        }
+    }
+}
+
+pub mod SocketUnusedMemberTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Forwards the verdict computed by the harness.
+    outgoing exit : Valid[Word[8]] {
+        it := stim.exit
+    }
+
+    mod stim of Stim {
+        it.clock := clock
+    }
+
+    mod dut of Memory
+
+    // The client and server socket ends meet through one bulk connect.
+    stim.drv :=: dut.mem
+}

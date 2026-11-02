@@ -1,0 +1,95 @@
+// Self-checking `kind = "run"` test for a three-deep import chain.
+//
+// `a.vir` (this file) imports `b.vir`, which imports `c.vir`.  Inside
+// `a`, two instances of `b::Wrapped` are driven; each `Wrapped`
+// internally instantiates `c::Counter`, so instantiating a module from
+// `c` inside `a` goes through the full three-file chain a -> b -> c.
+// The checks assert that both chains load and count independently and
+// correctly; the simulator exits with code 0 only if every check
+// passed.
+
+import b
+
+pub mod MultiFileThreeDeepTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> First chain down to `c`: `Wrapped` (in `b`) instantiates
+    //> `c::Counter`, loaded with 10 on cycle 0.
+    mod chain_a of b::Wrapped {
+        it.clock := clock
+        it.load := load
+        it.start := 10
+    }
+
+    //> Second chain down to `c`, wired differently (start 100) so a
+    //> bug that aliased the two chains would fail the checks.
+    mod chain_b of b::Wrapped {
+        it.clock := clock
+        it.load := load
+        it.start := 100
+    }
+
+    //> Test schedule: cycles 0 through 10.
+    reg tick : Word[5] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Load pulse for both chains, on cycle 0.
+    wire load : Bit {
+        it := tick == 0
+    }
+
+    //> Cycle 1: both chains took their own start value.
+    wire check_loaded : Bit {
+        it := tick != 1 || (chain_a.value == 10 && chain_b.value == 100)
+    }
+
+    //> Cycle 5: four free-running cycles after the load, each from its
+    //> own start value.
+    wire check_counting : Bit {
+        it := tick != 5 || (chain_a.value == 14 && chain_b.value == 104)
+    }
+
+    //> Cycle 9: eight free-running cycles after the load.  If the
+    //> three-deep resolution collapsed onto one instance, the two
+    //> chains would alias and both read the same value here.
+    wire check_distinct : Bit {
+        it := tick != 9 || (chain_a.value == 18 && chain_b.value == 108)
+    }
+
+    //> The two chains must never read the same value once running:
+    //> their different start values (10 vs 100) keep them apart.
+    //> Vacuously true in cycle 0, where both still read power-on 0.
+    wire check_never_alias : Bit {
+        it := tick == 0 || chain_a.value != chain_b.value
+    }
+
+    //> Running AND of every check.  Power-on true; each scheduled
+    //> check folds its verdict in on the cycle it is active.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check_loaded && check_counting && check_distinct && check_never_alias
+    }
+
+    //> Rises after the last scheduled check (cycle 9) has been folded
+    //> in.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case tick == 9 {
+                it <= true
+            }
+        }
+    }
+}

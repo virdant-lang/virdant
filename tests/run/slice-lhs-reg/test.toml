@@ -1,0 +1,3 @@
+kind = "run"
+description = "Partial register update: drives one nibble of a Word[8] reg per cycle by reassembling with word(), asserting the written nibble updates and the unwritten nibble is preserved"
+cycle_limit = 20

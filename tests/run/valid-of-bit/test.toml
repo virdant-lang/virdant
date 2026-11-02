@@ -1,0 +1,4 @@
+kind = "run"
+description = "`Valid[Bit]` with a Bit payload: construct `@Valid(true)`, `@Valid(false)`, and `@Invalid()`, match and extract the payload, assert both variants"
+cycle_limit = 4
+trace = false

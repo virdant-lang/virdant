@@ -1,0 +1,4 @@
+kind = "run"
+description = "Slice an incoming port directly (`inp[8..4]`) without an intermediate wire"
+cycle_limit = 10
+trace = false

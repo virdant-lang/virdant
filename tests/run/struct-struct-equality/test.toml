@@ -1,0 +1,4 @@
+kind = "run"
+description = "Compare two struct values with == (field-by-field fallback if unsupported); assert both"
+cycle_limit = 3
+trace = false

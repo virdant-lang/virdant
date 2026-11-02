@@ -1,0 +1,5 @@
+[project]
+name = "union-match-in-driver"
+
+[prog]
+top = "union-match-in-driver::UnionMatchInDriverTest"

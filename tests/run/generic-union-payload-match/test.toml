@@ -1,0 +1,4 @@
+kind = "run"
+description = "`match` over `Opt[Word[8]]` — a generic union type; the `@Some` arm binds the payload and the extraction is asserted"
+cycle_limit = 3
+trace = false

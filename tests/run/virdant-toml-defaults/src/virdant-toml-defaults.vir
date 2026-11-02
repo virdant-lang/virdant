@@ -1,0 +1,83 @@
+//! Self-checking `kind = "run"` test for a minimal `virdant.toml`.
+//!
+//! The project's `virdant.toml` contains only the `[project]` `name`
+//! and the `[prog]` `top` keys -- no other configuration.  The test
+//! doubles as a smoke test of the default toolchain configuration: a
+//! trivial free-running counter must build and simulate through the
+//! default runner path.  The harness compares the counter against a
+//! shadow counter every cycle after warm-up; the simulator exits with
+//! code 0 only if every check passed, and 1 otherwise.
+
+import virt
+
+//> Trivial free-running 2-bit counter: 0, 1, 2, 3, 0, 1, ...
+mod Counter {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> The current count, wrapping modulo 4.
+    outgoing count : Word[2] {
+        it := value
+    }
+
+    reg value : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+}
+
+pub mod VirdantTomlDefaultsTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last check checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod dut of Counter {
+        it.clock := clock
+    }
+
+    //> Warm-up flag: false on the first cycle only, so simulator
+    //> start-up randomness on the first clock edge cannot leak into
+    //> a verdict.
+    reg warm : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> Shadow counter: free-runs through 0..7 and wraps, in lockstep
+    //> with `dut.count`'s modulo-4 sequence.
+    reg checks : Word[3] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the cycle it is made.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case warm {
+                it <= it && dut.count == checks[2..0]
+            }
+        }
+    }
+
+    //> Rises at the end of the final check, freezing the fold and
+    //> validating `exit` on the next cycle.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case warm && checks == 7 {
+                it <= true
+            }
+        }
+    }
+}

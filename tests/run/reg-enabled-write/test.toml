@@ -1,0 +1,3 @@
+kind = "run"
+description = "Load-enable register: loads d when wr_en, holds when disabled"
+cycle_limit = 20

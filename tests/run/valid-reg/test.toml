@@ -1,0 +1,3 @@
+kind = "run"
+description = "Register of Valid[Word[8]]: loads @Valid(d) while en, holds payload otherwise"
+cycle_limit = 24

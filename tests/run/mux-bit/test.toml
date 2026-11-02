@@ -1,0 +1,4 @@
+kind = "run"
+description = "mux(sel, a, b) on Bits: selects a when sel is true and b when sel is false, for both sel values"
+cycle_limit = 5
+trace = false

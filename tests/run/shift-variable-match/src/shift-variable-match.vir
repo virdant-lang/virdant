@@ -1,0 +1,165 @@
+//! Self-checking `kind = "run"` test for variable-distance shifts
+//! via `match` on the shift amount.
+//!
+//! A `VarShifter` unit shifts an 8-bit word left and right by a 2-bit
+//! amount (0..3), each direction computed with a `match` expression
+//! on the amount.  The harness top runs a sequencer that cycles the
+//! amount 0 through 3 and, one cycle later (once the shifter's
+//! registered outputs reflect that amount), checks both results
+//! against golden values.  Every verdict is folded into a running
+//! `all_ok`; the simulator exits with code 0 only if all four amounts
+//! checked out in both directions, and 1 otherwise.
+//!
+//! Slices use the exclusive-top convention: `x[hi..lo]` selects bits
+//! `lo` through `hi - 1`, so `x[7..0]` is the low 7 bits of `x` and
+//! `x[8..1]` is the high 7 bits.
+
+import virt
+
+//> Variable-distance shifter: left- and right-shifts an 8-bit word
+//> by a 2-bit amount, each direction selected with a `match`
+//> expression on the amount.
+mod VarShifter {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Word to shift.
+    incoming x : Word[8]
+
+    //> Shift amount, 0 through 3.
+    incoming amount : Word[2]
+
+    //> `x` shifted left by `amount`; bits shifted out are lost.
+    outgoing shl : Word[8]
+
+    //> `x` shifted right by `amount`; bits shifted in are zeros.
+    outgoing shr : Word[8]
+
+    //> Left shift: keep the low `8 - amount` bits of `x` and pad
+    //> with zeros on the least-significant end.
+    reg shl_reg : Word[8] on clock {
+        initial it <= 0
+        it <= match amount {
+            case 0 => x
+            case 1 => word(x[7..0], 0w1)
+            case 2 => word(x[6..0], 0w2)
+            case 3 => word(x[5..0], 0w3)
+        }
+    }
+
+    reg shr_reg : Word[8] on clock {
+        initial it <= 0
+        it <= match amount {
+            case 0 => x
+            case 1 => word(0w1, x[8..1])
+            case 2 => word(0w2, x[8..2])
+            case 3 => word(0w3, x[8..3])
+        }
+    }
+
+    shl := shl_reg
+    shr := shr_reg
+}
+
+pub mod ShiftVarMatchTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all four amounts checked out in both
+    //> directions; `@Valid(1)` if any check failed.  While
+    //> `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod shifter of VarShifter {
+        it.clock := clock
+        it.x := stimulus
+        it.amount := amount
+    }
+
+    //> The constant word under test.
+    wire stimulus : Word[8] {
+        it := 0b1011_0010
+    }
+
+    //> Sequencer: the shift amount under test, cycling 0, 1, 2, 3.
+    reg amount : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> The amount the shifter's registered outputs currently reflect
+    //> (the sequencer value from the previous cycle).
+    reg checked : Word[2] on clock {
+        initial it <= 0
+        it <= amount
+    }
+
+    //> High from the first checked cycle until the test finishes.
+    reg started : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> High on every cycle whose shifter outputs are checked.
+    wire checking : Bit {
+        it := started && !finished
+    }
+
+    //> Golden left-shift results for `stimulus`, one per amount.
+    wire exp_shl : Word[8] {
+        it := match checked {
+            case 0 => 0b1011_0010
+            case 1 => 0b0110_0100
+            case 2 => 0b1100_1000
+            case 3 => 0b1001_0000
+        }
+    }
+
+    //> Golden right-shift results for `stimulus`, one per amount.
+    wire exp_shr : Word[8] {
+        it := match checked {
+            case 0 => 0b1011_0010
+            case 1 => 0b0101_1001
+            case 2 => 0b0010_1100
+            case 3 => 0b0001_0110
+        }
+    }
+
+    //> Verdict for the current cycle: both directions must match the
+    //> golden values for `checked`.
+    wire step_ok : Bit {
+        it := shifter.shl == exp_shl && shifter.shr == exp_shr
+    }
+
+    //> Running AND of every cycle's verdict.  Power-on true; each
+    //> checked cycle folds `step_ok` in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && step_ok
+            }
+        }
+    }
+
+    //> True once the amount-3 cycle has been checked, freezing
+    //> `all_ok` so the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case last_check {
+                it <= true
+            }
+        }
+    }
+
+    //> The final checked cycle: amount 3 under `checked`.
+    wire last_check : Bit {
+        it := checking && checked == 3
+    }
+}

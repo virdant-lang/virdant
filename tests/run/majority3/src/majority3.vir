@@ -1,0 +1,123 @@
+// Self-checking `kind = "run"` test for the majority function of
+// three bits.
+//
+// A `Majority3` unit outputs `1` when at least two of its three bit
+// inputs are `1`, and `0` otherwise.  A harness top drives it through
+// all 8 combinations of the three input bits (the index itself
+// supplies the operands), each compared against a hand-written golden
+// bit and ANDed into a running `all_ok`; the simulator exits with
+// code 0 only if all 8 rows passed, and 1 otherwise.
+
+import virt
+
+//> Majority of three bits: `1` when at least two inputs are `1`.
+mod Majority3 {
+    //> First operand.
+    incoming a : Bit
+
+    //> Second operand.
+    incoming b : Bit
+
+    //> Third operand.
+    incoming c : Bit
+
+    //> Majority: `a && b`, `a && c`, or `b && c` makes it `1`.
+    outgoing out : Bit {
+        it := (a && b) || (a && c) || (b && c)
+    }
+}
+
+pub mod Majority3Test for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last row checked out; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod maj of Majority3 {
+        it.a := vec_a
+        it.b := vec_b
+        it.c := vec_c
+    }
+
+    //> Index of the row under test, 0 through 7.  Its three bits are
+    //> driven straight into the unit, so the 8 values sweep every
+    //> combination of the three input bits.
+    reg index : Word[3] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdict for the current row.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && maj.out == expected
+    }
+
+    //> Rises one cycle after the last row is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 7 {
+                it <= true
+            }
+        }
+    }
+
+    //> Operands for the current row, taken from the bits of `index`.
+    wire vec_a : Bit {
+        it := index[2]
+    }
+
+    wire vec_b : Bit {
+        it := index[1]
+    }
+
+    wire vec_c : Bit {
+        it := index[0]
+    }
+
+    //> Golden majority for the current row, selected by `index`.  All
+    //> 8 combinations of three bits are covered, so the match is
+    //> exhaustive.
+    wire expected : Bit
+
+    match index {
+        case 0 {
+            expected := false
+        }
+        case 1 {
+            expected := false
+        }
+        case 2 {
+            expected := false
+        }
+        case 3 {
+            expected := true
+        }
+        case 4 {
+            expected := false
+        }
+        case 5 {
+            expected := true
+        }
+        case 6 {
+            expected := true
+        }
+        case 7 {
+            expected := true
+        }
+    }
+}

@@ -1,0 +1,4 @@
+kind = "run"
+description = "Multi-file import: `Counter` lives in `counter.vir` (separate package) and is instantiated by plain name after `import counter`; the harness checks the count against a golden table over eight cycles"
+cycle_limit = 12
+trace = false

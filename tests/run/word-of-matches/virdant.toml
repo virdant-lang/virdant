@@ -1,0 +1,5 @@
+[project]
+name = "word-of-matches"
+
+[prog]
+top = "word-of-matches::WordOfMatchesTest"

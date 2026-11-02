@@ -1,0 +1,4 @@
+kind = "run"
+description = "Comparisons of Word[4] against Word[8] where the narrow side is zext-ed; assert ==, !=, <, <=, >, >= results"
+cycle_limit = 1
+trace = false

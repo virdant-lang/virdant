@@ -1,0 +1,4 @@
+kind = "run"
+description = "register of struct type with field-wise update: read fields of `it`, write back a new struct; assert fields"
+cycle_limit = 6
+trace = false

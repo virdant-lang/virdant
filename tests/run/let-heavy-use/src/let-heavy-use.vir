@@ -1,0 +1,42 @@
+// Self-checking `kind = "run"` test for a `let` bound to a complex
+// expression that is used three times in its body: the shared
+// subexpression is bound once and each use is checked against a golden
+// value, so the simulator exits with code 0 only if the bound value is
+// correct everywhere it is used.
+
+import virt
+
+pub mod Top for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Operands of the shared subexpression.
+    wire x : Word[8] {
+        it := 0x2Aw8
+    }
+
+    wire y : Word[8] {
+        it := 0x63w8
+    }
+
+    //> `shared` is `(x + y) + (x ^ y)` = `0x8D + 0x49` = `0xD6`.
+    //> The body uses it three times: a direct compare against the
+    //> golden value, a slice of its top nibble, and an arithmetic use.
+    wire shared_check0 : Bit
+    wire shared_check1 : Bit
+    wire shared_check2 : Bit
+    let shared = (x + y) + (x ^ y) : Word[8] {
+        shared_check0 := shared == 0xD6w8
+        shared_check1 := shared[8..4] == 0xDw4
+        shared_check2 := shared + 1w8 == 0xD7w8
+    }
+
+    //> Exit `@Valid(0)` when all three uses of `shared` agree with
+    //> their golden values; `@Invalid()` keeps the simulator running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case shared_check0 && shared_check1 && shared_check2 => @Valid(0)
+            else => @Invalid()
+        }
+    }
+}

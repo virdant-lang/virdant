@@ -1,0 +1,93 @@
+//! Self-checking `kind = "run"` test for casting an enum to its
+//! underlying `Word[n]` bit pattern.
+//!
+//! A four-variant `Phase` enum with hand-picked encodings is turned
+//! into `Word[3]` with `cast()`, and each variant's bit pattern is
+//! compared against its declared encoding.  Every verdict is folded
+//! into a running `all_ok`; the simulator exits with code 0 only if
+//! all four encodings matched, and 1 otherwise.
+
+import virt
+
+//> Traffic-light phase with nontrivial, sparse encodings: `Off`
+//> covers the all-zero pattern and `Red` the single high bit at
+//> position 2.
+enum type Phase {
+    Off    = 0w3
+    Green  = 1w3
+    Yellow = 2w3
+    Red    = 4w3
+}
+
+pub mod EnumCastToWordTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every encoding matched; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Each enum variant, bound to a typed wire so the variant's
+    //> type is known.
+    wire off : Phase {
+        it := #Off
+    }
+
+    wire green : Phase {
+        it := #Green
+    }
+
+    wire yellow : Phase {
+        it := #Yellow
+    }
+
+    wire red : Phase {
+        it := #Red
+    }
+
+    //> `cast()` of each enum variant down to its underlying
+    //> `Word[3]`, the width the enum's value widths dictate.
+    wire off_bits : Word[3] {
+        it := cast(off)
+    }
+
+    wire green_bits : Word[3] {
+        it := cast(green)
+    }
+
+    wire yellow_bits : Word[3] {
+        it := cast(yellow)
+    }
+
+    wire red_bits : Word[3] {
+        it := cast(red)
+    }
+
+    //> All four bit patterns must equal their declared encodings.
+    wire checks_ok : Bit {
+        it := off_bits == 0
+            && green_bits == 1
+            && yellow_bits == 2
+            && red_bits == 4
+    }
+
+    //> Running AND of every check.  Power-on true; the checks fold in
+    //> on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && checks_ok
+    }
+
+    //> Rises on the first clock edge, after the checks are folded
+    //> into `all_ok`, so the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

@@ -1,0 +1,4 @@
+kind = "run"
+description = "Short-circuit folding: `false && x`, `true || x` over `dontcare`"
+cycle_limit = 4
+trace = false

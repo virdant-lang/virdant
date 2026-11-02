@@ -1,0 +1,4 @@
+kind = "run"
+description = "Single-variant enum: construction, matching, and casting"
+cycle_limit = 3
+trace = false

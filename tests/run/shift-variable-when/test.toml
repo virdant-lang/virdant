@@ -1,0 +1,4 @@
+kind = "run"
+description = "Variable-distance shift of Word[8] by 0..3 in both directions via a when expression"
+cycle_limit = 20
+trace = false

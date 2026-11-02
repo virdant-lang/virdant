@@ -1,0 +1,4 @@
+kind = "run"
+description = "word(hi : Word[4], mid : Bit, lo : Word[3]) concatenates most-significant first: the Word[4] lands in bits 7..4, the Bit in bit 3, and the Word[3] in bits 2..0"
+cycle_limit = 5
+trace = false

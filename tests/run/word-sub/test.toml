@@ -1,0 +1,4 @@
+kind = "run"
+description = "`-` on Word[4] with underflow wrap (0 - 1 = 0xf); assert wrap-around and several non-wrapping differences"
+cycle_limit = 1
+trace = false

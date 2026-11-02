@@ -1,0 +1,4 @@
+kind = "run"
+description = "Match arms project struct fields with -> and assert"
+cycle_limit = 3
+trace = false

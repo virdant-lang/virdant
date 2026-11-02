@@ -1,0 +1,4 @@
+kind = "run"
+description = "any() builtin: true iff at least one bit set, agrees with x != 0"
+cycle_limit = 5
+trace = false

@@ -1,0 +1,116 @@
+//! Self-checking `kind = "run"` test for concrete literal sub-patterns
+//! in `match` arms.
+//!
+//! A `PairState` union carries a `Pair(a : Bit, b : Bit)` variant.
+//! Each candidate value is fed through a `match` whose concrete arm
+//! is `case @Pair(true, false)`: the arm must fire only for the value
+//! whose payloads are exactly `true` and `false`, and every
+//! Non-matching vectors -- both payloads flipped one at a time or
+//! together, and the payload-free `@Nothing()` -- must fall through to
+//! the `else` arm.  The same match is exercised in value position, so
+//! the arm's result is observable.  All verdicts are ANDed into a
+//! `fail_bits` bitmask; the simulator exits with code 0 only if every
+//! check passed, and with the bitmask (nonzero) otherwise.
+
+import virt
+
+//> State under test.
+//>
+//> `Nothing()` - carries no payload.
+//> `Pair(a, b)` - carries two `Bit` payloads.
+union type PairState {
+    Nothing()
+    Pair(a : Bit, b : Bit)
+}
+
+pub mod MatchSubpatternConcreteTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> The matching vector: payloads exactly `true`, `false`.
+    wire u_hit : PairState {
+        it := @Pair(true, false)
+    }
+
+    //> Non-matching vectors: one or both payloads flipped, and the
+    //> payload-free variant.
+    wire u_ff : PairState {
+        it := @Pair(false, false)
+    }
+    wire u_ft : PairState {
+        it := @Pair(false, true)
+    }
+    wire u_tt : PairState {
+        it := @Pair(true, true)
+    }
+    wire u_none : PairState {
+        it := @Nothing()
+    }
+
+    //> One verdict per vector: `true` iff the concrete arm
+    //> `case @Pair(true, false)` fired.
+    wire hit_hit : Bit {
+        it := match u_hit : PairState {
+            case @Pair(true, false) => true
+            else => false
+        }
+    }
+    wire hit_ff : Bit {
+        it := match u_ff : PairState {
+            case @Pair(true, false) => true
+            else => false
+        }
+    }
+    wire hit_ft : Bit {
+        it := match u_ft : PairState {
+            case @Pair(true, false) => true
+            else => false
+        }
+    }
+    wire hit_tt : Bit {
+        it := match u_tt : PairState {
+            case @Pair(true, false) => true
+            else => false
+        }
+    }
+    wire hit_none : Bit {
+        it := match u_none : PairState {
+            case @Pair(true, false) => true
+            else => false
+        }
+    }
+
+    //> Value position: the concrete arm selects `3`, everything else
+    //> selects `0`.
+    wire sel : Word[2] {
+        it := match u_hit : PairState {
+            case @Pair(true, false) => 3w2
+            else => 0w2
+        }
+    }
+    wire sel_other : Word[2] {
+        it := match u_ft : PairState {
+            case @Pair(true, false) => 3w2
+            else => 0w2
+        }
+    }
+
+    //> Diagnostic bitmask: bit0 = matching vector missed; bit1 =
+    //> @Pair(false, false) hit; bit2 = @Pair(false, true) hit;
+    //> bit3 = @Pair(true, true) hit; bit4 = @Nothing() hit;
+    //> bit5 = value-position match on u_hit wrong; bit6 = on u_ft
+    //> wrong.
+    wire fail_bits : Word[8] {
+        it := word(!hit_hit, hit_ff, hit_ft, hit_tt, hit_none,
+                    sel != 3w2, sel_other != 0w2, false)
+    }
+
+    //> `@Valid(0)` when every check passed; `@Valid(fail_bits)`
+    //> otherwise.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case fail_bits == 0 => @Valid(0)
+            else => @Valid(fail_bits)
+        }
+    }
+}

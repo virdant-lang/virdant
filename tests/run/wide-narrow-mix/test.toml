@@ -1,0 +1,4 @@
+kind = "run"
+description = "Mixed Word[1], Word[2], Word[17], Word[64] signals in one design: constants, ops, and slices at each width, each asserted independently"
+cycle_limit = 5
+trace = false

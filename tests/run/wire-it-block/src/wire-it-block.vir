@@ -1,0 +1,138 @@
+//! Self-checking `kind = "run"` test for wire driver blocks.
+//!
+//! The same logic is written twice side by side: once in the driver
+//! block form `wire w : T { it := expr }` and once in the bare form
+//! `wire w : T` followed by a top-level driver `w := expr`.  Each
+//! pair must produce identical results, so a bug in either form
+//! breaks the equality check.  Every check is folded into a running
+//! `all_ok`; the simulator exits with code 0 only if every pair
+//! matched, and 1 otherwise.
+
+import virt
+
+pub mod WireItBlockTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every form pair matched; `@Valid(1)` if any
+    //> pair diverged.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Driver-block form: `true && false`.
+    wire block_and : Bit {
+        it := true && false
+    }
+
+    //> Bare form of the same logic.
+    wire bare_and : Bit
+
+    bare_and := true && false
+
+    //> Driver-block form: `100w8 + 55w8`.
+    wire block_add : Word[8] {
+        it := 100w8 + 55w8
+    }
+
+    //> Bare form of the same logic.
+    wire bare_add : Word[8]
+
+    bare_add := 100w8 + 55w8
+
+    //> Driver-block form: `100w8 < 55w8`.
+    wire block_cmp : Bit {
+        it := 100w8 < 55w8
+    }
+
+    //> Bare form of the same logic.
+    wire bare_cmp : Bit
+
+    bare_cmp := 100w8 < 55w8
+
+    //> Driver-block form: a `when` expression.
+    wire block_when : Bit {
+        it := when {
+            case true => false
+            else => true
+        }
+    }
+
+    //> Bare form of the same logic.
+    wire bare_when : Bit
+
+    bare_when := when {
+        case true => false
+        else => true
+    }
+
+    //> Driver-block form: `mux(true, true, false)`.
+    wire block_mux : Bit {
+        it := mux(true, true, false)
+    }
+
+    //> Bare form of the same logic.
+    wire bare_mux : Bit
+
+    bare_mux := mux(true, true, false)
+
+    //> Driver-block form: slicing `(0b10110101 : Word[8])[7..3]`.
+    wire block_slice : Word[4] {
+        it := (0b10110101 : Word[8])[7..3]
+    }
+
+    //> Bare form of the same logic.
+    wire bare_slice : Word[4]
+
+    bare_slice := (0b10110101 : Word[8])[7..3]
+
+    //> Driver-block and bare forms of `true && false` must be equal.
+    wire ok_and : Bit {
+        it := block_and == bare_and
+    }
+
+    //> Driver-block and bare forms of `100w8 + 55w8` must be equal.
+    wire ok_add : Bit {
+        it := block_add == bare_add
+    }
+
+    //> Driver-block and bare forms of `100w8 < 55w8` must be equal.
+    wire ok_cmp : Bit {
+        it := block_cmp == bare_cmp
+    }
+
+    //> Driver-block and bare forms of the `when` expression must be
+    //> equal.
+    wire ok_when : Bit {
+        it := block_when == bare_when
+    }
+
+    //> Driver-block and bare forms of `mux(true, true, false)` must be
+    //> equal.
+    wire ok_mux : Bit {
+        it := block_mux == bare_mux
+    }
+
+    //> Driver-block and bare forms of `(0b10110101 : Word[8])[7..3]` must be
+    //> equal.
+    wire ok_slice : Bit {
+        it := block_slice == bare_slice
+    }
+
+    //> Running AND of every check so far.  Power-on true; the check
+    //> verdicts fold in on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && ok_and && ok_add && ok_cmp && ok_when && ok_mux && ok_slice
+    }
+
+    //> Rises on the first clock edge, so that `exit` never observes
+    //> the vacuous power-on `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

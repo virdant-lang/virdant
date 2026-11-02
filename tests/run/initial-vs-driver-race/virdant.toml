@@ -1,0 +1,5 @@
+[project]
+name = "initial-vs-driver-race"
+
+[prog]
+top = "initial-vs-driver-race::Top"

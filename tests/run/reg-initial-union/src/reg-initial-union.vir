@@ -1,0 +1,42 @@
+// A minimal `kind = "run"` test: a union register with
+// `initial it <= @Idle()` must power on as `@Idle()` (observed before
+// any driver fires), then move to `@Running()` on the first clock
+// edge.  The exit value is chosen with a `match` on the register, so
+// a missing `initial` (Verilog zero-init) fails the assert.
+
+import virt
+
+//> Three-phase lifecycle.  `Idle` and `Running` are listed as
+//> `case` arms; `Done` is left for `else`.  Union tags are one-hot,
+//> so a zero-initialized register reads as no variant at all and
+//> falls into the `else` arm, which fails the exit code.
+union type State {
+    Idle()
+    Running()
+    Done()
+}
+
+pub mod RegInitialUnionTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Powers on as `@Idle()`; the driver moves it to `@Running()` on
+    //> the first clock edge.
+    reg state : State on clock {
+        initial it <= @Idle()
+        it <= @Running()
+    }
+
+    //> `@Valid(0)` once the register has left its power-on value;
+    //> while the register is still at `@Idle()`, the simulator keeps
+    //> running.  `@Done()` is never driven, so reaching `else` (with
+    //> a zero-initialized tag or `@Done()`) means the `initial` did
+    //> not take effect and exits with code 1.
+    outgoing exit : Valid[Word[8]] {
+        it := match state {
+            case @Running() => @Valid(0)
+            case @Idle() => @Invalid()
+            else => @Valid(1)
+        }
+    }
+}

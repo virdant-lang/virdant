@@ -1,0 +1,88 @@
+//! Self-checking `kind = "run"` test for an 8-stage combinational
+//! wire chain.
+//!
+//! A held `start` register feeds a chain of 8 wires, each incrementing
+//! the previous stage by one: `stage1 := start + 1`, ..., `stage8 :=
+//! stage7 + 1`.  Every stage is checked combinationally against its
+//! expected value `start + i`, so the chain must fully converge
+//! (through whatever delta-cycle iteration the simulator performs)
+//! within a single clock cycle.  `exit` goes `@Valid(0)` the moment
+//! every stage agrees and `@Valid(1)` otherwise; if the chain never
+//! converges, the run hits the cycle limit instead of exiting 0.
+
+import virt
+
+pub mod LongChainTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once the whole 8-stage chain has converged to its
+    //> expected values within a cycle; `@Valid(1)` if any stage is
+    //> wrong.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case chain_ok => @Valid(0)
+            else => @Valid(1)
+        }
+    }
+
+    //> Starting value fed into the head of the chain; held constant.
+    reg start : Word[8] on clock {
+        initial it <= 3
+        it <= start
+    }
+
+    //> Stage 1 of the chain: `start` incremented once.
+    wire stage1 : Word[8] {
+        it := start + 1
+    }
+
+    //> Stage 2 of the chain.
+    wire stage2 : Word[8] {
+        it := stage1 + 1
+    }
+
+    //> Stage 3 of the chain.
+    wire stage3 : Word[8] {
+        it := stage2 + 1
+    }
+
+    //> Stage 4 of the chain.
+    wire stage4 : Word[8] {
+        it := stage3 + 1
+    }
+
+    //> Stage 5 of the chain.
+    wire stage5 : Word[8] {
+        it := stage4 + 1
+    }
+
+    //> Stage 6 of the chain.
+    wire stage6 : Word[8] {
+        it := stage5 + 1
+    }
+
+    //> Stage 7 of the chain.
+    wire stage7 : Word[8] {
+        it := stage6 + 1
+    }
+
+    //> Final stage of the chain: `start` incremented 8 times.
+    wire stage8 : Word[8] {
+        it := stage7 + 1
+    }
+
+    //> True only when every stage of the chain already holds its
+    //> expected value `start + i` in the same cycle, i.e. the
+    //> combinational chain converged with no delta-cycle issues.
+    wire chain_ok : Bit {
+        it := stage1 == start + 1
+                && stage2 == start + 2
+                && stage3 == start + 3
+                && stage4 == start + 4
+                && stage5 == start + 5
+                && stage6 == start + 6
+                && stage7 == start + 7
+                && stage8 == start + 8
+    }
+}

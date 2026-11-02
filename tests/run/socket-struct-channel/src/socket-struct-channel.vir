@@ -1,0 +1,187 @@
+//! Self-checking `kind = "run"` test for a socket channel of struct
+//! type: field-wise integrity across a socket.
+//!
+//! `Chan` carries two struct-typed channels: a `Req` cosi channel
+//! (client -> server) and a `Resp` soci channel (server -> client).
+//! The client streams four request vectors through the socket; the
+//! server reads the request's fields (`a`, `b`), computes
+//! `sum = a + b` and `eq = a == b` into a response struct, and sends
+//! it back.  The client checks each response field against the golden
+//! value derived from the request fields it sent, so every field of
+//! both struct channels must cross the socket intact for the test to
+//! pass.
+//!
+//! Struct values are built with `${...}` struct literals -- the only
+//! construction mechanism the checker accepts for whole-struct
+//! drivers (field-wise reg drivers like `it.a := ...` fail with
+//! `Unresolved component req.a`).  Note: the `vir run` interpreter
+//! currently panics while lowering struct literals, so this test
+//! cannot go green until that is fixed; the socket wiring itself
+//! (`stim.chan :=: dut.chan`) is exercised up to that point.
+
+import virt
+
+//> Request carried on the cosi channel: operands `a` and `b`.
+struct type Req {
+    a : Word[4]
+    b : Word[4]
+}
+
+//> Response carried on the soci channel: `sum = a + b` and `eq`
+//> from the server.
+struct type Resp {
+    sum : Word[5]
+    eq : Bit
+}
+
+//> Socket with struct-typed channels in both directions.
+socket Chan {
+    cosi req : Req
+    soci resp : Resp
+}
+
+//> Server endpoint: reads the request's fields, responds field-wise.
+mod Server {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Server side of the struct-channel socket.  The response is
+    //> computed from the incoming request's fields: `sum` is the
+    //> 5-bit sum of `a` and `b`, `eq` their equality.
+    server socket chan of Chan {
+        it.resp := ${
+            sum = word(false, it.req->a) + word(false, it.req->b),
+            eq = it.req->a == it.req->b,
+        }
+    }
+}
+
+//> Client endpoint and self-checking harness: drives four request
+//> vectors and checks the response fields against golden values.
+mod Stim {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once every vector's fields checked out; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Client side of the struct-channel socket.  The request struct
+    //> register is driven out whole; its value steps through the four
+    //> vectors below, one per cycle.
+    client socket chan of Chan {
+        it.req := req
+    }
+
+    //> Request register.  Starts on vector `(5, 3)`; the `when` block
+    //> steps through `(7, 7)`, `(1, 2)`, and `(0, 0)`, one per cycle.
+    reg req : Req on clock {
+        initial it <= ${
+            a = 0b0101,
+            b = 0b0011,
+        }
+        when {
+            case phase == 1 {
+                it <= ${
+                    a = 0b0111,
+                    b = 0b0111,
+                }
+            }
+            case phase == 2 {
+                it <= ${
+                    a = 0b0001,
+                    b = 0b0010,
+                }
+            }
+            case phase == 3 {
+                it <= ${
+                    a = 0b0000,
+                    b = 0b0000,
+                }
+            }
+        }
+    }
+
+    //> Vector index, 0 through 3: one request vector per phase.
+    reg phase : Word[2] on clock {
+        initial it <= 0
+        when {
+            case phase != 3 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Golden response fields derived from the request fields the
+    //> client is sending this cycle.
+    wire golden_sum : Word[5] {
+        it := word(false, req->a) + word(false, req->b)
+    }
+
+    //> Golden equality bit for the current operands.
+    wire golden_eq : Bit {
+        it := req->a == req->b
+    }
+
+    //> This cycle's field-wise verdicts: the response's `sum` field
+    //> must equal the sum of the request fields, and the response's
+    //> `eq` field must equal their equality.
+    wire check_sum : Bit {
+        it := chan.resp->sum == golden_sum
+    }
+
+    //> The response's `eq` field against the golden equality bit.
+    wire check_eq : Bit {
+        it := chan.resp->eq == golden_eq
+    }
+
+    //> Running AND of every field check so far.  Power-on true; each
+    //> cycle folds in the current vector's verdicts.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check_sum && check_eq
+    }
+
+    //> Rises one cycle after the last vector has been driven and
+    //> checked, so that the exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case phase == 3 && cycle > 4 {
+                it <= true
+            }
+        }
+    }
+
+    //> Free-running cycle counter for the exit timing.
+    reg cycle : Word[3] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+}
+
+pub mod SocketStructTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Forwards the verdict computed by the harness.
+    outgoing exit : Valid[Word[8]] {
+        it := stim.exit
+    }
+
+    mod stim of Stim {
+        it.clock := clock
+    }
+
+    mod dut of Server {
+        it.clock := clock
+    }
+
+    stim.chan :=: dut.chan
+}

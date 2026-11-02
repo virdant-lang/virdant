@@ -1,0 +1,3 @@
+kind = "run"
+description = "Rate limiter: passes one item every 4 cycles; asserts the spacing between accepted items"
+cycle_limit = 64

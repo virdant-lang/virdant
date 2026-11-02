@@ -1,0 +1,119 @@
+//! Self-checking `kind = "run"` test for type ascription (`expr :
+//! Type`).
+//!
+//! Checks the ascriptions from SIM_TESTS.md -- `0w8 : Word[8]`,
+//! `@Valid(3) : Valid[Word[8]]`, and `15 : Word[4]` -- in various
+//! positions: wire drivers, operands of a larger expression, and reg
+//! drivers (both `initial` and clocked).  The ascribed type must match
+//! and the value must be unchanged.  Every verdict is folded into a
+//! running `all_ok`; the simulator exits with code 0 only if all
+//! checks passed, and 1 otherwise.
+
+import virt
+
+pub mod TypeAscriptionTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last check passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && w_word_ok && w_valid_ok && w_lit_ok
+        && op_word_ok && op_lit_ok
+        && reg_word_ok && reg_valid_ok && reg_lit_ok
+    }
+
+    //> Rises on the first clock edge, after the checks have folded
+    //> into `all_ok`, so that the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> Wire driver: `0w8 : Word[8]` drives 0 as a `Word[8]`.
+    wire w_word : Word[8]
+    w_word := 0w8 : Word[8]
+
+    //> Wire driver: `@Valid(3) : Valid[Word[8]]` drives a valid
+    //> `Word[8]` carrying 3.
+    wire w_valid : Valid[Word[8]]
+    w_valid := @Valid(3) : Valid[Word[8]]
+
+    //> Wire driver: the untyped literal `15` ascribed to `Word[4]`
+    //> drives 15 as a `Word[4]`.
+    wire w_lit : Word[4]
+    w_lit := 15 : Word[4]
+
+    //> Operand position: an ascribed `0w8` feeds `+`.  The ascription
+    //> annotates its sub-expression only; the other operand carries an
+    //> explicit width, since expected types are not pushed down
+    //> through the ascription.
+    wire op_word : Word[8]
+    op_word := (0w8 : Word[8]) + 1w8
+
+    //> Operand position: an ascribed untyped literal feeds `+`.
+    wire op_lit : Word[4]
+    op_lit := (15 : Word[4]) + 0w4
+
+    //> Reg driver, `initial` and clocked: `0w8 : Word[8]`.
+    reg r_word : Word[8] on clock {
+        initial it <= 0w8 : Word[8]
+        it <= 0w8 : Word[8]
+    }
+
+    //> Reg driver, `initial` and clocked: `@Valid(3) :
+    //> Valid[Word[8]]`.
+    reg r_valid : Valid[Word[8]] on clock {
+        initial it <= @Valid(3) : Valid[Word[8]]
+        it <= @Valid(3) : Valid[Word[8]]
+    }
+
+    //> Reg driver, `initial` and clocked: `15 : Word[4]`.
+    reg r_lit : Word[4] on clock {
+        initial it <= 15 : Word[4]
+        it <= 15 : Word[4]
+    }
+
+    wire w_word_ok : Bit
+    w_word_ok := w_word == 0
+
+    wire w_valid_ok : Bit {
+        it := match w_valid {
+            case @Valid(v) => v == 3
+            else => false
+        }
+    }
+
+    wire w_lit_ok : Bit
+    w_lit_ok := w_lit == 15
+
+    wire op_word_ok : Bit
+    op_word_ok := op_word == 1
+
+    wire op_lit_ok : Bit
+    op_lit_ok := op_lit == 15
+
+    wire reg_word_ok : Bit
+    reg_word_ok := r_word == 0
+
+    wire reg_valid_ok : Bit {
+        it := match r_valid {
+            case @Valid(v) => v == 3
+            else => false
+        }
+    }
+
+    wire reg_lit_ok : Bit
+    reg_lit_ok := r_lit == 15
+}

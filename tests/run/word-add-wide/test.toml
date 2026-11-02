@@ -1,0 +1,4 @@
+kind = "run"
+description = "The `+` operator on Word[32] and Word[64] operands: large sums and wraparound"
+cycle_limit = 1
+trace = false

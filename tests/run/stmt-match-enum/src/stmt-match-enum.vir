@@ -1,0 +1,124 @@
+//! Self-checking `kind = "run"` test for a statement-level `match` on
+//! an enum, driving different registers per case.
+//!
+//! A `Phase` register cycles `#Alpha` -> `#Beta` -> `#Gamma`.  A
+//! statement-level `match` on `phase` gives each arm its own register
+//! (or registers) to drive: `#Alpha` bumps `alpha_count`, `#Beta`
+//! bumps both `beta_count` and `beta_note`, and `#Gamma` bumps
+//! `gamma_count`.  Untaken arms leave their registers undriven, so
+//! each counter must hold between its own visits.  After nine cycles
+//! every variant has been visited exactly three times; the exit code
+//! is 0 only if all counters and holds checked out, and 1 otherwise.
+
+import virt
+
+//> Three-phase cycle with distinct one-hot encodings.
+enum type Phase {
+    Alpha = 1w2
+    Beta  = 2w2
+    Gamma = 3w2
+}
+
+pub mod StmtMatchEnumTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every counter checked out; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Cycles `#Alpha` -> `#Beta` -> `#Gamma` -> `#Alpha`, one step
+    //> per clock edge.
+    reg phase : Phase {
+        initial it <= #Alpha
+        it <= match it : Phase {
+            case #Alpha => #Beta
+            case #Beta  => #Gamma
+            case #Gamma => #Alpha
+        }
+    }
+
+    // Statement-level `match`: each arm drives only its own
+    // register(s); the other registers hold.
+    match phase {
+        case #Alpha {
+            alpha_count <= alpha_count + 1
+        }
+        case #Beta {
+            beta_count <= beta_count + 1
+            beta_note <= beta_note + 2
+        }
+        case #Gamma {
+            gamma_count <= gamma_count + 1
+        }
+    }
+
+    //> Bumped once per visit of `#Alpha` (3 expected).
+    reg alpha_count : Word[8] {
+        initial it <= 0
+    }
+
+    //> Bumped once per visit of `#Beta` (3 expected).
+    reg beta_count : Word[8] {
+        initial it <= 0
+    }
+
+    //> Second register driven by the `#Beta` arm, bumped by 2 per
+    //> visit (6 expected).
+    reg beta_note : Word[8] {
+        initial it <= 0
+    }
+
+    //> Bumped once per visit of `#Gamma` (3 expected).
+    reg gamma_count : Word[8] {
+        initial it <= 0
+    }
+
+    //> Number of clock edges so far.
+    reg cycles : Word[4] {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> All checks, folded in once the counters are final.
+    wire checks_ok : Bit {
+        it := alpha_count == 3
+            && beta_count == 3
+            && beta_note == 6
+            && gamma_count == 3
+    }
+
+    //> High during the cycle after the ninth edge, when every variant
+    //> has been visited exactly three times.
+    wire done : Bit {
+        it := cycles == 9
+    }
+
+    //> Running AND of every check.  Folds `checks_ok` in on the edge
+    //> that ends the `done` cycle.
+    reg all_ok : Bit {
+        initial it <= true
+        when {
+            case done {
+                it <= it && checks_ok
+            }
+        }
+    }
+
+    //> Rises on the same edge `all_ok` folds in the final verdict, so
+    //> the exit code sees the result.
+    reg finished : Bit {
+        initial it <= false
+        when {
+            case done {
+                it <= true
+            }
+        }
+    }
+}

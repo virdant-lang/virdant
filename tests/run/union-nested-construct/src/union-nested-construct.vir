@@ -1,0 +1,80 @@
+//! Self-checking `kind = "run"` test for nested union construction:
+//! `@Some(@Valid(x))` — a user-defined `Opt[T]` union wrapping the
+//! built-in `Valid[Word[8]]` wrapping a word.
+//!
+//! Two registers of type `Opt[Valid[Word[8]]]` are constructed as
+//! `@Some(@Valid(42))` and `@Some(@Valid(7))`.  The unwrap chain (the
+//! outer `match` strips `@Some`, the inner `match` strips `@Valid`)
+//! must extract the innermost word, and each extracted word is checked
+//! against the payload it was constructed with.  The simulator exits
+//! with code 0 only if every check passed, and 1 otherwise.
+
+import virt
+
+//> Optional value of `T`: either `@None()` or `@Some(value)`.
+union type Opt[T : Type] {
+    None()
+    Some(value : T)
+}
+
+pub mod UnionNestedTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> The construction under test: a union wrapping a `Valid`
+    //> wrapping a word — `@Some(@Valid(42))`.
+    reg opt_valid : Opt[Valid[Word[8]]] on clock {
+        initial it <= @Some(@Valid(42))
+        it <= it
+    }
+
+    //> A second construction with a distinct payload: the unwrap
+    //> chain must bind `x` to the actual innermost word, not to any
+    //> fixed constant.
+    reg opt_valid_other : Opt[Valid[Word[8]]] on clock {
+        initial it <= @Some(@Valid(7))
+        it <= it
+    }
+
+    //> Unwrap chain over `opt_valid`: the outer `match` unwraps the
+    //> `Opt`, the inner `match` unwraps the `Valid`, yielding the
+    //> payload `Word[8]`.
+    wire unwrapped : Word[8] {
+        it := match opt_valid {
+            case @Some(v) =>
+                match v {
+                    case @Valid(x) => x
+                    case @Invalid() => 0
+                }
+            case @None() => 255
+        }
+    }
+
+    //> The same chain over `opt_valid_other`, so that both
+    //> constructions are asserted independently.
+    wire unwrapped_other : Word[8] {
+        it := match opt_valid_other {
+            case @Some(v) =>
+                match v {
+                    case @Valid(x) => x
+                    case @Invalid() => 0
+                }
+            case @None() => 255
+        }
+    }
+
+    //> The extracted words must equal the payloads they were
+    //> constructed with.
+    wire checks_ok : Bit {
+        it := unwrapped == 42 && unwrapped_other == 7
+    }
+
+    //> `@Valid(0)` when every check passed; `@Valid(1)` otherwise.
+    //> While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case checks_ok => @Valid(0)
+            else => @Valid(1)
+        }
+    }
+}

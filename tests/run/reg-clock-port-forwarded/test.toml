@@ -1,0 +1,3 @@
+kind = "run"
+description = "Clock forwarded through two hierarchy levels via forwarding blocks still clocks a leaf register"
+cycle_limit = 15

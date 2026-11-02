@@ -1,0 +1,65 @@
+//! Self-checking `kind = "run"` test for short-circuit shapes over
+//! `dontcare`.
+//!
+//! `false && x` must fold to the constant `false` and `true || x` to
+//! the constant `true`, even when `x` is a `dontcare` wire, because
+//! the known operand alone determines the result.  Both checks are
+//! done combinationally and folded into a running `all_ok`; the
+//! simulator exits with code 0 only if every check passed, and 1
+//! otherwise.
+
+import virt
+
+pub mod BitShortcircuitShape for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every short-circuit check passed; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Wire vector under test: a `dontcare` bit.
+    wire x : Bit {
+        it := dontcare
+    }
+
+    //> `false && x` must be the constant `false`, regardless of `x`.
+    wire and_result : Bit {
+        it := false && x
+    }
+
+    //> `true || x` must be the constant `true`, regardless of `x`.
+    wire or_result : Bit {
+        it := true || x
+    }
+
+    //> Check that `false && x` folded to `false`.
+    wire ok_and : Bit {
+        it := and_result == false
+    }
+
+    //> Check that `true || x` folded to `true`.
+    wire ok_or : Bit {
+        it := or_result == true
+    }
+
+    //> Running AND of every check so far.  Power-on true; the check
+    //> verdicts fold in on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && ok_and && ok_or
+    }
+
+    //> Rises on the first clock edge, so that `exit` never observes
+    //> the vacuous power-on `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

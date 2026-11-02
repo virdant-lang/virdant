@@ -1,0 +1,49 @@
+// A self-checking `kind = "run"` test for 8-bit bit reversal built
+// explicitly from single-bit slices with `word()`.  One constant
+// vector is reversed and compared against its golden value; the
+// simulator exits with code 0 on a match and 1 otherwise.  The check
+// is purely combinational, so the simulator exits on the first cycle.
+
+import virt
+
+//> Reverses an 8-bit word by rebuilding it with `word()` from its
+//> single-bit slices, most-significant-first.
+mod BitReverse {
+    //> Word to reverse.
+    incoming x : Word[8]
+
+    //> Bit-reversed `x`.
+    outgoing reversed : Word[8] {
+        it := word(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7])
+    }
+}
+
+pub mod BitReverseTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when the reversed vector matches the golden value;
+    //> `@Valid(1)` otherwise.
+    outgoing exit : Valid[Word[8]] {
+        it := mux(ok, @Valid(0), @Valid(1))
+    }
+
+    mod bit_reverse of BitReverse {
+        it.x := stimulus
+    }
+
+    //> The one vector under test.
+    wire stimulus : Word[8] {
+        it := 0b1011_0010
+    }
+
+    //> Golden value: `0b1011_0010` reversed is `0b0100_1101`.
+    wire expected : Word[8] {
+        it := 0b0100_1101
+    }
+
+    //> True when the reversal matches the golden value.
+    wire ok : Bit {
+        it := bit_reverse.reversed == expected
+    }
+}

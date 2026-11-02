@@ -1,0 +1,5 @@
+[project]
+name = "wire-it-block"
+
+[prog]
+top = "wire-it-block::WireItBlockTest"

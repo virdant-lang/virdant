@@ -1,0 +1,4 @@
+kind = "run"
+description = "`when`-expression conditions built from comparisons and bit ops (`x > 3 && y[0]`-style); every arm asserted over eight operand vectors"
+cycle_limit = 10
+trace = false

@@ -1,0 +1,5 @@
+[project]
+name = "comparator-three-way"
+
+[prog]
+top = "comparator-three-way::ThreeWayComparatorTest"

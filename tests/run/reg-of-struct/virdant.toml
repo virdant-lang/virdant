@@ -1,0 +1,5 @@
+[project]
+name = "reg-of-struct"
+
+[prog]
+top = "reg-of-struct::Top"

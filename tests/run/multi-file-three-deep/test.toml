@@ -1,0 +1,4 @@
+kind = "run"
+description = "Three-deep import chain: a imports b, b imports c, a instantiates a module from c"
+cycle_limit = 15
+trace = false

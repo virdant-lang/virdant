@@ -1,0 +1,116 @@
+//! Self-checking `kind = "run"` test for one wire consumed by two
+//! different outputs.
+//!
+//! A `Consumers` unit computes a wire `sum` from two incoming words.
+//! `sum` feeds two different outgoing outputs: `out_direct` consumes
+//! it directly, while `out_recombined` consumes it through another
+//! wire's computation (`double`, which adds `sum` to itself, then
+//! subtracts `sum` back out).  The harness top advances two counters
+//! every cycle and asserts, each cycle, that both consumers agree with
+//! each other and with an independently recomputed expected sum.  Each
+//! check is folded into a running `all_ok`; the simulator exits with
+//! code 0 only if every cycle checked out, and 1 otherwise.
+
+import virt
+
+//> Two consumers of one wire: `out_direct` reads `sum` directly, and
+//> `out_recombined` reads it via the intermediate `double` wire.  Both
+//> must always expose the same value.
+mod Consumers {
+    //> First summand.
+    incoming a : Word[8]
+
+    //> Second summand.
+    incoming b : Word[8]
+
+    //> The one wire under test, consumed by both outputs below.
+    wire sum : Word[8] {
+        it := a + b
+    }
+
+    //> First consumer: reads `sum` directly.
+    outgoing out_direct : Word[8] {
+        it := sum
+    }
+
+    //> Intermediate wire whose computation also consumes `sum`.
+    wire double : Word[8] {
+        it := sum + sum
+    }
+
+    //> Second consumer: reads `sum` through `double`.
+    outgoing out_recombined : Word[8] {
+        it := double - sum
+    }
+}
+
+pub mod WireConsumedTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every cycle's checks passed; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod consumers of Consumers {
+        it.a := vec_a
+        it.b := vec_b
+    }
+
+    //> First counter, stepping by 3 each cycle.
+    reg count_a : Word[8] on clock {
+        initial it <= 0
+        it <= it + 3
+    }
+
+    //> Second counter, stepping by 5 each cycle.
+    reg count_b : Word[8] on clock {
+        initial it <= 0
+        it <= it + 5
+    }
+
+    //> Operand vector for `consumers.a`.
+    wire vec_a : Word[8] {
+        it := count_a
+    }
+
+    //> Operand vector for `consumers.b`.
+    wire vec_b : Word[8] {
+        it := count_b
+    }
+
+    //> Independently recomputed expected sum for this cycle.
+    wire expected : Word[8] {
+        it := count_a + count_b
+    }
+
+    //> Both consumers must agree with each other and with `expected`.
+    wire ok_this_cycle : Bit {
+        it := consumers.out_direct == consumers.out_recombined
+            && consumers.out_direct == expected
+    }
+
+    //> Running AND of every cycle's checks.  Power-on true; each cycle
+    //> folds its verdict in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && ok_this_cycle
+    }
+
+    //> Cycles elapsed since power-on.
+    reg elapsed : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> High once enough varied operand pairs have been checked.
+    wire finished : Bit {
+        it := elapsed == 12
+    }
+}

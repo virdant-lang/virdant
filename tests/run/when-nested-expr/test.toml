@@ -1,0 +1,4 @@
+kind = "run"
+description = "Nested when expressions: a when inside a when arm's expression, every path asserted"
+cycle_limit = 10
+trace = false

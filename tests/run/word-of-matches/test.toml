@@ -1,0 +1,4 @@
+kind = "run"
+description = "word(match a {...}, match b {...}): inline match expressions as word() arguments, most-significant first; assert the assembled word"
+cycle_limit = 1
+trace = false

@@ -1,0 +1,3 @@
+kind = "run"
+description = "Three-way comparator: x < y, x == y, x > y encoded as a 2-bit code"
+cycle_limit = 20

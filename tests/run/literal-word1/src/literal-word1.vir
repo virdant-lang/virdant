@@ -1,0 +1,96 @@
+//! Self-checking `kind = "run"` test for `Word[1]` literals and ops.
+//!
+//! Asserts wrap-around arithmetic at 1 bit: `1w1 + 1w1 == 0` and
+//! `0w1 - 1w1 == 1`.  Also checks the other `Word[1]` ops
+//! (`&`, `|`, `^`, comparisons, `any`, `word`), literals in every
+//! spelling (decimal, binary, hex, and untyped), and that a `Word[1]`
+//! reg counter wraps across clock edges.  Every verdict is ANDed into
+//! a running `all_ok`; the simulator exits with code 0 only if every
+//! check passed, and 1 otherwise.
+
+import virt
+
+pub mod LiteralWord1Test for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Counts 0, 1, 0, 1, ... across clock edges: the reg's `+` wraps
+    //> at the top, exercising wrap-around on stored values too.
+    reg count : Word[1] on clock {
+        initial it <= 0w1
+        it <= it + 1w1
+    }
+
+    //> Number of elapsed cycles.
+    reg cycle_num : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Running AND of every check so far.  Power-on true; from the
+    //> first cycle on, every cycle folds its verdict in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case started {
+                it <= it && check_ok
+            }
+        }
+    }
+
+    //> False on cycle 0, before anything has been checked.
+    reg started : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> Rises one cycle after the last check, so that the exit code
+    //> sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case cycle_num == 7 {
+                it <= true
+            }
+        }
+    }
+
+    //> The `Word[1]` literal and op checks, including the
+    //> wrap-around assertions, and the reg counter's parity.
+    wire check_ok : Bit {
+        it := count == word(cycle_num[0])
+            && 1w1 + 1w1 == 0w1
+            && 1w1 + 1w1 != 1w1
+            && 0w1 - 1w1 == 1w1
+            && 1w1 == 1w1
+            && 1w1 != 0w1
+            && 0b1w1 == 1w1
+            && 0x1w1 == 1w1
+            && 1w1 == 1
+            && 0w1 == 0
+            && (1w1 & 0w1) == 0w1
+            && (1w1 & 1w1) == 1w1
+            && (1w1 | 0w1) == 1w1
+            && (0w1 | 0w1) == 0w1
+            && (1w1 ^ 1w1) == 0w1
+            && (1w1 ^ 0w1) == 1w1
+            && 0w1 < 1w1
+            && 1w1 > 0w1
+            && 1w1 <= 1w1
+            && 1w1 >= 1w1
+            && any(1w1)
+            && !any(0w1)
+            && word(true) == 1w1
+            && word(false) == 0w1
+            && mux(true, 1w1, 0w1) == 1w1
+    }
+}

@@ -1,0 +1,149 @@
+//! Self-checking `kind = "run"` test for enum `match` with `else`
+//! catching the remaining variants.
+//!
+//! A two-bit `index` register walks every `Mode` variant in sequence.
+//! Both an expression-level `match` and a statement-level `match`
+//! list only the `Alpha` and `Beta` cases, so the `else` arm must
+//! catch `Gamma` and `Delta`; the `else` arm's result depends on the
+//! variant's encoding, so each remaining variant is observed
+//! distinctly.  A third, `else`-only match must reach `Delta` exactly
+//! when `index` is 3, proving that `else` catches every unlisted
+//! variant.  Every verdict is folded into a running `all_ok`, and the
+//! simulator exits with code 0 only if every cycle matched, and 1
+//! otherwise.
+
+import virt
+
+//> Modes walked in encoding order by the `index` register: `Alpha`,
+//> `Beta`, `Gamma`, `Delta`, then wrapping back to `Alpha`.
+enum type Mode {
+    Alpha = 0w2
+    Beta  = 1w2
+    Gamma = 2w2
+    Delta = 3w2
+}
+
+pub mod MatchEnumElseTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every cycle matched; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Walks every `Mode` encoding, one per cycle, wrapping after
+    //> `Delta`.
+    reg index : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Counts cycles so that `finished` rises only after the full
+    //> walk has been checked.
+    reg cycle : Word[3] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> The variant under test on this cycle.
+    wire mode : Mode {
+        it := cast(index)
+    }
+
+    //> The variant's underlying encoding, so the `else` arm can
+    //> produce a distinct result for each remaining variant.
+    wire mode_bits : Word[2] {
+        it := cast(mode)
+    }
+
+    //> Expression-level `match` under test: only `Alpha` and `Beta`
+    //> are listed, so `else` must catch `Gamma` and `Delta`, with the
+    //> variant's encoding distinguishing the two.
+    wire expr_code : Word[3] {
+        it := match mode : Mode {
+            case #Alpha => 0
+            case #Beta  => 1
+            else        => word(true, mode_bits)
+        }
+    }
+
+    //> Statement-level `match` under test: `else` again catches
+    //> `Gamma` and `Delta`.  The initial value is the `else` result
+    //> for `Delta`, so the first cycle's check is meaningful too.
+    reg stmt_code : Word[3] on clock {
+        initial it <= 7
+        match mode {
+            case #Alpha {
+                it <= 0
+            }
+            case #Beta {
+                it <= 1
+            }
+            else {
+                it <= word(true, mode_bits)
+            }
+        }
+    }
+
+    //> `true` exactly when this `else`-only match reaches `Delta`;
+    //> the `else` arm must catch every remaining variant.
+    wire delta_only : Bit {
+        it := match mode : Mode {
+            case #Delta => true
+            else        => false
+        }
+    }
+
+    //> Golden result of the expression-level `match` for the current
+    //> `index`: `Alpha` and `Beta` take their listed cases, `Gamma`
+    //> and `Delta` take `else`.
+    wire expected_expr : Word[3] {
+        it := match index {
+            case 0 => 0
+            case 1 => 1
+            case 2 => 6
+            case 3 => 7
+        }
+    }
+
+    //> Golden result of the statement-level `match` for this cycle:
+    //> `stmt_code` holds the result computed from the *previous*
+    //> cycle's `mode`.
+    wire expected_stmt : Word[3] {
+        it := match index {
+            case 0 => 7
+            case 1 => 0
+            case 2 => 1
+            case 3 => 6
+        }
+    }
+
+    //> This cycle's verdict: the expression-level `match` matches its
+    //> golden table, the statement-level `match` matches its table,
+    //> and the `else`-only match reaches `Delta` exactly when `index`
+    //> is 3.
+    wire checks_ok : Bit {
+        it := expr_code == expected_expr
+            && stmt_code == expected_stmt
+            && delta_only == (index == 3)
+    }
+
+    //> Running AND of every check so far.  Power-on true; each
+    //> cycle's verdict is folded in on the clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && checks_ok
+    }
+
+    //> Rises the cycle after the full walk (cycles 0 through 5) has
+    //> been checked, so that the exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= cycle == 5
+    }
+}

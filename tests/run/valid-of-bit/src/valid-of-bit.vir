@@ -1,0 +1,85 @@
+// Self-checking `kind = "run"` test for `Valid[Bit]`, where the innermost
+// payload is a Bit: the test constructs `@Valid(true)`, `@Valid(false)`,
+// and `@Invalid()`, matches on each value, and extracts the payload in
+// the `@Valid` arm.  Each cycle's observation must agree with the golden
+// variant and payload, and the simulator exits with code 0 only if every
+// check passed, 1 otherwise.
+
+import virt
+
+pub mod ValidOfBitTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Cycle counter: 0 exercises `@Valid(true)`, 1 `@Valid(false)`,
+    //> and 2+ `@Invalid()`.
+    reg cycle : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> The `Valid[Bit]` value under test, constructed fresh each cycle:
+    //> `@Valid(true)`, then `@Valid(false)`, then `@Invalid()`.
+    wire value : Valid[Bit] {
+        it := match cycle {
+            case 0 => @Valid(true)
+            case 1 => @Valid(false)
+            else => @Invalid()
+        }
+    }
+
+    //> The `match` on the value: the `@Valid` arm binds the Bit payload,
+    //> the `else` arm substitutes a false payload.
+    wire payload : Bit {
+        it := match value {
+            case @Valid(bit) => bit
+            else => false
+        }
+    }
+
+    //> The same `match` shape, boolean result: true only in the
+    //> `@Valid` arm.
+    wire is_valid : Bit {
+        it := match value {
+            case @Valid(bit) => true
+            else => false
+        }
+    }
+
+    //> The per-cycle check: cycle 0 must see `@Valid(true)`, cycle 1
+    //> `@Valid(false)`, and cycle 2+ `@Invalid()`.
+    wire check : Bit {
+        it := when {
+            case cycle == 0 => is_valid && payload
+            case cycle == 1 => is_valid && !payload
+            else => !is_valid && !payload
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds its verdict in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check
+    }
+
+    //> Rises after the third cycle (the first `@Invalid()` check), so
+    //> the exit code only sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case cycle == 2 {
+                it <= true
+            }
+        }
+    }
+}

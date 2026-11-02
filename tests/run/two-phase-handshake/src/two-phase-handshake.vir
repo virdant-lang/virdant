@@ -1,0 +1,298 @@
+//! Self-checking `kind = "run"` test for a 2-phase (nonce/toggle)
+//! handshake between two modules over a socket.
+//!
+//! In a 2-phase handshake the request line never returns to a rest
+//! level: the producer toggles `req` once per transfer and holds
+//! `data` stable while the transfer is in flight, and the consumer
+//! samples `data` on each `req` toggle and answers by toggling `ack`.
+//! The link is idle exactly when `req == ack`, so each `req` toggle
+//! is one transfer: a lost or duplicated transfer shows up as a
+//! missing or extra toggle.
+//!
+//! The producer issues 8 transfers whose payloads alternate `0x5A`,
+//! `0xA5`, `0x5A`, ...  The consumer checks on every toggle that the
+//! sampled data equals the expected alternating value and that no
+//! more than 8 transfers arrive.  `exit` becomes `@Valid(0)` only
+//! when exactly 8 transfers were sampled with every data check
+//! passing, and `@Valid(1)` otherwise; a lost transfer leaves `exit`
+//! `@Invalid()` until the cycle limit.  Both sides hold the link
+//! quiescent through a warm-up period, and force their link state to
+//! the power-on values until warm-up settles, so the checks are
+//! independent of the first clock edge.
+
+import virt
+
+//> 2-phase handshake socket.  The client (producer) drives the
+//> request line, toggling it once per transfer, and the payload,
+//> stable while a transfer is in flight.  The server (consumer)
+//> answers by toggling `ack` once per sampled transfer.  The link is
+//> idle exactly when `req == ack`.
+socket TwoPhase {
+    cosi req  : Bit
+    cosi data : Word[8]
+    soci ack  : Bit
+}
+
+//> Producer side of the 2-phase handshake.
+//>
+//> After warm-up it issues 8 back-to-back transfers, toggling `req`
+//> once per transfer and holding the payload stable until `ack`
+//> catches up.  The payload alternates `0x5A` and `0xA5`.
+mod Producer {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Outgoing 2-phase link.  Request and payload are gated low
+    //> until warm-up has settled.
+    client socket link of TwoPhase {
+        it.req := mux(ready, nonce, false)
+        it.data := mux(ready, tx_data, 0)
+    }
+
+    //> Warm-up has settled: `warm` counts up to 63 and holds there,
+    //> so `ready` is sticky.
+    wire ready : Bit {
+        it := warm == 63
+    }
+
+    //> Transfers left to issue.
+    wire sending : Bit {
+        it := sent != 8
+    }
+
+    //> Link idle: the previous transfer has been acked.
+    wire idle : Bit {
+        it := nonce == link.ack
+    }
+
+    //> Issue a new transfer this edge: warmed up, transfers left,
+    //> and the previous one acked.
+    wire issue : Bit {
+        it := ready && sending && idle
+    }
+
+    //> Payload of the current transfer: alternates with `phase`.
+    //> `phase` toggles on the same edge the transfer is issued, so
+    //> the first transfer presents `0x5A`.
+    wire tx_data : Word[8] {
+        it := mux(phase, 0x5A, 0xA5)
+    }
+
+    //> Warm-up counter: counts up to 63 and holds, so `ready` is
+    //> sticky without a latch.
+    reg warm : Word[6] on clock {
+        initial it <= 0
+        when {
+            case it != 63 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Request nonce: toggles once per issued transfer.  Held low
+    //> through warm-up so the link starts aligned.
+    reg nonce : Bit on clock {
+        initial it <= false
+        when {
+            case !ready {
+                it <= false
+            }
+            case issue {
+                it <= !it
+            }
+        }
+    }
+
+    //> Payload phase: toggles once per issued transfer, in step
+    //> with `nonce`.  Held low through warm-up.
+    reg phase : Bit on clock {
+        initial it <= false
+        when {
+            case !ready {
+                it <= false
+            }
+            case issue {
+                it <= !it
+            }
+        }
+    }
+
+    //> Transfers issued so far.  Held at 0 through warm-up.
+    reg sent : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !ready {
+                it <= 0
+            }
+            case issue {
+                it <= it + 1
+            }
+        }
+    }
+}
+
+//> Consumer side of the 2-phase handshake.
+//>
+//> Samples `data` on every `req` toggle (`req != ack`) and answers
+//> by toggling `ack`.  Each sampled payload must equal the expected
+//> alternating value `0x5A`, `0xA5`, ... in step with the transfer
+//> count, and no more than 8 transfers may arrive.
+mod Consumer {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Incoming 2-phase link.
+    server socket link of TwoPhase {
+        it.ack := ack
+    }
+
+    //> `@Valid(0)` once all 8 transfers were sampled with every
+    //> check passing; `@Valid(1)` if any check failed.  While
+    //> `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Warm-up has settled: `warm` counts up to 63 and holds there,
+    //> so `ready` is sticky.
+    wire ready : Bit {
+        it := warm == 63
+    }
+
+    //> A transfer is in flight: the request line has toggled once
+    //> more than the ack line.
+    wire service : Bit {
+        it := ready && (link.req != ack)
+    }
+
+    //> Payload expected on the current transfer: alternates with
+    //> `exp_val`, in step with the transfer count.
+    wire expect : Word[8] {
+        it := mux(exp_val, 0xA5, 0x5A)
+    }
+
+    //> The in-flight payload matches the expected alternating value.
+    wire sample_ok : Bit {
+        it := link.data == expect
+    }
+
+    //> Room for another transfer: a 9th toggle would be a
+    //> duplicated transfer.
+    wire count_ok : Bit {
+        it := recv_count < 8
+    }
+
+    //> Warm-up counter: counts up to 63 and holds, so `ready` is
+    //> sticky without a latch.
+    reg warm : Word[6] on clock {
+        initial it <= 0
+        when {
+            case it != 63 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Ack nonce: toggles once per sampled transfer.  Held low
+    //> through warm-up so the link starts aligned.
+    reg ack : Bit on clock {
+        initial it <= false
+        when {
+            case !ready {
+                it <= false
+            }
+            case service {
+                it <= !it
+            }
+        }
+    }
+
+    //> Expected payload phase: toggles once per sampled transfer.
+    //> Held low through warm-up.
+    reg exp_val : Bit on clock {
+        initial it <= false
+        when {
+            case !ready {
+                it <= false
+            }
+            case service {
+                it <= !it
+            }
+        }
+    }
+
+    //> Transfers sampled so far.  Held at 0 through warm-up; stops
+    //> counting at 8 so an extra (duplicated) transfer is caught by
+    //> `count_ok` rather than wrapping.
+    reg recv_count : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !ready {
+                it <= 0
+            }
+            case service && count_ok {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each
+    //> sampled transfer folds its verdicts in.  Held true through
+    //> warm-up.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !ready {
+                it <= true
+            }
+            case service {
+                it <= it && sample_ok && count_ok
+            }
+        }
+    }
+
+    //> Rises the cycle after the 8th transfer is counted, so
+    //> `all_ok` has folded in every verdict by the time `exit` is
+    //> read.  Held low through warm-up.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case !ready {
+                it <= false
+            }
+            case recv_count == 8 {
+                it <= true
+            }
+        }
+    }
+}
+
+//> Self-checking harness: a producer and a consumer joined by one
+//> `TwoPhase` socket.
+pub mod TwoPhaseTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Consumer verdict: `@Valid(0)` when all 8 transfers arrived
+    //> alternating correctly, `@Valid(1)` otherwise.  While
+    //> `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := cons.exit
+    }
+
+    //> Producer side of the link.
+    mod prod of Producer {
+        it.clock := clock
+    }
+
+    //> Consumer side of the link.
+    mod cons of Consumer {
+        it.clock := clock
+    }
+
+    // The 2-phase link under test.
+    prod.link :=: cons.link
+}

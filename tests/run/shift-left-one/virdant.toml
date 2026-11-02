@@ -1,0 +1,5 @@
+[project]
+name = "shift-left-one"
+
+[prog]
+top = "shift-left-one::ShiftLeftOneTest"

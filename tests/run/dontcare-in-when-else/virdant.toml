@@ -1,0 +1,5 @@
+[project]
+name = "dontcare-in-when-else"
+
+[prog]
+top = "dontcare-in-when-else::DontcareInWhenElse"

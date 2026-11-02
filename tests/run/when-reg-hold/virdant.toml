@@ -1,0 +1,5 @@
+[project]
+name = "when-reg-hold"
+
+[prog]
+top = "when-reg-hold::WhenRegHoldTest"

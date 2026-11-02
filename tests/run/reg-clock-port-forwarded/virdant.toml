@@ -1,0 +1,5 @@
+[project]
+name = "reg-clock-port-forwarded"
+
+[prog]
+top = "reg-clock-port-forwarded::RegClockForwardedTest"

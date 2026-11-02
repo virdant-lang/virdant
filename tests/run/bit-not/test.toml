@@ -1,0 +1,4 @@
+kind = "run"
+description = "Bitwise not: `!true` and `!false` on wires"
+cycle_limit = 10
+trace = false

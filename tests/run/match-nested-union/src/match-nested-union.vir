@@ -1,0 +1,131 @@
+//! Self-checking `kind = "run"` test for nested union destructuring in
+//! `match` arms.
+//!
+//! The built-in `Valid[Valid[Word[8]]]` type is matched with the
+//! nested arm `case @Valid(@Valid(x))`: the arm must fire only when
+//! *both* layers are `@Valid`, and the innermost payload must bind to
+//! `x` and flow through to the arm's result.  All three representable
+//! values are exercised -- `@Valid(@Valid(...))`, `@Valid(@Invalid())`,
+//! and `@Invalid()` (the outer `@Invalid()` carries no payload, so the
+//! inner Valid/Invalid distinction collapses into it) -- and each
+//! candidate is checked against every arm.  Verdicts are ANDed into a
+//! `fail_bits` bitmask; the simulator exits with code 0 only if every
+//! check passed, and with the bitmask (nonzero) otherwise.
+
+import virt
+
+pub mod MatchNestedUnionTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Candidate values: both layers valid with payloads `42` and
+    //> `0`, only the inner layer invalid, and the outer layer invalid.
+    wire vv42 : Valid[Valid[Word[8]]] {
+        it := @Valid(@Valid(42w8))
+    }
+    wire vv0 : Valid[Valid[Word[8]]] {
+        it := @Valid(@Valid(0w8))
+    }
+    wire vi : Valid[Valid[Word[8]]] {
+        it := @Valid(@Invalid())
+    }
+    wire iv : Valid[Valid[Word[8]]] {
+        it := @Invalid()
+    }
+
+    //> Arm routing, one `Word[2]` code per arm: `1` for the nested
+    //> `@Valid(@Valid(x))` arm, `2` for `@Valid(@Invalid())`, `3` for
+    //> `@Invalid()`.
+    wire sel_vv42 : Word[2] {
+        it := match vv42 : Valid[Valid[Word[8]]] {
+            case @Valid(@Valid(x)) => 1w2
+            case @Valid(@Invalid()) => 2w2
+            case @Invalid() => 3w2
+        }
+    }
+    wire sel_vi : Word[2] {
+        it := match vi : Valid[Valid[Word[8]]] {
+            case @Valid(@Valid(x)) => 1w2
+            case @Valid(@Invalid()) => 2w2
+            case @Invalid() => 3w2
+        }
+    }
+    wire sel_iv : Word[2] {
+        it := match iv : Valid[Valid[Word[8]]] {
+            case @Valid(@Valid(x)) => 1w2
+            case @Valid(@Invalid()) => 2w2
+            case @Invalid() => 3w2
+        }
+    }
+
+    //> Nested destructuring: the bound `x` must be exactly the
+    //> innermost payload, including the all-zero payload (which must
+    //> not be confused with `@Invalid()`).
+    wire vv42_bind : Bit {
+        it := match vv42 : Valid[Valid[Word[8]]] {
+            case @Valid(@Valid(x)) => x == 42w8
+            case @Valid(@Invalid()) => false
+            case @Invalid() => false
+        }
+    }
+    wire vv0_bind : Bit {
+        it := match vv0 : Valid[Valid[Word[8]]] {
+            case @Valid(@Valid(x)) => x == 0w8
+            case @Valid(@Invalid()) => false
+            case @Invalid() => false
+        }
+    }
+
+    //> Value position: the nested arm extracts the innermost payload
+    //> itself.
+    wire extracted : Word[8] {
+        it := match vv42 : Valid[Valid[Word[8]]] {
+            case @Valid(@Valid(x)) => x
+            case @Valid(@Invalid()) => 0w8
+            case @Invalid() => 0w8
+        }
+    }
+
+    //> Fall-through guards: a value whose *inner* layer is `@Invalid()`
+    //> must not fire the nested `@Valid(@Valid(x))` arm nor the
+    //> payload-free outer `@Invalid()` arm; a fully `@Invalid()` value
+    //> must not fire either `@Valid(...)` arm.
+    wire vi_sneak : Bit {
+        it := match vi : Valid[Valid[Word[8]]] {
+            case @Valid(@Valid(x)) => true
+            case @Valid(@Invalid()) => false
+            case @Invalid() => false
+        }
+    }
+    wire iv_sneak : Bit {
+        it := match iv : Valid[Valid[Word[8]]] {
+            case @Valid(@Valid(x)) => true
+            case @Valid(@Invalid()) => false
+            case @Invalid() => false
+        }
+    }
+
+    //> Diagnostic bitmask: bit0 = wrong arm for `@Valid(@Valid(42))`;
+    //> bit1 = `x` not bound to `42`; bit2 = `x` not bound to `0`;
+    //> bit3 = wrong arm for `@Valid(@Invalid())`; bit4 = extracted
+    //> payload wrong; bit5 = `@Valid(@Invalid())` fired the nested
+    //> arm; bit6 = `@Invalid()` fired a `@Valid(...)` arm; bit7 =
+    //> `@Valid(@Invalid())` fired the outer `@Invalid()` arm.
+    wire fail_bits : Word[8] {
+        it := word(sel_vv42 != 1w2, !vv42_bind, !vv0_bind, sel_vi != 2w2,
+                    extracted != 42w8, vi_sneak, iv_sneak,
+                    match vi : Valid[Valid[Word[8]]] {
+                        case @Invalid() => true
+                        else => false
+                    })
+    }
+
+    //> `@Valid(0)` when every check passed; `@Valid(fail_bits)`
+    //> otherwise.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case fail_bits == 0 => @Valid(0)
+            else => @Valid(fail_bits)
+        }
+    }
+}

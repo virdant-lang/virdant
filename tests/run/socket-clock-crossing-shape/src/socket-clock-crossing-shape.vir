@@ -1,0 +1,186 @@
+//! Self-checking `kind = "run"` test for a socket between two modules
+//! that each own their own registers, in the same clock domain.
+//!
+//! `Client` and `Server` exchange a request/response over a `Link`
+//! socket, and each side registers the data it handles: the client
+//! drives `link.req` straight from a register, and the server answers
+//! `link.rsp` straight from a register that samples `link.req`.  The
+//! handshake therefore shows exactly one cycle of delay on each side:
+//! the request on the socket is the stimulus delayed by one cycle, and
+//! the response coming back is that request delayed by one more.  The
+//! harness asserts both delays on every enabled cycle, ANDs every
+//! verdict into a running `all_ok`, and the simulator exits with code
+//! 0 only if all 24 checked cycles passed, and 1 otherwise.
+
+import virt
+
+//> Request/response channel between the two registered modules.
+//>
+//> The client drives `req`, the server answers with `rsp`.
+socket Link {
+    cosi req : Word[8]
+    soci rsp : Word[8]
+}
+
+//> Client side of the socket: owns its own registers and checks the
+//> handshake latency on both sides of the link.
+//>
+//> `req_reg` registers the outgoing stimulus, so the value crossing
+//> the socket is one cycle behind `stim`.  The response arriving back
+//> must be exactly one cycle behind the request: proof that the
+//> server sampled the incoming request into its own register before
+//> answering.  Several idle warm-up cycles run before the stimulus
+//> starts, so no verdict depends on the first clock edge.
+mod Client {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> False while every checked cycle agreed; true once any check
+    //> failed.
+    outgoing ok : Bit {
+        it := all_ok
+    }
+
+    //> Rises once 24 cycles have been checked, so the runner reads
+    //> the verdict only after the last check has folded in.
+    outgoing fin : Bit {
+        it := checks_done
+    }
+
+    //> Client end of the link.  The request is a registered value,
+    //> not a combinational function of `stim`.
+    client socket link of Link {
+        it.req := req_reg
+    }
+
+    //> Free-running warm-up counter, wrapping 0 through 15.
+    reg warm : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1w4
+    }
+
+    //> Latches once `warm == 8` has been observed; stays true as
+    //> `warm` wraps.
+    reg warm_seen : Bit on clock {
+        initial it <= false
+        it <= warm_seen || warm == 8w4
+    }
+
+    //> Latches one cycle after `warm_seen`.
+    reg warm_seen2 : Bit on clock {
+        initial it <= false
+        it <= warm_seen2 || warm_seen
+    }
+
+    //> Rises after several clean warm-up edges and stays high: the
+    //> stimulus starts and the checks begin.
+    reg enabled : Bit on clock {
+        initial it <= false
+        it <= enabled || (warm_seen2 && warm == 12w4)
+    }
+
+    //> Stimulus counter, held at 0 during warm-up and incrementing
+    //> once per cycle afterwards, so consecutive requests always
+    //> differ and the delay checks are decisive.
+    reg stim : Word[8] on clock {
+        initial it <= 0
+        when {
+            case enabled {
+                it <= it + 1w8
+            }
+        }
+    }
+
+    //> Client-side register: the request presented on the socket is
+    //> `stim` delayed by exactly one cycle.
+    reg req_reg : Word[8] on clock {
+        initial it <= 0
+        it <= stim
+    }
+
+    //> `stim` as it was one cycle ago.
+    reg stim_d1 : Word[8] on clock {
+        initial it <= 0
+        it <= stim
+    }
+
+    //> The outgoing request register as it was one cycle ago: what
+    //> the server saw on `link.req` last cycle.
+    reg req_reg_d1 : Word[8] on clock {
+        initial it <= 0
+        it <= req_reg
+    }
+
+    //> Number of checked cycles so far.  Forced back to 0 on every
+    //> warm-up cycle, so no power-on random value can survive into
+    //> the count.
+    reg n_checked : Word[6] on clock {
+        initial it <= 0
+        it <= mux(enabled, it + 1w6, 0w6)
+    }
+
+    //> Running AND of every checked cycle.  Forced back to true on
+    //> every warm-up cycle for the same reason.  Each checked cycle
+    //> asserts both one-cycle delays: the request on the socket is
+    //> `stim` delayed by one (client-side register), and the response
+    //> is the request delayed by one more (server-side register).
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= mux(enabled, it && (link.req == stim_d1) && (link.rsp == req_reg_d1), true)
+    }
+
+    //> Latches once `n_checked` has reached 24 checked cycles.
+    reg checks_done : Bit on clock {
+        initial it <= false
+        it <= checks_done || n_checked == 24w6
+    }
+}
+
+//> Server side of the socket: owns its own register and answers with
+//> registered data.
+//>
+//> `rsp_reg` samples the incoming request every cycle, and the
+//> response crossing back is exactly that register, so the answer
+//> lags the request by one cycle.
+mod Server {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Server end of the link.  The response is a registered value,
+    //> not a combinational function of the incoming request.
+    server socket link of Link {
+        it.rsp := rsp_reg
+    }
+
+    //> Server-side register: the response presented back across the
+    //> socket is the incoming request delayed by exactly one cycle.
+    reg rsp_reg : Word[8] on clock {
+        initial it <= 0
+        it <= link.req
+    }
+}
+
+pub mod SocketClockTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once the client has checked 24 cycles with every
+    //> check passed; `@Valid(1)` if any check failed.  While
+    //> `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case cli.fin => @Valid(mux(cli.ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod cli of Client {
+        it.clock := clock
+    }
+
+    mod srv of Server {
+        it.clock := clock
+    }
+
+    cli.link :=: srv.link
+}

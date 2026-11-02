@@ -1,0 +1,134 @@
+//! Self-checking `kind = "run"` test for a 4-bit rotate chained
+//! through a register.
+//!
+//! A `RotateLeft` unit free-runs a 4-bit register whose next value is
+//! a one-bit rotate-left of itself, chained through the register: on
+//! every enabled clock edge `it <= word(it[3..0], it[3])`.  After several cycles the register
+//! must have visited each of the four rotations of its start value
+//! `0b0001` (`0b0001`, `0b0010`, `0b0100`, `0b1000`) and then returned
+//! to its start value.  The harness checks each cycle against a golden
+//! table after a short idle warm-up (which also flushes any garbage
+//! the run simulator commits on its first clock edge); every verdict
+//! is ANDed into a running `all_ok`, and the simulator exits with code
+//! 0 only if all cycles checked out, and 1 otherwise.
+
+import virt
+
+//> 4-bit rotator: on every enabled clock edge, the register is
+//> reloaded with `word(it[3..0], it[3])`, rotating the word one bit
+//> to the left (the MSB wraps around to the LSB).  Note: slice bounds
+//> are exclusive at the top, so `it[3..0]` is bits 2, 1, 0; the
+//> rotate-left idiom in SIM_TESTS.md's `rotate-left` bullet,
+//> `word(x[4..1], x[0])`, reads as an identity under those semantics
+//> and was corrected to this form.
+mod RotateLeft {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Low during warm-up: holds the register at its start value.
+    //> High once stimulus begins: the register rotates every cycle.
+    incoming en : Bit
+
+    //> Current register state.
+    outgoing state : Word[4]
+
+    reg bits : Word[4] on clock {
+        initial it <= 0b0001
+        it <= mux(en, word(it[3..0], it[3]), 0b0001)
+    }
+
+    state := bits
+}
+
+pub mod RotateLeftTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last cycle checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod rotateleft of RotateLeft {
+        it.clock := clock
+        it.en := count >= 3
+    }
+
+    //> Cycle counter, free-running.
+    reg count : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Index of the checked rotation, 0 through 4: rotations 0..3
+    //> visit each bit position, rotation 4 is the return to the start
+    //> value.
+    reg index : Word[3] on clock {
+        initial it <= 0
+        when {
+            case checking {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the cycle it applies to.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && rotateleft.state == expected
+            }
+        }
+    }
+
+    //> Rises one cycle after the last check, so that the exit code
+    //> sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case checking {
+                it <= index == 4
+            }
+        }
+    }
+
+    //> High on every checked cycle: cycles 3 onward.  Cycles 0 through
+    //> 2 are idle warm-up and unchecked.
+    wire checking : Bit {
+        it := count >= 3 && !finished
+    }
+
+    wire expected : Word[4]
+
+    // Golden table: with the register held at `0b0001` through the
+    // warm-up, the checked cycles must visit each rotation
+    // `0b0001`, `0b0010`, `0b0100`, `0b1000`, and then return to the
+    // start value `0b0001` on the fifth checked cycle.
+    match index {
+        case 0 {
+            expected := 0b0001
+        }
+        case 1 {
+            expected := 0b0010
+        }
+        case 2 {
+            expected := 0b0100
+        }
+        case 3 {
+            expected := 0b1000
+        }
+        case 4 {
+            expected := 0b0001
+        }
+        else {
+            expected := 0b0001
+        }
+    }
+}

@@ -1,0 +1,4 @@
+kind = "run"
+description = "Word ops (`+`, `-`, `&`, `|`, `^`, `==`, `!=`, `<`, `>`, `<=`, `>=`) on operands built with `word(...)` from Bits"
+cycle_limit = 1
+trace = false

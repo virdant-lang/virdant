@@ -1,0 +1,66 @@
+//! Self-checking `kind = "run"` test for an outgoing port driven
+//! `dontcare`.
+//!
+//! A helper module drives one outgoing port with `dontcare` next to a
+//! deterministic sibling.  The harness asserts only the sibling — the
+//! `dontcare` value itself is never asserted — and folds the verdict
+//! into a running `all_ok`.  The simulator exits with code 0 only if
+//! the design built and evaluated the `dontcare`-driven port without
+//! crashing, and 1 otherwise.
+
+import virt
+
+//> Helper: an outgoing port driven `dontcare`, alongside a
+//> deterministic sibling the harness can check.
+mod DontcareSource {
+    //> Deterministic sibling of the `dontcare` port.
+    outgoing fixed : Bit {
+        it := true
+    }
+
+    //> Outgoing port driven `dontcare`.
+    outgoing out : Word[8] {
+        it := dontcare
+    }
+}
+
+pub mod DontcareOutgoingTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> The `dontcare` port's value is implementation-defined and never
+    //> asserted, so it is left unread.
+    mod source of DontcareSource {
+        unused it.out
+    }
+
+    //> Check that the deterministic sibling is `true`: the module was
+    //> elaborated and evaluated, so the `dontcare`-driven outgoing
+    //> port was exercised too.
+    wire ok_fixed : Bit {
+        it := source.fixed
+    }
+
+    //> Running AND of every check so far.  Power-on true; the check
+    //> verdict folds in on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && ok_fixed
+    }
+
+    //> Rises on the first clock edge, so that `exit` never observes
+    //> the vacuous power-on `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

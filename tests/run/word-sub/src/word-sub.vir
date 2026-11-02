@@ -1,0 +1,71 @@
+// Self-checking `kind = "run"` test for `-` on `Word[4]`: underflow
+// wrap-around (0 - 1 = 0xf) and several non-wrapping differences.  The
+// simulator exits with code 0 only if every check passed, and 1
+// otherwise.
+
+import virt
+
+pub mod WordSubTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case success => @Valid(0)
+            else => @Invalid()
+        }
+    }
+
+    //> 0 - 1 wraps around to 0xf: the borrow out of the top bit is
+    //> dropped.
+    wire wrap_zero_minus_one : Bit
+    wrap_zero_minus_one := 0w4 - 1w4 == 0xfw4
+
+    //> 0x2 - 0x3 also wraps around, to 0xf.
+    wire wrap_small_underflow : Bit
+    wrap_small_underflow := 0x2w4 - 0x3w4 == 0xfw4
+
+    //> 0x0 - 0x8 wraps around to 0x8: only the low 4 bits survive.
+    wire wrap_borrow_dropped : Bit
+    wrap_borrow_dropped := 0x0w4 - 0x8w4 == 0x8w4
+
+    //> 0 - 0 = 0.
+    wire diff_zeros : Bit
+    diff_zeros := 0w4 - 0w4 == 0w4
+
+    //> Largest non-wrapping difference: 0xf - 0x1 = 0xe.
+    wire diff_max_minus_one : Bit
+    diff_max_minus_one := 0xfw4 - 0x1w4 == 0xew4
+
+    //> A small non-wrapping difference: 0x7 - 0x3 = 0x4.
+    wire diff_small : Bit
+    diff_small := 0x7w4 - 0x3w4 == 0x4w4
+
+    //> A difference computed from word operands rather than literals
+    //> directly: 0x6 - 0x2 = 0x4.
+    wire a : Word[4]
+    a := 0x6
+
+    wire b : Word[4]
+    b := 0x2
+
+    wire diff_word_operands : Bit
+    diff_word_operands := a - b == 0x4w4
+
+    //> A near-min non-wrapping difference from word operands: 0x8 -
+    //> 0x7 = 0x1.
+    wire c : Word[4]
+    c := 0x8
+
+    wire d : Word[4]
+    d := 0x7
+
+    wire diff_near_min : Bit
+    diff_near_min := c - d == 0x1w4
+
+    //> AND of every check; the exit verdict.
+    wire success : Bit
+    success := wrap_zero_minus_one && wrap_small_underflow && wrap_borrow_dropped && diff_zeros && diff_max_minus_one && diff_small && diff_word_operands && diff_near_min
+}

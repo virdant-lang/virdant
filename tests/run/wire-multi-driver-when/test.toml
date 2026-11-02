@@ -1,0 +1,4 @@
+kind = "run"
+description = "Statement when: one wire driven from both case and else arms, total"
+cycle_limit = 16
+trace = false

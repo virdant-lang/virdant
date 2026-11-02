@@ -1,0 +1,3 @@
+kind = "run"
+description = "Input debouncer: output settles only after 3 stable cycles, checked against a bouncy stimulus table"
+cycle_limit = 40

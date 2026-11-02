@@ -1,0 +1,106 @@
+//! Self-checking `kind = "run"` test for a toggle flop.
+//!
+//! A `ToggleFlop` register drives `it <= !it` on every clock edge,
+//! producing a period-2 square wave on `q`.  After idle warm-up
+//! cycles, the harness samples `q` every cycle and checks each sample
+//! against the previous one: the value must alternate on every cycle,
+//! so over the 16 checked cycles the square wave must visit both
+//! polarities.  Each verdict folds into a running `all_ok`; the
+//! simulator exits with code 0 only if every check passed, and 1
+//! otherwise.
+
+import virt
+
+//> Toggle flop: a single bit that flips on every clock edge,
+//> producing a period-2 square wave.
+mod ToggleFlop {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> The toggling bit: 0, 1, 0, 1, ...
+    outgoing q : Bit {
+        it := value
+    }
+
+    reg value : Bit on clock {
+        initial it <= false
+        it <= !it
+    }
+}
+
+pub mod ToggleFlopTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last check checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod dut of ToggleFlop {
+        it.clock := clock
+    }
+
+    //> Warm-up cycle counter: counts 0, 1, 2, 3 and then saturates.
+    //> Checks only start once warm-up is over, so simulator start-up
+    //> randomness on the first clock edge cannot leak into a verdict.
+    reg warm : Word[2] on clock {
+        initial it <= 0
+        when {
+            case warm != 3 {
+                it <= warm + 1
+            }
+        }
+    }
+
+    //> Previous sample of `dut.q`: it follows `dut.q` every clock
+    //> edge, so on any cycle after the first it holds the value
+    //> `dut.q` showed the cycle before.
+    reg prev : Bit on clock {
+        initial it <= false
+        it <= dut.q
+    }
+
+    //> Number of alternation checks performed so far, 0 through 16.
+    reg checks : Word[4] on clock {
+        initial it <= 0
+        when {
+            case checking {
+                it <= checks + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the cycle it is made.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && dut.q != prev
+            }
+        }
+    }
+
+    //> Rises at the end of the final check, freezing the fold and
+    //> validating `exit` on the next cycle.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case checking && checks == 15 {
+                it <= true
+            }
+        }
+    }
+
+    //> High on every cycle where an alternation check is due: from
+    //> the first cycle after warm-up through the sixteenth check.
+    wire checking : Bit {
+        it := warm == 3 && !finished
+    }
+}

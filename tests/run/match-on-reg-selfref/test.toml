@@ -1,0 +1,3 @@
+kind = "run"
+description = "Register self-updated via match: assert the state walk"
+cycle_limit = 8

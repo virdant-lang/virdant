@@ -1,0 +1,87 @@
+// Self-checking `kind = "run"` test for struct types used together with
+// `match`.
+//
+// The Virdant grammar has no struct patterns in `match` position (a
+// `Pat` can only be `#Enumerant`, `@Variant(...)`, word/bit literals, a
+// bare identifier, or `dontcare`), so this test takes the documented
+// fallback path: the `match` scrutinee is a plain `Word`, and each arm
+// projects a field of the struct value with the `->` operator and is
+// checked against a golden value.
+//
+// The struct value is built with a struct literal (`${}`) in the
+// `initial` driver of the `p` register: no other construction mechanism
+// exists (the checker rejects field-wise reg drivers like `it.x := 3`
+// with `Unresolved component p.x`).  The test then asserts,
+// for two different scrutinee values, that the arm's projection yields
+// the right field, and that projecting both fields and adding them
+// gives the expected sum.  The simulator exits with code 0 only if
+// every check passed, and 1 otherwise.
+
+import virt
+
+//> A pair of bytes, used to exercise struct field projection.
+struct type Point {
+    x : Word[8]
+    y : Word[8]
+}
+
+pub mod MatchStructPatternTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> The struct value under test, built once by field-wise updates
+    //> and then held.
+    reg p : Point on clock {
+        initial it <= ${ x = 3, y = 7 }
+    }
+
+    //> The `match` scrutinee: 0 selects the `x` arm, 1 selects the
+    //> `y` arm.  It wraps 0 -> 1 -> 0 so both arms are exercised.
+    reg sel : Word[1] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> The arm's projection of a `p` field, selected by `sel`.
+    wire proj : Word[8] {
+        it := match sel {
+            case 0 => p->x
+            case 1 => p->y
+        }
+    }
+
+    //> Golden value matching the arm `sel` chose.
+    wire expected : Word[8] {
+        it := mux(sel == 0, 3, 7)
+    }
+
+    //> Both fields projected in one arm and combined: the sum must be
+    //> the same every cycle.
+    wire sum : Word[8] {
+        it := p->x + p->y
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds its verdicts in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && proj == expected && sum == 10
+    }
+
+    //> Rises after the first cycle, so the exit code only sees the
+    //> final `all_ok` once both arms have been checked.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> `@Valid(0)` after both match arms checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+}

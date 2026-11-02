@@ -1,0 +1,157 @@
+//! Self-checking `kind = "run"` test for the arithmetic (sign-replicating)
+//! right shift.
+//!
+//! An `Sra2` unit computes `word(x[7], x[7], x[8..2])` on `Word[8]`,
+//! prepending two copies of the MSB onto the top 6 bits of `x`.
+//! The harness applies it to negative (MSB=1) and positive (MSB=0)
+//! values, compares each result against a golden value, and exits with
+//! code 0 only if every check passed.
+
+import virt
+
+//> Arithmetic (sign-replicating) right shift by 2 on `Word[8]`.
+//>
+//> `word(x[7], x[7], x[8..2])` replicates the MSB of `x` into the two
+//> vacated top bits and keeps bits 7 down to 2, so a negative value
+//> (MSB=1) stays negative and a positive value (MSB=0) stays positive.
+mod Sra2 {
+    //> Value to shift.
+    incoming x : Word[8]
+
+    //> `x` arithmetically shifted right by 2.
+    outgoing result : Word[8] {
+        it := word(x[7], x[7], x[8..2])
+    }
+}
+
+pub mod ShiftArithRightTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed, `@Valid(1)` otherwise.
+    outgoing exit : Valid[Word[8]] {
+        it := @Valid(mux(all_ok, 0, 1))
+    }
+
+    //> Running AND of every check.
+    wire all_ok : Bit {
+        it := ok_neg128 && ok_neg1 && ok_neg59 && ok_neg86 &&
+            ok_pos127 && ok_pos64 && ok_pos1 && ok_pos42
+    }
+
+    // Negative values (MSB=1): the vacated top bits must fill with 1s.
+
+    //> -128 shifted right by 2 stays negative: 0x80 -> 0xE0.
+    mod sra_neg128 of Sra2
+    sra_neg128.x := vec_neg128
+
+    //> 0x80 as the test vector for `sra_neg128`.
+    wire vec_neg128 : Word[8] {
+        it := 0b1000_0000
+    }
+
+    //> Check that 0x80 shifts to 0xE0.
+    wire ok_neg128 : Bit {
+        it := sra_neg128.result == 0b1110_0000
+    }
+
+    //> -1 shifted right by 2 is still -1: 0xFF -> 0xFF.
+    mod sra_neg1 of Sra2
+    sra_neg1.x := vec_neg1
+
+    //> 0xFF as the test vector for `sra_neg1`.
+    wire vec_neg1 : Word[8] {
+        it := 0b1111_1111
+    }
+
+    //> Check that 0xFF shifts to 0xFF.
+    wire ok_neg1 : Bit {
+        it := sra_neg1.result == 0b1111_1111
+    }
+
+    //> -59 shifted right by 2: 0xC5 -> 0xF1.
+    mod sra_neg59 of Sra2
+    sra_neg59.x := vec_neg59
+
+    //> 0xC5 as the test vector for `sra_neg59`.
+    wire vec_neg59 : Word[8] {
+        it := 0b1100_0101
+    }
+
+    //> Check that 0xC5 shifts to 0xF1.
+    wire ok_neg59 : Bit {
+        it := sra_neg59.result == 0b1111_0001
+    }
+
+    //> -86 shifted right by 2: 0xAA -> 0xEA.
+    mod sra_neg86 of Sra2
+    sra_neg86.x := vec_neg86
+
+    //> 0xAA as the test vector for `sra_neg86`.
+    wire vec_neg86 : Word[8] {
+        it := 0b1010_1010
+    }
+
+    //> Check that 0xAA shifts to 0xEA.
+    wire ok_neg86 : Bit {
+        it := sra_neg86.result == 0b1110_1010
+    }
+
+    // Positive values (MSB=0): the vacated top bits must fill with 0s.
+
+    //> 127 shifted right by 2: 0x7F -> 0x1F.
+    mod sra_pos127 of Sra2
+    sra_pos127.x := vec_pos127
+
+    //> 0x7F as the test vector for `sra_pos127`.
+    wire vec_pos127 : Word[8] {
+        it := 0b0111_1111
+    }
+
+    //> Check that 0x7F shifts to 0x1F.
+    wire ok_pos127 : Bit {
+        it := sra_pos127.result == 0b0001_1111
+    }
+
+    //> 64 shifted right by 2: 0x40 -> 0x10.
+    mod sra_pos64 of Sra2
+    sra_pos64.x := vec_pos64
+
+    //> 0x40 as the test vector for `sra_pos64`.
+    wire vec_pos64 : Word[8] {
+        it := 0b0100_0000
+    }
+
+    //> Check that 0x40 shifts to 0x10.
+    wire ok_pos64 : Bit {
+        it := sra_pos64.result == 0b0001_0000
+    }
+
+    //> 1 shifted right by 2: 0x01 -> 0x00.
+    mod sra_pos1 of Sra2
+    sra_pos1.x := vec_pos1
+
+    //> 0x01 as the test vector for `sra_pos1`.
+    wire vec_pos1 : Word[8] {
+        it := 0b0000_0001
+    }
+
+    //> Check that 0x01 shifts to 0x00.
+    wire ok_pos1 : Bit {
+        it := sra_pos1.result == 0b0000_0000
+    }
+
+    //> 42 shifted right by 2: 0x2A -> 0x0A.
+    mod sra_pos42 of Sra2
+    sra_pos42.x := vec_pos42
+
+    //> 0x2A as the test vector for `sra_pos42`.
+    wire vec_pos42 : Word[8] {
+        it := 0b0010_1010
+    }
+
+    //> Check that 0x2A shifts to 0x0A.
+    wire ok_pos42 : Bit {
+        it := sra_pos42.result == 0b0000_1010
+    }
+}

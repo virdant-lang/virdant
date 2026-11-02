@@ -1,0 +1,5 @@
+[project]
+name = "majority3"
+
+[prog]
+top = "majority3::Majority3Test"

@@ -1,0 +1,78 @@
+//! A `kind = "run"` self-checking test for `mux` selecting between
+//! two `${}` struct literals.
+//!
+//! A selector register toggles every cycle, so the `mux` is checked
+//! with both struct literals.  Each cycle, a field of the selected
+//! struct is asserted against the golden value for that selector; the
+//! verdicts are folded into a running `all_ok`.  The simulator exits
+//! with code 0 only if every check passed, and 1 otherwise.
+
+import virt
+
+//> Struct type built by the two literals under test.
+pub struct type Pair {
+    fst : Word[8]
+    snd : Word[8]
+}
+
+pub mod MuxStructsTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once every check has passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case cycle == 3 => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Selector for the `mux` under test: toggles every cycle, so
+    //> both struct literals are exercised.
+    reg sel : Bit on clock {
+        initial it <= false
+        it <= !it
+    }
+
+    //> The `mux` under test: picks between two `${}` struct literals.
+    wire chosen : Pair {
+        it := mux(sel, ${
+            fst = 42,
+            snd = 7,
+        }, ${
+            fst = 99,
+            snd = 200,
+        })
+    }
+
+    //> Golden value for `chosen->fst` given the current selector.
+    wire golden_fst : Word[8] {
+        it := mux(sel, 42, 99)
+    }
+
+    //> Golden value for `chosen->snd` given the current selector.
+    wire golden_snd : Word[8] {
+        it := mux(sel, 7, 200)
+    }
+
+    //> This cycle's verdict: fields of the selected struct match the
+    //> golden values.
+    wire ok : Bit {
+        it := chosen->fst == golden_fst && chosen->snd == golden_snd
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the latest verdict.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && ok
+    }
+
+    //> Cycles elapsed since reset.
+    reg cycle : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+}

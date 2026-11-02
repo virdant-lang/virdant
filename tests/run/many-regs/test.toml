@@ -1,0 +1,4 @@
+kind = "run"
+description = "~16 registers in one module driven from one statement `when` block; assert all 16 update independently (codegen fan-out of always-blocks)"
+cycle_limit = 20
+trace = false

@@ -1,0 +1,5 @@
+[project]
+name = "slice-zero-width"
+
+[prog]
+top = "slice-zero-width::SliceZeroWidthTest"

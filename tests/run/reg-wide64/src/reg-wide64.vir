@@ -1,0 +1,149 @@
+//! Self-checking `kind = "run"` test for a wide (`Word[64]`) register.
+//!
+//! A `WideCounter` holds a `Word[64]` counter register that advances
+//! by `0x8000_0000` (2^31) per enabled cycle, so five enabled cycles
+//! carry the count past 2^32 to `0x2_8000_0000`.  A harness top drives
+//! the counter through idle warm-up cycles (so simulator start-up
+//! randomness cannot leak into a verdict), a synchronous clear that
+//! re-establishes a known zero, then five enabled steps.  At the first
+//! enabled step and after the fifth, the harness checks the full
+//! 64-bit value plus both 32-bit halves (`q[64..32]` and `q[32..0]`).
+//! Each verdict is folded into a running `all_ok`; the simulator exits
+//! with code 0 only if all checks passed, and 1 otherwise.
+
+import virt
+
+//> Wide register counter under test: a `Word[64]` register advanced
+//> by `0x8000_0000` per enabled cycle, clearable to zero.
+mod WideCounter {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Synchronously clears the count to zero.
+    incoming clear : Bit
+
+    //> When high, the count advances by one stride on the next clock
+    //> edge.
+    incoming en : Bit
+
+    //> Current count.
+    outgoing q : Word[64]
+
+    reg count : Word[64] on clock {
+        initial it <= 0
+        when {
+            case clear {
+                it <= 0
+            }
+            case en {
+                it <= it + 0x8000_0000
+            }
+        }
+    }
+
+    q := count
+}
+
+pub mod RegWide64Test for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last check passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod dut of WideCounter {
+        it.clock := clock
+        it.clear := clear
+        it.en := en
+    }
+
+    //> Index of the stimulus step currently being applied; free-runs
+    //> through 0..15 and wraps.
+    reg step : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Lags `step` by one cycle: at any cycle after the first it holds
+    //> the step applied the cycle before, selecting the golden `q` to
+    //> check against.
+    reg check_step : Word[4] on clock {
+        initial it <= 0
+        it <= step
+    }
+
+    //> Rises at the end of the final check (step 8), freezing the fold
+    //> and validating `exit` on the next cycle.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case checking && check_step == 8 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the cycle after its step is applied.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && mux(check_step == 3, mid_ok, final_ok)
+            }
+        }
+    }
+
+    //> True only during the two check cycles, after warm-up and the
+    //> clear have re-established a known register value and after the
+    //> final enabled step.
+    wire checking : Bit {
+        it := !finished && (check_step == 3 || check_step == 8)
+    }
+
+    wire clear : Bit
+    clear := step < 3
+
+    wire en : Bit
+    en := step >= 3 && step < 8
+
+    //> Full 64-bit counter value under test.
+    wire q_full : Word[64] {
+        it := dut.q
+    }
+
+    //> High half of the counter (bits 63..32).
+    wire q_high : Word[32] {
+        it := dut.q[64..32]
+    }
+
+    //> Low half of the counter (bits 31..0).
+    wire q_low : Word[32] {
+        it := dut.q[32..0]
+    }
+
+    //> After the first enabled step, the count is one stride:
+    //> `0x0000_0000_8000_0000` -- still below 2^32, so high half 0,
+    //> low half `0x8000_0000`.
+    wire mid_ok : Bit {
+        it := q_full == 0x0000_0000_8000_0000
+            && q_high == 0
+            && q_low == 0x8000_0000
+    }
+
+    //> After the fifth enabled step, the count is five strides:
+    //> `0x0000_0002_8000_0000` (above 2^32) -- high half 2, low half
+    //> `0x8000_0000`.
+    wire final_ok : Bit {
+        it := q_full == 0x0000_0002_8000_0000
+            && q_high == 2
+            && q_low == 0x8000_0000
+    }
+}

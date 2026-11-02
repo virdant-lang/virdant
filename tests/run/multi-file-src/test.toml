@@ -1,0 +1,4 @@
+kind = "run"
+description = "A design split across three `src/` files (`bits`, `adder`, `comparator`), where the harness top imports and instantiates modules from the other two files and those in turn reuse a shared module from `bits`: writes four vectors through the chain, checks the sum and the equality verdict, and asserts the cross-file visibility and dataflow."
+cycle_limit = 8
+trace = false

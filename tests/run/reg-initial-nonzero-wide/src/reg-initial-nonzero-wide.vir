@@ -1,0 +1,43 @@
+//! Self-checking `kind = "run"` test for `initial` on a `Word[16]`
+//! register.
+//!
+//! The register powers on with the large constant `0xbeef` and holds
+//! it through the first clock edge, by which point the exit check has
+//! fired.  Only after `started` rises does the register free-run.  If
+//! the power-on value were missing, the register would instead start
+//! at 0, never matching `0xbeef` within the cycle limit, so the
+//! simulator would exit nonzero.
+
+import virt
+
+pub mod RegInitialWideTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Wide register loaded with the large constant `0xbeef` at
+    //> power-on, then free-running once `started` rises.
+    reg value : Word[16] on clock {
+        initial it <= 0xbeef
+        when {
+            case started {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Rises on the first clock edge, letting `value` hold its
+    //> power-on constant until the exit check has observed it.
+    reg started : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> `@Valid(0)` while `value` holds its power-on constant
+    //> `0xbeef`; while `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case value == 0xbeef => @Valid(0)
+            else => @Invalid()
+        }
+    }
+}

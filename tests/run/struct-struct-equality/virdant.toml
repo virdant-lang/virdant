@@ -1,0 +1,5 @@
+[project]
+name = "struct-struct-equality"
+
+[prog]
+top = "struct-struct-equality::StructEqualityTest"

@@ -1,0 +1,124 @@
+//! Self-checking `kind = "run"` test for `it <= match it { ... }`:
+//! a register updated based on its own value through a `match`.
+//!
+//! A `Walker` register steps through a union state machine —
+//! `@Idle()`, then `@Count(n)` counting 0 through 3, then `@Wrapped()`
+//! — where every transition is chosen by matching on the register's
+//! own current value.  A harness top walks alongside, asserting the
+//! exact state at every cycle with pattern matching; the simulator
+//! exits with code 0 only if every step of the walk checked out, and
+//! 1 otherwise.
+
+import virt
+
+//> State of the self-referential register under test.
+//>
+//> `Idle` - power-on state.
+//> `Count(n)` - counting up from 0 to 3.
+//> `Wrapped` - terminal state reached after `Count(3)`.
+union type WalkState {
+    Idle()
+    Count(n : Word[2])
+    Wrapped()
+}
+
+//> Register whose next value is computed by matching on its own
+//> current value: `it <= match it { ... }`.  From `@Idle()` it enters
+//> `@Count(0)`; each `@Count(n)` either increments or, once `n`
+//> reaches 3, wraps into the terminal `@Wrapped()`.
+mod Walker {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Current state of the walk, for the harness to assert against.
+    outgoing state : WalkState
+
+    reg walk : WalkState on clock {
+        initial it <= @Idle()
+        it <= match it : WalkState {
+            case @Idle() => @Count(0)
+            case @Count(n) when {
+                case n == 3 => @Wrapped()
+                else => @Count(n + 1)
+            }
+            case @Wrapped() => @Wrapped()
+        }
+    }
+
+    state := walk
+}
+
+pub mod MatchOnRegSelfrefTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the whole walk checked out; `@Valid(1)` if
+    //> any step diverged from the expected walk.  While
+    //> `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod walker of Walker {
+        it.clock := clock
+    }
+
+    //> Cycle index of the walk: 0 through 5.
+    reg step : Word[3] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Rises the cycle after `step` reaches 5, freezing `all_ok` so
+    //> the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case step == 5 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every step's verdict.  Power-on true; each
+    //> cycle folds in whether `walker.state` matched the expected
+    //> walk.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && step_ok
+            }
+        }
+    }
+
+    //> High on every cycle before the walk has finished.
+    wire checking : Bit {
+        it := !finished
+    }
+
+    //> Verdict for the current cycle: the observed state must equal
+    //> the expected state of the walk at this `step`.
+    wire step_ok : Bit
+
+    match walker.state {
+        case @Idle() {
+            step_ok := step == 0
+        }
+        case @Count(n) {
+            step_ok := match step : Word[3] {
+                case 1 => n == 0
+                case 2 => n == 1
+                case 3 => n == 2
+                case 4 => n == 3
+                else => false
+            }
+        }
+        case @Wrapped() {
+            step_ok := step == 5
+        }
+    }
+}

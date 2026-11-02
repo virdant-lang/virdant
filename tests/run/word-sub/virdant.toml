@@ -1,0 +1,5 @@
+[project]
+name = "word-sub"
+
+[prog]
+top = "word-sub::WordSubTest"

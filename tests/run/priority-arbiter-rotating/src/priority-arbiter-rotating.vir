@@ -1,0 +1,260 @@
+//! Self-checking `kind = "run"` test for a rotating-priority arbiter.
+//!
+//! `RotatingArbiter` grants one of 4 requesting clients per cycle.
+//! The twist: the client granted last cycle drops to the lowest
+//! priority - the next grant goes to the first requesting client
+//! after `last` in the ring, wrapping around; `last` itself is
+//! checked last.  A harness top applies 8 request vectors (including
+//! one idle vector) and checks the one-hot grant against the expected
+//! client each cycle; every verdict is ANDed into a running `all_ok`,
+//! and the simulator exits with code 0 only if all 8 vectors produced
+//! the expected grant, and 1 otherwise.
+//!
+//! The harness idles a few cycles before stimulus so the simulator's
+//! first clock edge (which can commit garbage register values) is
+//! flushed: during warm-up, every harness register is re-driven to a
+//! known constant and the arbiter's `last` pointer is held at its
+//! reset value, so stimulus starts from a fully deterministic state.
+
+import virt
+
+//> Rotating-priority arbiter for 4 clients.
+//>
+//> Each cycle, the requesting client with the highest priority is
+//> granted.  Priority starts just after the last-granted client
+//> (`last`) and wraps around: client `last + 1` has top priority,
+//> then `last + 2`, `last + 3`, and finally `last` itself (lowest).
+//> So the last-granted client drops to the lowest priority.  With no
+//> requests, nothing is granted and `last` holds.
+//>
+//> While `warmup` is high, `last` is held at 3, so the first stimulus
+//> cycle always starts with the priority order 0, 1, 2, 3.
+mod RotatingArbiter {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Warm-up hold: while high, `last` is forced to 3.
+    incoming warmup : Bit
+
+    //> Client 0 requests a grant.
+    incoming req0 : Bit
+    //> Client 1 requests a grant.
+    incoming req1 : Bit
+    //> Client 2 requests a grant.
+    incoming req2 : Bit
+    //> Client 3 requests a grant.
+    incoming req3 : Bit
+
+    //> Client 0 is granted this cycle.
+    outgoing grant0 : Bit {
+        it := g0
+    }
+    //> Client 1 is granted this cycle.
+    outgoing grant1 : Bit {
+        it := g1
+    }
+    //> Client 2 is granted this cycle.
+    outgoing grant2 : Bit {
+        it := g2
+    }
+    //> Client 3 is granted this cycle.
+    outgoing grant3 : Bit {
+        it := g3
+    }
+
+    //> Internal grant nets, one per client, driven by the priority
+    //> logic below.
+    wire g0 : Bit
+    wire g1 : Bit
+    wire g2 : Bit
+    wire g3 : Bit
+
+    //> Index of the last granted client.  Set by whichever grant is
+    //> asserted; holds when no client is granted.  Forced to 3 while
+    //> `warmup` is high.
+    reg last : Word[2] on clock {
+        initial it <= 3
+        when {
+            case warmup {
+                it <= 3
+            }
+            case g0 {
+                it <= 0
+            }
+            case g1 {
+                it <= 1
+            }
+            case g2 {
+                it <= 2
+            }
+            case g3 {
+                it <= 3
+            }
+        }
+    }
+
+    // Priority order per `last`: `case last == 0` starts at client 1,
+    // and so on around the ring; the `else` arm covers `last == 3`,
+    // which starts at client 0.
+    when {
+        case last == 0 {
+            g0 := req0 && !req1 && !req2 && !req3
+            g1 := req1
+            g2 := req2 && !req1
+            g3 := req3 && !req1 && !req2
+        }
+        case last == 1 {
+            g0 := req0 && !req2 && !req3
+            g1 := req1 && !req0 && !req2 && !req3
+            g2 := req2
+            g3 := req3 && !req2
+        }
+        case last == 2 {
+            g0 := req0 && !req3
+            g1 := req1 && !req0 && !req3
+            g2 := req2 && !req0 && !req1 && !req3
+            g3 := req3
+        }
+        else {
+            g0 := req0
+            g1 := req1 && !req0
+            g2 := req2 && !req0 && !req1
+            g3 := req3 && !req0 && !req1 && !req2
+        }
+    }
+}
+
+pub mod RotatingArbiterTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once all 8 vectors checked out; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case done_count == 8 => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod arb of RotatingArbiter {
+        it.clock := clock
+        it.warmup := warming
+        it.req0 := reqs[0]
+        it.req1 := reqs[1]
+        it.req2 := reqs[2]
+        it.req3 := reqs[3]
+    }
+
+    //> One-hot grant vector: bit i is client i's grant.
+    wire grants : Word[4] {
+        it := word(arb.grant3, arb.grant2, arb.grant1, arb.grant0)
+    }
+
+    //> Warm-up counter: counts 0, 1, 2, 3, then parks at 4 or above.
+    reg warm : Word[3] on clock {
+        initial it <= 0
+        when {
+            case warm < 4 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> True during the idle warm-up phase, before any stimulus.
+    wire warming : Bit {
+        it := warm < 4
+    }
+
+    //> True while a test vector is being applied: warm-up is over and
+    //> fewer than all 8 vectors have been checked.
+    wire stimulus : Bit {
+        it := warm >= 4 && done_count < 8
+    }
+
+    //> Index of the vector under test, 0 through 7.  Held at 0 during
+    //> warm-up; advances once per stimulus cycle.
+    reg step : Word[3] on clock {
+        initial it <= 0
+        when {
+            case warming {
+                it <= 0
+            }
+            case stimulus {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Number of vectors checked, 0 through 8.  Held at 0 during
+    //> warm-up; the test is complete once it reaches 8.
+    reg done_count : Word[4] on clock {
+        initial it <= 0
+        when {
+            case warming {
+                it <= 0
+            }
+            case stimulus {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Re-anchored to true during
+    //> warm-up; each stimulus cycle folds in the current verdict.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case warming {
+                it <= true
+            }
+            case stimulus {
+                it <= it && grants == expected
+            }
+        }
+    }
+
+    wire reqs : Word[4]
+    wire expected : Word[4]
+
+    // Test-vector table: the applied request vector `reqs` and the
+    // expected one-hot grant `expected`, selected by `step`.
+    when {
+        case warming {
+            reqs := 0w4
+            expected := 0w4
+        }
+        case step == 0 {
+            reqs := 0b0001w4
+            expected := 0b0001w4
+        }
+        case step == 1 {
+            reqs := 0b1111w4
+            expected := 0b0010w4
+        }
+        case step == 2 {
+            reqs := 0b1111w4
+            expected := 0b0100w4
+        }
+        case step == 3 {
+            reqs := 0b1111w4
+            expected := 0b1000w4
+        }
+        case step == 4 {
+            reqs := 0b1111w4
+            expected := 0b0001w4
+        }
+        case step == 5 {
+            reqs := 0b0101w4
+            expected := 0b0100w4
+        }
+        case step == 6 {
+            reqs := 0w4
+            expected := 0w4
+        }
+        case step == 7 {
+            reqs := 0b0101w4
+            expected := 0b0001w4
+        }
+    }
+}

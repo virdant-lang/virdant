@@ -1,0 +1,121 @@
+//! Self-checking `kind = "run"` test for a design spread across
+//! three source files with cross-file imports.
+//!
+//! The design is split over `bits.vir`, `adder.vir`, and
+//! `comparator.vir`: `adder::Adder` and `comparator::Equal` both
+//! reuse the shared `bits::Widen` module via `import bits`, and this
+//! harness top instantiates both through `import adder` and
+//! `import comparator`.  A table of four vectors drives the chain:
+//! each cycle the harness checks `Adder.sum` against a golden sum
+//! and `Equal.eq` against a golden verdict, ANDing every check into
+//! a running `all_ok`.  The simulator exits with code 0 only if all
+//! four vectors passed through every cross-file boundary, and 1
+//! otherwise.
+
+import virt
+import adder
+import comparator
+
+pub mod Top for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last vector checked out; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Cross-file adder, instantiated from `adder.vir` via
+    //> `import adder`.
+    mod adder of adder::Adder {
+        it.x := vec_x
+        it.y := vec_y
+    }
+
+    //> Cross-file equality checker, instantiated from
+    //> `comparator.vir` via `import comparator`.
+    mod eq of comparator::Equal {
+        it.x := vec_x
+        it.y := vec_y8
+    }
+
+    //> Index of the vector under test, 0 through 3.
+    reg index : Word[2] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdicts for the current vector.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && adder.sum == expected_sum && eq.eq == expected_eq
+    }
+
+    //> Rises one cycle after the last vector is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 3 {
+                it <= true
+            }
+        }
+    }
+
+    wire vec_x : Word[4]
+    wire vec_y : Word[4]
+
+    //> 8-bit operand for `comparator::Equal`, so the widened
+    //> `vec_x` can be checked both equal and unequal.
+    wire vec_y8 : Word[8]
+
+    wire expected_sum : Word[8]
+
+    //> Golden verdict for `comparator::Equal`.
+    wire expected_eq : Bit
+
+    // Test-vector table: `vec_x`, `vec_y`, the 8-bit `vec_y8`, the
+    // golden `expected_sum` (`zext(vec_x) + zext(vec_y) + 1`), and
+    // the golden `expected_eq` (`zext(vec_x) == vec_y8`).  The four
+    // cases exactly cover `Word[2]`, so the match is exhaustive.
+    match index {
+        case 0 {
+            vec_x := 5
+            vec_y := 3
+            vec_y8 := 5
+            expected_sum := 9
+            expected_eq := true
+        }
+        case 1 {
+            vec_x := 15
+            vec_y := 1
+            vec_y8 := 15
+            expected_sum := 17
+            expected_eq := true
+        }
+        case 2 {
+            vec_x := 0
+            vec_y := 0
+            vec_y8 := 255
+            expected_sum := 1
+            expected_eq := false
+        }
+        case 3 {
+            vec_x := 9
+            vec_y := 6
+            vec_y8 := 9
+            expected_sum := 16
+            expected_eq := true
+        }
+    }
+}

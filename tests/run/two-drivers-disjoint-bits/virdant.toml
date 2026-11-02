@@ -1,0 +1,5 @@
+[project]
+name = "two-drivers-disjoint-bits"
+
+[prog]
+top = "two-drivers-disjoint-bits::TwoDriversTest"

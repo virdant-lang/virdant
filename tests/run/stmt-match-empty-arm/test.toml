@@ -1,0 +1,4 @@
+kind = "run"
+description = "a statement-level match arm with zero driver statements matches but drives nothing, so the register holds its old value"
+cycle_limit = 20
+trace = false

@@ -1,0 +1,4 @@
+kind = "run"
+description = "Nested mux() as a 4-way selector, all 8 select combinations"
+cycle_limit = 12
+trace = false

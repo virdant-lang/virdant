@@ -1,0 +1,182 @@
+// Self-checking `kind = "run"` test for a 4-input priority encoder.
+//
+// A `PrioEnc` unit resolves four request bits into a grant with a
+// statement-level `when` written highest-priority first: the arm for
+// `req[3]` comes first, so the first matching arm wins and the grant
+// always names the highest set request bit.  A harness sequencer
+// sweeps all 16 input vectors, compares `grant` and `valid` against
+// an explicit golden table, and ANDs every verdict into a running
+// `all_ok`; the simulator exits with code 0 only if all 16 vectors
+// passed, and 1 otherwise.
+
+import virt
+
+//> 4-input priority encoder resolved by a statement-level `when`.
+//>
+//> The arms are tried in order, so the `req[3]` arm -- the
+//> highest-priority request -- fires whenever it is set; a lower
+//> request can only win when every higher one is clear.  With no
+//> requests pending at all, `valid` drops and `grant` holds 0.
+mod PrioEnc {
+    //> Four request bits; `req[3]` has the highest priority.
+    incoming req : Word[4]
+
+    //> Index of the granted request, 0 through 3.
+    outgoing grant : Word[2]
+
+    //> High when any request is pending.
+    outgoing valid : Bit
+
+    when {
+        case req[3] {
+            grant := 3
+            valid := true
+        }
+        case req[2] {
+            grant := 2
+            valid := true
+        }
+        case req[1] {
+            grant := 1
+            valid := true
+        }
+        case req[0] {
+            grant := 0
+            valid := true
+        }
+        else {
+            grant := 0
+            valid := false
+        }
+    }
+}
+
+pub mod StmtWhenPrioEncTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last vector checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod enc of PrioEnc {
+        it.req := req
+    }
+
+    //> Index of the vector under test, 0 through 15.  The index bits
+    //> themselves form the request vector, so all 16 input
+    //> combinations appear exactly once.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdict for the current vector.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && enc.valid == expected_valid && enc.grant == expected_grant
+    }
+
+    //> Rises one cycle after the last vector is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 15 {
+                it <= true
+            }
+        }
+    }
+
+    //> Request vector fed to the unit: the raw index bits.
+    wire req : Word[4] {
+        it := index
+    }
+
+    //> Golden `valid` for the current vector: only the empty vector
+    //> has no request pending.
+    wire expected_valid : Bit
+
+    //> Golden `grant` for the current vector: the highest set bit of
+    //> the index, with 0 as the don't-care grant for the empty case.
+    wire expected_grant : Word[2]
+
+    // Golden table for all 16 request vectors, selected by `index`.
+    match index {
+        case 0 {
+            expected_valid := false
+            expected_grant := 0
+        }
+        case 1 {
+            expected_valid := true
+            expected_grant := 0
+        }
+        case 2 {
+            expected_valid := true
+            expected_grant := 1
+        }
+        case 3 {
+            expected_valid := true
+            expected_grant := 1
+        }
+        case 4 {
+            expected_valid := true
+            expected_grant := 2
+        }
+        case 5 {
+            expected_valid := true
+            expected_grant := 2
+        }
+        case 6 {
+            expected_valid := true
+            expected_grant := 2
+        }
+        case 7 {
+            expected_valid := true
+            expected_grant := 2
+        }
+        case 8 {
+            expected_valid := true
+            expected_grant := 3
+        }
+        case 9 {
+            expected_valid := true
+            expected_grant := 3
+        }
+        case 10 {
+            expected_valid := true
+            expected_grant := 3
+        }
+        case 11 {
+            expected_valid := true
+            expected_grant := 3
+        }
+        case 12 {
+            expected_valid := true
+            expected_grant := 3
+        }
+        case 13 {
+            expected_valid := true
+            expected_grant := 3
+        }
+        case 14 {
+            expected_valid := true
+            expected_grant := 3
+        }
+        case 15 {
+            expected_valid := true
+            expected_grant := 3
+        }
+    }
+}

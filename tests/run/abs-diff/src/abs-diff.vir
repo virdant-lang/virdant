@@ -1,0 +1,166 @@
+// Self-checking `kind = "run"` test for the absolute difference
+// pattern: `|x - y|` computed with a `when` on the comparison of the
+// operands.
+//
+//! An `AbsDiff` unit computes `|x - y|` combinationally.  A harness
+//! top drives it through a table of 13 vectors: both orders of
+//! asymmetric pairs, equal operands (including 0 vs 0 and 255 vs 255),
+//! extremes at 0 and 255, and adjacent values.  Each result is
+//! compared against a golden value and every check is ANDed into a
+//! running `all_ok`; the simulator exits with code 0 only if all 13
+//! vectors passed, and 1 otherwise.
+
+import virt
+
+//> Absolute difference of the operands, computed with a `when` on
+//> the comparison.
+mod AbsDiff {
+    //> First operand.
+    incoming x : Word[8]
+
+    //> Second operand.
+    incoming y : Word[8]
+
+    //> `|x - y|`: `y - x` when `x < y`, otherwise `x - y`.  Equal
+    //> operands give 0.
+    outgoing diff : Word[8] {
+        it := when {
+            case x < y => y - x
+            else => x - y
+        }
+    }
+}
+
+pub mod AbsDiffTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last vector checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod absdiff of AbsDiff {
+        it.x := vec_x
+        it.y := vec_y
+    }
+
+    //> Index of the vector under test, 0 through 12.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdict for the current vector.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && absdiff.diff == expected
+    }
+
+    //> Rises one cycle after the last vector is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 12 {
+                it <= true
+            }
+        }
+    }
+
+    wire vec_x : Word[8]
+    wire vec_y : Word[8]
+
+    //> Test-vector table: `vec_x`, `vec_y`, and the golden `expected`
+    //> result, selected by `index`.  Indexes 13 through 15 are unused;
+    //> the `else` arm parks the operands where the check is harmless.
+    wire expected : Word[8]
+
+    match index {
+        // Both orders of an asymmetric pair.
+        case 0 {
+            vec_x := 10
+            vec_y := 3
+            expected := 7
+        }
+        case 1 {
+            vec_x := 3
+            vec_y := 10
+            expected := 7
+        }
+        // Equal operands give 0.
+        case 2 {
+            vec_x := 5
+            vec_y := 5
+            expected := 0
+        }
+        case 3 {
+            vec_x := 0
+            vec_y := 0
+            expected := 0
+        }
+        case 4 {
+            vec_x := 255
+            vec_y := 255
+            expected := 0
+        }
+        // Extremes at 0 and 255, both orders.
+        case 5 {
+            vec_x := 0
+            vec_y := 255
+            expected := 255
+        }
+        case 6 {
+            vec_x := 255
+            vec_y := 0
+            expected := 255
+        }
+        // Assorted asymmetric pairs, both orders.
+        case 7 {
+            vec_x := 200
+            vec_y := 100
+            expected := 100
+        }
+        case 8 {
+            vec_x := 100
+            vec_y := 200
+            expected := 100
+        }
+        // Adjacent values.
+        case 9 {
+            vec_x := 128
+            vec_y := 127
+            expected := 1
+        }
+        case 10 {
+            vec_x := 1
+            vec_y := 0
+            expected := 1
+        }
+        case 11 {
+            vec_x := 255
+            vec_y := 254
+            expected := 1
+        }
+        case 12 {
+            vec_x := 42
+            vec_y := 42
+            expected := 0
+        }
+        else {
+            vec_x := 0
+            vec_y := 0
+            expected := 0
+        }
+    }
+}

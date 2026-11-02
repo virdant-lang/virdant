@@ -1,0 +1,106 @@
+// A `kind = "run"` test appending a bit at the LSB end with the
+// `word()` constructor, rotate-style: `word(new_bit, x[4..1])`.
+// Slice top indices are exclusive, so `x[4..1]` on a `Word[4]` is
+// bits 3..1 (a `Word[3]`), and `word()` takes its arguments
+// most-significant first — so the appended bit lands at bit 3 and
+// the original bit 0 falls off.  Fixed vectors assert the full
+// result and the placement of every bit.  The simulator exits with
+// code 0 only if every check passes.
+
+import virt
+
+pub mod WordAppendTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Vector 0: `x` is 0b1011, so `x[4..1]` is bits 3..1 = 0b101,
+    //> and appending `new_bit = 1` gives 0b1101.
+    wire x0 : Word[4] {
+        it := 0b1011
+    }
+
+    wire new_bit0 : Bit {
+        it := true
+    }
+
+    //> The append itself: `word()` arguments are most-significant
+    //> first, so `new_bit` lands at bit 3 and `x[4..1]` fills bits
+    //> 2..0.
+    wire y0 : Word[4] {
+        it := word(new_bit0, x0[4..1])
+    }
+
+    //> Full-value and per-bit placement checks for vector 0.
+    wire check0 : Bit {
+        it := y0 == 0b1101
+            && y0[3] == new_bit0
+            && y0[2] == x0[3]
+            && y0[1] == x0[2]
+            && y0[0] == x0[1]
+    }
+
+    //> Vector 1: the original bit 0 (1) falls off; the result is
+    //> 0b0000.
+    wire x1 : Word[4] {
+        it := 0b0001
+    }
+
+    wire new_bit1 : Bit {
+        it := false
+    }
+
+    wire y1 : Word[4] {
+        it := word(new_bit1, x1[4..1])
+    }
+
+    wire check1 : Bit {
+        it := y1 == 0b0000
+    }
+
+    //> Vector 2: a lone 1 shifted down one place (bit 3 to bit 2)
+    //> with a 0 appended: 0b1000 gives 0b0100.
+    wire x2 : Word[4] {
+        it := 0b1000
+    }
+
+    wire new_bit2 : Bit {
+        it := false
+    }
+
+    wire y2 : Word[4] {
+        it := word(new_bit2, x2[4..1])
+    }
+
+    wire check2 : Bit {
+        it := y2 == 0b0100
+    }
+
+    //> Rotate-style use: appending `x[0]` itself rotates the word
+    //> right.  `0b0110` rotates to 0b0011.
+    wire x3 : Word[4] {
+        it := 0b0110
+    }
+
+    wire y3 : Word[4] {
+        it := word(x3[0], x3[4..1])
+    }
+
+    wire check3 : Bit {
+        it := y3 == 0b0011
+    }
+
+    //> AND of every check: true only if every vector matched its
+    //> golden value.
+    wire success_wire : Bit {
+        it := check0 && check1 && check2 && check3
+    }
+
+    let ok = success_wire when {
+        case ok {
+            exit := @Valid(0)
+        }
+        else {
+            exit := @Invalid()
+        }
+    }
+}

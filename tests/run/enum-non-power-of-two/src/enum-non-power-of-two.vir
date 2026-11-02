@@ -1,0 +1,98 @@
+//! Self-checking `kind = "run"` test for a non-power-of-two enum.
+//!
+//! A three-variant enum on `Word[2]` leaves the encoding `3w2`
+//! unassigned.  Casting that unused encoding into the enum and
+//! matching it must fall through to the `else` arm, while each
+//! declared variant still hits its own `case` arm.  Every verdict is
+//! folded into a running `all_ok`; the simulator exits with code 0
+//! only if all four checks passed, and 1 otherwise.
+//!
+//! Each match lists only a subset of the variants, so the `else` arm
+//! is never flagged as redundant by the coverage checker.
+
+import virt
+
+//> Three variants on `Word[2]`: the encoding `3w2` is deliberately
+//> unused.
+enum type Ternary {
+    Zero = 0w2
+    One  = 1w2
+    Two  = 2w2
+}
+
+pub mod EnumNonPowerOfTwoTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> The unused encoding `3w2`, cast into the enum.  Its bits pass
+    //> through `cast()` unchanged, so its bit pattern is not the
+    //> encoding of any declared variant.
+    wire junk : Ternary {
+        it := cast(3w2 : Word[2]) : Ternary
+    }
+
+    //> Matching the unused encoding must miss the `case` arm and be
+    //> caught by the `else` arm — in particular, it must not decode
+    //> to `#Zero`.
+    wire unused_caught : Bit {
+        it := match junk {
+            case #Zero => false
+            else       => true
+        }
+    }
+
+    //> Each declared variant must still be caught by its own `case`
+    //> arm, not by `else`.  This keeps `unused_caught` from passing
+    //> vacuously.
+    wire zero_hit : Bit {
+        it := match cast(0w2 : Word[2]) : Ternary {
+            case #Zero => true
+            else       => false
+        }
+    }
+
+    wire one_hit : Bit {
+        it := match cast(1w2 : Word[2]) : Ternary {
+            case #One => true
+            else      => false
+        }
+    }
+
+    wire two_hit : Bit {
+        it := match cast(2w2 : Word[2]) : Ternary {
+            case #Two => true
+            else      => false
+        }
+    }
+
+    //> All four checks must hold.
+    wire checks_ok : Bit {
+        it := unused_caught
+            && zero_hit
+            && one_hit
+            && two_hit
+    }
+
+    //> Running AND of every check.  Power-on true; the checks fold in
+    //> on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && checks_ok
+    }
+
+    //> Rises on the first clock edge, after the checks are folded
+    //> into `all_ok`, so the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

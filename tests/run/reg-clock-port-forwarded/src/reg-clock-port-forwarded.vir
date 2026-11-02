@@ -1,0 +1,112 @@
+//! Self-checking `kind = "run"` test for a clock forwarded through
+//! two hierarchy levels via `incoming { ... }` forwarding blocks.
+//!
+//! The harness top forwards its incoming clock to `mid` from the
+//! declaration site (`mid.clock := it`), and `mid` forwards the same
+//! clock down to `leaf` the same way (`leaf.clock := it`).  `leaf`
+//! holds a free-running counter register, so if the forwarded clock
+//! reaches it, `mid.count` advances by exactly 1 every cycle.  Each
+//! check is ANDed into a running `all_ok`; the simulator exits with
+//! code 0 only if every checked cycle passed, and 1 otherwise.
+
+import virt
+
+//> Free-running counter at the bottom of the hierarchy.
+mod LeafCounter {
+    //> Primary clock, forwarded down from `Mid`.
+    incoming clock : Clock
+
+    //> Current count.
+    outgoing count : Word[8]
+
+    reg value : Word[8] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    count := value
+}
+
+//> Middle of the hierarchy: forwards the clock down to `leaf` via a
+//> forwarding block and lifts `leaf`'s count back up.
+mod Mid {
+    //> Primary clock, forwarded to `leaf` from the declaration site.
+    incoming clock : Clock {
+        leaf.clock := it
+    }
+
+    //> The leaf's counter, clocked only through the forwarded clock.
+    mod leaf of LeafCounter
+
+    //> Current count, forwarded up from `leaf`.
+    outgoing count : Word[8] {
+        it := leaf.count
+    }
+}
+
+pub mod RegClockForwardedTest for virt::Virt {
+    //> Primary clock, forwarded to `mid` from the declaration site.
+    incoming clock : Clock {
+        mid.clock := it
+    }
+
+    mod mid of Mid
+
+    //> `@Valid(0)` after the last cycle checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Number of elapsed cycles.
+    reg cycle_num : Word[5] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Value of `mid.count` on the previous cycle.
+    reg prev_count : Word[8] on clock {
+        initial it <= 0
+        it <= mid.count
+    }
+
+    //> False on cycle 0, where `prev_count` holds no previous count
+    //> yet.
+    reg started : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> This cycle's check: the leaf's counter advanced by exactly one
+    //> since the previous cycle - i.e. the clock survived both
+    //> forwarding blocks and still clocks the leaf's register.
+    wire check_ok : Bit {
+        it := mid.count == prev_count + 1
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> after the first folds its verdict in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case started {
+                it <= it && check_ok
+            }
+        }
+    }
+
+    //> Rises one cycle after the last check, so that the exit code
+    //> sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case cycle_num == 10 {
+                it <= true
+            }
+        }
+    }
+}

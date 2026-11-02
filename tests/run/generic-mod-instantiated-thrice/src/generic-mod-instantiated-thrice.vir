@@ -1,0 +1,86 @@
+// A `kind = "run"` self-checking test: one generic mod instantiated
+// three times, at `Word[2]`, `Word[4]`, and `Word[8]`.  Each
+// instantiation doubles a fixed input, and each width's result is
+// checked against its own golden value so a bug at one width cannot
+// mask another.  The simulator exits with code 0 only if all three
+// checks passed, and 1 otherwise.
+
+import virt
+
+//> Generic mod whose port widths adapt to the type parameter `T`.
+//>
+//> Instantiated below at `Word[2]`, `Word[4]`, and `Word[8]`; the
+//> doubling arithmetic is re-elaborated at each width.
+mod Doubler[T : Type] {
+    incoming d : T
+    outgoing q : T {
+        it := d + d
+    }
+}
+
+pub mod Top for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once every width's check has passed; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case cycle == 1 => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod doubler2 of Doubler[Word[2]] {
+        it.d := 1w2
+    }
+
+    mod doubler4 of Doubler[Word[4]] {
+        it.d := 5w4
+    }
+
+    mod doubler8 of Doubler[Word[8]] {
+        it.d := 100w8
+    }
+
+    //> Result of the `Word[2]` instantiation: 1 + 1 = 2.
+    wire q2 : Word[2] {
+        it := doubler2.q
+    }
+
+    //> Result of the `Word[4]` instantiation: 5 + 5 = 10.
+    wire q4 : Word[4] {
+        it := doubler4.q
+    }
+
+    //> Result of the `Word[8]` instantiation: 100 + 100 = 200.
+    wire q8 : Word[8] {
+        it := doubler8.q
+    }
+
+    //> Independent check for the `Word[2]` instantiation.
+    wire ok2 : Bit {
+        it := q2 == 2w2
+    }
+
+    //> Independent check for the `Word[4]` instantiation.
+    wire ok4 : Bit {
+        it := q4 == 10w4
+    }
+
+    //> Independent check for the `Word[8]` instantiation.
+    wire ok8 : Bit {
+        it := q8 == 200w8
+    }
+
+    wire all_ok : Bit {
+        it := ok2 && ok4 && ok8
+    }
+
+    //> Cycles elapsed since reset.
+    reg cycle : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+}

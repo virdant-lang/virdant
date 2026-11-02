@@ -1,0 +1,4 @@
+kind = "run"
+description = "Two-parameter generic socket Bus[A, B] with request and response of different widths, both orderings; assert"
+cycle_limit = 16
+trace = false

@@ -1,0 +1,5 @@
+[project]
+name = "type-ascription"
+
+[prog]
+top = "type-ascription::TypeAscriptionTest"

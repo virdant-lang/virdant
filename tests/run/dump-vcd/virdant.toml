@@ -1,0 +1,5 @@
+[project]
+name = "dump-vcd"
+
+[prog]
+top = "dump-vcd::DumpVcd"

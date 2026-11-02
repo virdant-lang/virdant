@@ -1,0 +1,4 @@
+kind = "run"
+description = "a three-arm-plus-else `when` used as an expression, with overlapping conditions asserting first-match-wins ordering"
+cycle_limit = 14
+trace = false

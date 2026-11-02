@@ -1,0 +1,198 @@
+//! Self-checking `kind = "run"` test for a statement-level `match`
+//! arm with zero driver statements.
+//!
+//! A top-level statement `match` on the free-running `phase` counter
+//! drives `data` through the values `0x11`, `0x22`, and `0x33`.
+//! Interspersed arms -- some isolated, some back-to-back -- have
+//! completely empty bodies: they match, but drive nothing, so `data`
+//! must hold its previous value.  The phase sequence alternates
+//! drives and empty arms so that each of the three values is both
+//! freshly driven and held through one and two consecutive empty
+//! arms.  A golden `expect` table gives the value `data` must show
+//! during each phase (the driven value after a drive, the held value
+//! after empty arms).  Each check is folded into a running `all_ok`;
+//! the simulator exits with code 0 only if every checked cycle
+//! passed, and 1 otherwise.
+
+import virt
+
+pub mod StmtMatchEmptyArmTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every hold and drive check passed; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> The register under test.  Its driver is the statement-level
+    //> `match` on `phase` below; arms with empty bodies must leave
+    //> this value untouched.
+    reg data : Word[8] on clock {
+        initial it <= 0x42
+    }
+
+    //> Free-running phase counter, 0 through 15.
+    reg phase : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Running AND of every check so far.  Power-on true; each
+    //> checked cycle folds in its verdict.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && data == expect
+            }
+        }
+    }
+
+    //> Rises at the end of the last check cycle (phase 15), so the
+    //> exit code sees the final `all_ok` on the next cycle.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case checking && phase == 15 {
+                it <= true
+            }
+        }
+    }
+
+    //> True on every checked cycle: after the two warm-up cycles
+    //> (phases 0 and 1) and before `finished` latches.
+    wire checking : Bit {
+        it := phase >= 2 && !finished
+    }
+
+    //> Golden value `data` must show during each phase: the driven
+    //> value after a drive arm, the held value after empty arms.
+    wire expect : Word[8]
+
+    // The register driver: the empty-bodied arms (1, 3, 5, 7, 8, 10,
+    // 11, 13, 14) match but drive nothing, so `data` holds.
+    match phase {
+        // First drive also resynchronizes `data` away from the
+        // simulator's power-on edge.
+        case 0 {
+            data <= 0x11
+        }
+        case 1 {
+        }
+        case 2 {
+            data <= 0x22
+        }
+        case 3 {
+        }
+        case 4 {
+            data <= 0x33
+        }
+        case 5 {
+        }
+        case 6 {
+            data <= 0x11
+        }
+        // Two consecutive empty arms: `data` holds `0x11` throughout.
+        case 7 {
+        }
+        case 8 {
+        }
+        case 9 {
+            data <= 0x22
+        }
+        // Two consecutive empty arms: `data` holds `0x22`.
+        case 10 {
+        }
+        case 11 {
+        }
+        case 12 {
+            data <= 0x33
+        }
+        // Two consecutive empty arms: `data` holds `0x33` to the end.
+        case 13 {
+        }
+        case 14 {
+        }
+        case 15 {
+            data <= 0x11
+        }
+    }
+
+    // Golden table: `expect` is the value `data` must show during the
+    // cycle (i.e. after the previous cycle's edge).  Phases 0 and 1
+    // are warm-up, so the first check does not coincide with the
+    // simulator's power-on edge.  The 16 cases exactly cover
+    // `Word[4]`, so the match is exhaustive.
+    match phase {
+        // Power-on: unchecked, `data` shows its initial value.
+        case 0 {
+            expect := 0x42
+        }
+        // Phase 0 drove `0x11`.
+        case 1 {
+            expect := 0x11
+        }
+        // Empty arm: `data` still shows `0x11` (warm-up, unchecked).
+        case 2 {
+            expect := 0x11
+        }
+        // Phase 2 drove `0x22`.
+        case 3 {
+            expect := 0x22
+        }
+        // Empty arm: holds `0x22`.
+        case 4 {
+            expect := 0x22
+        }
+        // Phase 4 drove `0x33`.
+        case 5 {
+            expect := 0x33
+        }
+        // Empty arm: holds `0x33`.
+        case 6 {
+            expect := 0x33
+        }
+        // Phase 6 drove `0x11`.
+        case 7 {
+            expect := 0x11
+        }
+        // Empty arm: holds `0x11`.
+        case 8 {
+            expect := 0x11
+        }
+        // Second consecutive empty arm: still holds `0x11`.
+        case 9 {
+            expect := 0x11
+        }
+        // Phase 9 drove `0x22`.
+        case 10 {
+            expect := 0x22
+        }
+        // Empty arm: holds `0x22`.
+        case 11 {
+            expect := 0x22
+        }
+        // Second consecutive empty arm: still holds `0x22`.
+        case 12 {
+            expect := 0x22
+        }
+        // Phase 12 drove `0x33`.
+        case 13 {
+            expect := 0x33
+        }
+        // Empty arm: holds `0x33`.
+        case 14 {
+            expect := 0x33
+        }
+        // Second consecutive empty arm: still holds `0x33`.
+        case 15 {
+            expect := 0x33
+        }
+    }
+}

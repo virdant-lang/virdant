@@ -1,0 +1,4 @@
+kind = "run"
+description = "Direct chaining of when/match arms without =>, checked against the => form"
+cycle_limit = 24
+trace = false

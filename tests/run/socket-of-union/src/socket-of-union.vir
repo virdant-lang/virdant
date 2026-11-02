@@ -1,0 +1,235 @@
+//! Self-checking `kind = "run"` test for a socket channel of union
+//! type: a `Valid[Word[8]]`-style handshake crossing a socket.
+//!
+//! A client module drives the socket's `cosi` channel with a sequence
+//! of `@Valid(payload)` beats separated by `@Invalid()` gaps; a server
+//! module samples the channel and latches every valid payload.  The
+//! top folds a per-cycle payload-integrity check into a running
+//! `all_ok`: whenever the previous cycle's beat was `@Valid`, the
+//! latched payload must equal the expected vector.  The simulator
+//! exits with code 0 only if every beat checked out, and 1 otherwise.
+
+import virt
+
+//> Handshake channel carrying a union-typed (`Valid[Word[8]]`)
+//> payload from client to server, with a one-bit ready back-channel.
+socket Handshake {
+    cosi data : Valid[Word[8]]
+    soci ready : Bit
+}
+
+//> Client side: drives the union-typed channel from `d` and ignores
+//> the server's `ready`.
+mod Sender {
+    incoming d : Valid[Word[8]]
+
+    client socket hs of Handshake {
+        it.data := d
+        unused it.ready
+    }
+}
+
+//> Server side: asserts `ready` and latches each `@Valid(payload)`
+//> beat into `got`, exported as `last`.
+mod Receiver {
+    incoming clock : Clock
+
+    server socket hs of Handshake {
+        it.ready := true
+    }
+
+    wire fires : Bit {
+        it := match hs.data {
+            case @Valid(dontcare) => true
+            case @Invalid() => false
+        }
+    }
+
+    reg got : Valid[Word[8]] on clock {
+        initial it <= @Invalid()
+        when {
+            case fires {
+                it <= hs.data
+            }
+        }
+    }
+
+    outgoing last : Valid[Word[8]] {
+        it := got
+    }
+}
+
+pub mod SocketOfUnionTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once every beat checked out; `@Valid(1)` if any
+    //> payload integrity check failed.  While `@Invalid()`, the
+    //> simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod sender of Sender {
+        it.d := d
+    }
+
+    mod receiver of Receiver {
+        it.clock := clock
+        sender.hs :=: it.hs
+    }
+
+    //> Beat driven this cycle: `@Valid(payload)` on even `index`,
+    //> `@Invalid()` gap on odd `index`.
+    wire d : Valid[Word[8]] {
+        it := when {
+            case send_valid => @Valid(send_vec)
+            else => @Invalid()
+        }
+    }
+
+    //> Index of the current beat, 0 through 15 (wrapping).
+    reg index : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    wire send_vec : Word[8]
+    wire send_valid : Bit
+
+    // Test-vector table: even indices send payloads 100, 101, ...,
+    // 107; odd indices send `@Invalid()` gaps.
+    match index {
+        case 0 {
+            send_vec := 100
+            send_valid := true
+        }
+        case 1 {
+            send_vec := 0
+            send_valid := false
+        }
+        case 2 {
+            send_vec := 101
+            send_valid := true
+        }
+        case 3 {
+            send_vec := 0
+            send_valid := false
+        }
+        case 4 {
+            send_vec := 102
+            send_valid := true
+        }
+        case 5 {
+            send_vec := 0
+            send_valid := false
+        }
+        case 6 {
+            send_vec := 103
+            send_valid := true
+        }
+        case 7 {
+            send_vec := 0
+            send_valid := false
+        }
+        case 8 {
+            send_vec := 104
+            send_valid := true
+        }
+        case 9 {
+            send_vec := 0
+            send_valid := false
+        }
+        case 10 {
+            send_vec := 105
+            send_valid := true
+        }
+        case 11 {
+            send_vec := 0
+            send_valid := false
+        }
+        case 12 {
+            send_vec := 106
+            send_valid := true
+        }
+        case 13 {
+            send_vec := 0
+            send_valid := false
+        }
+        case 14 {
+            send_vec := 107
+            send_valid := true
+        }
+        case 15 {
+            send_vec := 0
+            send_valid := false
+        }
+    }
+
+    //> Previous cycle's beat, one edge behind `d`: what the receiver
+    //> was offered to latch this cycle.
+    reg pending : Valid[Word[8]] on clock {
+        initial it <= @Invalid()
+        when {
+            case !finished {
+                it <= d
+            }
+        }
+    }
+
+    //> Payload-integrity check for this cycle: if the previous beat
+    //> was `@Valid`, the receiver's latched payload must match; while
+    //> the previous beat was `@Invalid`, the receiver may legitimately
+    //> hold its old value.
+    wire pending_valid : Bit {
+        it := match pending {
+            case @Valid(dontcare) => true
+            case @Invalid() => false
+        }
+    }
+
+    wire expected : Word[8] {
+        it := match pending {
+            case @Valid(e) => e
+            case @Invalid() => 0
+        }
+    }
+
+    wire actual_valid : Bit {
+        it := match receiver.last {
+            case @Valid(dontcare) => true
+            case @Invalid() => false
+        }
+    }
+
+    wire actual : Word[8] {
+        it := match receiver.last {
+            case @Valid(a) => a
+            case @Invalid() => 0
+        }
+    }
+
+    wire checked_ok : Bit {
+        it := !pending_valid || (actual_valid && actual == expected)
+    }
+
+    //> Running AND of every per-cycle check.  Power-on true.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && checked_ok
+    }
+
+    //> Rises one cycle after the last beat, so that every check has
+    //> folded into `all_ok` by the time the exit code is read.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 15 {
+                it <= true
+            }
+        }
+    }
+}

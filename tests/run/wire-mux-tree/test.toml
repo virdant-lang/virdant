@@ -1,0 +1,4 @@
+kind = "run"
+description = "5-stage combinational wire chain, each stage mux-transforming the previous; asserts every stage against a golden when-chain and the final value against 0xF6"
+cycle_limit = 5
+trace = false

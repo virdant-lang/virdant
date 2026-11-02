@@ -1,0 +1,85 @@
+//! Self-checking `kind = "run"` test for `mux()` on a union type:
+//! `mux(cond, @Valid(x), @Invalid())` on `Valid[Word[8]]` must select
+//! `@Valid(x)` when `cond` is true and `@Invalid()` when `cond` is
+//! false.
+//!
+//! `cond` toggles every cycle so both values drive the selection.
+//! Each cycle the result is asserted by `match`ing it and extracting
+//! the payload: the variant must agree with `cond`, and the payload
+//! must equal the `x` fed into the `@Valid()` constructor.  Every
+//! verdict is folded into a running `all_ok`; the simulator exits
+//! with code 0 only if both `cond` values checked out, and 1
+//! otherwise.
+
+import virt
+
+pub mod MuxUnionsTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every `mux()` selection checked out; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Condition under test: false on power-on, then toggled every
+    //> cycle so both values drive `mux()`.
+    reg cond : Bit on clock {
+        initial it <= false
+        it <= !it
+    }
+
+    //> The `mux()` selection under test.
+    wire sel : Valid[Word[8]] {
+        it := mux(cond, @Valid(42w8), @Invalid())
+    }
+
+    //> Variant decode: `@Valid(x)` matches true and `@Invalid()`
+    //> matches false.
+    wire sel_is_valid : Bit {
+        it := match sel : Valid[Word[8]] {
+            case @Valid(x) => true
+            case @Invalid() => false
+        }
+    }
+
+    //> Payload extracted by matching; `0w8` is a don't-care stand-in
+    //> for `@Invalid()`, guarded by the variant check below.
+    wire payload : Word[8] {
+        it := match sel : Valid[Word[8]] {
+            case @Valid(x) => x
+            case @Invalid() => 0w8
+        }
+    }
+
+    //> The selection must agree with `cond` on the variant, and when
+    //> `@Valid(x)` was selected the payload must be the `x` from the
+    //> constructor.
+    wire check : Bit {
+        it := sel_is_valid == cond
+            && mux(cond, payload == 42w8, true)
+    }
+
+    //> Running AND of every check.  Power-on true; the checks fold in
+    //> on every clock edge, covering both `cond` values.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check
+    }
+
+    //> Rises after both `cond` values have been folded into
+    //> `all_ok`, so the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case cond {
+                it <= true
+            }
+        }
+    }
+}

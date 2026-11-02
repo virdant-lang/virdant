@@ -1,0 +1,182 @@
+// Self-checking `kind = "run"` test for the word comparison
+// operators: `==` and `!=` on `Word[8]` operands.
+//
+//! A `WordEqNe` unit computes both `x == y` and `x != y`
+//! combinationally.  A harness top drives it through a table of 12
+//! vectors: equal pairs (including 0 vs 0, mid vs mid, max vs max,
+//! and equal values spelled with different literal styles) and
+//! unequal pairs (both orders of the extremes, adjacent values,
+//! single-bit differences, and byte-swapped hex values).  Each
+//! vector's two verdicts are compared against hand-written golden
+//! bits and folded into a running `all_ok`; the simulator exits with
+//! code 0 only if all 12 vectors passed, and 1 otherwise.
+
+import virt
+
+//> Computes both equality and inequality of its operands.
+mod WordEqNe {
+    //> First operand.
+    incoming x : Word[8]
+
+    //> Second operand.
+    incoming y : Word[8]
+
+    //> `x == y`.
+    outgoing eq : Bit {
+        it := x == y
+    }
+
+    //> `x != y`.
+    outgoing ne : Bit {
+        it := x != y
+    }
+}
+
+pub mod WordEqNeTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last vector checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod eqne of WordEqNe {
+        it.x := vec_x
+        it.y := vec_y
+    }
+
+    //> Index of the vector under test, 0 through 11.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in both verdicts for the current vector.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && eqne.eq == expected_eq && eqne.ne == expected_ne
+    }
+
+    //> Rises one cycle after the last vector is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 11 {
+                it <= true
+            }
+        }
+    }
+
+    //> Operands of the vector under test.
+    wire vec_x : Word[8]
+    wire vec_y : Word[8]
+
+    //> Golden verdicts for the vector under test: `expected_eq` for
+    //> `==` and `expected_ne` for `!=`.
+    wire expected_eq : Bit
+    wire expected_ne : Bit
+
+    // Test-vector table, selected by `index`.  Indexes 12 through 15
+    // are unused; the `else` arm parks the operands where the checks
+    // are harmless.
+    match index {
+        // Equal pairs: 0 vs 0, mid vs mid, max vs max.
+        case 0 {
+            vec_x := 0
+            vec_y := 0
+            expected_eq := true
+            expected_ne := false
+        }
+        case 1 {
+            vec_x := 42
+            vec_y := 42
+            expected_eq := true
+            expected_ne := false
+        }
+        case 2 {
+            vec_x := 255
+            vec_y := 255
+            expected_eq := true
+            expected_ne := false
+        }
+        // Equal values spelled differently: binary vs decimal, hex
+        // vs decimal.
+        case 3 {
+            vec_x := 0b0000_1010
+            vec_y := 10
+            expected_eq := true
+            expected_ne := false
+        }
+        case 4 {
+            vec_x := 0xfe
+            vec_y := 254
+            expected_eq := true
+            expected_ne := false
+        }
+        // Unequal extremes, both orders.
+        case 5 {
+            vec_x := 0
+            vec_y := 255
+            expected_eq := false
+            expected_ne := true
+        }
+        case 6 {
+            vec_x := 255
+            vec_y := 0
+            expected_eq := false
+            expected_ne := true
+        }
+        // Adjacent values.
+        case 7 {
+            vec_x := 42
+            vec_y := 43
+            expected_eq := false
+            expected_ne := true
+        }
+        // Values differing only around the MSB.
+        case 8 {
+            vec_x := 128
+            vec_y := 127
+            expected_eq := false
+            expected_ne := true
+        }
+        // Single-bit differences.
+        case 9 {
+            vec_x := 0b1000
+            vec_y := 0b0001
+            expected_eq := false
+            expected_ne := true
+        }
+        // Byte-swapped hex values.
+        case 10 {
+            vec_x := 0xa5
+            vec_y := 0x5a
+            expected_eq := false
+            expected_ne := true
+        }
+        case 11 {
+            vec_x := 200
+            vec_y := 201
+            expected_eq := false
+            expected_ne := true
+        }
+        else {
+            vec_x := 0
+            vec_y := 0
+            expected_eq := true
+            expected_ne := false
+        }
+    }
+}

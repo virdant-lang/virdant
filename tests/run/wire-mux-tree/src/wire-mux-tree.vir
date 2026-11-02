@@ -1,0 +1,159 @@
+//! Self-checking `kind = "run"` test for a deep combinational wire
+//! chain (`wire-mux-tree`).
+//!
+//! A free-running `seed` register feeds a chain of 5 wires, each
+//! stage transforming the previous one under a `mux()` selected by a
+//! bit of `seed`: `w1` consumes `seed`, `w2` consumes `w1`, and so on
+//! down to `w5`, so the final value depends on the entire chain.  A
+//! parallel golden chain of `when` expressions computes the same 5
+//! stages from `seed` alone; every stage of the wire chain must equal
+//! its golden stage on every cycle, and the final value must be
+//! `0xF6` on the first cycle (`seed == 0xB6`).  Verdicts fold into a
+//! running `all_ok` register; the simulator exits with code 0 only if
+//! every check held, and 1 otherwise.
+
+import virt
+
+pub mod WireMuxTreeTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every stage of the chain checked out;
+    //> `@Valid(1)` if any check failed.  While `@Invalid()`, the
+    //> simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Free-running seed feeding the head of the chain; changes every
+    //> cycle so the chain is re-exercised with fresh data.
+    reg seed : Word[8] on clock {
+        initial it <= 0xB6
+        it <= seed + 0x01
+    }
+
+    //> Stage 1: `seed` incremented or decremented under `seed[0]`.
+    wire w1 : Word[8] {
+        it := mux(seed[0], seed + 0x01, seed - 0x01)
+    }
+
+    //> Stage 2: consumes stage 1; xor or or under `seed[1]`.
+    wire w2 : Word[8] {
+        it := mux(seed[1], w1 ^ 0x3C, w1 | 0x0F)
+    }
+
+    //> Stage 3: consumes stage 2; add or subtract under `seed[2]`.
+    wire w3 : Word[8] {
+        it := mux(seed[2], w2 + 0x10, w2 - 0x10)
+    }
+
+    //> Stage 4: consumes stage 3; high or low nibble mask under
+    //> `seed[3]`.
+    wire w4 : Word[8] {
+        it := mux(seed[3], w3 & 0xF0, w3 & 0x0F)
+    }
+
+    //> Final stage of the chain: consumes stage 4; complement or
+    //> pass-through under `seed[4]`.
+    wire w5 : Word[8] {
+        it := mux(seed[4], w4 ^ 0xFF, w4)
+    }
+
+    //> Golden stage 1: the same selection written as a `when`
+    //> expression straight from `seed`.
+    wire exp1 : Word[8] {
+        it := when {
+            case seed[0] => seed + 0x01
+            else => seed - 0x01
+        }
+    }
+
+    //> Golden stage 2.
+    wire exp2 : Word[8] {
+        it := when {
+            case seed[1] => exp1 ^ 0x3C
+            else => exp1 | 0x0F
+        }
+    }
+
+    //> Golden stage 3.
+    wire exp3 : Word[8] {
+        it := when {
+            case seed[2] => exp2 + 0x10
+            else => exp2 - 0x10
+        }
+    }
+
+    //> Golden stage 4.
+    wire exp4 : Word[8] {
+        it := when {
+            case seed[3] => exp3 & 0xF0
+            else => exp3 & 0x0F
+        }
+    }
+
+    //> Golden stage 5: the expected final value of the chain.
+    wire exp5 : Word[8] {
+        it := when {
+            case seed[4] => exp4 ^ 0xFF
+            else => exp4
+        }
+    }
+
+    //> Stage 1 of the chain must equal its golden stage.
+    wire check1 : Bit {
+        it := w1 == exp1
+    }
+
+    //> Stage 2 must consume stage 1 exactly as the golden does.
+    wire check2 : Bit {
+        it := w2 == exp2
+    }
+
+    //> Stage 3 must consume stage 2 exactly as the golden does.
+    wire check3 : Bit {
+        it := w3 == exp3
+    }
+
+    //> Stage 4 must consume stage 3 exactly as the golden does.
+    wire check4 : Bit {
+        it := w4 == exp4
+    }
+
+    //> The final value of the chain must consume stage 4 exactly as
+    //> the golden does.
+    wire check5 : Bit {
+        it := w5 == exp5
+    }
+
+    //> On the first cycle (`seed == 0xB6`) the whole chain is
+    //> pinned down: the final value must be `0xF6`.
+    wire check_final : Bit {
+        it := !(seed == 0xB6) || w5 == 0xF6
+    }
+
+    //> Running AND of every check.  Power-on true; the checks fold in
+    //> on every clock edge across several `seed` values.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check1 && check2 && check3 && check4 && check5
+                && check_final
+    }
+
+    //> Counts cycles so the exit code only fires after the checks
+    //> have folded in for three cycles (covering both `seed[0]`
+    //> parities).
+    reg count : Word[2] on clock {
+        initial it <= 0
+        it <= it + 0x01
+    }
+
+    //> Rises once `all_ok` has accumulated three cycles of verdicts,
+    //> so the exit code sees the final verdict.
+    wire finished : Bit {
+        it := count == 0x3
+    }
+}

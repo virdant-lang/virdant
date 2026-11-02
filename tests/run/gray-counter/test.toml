@@ -1,0 +1,3 @@
+kind = "run"
+description = "4-bit gray counter: `gray := bin ^ (bin >> 1)` via word()/slice, asserting the gray sequence"
+cycle_limit = 20

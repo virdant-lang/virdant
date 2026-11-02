@@ -1,0 +1,53 @@
+//! Cross-file arithmetic package for the `multi-file-src` test.
+//!
+//! Defines the adder that the harness top instantiates.  Its operand
+//! paths flow through the shared `bits::Widen` module from
+//! `bits.vir`, proving that an imported cross-file module can be
+//! instantiated and driven from this package.
+
+import bits
+
+//> Package-private helper: adds one to an 8-bit word.  Only usable
+//> inside this package; the harness top never references it.
+mod Inc8 {
+    //> 8-bit operand.
+    incoming a : Word[8]
+
+    //> `a + 1`.
+    outgoing sum : Word[8] {
+        it := a + 1
+    }
+}
+
+//> Adds two 4-bit operands by widening each through the shared
+//> `bits::Widen` module, summing the widened values, and running the
+//> result through the package-private `Inc8` helper.
+pub mod Adder {
+    //> First 4-bit operand.
+    incoming x : Word[4]
+
+    //> Second 4-bit operand.
+    incoming y : Word[4]
+
+    //> `widen_x + zext(y) + 1`: the widened operands summed, then
+    //> incremented by `Inc8`.
+    outgoing sum : Word[8]
+
+    //> Shared cross-file module, instantiated from `bits.vir`.
+    mod widen_x of bits::Widen {
+        it.x := x
+    }
+
+    //> Second instance of the shared module, widening `y`.
+    mod widen_y of bits::Widen {
+        it.x := y
+    }
+
+    //> Package-private helper: increments the sum of the widened
+    //> operands.
+    mod inc of Inc8 {
+        it.a := widen_x.y + widen_y.y
+    }
+
+    sum := inc.sum
+}

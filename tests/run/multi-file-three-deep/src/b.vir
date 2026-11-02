@@ -1,0 +1,28 @@
+// Middle link of the chain: imports `c` and wraps `c::Counter` in a
+// pass-through module, re-exported so that `a` can instantiate a
+// module from `c` through the `b` package.
+
+import c
+
+//> Pass-through wrapper around `c::Counter`, forwarding all ports.
+pub mod Wrapped {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Forwarded to the wrapped `c::Counter`.
+    incoming load : Bit
+
+    //> Forwarded to the wrapped `c::Counter`.
+    incoming start : Word[8]
+
+    //> Forwarded from the wrapped `c::Counter`.
+    outgoing value : Word[8]
+
+    mod inner of c::Counter {
+        it.clock := clock
+        it.load := load
+        it.start := start
+    }
+
+    value := inner.value
+}

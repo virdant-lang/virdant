@@ -1,0 +1,5 @@
+[project]
+name = "match-subpattern-concrete"
+
+[prog]
+top = "match-subpattern-concrete::MatchSubpatternConcreteTest"

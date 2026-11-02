@@ -1,0 +1,5 @@
+[project]
+name = "same-name-shadow-hierarchy"
+
+[prog]
+top = "same-name-shadow-hierarchy::ShadowHierarchyTest"

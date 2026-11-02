@@ -1,0 +1,4 @@
+kind = "run"
+description = "Three levels of hierarchy (Top -> Mid -> Leaf); assert signal passes through both levels."
+cycle_limit = 20
+trace = false

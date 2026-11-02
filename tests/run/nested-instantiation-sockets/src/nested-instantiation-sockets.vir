@@ -1,0 +1,158 @@
+//! Self-checking `kind = "run"` test for two-hop socket wiring.
+//!
+//! The grandparent `Grandparent` bulk-connects (`:=:`) its own socket
+//! port `top_port` to the child `mid`'s socket `a`, and `mid`'s
+//! socket `b` to the grandchild `leaf`'s socket `link`, both inside
+//! `mid`'s instantiation block:
+//!
+//!     mid.a :=: top_port
+//!     mid.b :=: leaf.link
+//!
+//! `Mid` is a pure combinational relay and `Leaf` answers
+//! `rsp := req + 1`, so a request driven onto `top_port.req` crosses
+//! both hops and the response crosses both hops back.  The harness
+//! `Stim` asserts on every cycle that the response arriving back on
+//! `drv.rsp` equals `req + 1`.
+//!
+//! A `virt::Virt` platform module cannot declare socket ports, so
+//! `NestedSocketsTest` instantiates the stimulus harness and the
+//! grandparent and bulk-connects them: `stim.drv :=: dut.top_port`.
+
+import virt
+
+//> Request/response handshake: the client drives `req`, the server
+//> answers with `rsp`.
+socket Handshake {
+    cosi req : Word[8]
+    soci rsp : Word[8]
+}
+
+//> Pure combinational relay between two `Handshake` sockets.
+//>
+//> The server side `a` faces the grandparent's `top_port`; the client
+//> side `b` faces the grandchild's `link`.  `b.req` retransmits
+//> `a.req`, and `a.rsp` retransmits `b.rsp`, with no registers in
+//> between.
+mod Mid {
+    //> Server side, bulk-connected to the grandparent's `top_port`.
+    server socket a of Handshake {
+        it.rsp := b.rsp
+    }
+
+    //> Client side, bulk-connected to the grandchild's `link`.
+    client socket b of Handshake {
+        it.req := a.req
+    }
+}
+
+//> Grandchild endpoint of the two-hop chain.
+//>
+//> Answers each request combinationally with `req + 1`.
+mod Leaf {
+    //> Server side, bulk-connected to `mid.b`.
+    server socket link of Handshake {
+        it.rsp := it.req + 1w8
+    }
+}
+
+//> Grandparent: bulk-connects a socket between its child `mid` and
+//> its grandchild `leaf`.  The request enters on the grandparent's
+//> own socket port `top_port`, crosses `mid.a` into `mid.b`, and
+//> reaches `leaf.link`; the response returns the same way.
+mod Grandparent {
+    //> The grandparent's own socket port: the near end of the
+    //> two-hop chain, fed by `Stim` and bulk-connected to `mid.a`.
+    server socket top_port of Handshake
+
+    //> Grandchild, declared first so `mid`'s instantiation block can
+    //> bulk-connect to it.
+    mod leaf of Leaf
+
+    //> Child relay.  The grandparent bulk-connects its own socket
+    //> port to the relay's server side and the grandchild's socket to
+    //> the relay's client side.
+    mod mid of Mid {
+        it.a :=: top_port
+        it.b :=: leaf.link
+    }
+}
+
+//> Self-checking harness: drives an incrementing request into the
+//> grandparent's `top_port` and checks the response that returns
+//> across both hops.
+mod Stim {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once the test cycle count has elapsed with every
+    //> two-hop check having passed; `@Valid(1)` if any check failed.
+    //> While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case done => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Client end of the stimulus feed; `req` goes out to the
+    //> grandparent's `top_port`, `rsp` is the response coming back
+    //> across both hops.
+    client socket drv of Handshake {
+        it.req := req
+    }
+
+    //> Request value driven onto `drv.req`, advancing by one every
+    //> cycle so each cycle exercises a new value.
+    reg req : Word[8] on clock {
+        initial it <= 0
+        it <= it + 1w8
+    }
+
+    //> Cycles elapsed since reset, 0 through 31.
+    reg cycles : Word[5] on clock {
+        initial it <= 0
+        it <= it + 1w5
+    }
+
+    //> Rises once 24 cycles have been checked; freezes `all_ok` and
+    //> lets `exit` become `@Valid`.
+    reg done : Bit on clock {
+        initial it <= false
+        when {
+            case cycles == 24w5 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every two-hop check: the response arriving back
+    //> on `drv.rsp` must equal the request sent on `req` plus one,
+    //> having crossed grandchild-ward through `mid.b` and back
+    //> through `mid.a`.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !done {
+                it <= it && drv.rsp == req + 1w8
+            }
+        }
+    }
+}
+
+pub mod NestedSocketsTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Forwards the verdict computed by the harness.
+    outgoing exit : Valid[Word[8]] {
+        it := stim.exit
+    }
+
+    mod stim of Stim {
+        it.clock := clock
+    }
+
+    mod dut of Grandparent
+
+    stim.drv :=: dut.top_port
+}

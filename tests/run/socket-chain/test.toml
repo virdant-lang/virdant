@@ -1,0 +1,4 @@
+kind = "run"
+description = "Two-hop socket chain: client -> middle (one socket of each role) -> server; round-trip transform checked"
+cycle_limit = 24
+trace = false

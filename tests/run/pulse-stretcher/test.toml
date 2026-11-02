@@ -1,0 +1,3 @@
+kind = "run"
+description = "Single-cycle input pulse stretched to exactly 4 output cycles, asserted cycle-by-cycle"
+cycle_limit = 30

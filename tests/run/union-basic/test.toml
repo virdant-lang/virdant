@@ -1,0 +1,4 @@
+kind = "run"
+description = "Two-variant union with payloads: construct, match, extract, round-trip"
+cycle_limit = 8
+trace = false

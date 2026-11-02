@@ -1,0 +1,141 @@
+// Self-checking `kind = "run"` test for a module that forwards
+// `Valid[Word[8]]` in -> out combinationally.
+//
+// A `Passthrough` unit has no registers: whatever variant arrives on
+// `inp` (`@Valid(payload)` or `@Invalid()`) must appear on `outp` in
+// the same cycle.  The harness top drives four vectors through the
+// unit -- two `@Valid` payloads and two `@Invalid()` gaps -- and for
+// each one checks both the validity flag and the payload on the far
+// side of the module boundary.  Every check is ANDed into a running
+// `all_ok`; the simulator exits with code 0 only if all four vectors
+// passed, and 1 otherwise.
+
+import virt
+
+//> Combinational passthrough: forwards a `Valid[Word[8]]` from `inp`
+//> to `outp` with no registers in between.
+mod Passthrough {
+    //> Incoming `Valid[Word[8]]` channel.
+    incoming inp : Valid[Word[8]]
+
+    //> Forwards `inp` combinationally.
+    outgoing outp : Valid[Word[8]] {
+        it := inp
+    }
+}
+
+pub mod ValidPassthroughTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last vector checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod passthrough of Passthrough {
+        it.inp := d
+    }
+
+    //> Vector driven into the passthrough this cycle: `@Valid(payload)`
+    //> on even `index`, `@Invalid()` on odd `index`.
+    wire d : Valid[Word[8]] {
+        it := when {
+            case drive_valid => @Valid(vec)
+            else => @Invalid()
+        }
+    }
+
+    //> Index of the vector under test, 0 through 3.
+    reg index : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    wire vec : Word[8]
+    wire drive_valid : Bit
+
+    // Test-vector table: even indices drive `@Valid` payloads (42 and
+    // 255), odd indices drive `@Invalid()` gaps.
+    match index {
+        case 0 {
+            vec := 42
+            drive_valid := true
+        }
+        case 1 {
+            vec := 0
+            drive_valid := false
+        }
+        case 2 {
+            vec := 255
+            drive_valid := true
+        }
+        case 3 {
+            vec := 0
+            drive_valid := false
+        }
+    }
+
+    //> Validity flag on the far side of the module boundary.
+    wire out_valid : Bit {
+        it := match passthrough.outp {
+            case @Valid(dontcare) => true
+            case @Invalid() => false
+        }
+    }
+
+    //> Payload on the far side of the module boundary, `0` when the
+    //> forwarded value is `@Invalid()`.
+    wire out_payload : Word[8] {
+        it := match passthrough.outp {
+            case @Valid(x) => x
+            case @Invalid() => 0
+        }
+    }
+
+    //> Expected validity flag and payload, from the same match shape
+    //> applied to the driven vector.
+    wire in_valid : Bit {
+        it := match d {
+            case @Valid(dontcare) => true
+            case @Invalid() => false
+        }
+    }
+
+    wire in_payload : Word[8] {
+        it := match d {
+            case @Valid(x) => x
+            case @Invalid() => 0
+        }
+    }
+
+    //> The passthrough must forward both the validity flag and the
+    //> payload unchanged, in the same cycle, for both variants.
+    wire check : Bit {
+        it := out_valid == in_valid && out_payload == in_payload
+    }
+
+    //> Running AND of every per-cycle check.  Power-on true; the
+    //> combinational path means each vector's check folds in on the
+    //> same cycle the vector is driven.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check
+    }
+
+    //> Rises at the edge ending the last vector's cycle, so the exit
+    //> code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 3 {
+                it <= true
+            }
+        }
+    }
+}

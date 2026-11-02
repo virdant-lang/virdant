@@ -1,0 +1,5 @@
+[project]
+name = "bit-double-negation"
+
+[prog]
+top = "bit-double-negation::BitDoubleNegation"

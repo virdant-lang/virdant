@@ -1,0 +1,4 @@
+kind = "run"
+description = "8-bit reversal via explicit word() of single-bit slices"
+cycle_limit = 1
+trace = false

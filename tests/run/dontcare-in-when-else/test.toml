@@ -1,0 +1,4 @@
+kind = "run"
+description = "`else => dontcare` as the value of an unused wire"
+cycle_limit = 4
+trace = false

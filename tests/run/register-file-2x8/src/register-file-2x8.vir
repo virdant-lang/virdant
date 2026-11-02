@@ -1,0 +1,230 @@
+//! Self-checking `kind = "run"` test for a two-entry register file.
+//!
+//! A `RegisterFile` unit holds two 8-bit registers behind a single
+//! write port and a combinational read mux.  The harness top warms up
+//! by writing zeros through the write port (so the first clock edge's
+//! flaky garbage commit is flushed), then writes a distinct pattern to
+//! each register and reads it back through the read mux, re-reading
+//! each slot once more to assert both persistence and mux steering.
+//! Every check is ANDed into a running `all_ok`; the simulator exits
+//! with code 0 only if all checks passed, and 1 otherwise.
+
+import virt
+
+//> Phases of the self-checking harness.
+//>
+//> `Warm()` - write zeros through the write port so both registers
+//> hold known values before any stimulus is asserted.
+//> `Write0()` / `Write1()` - pulse the write port at the slot.
+//> `Check0()` / `Check1()` - read the slot back and compare.
+//> `Recheck0()` / `Recheck1()` - read each slot again to assert the
+//> value persisted and the read mux still steers correctly.
+//> `Finish()` - park while `finished` rises and the exit code lands.
+union type Phase {
+    Warm()
+    Write0()
+    Check0()
+    Write1()
+    Check1()
+    Recheck0()
+    Recheck1()
+    Finish()
+}
+
+//> Two-entry register file: two 8-bit registers, a single write port
+//> gated by `write_en`, and a combinational read mux selected by
+//> `read_addr`.
+mod RegisterFile {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> When high, `write_data` is written to the slot selected by
+    //> `write_addr` on the clock edge.
+    incoming write_en : Bit
+
+    //> Write port slot select.
+    incoming write_addr : Word[1]
+
+    //> Data written by the write port.
+    incoming write_data : Word[8]
+
+    //> Read mux slot select.
+    incoming read_addr : Word[1]
+
+    //> Value of the slot selected by `read_addr`.
+    outgoing read_data : Word[8] {
+        it := match read_addr {
+            case 0 => slot0
+            case 1 => slot1
+        }
+    }
+
+    //> Register 0, written when the write port selects slot 0.
+    reg slot0 : Word[8] on clock {
+        initial it <= 0
+        when {
+            case write_en match write_addr {
+                case 0 {
+                    it <= write_data
+                }
+            }
+        }
+    }
+
+    //> Register 1, written when the write port selects slot 1.
+    reg slot1 : Word[8] on clock {
+        initial it <= 0
+        when {
+            case write_en match write_addr {
+                case 1 {
+                    it <= write_data
+                }
+            }
+        }
+    }
+}
+
+pub mod RegisterFileTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every read-back check passed; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod rf of RegisterFile {
+        it.clock := clock
+        it.write_en := write_en
+        it.write_addr := write_addr
+        it.write_data := write_data
+        it.read_addr := read_addr
+    }
+
+    //> Current harness phase.
+    reg phase : Phase on clock {
+        initial it <= @Warm()
+        it <= match it : Phase {
+            case @Warm() => mux(warmup == 3, @Write0(), @Warm())
+            case @Write0() => @Check0()
+            case @Check0() => @Write1()
+            case @Write1() => @Check1()
+            case @Check1() => @Recheck0()
+            case @Recheck0() => @Recheck1()
+            case @Recheck1() => @Finish()
+            case @Finish() => @Finish()
+        }
+    }
+
+    //> Warm-up counter.  Runs the `Warm()` phase for four cycles while
+    //> its low bit alternates the write port between the two slots,
+    //> flushing any garbage committed on the first clock edge.
+    reg warmup : Word[2] on clock {
+        initial it <= 0
+        when {
+            case warmup != 3 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every read-back check so far.  Power-on true;
+    //> each check folds its verdict in on its check cycle.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && rf.read_data == expected
+            }
+        }
+    }
+
+    //> Rises one cycle after the last check, so that the exit code
+    //> sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case is_finishing {
+                it <= true
+            }
+        }
+    }
+
+    //> High on a cycle where the read mux output is compared against
+    //> `expected`.
+    wire checking : Bit {
+        it := match phase {
+            case @Check0() => true
+            case @Check1() => true
+            case @Recheck0() => true
+            case @Recheck1() => true
+            else => false
+        }
+    }
+
+    //> High while the harness is parked in `Finish()`.
+    wire is_finishing : Bit {
+        it := match phase {
+            case @Finish() => true
+            else => false
+        }
+    }
+
+    //> Write-port enable: zeros during warm-up, then one pulse per
+    //> register under test.
+    wire write_en : Bit {
+        it := match phase {
+            case @Warm() => true
+            case @Write0() => true
+            case @Write1() => true
+            else => false
+        }
+    }
+
+    //> Write-port slot select: alternating during warm-up, then the
+    //> slot under test.
+    wire write_addr : Word[1] {
+        it := match phase {
+            case @Warm() => warmup[1..0]
+            case @Write0() => 0
+            case @Write1() => 1
+            else => 0
+        }
+    }
+
+    //> Write-port data: zeros during warm-up, then the test pattern.
+    wire write_data : Word[8] {
+        it := match phase {
+            case @Warm() => 0
+            case @Write0() => 165
+            case @Write1() => 60
+            else => 0
+        }
+    }
+
+    //> Read mux slot select: the slot being checked, else slot 0.
+    wire read_addr : Word[1] {
+        it := match phase {
+            case @Check1() => 1
+            case @Recheck1() => 1
+            else => 0
+        }
+    }
+
+    //> Golden read-back value for the slot under check: `165` for
+    //> register 0 and `60` for register 1.
+    wire expected : Word[8] {
+        it := match phase {
+            case @Check0() => 165
+            case @Check1() => 60
+            case @Recheck0() => 165
+            case @Recheck1() => 60
+            else => 0
+        }
+    }
+}

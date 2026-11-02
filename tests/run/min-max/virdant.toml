@@ -1,0 +1,5 @@
+[project]
+name = "min-max"
+
+[prog]
+top = "min-max::MinMaxTest"

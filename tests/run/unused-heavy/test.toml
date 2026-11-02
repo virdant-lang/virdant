@@ -1,0 +1,4 @@
+kind = "run"
+description = "Many unused wires, unused instance ports, and unused socket channels (both socket directions) alongside used behavior checked every cycle"
+cycle_limit = 24
+trace = false

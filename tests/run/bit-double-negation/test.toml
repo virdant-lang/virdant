@@ -1,0 +1,4 @@
+kind = "run"
+description = "Double negation: `!!x` round-trips"
+cycle_limit = 10
+trace = false

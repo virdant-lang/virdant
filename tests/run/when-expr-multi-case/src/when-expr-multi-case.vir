@@ -1,0 +1,121 @@
+//! Self-checking `kind = "run"` test for a three-arm-plus-else `when`
+//! used as an expression, with overlapping conditions.
+//!
+//! `out` is driven by a `when` expression whose three `case` arms have
+//! deliberately overlapping conditions (`x < 2`, `x < 5`, `x < 7`), so
+//! several arms can match the same `x` and only first-match-wins
+//! ordering yields the expected code.  A 3-bit register sweeps `x`
+//! through 0..7, covering all three `case` arms plus the `else` arm;
+//! if ordering were inverted (last match wins), `x = 0` would produce
+//! the arm-3 code and `x = 2` the arm-3 code instead of arm 1's and
+//! arm 2's, tripping the per-cycle checks.  Dedicated registers record
+//! that each arm was actually taken at least once, so a test that only
+//! ever hit one arm could not pass.  Every verdict is ANDed into a
+//! running `all_ok`; the simulator exits with code 0 only if all checks
+//! passed and all four arms were hit, and 1 otherwise.
+
+import virt
+
+pub mod WhenMultiCaseTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed and all four arms were hit;
+    //> `@Valid(1)` otherwise.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok && saw_arm1 && saw_arm2 && saw_arm3 && saw_else, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Sweeps 0..7, wrapping around, so every arm of the `when`
+    //> expression is exercised.
+    reg x : Word[3] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Target of the three-arm-plus-else `when` expression.  The
+    //> conditions overlap, so the code identifies which arm fired:
+    //> `x = 0, 1` -> 1 (arm 1, even though arms 2 and 3 also match),
+    //> `x = 2, 3, 4` -> 2 (arm 2, even though arm 3 also matches),
+    //> `x = 5, 6` -> 4 (arm 3), `x = 7` -> 7 (`else`).
+    wire out : Word[3] {
+        it := when {
+            case x < 2 => 1
+            case x < 5 => 2
+            case x < 7 => 4
+            else => 7
+        }
+    }
+
+    //> When arm 1 is the first match, `out` must carry its code.
+    wire check_arm1 : Bit {
+        it := !(x < 2) || out == 1
+    }
+
+    //> When arm 2 is the first match, `out` must carry its code.
+    wire check_arm2 : Bit {
+        it := (x < 2) || !(x < 5) || out == 2
+    }
+
+    //> When arm 3 is the first match, `out` must carry its code.
+    wire check_arm3 : Bit {
+        it := (x < 2) || (x < 5) || !(x < 7) || out == 4
+    }
+
+    //> When no `case` matches (`x = 7`), `out` must carry the `else`
+    //> code.
+    wire check_else : Bit {
+        it := (x < 7) || out == 7
+    }
+
+    //> Latches that arm 1 was the first match at least once.
+    reg saw_arm1 : Bit on clock {
+        initial it <= false
+        it <= it || (x < 2)
+    }
+
+    //> Latches that arm 2 was the first match at least once.
+    reg saw_arm2 : Bit on clock {
+        initial it <= false
+        it <= it || (!(x < 2) && (x < 5))
+    }
+
+    //> Latches that arm 3 was the first match at least once.
+    reg saw_arm3 : Bit on clock {
+        initial it <= false
+        it <= it || (!(x < 2) && !(x < 5) && (x < 7))
+    }
+
+    //> Latches that the `else` arm was taken at least once (no `case`
+    //> condition matched).
+    reg saw_else : Bit on clock {
+        initial it <= false
+        it <= it || (!(x < 2) && !(x < 5) && !(x < 7))
+    }
+
+    //> Running AND of every per-cycle verdict so far.  Power-on true;
+    //> each cycle folds in the four current checks until `finished`.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !finished {
+                it <= it && check_arm1 && check_arm2 && check_arm3 && check_else
+            }
+        }
+    }
+
+    //> Rises the cycle after the last `x` value is checked, so that
+    //> `exit` sees the final `all_ok` and latch state.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case x == 7 {
+                it <= true
+            }
+        }
+    }
+}

@@ -1,0 +1,61 @@
+//! Self-checking `kind = "run"` test for the full-width slice.
+//!
+//! `x[8..0]` must be the whole 8-bit word: the top index in a Virdant
+//! slice is exclusive, so a slice from 8 down to 0 spans all eight
+//! bits of a `Word[8]` (the Verilog `x[7:0]`).  A nontrivial vector
+//! `0xA5` is sliced and asserted identical both to the original word
+//! and to its own literal, so the slice must preserve the exact bit
+//! pattern, not merely the width.  Every check is folded into a
+//! running `all_ok`; the simulator exits with code 0 only if every
+//! check passed, and 1 otherwise.
+
+import virt
+
+pub mod SliceFullTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Nontrivial vector under test: alternating bit pattern.
+    wire x : Word[8] {
+        it := 0xA5
+    }
+
+    //> The full-width slice: `x[8..0]` must be the whole word.
+    wire whole : Word[8] {
+        it := x[8..0]
+    }
+
+    //> The slice must be identical to the original word.
+    wire ok_identity : Bit {
+        it := whole == x
+    }
+
+    //> The slice must preserve the exact bit pattern, not just the
+    //> width.
+    wire ok_pattern : Bit {
+        it := whole == 0xA5
+    }
+
+    //> Running AND of every check so far.  Power-on true; the check
+    //> verdicts fold in on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && ok_identity && ok_pattern
+    }
+
+    //> Rises on the first clock edge, so that `exit` never observes
+    //> the vacuous power-on `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

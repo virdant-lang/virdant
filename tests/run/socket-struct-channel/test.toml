@@ -1,0 +1,3 @@
+kind = "run"
+description = "Socket channel of struct type; assert field-wise integrity"
+cycle_limit = 40

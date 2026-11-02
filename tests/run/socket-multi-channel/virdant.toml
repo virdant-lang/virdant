@@ -1,0 +1,5 @@
+[project]
+name = "socket-multi-channel"
+
+[prog]
+top = "socket-multi-channel::SocketMultiChannelTest"

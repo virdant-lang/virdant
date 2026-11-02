@@ -1,0 +1,111 @@
+//! A self-checking `kind = "run"` test for nested generics:
+//! `Valid[Opt[Word[4]]]` — a generic type (`Valid`) applied to a
+//! generic type (`Opt`) applied to `Word[4]`.  Two registers of that
+//! nested type walk through their variants; the unwrap chain (a match
+//! inside a match) is checked cycle by cycle against the expected
+//! payloads, and the simulator exits with code 0 only if every check
+//! passed.
+
+import virt
+
+//> Optional value of `T`: either `@None()` or `@Some(value)`.
+union type Opt[T : Type] {
+    None()
+    Some(value : T)
+}
+
+pub mod GenericNested for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Cycles elapsed since reset.
+    reg cycle : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Walks `@Valid(@None())` -> `@Valid(@Some(5))`: a `Word[4]`
+    //> payload nested inside two generic types.
+    reg some_reg : Valid[Opt[Word[4]]] on clock {
+        initial it <= @Valid(@None())
+        when {
+            case cycle == 0 {
+                it <= @Valid(@Some(5))
+            }
+        }
+    }
+
+    //> Walks `@Invalid()` -> `@Valid(@None())`: exercises the
+    //> outer `@Invalid()` arm of the unwrap chain.
+    reg none_reg : Valid[Opt[Word[4]]] on clock {
+        initial it <= @Invalid()
+        when {
+            case cycle == 0 {
+                it <= @Valid(@None())
+            }
+        }
+    }
+
+    //> Unwrap chain over `some_reg`: the outer match unwraps the
+    //> `Valid`, the inner match unwraps the `Opt`, yielding the
+    //> payload `Word[4]`.
+    wire some_unwrapped : Word[4] {
+        it := match some_reg {
+            case @Valid(opt) =>
+                match opt {
+                    case @Some(value) => value
+                    case @None() => 0
+                }
+            case @Invalid() => 15
+        }
+    }
+
+    //> Unwrap chain over `none_reg`, with a distinct fallback for the
+    //> outer `@Invalid()` arm so that every arm of the chain is
+    //> asserted separately.
+    wire none_unwrapped : Word[4] {
+        it := match none_reg {
+            case @Valid(opt) =>
+                match opt {
+                    case @Some(value) => value
+                    case @None() => 0
+                }
+            case @Invalid() => 15
+        }
+    }
+
+    //> This cycle's verdict against the expected walk: at cycle 0 the
+    //> registers still hold their initial values (`@None()` unwraps
+    //> to `0`, `@Invalid()` unwraps to `15`); from cycle 1 on, the
+    //> loaded values (`@Some(5)` unwraps to `5`, `@None()` unwraps to
+    //> `0`).
+    wire checks_ok : Bit {
+        it := match cycle {
+            case 0 => some_unwrapped == 0 && none_unwrapped == 15
+            else => some_unwrapped == 5 && none_unwrapped == 0
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each
+    //> cycle's verdict is folded in on the clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && checks_ok
+    }
+
+    //> Rises after the loaded values have been checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= cycle == 1
+    }
+
+    //> `@Valid(0)` if every check passed, `@Valid(1)` otherwise;
+    //> while `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+}

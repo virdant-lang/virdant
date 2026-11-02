@@ -1,0 +1,3 @@
+kind = "run"
+description = "Two registers in series; asserts exactly 2-cycle latency with a per-cycle golden table"
+cycle_limit = 20

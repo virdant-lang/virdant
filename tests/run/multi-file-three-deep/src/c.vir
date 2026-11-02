@@ -1,0 +1,29 @@
+//> 8-bit counter with a synchronous load.  Loaded with `start` at a
+//> `load` pulse, it free-runs (wrapping) afterwards.
+pub mod Counter {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> When high at a clock edge, `count` takes `start`.
+    incoming load : Bit
+
+    //> Value loaded into `count` when `load` is high.
+    incoming start : Word[8]
+
+    //> Current count.
+    outgoing value : Word[8]
+
+    reg count : Word[8] on clock {
+        initial it <= 0
+        when {
+            case load {
+                it <= start
+            }
+            else {
+                it <= it + 1
+            }
+        }
+    }
+
+    value := count
+}

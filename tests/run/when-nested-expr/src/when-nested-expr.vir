@@ -1,0 +1,135 @@
+// Self-checking `kind = "run"` test for nested `when` expressions:
+// a `when` inside a `when` arm's expression.
+//
+// A `NestedWhen` unit drives two outputs through `when` expressions
+// whose arms contain further `when` expressions.  The `nested` output
+// nests a `when` in a `case` arm and another in the `else` arm; the
+// `overlap` output nests a `when` in an arm whose outer condition
+// overlaps its inner condition, so first-match-wins ordering matters
+// across the nesting.  The harness cycles the two select bits through
+// all four combinations, comparing both outputs against golden values
+// each cycle; every check is ANDed into a running `all_ok` and the
+// simulator exits with code 0 only if all four vectors passed on both
+// outputs, and 1 otherwise.
+
+import virt
+
+//> Select logic evaluated with nested `when` expressions.
+//>
+//> `nested`: the outer `when` picks between a `when` in its `case`
+//> arm and a `when` in its `else` arm; every inner arm yields a
+//> distinct constant.  `overlap`: the outer `case a || b` arm nests a
+//> `when` on `a && b`, so the inner arm only wins when both bits are
+//> set.
+mod NestedWhen {
+    //> Select bit feeding the outer `case` conditions.
+    incoming a : Bit
+
+    //> Select bit feeding the inner `case` conditions.
+    incoming b : Bit
+
+    //> Value from a `when` nested in both a `case` arm and the `else`
+    //> arm of an outer `when`.
+    outgoing nested : Word[8] {
+        it := when {
+            case a => when {
+                case b => 0xa1
+                else => 0xa2
+            }
+            case b => 0xa3
+            else => when {
+                case !b => 0xa4
+                else => 0xa5
+            }
+        }
+    }
+
+    //> Value from a `when` nested inside an arm whose outer condition
+    //> (`a || b`) overlaps the inner one (`a && b`).
+    outgoing overlap : Word[8] {
+        it := when {
+            case a || b => when {
+                case a && b => 0xb1
+                else => 0xb2
+            }
+            else => 0xb3
+        }
+    }
+}
+
+pub mod WhenNestedTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all four vectors passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod dut of NestedWhen {
+        it.a := sel[1]
+        it.b := sel[0]
+    }
+
+    //> Select bits under test: the sequencer cycles them 0, 1, 2, 3,
+    //> wrapping back to 0.
+    reg sel : Word[2] on clock {
+        initial it <= 0
+        it <= when {
+            case it == 3 => 0
+            else => it + 1
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdicts for the current vector.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && dut.nested == expected_nested && dut.overlap == expected_overlap
+    }
+
+    //> Rises one cycle after the last vector is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case sel == 3 {
+                it <= true
+            }
+        }
+    }
+
+    wire expected_nested : Word[8]
+    wire expected_overlap : Word[8]
+
+    // Golden values keyed by `sel`.  The 4 cases exactly cover
+    // `Word[2]`, so the match is exhaustive.
+    match sel {
+        // a=0, b=0: outer `else`, inner `case !b` wins.
+        case 0 {
+            expected_nested := 0xa4
+            expected_overlap := 0xb3
+        }
+        // a=0, b=1: outer `case b` wins before `case a` is reached.
+        case 1 {
+            expected_nested := 0xa3
+            expected_overlap := 0xb2
+        }
+        // a=1, b=0: outer `case a`, inner `else`.
+        case 2 {
+            expected_nested := 0xa2
+            expected_overlap := 0xb2
+        }
+        // a=1, b=1: outer `case a`, inner `case b`; inner `a && b`
+        // wins in `overlap`.
+        case 3 {
+            expected_nested := 0xa1
+            expected_overlap := 0xb1
+        }
+    }
+}

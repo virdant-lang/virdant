@@ -1,0 +1,108 @@
+//! Self-checking `kind = "run"` test for a statement `when` with a
+//! single `else` block and no `case` arms.
+//!
+//! With no `case` arm to guard it, the `else` block is the only arm,
+//! so the statement `when` must fire on every cycle and drive every
+//! target inside it.  Two such `when` blocks are exercised: one drives
+//! a register (`count`), which must therefore advance every cycle, and
+//! a top-level one drives three wire targets (`bumped`, `diminished`,
+//! and `parity`).  Each target is checked against a free-running cycle
+//! counter, so a skipped or stalled `else` firing is caught on the
+//! next cycle.  Every check is ANDed into a running `all_ok`; the
+//! simulator exits with code 0 only if all checks passed, and 1
+//! otherwise.
+
+import virt
+
+pub mod StmtWhenElseOnlyTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Register target of a statement `when` with only an `else`
+    //> block: with no `case` arm to guard it, the `else` must fire
+    //> every cycle, so `count` must track the cycle counter.
+    reg count : Word[4] on clock {
+        initial it <= 0
+        when {
+            else {
+                it <= it + 1
+            }
+        }
+    }
+
+    // Free-running cycle counter.  `Word[8]` so it outruns the 4-bit
+    // `count` wrap and can also time the exit.
+    reg phase : Word[8] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Wire target of a top-level statement `when` with only an
+    //> `else` block: must be driven every cycle.
+    wire bumped : Word[4]
+
+    //> Second target driven by the same `else` block.
+    wire diminished : Word[4]
+
+    //> Third, 1-bit target driven by the same `else` block.
+    wire parity : Bit
+
+    when {
+        else {
+            bumped := count + 1
+            diminished := count - 1
+            parity := count[0]
+        }
+    }
+
+    //> The register-target `when` fired every cycle: `count` tracks
+    //> the free-running counter modulo 16, through the wrap at
+    //> cycle 16.
+    wire check_count : Bit {
+        it := count == phase[4..0]
+    }
+
+    //> The wire-target `when` drove `bumped`, and keeps driving it as
+    //> `count` advances.
+    wire check_bumped : Bit {
+        it := bumped == count + 1
+    }
+
+    //> The wire-target `when` drove `diminished`, including the
+    //> `0 - 1` wrap to `15` at cycle 0.
+    wire check_diminished : Bit {
+        it := diminished == count - 1
+    }
+
+    //> The wire-target `when` drove `parity`.
+    wire check_parity : Bit {
+        it := parity == count[0]
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdicts.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check_count && check_bumped && check_diminished && check_parity
+    }
+
+    //> Rises one cycle after the last cycle is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case phase == 22 {
+                it <= true
+            }
+        }
+    }
+}

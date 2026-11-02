@@ -1,0 +1,201 @@
+//! Self-checking `kind = "run"` test for mixing narrow and wide words
+//! in one design.
+//!
+//! The module mixes `Word[1]`, `Word[2]`, `Word[17]`, and `Word[64]`
+//! signals side by side: at each width it exercises a constant, the
+//! word operators (`&`, `|`, `^`, `+`, `-`), and bit slices, and each
+//! width is asserted independently through its own `*_ok` wire.  Each
+//! width also drives a `reg` of that width through its `initial` value
+//! and a wrap-around update, checked at two specific cycles.  All
+//! verdicts fold into a running `all_ok`; the simulator exits with
+//! code 0 only if every width passed, and 1 otherwise.
+
+import virt
+
+pub mod WideNarrowMixTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last check passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Cycle counter, used to pick the two checking cycles.
+    reg index : Word[2] on clock {
+        initial it <= 0
+        when {
+            case counting {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Rises on the cycle after the last check folded into `all_ok`,
+    //> so that the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case at_check2 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; the
+    //> combinational checks fold in on the first checking cycle and
+    //> the register checks on both checking cycles.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case at_check1 {
+                it <= it && w1_ok && w2_ok && w17_ok && w64_ok && mix_ok
+                    && r1_check1_ok && r2_check1_ok
+                    && r17_check1_ok && r64_check1_ok
+            }
+            case at_check2 {
+                it <= it && r1_check2_ok && r2_check2_ok
+                    && r17_check2_ok && r64_check2_ok
+            }
+        }
+    }
+
+    //> Word[1] register: toggles every cycle.
+    reg r1 : Word[1] on clock {
+        initial it <= 1w1
+        it <= it ^ 1w1
+    }
+
+    //> Word[2] register: wraps around from `0b11` to `0b00`.
+    reg r2 : Word[2] on clock {
+        initial it <= 0b11
+        it <= it + 1w2
+    }
+
+    //> Word[17] register: steps up from `0x1_0000`.
+    reg r17 : Word[17] on clock {
+        initial it <= 0x1_0000w17
+        it <= it + 1w17
+    }
+
+    //> Word[64] register: steps up from
+    //> `0x0123_4567_89ab_cdef`.
+    reg r64 : Word[64] on clock {
+        initial it <= 0x0123_4567_89ab_cdefw64
+        it <= it + 1w64
+    }
+
+    //> Word[1] constant.
+    wire w1_const : Word[1]
+    w1_const := 1w1
+
+    //> Word[2] constant.
+    wire w2_const : Word[2]
+    w2_const := 0b10w2
+
+    //> Word[17] constant: bit 16 set, all lower bits clear.
+    wire w17_const : Word[17]
+    w17_const := 0x1_0000w17
+
+    //> Word[64] constant.
+    wire w64_const : Word[64]
+    w64_const := 0x0123_4567_89ab_cdefw64
+
+    //> Word[17] viewed at other widths: `zext` of the Word[2]
+    //> constant.
+    wire w2_in_17 : Word[17]
+    w2_in_17 := zext(w2_const)
+
+    //> Word[1] checks: constant, bitwise ops, and Word[1] slices cut
+    //> out of the Word[17] and Word[64] constants.
+    wire w1_ok : Bit
+    w1_ok := w1_const == 1w1
+        && (w1_const & w1_const) == 1w1
+        && (w1_const | w1_const) == 1w1
+        && (w1_const ^ w1_const) == 0w1
+        && w17_const[17..16] == 1w1
+        && w64_const[64..63] == 0w1
+
+    //> Word[2] checks: constant, add/sub wrap-around, and Word[2]
+    //> slices cut out of the Word[17] and Word[64] constants.
+    wire w2_ok : Bit
+    w2_ok := w2_const == 0b10w2
+        && (w2_const + w2_const) == 0w2
+        && (w2_const - 1w2) == 1w2
+        && w17_const[9..7] == 0w2
+        && w64_const[35..33] == 3w2
+
+    //> Word[17] checks: constant, add/sub near the top bit, slices at
+    //> narrower widths, and reassembly via `word()`.
+    wire w17_ok : Bit
+    w17_ok := w17_const == 0x1_0000w17
+        && (w17_const + 1w17) == 0x1_0001w17
+        && (w17_const - 1w17) == 0xffffw17
+        && w17_const[8..0] == 0w8
+        && word(w17_const[17..9], w17_const[9..0]) == w17_const
+
+    //> Word[64] checks: constant, add, slices at narrower widths, and
+    //> reassembly from four Word[16] quarters via `word()`.
+    wire w64_ok : Bit
+    w64_ok := w64_const == 0x0123_4567_89ab_cdefw64
+        && (w64_const + 1w64) == 0x0123_4567_89ab_cdf0w64
+        && w64_const[64..56] == 0x01w8
+        && w64_const[8..0] == 0xefw8
+        && word(w64_const[64..48], w64_const[48..32], w64_const[32..16], w64_const[16..0]) == w64_const
+
+    //> Cross-width mixing: one `word()` concatenation combining a
+    //> Word[1] top slice of the Word[64] constant, the whole Word[17]
+    //> constant, the Word[2] constant, and the Word[1] constant; a
+    //> narrow `word()` of the Word[1] and Word[2] constants; and a
+    //> zero-extended Word[2] in Word[17] context.
+    wire mix_ok : Bit
+    mix_ok := word(w64_const[64..63], w17_const[17..0], w2_const, w1_const) == 0x8_0005w21
+        && word(w1_const, w2_const) == 6w3
+        && w2_in_17 == 0x2w17
+
+    //> True on the cycle the index counter reads 1: the first cycle
+    //> after the registers leave their `initial` values.
+    wire at_check1 : Bit
+    at_check1 := index == 1
+
+    //> True on the cycle the index counter reads 2.
+    wire at_check2 : Bit
+    at_check2 := index == 2
+
+    //> True while the index counter is still counting up.
+    wire counting : Bit
+    counting := !finished
+
+    //> Register values expected on the first checking cycle: `r1`
+    //> toggled to 0, `r2` wrapped to 0, `r17` stepped to
+    //> `0x1_0001`, `r64` stepped to `0x0123_4567_89ab_cdf0`.
+    wire r1_check1_ok : Bit
+    r1_check1_ok := r1 == 0w1
+
+    wire r2_check1_ok : Bit
+    r2_check1_ok := r2 == 0w2
+
+    wire r17_check1_ok : Bit
+    r17_check1_ok := r17 == 0x1_0001w17
+
+    wire r64_check1_ok : Bit
+    r64_check1_ok := r64 == 0x0123_4567_89ab_cdf0w64
+
+    //> Register values expected on the second checking cycle.
+    wire r1_check2_ok : Bit
+    r1_check2_ok := r1 == 1w1
+
+    wire r2_check2_ok : Bit
+    r2_check2_ok := r2 == 1w2
+
+    wire r17_check2_ok : Bit
+    r17_check2_ok := r17 == 0x1_0002w17
+
+    wire r64_check2_ok : Bit
+    r64_check2_ok := r64 == 0x0123_4567_89ab_cdf1w64
+}

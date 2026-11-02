@@ -1,0 +1,4 @@
+kind = "run"
+description = "Nullary union variants: construct, match, assert"
+cycle_limit = 8
+trace = false

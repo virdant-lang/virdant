@@ -1,0 +1,4 @@
+kind = "run"
+description = "`&&`/`||`/`^^` truth table over register-driven input ports"
+cycle_limit = 16
+trace = false

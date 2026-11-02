@@ -1,0 +1,5 @@
+[project]
+name = "reg-hold-no-driver"
+
+[prog]
+top = "reg-hold-no-driver::RegHoldTest"

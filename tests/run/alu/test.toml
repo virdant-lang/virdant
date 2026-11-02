@@ -1,0 +1,3 @@
+kind = "run"
+description = "Tiny ALU: enum opcode selects add/sub/and/or/xor via match"
+cycle_limit = 40

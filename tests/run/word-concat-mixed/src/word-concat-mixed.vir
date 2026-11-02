@@ -1,0 +1,101 @@
+//! Self-checking `kind = "run"` test for `word()` concatenation with
+//! mixed argument types: `word(hi : Word[4], mid : Bit, lo : Word[3])`
+//! yielding a `Word[8]`.
+//!
+//! `word()` lists its arguments most-significant first, so the
+//! fixed vector `hi = 0b1010`, `mid = 1`, `lo = 0b110` must produce
+//! `0b1010_1_110 = 0b10101110`.  This golden value distinguishes the
+//! correct layout from the reversed order `word(lo, mid, hi)`
+//! (`0b110_1_1010 = 0b11011010`), from dropping the bit in the
+//! middle (`0b1010_110 = 0b1010110`, a `Word[7]`), and from swapping
+//! mid with a neighbouring bit (`0b1010_0_110` or `0b1011_0_110`).
+//! Every check is ANDed into a running `all_ok`; the simulator exits
+//! with code 0 only if all checks passed, and 1 otherwise.
+
+import virt
+
+pub mod WordConcatMixedTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every concatenation check passed; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Fixed test vector, high half: `0b1010`.
+    wire hi : Word[4] {
+        it := 0b1010
+    }
+
+    //> Fixed test vector, middle bit: `1`.
+    wire mid : Bit {
+        it := true
+    }
+
+    //> Fixed test vector, low half: `0b110`.
+    wire lo : Word[3] {
+        it := 0b110
+    }
+
+    //> The concatenation under test: `Word[4] + Bit + Word[3]`
+    //> = `Word[8]`, most-significant argument first.
+    wire concat : Word[8] {
+        it := word(hi, mid, lo)
+    }
+
+    //> Golden value: `hi`, `mid`, and `lo` reassembled by hand,
+    //> most-significant first: `0b1010_1_110`.
+    wire check_golden : Bit {
+        it := concat == 0b10101110
+    }
+
+    //> Exact layout, field by field: the `Word[4]` occupies bits
+    //> 7..4, the `Bit` occupies bit 3, and the `Word[3]` occupies
+    //> bits 2..0.
+    wire check_fields : Bit {
+        it := concat[8..4] == hi && concat[3] == mid && concat[3..0] == lo
+    }
+
+    //> Per-bit identity: the result must equal the flat
+    //> eight-argument concatenation in the same order.
+    wire check_perbit : Bit {
+        it := concat == word(hi[3], hi[2], hi[1], hi[0], mid, lo[2], lo[1], lo[0])
+    }
+
+    //> Order sensitivity: reversing the arguments (least-significant
+    //> first) would produce `0b110_1_1010 = 0b11011010`, which must
+    //> not match.
+    wire check_not_reversed : Bit {
+        it := concat != word(lo, mid, hi)
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdicts.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check_golden && check_fields && check_perbit && check_not_reversed
+    }
+
+    //> Cycle counter used to time the exit.
+    reg count : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Rises one cycle after the last cycle is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case count == 3 {
+                it <= true
+            }
+        }
+    }
+}

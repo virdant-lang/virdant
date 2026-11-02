@@ -1,0 +1,183 @@
+//! Self-checking `kind = "run"` test for `&`, `|`, and `^` on
+//! `Word[8]` operands driven by the testbench: a register-based
+//! sequencer walks the operands through eight pairs -- all-zeros,
+//! all-ones, complementary, and mixed patterns -- one pair per cycle,
+//! comparing a unit's outputs against a golden table.  The simulator
+//! exits with code 0 only if every pair passed, and 1 otherwise.
+
+import virt
+
+//> Computes the three bitwise operators on its `Word[8]` input ports.
+mod WordBitwise {
+    //> First operand.
+    incoming a : Word[8]
+
+    //> Second operand.
+    incoming b : Word[8]
+
+    //> Bitwise AND of the two operands.
+    outgoing and_out : Word[8] {
+        it := a & b
+    }
+
+    //> Bitwise OR of the two operands.
+    outgoing or_out : Word[8] {
+        it := a | b
+    }
+
+    //> Bitwise XOR of the two operands.
+    outgoing xor_out : Word[8] {
+        it := a ^ b
+    }
+}
+
+pub mod WordBitwiseTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all eight pairs checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod ops of WordBitwise {
+        it.a := a
+        it.b := b
+    }
+
+    //> Next pair index to load, 0 through 7.  `index` and the operand
+    //> registers advance together from this wire, so `a`/`b` always
+    //> hold the operands of pair `index`.
+    wire next : Word[3] {
+        it := mux(index == 7, index, index + 1)
+    }
+
+    //> First operand under test, driven by the sequencer.
+    reg a : Word[8] on clock {
+        initial it <= 0x00w8
+        it <= match next {
+            case 0 => 0x00w8
+            case 1 => 0xffw8
+            case 2 => 0xffw8
+            case 3 => 0xf0w8
+            case 4 => 0xaaw8
+            case 5 => 0xa5w8
+            case 6 => 0x96w8
+            case 7 => 0x12w8
+        }
+    }
+
+    //> Second operand under test, driven by the sequencer.
+    reg b : Word[8] on clock {
+        initial it <= 0x00w8
+        it <= match next {
+            case 0 => 0x00w8
+            case 1 => 0xffw8
+            case 2 => 0x00w8
+            case 3 => 0xffw8
+            case 4 => 0x55w8
+            case 5 => 0x0fw8
+            case 6 => 0x3cw8
+            case 7 => 0x34w8
+        }
+    }
+
+    //> Pair under test, 0 through 7.
+    reg index : Word[3] on clock {
+        initial it <= 0w3
+        when {
+            case !finished {
+                it <= next
+            }
+        }
+    }
+
+    //> Rises the cycle after pair 7 is checked, so that `exit` sees
+    //> the final fold into `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 7 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every pair's verdict.  Power-on true; each pair
+    //> folds its verdict in while the sequencer is stepping.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !finished {
+                it <= it && ok
+            }
+        }
+    }
+
+    //> Golden expectations for pair `index`, and the comparison of
+    //> the unit's port-driven outputs against them.  The eight cases
+    //> exactly cover `Word[3]`, so the match is exhaustive.
+    wire exp_and : Word[8]
+    wire exp_or : Word[8]
+    wire exp_xor : Word[8]
+
+    wire ok : Bit {
+        it := (ops.and_out == exp_and)
+            && (ops.or_out == exp_or)
+            && (ops.xor_out == exp_xor)
+    }
+
+    // Pair 0: all-zeros operands.
+    // Pair 1: all-ones operands.
+    // Pair 2: all-ones vs all-zeros.
+    // Pair 3: high nibble vs all-ones.
+    // Pair 4: complementary alternating patterns.
+    // Pairs 5-7: mixed patterns.
+    match index {
+        case 0 {
+            exp_and := 0x00w8
+            exp_or := 0x00w8
+            exp_xor := 0x00w8
+        }
+        case 1 {
+            exp_and := 0xffw8
+            exp_or := 0xffw8
+            exp_xor := 0x00w8
+        }
+        case 2 {
+            exp_and := 0x00w8
+            exp_or := 0xffw8
+            exp_xor := 0xffw8
+        }
+        case 3 {
+            exp_and := 0xf0w8
+            exp_or := 0xffw8
+            exp_xor := 0x0fw8
+        }
+        case 4 {
+            exp_and := 0x00w8
+            exp_or := 0xffw8
+            exp_xor := 0xffw8
+        }
+        case 5 {
+            exp_and := 0x05w8
+            exp_or := 0xafw8
+            exp_xor := 0xaaw8
+        }
+        case 6 {
+            exp_and := 0x14w8
+            exp_or := 0xbew8
+            exp_xor := 0xaaw8
+        }
+        case 7 {
+            exp_and := 0x10w8
+            exp_or := 0x36w8
+            exp_xor := 0x26w8
+        }
+    }
+}

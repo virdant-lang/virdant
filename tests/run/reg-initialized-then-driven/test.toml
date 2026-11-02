@@ -1,0 +1,3 @@
+kind = "run"
+description = "initial it <= 5 with driver it <= 9: first post-reset cycle shows the driven value, not the initial"
+cycle_limit = 10

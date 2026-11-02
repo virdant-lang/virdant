@@ -1,0 +1,4 @@
+kind = "run"
+description = "4-bit one-hot to 2-bit binary encoder; asserts all 4 hot positions"
+cycle_limit = 8
+trace = false

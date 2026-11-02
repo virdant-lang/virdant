@@ -1,0 +1,5 @@
+[project]
+name = "pulse-stretcher"
+
+[prog]
+top = "pulse-stretcher::PulseStretcherTest"

@@ -1,0 +1,238 @@
+//! Self-checking `kind = "run"` test for a rate limiter.
+//!
+//! A `RateLimiter` passes one item every `N = 4` cycles: behind a
+//! `Pipe`-style valid/ready handshake, its `out.data` is valid for
+//! exactly one cycle out of every four while it is enabled, stepping
+//! through a free-running 4-cycle window.  A harness top enables the
+//! limiter after an idle warm-up period, accepts every offered item,
+//! and asserts the spacing: exactly 4 cycles must elapse between
+//! consecutive accepted transfers.  Eight items are passed in total;
+//! every verdict is ANDed into a running `all_ok`, and the simulator
+//! exits with code 0 only if all spacings were exactly 4 cycles, and
+//! 1 otherwise.
+
+import virt
+
+//> Local valid/ready handshake socket, structurally identical to the
+//> builtin `Pipe`: the producer drives `data`, the consumer drives
+//> `ready`.
+socket Pipe[T : Type] {
+    cosi data  : Valid[T]
+    soci ready : Bit
+}
+
+//> Passes one item every `N = 4` cycles.
+//>
+//> A window counter divides time into 4-cycle windows; `out.data` is
+//> valid during the first cycle of each window.  While `enable` is
+//> low the limiter is idle: `window` is held at 0 and nothing is
+//> offered.  The payload is a sequence number that advances once per
+//> accepted transfer.
+mod RateLimiter {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> When low, the limiter is idle: nothing is offered and the
+    //> window counter is held at 0.
+    incoming enable : Bit
+
+    //> Outgoing handshake.  Valid during the first cycle of each
+    //> 4-cycle window.
+    client socket out of Pipe[Word[8]] {
+        it.data := when {
+            case pass_cycle => @Valid(item)
+            else => @Invalid()
+        }
+    }
+
+    //> Position within the 4-cycle window, 0 through 3.  Held at 0
+    //> while `enable` is low, so the first enabled cycle is the first
+    //> cycle of a window.
+    reg window : Word[2] on clock {
+        initial it <= 0
+        when {
+            case enable {
+                it <= it + 1
+            }
+            case !enable {
+                it <= 0
+            }
+        }
+    }
+
+    //> The cycle an item is offered: the first cycle of a window.
+    wire pass_cycle : Bit {
+        it := enable && window == 0
+    }
+
+    //> Sequence number of the next item to offer; advances once per
+    //> accepted transfer.
+    reg item : Word[8] on clock {
+        initial it <= 0
+        when {
+            case pass_cycle && out.ready {
+                it <= it + 1
+            }
+        }
+    }
+}
+
+pub mod RateLimiterTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all 8 items arrived with every spacing
+    //> exactly 4 cycles; `@Valid(1)` if any check failed.  While
+    //> `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod limiter of RateLimiter {
+        it.clock := clock
+        it.enable := enabled
+        it.out.ready := true
+    }
+
+    //> Warm-up counter, free-running 0 through 15.  Keeps the test
+    //> idle for many cycles before stimulus begins, so the checks are
+    //> independent of the first clock edge.
+    reg warm : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Latches once `warm == 8` has been observed; `warm_seen` then
+    //> stays true as `warm` wraps.
+    reg warm_seen : Bit on clock {
+        initial it <= false
+        it <= warm_seen || warm == 8
+    }
+
+    //> Latches one cycle after `warm_seen`, so `enabled` can only
+    //> rise after two clean edges of warm-up counting.
+    reg warm_seen2 : Bit on clock {
+        initial it <= false
+        it <= warm_seen2 || warm_seen
+    }
+
+    //> Rises once the warm-up has settled, and stays high: the
+    //> limiter runs for the rest of the test.
+    reg enabled : Bit on clock {
+        initial it <= false
+        it <= enabled || (warm_seen2 && warm == 12)
+    }
+
+    //> Free-running cycle counter.  Only differences are checked, so
+    //> its absolute phase does not matter.
+    reg cycle : Word[8] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> An item is accepted this cycle: the limiter offers a valid
+    //> payload and this consumer is always ready.
+    wire fires : Bit {
+        it := match limiter.out.data {
+            case @Valid(dontcare) => true
+            case @Invalid() => false
+        }
+    }
+
+    //> True once at least one item has been accepted, so the spacing
+    //> check only runs between two real transfers.
+    reg seen : Bit on clock {
+        initial it <= false
+        when {
+            case !enabled {
+                it <= false
+            }
+            case fires {
+                it <= true
+            }
+        }
+    }
+
+    //> Cycle counter value at the most recently accepted transfer.
+    reg last_cycle : Word[8] on clock {
+        initial it <= 0
+        when {
+            case !enabled {
+                it <= 0
+            }
+            case fires {
+                it <= cycle
+            }
+        }
+    }
+
+    //> Payload of the most recently accepted transfer, for the
+    //> sequence check.
+    reg last_data : Word[8] on clock {
+        initial it <= 0
+        when {
+            case !enabled {
+                it <= 0
+            }
+            case fires match limiter.out.data {
+                case @Valid(data) {
+                    it <= data
+                }
+            }
+        }
+    }
+
+    //> Number of items accepted so far, 0 through 8.
+    reg items : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !enabled {
+                it <= 0
+            }
+            case fires {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> The spacing since the previous transfer is exactly the
+    //> 4-cycle rate limit.
+    wire spacing_ok : Bit {
+        it := cycle - last_cycle == 4
+    }
+
+    //> Each accepted item is one more than the previous one, so the
+    //> limiter really is passing distinct items.
+    wire sequence_ok : Bit {
+        it := match limiter.out.data {
+            case @Valid(data) => data == last_data + 1
+            case @Invalid() => false
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; the spacing
+    //> and sequence verdicts fold in on each accepted transfer after
+    //> the first.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !enabled {
+                it <= true
+            }
+            case fires && seen {
+                it <= it && spacing_ok && sequence_ok
+            }
+        }
+    }
+
+    //> Rises the cycle after the eighth item is accepted, so that
+    //> `all_ok` has folded in every verdict by the time the exit code
+    //> is read.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= finished || items == 8
+    }
+}

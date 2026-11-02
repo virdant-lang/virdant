@@ -1,0 +1,101 @@
+//! Self-checking `kind = "run"` test for constants driven into child
+//! module inputs.
+//!
+//! The `ThresholdUnit` child has its `threshold` and `offset` inputs
+//! tied to the literals `7` and `3` by the parent, while `value` comes
+//! from a free-running counter.  The parent asserts that the child
+//! actually uses those constants: the child's `total` must be
+//! `value + 3`, and its `under` flag must be `(value + 3) < 7`,
+//! sampled across enough cycles to sweep the comparison across the
+//! threshold boundary in both directions.  The simulator exits with
+//! code 0 only if every check passed, and 1 otherwise.
+
+import virt
+
+//> Combinational child whose `threshold` and `offset` inputs are tied
+//> to literals by the parent.
+//>
+//> `total` adds `offset` onto `value`; `under` reports whether
+//> `total` stays below `threshold`.
+mod ThresholdUnit {
+    //> Constant added onto `value`, tied to a literal by the parent.
+    incoming offset : Word[8]
+
+    //> Constant limit compared against, tied to a literal by the parent.
+    incoming threshold : Word[8]
+
+    //> Data input, driven by the parent's counter.
+    incoming value : Word[8]
+
+    //> `value` plus the constant `offset`.
+    outgoing total : Word[8] {
+        it := value + offset
+    }
+
+    //> High while `total` stays below the constant `threshold`.
+    outgoing under : Bit {
+        it := total < threshold
+    }
+}
+
+pub mod ModConstantsTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every sampled cycle checked out; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case cycles == 12 => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod unit of ThresholdUnit {
+        it.threshold := 7
+        it.offset := 3
+        it.value := value
+    }
+
+    //> Free-running counter driving the child's `value` input, so the
+    //> checks sweep `value + 3` across the threshold.
+    reg value : Word[8] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Cycles elapsed since reset; `exit` goes valid at 12.
+    reg cycles : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Golden sum, recomputed from the parent's own literal `3`.
+    wire expected_total : Word[8] {
+        it := value + 3
+    }
+
+    //> Golden comparison, recomputed from the parent's own literals.
+    wire expected_under : Bit {
+        it := (value + 3) < 7
+    }
+
+    wire ok_total : Bit {
+        it := unit.total == expected_total
+    }
+
+    wire ok_under : Bit {
+        it := unit.under == expected_under
+    }
+
+    wire ok : Bit {
+        it := ok_total && ok_under
+    }
+
+    //> Running AND of every cycle's checks.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && ok
+    }
+}

@@ -1,0 +1,4 @@
+kind = "run"
+description = "A register clocked by asclock(bit) advances on every rising edge of the Bit"
+cycle_limit = 12
+trace = false

@@ -1,0 +1,3 @@
+kind = "run"
+description = "Serial CRC-4/ITU shift register: feed two known messages bit-by-bit, assert residues"
+cycle_limit = 46

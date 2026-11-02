@@ -1,0 +1,4 @@
+kind = "run"
+description = "`mux` selecting between two `${}` struct literals; assert field of the result"
+cycle_limit = 6
+trace = false

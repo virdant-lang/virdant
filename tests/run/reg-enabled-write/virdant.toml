@@ -1,0 +1,5 @@
+[project]
+name = "reg-enabled-write"
+
+[prog]
+top = "reg-enabled-write::RegEnabledWriteTest"

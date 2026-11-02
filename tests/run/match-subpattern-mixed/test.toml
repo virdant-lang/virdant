@@ -1,0 +1,4 @@
+kind = "run"
+description = "Mix variable and literal sub-patterns in one union match arm: case @Pair(x, false) => x binds x and the literal filters"
+cycle_limit = 1
+trace = false

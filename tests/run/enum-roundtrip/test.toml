@@ -1,0 +1,4 @@
+kind = "run"
+description = "cast(cast(#X)) enum -> word -> enum is the identity for every variant"
+cycle_limit = 5
+trace = false

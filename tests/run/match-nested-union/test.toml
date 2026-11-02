@@ -1,0 +1,4 @@
+kind = "run"
+description = "Nested union destructuring in match: case @Valid(@Valid(x)) on Valid[Valid[Word[8]]], all Valid/Invalid combinations"
+cycle_limit = 1
+trace = false

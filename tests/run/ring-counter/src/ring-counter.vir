@@ -1,0 +1,145 @@
+// Self-checking `kind = "run"` test for a one-hot ring counter.
+//!
+//! A `RingCounter` unit holds a 4-bit register in which exactly one
+//! bit is set.  Once seeded with 0b0001 and enabled, every clock
+//! edge walks the bit one position up, wrapping the top bit around
+//! to bit 0: 0001 -> 0010 -> 0100 -> 1000 -> 0001.  A harness top
+//! waits out a few idle warm-up cycles (so any first-edge garbage in
+//! the simulator is harmless), loads the seed, and then checks the
+//! rotation against the golden sequence.  Every verdict is ANDed
+//! into a running `all_ok`; the simulator exits with code 0 only if
+//! all 5 checked states passed, and 1 otherwise.
+
+import virt
+
+//> One-hot ring counter: when loaded, seeds 0b0001; when enabled,
+//> rotates the single set bit one position up each cycle, wrapping
+//> the top bit around to bit 0.
+mod RingCounter {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> When high, loads the one-hot seed 0b0001 on the clock edge.
+    incoming load : Bit
+
+    //> When high (and not loading), advances the ring on the clock
+    //> edge.
+    incoming en : Bit
+
+    //> Current ring state.
+    outgoing state : Word[4]
+
+    reg bits : Word[4] on clock {
+        initial it <= 0b0001
+        when {
+            case load {
+                it <= 0b0001
+            }
+            case en {
+                it <= word(it[2], it[1], it[0], it[3])
+            }
+        }
+    }
+
+    state := bits
+}
+
+pub mod RingCounterTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last rotation step checked out;
+    //> `@Valid(1)` if any check failed.  While `@Invalid()`, the
+    //> simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod ringcounter of RingCounter {
+        it.clock := clock
+        it.load := load
+        it.en := en
+    }
+
+    //> Index of the cycle under test, 0 through 9; parks once
+    //> `finished` rises.  Indices 0 through 3 are unchecked idle
+    //> warm-up, index 4 loads the seed, and indices 5 through 9
+    //> check the rotation.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each
+    //> checked cycle folds in the verdict for the current state.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && ringcounter.state == expected
+            }
+        }
+    }
+
+    //> Rises on the clock edge after the last checked state, so that
+    //> the exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 9 {
+                it <= true
+            }
+        }
+    }
+
+    //> Checks run only for indices 5 through 9, after the warm-up
+    //> and the seed load, and stop once `finished` rises.
+    wire checking : Bit {
+        it := index >= 5 && !finished
+    }
+
+    //> High exactly on the seeding cycle, index 4.
+    wire load : Bit {
+        it := index == 4
+    }
+
+    //> High from the first rotation cycle onward.
+    wire en : Bit {
+        it := index >= 5
+    }
+
+    //> Golden one-hot sequence, selected by `index`.
+    wire expected : Word[4]
+
+    // The ring must read 0001 right after the load edge, then
+    // 0010, 0100, 1000, and back to 0001 on successive enabled
+    // edges.  Unchecked cycles (warm-up, load, parked) fall into
+    // `else`.
+    match index {
+        case 5 {
+            expected := 0b0001
+        }
+        case 6 {
+            expected := 0b0010
+        }
+        case 7 {
+            expected := 0b0100
+        }
+        case 8 {
+            expected := 0b1000
+        }
+        case 9 {
+            expected := 0b0001
+        }
+        else {
+            expected := 0b0000
+        }
+    }
+}

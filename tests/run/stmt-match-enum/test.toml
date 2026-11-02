@@ -1,0 +1,3 @@
+kind = "run"
+description = "Statement-level match on an enum driving different registers per case"
+cycle_limit = 12

@@ -1,0 +1,5 @@
+[project]
+name = "enum-wide"
+
+[prog]
+top = "enum-wide::EnumWideTest"

@@ -1,0 +1,70 @@
+// Self-checking `kind = "run"` test for `+` on `Word[4]`: carry
+// wrap-around (0xf + 1 = 0) and several non-wrapping sums.  The
+// simulator exits with code 0 only if every check passed, and 1
+// otherwise.
+
+import virt
+
+pub mod WordAddTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case success => @Valid(0)
+            else => @Invalid()
+        }
+    }
+
+    //> 0xf + 1 wraps to 0: the carry out of the top bit is dropped.
+    wire wrap_max_plus_one : Bit
+    wrap_max_plus_one := 0xfw4 + 1w4 == 0w4
+
+    //> 0x8 + 0x8 also wraps to 0.
+    wire wrap_halves : Bit
+    wrap_halves := 0x8w4 + 0x8w4 == 0w4
+
+    //> 0x9 + 0x9 wraps to 0x2: only the low 4 bits survive.
+    wire wrap_carry_dropped : Bit
+    wrap_carry_dropped := 0x9w4 + 0x9w4 == 0x2w4
+
+    //> Largest non-wrapping sum: 0x7 + 0x8 = 0xf.
+    wire sum_max_no_wrap : Bit
+    sum_max_no_wrap := 0x7w4 + 0x8w4 == 0xfw4
+
+    //> A small non-wrapping sum: 0x3 + 0x4 = 0x7.
+    wire sum_small : Bit
+    sum_small := 0x3w4 + 0x4w4 == 0x7w4
+
+    //> 0 + 0 = 0.
+    wire sum_zeros : Bit
+    sum_zeros := 0w4 + 0w4 == 0w4
+
+    //> A sum computed from word operands rather than literals
+    //> directly: 0x2 + 0x5 = 0x7.
+    wire a : Word[4]
+    a := 0x2
+
+    wire b : Word[4]
+    b := 0x5
+
+    wire sum_word_operands : Bit
+    sum_word_operands := a + b == 0x7w4
+
+    //> A near-max non-wrapping sum from word operands: 0xe + 0x1 =
+    //> 0xf.
+    wire c : Word[4]
+    c := 0xe
+
+    wire d : Word[4]
+    d := 0x1
+
+    wire sum_near_max : Bit
+    sum_near_max := c + d == 0xfw4
+
+    //> AND of every check; the exit verdict.
+    wire success : Bit
+    success := wrap_max_plus_one && wrap_halves && wrap_carry_dropped && sum_max_no_wrap && sum_small && sum_zeros && sum_word_operands && sum_near_max
+}

@@ -1,0 +1,3 @@
+kind = "run"
+description = "a statement `when` with a single `else` block and no `case` arms fires every cycle and drives all its targets"
+cycle_limit = 40

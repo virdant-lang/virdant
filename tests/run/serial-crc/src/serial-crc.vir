@@ -1,0 +1,190 @@
+//! Self-checking `kind = "run"` test for a serial CRC-4 shift
+//! register (CRC-4/ITU: polynomial 0x3 = x^4 + x + 1, LSB-first).
+//!
+//! A `Crc4` unit shifts one message bit in per clock edge, LSB first:
+//! the feedback taps the register's LSB against the data bit, the
+//! register shifts right, and the reflected polynomial `0xC` is XORed
+//! in when the feedback is 1.  The harness holds the register at 0
+//! through a warm-up (flushing any garbage the run simulator may
+//! commit on its first clock edge), feeds two known messages
+//! bit-by-bit -- "Hi" (0x48, 0x69), residue 0x7, and "OK" (0x4F,
+//! 0x4B), residue 0x5 -- re-initialising between them, and asserts
+//! each residue on its check cycle.  Every check is ANDed into a
+//! running `all_ok`; the simulator exits with code 0 only if both
+//! residues matched, and 1 otherwise.
+
+import virt
+
+//> Serial CRC-4/ITU shift register: polynomial 0x3 (x^4 + x + 1),
+//> LSB-first.
+//>
+//> While `init` is high the register is held at 0.  While `advance`
+//> is high, each clock edge shifts in one message bit, LSB first:
+//> the feedback is the register's LSB XORed with `data_bit`, and when
+//> the feedback is 1 the shifted result is XORed with the reflected
+//> polynomial 0xC.  Once the last message bit has been advanced in,
+//> `crc` holds the residue.
+mod Crc4 {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Synchronous init: holds the register at 0.  The harness
+    //> asserts it during warm-up and between messages, flushing any
+    //> first-edge garbage.
+    incoming init : Bit
+
+    //> Shift one message bit into the register on this cycle.
+    incoming advance : Bit
+
+    //> Message bit, sampled when `advance` is high.
+    incoming data_bit : Bit
+
+    //> Register contents: the residue once the message has been
+    //> fully shifted in.
+    outgoing crc : Word[4] {
+        it := state
+    }
+
+    //> The shift register.  Right shift by one (drop the LSB,
+    //> prepend a zero bit at the top), XORed with the reflected
+    //> polynomial 0xC when the feedback (register LSB against
+    //> `data_bit`) is 1.
+    reg state : Word[4] on clock {
+        initial it <= 0
+        when {
+            case init {
+                it <= 0
+            }
+            case advance {
+                it <= mux(it[0] ^^ data_bit,
+                    word(0w1, it[4..1]) ^ 0xCw4,
+                    word(0w1, it[4..1]))
+            }
+        }
+    }
+}
+
+pub mod SerialCrcTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after both message residues checked out; `@Valid(1)`
+    //> if either check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished && step >= 42 => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod crc of Crc4 {
+        it.clock := clock
+        it.init := init
+        it.advance := advance
+        it.data_bit := data_bit
+    }
+
+    //> Schedule counter: 0..3 warm-up (init), 4..19 feed "Hi", 20
+    //> settle, 21 check "Hi", 22..23 re-init, 24..39 feed "OK", 40
+    //> settle, 41 check "OK".  The `step >= 42` guard in `exit` keeps
+    //> a flaky first-edge garbage commit from ending the run vacuously.
+    reg step : Word[6] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> High while the register is being held at 0: the warm-up cycles
+    //> and the two re-init cycles between the messages.
+    wire init : Bit {
+        it := warmup || reinit
+    }
+
+    //> Warm-up idle cycles before any stimulus.
+    wire warmup : Bit {
+        it := step < 4
+    }
+
+    //> Re-init window between the two messages.
+    wire reinit : Bit {
+        it := step >= 22 && step < 24
+    }
+
+    //> High on the cycles feeding message bits into the register.
+    wire feeding : Bit {
+        it := (step >= 4 && step < 20) || (step >= 24 && step < 40)
+    }
+
+    //> Wire into the CRC unit's `advance` port.
+    wire advance : Bit {
+        it := feeding
+    }
+
+    //> Index of the message bit currently being fed, 0..15 (LSB of the
+    //> low byte first); reset to 0 whenever not feeding, so each
+    //> message starts at bit 0.
+    reg bit_index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case feeding {
+                it <= it + 1
+            }
+            else {
+                it <= 0
+            }
+        }
+    }
+
+    //> Bit position within the current message byte: bits 2..0 of
+    //> `bit_index`.
+    wire bitpos : Word[3] {
+        it := bit_index[3..0]
+    }
+
+    //> High while feeding the second (high) byte of the message.
+    wire byte_hi : Bit {
+        it := bit_index[3]
+    }
+
+    //> Bytes of message 1, "Hi" (0x48, 0x69), selected low byte first.
+    wire byte_a : Word[8] {
+        it := mux(byte_hi, 0x69, 0x48)
+    }
+
+    //> Bytes of message 2, "OK" (0x4F, 0x4B), selected low byte first.
+    wire byte_b : Word[8] {
+        it := mux(byte_hi, 0x4B, 0x4F)
+    }
+
+    //> Message bit currently being fed: from message 1 during its feed
+    //> window, message 2 during the second.  (Only sampled while
+    //> `advance` is high.)
+    wire data_bit : Bit {
+        it := mux(step < 20, byte_a[dyn bitpos], byte_b[dyn bitpos])
+    }
+
+    //> Running AND of both residue checks.  Power-on true; each check
+    //> folds its verdict in on its check cycle.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case step == 21 {
+                it <= it && crc.crc == 0x7w4
+            }
+            case step == 41 {
+                it <= it && crc.crc == 0x5w4
+            }
+        }
+    }
+
+    //> Rises one cycle after the last check, so that the exit code
+    //> sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case step == 41 {
+                it <= true
+            }
+        }
+    }
+}

@@ -1,0 +1,5 @@
+[project]
+name = "serial-crc"
+
+[prog]
+top = "serial-crc::SerialCrcTest"

@@ -1,0 +1,44 @@
+//! Self-checking `kind = "run"` test for a register without `initial`.
+//!
+//! The register `value` has a driver but no `initial` statement, so
+//! its power-on value is whatever the target gives an uninitialized
+//! register.  The SIM_TESTS bullet `reg-no-initial-zero` expects that
+//! value to be 0 in Verilog: the test asserts `value == 0` on the
+//! first cycle after reset (before the driver's `when` ever fires)
+//! and exits 0 if it holds, 1 otherwise.
+
+import virt
+
+pub mod RegNoInitialTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once `value` has been observed to read 0 after
+    //> reset; `@Valid(1)` if it did not.  While `@Invalid()`, the
+    //> simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case checked => @Valid(mux(value == 0, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Register under test: driven only after the check window, with
+    //> no `initial`, so its power-on value is whatever the target
+    //> gives an uninitialized register.
+    reg value : Word[8] on clock {
+        when {
+            case checked {
+                it <= 0xa5
+            }
+        }
+    }
+
+    //> Rises on the first clock edge, so `exit` samples `value` on the
+    //> first post-reset cycle, before the driver's `when` has ever
+    //> fired.
+    reg checked : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

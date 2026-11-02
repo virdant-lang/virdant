@@ -1,0 +1,116 @@
+// Self-checking `kind = "run"` test for a Johnson (twisted ring)
+// counter.
+//!
+//! A `JohnsonCounter` unit free-runs a 4-bit twisted ring counter: on
+//! every clock edge it shifts right and inserts the complement of its
+//! LSB at the MSB, `it <= word(!it[0], it[4..1])`.  This walks the
+//! 2N = 8-state sequence 0000, 1000, 1100, 1110, 1111, 0111, 0011,
+//! 0001, then repeats.  A harness top walks the 8 states and checks
+//! the counter against the golden sequence.  Every verdict is ANDed
+//! into a running `all_ok`; the simulator exits with code 0 only if
+//! all 8 states passed, and 1 otherwise.
+
+import virt
+
+//> Twisted ring counter: on every clock edge, shifts right and
+//> inserts the complement of the LSB at the MSB.
+mod JohnsonCounter {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Current counter state.  Powers on 0b0000 and advances every
+    //> cycle through the 2N = 8-state sequence 0000, 1000, 1100,
+    //> 1110, 1111, 0111, 0011, 0001, then repeats.
+    outgoing state : Word[4]
+
+    reg bits : Word[4] on clock {
+        initial it <= 0
+        it <= word(!it[0], it[4..1])
+    }
+
+    state := bits
+}
+
+pub mod JohnsonCounterTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last state checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod johnsoncounter of JohnsonCounter {
+        it.clock := clock
+    }
+
+    //> Index of the state under test, 0 through 7.  `state` powers on
+    //> 0b0000 and advances every cycle, so `state == expected` on
+    //> each cycle.
+    reg index : Word[3] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> before `finished` folds in the verdict for the current state.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !finished {
+                it <= it && johnsoncounter.state == expected
+            }
+        }
+    }
+
+    //> Rises one cycle after the last state is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 7 {
+                it <= true
+            }
+        }
+    }
+
+    // Golden Johnson sequence, selected by `index`.  The 8 cases
+    // exactly cover `Word[3]`, so the match is exhaustive.
+    wire expected : Word[4]
+
+    match index {
+        case 0 {
+            expected := 0b0000
+        }
+        case 1 {
+            expected := 0b1000
+        }
+        case 2 {
+            expected := 0b1100
+        }
+        case 3 {
+            expected := 0b1110
+        }
+        case 4 {
+            expected := 0b1111
+        }
+        case 5 {
+            expected := 0b0111
+        }
+        case 6 {
+            expected := 0b0011
+        }
+        case 7 {
+            expected := 0b0001
+        }
+    }
+}

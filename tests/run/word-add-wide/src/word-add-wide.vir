@@ -1,0 +1,105 @@
+//! Self-checking `kind = "run"` test for the `+` operator on
+//! `Word[32]` and `Word[64]` operands.
+//!
+//! Asserts large sums whose carries ripple across many hex digits
+//! (e.g. `0xdeadbeef + 1`), and wraparound: all-ones `+ 1` must wrap
+//! to `0` on `Word[64]` (and on `Word[32]`).  Every check is folded
+//! into a running `all_ok`; the simulator exits with code 0 only if
+//! all checks passed, and 1 otherwise.
+
+import virt
+
+pub mod WordAddWideTest for virt::Virt {
+    //> `@Valid(0)` when every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case all_ok => @Valid(0)
+            else => @Invalid()
+        }
+    }
+
+    //> `+` on `Word[32]`: `0xdeadbeef + 1` carries into the top
+    //> digits.
+    wire sum32_inc : Word[32]
+    sum32_inc := 0xdead_beefw32 + 1
+
+    //> `+` on `Word[32]` with a wide second operand: carries ripple
+    //> through every hex digit.
+    wire sum32_wide : Word[32]
+    sum32_wide := 0xdead_beefw32 + 0x1234_5678w32
+
+    //> `+` on `Word[32]`: overflowing into the would-be sign bit
+    //> gives `0x80000000`, not a negative result.
+    wire sum32_half : Word[32]
+    sum32_half := 0x7fff_ffffw32 + 1
+
+    //> `+` on `Word[32]`: all-ones `+ 1` wraps to `0`.
+    wire wrap32 : Word[32]
+    wrap32 := 0xffff_ffffw32 + 1
+
+    //> `+` on `Word[32]`, left-associative chain whose intermediate
+    //> sum already wraps.
+    wire wrap32_chain : Word[32]
+    wrap32_chain := 0xffff_ffffw32 + 0xffff_ffffw32 + 0xffff_ffffw32
+
+    //> `+` on `Word[64]`: `0xdeadbeefcafebabe + 1` carries into the
+    //> top digits.
+    wire sum64_inc : Word[64]
+    sum64_inc := 0xdead_beef_cafe_babew64 + 1
+
+    //> `+` on `Word[64]` with a wide second operand: carries ripple
+    //> through every hex digit.
+    wire sum64_wide : Word[64]
+    sum64_wide := 0xdead_beef_cafe_babew64 + 0x1234_5678_9abc_def0w64
+
+    //> `+` on `Word[64]`: a carry out of the low 32 bits must
+    //> propagate into the high 32 bits.
+    wire sum64_carry : Word[64]
+    sum64_carry := 0x0000_0001_0000_0000w64 + 0xffff_ffffw64
+
+    //> `+` on `Word[64]`: all-ones `+ 1` wraps to `0`.
+    wire wrap64 : Word[64]
+    wrap64 := 0xffff_ffff_ffff_ffffw64 + 1
+
+    //> `+` on `Word[64]`: all-ones `+ 2` wraps to `1`.
+    wire wrap64_two : Word[64]
+    wrap64_two := 0xffff_ffff_ffff_ffffw64 + 2
+
+    wire sum32_inc_ok : Bit
+    sum32_inc_ok := sum32_inc == 0xdead_bef0w32
+
+    wire sum32_wide_ok : Bit
+    sum32_wide_ok := sum32_wide == 0xf0e2_1567w32
+
+    wire sum32_half_ok : Bit
+    sum32_half_ok := sum32_half == 0x8000_0000w32
+
+    wire wrap32_ok : Bit
+    wrap32_ok := wrap32 == 0w32
+
+    wire wrap32_chain_ok : Bit
+    wrap32_chain_ok := wrap32_chain == 0xffff_fffdw32
+
+    wire sum64_inc_ok : Bit
+    sum64_inc_ok := sum64_inc == 0xdead_beef_cafe_babfw64
+
+    wire sum64_wide_ok : Bit
+    sum64_wide_ok := sum64_wide == 0xf0e2_1568_65bb_99aew64
+
+    wire sum64_carry_ok : Bit
+    sum64_carry_ok := sum64_carry == 0x0000_0001_ffff_ffffw64
+
+    wire wrap64_ok : Bit
+    wrap64_ok := wrap64 == 0w64
+
+    wire wrap64_two_ok : Bit
+    wrap64_two_ok := wrap64_two == 1w64
+
+    //> Running AND of every check; drives `exit`.
+    wire all_ok : Bit
+    all_ok := sum32_inc_ok && sum32_wide_ok && sum32_half_ok
+        && wrap32_ok && wrap32_chain_ok
+        && sum64_inc_ok && sum64_wide_ok && sum64_carry_ok
+        && wrap64_ok && wrap64_two_ok
+}

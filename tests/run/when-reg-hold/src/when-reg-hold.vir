@@ -1,0 +1,194 @@
+//! Self-checking `kind = "run"` test for a register driven by a
+//! statement-level `when` with no `else`.
+//!
+//! A `WhenRegHold` unit owns a register whose driver `when` has two
+//! cases (increment and decrement) and no `else`: on a cycle where no
+//! case matches -- including a mode value that is neither 0 nor any
+//! case condition -- nothing drives the register and it must hold its
+//! old value.  A harness top runs a fixed schedule of driven cycles
+//! and hold cycles -- after two idle warm-up cycles, which keep the
+//! simulator's power-on edge away from the stimulus -- and checks the
+//! register's value on every subsequent cycle against a golden
+//! table.  Back-to-back idle cycles assert the hold across several
+//! consecutive unmatched cycles.  Each verdict is folded into a
+//! running `all_ok`; the simulator exits with code 0 only if every
+//! check passed, and 1 otherwise.
+
+import virt
+
+//> Register driven only on cycles where `mode` matches a case.
+//>
+//> The `when` has no `else`, so on a cycle where neither case
+//> matches nothing drives the register: it must hold its value.
+mod WhenRegHold {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `1` increments the register on the next clock edge, `2`
+    //> decrements it, and anything else matches no case so the
+    //> register holds.
+    incoming mode : Word[2]
+
+    //> The register's current value.
+    outgoing out : Word[4]
+
+    reg value : Word[4] on clock {
+        initial it <= 0
+        when {
+            case mode == 1 {
+                it <= it + 1
+            }
+            case mode == 2 {
+                it <= it - 1
+            }
+        }
+    }
+
+    out := value
+}
+
+pub mod WhenRegHoldTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last check passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod dut of WhenRegHold {
+        it.clock := clock
+        it.mode := mode
+    }
+
+    //> Cycle counter driving the stimulus schedule; free-runs
+    //> through 0..15 and wraps (harmless: `finished` latches after
+    //> the last check, so checks never resume).
+    reg phase : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in at the clock edge that ends its cycle.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && dut.out == expect
+            }
+        }
+    }
+
+    //> Rises at the end of the last check cycle (phase 15), so the
+    //> exit code sees the final `all_ok` on the next cycle.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case checking && phase == 15 {
+                it <= true
+            }
+        }
+    }
+
+    //> True on every checked cycle: after the two idle warm-up
+    //> cycles (phases 0 and 1) and before `finished` latches.
+    wire checking : Bit {
+        it := phase >= 2 && !finished
+    }
+
+    wire mode : Word[2]
+    wire expect : Word[4]
+
+    // Stimulus and golden table: `mode` is the command driven during
+    // the cycle, and `expect` is the value the register must show
+    // during the cycle (i.e. after the previous cycle's edge).
+    // Phases 0 and 1 are idle warm-up, so the first stimulus does
+    // not coincide with the simulator's power-on edge.  Phase 15
+    // drives mode 3, which matches neither case.  The 16 cases
+    // exactly cover `Word[4]`, so the match is exhaustive.
+    match phase {
+        // Warm-up: idle, unchecked.
+        case 0 {
+            mode := 0
+            expect := 0
+        }
+        case 1 {
+            mode := 0
+            expect := 0
+        }
+        // Still idle: the initial value survives the power-on edge.
+        case 2 {
+            mode := 0
+            expect := 0
+        }
+        // Increment: the edge ending this cycle writes 1.
+        case 3 {
+            mode := 1
+            expect := 0
+        }
+        // Two consecutive unmatched cycles: the register holds.
+        case 4 {
+            mode := 0
+            expect := 1
+        }
+        case 5 {
+            mode := 0
+            expect := 1
+        }
+        // Increment: writes 2.
+        case 6 {
+            mode := 1
+            expect := 1
+        }
+        // Decrement: writes 1.
+        case 7 {
+            mode := 2
+            expect := 2
+        }
+        // Unmatched cycle: holds at 1.
+        case 8 {
+            mode := 0
+            expect := 1
+        }
+        // Increment: writes 2.
+        case 9 {
+            mode := 1
+            expect := 1
+        }
+        // Decrement: writes 1.
+        case 10 {
+            mode := 2
+            expect := 2
+        }
+        // Two consecutive increments: writes 2, then 3.
+        case 11 {
+            mode := 1
+            expect := 1
+        }
+        case 12 {
+            mode := 1
+            expect := 2
+        }
+        // Two consecutive unmatched cycles: holds at 3.
+        case 13 {
+            mode := 0
+            expect := 3
+        }
+        case 14 {
+            mode := 0
+            expect := 3
+        }
+        // Unmatched non-case value (mode 3): still holds at 3, then
+        // `finished` latches.
+        case 15 {
+            mode := 3
+            expect := 3
+        }
+    }
+}

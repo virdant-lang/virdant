@@ -1,0 +1,187 @@
+//! Self-checking `kind = "run"` test for a register whose `when`
+//! driver matches only sometimes.
+//!
+//! A `HoldReg` unit owns a register driven by a statement-level
+//! `when` with a single `go` case and no `else`: on a cycle where
+//! `go` is low, no arm matches, so nothing drives the register and
+//! it must hold its old value.  A harness top runs a fixed schedule
+//! of pulses and idle cycles -- after two idle warm-up cycles, which
+//! keep the simulator's power-on edge away from the stimulus -- and
+//! checks the register's value on every subsequent cycle against a
+//! golden table.  Back-to-back idle cycles assert the hold across
+//! several consecutive unmatched cycles.  Each verdict is folded
+//! into a running `all_ok`; the simulator exits with code 0 only if
+//! every check passed, and 1 otherwise.
+
+import virt
+
+//> Register driven only when `go` is high.
+//>
+//> The `when` has no `else`, so on a cycle where `go` is low no arm
+//> matches and nothing drives the register: it must hold its value.
+mod HoldReg {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> When high, the register increments on the next clock edge;
+    //> when low, nothing drives it and it holds.
+    incoming go : Bit
+
+    //> The register's current value.
+    outgoing out : Word[4]
+
+    reg value : Word[4] on clock {
+        initial it <= 0
+        when {
+            case go {
+                it <= it + 1
+            }
+        }
+    }
+
+    out := value
+}
+
+pub mod RegHoldTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last check passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod dut of HoldReg {
+        it.clock := clock
+        it.go := go
+    }
+
+    //> Cycle counter driving the stimulus schedule; free-runs
+    //> through 0..15 and wraps (harmless: `finished` latches after
+    //> the last check, so checks never resume).
+    reg phase : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in at the clock edge that ends its cycle.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && dut.out == expect
+            }
+        }
+    }
+
+    //> Rises at the end of the last check cycle (phase 15), so the
+    //> exit code sees the final `all_ok` on the next cycle.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case checking && phase == 15 {
+                it <= true
+            }
+        }
+    }
+
+    //> True on every checked cycle: after the two idle warm-up
+    //> cycles (phases 0 and 1) and before `finished` latches.
+    wire checking : Bit {
+        it := phase >= 2 && !finished
+    }
+
+    wire go : Bit
+    wire expect : Word[4]
+
+    // Stimulus and golden table: `go` is the pulse driven during the
+    // cycle, and `expect` is the value the register must show during
+    // the cycle (i.e. after the previous cycle's edge).  Phases 0
+    // and 1 are idle warm-up, so the first stimulus does not coincide
+    // with the simulator's power-on edge.  The 16 cases exactly cover
+    // `Word[4]`, so the match is exhaustive.
+    match phase {
+        // Warm-up: idle, unchecked.
+        case 0 {
+            go := false
+            expect := 0
+        }
+        case 1 {
+            go := false
+            expect := 0
+        }
+        // Still idle: the initial value survives the power-on edge.
+        case 2 {
+            go := false
+            expect := 0
+        }
+        // Pulse: the edge ending this cycle writes 1.
+        case 3 {
+            go := true
+            expect := 0
+        }
+        // Two consecutive unmatched cycles: the register holds.
+        case 4 {
+            go := false
+            expect := 1
+        }
+        case 5 {
+            go := false
+            expect := 1
+        }
+        // Pulse: writes 2.
+        case 6 {
+            go := true
+            expect := 1
+        }
+        // Two consecutive unmatched cycles: holds at 2.
+        case 7 {
+            go := false
+            expect := 2
+        }
+        case 8 {
+            go := false
+            expect := 2
+        }
+        // Pulse: writes 3.
+        case 9 {
+            go := true
+            expect := 2
+        }
+        // One unmatched cycle: holds at 3.
+        case 10 {
+            go := false
+            expect := 3
+        }
+        // Pulse: writes 4.
+        case 11 {
+            go := true
+            expect := 3
+        }
+        // Two consecutive unmatched cycles: holds at 4.
+        case 12 {
+            go := false
+            expect := 4
+        }
+        case 13 {
+            go := false
+            expect := 4
+        }
+        // Pulse: writes 5.
+        case 14 {
+            go := true
+            expect := 4
+        }
+        // Final unmatched cycle: holds at 5, then `finished` latches.
+        case 15 {
+            go := false
+            expect := 5
+        }
+    }
+}

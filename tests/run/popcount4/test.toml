@@ -1,0 +1,4 @@
+kind = "run"
+description = "Population count of a 4-bit word via nested word/match"
+cycle_limit = 32
+trace = false

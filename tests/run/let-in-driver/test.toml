@@ -1,0 +1,3 @@
+kind = "run"
+description = "`let` inside a register driver block, computing `it <= ...`"
+cycle_limit = 7

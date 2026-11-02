@@ -1,0 +1,121 @@
+//! Self-checking `kind = "run"` test for slicing an incoming port
+//! directly: `inp[8..4]`, with no intermediate wire between the port
+//! and the slice.
+//!
+//! A `Slicer` module declares `incoming inp : Word[8]` and its
+//! outgoing driver is the bare slice `inp[8..4]` — the top index is
+//! exclusive, so this is the upper nibble, a `Word[4]`.  The harness
+//! top drives eight distinct stimulus values across eight cycles and
+//! checks, every cycle, that the sliced output equals the expected
+//! upper nibble taken from a literal table (not from a slice, so the
+//! check is independent of the feature under test).  The simulator
+//! exits with code 0 only if every cycle checked out, and 1
+//! otherwise.
+
+import virt
+
+//> Device under test: its outgoing driver slices the incoming port
+//> directly, `inp[8..4]`, with no intermediate wire.
+mod Slicer {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Port sliced directly in the outgoing driver below.
+    incoming inp : Word[8]
+
+    //> Upper nibble of `inp`: `inp[8..4]`, a `Word[4]` (top index
+    //> exclusive).
+    outgoing high : Word[4] {
+        it := inp[8..4]
+    }
+}
+
+pub mod SliceOfIncomingTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every cycle's check passed; `@Valid(1)` if
+    //> any cycle's sliced value diverged.  While `@Invalid()`, the
+    //> simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod slicer of Slicer {
+        it.clock := clock
+        it.inp := stimulus
+    }
+
+    //> Cycle index of the test: 0 through 7, then it wraps.
+    reg step : Word[3] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Rises the cycle after `step` reaches 7, freezing `all_ok` so
+    //> the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case step == 7 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every cycle's verdict.  Power-on true; each
+    //> cycle folds in whether `slicer.high` matched the expected
+    //> upper nibble.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && step_ok
+            }
+        }
+    }
+
+    //> High on every cycle before the test has finished.
+    wire checking : Bit {
+        it := !finished
+    }
+
+    //> Stimulus driven into `slicer.inp` this cycle: one distinct
+    //> `Word[8]` per cycle.
+    wire stimulus : Word[8] {
+        it := match step {
+            case 0 => 0xabw8
+            case 1 => 0x01w8
+            case 2 => 0xf0w8
+            case 3 => 0x3cw8
+            case 4 => 0x87w8
+            case 5 => 0xffw8
+            case 6 => 0x10w8
+            case 7 => 0x0fw8
+        }
+    }
+
+    //> Expected upper nibble for this cycle's stimulus, from a
+    //> literal table — deliberately not computed by slicing.
+    wire exp_high : Word[4] {
+        it := match step {
+            case 0 => 0xaw4
+            case 1 => 0x0w4
+            case 2 => 0xfw4
+            case 3 => 0x3w4
+            case 4 => 0x8w4
+            case 5 => 0xfw4
+            case 6 => 0x1w4
+            case 7 => 0x0w4
+        }
+    }
+
+    //> Verdict for the current cycle: the sliced incoming port must
+    //> equal the expected upper nibble.
+    wire step_ok : Bit {
+        it := slicer.high == exp_high
+    }
+}

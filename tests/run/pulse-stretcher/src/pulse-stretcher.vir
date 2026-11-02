@@ -1,0 +1,227 @@
+//! Self-checking `kind = "run"` test for a pulse stretcher.
+//!
+//! A `PulseStretcher` unit extends a single-cycle pulse on `inp` into
+//! exactly 4 consecutive high cycles on `out`.  The harness top drives
+//! a cycle-by-cycle stimulus table: power-on idle warm-up (which also
+//! keeps the check out of the simulator's first clock edge), two
+//! isolated pulses each followed by an exact 4-cycle stretch, and
+//! trailing idle cycles to confirm the stretch ends on time.  Each
+//! cycle's expected output is compared against a golden value and
+//! every check is ANDed into a running `all_ok`; the simulator exits
+//! with code 0 only if all 16 checked cycles passed, and 1 otherwise.
+
+import virt
+
+//> Stretches a single-cycle pulse on `inp` into exactly 4
+//> consecutive high cycles on `out`.
+//>
+//> `counter` is loaded with 4 on the clock edge that ends a cycle
+//> where `inp` was high, then counts down once per edge; `out` is
+//> high exactly while `counter` is nonzero.  A pulse seen mid-stretch
+//> restarts the count.
+mod PulseStretcher {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Single-cycle pulse input.
+    incoming inp : Bit
+
+    //> High for exactly 4 cycles after each pulse on `inp`.
+    outgoing out : Bit {
+        it := counter != 0
+    }
+
+    //> Cycles of stretch remaining.  A pulse on `inp` reloads it with
+    //> 4; otherwise it counts down to 0 and parks there.
+    reg counter : Word[3] on clock {
+        initial it <= 0
+        when {
+            case inp {
+                it <= 4
+            }
+            case it != 0 {
+                it <= it - 1
+            }
+        }
+    }
+}
+
+pub mod PulseStretcherTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last stimulus cycle checked out;
+    //> `@Valid(1)` if any check failed.  While `@Invalid()`, the
+    //> simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod stretcher of PulseStretcher {
+        it.clock := clock
+        it.inp := stimulus
+    }
+
+    //> Index of the stimulus cycle under test, 0 through 23.
+    reg index : Word[5] on clock {
+        initial it <= 0
+        when {
+            case checking {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds its verdict in while the stimulus table is running.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && (stretcher.out == expected)
+            }
+        }
+    }
+
+    //> Rises on the clock edge after the last stimulus cycle is
+    //> checked, so that the exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 23 {
+                it <= true
+            }
+        }
+    }
+
+    //> High while the stimulus table is running.
+    wire checking : Bit {
+        it := !finished
+    }
+
+    wire stimulus : Bit
+    wire expected : Bit
+
+    // Stimulus table: the value driven on `stretcher.inp` and the
+    // golden `expected` output, for each of the 24 stimulus cycles,
+    // selected by `index`.  Indices 0 through 7 are unchecked warm-up
+    // idle cycles; the first pulse lands on index 10, so `out` must
+    // be high exactly on indices 11 through 14 and low again on 15.
+    // The second pulse lands on index 17, giving a second exact
+    // 4-cycle stretch on indices 18 through 21.
+    match index {
+        // Power-on idle warm-up: no checks, and plenty of cycles for
+        // any first-edge garbage in `counter` to count down to 0.
+        case 0 {
+            stimulus := false
+            expected := false
+        }
+        case 1 {
+            stimulus := false
+            expected := false
+        }
+        case 2 {
+            stimulus := false
+            expected := false
+        }
+        case 3 {
+            stimulus := false
+            expected := false
+        }
+        case 4 {
+            stimulus := false
+            expected := false
+        }
+        case 5 {
+            stimulus := false
+            expected := false
+        }
+        case 6 {
+            stimulus := false
+            expected := false
+        }
+        case 7 {
+            stimulus := false
+            expected := false
+        }
+        // Idle before the first pulse: still low.
+        case 8 {
+            stimulus := false
+            expected := false
+        }
+        case 9 {
+            stimulus := false
+            expected := false
+        }
+        // First pulse: `out` does not rise until the next cycle.
+        case 10 {
+            stimulus := true
+            expected := false
+        }
+        // Exact 4-cycle stretch.
+        case 11 {
+            stimulus := false
+            expected := true
+        }
+        case 12 {
+            stimulus := false
+            expected := true
+        }
+        case 13 {
+            stimulus := false
+            expected := true
+        }
+        case 14 {
+            stimulus := false
+            expected := true
+        }
+        // Two idle cycles proving the stretch ended on time.
+        case 15 {
+            stimulus := false
+            expected := false
+        }
+        case 16 {
+            stimulus := false
+            expected := false
+        }
+        // Second pulse.
+        case 17 {
+            stimulus := true
+            expected := false
+        }
+        // Second exact 4-cycle stretch.
+        case 18 {
+            stimulus := false
+            expected := true
+        }
+        case 19 {
+            stimulus := false
+            expected := true
+        }
+        case 20 {
+            stimulus := false
+            expected := true
+        }
+        case 21 {
+            stimulus := false
+            expected := true
+        }
+        // Two idle cycles proving the second stretch ended on time.
+        case 22 {
+            stimulus := false
+            expected := false
+        }
+        case 23 {
+            stimulus := false
+            expected := false
+        }
+        // Unreachable: `index` parks at 23 once `finished` rises.
+        else {
+            stimulus := false
+            expected := false
+        }
+    }
+}

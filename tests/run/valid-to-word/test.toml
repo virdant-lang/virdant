@@ -1,0 +1,4 @@
+kind = "run"
+description = "Convert a Valid[Word[8]] to a {payload, flag} pair via match"
+cycle_limit = 1
+trace = false

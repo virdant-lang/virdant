@@ -1,0 +1,177 @@
+// Self-checking `kind = "run"` test for the any-edge detector
+// (`last != inp`): the output is high exactly on cycles where the
+// input differs from its value on the previous cycle.
+//
+//! An `EdgeBoth` unit raises `edge` for one cycle on every 0->1 and
+//! 1->0 transition of `inp`, and holds it low while `inp` is stable.
+//! A harness top walks a 16-step stimulus bit sequence -- holds,
+//! single 0->1 and 1->0 edges, back-to-back alternating edges, and a
+//! repeat of the 0->1 pattern -- and on every cycle checks `edge`
+//! against the golden expectation derived from the sequence.  Every
+//! verdict is ANDed into a running `all_ok`; the simulator exits with
+//! code 0 only if all 16 steps passed, and 1 otherwise.
+
+import virt
+
+//> Any-edge detector: `edge` is high exactly when `inp` differs from
+//> its previous-cycle value, regardless of direction.
+mod EdgeBoth {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Input whose transitions are detected.
+    incoming inp : Bit
+
+    //> One-cycle pulse on any 0->1 or 1->0 transition of `inp`.
+    outgoing edge : Bit {
+        it := last != inp
+    }
+
+    //> Value of `inp` on the previous cycle.  Powers on false.
+    reg last : Bit on clock {
+        initial it <= false
+        it <= inp
+    }
+}
+
+pub mod EdgeBothTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last step checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> The detector's previous-cycle sample.  (Kept at top level: see
+    //> BUGFIX_SIM_ALIAS_CLOCK_RACE_PLAN.md -- registers clocked through
+    //> an aliased submodule clock port can commit clobbered pendings.)
+    reg last : Bit on clock {
+        initial it <= false
+        it <= stim
+    }
+
+    //> Any-edge output of the detector: high exactly when `stim`
+    //> differs from its previous-cycle value.
+    wire edge : Bit {
+        it := last != stim
+    }
+
+    //> Index of the stimulus step under test, 0 through 15.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> before `finished` folds in the verdict for the current step.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !finished {
+                it <= it && edge == expected
+            }
+        }
+    }
+
+    //> Rises one cycle after the last step is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 15 {
+                it <= true
+            }
+        }
+    }
+
+    //> Stimulus table: `stim` drives `inp` and `expected` is the
+    //> golden edge output for that cycle, selected by `index`.  The
+    //> 16 cases exactly cover `Word[4]`, so the match is exhaustive.
+    //> `EdgeBoth.last` powers on false, so step 0 holding `stim` at 0
+    //> expects no edge.
+    wire stim : Bit
+    wire expected : Bit
+
+    match index {
+        // Power-on hold at 0.
+        case 0 {
+            stim := false
+            expected := false
+        }
+        case 1 {
+            stim := false
+            expected := false
+        }
+        // Single rising edge, then holds.
+        case 2 {
+            stim := true
+            expected := true
+        }
+        case 3 {
+            stim := true
+            expected := false
+        }
+        case 4 {
+            stim := true
+            expected := false
+        }
+        // Falling edge, then hold.
+        case 5 {
+            stim := false
+            expected := true
+        }
+        case 6 {
+            stim := false
+            expected := false
+        }
+        // Rising edge again (repeat of the 0->1 case), then hold.
+        case 7 {
+            stim := true
+            expected := true
+        }
+        case 8 {
+            stim := true
+            expected := false
+        }
+        // Back-to-back alternating edges.
+        case 9 {
+            stim := false
+            expected := true
+        }
+        case 10 {
+            stim := true
+            expected := true
+        }
+        case 11 {
+            stim := false
+            expected := true
+        }
+        // Hold, then a final 0->1, hold, and 1->0.
+        case 12 {
+            stim := false
+            expected := false
+        }
+        case 13 {
+            stim := true
+            expected := true
+        }
+        case 14 {
+            stim := true
+            expected := false
+        }
+        case 15 {
+            stim := false
+            expected := true
+        }
+    }
+}

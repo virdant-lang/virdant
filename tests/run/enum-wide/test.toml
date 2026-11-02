@@ -1,0 +1,4 @@
+kind = "run"
+description = "Ten-variant enum on a Word[8] backing casts to its declared bit patterns"
+cycle_limit = 5
+trace = false

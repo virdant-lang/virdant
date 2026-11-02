@@ -1,0 +1,248 @@
+//! Self-checking `kind = "run"` test for a 2-deep skid buffer.
+//!
+//! `SkidBuffer` is a register-based 2-deep FIFO with a `Pipe` handshake
+//! on both sides.  Its key property is that it never drops data when
+//! the downstream side stalls: the input `ready` stays high until both
+//! slots are full, so an upstream transfer that lands during a
+//! downstream stall is captured in the skid register instead of being
+//! lost.
+//!
+//! The harness top streams the 16 values `0` through `15` into the
+//! buffer while the downstream consumer stalls 3 of every 8 cycles
+//! (a repeating stall pattern).  Every value that fires out of the
+//! buffer is checked against the expected sequence, and all verdicts
+//! are ANDed into a running `all_ok`; the simulator exits with code 0
+//! only if all 16 values arrived in order, and 1 otherwise.  The
+//! producer only ever offers data while the buffer advertises `ready`,
+//! so end-to-end sequence equality proves no data was dropped.
+
+import virt
+
+//> Local valid/ready handshake socket, structurally identical to the
+//> builtin `Pipe`: the producer drives `data`, the consumer drives
+//> `ready`.
+socket Pipe[T : Type] {
+    cosi data  : Valid[T]
+    soci ready : Bit
+}
+
+//> Two-deep, register-based skid buffer with `Pipe` handshakes on
+//> both sides.
+//>
+//> `slot0` is the head (the value currently presented on `out.data`);
+//> `slot1` is the skid register, which catches an incoming transfer
+//> while the head is stalled downstream.  `count` is the number of
+//> valid entries, 0 through 2.  `inp.ready` stays high while
+//> `count != 2`, so a transfer arriving during a downstream stall is
+//> never dropped: it goes into the free slot.
+mod SkidBuffer {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Upstream handshake.  Accepts until both slots are full.
+    server socket inp of Pipe[Word[8]] {
+        it.ready := count != 2
+    }
+
+    //> Downstream handshake.  Presents the head while `count != 0`.
+    client socket out of Pipe[Word[8]] {
+        it.data := out_data
+    }
+
+    //> Payload presented downstream: the head register when non-empty.
+    wire out_data : Valid[Word[8]] {
+        it := when {
+            case count == 0 => @Invalid()
+            else => @Valid(slot0)
+        }
+    }
+
+    //> The incoming payload, unwrapped (`0` when `@Invalid()`, which
+    //> never reaches a register because `inp_fires` is false then).
+    wire in_word : Word[8] {
+        it := match inp.data {
+            case @Valid(data) => data
+            case @Invalid() => 0
+        }
+    }
+
+    //> An upstream transfer lands this cycle: incoming payload with
+    //> `inp.ready` high.
+    wire inp_fires : Bit {
+        it := match inp.data {
+            case @Valid(dontcare) => count != 2
+            case @Invalid() => false
+        }
+    }
+
+    //> The downstream consumes the head this cycle: valid payload with
+    //> `out.ready` high.
+    wire out_fires : Bit {
+        it := match out_data {
+            case @Valid(dontcare) => out.ready
+            case @Invalid() => false
+        }
+    }
+
+    //> Head register.  Loaded from the incoming payload when an
+    //> transfer lands in an empty buffer, or when a transfer lands in
+    //> the same cycle the head is consumed (`count == 1`); shifted up
+    //> from the skid register when the last entry is consumed.
+    reg slot0 : Word[8] on clock {
+        initial it <= 0
+        when {
+            case inp_fires && count == 0 {
+                it <= in_word
+            }
+            case inp_fires && out_fires && count == 1 {
+                it <= in_word
+            }
+            case out_fires && count == 2 {
+                it <= slot1
+            }
+        }
+    }
+
+    //> Skid register.  Only loaded when a transfer lands while the
+    //> head is not being consumed in the same cycle (`count == 1`,
+    //> downstream stalled): the case that must never drop data.
+    reg slot1 : Word[8] on clock {
+        initial it <= 0
+        when {
+            case inp_fires && count == 1 && !out_fires {
+                it <= in_word
+            }
+        }
+    }
+
+    //> Number of valid entries, 0 through 2.  `inp_fires` implies
+    //> `count != 2` and `out_fires` implies `count != 0`, so neither
+    //> increment nor decrement can wrap.
+    reg count : Word[2] on clock {
+        initial it <= 0
+        when {
+            case inp_fires && !out_fires {
+                it <= it + 1
+            }
+            case out_fires && !inp_fires {
+                it <= it - 1
+            }
+        }
+    }
+}
+
+pub mod Top for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all 16 values arrived in order; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod buf of SkidBuffer {
+        it.clock := clock
+        it.inp.data := in_data
+        it.out.ready := downstream_ready
+    }
+
+    //> True while the producer still has values to send.
+    wire sending : Bit {
+        it := send_index != 16
+    }
+
+    //> Producer payload: the next value `0` through `15`, offered
+    //> every cycle until all 16 have been accepted.
+    wire in_data : Valid[Word[8]] {
+        it := when {
+            case sending => @Valid(zext(send_index))
+            else => @Invalid()
+        }
+    }
+
+    //> Repeating stall pattern, phased by a free-running counter: the
+    //> consumer is not ready on phases 2, 4, and 5 of every 8 cycles.
+    wire downstream_ready : Bit {
+        it := match stall_pat {
+            case 2 => false
+            case 4 => false
+            case 5 => false
+            else => true
+        }
+    }
+
+    reg stall_pat : Word[3] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Index of the next value to send, 0 through 16.  Advances only
+    //> on an accepted transfer.
+    wire in_fires : Bit {
+        it := sending && buf.inp.ready
+    }
+
+    reg send_index : Word[5] on clock {
+        initial it <= 0
+        when {
+            case in_fires {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> A value is consumed downstream this cycle: the buffer presents
+    //> a valid head and `downstream_ready` accepts it.
+    wire out_fires : Bit {
+        it := match buf.out.data {
+            case @Valid(dontcare) => downstream_ready
+            case @Invalid() => false
+        }
+    }
+
+    //> Index of the next expected value, 0 through 16.
+    reg recv_index : Word[5] on clock {
+        initial it <= 0
+        when {
+            case out_fires {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> The consumed value matches the expected sequence position.
+    wire recv_ok : Bit {
+        it := match buf.out.data {
+            case @Valid(data) => data == zext(recv_index)
+            case @Invalid() => false
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the cycle the value is consumed.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case out_fires {
+                it <= it && recv_ok
+            }
+        }
+    }
+
+    //> Rises the cycle after the last value is checked, so that
+    //> `all_ok` has folded in every verdict by the time the exit code
+    //> is read.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case recv_index == 16 {
+                it <= true
+            }
+        }
+    }
+}

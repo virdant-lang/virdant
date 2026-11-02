@@ -1,0 +1,4 @@
+kind = "run"
+description = "2-bit binary to 4-bit one-hot decoder via match"
+cycle_limit = 6
+trace = false

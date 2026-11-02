@@ -1,0 +1,4 @@
+kind = "run"
+description = "`struct type Pair[T : Type]` generic struct with field of type T; assert"
+cycle_limit = 3
+trace = false

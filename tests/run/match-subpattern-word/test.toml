@@ -1,0 +1,4 @@
+kind = "run"
+description = "`case @Some(0)` — a sub-pattern on a word payload matches only the zero payload"
+cycle_limit = 8
+trace = false

@@ -1,0 +1,102 @@
+//! Self-checking `kind = "run"` test for the relative precedence of
+//! the logical operators `&&`, `||`, and `^^`.
+//!
+//! The reference grammar puts all three at the same precedence level,
+//! associating left-to-right, so the unparenthesized expression
+//! `a && b || c ^^ d` must parse as `((a && b) || c) ^^ d` and *not*
+//! as the C-like grouping `(a && b) || (c ^^ d)`.
+//!
+//! A battery of constant vectors checks the flat form against its
+//! fully parenthesized documented grouping, checks a mixed-paren
+//! form `a && (b || c) ^^ d` against `(a && (b || c)) ^^ d`, and —
+//! on the vectors where the two groupings actually disagree — checks
+//! that the flat form differs from the C-like grouping.  Every
+//! verdict folds into `all_ok`, and the simulator exits with code 0
+//! only if every vector passed, and 1 otherwise.
+
+import virt
+
+pub mod BitNestedOpsTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every vector checked out; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Running AND of every vector's verdict.  Power-on true; the
+    //> combinational verdicts fold in on the first clock edge, so
+    //> `exit` reports the real result from cycle 1 on.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && ok
+    }
+
+    //> Rises on the first clock edge, after `all_ok` has folded in
+    //> the verdicts once.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> AND of every vector's verdict.
+    wire ok : Bit {
+        it := ok0 && ok1 && ok2 && ok3 && ok4
+    }
+
+    //> Vector (a, b, c, d) = (0, 0, 1, 1): flat = (0 && 0 || 1) ^^ 1
+    //> = 0.  The groupings agree here (both 0), so only the
+    //> flat-vs-documented-grouping checks apply.
+    wire ok0 : Bit {
+        let a = false, b = false, c = true, d = true {
+            it := (a && b || c ^^ d) == (((a && b) || c) ^^ d)
+                && (a && (b || c) ^^ d) == ((a && (b || c)) ^^ d)
+        }
+    }
+
+    //> Vector (a, b, c, d) = (0, 1, 1, 0): flat = (0 && 1 || 1) ^^ 0
+    //> = 1.  The groupings agree here (both 1).
+    wire ok1 : Bit {
+        let a = false, b = true, c = true, d = false {
+            it := (a && b || c ^^ d) == (((a && b) || c) ^^ d)
+                && (a && (b || c) ^^ d) == ((a && (b || c)) ^^ d)
+        }
+    }
+
+    //> Vector (a, b, c, d) = (1, 0, 1, 0): flat = (1 && 0 || 1) ^^ 0
+    //> = 1.  The groupings agree here (both 1).
+    wire ok2 : Bit {
+        let a = true, b = false, c = true, d = false {
+            it := (a && b || c ^^ d) == (((a && b) || c) ^^ d)
+                && (a && (b || c) ^^ d) == ((a && (b || c)) ^^ d)
+        }
+    }
+
+    //> Vector (a, b, c, d) = (1, 1, 0, 1): flat = ((1 && 1) || 0) ^^ 1
+    //> = 0, while the C-like grouping (1 && 1) || (0 ^^ 1) = 1.  The
+    //> groupings disagree, so the flat form must differ from it.
+    wire ok3 : Bit {
+        let a = true, b = true, c = false, d = true {
+            it := (a && b || c ^^ d) == (((a && b) || c) ^^ d)
+                && (a && (b || c) ^^ d) == ((a && (b || c)) ^^ d)
+                && ((a && b || c ^^ d) != ((a && b) || (c ^^ d)))
+        }
+    }
+
+    //> Vector (a, b, c, d) = (1, 1, 1, 1): flat = ((1 && 1) || 1) ^^ 1
+    //> = 0, while the C-like grouping (1 && 1) || (1 ^^ 1) = 1.  The
+    //> groupings disagree, so the flat form must differ from it.
+    wire ok4 : Bit {
+        let a = true, b = true, c = true, d = true {
+            it := (a && b || c ^^ d) == (((a && b) || c) ^^ d)
+                && (a && (b || c) ^^ d) == ((a && (b || c)) ^^ d)
+                && ((a && b || c ^^ d) != ((a && b) || (c ^^ d)))
+        }
+    }
+}

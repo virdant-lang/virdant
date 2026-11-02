@@ -1,0 +1,4 @@
+kind = "run"
+description = "`unused mem.addr` on a socket port whose server drives only some channels; the used channel still crosses"
+cycle_limit = 24
+trace = false

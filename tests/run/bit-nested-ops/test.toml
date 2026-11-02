@@ -1,0 +1,4 @@
+kind = "run"
+description = "Precedence of `&&`/`||`/`^^`: `a && b || c ^^ d` parses as `((a && b) || c) ^^ d`"
+cycle_limit = 4
+trace = false

@@ -1,0 +1,106 @@
+//! Self-checking `kind = "run"` test for three levels of module
+//! hierarchy.
+//!
+//! The harness `ModNestedTest` (Top) instantiates `Mid`, which
+//! instantiates `Leaf`.  A stimulus word is driven into `Mid` from the
+//! harness, passes through `Mid` into `Leaf`, and returns unchanged.
+//! Each cycle the harness checks that the value seen after both levels
+//! matches the value driven in, ANDs the verdict into a running
+//! `all_ok`, and the simulator exits with code 0 only if every checked
+//! cycle passed.
+
+import virt
+
+//> Innermost module of the hierarchy.  Passes `inp` through to `out`.
+mod Leaf {
+    //> Word driven in from the enclosing module.
+    incoming inp : Word[8]
+
+    //> Word passed through unchanged.
+    outgoing out : Word[8]
+
+    out := inp
+}
+
+//> Middle module of the hierarchy.  Instantiates `Leaf` and passes
+//> `inp` through it, so a signal must cross both `Mid` and `Leaf` to
+//> reach `out`.
+mod Mid {
+    //> Word driven in from the harness.
+    incoming inp : Word[8]
+
+    //> Word passed through `Leaf` and back out.
+    outgoing out : Word[8]
+
+    mod leaf of Leaf {
+        it.inp := inp
+    }
+
+    out := leaf.out
+}
+
+pub mod ModNestedTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last cycle checked out; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod mid of Mid {
+        it.inp := stimulus
+    }
+
+    //> Number of elapsed cycles, stopping at 10 so that `exit` goes
+    //> `@Valid`.
+    reg cycle_num : Word[4] on clock {
+        initial it <= 0
+        when {
+            case cycle_num < 10 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Value driven into the hierarchy this cycle, selected by
+    //> `cycle_num`.
+    wire stimulus : Word[8] {
+        it := match cycle_num : Word[4] {
+            case 0 => 0
+            case 1 => 1
+            case 2 => 85
+            case 3 => 170
+            case 4 => 255
+            else => 42
+        }
+    }
+
+    //> True when the value returned through `Mid` and `Leaf` matches
+    //> the value driven in this cycle.
+    wire check_ok : Bit {
+        it := mid.out == stimulus
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds its verdict in on the clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check_ok
+    }
+
+    //> Rises one cycle after the last check, so that the exit code sees
+    //> the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case cycle_num == 10 {
+                it <= true
+            }
+        }
+    }
+}

@@ -1,0 +1,162 @@
+//! Self-checking `kind = "run"` test for two registers in series.
+//!
+//! A `RegChain` unit passes `d` through two registers (`r1 <= d`,
+//! `r2 <= r1`), so `q` lags `d` by exactly two cycles.  The harness
+//! top drives a distinct nonzero stimulus value on every cycle after a
+//! short idle warm-up and checks `q` against a per-cycle golden table:
+//! the two cycles right after stimulus starts must still show the old
+//! value, and every later cycle must show the value driven exactly two
+//! cycles earlier.  A 0-, 1-, or 3-cycle latency fails some entry.
+//! Each verdict is folded into a running `all_ok`; the simulator exits
+//! with code 0 only if every check passed, and 1 otherwise.
+
+import virt
+
+//> Two registers in series: `r1` samples `d`, and `r2` samples `r1`.
+//> `q` therefore shows the value `d` held exactly two cycles ago.
+mod RegChain {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Chain input, sampled by `r1` on every clock edge.
+    incoming d : Word[8]
+
+    //> Chain output: the value `d` held two cycles earlier.
+    outgoing q : Word[8]
+
+    reg r1 : Word[8] on clock {
+        initial it <= 0
+        it <= d
+    }
+
+    reg r2 : Word[8] on clock {
+        initial it <= 0
+        it <= r1
+    }
+
+    q := r2
+}
+
+pub mod RegChainTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last cycle checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod chain of RegChain {
+        it.clock := clock
+        it.d := d
+    }
+
+    //> Cycle counter, free-running 0 through 15 and then wrapping.
+    reg count : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Rises at the end of cycle 14 (the final checked cycle),
+    //> freezing the fold and validating `exit` on the next cycle.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case count == 14 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the cycle it applies to.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && chain.q == expected
+            }
+        }
+    }
+
+    //> High on every checked cycle: cycles 3 through 14.  Cycles 0
+    //> through 2 are warm-up and unchecked.
+    wire checking : Bit {
+        it := count >= 3 && !finished
+    }
+
+    //> Stimulus: idle (`d = 0`) during warm-up cycles 0..2 so any
+    //> garbage the run simulator commits on its first clock edge has
+    //> flushed out of both registers before checks begin.  From cycle
+    //> 3 on, drive a distinct nonzero value (`count`) every cycle so
+    //> each checked cycle pins down the latency precisely.
+    wire d : Word[8] {
+        it := mux(count < 3, 0, zext(count))
+    }
+
+    wire expected : Word[8]
+
+    // Golden table: `expected[c]` is what `q` must show on cycle `c`.
+    // Cycles 0..2 are warm-up and unchecked.  Cycles 3 and 4 must
+    // still show 0 -- the stimulus has started but the chain has not
+    // caught up yet -- and cycles 5..14 must show the value driven
+    // exactly two cycles earlier.  A 0-, 1-, or 3-cycle latency would
+    // fail some entry.  Cycle 15 is unchecked (test is finishing).
+    // The 16 cases exactly cover `Word[4]`, so the match is
+    // exhaustive.
+    match count {
+        case 0 {
+            expected := 0
+        }
+        case 1 {
+            expected := 0
+        }
+        case 2 {
+            expected := 0
+        }
+        case 3 {
+            expected := 0
+        }
+        case 4 {
+            expected := 0
+        }
+        case 5 {
+            expected := 3
+        }
+        case 6 {
+            expected := 4
+        }
+        case 7 {
+            expected := 5
+        }
+        case 8 {
+            expected := 6
+        }
+        case 9 {
+            expected := 7
+        }
+        case 10 {
+            expected := 8
+        }
+        case 11 {
+            expected := 9
+        }
+        case 12 {
+            expected := 10
+        }
+        case 13 {
+            expected := 11
+        }
+        case 14 {
+            expected := 12
+        }
+        case 15 {
+            expected := 0
+        }
+    }
+}

@@ -1,0 +1,153 @@
+// Self-checking `kind = "run"` test for the three-way comparator:
+// encoding the outcome of comparing two words into a 2-bit code.
+//
+// A `ThreeWayComparator` unit maps `x < y`, `x == y`, and `x > y` to
+// the codes 0, 1, and 2 respectively (code 3 is unreachable for
+// `Word[2]` operands, since exactly one of the three relations always
+// holds).  A harness top drives it through all 16 combinations of
+// 2-bit operands, each compared against a hand-written golden code
+// and ANDed into a running `all_ok`; the simulator exits with code 0
+// only if all 16 combinations passed, and 1 otherwise.
+
+import virt
+
+//> Encodes the comparison of the operands into a 2-bit code.
+mod ThreeWayComparator {
+    //> First operand.
+    incoming x : Word[2]
+
+    //> Second operand.
+    incoming y : Word[2]
+
+    //> Comparison code: `0` for `x < y`, `1` for `x == y`, and `2`
+    //> for `x > y`.  The `else` arm is unreachable for `Word[2]`
+    //> operands, since exactly one of the three relations holds.
+    outgoing code : Word[2] {
+        it := when {
+            case x < y => 0
+            case x == y => 1
+            case x > y => 2
+            else => 3
+        }
+    }
+}
+
+pub mod ThreeWayComparatorTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last combination checked out; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod comparator of ThreeWayComparator {
+        it.x := vec_x
+        it.y := vec_y
+    }
+
+    //> Index of the combination under test, 0 through 15.  The upper
+    //> two bits drive `vec_x` and the lower two bits drive `vec_y`,
+    //> so the 16 values sweep every combination of 2-bit operands.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdict for the current combination.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && comparator.code == expected
+    }
+
+    //> Rises one cycle after the last combination is checked, so that
+    //> the exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 15 {
+                it <= true
+            }
+        }
+    }
+
+    //> Upper two bits of `index`.
+    wire vec_x : Word[2] {
+        it := index[4..2]
+    }
+
+    //> Lower two bits of `index`.
+    wire vec_y : Word[2] {
+        it := index[2..0]
+    }
+
+    //> Golden code for the current combination, selected by `index`.
+    //> All 16 combinations of `Word[2]` operands are covered, so the
+    //> match is exhaustive.
+    wire expected : Word[2]
+
+    match index {
+        // x = 0: equal to y = 0, less than every nonzero y.
+        case 0 {
+            expected := 1
+        }
+        case 1 {
+            expected := 0
+        }
+        case 2 {
+            expected := 0
+        }
+        case 3 {
+            expected := 0
+        }
+        // x = 1: greater than 0, equal to 1, less than 2 and 3.
+        case 4 {
+            expected := 2
+        }
+        case 5 {
+            expected := 1
+        }
+        case 6 {
+            expected := 0
+        }
+        case 7 {
+            expected := 0
+        }
+        // x = 2: greater than 0 and 1, equal to 2, less than 3.
+        case 8 {
+            expected := 2
+        }
+        case 9 {
+            expected := 2
+        }
+        case 10 {
+            expected := 1
+        }
+        case 11 {
+            expected := 0
+        }
+        // x = 3: greater than every y except y = 3.
+        case 12 {
+            expected := 2
+        }
+        case 13 {
+            expected := 2
+        }
+        case 14 {
+            expected := 2
+        }
+        case 15 {
+            expected := 1
+        }
+    }
+}

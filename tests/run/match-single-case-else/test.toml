@@ -1,0 +1,4 @@
+kind = "run"
+description = "Minimal two-arm `match`: one `case` plus `else`, asserting both arms"
+cycle_limit = 10
+trace = false

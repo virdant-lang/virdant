@@ -1,0 +1,99 @@
+//! A self-checking `kind = "run"` test for matching over a generic
+//! union type: `Opt[Word[8]]` is defined locally with a type
+//! parameter, and a `match` binds the payload in the `@Some(value)`
+//! pattern.  The extracted payload is asserted cycle by cycle against
+//! independently computed expected values, and the simulator exits
+//! with code 0 only if every check passed.
+
+import virt
+
+//> Optional value of `T`: either `@None()` or `@Some(value)` whose
+//> payload width is the argument's width.
+union type Opt[T : Type] {
+    None()
+    Some(value : T)
+}
+
+pub mod GenericUnionMatchTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Cycles elapsed since reset.
+    reg cycle : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Walks `@None()` -> `@Some(170)` -> `@Some(204)`, so both the
+    //> `@Some` and `@None` arms of the match are exercised on the
+    //> same generic union instantiation.
+    reg opt : Opt[Word[8]] on clock {
+        initial it <= @None()
+        when {
+            case cycle == 0 {
+                it <= @Some(170w8)
+            }
+            case cycle == 1 {
+                it <= @Some(204w8)
+            }
+        }
+    }
+
+    //> Extracts the payload by binding it in the pattern: `value`
+    //> below is the `Word[8]` carried by `@Some`.
+    wire payload : Word[8] {
+        it := match opt {
+            case @Some(value) => value
+            case @None() => 0w8
+        }
+    }
+
+    //> Independently checks which variant is present, again binding
+    //> the payload in a pattern.
+    wire is_some : Bit {
+        it := match opt {
+            case @Some(value) => true
+            case @None() => false
+        }
+    }
+
+    //> What `payload` should be this cycle, computed without the
+    //> union: cycle 0 holds the initial `@None()`, later cycles hold
+    //> the loaded `@Some` payloads.
+    wire expected : Word[8] {
+        it := match cycle {
+            case 0 => 0w8
+            case 1 => 170w8
+            else => 204w8
+        }
+    }
+
+    //> The bound payload must equal the expected value, and `is_some`
+    //> must report `@Some` exactly when a payload was loaded.
+    wire checks_ok : Bit {
+        it := payload == expected && is_some == (cycle != 0)
+    }
+
+    //> Running AND of every check so far.  Power-on true; each
+    //> cycle's verdict is folded in on the clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && checks_ok
+    }
+
+    //> Rises after both loaded payloads have been checked, so that
+    //> the exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= cycle == 2
+    }
+
+    //> `@Valid(0)` if every check passed, `@Valid(1)` on any
+    //> mismatch; `@Invalid()` while still waiting.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+}

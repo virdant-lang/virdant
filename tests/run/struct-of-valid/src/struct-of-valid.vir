@@ -1,0 +1,88 @@
+// Self-checking `kind = "run"` test for a struct with a `Valid[Word[8]]`
+// field: the test matches on the struct's field, extracting the payload
+// in the `@Valid` arm and taking the `else`-branch when the field holds
+// `@Invalid()`.  Both branches must agree with golden values, and the
+// simulator exits with code 0 only if every check passed, 1 otherwise.
+
+import virt
+
+//> A struct with a `Valid[Word[8]]` field, the type under test.
+struct type Chan {
+    data : Valid[Word[8]]
+}
+
+pub mod StructOfValidTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Cycle counter: 0 exercises the `@Valid` arm, 1+ the `else` arm.
+    reg cycle : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> The struct value under test.  Cycle 0 holds `@Valid(42w8)`, then
+    //> it switches to `@Invalid()` so the `else`-branch is covered too.
+    reg chan : Chan on clock {
+        initial it <= ${ data = @Valid(42w8) }
+        when {
+            case cycle == 0 {
+                it <= ${ data = @Invalid() }
+            }
+        }
+    }
+
+    //> The `match` on the struct's field: the `@Valid` arm extracts
+    //> the payload, the `else` arm substitutes 0.
+    wire payload : Word[8] {
+        it := match chan->data {
+            case @Valid(x) => x
+            else => 0
+        }
+    }
+
+    //> The same `match` shape, boolean result: true only in the
+    //> `@Valid` arm.
+    wire is_valid : Bit {
+        it := match chan->data {
+            case @Valid(x) => true
+            else => false
+        }
+    }
+
+    //> The per-cycle check: cycle 0 must see the payload through the
+    //> `@Valid` arm; cycle 1+ must take the `else`-branch.
+    wire check : Bit {
+        it := when {
+            case cycle == 0 => is_valid && payload == 42w8
+            else => !is_valid && payload == 0w8
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds its verdict in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check
+    }
+
+    //> Rises after the second cycle (the first `else`-branch check),
+    //> so the exit code only sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case cycle == 1 {
+                it <= true
+            }
+        }
+    }
+}

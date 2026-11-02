@@ -1,0 +1,59 @@
+//! Self-checking `kind = "run"` test for underscore separators in
+//! numeric literals.
+//!
+//! Exercises decimal (`100_000`), binary (`0b00_101_11`), and hex
+//! (`0xcafe_babe`) literals with underscore digit grouping.  The
+//! separators must be ignored by the compiler: every grouped literal
+//! must equal the same value written without separators (and, for
+//! redundancy, a differently grouped spelling).  The simulator exits
+//! with code 0 only if every check passed, and 1 otherwise.
+
+import virt
+
+pub mod LiteralUnderscores for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case success => @Valid(0)
+            else => @Invalid()
+        }
+    }
+
+    //> Decimal literal with underscore separators: `100_000` is
+    //> 100000, which fits `Word[17]`.
+    wire dec : Word[17]
+    dec := 100_000
+
+    //> The grouped decimal must equal the ungrouped decimal and a
+    //> differently grouped spelling of the same value.
+    wire dec_ok : Bit
+    dec_ok := dec == 100000 && dec == 10_000_0
+
+    //> Binary literal with underscore separators: `0b00_101_11` is
+    //> 0b0010111 = 23, which fits `Word[5]`.
+    wire bin : Word[5]
+    bin := 0b00_101_11
+
+    //> The grouped binary must equal the ungrouped binary and the
+    //> ungrouped decimal.
+    wire bin_ok : Bit
+    bin_ok := bin == 0b0010111 && bin == 23
+
+    //> Hex literal with underscore separators: `0xcafe_babe` is
+    //> 0xcafebabe = 3405691582, which fits `Word[32]`.
+    wire hex : Word[32]
+    hex := 0xcafe_babe
+
+    //> The grouped hex must equal the ungrouped hex and the ungrouped
+    //> decimal.
+    wire hex_ok : Bit
+    hex_ok := hex == 0xcafebabe && hex == 3405691582w32
+
+    //> AND of every check; the exit verdict.
+    wire success : Bit
+    success := dec_ok && bin_ok && hex_ok
+}

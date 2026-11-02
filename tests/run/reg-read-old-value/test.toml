@@ -1,0 +1,3 @@
+kind = "run"
+description = "Register reads its old value on the cycle it is being written (self-ref on RHS under a when arm)"
+cycle_limit = 20

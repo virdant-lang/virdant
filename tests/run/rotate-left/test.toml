@@ -1,0 +1,3 @@
+kind = "run"
+description = "4-bit rotate-left chained through a register: asserts each rotation and the return to the start value"
+cycle_limit = 20

@@ -1,0 +1,105 @@
+//! Self-checking `kind = "run"` test for decimal literals whose values
+//! fit the inferred width.
+//!
+//! The `literal-truncate-decimal` bullet in SIM_TESTS.md asks about a
+//! decimal literal whose value doesn't fit the inferred width (e.g.
+//! `16` inferred at `Word[4]`; `15` fits).  In the current compiler,
+//! the too-large literal is a hard compile error (`DoesntFit`, raised
+//! by `check_word_lit` in `virdant/src/types/typing/check.rs` when
+//! `min_word_width(value) > width`), not a silent truncation, so this
+//! test covers the fitting values instead: the spec's example `15` at
+//! `Word[4]`, the boundary values `1` at `Word[1]`, `7` at `Word[3]`,
+//! and `255` at `Word[8]`, plus `0` and a fitting value in a wider
+//! context.  Each literal is round-tripped through codegen: the
+//! generated simulator must reproduce the exact written value,
+//! checked with `==`.  Every check folds into a running `all_ok`; the
+//! simulator exits with code 0 only if all checks passed, and 1
+//! otherwise.
+
+import virt
+
+pub mod LiteralTruncateDecimal for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last check passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && w4_15_ok && w4_0_ok
+            && w1_1_ok && w3_7_ok && w8_255_ok
+            && w8_15_ok && roundtrip_ok
+    }
+
+    //> Rises on the first clock edge, after the checks have folded
+    //> into `all_ok`, so that the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> The spec's example: `15` fits the inferred width `Word[4]`.
+    wire w4_15 : Word[4]
+    w4_15 := 15
+
+    //> Zero fits any width, including `Word[4]`.
+    wire w4_0 : Word[4]
+    w4_0 := 0
+
+    //> Boundary value at the smallest nonzero width.
+    wire w1_1 : Word[1]
+    w1_1 := 1
+
+    //> Boundary value at `Word[3]`.
+    wire w3_7 : Word[3]
+    w3_7 := 7
+
+    //> Boundary value at `Word[8]`.
+    wire w8_255 : Word[8]
+    w8_255 := 255
+
+    //> A fitting value in a wider context: `15` at `Word[8]` must
+    //> keep its value, not be padded or truncated.
+    wire w8_15 : Word[8]
+    w8_15 := 15
+
+    wire w4_15_ok : Bit
+    w4_15_ok := w4_15 == 15
+
+    wire w4_0_ok : Bit
+    w4_0_ok := w4_0 == 0
+
+    wire w1_1_ok : Bit
+    w1_1_ok := w1_1 == 1
+
+    wire w3_7_ok : Bit
+    w3_7_ok := w3_7 == 7
+
+    wire w8_255_ok : Bit
+    w8_255_ok := w8_255 == 255
+
+    wire w8_15_ok : Bit
+    w8_15_ok := w8_15 == 15
+
+    //> Round-trip of the spec's example literal through arithmetic
+    //> and zero-extension: `15 + 0w4` must stay `15`, and the
+    //> zero-extended copy must widen to `0x0f` with its top checked
+    //> bit still set.
+    wire widened : Word[8]
+    widened := zext(w4_15)
+
+    wire roundtrip_ok : Bit
+    roundtrip_ok := (w4_15 + 0w4) == 0xfw4
+        && widened == 15
+        && widened[3]
+}

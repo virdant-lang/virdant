@@ -1,0 +1,77 @@
+//! Self-checking `kind = "run"` test for `dontcare` in the `else`
+//! arm of a `when`.
+//!
+//! An unused wire is driven by a `when` whose `else` arm yields
+//! `dontcare`: the design must build and the simulation must run to
+//! completion, without asserting anything about the wire's value.
+//! The same `when`-with-`dontcare`-else shape is also checked
+//! deterministically through a *used* wire whose `case` arm is taken,
+//! so the never-observed `dontcare` value itself is never asserted.
+//! Every check is ANDed into a running `all_ok`; the simulator exits
+//! with code 0 only if all checks passed, and 1 otherwise.
+//!
+//! ADAPTATION: the bare form `else => dontcare` in a `when` arm is
+//! currently rejected by the compiler ("Invalid arm body type"):
+//! `AstNodePayload::ExprDontcare` is missing from `AstNode::is_expr`
+//! (virdant/src/syntax/ast.rs), while `match` arms and the
+//! parenthesized form `(dontcare)` both work.  This test therefore
+//! uses `else => (dontcare)`; adding `ExprDontcare` to `is_expr` is a
+//! candidate one-line compiler fix for a future change.
+
+import virt
+
+pub mod DontcareInWhenElse for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Unused wire whose value comes from the `else` arm of a `when`:
+    //> `else => (dontcare)` (parenthesized; see the ADAPTATION note
+    //> above).  The design must build and the simulation
+    //> must run; the value itself is implementation-defined and is
+    //> never read, so nothing about it is asserted.
+    wire unused_wire : Word[8] {
+        it := when {
+            case false => 0w8
+            else => (dontcare)
+        }
+    }
+
+    unused unused_wire
+
+    //> The same `when`-with-`dontcare`-else shape, but with the `case`
+    //> condition true so the value is deterministic and checkable.
+    wire case_taken : Word[8] {
+        it := when {
+            case true => 0xa7w8
+            else => (dontcare)
+        }
+    }
+
+    //> Check that the taken `case` arm produced its value.
+    wire ok_case_taken : Bit {
+        it := case_taken == 0xa7w8
+    }
+
+    //> Running AND of every check so far.  Power-on true; the check
+    //> verdicts fold in on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && ok_case_taken
+    }
+
+    //> Rises on the first clock edge, so that `exit` never observes
+    //> the vacuous power-on `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

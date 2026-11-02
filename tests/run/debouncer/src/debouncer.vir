@@ -1,0 +1,297 @@
+//! Self-checking `kind = "run"` test for an input debouncer.
+//!
+//! A `Debouncer` unit only lets its output settle to a new value once
+//! its input has held that value for 3 consecutive cycles.  The
+//! harness top drives it through a table of 35 bouncy stimulus
+//! cycles: power-on idle, rapid toggles too short to settle, stable
+//! stretches of both polarities, and a single-cycle glitch injected
+//! into a settled output.  Each cycle's expected output is compared
+//! against a golden value and every check is ANDed into a running
+//! `all_ok`; the simulator exits with code 0 only if all 35 cycles
+//! passed, and 1 otherwise.
+
+import virt
+
+//> Debounces `inp`: `out` settles to a new value only after `inp`
+//> has held that value for 3 consecutive cycles, and then only on a
+//> clock edge.
+//>
+//> `count` tracks how many consecutive cycles `inp` has held steady,
+//> saturating at 3.  A glitch shorter than 3 cycles resets `count`
+//> before it reaches the threshold, so `out` never moves.
+mod Debouncer {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Raw, possibly bouncy input.
+    incoming inp : Bit
+
+    //> Debounced output.
+    outgoing out : Bit {
+        it := stable
+    }
+
+    //> Value of `inp` on the previous cycle.
+    reg prev : Bit on clock {
+        initial it <= false
+        it <= inp
+    }
+
+    //> How many consecutive cycles `inp` has held steady, saturating
+    //> at 3.
+    reg count : Word[2] on clock {
+        initial it <= 0
+        it <= next_count
+    }
+
+    //> Settled output value; only re-latches `inp` once `inp` has
+    //> been stable long enough.
+    reg stable : Bit on clock {
+        initial it <= false
+        when {
+            case next_count == 3 {
+                it <= inp
+            }
+        }
+    }
+
+    //> What `count` becomes on this clock edge: one further
+    //> consecutive stable cycle if `inp` matches last cycle's value,
+    //> otherwise a fresh run of one cycle.  Computing this
+    //> combinationally (instead of gating on the registered `count`)
+    //> keeps the current cycle's input in the stability check, so a
+    //> glitch right after a stable stretch cannot be latched.
+    wire next_count : Word[2] {
+        it := when {
+            case inp == prev => mux(count == 3, count, count + 1)
+            else => 1
+        }
+    }
+}
+
+pub mod Top for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last stimulus cycle checked out;
+    //> `@Valid(1)` if any check failed.  While `@Invalid()`, the
+    //> simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod debouncer of Debouncer {
+        it.clock := clock
+        it.inp := stimulus
+    }
+
+    //> Index of the stimulus cycle under test, 0 through 34.
+    reg index : Word[6] on clock {
+        initial it <= 0
+        when {
+            case checking {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds its verdict in while the stimulus table is running.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && (debouncer.out == expected)
+            }
+        }
+    }
+
+    //> Rises on the clock edge after the last stimulus cycle is
+    //> checked, so that the exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 34 {
+                it <= true
+            }
+        }
+    }
+
+    //> High while the stimulus table is running.
+    wire checking : Bit {
+        it := !finished
+    }
+
+    wire stimulus : Bit
+    wire expected : Bit
+
+    // Stimulus table: the value driven on `debouncer.inp` and the
+    // golden `expected` output, for each of the 35 stimulus cycles,
+    // selected by `index`.  The input never stabilizes for long
+    // during the bouncy stretches, so the debounced output must hold
+    // its previous settled value throughout; it may only move after
+    // a stable stretch of 3 cycles, of either polarity.
+    match index {
+        // Power-on idle: input low, matching the power-on output.
+        case 0 {
+            stimulus := false
+            expected := false
+        }
+        case 1 {
+            stimulus := false
+            expected := false
+        }
+        case 2 {
+            stimulus := false
+            expected := false
+        }
+        case 3 {
+            stimulus := false
+            expected := false
+        }
+        // Rapid toggles: no stretch reaches 3 cycles, so the output
+        // must hold the power-on value throughout.
+        case 4 {
+            stimulus := true
+            expected := false
+        }
+        case 5 {
+            stimulus := false
+            expected := false
+        }
+        case 6 {
+            stimulus := true
+            expected := false
+        }
+        case 7 {
+            stimulus := false
+            expected := false
+        }
+        case 8 {
+            stimulus := true
+            expected := false
+        }
+        case 9 {
+            stimulus := false
+            expected := false
+        }
+        case 10 {
+            stimulus := true
+            expected := false
+        }
+        case 11 {
+            stimulus := false
+            expected := false
+        }
+        // Stable high stretch: 3 consecutive high cycles (indices 12
+        // through 14), so the output settles to high on the cycle
+        // after the third.
+        case 12 {
+            stimulus := true
+            expected := false
+        }
+        case 13 {
+            stimulus := true
+            expected := false
+        }
+        case 14 {
+            stimulus := true
+            expected := false
+        }
+        case 15 {
+            stimulus := true
+            expected := true
+        }
+        case 16 {
+            stimulus := true
+            expected := true
+        }
+        // Single-cycle glitch low: far too short to settle, so the
+        // output must stay high.
+        case 17 {
+            stimulus := false
+            expected := true
+        }
+        // Back high, then a stable low stretch (indices 20 through
+        // 22) settling the output to low.
+        case 18 {
+            stimulus := true
+            expected := true
+        }
+        case 19 {
+            stimulus := true
+            expected := true
+        }
+        case 20 {
+            stimulus := false
+            expected := true
+        }
+        case 21 {
+            stimulus := false
+            expected := true
+        }
+        case 22 {
+            stimulus := false
+            expected := true
+        }
+        case 23 {
+            stimulus := false
+            expected := false
+        }
+        case 24 {
+            stimulus := false
+            expected := false
+        }
+        // Rapid toggles again from the low baseline.
+        case 25 {
+            stimulus := true
+            expected := false
+        }
+        case 26 {
+            stimulus := false
+            expected := false
+        }
+        case 27 {
+            stimulus := true
+            expected := false
+        }
+        case 28 {
+            stimulus := false
+            expected := false
+        }
+        case 29 {
+            stimulus := true
+            expected := false
+        }
+        case 30 {
+            stimulus := false
+            expected := false
+        }
+        // Final stable high stretch (indices 31 through 33),
+        // settling the output to high for the last check.
+        case 31 {
+            stimulus := true
+            expected := false
+        }
+        case 32 {
+            stimulus := true
+            expected := false
+        }
+        case 33 {
+            stimulus := true
+            expected := false
+        }
+        case 34 {
+            stimulus := true
+            expected := true
+        }
+        // Unreachable: `index` parks at 34 once `finished` rises.
+        else {
+            stimulus := false
+            expected := false
+        }
+    }
+}

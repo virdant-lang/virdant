@@ -1,0 +1,5 @@
+[project]
+name = "generic-mod-of-generic-socket"
+
+[prog]
+top = "generic-mod-of-generic-socket::Top"

@@ -1,0 +1,4 @@
+kind = "run"
+description = "Parent instantiates two different modules and checks their independent behavior"
+cycle_limit = 12
+trace = false

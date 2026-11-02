@@ -1,0 +1,3 @@
+kind = "run"
+description = "2-phase (nonce/toggle) handshake between two modules over a socket: data alternates 0x5A/0xA5 across 8 transfers, none lost or duplicated"
+cycle_limit = 96

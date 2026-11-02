@@ -1,0 +1,170 @@
+// Self-checking `kind = "run"` test for XOR-tree parity.
+//
+// A `Parity` unit computes the even-parity bit of an 8-bit word with
+// a three-level XOR tree built from slices: the two 4-bit halves are
+// XORed, then the two 2-bit halves of that, then the two 1-bit
+// halves.  A harness top drives 16 vectors through a table -- nine
+// even-parity and seven odd-parity words -- each compared against a
+// hand-written golden bit and ANDed into a running `all_ok`; the
+// simulator exits with code 0 only if all 16 vectors passed, and 1
+// otherwise.
+
+import virt
+
+//> Even parity of an 8-bit word, computed by an XOR tree over
+//> slices.
+//>
+//> Folding the two 4-bit halves together with `^` preserves the XOR
+//> of all 8 bits; repeating the fold on `Word[4]` and then `Word[2]`
+//> reduces the whole word to a single bit, which is `0` exactly when
+//> the word has even parity.
+mod Parity {
+    //> Word whose parity is computed.
+    incoming x : Word[8]
+
+    //> Fold of the two 4-bit halves: bit `i` here is `x[8..4][i] ^
+    //> x[4..0][i]`.
+    wire p4 : Word[4] {
+        it := x[8..4] ^ x[4..0]
+    }
+
+    //> Fold of the two 2-bit halves of `p4`.
+    wire p2 : Word[2] {
+        it := p4[4..2] ^ p4[2..0]
+    }
+
+    //> Fold of the two bits of `p2`: the XOR of all 8 bits of `x`.
+    wire p1 : Word[1] {
+        it := p2[2..1] ^ p2[1..0]
+    }
+
+    //> `1` when `x` has an even number of set bits.
+    outgoing even : Bit {
+        it := p1 == 0
+    }
+}
+
+pub mod ParityTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last vector checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod parity of Parity {
+        it.x := vec
+    }
+
+    //> Index of the vector under test, 0 through 15.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdict for the current vector.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && parity.even == expected
+    }
+
+    //> Rises one cycle after the last vector is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 15 {
+                it <= true
+            }
+        }
+    }
+
+    //> Word fed to the unit for the current vector.
+    wire vec : Word[8]
+
+    //> Golden even-parity bit for the current vector, selected by
+    //> `index`.  All 16 rows are covered, so the match is exhaustive.
+    //> The set mixes even-parity words (`0x00`, `0x03`, `0x0f`,
+    //> `0xff`, `0xaa`, `0x55`, `0xc0`, `0xf0`, `0x24`) with
+    //> odd-parity ones (`0x01`, `0x07`, `0xab`, `0x57`, `0x80`,
+    //> `0xfe`, `0x92`).
+    wire expected : Bit
+
+    match index {
+        case 0 {
+            vec := 0x00
+            expected := true
+        }
+        case 1 {
+            vec := 0x01
+            expected := false
+        }
+        case 2 {
+            vec := 0x03
+            expected := true
+        }
+        case 3 {
+            vec := 0x07
+            expected := false
+        }
+        case 4 {
+            vec := 0x0f
+            expected := true
+        }
+        case 5 {
+            vec := 0xff
+            expected := true
+        }
+        case 6 {
+            vec := 0xaa
+            expected := true
+        }
+        case 7 {
+            vec := 0xab
+            expected := false
+        }
+        case 8 {
+            vec := 0x55
+            expected := true
+        }
+        case 9 {
+            vec := 0x57
+            expected := false
+        }
+        case 10 {
+            vec := 0x80
+            expected := false
+        }
+        case 11 {
+            vec := 0xc0
+            expected := true
+        }
+        case 12 {
+            vec := 0xfe
+            expected := false
+        }
+        case 13 {
+            vec := 0xf0
+            expected := true
+        }
+        case 14 {
+            vec := 0x92
+            expected := false
+        }
+        case 15 {
+            vec := 0x24
+            expected := true
+        }
+    }
+}

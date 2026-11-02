@@ -1,0 +1,4 @@
+kind = "run"
+description = "color->red[4..2] is a Word[2] holding bits 3..2 of the red field (Verilog red[3:2]); the top slice index is exclusive"
+cycle_limit = 4
+trace = false

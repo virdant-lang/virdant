@@ -1,0 +1,4 @@
+kind = "run"
+description = "`+` on Word[4] with carry wrap (0xf + 1 = 0); assert wrap-around and several non-wrapping sums"
+cycle_limit = 1
+trace = false

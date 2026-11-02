@@ -1,0 +1,4 @@
+kind = "run"
+description = "One wire consumed by two different outputs; both consumers must see the same value"
+cycle_limit = 14
+trace = false

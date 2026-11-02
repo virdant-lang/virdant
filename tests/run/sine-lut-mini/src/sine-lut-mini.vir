@@ -1,0 +1,99 @@
+//! Self-checking `kind = "run"` test for a 4-entry sine lookup table.
+//!
+//! A `SineLut` unit holds four quarter-wave sine samples (0, 64, 128,
+//! and 255 on `Word[8]`) and drives the one selected by a 2-bit index
+//! via a statement-level `match`.  The harness top walks all 4
+//! indices, one per cycle.  Each sample is compared against a golden
+//! value and every check is ANDed into a running `all_ok`; the
+//! simulator exits with code 0 only if all 4 entries passed, and 1
+//! otherwise.
+
+import virt
+
+//> Four-entry quarter-wave sine lookup table.
+//>
+//> Assert `index` with a table position 0 through 3; `sample` then
+//> shows the sine sample stored at that position.
+mod SineLut {
+    //> Table index, 0 through 3.
+    incoming index : Word[2]
+
+    //> Sine sample stored at `index`.
+    outgoing sample : Word[8]
+
+    match index {
+        case 0 {
+            sample := 0
+        }
+        case 1 {
+            sample := 64
+        }
+        case 2 {
+            sample := 128
+        }
+        case 3 {
+            sample := 255
+        }
+    }
+}
+
+pub mod SineLutTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all 4 entries checked out; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod lut of SineLut {
+        it.index := index
+    }
+
+    //> Index of the entry under test, walking 0 through 3 and then
+    //> wrapping back to 0.
+    reg index : Word[2] on clock {
+        initial it <= 0
+        it <= index + 1
+    }
+
+    //> Golden sine sample for `index`, selected by a `match` on the
+    //> index.  The 4 cases exactly cover `Word[2]`, so the match is
+    //> exhaustive.
+    wire expected : Word[8] {
+        it := match index {
+            case 0 => 0
+            case 1 => 64
+            case 2 => 128
+            case 3 => 255
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the cycle its entry is on the inputs.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && lut.sample == expected
+    }
+
+    //> Number of entries checked so far, 0 through 4.  Holds at 4 so
+    //> that `finished` stays high.
+    reg checked : Word[3] on clock {
+        initial it <= 0
+        when {
+            case checked != 4 {
+                it <= checked + 1
+            }
+        }
+    }
+
+    //> Rises once all 4 entries have been checked, so that the exit
+    //> code sees the final `all_ok`.
+    wire finished : Bit {
+        it := checked == 4
+    }
+}

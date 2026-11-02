@@ -1,0 +1,4 @@
+kind = "run"
+description = "Union `match` with `else` catching unlisted variants"
+cycle_limit = 8
+trace = false

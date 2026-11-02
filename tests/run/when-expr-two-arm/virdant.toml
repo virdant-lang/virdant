@@ -1,0 +1,5 @@
+[project]
+name = "when-expr-two-arm"
+
+[prog]
+top = "when-expr-two-arm::WhenTwoArmTest"

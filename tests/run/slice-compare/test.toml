@@ -1,0 +1,4 @@
+kind = "run"
+description = "Compare a slice of one word with a slice of another (== and <), over equal and unequal vectors"
+cycle_limit = 1
+trace = false

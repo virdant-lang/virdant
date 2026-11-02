@@ -1,0 +1,4 @@
+kind = "run"
+description = "mux(cond, @Valid(x), @Invalid()) on Valid[Word[8]] selects the right variant for both cond values"
+cycle_limit = 5
+trace = false

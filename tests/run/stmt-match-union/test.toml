@@ -1,0 +1,4 @@
+kind = "run"
+description = "Statement-level match on a union type driving different registers per variant, with an empty idle arm"
+cycle_limit = 16
+trace = false

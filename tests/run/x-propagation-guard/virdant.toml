@@ -1,0 +1,5 @@
+[project]
+name = "x-propagation-guard"
+
+[prog]
+top = "x-propagation-guard::XPropGuardTest"

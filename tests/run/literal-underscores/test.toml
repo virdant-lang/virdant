@@ -1,0 +1,4 @@
+kind = "run"
+description = "Underscore separators in decimal, binary, and hex literals (100_000, 0b00_101_11, 0xcafe_babe); assert the ungrouped values"
+cycle_limit = 1
+trace = false

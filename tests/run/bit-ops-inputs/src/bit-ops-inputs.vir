@@ -1,0 +1,159 @@
+//! Self-checking `kind = "run"` test for `&&`, `||`, and `^^` on
+//! `Bit` operands that arrive through `incoming` ports, rather than
+//! as constants.
+//!
+//! A `BitOps` unit takes `a` and `b` on its input ports and computes
+//! all three operators.  A register-based sequencer in the harness
+//! walks the two input registers through all four truth-table rows,
+//! one row per cycle, comparing the unit's outputs against a golden
+//! table selected by the row index.  Each row's verdict is folded
+//! into `all_ok`, and the simulator exits with code 0 only if every
+//! row passed, and 1 otherwise.
+//!
+//! There is no external testbench in a `run` test, so the "driven by
+//! the testbench" aspect is realized by the sequencer: the operands
+//! change over time on the `a`/`b` input ports of `BitOps` instead of
+//! being fixed constants in its body.
+
+import virt
+
+//> Computes the three boolean operators on its input ports.
+mod BitOps {
+    //> First operand.
+    incoming a : Bit
+
+    //> Second operand.
+    incoming b : Bit
+
+    //> Logical AND of the two operands.
+    outgoing and_out : Bit {
+        it := a && b
+    }
+
+    //> Logical OR of the two operands.
+    outgoing or_out : Bit {
+        it := a || b
+    }
+
+    //> Logical XOR of the two operands.
+    outgoing xor_out : Bit {
+        it := a ^^ b
+    }
+}
+
+pub mod BitOpsInputsTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all four rows checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod ops of BitOps {
+        it.a := a
+        it.b := b
+    }
+
+    //> Next truth-table row to load, 0 through 3.  `index` and the
+    //> operand registers advance together from this wire, so `a`/`b`
+    //> always hold the operands of row `index`.
+    wire next : Word[2] {
+        it := mux(index == 3, index, index + 1)
+    }
+
+    //> First operand under test, driven by the sequencer.
+    reg a : Bit on clock {
+        initial it <= false
+        it <= match next {
+            case 0 => false
+            case 1 => false
+            case 2 => true
+            case 3 => true
+        }
+    }
+
+    //> Second operand under test, driven by the sequencer.
+    reg b : Bit on clock {
+        initial it <= false
+        it <= match next {
+            case 0 => false
+            case 1 => true
+            case 2 => false
+            case 3 => true
+        }
+    }
+
+    //> Truth-table row under test, 0 through 3.
+    reg index : Word[2] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= next
+            }
+        }
+    }
+
+    //> Rises the cycle after row 3 is checked, so that `exit` sees the
+    //> final fold into `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 3 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every row's verdict.  Power-on true; each row
+    //> folds its verdict in while the sequencer is stepping.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !finished {
+                it <= it && ok
+            }
+        }
+    }
+
+    //> Golden expectations for row `index`, and the comparison of the
+    //> unit's port-driven outputs against them.  The four cases
+    //> exactly cover `Word[2]`, so the matches are exhaustive.
+    wire exp_and : Bit
+    wire exp_or : Bit
+    wire exp_xor : Bit
+
+    wire ok : Bit {
+        it := (ops.and_out == exp_and)
+            && (ops.or_out == exp_or)
+            && (ops.xor_out == exp_xor)
+    }
+
+    match index {
+        case 0 {
+            exp_and := false
+            exp_or := false
+            exp_xor := false
+        }
+        case 1 {
+            exp_and := false
+            exp_or := true
+            exp_xor := true
+        }
+        case 2 {
+            exp_and := false
+            exp_or := true
+            exp_xor := true
+        }
+        case 3 {
+            exp_and := true
+            exp_or := true
+            exp_xor := false
+        }
+    }
+}

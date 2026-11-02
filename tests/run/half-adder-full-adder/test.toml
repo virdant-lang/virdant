@@ -1,0 +1,4 @@
+kind = "run"
+description = "Half adder instantiated twice inside a full adder (hierarchy + add)"
+cycle_limit = 16
+trace = false

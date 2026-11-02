@@ -1,0 +1,83 @@
+//! Self-checking `kind = "run"` test for `mux()` on an enum type:
+//! `mux(cond, #On, #Off)` must select `#On` when `cond` is true and
+//! `#Off` when `cond` is false.
+//!
+//! `cond` toggles every cycle so both values drive the selection.
+//! Each cycle the selected `Light` is asserted two ways: a
+//! `match`-driven decode and a `cast()` to the underlying `Word[1]`.
+//! Every verdict is folded into a running `all_ok`; the simulator
+//! exits with code 0 only if both `cond` values checked out, and 1
+//! otherwise.
+
+import virt
+
+//> Light state selected by `mux()`.
+enum type Light {
+    Off = 0w1
+    On  = 1w1
+}
+
+pub mod MuxEnumsTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every `mux()` selection checked out; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Condition under test: false on power-on, then toggled every
+    //> cycle so both values drive `mux()`.
+    reg cond : Bit on clock {
+        initial it <= false
+        it <= !it
+    }
+
+    //> The `mux()` selection under test.
+    wire light : Light {
+        it := mux(cond, #On, #Off)
+    }
+
+    //> `match`-driven assertion: `#On` must decode to true and `#Off`
+    //> to false.
+    wire light_decodes : Bit {
+        it := match light {
+            case #On => true
+            case #Off => false
+        }
+    }
+
+    //> `cast()` assertion: `#On` is `1w1` and `#Off` is `0w1`.
+    wire light_bits : Word[1] {
+        it := cast(light)
+    }
+
+    //> The selection must agree with `cond` both by `match` decode
+    //> and by `cast()` bits.
+    wire check : Bit {
+        it := light_decodes == cond && light_bits == mux(cond, 1w1, 0w1)
+    }
+
+    //> Running AND of every check.  Power-on true; the checks fold in
+    //> on every clock edge, covering both `cond` values.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check
+    }
+
+    //> Rises after both `cond` values have been folded into
+    //> `all_ok`, so the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case cond {
+                it <= true
+            }
+        }
+    }
+}

@@ -1,0 +1,134 @@
+//! Self-checking `kind = "run"` test for an enum register driven by a
+//! match over another enum.
+//!
+//! A `Cmd` enum register walks a fixed sequence of command values; a
+//! `State` enum register is driven by a `match` over `Cmd` (with
+//! inner matches over the old state for the advance steps).  The
+//! state sequence is compared against an expected walk cycle by
+//! cycle, each verdict is folded into a running `all_ok`, and the
+//! simulator exits with code 0 only if every cycle matched, and 1
+//! otherwise.
+
+import virt
+
+//> Command sequence driving the state register, one command per
+//> cycle: `Start`, then `GoS0`, two `Advance` cycles, `GoS2`,
+//> `Finish`, and finally `Hold` forever.
+enum type Cmd {
+    Start    = 0w3
+    GoS0     = 1w3
+    Advance1 = 2w3
+    Advance2 = 3w3
+    GoS2     = 4w3
+    Finish   = 5w3
+    Hold     = 6w3
+}
+
+//> States of the register under test, asserted in the order
+//> `Idle`, `Idle`, `S0`, `S1`, `S2`, `S2`, `Done`.
+enum type State {
+    Idle = 0w3
+    S0   = 1w3
+    S1   = 2w3
+    S2   = 3w3
+    Done = 4w3
+}
+
+pub mod EnumInRegTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if the state walk matched the expected sequence;
+    //> `@Valid(1)` if any cycle diverged.  While `@Invalid()`, the
+    //> simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Command register walking the fixed `Cmd` sequence above; each
+    //> value lasts exactly one cycle and `Hold` holds forever.
+    reg cmd : Cmd on clock {
+        initial it <= #Start
+        match it : Cmd {
+            case #Start    { it <= #GoS0 }
+            case #GoS0     { it <= #Advance1 }
+            case #Advance1 { it <= #Advance2 }
+            case #Advance2 { it <= #GoS2 }
+            case #GoS2     { it <= #Finish }
+            case #Finish   { it <= #Hold }
+        }
+    }
+
+    //> The enum register under test, driven by a `match` over the
+    //> `cmd` register.  Cycles with no matching arm leave the state
+    //> unchanged; the `Advance` cycles step `S0` -> `S1` -> `S2` via
+    //> an inner match over the old state.
+    reg state : State on clock {
+        initial it <= #Idle
+        match cmd {
+            case #GoS0 {
+                it <= #S0
+            }
+            case #Advance1 match it : State {
+                case #S0 {
+                    it <= #S1
+                }
+            }
+            case #Advance2 match it : State {
+                case #S1 {
+                    it <= #S2
+                }
+            }
+            case #GoS2 {
+                it <= #S2
+            }
+            case #Finish {
+                it <= #Done
+            }
+        }
+    }
+
+    //> Cycle counter, indexing the expected state sequence.
+    reg cycle : Word[3] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> The state the walk should show on cycle `cycle`: `Idle` for
+    //> the first two cycles, then `S0`, `S1`, `S2` for two cycles,
+    //> then `Done` forever.
+    wire expected_state : State {
+        it := match cycle {
+            case 0 => #Idle
+            case 1 => #Idle
+            case 2 => #S0
+            case 3 => #S1
+            case 4 => #S2
+            case 5 => #S2
+            else => #Done
+        }
+    }
+
+    //> This cycle's verdict: the state register must equal the
+    //> expected state.
+    wire checks_ok : Bit {
+        it := state == expected_state
+    }
+
+    //> Running AND of every check so far.  Power-on true; each
+    //> cycle's verdict is folded in on the clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && checks_ok
+    }
+
+    //> Rises the cycle after the last checked cycle, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= cycle == 6
+    }
+}

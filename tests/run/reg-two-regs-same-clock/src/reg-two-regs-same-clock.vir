@@ -1,0 +1,186 @@
+//! Self-checking `kind = "run"` test for two registers updated on the
+//! same clock edge.
+//!
+//! A `DualCounters` module holds two registers on one clock: `up`
+//! counts 0, 1, 2, ... and `down` counts 9, 8, 7, ....  After a short
+//! warm-up, both step on every clock edge.  The harness top checks,
+//! cycle by cycle against a golden table, that both registers stepped
+//! exactly once per edge and independently: `up` shows the number of
+//! edges taken and `down` shows `9` minus that number (wrapping in
+//! `Word[4]`).  A register that skips an edge, double-steps, absorbs
+//! the other register's update, or gets clobbered by it fails some
+//! entry.  Each verdict is folded into a running `all_ok`; the
+//! simulator exits with code 0 only if every check passed, and 1
+//! otherwise.
+
+import virt
+
+//> Two registers driven on the same clock edge: while `warmup` is
+//> low, `up` increments and `down` decrements in lockstep, each from
+//> its own starting value.
+mod DualCounters {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> While high, both registers are pinned to their starting values
+    //> (0 and 9) so simulator start-up randomness cannot leak into
+    //> the run; both step every edge while low.
+    incoming warmup : Bit
+
+    //> Up-counter: 0, 1, 2, ... wrapping through 0xf.
+    outgoing up_out : Word[4]
+
+    //> Down-counter: 9, 8, 7, ... wrapping through 0xf.
+    outgoing down_out : Word[4]
+
+    reg up : Word[4] on clock {
+        initial it <= 0
+        it <= mux(warmup, 0, it + 1)
+    }
+
+    reg down : Word[4] on clock {
+        initial it <= 9
+        it <= mux(warmup, 9, it - 1)
+    }
+
+    up_out := up
+    down_out := down
+}
+
+pub mod RegTwoRegsTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last cycle checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod dut of DualCounters {
+        it.clock := clock
+        it.warmup := warmup
+    }
+
+    //> Cycle counter, free-running 0 through 15 and then wrapping.
+    reg count : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Rises at the end of cycle 14 (the final checked cycle),
+    //> freezing the fold and validating `exit` on the next cycle.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case count == 14 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the cycle it applies to.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && dut.up_out == expected_up && dut.down_out == expected_down
+            }
+        }
+    }
+
+    //> High on every checked cycle: cycles 3 through 14.  Cycles 0
+    //> through 2 are warm-up and unchecked.
+    wire checking : Bit {
+        it := count >= 3 && !finished
+    }
+
+    //> High on cycles 0 through 2 so both registers are pinned to
+    //> their starting values before any edge is allowed to step
+    //> them.
+    wire warmup : Bit {
+        it := count < 3
+    }
+
+    wire expected_up : Word[4]
+    wire expected_down : Word[4]
+
+    // Golden table: `expected_up[c]` and `expected_down[c]` are the
+    // values the two registers must show on cycle `c`.  Cycles 0..2
+    // are warm-up and unchecked.  From cycle 3 on, both registers
+    // must have stepped exactly once per edge: `up` shows `c - 3`
+    // and `down` shows `9 - (c - 3)`, both in `Word[4]` arithmetic.
+    // The 16 cases exactly cover `Word[4]`, so the match is
+    // exhaustive.
+    match count {
+        case 0 {
+            expected_up := 0
+            expected_down := 9
+        }
+        case 1 {
+            expected_up := 0
+            expected_down := 9
+        }
+        case 2 {
+            expected_up := 0
+            expected_down := 9
+        }
+        case 3 {
+            expected_up := 0
+            expected_down := 9
+        }
+        case 4 {
+            expected_up := 1
+            expected_down := 8
+        }
+        case 5 {
+            expected_up := 2
+            expected_down := 7
+        }
+        case 6 {
+            expected_up := 3
+            expected_down := 6
+        }
+        case 7 {
+            expected_up := 4
+            expected_down := 5
+        }
+        case 8 {
+            expected_up := 5
+            expected_down := 4
+        }
+        case 9 {
+            expected_up := 6
+            expected_down := 3
+        }
+        case 10 {
+            expected_up := 7
+            expected_down := 2
+        }
+        case 11 {
+            expected_up := 8
+            expected_down := 1
+        }
+        case 12 {
+            expected_up := 9
+            expected_down := 0
+        }
+        case 13 {
+            expected_up := 10
+            expected_down := 15
+        }
+        case 14 {
+            expected_up := 11
+            expected_down := 14
+        }
+        case 15 {
+            expected_up := 0
+            expected_down := 9
+        }
+    }
+}

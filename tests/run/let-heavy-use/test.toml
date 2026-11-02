@@ -1,0 +1,4 @@
+kind = "run"
+description = "A `let` bound to a complex expression used three times in the body"
+cycle_limit = 1
+trace = false

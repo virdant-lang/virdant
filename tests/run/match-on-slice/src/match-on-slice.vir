@@ -1,0 +1,112 @@
+//! Self-checking `kind = "run"` test for matching over a slice
+//! expression: `match x[2..0] { case 0 => ... }`.
+//!
+//! A `Slicer` register counts 0 through 7 and wraps; the slice
+//! `x[2..0]` (bits 1..0 — the top index is exclusive) is matched and
+//! each case maps to a distinct code.  A harness top asserts, every
+//! cycle, that the code matches the case selected by the register's
+//! low two bits — including cycles where the register's top bit is 1,
+//! so the match provably sees only the sliced bits.  The simulator
+//! exits with code 0 only if every case checked out, and 1 otherwise.
+
+import virt
+
+//> Register under test: counts 0 through 7 and wraps.
+mod Slicer {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Code selected by matching on the slice `x[2..0]`: `0xa0` for
+    //> case 0, `0xa1` for case 1, `0xa2` for case 2, `0xa3` for
+    //> case 3.
+    outgoing code : Word[8] {
+        it := match x[2..0] {
+            case 0 => 0xa0
+            case 1 => 0xa1
+            case 2 => 0xa2
+            case 3 => 0xa3
+        }
+    }
+
+    reg x : Word[3] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+}
+
+pub mod MatchOnSliceTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every case checked out; `@Valid(1)` if any
+    //> cycle's code diverged from the case selected by the slice.
+    //> While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod slicer of Slicer {
+        it.clock := clock
+    }
+
+    //> Cycle index of the test: 0 through 7.
+    reg step : Word[3] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Rises the cycle after `step` reaches 7, freezing `all_ok` so
+    //> the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case step == 7 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every cycle's verdict.  Power-on true; each
+    //> cycle folds in whether `slicer.code` matched the expected
+    //> code.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && step_ok
+            }
+        }
+    }
+
+    //> High on every cycle before the test has finished.
+    wire checking : Bit {
+        it := !finished
+    }
+
+    //> The two low bits of `step` — the expected value of the slice
+    //> `x[2..0]`, since `slicer.x` and `step` start at 0 and
+    //> increment together.
+    wire exp_low : Word[2] {
+        it := step[2..0]
+    }
+
+    //> The code the match should have produced for this cycle's
+    //> slice value.
+    wire exp_code : Word[8] {
+        it := match exp_low {
+            case 0 => 0xa0
+            case 1 => 0xa1
+            case 2 => 0xa2
+            case 3 => 0xa3
+        }
+    }
+
+    //> Verdict for the current cycle: the observed code must equal
+    //> the expected code for the slice value.
+    wire step_ok : Bit {
+        it := slicer.code == exp_code
+    }
+}

@@ -1,0 +1,5 @@
+[project]
+name = "nested-instantiation-sockets"
+
+[prog]
+top = "nested-instantiation-sockets::NestedSocketsTest"

@@ -1,0 +1,3 @@
+kind = "run"
+description = "4-bit one-hot ring counter: asserts the single bit walks around the register"
+cycle_limit = 14

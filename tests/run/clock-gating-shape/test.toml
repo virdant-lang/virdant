@@ -1,0 +1,3 @@
+kind = "run"
+description = "Register whose enable is a clocked copy of the input, delayed one cycle"
+cycle_limit = 32

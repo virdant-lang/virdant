@@ -1,0 +1,3 @@
+kind = "run"
+description = "8-bit barrel shifter via 3 stages of conditional word() shifts"
+cycle_limit = 10

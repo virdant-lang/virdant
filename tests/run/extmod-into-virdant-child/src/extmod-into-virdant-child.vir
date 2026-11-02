@@ -1,0 +1,166 @@
+//! Self-checking `kind = "run"` test for cross-boundary dataflow
+//! between an `ext mod` and a regular Virdant child module.
+//!
+//! The design writes four distinct words into an external RAM
+//! (`ext mod Mem`, hand-written Verilog in `ext/Mem.sv`; the simulator
+//! models it with the `mem::Mem` builtin) during cycles 0..3, then
+//! reads the same four addresses back during cycles 4..7.  The RAM's
+//! `data_out` feeds `AddOne`, an ordinary (non-`ext`) Virdant child
+//! module that adds one.  Each read-back is compared against a golden
+//! value and ANDed into `all_ok`; the simulator exits with code 0 only
+//! if all four cross-boundary checks passed, and 1 otherwise.
+
+import virt
+import mem
+
+//> Ordinary Virdant child module: adds one to the word read out of
+//> the external RAM, entirely in Virdant.
+mod AddOne {
+    //> Word read from the external RAM (the `ext mod` boundary).
+    incoming data : Word[32]
+
+    //> `data + 1`.
+    outgoing sum : Word[32] {
+        it := data + 1
+    }
+}
+
+pub mod Top for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last read-back checked out; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> External RAM instance (hand-written Verilog behind
+    //> `ext mod Mem`).
+    mod ram of mem::Mem {
+        it.clock := clock
+        it.addr := addr
+        it.data_in := wdata
+        it.read := read
+        it.write := write
+        it.sel := 0xF
+    }
+
+    //> Regular Virdant child module, fed by the external RAM's output:
+    //> the cross-boundary dataflow under test.
+    mod adder of AddOne {
+        it.data := ram.data_out
+    }
+
+    //> Free-running cycle counter, 0 through 15.
+    reg count : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Byte address presented to the RAM.  It walks 0, 4, 8, 12 and
+    //> wraps, so the write phase (cycles 0..3) and the read phase
+    //> (cycles 4..7) visit the same four words.
+    reg addr : Word[16] on clock {
+        initial it <= 0
+        it <= when {
+            case it == 12 => 0
+            else => it + 4
+        }
+    }
+
+    //> High during the write phase (cycles 0..3).
+    wire write : Bit {
+        it := count < 4
+    }
+
+    //> High during the read phase (cycles 4..7 and beyond).
+    wire read : Bit {
+        it := count > 3
+    }
+
+    // Write data, one distinct word per RAM address: whatever the RAM
+    // retains must be distinguishable from its address, so a builtin
+    // that returned the address instead of the stored word could not
+    // pass by accident.
+    wire wdata : Word[32]
+
+    match count {
+        case 0 {
+            wdata := 0x000000C3
+        }
+        case 1 {
+            wdata := 0x0000005A
+        }
+        case 2 {
+            wdata := 0x000000A7
+        }
+        case 3 {
+            wdata := 0x0000003F
+        }
+        else {
+            wdata := 0
+        }
+    }
+
+    // Golden read-back: what `AddOne` should output once the word
+    // written to the matching address is read back through the
+    // `ext mod` boundary and incremented.
+    wire expected : Word[32]
+
+    match count {
+        case 4 {
+            expected := 0x000000C4
+        }
+        case 5 {
+            expected := 0x0000005B
+        }
+        case 6 {
+            expected := 0x000000A8
+        }
+        case 7 {
+            expected := 0x00000040
+        }
+        else {
+            expected := 0
+        }
+    }
+
+    //> High exactly on the four cycles where a read-back check is due.
+    wire checking : Bit {
+        it := started && read && !finished
+    }
+
+    //> False during cycle 0, before any stimulus has been applied.
+    reg started : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> Running AND of every cross-boundary check so far.  Power-on
+    //> true; each read-back folds its verdict in on the cycle after
+    //> its address is presented.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && adder.sum == expected
+            }
+        }
+    }
+
+    //> Rises at the end of the final read-back check (cycle 7), so
+    //> that the exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case read && count == 7 {
+                it <= true
+            }
+        }
+    }
+}

@@ -1,0 +1,4 @@
+kind = "run"
+description = "Slice of a match expression result: word(1w1, match ...)[4..2]"
+cycle_limit = 6
+trace = false

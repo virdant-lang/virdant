@@ -1,0 +1,92 @@
+//! Self-checking `kind = "run"` test for `let` as the body of a
+//! statement-level `when` arm.
+//!
+//! Each `when` arm's body is a `let` whose binding is used to drive a
+//! wire.  Sibling arms bind the same names to different values, so the
+//! wires only come out right if each arm sees its own binding, scoped
+//! to that arm.  Every check is ANDed into a running `all_ok`; the
+//! simulator exits with code 0 only if all checks passed, and 1
+//! otherwise.
+
+import virt
+
+pub mod LetInWhenArmTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Toggles every cycle so both arms of each `when` run.
+    reg sel : Bit on clock {
+        initial it <= true
+        it <= !sel
+    }
+
+    //> Running AND of every check so far.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && checked
+    }
+
+    //> First checked output.  The `case` arm binds `x` to `true`, the
+    //> `else` arm binds `x` to `false`; each arm's body is that `let`,
+    //> driving `a` from its own binding.
+    wire a : Bit
+
+    when {
+        case sel {
+            let x = true {
+                a := x
+            }
+        }
+        else {
+            let x = false {
+                a := x
+            }
+        }
+    }
+
+    //> Second checked output.  The `case` arm binds `hi` and `lo` in
+    //> one `let` and uses both in the arm's driver; the `else` arm
+    //> rebinds `hi` alone to a different value.
+    wire b : Word[2]
+
+    when {
+        case sel {
+            let hi = 3w2,
+                lo = 1w2 {
+                b := hi - lo
+            }
+        }
+        else {
+            let hi = 0w2 {
+                b := hi
+            }
+        }
+    }
+
+    //> `a` follows `sel` and `b` is 2 or 0 exactly when each arm used
+    //> its own `let` bindings.
+    wire checked : Bit {
+        it := a == sel && b == mux(sel, 2, 0)
+    }
+
+    //> Settles true one cycle after `stage1`, so that `all_ok` has
+    //> folded in checks from both `sel` polarities before the exit
+    //> code is sampled.
+    reg stage1 : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> Rises in the last checked cycle.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= stage1
+    }
+
+    //> `@Valid(0)` once both `sel` polarities checked out; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := mux(finished, @Valid(mux(all_ok, 0, 1)), @Invalid())
+    }
+}

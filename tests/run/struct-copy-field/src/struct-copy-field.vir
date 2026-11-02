@@ -1,0 +1,67 @@
+// Self-checking `kind = "run"` test for the struct field-update
+// idiom: building a new struct from an old one's fields with a struct
+// literal (`${ a = p->a, b = !p->b }`), carrying one field over
+// unchanged and updating the other.  Then the simulator exits with
+// code 0.
+
+import virt
+
+//> A two-field struct used to exercise the field-update idiom.
+struct type Pair {
+    a : Word[8]
+    b : Bit
+}
+
+pub mod StructCopyFieldTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> The source struct.  It changes every cycle, so the copy is
+    //> re-exercised against fresh values instead of one frozen value.
+    reg p : Pair on clock {
+        initial it <= ${ a = 0w8, b = false }
+        it <= ${ a = it->a + 1w8, b = !it->b }
+    }
+
+    //> The copy: `a` carried over from `p`, `b` updated as the
+    //> complement of `p`'s field.
+    wire q : Pair {
+        it := ${ a = p->a, b = !p->b }
+    }
+
+    //> The carried-over field must equal the source's field, cycle
+    //> after cycle, even as `p` changes underneath it.
+    wire carried : Bit {
+        it := q->a == p->a
+    }
+
+    //> The updated field must be the complement of the source's
+    //> field, not a stale or aliased copy of it.
+    wire updated : Bit {
+        it := q->b == !p->b
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds its verdicts in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && carried && updated
+    }
+
+    //> Rises after the first cycle, so the exit code only sees the
+    //> final `all_ok` once the copy has been checked against at
+    //> least two different source values.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any failed.
+    //> While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+}

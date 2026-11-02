@@ -1,0 +1,167 @@
+//! Self-checking `kind = "run"` test for the canonical `mux`
+//! self-reference idiom: `it <= mux(reset, 0, it + 1)`.
+//!
+//! A `MuxCounter` counts up every cycle and resets to zero whenever
+//! `reset` is high, expressed with a single `mux` whose false arm
+//! self-references the register through `it`.  A harness top walks 16
+//! stimulus steps -- clear pulses at indices 0, 5, 10, and 14 --
+//! and checks the count against a golden value one cycle after every
+//! step.  Each verdict is folded into a running `all_ok`; the
+//! simulator exits with code 0 only if all 16 checks passed, and 1
+//! otherwise.
+
+import virt
+
+//> Free-running counter that returns to zero on the cycle after a
+//> `reset` pulse, written with the canonical self-referencing `mux`
+//> idiom.  The count wraps modulo 16.
+mod MuxCounter {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> When high, the count becomes 0 on the next clock edge instead
+    //> of incrementing.
+    incoming reset : Bit
+
+    //> Current count, wrapping modulo 16.
+    outgoing count : Word[4]
+
+    reg tick : Word[4] on clock {
+        initial it <= 0
+        it <= mux(reset, 0, it + 1)
+    }
+
+    count := tick
+}
+
+pub mod MuxSelfrefTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last step checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod counter of MuxCounter {
+        it.clock := clock
+        it.reset := reset
+    }
+
+    //> Index of the stimulus step currently being applied; free-runs
+    //> through 0..15 and wraps.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Lags `index` by one cycle: at any cycle after the first it
+    //> holds the step applied the cycle before, selecting the golden
+    //> count to check against.
+    reg check_index : Word[4] on clock {
+        initial it <= 0
+        it <= index
+    }
+
+    //> False only during cycle 0, before any stimulus has been
+    //> applied and hence before any count is meaningful.
+    reg started : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> Rises at the end of the final check (step 15), freezing the
+    //> fold and validating `exit` on the next cycle.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case checking && check_index == 15 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the cycle after its step is applied.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && counter.count == expected
+            }
+        }
+    }
+
+    //> High on every cycle where a check is due: every cycle after
+    //> the first, up to and including the final check of step 15.
+    wire checking : Bit {
+        it := started && !finished
+    }
+
+    //> Clear-style reset condition: pulsed at steps 0, 5, 10, and 14
+    //> so the test covers both counting runs and reset-to-0 edges,
+    //> including a reset immediately after another reset's effect.
+    wire reset : Bit {
+        it := index == 0 || index == 5 || index == 10 || index == 14
+    }
+
+    wire expected : Word[4]
+
+    // Golden counts: `expected[i]` is the counter's value on the
+    // cycle after step `i` is applied.  Exhaustive over `Word[4]`.
+    match check_index {
+        case 0 {
+            expected := 0
+        }
+        case 1 {
+            expected := 1
+        }
+        case 2 {
+            expected := 2
+        }
+        case 3 {
+            expected := 3
+        }
+        case 4 {
+            expected := 4
+        }
+        case 5 {
+            expected := 0
+        }
+        case 6 {
+            expected := 1
+        }
+        case 7 {
+            expected := 2
+        }
+        case 8 {
+            expected := 3
+        }
+        case 9 {
+            expected := 4
+        }
+        case 10 {
+            expected := 0
+        }
+        case 11 {
+            expected := 1
+        }
+        case 12 {
+            expected := 2
+        }
+        case 13 {
+            expected := 3
+        }
+        case 14 {
+            expected := 0
+        }
+        case 15 {
+            expected := 1
+        }
+    }
+}

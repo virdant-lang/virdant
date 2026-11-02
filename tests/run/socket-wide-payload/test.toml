@@ -1,0 +1,4 @@
+kind = "run"
+description = "Socket carrying Word[32] channels; assert wide data crosses without truncation"
+cycle_limit = 20
+trace = false

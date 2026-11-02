@@ -1,0 +1,113 @@
+//! Self-checking `kind = "run"` test for the `incoming { ... }`
+//! forwarding block.
+//!
+//! The harness declares `incoming clock : Clock { a.clock := it;
+//! b.clock := it }`, fanning one incoming port out to two submodule
+//! instances from the declaration site.  Both children are free-running
+//! counters that advance by their own `step` on every clock edge, so
+//! if the forwarded clock reaches them, `a` ticks by 1 and `b` ticks
+//! by 2 every cycle.  Each check is ANDed into a running `all_ok`; the
+//! simulator exits with code 0 only if all 16 checked cycles passed,
+//! and 1 otherwise.
+
+import virt
+
+//> Free-running counter advancing by `step` on every clock edge.
+mod FanCounter {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Amount added to the counter on every clock edge.
+    incoming step : Word[8]
+
+    //> Current count.
+    outgoing count : Word[8]
+
+    reg value : Word[8] on clock {
+        initial it <= 0
+        it <= it + step
+    }
+
+    count := value
+}
+
+pub mod ModFanoutTest for virt::Virt {
+    //> Primary clock, fanned out to both submodule counters from the
+    //> declaration site via the forwarding block.
+    incoming clock : Clock {
+        a.clock := it
+        b.clock := it
+    }
+
+    mod a of FanCounter {
+        it.step := 1
+    }
+
+    mod b of FanCounter {
+        it.step := 2
+    }
+
+    //> `@Valid(0)` after the last cycle checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Number of elapsed cycles.
+    reg cycle_num : Word[5] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Value of `a.count` on the previous cycle.
+    reg prev_a : Word[8] on clock {
+        initial it <= 0
+        it <= a.count
+    }
+
+    //> Value of `b.count` on the previous cycle.
+    reg prev_b : Word[8] on clock {
+        initial it <= 0
+        it <= b.count
+    }
+
+    //> False on cycle 0, where `prev_a`/`prev_b` hold no previous
+    //> counts yet.
+    reg started : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> This cycle's check: `a` advanced by exactly one and `b` by
+    //> exactly two since the previous cycle - i.e. the single
+    //> forwarded clock reached and drove both children.
+    wire check_ok : Bit {
+        it := (a.count == prev_a + 1) && (b.count == prev_b + 2)
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> after the first folds its verdict in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case started {
+                it <= it && check_ok
+            }
+        }
+    }
+
+    //> Rises one cycle after the last check, so that the exit code
+    //> sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case cycle_num == 16 {
+                it <= true
+            }
+        }
+    }
+}

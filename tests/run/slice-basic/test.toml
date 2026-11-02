@@ -1,0 +1,4 @@
+kind = "run"
+description = "x[4..1] is Word[3] and equals bits 3..1 of the input (Verilog x[3:1]); the top slice index is exclusive"
+cycle_limit = 5
+trace = false

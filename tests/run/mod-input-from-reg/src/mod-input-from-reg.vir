@@ -1,0 +1,236 @@
+//! Self-checking `kind = "run"` test for a child module input driven
+//! from a parent register (hierarchy crossing a clocked boundary).
+//!
+//! A `Doubler` child has its single `input` driven by the parent's
+//! `stimulus_reg`, which captures the raw `stimulus` wire once per
+//! clock edge.  The parent asserts two things every checked cycle:
+//! `stimulus_reg` equals the raw stimulus from the previous cycle, and
+//! the child's `doubled` output equals that previous raw stimulus
+//! doubled -- that is, the child sees the registered value, which is a
+//! one-cycle delay relative to the raw stimulus.  The raw stimulus
+//! table has 16 distinct values with consecutive entries (including
+//! the wrap from 15 back to 0) always differing, so if the child were
+//! wrongly fed the unregistered raw stimulus, it would fail every
+//! check.  The simulator exits with code 0 only if every check passed,
+//! and 1 otherwise.
+
+import virt
+
+//> Combinational child whose single input the parent drives from a
+//> register.
+mod Doubler {
+    //> Value registered in the parent one cycle after the raw stimulus.
+    incoming input : Word[8]
+
+    //> `input` doubled (wrapping modulo 256).
+    outgoing doubled : Word[8] {
+        it := input + input
+    }
+}
+
+pub mod ModInputFromRegTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every sampled cycle checked out; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod child of Doubler {
+        it.input := stimulus_reg
+    }
+
+    //> Index of the raw stimulus step currently being presented;
+    //> free-runs through 0..15 and wraps.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Captures the raw `stimulus` once per clock edge.  This register
+    //> is what drives the child's `input`, so the child sees the
+    //> previous cycle's raw stimulus.
+    reg stimulus_reg : Word[8] on clock {
+        initial it <= 0
+        it <= stimulus
+    }
+
+    //> Lags `index` by one cycle: at any cycle after the first it
+    //> holds the stimulus step applied the cycle before, selecting the
+    //> golden (one-cycle-delayed) raw stimulus.
+    reg check_index : Word[4] on clock {
+        initial it <= 0
+        it <= index
+    }
+
+    //> False only during cycle 0, before any stimulus has been
+    //> registered and hence before any check is meaningful.
+    reg started : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> Rises at the end of the final check (step 15), freezing the
+    //> fold and validating `exit` on the next cycle.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case checking && check_index == 15 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the cycle after its step is registered.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && ok
+            }
+        }
+    }
+
+    //> High on every cycle where a check is due: every cycle after the
+    //> first, up to and including the final check of step 15.
+    wire checking : Bit {
+        it := started && !finished
+    }
+
+    wire ok_reg : Bit {
+        it := stimulus_reg == expected
+    }
+
+    //> The child sees the registered value: its output is the previous
+    //> cycle's raw stimulus doubled, not the current raw stimulus
+    //> doubled.
+    wire ok_child : Bit {
+        it := child.doubled == expected + expected
+    }
+
+    wire ok : Bit {
+        it := ok_reg && ok_child
+    }
+
+    //> The raw stimulus for step `index`, presented to the register.
+    wire stimulus : Word[8]
+
+    // Raw stimulus table: 16 distinct values, chosen so consecutive
+    // entries (including the wrap from 15 back to 0) always differ,
+    // so a wrongly-unclocked crossing would fail every check.
+    // Exhaustive over `Word[4]`.
+    match index {
+        case 0 {
+            stimulus := 3
+        }
+        case 1 {
+            stimulus := 200
+        }
+        case 2 {
+            stimulus := 9
+        }
+        case 3 {
+            stimulus := 240
+        }
+        case 4 {
+            stimulus := 17
+        }
+        case 5 {
+            stimulus := 1
+        }
+        case 6 {
+            stimulus := 128
+        }
+        case 7 {
+            stimulus := 65
+        }
+        case 8 {
+            stimulus := 77
+        }
+        case 9 {
+            stimulus := 14
+        }
+        case 10 {
+            stimulus := 255
+        }
+        case 11 {
+            stimulus := 8
+        }
+        case 12 {
+            stimulus := 130
+        }
+        case 13 {
+            stimulus := 2
+        }
+        case 14 {
+            stimulus := 90
+        }
+        case 15 {
+            stimulus := 199
+        }
+    }
+
+    //> Golden one-cycle-delayed raw stimulus: `expected[check_index]`
+    //> is the raw stimulus registered by step `check_index`, so on the
+    //> cycle after that step it is both the register's value and what
+    //> the child's input carries.  Exhaustive over `Word[4]`.
+    wire expected : Word[8]
+
+    match check_index {
+        case 0 {
+            expected := 3
+        }
+        case 1 {
+            expected := 200
+        }
+        case 2 {
+            expected := 9
+        }
+        case 3 {
+            expected := 240
+        }
+        case 4 {
+            expected := 17
+        }
+        case 5 {
+            expected := 1
+        }
+        case 6 {
+            expected := 128
+        }
+        case 7 {
+            expected := 65
+        }
+        case 8 {
+            expected := 77
+        }
+        case 9 {
+            expected := 14
+        }
+        case 10 {
+            expected := 255
+        }
+        case 11 {
+            expected := 8
+        }
+        case 12 {
+            expected := 130
+        }
+        case 13 {
+            expected := 2
+        }
+        case 14 {
+            expected := 90
+        }
+        case 15 {
+            expected := 199
+        }
+    }
+}

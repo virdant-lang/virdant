@@ -1,0 +1,179 @@
+// A `kind = "run"` self-checking test for a socket with TWO type
+// parameters: `socket Bus[A : Type, B : Type]`.  Each instantiation is
+// used with a request channel and a response channel of DIFFERENT
+// widths, in both orderings:
+//
+//   Bus[Word[8], Word[4]]  — request Word[8], response Word[4]
+//   Bus[Word[4], Word[8]]  — request Word[4], response Word[8]
+//
+// A client mod drives `req` from a vector; a server mod responds on
+// `rsp` (low nibble, or zero-extended, depending on the direction).
+// Both directions are wired through `:=:` and the data that comes back
+// is checked against a golden value.  The simulator exits with code 0
+// only if every vector checked out in both directions, and 1 otherwise.
+
+import virt
+
+//> A two-parameter generic socket: the request and response channels
+//> carry independent types `A` and `B`, so a socket instance can be
+//> asymmetric (wide request, narrow response) or the reverse.
+socket Bus[A : Type, B : Type] {
+    cosi req : A
+    soci rsp : B
+}
+
+//> Client side of the wide-request instantiation: drives an 8-bit
+//> request and ignores the 4-bit response.
+mod Req8to4 {
+    incoming d : Word[8]
+    client socket busif of Bus[Word[8], Word[4]] {
+        it.req := d
+    }
+    unused busif.rsp
+}
+
+//> Server side of the wide-request instantiation: answers an 8-bit
+//> request with its low nibble on the 4-bit response channel.
+mod Rsp8to4 {
+    server socket busif of Bus[Word[8], Word[4]] {
+        it.rsp := it.req[4..0]
+    }
+}
+
+//> Client side of the narrow-request instantiation: drives a 4-bit
+//> request and ignores the 8-bit response.
+mod Req4to8 {
+    incoming d : Word[4]
+    client socket busif of Bus[Word[4], Word[8]] {
+        it.req := d
+    }
+    unused busif.rsp
+}
+
+//> Server side of the narrow-request instantiation: answers a 4-bit
+//> request with its zero-extended value on the 8-bit response channel.
+mod Rsp4to8 {
+    server socket busif of Bus[Word[4], Word[8]] {
+        it.rsp := zext(it.req)
+    }
+}
+
+pub mod Top for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    mod req8 of Req8to4 {
+        it.d := vec8
+    }
+    mod rsp8 of Rsp8to4 {
+        req8.busif :=: it.busif
+    }
+    mod req4 of Req4to8 {
+        it.d := vec4
+    }
+    mod rsp4 of Rsp4to8 {
+        req4.busif :=: it.busif
+    }
+
+    wire out4 : Word[4] {
+        it := rsp8.busif.rsp
+    }
+    wire out8 : Word[8] {
+        it := rsp4.busif.rsp
+    }
+
+    //> Index of the vector under test, 0 through 7.
+    reg index : Word[3] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    wire vec8 : Word[8]
+    wire exp4 : Word[4]
+    wire vec4 : Word[4]
+    wire exp8 : Word[8]
+
+    match index {
+        case 0 {
+            vec8 := 0
+            exp4 := 0
+            vec4 := 0
+            exp8 := 0
+        }
+        case 1 {
+            vec8 := 0xAB
+            exp4 := 0xB
+            vec4 := 1
+            exp8 := 1
+        }
+        case 2 {
+            vec8 := 1
+            exp4 := 1
+            vec4 := 15
+            exp8 := 15
+        }
+        case 3 {
+            vec8 := 0xF0
+            exp4 := 0
+            vec4 := 9
+            exp8 := 9
+        }
+        case 4 {
+            vec8 := 0x5A
+            exp4 := 0xA
+            vec4 := 7
+            exp8 := 7
+        }
+        case 5 {
+            vec8 := 0x93
+            exp4 := 3
+            vec4 := 12
+            exp8 := 12
+        }
+        case 6 {
+            vec8 := 255
+            exp4 := 15
+            vec4 := 2
+            exp8 := 2
+        }
+        case 7 {
+            vec8 := 0xC4
+            exp4 := 4
+            vec4 := 8
+            exp8 := 8
+        }
+    }
+
+    //> True when the low nibble came back through the wide-request
+    //> socket AND the zero-extended value came back through the
+    //> narrow-request socket, both unchanged from the golden values.
+    wire ok : Bit {
+        it := out4 == exp4 && out8 == exp8
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds its verdict in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && ok
+    }
+
+    //> Rises at the edge that ends the last vector's cycle, so that
+    //> `all_ok` has folded in every check by the time the exit code is
+    //> read.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 7 {
+                it <= true
+            }
+        }
+    }
+
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+}

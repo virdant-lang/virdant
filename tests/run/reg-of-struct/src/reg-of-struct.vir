@@ -1,0 +1,88 @@
+// Self-checking `kind = "run"` test for a register of struct type:
+// `reg c : Color { it <= ... }`.  The struct register starts at zero,
+// then each of its fields is written in a separate cycle while the
+// untouched fields carry over from `it`.  After a few cycles every
+// field projection is checked against its golden value, and the
+// simulator exits with code 0 only if all checks passed, and 1
+// otherwise.
+
+import virt
+
+//> RGB color: the struct type held by the register under test.
+struct type Color {
+    red   : Word[8]
+    green : Word[8]
+    blue  : Word[8]
+}
+
+pub mod Top for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once every check has passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case cycle == 3 => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Cycles elapsed since reset, 0 through 3.
+    reg cycle : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Register of struct type.  Each field is written in its own
+    //> cycle, reconstructing the struct with a literal while the
+    //> untouched fields carry over from `it`.
+    reg c : Color on clock {
+        initial it <= ${
+            red = 0,
+            green = 0,
+            blue = 0,
+        }
+        when {
+            case cycle == 0 {
+                it <= ${
+                    red = 10,
+                    green = it->green,
+                    blue = it->blue,
+                }
+            }
+            case cycle == 1 {
+                it <= ${
+                    red = it->red,
+                    green = 20,
+                    blue = it->blue,
+                }
+            }
+            case cycle == 2 {
+                it <= ${
+                    red = it->red,
+                    green = it->green,
+                    blue = 30,
+                }
+            }
+        }
+    }
+
+    //> Field projections off the struct register.
+    wire red : Word[8] {
+        it := c->red
+    }
+
+    wire green : Word[8] {
+        it := c->green
+    }
+
+    wire blue : Word[8] {
+        it := c->blue
+    }
+
+    //> By cycle 3 all three fields must have taken their writes.
+    wire all_ok : Bit {
+        it := red == 10w8 && green == 20w8 && blue == 30w8
+    }
+}

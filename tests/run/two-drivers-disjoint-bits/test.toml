@@ -1,0 +1,3 @@
+kind = "run"
+description = "One word register recombined from two disjoint half-word drivers via word()"
+cycle_limit = 40

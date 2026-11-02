@@ -1,0 +1,4 @@
+kind = "run"
+description = "Outgoing port driven `dontcare`: sim runs, value unasserted"
+cycle_limit = 4
+trace = false

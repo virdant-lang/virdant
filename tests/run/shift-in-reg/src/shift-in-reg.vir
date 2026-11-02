@@ -1,0 +1,250 @@
+//! Self-checking `kind = "run"` test for a serial-in shift register.
+//!
+//! A `ShiftInReg` unit shifts one bit into its register every cycle:
+//! `it <= word(it[8..1], serial_in)` (serial bit enters at the LSB,
+//! the whole word slides one bit up, and the oldest bit falls off the
+//! top).  A harness top drives a fixed 16-bit serial pattern through a
+//! sequencer and checks the full 8-bit register contents cycle by
+//! cycle: the 8 fill steps, the 8 steady-state windows, and 4 flush
+//! cycles where the last bits of the stream emerge and are lost.  Each
+//! check is ANDed into a running `all_ok`; the simulator exits with
+//! code 0 only if every cycle checked out, and 1 otherwise.
+
+import virt
+
+//> Serial-in shift register: one bit of `serial_in` is absorbed at
+//> the LSB every cycle and the previous contents slide up one bit.
+//> `out` always shows the current register contents so the harness
+//> can check them cycle by cycle.
+mod ShiftInReg {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Serial bit absorbed at the LSB on every clock edge.
+    incoming serial_in : Bit
+
+    //> Current 8-bit register contents.
+    outgoing out : Word[8]
+
+    reg shift : Word[8] on clock {
+        initial it <= 0
+        it <= word(it[8..1], serial_in)
+    }
+
+    out := shift
+}
+
+pub mod ShiftInRegTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every cycle of the schedule checked out;
+    //> `@Valid(1)` if any register snapshot diverged from the
+    //> expected bit stream.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod dut of ShiftInReg {
+        it.clock := clock
+        it.serial_in := serial_in
+    }
+
+    //> Cycle counter driving the whole schedule: cycles 0-9 are an
+    //> idle warm-up (serial low, flushing any power-on garbage out of
+    //> the shift register), cycles 10-25 clock the 16-bit pattern in
+    //> one bit per cycle, and cycles 26-30 flush the tail of the
+    //> stream out of the top.
+    reg index : Word[5] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Running AND of every cycle-by-cycle check so far.  Power-on
+    //> true; checks only fold in while `checking` is high, so the
+    //> warm-up cycles never poison the verdict.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && (!checking || dut.out == expected)
+    }
+
+    //> Rises one cycle after the last check (cycle 30) is folded in,
+    //> so that the exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 30 {
+                it <= true
+            }
+        }
+    }
+
+    //> High on every cycle whose `dut.out` snapshot is checked
+    //> against `expected`: cycles 11-30.
+    wire checking : Bit {
+        it := index >= 11 && index <= 30
+    }
+
+    wire serial_in : Bit
+    wire expected : Word[8]
+
+    // Sequencer and golden table, selected by `index`.  The serial
+    // pattern is 1,1,0,1,0,0,1,0,1,0,1,1,0,0,0,1 (indices 10-25);
+    // `expected` is the register contents observed one cycle after
+    // each pattern bit is absorbed, then the flush values as the
+    // stream slides out of the top.
+    match index {
+        // Idle warm-up: serial low, no checks.
+        case 0 {
+            serial_in := false
+            expected := dontcare
+        }
+        case 1 {
+            serial_in := false
+            expected := dontcare
+        }
+        case 2 {
+            serial_in := false
+            expected := dontcare
+        }
+        case 3 {
+            serial_in := false
+            expected := dontcare
+        }
+        case 4 {
+            serial_in := false
+            expected := dontcare
+        }
+        case 5 {
+            serial_in := false
+            expected := dontcare
+        }
+        case 6 {
+            serial_in := false
+            expected := dontcare
+        }
+        case 7 {
+            serial_in := false
+            expected := dontcare
+        }
+        case 8 {
+            serial_in := false
+            expected := dontcare
+        }
+        case 9 {
+            serial_in := false
+            expected := dontcare
+        }
+        // Pattern bit 0 (1) absorbed at the edge ending this cycle.
+        case 10 {
+            serial_in := true
+            expected := dontcare
+        }
+        // Register now holds 0b00000001.
+        case 11 {
+            serial_in := true
+            expected := 0x01
+        }
+        // Pattern bit 1 (1) absorbed: 0b00000011.
+        case 12 {
+            serial_in := false
+            expected := 0x03
+        }
+        // Pattern bit 2 (0) absorbed: 0b00000110.
+        case 13 {
+            serial_in := true
+            expected := 0x06
+        }
+        // Pattern bit 3 (1) absorbed: 0b00001101.
+        case 14 {
+            serial_in := false
+            expected := 0x0d
+        }
+        // Pattern bit 4 (0) absorbed: 0b00011010.
+        case 15 {
+            serial_in := false
+            expected := 0x1a
+        }
+        // Pattern bit 5 (0) absorbed: 0b00110100.
+        case 16 {
+            serial_in := true
+            expected := 0x34
+        }
+        // Pattern bit 6 (1) absorbed: 0b01101001.
+        case 17 {
+            serial_in := false
+            expected := 0x69
+        }
+        // Pattern bit 7 (0) absorbed: 0b11010010.
+        case 18 {
+            serial_in := true
+            expected := 0xd2
+        }
+        // Pattern bit 8 (1) absorbed: 0b10100101 (bit 7 of the first
+        // byte has slid off the top).
+        case 19 {
+            serial_in := false
+            expected := 0xa5
+        }
+        // Pattern bit 9 (0) absorbed: 0b01001010.
+        case 20 {
+            serial_in := true
+            expected := 0x4a
+        }
+        // Pattern bit 10 (1) absorbed: 0b10010101.
+        case 21 {
+            serial_in := true
+            expected := 0x95
+        }
+        // Pattern bit 11 (1) absorbed: 0b00101011.
+        case 22 {
+            serial_in := false
+            expected := 0x2b
+        }
+        // Pattern bit 12 (0) absorbed: 0b01010110.
+        case 23 {
+            serial_in := false
+            expected := 0x56
+        }
+        // Pattern bit 13 (0) absorbed: 0b10101100.
+        case 24 {
+            serial_in := false
+            expected := 0xac
+        }
+        // Pattern bit 14 (0) absorbed: 0b01011000.
+        case 25 {
+            serial_in := true
+            expected := 0x58
+        }
+        // Pattern bit 15 (1) absorbed: 0b10110001.
+        case 26 {
+            serial_in := false
+            expected := 0xb1
+        }
+        // Flush: serial low, stream slides out of the top.
+        case 27 {
+            serial_in := false
+            expected := 0x62
+        }
+        case 28 {
+            serial_in := false
+            expected := 0xc4
+        }
+        case 29 {
+            serial_in := false
+            expected := 0x88
+        }
+        case 30 {
+            serial_in := false
+            expected := 0x10
+        }
+        case 31 {
+            serial_in := false
+            expected := dontcare
+        }
+    }
+}

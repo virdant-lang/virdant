@@ -1,0 +1,101 @@
+//! Self-checking `kind = "run"` test for equality comparison on
+//! enum values: `phase == #Red`.
+//!
+//! A four-variant `Phase` enum is compared against the `#Red` literal
+//! and against other enum values, asserting that the comparison is
+//! true only when both sides hold the same variant.  Every verdict is
+//! folded into a running `all_ok`; the simulator exits with code 0
+//! only if all checks passed, and 1 otherwise.
+
+import virt
+
+//> Traffic-light phase with nontrivial, sparse encodings: `Off`
+//> covers the all-zero pattern and `Red` the single high bit at
+//> position 2.
+enum type Phase {
+    Off    = 0w3
+    Green  = 1w3
+    Yellow = 2w3
+    Red    = 4w3
+}
+
+pub mod EnumCompareTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every comparison checked out; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> The four variants, each held in its own wire so every
+    //> comparison has an enum-typed left-hand side.
+    wire off : Phase {
+        it := #Off
+    }
+
+    wire green : Phase {
+        it := #Green
+    }
+
+    wire yellow : Phase {
+        it := #Yellow
+    }
+
+    wire red : Phase {
+        it := #Red
+    }
+
+    //> The equal case: `#Red == #Red` must hold, in both operand
+    //> orders.
+    wire red_eq_red : Bit {
+        it := red == #Red && #Red == red
+    }
+
+    //> The unequal cases: every other variant must compare unequal to
+    //> `#Red`, in both operand orders.
+    wire off_ne_red : Bit {
+        it := !(off == #Red) && !(#Red == off)
+    }
+
+    wire green_ne_red : Bit {
+        it := !(green == #Red) && !(#Red == green)
+    }
+
+    wire yellow_ne_red : Bit {
+        it := !(yellow == #Red) && !(#Red == yellow)
+    }
+
+    //> Distinct variants must also compare unequal to each other.
+    wire green_ne_yellow : Bit {
+        it := !(green == yellow)
+    }
+
+    //> All comparisons must behave as asserted.
+    wire checks_ok : Bit {
+        it := red_eq_red
+            && off_ne_red
+            && green_ne_red
+            && yellow_ne_red
+            && green_ne_yellow
+    }
+
+    //> Running AND of every check.  Power-on true; the checks fold in
+    //> on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && checks_ok
+    }
+
+    //> Rises on the first clock edge, after the checks are folded
+    //> into `all_ok`, so the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

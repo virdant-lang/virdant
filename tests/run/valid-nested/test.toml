@@ -1,0 +1,4 @@
+kind = "run"
+description = "Valid[Valid[Word[4]]]: double wrap and double unwrap, all Valid/Invalid combinations"
+cycle_limit = 1
+trace = false

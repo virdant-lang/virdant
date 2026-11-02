@@ -1,0 +1,212 @@
+//! Self-checking `kind = "run"` test for heavy `unused` usage.
+//!
+//! The harness carries many unused wires, unused outgoing ports of an
+//! instance, and unused socket channels on *both* socket directions
+//! (a server ignoring a request channel at module scope, and a client
+//! ignoring a response channel inside its socket driver block), each
+//! suppressed with its own `unused` declaration.  Alongside all of
+//! that, the used channels and ports are checked on every cycle: the
+//! design must build cleanly and the used behavior must be correct.
+//! Every check is ANDed into a running `all_ok`; the simulator exits
+//! with code 0 only if all checks passed, and 1 otherwise.
+
+import virt
+
+//> Socket under test: two client-to-server request channels (`addr`
+//> and `sel`) and two server-to-client response channels (`rsp` and
+//> `aux`), so that each side has a channel to ignore.
+socket Bus {
+    cosi addr : Word[8]
+    cosi sel : Bit
+    soci rsp : Word[8]
+    soci aux : Word[4]
+}
+
+//> Server side of the socket under test: answers `addr` with a
+//> channel-distinct transform and drives `aux`; the `sel` request
+//> channel is deliberately never consumed and suppressed with
+//> `unused link.sel`.
+mod Peer {
+    //> Server end of the socket: both response channels are driven.
+    server socket link of Bus {
+        it.rsp := rsp
+        it.aux := addr_low
+    }
+
+    // The request channel is deliberately never consumed.
+    unused link.sel
+
+    //> The used response: `addr + 1`, computed from `addr` alone --
+    //> `sel` is ignored, so the transform must never depend on it.
+    wire rsp : Word[8] {
+        it := link.addr + 1w8
+    }
+
+    //> The ignored-by-client response: the low nibble of `addr`.
+    wire addr_low : Word[4] {
+        it := link.addr[4..0]
+    }
+}
+
+//> Helper module with more outgoing ports than its consumer needs:
+//> `kept_out` is read by the harness, while `spare_a` and `spare_b`
+//> are suppressed with `unused` in the instantiation.
+mod Extras {
+    //> Port the harness actually consumes.
+    outgoing kept_out : Word[8] {
+        it := 0xabw8
+    }
+
+    //> Port the harness ignores.
+    outgoing spare_a : Word[8] {
+        it := 0x11w8
+    }
+
+    //> Another port the harness ignores.
+    outgoing spare_b : Word[8] {
+        it := 0x22w8
+    }
+}
+
+//> Self-checking harness: owns the client end of the socket under
+//> test, the helper instance, and many unused wires; checks the used
+//> behavior on every cycle.
+mod Stim {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case done => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Helper instance whose spare outgoing ports are suppressed.
+    mod extras of Extras {
+        unused it.spare_a
+        unused it.spare_b
+    }
+
+    //> Client end of the socket under test: both request channels go
+    //> out, `rsp` comes back and is checked, `aux` is ignored with
+    //> `unused it.aux` inside the driver block.
+    client socket link of Bus {
+        it.addr := addr
+        it.sel := sel
+        unused it.aux
+    }
+
+    //> Request address, cycling 0 through 15.
+    reg addr : Word[8] on clock {
+        initial it <= 0
+        when {
+            case !done {
+                it <= it + 1w8
+            }
+        }
+    }
+
+    //> Request selector bit, toggling every cycle; the server ignores
+    //> it, so it must never influence the response.
+    reg sel : Bit on clock {
+        initial it <= false
+        when {
+            case !done {
+                it <= !it
+            }
+        }
+    }
+
+    //> The used response channel must carry the server's transform of
+    //> `addr` on every cycle.
+    wire ok_rsp : Bit {
+        it := link.rsp == addr + 1w8
+    }
+
+    //> The used port of the helper must carry its constant.
+    wire ok_port : Bit {
+        it := extras.kept_out == 0xabw8
+    }
+
+    //> Unused wire: driven from `addr` but never read.
+    wire unused_sum : Word[8] {
+        it := addr + 0x11w8
+    }
+
+    //> Unused wire: driven from the used socket channel but never
+    //> read.
+    wire unused_copy : Word[8] {
+        it := link.rsp
+    }
+
+    //> Unused wire: a derived flag that nothing consumes.
+    wire unused_flag : Bit {
+        it := sel && addr == 0w8
+    }
+
+    //> Unused wire: a constant that nothing consumes.
+    wire unused_const : Word[4] {
+        it := 0x3w4
+    }
+
+    unused unused_sum
+    unused unused_copy
+    unused unused_flag
+    unused unused_const
+
+    //> Cycle counter, 0 through 15.
+    reg cycles : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !done {
+                it <= it + 1w4
+            }
+        }
+    }
+
+    //> Rises once 16 cycles have been checked; freezes `all_ok` and
+    //> lets `exit` become `@Valid`.
+    reg done : Bit on clock {
+        initial it <= false
+        when {
+            case cycles == 15w4 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds both verdicts in until `done`.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !done {
+                it <= it && ok_rsp && ok_port
+            }
+        }
+    }
+}
+
+pub mod UnusedHeavyTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Forwards the verdict computed by the harness.
+    outgoing exit : Valid[Word[8]] {
+        it := stim.exit
+    }
+
+    //> Harness module.
+    mod stim of Stim {
+        it.clock := clock
+    }
+
+    //> Server peer of the socket under test.
+    mod peer of Peer
+
+    // The client and server socket ends meet through one bulk connect.
+    stim.link :=: peer.link
+}

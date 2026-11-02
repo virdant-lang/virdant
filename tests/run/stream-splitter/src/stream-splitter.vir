@@ -1,0 +1,255 @@
+//! Self-checking `kind = "run"` test for a stream splitter.
+//!
+//! `StreamSplitter` demuxes one `Pipe`-style valid/ready input stream
+//! to two output streams by a header bit carried with each item: the
+//! top bit of the 8-bit input word selects the output, and the low 7
+//! bits are the payload passed through unchanged.  The harness sends
+//! 8 items with alternating route bits after an idle warm-up period,
+//! consumes both outputs, and asserts the routing: every item must
+//! land on exactly the output its header bit selects, with its payload
+//! intact, and nothing may be dropped (4 items on each output).  Every
+//! verdict is ANDed into a running `all_ok`, and the simulator exits
+//! with code 0 only if every item was routed correctly, and 1
+//! otherwise.
+
+import virt
+
+//> Local valid/ready handshake socket, structurally identical to the
+//> builtin `Pipe`: the producer drives `data`, the consumer drives
+//> `ready`.
+socket Pipe[T : Type] {
+    cosi data  : Valid[T]
+    soci ready : Bit
+}
+
+//> Demuxes one `Pipe` input stream to two output streams by a header
+//> bit.
+//>
+//> The header is the top bit of the 8-bit input word: `0` routes the
+//> item to `out_a`, `1` routes it to `out_b`.  The low 7 bits are the
+//> payload, passed through unchanged.  The splitter is purely
+//> combinational: an accepted input transfer appears on the selected
+//> output in the same cycle, and `inp.ready` is the selected output's
+//> `ready`.
+mod StreamSplitter {
+    //> Upstream input stream.  The header bit routes each item.
+    server socket inp of Pipe[Word[8]] {
+        it.ready := inp_fires
+    }
+
+    //> Output stream for items whose header bit is `0`.
+    client socket out_a of Pipe[Word[7]] {
+        it.data := when {
+            case inp_fires && !route => @Valid(item_data)
+            else => @Invalid()
+        }
+    }
+
+    //> Output stream for items whose header bit is `1`.
+    client socket out_b of Pipe[Word[7]] {
+        it.data := when {
+            case inp_fires && route => @Valid(item_data)
+            else => @Invalid()
+        }
+    }
+
+    //> The incoming item as a plain word (`0` when `@Invalid()`, which
+    //> never reaches an output because `inp_fires` is false then).
+    wire in_item : Word[8] {
+        it := match inp.data {
+            case @Valid(item) => item
+            case @Invalid() => 0
+        }
+    }
+
+    //> The header bit carried with the incoming item: its top bit.
+    wire route : Bit {
+        it := in_item[7]
+    }
+
+    //> The payload carried with the incoming item: its low 7 bits.
+    wire item_data : Word[7] {
+        it := in_item[7..0]
+    }
+
+    //> An input transfer lands this cycle: incoming payload with the
+    //> selected output ready.
+    wire inp_fires : Bit {
+        it := match inp.data {
+            case @Valid(dontcare) => mux(route, out_b.ready, out_a.ready)
+            case @Invalid() => false
+        }
+    }
+}
+
+pub mod StreamSplitterTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all 8 items were routed correctly with
+    //> nothing dropped; `@Valid(1)` if any check failed.  While
+    //> `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok && counts_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod splitter of StreamSplitter {
+        it.inp.data := in_data
+        it.out_a.ready := true
+        it.out_b.ready := true
+    }
+
+    //> Warm-up counter, free-running 0 through 15.  Keeps the test
+    //> idle for many cycles before stimulus begins, so the checks are
+    //> independent of the first clock edge.
+    reg warm : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Latches once `warm == 8` has been observed; `warm_seen` then
+    //> stays true as `warm` wraps.
+    reg warm_seen : Bit on clock {
+        initial it <= false
+        it <= it || warm == 8
+    }
+
+    //> Latches one cycle after `warm_seen`, so stimulus can only
+    //> begin after two clean edges of warm-up counting.
+    reg warm_seen2 : Bit on clock {
+        initial it <= false
+        it <= it || warm_seen
+    }
+
+    //> Rises once the warm-up has settled, and stays high: the
+    //> producer runs for the rest of the test.
+    reg enabled : Bit on clock {
+        initial it <= false
+        it <= it || (warm_seen2 && warm == 12)
+    }
+
+    //> True while the producer still has items to send.
+    wire sending : Bit {
+        it := enabled && send_index != 8
+    }
+
+    //> Header bit for item `send_index`: its low bit, so the route
+    //> alternates 0, 1, 0, 1, ...  across the 8 items.
+    wire send_route : Bit {
+        it := send_index[0]
+    }
+
+    //> Producer payload: item `send_index`, header in the top bit,
+    //> payload in the low 7 bits.
+    wire in_data : Valid[Word[8]] {
+        it := when {
+            case sending => @Valid(word(send_route, zext(send_index) : Word[7]))
+            else => @Invalid()
+        }
+    }
+
+    //> An input transfer lands this cycle: the splitter accepts the
+    //> offered item.
+    wire in_fires : Bit {
+        it := sending && splitter.inp.ready
+    }
+
+    //> Index of the next item to send, 0 through 8.  Advances only on
+    //> an accepted transfer.
+    reg send_index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case in_fires {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> An item is consumed on output `a` this cycle.
+    wire fires_a : Bit {
+        it := match splitter.out_a.data {
+            case @Valid(dontcare) => true
+            case @Invalid() => false
+        }
+    }
+
+    //> An item is consumed on output `b` this cycle.
+    wire fires_b : Bit {
+        it := match splitter.out_b.data {
+            case @Valid(dontcare) => true
+            case @Invalid() => false
+        }
+    }
+
+    //> Number of items consumed on output `a`, 0 through 4.
+    reg cnt_a : Word[3] on clock {
+        initial it <= 0
+        when {
+            case fires_a {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Number of items consumed on output `b`, 0 through 4.
+    reg cnt_b : Word[3] on clock {
+        initial it <= 0
+        when {
+            case fires_b {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> The item consumed on output `a` is the `cnt_a`-th even-indexed
+    //> item, so its payload must be `2 * cnt_a`.
+    wire recv_ok_a : Bit {
+        it := match splitter.out_a.data {
+            case @Valid(data) => data == zext(cnt_a + cnt_a)
+            case @Invalid() => false
+        }
+    }
+
+    //> The item consumed on output `b` is the `cnt_b`-th odd-indexed
+    //> item, so its payload must be `2 * cnt_b + 1`.
+    wire recv_ok_b : Bit {
+        it := match splitter.out_b.data {
+            case @Valid(data) => data == zext(cnt_b + cnt_b + 1)
+            case @Invalid() => false
+        }
+    }
+
+    //> Nothing dropped: exactly 4 of the 8 items landed on each
+    //> output.
+    wire counts_ok : Bit {
+        it := cnt_a == 4 && cnt_b == 4
+    }
+
+    //> Running AND of every check so far.  Power-on true; each
+    //> verdict folds in on the cycle the item is consumed.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !enabled {
+                it <= true
+            }
+            case fires_a {
+                it <= it && recv_ok_a
+            }
+            case fires_b {
+                it <= it && recv_ok_b
+            }
+        }
+    }
+
+    //> Rises the cycle after the last item is accepted, so that
+    //> `all_ok` has folded in every verdict by the time the exit code
+    //> is read.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= it || send_index == 8
+    }
+}

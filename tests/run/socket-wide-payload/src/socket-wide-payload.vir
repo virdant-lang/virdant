@@ -1,0 +1,138 @@
+//! Self-checking `kind = "run"` test for a socket carrying `Word[32]`
+//! channels.
+//!
+//! An echo server sits behind the `Wide` socket.  The harness top
+//! drives eight distinct 32-bit vectors onto the request channel --
+//! including values that exercise every bit (all-ones, the MSB alone,
+//! `0xdeadbeef`) -- and checks that the value echoed back on the
+//! response channel is bit-for-bit identical.  Any truncated or
+//! corrupted bit fails the check, and the simulator exits with code 1;
+//! otherwise 0.
+
+import virt
+
+//> A socket whose request and response channels are both 32 bits wide.
+socket Wide {
+    cosi req : Word[32]
+    soci rsp : Word[32]
+}
+
+//> Echo server for the `Wide` socket.
+//>
+//> Drives the response channel with whatever appears on the request
+//> channel, so the harness can check that wide data crosses the socket
+//> bit-for-bit.
+mod WideEcho {
+    server socket busif of Wide {
+        it.rsp := it.req
+    }
+}
+
+//> Client side of the `Wide` socket.
+//>
+//> Drives the 32-bit request channel from `d` and ignores the echo on
+//> the response channel (the harness reads it from the server side).
+mod WideClient {
+    //> 32-bit value presented on the request channel.
+    incoming d : Word[32]
+
+    client socket busif of Wide {
+        it.req := d
+    }
+    unused busif.rsp
+}
+
+pub mod SocketWideTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every vector checked out; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod requester of WideClient {
+        it.d := vec
+    }
+    mod echo of WideEcho
+
+    requester.busif :=: echo.busif
+
+    //> Index of the vector under test, 0 through 7.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case checking {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> High while a vector is being checked; the eight vectors occupy
+    //> indices 0 through 7.
+    wire checking : Bit {
+        it := index < 8
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the cycle its vector is on the wire.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && echo.busif.rsp == vec
+            }
+        }
+    }
+
+    //> Rises once the last vector has been checked, so that the exit
+    //> code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 8 {
+                it <= true
+            }
+        }
+    }
+
+    // Vector on the request channel this cycle, selected by `index`.
+    // The eight cases cover distinct values chosen to catch truncation:
+    // least-significant bit set, most-significant bit set, all ones,
+    // and assorted mixed patterns.
+    wire vec : Word[32]
+
+    match index {
+        case 0 {
+            vec := 0x0000_0001w32
+        }
+        case 1 {
+            vec := 0x8000_0000w32
+        }
+        case 2 {
+            vec := 0x7fff_ffffw32
+        }
+        case 3 {
+            vec := 0xffff_ffffw32
+        }
+        case 4 {
+            vec := 0xdead_beefw32
+        }
+        case 5 {
+            vec := 0x1234_5678w32
+        }
+        case 6 {
+            vec := 0xa5a5_a5a5w32
+        }
+        case 7 {
+            vec := 0x0000_ffffw32
+        }
+        else {
+            vec := 0w32
+        }
+    }
+}

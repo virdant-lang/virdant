@@ -1,0 +1,4 @@
+kind = "run"
+description = "Equality comparison of enum values against enum literals"
+cycle_limit = 5
+trace = false

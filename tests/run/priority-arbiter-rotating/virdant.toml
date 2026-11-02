@@ -1,0 +1,5 @@
+[project]
+name = "priority-arbiter-rotating"
+
+[prog]
+top = "priority-arbiter-rotating::RotatingArbiterTest"

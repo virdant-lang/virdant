@@ -1,0 +1,5 @@
+[project]
+name = "stream-splitter"
+
+[prog]
+top = "stream-splitter::StreamSplitterTest"

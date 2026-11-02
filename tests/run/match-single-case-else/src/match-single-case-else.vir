@@ -1,0 +1,62 @@
+// Self-checking `kind = "run"` test for a minimal two-arm `match`:
+// one `case` arm plus an `else` arm.  A register alternates between
+// two union payloads every cycle; a statement-level `match` drives one
+// flag per arm.  The test asserts the two arms never fire together and
+// that each arm is exercised before the simulator exits with code 0.
+
+import virt
+
+//> Payloads of the two match arms.
+union type Arm {
+    Left()
+    Right()
+}
+
+pub mod Top for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    reg sel : Arm on clock {
+        initial it <= @Left()
+        it <= match it {
+            case @Left() => @Right()
+            else => @Left()
+        }
+    }
+
+    wire via_case : Bit
+    wire via_else : Bit
+    match sel {
+        case @Left() {
+            via_case := true
+            via_else := false
+        }
+        else {
+            via_case := false
+            via_else := true
+        }
+    }
+
+    reg seen_case : Bit on clock {
+        initial it <= false
+        it <= seen_case || via_case
+    }
+
+    reg seen_else : Bit on clock {
+        initial it <= false
+        it <= seen_else || via_else
+    }
+
+    wire ok : Bit {
+        it := seen_case && seen_else && via_case != via_else
+    }
+
+    //> `@Valid(0)` once both arms have been exercised; `@Valid(1)` if
+    //> the arms ever contradict each other; `@Invalid()` while waiting.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case seen_case && seen_else && via_case != via_else => @Valid(mux(ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+}

@@ -1,0 +1,97 @@
+// A `kind = "run"` test for a register whose driver immediately
+// overwrites its `initial` value: `initial it <= 5` with driver
+// `it <= 9`.
+//
+// The ordering under test: the register powers on at the `initial` 5,
+// and the very first clock edge commits the driver's 9, so the first
+// post-reset cycle shows the driven value, not the initial.  This
+// test asserts that ordering consistently: a capture register
+// sampling `data` at the first clock edge (which, like any register
+// driver, sees the pre-edge value) observes the initial 5, and every
+// later capture observes the driven 9.  An implementation where the
+// `initial` value survived the first edge (captures reading 5, 5, 5)
+// or where the driver beat the `initial` before any edge (first
+// capture already 9) fails here.
+
+import virt
+
+pub mod RegInitThenDriveTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Register under test: powers on at the `initial` 5, and its
+    //> driver overwrites it with 9 at the very first clock edge.
+    reg data : Word[8] on clock {
+        initial it <= 5
+        it <= 9
+    }
+
+    //> Counts settled clock edges, freezing at 4 once all four
+    //> captures are done.
+    reg stage : Word[3] on clock {
+        initial it <= 0
+        when {
+            case it < 4 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Capture registers: each samples `data` on the clock edge that
+    //> ends the cycle its `stage` guard selects.  A register driver
+    //> sees the pre-edge value, so `snap0` observes the power-on
+    //> `initial` 5, and `snap1`, `snap2`, `snap3` observe the driven
+    //> 9 from the first post-reset cycle onward.
+    reg snap0 : Word[8] on clock {
+        initial it <= 0
+        when {
+            case stage == 0 {
+                it <= data
+            }
+        }
+    }
+
+    reg snap1 : Word[8] on clock {
+        initial it <= 0
+        when {
+            case stage == 1 {
+                it <= data
+            }
+        }
+    }
+
+    reg snap2 : Word[8] on clock {
+        initial it <= 0
+        when {
+            case stage == 2 {
+                it <= data
+            }
+        }
+    }
+
+    reg snap3 : Word[8] on clock {
+        initial it <= 0
+        when {
+            case stage == 3 {
+                it <= data
+            }
+        }
+    }
+
+    //> Verdict: the first capture saw the `initial` 5 and every later
+    //> capture saw the driven 9.
+    wire ok : Bit {
+        it := snap0 == 5 && snap1 == 9 && snap2 == 9 && snap3 == 9
+    }
+
+    //> `@Valid(0)` once the four captures are in and match the
+    //> documented ordering; `@Valid(1)` if the initial and driven
+    //> values came out in any other order.  While `@Invalid()`, the
+    //> simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case stage == 4 => @Valid(mux(ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+}

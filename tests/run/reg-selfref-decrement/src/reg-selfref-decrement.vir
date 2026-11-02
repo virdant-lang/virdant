@@ -1,0 +1,89 @@
+//! Self-checking `kind = "run"` test for a self-referential
+//! down-counter.
+//!
+//! `count` is a `Word[4]` register with `initial it <= 3` and the
+//! self-referential driver `it <= it - 1`, free-running on the
+//! primary clock: 3, 2, 1, 0, then wrapping to 15, 14, ...
+//!
+//! The run simulator can flakily commit garbage register values on
+//! the first clock edge, so checking only starts once a small warm-up
+//! counter (immune to that garbage: it reaches its stick value from
+//! any starting value) has settled.  Every checked cycle asserts that
+//! `count` equals the previous cycle's value minus one — which, in
+//! `Word[4]` arithmetic, is exactly the 0 -> 15 wrap — and the test
+//! additionally requires that the 0 -> 15 wrap was actually observed
+//! before exiting.  The simulator exits with code 0 only if every
+//! check passed and the wrap was seen, and 1 otherwise.
+
+import virt
+
+pub mod RegSelfrefDecrementTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Free-running down-counter under test, starting at 3 and
+    //> wrapping at 0: 3, 2, 1, 0, 15, 14, ...
+    reg count : Word[4] on clock {
+        initial it <= 3
+        it <= it - 1
+    }
+
+    //> Lags `count` by one cycle, so each check compares two
+    //> consecutive values of the counter.
+    reg prev : Word[4] on clock {
+        initial it <= 0
+        it <= count
+    }
+
+    //> Warm-up counter: counts up and sticks at 3.  If the simulator
+    //> commits garbage here on the first clock edge, it still reaches
+    //> 3 from any 2-bit value within three edges, so checking starts
+    //> deterministically.
+    reg warm : Word[2] on clock {
+        initial it <= 0
+        when {
+            case it != 3 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> True once the warm-up margin has passed and checks are due.
+    wire checking : Bit {
+        it := warm == 3
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in: `count` must equal the previous value
+    //> minus one, which for `prev == 0` asserts the wrap to 15.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && count == (prev - 1)
+            }
+        }
+    }
+
+    //> Rises once a 0 -> 15 wrap transition has actually been checked,
+    //> so the exit cannot happen without the wrap being exercised.
+    reg saw_wrap : Bit on clock {
+        initial it <= false
+        when {
+            case checking {
+                it <= it || (prev == 0 && count == 15)
+            }
+        }
+    }
+
+    //> `@Valid(0)` once all checks passed and the wrap was observed;
+    //> `@Valid(1)` as soon as any check fails.  While `@Invalid()`,
+    //> the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case checking && !all_ok => @Valid(1)
+            case checking && saw_wrap => @Valid(0)
+            else => @Invalid()
+        }
+    }
+}

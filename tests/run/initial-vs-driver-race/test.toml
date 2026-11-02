@@ -1,0 +1,3 @@
+kind = "run"
+description = "initial it <= 5 with driver it <= it + 1: first observed value after reset release"
+cycle_limit = 10

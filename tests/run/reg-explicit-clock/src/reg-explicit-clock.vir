@@ -1,0 +1,237 @@
+//! Self-checking `kind = "run"` test for `reg ... on <named clock>`:
+//! a register explicitly clocked by a named clock produced by
+//! `asclock(bit)` from a `Bit`.
+//!
+//! A `BitClockDomains` module derives two clocks from `Bit` registers
+//! with `asclock`: `tick` rises every other platform edge, so the
+//! counter on that domain advances every other platform cycle;
+//! `slow_tick` (gated by `phase`) rises every fourth platform edge, so
+//! the second counter advances every fourth platform cycle.  The
+//! harness keeps mirror registers of the clock source `Bit`s (identical
+//! drivers, so they stay in lockstep with the DUT), rebuilds each
+//! expected count from those mirrors, and checks, on the settled edge
+//! after each falling edge of the clock source `Bit`, that the counter
+//! matches.  Every check is ANDed into running verdict registers; the
+//! simulator exits with code 0 only if all checks passed, and 1
+//! otherwise.
+//!
+//! A warm-up reset holds every register (and the clock source `Bit`s)
+//! at a known value for the first few platform cycles, so a flaky
+//! garbage commit on the very first clock edge cannot desynchronize
+//! the check.
+
+import virt
+
+//> Two counters, each on its own derived clock domain produced by
+//> `asclock` from a `Bit` register.
+mod BitClockDomains {
+    //> Platform clock.
+    incoming clock : Clock
+
+    //> Synchronous reset, asserted by the harness during warm-up.
+    incoming reset : Bit
+
+    //> Toggles once the reset releases, so it rises on every other
+    //> platform edge.  This `Bit` is the clock of the fast domain.
+    reg tick : Bit on clock {
+        initial it <= false
+        when {
+            case reset { it <= false }
+            else { it <= !it }
+        }
+    }
+
+    //> Half-rate phase: toggles once the reset releases, one edge
+    //> out of every two.
+    reg phase : Bit on clock {
+        initial it <= false
+        when {
+            case reset { it <= false }
+            else { it <= !it }
+        }
+    }
+
+    //> Toggles only while `phase` is high, so it rises every fourth
+    //> platform edge.  This `Bit` is the clock of the slow domain.
+    reg slow_tick : Bit on clock {
+        initial it <= false
+        when {
+            case reset { it <= false }
+            else { it <= mux(phase, !it, it) }
+        }
+    }
+
+    //> Fast derived clock: `tick` reinterpreted as a `Clock`.
+    wire fast_clock : Clock {
+        it := asclock(tick)
+    }
+
+    //> Slow derived clock: `slow_tick` reinterpreted as a `Clock`.
+    wire slow_clock : Clock {
+        it := asclock(slow_tick)
+    }
+
+    //> Counter on the fast derived domain: advances once per rising
+    //> edge of `tick`, i.e. every other platform cycle.
+    reg fast_count : Word[8] on fast_clock {
+        initial it <= 0
+        when {
+            case reset { it <= 0 }
+            else { it <= it + 1 }
+        }
+    }
+
+    //> Counter on the slow derived domain: advances once per rising
+    //> edge of `slow_tick`, i.e. every fourth platform cycle.
+    reg slow_count : Word[8] on slow_clock {
+        initial it <= 0
+        when {
+            case reset { it <= 0 }
+            else { it <= it + 1 }
+        }
+    }
+
+    //> Counter of the fast derived domain.
+    outgoing fast_count_out : Word[8] {
+        it := fast_count
+    }
+
+    //> Counter of the slow derived domain.
+    outgoing slow_count_out : Word[8] {
+        it := slow_count
+    }
+}
+
+pub mod RegExplicitClockTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every check passed; `@Valid(1)` if any check
+    //> failed or no check ever ran.  `@Invalid()` while running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished && step >= 10 => @Valid(mux(fast_ok && slow_ok && saw_check, 0w8, 1w8))
+            else => @Invalid()
+        }
+    }
+
+    mod dut of BitClockDomains {
+        it.clock := clock
+        it.reset := reset
+    }
+
+    //> Number of platform edges so far.  Schedules the end of warm-up
+    //> and guards `exit` against a flaky first-edge garbage commit.
+    reg step : Word[8] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Warm-up reset: high until `step` reaches 4, so the first few
+    //> platform cycles are idle (no toggling, no counting) and every
+    //> forced register re-converges to a known value before stimulus.
+    reg reset : Bit on clock {
+        initial it <= true
+        when {
+            case step >= 4 { it <= false }
+        }
+    }
+
+    //> Post-reset edge counter, forced to 0 while `reset` is high so
+    //> the finish schedule cannot be shifted by first-edge garbage.
+    reg run_step : Word[8] on clock {
+        initial it <= 0
+        when {
+            case reset { it <= 0 }
+            else { it <= it + 1 }
+        }
+    }
+
+    //> Harness mirror of `dut.tick`: identical driver, so it stays in
+    //> lockstep with the DUT's clock source `Bit`.  All harness check
+    //> scheduling reads mirrors like this one — never the DUT's
+    //> combinational outputs, whose settlements can race with a check.
+    reg tick_h : Bit on clock {
+        initial it <= false
+        when {
+            case reset { it <= false }
+            else { it <= !it }
+        }
+    }
+
+    //> Harness mirror of `dut.phase`.
+    reg phase_h : Bit on clock {
+        initial it <= false
+        when {
+            case reset { it <= false }
+            else { it <= !it }
+        }
+    }
+
+    //> Harness mirror of `dut.slow_tick`.
+    reg slow_tick_h : Bit on clock {
+        initial it <= false
+        when {
+            case reset { it <= false }
+            else { it <= mux(phase_h, !it, it) }
+        }
+    }
+
+    //> Race-free fast sampling point: `tick_h` high means `tick` falls
+    //> on this edge, so the fast counter changed on the previous edge
+    //> and is settled now.
+    wire fast_check : Bit {
+        it := !reset && tick_h
+    }
+
+    //> Race-free slow sampling point: `slow_tick_h` high means
+    //> `slow_tick` falls on this edge, so the slow counter changed on
+    //> the previous edge and is settled now.
+    wire slow_check : Bit {
+        it := !reset && slow_tick_h
+    }
+
+    //> Expected value of the fast counter: one increment per rising
+    //> edge of `tick` (`tick_h` low going into an edge means it rises
+    //> on that edge), so it advances in lockstep with `dut`.
+    reg expected_fast : Word[8] on clock {
+        initial it <= 0
+        it <= mux(reset, 0w8, it + mux(!tick_h, 1w8, 0w8))
+    }
+
+    //> Expected value of the slow counter: one increment per rising
+    //> edge of `slow_tick` (low `slow_tick_h` under a high `phase_h`
+    //> going into an edge means `slow_tick` rises on it).
+    reg expected_slow : Word[8] on clock {
+        initial it <= 0
+        it <= mux(reset, 0w8, it + mux(phase_h && !slow_tick_h, 1w8, 0w8))
+    }
+
+    //> Running verdict of the fast-domain checks.  Power-on true; each
+    //> fast check folds its result in on the settled edges.
+    reg fast_ok : Bit on clock {
+        initial it <= true
+        it <= mux(reset, true, mux(fast_check, it && dut.fast_count_out == expected_fast, it))
+    }
+
+    //> Running verdict of the slow-domain checks.
+    reg slow_ok : Bit on clock {
+        initial it <= true
+        it <= mux(reset, true, mux(slow_check, it && dut.slow_count_out == expected_slow, it))
+    }
+
+    //> Set once a check has actually run, guarding against a vacuous
+    //> pass if no check ever fired.
+    reg saw_check : Bit on clock {
+        initial it <= false
+        it <= mux(reset, false, it || fast_check || slow_check)
+    }
+
+    //> Rises one edge after the last check, so that `exit` sees the
+    //> final verdicts.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= mux(reset, false, mux(run_step == 14, true, it))
+    }
+
+}

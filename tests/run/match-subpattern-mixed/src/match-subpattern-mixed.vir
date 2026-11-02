@@ -1,0 +1,162 @@
+// Self-checking `kind = "run"` test for mixing variable and literal
+// sub-patterns in one union `match` arm: `case @Pair(x, false) => x`.
+//
+// A two-payload union variant is matched with a variable sub-pattern
+// in the first payload position and a literal sub-pattern in the
+// second.  Each check asserts that the bound variable flows through
+// to the arm's result and that the literal position filters which
+// values reach the arm.  All verdicts are ANDed into `fail_bits`;
+// the simulator exits with code 0 only if every check passed, and
+// with the failing bitmask otherwise.
+
+import virt
+
+//> A two-payload union used for sub-pattern matching.
+//>
+//> `Empty()` - carries no payload.
+//> `Pair(a, flag)` - carries a `Word[4]` and a `Bit` payload.
+union type PairU {
+    Empty()
+    Pair(a : Word[4], flag : Bit)
+}
+
+//> A two-`Bit` union mirroring the spec arm `case @Pair(x, false) => x`
+//> exactly: the bound variable is a `Bit`.
+//>
+//> `Nothing()` - carries no payload.
+//> `Twin(hi, lo)` - carries two `Bit` payloads.
+union type BitPair {
+    Nothing()
+    Twin(hi : Bit, lo : Bit)
+}
+
+pub mod MatchSubpatternMixedTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Vector whose first payload should bind and whose second
+    //> payload matches the literal `false`.
+    wire u_hit : PairU {
+        it := @Pair(5, false)
+    }
+
+    //> Vector whose second payload fails the literal `false`.
+    wire u_flag : PairU {
+        it := @Pair(5, true)
+    }
+
+    //> Vector with a zero first payload.
+    wire u_zero : PairU {
+        it := @Pair(0, false)
+    }
+
+    //> Payload-free vector: nothing to bind or match.
+    wire u_none : PairU {
+        it := @Empty()
+    }
+
+    //> `Bit`-payload vectors for the spec arm, where the bound
+    //> variable is a `Bit`.
+    wire b_hit : BitPair {
+        it := @Twin(true, false)
+    }
+    wire b_lo : BitPair {
+        it := @Twin(false, false)
+    }
+    wire b_flag : BitPair {
+        it := @Twin(true, true)
+    }
+    wire b_none : BitPair {
+        it := @Nothing()
+    }
+
+    //> The arm `case @Pair(x, false)` must fire: the bound `x` flows
+    //> through as `5`, distinct from the `else` sentinel `15`.
+    wire hit_hit : Word[4] {
+        it := match u_hit : PairU {
+            case @Pair(x, false) => x
+            else => 15
+        }
+    }
+
+    //> The literal `false` must reject the second payload `true`:
+    //> the `else` sentinel, not the bound `5`.
+    wire hit_flag : Word[4] {
+        it := match u_flag : PairU {
+            case @Pair(x, false) => x
+            else => 15
+        }
+    }
+
+    //> A zero payload must bind as `0`, distinct from the `else`
+    //> sentinel `15`.
+    wire hit_zero : Word[4] {
+        it := match u_zero : PairU {
+            case @Pair(x, false) => x
+            else => 15
+        }
+    }
+
+    //> `@Empty()` has no payload to match: the `else` sentinel.
+    wire hit_none : Word[4] {
+        it := match u_none : PairU {
+            case @Pair(x, false) => x
+            else => 15
+        }
+    }
+
+    //> `hi = true` binds and flows through as `true`.
+    wire bit_hit : Bit {
+        it := match b_hit : BitPair {
+            case @Twin(x, false) => x
+            else => false
+        }
+    }
+
+    //> `hi = false` binds and flows through as `false`.
+    wire bit_lo : Bit {
+        it := match b_lo : BitPair {
+            case @Twin(x, false) => x
+            else => false
+        }
+    }
+
+    //> `lo = true` fails the literal `false`: the `else` arm gives
+    //> `false` even though `hi` would have bound to `true`.
+    wire bit_flag : Bit {
+        it := match b_flag : BitPair {
+            case @Twin(x, false) => x
+            else => false
+        }
+    }
+
+    //> `@Nothing()` has no payload to match: the `else` arm.
+    wire bit_none : Bit {
+        it := match b_none : BitPair {
+            case @Twin(x, false) => x
+            else => false
+        }
+    }
+
+    //> Diagnostic bitmask (`word()` is most-significant-first):
+    //> bit7 = bound `5` did not flow through; bit6 = literal `false`
+    //> did not reject `true`; bit5 = zero payload did not bind as
+    //> `0`; bit4 = `@Empty()` hit the arm; bit3 = bound `true` did
+    //> not flow through; bit2 = bound `false` did not flow through;
+    //> bit1 = `lo = true` hit the arm; bit0 = `@Nothing()` hit the
+    //> arm.
+    wire fail_bits : Word[8] {
+        it := word(hit_hit != 5, hit_flag != 15, hit_zero != 0,
+                    hit_none != 15, !bit_hit, bit_lo, bit_flag,
+                    bit_none)
+    }
+
+    //> `@Valid(0)` when every check passed; `@Valid(fail_bits)`
+    //> otherwise.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case fail_bits == 0 => @Valid(0)
+            else => @Valid(fail_bits)
+        }
+    }
+}

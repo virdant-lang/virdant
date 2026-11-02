@@ -1,0 +1,110 @@
+//! Self-checking `kind = "run"` test for X-propagation guarding by
+//! `initial` values.
+//!
+//! An input is sampled before the first clock, with no reset stimulus
+//! of any kind: the harness's very first check, folded at the first
+//! clock edge from pre-edge values, requires the `Sampler`'s output to
+//! already be the defined value 0.  That is only possible because
+//! `captured` carries `initial it <= 0`; in a plain Verilog flow the
+//! register would power on as X and the check would see X, and under
+//! `vir run` it would see per-process random garbage.  The later
+//! stages confirm the input really is being sampled: the first edge
+//! latches the power-on `stimulus` (1) and the second edge latches the
+//! toggled value (0).
+
+import virt
+
+//> Samples its `data` input at each clock edge.
+//>
+//> `captured` powers on at the `initial` 0, so `out` is defined (0)
+//> from cycle 0, before any clock edge has fired and without any
+//> reset stimulus.
+mod Sampler {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Data input sampled at each clock edge.
+    incoming data : Bit
+
+    //> Powers on at 0 via `initial`; afterwards holds the value
+    //> sampled from `data` at the most recent clock edge.
+    reg captured : Word[8] on clock {
+        initial it <= 0
+        it <= zext(word(data))
+    }
+
+    //> Defined from cycle 0: mirrors `captured`, whose power-on value
+    //> comes from `initial`, never X or garbage.
+    outgoing out : Word[8] {
+        it := captured
+    }
+}
+
+pub mod XPropGuardTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once every stage's check has held; `@Valid(1)` if
+    //> any check failed, including the pre-first-clock check.
+    //> While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod sampler of Sampler {
+        it.clock := clock
+        it.data := stimulus
+    }
+
+    //> Toggling stimulus: powers on at true via `initial`, so the
+    //> first clock edge samples 1 and the second edge samples 0.
+    reg stimulus : Bit on clock {
+        initial it <= true
+        it <= !it
+    }
+
+    //> Cycle index, advancing each edge until every check has run.
+    reg stage : Word[2] on clock {
+        initial it <= 0
+        when {
+            case stage < 3 {
+                it <= stage + 1
+            }
+        }
+    }
+
+    //> Running AND of every cycle's check, folded at each clock edge
+    //> from the pre-edge values.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= all_ok && check_now
+    }
+
+    //> Rises once the final check has been folded into `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case stage == 2 {
+                it <= true
+            }
+        }
+    }
+
+    //> Check for the current cycle.
+    //>
+    //> At `stage == 0`, before the first clock edge and with no reset
+    //> stimulus, `out` must already be the `initial`-derived 0 rather
+    //> than X or garbage.  The later stages confirm that `out` tracks
+    //> the value the `Sampler` sampled at the previous edge.
+    wire check_now : Bit {
+        it := match stage {
+            case 0 => sampler.out == 0
+            case 1 => sampler.out == 1
+            case 2 => sampler.out == 0
+            else => true
+        }
+    }
+}

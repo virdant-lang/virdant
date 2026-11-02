@@ -1,0 +1,81 @@
+//! Self-checking `kind = "run"` test for basic bit slicing.
+//!
+//! The slice `x[4..1]` of a `Word[4]` is a `Word[3]` holding bits 3,
+//! 2, and 1 of the input -- the Verilog `x[3:1]` -- so the top slice
+//! index is exclusive.  The fixed vector `0b1001` separates the sliced
+//! bits (`1`, `0`, `0`) from the retained bit 0 (`1`): the golden
+//! value `0b100` differs from both the retained bit and from what an
+//! inclusive-top or bit-reversed reading of the slice would produce.
+//! Every check is ANDed into a running `all_ok`; the simulator exits
+//! with code 0 only if all checks passed, and 1 otherwise.
+
+import virt
+
+pub mod SliceBasicTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every slice check passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Fixed test vector: bits 3..1 are `1`, `0`, `0` while the
+    //> retained bit 0 is `1`, so the slice value `0b100` cannot be
+    //> confused with the retained bits.
+    wire x : Word[4] {
+        it := 0b1001
+    }
+
+    //> The slice under test: `Word[3]`, bits 3..1 of `x` (Verilog
+    //> `x[3:1]`).
+    wire sliced : Word[3] {
+        it := x[4..1]
+    }
+
+    //> Golden value: bits 3..1 of `0b1001` reassembled by hand.
+    wire check_golden : Bit {
+        it := sliced == 0b100
+    }
+
+    //> Per-bit identity: slice bit `i` must be the corresponding
+    //> original bit, in order, with no reversal.
+    wire check_perbit : Bit {
+        it := sliced == word(x[3], x[2], x[1])
+    }
+
+    //> The slice must not have picked up the retained bit 0: the
+    //> Verilog `x[3:0]` reading (`x[3..0]` here) would give `0b001`,
+    //> not `0b100`.
+    wire check_not_retained : Bit {
+        it := sliced != x[3..0]
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdicts.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check_golden && check_perbit && check_not_retained
+    }
+
+    //> Cycle counter used to time the exit.
+    reg count : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Rises one cycle after the last cycle is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case count == 3 {
+                it <= true
+            }
+        }
+    }
+}

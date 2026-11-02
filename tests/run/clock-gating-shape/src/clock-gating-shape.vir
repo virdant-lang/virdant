@@ -1,0 +1,177 @@
+//! Self-checking `kind = "run"` test for a register whose enable is a
+//! clocked copy of the input.
+//!
+//! A `ClockGatedReg` unit registers its `en` input for one cycle and
+//! uses that delayed enable to gate a data register.  A harness top
+//! drives 8 stimulus steps, each three cycles long: `en` pulses for
+//! exactly one cycle, then the harness checks that `out` still holds
+//! the old value during the delayed-enable cycle, and only takes the
+//! new data at the end of that cycle.  Every check is ANDed into a
+//! running `all_ok`; the simulator exits with code 0 only if all
+//! checks passed, and 1 otherwise.
+
+import virt
+
+//> Data register whose write-enable is a clocked copy of `en`.
+//>
+//> While `en` is high, nothing is captured yet; the capture happens at
+//> the end of the following cycle, when the registered enable
+//> `en_delayed` is high.  With `en` low, `out` holds its value.
+mod ClockGatedReg {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Enable request, sampled by `en_delayed` on every clock edge.
+    incoming en : Bit
+
+    //> Data captured when `en_delayed` is high.
+    incoming data : Word[8]
+
+    //> Held data, updated one cycle after `en` was high.
+    outgoing out : Word[8]
+
+    //> Clocked copy of `en`: the write-enable, delayed one cycle.
+    reg en_delayed : Bit on clock {
+        initial it <= false
+        it <= en
+    }
+
+    reg held : Word[8] on clock {
+        initial it <= 0
+        when {
+            case en_delayed {
+                it <= data
+            }
+        }
+    }
+
+    out := held
+}
+
+pub mod ClockGatingShapeTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last step checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod dut of ClockGatedReg {
+        it.clock := clock
+        it.en := en
+        it.data := data
+    }
+
+    //> Phase within the current step: 0 is the `en` pulse, 1 is the
+    //> delayed-enable cycle, and 2 is the settled outcome.
+    reg phase : Word[2] on clock {
+        initial it <= 0
+        it <= mux(it == 2, 0, it + 1)
+    }
+
+    //> Index of the step under test, 0 through 7.
+    reg index : Word[3] on clock {
+        initial it <= 0
+        when {
+            case phase == 2 {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in while the step is in flight.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case phase == 0 {
+                it <= it && dut.out == expected
+            }
+            case phase == 1 {
+                it <= it && dut.out == expected
+            }
+            case phase == 2 {
+                it <= it && dut.out == mux(step_en, data, expected)
+            }
+        }
+    }
+
+    //> Harness model of `dut.out`: the value the data register should
+    //> hold while this step runs, updated at the end of each step.
+    reg expected : Word[8] on clock {
+        initial it <= 0
+        when {
+            case phase == 2 {
+                it <= mux(step_en, data, it)
+            }
+        }
+    }
+
+    //> Rises at the end of the last step, so that the exit code sees
+    //> the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case phase == 2 && index == 7 {
+                it <= true
+            }
+        }
+    }
+
+    //> `en` pulses for exactly one cycle: phase 0 of an enabled step.
+    wire en : Bit {
+        it := phase == 0 && step_en
+    }
+
+    //> Stimulus table: `step_en` says whether `en` pulses this step,
+    //> and `data` is the value offered throughout the step.  Step 0 is
+    //> a disabled warm-up, so that the first `en` pulse does not
+    //> coincide with the simulator's power-on edge.  Disabled steps
+    //> with changing data check that `out` holds, and back-to-back
+    //> enabled steps check that the delayed enable re-captures every
+    //> cycle.  The 8 cases exactly cover `Word[3]`, so the match is
+    //> exhaustive.
+    wire step_en : Bit
+    wire data : Word[8]
+
+    match index {
+        case 0 {
+            step_en := false
+            data := 0
+        }
+        case 1 {
+            step_en := true
+            data := 1
+        }
+        case 2 {
+            step_en := true
+            data := 2
+        }
+        case 3 {
+            step_en := false
+            data := 3
+        }
+        case 4 {
+            step_en := true
+            data := 4
+        }
+        case 5 {
+            step_en := false
+            data := 5
+        }
+        case 6 {
+            step_en := false
+            data := 6
+        }
+        case 7 {
+            step_en := true
+            data := 7
+        }
+    }
+}

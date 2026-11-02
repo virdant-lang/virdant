@@ -1,0 +1,4 @@
+kind = "run"
+description = "Struct payload inside a Valid[T]; assert field extraction after match"
+cycle_limit = 6
+trace = false

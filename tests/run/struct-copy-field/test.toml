@@ -1,0 +1,4 @@
+kind = "run"
+description = "Build a new struct from an old one's fields; assert carried-over and updated fields"
+cycle_limit = 3
+trace = false

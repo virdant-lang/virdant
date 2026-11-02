@@ -1,0 +1,4 @@
+kind = "run"
+description = "Append a bit at the LSB end with word(new_bit, x[4..1]) (rotate-style)"
+cycle_limit = 1
+trace = false

@@ -1,0 +1,454 @@
+//! Self-checking `kind = "run"` test for a PWM generator.
+//!
+//! A `Pwm` unit compares a duty-cycle register against a free-running
+//! 8-cycle counter: `out` is high while `count < duty`, so it is high
+//! for exactly `duty` cycles of every 8-cycle period.  The harness
+//! asserts the output cycle-by-cycle against a golden table over
+//! several periods at four duty settings: duty 3 of 8 (two full
+//! periods), duty 0 (never high), duty 7 of 8 (low for exactly one
+//! cycle per period), and duty 1 of 8 (a single-cycle pulse per
+//! period).  Every check is ANDed into a running `all_ok`; the
+//! simulator exits with code 0 only if all 40 checked cycles passed,
+//! and 1 otherwise.
+
+import virt
+
+//> PWM generator: a duty-cycle register compared against a
+//> free-running counter.
+//>
+//> `count` free-runs 0 through 7, wrapping every 8 cycles; `out` is
+//> high while `count < duty`, so `out` is high for exactly `duty`
+//> cycles of each 8-cycle period.  `duty` is loaded from `duty_in`
+//> while `load` is high, and holds between loads.  `clear`
+//> synchronously forces `count` to 0; the harness asserts it once,
+//> after power-on warm-up, so the counter phase is deterministic
+//> regardless of the simulator's random power-on state.
+mod Pwm {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Synchronous clear: forces `count` to 0 on the next clock edge.
+    incoming clear : Bit
+
+    //> While high, loads `duty` with `duty_in` on the next clock edge.
+    incoming load : Bit
+
+    //> Duty cycle to load, 0 through 7: the number of cycles `out` is
+    //> high in each 8-cycle period.
+    incoming duty_in : Word[3]
+
+    //> PWM output: high for exactly `duty` cycles of every 8-cycle
+    //> period.
+    outgoing out : Bit {
+        it := count < duty
+    }
+
+    //> Free-running counter, 0 through 7, wrapping every 8 cycles.
+    reg count : Word[3] on clock {
+        initial it <= 0
+        when {
+            case clear {
+                it <= 0
+            }
+            case it == 7 {
+                it <= 0
+            }
+            else {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Current duty cycle; holds between loads.
+    reg duty : Word[3] on clock {
+        initial it <= 0
+        when {
+            case load {
+                it <= duty_in
+            }
+        }
+    }
+}
+
+pub mod PwmTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last checked cycle passed; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod pwm of Pwm {
+        it.clock := clock
+        it.clear := clear
+        it.load := load
+        it.duty_in := duty_in
+    }
+
+    //> Index of the stimulus cycle under test, 0 through 46; parks at
+    //> 47 once `finished` rises.
+    reg index : Word[6] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each checked
+    //> cycle folds its verdict in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && (pwm.out == expected)
+            }
+        }
+    }
+
+    //> Rises on the clock edge after the last checked cycle, so that
+    //> the exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 46 {
+                it <= true
+            }
+        }
+    }
+
+    //> Checks run only after the power-on warm-up (indices 0 through
+    //> 6) and stop once `finished` rises.
+    wire checking : Bit {
+        it := index >= 7 && !finished
+    }
+
+    wire clear : Bit
+    wire load : Bit
+    wire duty_in : Word[3]
+    wire expected : Bit
+
+    // Stimulus table: the values driven on `clear`, `load`, and
+    // `duty_in`, and the golden `expected` output, for each of the 47
+    // stimulus cycles, selected by `index`.  Indices 0 through 5 are
+    // unchecked power-on warm-up idle cycles; index 6 clears the
+    // counter and loads duty 3, so `count` is 0 during index 7 and
+    // its phase is known from then on: `count` is
+    // `(index - 7) mod 8`.  Duty 3 runs for two full periods (indices
+    // 7 through 22), then duty 0, duty 7, and duty 1 each run one
+    // full period (indices 23 through 46), with each new duty loaded
+    // on the last cycle of the previous phase.
+    match index {
+        // Power-on warm-up: idle, unchecked.
+        case 0 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := false
+        }
+        case 1 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := false
+        }
+        case 2 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := false
+        }
+        case 3 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := false
+        }
+        case 4 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := false
+        }
+        case 5 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := false
+        }
+        // Clear the counter and load duty 3: `count` is 0 from the
+        // next cycle on, so every later expectation is pinned down.
+        case 6 {
+            clear := true
+            load := true
+            duty_in := 3
+            expected := false
+        }
+        // Duty 3 of 8, first period: `out` high while `count` is 0,
+        // 1, 2, low for the remaining 5 cycles.
+        case 7 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := true
+        }
+        case 8 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := true
+        }
+        case 9 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := true
+        }
+        case 10 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := false
+        }
+        case 11 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := false
+        }
+        case 12 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := false
+        }
+        case 13 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := false
+        }
+        case 14 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := false
+        }
+        // Duty 3 of 8, second period.
+        case 15 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := true
+        }
+        case 16 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := true
+        }
+        case 17 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := true
+        }
+        case 18 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := false
+        }
+        case 19 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := false
+        }
+        case 20 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := false
+        }
+        case 21 {
+            clear := false
+            load := false
+            duty_in := 3
+            expected := false
+        }
+        // Last cycle of the duty-3 phase (count 7, low) and the load
+        // of duty 0 for the next phase.
+        case 22 {
+            clear := false
+            load := true
+            duty_in := 0
+            expected := false
+        }
+        // Duty 0 of 8: `out` is low for the whole period.
+        case 23 {
+            clear := false
+            load := false
+            duty_in := 0
+            expected := false
+        }
+        case 24 {
+            clear := false
+            load := false
+            duty_in := 0
+            expected := false
+        }
+        case 25 {
+            clear := false
+            load := false
+            duty_in := 0
+            expected := false
+        }
+        case 26 {
+            clear := false
+            load := false
+            duty_in := 0
+            expected := false
+        }
+        case 27 {
+            clear := false
+            load := false
+            duty_in := 0
+            expected := false
+        }
+        case 28 {
+            clear := false
+            load := false
+            duty_in := 0
+            expected := false
+        }
+        case 29 {
+            clear := false
+            load := false
+            duty_in := 0
+            expected := false
+        }
+        // Last cycle of the duty-0 phase and the load of duty 7.
+        case 30 {
+            clear := false
+            load := true
+            duty_in := 7
+            expected := false
+        }
+        // Duty 7 of 8: `out` is high for 7 cycles ...
+        case 31 {
+            clear := false
+            load := false
+            duty_in := 7
+            expected := true
+        }
+        case 32 {
+            clear := false
+            load := false
+            duty_in := 7
+            expected := true
+        }
+        case 33 {
+            clear := false
+            load := false
+            duty_in := 7
+            expected := true
+        }
+        case 34 {
+            clear := false
+            load := false
+            duty_in := 7
+            expected := true
+        }
+        case 35 {
+            clear := false
+            load := false
+            duty_in := 7
+            expected := true
+        }
+        case 36 {
+            clear := false
+            load := false
+            duty_in := 7
+            expected := true
+        }
+        case 37 {
+            clear := false
+            load := false
+            duty_in := 7
+            expected := true
+        }
+        // ... low on exactly the last cycle of the period, which also
+        // loads duty 1 for the next phase.
+        case 38 {
+            clear := false
+            load := true
+            duty_in := 1
+            expected := false
+        }
+        // Duty 1 of 8: a single-cycle pulse at the start of the
+        // period.
+        case 39 {
+            clear := false
+            load := false
+            duty_in := 1
+            expected := true
+        }
+        case 40 {
+            clear := false
+            load := false
+            duty_in := 1
+            expected := false
+        }
+        case 41 {
+            clear := false
+            load := false
+            duty_in := 1
+            expected := false
+        }
+        case 42 {
+            clear := false
+            load := false
+            duty_in := 1
+            expected := false
+        }
+        case 43 {
+            clear := false
+            load := false
+            duty_in := 1
+            expected := false
+        }
+        case 44 {
+            clear := false
+            load := false
+            duty_in := 1
+            expected := false
+        }
+        case 45 {
+            clear := false
+            load := false
+            duty_in := 1
+            expected := false
+        }
+        case 46 {
+            clear := false
+            load := false
+            duty_in := 1
+            expected := false
+        }
+        // Unreachable: `index` parks at 46 once `finished` rises.
+        else {
+            clear := false
+            load := false
+            duty_in := 1
+            expected := false
+        }
+    }
+}

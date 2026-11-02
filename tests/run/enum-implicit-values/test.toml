@@ -1,0 +1,4 @@
+kind = "run"
+description = "Enum encodings left implicit: widthless enumerant values and all-implicit one-hot encoding"
+cycle_limit = 4
+trace = false

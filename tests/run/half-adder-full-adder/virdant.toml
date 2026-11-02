@@ -1,0 +1,5 @@
+[project]
+name = "half-adder-full-adder"
+
+[prog]
+top = "half-adder-full-adder::Top"

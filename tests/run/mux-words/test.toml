@@ -1,0 +1,4 @@
+kind = "run"
+description = "mux(cond, a, b) on Word[8] operands picks the right operand for both cond values"
+cycle_limit = 5
+trace = false

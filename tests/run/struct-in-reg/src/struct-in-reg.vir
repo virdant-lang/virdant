@@ -1,0 +1,57 @@
+//! Self-checking `kind = "run"` test for a register of struct type
+//! updated field-wise: the register's driver reads the fields of
+//! `it` and writes back a new struct literal each cycle.
+//!
+//! `p` starts at `(3, 5)` and every cycle moves to
+//! `(it->x + 1, it->y + 2)`.  After three ticks it must hold
+//! `(6, 11)`; both field projections are asserted against those
+//! golden values, and the simulator exits with code 0 only if the
+//! check passed, and 1 otherwise.
+
+import virt
+
+//> Point carried by the struct register under test.
+struct type Point {
+    x : Word[8]
+    y : Word[8]
+}
+
+pub mod StructInRegTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if the field-wise updates checked out; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case cycle == 3 => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Cycles elapsed since reset, 0 through 3.
+    reg cycle : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> The struct register under test.  The driver is field-wise:
+    //> each cycle it reads `it->x` and `it->y` and writes back a new
+    //> struct literal built from those fields.
+    reg p : Point on clock {
+        initial it <= ${
+            x = 3,
+            y = 5,
+        }
+        it <= ${
+            x = it->x + 1,
+            y = it->y + 2,
+        }
+    }
+
+    //> After three ticks `p` must be `(3 + 3, 5 + 6) = (6, 11)`.
+    wire all_ok : Bit {
+        it := p->x == 6w8 && p->y == 11w8
+    }
+}

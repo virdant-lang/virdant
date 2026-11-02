@@ -1,0 +1,4 @@
+kind = "run"
+description = "`==` and `!=` on words, including equal and unequal pairs"
+cycle_limit = 16
+trace = false

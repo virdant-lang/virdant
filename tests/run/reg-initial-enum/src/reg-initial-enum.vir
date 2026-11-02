@@ -1,0 +1,42 @@
+// A minimal `kind = "run"` test: an enum register with
+// `initial it <= #Wait` must power on as `#Wait` (observed before any
+// driver fires), then move to `#Run` on the first clock edge.  The
+// exit value is chosen with a `match` on the register, so a missing
+// `initial` (Verilog zero-init) fails the assert.
+
+import virt
+
+//> Three-phase lifecycle.  `Wait` and `Run` are listed as `case`
+//> arms; `Done` is left for `else`.  A zero-initialized register
+//> reads as the all-zero pattern, which is no declared variant, and
+//> falls into the `else` arm, which fails the exit code.
+enum type Phase {
+    Wait = 1w2
+    Run  = 2w2
+    Done = 3w2
+}
+
+pub mod RegInitialEnumTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Powers on as `#Wait`; the driver moves it to `#Run` on the
+    //> first clock edge.
+    reg state : Phase on clock {
+        initial it <= #Wait
+        it <= #Run
+    }
+
+    //> `@Valid(0)` once the register has left its power-on value;
+    //> while the register is still at `#Wait`, the simulator keeps
+    //> running.  `#Done` is never driven, so reaching `else` (with a
+    //> zero-initialized register) means the `initial` did not take
+    //> effect and exits with code 1.
+    outgoing exit : Valid[Word[8]] {
+        it := match state {
+            case #Run => @Valid(0)
+            case #Wait => @Invalid()
+            else => @Valid(1)
+        }
+    }
+}

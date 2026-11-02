@@ -1,0 +1,3 @@
+kind = "run"
+description = "Union-typed FSM register driven by it <= match state with direct chaining (no => before nested when blocks)"
+cycle_limit = 30

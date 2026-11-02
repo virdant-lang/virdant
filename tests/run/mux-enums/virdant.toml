@@ -1,0 +1,5 @@
+[project]
+name = "mux-enums"
+
+[prog]
+top = "mux-enums::MuxEnumsTest"

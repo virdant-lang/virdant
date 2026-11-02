@@ -1,0 +1,4 @@
+kind = "run"
+description = "Word[64] wide register counter: assert sliced low and high halves plus the full 64-bit value at a count above 2^32"
+cycle_limit = 12
+trace = false

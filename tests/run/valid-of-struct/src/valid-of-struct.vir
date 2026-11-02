@@ -1,0 +1,126 @@
+// Self-checking `kind = "run"` test for a struct payload inside a
+// `Valid[T]`.
+//
+// A `Color` struct rides in the payload of a `Valid[Color]`: the
+// register `v` alternates between `@Valid(${ ... })` built with a
+// struct literal and `@Invalid()`.  After `match`ing the union, each
+// arm projects the payload's fields with the `->` operator.  The test
+// asserts that the extracted `red` field and the sum of all three
+// fields are correct in the `@Valid` cycles, and that the `match`
+// falls through to the `@Invalid()` arm with a zero result in the
+// other cycles.  Because `v` is a register, it reflects the `sel` of
+// the *previous* cycle, so the golden values are keyed to a lagged
+// selector `sel_d1` (lagging `sel` by one cycle).  The simulator exits
+// with code 0 only if every check passed, and 1 otherwise.
+
+import virt
+
+//> An RGB triple, used as the payload of a `Valid[Color]`.
+struct type Color {
+    red : Word[8]
+    green : Word[8]
+    blue : Word[8]
+}
+
+pub mod ValidOfStructTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Alternates 0/1 each cycle: 0 selects the `@Valid` variant,
+    //> 1 selects `@Invalid()`.
+    reg sel : Word[1] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> The union under test.  While `sel` is 0, a `@Valid` carrying a
+    //> struct literal; while `sel` is 1, `@Invalid()`.
+    reg v : Valid[Color] on clock {
+        initial it <= @Valid(${
+            red = 10,
+            green = 20,
+            blue = 30,
+        })
+        it <= mux(sel == 0, @Valid(${ red = 10, green = 20, blue = 30 }), @Invalid())
+    }
+
+    //> Lags `sel` by one cycle: at any cycle after the first it holds
+    //> the variant selected the cycle before, which is exactly the
+    //> variant the register `v` shows this cycle.
+    reg sel_d1 : Word[1] on clock {
+        initial it <= 0
+        it <= sel
+    }
+
+    //> Field extraction after `match`: the payload's `red` field in
+    //> the `@Valid` cycles, 0 through the `@Invalid()` arm otherwise.
+    wire extracted_red : Word[8] {
+        it := match v {
+            case @Valid(c) => c->red
+            case @Invalid() => 0
+        }
+    }
+
+    //> Field extraction after `match`: the sum of all three fields of
+    //> the extracted payload.
+    wire extracted_sum : Word[8] {
+        it := match v {
+            case @Valid(c) => c->red + c->green + c->blue
+            case @Invalid() => 0
+        }
+    }
+
+    //> The `match` discriminates the variants: true exactly in the
+    //> `@Valid` cycles.
+    wire is_valid : Bit {
+        it := match v {
+            case @Valid(c) => c->blue == 30
+            case @Invalid() => false
+        }
+    }
+
+    //> Golden value for `extracted_red`, keyed to the lagged selector
+    //> `sel_d1` so it lines up with the registered `v`.
+    wire expected_red : Word[8] {
+        it := mux(sel_d1 == 0, 10, 0)
+    }
+
+    //> Golden value for `extracted_sum`, keyed to the lagged selector
+    //> `sel_d1` so it lines up with the registered `v`.
+    wire expected_sum : Word[8] {
+        it := mux(sel_d1 == 0, 60, 0)
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds its verdicts in.  `is_valid` is compared against the
+    //> expected variant (`sel_d1 == 0`), not folded raw: it is false
+    //> on every `@Invalid()` cycle, and the check verifies that the
+    //> `match` discriminates the variants -- true exactly on the
+    //> expected-`@Valid` cycles.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && extracted_red == expected_red && extracted_sum == expected_sum && is_valid == (sel_d1 == 0)
+    }
+
+    //> Rises once the lagged checks have actually run: `sel_d1` is 1
+    //> on the first `@Invalid()` cycle of `v` (cycle 2), so `finished`
+    //> rises on cycle 3, after a `@Valid` and an `@Invalid()` cycle
+    //> have both folded into `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case sel_d1 == 1 {
+                it <= true
+            }
+        }
+    }
+
+    //> `@Valid(0)` after both variants checked out; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+}

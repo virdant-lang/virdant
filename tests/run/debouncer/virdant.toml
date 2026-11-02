@@ -1,0 +1,5 @@
+[project]
+name = "debouncer"
+
+[prog]
+top = "debouncer::Top"

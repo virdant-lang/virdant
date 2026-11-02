@@ -1,0 +1,4 @@
+kind = "run"
+description = "Concrete literal sub-patterns in match: case @Pair(true, false) hits only the exact payload values"
+cycle_limit = 1
+trace = false

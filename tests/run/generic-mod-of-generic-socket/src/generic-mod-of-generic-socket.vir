@@ -1,0 +1,155 @@
+// A `kind = "run"` self-checking test for a generic module whose
+// socket port is itself generic in the same parameter: a client-side
+// and a server-side generic module each carry a socket port of the
+// generic socket `Chan[W]`, are instantiated at two type arguments
+// (`Word[8]` and `Word[4]`) in one top, wired with `:=:`, and the data
+// is asserted end-to-end against a vector table.  The simulator exits
+// with code 0 only if every vector checked out at both widths.
+
+import virt
+
+//> A generic request/response channel: the socket itself is generic,
+//> parameterized by the payload type `T`.
+socket Chan[T : Type] {
+    cosi req : T
+    soci rsp : T
+}
+
+//> A generic module with a client socket port of the generic socket
+//> `Chan[W]`, generic in the same parameter `W`.  It drives `req`
+//> combinationally from `d`.
+mod Producer[W : Type] {
+    incoming d : W
+    client socket link of Chan[W] {
+        it.req := d
+    }
+    unused link.rsp
+}
+
+//> A generic module with a server socket port of the generic socket
+//> `Chan[W]`, generic in the same parameter `W`.  It echoes `req`
+//> straight back on `rsp`.
+mod Echo[W : Type] {
+    server socket link of Chan[W] {
+        it.rsp := it.req
+    }
+}
+
+pub mod Top for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    mod p8 of Producer[Word[8]] {
+        it.d := vec8
+    }
+    mod e8 of Echo[Word[8]] {
+        p8.link :=: it.link
+    }
+    mod p4 of Producer[Word[4]] {
+        it.d := vec4
+    }
+    mod e4 of Echo[Word[4]] {
+        p4.link :=: it.link
+    }
+
+    wire out8 : Word[8] {
+        it := e8.link.rsp
+    }
+    wire out4 : Word[4] {
+        it := e4.link.rsp
+    }
+
+    //> Index of the vector under test, 0 through 7.
+    reg index : Word[3] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    wire vec8 : Word[8]
+    wire exp8 : Word[8]
+    wire vec4 : Word[4]
+    wire exp4 : Word[4]
+
+    match index {
+        case 0 {
+            vec8 := 0
+            exp8 := 0
+            vec4 := 0
+            exp4 := 0
+        }
+        case 1 {
+            vec8 := 255
+            exp8 := 255
+            vec4 := 1
+            exp4 := 1
+        }
+        case 2 {
+            vec8 := 1
+            exp8 := 1
+            vec4 := 15
+            exp4 := 15
+        }
+        case 3 {
+            vec8 := 170
+            exp8 := 170
+            vec4 := 10
+            exp4 := 10
+        }
+        case 4 {
+            vec8 := 204
+            exp8 := 204
+            vec4 := 12
+            exp4 := 12
+        }
+        case 5 {
+            vec8 := 18
+            exp8 := 18
+            vec4 := 5
+            exp4 := 5
+        }
+        case 6 {
+            vec8 := 99
+            exp8 := 99
+            vec4 := 9
+            exp4 := 9
+        }
+        case 7 {
+            vec8 := 128
+            exp8 := 128
+            vec4 := 8
+            exp4 := 8
+        }
+    }
+
+    //> True when the data came out the far side of the generic socket
+    //> pair unchanged at both widths.
+    wire ok : Bit {
+        it := out8 == exp8 && out4 == exp4
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds its verdict in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && ok
+    }
+
+    //> Rises at the edge that ends the last vector's cycle, so that
+    //> `all_ok` has folded in every check by the time the exit code is
+    //> read.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 7 {
+                it <= true
+            }
+        }
+    }
+
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+}

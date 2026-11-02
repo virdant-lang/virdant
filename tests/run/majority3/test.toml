@@ -1,0 +1,4 @@
+kind = "run"
+description = "Majority function of three bits"
+cycle_limit = 12
+trace = false

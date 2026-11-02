@@ -1,0 +1,143 @@
+//! Self-checking `kind = "run"` test for slicing the result of a
+//! `match` expression: `word(1w1, match x { ... })[4..2]`.
+//!
+//! A `Slicer` register counts 0 through 3 and wraps.  Each cycle, a
+//! `match` on the register selects one of four `Word[3]` patterns;
+//! prepending `1w1` widens it to `Word[4]`, and the slice `[4..2]`
+//! (the top index is exclusive) extracts the prepended bit together
+//! with the match result's most-significant bit.  The direct form is
+//! asserted every cycle, and the bullet's alternative — binding the
+//! match result to a typed wire and slicing that — is asserted too,
+//! with slice values distinct for all four register values.  The
+//! simulator exits with code 0 only if every cycle checked out, and
+//! 1 otherwise.
+
+import virt
+
+//> Register under test: slices the result of a `match` over `x`.
+mod Slicer {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Direct form: `word(1w1, match x { ... })[4..2]`.  The match
+    //> yields a `Word[3]` pattern; `word(1w1, ...)` prepends a `1`
+    //> at bit 3, and the slice `[4..2]` (top index exclusive) keeps
+    //> bits 3 and 2: the prepended `1` plus the match result's
+    //> most-significant bit.  For x = 0, 1, 2, 3 the match yields
+    //> 0b000, 0b011, 0b100, 0b111, so the slice yields 0b10, 0b10,
+    //> 0b11, 0b11 respectively.
+    outgoing code : Word[2] {
+        it := word(1w1, (match x {
+            case 0 => 0b000
+            case 1 => 0b011
+            case 2 => 0b100
+            case 3 => 0b111
+        }) : Word[3])[4..2]
+    }
+
+    //> The match result bound to a typed wire, for the bound form
+    //> below.  Same patterns as the direct form.
+    wire m : Word[3] {
+        it := match x {
+            case 0 => 0b000
+            case 1 => 0b011
+            case 2 => 0b100
+            case 3 => 0b111
+        }
+    }
+
+    //> Bound form: the match result is bound to the typed wire `m`
+    //> above, then sliced: `m[3..1]` keeps bits 2 and 1 of the match
+    //> result — 0b00, 0b01, 0b10, 0b11 for x = 0, 1, 2, 3, a value
+    //> distinct for every case.
+    outgoing code_bound : Word[2] {
+        it := m[3..1]
+    }
+
+    //> Counts 0 through 3 and wraps.
+    reg x : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+}
+
+pub mod SliceOfMatchTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every cycle's sliced bits checked out;
+    //> `@Valid(1)` if any cycle diverged.  While `@Invalid()`, the
+    //> simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod slicer of Slicer {
+        it.clock := clock
+    }
+
+    //> Cycle index of the test: 0 through 3, mirroring `slicer.x`.
+    reg step : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Rises the cycle after `step` reaches 3, freezing `all_ok` so
+    //> the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case step == 3 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every cycle's verdict.  Power-on true; each
+    //> cycle folds in whether the sliced bits matched the expected
+    //> value.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && step_ok
+            }
+        }
+    }
+
+    //> High on every cycle before the test has finished.
+    wire checking : Bit {
+        it := !finished
+    }
+
+    //> The value the slice `word(1w1, match x { ... })[4..2]` should
+    //> have produced for this cycle's register value.
+    wire exp_code : Word[2] {
+        it := match step {
+            case 0 => 0b10
+            case 1 => 0b10
+            case 2 => 0b11
+            case 3 => 0b11
+        }
+    }
+
+    //> The value the bound form `m[3..1]` should have produced for
+    //> this cycle's register value.
+    wire exp_code_bound : Word[2] {
+        it := match step {
+            case 0 => 0b00
+            case 1 => 0b01
+            case 2 => 0b10
+            case 3 => 0b11
+        }
+    }
+
+    //> Verdict for the current cycle: both the direct and the bound
+    //> form's sliced bits must equal their expected values.
+    wire step_ok : Bit {
+        it := slicer.code == exp_code && slicer.code_bound == exp_code_bound
+    }
+}

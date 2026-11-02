@@ -1,0 +1,42 @@
+// Self-checking `kind = "run"` test for a `let` statement inside a
+// register driver block: the `let` binding computes the value that the
+// register stores via `it <= ...`.  `count` increments each cycle and
+// `twice` uses a `let` to store `count + count`.  Once `count` reaches
+// 6, the test asserts `twice == 10` (computed on the previous edge,
+// when `count` was 5) and requests simulator exit with code 0 (1 on
+// any mismatch).
+
+import virt
+
+pub mod Top for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> The current count, 0 through 0xf.
+    reg count : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Twice the current `count`, computed by a `let` binding inside
+    //> the register's driver block.
+    reg twice : Word[4] on clock {
+        initial it <= 0
+        let next = count + count {
+            it <= next
+        }
+    }
+
+    //> `@Valid(0)` once `count` reaches 6, at which point `twice`
+    //> (updated on the same edge, from the previous cycle's `count` of
+    //> 5) must be 10.  `@Valid(1)` on any mismatch; while
+    //> `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case count == 0x6 && twice == 0xa => @Valid(0)
+            case count == 0x6 && twice != 0xa => @Valid(1)
+            case count > 0x6 => @Valid(1)
+            else => @Invalid()
+        }
+    }
+}

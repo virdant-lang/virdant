@@ -1,0 +1,207 @@
+//! Self-checking `kind = "run"` test for one logical word target
+//! assembled from two drivers covering disjoint bit ranges.
+//!
+//! A `Word[8]` register is written each active cycle through a single
+//! driver expression `word(high_half, low_half)`, where the two
+//! halves come from two independent counters: bits 7..4 are sourced
+//! solely by the high-half driver and bits 3..0 solely by the
+//! low-half driver.  On every settled cycle the harness asserts the
+//! full word: the high slice of the register must equal the high-half
+//! driver and the low slice must equal the low-half driver.  Every
+//! verdict is ANDed into a running `all_ok`, and the simulator exits
+//! with code 0 only if all checks passed, and 1 otherwise.
+
+import virt
+
+//> Assembles one logical `Word[8]` target from two disjoint drivers.
+//>
+//> Each active cycle, `assembled` is reloaded with
+//> `word(high_half, low_half)`: bits 7..4 come solely from the
+//> high-half wire and bits 3..0 solely from the low-half wire.
+mod WordJoin {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> While low, every register holds a known seed and nothing
+    //> advances; the harness raises this after warm-up.
+    incoming enabled : Bit
+
+    //> The recombined word, one register behind the driver wires.
+    outgoing joined : Word[8] {
+        it := assembled
+    }
+
+    //> Current value of the high-half driver (bits 7..4 source).
+    outgoing high_value : Word[4] {
+        it := high_half
+    }
+
+    //> Current value of the low-half driver (bits 3..0 source).
+    outgoing low_value : Word[4] {
+        it := low_half
+    }
+
+    //> High on cycles where `assembled` and both driver wires were
+    //> settled by the same clock edge, so a same-cycle comparison is
+    //> exact.
+    outgoing settled : Bit {
+        it := toggled
+    }
+
+    //> High-half driver: steps by 1 each active cycle from seed 2.
+    //>
+    //> Steps only while `toggled` is high, so on the following
+    //> (settled) cycle `assembled` matches the current driver values.
+    reg count_high : Word[4] on clock {
+        initial it <= 2
+        when {
+            case enabled && toggled {
+                it <= it + 1
+            }
+            case !enabled {
+                it <= 2
+            }
+        }
+    }
+
+    //> Low-half driver: steps by 3 each active cycle from seed 7.
+    //>
+    //> Steps only while `toggled` is high, so on the following
+    //> (settled) cycle `assembled` matches the current driver values.
+    reg count_low : Word[4] on clock {
+        initial it <= 7
+        when {
+            case enabled && toggled {
+                it <= it + 3
+            }
+            case !enabled {
+                it <= 7
+            }
+        }
+    }
+
+    //> Alternates every active cycle.  Counters only step while this
+    //> is high, so on the next cycle (this held low) `assembled`
+    //> matches the current driver values exactly.
+    reg toggled : Bit on clock {
+        initial it <= false
+        when {
+            case enabled {
+                it <= !it
+            }
+            else {
+                it <= false
+            }
+        }
+    }
+
+    //> High-half driver wire: covers bits 7..4 of the target.
+    wire high_half : Word[4] {
+        it := count_high
+    }
+
+    //> Low-half driver wire: covers bits 3..0 of the target.
+    wire low_half : Word[4] {
+        it := count_low
+    }
+
+    //> The logical word target: one register driven through `word()`
+    //> from two wires covering disjoint bit ranges.
+    reg assembled : Word[8] on clock {
+        initial it <= 0
+        when {
+            case enabled {
+                it <= word(high_half, low_half)
+            }
+            else {
+                it <= 0
+            }
+        }
+    }
+}
+
+pub mod TwoDriversTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all 6 checks passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod join of WordJoin {
+        it.clock := clock
+        it.enabled := enabled
+    }
+
+    //> Warm-up counter, free-running 0 through 15.  Keeps the test
+    //> idle for many cycles before stimulus begins, so the checks are
+    //> independent of the first clock edge.
+    reg warm : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Latches once `warm == 8` has been observed; `warm_seen` then
+    //> stays true as `warm` wraps.
+    reg warm_seen : Bit on clock {
+        initial it <= false
+        it <= it || warm == 8
+    }
+
+    //> Latches one cycle after `warm_seen`, so `enabled` can only
+    //> rise after two clean edges of warm-up counting.
+    reg warm_seen2 : Bit on clock {
+        initial it <= false
+        it <= it || warm_seen
+    }
+
+    //> Rises once the warm-up has settled, and stays high: the
+    //> recombination runs for the rest of the test.
+    reg enabled : Bit on clock {
+        initial it <= false
+        it <= it || (warm_seen2 && warm == 12)
+    }
+
+    //> High on the cycles a check is performed: after warm-up, on a
+    //> settled cycle, and while checks remain.
+    wire checking : Bit {
+        it := enabled && join.settled && check_index < 6
+    }
+
+    //> Number of checks performed so far, 0 through 6.
+    reg check_index : Word[3] on clock {
+        initial it <= 0
+        when {
+            case checking {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on its checking cycle: the high slice of
+    //> the recombined word must come from the high-half driver and
+    //> the low slice from the low-half driver.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && join.joined[8..4] == join.high_value
+                            && join.joined[4..0] == join.low_value
+            }
+        }
+    }
+
+    //> Rises one cycle after the last check is folded in, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= it || check_index == 6
+    }
+}

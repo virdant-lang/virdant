@@ -1,0 +1,177 @@
+// Self-checking `kind = "run"` test for the word comparison operators
+// `<`, `>`, `<=`, `>=`.
+//
+//! A `WordCompare` unit computes all four comparisons of two `Word[8]`
+//! operands.  A harness top drives it through a table of 12 vectors:
+//! the boundary pairs 0 vs 255 and 255 vs 0, equal values (including
+//! 0 vs 0 and 255 vs 255), and assorted asymmetric and adjacent pairs
+//! in both orders.  The four result bits are concatenated into a
+//! `Word[4]` and compared against a golden value; every check is ANDed
+//! into a running `all_ok`, and the simulator exits with code 0 only
+//! if all 12 vectors passed, and 1 otherwise.
+
+import virt
+
+//> All four ordered comparisons of the operands.
+mod WordCompare {
+    //> First operand.
+    incoming a : Word[8]
+
+    //> Second operand.
+    incoming b : Word[8]
+
+    //> `a < b`.
+    outgoing lt : Bit {
+        it := a < b
+    }
+
+    //> `a > b`.
+    outgoing gt : Bit {
+        it := a > b
+    }
+
+    //> `a <= b`.
+    outgoing le : Bit {
+        it := a <= b
+    }
+
+    //> `a >= b`.
+    outgoing ge : Bit {
+        it := a >= b
+    }
+}
+
+pub mod WordCompareTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last vector checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod cmp of WordCompare {
+        it.a := vec_a
+        it.b := vec_b
+    }
+
+    //> Index of the vector under test, 0 through 11.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdict for the current vector.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && verdict == expected
+    }
+
+    //> Rises one cycle after the last vector is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 11 {
+                it <= true
+            }
+        }
+    }
+
+    wire vec_a : Word[8]
+    wire vec_b : Word[8]
+
+    //> The four result bits packed MSB-first: `lt`, `gt`, `le`, `ge`.
+    wire verdict : Word[4] {
+        it := word(cmp.lt, cmp.gt, cmp.le, cmp.ge)
+    }
+
+    //> Test-vector table: `vec_a`, `vec_b`, and the golden `expected`
+    //> verdict, selected by `index`.  The `else` arm parks the
+    //> operands where the check is harmless.
+    wire expected : Word[4]
+
+    match index {
+        // Boundary pair 0 vs max, both orders.
+        case 0 {
+            vec_a := 0
+            vec_b := 255
+            expected := 10
+        }
+        case 1 {
+            vec_a := 255
+            vec_b := 0
+            expected := 5
+        }
+        // Equal values, including both boundary values against
+        // themselves.
+        case 2 {
+            vec_a := 5
+            vec_b := 5
+            expected := 3
+        }
+        case 3 {
+            vec_a := 0
+            vec_b := 0
+            expected := 3
+        }
+        case 4 {
+            vec_a := 255
+            vec_b := 255
+            expected := 3
+        }
+        // Asymmetric pairs, both orders.
+        case 5 {
+            vec_a := 0
+            vec_b := 1
+            expected := 10
+        }
+        case 6 {
+            vec_a := 1
+            vec_b := 0
+            expected := 5
+        }
+        // Adjacent to the max boundary, both orders.
+        case 7 {
+            vec_a := 254
+            vec_b := 255
+            expected := 10
+        }
+        case 8 {
+            vec_a := 255
+            vec_b := 254
+            expected := 5
+        }
+        // Adjacent around the mid-point, both orders.
+        case 9 {
+            vec_a := 127
+            vec_b := 128
+            expected := 10
+        }
+        case 10 {
+            vec_a := 128
+            vec_b := 127
+            expected := 5
+        }
+        case 11 {
+            vec_a := 42
+            vec_b := 43
+            expected := 10
+        }
+        else {
+            vec_a := 0
+            vec_b := 0
+            expected := 3
+        }
+    }
+}

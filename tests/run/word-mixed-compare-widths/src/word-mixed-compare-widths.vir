@@ -1,0 +1,119 @@
+// Self-checking `kind = "run"` test for mixed-width comparisons: a
+// `Word[4]` compared against a `Word[8]`, where the narrow side must
+// be zero-extended with `zext` to match the wide side's width.  Each
+// comparison operator (`==`, `!=`, `<`, `<=`, `>`, `>=`) is exercised
+// over equal, unequal, and boundary pairs, and each expected result is
+// asserted independently.  The simulator exits with code 0 only if
+// every check passed, and 1 otherwise.
+
+import virt
+
+pub mod WordMixedCompareTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case success => @Valid(0)
+            else => @Invalid()
+        }
+    }
+
+    //> Narrow operand: 0xa.
+    wire small_a : Word[4]
+    small_a := 0xaw4
+
+    //> Narrow operand: 0x5.
+    wire small_b : Word[4]
+    small_b := 0x5w4
+
+    //> Narrow operand: the Word[4] maximum, 0xf.
+    wire small_max : Word[4]
+    small_max := 0xfw4
+
+    //> Narrow operand: zero.
+    wire small_zero : Word[4]
+    small_zero := 0w4
+
+    //> Wide operand with the same value as `small_a`: 0x0a.  The
+    //> zero-extended comparison must see them as equal.
+    wire wide_a : Word[8]
+    wide_a := 0x0aw8
+
+    //> Wide operand: 0x5f, larger than any zero-extended Word[4].
+    wire wide_b : Word[8]
+    wide_b := 0x5fw8
+
+    //> Wide operand: the Word[8] maximum, 0xff.  `zext(0xfw4)` is
+    //> 0x0f, which is smaller, not equal.
+    wire wide_max : Word[8]
+    wide_max := 0xffw8
+
+    //> Wide operand: zero.
+    wire wide_zero : Word[8]
+    wide_zero := 0w8
+
+    //> `==`: zero-extended 0xa equals 0x0a.
+    wire eq_zero_extended : Bit
+    eq_zero_extended := zext(small_a) == wide_a
+
+    //> `==` with the operands reordered: 0x0a equals zero-extended
+    //> 0xa.
+    wire eq_reordered : Bit
+    eq_reordered := wide_a == zext(small_a)
+
+    //> `==` on zero: zero-extended 0 equals 0.
+    wire eq_zero : Bit
+    eq_zero := zext(small_zero) == wide_zero
+
+    //> `!=`: zero-extended 0xf (0x0f) differs from the Word[8]
+    //> maximum 0xff: the zero-padded upper bits are compared too.
+    wire ne_upper_bits : Bit
+    ne_upper_bits := zext(small_max) != wide_max
+
+    //> `!=` between two different values: zero-extended 0xa differs
+    //> from 0x5f.
+    wire ne_different : Bit
+    ne_different := zext(small_a) != wide_b
+
+    //> `<`: zero-extended 0x5 (0x05) is below 0x5f.
+    wire lt_narrow_below : Bit
+    lt_narrow_below := zext(small_b) < wide_b
+
+    //> `<` must be false for equal values: zero-extended 0xa is not
+    //> below 0x0a.
+    wire lt_equal_false : Bit
+    lt_equal_false := !(zext(small_a) < wide_a)
+
+    //> `<` at the wide boundary: zero-extended 0xf (0x0f) is below
+    //> the Word[8] maximum 0xff.
+    wire lt_max : Bit
+    lt_max := zext(small_max) < wide_max
+
+    //> `<=`: equal values compare as less-or-equal.
+    wire lte_equal : Bit
+    lte_equal := zext(small_a) <= wide_a
+
+    //> `>` must be false for equal values: zero-extended 0xa is not
+    //> above 0x0a.
+    wire gt_equal_false : Bit
+    gt_equal_false := !(zext(small_a) > wide_a)
+
+    //> `>` with the wide operand on the left: 0x5f is above
+    //> zero-extended 0xa.
+    wire gt_wide_above : Bit
+    gt_wide_above := wide_b > zext(small_a)
+
+    //> `>=`: equal values compare as greater-or-equal.
+    wire gte_equal : Bit
+    gte_equal := zext(small_a) >= wide_a
+
+    //> AND of every check; the exit verdict.
+    wire success : Bit
+    success := eq_zero_extended && eq_reordered && eq_zero
+        && ne_upper_bits && ne_different
+        && lt_narrow_below && lt_equal_false && lt_max
+        && lte_equal && gt_equal_false && gt_wide_above && gte_equal
+}

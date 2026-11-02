@@ -1,0 +1,80 @@
+// Self-checking `kind = "run"` test for a struct containing a struct:
+// chained projection `outer->inner->field`.  A nested struct literal is
+// written to the register, every chained projection is checked against
+// its golden value, and the simulator exits with code 0 only if all
+// checks passed, and 1 otherwise.
+
+import virt
+
+//> Inner struct type held by the `inner` field of `Outer`.
+struct type Inner {
+    value : Word[8]
+    tag   : Word[8]
+}
+
+//> Outer struct type holding an `Inner` struct.
+struct type Outer {
+    inner : Inner
+    extra : Word[8]
+}
+
+pub mod StructNestedTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once every check has passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case cycle == 2 => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Cycles elapsed since reset, 0 through 2.
+    reg cycle : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Register of nested struct type.  After one cycle the whole
+    //> nested struct is overwritten with a nested literal.
+    reg o : Outer on clock {
+        initial it <= ${
+            inner = ${
+                value = 0,
+                tag = 0,
+            },
+            extra = 0,
+        }
+        when {
+            case cycle == 0 {
+                it <= ${
+                    inner = ${
+                        value = 42,
+                        tag = 7,
+                    },
+                    extra = 99,
+                }
+            }
+        }
+    }
+
+    //> Chained projections through the nested struct.
+    wire value : Word[8] {
+        it := o->inner->value
+    }
+
+    wire tag : Word[8] {
+        it := o->inner->tag
+    }
+
+    wire extra : Word[8] {
+        it := o->extra
+    }
+
+    //> By cycle 2 every chained projection must equal its golden value.
+    wire all_ok : Bit {
+        it := value == 42w8 && tag == 7w8 && extra == 99w8
+    }
+}

@@ -1,0 +1,5 @@
+[project]
+name = "generic-mod-instantiated-thrice"
+
+[prog]
+top = "generic-mod-instantiated-thrice::Top"

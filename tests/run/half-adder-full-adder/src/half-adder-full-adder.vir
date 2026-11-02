@@ -1,0 +1,202 @@
+// Self-checking `kind = "run"` test for module hierarchy: a
+// `HalfAdder` instantiated twice inside a `FullAdder`.
+//
+//! The harness drives every row of `a`, `b`, and `cin` through the
+//! `FullAdder` and checks `sum` and `cout` against golden values,
+//! cross-checked against the word addition `a + b + cin`.  All 8
+//! checks are ANDed into a running `all_ok`; the simulator exits with
+//! code 0 only if every row passed, and 1 otherwise.
+
+import virt
+
+//> Sum and carry of two bits: `sum = a ^^ b`, `carry = a && b`.
+mod HalfAdder {
+    //> First operand.
+    incoming a : Bit
+
+    //> Second operand.
+    incoming b : Bit
+
+    //> Sum bit.
+    outgoing sum : Bit {
+        it := a ^^ b
+    }
+
+    //> Carry bit.
+    outgoing carry : Bit {
+        it := a && b
+    }
+}
+
+//> Full adder built from two `HalfAdder`s: the first adds `a` and
+//> `b`, the second adds that partial sum to `cin`.  The carry-out is
+//> the OR of the two partial carries.
+mod FullAdder {
+    //> First operand.
+    incoming a : Bit
+
+    //> Second operand.
+    incoming b : Bit
+
+    //> Carry-in.
+    incoming cin : Bit
+
+    //> Sum of `a`, `b`, and `cin`.
+    outgoing sum : Bit
+
+    //> Carry-out.
+    outgoing cout : Bit
+
+    //> Adds `a` and `b`.
+    mod ha0 of HalfAdder {
+        it.a := a
+        it.b := b
+    }
+
+    //> Adds the partial sum to `cin`.
+    mod ha1 of HalfAdder {
+        it.a := ha0.sum
+        it.b := cin
+    }
+
+    sum := ha1.sum
+    cout := ha0.carry || ha1.carry
+}
+
+pub mod Top for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all 8 rows checked out; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod fulladder of FullAdder {
+        it.a := vec_a
+        it.b := vec_b
+        it.cin := vec_cin
+    }
+
+    //> Index of the input row under test, 0 through 7.
+    reg index : Word[3] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdict for the current row, both against the
+    //> golden table and against the word-addition oracle.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && fulladder.sum == expected_sum && fulladder.cout == expected_cout
+            && fulladder.sum == golden[0] && fulladder.cout == golden[1]
+    }
+
+    //> Rises one cycle after the last row is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 7 {
+                it <= true
+            }
+        }
+    }
+
+    //> Independent oracle: the three operand bits added as a word.
+    //> Bit 0 is the expected sum, bit 1 the expected carry-out.
+    wire va : Word[2] {
+        it := zext(vec_a)
+    }
+
+    wire vb : Word[2] {
+        it := zext(vec_b)
+    }
+
+    wire vc : Word[2] {
+        it := zext(vec_cin)
+    }
+
+    wire golden : Word[2] {
+        it := va + vb + vc
+    }
+
+    wire vec_a : Bit
+    wire vec_b : Bit
+    wire vec_cin : Bit
+    wire expected_sum : Bit
+
+    //> Golden `expected_sum`/`expected_cout` for the row selected by
+    //> `index`.  The 8 cases exactly cover `Word[3]`, so the match is
+    //> exhaustive.
+    wire expected_cout : Bit
+
+    match index {
+        case 0 {
+            vec_a := false
+            vec_b := false
+            vec_cin := false
+            expected_sum := false
+            expected_cout := false
+        }
+        case 1 {
+            vec_a := false
+            vec_b := false
+            vec_cin := true
+            expected_sum := true
+            expected_cout := false
+        }
+        case 2 {
+            vec_a := false
+            vec_b := true
+            vec_cin := false
+            expected_sum := true
+            expected_cout := false
+        }
+        case 3 {
+            vec_a := false
+            vec_b := true
+            vec_cin := true
+            expected_sum := false
+            expected_cout := true
+        }
+        case 4 {
+            vec_a := true
+            vec_b := false
+            vec_cin := false
+            expected_sum := true
+            expected_cout := false
+        }
+        case 5 {
+            vec_a := true
+            vec_b := false
+            vec_cin := true
+            expected_sum := false
+            expected_cout := true
+        }
+        case 6 {
+            vec_a := true
+            vec_b := true
+            vec_cin := false
+            expected_sum := false
+            expected_cout := true
+        }
+        case 7 {
+            vec_a := true
+            vec_b := true
+            vec_cin := true
+            expected_sum := true
+            expected_cout := true
+        }
+    }
+}

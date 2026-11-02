@@ -1,0 +1,248 @@
+//! Self-checking `kind = "run"` test for a vending-machine coin FSM.
+//!
+//! A `VendingMachine` unit accumulates `#Nickel` (5) and `#Dime` (10)
+//! coins and dispenses an item (with change) as soon as the balance
+//! reaches 15.  The harness drives a scripted transaction sequence:
+//! nickel+dime, dime+dime, a dime held over idle cycles then topped
+//! up with a nickel, three nickels, two dimes, and nickel+dime
+//! again.  Every cycle inside the checking window asserts the
+//! `dispense` pulse and the change amount against the expected
+//! timeline; every verdict is folded into a running `all_ok` and the
+//! simulator exits with code 0 only if all cycles matched.
+
+import virt
+
+//> Coin presented during a cycle.  `#None` encodes "no coin this
+//> cycle" and is worth 0.
+enum type Coin {
+    None   = 0w2
+    Nickel = 1w2
+    Dime   = 2w2
+}
+
+//> State of the vending machine.
+//>
+//> `Idle` - waiting for a coin.
+//> `Acc(balance)` - accumulating credit, `balance < 15`.
+//> `Dispense(change)` - one-cycle dispense with `change` returned.
+union type VmState {
+    Idle()
+    Acc(balance : Word[5])
+    Dispense(change : Word[5])
+}
+
+//> Vending machine: dispenses as soon as the accumulated credit
+//> reaches 15 and returns the excess as change.
+mod VendingMachine {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Coin presented this cycle (`#None` when no coin is inserted).
+    incoming coin : Coin
+
+    //> One-cycle pulse: an item is dispensed and `change` is returned.
+    outgoing dispense : Bit
+
+    //> Change returned on the `dispense` cycle; 0 otherwise.
+    outgoing change : Word[5]
+
+    //> Credit value of the coin presented this cycle: 5 for
+    //> `#Nickel`, 10 for `#Dime`, 0 for `#None`.
+    wire coin_value : Word[5] {
+        it := match coin {
+            case #Nickel => 5
+            case #Dime => 10
+            else => 0
+        }
+    }
+
+    reg state : VmState on clock {
+        initial it <= @Idle()
+        it <= match it : VmState {
+            case @Idle() =>
+                when {
+                    case coin_value > 0 => @Acc(coin_value)
+                    else => @Idle()
+                }
+            case @Acc(balance) =>
+                when {
+                    case balance + coin_value >= 15 => @Dispense(balance + coin_value - 15)
+                    else => @Acc(balance + coin_value)
+                }
+            case @Dispense(c) => @Idle()
+        }
+    }
+
+    match state {
+        case @Dispense(c) {
+            dispense := true
+            change := c
+        }
+        else {
+            dispense := false
+            change := 0
+        }
+    }
+}
+
+pub mod VendingMachineTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every cycle in the checking window matched the
+    //> expected timeline; `@Valid(1)` if any check failed.  While
+    //> `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod vm of VendingMachine {
+        it.clock := clock
+        it.coin := coin
+    }
+
+    //> Cycle counter; the transaction schedule below is keyed on it.
+    //> Cycles 0-5 are an idle warm-up so the first clock edge cannot
+    //> perturb the checked timeline.
+    reg cycle : Word[8] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    wire coin : Coin
+    wire expect_dispense : Bit
+    wire expect_change : Word[5]
+
+    //> True while the harness compares the machine against the
+    //> expected timeline (after the warm-up, until the last checked
+    //> cycle).
+    wire checking : Bit {
+        it := cycle > 5 && cycle < 59
+    }
+
+    //> Verdict for the current cycle: `dispense` must match the
+    //> expectation, and when a dispense is expected the change amount
+    //> must match too.
+    wire cycle_ok : Bit {
+        it := vm.dispense == expect_dispense
+            && (!expect_dispense || vm.change == expect_change)
+    }
+
+    // Coin schedule: one coin per cycle, `#None` in between.
+    match cycle {
+        case 6 {
+            coin := #Nickel
+        }
+        case 7 {
+            coin := #Dime
+        }
+        case 13 {
+            coin := #Dime
+        }
+        case 14 {
+            coin := #Dime
+        }
+        case 20 {
+            coin := #Dime
+        }
+        case 22 {
+            coin := #Nickel
+        }
+        case 28 {
+            coin := #Nickel
+        }
+        case 29 {
+            coin := #Nickel
+        }
+        case 30 {
+            coin := #Nickel
+        }
+        case 36 {
+            coin := #Dime
+        }
+        case 37 {
+            coin := #Dime
+        }
+        case 43 {
+            coin := #Nickel
+        }
+        case 44 {
+            coin := #Nickel
+        }
+        case 45 {
+            coin := #Nickel
+        }
+        case 50 {
+            coin := #Dime
+        }
+        case 51 {
+            coin := #Nickel
+        }
+        else {
+            coin := #None
+        }
+    }
+
+    // Expected dispense/change timeline.  A coin during cycle `c`
+    // updates the machine's state for cycle `c + 1`, so each
+    // transaction dispenses one cycle after its last coin.
+    match cycle {
+        case 8 {
+            expect_dispense := true
+            expect_change := 0
+        }
+        case 15 {
+            expect_dispense := true
+            expect_change := 5
+        }
+        case 23 {
+            expect_dispense := true
+            expect_change := 0
+        }
+        case 31 {
+            expect_dispense := true
+            expect_change := 0
+        }
+        case 38 {
+            expect_dispense := true
+            expect_change := 5
+        }
+        case 46 {
+            expect_dispense := true
+            expect_change := 0
+        }
+        case 52 {
+            expect_dispense := true
+            expect_change := 0
+        }
+        else {
+            expect_dispense := false
+            expect_change := 0
+        }
+    }
+
+    //> Running AND of every checked cycle.  Power-on true; each check
+    //> folds its verdict in on the cycle it covers.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case checking {
+                it <= it && cycle_ok
+            }
+        }
+    }
+
+    //> Rises after the last checked cycle has been folded into
+    //> `all_ok`, so the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case cycle > 58 {
+                it <= true
+            }
+        }
+    }
+}

@@ -1,0 +1,5 @@
+[project]
+name = "mux-structs"
+
+[prog]
+top = "mux-structs::MuxStructsTest"

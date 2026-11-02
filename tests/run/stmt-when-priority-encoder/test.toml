@@ -1,0 +1,4 @@
+kind = "run"
+description = "4-input priority encoder written as a statement when, highest-priority first, all 16 vectors asserted"
+cycle_limit = 20
+trace = false

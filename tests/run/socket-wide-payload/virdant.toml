@@ -1,0 +1,5 @@
+[project]
+name = "socket-wide-payload"
+
+[prog]
+top = "socket-wide-payload::SocketWideTest"

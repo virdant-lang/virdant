@@ -1,0 +1,318 @@
+//! Self-checking `kind = "run"` test for a two-input stream join.
+//!
+//! `Join` combines two `Pipe`-style valid streams into one output that
+//! presents the joined pair only on cycles where BOTH inputs are
+//! valid.  Its two key properties are:
+//!
+//! * No premature fire: when only one (or neither) input is valid,
+//!   the output presents `@Invalid()`, and the valid side's `ready`
+//!   stays low so the transfer is not consumed before its partner
+//!   arrives.
+//! * Correct pairing: when both inputs are valid on the same cycle,
+//!   the output fires with a pair built from exactly the values
+//!   offered on that cycle.
+//!
+//! The harness drives the two streams through a scripted schedule
+//! (after 3 warm-up idle cycles, which keep the test deterministic
+//! against first-edge randomization): cycles with only A valid, only
+//! B valid, neither valid, and both valid with distinct values.  The
+//! per-cycle verdicts are invariants -- they must hold for whatever
+//! pattern is on the inputs -- and are folded into a running `all_ok`;
+//! the simulator exits with code 0 only if every cycle checked out,
+//! and 1 otherwise.
+
+import virt
+
+//> Local valid/ready handshake socket, structurally identical to the
+//> builtin `Pipe`: the producer drives `data`, the consumer drives
+//> `ready`.
+socket Pipe[T : Type] {
+    cosi data  : Valid[T]
+    soci ready : Bit
+}
+
+//> Joined pair: the payload carried by the output stream.
+//>
+//> `Pair(a, b)` - carries the value from stream A and the value from
+//> stream B that were valid on the same cycle.
+union type Joined {
+    Pair(a : Word[8], b : Word[8])
+}
+
+//> Two-input stream join: the output presents a joined pair only on
+//> cycles where both inputs offer valid data.  Purely combinational.
+//> The input `ready`s are gated on both-valid (and downstream
+//> `ready`), so a one-sided valid transfer is never consumed.
+mod Join {
+    //> Upstream stream A.
+    server socket inA of Pipe[Word[8]] {
+        it.ready := in_ready
+    }
+
+    //> Upstream stream B.
+    server socket inB of Pipe[Word[8]] {
+        it.ready := in_ready
+    }
+
+    //> Joined output stream.
+    client socket out of Pipe[Joined] {
+        it.data := out_data
+    }
+
+    //> Whether stream A offers a valid payload this cycle.
+    wire a_valid : Bit {
+        it := match inA.data {
+            case @Valid(dontcare) => true
+            case @Invalid() => false
+        }
+    }
+
+    //> Whether stream B offers a valid payload this cycle.
+    wire b_valid : Bit {
+        it := match inB.data {
+            case @Valid(dontcare) => true
+            case @Invalid() => false
+        }
+    }
+
+    //> A's offered payload, unwrapped (`0` when `@Invalid()`, which
+    //> never reaches the output because `both_valid` is false then).
+    wire a_word : Word[8] {
+        it := match inA.data {
+            case @Valid(word) => word
+            case @Invalid() => 0
+        }
+    }
+
+    //> B's offered payload, unwrapped (`0` when `@Invalid()`).
+    wire b_word : Word[8] {
+        it := match inB.data {
+            case @Valid(word) => word
+            case @Invalid() => 0
+        }
+    }
+
+    //> Both inputs are valid on this same cycle: the join condition.
+    wire both_valid : Bit {
+        it := a_valid && b_valid
+    }
+
+    //> The joined pair, present only when both inputs are valid.
+    wire out_data : Valid[Joined] {
+        it := when {
+            case both_valid => @Valid(@Pair(a_word, b_word))
+            else => @Invalid()
+        }
+    }
+
+    //> Inputs are accepted only when the pair can actually fire: both
+    //> inputs valid and the downstream consumer ready.
+    wire in_ready : Bit {
+        it := both_valid && out.ready
+    }
+}
+
+pub mod StreamJoinTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> The join under test.
+    mod join of Join {
+        it.inA.data := a_data
+        it.inB.data := b_data
+        it.out.ready := consumer_ready
+    }
+
+    //> Cycle counter driving the stimulus schedule.  Steps 0-2 are
+    //> idle warm-up so the test stays deterministic regardless of any
+    //> first-edge randomization; steps 3-10 carry the scripted
+    //> stimulus; step 12 raises `finished`.
+    reg step : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> The downstream consumer always accepts, so "the output fires"
+    //> is exactly "the output presents a valid pair".
+    wire consumer_ready : Bit {
+        it := true
+    }
+
+    //> Stream A stimulus.  The schedule holds A's value across cycles
+    //> where B is absent, exercises one-sided-valid cycles on both
+    //> streams, and pairs four distinct values.
+    wire a_data : Valid[Word[8]] {
+        it := match step {
+            case 3 => @Valid(10)
+            case 4 => @Valid(10)
+            case 5 => @Invalid()
+            case 6 => @Valid(11)
+            case 7 => @Valid(12)
+            case 8 => @Invalid()
+            case 9 => @Valid(13)
+            case 10 => @Valid(14)
+            else => @Invalid()
+        }
+    }
+
+    //> Stream B stimulus, phased against A so that steps 3, 5, 7, and
+    //> 8 have exactly one side valid.
+    wire b_data : Valid[Word[8]] {
+        it := match step {
+            case 4 => @Valid(20)
+            case 5 => @Valid(21)
+            case 6 => @Valid(22)
+            case 7 => @Invalid()
+            case 8 => @Valid(23)
+            case 9 => @Valid(24)
+            case 10 => @Valid(25)
+            else => @Invalid()
+        }
+    }
+
+    //> Whether A offers a valid payload this cycle.
+    wire a_valid : Bit {
+        it := match a_data {
+            case @Valid(dontcare) => true
+            case @Invalid() => false
+        }
+    }
+
+    //> Whether B offers a valid payload this cycle.
+    wire b_valid : Bit {
+        it := match b_data {
+            case @Valid(dontcare) => true
+            case @Invalid() => false
+        }
+    }
+
+    //> A's offered payload, unwrapped (`0` when `@Invalid()`).
+    wire a_word : Word[8] {
+        it := match a_data {
+            case @Valid(word) => word
+            case @Invalid() => 0
+        }
+    }
+
+    //> B's offered payload, unwrapped (`0` when `@Invalid()`).
+    wire b_word : Word[8] {
+        it := match b_data {
+            case @Valid(word) => word
+            case @Invalid() => 0
+        }
+    }
+
+    //> Both streams offer valid payloads on this same cycle.
+    wire both_valid : Bit {
+        it := a_valid && b_valid
+    }
+
+    //> No premature fire: whenever the inputs are not both valid, the
+    //> output must present `@Invalid()` (and so, with the consumer
+    //> always ready, must not fire).
+    wire ok_no_premature_fire : Bit {
+        it := when {
+            case !both_valid => match join.out.data {
+                case @Valid(dontcare) => false
+                case @Invalid() => true
+            }
+            else => true
+        }
+    }
+
+    //> The output stream, unwrapped: the joined pair when the output
+    //> fires, `@Pair(0, 0)` otherwise (which `ok_pairing` never looks
+    //> at, because it only inspects `pair` on both-valid cycles).
+    wire out_pair : Joined {
+        it := match join.out.data {
+            case @Valid(pair) => pair
+            case @Invalid() => @Pair(0, 0)
+        }
+    }
+
+    //> The joined pair's A field.
+    wire out_a : Word[8] {
+        it := match out_pair {
+            case @Pair(a, b) => a
+        }
+    }
+
+    //> The joined pair's B field.
+    wire out_b : Word[8] {
+        it := match out_pair {
+            case @Pair(a, b) => b
+        }
+    }
+
+    //> Correct pairing: whenever both inputs are valid, the output
+    //> fires with a pair built from exactly this cycle's offered
+    //> values.
+    wire ok_pairing : Bit {
+        it := when {
+            case both_valid => out_a == a_word && out_b == b_word
+            else => true
+        }
+    }
+
+    //> No premature accept: when exactly one stream is valid, that
+    //> stream's `ready` must be low, so the transfer is not consumed
+    //> before its partner arrives.
+    wire ok_ready_gated : Bit {
+        it := when {
+            case a_valid && !b_valid => !join.inA.ready
+            case !a_valid && b_valid => !join.inB.ready
+            else => true
+        }
+    }
+
+    //> When both streams are valid and the consumer is ready, both
+    //> input `ready`s must be high so the pair transfers this cycle.
+    wire ok_ready_open : Bit {
+        it := when {
+            case both_valid => join.inA.ready && join.inB.ready
+            else => true
+        }
+    }
+
+    //> This cycle's combined verdict.
+    wire ok_all : Bit {
+        it := ok_no_premature_fire && ok_pairing
+            && ok_ready_gated && ok_ready_open
+    }
+
+    //> Running AND of every check so far.  Power-on true; re-asserted
+    //> (not folded) during the warm-up steps so first-edge
+    //> randomization cannot poison it; the stimulus verdicts fold in
+    //> from step 3 onward.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case step < 3 {
+                it <= true
+            }
+            case step < 12 {
+                it <= it && ok_all
+            }
+        }
+    }
+
+    //> Rises the cycle after the last stimulus verdict has folded in,
+    //> so that `exit` never observes a vacuous `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case step == 12 {
+                it <= true
+            }
+        }
+    }
+}

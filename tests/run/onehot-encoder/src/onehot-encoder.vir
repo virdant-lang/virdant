@@ -1,0 +1,112 @@
+//! Self-checking `kind = "run"` test for a 4-bit one-hot to 2-bit
+//! binary encoder.
+//!
+//! A `OnehotEncoder` maps a one-hot `Word[4]` to the index of its hot
+//! bit with a `match`.  The harness top walks all 4 hot positions,
+//! one per cycle, and checks the encoded value against the expected
+//! index.  Each verdict is folded into a running `all_ok`; the
+//! simulator exits with code 0 only if all 4 positions passed, and 1
+//! otherwise.
+
+import virt
+
+//> Encodes a one-hot `Word[4]` into the index of its hot bit.
+mod OnehotEncoder {
+    //> One-hot input: exactly one bit hot.
+    incoming onehot : Word[4]
+
+    //> Index of the hot bit.
+    outgoing code : Word[2]
+
+    match onehot {
+        case 0b0001 {
+            code := 0
+        }
+        case 0b0010 {
+            code := 1
+        }
+        case 0b0100 {
+            code := 2
+        }
+        case 0b1000 {
+            code := 3
+        }
+        else {
+            code := 0
+        }
+    }
+}
+
+pub mod OnehotEncoderTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all 4 hot positions checked out; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod enc of OnehotEncoder {
+        it.onehot := onehot
+    }
+
+    //> Index of the hot position under test, 0 through 3; free-runs
+    //> and wraps.
+    reg index : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in until all 4 hot positions are done.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !finished {
+                it <= it && enc.code == expected
+            }
+        }
+    }
+
+    //> Rises once every hot position has been checked (one cycle
+    //> after the last check), so that the exit code sees the final
+    //> `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case !finished {
+                it <= index == 3
+            }
+        }
+    }
+
+    //> One-hot pattern applied to the encoder, selected by `index`.
+    wire onehot : Word[4]
+
+    //> Golden binary code expected for the pattern on `onehot`.
+    wire expected : Word[2]
+
+    match index {
+        case 0 {
+            onehot := 0b0001
+            expected := 0
+        }
+        case 1 {
+            onehot := 0b0010
+            expected := 1
+        }
+        case 2 {
+            onehot := 0b0100
+            expected := 2
+        }
+        case 3 {
+            onehot := 0b1000
+            expected := 3
+        }
+    }
+}

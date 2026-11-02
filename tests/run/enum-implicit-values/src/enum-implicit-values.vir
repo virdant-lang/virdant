@@ -1,0 +1,154 @@
+//! Self-checking `kind = "run"` test for enum encodings left implicit.
+//!
+//! Two implicit-value styles are exercised:
+//!
+//! * Mixed widths: every enumerant has an explicit value, but only
+//!   the first pins down the width (`Add = 1w3`); the rest are bare
+//!   (`Sub = 2`).  The enum's width comes from the first enumerant.
+//!   (Giving a value to only *some* enumerants is an Error,
+//!   `EnumPartiallySpecified`, so that style cannot be a run test.)
+//! * All-implicit: no enumerant names a value at all, so the enum is
+//!   one-hot encoded by default -- enumerant `i` gets `1 << i` and
+//!   the width is the number of enumerants.
+//!
+//! Each encoding is asserted with `cast()` down to the underlying
+//! `Word[n]`.  Every verdict is folded into a running `all_ok`; the
+//! simulator exits with code 0 only if all encodings matched, and 1
+//! otherwise.
+
+import virt
+
+//> Opcode with mixed width style: `Add` fixes the width at 3 bits;
+//> `Sub`, `Nop`, and `Xor` give bare values with implicit width.
+enum type Opcode {
+    Add = 1w3
+    Sub = 2
+    Nop = 0
+    Xor = 5
+}
+
+//> Pipeline stage with no explicit values at all: one-hot encoded,
+//> width 3 for the three enumerants.
+enum type Stage {
+    Fetch
+    Decode
+    Execute
+}
+
+pub mod EnumImplicitValuesTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every encoding matched; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Each `Opcode` variant, bound to a typed wire so the variant's
+    //> type is known.
+    wire op_add : Opcode {
+        it := #Add
+    }
+
+    wire op_sub : Opcode {
+        it := #Sub
+    }
+
+    wire op_nop : Opcode {
+        it := #Nop
+    }
+
+    wire op_xor : Opcode {
+        it := #Xor
+    }
+
+    //> `cast()` of each `Opcode` variant down to its underlying
+    //> `Word[3]`, the width pinned by the first enumerant.
+    wire op_add_bits : Word[3] {
+        it := cast(op_add)
+    }
+
+    wire op_sub_bits : Word[3] {
+        it := cast(op_sub)
+    }
+
+    wire op_nop_bits : Word[3] {
+        it := cast(op_nop)
+    }
+
+    wire op_xor_bits : Word[3] {
+        it := cast(op_xor)
+    }
+
+    //> All four mixed-width encodings must equal their declared
+    //> values.
+    wire opcode_ok : Bit {
+        it := op_add_bits == 1
+            && op_sub_bits == 2
+            && op_nop_bits == 0
+            && op_xor_bits == 5
+    }
+
+    //> Each `Stage` variant, bound to a typed wire.
+    wire stage_fetch : Stage {
+        it := #Fetch
+    }
+
+    wire stage_decode : Stage {
+        it := #Decode
+    }
+
+    wire stage_execute : Stage {
+        it := #Execute
+    }
+
+    //> `cast()` of each `Stage` variant down to its underlying
+    //> `Word[3]`, the width of three one-hot enumerants.
+    wire stage_fetch_bits : Word[3] {
+        it := cast(stage_fetch)
+    }
+
+    wire stage_decode_bits : Word[3] {
+        it := cast(stage_decode)
+    }
+
+    wire stage_execute_bits : Word[3] {
+        it := cast(stage_execute)
+    }
+
+    //> The default one-hot encodings: enumerant `i` is `1 << i`.
+    wire stage_ok : Bit {
+        it := stage_fetch_bits == 1
+            && stage_decode_bits == 2
+            && stage_execute_bits == 4
+    }
+
+    //> A `match` over the all-implicit enum must select the right
+    //> arm for each one-hot pattern.
+    wire stage_match_ok : Bit {
+        it := match stage_execute : Stage {
+            case #Fetch => false
+            case #Decode => false
+            case #Execute => true
+        }
+    }
+
+    //> Running AND of every check.  Power-on true; the checks fold in
+    //> on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && opcode_ok && stage_ok && stage_match_ok
+    }
+
+    //> Rises on the first clock edge, after the checks are folded
+    //> into `all_ok`, so the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

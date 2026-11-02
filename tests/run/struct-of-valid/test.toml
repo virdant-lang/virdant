@@ -1,0 +1,4 @@
+kind = "run"
+description = "Struct with a `Valid[Word[8]]` field; match on the field extracts the payload when Valid, else-branch when Invalid"
+cycle_limit = 3
+trace = false

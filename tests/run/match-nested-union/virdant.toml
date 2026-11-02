@@ -1,0 +1,5 @@
+[project]
+name = "match-nested-union"
+
+[prog]
+top = "match-nested-union::MatchNestedUnionTest"

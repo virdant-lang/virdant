@@ -1,0 +1,159 @@
+//! Self-checking `kind = "run"` test for enum round-trips through
+//! `cast()`: `cast(cast(#X))` — enum -> word -> enum — must be the
+//! identity for every variant.
+//!
+//! Each variant of a four-variant `Phase` enum with sparse encodings
+//! is cast to its underlying `Word[3]` and cast back, then checked
+//! two ways: the round-tripped value must equal the original variant,
+//! and a `match` on the round-tripped value must select that
+//! variant's arm.  Every verdict is folded into a running `all_ok`;
+//! the simulator exits with code 0 only if every variant round-tripped,
+//! and 1 otherwise.
+
+import virt
+
+//> Traffic-light phase with sparse, non-sequential encodings, so a
+//> round-trip bug that mangles bit patterns cannot alias one variant
+//> onto another.
+enum type Phase {
+    Off    = 0w3
+    Green  = 1w3
+    Yellow = 2w3
+    Red    = 4w3
+}
+
+pub mod EnumRoundtripTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every round-trip was the identity; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Each enum variant, bound to a typed wire so the variant's
+    //> type is known.
+    wire off : Phase {
+        it := #Off
+    }
+
+    wire green : Phase {
+        it := #Green
+    }
+
+    wire yellow : Phase {
+        it := #Yellow
+    }
+
+    wire red : Phase {
+        it := #Red
+    }
+
+    //> `cast()` down to the underlying `Word[3]`, the width the
+    //> enum's value widths dictate.
+    wire off_bits : Word[3] {
+        it := cast(off)
+    }
+
+    wire green_bits : Word[3] {
+        it := cast(green)
+    }
+
+    wire yellow_bits : Word[3] {
+        it := cast(yellow)
+    }
+
+    wire red_bits : Word[3] {
+        it := cast(red)
+    }
+
+    //> `cast()` back up to `Phase`: the second leg of the round-trip
+    //> under test.
+    wire off_roundtrip : Phase {
+        it := cast(off_bits)
+    }
+
+    wire green_roundtrip : Phase {
+        it := cast(green_bits)
+    }
+
+    wire yellow_roundtrip : Phase {
+        it := cast(yellow_bits)
+    }
+
+    wire red_roundtrip : Phase {
+        it := cast(red_bits)
+    }
+
+    //> A `match` on each round-tripped value must select that
+    //> variant's arm and no other.
+    wire off_decodes : Bit {
+        it := match off_roundtrip {
+            case #Off => true
+            else => false
+        }
+    }
+
+    wire green_decodes : Bit {
+        it := match green_roundtrip {
+            case #Green => true
+            else => false
+        }
+    }
+
+    wire yellow_decodes : Bit {
+        it := match yellow_roundtrip {
+            case #Yellow => true
+            else => false
+        }
+    }
+
+    wire red_decodes : Bit {
+        it := match red_roundtrip {
+            case #Red => true
+            else => false
+        }
+    }
+
+    //> Each round-tripped value must equal the original variant and
+    //> decode back to that variant's arm.
+    wire off_ok : Bit {
+        it := off_roundtrip == off && off_decodes
+    }
+
+    wire green_ok : Bit {
+        it := green_roundtrip == green && green_decodes
+    }
+
+    wire yellow_ok : Bit {
+        it := yellow_roundtrip == yellow && yellow_decodes
+    }
+
+    wire red_ok : Bit {
+        it := red_roundtrip == red && red_decodes
+    }
+
+    //> All four variants must have round-tripped as the identity.
+    wire checks_ok : Bit {
+        it := off_ok && green_ok && yellow_ok && red_ok
+    }
+
+    //> Running AND of every check.  Power-on true; the checks fold in
+    //> on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && checks_ok
+    }
+
+    //> Rises on the first clock edge, after the checks are folded
+    //> into `all_ok`, so the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+}

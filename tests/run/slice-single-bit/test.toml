@@ -1,0 +1,4 @@
+kind = "run"
+description = "x[3..2] is a single bit (bit 2); asserted against sequencer-driven vectors 0b0100 and 0b1011"
+cycle_limit = 8
+trace = false

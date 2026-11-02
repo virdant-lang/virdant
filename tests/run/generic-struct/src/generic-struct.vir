@@ -1,0 +1,96 @@
+// A `kind = "run"` self-checking test for a generic struct:
+// `struct type Pair[T : Type]` with fields of type `T`.  The struct is
+// instantiated at `Word[4]` (as a register, driven from power-on with
+// a struct literal) and at `Word[8]` (as a combinational wire).  Every
+// field projection is checked against its golden value, and the
+// simulator exits with code 0 only if all checks passed, and 1
+// otherwise.
+
+import virt
+
+//> Generic struct: both fields have the type parameter `T`.
+pub struct type Pair[T : Type] {
+    fst : T
+    snd : T
+}
+
+pub mod Top for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` once every check has passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case cycle == 2 => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Holds the `Pair[Word[4]]` from power-on.
+    reg pair4 : Pair[Word[4]] on clock {
+        initial it <= ${
+            fst = 5,
+            snd = 9,
+        }
+        it <= it
+    }
+
+    //> Struct literal at `Word[8]`, built combinationally.
+    wire pair8 : Pair[Word[8]] {
+        it := ${
+            fst = 100,
+            snd = 200,
+        }
+    }
+
+    //> Field projection off the `Word[4]` register: 5.
+    wire fst4 : Word[4] {
+        it := pair4->fst
+    }
+
+    //> Field projection off the `Word[4]` register: 9.
+    wire snd4 : Word[4] {
+        it := pair4->snd
+    }
+
+    //> Field projection off the `Word[8]` wire literal: 100.
+    wire fst8 : Word[8] {
+        it := pair8->fst
+    }
+
+    //> Field projection off the `Word[8]` wire literal: 200.
+    wire snd8 : Word[8] {
+        it := pair8->snd
+    }
+
+    //> Independent check for `pair4->fst`.
+    wire ok_fst4 : Bit {
+        it := fst4 == 5w4
+    }
+
+    //> Independent check for `pair4->snd`.
+    wire ok_snd4 : Bit {
+        it := snd4 == 9w4
+    }
+
+    //> Independent check for `pair8->fst`.
+    wire ok_fst8 : Bit {
+        it := fst8 == 100w8
+    }
+
+    //> Independent check for `pair8->snd`.
+    wire ok_snd8 : Bit {
+        it := snd8 == 200w8
+    }
+
+    wire all_ok : Bit {
+        it := ok_fst4 && ok_snd4 && ok_fst8 && ok_snd8
+    }
+
+    //> Cycles elapsed since reset.
+    reg cycle : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+}

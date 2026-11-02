@@ -1,0 +1,130 @@
+// Self-checking `kind = "run"` test for `same-name-shadow-hierarchy`:
+// a parent wire and a child module port share the same name.
+//
+//! The harness module owns a wire `value` driven by its own counter,
+//! while the child module `ShadowChild` has an incoming port also
+//! named `value`, driven from a different sequence.  Each cycle the
+//! harness checks that the parent wire still carries the parent
+//! sequence and that the child port received the child sequence
+//! (both combinationally and through the child's registered copy),
+//! so a name collision in either direction would fail.  All checks
+//! are ANDed into a running `all_ok`; the simulator exits with code 0
+//! only if every checked cycle passed, and 1 otherwise.
+
+import virt
+
+//> Child whose incoming port deliberately shares its name (`value`)
+//> with a wire in the instantiating parent.
+//>
+//> `echo` forwards the port combinationally; `seen_out` exposes a
+//> register that sampled the port on the previous clock edge.
+mod ShadowChild {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Same name as the parent's `value` wire; must carry its own
+    //> values, independent of the parent wire.
+    incoming value : Word[4]
+
+    //> Combinational forward of the `value` port.
+    outgoing echo : Word[4] {
+        it := value
+    }
+
+    //> Registered copy of the `value` port, one cycle delayed.
+    reg seen : Word[4] on clock {
+        initial it <= 0
+        it <= value
+    }
+
+    //> Exposes `seen`.
+    outgoing seen_out : Word[4] {
+        it := seen
+    }
+}
+
+pub mod ShadowHierarchyTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every checked cycle passed; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Child instance whose `value` port is driven from `child_in`,
+    //> not from the parent's own `value` wire.
+    mod child of ShadowChild {
+        it.clock := clock
+        it.value := child_in
+    }
+
+    //> Parent-side counter; the parent wire `value` follows it.
+    reg parent_count : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Independent sequence for the child port, offset from
+    //> `parent_count` so a collision would be visible.
+    reg child_seed : Word[4] on clock {
+        initial it <= 3
+        it <= it + 2
+    }
+
+    //> The parent wire under test: same name as the child port.
+    wire value : Word[4] {
+        it := parent_count
+    }
+
+    //> What the child port `value` is actually fed.
+    wire child_in : Word[4] {
+        it := child_seed
+    }
+
+    //> `child_in` as of the previous cycle, for checking the child's
+    //> registered copy of the port.
+    reg child_in_prev : Word[4] on clock {
+        initial it <= 3
+        it <= child_in
+    }
+
+    //> Index of the cycle under check, 0 through 7.
+    reg index : Word[3] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdict that the parent wire and the child port
+    //> each carried their own sequence.  The registered check is
+    //> skipped on cycle 0, where the child's power-on `seen` has not
+    //> yet sampled the port.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it
+            && value == parent_count
+            && child.echo == child_in
+            && (index == 0 || child.seen_out == child_in_prev)
+    }
+
+    //> Rises one cycle after the last checked cycle, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 7 {
+                it <= true
+            }
+        }
+    }
+}

@@ -1,0 +1,128 @@
+// Self-checking `kind = "run"` test for two instances of the same
+// module with different wiring.
+//
+// A `Counter` module is instantiated twice: `counter_a` is loaded
+// with 3 on cycle 0, `counter_b` with 9 on cycle 2.  The checks assert
+// that the instances behave independently: loading one does not touch
+// the other, each free-runs from its own start value, and their values
+// stay different (so a bug that aliased the two instances would fail).
+// The simulator exits with code 0 only if every check passed.
+
+import virt
+
+//> Free-running 4-bit counter with a synchronous load.
+mod Counter {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> When high at a clock edge, `count` takes `start`.
+    incoming load : Bit
+
+    //> Value loaded into `count` when `load` is high.
+    incoming start : Word[4]
+
+    //> Current count.
+    outgoing value : Word[4]
+
+    reg count : Word[4] on clock {
+        initial it <= 0
+        when {
+            case load {
+                it <= start
+            }
+            else {
+                it <= it + 1
+            }
+        }
+    }
+
+    value := count
+}
+
+pub mod ModTwoInstancesTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Test schedule: cycles 0 through 8.
+    reg tick : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> `counter_a` is wired to load on cycle 0.
+    wire load_a : Bit {
+        it := tick == 0
+    }
+
+    //> `counter_b` is wired to load on cycle 2, a different schedule
+    //> than `counter_a`.
+    wire load_b : Bit {
+        it := tick == 2
+    }
+
+    mod counter_a of Counter {
+        it.clock := clock
+        it.load := load_a
+        it.start := 3
+    }
+
+    mod counter_b of Counter {
+        it.clock := clock
+        it.load := load_b
+        it.start := 9
+    }
+
+    //> Cycle 1: `counter_a` took its start value 3, while `counter_b`
+    //> (not yet loaded) has merely free-run from power-on 0 to 1.  If
+    //> the two instances were aliased, `counter_b` would read 3 here.
+    //> Each check is vacuously true outside its own cycle so that
+    //> folding into `all_ok` only records a verdict on the cycle it is
+    //> scheduled for.
+    wire check_a_loaded : Bit {
+        it := tick != 1 || (counter_a.value == 3 && counter_b.value == 1)
+    }
+
+    //> Cycle 3: `counter_b` took its own start value 9 one cycle after
+    //> its own load, while `counter_a` kept counting untouched
+    //> (3 + 2 = 5).
+    wire check_b_loaded : Bit {
+        it := tick != 3 || (counter_a.value == 5 && counter_b.value == 9)
+    }
+
+    //> Cycle 6: both free-running, each from its own start value.
+    wire check_free_run : Bit {
+        it := tick != 6 || (counter_a.value == 8 && counter_b.value == 12)
+    }
+
+    //> From cycle 1 on, the two instances must never read the same
+    //> value: their different wiring (starts 3 vs 9) keeps them apart.
+    wire check_distinct : Bit {
+        it := tick == 0 || tick > 6 || counter_a.value != counter_b.value
+    }
+
+    //> Running AND of every check.  Power-on true; each check folds
+    //> its verdict in on the cycle after it is active.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && check_a_loaded && check_b_loaded && check_free_run && check_distinct
+    }
+
+    //> Rises after the last check (cycle 6) has been folded in.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case tick == 7 {
+                it <= true
+            }
+        }
+    }
+}

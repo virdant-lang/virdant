@@ -1,0 +1,5 @@
+[project]
+name = "virdant-toml-defaults"
+
+[prog]
+top = "virdant-toml-defaults::VirdantTomlDefaultsTest"

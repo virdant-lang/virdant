@@ -1,0 +1,4 @@
+kind = "run"
+description = "Enum register driven by a match over another enum register, walking an asserted state sequence"
+cycle_limit = 7
+trace = false

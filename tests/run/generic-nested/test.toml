@@ -1,0 +1,4 @@
+kind = "run"
+description = "`Valid[Opt[Word[4]]]` — a generic type applied to a generic type; the unwrap chain is asserted"
+cycle_limit = 3
+trace = false

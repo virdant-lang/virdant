@@ -1,0 +1,4 @@
+kind = "run"
+description = "Enum-to-word cast yields each variant's declared bit pattern"
+cycle_limit = 5
+trace = false

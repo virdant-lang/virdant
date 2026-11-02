@@ -1,0 +1,96 @@
+// Self-checking `kind = "run"` test for a union whose variants carry
+// no payload (`Idle()`-style nullary variants).  A register alternates
+// between the two nullary variants every cycle, constructed with
+// `@Idle()` / `@Busy()` and decoded by both a statement-level and an
+// expression-level `match`.  The test asserts that exactly one variant
+// is active per cycle, that both decoding styles agree, that both
+// variants get exercised, and that no mismatch is ever observed, then
+// exits with code 0.
+
+import virt
+
+//> The union under test: both variants are nullary (no payload).
+union type State {
+    Idle()
+    Busy()
+}
+
+pub mod UnionNullaryTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Toggles between `@Idle()` and `@Busy()` every cycle, starting
+    //> at `@Idle()`, so both nullary variants round-trip repeatedly.
+    reg state : State on clock {
+        initial it <= @Idle()
+        it <= match it : State {
+            case @Idle() => @Busy()
+            case @Busy() => @Idle()
+        }
+    }
+
+    //> Statement-level decoding of `state`.
+    wire on_idle : Bit
+    wire on_busy : Bit
+    match state {
+        case @Idle() {
+            on_idle := true
+            on_busy := false
+        }
+        else {
+            on_idle := false
+            on_busy := true
+        }
+    }
+
+    //> Expression-level decoding of `state`: `0` for `@Idle()`,
+    //> `1` for `@Busy()`.
+    wire tag : Word[1] {
+        it := match state {
+            case @Idle() => 0w1
+            case @Busy() => 1w1
+        }
+    }
+
+    //> Exactly one variant must be active every cycle.
+    wire onehot : Bit {
+        it := on_idle != on_busy
+    }
+
+    //> The statement-level and expression-level decodings must agree
+    //> whichever variant is active.
+    wire ok : Bit {
+        it := (on_idle && tag == 0w1) || (on_busy && tag == 1w1)
+    }
+
+    //> Sticky record of which variants have been seen: bit 0 for
+    //> `@Idle()`, bit 1 for `@Busy()`.
+    reg seen : Word[2] on clock {
+        initial it <= 0w2
+        it <= match state {
+            case @Idle() => it | 1w2
+            case @Busy() => it | 2w2
+        }
+    }
+
+    //> Both variants exercised.
+    wire done : Bit {
+        it := seen == 3w2
+    }
+
+    //> Latches a mismatch the moment one occurs.
+    reg failed : Bit on clock {
+        initial it <= false
+        it <= it || !ok || !onehot
+    }
+
+    //> `@Valid(0)` once both variants round-tripped without mismatch;
+    //> `@Valid(1)` on any mismatch; `@Invalid()` while still waiting.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case failed => @Valid(1)
+            case done => @Valid(0)
+            else => @Invalid()
+        }
+    }
+}

@@ -1,0 +1,139 @@
+// Self-checking `kind = "run"` test for a gray counter.
+//
+//! A `GrayCounter` unit free-runs a 4-bit binary counter and presents
+//! its binary-to-gray conversion `gray := bin ^ (bin >> 1)`, with the
+//! right shift implemented via `word()` and a slice (Virdant has no
+//! `>>` operator).  A harness top walks the 16 counts and checks
+//! `gray` against the golden gray sequence
+//! 0, 1, 3, 2, 6, 7, 5, 4, 12, 13, 15, 14, 10, 11, 9, 8.  Every
+//! verdict is ANDed into a running `all_ok`; the simulator exits with
+//! code 0 only if all 16 steps passed, and 1 otherwise.
+
+import virt
+
+//> Binary counter converted to gray code: `gray` is always the
+//> gray-code encoding of the current `bin` count.
+mod GrayCounter {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Gray code of the current count:
+    //> `bin ^ (bin >> 1)`, shifted with `word()` and a slice.
+    outgoing gray : Word[4] {
+        it := bin ^ word(0w1, bin[4..1])
+    }
+
+    //> Free-running binary counter.  Powers on 0 and increments every
+    //> cycle, wrapping 0xf to 0x0.
+    reg bin : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+}
+
+pub mod GrayCounterTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last step checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod graycounter of GrayCounter {
+        it.clock := clock
+    }
+
+    //> Index of the count under test, 0 through 15.  `bin` powers on
+    //> 0 and increments every cycle, so `bin == index` on each cycle.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> before `finished` folds in the verdict for the current count.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !finished {
+                it <= it && graycounter.gray == expected
+            }
+        }
+    }
+
+    //> Rises one cycle after the last step is checked, so that the
+    //> exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 15 {
+                it <= true
+            }
+        }
+    }
+
+    //> Golden gray sequence, selected by `index`.  The 16 cases
+    //> exactly cover `Word[4]`, so the match is exhaustive.
+    wire expected : Word[4]
+
+    match index {
+        case 0 {
+            expected := 0b0000
+        }
+        case 1 {
+            expected := 0b0001
+        }
+        case 2 {
+            expected := 0b0011
+        }
+        case 3 {
+            expected := 0b0010
+        }
+        case 4 {
+            expected := 0b0110
+        }
+        case 5 {
+            expected := 0b0111
+        }
+        case 6 {
+            expected := 0b0101
+        }
+        case 7 {
+            expected := 0b0100
+        }
+        case 8 {
+            expected := 0b1100
+        }
+        case 9 {
+            expected := 0b1101
+        }
+        case 10 {
+            expected := 0b1111
+        }
+        case 11 {
+            expected := 0b1110
+        }
+        case 12 {
+            expected := 0b1010
+        }
+        case 13 {
+            expected := 0b1011
+        }
+        case 14 {
+            expected := 0b1001
+        }
+        case 15 {
+            expected := 0b1000
+        }
+    }
+}

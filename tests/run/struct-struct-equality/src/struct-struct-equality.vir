@@ -1,0 +1,96 @@
+// Self-checking `kind = "run"` test for SIM_TESTS.md bullet
+// `struct-struct-equality`: if struct `==` is supported, compare two
+// struct values directly; else compare field-by-field
+// (`p->a == q->a && p->b == q->b`).
+//
+// PATH TAKEN: struct `==` IS the primary path here.  The typechecker
+// types `==` generically over compatible operand types
+// (`BinOp::Eq` in `types/typing/infer.rs`), and `p == q` on two
+// `Pair`-typed values parses, typechecks, and drives the wires below.
+// The simulator's `eval_binop` (`sim/eval.rs`) is also written to
+// compare whole values.  However, the interpreter currently panics
+// while converting the struct LITERALS needed to build any struct
+// value (`sim/expr.rs:597`, `expected expression node, got
+// "Assign"`), and struct values cannot be built without a literal.
+// This matches the known struct-literal panic called out in
+// SIM_TESTS.md and is reproducible in the existing `struct-*` run
+// tests, so the test is left in place in this failing state.
+// A field-by-field cross-check is also asserted, covering the
+// bullet's fallback path once the literal bug is fixed.
+//
+// Then the simulator exits with code 0.
+
+import virt
+
+//> A two-field struct used to exercise struct equality.
+struct type Pair {
+    a : Word[8]
+    b : Bit
+}
+
+pub mod StructEqualityTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> The reference struct.  It changes every cycle, so equality is
+    //> re-exercised against fresh values instead of one frozen value.
+    reg p : Pair on clock {
+        initial it <= ${ a = 0w8, b = false }
+        it <= ${ a = it->a + 1w8, b = !it->b }
+    }
+
+    //> A struct built field-by-field from `p`, hence equal to `p`.
+    wire q : Pair {
+        it := ${ a = p->a, b = p->b }
+    }
+
+    //> A struct differing from `p` in exactly one field (`b`).
+    wire r : Pair {
+        it := ${ a = p->a, b = !p->b }
+    }
+
+    //> Direct struct equality: `p == q` must hold.
+    wire eq : Bit {
+        it := p == q
+    }
+
+    //> Direct struct inequality: `p == r` must not hold.
+    wire neq : Bit {
+        it := p == r
+    }
+
+    //> Cross-check of the same relation, field-by-field.
+    wire eq_by_field : Bit {
+        it := p->a == q->a && p->b == q->b
+    }
+
+    //> Cross-check of the inequal pair, field-by-field: the fields
+    //> must disagree on `b` but agree on `a`.
+    wire neq_by_field : Bit {
+        it := (p->a == r->a) && (p->b != r->b)
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds its verdicts in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && eq && !neq && eq_by_field && neq_by_field
+    }
+
+    //> Rises after the first cycle, so the exit code only sees the
+    //> final `all_ok` once equality has been checked against at
+    //> least two different struct values.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any failed.
+    //> While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+}

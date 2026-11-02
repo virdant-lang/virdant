@@ -1,0 +1,3 @@
+kind = "run"
+description = "Two Pipe streams joined into one output that fires only when BOTH inputs are valid; assert no premature fire and correct pairing"
+cycle_limit = 18

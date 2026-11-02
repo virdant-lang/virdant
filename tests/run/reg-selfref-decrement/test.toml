@@ -1,0 +1,3 @@
+kind = "run"
+description = "Self-referential down-counter `it <= it - 1` starting at 3 wraps at 0 (3,2,1,0,15,14,...)"
+cycle_limit = 24

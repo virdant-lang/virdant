@@ -1,0 +1,203 @@
+//! Self-checking `kind = "run"` test for direct chaining in `when`/`match`
+//! expressions without `=>` (SIM_TESTS.md `when-expr-chaining`).
+//!
+//! The same decision is computed three ways and the simulator exits with
+//! code 0 only if they all agree over every combination of the two input
+//! bits:
+//!
+//! - `chained` — direct chaining: `case c when { ... }` and
+//!   `else match { ... }` with no `=>` in front of the nested block.
+//! - `explicit` — the same shape rewritten with the explicit `=>`.
+//! - `expected` — an independent flat `when` over the compound conditions.
+//!
+//! A second pair (`chained2`/`explicit2`/`expected2`) covers the
+//! `case ... match { ... }` and `else when { ... }` combinations, and a
+//! statement-position `probe` covers chaining while driving a wire.
+
+import virt
+
+//> Walks every combination of `a` (`count[3]`) and `sel` (`count[1..0]`),
+//> 0 through 15 and wrapping.
+pub mod WhenChainingTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after every combination checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Test-vector counter cycling 0 through 15; `a` is `count[3]` and
+    //> `sel` is `count[1..0]`, so all 16 combinations are visited.
+    reg count : Word[4] on clock {
+        initial it <= 0w4
+        it <= it + 1
+    }
+
+    //> First condition bit: the top counter bit.
+    wire a : Bit {
+        it := count[3]
+    }
+
+    //> Selector: the two low counter bits.
+    wire sel : Word[2] {
+        it := count[2..0]
+    }
+
+    //> Direct chaining without `=>`: the `a` arm's body is a `when`
+    //> block and the `else` arm's body is a `match` block, attached
+    //> directly to their arms.
+    wire chained : Word[4] {
+        it := when {
+            case a when {
+                case sel == 0 => 1w4
+                case sel == 1 => 2w4
+                else => 3w4
+            }
+            else match sel {
+                case 0 => 4w4
+                case 1 => 5w4
+                case 2 => 6w4
+                else => 7w4
+            }
+        }
+    }
+
+    //> The same decision written with the explicit `=>` form.
+    wire explicit : Word[4] {
+        it := when {
+            case a => when {
+                case sel == 0 => 1w4
+                case sel == 1 => 2w4
+                else => 3w4
+            }
+            else => match sel {
+                case 0 => 4w4
+                case 1 => 5w4
+                case 2 => 6w4
+                else => 7w4
+            }
+        }
+    }
+
+    //> Independent flat restatement of `chained` over the compound
+    //> conditions, so agreement is not just `chained == explicit`.
+    wire expected : Word[4] {
+        it := when {
+            case a && sel == 0 => 1w4
+            case a && sel == 1 => 2w4
+            case a => 3w4
+            case sel == 0 => 4w4
+            case sel == 1 => 5w4
+            case sel == 2 => 6w4
+            else => 7w4
+        }
+    }
+
+    //> Direct chaining in a `match` expression: `case ... when { ... }`,
+    //> `case ... match { ... }`, and `else when { ... }` without `=>`.
+    wire chained2 : Word[3] {
+        it := match sel {
+            case 0 when {
+                case a => 0w3
+                else => 1w3
+            }
+            case 1 match count {
+                case 5 => 2w3
+                else => 3w3
+            }
+            else when {
+                case a => 4w3
+                else => 5w3
+            }
+        }
+    }
+
+    //> The same decision written with the explicit `=>` form.
+    wire explicit2 : Word[3] {
+        it := match sel {
+            case 0 => when {
+                case a => 0w3
+                else => 1w3
+            }
+            case 1 => match count {
+                case 5 => 2w3
+                else => 3w3
+            }
+            else => when {
+                case a => 4w3
+                else => 5w3
+            }
+        }
+    }
+
+    //> Independent flat restatement of `chained2`.
+    wire expected2 : Word[3] {
+        it := when {
+            case sel == 0 && a => 0w3
+            case sel == 0 => 1w3
+            case sel == 1 && count == 5 => 2w3
+            case sel == 1 => 3w3
+            case a => 4w3
+            else => 5w3
+        }
+    }
+
+    //> Statement-position chaining: `case a match sel { case 0 when
+    //> { ... } }` driving a wire's `it`.
+    //>
+    //> True iff `a && (sel != 0 || count < 4)`.
+    wire probe : Bit {
+        when {
+            case a match sel {
+                case 0 when {
+                    case count < 4 {
+                        it := true
+                    }
+                    else {
+                        it := false
+                    }
+                }
+                else {
+                    it := true
+                }
+            }
+            else {
+                it := false
+            }
+        }
+    }
+
+    //> Independent flat restatement of `probe`.
+    wire probe_expected : Bit {
+        it := a && (sel != 0 || count < 4)
+    }
+
+    //> Running AND of every check.  Power-on true; each cycle's
+    //> verdict folds in on the clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it
+            && (chained == explicit)
+            && (chained == expected)
+            && (chained2 == explicit2)
+            && (chained2 == expected2)
+            && (probe == probe_expected)
+    }
+
+    //> Goes high the cycle after `count` last fired 15, so that `exit`
+    //> sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case count == 15 {
+                it <= true
+            }
+        }
+    }
+}

@@ -1,0 +1,4 @@
+kind = "run"
+description = "XOR-tree parity over slices"
+cycle_limit = 20
+trace = false

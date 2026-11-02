@@ -1,0 +1,188 @@
+//! Self-checking `kind = "run"` test for a three-module socket chain.
+//!
+//! A `Responder` (server role), a `Middleman` (one socket of each
+//! role), and a `Requester` (client role) are wired into a chain, so a
+//! request makes two hops before returning: `Requester` ->
+//! `Middleman` -> `Responder` and back.  Each stage transforms the
+//! value it relays, so the value the requester sees on `resp` is only
+//! correct if both hops carried it.  The requester walks a table of 16
+//! vectors, one per cycle, checks each round-trip result against the
+//! expected transform, and folds every verdict into a running
+//! `all_ok`; the simulator exits with code 0 only if all 16 checks
+//! passed, and 1 otherwise.
+
+import virt
+
+//> Request/response link used by both hops of the chain.
+socket Link {
+    cosi req : Word[8]
+    soci resp : Word[8]
+}
+
+//> Top of the chain: server role.  Answers every request by
+//> XOR-ing the request payload with `0xA5`.
+mod Responder {
+    server socket link of Link {
+        it.resp := it.req ^ 0xA5
+    }
+}
+
+//> Middle of the chain: one socket of each role.  The `client` socket
+//> faces the upstream `Responder`; the `server` socket faces the
+//> downstream `Requester`.  Relays each direction through its own
+//> transform, so a correct round trip proves both hops carried data.
+mod Middleman {
+    //> Faces the upstream server: relays requests with `^ 0x0F`.
+    client socket up of Link {
+        it.req := down.req ^ 0x0F
+    }
+
+    //> Faces the downstream client: relays responses with `^ 0xF0`.
+    server socket down of Link {
+        it.resp := up.resp ^ 0xF0
+    }
+}
+
+//> Bottom of the chain: client role and the test sequencer.  Drives
+//> one vector per cycle onto `req` and checks that the value coming
+//> back on `resp` is `vec ^ 0x5A` -- the composition of both hops'
+//> transforms and the responder's (`0x0F ^ 0xA5 ^ 0xF0` = `0x5A`).
+mod Requester {
+    //> Primary clock.
+    incoming clock : Clock
+
+    client socket link of Link {
+        it.req := vec
+    }
+
+    //> High from the cycle after the last vector was checked.
+    outgoing done : Bit
+
+    //> Running AND of every per-vector verdict so far.
+    outgoing all_ok : Bit
+
+    //> Index of the vector under test, 0 through 15, holding at 15.
+    reg index : Word[4] on clock {
+        initial it <= 0
+        when {
+            case !last {
+                it <= it + 1w4
+            }
+        }
+    }
+
+    //> High on the cycle the last vector is being checked.
+    wire last : Bit {
+        it := index == 15w4
+    }
+
+    //> Latches once every vector has been checked.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case last {
+                it <= true
+            }
+        }
+    }
+
+    //> Power-on true; folds in the verdict of every cycle before
+    //> `finished` rises.
+    reg checks_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !finished {
+                it <= it && ok
+            }
+        }
+    }
+
+    done := finished
+    all_ok := checks_ok
+
+    //> The round trip is correct iff `resp` carries `vec` with every
+    //> stage's transform applied.
+    wire ok : Bit {
+        it := link.resp == (vec ^ 0x5A)
+    }
+
+    //> Test vector currently driven onto the request channel.
+    wire vec : Word[8]
+
+    // The 16 cases below exactly cover `Word[4]`, so the match is
+    // exhaustive.
+    match index {
+        case 0 {
+            vec := 0x00
+        }
+        case 1 {
+            vec := 0xFF
+        }
+        case 2 {
+            vec := 0x5A
+        }
+        case 3 {
+            vec := 0xA5
+        }
+        case 4 {
+            vec := 0x0F
+        }
+        case 5 {
+            vec := 0xF0
+        }
+        case 6 {
+            vec := 0xAA
+        }
+        case 7 {
+            vec := 0x01
+        }
+        case 8 {
+            vec := 0x80
+        }
+        case 9 {
+            vec := 0x7F
+        }
+        case 10 {
+            vec := 0x33
+        }
+        case 11 {
+            vec := 0xCC
+        }
+        case 12 {
+            vec := 0x3C
+        }
+        case 13 {
+            vec := 0xC3
+        }
+        case 14 {
+            vec := 0x96
+        }
+        case 15 {
+            vec := 0x69
+        }
+    }
+}
+
+pub mod SocketChainTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all 16 round trips checked out; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case requester.done => @Valid(mux(requester.all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod responder of Responder
+    mod middleman of Middleman
+    mod requester of Requester {
+        it.clock := clock
+    }
+
+    responder.link :=: middleman.up
+    middleman.down :=: requester.link
+}

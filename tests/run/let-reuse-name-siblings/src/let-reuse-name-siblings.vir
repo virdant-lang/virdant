@@ -1,0 +1,144 @@
+//! Self-checking `kind = "run"` test for reusing the same `let` name
+//! in sibling `match` arms.
+//!
+//! Sibling arms of a statement-level `match` bind the same names to
+//! different values, so the driven wires only come out right if each
+//! arm sees its own binding, scoped to that arm.  A rotating selector
+//! runs every arm, each arm also asserts its own binding directly,
+//! every check is ANDed into a running `all_ok`, and the simulator
+//! exits with code 0 only if all checks passed, and 1 otherwise.
+
+import virt
+
+pub mod LetReuseNameSiblingsTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Cycles 0, 1, 2, 3, 0, 1, ... so every sibling arm of each
+    //> `match` runs.
+    reg sel : Word[2] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Running AND of every check so far.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && checked
+    }
+
+    //> First checked output.  Each sibling arm binds `x` to a
+    //> different value; `a` only follows the golden table if every
+    //> arm sees its own binding.
+    wire a : Word[8]
+
+    // Each sibling arm binds its own `x` to a different value.
+    match sel : Word[2] {
+        case 0 let x = 10w8 {
+            a := x
+        }
+        case 1 let x = 20w8 {
+            a := x
+        }
+        case 2 let x = 30w8 {
+            a := x
+        }
+        case 3 let x = 40w8 {
+            a := x
+        }
+    }
+
+    //> Second checked output.  Each sibling arm rebinds `hi` (and, in
+    //> some arms, `lo` alongside it) to different values, so `b` only
+    //> follows the golden table if each arm used its own bindings.
+    wire b : Word[2]
+
+    // Same name, different values, arm by arm.
+    match sel : Word[2] {
+        case 0 let hi = 3w2,
+            lo = 1w2 {
+            b := hi - lo
+        }
+        case 1 let hi = 0w2 {
+            b := hi
+        }
+        case 2 let hi = 2w2,
+            lo = 3w2 {
+            b := hi - lo
+        }
+        case 3 let hi = 1w2 {
+            b := hi
+        }
+    }
+
+    //> Direct per-arm assertion: each sibling arm binds `x` to its own
+    //> value and checks itself against that very value, so a wrongly
+    //> shared binding makes the firing arm's own check fail.
+    wire c : Bit
+
+    match sel : Word[2] {
+        case 0 let x = 10w8 {
+            c := x == 10
+        }
+        case 1 let x = 20w8 {
+            c := x == 20
+        }
+        case 2 let x = 30w8 {
+            c := x == 30
+        }
+        case 3 let x = 40w8 {
+            c := x == 40
+        }
+    }
+
+    //> Golden table for `a` and `b`, dispatched the same way as the
+    //> checked outputs but without any `let` bindings.
+    wire expected_a : Word[8]
+    wire expected_b : Word[2]
+
+    match sel : Word[2] {
+        case 0 {
+            expected_a := 10
+            expected_b := 2
+        }
+        case 1 {
+            expected_a := 20
+            expected_b := 0
+        }
+        case 2 {
+            expected_a := 30
+            expected_b := 3
+        }
+        case 3 {
+            expected_a := 40
+            expected_b := 1
+        }
+    }
+
+    //> All three outputs agree with the golden table exactly when
+    //> every sibling arm used its own `let` bindings.
+    wire checked : Bit {
+        it := a == expected_a && b == expected_b && c
+    }
+
+    //> Cycle counter, used to time the exit.
+    reg count : Word[3] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Rises after the clock edge that has folded checks for all four
+    //> `sel` values into `all_ok`, so that the exit code samples the
+    //> final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= count == 3
+    }
+
+    //> `@Valid(0)` once all four `sel` values checked out; `@Valid(1)`
+    //> if any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := mux(finished, @Valid(mux(all_ok, 0, 1)), @Invalid())
+    }
+}

@@ -1,0 +1,164 @@
+// Self-checking `kind = "run"` test for a nested `mux()` used as a
+// 4-way selector: `mux(a, mux(b, x, y), mux(c, z, w))`.
+//
+//! A `MuxNested` unit computes the nested `mux` combinationally.  The
+//! harness top drives `a`, `b`, and `c` through all 8 combinations of
+//! the select bits, with distinct `x`, `y`, `z`, `w` operands so that
+//! every selected data path is distinguishable.  Each result is
+//! compared against a golden value and every check is ANDed into a
+//! running `all_ok`; the simulator exits with code 0 only if all 8
+//! combinations passed, and 1 otherwise.
+
+import virt
+
+//> Nested `mux()` 4-way selector.
+mod MuxNested {
+    //> Selects between the `mux(b, x, y)` arm (true) and the
+    //> `mux(c, z, w)` arm (false).
+    incoming a : Bit
+
+    //> Selects `x` (true) or `y` (false); only consulted when `a` is
+    //> true.
+    incoming b : Bit
+
+    //> Selects `z` (true) or `w` (false); only consulted when `a` is
+    //> false.
+    incoming c : Bit
+
+    //> Data operand selected when `a` and `b` are both true.
+    incoming x : Word[3]
+
+    //> Data operand selected when `a` is true and `b` is false.
+    incoming y : Word[3]
+
+    //> Data operand selected when `a` is false and `c` is true.
+    incoming z : Word[3]
+
+    //> Data operand selected when `a` and `c` are both false.
+    incoming w : Word[3]
+
+    //> The 4-way selector: `x` when `a` and `b`, `y` when `a` and
+    //> `!b`, `z` when `!a` and `c`, `w` when `!a` and `!c`.
+    outgoing sel : Word[3] {
+        it := mux(a, mux(b, x, y), mux(c, z, w))
+    }
+}
+
+pub mod MuxNestedTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last vector checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod mux_nested of MuxNested {
+        it.a := vec_a
+        it.b := vec_b
+        it.c := vec_c
+        it.x := 1
+        it.y := 2
+        it.z := 3
+        it.w := 4
+    }
+
+    //> Index of the select-bit combination under test, 0 through 7:
+    //> bit 2 drives `a`, bit 1 drives `b`, bit 0 drives `c`.
+    reg index : Word[3] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each cycle
+    //> folds in the verdict for the current combination.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && mux_nested.sel == expected
+    }
+
+    //> Rises one cycle after the last combination is checked, so that
+    //> the exit code sees the final `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 7 {
+                it <= true
+            }
+        }
+    }
+
+    wire vec_a : Bit
+    wire vec_b : Bit
+    wire vec_c : Bit
+
+    //> Golden result for the current combination, taken from an
+    //> explicit table rather than a `mux` of the same shape, so the
+    //> check is independent of the construct under test.
+    wire expected : Word[3]
+
+    // Test-vector table: `vec_a`, `vec_b`, `vec_c` sweep all 8
+    // combinations of the select bits, and `expected` holds the
+    // golden data operand for each.  With `x = 1`, `y = 2`, `z = 3`,
+    // `w = 4`, the `b` arm is what matters when `a` is true and the
+    // `c` arm when `a` is false.
+    match index {
+        case 0 {
+            vec_a := false
+            vec_b := false
+            vec_c := false
+            expected := 4
+        }
+        case 1 {
+            vec_a := false
+            vec_b := false
+            vec_c := true
+            expected := 3
+        }
+        case 2 {
+            vec_a := false
+            vec_b := true
+            vec_c := false
+            expected := 4
+        }
+        case 3 {
+            vec_a := false
+            vec_b := true
+            vec_c := true
+            expected := 3
+        }
+        case 4 {
+            vec_a := true
+            vec_b := false
+            vec_c := false
+            expected := 2
+        }
+        case 5 {
+            vec_a := true
+            vec_b := false
+            vec_c := true
+            expected := 2
+        }
+        case 6 {
+            vec_a := true
+            vec_b := true
+            vec_c := false
+            expected := 1
+        }
+        case 7 {
+            vec_a := true
+            vec_b := true
+            vec_c := true
+            expected := 1
+        }
+    }
+}

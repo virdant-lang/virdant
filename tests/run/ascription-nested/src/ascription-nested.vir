@@ -1,0 +1,74 @@
+//! Self-checking `kind = "run"` test for type ascription on
+//! sub-expressions.
+//!
+//! Checks that `(expr) : Type` and `word(...) : Type` annotate a
+//! sub-expression with its type: the ascribed type must match the
+//! sub-expression's type and the value is unchanged, both standalone
+//! and embedded in a larger expression.  Every check is folded into
+//! a running `all_ok`; the simulator exits with code 0 only if all
+//! checks passed, and 1 otherwise.
+
+import virt
+
+pub mod AscriptionNested for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after the last check passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Running AND of every check so far.  Power-on true; each check
+    //> folds its verdict in on the first clock edge.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it && sum_ok && concat_ok && embed_ok && direct_ok
+    }
+
+    //> Rises on the first clock edge, after the checks have folded
+    //> into `all_ok`, so that the exit code sees the final verdict.
+    reg finished : Bit on clock {
+        initial it <= false
+        it <= true
+    }
+
+    //> Concatenation operands for the `word()` ascription check.
+    wire a : Word[2]
+    wire b : Word[2]
+
+    a := 0b10
+    b := 0b01
+
+    //> `(1w4 + 2w4) : Word[4]`: the ascribed type wraps the
+    //> parenthesized sum, which must stay 3.  The operands carry
+    //> explicit widths: the ascription annotates the sub-expression
+    //> but does not push its expected type down into `+`'s operands.
+    wire sum : Word[4]
+    sum := (1w4 + 2w4) : Word[4]
+
+    //> `word(a, b) : Word[4]`: the ascribed type wraps the whole
+    //> concatenation, which must stay `0b10_01`, i.e. 9.
+    wire concat : Word[4]
+    concat := word(a, b) : Word[4]
+
+    wire sum_ok : Bit
+    sum_ok := sum == 3
+
+    wire concat_ok : Bit
+    concat_ok := concat == 9
+
+    //> The ascribed sub-expression embeds in a larger expression: the
+    //> ascription's type is what the outer `+` sees.
+    wire embed_ok : Bit
+    embed_ok := ((1w4 + 2w4) : Word[4]) + 1w4 == 4
+
+    //> The same ascriptions checked inline, without named intermediates.
+    wire direct_ok : Bit
+    direct_ok := ((1w4 + 2w4) : Word[4]) == 3 && (word(a, b) : Word[4]) == 9
+}

@@ -1,0 +1,4 @@
+kind = "run"
+description = "Module forwarding `Valid[Word[8]]` in -> out combinationally; asserts the payload and validity flag cross the boundary for both variants"
+cycle_limit = 8
+trace = false

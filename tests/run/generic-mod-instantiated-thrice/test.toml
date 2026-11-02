@@ -1,0 +1,3 @@
+kind = "run"
+description = "Same generic mod instantiated at Word[2], Word[4], and Word[8]; assert each width independently"
+cycle_limit = 5

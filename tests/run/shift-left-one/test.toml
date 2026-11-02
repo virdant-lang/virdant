@@ -1,0 +1,4 @@
+kind = "run"
+description = "Shift Word[8] by 1 in both directions via word() and bit slices"
+cycle_limit = 20
+trace = false

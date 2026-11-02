@@ -1,0 +1,5 @@
+[project]
+name = "slice-lhs-reg"
+
+[prog]
+top = "slice-lhs-reg::SliceLhsRegTest"

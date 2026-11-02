@@ -1,0 +1,4 @@
+kind = "run"
+description = "Comparison operators <, >, <=, >= on Word[8], including boundary pairs"
+cycle_limit = 16
+trace = false

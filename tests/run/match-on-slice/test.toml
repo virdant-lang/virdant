@@ -1,0 +1,4 @@
+kind = "run"
+description = "Match over a slice expression: assert each case"
+cycle_limit = 10
+trace = false

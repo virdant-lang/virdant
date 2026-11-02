@@ -1,0 +1,5 @@
+[project]
+name = "mod-two-instances"
+
+[prog]
+top = "mod-two-instances::ModTwoInstancesTest"

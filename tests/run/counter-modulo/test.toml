@@ -1,0 +1,3 @@
+kind = "run"
+description = "Counter wraps at a non-power-of-2 modulus (mod 10)"
+cycle_limit = 30

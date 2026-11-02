@@ -1,0 +1,5 @@
+[project]
+name = "match-enum-else"
+
+[prog]
+top = "match-enum-else::MatchEnumElseTest"

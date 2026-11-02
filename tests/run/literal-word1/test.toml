@@ -1,0 +1,4 @@
+kind = "run"
+description = "`Word[1]` literals and ops (`1w1 + 1w1` wraps to `0`); assert wrap-around"
+cycle_limit = 10
+trace = false

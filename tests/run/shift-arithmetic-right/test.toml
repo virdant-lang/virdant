@@ -1,0 +1,4 @@
+kind = "run"
+description = "Arithmetic (sign-replicating) right shift: word(x[7], x[7], x[8..2]) on negative and positive values"
+cycle_limit = 2
+trace = false

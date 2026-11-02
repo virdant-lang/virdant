@@ -1,0 +1,3 @@
+kind = "run"
+description = "Output sampled before the first clock is defined (0) thanks to `initial`, not X"
+cycle_limit = 5

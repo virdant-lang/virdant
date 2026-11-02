@@ -1,0 +1,187 @@
+//! Self-checking `kind = "run"` test for `when`-expression conditions
+//! built from comparisons and bit ops (`x > 3 && y[0]`-style).
+//!
+//! A `WhenCondComplex` unit selects one of four 2-bit branch codes
+//! with a `when` expression whose arms mix comparisons (`>`, `<`,
+//! `==`), boolean operators (`&&`, `||`, `!`), and single-bit selects
+//! (`y[0]`, `y[2]`, `x[1]`).  A register-based sequencer in the
+//! harness walks the `x`/`y` operand registers through eight vectors
+//! chosen so that every arm - including `else` - is taken, and so
+//! that later matching arms are shadowed by earlier ones.  Each cycle
+//! the harness compares the unit's branch code against a hand-written
+//! golden table indexed by the row under test and folds the verdict
+//! into a running `all_ok`; the simulator exits with code 0 only if
+//! all eight rows passed, and 1 otherwise.
+
+import virt
+
+//> Selects a branch code with a `when` expression whose conditions
+//> are built from comparisons, boolean operators, and bit selects.
+//>
+//> Codes: `1` = `x > 3 && y[0]`,
+//> `2` = `x == 0 || (y == 5 && y[2])`,
+//> `3` = `!(x == y) && x[1]`, `0` = none of the above.
+//>
+//> Note that `&&` and `||` share one precedence level (and associate
+//> left), so arm 2's parentheses are load-bearing: without them,
+//> `x == 0 || y == 5 && y[2]` would parse as
+//> `(x == 0 || y == 5) && y[2]` and row 0 would fall to `else`.
+mod WhenCondComplex {
+    //> First operand.
+    incoming x : Word[4]
+
+    //> Second operand.
+    incoming y : Word[4]
+
+    //> Code of the first arm whose condition matched: `1`, `2`, `3`,
+    //> or `0` for the `else` arm.
+    outgoing branch : Word[2] {
+        it := when {
+            case x > 3 && y[0] => 1
+            case x == 0 || (y == 5 && y[2]) => 2
+            case !(x == y) && x[1] => 3
+            else => 0
+        }
+    }
+}
+
+pub mod WhenBoolCondTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` after all eight rows checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod cond of WhenCondComplex {
+        it.x := x
+        it.y := y
+    }
+
+    //> Next row to load, 0 through 7.  `index` and the operand
+    //> registers advance together from this wire, so `x`/`y` always
+    //> hold the operands of row `index`.
+    wire next : Word[3] {
+        it := mux(index == 7, index, index + 1)
+    }
+
+    //> First operand under test, driven by the sequencer.
+    reg x : Word[4] on clock {
+        initial it <= 0
+        it <= match next {
+            case 0 => 0
+            case 1 => 4
+            case 2 => 4
+            case 3 => 7
+            case 4 => 3
+            case 5 => 15
+            case 6 => 2
+            case 7 => 3
+        }
+    }
+
+    //> Second operand under test, driven by the sequencer.
+    reg y : Word[4] on clock {
+        initial it <= 0
+        it <= match next {
+            case 0 => 0
+            case 1 => 1
+            case 2 => 2
+            case 3 => 5
+            case 4 => 5
+            case 5 => 8
+            case 6 => 1
+            case 7 => 3
+        }
+    }
+
+    //> Truth-table row under test, 0 through 7.
+    reg index : Word[3] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= next
+            }
+        }
+    }
+
+    //> Rises the cycle after row 7 is checked, so that `exit` sees the
+    //> final fold into `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 7 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every row's verdict.  Power-on true; each row
+    //> folds its verdict in while the sequencer is stepping.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !finished {
+                it <= it && ok
+            }
+        }
+    }
+
+    //> Golden branch code for row `index`, and the comparison of the
+    //> unit's output against it.  The eight cases exactly cover
+    //> `Word[3]`, so the match is exhaustive.
+    wire expected : Word[2]
+
+    wire ok : Bit {
+        it := cond.branch == expected
+    }
+
+    // Row 0: x = 0, y = 0.  Arm 1 fails on `x > 3`; arm 2 holds via
+    // the parenthesized `x == 0` disjunct even though
+    // `y == 5 && y[2]` is false.
+    // Row 1: x = 4, y = 1.  Arm 1 holds.
+    // Row 2: x = 4, y = 2.  Only arm 3's `x[1]` could hold, and
+    // x = 4 = 0b0100 has `x[1] == 0`, so the `else` arm fires.
+    // Row 3: x = 7, y = 5.  Arm 1 wins even though arm 2 would also
+    // match: first matching arm fires.
+    // Row 4: x = 3, y = 5.  Arm 1 fails on `x > 3`; arm 2 holds via
+    // `y == 5 && y[2]` (y = 5 = 0b0101).
+    // Row 5: x = 15, y = 8.  Arm 1 fails on `y[0]` (8 = 0b1000);
+    // arm 3 holds: `!(15 == 8) && x[1]` (15 = 0b1111).
+    // Row 6: x = 2, y = 1.  Arms 1 and 2 fail; arm 3 holds:
+    // `!(2 == 1) && x[1]` (2 = 0b0010).
+    // Row 7: x = 1, y = 4.  Arm 3 fails on `x[1]` (1 = 0b0001), so
+    // the `else` arm fires.
+    match index {
+        case 0 {
+            expected := 2
+        }
+        case 1 {
+            expected := 1
+        }
+        case 2 {
+            expected := 0
+        }
+        case 3 {
+            expected := 1
+        }
+        case 4 {
+            expected := 2
+        }
+        case 5 {
+            expected := 3
+        }
+        case 6 {
+            expected := 3
+        }
+        case 7 {
+            expected := 0
+        }
+    }
+}

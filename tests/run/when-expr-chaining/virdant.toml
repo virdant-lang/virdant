@@ -1,0 +1,5 @@
+[project]
+name = "when-expr-chaining"
+
+[prog]
+top = "when-expr-chaining::WhenChainingTest"

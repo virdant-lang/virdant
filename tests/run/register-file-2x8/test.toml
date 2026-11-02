@@ -1,0 +1,3 @@
+kind = "run"
+description = "Two 8-bit registers, write port, read mux. Assert write-then-read."
+cycle_limit = 16

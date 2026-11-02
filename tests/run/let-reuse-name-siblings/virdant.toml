@@ -1,0 +1,5 @@
+[project]
+name = "let-reuse-name-siblings"
+
+[prog]
+top = "let-reuse-name-siblings::LetReuseNameSiblingsTest"

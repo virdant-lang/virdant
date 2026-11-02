@@ -1,0 +1,4 @@
+kind = "run"
+description = "`@Some(@Valid(x))` — a union wrapping a Valid wrapping a word; the unwrap chain (outer match, then inner match) extracts the word"
+cycle_limit = 2
+trace = false

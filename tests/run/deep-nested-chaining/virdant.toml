@@ -1,0 +1,5 @@
+[project]
+name = "deep-nested-chaining"
+
+[prog]
+top = "deep-nested-chaining::DeepNestedChainingTest"

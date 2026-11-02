@@ -1,0 +1,137 @@
+//! Self-checking `kind = "run"` test for `word()` over four `Bit`
+//! arguments.
+//!
+//! `word(b3, b2, b1, b0)` builds a `Word[4]` from four `Bit`s with
+//! the most-significant bit FIRST: `b3` must land at bit 3, `b0` at
+//! bit 0.  The testbench drives the four bits from a vector register
+//! through three rows -- `0b1010`, `0b0101`, and `0b1000` -- and each
+//! row asserts the exact bit layout two ways: the assembled word must
+//! equal the row's golden vector, and each output bit must equal its
+//! own source `Bit`.  The two alternating vectors make any argument
+//! reordering or mirroring fail, and `0b1000` pins the
+//! most-significant argument to bit 3 unambiguously.  Each row's
+//! verdict is folded into a running `all_ok`; the simulator exits
+//! with code 0 only if every row passed, and 1 otherwise.
+
+import virt
+
+pub mod WordConcatBitsTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every row's checks passed; `@Valid(1)` if any
+    //> check failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := when {
+            case finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Next vector row to load, 0, 1, or 2.  Holds at 2 so the last
+    //> row stays in place while the exit settles.
+    wire next : Word[2] {
+        it := mux(index == 2, index, index + 1)
+    }
+
+    //> Vector register driven one row ahead by the sequencer so it
+    //> always holds the vector of row `index`: `0b1010` for row 0,
+    //> `0b0101` for row 1, and `0b1000` for row 2.
+    reg vec : Word[4] on clock {
+        initial it <= 0b1010
+        it <= match next {
+            case 0 => 0b1010
+            case 1 => 0b0101
+            case 2 => 0b1000
+            case 3 => 0b1000
+        }
+    }
+
+    //> The four `Bit` sources, one per bit of `vec`, read out by
+    //> single-bit indexing.
+    wire b3 : Bit {
+        it := vec[3]
+    }
+
+    wire b2 : Bit {
+        it := vec[2]
+    }
+
+    wire b1 : Bit {
+        it := vec[1]
+    }
+
+    wire b0 : Bit {
+        it := vec[0]
+    }
+
+    //> The constructor under test: four `Bit`s, most-significant
+    //> first, assembled into a `Word[4]`.
+    wire built : Word[4] {
+        it := word(b3, b2, b1, b0)
+    }
+
+    //> Golden vector for row `index`.
+    wire exp : Word[4]
+
+    //> Exact bit layout, checked two ways: the whole assembled word
+    //> must equal the row's golden vector, and every output bit must
+    //> equal its own source `Bit`.
+    wire ok : Bit {
+        it := built == exp
+            && built[3] == b3
+            && built[2] == b2
+            && built[1] == b1
+            && built[0] == b0
+    }
+
+    //> Truth-table row under test, 0, 1, or 2.
+    reg index : Word[2] on clock {
+        initial it <= 0
+        when {
+            case !finished {
+                it <= next
+            }
+        }
+    }
+
+    //> Rises the cycle after row 2 is checked, so that `exit` sees
+    //> the final fold into `all_ok`.
+    reg finished : Bit on clock {
+        initial it <= false
+        when {
+            case index == 2 {
+                it <= true
+            }
+        }
+    }
+
+    //> Running AND of every row's verdict.  Power-on true; each cycle
+    //> before `finished` folds its verdict in.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        when {
+            case !finished {
+                it <= it && ok
+            }
+        }
+    }
+
+    // Golden vectors, one per row.  Row 0 and row 1 are complements,
+    // so any fixed reordering of the four arguments produces a value
+    // that fails at least one of them.
+    match index {
+        case 0 {
+            exp := 0b1010
+        }
+        case 1 {
+            exp := 0b0101
+        }
+        case 2 {
+            exp := 0b1000
+        }
+        case 3 {
+            exp := 0b1000
+        }
+    }
+}
