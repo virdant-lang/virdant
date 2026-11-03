@@ -23,13 +23,15 @@ mod VariableShift {
     incoming s : Word[2]
 
     //> `x` shifted left by `s`: drop the top `s` bits (shifted out
-    //> and lost) and append `s` zero bits at the bottom.
+    //> and lost) and append `s` zero bits at the bottom.  The slice
+    //> `x[8-s..0]` keeps the bottom `8-s` bits; the top slice index is
+    //> exclusive.
     outgoing left : Word[8] {
         it := when {
             case s == 0 => x
-            case s == 1 => word(x[8..1], 0w1)
-            case s == 2 => word(x[8..2], 0w2)
-            else => word(x[8..3], 0w3)
+            case s == 1 => word(x[7..0], 0w1)
+            case s == 2 => word(x[6..0], 0w2)
+            else => word(x[5..0], 0w3)
         }
     }
 

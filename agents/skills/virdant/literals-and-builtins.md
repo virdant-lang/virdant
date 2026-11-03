@@ -177,14 +177,17 @@ Bit shifting must be done with `word()` and bit slicing.
 ### Shift left by `n` bits (multiply by 2^n)
 
 Drop the top `n` bits and append `n` zero bits at the bottom.
+The slice keeps the bottom `8-n` bits: `x[8-n..0]` (the top
+slice index is exclusive, so `x[5..0]` holds bits 4..0).
 
 ```virdant
 // x is Word[8], shift left by 3 into Word[8]
-result := word(x[8..3], 0w3)
+result := word(x[5..0], 0w3)
 ```
 
-The slice `x[8..3]` keeps the top 5 bits of the original word and discards
-bits 2..0.
+The slice `x[5..0]` keeps the bottom 5 bits of the original word and
+
+discards bits 7..5 (the bits shifted out and lost).
 Then `0w3` pads the result with 3 zero bits at the bottom (the LSB side).
 
 ### Shift right by `n` bits (divide by 2^n)
@@ -208,9 +211,9 @@ Variable-distance shifts require an `if` or `match` expression:
 reg result : Word[8] on clock {
     it <= match shift_amount {
         with 0 => x
-        with 1 => word(x[8..1], 0w1)
-        with 2 => word(x[8..2], 0w2)
-        with 3 => word(x[8..3], 0w3)
+        with 1 => word(x[7..0], 0w1)
+        with 2 => word(x[6..0], 0w2)
+        with 3 => word(x[5..0], 0w3)
     }
 }
 ```

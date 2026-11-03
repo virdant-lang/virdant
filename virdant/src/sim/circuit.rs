@@ -444,11 +444,29 @@ fn collect_locations_inner(driver: &Driver, locs: &mut Vec<Location>) {
 fn walk_expr_refs(parsing: &Parsing, root_id: AstNodeId) -> Vec<BString> {
     let mut result = Vec::new();
     let mut stack = vec![root_id];
+    // Guard against revisiting nodes: splicing a `let` binding's RHS
+    // into the walk can reach the same node several times (one per
+    // reference to the bound name).
+    let mut visited: IndexSet<AstNodeId> = IndexSet::new();
     while let Some(id) = stack.pop() {
+        if !visited.insert(id) {
+            continue;
+        }
         let node = parsing.ast_node(id);
         if matches!(node.payload(), AstNodePayload::ExprReference) {
             if let Some(interned) = node.path() {
                 let raw = parsing.string(interned);
+                // A reference to a `let`-bound name beta-reduces to the
+                // binding's RHS (the same reduction the expression
+                // converter applies): the dependencies live in that
+                // RHS, which sits outside this driver's subtree, so it
+                // must be spliced into the walk here.  The bound name
+                // itself shadows components, so it contributes no
+                // dependency of its own.
+                if let Some(rhs) = crate::syntax::ast::resolve_let_binding(&node, raw) {
+                    stack.push(rhs.id());
+                    continue;
+                }
                 result.push(rewrite_it_in_name(parsing, id, raw));
             }
         }

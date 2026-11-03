@@ -1,7 +1,7 @@
 //! Self-checking `kind = "run"` test for a serial-in shift register.
 //!
 //! A `ShiftInReg` unit shifts one bit into its register every cycle:
-//! `it <= word(it[8..1], serial_in)` (serial bit enters at the LSB,
+//! `it <= word(it[7..0], serial_in)` (serial bit enters at the LSB,
 //! the whole word slides one bit up, and the oldest bit falls off the
 //! top).  A harness top drives a fixed 16-bit serial pattern through a
 //! sequencer and checks the full 8-bit register contents cycle by
@@ -28,7 +28,7 @@ mod ShiftInReg {
 
     reg shift : Word[8] on clock {
         initial it <= 0
-        it <= word(it[8..1], serial_in)
+        it <= word(it[7..0], serial_in)
     }
 
     out := shift

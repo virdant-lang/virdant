@@ -347,13 +347,17 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     continue;
                 };
                 let packages = builder.get_packages();
-                let submodule_package: Option<PackageId> = match ofness.package {
-                    Some(pkg) => packages.id(parsing.string(pkg)),
-                    None => Some(location.package()),
-                };
                 let submodule_name = parsing.string(ofness.name);
-                let submodule_symbol = match submodule_package.and_then(|pkg| symboltable.resolve_item(submodule_name, pkg)) {
-                    Some(symbol) => symbol.clone(),
+                let qualifier = ofness
+                    .package
+                    .and_then(|pkg| packages.id(parsing.string(pkg)));
+                let submodule_symbol = match crate::analysis::package::resolve_item_reference(
+                    builder,
+                    submodule_name,
+                    location.package(),
+                    qualifier,
+                ) {
+                    Some(symbol) => symbol,
                     None => {
                         component_analysis.diagnostics.push(
                             Diagnostic::new(
