@@ -854,7 +854,17 @@ fn resolve_alias(
         return None;
     }
 
-    let ref_path = parsing.string(node.path()?).to_str_lossy().into_owned();
+    // `it` / `it.<rest>` names the binding of the enclosing it-block:
+    // `cpu.clock := it` written inside `incoming clock : Clock { ... }`
+    // refers to `clock`, exactly as `it.clock := clock` inside `mod cpu
+    // of Cpu { ... }` does.  Both spellings must resolve to the same
+    // alias, or the simulator puts the two submodules' registers in
+    // different clock domains and commits them at different points of
+    // the same edge (see `sim::circuit::build_clock_domains`).
+    let raw_path = parsing.string(node.path()?);
+    let ref_path = crate::syntax::ast::rewrite_it_to_binding(&parsing, node.id(), raw_path)
+        .to_str_lossy()
+        .into_owned();
 
     // The scope in which the driver expression was written was computed
     // during the elaboration walk (`driver_scope`): the component's own

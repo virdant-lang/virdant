@@ -769,6 +769,51 @@ pub(crate) fn annotation_arg_value(node: &AstNode<'_>, parsing: &Parsing) -> Opt
     }
 }
 
+/// Rewrite a reference path of the form `it` or `it.<rest>` to use the
+/// binding name of the nearest enclosing `Submodule` / `Component` /
+/// `Socket` it-block (`mod cpu of Cpu { ... }`, `incoming clock : Clock
+/// { ... }`, `server socket wb of Wb { ... }`).  Paths that do not start
+/// with `it` are returned unchanged, as are `it` paths with no enclosing
+/// it-block (the walk stops at the item boundary).
+///
+/// Shared by the simulator's dependency walk and the elaboration's alias
+/// resolution so that both agree on what `it` names: a bare `x.clock :=
+/// it` written inside `incoming clock : Clock { ... }` must be recognised
+/// as an alias of `clock` just like `it.clock := clock` inside the
+/// submodule's own block, or the two forms end up in different clock
+/// domains in the simulator.
+pub fn rewrite_it_to_binding(parsing: &Parsing, start: AstNodeId, raw: &BStr) -> BString {
+    if !raw.starts_with(b"it.") && raw != b"it" {
+        return raw.to_owned();
+    }
+    let mut current_id = start;
+    loop {
+        let current = parsing.ast_node(current_id);
+        if current.is_item() {
+            return raw.to_owned();
+        }
+        let target: Option<BString> = match current.payload() {
+            AstNodePayload::Submodule(m) => Some(parsing.string(m.name).to_owned()),
+            AstNodePayload::Component(c) => Some(parsing.string(c.name).to_owned()),
+            AstNodePayload::Socket(s) => Some(parsing.string(s.name).to_owned()),
+            _ => None,
+        };
+        if let Some(target) = target {
+            if raw == b"it" {
+                return target;
+            }
+            let mut out = target;
+            out.push(b'.');
+            out.extend_from_slice(&raw[3..]);
+            return out;
+        }
+        current_id = match current.parent() {
+            Some(p) => p.id(),
+            None => return raw.to_owned(),
+        };
+    }
+}
+
 /// Resolve a reference to a `let`-bound name: walk up from `start`
 /// through the AST, checking each enclosing `Let`'s bindings for
 /// `name`.  A binding's scope is the let's body ("written to its
