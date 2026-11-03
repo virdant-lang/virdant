@@ -33,11 +33,11 @@ mod SelfRefCounter {
 
     reg count : Word[4] on clock {
         initial it <= 0
-        when {
-            case load {
+        if {
+            when load {
                 it <= 0
             }
-            case en {
+            when en {
                 it <= it + 1
             }
         }
@@ -54,8 +54,8 @@ pub mod RegReadOldValueTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -72,8 +72,8 @@ pub mod RegReadOldValueTest for virt::Virt {
     //> randomness cannot leak into a verdict.
     reg warm : Word[2] on clock {
         initial it <= 0
-        when {
-            case warm != 3 {
+        if {
+            when warm != 3 {
                 it <= warm + 1
             }
         }
@@ -98,8 +98,8 @@ pub mod RegReadOldValueTest for virt::Virt {
     //> fold and validating `exit` on the next cycle.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case checking && check_index == 15 {
+        if {
+            when checking && check_index == 15 {
                 it <= true
             }
         }
@@ -109,8 +109,8 @@ pub mod RegReadOldValueTest for virt::Virt {
     //> folds its verdict in on the cycle after its step is applied.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && dut.q == expected
             }
         }
@@ -132,73 +132,73 @@ pub mod RegReadOldValueTest for virt::Virt {
     // the match is exhaustive.
     match index {
         // Idle warm-up cycles before any stimulus.
-        case 0 {
+        with 0 {
             en := false
             load := false
         }
-        case 1 {
+        with 1 {
             en := false
             load := false
         }
         // Load a known value: re-establishes a known register state
         // whatever the register happened to hold during warm-up.
-        case 2 {
+        with 2 {
             en := false
             load := true
         }
         // Enabled cycles: on each of these, `count` is being written
         // (`it <= it + 1`) while `q` must still show the old value.
-        case 3 {
+        with 3 {
             en := true
             load := false
         }
-        case 4 {
+        with 4 {
             en := true
             load := false
         }
-        case 5 {
+        with 5 {
             en := true
             load := false
         }
-        case 6 {
+        with 6 {
             en := true
             load := false
         }
-        case 7 {
+        with 7 {
             en := true
             load := false
         }
         // Hold: with `en` low nothing is written, and `q` keeps
         // showing the same (old) value.
-        case 8 {
+        with 8 {
             en := false
             load := false
         }
-        case 9 {
+        with 9 {
             en := true
             load := false
         }
-        case 10 {
+        with 10 {
             en := true
             load := false
         }
-        case 11 {
+        with 11 {
             en := true
             load := false
         }
-        case 12 {
+        with 12 {
             en := true
             load := false
         }
-        case 13 {
+        with 13 {
             en := true
             load := false
         }
-        case 14 {
+        with 14 {
             en := true
             load := false
         }
-        case 15 {
+        with 15 {
             en := true
             load := false
         }
@@ -216,52 +216,52 @@ pub mod RegReadOldValueTest for virt::Virt {
     // 3..7 increment 0 -> 5; step 8 holds at 5; steps 9..15 increment
     // 5 -> 12.
     match check_index {
-        case 0 {
+        with 0 {
             expected := 0
         }
-        case 1 {
+        with 1 {
             expected := 0
         }
-        case 2 {
+        with 2 {
             expected := 0
         }
-        case 3 {
+        with 3 {
             expected := 1
         }
-        case 4 {
+        with 4 {
             expected := 2
         }
-        case 5 {
+        with 5 {
             expected := 3
         }
-        case 6 {
+        with 6 {
             expected := 4
         }
-        case 7 {
+        with 7 {
             expected := 5
         }
-        case 8 {
+        with 8 {
             expected := 5
         }
-        case 9 {
+        with 9 {
             expected := 6
         }
-        case 10 {
+        with 10 {
             expected := 7
         }
-        case 11 {
+        with 11 {
             expected := 8
         }
-        case 12 {
+        with 12 {
             expected := 9
         }
-        case 13 {
+        with 13 {
             expected := 10
         }
-        case 14 {
+        with 14 {
             expected := 11
         }
-        case 15 {
+        with 15 {
             expected := 12
         }
     }

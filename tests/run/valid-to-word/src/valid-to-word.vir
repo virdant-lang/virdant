@@ -18,8 +18,8 @@ pub mod ValidToWordTest for virt::Virt {
     //> `@Valid(0)` when every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case ok => @Valid(0)
+        it := if {
+            when ok => @Valid(0)
             else => @Invalid()
         }
     }
@@ -39,8 +39,8 @@ pub mod ValidToWordTest for virt::Virt {
     //> by `match`: the bound payload when `@Valid`, 0 otherwise.
     wire payload : Word[8] {
         it := match v {
-            case @Valid(x) => x
-            case @Invalid() => 0w8
+            with @Valid(x) => x
+            with @Invalid() => 0w8
         }
     }
 
@@ -48,8 +48,8 @@ pub mod ValidToWordTest for virt::Virt {
     //> `match`: high exactly when `v` is `@Valid`.
     wire flag : Bit {
         it := match v {
-            case @Valid(x) => true
-            case @Invalid() => false
+            with @Valid(x) => true
+            with @Invalid() => false
         }
     }
 
@@ -57,16 +57,16 @@ pub mod ValidToWordTest for virt::Virt {
     //> `@Invalid()` arm's fallback 0 must come out.
     wire inv_payload : Word[8] {
         it := match inv {
-            case @Valid(x) => x
-            case @Invalid() => 0w8
+            with @Valid(x) => x
+            with @Invalid() => 0w8
         }
     }
 
     //> Flag half of the pair for `inv`: low.
     wire inv_flag : Bit {
         it := match inv {
-            case @Valid(x) => true
-            case @Invalid() => false
+            with @Valid(x) => true
+            with @Invalid() => false
         }
     }
 

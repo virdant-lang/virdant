@@ -26,18 +26,18 @@ mod WhenOrder {
 
     //> Which arm fired: 1 for the first arm, 2 for the second, 0 for
     //> `else`.  Both-high must read 1 — the first arm's value.
-    outgoing sel : Word[2]
+    outgoing sel : Word[2] dependson a, b
 
     //> Mirrors the first arm only: true if (and only if) the first arm
     //> fired, false from the second arm and from `else`.
-    outgoing tag : Bit
+    outgoing tag : Bit dependson a, b
 
-    when {
-        case a {
+    if {
+        when a {
             sel := 1
             tag := true
         }
-        case b {
+        when b {
             sel := 2
             tag := false
         }
@@ -55,8 +55,8 @@ pub mod StmtWhenOrderTest for virt::Virt {
     //> `@Valid(0)` after all 4 vectors checked out; `@Valid(1)` if any
     //> check failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -98,19 +98,19 @@ pub mod StmtWhenOrderTest for virt::Virt {
     wire expected_tag : Bit
 
     match index {
-        case 0 {
+        with 0 {
             expected_sel := 0
             expected_tag := false
         }
-        case 1 {
+        with 1 {
             expected_sel := 2
             expected_tag := false
         }
-        case 2 {
+        with 2 {
             expected_sel := 1
             expected_tag := true
         }
-        case 3 {
+        with 3 {
             expected_sel := 1
             expected_tag := true
         }
@@ -120,8 +120,8 @@ pub mod StmtWhenOrderTest for virt::Virt {
     //> that `finished` stays high.
     reg checked : Word[3] on clock {
         initial it <= 0
-        when {
-            case checked != 4 {
+        if {
+            when checked != 4 {
                 it <= checked + 1
             }
         }

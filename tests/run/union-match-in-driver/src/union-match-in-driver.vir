@@ -36,8 +36,8 @@ pub mod UnionMatchInDriverTest for virt::Virt {
     //> any step diverged from the expected walk.  While `@Invalid()`,
     //> the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -49,16 +49,16 @@ pub mod UnionMatchInDriverTest for virt::Virt {
     reg state : FsmState on clock {
         initial it <= @Idle()
         it <= match state {
-            case @Idle() when {
-                case step == 3 => @Load()
+            with @Idle() if {
+                when step == 3 => @Load()
                 else => @Idle()
             }
-            case @Load() => @Run(0w2)
-            case @Run(n) when {
-                case n == 3w2 => @Done()
+            with @Load() => @Run(0w2)
+            with @Run(n) if {
+                when n == 3w2 => @Done()
                 else => @Run(n + 1)
             }
-            case @Done() => @Done()
+            with @Done() => @Done()
         }
     }
 
@@ -66,8 +66,8 @@ pub mod UnionMatchInDriverTest for virt::Virt {
     //> idle warm-up: the FSM holds `@Idle()` and no checks run.
     reg step : Word[4] on clock {
         initial it <= 0w4
-        when {
-            case step < 12 {
+        if {
+            when step < 12 {
                 it <= it + 1
             }
         }
@@ -84,8 +84,8 @@ pub mod UnionMatchInDriverTest for virt::Virt {
     //> the exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case step == 11 {
+        if {
+            when step == 11 {
                 it <= true
             }
         }
@@ -103,15 +103,15 @@ pub mod UnionMatchInDriverTest for virt::Virt {
     //> no-`=>` idiom in a second position.
     wire state_code : Word[4] {
         it := match state {
-            case @Idle() => 0w4
-            case @Load() => 1w4
-            case @Run(n) when {
-                case n == 0w2 => 2w4
-                case n == 1w2 => 3w4
-                case n == 2w2 => 4w4
+            with @Idle() => 0w4
+            with @Load() => 1w4
+            with @Run(n) if {
+                when n == 0w2 => 2w4
+                when n == 1w2 => 3w4
+                when n == 2w2 => 4w4
                 else => 5w4
             }
-            case @Done() => 6w4
+            with @Done() => 6w4
         }
     }
 
@@ -120,12 +120,12 @@ pub mod UnionMatchInDriverTest for virt::Virt {
     //> cycles 5 through 8, and `@Done` from cycle 9 onward.
     wire expected_code : Word[4] {
         it := match step : Word[4] {
-            case 3 => 0w4
-            case 4 => 1w4
-            case 5 => 2w4
-            case 6 => 3w4
-            case 7 => 4w4
-            case 8 => 5w4
+            with 3 => 0w4
+            with 4 => 1w4
+            with 5 => 2w4
+            with 6 => 3w4
+            with 7 => 4w4
+            with 8 => 5w4
             else => 6w4
         }
     }

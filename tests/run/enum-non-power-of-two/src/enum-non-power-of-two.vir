@@ -27,8 +27,8 @@ pub mod EnumNonPowerOfTwoTest for virt::Virt {
     //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -45,7 +45,7 @@ pub mod EnumNonPowerOfTwoTest for virt::Virt {
     //> to `#Zero`.
     wire unused_caught : Bit {
         it := match junk {
-            case #Zero => false
+            with #Zero => false
             else       => true
         }
     }
@@ -55,21 +55,21 @@ pub mod EnumNonPowerOfTwoTest for virt::Virt {
     //> vacuously.
     wire zero_hit : Bit {
         it := match cast(0w2 : Word[2]) : Ternary {
-            case #Zero => true
+            with #Zero => true
             else       => false
         }
     }
 
     wire one_hit : Bit {
         it := match cast(1w2 : Word[2]) : Ternary {
-            case #One => true
+            with #One => true
             else      => false
         }
     }
 
     wire two_hit : Bit {
         it := match cast(2w2 : Word[2]) : Ternary {
-            case #Two => true
+            with #Two => true
             else      => false
         }
     }

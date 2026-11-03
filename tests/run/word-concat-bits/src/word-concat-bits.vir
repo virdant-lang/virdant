@@ -22,8 +22,8 @@ pub mod WordConcatBitsTest for virt::Virt {
     //> `@Valid(0)` if every row's checks passed; `@Valid(1)` if any
     //> check failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -40,10 +40,10 @@ pub mod WordConcatBitsTest for virt::Virt {
     reg vec : Word[4] on clock {
         initial it <= 0b1010
         it <= match next {
-            case 0 => 0b1010
-            case 1 => 0b0101
-            case 2 => 0b1000
-            case 3 => 0b1000
+            with 0 => 0b1010
+            with 1 => 0b0101
+            with 2 => 0b1000
+            with 3 => 0b1000
         }
     }
 
@@ -88,8 +88,8 @@ pub mod WordConcatBitsTest for virt::Virt {
     //> Truth-table row under test, 0, 1, or 2.
     reg index : Word[2] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= next
             }
         }
@@ -99,8 +99,8 @@ pub mod WordConcatBitsTest for virt::Virt {
     //> the final fold into `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 2 {
+        if {
+            when index == 2 {
                 it <= true
             }
         }
@@ -110,8 +110,8 @@ pub mod WordConcatBitsTest for virt::Virt {
     //> before `finished` folds its verdict in.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it && ok
             }
         }
@@ -121,16 +121,16 @@ pub mod WordConcatBitsTest for virt::Virt {
     // so any fixed reordering of the four arguments produces a value
     // that fails at least one of them.
     match index {
-        case 0 {
+        with 0 {
             exp := 0b1010
         }
-        case 1 {
+        with 1 {
             exp := 0b0101
         }
-        case 2 {
+        with 2 {
             exp := 0b1000
         }
-        case 3 {
+        with 3 {
             exp := 0b1000
         }
     }

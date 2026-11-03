@@ -30,8 +30,8 @@ mod Accumulator {
 
     reg total : Word[8] on clock {
         initial it <= 0
-        it <= when {
-            case clear => 0
+        it <= if {
+            when clear => 0
             else => it + value
         }
     }
@@ -47,8 +47,8 @@ pub mod AccumulatorTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -85,8 +85,8 @@ pub mod AccumulatorTest for virt::Virt {
     //> fold and validating `exit` on the next cycle.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case checking && check_index == 15 {
+        if {
+            when checking && check_index == 15 {
                 it <= true
             }
         }
@@ -96,8 +96,8 @@ pub mod AccumulatorTest for virt::Virt {
     //> folds its verdict in on the cycle after its step is applied.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && acc.sum == expected
             }
         }
@@ -117,75 +117,75 @@ pub mod AccumulatorTest for virt::Virt {
     // exactly cover `Word[4]`, so the match is exhaustive.
     match index {
         // Ordinary running adds.
-        case 0 {
+        with 0 {
             value := 100
             clear := false
         }
-        case 1 {
+        with 1 {
             value := 55
             clear := false
         }
         // 155 + 200 = 355 wraps to 99.
-        case 2 {
+        with 2 {
             value := 200
             clear := false
         }
-        case 3 {
+        with 3 {
             value := 1
             clear := false
         }
         // Adding zero holds the sum.
-        case 4 {
+        with 4 {
             value := 0
             clear := false
         }
         // 100 + 156 = 256 wraps exactly to 0.
-        case 5 {
+        with 5 {
             value := 156
             clear := false
         }
-        case 6 {
+        with 6 {
             value := 7
             clear := false
         }
         // Explicit clear back to zero.
-        case 7 {
+        with 7 {
             value := 42
             clear := true
         }
         // 128 + 128 = 256 wraps exactly to 0.
-        case 8 {
+        with 8 {
             value := 128
             clear := false
         }
-        case 9 {
+        with 9 {
             value := 128
             clear := false
         }
         // 0 + 255 = 255, then 255 + 1 wraps to 0.
-        case 10 {
+        with 10 {
             value := 255
             clear := false
         }
-        case 11 {
+        with 11 {
             value := 1
             clear := false
         }
-        case 12 {
+        with 12 {
             value := 3
             clear := false
         }
         // Clear overrides a nonzero addend.
-        case 13 {
+        with 13 {
             value := 10
             clear := true
         }
         // 250 + 6 = 256 wraps exactly to 0.
-        case 14 {
+        with 14 {
             value := 250
             clear := false
         }
-        case 15 {
+        with 15 {
             value := 6
             clear := false
         }
@@ -196,52 +196,52 @@ pub mod AccumulatorTest for virt::Virt {
     // Golden sums: `expected[i]` is the accumulator's sum on the
     // cycle after step `i` is applied.  Exhaustive over `Word[4]`.
     match check_index {
-        case 0 {
+        with 0 {
             expected := 100
         }
-        case 1 {
+        with 1 {
             expected := 155
         }
-        case 2 {
+        with 2 {
             expected := 99
         }
-        case 3 {
+        with 3 {
             expected := 100
         }
-        case 4 {
+        with 4 {
             expected := 100
         }
-        case 5 {
+        with 5 {
             expected := 0
         }
-        case 6 {
+        with 6 {
             expected := 7
         }
-        case 7 {
+        with 7 {
             expected := 0
         }
-        case 8 {
+        with 8 {
             expected := 128
         }
-        case 9 {
+        with 9 {
             expected := 0
         }
-        case 10 {
+        with 10 {
             expected := 255
         }
-        case 11 {
+        with 11 {
             expected := 0
         }
-        case 12 {
+        with 12 {
             expected := 3
         }
-        case 13 {
+        with 13 {
             expected := 0
         }
-        case 14 {
+        with 14 {
             expected := 250
         }
-        case 15 {
+        with 15 {
             expected := 0
         }
     }

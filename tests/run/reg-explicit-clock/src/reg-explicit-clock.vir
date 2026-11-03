@@ -35,8 +35,8 @@ mod BitClockDomains {
     //> platform edge.  This `Bit` is the clock of the fast domain.
     reg tick : Bit on clock {
         initial it <= false
-        when {
-            case reset { it <= false }
+        if {
+            when reset { it <= false }
             else { it <= !it }
         }
     }
@@ -45,8 +45,8 @@ mod BitClockDomains {
     //> out of every two.
     reg phase : Bit on clock {
         initial it <= false
-        when {
-            case reset { it <= false }
+        if {
+            when reset { it <= false }
             else { it <= !it }
         }
     }
@@ -55,8 +55,8 @@ mod BitClockDomains {
     //> platform edge.  This `Bit` is the clock of the slow domain.
     reg slow_tick : Bit on clock {
         initial it <= false
-        when {
-            case reset { it <= false }
+        if {
+            when reset { it <= false }
             else { it <= mux(phase, !it, it) }
         }
     }
@@ -75,8 +75,8 @@ mod BitClockDomains {
     //> edge of `tick`, i.e. every other platform cycle.
     reg fast_count : Word[8] on fast_clock {
         initial it <= 0
-        when {
-            case reset { it <= 0 }
+        if {
+            when reset { it <= 0 }
             else { it <= it + 1 }
         }
     }
@@ -85,8 +85,8 @@ mod BitClockDomains {
     //> edge of `slow_tick`, i.e. every fourth platform cycle.
     reg slow_count : Word[8] on slow_clock {
         initial it <= 0
-        when {
-            case reset { it <= 0 }
+        if {
+            when reset { it <= 0 }
             else { it <= it + 1 }
         }
     }
@@ -109,8 +109,8 @@ pub mod RegExplicitClockTest for virt::Virt {
     //> `@Valid(0)` when every check passed; `@Valid(1)` if any check
     //> failed or no check ever ran.  `@Invalid()` while running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished && step >= 10 => @Valid(mux(fast_ok && slow_ok && saw_check, 0w8, 1w8))
+        it := if {
+            when finished && step >= 10 => @Valid(mux(fast_ok && slow_ok && saw_check, 0w8, 1w8))
             else => @Invalid()
         }
     }
@@ -132,8 +132,8 @@ pub mod RegExplicitClockTest for virt::Virt {
     //> forced register re-converges to a known value before stimulus.
     reg reset : Bit on clock {
         initial it <= true
-        when {
-            case step >= 4 { it <= false }
+        if {
+            when step >= 4 { it <= false }
         }
     }
 
@@ -141,8 +141,8 @@ pub mod RegExplicitClockTest for virt::Virt {
     //> the finish schedule cannot be shifted by first-edge garbage.
     reg run_step : Word[8] on clock {
         initial it <= 0
-        when {
-            case reset { it <= 0 }
+        if {
+            when reset { it <= 0 }
             else { it <= it + 1 }
         }
     }
@@ -153,8 +153,8 @@ pub mod RegExplicitClockTest for virt::Virt {
     //> combinational outputs, whose settlements can race with a check.
     reg tick_h : Bit on clock {
         initial it <= false
-        when {
-            case reset { it <= false }
+        if {
+            when reset { it <= false }
             else { it <= !it }
         }
     }
@@ -162,8 +162,8 @@ pub mod RegExplicitClockTest for virt::Virt {
     //> Harness mirror of `dut.phase`.
     reg phase_h : Bit on clock {
         initial it <= false
-        when {
-            case reset { it <= false }
+        if {
+            when reset { it <= false }
             else { it <= !it }
         }
     }
@@ -171,8 +171,8 @@ pub mod RegExplicitClockTest for virt::Virt {
     //> Harness mirror of `dut.slow_tick`.
     reg slow_tick_h : Bit on clock {
         initial it <= false
-        when {
-            case reset { it <= false }
+        if {
+            when reset { it <= false }
             else { it <= mux(phase_h, !it, it) }
         }
     }

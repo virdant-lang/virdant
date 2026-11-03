@@ -34,8 +34,8 @@ pub mod VirdantTomlDefaultsTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -63,8 +63,8 @@ pub mod VirdantTomlDefaultsTest for virt::Virt {
     //> folds its verdict in on the cycle it is made.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case warm {
+        if {
+            when warm {
                 it <= it && dut.count == checks[2..0]
             }
         }
@@ -74,8 +74,8 @@ pub mod VirdantTomlDefaultsTest for virt::Virt {
     //> validating `exit` on the next cycle.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case warm && checks == 7 {
+        if {
+            when warm && checks == 7 {
                 it <= true
             }
         }

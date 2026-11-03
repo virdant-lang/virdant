@@ -94,49 +94,49 @@ pub mod Top for virt::Virt {
     wire exp8 : Word[8]
 
     match index {
-        case 0 {
+        with 0 {
             vec8 := 0
             exp4 := 0
             vec4 := 0
             exp8 := 0
         }
-        case 1 {
+        with 1 {
             vec8 := 0xAB
             exp4 := 0xB
             vec4 := 1
             exp8 := 1
         }
-        case 2 {
+        with 2 {
             vec8 := 1
             exp4 := 1
             vec4 := 15
             exp8 := 15
         }
-        case 3 {
+        with 3 {
             vec8 := 0xF0
             exp4 := 0
             vec4 := 9
             exp8 := 9
         }
-        case 4 {
+        with 4 {
             vec8 := 0x5A
             exp4 := 0xA
             vec4 := 7
             exp8 := 7
         }
-        case 5 {
+        with 5 {
             vec8 := 0x93
             exp4 := 3
             vec4 := 12
             exp8 := 12
         }
-        case 6 {
+        with 6 {
             vec8 := 255
             exp4 := 15
             vec4 := 2
             exp8 := 2
         }
-        case 7 {
+        with 7 {
             vec8 := 0xC4
             exp4 := 4
             vec4 := 8
@@ -163,16 +163,16 @@ pub mod Top for virt::Virt {
     //> read.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 7 {
+        if {
+            when index == 7 {
                 it <= true
             }
         }
     }
 
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }

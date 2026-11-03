@@ -83,8 +83,8 @@ pub mod SliceCompareTest for virt::Virt {
         it := check_eq_equal && check_eq_unequal && check_lt_true && check_lt_false && check_slice_value
     }
 
-    let ok = success_wire when {
-        case ok {
+    let ok = success_wire if {
+        when ok {
             exit := @Valid(0)
         }
         else {

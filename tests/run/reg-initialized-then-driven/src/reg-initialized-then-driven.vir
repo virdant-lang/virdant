@@ -30,8 +30,8 @@ pub mod RegInitThenDriveTest for virt::Virt {
     //> captures are done.
     reg stage : Word[3] on clock {
         initial it <= 0
-        when {
-            case it < 4 {
+        if {
+            when it < 4 {
                 it <= it + 1
             }
         }
@@ -44,8 +44,8 @@ pub mod RegInitThenDriveTest for virt::Virt {
     //> 9 from the first post-reset cycle onward.
     reg snap0 : Word[8] on clock {
         initial it <= 0
-        when {
-            case stage == 0 {
+        if {
+            when stage == 0 {
                 it <= data
             }
         }
@@ -53,8 +53,8 @@ pub mod RegInitThenDriveTest for virt::Virt {
 
     reg snap1 : Word[8] on clock {
         initial it <= 0
-        when {
-            case stage == 1 {
+        if {
+            when stage == 1 {
                 it <= data
             }
         }
@@ -62,8 +62,8 @@ pub mod RegInitThenDriveTest for virt::Virt {
 
     reg snap2 : Word[8] on clock {
         initial it <= 0
-        when {
-            case stage == 2 {
+        if {
+            when stage == 2 {
                 it <= data
             }
         }
@@ -71,8 +71,8 @@ pub mod RegInitThenDriveTest for virt::Virt {
 
     reg snap3 : Word[8] on clock {
         initial it <= 0
-        when {
-            case stage == 3 {
+        if {
+            when stage == 3 {
                 it <= data
             }
         }
@@ -89,8 +89,8 @@ pub mod RegInitThenDriveTest for virt::Virt {
     //> values came out in any other order.  While `@Invalid()`, the
     //> simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case stage == 4 => @Valid(mux(ok, 0, 1))
+        it := if {
+            when stage == 4 => @Valid(mux(ok, 0, 1))
             else => @Invalid()
         }
     }

@@ -66,8 +66,8 @@ mod Stim {
     //> if any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -86,20 +86,20 @@ mod Stim {
             a = 0b0101,
             b = 0b0011,
         }
-        when {
-            case phase == 1 {
+        if {
+            when phase == 1 {
                 it <= ${
                     a = 0b0111,
                     b = 0b0111,
                 }
             }
-            case phase == 2 {
+            when phase == 2 {
                 it <= ${
                     a = 0b0001,
                     b = 0b0010,
                 }
             }
-            case phase == 3 {
+            when phase == 3 {
                 it <= ${
                     a = 0b0000,
                     b = 0b0000,
@@ -111,8 +111,8 @@ mod Stim {
     //> Vector index, 0 through 3: one request vector per phase.
     reg phase : Word[2] on clock {
         initial it <= 0
-        when {
-            case phase != 3 {
+        if {
+            when phase != 3 {
                 it <= it + 1
             }
         }
@@ -152,8 +152,8 @@ mod Stim {
     //> checked, so that the exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case phase == 3 && cycle > 4 {
+        if {
+            when phase == 3 && cycle > 4 {
                 it <= true
             }
         }

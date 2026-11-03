@@ -32,13 +32,13 @@ mod Alu {
     incoming opcode : AluOp
 
     //> Result of the operation selected by `opcode`.
-    outgoing result : Word[8] {
+    outgoing result : Word[8] dependson a, b, opcode {
         it := match opcode {
-            case #Add => a + b
-            case #Sub => a - b
-            case #And => a & b
-            case #Or  => a | b
-            case #Xor => a ^ b
+            with #Add => a + b
+            with #Sub => a - b
+            with #And => a & b
+            with #Or  => a | b
+            with #Xor => a ^ b
         }
     }
 }
@@ -51,8 +51,8 @@ pub mod AluTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -66,8 +66,8 @@ pub mod AluTest for virt::Virt {
     //> High while the loaded vector is being checked.
     reg busy : Bit on clock {
         initial it <= false
-        when {
-            case finished {
+        if {
+            when finished {
                 it <= false
             }
             else {
@@ -80,8 +80,8 @@ pub mod AluTest for virt::Virt {
     //> exactly cover `Word[4]`, so the vector table is exhaustive.
     reg index : Word[4] on clock {
         initial it <= 0
-        when {
-            case busy {
+        if {
+            when busy {
                 it <= it + 1
             }
         }
@@ -90,8 +90,8 @@ pub mod AluTest for virt::Virt {
     //> First operand of the loaded vector.
     reg va : Word[8] on clock {
         initial it <= 0
-        when {
-            case loading {
+        if {
+            when loading {
                 it <= table_a
             }
         }
@@ -100,8 +100,8 @@ pub mod AluTest for virt::Virt {
     //> Second operand of the loaded vector.
     reg vb : Word[8] on clock {
         initial it <= 0
-        when {
-            case loading {
+        if {
+            when loading {
                 it <= table_b
             }
         }
@@ -111,8 +111,8 @@ pub mod AluTest for virt::Virt {
     //> enum flows through a reg before reaching the ALU.
     reg vop : AluOp on clock {
         initial it <= #Add
-        when {
-            case loading {
+        if {
+            when loading {
                 it <= table_op
             }
         }
@@ -121,8 +121,8 @@ pub mod AluTest for virt::Virt {
     //> Golden result of the loaded vector.
     reg vexp : Word[8] on clock {
         initial it <= 0
-        when {
-            case loading {
+        if {
+            when loading {
                 it <= table_expected
             }
         }
@@ -132,8 +132,8 @@ pub mod AluTest for virt::Virt {
     //> folds its verdict in on the cycle the vector is checked.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case busy {
+        if {
+            when busy {
                 it <= it && alu.result == vexp
             }
         }
@@ -143,8 +143,8 @@ pub mod AluTest for virt::Virt {
     //> exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case busy && index == 15 {
+        if {
+            when busy && index == 15 {
                 it <= true
             }
         }
@@ -166,101 +166,101 @@ pub mod AluTest for virt::Virt {
 
     match index {
         // Addition, including modular wraparound.
-        case 0 {
+        with 0 {
             table_a := 10
             table_b := 20
             table_op := #Add
             table_expected := 30
         }
-        case 1 {
+        with 1 {
             table_a := 200
             table_b := 100
             table_op := #Add
             table_expected := 44
         }
-        case 2 {
+        with 2 {
             table_a := 0
             table_b := 0
             table_op := #Add
             table_expected := 0
         }
-        case 3 {
+        with 3 {
             table_a := 255
             table_b := 1
             table_op := #Add
             table_expected := 0
         }
         // Subtraction, including modular wraparound.
-        case 4 {
+        with 4 {
             table_a := 50
             table_b := 30
             table_op := #Sub
             table_expected := 20
         }
-        case 5 {
+        with 5 {
             table_a := 30
             table_b := 50
             table_op := #Sub
             table_expected := 236
         }
-        case 6 {
+        with 6 {
             table_a := 7
             table_b := 7
             table_op := #Sub
             table_expected := 0
         }
-        case 7 {
+        with 7 {
             table_a := 255
             table_b := 255
             table_op := #Sub
             table_expected := 0
         }
         // Bitwise AND, including a zero operand.
-        case 8 {
+        with 8 {
             table_a := 0xF0
             table_b := 0x3C
             table_op := #And
             table_expected := 0x30
         }
-        case 9 {
+        with 9 {
             table_a := 0xAA
             table_b := 0xFF
             table_op := #And
             table_expected := 0xAA
         }
-        case 10 {
+        with 10 {
             table_a := 0
             table_b := 0xFF
             table_op := #And
             table_expected := 0
         }
         // Bitwise OR, including complementary and zero operands.
-        case 11 {
+        with 11 {
             table_a := 0xF0
             table_b := 0x0F
             table_op := #Or
             table_expected := 0xFF
         }
-        case 12 {
+        with 12 {
             table_a := 0xAA
             table_b := 0x55
             table_op := #Or
             table_expected := 0xFF
         }
-        case 13 {
+        with 13 {
             table_a := 0
             table_b := 0
             table_op := #Or
             table_expected := 0
         }
         // Bitwise XOR, including self-cancelling operands.
-        case 14 {
+        with 14 {
             table_a := 0xFF
             table_b := 0xFF
             table_op := #Xor
             table_expected := 0
         }
-        case 15 {
+        with 15 {
             table_a := 0xAA
             table_b := 0x0F
             table_op := #Xor

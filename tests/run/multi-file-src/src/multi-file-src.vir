@@ -24,8 +24,8 @@ pub mod Top for virt::Virt {
     //> if any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -47,8 +47,8 @@ pub mod Top for virt::Virt {
     //> Index of the vector under test, 0 through 3.
     reg index : Word[2] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -65,8 +65,8 @@ pub mod Top for virt::Virt {
     //> exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 3 {
+        if {
+            when index == 3 {
                 it <= true
             }
         }
@@ -89,28 +89,28 @@ pub mod Top for virt::Virt {
     // the golden `expected_eq` (`zext(vec_x) == vec_y8`).  The four
     // cases exactly cover `Word[2]`, so the match is exhaustive.
     match index {
-        case 0 {
+        with 0 {
             vec_x := 5
             vec_y := 3
             vec_y8 := 5
             expected_sum := 9
             expected_eq := true
         }
-        case 1 {
+        with 1 {
             vec_x := 15
             vec_y := 1
             vec_y8 := 15
             expected_sum := 17
             expected_eq := true
         }
-        case 2 {
+        with 2 {
             vec_x := 0
             vec_y := 0
             vec_y8 := 255
             expected_sum := 1
             expected_eq := false
         }
-        case 3 {
+        with 3 {
             vec_x := 9
             vec_y := 6
             vec_y8 := 9

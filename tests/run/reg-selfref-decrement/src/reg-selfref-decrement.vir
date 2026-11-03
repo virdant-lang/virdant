@@ -41,8 +41,8 @@ pub mod RegSelfrefDecrementTest for virt::Virt {
     //> deterministically.
     reg warm : Word[2] on clock {
         initial it <= 0
-        when {
-            case it != 3 {
+        if {
+            when it != 3 {
                 it <= it + 1
             }
         }
@@ -58,8 +58,8 @@ pub mod RegSelfrefDecrementTest for virt::Virt {
     //> minus one, which for `prev == 0` asserts the wrap to 15.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && count == (prev - 1)
             }
         }
@@ -69,8 +69,8 @@ pub mod RegSelfrefDecrementTest for virt::Virt {
     //> so the exit cannot happen without the wrap being exercised.
     reg saw_wrap : Bit on clock {
         initial it <= false
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it || (prev == 0 && count == 15)
             }
         }
@@ -80,9 +80,9 @@ pub mod RegSelfrefDecrementTest for virt::Virt {
     //> `@Valid(1)` as soon as any check fails.  While `@Invalid()`,
     //> the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case checking && !all_ok => @Valid(1)
-            case checking && saw_wrap => @Valid(0)
+        it := if {
+            when checking && !all_ok => @Valid(1)
+            when checking && saw_wrap => @Valid(0)
             else => @Invalid()
         }
     }

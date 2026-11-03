@@ -16,19 +16,19 @@ mod OnehotEncoder {
     incoming onehot : Word[4]
 
     //> Index of the hot bit.
-    outgoing code : Word[2]
+    outgoing code : Word[2] dependson onehot
 
     match onehot {
-        case 0b0001 {
+        with 0b0001 {
             code := 0
         }
-        case 0b0010 {
+        with 0b0010 {
             code := 1
         }
-        case 0b0100 {
+        with 0b0100 {
             code := 2
         }
-        case 0b1000 {
+        with 0b1000 {
             code := 3
         }
         else {
@@ -45,8 +45,8 @@ pub mod OnehotEncoderTest for virt::Virt {
     //> if any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -66,8 +66,8 @@ pub mod OnehotEncoderTest for virt::Virt {
     //> folds its verdict in until all 4 hot positions are done.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it && enc.code == expected
             }
         }
@@ -78,8 +78,8 @@ pub mod OnehotEncoderTest for virt::Virt {
     //> `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= index == 3
             }
         }
@@ -92,19 +92,19 @@ pub mod OnehotEncoderTest for virt::Virt {
     wire expected : Word[2]
 
     match index {
-        case 0 {
+        with 0 {
             onehot := 0b0001
             expected := 0
         }
-        case 1 {
+        with 1 {
             onehot := 0b0010
             expected := 1
         }
-        case 2 {
+        with 2 {
             onehot := 0b0100
             expected := 2
         }
-        case 3 {
+        with 3 {
             onehot := 0b1000
             expected := 3
         }

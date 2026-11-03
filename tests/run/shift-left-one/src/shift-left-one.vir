@@ -24,13 +24,13 @@ mod ShiftOne {
 
     //> `x` shifted left by 1: drop the top bit (shifted out and
     //> lost) and append a 0 at the bottom.
-    outgoing left1 : Word[8] {
+    outgoing left1 : Word[8] dependson x {
         it := word(x[7..0], 0w1)
     }
 
     //> `x` shifted right by 1: prepend a 0 at the top and drop the
     //> bottom bit (shifted out and lost).
-    outgoing right1 : Word[8] {
+    outgoing right1 : Word[8] dependson x {
         it := word(0w1, x[8..1])
     }
 }
@@ -43,8 +43,8 @@ pub mod ShiftLeftOneTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -56,8 +56,8 @@ pub mod ShiftLeftOneTest for virt::Virt {
     //> Index of the vector under test, 0 through 15.
     reg index : Word[4] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -74,8 +74,8 @@ pub mod ShiftLeftOneTest for virt::Virt {
     //> exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 15 {
+        if {
+            when index == 15 {
                 it <= true
             }
         }
@@ -90,90 +90,90 @@ pub mod ShiftLeftOneTest for virt::Virt {
     // exactly cover `Word[4]`, so the match is exhaustive.
     match index {
         // Zero shifts to zero in both directions.
-        case 0 {
+        with 0 {
             vec_x := 0x00
             expected_left := 0x00
             expected_right := 0x00
         }
         // Right shift loses the bottom bit.
-        case 1 {
+        with 1 {
             vec_x := 0x01
             expected_left := 0x02
             expected_right := 0x00
         }
         // Left shift loses the top bit.
-        case 2 {
+        with 2 {
             vec_x := 0x80
             expected_left := 0x00
             expected_right := 0x40
         }
         // Both shifts lose a bit.
-        case 3 {
+        with 3 {
             vec_x := 0xFF
             expected_left := 0xFE
             expected_right := 0x7F
         }
         // Alternating patterns.
-        case 4 {
+        with 4 {
             vec_x := 0xAA
             expected_left := 0x54
             expected_right := 0x55
         }
-        case 5 {
+        with 5 {
             vec_x := 0x55
             expected_left := 0xAA
             expected_right := 0x2A
         }
         // Top and bottom bits set: both shifts drop a 1.
-        case 6 {
+        with 6 {
             vec_x := 0x81
             expected_left := 0x02
             expected_right := 0x40
         }
         // All ones below the top bit.
-        case 7 {
+        with 7 {
             vec_x := 0x7F
             expected_left := 0xFE
             expected_right := 0x3F
         }
         // Nibbles at the bottom and at the top.
-        case 8 {
+        with 8 {
             vec_x := 0x0F
             expected_left := 0x1E
             expected_right := 0x07
         }
-        case 9 {
+        with 9 {
             vec_x := 0xF0
             expected_left := 0xE0
             expected_right := 0x78
         }
         // Assorted mixed patterns.
-        case 10 {
+        with 10 {
             vec_x := 0xC3
             expected_left := 0x86
             expected_right := 0x61
         }
-        case 11 {
+        with 11 {
             vec_x := 0x3C
             expected_left := 0x78
             expected_right := 0x1E
         }
-        case 12 {
+        with 12 {
             vec_x := 0x99
             expected_left := 0x32
             expected_right := 0x4C
         }
-        case 13 {
+        with 13 {
             vec_x := 0x66
             expected_left := 0xCC
             expected_right := 0x33
         }
-        case 14 {
+        with 14 {
             vec_x := 0x5A
             expected_left := 0xB4
             expected_right := 0x2D
         }
-        case 15 {
+        with 15 {
             vec_x := 0xA5
             expected_left := 0x4A
             expected_right := 0x52

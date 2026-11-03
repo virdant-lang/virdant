@@ -14,8 +14,8 @@ pub mod ValidOfBitTest for virt::Virt {
     //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -31,8 +31,8 @@ pub mod ValidOfBitTest for virt::Virt {
     //> `@Valid(true)`, then `@Valid(false)`, then `@Invalid()`.
     wire value : Valid[Bit] {
         it := match cycle {
-            case 0 => @Valid(true)
-            case 1 => @Valid(false)
+            with 0 => @Valid(true)
+            with 1 => @Valid(false)
             else => @Invalid()
         }
     }
@@ -41,7 +41,7 @@ pub mod ValidOfBitTest for virt::Virt {
     //> the `else` arm substitutes a false payload.
     wire payload : Bit {
         it := match value {
-            case @Valid(bit) => bit
+            with @Valid(bit) => bit
             else => false
         }
     }
@@ -50,7 +50,7 @@ pub mod ValidOfBitTest for virt::Virt {
     //> `@Valid` arm.
     wire is_valid : Bit {
         it := match value {
-            case @Valid(bit) => true
+            with @Valid(bit) => true
             else => false
         }
     }
@@ -58,9 +58,9 @@ pub mod ValidOfBitTest for virt::Virt {
     //> The per-cycle check: cycle 0 must see `@Valid(true)`, cycle 1
     //> `@Valid(false)`, and cycle 2+ `@Invalid()`.
     wire check : Bit {
-        it := when {
-            case cycle == 0 => is_valid && payload
-            case cycle == 1 => is_valid && !payload
+        it := if {
+            when cycle == 0 => is_valid && payload
+            when cycle == 1 => is_valid && !payload
             else => !is_valid && !payload
         }
     }
@@ -76,8 +76,8 @@ pub mod ValidOfBitTest for virt::Virt {
     //> the exit code only sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case cycle == 2 {
+        if {
+            when cycle == 2 {
                 it <= true
             }
         }

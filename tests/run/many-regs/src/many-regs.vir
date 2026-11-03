@@ -18,8 +18,8 @@ pub mod ManyRegsTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case cycle == 16 => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when cycle == 16 => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -29,8 +29,8 @@ pub mod ManyRegsTest for virt::Virt {
     //> values.
     reg cycle : Word[5] on clock {
         initial it <= 0
-        when {
-            case cycle < 16 {
+        if {
+            when cycle < 16 {
                 it <= it + 1
             }
         }
@@ -126,8 +126,8 @@ pub mod ManyRegsTest for virt::Virt {
     // statement `when` block.  Each enabled cycle, every register
     // advances by its own distinct increment; on any other cycle no
     // arm matches and every register holds.
-    when {
-        case run {
+    if {
+        when run {
             r0 <= r0 + 1
             r1 <= r1 + 2
             r2 <= r2 + 3
@@ -153,14 +153,14 @@ pub mod ManyRegsTest for virt::Virt {
     //> multiplication in the language, so the golden values are
     //> spelled out.)  True on every non-checkpoint cycle.
     wire checks : Bit {
-        when {
-            case cycle == 5 {
+        if {
+            when cycle == 5 {
                 it := r0 == 5 && r1 == 11 && r2 == 17 && r3 == 23
                     && r4 == 29 && r5 == 35 && r6 == 41 && r7 == 47
                     && r8 == 53 && r9 == 59 && r10 == 65 && r11 == 71
                     && r12 == 77 && r13 == 83 && r14 == 89 && r15 == 95
             }
-            case cycle == 15 {
+            when cycle == 15 {
                 it := r0 == 15 && r1 == 31 && r2 == 47 && r3 == 63
                     && r4 == 79 && r5 == 95 && r6 == 111 && r7 == 127
                     && r8 == 143 && r9 == 159 && r10 == 175 && r11 == 191

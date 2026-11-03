@@ -88,8 +88,8 @@ mod Stim {
     //> two-hop check having passed; `@Valid(1)` if any check failed.
     //> While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case done => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when done => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -118,8 +118,8 @@ mod Stim {
     //> lets `exit` become `@Valid`.
     reg done : Bit on clock {
         initial it <= false
-        when {
-            case cycles == 24w5 {
+        if {
+            when cycles == 24w5 {
                 it <= true
             }
         }
@@ -131,8 +131,8 @@ mod Stim {
     //> through `mid.a`.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case !done {
+        if {
+            when !done {
                 it <= it && drv.rsp == req + 1w8
             }
         }

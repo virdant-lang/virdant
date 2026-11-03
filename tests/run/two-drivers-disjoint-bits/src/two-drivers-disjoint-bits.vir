@@ -54,11 +54,11 @@ mod WordJoin {
     //> (settled) cycle `assembled` matches the current driver values.
     reg count_high : Word[4] on clock {
         initial it <= 2
-        when {
-            case enabled && toggled {
+        if {
+            when enabled && toggled {
                 it <= it + 1
             }
-            case !enabled {
+            when !enabled {
                 it <= 2
             }
         }
@@ -70,11 +70,11 @@ mod WordJoin {
     //> (settled) cycle `assembled` matches the current driver values.
     reg count_low : Word[4] on clock {
         initial it <= 7
-        when {
-            case enabled && toggled {
+        if {
+            when enabled && toggled {
                 it <= it + 3
             }
-            case !enabled {
+            when !enabled {
                 it <= 7
             }
         }
@@ -85,8 +85,8 @@ mod WordJoin {
     //> matches the current driver values exactly.
     reg toggled : Bit on clock {
         initial it <= false
-        when {
-            case enabled {
+        if {
+            when enabled {
                 it <= !it
             }
             else {
@@ -109,8 +109,8 @@ mod WordJoin {
     //> from two wires covering disjoint bit ranges.
     reg assembled : Word[8] on clock {
         initial it <= 0
-        when {
-            case enabled {
+        if {
+            when enabled {
                 it <= word(high_half, low_half)
             }
             else {
@@ -128,8 +128,8 @@ pub mod TwoDriversTest for virt::Virt {
     //> check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -177,8 +177,8 @@ pub mod TwoDriversTest for virt::Virt {
     //> Number of checks performed so far, 0 through 6.
     reg check_index : Word[3] on clock {
         initial it <= 0
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it + 1
             }
         }
@@ -190,8 +190,8 @@ pub mod TwoDriversTest for virt::Virt {
     //> the low slice from the low-half driver.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && join.joined[8..4] == join.high_value
                             && join.joined[4..0] == join.low_value
             }

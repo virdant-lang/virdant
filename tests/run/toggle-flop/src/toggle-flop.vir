@@ -36,8 +36,8 @@ pub mod ToggleFlopTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -51,8 +51,8 @@ pub mod ToggleFlopTest for virt::Virt {
     //> randomness on the first clock edge cannot leak into a verdict.
     reg warm : Word[2] on clock {
         initial it <= 0
-        when {
-            case warm != 3 {
+        if {
+            when warm != 3 {
                 it <= warm + 1
             }
         }
@@ -69,8 +69,8 @@ pub mod ToggleFlopTest for virt::Virt {
     //> Number of alternation checks performed so far, 0 through 16.
     reg checks : Word[4] on clock {
         initial it <= 0
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= checks + 1
             }
         }
@@ -80,8 +80,8 @@ pub mod ToggleFlopTest for virt::Virt {
     //> folds its verdict in on the cycle it is made.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && dut.q != prev
             }
         }
@@ -91,8 +91,8 @@ pub mod ToggleFlopTest for virt::Virt {
     //> validating `exit` on the next cycle.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case checking && checks == 15 {
+        if {
+            when checking && checks == 15 {
                 it <= true
             }
         }

@@ -46,19 +46,19 @@ mod RotatingArbiter {
     incoming req3 : Bit
 
     //> Client 0 is granted this cycle.
-    outgoing grant0 : Bit {
+    outgoing grant0 : Bit dependson req0, req1, req2, req3 {
         it := g0
     }
     //> Client 1 is granted this cycle.
-    outgoing grant1 : Bit {
+    outgoing grant1 : Bit dependson req0, req1, req2, req3 {
         it := g1
     }
     //> Client 2 is granted this cycle.
-    outgoing grant2 : Bit {
+    outgoing grant2 : Bit dependson req0, req1, req2, req3 {
         it := g2
     }
     //> Client 3 is granted this cycle.
-    outgoing grant3 : Bit {
+    outgoing grant3 : Bit dependson req0, req1, req2, req3 {
         it := g3
     }
 
@@ -74,42 +74,42 @@ mod RotatingArbiter {
     //> `warmup` is high.
     reg last : Word[2] on clock {
         initial it <= 3
-        when {
-            case warmup {
+        if {
+            when warmup {
                 it <= 3
             }
-            case g0 {
+            when g0 {
                 it <= 0
             }
-            case g1 {
+            when g1 {
                 it <= 1
             }
-            case g2 {
+            when g2 {
                 it <= 2
             }
-            case g3 {
+            when g3 {
                 it <= 3
             }
         }
     }
 
-    // Priority order per `last`: `case last == 0` starts at client 1,
+    // Priority order per `last`: `when last == 0` starts at client 1,
     // and so on around the ring; the `else` arm covers `last == 3`,
     // which starts at client 0.
-    when {
-        case last == 0 {
+    if {
+        when last == 0 {
             g0 := req0 && !req1 && !req2 && !req3
             g1 := req1
             g2 := req2 && !req1
             g3 := req3 && !req1 && !req2
         }
-        case last == 1 {
+        when last == 1 {
             g0 := req0 && !req2 && !req3
             g1 := req1 && !req0 && !req2 && !req3
             g2 := req2
             g3 := req3 && !req2
         }
-        case last == 2 {
+        when last == 2 {
             g0 := req0 && !req3
             g1 := req1 && !req0 && !req3
             g2 := req2 && !req0 && !req1 && !req3
@@ -131,8 +131,8 @@ pub mod RotatingArbiterTest for virt::Virt {
     //> `@Valid(0)` once all 8 vectors checked out; `@Valid(1)` if any
     //> check failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case done_count == 8 => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when done_count == 8 => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -154,8 +154,8 @@ pub mod RotatingArbiterTest for virt::Virt {
     //> Warm-up counter: counts 0, 1, 2, 3, then parks at 4 or above.
     reg warm : Word[3] on clock {
         initial it <= 0
-        when {
-            case warm < 4 {
+        if {
+            when warm < 4 {
                 it <= it + 1
             }
         }
@@ -176,11 +176,11 @@ pub mod RotatingArbiterTest for virt::Virt {
     //> warm-up; advances once per stimulus cycle.
     reg step : Word[3] on clock {
         initial it <= 0
-        when {
-            case warming {
+        if {
+            when warming {
                 it <= 0
             }
-            case stimulus {
+            when stimulus {
                 it <= it + 1
             }
         }
@@ -190,11 +190,11 @@ pub mod RotatingArbiterTest for virt::Virt {
     //> warm-up; the test is complete once it reaches 8.
     reg done_count : Word[4] on clock {
         initial it <= 0
-        when {
-            case warming {
+        if {
+            when warming {
                 it <= 0
             }
-            case stimulus {
+            when stimulus {
                 it <= it + 1
             }
         }
@@ -204,11 +204,11 @@ pub mod RotatingArbiterTest for virt::Virt {
     //> warm-up; each stimulus cycle folds in the current verdict.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case warming {
+        if {
+            when warming {
                 it <= true
             }
-            case stimulus {
+            when stimulus {
                 it <= it && grants == expected
             }
         }
@@ -219,40 +219,40 @@ pub mod RotatingArbiterTest for virt::Virt {
 
     // Test-vector table: the applied request vector `reqs` and the
     // expected one-hot grant `expected`, selected by `step`.
-    when {
-        case warming {
+    if {
+        when warming {
             reqs := 0w4
             expected := 0w4
         }
-        case step == 0 {
+        when step == 0 {
             reqs := 0b0001w4
             expected := 0b0001w4
         }
-        case step == 1 {
+        when step == 1 {
             reqs := 0b1111w4
             expected := 0b0010w4
         }
-        case step == 2 {
+        when step == 2 {
             reqs := 0b1111w4
             expected := 0b0100w4
         }
-        case step == 3 {
+        when step == 3 {
             reqs := 0b1111w4
             expected := 0b1000w4
         }
-        case step == 4 {
+        when step == 4 {
             reqs := 0b1111w4
             expected := 0b0001w4
         }
-        case step == 5 {
+        when step == 5 {
             reqs := 0b0101w4
             expected := 0b0100w4
         }
-        case step == 6 {
+        when step == 6 {
             reqs := 0w4
             expected := 0w4
         }
-        case step == 7 {
+        when step == 7 {
             reqs := 0b0101w4
             expected := 0b0001w4
         }

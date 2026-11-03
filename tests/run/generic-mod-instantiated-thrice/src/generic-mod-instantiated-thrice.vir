@@ -13,7 +13,7 @@ import virt
 //> doubling arithmetic is re-elaborated at each width.
 mod Doubler[T : Type] {
     incoming d : T
-    outgoing q : T {
+    outgoing q : T dependson d {
         it := d + d
     }
 }
@@ -26,8 +26,8 @@ pub mod Top for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case cycle == 1 => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when cycle == 1 => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }

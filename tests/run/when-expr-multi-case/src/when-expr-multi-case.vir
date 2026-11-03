@@ -24,8 +24,8 @@ pub mod WhenMultiCaseTest for virt::Virt {
     //> `@Valid(1)` otherwise.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok && saw_arm1 && saw_arm2 && saw_arm3 && saw_else, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok && saw_arm1 && saw_arm2 && saw_arm3 && saw_else, 0, 1))
             else => @Invalid()
         }
     }
@@ -43,10 +43,10 @@ pub mod WhenMultiCaseTest for virt::Virt {
     //> `x = 2, 3, 4` -> 2 (arm 2, even though arm 3 also matches),
     //> `x = 5, 6` -> 4 (arm 3), `x = 7` -> 7 (`else`).
     wire out : Word[3] {
-        it := when {
-            case x < 2 => 1
-            case x < 5 => 2
-            case x < 7 => 4
+        it := if {
+            when x < 2 => 1
+            when x < 5 => 2
+            when x < 7 => 4
             else => 7
         }
     }
@@ -101,8 +101,8 @@ pub mod WhenMultiCaseTest for virt::Virt {
     //> each cycle folds in the four current checks until `finished`.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it && check_arm1 && check_arm2 && check_arm3 && check_else
             }
         }
@@ -112,8 +112,8 @@ pub mod WhenMultiCaseTest for virt::Virt {
     //> `exit` sees the final `all_ok` and latch state.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case x == 7 {
+        if {
+            when x == 7 {
                 it <= true
             }
         }

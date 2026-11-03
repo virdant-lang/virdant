@@ -26,8 +26,8 @@ pub mod UnionBasicTest for virt::Virt {
     reg state : Shape on clock {
         initial it <= @Rect(5w4, 3w4)
         it <= match it {
-            case @Rect(w, h) => @Tri(9w4)
-            case @Tri(base) => @Rect(5w4, 3w4)
+            with @Rect(w, h) => @Tri(9w4)
+            with @Tri(base) => @Rect(5w4, 3w4)
         }
     }
 
@@ -37,13 +37,13 @@ pub mod UnionBasicTest for virt::Virt {
     wire on_rect : Bit
     wire on_tri : Bit
     match state {
-        case @Rect(w, h) {
+        with @Rect(w, h) {
             a := w
             b := h
             on_rect := true
             on_tri := false
         }
-        case @Tri(base) {
+        with @Tri(base) {
             a := base
             b := 0w4
             on_rect := false
@@ -68,8 +68,8 @@ pub mod UnionBasicTest for virt::Virt {
     reg seen : Word[2] on clock {
         initial it <= 0w2
         it <= match state {
-            case @Rect(w, h) => it | 1w2
-            case @Tri(base) => it | 2w2
+            with @Rect(w, h) => it | 1w2
+            with @Tri(base) => it | 2w2
         }
     }
 
@@ -87,9 +87,9 @@ pub mod UnionBasicTest for virt::Virt {
     //> `@Valid(0)` once both variants round-tripped without mismatch;
     //> `@Valid(1)` on any mismatch; `@Invalid()` while still waiting.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case failed => @Valid(1)
-            case done => @Valid(0)
+        it := if {
+            when failed => @Valid(1)
+            when done => @Valid(0)
             else => @Invalid()
         }
     }

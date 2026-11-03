@@ -39,8 +39,8 @@ pub mod JohnsonCounterTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -54,8 +54,8 @@ pub mod JohnsonCounterTest for virt::Virt {
     //> each cycle.
     reg index : Word[3] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -65,8 +65,8 @@ pub mod JohnsonCounterTest for virt::Virt {
     //> before `finished` folds in the verdict for the current state.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it && johnsoncounter.state == expected
             }
         }
@@ -76,8 +76,8 @@ pub mod JohnsonCounterTest for virt::Virt {
     //> exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 7 {
+        if {
+            when index == 7 {
                 it <= true
             }
         }
@@ -88,28 +88,28 @@ pub mod JohnsonCounterTest for virt::Virt {
     wire expected : Word[4]
 
     match index {
-        case 0 {
+        with 0 {
             expected := 0b0000
         }
-        case 1 {
+        with 1 {
             expected := 0b1000
         }
-        case 2 {
+        with 2 {
             expected := 0b1100
         }
-        case 3 {
+        with 3 {
             expected := 0b1110
         }
-        case 4 {
+        with 4 {
             expected := 0b1111
         }
-        case 5 {
+        with 5 {
             expected := 0b0111
         }
-        case 6 {
+        with 6 {
             expected := 0b0011
         }
-        case 7 {
+        with 7 {
             expected := 0b0001
         }
     }

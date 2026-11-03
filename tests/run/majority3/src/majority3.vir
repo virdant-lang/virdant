@@ -22,7 +22,7 @@ mod Majority3 {
     incoming c : Bit
 
     //> Majority: `a && b`, `a && c`, or `b && c` makes it `1`.
-    outgoing out : Bit {
+    outgoing out : Bit dependson a, b, c {
         it := (a && b) || (a && c) || (b && c)
     }
 }
@@ -34,8 +34,8 @@ pub mod Majority3Test for virt::Virt {
     //> `@Valid(0)` after the last row checked out; `@Valid(1)` if any
     //> check failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -51,8 +51,8 @@ pub mod Majority3Test for virt::Virt {
     //> combination of the three input bits.
     reg index : Word[3] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -69,8 +69,8 @@ pub mod Majority3Test for virt::Virt {
     //> exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 7 {
+        if {
+            when index == 7 {
                 it <= true
             }
         }
@@ -95,28 +95,28 @@ pub mod Majority3Test for virt::Virt {
     wire expected : Bit
 
     match index {
-        case 0 {
+        with 0 {
             expected := false
         }
-        case 1 {
+        with 1 {
             expected := false
         }
-        case 2 {
+        with 2 {
             expected := false
         }
-        case 3 {
+        with 3 {
             expected := true
         }
-        case 4 {
+        with 4 {
             expected := false
         }
-        case 5 {
+        with 5 {
             expected := true
         }
-        case 6 {
+        with 6 {
             expected := true
         }
-        case 7 {
+        with 7 {
             expected := true
         }
     }

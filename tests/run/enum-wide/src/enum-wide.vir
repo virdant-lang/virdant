@@ -37,8 +37,8 @@ pub mod EnumWideTest for virt::Virt {
     //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -146,16 +146,16 @@ pub mod EnumWideTest for virt::Virt {
     //> `else` arm to catch mistakes.
     wire halt_roundtrip : Bit {
         it := match cast(200w8 : Word[8]) : Opcode {
-            case #Nop   => false
-            case #Load  => false
-            case #Store => false
-            case #Add   => false
-            case #Sub   => false
-            case #And   => false
-            case #Or    => false
-            case #Xor   => false
-            case #Shift => false
-            case #Halt  => true
+            with #Nop   => false
+            with #Load  => false
+            with #Store => false
+            with #Add   => false
+            with #Sub   => false
+            with #And   => false
+            with #Or    => false
+            with #Xor   => false
+            with #Shift => false
+            with #Halt  => true
         }
     }
 
@@ -163,16 +163,16 @@ pub mod EnumWideTest for virt::Virt {
     //> `#Shift`, the variant whose encoding is `8w8`.
     wire shift_roundtrip : Bit {
         it := match cast(8w8 : Word[8]) : Opcode {
-            case #Nop   => false
-            case #Load  => false
-            case #Store => false
-            case #Add   => false
-            case #Sub   => false
-            case #And   => false
-            case #Or    => false
-            case #Xor   => false
-            case #Shift => true
-            case #Halt  => false
+            with #Nop   => false
+            with #Load  => false
+            with #Store => false
+            with #Add   => false
+            with #Sub   => false
+            with #And   => false
+            with #Or    => false
+            with #Xor   => false
+            with #Shift => true
+            with #Halt  => false
         }
     }
 

@@ -21,7 +21,7 @@ mod BarrelShifter {
     incoming s : Word[3]
 
     //> `x` shifted left by `s`; bits shifted out are lost.
-    outgoing shifted : Word[8]
+    outgoing shifted : Word[8] dependson x, s
 
     //> Stage for the shift-amount bit weighting 4.
     wire stage4 : Word[8] {
@@ -48,8 +48,8 @@ pub mod BarrelShifterTest for virt::Virt {
     //> `@Valid(0)` when every shift amount checked out; `@Valid(1)`
     //> if any check failed.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }

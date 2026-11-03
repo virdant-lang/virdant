@@ -27,7 +27,7 @@ mod ShadowChild {
     incoming value : Word[4]
 
     //> Combinational forward of the `value` port.
-    outgoing echo : Word[4] {
+    outgoing echo : Word[4] dependson value {
         it := value
     }
 
@@ -51,8 +51,8 @@ pub mod ShadowHierarchyTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -97,8 +97,8 @@ pub mod ShadowHierarchyTest for virt::Virt {
     //> Index of the cycle under check, 0 through 7.
     reg index : Word[3] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -121,8 +121,8 @@ pub mod ShadowHierarchyTest for virt::Virt {
     //> exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 7 {
+        if {
+            when index == 7 {
                 it <= true
             }
         }

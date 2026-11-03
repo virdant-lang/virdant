@@ -82,8 +82,8 @@ mod Producer {
     //> sticky without a latch.
     reg warm : Word[6] on clock {
         initial it <= 0
-        when {
-            case it != 63 {
+        if {
+            when it != 63 {
                 it <= it + 1
             }
         }
@@ -93,11 +93,11 @@ mod Producer {
     //> through warm-up so the link starts aligned.
     reg nonce : Bit on clock {
         initial it <= false
-        when {
-            case !ready {
+        if {
+            when !ready {
                 it <= false
             }
-            case issue {
+            when issue {
                 it <= !it
             }
         }
@@ -107,11 +107,11 @@ mod Producer {
     //> with `nonce`.  Held low through warm-up.
     reg phase : Bit on clock {
         initial it <= false
-        when {
-            case !ready {
+        if {
+            when !ready {
                 it <= false
             }
-            case issue {
+            when issue {
                 it <= !it
             }
         }
@@ -120,11 +120,11 @@ mod Producer {
     //> Transfers issued so far.  Held at 0 through warm-up.
     reg sent : Word[4] on clock {
         initial it <= 0
-        when {
-            case !ready {
+        if {
+            when !ready {
                 it <= 0
             }
-            case issue {
+            when issue {
                 it <= it + 1
             }
         }
@@ -150,8 +150,8 @@ mod Consumer {
     //> check passing; `@Valid(1)` if any check failed.  While
     //> `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -189,8 +189,8 @@ mod Consumer {
     //> sticky without a latch.
     reg warm : Word[6] on clock {
         initial it <= 0
-        when {
-            case it != 63 {
+        if {
+            when it != 63 {
                 it <= it + 1
             }
         }
@@ -200,11 +200,11 @@ mod Consumer {
     //> through warm-up so the link starts aligned.
     reg ack : Bit on clock {
         initial it <= false
-        when {
-            case !ready {
+        if {
+            when !ready {
                 it <= false
             }
-            case service {
+            when service {
                 it <= !it
             }
         }
@@ -214,11 +214,11 @@ mod Consumer {
     //> Held low through warm-up.
     reg exp_val : Bit on clock {
         initial it <= false
-        when {
-            case !ready {
+        if {
+            when !ready {
                 it <= false
             }
-            case service {
+            when service {
                 it <= !it
             }
         }
@@ -229,11 +229,11 @@ mod Consumer {
     //> `count_ok` rather than wrapping.
     reg recv_count : Word[4] on clock {
         initial it <= 0
-        when {
-            case !ready {
+        if {
+            when !ready {
                 it <= 0
             }
-            case service && count_ok {
+            when service && count_ok {
                 it <= it + 1
             }
         }
@@ -244,11 +244,11 @@ mod Consumer {
     //> warm-up.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case !ready {
+        if {
+            when !ready {
                 it <= true
             }
-            case service {
+            when service {
                 it <= it && sample_ok && count_ok
             }
         }
@@ -259,11 +259,11 @@ mod Consumer {
     //> read.  Held low through warm-up.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case !ready {
+        if {
+            when !ready {
                 it <= false
             }
-            case recv_count == 8 {
+            when recv_count == 8 {
                 it <= true
             }
         }

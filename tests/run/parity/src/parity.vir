@@ -39,7 +39,7 @@ mod Parity {
     }
 
     //> `1` when `x` has an even number of set bits.
-    outgoing even : Bit {
+    outgoing even : Bit dependson x {
         it := p1 == 0
     }
 }
@@ -52,8 +52,8 @@ pub mod ParityTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -65,8 +65,8 @@ pub mod ParityTest for virt::Virt {
     //> Index of the vector under test, 0 through 15.
     reg index : Word[4] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -83,8 +83,8 @@ pub mod ParityTest for virt::Virt {
     //> exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 15 {
+        if {
+            when index == 15 {
                 it <= true
             }
         }
@@ -102,67 +102,67 @@ pub mod ParityTest for virt::Virt {
     wire expected : Bit
 
     match index {
-        case 0 {
+        with 0 {
             vec := 0x00
             expected := true
         }
-        case 1 {
+        with 1 {
             vec := 0x01
             expected := false
         }
-        case 2 {
+        with 2 {
             vec := 0x03
             expected := true
         }
-        case 3 {
+        with 3 {
             vec := 0x07
             expected := false
         }
-        case 4 {
+        with 4 {
             vec := 0x0f
             expected := true
         }
-        case 5 {
+        with 5 {
             vec := 0xff
             expected := true
         }
-        case 6 {
+        with 6 {
             vec := 0xaa
             expected := true
         }
-        case 7 {
+        with 7 {
             vec := 0xab
             expected := false
         }
-        case 8 {
+        with 8 {
             vec := 0x55
             expected := true
         }
-        case 9 {
+        with 9 {
             vec := 0x57
             expected := false
         }
-        case 10 {
+        with 10 {
             vec := 0x80
             expected := false
         }
-        case 11 {
+        with 11 {
             vec := 0xc0
             expected := true
         }
-        case 12 {
+        with 12 {
             vec := 0xfe
             expected := false
         }
-        case 13 {
+        with 13 {
             vec := 0xf0
             expected := true
         }
-        case 14 {
+        with 14 {
             vec := 0x92
             expected := false
         }
-        case 15 {
+        with 15 {
             vec := 0x24
             expected := true
         }

@@ -55,8 +55,8 @@ pub mod RegTwoRegsTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -76,8 +76,8 @@ pub mod RegTwoRegsTest for virt::Virt {
     //> freezing the fold and validating `exit` on the next cycle.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case count == 14 {
+        if {
+            when count == 14 {
                 it <= true
             }
         }
@@ -87,8 +87,8 @@ pub mod RegTwoRegsTest for virt::Virt {
     //> folds its verdict in on the cycle it applies to.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && dut.up_out == expected_up && dut.down_out == expected_down
             }
         }
@@ -118,67 +118,67 @@ pub mod RegTwoRegsTest for virt::Virt {
     // The 16 cases exactly cover `Word[4]`, so the match is
     // exhaustive.
     match count {
-        case 0 {
+        with 0 {
             expected_up := 0
             expected_down := 9
         }
-        case 1 {
+        with 1 {
             expected_up := 0
             expected_down := 9
         }
-        case 2 {
+        with 2 {
             expected_up := 0
             expected_down := 9
         }
-        case 3 {
+        with 3 {
             expected_up := 0
             expected_down := 9
         }
-        case 4 {
+        with 4 {
             expected_up := 1
             expected_down := 8
         }
-        case 5 {
+        with 5 {
             expected_up := 2
             expected_down := 7
         }
-        case 6 {
+        with 6 {
             expected_up := 3
             expected_down := 6
         }
-        case 7 {
+        with 7 {
             expected_up := 4
             expected_down := 5
         }
-        case 8 {
+        with 8 {
             expected_up := 5
             expected_down := 4
         }
-        case 9 {
+        with 9 {
             expected_up := 6
             expected_down := 3
         }
-        case 10 {
+        with 10 {
             expected_up := 7
             expected_down := 2
         }
-        case 11 {
+        with 11 {
             expected_up := 8
             expected_down := 1
         }
-        case 12 {
+        with 12 {
             expected_up := 9
             expected_down := 0
         }
-        case 13 {
+        with 13 {
             expected_up := 10
             expected_down := 15
         }
-        case 14 {
+        with 14 {
             expected_up := 11
             expected_down := 14
         }
-        case 15 {
+        with 15 {
             expected_up := 0
             expected_down := 9
         }

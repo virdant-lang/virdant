@@ -78,8 +78,8 @@ mod Stim {
     //> `@Valid(0)` once every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case done => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when done => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -102,8 +102,8 @@ mod Stim {
     //> Request address, cycling 0 through 15.
     reg addr : Word[8] on clock {
         initial it <= 0
-        when {
-            case !done {
+        if {
+            when !done {
                 it <= it + 1w8
             }
         }
@@ -113,8 +113,8 @@ mod Stim {
     //> it, so it must never influence the response.
     reg sel : Bit on clock {
         initial it <= false
-        when {
-            case !done {
+        if {
+            when !done {
                 it <= !it
             }
         }
@@ -160,8 +160,8 @@ mod Stim {
     //> Cycle counter, 0 through 15.
     reg cycles : Word[4] on clock {
         initial it <= 0
-        when {
-            case !done {
+        if {
+            when !done {
                 it <= it + 1w4
             }
         }
@@ -171,8 +171,8 @@ mod Stim {
     //> lets `exit` become `@Valid`.
     reg done : Bit on clock {
         initial it <= false
-        when {
-            case cycles == 15w4 {
+        if {
+            when cycles == 15w4 {
                 it <= true
             }
         }
@@ -182,8 +182,8 @@ mod Stim {
     //> folds both verdicts in until `done`.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case !done {
+        if {
+            when !done {
                 it <= it && ok_rsp && ok_port
             }
         }

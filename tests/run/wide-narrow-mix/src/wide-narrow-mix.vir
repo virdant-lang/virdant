@@ -20,8 +20,8 @@ pub mod WideNarrowMixTest for virt::Virt {
     //> check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -29,8 +29,8 @@ pub mod WideNarrowMixTest for virt::Virt {
     //> Cycle counter, used to pick the two checking cycles.
     reg index : Word[2] on clock {
         initial it <= 0
-        when {
-            case counting {
+        if {
+            when counting {
                 it <= it + 1
             }
         }
@@ -40,8 +40,8 @@ pub mod WideNarrowMixTest for virt::Virt {
     //> so that the exit code sees the final verdict.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case at_check2 {
+        if {
+            when at_check2 {
                 it <= true
             }
         }
@@ -52,13 +52,13 @@ pub mod WideNarrowMixTest for virt::Virt {
     //> the register checks on both checking cycles.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case at_check1 {
+        if {
+            when at_check1 {
                 it <= it && w1_ok && w2_ok && w17_ok && w64_ok && mix_ok
                     && r1_check1_ok && r2_check1_ok
                     && r17_check1_ok && r64_check1_ok
             }
-            case at_check2 {
+            when at_check2 {
                 it <= it && r1_check2_ok && r2_check2_ok
                     && r17_check2_ok && r64_check2_ok
             }

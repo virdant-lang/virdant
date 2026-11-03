@@ -30,8 +30,8 @@ mod LoadEnable {
 
     reg value : Word[8] on clock {
         initial it <= 0
-        when {
-            case wr_en {
+        if {
+            when wr_en {
                 it <= d
             }
         }
@@ -48,8 +48,8 @@ pub mod RegEnabledWriteTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -66,8 +66,8 @@ pub mod RegEnabledWriteTest for virt::Virt {
     //> start-up randomness cannot leak into a verdict.
     reg warm : Word[2] on clock {
         initial it <= 0
-        when {
-            case warm != 3 {
+        if {
+            when warm != 3 {
                 it <= warm + 1
             }
         }
@@ -92,8 +92,8 @@ pub mod RegEnabledWriteTest for virt::Virt {
     //> fold and validating `exit` on the next cycle.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case checking && check_index == 15 {
+        if {
+            when checking && check_index == 15 {
                 it <= true
             }
         }
@@ -103,8 +103,8 @@ pub mod RegEnabledWriteTest for virt::Virt {
     //> folds its verdict in on the cycle after its step is applied.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && dut.q == expected
             }
         }
@@ -125,73 +125,73 @@ pub mod RegEnabledWriteTest for virt::Virt {
     // `Word[4]`, so the match is exhaustive.
     match index {
         // Idle warm-up cycles before any stimulus.
-        case 0 {
+        with 0 {
             wr_en := false
             d := 0x00
         }
-        case 1 {
+        with 1 {
             wr_en := false
             d := 0x00
         }
         // First load: re-establishes a known value whatever the
         // register happened to hold during warm-up.
-        case 2 {
+        with 2 {
             wr_en := true
             d := 0xA5
         }
         // Back-to-back load: each edge loads the new data.
-        case 3 {
+        with 3 {
             wr_en := true
             d := 0x5A
         }
         // Holds with conflicting data: `d` must be ignored while
         // `wr_en` is low.
-        case 4 {
+        with 4 {
             wr_en := false
             d := 0xFF
         }
-        case 5 {
+        with 5 {
             wr_en := false
             d := 0x01
         }
-        case 6 {
+        with 6 {
             wr_en := true
             d := 0x3C
         }
-        case 7 {
+        with 7 {
             wr_en := false
             d := 0xC3
         }
         // Loading zero is distinct from holding.
-        case 8 {
+        with 8 {
             wr_en := true
             d := 0x00
         }
-        case 9 {
+        with 9 {
             wr_en := false
             d := 0xFF
         }
-        case 10 {
+        with 10 {
             wr_en := true
             d := 0x81
         }
-        case 11 {
+        with 11 {
             wr_en := false
             d := 0x7E
         }
-        case 12 {
+        with 12 {
             wr_en := false
             d := 0x00
         }
-        case 13 {
+        with 13 {
             wr_en := true
             d := 0x42
         }
-        case 14 {
+        with 14 {
             wr_en := false
             d := 0xBD
         }
-        case 15 {
+        with 15 {
             wr_en := false
             d := 0x99
         }
@@ -204,52 +204,52 @@ pub mod RegEnabledWriteTest for virt::Virt {
     // `Word[4]`; cases 0 and 1 are warm-up holds and are never
     // checked (see `warm`).
     match check_index {
-        case 0 {
+        with 0 {
             expected := 0x00
         }
-        case 1 {
+        with 1 {
             expected := 0x00
         }
-        case 2 {
+        with 2 {
             expected := 0xA5
         }
-        case 3 {
+        with 3 {
             expected := 0x5A
         }
-        case 4 {
+        with 4 {
             expected := 0x5A
         }
-        case 5 {
+        with 5 {
             expected := 0x5A
         }
-        case 6 {
+        with 6 {
             expected := 0x3C
         }
-        case 7 {
+        with 7 {
             expected := 0x3C
         }
-        case 8 {
+        with 8 {
             expected := 0x00
         }
-        case 9 {
+        with 9 {
             expected := 0x00
         }
-        case 10 {
+        with 10 {
             expected := 0x81
         }
-        case 11 {
+        with 11 {
             expected := 0x81
         }
-        case 12 {
+        with 12 {
             expected := 0x81
         }
-        case 13 {
+        with 13 {
             expected := 0x42
         }
-        case 14 {
+        with 14 {
             expected := 0x42
         }
-        case 15 {
+        with 15 {
             expected := 0x42
         }
     }

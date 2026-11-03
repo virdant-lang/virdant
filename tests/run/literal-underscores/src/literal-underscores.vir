@@ -17,8 +17,8 @@ pub mod LiteralUnderscores for virt::Virt {
     //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case success => @Valid(0)
+        it := if {
+            when success => @Valid(0)
             else => @Invalid()
         }
     }

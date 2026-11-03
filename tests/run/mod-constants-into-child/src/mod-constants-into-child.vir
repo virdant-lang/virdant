@@ -28,12 +28,12 @@ mod ThresholdUnit {
     incoming value : Word[8]
 
     //> `value` plus the constant `offset`.
-    outgoing total : Word[8] {
+    outgoing total : Word[8] dependson offset, value {
         it := value + offset
     }
 
     //> High while `total` stays below the constant `threshold`.
-    outgoing under : Bit {
+    outgoing under : Bit dependson offset, threshold, value {
         it := total < threshold
     }
 }
@@ -46,8 +46,8 @@ pub mod ModConstantsTest for virt::Virt {
     //> if any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case cycles == 12 => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when cycles == 12 => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }

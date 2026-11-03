@@ -26,7 +26,7 @@ mod WireMultiDriverWhen {
     incoming sel : Bit
 
     //> Value carried by the multi-driver wire under test.
-    outgoing result : Word[8]
+    outgoing result : Word[8] dependson a, b, sel
 
     //> Wire with a driver in each arm of the statement `when` below.
     //> Being a wire, the `when` must be total: every arm assigns it.
@@ -35,8 +35,8 @@ mod WireMultiDriverWhen {
     // Both arms drive `picked`: `case` computes the sum, `else` the
     // wrapping difference.  Evaluated in order; `else` catches every
     // cycle where `sel` is low.
-    when {
-        case sel {
+    if {
+        when sel {
             picked := a + b
         }
         else {
@@ -55,8 +55,8 @@ pub mod WireMultiDriverTest for virt::Virt {
     //> exercised; `@Valid(1)` if any check failed.  While
     //> `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -83,49 +83,49 @@ pub mod WireMultiDriverTest for virt::Virt {
     // arm, odd indices the `else` (`sel` low) arm; the wraparound
     // pairs catch width and sign mistakes in either arm.
     match index {
-        case 0 {
+        with 0 {
             a := 3
             b := 4
             sel := true
             expected := 7
         }
-        case 1 {
+        with 1 {
             a := 3
             b := 4
             sel := false
             expected := 255
         }
-        case 2 {
+        with 2 {
             a := 0
             b := 0
             sel := true
             expected := 0
         }
-        case 3 {
+        with 3 {
             a := 0
             b := 0
             sel := false
             expected := 0
         }
-        case 4 {
+        with 4 {
             a := 255
             b := 1
             sel := true
             expected := 0
         }
-        case 5 {
+        with 5 {
             a := 255
             b := 1
             sel := false
             expected := 254
         }
-        case 6 {
+        with 6 {
             a := 200
             b := 100
             sel := true
             expected := 44
         }
-        case 7 {
+        with 7 {
             a := 100
             b := 200
             sel := false
@@ -143,8 +143,8 @@ pub mod WireMultiDriverTest for virt::Virt {
     //> Latched high once a `case`-arm vector has been on the inputs.
     reg saw_case : Bit on clock {
         initial it <= false
-        when {
-            case sel {
+        if {
+            when sel {
                 it <= true
             }
         }
@@ -153,8 +153,8 @@ pub mod WireMultiDriverTest for virt::Virt {
     //> Latched high once an `else`-arm vector has been on the inputs.
     reg saw_else : Bit on clock {
         initial it <= false
-        when {
-            case !sel {
+        if {
+            when !sel {
                 it <= true
             }
         }
@@ -171,8 +171,8 @@ pub mod WireMultiDriverTest for virt::Virt {
     //> that `finished` stays high.
     reg checked : Word[4] on clock {
         initial it <= 0
-        when {
-            case checked != 8 {
+        if {
+            when checked != 8 {
                 it <= checked + 1
             }
         }

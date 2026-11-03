@@ -18,19 +18,19 @@ mod Decoder {
     incoming code : Word[2]
 
     //> One-hot encoding of `code`: bit `code` set, all others clear.
-    outgoing onehot : Word[4]
+    outgoing onehot : Word[4] dependson code
 
     match code {
-        case 0 {
+        with 0 {
             onehot := 0b0001w4
         }
-        case 1 {
+        with 1 {
             onehot := 0b0010w4
         }
-        case 2 {
+        with 2 {
             onehot := 0b0100w4
         }
-        case 3 {
+        with 3 {
             onehot := 0b1000w4
         }
     }
@@ -43,8 +43,8 @@ pub mod Top for virt::Virt {
     //> `@Valid(0)` after all 4 codes checked out; `@Valid(1)` if any
     //> check failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -64,16 +64,16 @@ pub mod Top for virt::Virt {
     wire expected : Word[4]
 
     match code {
-        case 0 {
+        with 0 {
             expected := 0b0001w4
         }
-        case 1 {
+        with 1 {
             expected := 0b0010w4
         }
-        case 2 {
+        with 2 {
             expected := 0b0100w4
         }
-        case 3 {
+        with 3 {
             expected := 0b1000w4
         }
     }
@@ -95,8 +95,8 @@ pub mod Top for virt::Virt {
     //> that `finished` stays high.
     reg checked : Word[3] on clock {
         initial it <= 0
-        when {
-            case checked != 4 {
+        if {
+            when checked != 4 {
                 it <= checked + 1
             }
         }

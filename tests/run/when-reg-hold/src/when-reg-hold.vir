@@ -34,11 +34,11 @@ mod WhenRegHold {
 
     reg value : Word[4] on clock {
         initial it <= 0
-        when {
-            case mode == 1 {
+        if {
+            when mode == 1 {
                 it <= it + 1
             }
-            case mode == 2 {
+            when mode == 2 {
                 it <= it - 1
             }
         }
@@ -55,8 +55,8 @@ pub mod WhenRegHoldTest for virt::Virt {
     //> check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -78,8 +78,8 @@ pub mod WhenRegHoldTest for virt::Virt {
     //> folds its verdict in at the clock edge that ends its cycle.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && dut.out == expect
             }
         }
@@ -89,8 +89,8 @@ pub mod WhenRegHoldTest for virt::Virt {
     //> exit code sees the final `all_ok` on the next cycle.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case checking && phase == 15 {
+        if {
+            when checking && phase == 15 {
                 it <= true
             }
         }
@@ -114,79 +114,79 @@ pub mod WhenRegHoldTest for virt::Virt {
     // exactly cover `Word[4]`, so the match is exhaustive.
     match phase {
         // Warm-up: idle, unchecked.
-        case 0 {
+        with 0 {
             mode := 0
             expect := 0
         }
-        case 1 {
+        with 1 {
             mode := 0
             expect := 0
         }
         // Still idle: the initial value survives the power-on edge.
-        case 2 {
+        with 2 {
             mode := 0
             expect := 0
         }
         // Increment: the edge ending this cycle writes 1.
-        case 3 {
+        with 3 {
             mode := 1
             expect := 0
         }
         // Two consecutive unmatched cycles: the register holds.
-        case 4 {
+        with 4 {
             mode := 0
             expect := 1
         }
-        case 5 {
+        with 5 {
             mode := 0
             expect := 1
         }
         // Increment: writes 2.
-        case 6 {
+        with 6 {
             mode := 1
             expect := 1
         }
         // Decrement: writes 1.
-        case 7 {
+        with 7 {
             mode := 2
             expect := 2
         }
         // Unmatched cycle: holds at 1.
-        case 8 {
+        with 8 {
             mode := 0
             expect := 1
         }
         // Increment: writes 2.
-        case 9 {
+        with 9 {
             mode := 1
             expect := 1
         }
         // Decrement: writes 1.
-        case 10 {
+        with 10 {
             mode := 2
             expect := 2
         }
         // Two consecutive increments: writes 2, then 3.
-        case 11 {
+        with 11 {
             mode := 1
             expect := 1
         }
-        case 12 {
+        with 12 {
             mode := 1
             expect := 2
         }
         // Two consecutive unmatched cycles: holds at 3.
-        case 13 {
+        with 13 {
             mode := 0
             expect := 3
         }
-        case 14 {
+        with 14 {
             mode := 0
             expect := 3
         }
         // Unmatched non-case value (mode 3): still holds at 3, then
         // `finished` latches.
-        case 15 {
+        with 15 {
             mode := 3
             expect := 3
         }

@@ -34,8 +34,8 @@ pub mod RegInitialUnionTest for virt::Virt {
     //> not take effect and exits with code 1.
     outgoing exit : Valid[Word[8]] {
         it := match state {
-            case @Running() => @Valid(0)
-            case @Idle() => @Invalid()
+            with @Running() => @Valid(0)
+            with @Idle() => @Invalid()
             else => @Valid(1)
         }
     }

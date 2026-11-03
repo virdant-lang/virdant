@@ -95,8 +95,8 @@ pub mod WordAppendTest for virt::Virt {
         it := check0 && check1 && check2 && check3
     }
 
-    let ok = success_wire when {
-        case ok {
+    let ok = success_wire if {
+        when ok {
             exit := @Valid(0)
         }
         else {

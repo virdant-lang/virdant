@@ -28,10 +28,10 @@ mod Slicer {
     //> 0b11, 0b11 respectively.
     outgoing code : Word[2] {
         it := word(1w1, (match x {
-            case 0 => 0b000
-            case 1 => 0b011
-            case 2 => 0b100
-            case 3 => 0b111
+            with 0 => 0b000
+            with 1 => 0b011
+            with 2 => 0b100
+            with 3 => 0b111
         }) : Word[3])[4..2]
     }
 
@@ -39,10 +39,10 @@ mod Slicer {
     //> below.  Same patterns as the direct form.
     wire m : Word[3] {
         it := match x {
-            case 0 => 0b000
-            case 1 => 0b011
-            case 2 => 0b100
-            case 3 => 0b111
+            with 0 => 0b000
+            with 1 => 0b011
+            with 2 => 0b100
+            with 3 => 0b111
         }
     }
 
@@ -69,8 +69,8 @@ pub mod SliceOfMatchTest for virt::Virt {
     //> `@Valid(1)` if any cycle diverged.  While `@Invalid()`, the
     //> simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -89,8 +89,8 @@ pub mod SliceOfMatchTest for virt::Virt {
     //> the exit code sees the final verdict.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case step == 3 {
+        if {
+            when step == 3 {
                 it <= true
             }
         }
@@ -101,8 +101,8 @@ pub mod SliceOfMatchTest for virt::Virt {
     //> value.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && step_ok
             }
         }
@@ -117,10 +117,10 @@ pub mod SliceOfMatchTest for virt::Virt {
     //> have produced for this cycle's register value.
     wire exp_code : Word[2] {
         it := match step {
-            case 0 => 0b10
-            case 1 => 0b10
-            case 2 => 0b11
-            case 3 => 0b11
+            with 0 => 0b10
+            with 1 => 0b10
+            with 2 => 0b11
+            with 3 => 0b11
         }
     }
 
@@ -128,10 +128,10 @@ pub mod SliceOfMatchTest for virt::Virt {
     //> this cycle's register value.
     wire exp_code_bound : Word[2] {
         it := match step {
-            case 0 => 0b00
-            case 1 => 0b01
-            case 2 => 0b10
-            case 3 => 0b11
+            with 0 => 0b00
+            with 1 => 0b01
+            with 2 => 0b10
+            with 3 => 0b11
         }
     }
 

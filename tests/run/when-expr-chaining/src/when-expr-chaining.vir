@@ -26,8 +26,8 @@ pub mod WhenChainingTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -53,16 +53,16 @@ pub mod WhenChainingTest for virt::Virt {
     //> block and the `else` arm's body is a `match` block, attached
     //> directly to their arms.
     wire chained : Word[4] {
-        it := when {
-            case a when {
-                case sel == 0 => 1w4
-                case sel == 1 => 2w4
+        it := if {
+            when a if {
+                when sel == 0 => 1w4
+                when sel == 1 => 2w4
                 else => 3w4
             }
             else match sel {
-                case 0 => 4w4
-                case 1 => 5w4
-                case 2 => 6w4
+                with 0 => 4w4
+                with 1 => 5w4
+                with 2 => 6w4
                 else => 7w4
             }
         }
@@ -70,16 +70,16 @@ pub mod WhenChainingTest for virt::Virt {
 
     //> The same decision written with the explicit `=>` form.
     wire explicit : Word[4] {
-        it := when {
-            case a => when {
-                case sel == 0 => 1w4
-                case sel == 1 => 2w4
+        it := if {
+            when a => if {
+                when sel == 0 => 1w4
+                when sel == 1 => 2w4
                 else => 3w4
             }
             else => match sel {
-                case 0 => 4w4
-                case 1 => 5w4
-                case 2 => 6w4
+                with 0 => 4w4
+                with 1 => 5w4
+                with 2 => 6w4
                 else => 7w4
             }
         }
@@ -88,13 +88,13 @@ pub mod WhenChainingTest for virt::Virt {
     //> Independent flat restatement of `chained` over the compound
     //> conditions, so agreement is not just `chained == explicit`.
     wire expected : Word[4] {
-        it := when {
-            case a && sel == 0 => 1w4
-            case a && sel == 1 => 2w4
-            case a => 3w4
-            case sel == 0 => 4w4
-            case sel == 1 => 5w4
-            case sel == 2 => 6w4
+        it := if {
+            when a && sel == 0 => 1w4
+            when a && sel == 1 => 2w4
+            when a => 3w4
+            when sel == 0 => 4w4
+            when sel == 1 => 5w4
+            when sel == 2 => 6w4
             else => 7w4
         }
     }
@@ -103,16 +103,16 @@ pub mod WhenChainingTest for virt::Virt {
     //> `case ... match { ... }`, and `else when { ... }` without `=>`.
     wire chained2 : Word[3] {
         it := match sel {
-            case 0 when {
-                case a => 0w3
+            with 0 if {
+                when a => 0w3
                 else => 1w3
             }
-            case 1 match count {
-                case 5 => 2w3
+            with 1 match count {
+                with 5 => 2w3
                 else => 3w3
             }
-            else when {
-                case a => 4w3
+            else if {
+                when a => 4w3
                 else => 5w3
             }
         }
@@ -121,16 +121,16 @@ pub mod WhenChainingTest for virt::Virt {
     //> The same decision written with the explicit `=>` form.
     wire explicit2 : Word[3] {
         it := match sel {
-            case 0 => when {
-                case a => 0w3
+            with 0 => if {
+                when a => 0w3
                 else => 1w3
             }
-            case 1 => match count {
-                case 5 => 2w3
+            with 1 => match count {
+                with 5 => 2w3
                 else => 3w3
             }
-            else => when {
-                case a => 4w3
+            else => if {
+                when a => 4w3
                 else => 5w3
             }
         }
@@ -138,12 +138,12 @@ pub mod WhenChainingTest for virt::Virt {
 
     //> Independent flat restatement of `chained2`.
     wire expected2 : Word[3] {
-        it := when {
-            case sel == 0 && a => 0w3
-            case sel == 0 => 1w3
-            case sel == 1 && count == 5 => 2w3
-            case sel == 1 => 3w3
-            case a => 4w3
+        it := if {
+            when sel == 0 && a => 0w3
+            when sel == 0 => 1w3
+            when sel == 1 && count == 5 => 2w3
+            when sel == 1 => 3w3
+            when a => 4w3
             else => 5w3
         }
     }
@@ -153,10 +153,10 @@ pub mod WhenChainingTest for virt::Virt {
     //>
     //> True iff `a && (sel != 0 || count < 4)`.
     wire probe : Bit {
-        when {
-            case a match sel {
-                case 0 when {
-                    case count < 4 {
+        if {
+            when a match sel {
+                with 0 if {
+                    when count < 4 {
                         it := true
                     }
                     else {
@@ -194,8 +194,8 @@ pub mod WhenChainingTest for virt::Virt {
     //> sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case count == 15 {
+        if {
+            when count == 15 {
                 it <= true
             }
         }

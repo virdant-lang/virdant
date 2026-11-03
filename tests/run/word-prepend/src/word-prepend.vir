@@ -45,8 +45,8 @@ pub mod WordPrependTest for virt::Virt {
     //> expected bit stream.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -78,8 +78,8 @@ pub mod WordPrependTest for virt::Virt {
     //> so that the exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 16 {
+        if {
+            when index == 16 {
                 it <= true
             }
         }
@@ -101,81 +101,81 @@ pub mod WordPrependTest for virt::Virt {
     // top.
     match index {
         // Idle warm-up: serial low, no checks.
-        case 0 {
+        with 0 {
             serial_in := false
             expected := dontcare
         }
-        case 1 {
+        with 1 {
             serial_in := false
             expected := dontcare
         }
-        case 2 {
+        with 2 {
             serial_in := false
             expected := dontcare
         }
-        case 3 {
+        with 3 {
             serial_in := false
             expected := dontcare
         }
-        case 4 {
+        with 4 {
             serial_in := false
             expected := dontcare
         }
         // Pattern bit 0 (1) absorbed at the edge ending this cycle.
-        case 5 {
+        with 5 {
             serial_in := true
             expected := dontcare
         }
         // Register now holds 0b0001.
-        case 6 {
+        with 6 {
             serial_in := false
             expected := 0x1
         }
         // Pattern bit 1 (0) absorbed: 0b0010.
-        case 7 {
+        with 7 {
             serial_in := true
             expected := 0x2
         }
         // Pattern bit 2 (1) absorbed: 0b0101.
-        case 8 {
+        with 8 {
             serial_in := true
             expected := 0x5
         }
         // Pattern bit 3 (1) absorbed: 0b1011.
-        case 9 {
+        with 9 {
             serial_in := false
             expected := 0xb
         }
         // Pattern bit 4 (0) absorbed: 0b0110.
-        case 10 {
+        with 10 {
             serial_in := false
             expected := 0x6
         }
         // Pattern bit 5 (0) absorbed: 0b1100.
-        case 11 {
+        with 11 {
             serial_in := true
             expected := 0xc
         }
         // Pattern bit 6 (1) absorbed: 0b1001.
-        case 12 {
+        with 12 {
             serial_in := false
             expected := 0x9
         }
         // Pattern bit 7 (0) absorbed: 0b0010.
-        case 13 {
+        with 13 {
             serial_in := false
             expected := 0x2
         }
         // Flush: serial low, stream slides out of the top.
-        case 14 {
+        with 14 {
             serial_in := false
             expected := 0x4
         }
-        case 15 {
+        with 15 {
             serial_in := false
             expected := 0x8
         }
-        case 16 {
+        with 16 {
             serial_in := false
             expected := 0x0
         }

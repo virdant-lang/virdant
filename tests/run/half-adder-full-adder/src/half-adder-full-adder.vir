@@ -18,12 +18,12 @@ mod HalfAdder {
     incoming b : Bit
 
     //> Sum bit.
-    outgoing sum : Bit {
+    outgoing sum : Bit dependson a, b {
         it := a ^^ b
     }
 
     //> Carry bit.
-    outgoing carry : Bit {
+    outgoing carry : Bit dependson a, b {
         it := a && b
     }
 }
@@ -71,8 +71,8 @@ pub mod Top for virt::Virt {
     //> check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -86,8 +86,8 @@ pub mod Top for virt::Virt {
     //> Index of the input row under test, 0 through 7.
     reg index : Word[3] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -106,8 +106,8 @@ pub mod Top for virt::Virt {
     //> exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 7 {
+        if {
+            when index == 7 {
                 it <= true
             }
         }
@@ -142,56 +142,56 @@ pub mod Top for virt::Virt {
     wire expected_cout : Bit
 
     match index {
-        case 0 {
+        with 0 {
             vec_a := false
             vec_b := false
             vec_cin := false
             expected_sum := false
             expected_cout := false
         }
-        case 1 {
+        with 1 {
             vec_a := false
             vec_b := false
             vec_cin := true
             expected_sum := true
             expected_cout := false
         }
-        case 2 {
+        with 2 {
             vec_a := false
             vec_b := true
             vec_cin := false
             expected_sum := true
             expected_cout := false
         }
-        case 3 {
+        with 3 {
             vec_a := false
             vec_b := true
             vec_cin := true
             expected_sum := false
             expected_cout := true
         }
-        case 4 {
+        with 4 {
             vec_a := true
             vec_b := false
             vec_cin := false
             expected_sum := true
             expected_cout := false
         }
-        case 5 {
+        with 5 {
             vec_a := true
             vec_b := false
             vec_cin := true
             expected_sum := false
             expected_cout := true
         }
-        case 6 {
+        with 6 {
             vec_a := true
             vec_b := true
             vec_cin := false
             expected_sum := false
             expected_cout := true
         }
-        case 7 {
+        with 7 {
             vec_a := true
             vec_b := true
             vec_cin := true

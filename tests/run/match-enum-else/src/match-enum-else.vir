@@ -30,8 +30,8 @@ pub mod MatchEnumElseTest for virt::Virt {
     //> `@Valid(0)` if every cycle matched; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -66,8 +66,8 @@ pub mod MatchEnumElseTest for virt::Virt {
     //> variant's encoding distinguishing the two.
     wire expr_code : Word[3] {
         it := match mode : Mode {
-            case #Alpha => 0
-            case #Beta  => 1
+            with #Alpha => 0
+            with #Beta  => 1
             else        => word(true, mode_bits)
         }
     }
@@ -78,10 +78,10 @@ pub mod MatchEnumElseTest for virt::Virt {
     reg stmt_code : Word[3] on clock {
         initial it <= 7
         match mode {
-            case #Alpha {
+            with #Alpha {
                 it <= 0
             }
-            case #Beta {
+            with #Beta {
                 it <= 1
             }
             else {
@@ -94,7 +94,7 @@ pub mod MatchEnumElseTest for virt::Virt {
     //> the `else` arm must catch every remaining variant.
     wire delta_only : Bit {
         it := match mode : Mode {
-            case #Delta => true
+            with #Delta => true
             else        => false
         }
     }
@@ -104,10 +104,10 @@ pub mod MatchEnumElseTest for virt::Virt {
     //> and `Delta` take `else`.
     wire expected_expr : Word[3] {
         it := match index {
-            case 0 => 0
-            case 1 => 1
-            case 2 => 6
-            case 3 => 7
+            with 0 => 0
+            with 1 => 1
+            with 2 => 6
+            with 3 => 7
         }
     }
 
@@ -116,10 +116,10 @@ pub mod MatchEnumElseTest for virt::Virt {
     //> cycle's `mode`.
     wire expected_stmt : Word[3] {
         it := match index {
-            case 0 => 7
-            case 1 => 0
-            case 2 => 1
-            case 3 => 6
+            with 0 => 7
+            with 1 => 0
+            with 2 => 1
+            with 3 => 6
         }
     }
 

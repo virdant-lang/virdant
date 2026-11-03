@@ -41,12 +41,12 @@ pub mod UnionNestedTest for virt::Virt {
     //> payload `Word[8]`.
     wire unwrapped : Word[8] {
         it := match opt_valid {
-            case @Some(v) =>
+            with @Some(v) =>
                 match v {
-                    case @Valid(x) => x
-                    case @Invalid() => 0
+                    with @Valid(x) => x
+                    with @Invalid() => 0
                 }
-            case @None() => 255
+            with @None() => 255
         }
     }
 
@@ -54,12 +54,12 @@ pub mod UnionNestedTest for virt::Virt {
     //> constructions are asserted independently.
     wire unwrapped_other : Word[8] {
         it := match opt_valid_other {
-            case @Some(v) =>
+            with @Some(v) =>
                 match v {
-                    case @Valid(x) => x
-                    case @Invalid() => 0
+                    with @Valid(x) => x
+                    with @Invalid() => 0
                 }
-            case @None() => 255
+            with @None() => 255
         }
     }
 
@@ -72,8 +72,8 @@ pub mod UnionNestedTest for virt::Virt {
     //> `@Valid(0)` when every check passed; `@Valid(1)` otherwise.
     //> While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case checks_ok => @Valid(0)
+        it := if {
+            when checks_ok => @Valid(0)
             else => @Valid(1)
         }
     }

@@ -42,8 +42,8 @@ pub mod EnumInRegTest for virt::Virt {
     //> `@Valid(1)` if any cycle diverged.  While `@Invalid()`, the
     //> simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -53,12 +53,12 @@ pub mod EnumInRegTest for virt::Virt {
     reg cmd : Cmd on clock {
         initial it <= #Start
         match it : Cmd {
-            case #Start    { it <= #GoS0 }
-            case #GoS0     { it <= #Advance1 }
-            case #Advance1 { it <= #Advance2 }
-            case #Advance2 { it <= #GoS2 }
-            case #GoS2     { it <= #Finish }
-            case #Finish   { it <= #Hold }
+            with #Start    { it <= #GoS0 }
+            with #GoS0     { it <= #Advance1 }
+            with #Advance1 { it <= #Advance2 }
+            with #Advance2 { it <= #GoS2 }
+            with #GoS2     { it <= #Finish }
+            with #Finish   { it <= #Hold }
         }
     }
 
@@ -69,23 +69,23 @@ pub mod EnumInRegTest for virt::Virt {
     reg state : State on clock {
         initial it <= #Idle
         match cmd {
-            case #GoS0 {
+            with #GoS0 {
                 it <= #S0
             }
-            case #Advance1 match it : State {
-                case #S0 {
+            with #Advance1 match it : State {
+                with #S0 {
                     it <= #S1
                 }
             }
-            case #Advance2 match it : State {
-                case #S1 {
+            with #Advance2 match it : State {
+                with #S1 {
                     it <= #S2
                 }
             }
-            case #GoS2 {
+            with #GoS2 {
                 it <= #S2
             }
-            case #Finish {
+            with #Finish {
                 it <= #Done
             }
         }
@@ -102,12 +102,12 @@ pub mod EnumInRegTest for virt::Virt {
     //> then `Done` forever.
     wire expected_state : State {
         it := match cycle {
-            case 0 => #Idle
-            case 1 => #Idle
-            case 2 => #S0
-            case 3 => #S1
-            case 4 => #S2
-            case 5 => #S2
+            with 0 => #Idle
+            with 1 => #Idle
+            with 2 => #S0
+            with 3 => #S1
+            with 4 => #S2
+            with 5 => #S2
             else => #Done
         }
     }

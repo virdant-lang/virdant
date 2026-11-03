@@ -18,8 +18,8 @@ pub mod StructOfValidTest for virt::Virt {
     //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -34,8 +34,8 @@ pub mod StructOfValidTest for virt::Virt {
     //> it switches to `@Invalid()` so the `else`-branch is covered too.
     reg chan : Chan on clock {
         initial it <= ${ data = @Valid(42w8) }
-        when {
-            case cycle == 0 {
+        if {
+            when cycle == 0 {
                 it <= ${ data = @Invalid() }
             }
         }
@@ -45,7 +45,7 @@ pub mod StructOfValidTest for virt::Virt {
     //> the payload, the `else` arm substitutes 0.
     wire payload : Word[8] {
         it := match chan->data {
-            case @Valid(x) => x
+            with @Valid(x) => x
             else => 0
         }
     }
@@ -54,7 +54,7 @@ pub mod StructOfValidTest for virt::Virt {
     //> `@Valid` arm.
     wire is_valid : Bit {
         it := match chan->data {
-            case @Valid(x) => true
+            with @Valid(x) => true
             else => false
         }
     }
@@ -62,8 +62,8 @@ pub mod StructOfValidTest for virt::Virt {
     //> The per-cycle check: cycle 0 must see the payload through the
     //> `@Valid` arm; cycle 1+ must take the `else`-branch.
     wire check : Bit {
-        it := when {
-            case cycle == 0 => is_valid && payload == 42w8
+        it := if {
+            when cycle == 0 => is_valid && payload == 42w8
             else => !is_valid && payload == 0w8
         }
     }
@@ -79,8 +79,8 @@ pub mod StructOfValidTest for virt::Virt {
     //> so the exit code only sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case cycle == 1 {
+        if {
+            when cycle == 1 {
                 it <= true
             }
         }

@@ -17,8 +17,8 @@ pub mod SliceZeroWidthTest for virt::Virt {
     //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case all_ok => @Valid(0)
+        it := if {
+            when all_ok => @Valid(0)
             else => @Invalid()
         }
     }

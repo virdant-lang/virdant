@@ -48,8 +48,8 @@ pub mod RotateLeftTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -70,8 +70,8 @@ pub mod RotateLeftTest for virt::Virt {
     //> value.
     reg index : Word[3] on clock {
         initial it <= 0
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it + 1
             }
         }
@@ -81,8 +81,8 @@ pub mod RotateLeftTest for virt::Virt {
     //> folds its verdict in on the cycle it applies to.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && rotateleft.state == expected
             }
         }
@@ -92,8 +92,8 @@ pub mod RotateLeftTest for virt::Virt {
     //> sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= index == 4
             }
         }
@@ -112,19 +112,19 @@ pub mod RotateLeftTest for virt::Virt {
     // `0b0001`, `0b0010`, `0b0100`, `0b1000`, and then return to the
     // start value `0b0001` on the fifth checked cycle.
     match index {
-        case 0 {
+        with 0 {
             expected := 0b0001
         }
-        case 1 {
+        with 1 {
             expected := 0b0010
         }
-        case 2 {
+        with 2 {
             expected := 0b0100
         }
-        case 3 {
+        with 3 {
             expected := 0b1000
         }
-        case 4 {
+        with 4 {
             expected := 0b0001
         }
         else {

@@ -40,15 +40,15 @@ mod Receiver {
 
     wire fires : Bit {
         it := match hs.data {
-            case @Valid(dontcare) => true
-            case @Invalid() => false
+            with @Valid(dontcare) => true
+            with @Invalid() => false
         }
     }
 
     reg got : Valid[Word[8]] on clock {
         initial it <= @Invalid()
-        when {
-            case fires {
+        if {
+            when fires {
                 it <= hs.data
             }
         }
@@ -67,8 +67,8 @@ pub mod SocketOfUnionTest for virt::Virt {
     //> payload integrity check failed.  While `@Invalid()`, the
     //> simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -85,8 +85,8 @@ pub mod SocketOfUnionTest for virt::Virt {
     //> Beat driven this cycle: `@Valid(payload)` on even `index`,
     //> `@Invalid()` gap on odd `index`.
     wire d : Valid[Word[8]] {
-        it := when {
-            case send_valid => @Valid(send_vec)
+        it := if {
+            when send_valid => @Valid(send_vec)
             else => @Invalid()
         }
     }
@@ -103,67 +103,67 @@ pub mod SocketOfUnionTest for virt::Virt {
     // Test-vector table: even indices send payloads 100, 101, ...,
     // 107; odd indices send `@Invalid()` gaps.
     match index {
-        case 0 {
+        with 0 {
             send_vec := 100
             send_valid := true
         }
-        case 1 {
+        with 1 {
             send_vec := 0
             send_valid := false
         }
-        case 2 {
+        with 2 {
             send_vec := 101
             send_valid := true
         }
-        case 3 {
+        with 3 {
             send_vec := 0
             send_valid := false
         }
-        case 4 {
+        with 4 {
             send_vec := 102
             send_valid := true
         }
-        case 5 {
+        with 5 {
             send_vec := 0
             send_valid := false
         }
-        case 6 {
+        with 6 {
             send_vec := 103
             send_valid := true
         }
-        case 7 {
+        with 7 {
             send_vec := 0
             send_valid := false
         }
-        case 8 {
+        with 8 {
             send_vec := 104
             send_valid := true
         }
-        case 9 {
+        with 9 {
             send_vec := 0
             send_valid := false
         }
-        case 10 {
+        with 10 {
             send_vec := 105
             send_valid := true
         }
-        case 11 {
+        with 11 {
             send_vec := 0
             send_valid := false
         }
-        case 12 {
+        with 12 {
             send_vec := 106
             send_valid := true
         }
-        case 13 {
+        with 13 {
             send_vec := 0
             send_valid := false
         }
-        case 14 {
+        with 14 {
             send_vec := 107
             send_valid := true
         }
-        case 15 {
+        with 15 {
             send_vec := 0
             send_valid := false
         }
@@ -173,8 +173,8 @@ pub mod SocketOfUnionTest for virt::Virt {
     //> was offered to latch this cycle.
     reg pending : Valid[Word[8]] on clock {
         initial it <= @Invalid()
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= d
             }
         }
@@ -186,29 +186,29 @@ pub mod SocketOfUnionTest for virt::Virt {
     //> hold its old value.
     wire pending_valid : Bit {
         it := match pending {
-            case @Valid(dontcare) => true
-            case @Invalid() => false
+            with @Valid(dontcare) => true
+            with @Invalid() => false
         }
     }
 
     wire expected : Word[8] {
         it := match pending {
-            case @Valid(e) => e
-            case @Invalid() => 0
+            with @Valid(e) => e
+            with @Invalid() => 0
         }
     }
 
     wire actual_valid : Bit {
         it := match receiver.last {
-            case @Valid(dontcare) => true
-            case @Invalid() => false
+            with @Valid(dontcare) => true
+            with @Invalid() => false
         }
     }
 
     wire actual : Word[8] {
         it := match receiver.last {
-            case @Valid(a) => a
-            case @Invalid() => 0
+            with @Valid(a) => a
+            with @Invalid() => 0
         }
     }
 
@@ -226,8 +226,8 @@ pub mod SocketOfUnionTest for virt::Virt {
     //> folded into `all_ok` by the time the exit code is read.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 15 {
+        if {
+            when index == 15 {
                 it <= true
             }
         }

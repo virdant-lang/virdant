@@ -46,11 +46,11 @@ mod Pwm {
     //> Free-running counter, 0 through 7, wrapping every 8 cycles.
     reg count : Word[3] on clock {
         initial it <= 0
-        when {
-            case clear {
+        if {
+            when clear {
                 it <= 0
             }
-            case it == 7 {
+            when it == 7 {
                 it <= 0
             }
             else {
@@ -62,8 +62,8 @@ mod Pwm {
     //> Current duty cycle; holds between loads.
     reg duty : Word[3] on clock {
         initial it <= 0
-        when {
-            case load {
+        if {
+            when load {
                 it <= duty_in
             }
         }
@@ -78,8 +78,8 @@ pub mod PwmTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -95,8 +95,8 @@ pub mod PwmTest for virt::Virt {
     //> 47 once `finished` rises.
     reg index : Word[6] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -106,8 +106,8 @@ pub mod PwmTest for virt::Virt {
     //> cycle folds its verdict in.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && (pwm.out == expected)
             }
         }
@@ -117,8 +117,8 @@ pub mod PwmTest for virt::Virt {
     //> the exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 46 {
+        if {
+            when index == 46 {
                 it <= true
             }
         }
@@ -147,37 +147,37 @@ pub mod PwmTest for virt::Virt {
     // on the last cycle of the previous phase.
     match index {
         // Power-on warm-up: idle, unchecked.
-        case 0 {
+        with 0 {
             clear := false
             load := false
             duty_in := 3
             expected := false
         }
-        case 1 {
+        with 1 {
             clear := false
             load := false
             duty_in := 3
             expected := false
         }
-        case 2 {
+        with 2 {
             clear := false
             load := false
             duty_in := 3
             expected := false
         }
-        case 3 {
+        with 3 {
             clear := false
             load := false
             duty_in := 3
             expected := false
         }
-        case 4 {
+        with 4 {
             clear := false
             load := false
             duty_in := 3
             expected := false
         }
-        case 5 {
+        with 5 {
             clear := false
             load := false
             duty_in := 3
@@ -185,7 +185,7 @@ pub mod PwmTest for virt::Virt {
         }
         // Clear the counter and load duty 3: `count` is 0 from the
         // next cycle on, so every later expectation is pinned down.
-        case 6 {
+        with 6 {
             clear := true
             load := true
             duty_in := 3
@@ -193,92 +193,92 @@ pub mod PwmTest for virt::Virt {
         }
         // Duty 3 of 8, first period: `out` high while `count` is 0,
         // 1, 2, low for the remaining 5 cycles.
-        case 7 {
+        with 7 {
             clear := false
             load := false
             duty_in := 3
             expected := true
         }
-        case 8 {
+        with 8 {
             clear := false
             load := false
             duty_in := 3
             expected := true
         }
-        case 9 {
+        with 9 {
             clear := false
             load := false
             duty_in := 3
             expected := true
         }
-        case 10 {
+        with 10 {
             clear := false
             load := false
             duty_in := 3
             expected := false
         }
-        case 11 {
+        with 11 {
             clear := false
             load := false
             duty_in := 3
             expected := false
         }
-        case 12 {
+        with 12 {
             clear := false
             load := false
             duty_in := 3
             expected := false
         }
-        case 13 {
+        with 13 {
             clear := false
             load := false
             duty_in := 3
             expected := false
         }
-        case 14 {
+        with 14 {
             clear := false
             load := false
             duty_in := 3
             expected := false
         }
         // Duty 3 of 8, second period.
-        case 15 {
+        with 15 {
             clear := false
             load := false
             duty_in := 3
             expected := true
         }
-        case 16 {
+        with 16 {
             clear := false
             load := false
             duty_in := 3
             expected := true
         }
-        case 17 {
+        with 17 {
             clear := false
             load := false
             duty_in := 3
             expected := true
         }
-        case 18 {
+        with 18 {
             clear := false
             load := false
             duty_in := 3
             expected := false
         }
-        case 19 {
+        with 19 {
             clear := false
             load := false
             duty_in := 3
             expected := false
         }
-        case 20 {
+        with 20 {
             clear := false
             load := false
             duty_in := 3
             expected := false
         }
-        case 21 {
+        with 21 {
             clear := false
             load := false
             duty_in := 3
@@ -286,100 +286,100 @@ pub mod PwmTest for virt::Virt {
         }
         // Last cycle of the duty-3 phase (count 7, low) and the load
         // of duty 0 for the next phase.
-        case 22 {
+        with 22 {
             clear := false
             load := true
             duty_in := 0
             expected := false
         }
         // Duty 0 of 8: `out` is low for the whole period.
-        case 23 {
+        with 23 {
             clear := false
             load := false
             duty_in := 0
             expected := false
         }
-        case 24 {
+        with 24 {
             clear := false
             load := false
             duty_in := 0
             expected := false
         }
-        case 25 {
+        with 25 {
             clear := false
             load := false
             duty_in := 0
             expected := false
         }
-        case 26 {
+        with 26 {
             clear := false
             load := false
             duty_in := 0
             expected := false
         }
-        case 27 {
+        with 27 {
             clear := false
             load := false
             duty_in := 0
             expected := false
         }
-        case 28 {
+        with 28 {
             clear := false
             load := false
             duty_in := 0
             expected := false
         }
-        case 29 {
+        with 29 {
             clear := false
             load := false
             duty_in := 0
             expected := false
         }
         // Last cycle of the duty-0 phase and the load of duty 7.
-        case 30 {
+        with 30 {
             clear := false
             load := true
             duty_in := 7
             expected := false
         }
         // Duty 7 of 8: `out` is high for 7 cycles ...
-        case 31 {
+        with 31 {
             clear := false
             load := false
             duty_in := 7
             expected := true
         }
-        case 32 {
+        with 32 {
             clear := false
             load := false
             duty_in := 7
             expected := true
         }
-        case 33 {
+        with 33 {
             clear := false
             load := false
             duty_in := 7
             expected := true
         }
-        case 34 {
+        with 34 {
             clear := false
             load := false
             duty_in := 7
             expected := true
         }
-        case 35 {
+        with 35 {
             clear := false
             load := false
             duty_in := 7
             expected := true
         }
-        case 36 {
+        with 36 {
             clear := false
             load := false
             duty_in := 7
             expected := true
         }
-        case 37 {
+        with 37 {
             clear := false
             load := false
             duty_in := 7
@@ -387,7 +387,7 @@ pub mod PwmTest for virt::Virt {
         }
         // ... low on exactly the last cycle of the period, which also
         // loads duty 1 for the next phase.
-        case 38 {
+        with 38 {
             clear := false
             load := true
             duty_in := 1
@@ -395,49 +395,49 @@ pub mod PwmTest for virt::Virt {
         }
         // Duty 1 of 8: a single-cycle pulse at the start of the
         // period.
-        case 39 {
+        with 39 {
             clear := false
             load := false
             duty_in := 1
             expected := true
         }
-        case 40 {
+        with 40 {
             clear := false
             load := false
             duty_in := 1
             expected := false
         }
-        case 41 {
+        with 41 {
             clear := false
             load := false
             duty_in := 1
             expected := false
         }
-        case 42 {
+        with 42 {
             clear := false
             load := false
             duty_in := 1
             expected := false
         }
-        case 43 {
+        with 43 {
             clear := false
             load := false
             duty_in := 1
             expected := false
         }
-        case 44 {
+        with 44 {
             clear := false
             load := false
             duty_in := 1
             expected := false
         }
-        case 45 {
+        with 45 {
             clear := false
             load := false
             duty_in := 1
             expected := false
         }
-        case 46 {
+        with 46 {
             clear := false
             load := false
             duty_in := 1

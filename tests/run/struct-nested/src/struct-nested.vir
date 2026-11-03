@@ -25,8 +25,8 @@ pub mod StructNestedTest for virt::Virt {
     //> `@Valid(0)` once every check has passed; `@Valid(1)` if any
     //> check failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case cycle == 2 => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when cycle == 2 => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -47,8 +47,8 @@ pub mod StructNestedTest for virt::Virt {
             },
             extra = 0,
         }
-        when {
-            case cycle == 0 {
+        if {
+            when cycle == 0 {
                 it <= ${
                     inner = ${
                         value = 42,

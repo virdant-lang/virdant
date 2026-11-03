@@ -48,8 +48,8 @@ mod Debouncer {
     //> been stable long enough.
     reg stable : Bit on clock {
         initial it <= false
-        when {
-            case next_count == 3 {
+        if {
+            when next_count == 3 {
                 it <= inp
             }
         }
@@ -62,8 +62,8 @@ mod Debouncer {
     //> keeps the current cycle's input in the stability check, so a
     //> glitch right after a stable stretch cannot be latched.
     wire next_count : Word[2] {
-        it := when {
-            case inp == prev => mux(count == 3, count, count + 1)
+        it := if {
+            when inp == prev => mux(count == 3, count, count + 1)
             else => 1
         }
     }
@@ -77,8 +77,8 @@ pub mod Top for virt::Virt {
     //> `@Valid(1)` if any check failed.  While `@Invalid()`, the
     //> simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -91,8 +91,8 @@ pub mod Top for virt::Virt {
     //> Index of the stimulus cycle under test, 0 through 34.
     reg index : Word[6] on clock {
         initial it <= 0
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it + 1
             }
         }
@@ -102,8 +102,8 @@ pub mod Top for virt::Virt {
     //> folds its verdict in while the stimulus table is running.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && (debouncer.out == expected)
             }
         }
@@ -113,8 +113,8 @@ pub mod Top for virt::Virt {
     //> checked, so that the exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 34 {
+        if {
+            when index == 34 {
                 it <= true
             }
         }
@@ -136,155 +136,155 @@ pub mod Top for virt::Virt {
     // a stable stretch of 3 cycles, of either polarity.
     match index {
         // Power-on idle: input low, matching the power-on output.
-        case 0 {
+        with 0 {
             stimulus := false
             expected := false
         }
-        case 1 {
+        with 1 {
             stimulus := false
             expected := false
         }
-        case 2 {
+        with 2 {
             stimulus := false
             expected := false
         }
-        case 3 {
+        with 3 {
             stimulus := false
             expected := false
         }
         // Rapid toggles: no stretch reaches 3 cycles, so the output
         // must hold the power-on value throughout.
-        case 4 {
+        with 4 {
             stimulus := true
             expected := false
         }
-        case 5 {
+        with 5 {
             stimulus := false
             expected := false
         }
-        case 6 {
+        with 6 {
             stimulus := true
             expected := false
         }
-        case 7 {
+        with 7 {
             stimulus := false
             expected := false
         }
-        case 8 {
+        with 8 {
             stimulus := true
             expected := false
         }
-        case 9 {
+        with 9 {
             stimulus := false
             expected := false
         }
-        case 10 {
+        with 10 {
             stimulus := true
             expected := false
         }
-        case 11 {
+        with 11 {
             stimulus := false
             expected := false
         }
         // Stable high stretch: 3 consecutive high cycles (indices 12
         // through 14), so the output settles to high on the cycle
         // after the third.
-        case 12 {
+        with 12 {
             stimulus := true
             expected := false
         }
-        case 13 {
+        with 13 {
             stimulus := true
             expected := false
         }
-        case 14 {
+        with 14 {
             stimulus := true
             expected := false
         }
-        case 15 {
+        with 15 {
             stimulus := true
             expected := true
         }
-        case 16 {
+        with 16 {
             stimulus := true
             expected := true
         }
         // Single-cycle glitch low: far too short to settle, so the
         // output must stay high.
-        case 17 {
+        with 17 {
             stimulus := false
             expected := true
         }
         // Back high, then a stable low stretch (indices 20 through
         // 22) settling the output to low.
-        case 18 {
+        with 18 {
             stimulus := true
             expected := true
         }
-        case 19 {
+        with 19 {
             stimulus := true
             expected := true
         }
-        case 20 {
+        with 20 {
             stimulus := false
             expected := true
         }
-        case 21 {
+        with 21 {
             stimulus := false
             expected := true
         }
-        case 22 {
+        with 22 {
             stimulus := false
             expected := true
         }
-        case 23 {
+        with 23 {
             stimulus := false
             expected := false
         }
-        case 24 {
+        with 24 {
             stimulus := false
             expected := false
         }
         // Rapid toggles again from the low baseline.
-        case 25 {
+        with 25 {
             stimulus := true
             expected := false
         }
-        case 26 {
+        with 26 {
             stimulus := false
             expected := false
         }
-        case 27 {
+        with 27 {
             stimulus := true
             expected := false
         }
-        case 28 {
+        with 28 {
             stimulus := false
             expected := false
         }
-        case 29 {
+        with 29 {
             stimulus := true
             expected := false
         }
-        case 30 {
+        with 30 {
             stimulus := false
             expected := false
         }
         // Final stable high stretch (indices 31 through 33),
         // settling the output to high for the last check.
-        case 31 {
+        with 31 {
             stimulus := true
             expected := false
         }
-        case 32 {
+        with 32 {
             stimulus := true
             expected := false
         }
-        case 33 {
+        with 33 {
             stimulus := true
             expected := false
         }
-        case 34 {
+        with 34 {
             stimulus := true
             expected := true
         }

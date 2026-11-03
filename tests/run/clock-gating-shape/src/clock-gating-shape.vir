@@ -38,8 +38,8 @@ mod ClockGatedReg {
 
     reg held : Word[8] on clock {
         initial it <= 0
-        when {
-            case en_delayed {
+        if {
+            when en_delayed {
                 it <= data
             }
         }
@@ -56,8 +56,8 @@ pub mod ClockGatingShapeTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -78,8 +78,8 @@ pub mod ClockGatingShapeTest for virt::Virt {
     //> Index of the step under test, 0 through 7.
     reg index : Word[3] on clock {
         initial it <= 0
-        when {
-            case phase == 2 {
+        if {
+            when phase == 2 {
                 it <= it + 1
             }
         }
@@ -89,14 +89,14 @@ pub mod ClockGatingShapeTest for virt::Virt {
     //> folds its verdict in while the step is in flight.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case phase == 0 {
+        if {
+            when phase == 0 {
                 it <= it && dut.out == expected
             }
-            case phase == 1 {
+            when phase == 1 {
                 it <= it && dut.out == expected
             }
-            case phase == 2 {
+            when phase == 2 {
                 it <= it && dut.out == mux(step_en, data, expected)
             }
         }
@@ -106,8 +106,8 @@ pub mod ClockGatingShapeTest for virt::Virt {
     //> hold while this step runs, updated at the end of each step.
     reg expected : Word[8] on clock {
         initial it <= 0
-        when {
-            case phase == 2 {
+        if {
+            when phase == 2 {
                 it <= mux(step_en, data, it)
             }
         }
@@ -117,8 +117,8 @@ pub mod ClockGatingShapeTest for virt::Virt {
     //> the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case phase == 2 && index == 7 {
+        if {
+            when phase == 2 && index == 7 {
                 it <= true
             }
         }
@@ -141,35 +141,35 @@ pub mod ClockGatingShapeTest for virt::Virt {
     wire data : Word[8]
 
     match index {
-        case 0 {
+        with 0 {
             step_en := false
             data := 0
         }
-        case 1 {
+        with 1 {
             step_en := true
             data := 1
         }
-        case 2 {
+        with 2 {
             step_en := true
             data := 2
         }
-        case 3 {
+        with 3 {
             step_en := false
             data := 3
         }
-        case 4 {
+        with 4 {
             step_en := true
             data := 4
         }
-        case 5 {
+        with 5 {
             step_en := false
             data := 5
         }
-        case 6 {
+        with 6 {
             step_en := false
             data := 6
         }
-        case 7 {
+        with 7 {
             step_en := true
             data := 7
         }

@@ -37,8 +37,8 @@ mod Stim {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case done => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when done => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -54,8 +54,8 @@ mod Stim {
     //> leak into the response.
     reg count : Word[16] on clock {
         initial it <= 0
-        when {
-            case !done {
+        if {
+            when !done {
                 it <= it + 1w16
             }
         }
@@ -71,8 +71,8 @@ mod Stim {
     //> folds its verdict in until `done`.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case !done {
+        if {
+            when !done {
                 it <= it && ok
             }
         }
@@ -82,8 +82,8 @@ mod Stim {
     //> lets `exit` become `@Valid`.
     reg done : Bit on clock {
         initial it <= false
-        when {
-            case count == 15w16 {
+        if {
+            when count == 15w16 {
                 it <= true
             }
         }

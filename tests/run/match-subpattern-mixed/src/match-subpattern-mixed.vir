@@ -1,5 +1,5 @@
 // Self-checking `kind = "run"` test for mixing variable and literal
-// sub-patterns in one union `match` arm: `case @Pair(x, false) => x`.
+// sub-patterns in one union `match` arm: `with @Pair(x, false) => x`.
 //
 // A two-payload union variant is matched with a variable sub-pattern
 // in the first payload position and a literal sub-pattern in the
@@ -20,7 +20,7 @@ union type PairU {
     Pair(a : Word[4], flag : Bit)
 }
 
-//> A two-`Bit` union mirroring the spec arm `case @Pair(x, false) => x`
+//> A two-`Bit` union mirroring the spec arm `with @Pair(x, false) => x`
 //> exactly: the bound variable is a `Bit`.
 //>
 //> `Nothing()` - carries no payload.
@@ -70,11 +70,11 @@ pub mod MatchSubpatternMixedTest for virt::Virt {
         it := @Nothing()
     }
 
-    //> The arm `case @Pair(x, false)` must fire: the bound `x` flows
+    //> The arm `with @Pair(x, false)` must fire: the bound `x` flows
     //> through as `5`, distinct from the `else` sentinel `15`.
     wire hit_hit : Word[4] {
         it := match u_hit : PairU {
-            case @Pair(x, false) => x
+            with @Pair(x, false) => x
             else => 15
         }
     }
@@ -83,7 +83,7 @@ pub mod MatchSubpatternMixedTest for virt::Virt {
     //> the `else` sentinel, not the bound `5`.
     wire hit_flag : Word[4] {
         it := match u_flag : PairU {
-            case @Pair(x, false) => x
+            with @Pair(x, false) => x
             else => 15
         }
     }
@@ -92,7 +92,7 @@ pub mod MatchSubpatternMixedTest for virt::Virt {
     //> sentinel `15`.
     wire hit_zero : Word[4] {
         it := match u_zero : PairU {
-            case @Pair(x, false) => x
+            with @Pair(x, false) => x
             else => 15
         }
     }
@@ -100,7 +100,7 @@ pub mod MatchSubpatternMixedTest for virt::Virt {
     //> `@Empty()` has no payload to match: the `else` sentinel.
     wire hit_none : Word[4] {
         it := match u_none : PairU {
-            case @Pair(x, false) => x
+            with @Pair(x, false) => x
             else => 15
         }
     }
@@ -108,7 +108,7 @@ pub mod MatchSubpatternMixedTest for virt::Virt {
     //> `hi = true` binds and flows through as `true`.
     wire bit_hit : Bit {
         it := match b_hit : BitPair {
-            case @Twin(x, false) => x
+            with @Twin(x, false) => x
             else => false
         }
     }
@@ -116,7 +116,7 @@ pub mod MatchSubpatternMixedTest for virt::Virt {
     //> `hi = false` binds and flows through as `false`.
     wire bit_lo : Bit {
         it := match b_lo : BitPair {
-            case @Twin(x, false) => x
+            with @Twin(x, false) => x
             else => false
         }
     }
@@ -125,7 +125,7 @@ pub mod MatchSubpatternMixedTest for virt::Virt {
     //> `false` even though `hi` would have bound to `true`.
     wire bit_flag : Bit {
         it := match b_flag : BitPair {
-            case @Twin(x, false) => x
+            with @Twin(x, false) => x
             else => false
         }
     }
@@ -133,7 +133,7 @@ pub mod MatchSubpatternMixedTest for virt::Virt {
     //> `@Nothing()` has no payload to match: the `else` arm.
     wire bit_none : Bit {
         it := match b_none : BitPair {
-            case @Twin(x, false) => x
+            with @Twin(x, false) => x
             else => false
         }
     }
@@ -154,8 +154,8 @@ pub mod MatchSubpatternMixedTest for virt::Virt {
     //> `@Valid(0)` when every check passed; `@Valid(fail_bits)`
     //> otherwise.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case fail_bits == 0 => @Valid(0)
+        it := if {
+            when fail_bits == 0 => @Valid(0)
             else => @Valid(fail_bits)
         }
     }

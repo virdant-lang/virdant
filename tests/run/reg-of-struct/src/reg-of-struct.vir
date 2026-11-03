@@ -22,8 +22,8 @@ pub mod Top for virt::Virt {
     //> `@Valid(0)` once every check has passed; `@Valid(1)` if any
     //> check failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case cycle == 3 => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when cycle == 3 => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -43,22 +43,22 @@ pub mod Top for virt::Virt {
             green = 0,
             blue = 0,
         }
-        when {
-            case cycle == 0 {
+        if {
+            when cycle == 0 {
                 it <= ${
                     red = 10,
                     green = it->green,
                     blue = it->blue,
                 }
             }
-            case cycle == 1 {
+            when cycle == 1 {
                 it <= ${
                     red = it->red,
                     green = 20,
                     blue = it->blue,
                 }
             }
-            case cycle == 2 {
+            when cycle == 2 {
                 it <= ${
                     red = it->red,
                     green = it->green,

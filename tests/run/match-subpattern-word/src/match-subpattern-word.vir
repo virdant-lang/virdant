@@ -21,8 +21,8 @@ pub mod MatchSubpatternWord for virt::Virt {
     //> Index of the vector under test, 0 through 3.
     reg index : Word[2] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -32,8 +32,8 @@ pub mod MatchSubpatternWord for virt::Virt {
     //> `all_ok` stops folding and the exit code settles.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 3 {
+        if {
+            when index == 3 {
                 it <= true
             }
         }
@@ -43,8 +43,8 @@ pub mod MatchSubpatternWord for virt::Virt {
     //> folds its verdict in on every cycle before `finished`.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it && check_ok
             }
         }
@@ -63,26 +63,26 @@ pub mod MatchSubpatternWord for virt::Virt {
 
     match index {
         // The only vector that `case @Some(0)` must match.
-        case 0 {
+        with 0 {
             opt := @Some(0)
             exp_match := true
             exp_val := 0
         }
         // Nonzero payloads: the concrete sub-pattern must reject.
-        case 1 {
+        with 1 {
             opt := @Some(1)
             exp_match := false
             exp_val := 1
         }
         // Maximal nonzero payload: the concrete sub-pattern must
         // reject (so the match is not just matching every `@Some`).
-        case 2 {
+        with 2 {
             opt := @Some(15)
             exp_match := false
             exp_val := 15
         }
         // The other variant: neither match may take the `@Some` arms.
-        case 3 {
+        with 3 {
             opt := @None()
             exp_match := false
             exp_val := 0
@@ -93,7 +93,7 @@ pub mod MatchSubpatternWord for virt::Virt {
     //> the payload is zero.
     wire matched : Bit {
         it := match opt {
-            case @Some(0) => true
+            with @Some(0) => true
             else => false
         }
     }
@@ -103,8 +103,8 @@ pub mod MatchSubpatternWord for virt::Virt {
     //> the concrete zero sub-pattern itself.
     wire unwrapped : Word[4] {
         it := match opt {
-            case @Some(x) => x
-            case @None() => 0
+            with @Some(x) => x
+            with @None() => 0
         }
     }
 
@@ -117,8 +117,8 @@ pub mod MatchSubpatternWord for virt::Virt {
     //> check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }

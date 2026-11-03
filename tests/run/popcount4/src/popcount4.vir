@@ -29,31 +29,31 @@ mod Popcount4 {
     }
 
     //> Number of set bits in `x`, 0 through 4.
-    outgoing count : Word[3] {
+    outgoing count : Word[3] dependson x {
         it := match high {
-            case 0 => match low {
-                case 0 => 0
-                case 1 => 1
-                case 2 => 1
-                case 3 => 2
+            with 0 => match low {
+                with 0 => 0
+                with 1 => 1
+                with 2 => 1
+                with 3 => 2
             }
-            case 1 => match low {
-                case 0 => 1
-                case 1 => 2
-                case 2 => 2
-                case 3 => 3
+            with 1 => match low {
+                with 0 => 1
+                with 1 => 2
+                with 2 => 2
+                with 3 => 3
             }
-            case 2 => match low {
-                case 0 => 1
-                case 1 => 2
-                case 2 => 2
-                case 3 => 3
+            with 2 => match low {
+                with 0 => 1
+                with 1 => 2
+                with 2 => 2
+                with 3 => 3
             }
-            case 3 => match low {
-                case 0 => 2
-                case 1 => 3
-                case 2 => 3
-                case 3 => 4
+            with 3 => match low {
+                with 0 => 2
+                with 1 => 3
+                with 2 => 3
+                with 3 => 4
             }
         }
     }
@@ -67,8 +67,8 @@ pub mod Popcount4Test for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -80,8 +80,8 @@ pub mod Popcount4Test for virt::Virt {
     //> The input currently under test, 0 through 15.
     reg index : Word[4] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -91,8 +91,8 @@ pub mod Popcount4Test for virt::Virt {
     //> freezing `all_ok` so the exit code sees the final verdict.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 15 {
+        if {
+            when index == 15 {
                 it <= true
             }
         }
@@ -102,8 +102,8 @@ pub mod Popcount4Test for virt::Virt {
     //> folds its verdict in on the cycle the input is under test.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && popcount.count == expected
             }
         }
@@ -121,21 +121,21 @@ pub mod Popcount4Test for virt::Virt {
 
     // Expected counts for inputs 0 through 15.
     match index {
-        case 0 { expected := 0 }
-        case 1 { expected := 1 }
-        case 2 { expected := 1 }
-        case 3 { expected := 2 }
-        case 4 { expected := 1 }
-        case 5 { expected := 2 }
-        case 6 { expected := 2 }
-        case 7 { expected := 3 }
-        case 8 { expected := 1 }
-        case 9 { expected := 2 }
-        case 10 { expected := 2 }
-        case 11 { expected := 3 }
-        case 12 { expected := 2 }
-        case 13 { expected := 3 }
-        case 14 { expected := 3 }
-        case 15 { expected := 4 }
+        with 0 { expected := 0 }
+        with 1 { expected := 1 }
+        with 2 { expected := 1 }
+        with 3 { expected := 2 }
+        with 4 { expected := 1 }
+        with 5 { expected := 2 }
+        with 6 { expected := 2 }
+        with 7 { expected := 3 }
+        with 8 { expected := 1 }
+        with 9 { expected := 2 }
+        with 10 { expected := 2 }
+        with 11 { expected := 3 }
+        with 12 { expected := 2 }
+        with 13 { expected := 3 }
+        with 14 { expected := 3 }
+        with 15 { expected := 4 }
     }
 }

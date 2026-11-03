@@ -19,7 +19,7 @@ mod Sra2 {
     incoming x : Word[8]
 
     //> `x` arithmetically shifted right by 2.
-    outgoing result : Word[8] {
+    outgoing result : Word[8] dependson x {
         it := word(x[7], x[7], x[8..2])
     }
 }

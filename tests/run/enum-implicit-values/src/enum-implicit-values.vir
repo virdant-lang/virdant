@@ -43,8 +43,8 @@ pub mod EnumImplicitValuesTest for virt::Virt {
     //> check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -132,9 +132,9 @@ pub mod EnumImplicitValuesTest for virt::Virt {
     //> arm for each one-hot pattern.
     wire stage_match_ok : Bit {
         it := match stage_execute : Stage {
-            case #Fetch => false
-            case #Decode => false
-            case #Execute => true
+            with #Fetch => false
+            with #Decode => false
+            with #Execute => true
         }
     }
 

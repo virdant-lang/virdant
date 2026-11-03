@@ -21,10 +21,10 @@ mod Slicer {
     //> case 3.
     outgoing code : Word[8] {
         it := match x[2..0] {
-            case 0 => 0xa0
-            case 1 => 0xa1
-            case 2 => 0xa2
-            case 3 => 0xa3
+            with 0 => 0xa0
+            with 1 => 0xa1
+            with 2 => 0xa2
+            with 3 => 0xa3
         }
     }
 
@@ -42,8 +42,8 @@ pub mod MatchOnSliceTest for virt::Virt {
     //> cycle's code diverged from the case selected by the slice.
     //> While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -62,8 +62,8 @@ pub mod MatchOnSliceTest for virt::Virt {
     //> the exit code sees the final verdict.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case step == 7 {
+        if {
+            when step == 7 {
                 it <= true
             }
         }
@@ -74,8 +74,8 @@ pub mod MatchOnSliceTest for virt::Virt {
     //> code.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && step_ok
             }
         }
@@ -97,10 +97,10 @@ pub mod MatchOnSliceTest for virt::Virt {
     //> slice value.
     wire exp_code : Word[8] {
         it := match exp_low {
-            case 0 => 0xa0
-            case 1 => 0xa1
-            case 2 => 0xa2
-            case 3 => 0xa3
+            with 0 => 0xa0
+            with 1 => 0xa1
+            with 2 => 0xa2
+            with 3 => 0xa3
         }
     }
 

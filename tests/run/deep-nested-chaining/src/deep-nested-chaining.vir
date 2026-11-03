@@ -16,8 +16,8 @@ pub mod DeepNestedChainingTest for virt::Virt {
     //> cycle 4; `@Valid(1)` if any check failed.  While `@Invalid()`,
     //> the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case step == 5 => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when step == 5 => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -29,20 +29,20 @@ pub mod DeepNestedChainingTest for virt::Virt {
     //> its own cycle, so a stuck or skipped transition fails a check.
     reg state : Word[2] on clock {
         initial it <= 0w2
-        it <= when {
-            case it == 0w2 match it {
-                case 0 when {
-                    case step == 0 => 1w2
+        it <= if {
+            when it == 0w2 match it {
+                with 0 if {
+                    when step == 0 => 1w2
                     else => it
                 }
                 else => it
             }
-            case it == 1w2 when {
-                case step == 1 => 2w2
+            when it == 1w2 if {
+                when step == 1 => 2w2
                 else => it
             }
-            else when {
-                case step == 2 => 3w2
+            else if {
+                when step == 2 => 3w2
                 else => it
             }
         }
@@ -51,8 +51,8 @@ pub mod DeepNestedChainingTest for virt::Virt {
     //> Cycle counter, stopping at 5 so that `exit` goes `@Valid`.
     reg step : Word[3] on clock {
         initial it <= 0
-        when {
-            case step < 5 {
+        if {
+            when step < 5 {
                 it <= it + 1
             }
         }
@@ -69,9 +69,9 @@ pub mod DeepNestedChainingTest for virt::Virt {
     //> climbing, then 3.
     wire expected : Word[2] {
         it := match step : Word[3] {
-            case 0 => 0w2
-            case 1 => 1w2
-            case 2 => 2w2
+            with 0 => 0w2
+            with 1 => 1w2
+            with 2 => 2w2
             else => 3w2
         }
     }
@@ -85,12 +85,12 @@ pub mod DeepNestedChainingTest for virt::Virt {
     //> 3 from cycle 3 onward and still below 3 before that.
     wire hold_ok : Bit {
         it := match state {
-            case 3 when {
-                case step >= 3 => true
+            with 3 if {
+                when step >= 3 => true
                 else => false
             }
-            else when {
-                case step < 3 => true
+            else if {
+                when step < 3 => true
                 else => false
             }
         }
@@ -100,10 +100,10 @@ pub mod DeepNestedChainingTest for virt::Virt {
     //> case ... when { ... } } }` with driver statements inside.
     //> Goes high on cycle 4 only if the FSM has settled at 3.
     wire probe : Bit {
-        when {
-            case step == 4 match state {
-                case 3 when {
-                    case true {
+        if {
+            when step == 4 match state {
+                with 3 if {
+                    when true {
                         it := true
                     }
                 }

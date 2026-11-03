@@ -36,8 +36,8 @@ pub mod StmtMatchUnionTest for virt::Virt {
     //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -47,8 +47,8 @@ pub mod StmtMatchUnionTest for virt::Virt {
     //> for the rest of the run.
     reg step : Word[4] on clock {
         initial it <= 0
-        when {
-            case step < 8 {
+        if {
+            when step < 8 {
                 it <= it + 1
             }
         }
@@ -59,14 +59,14 @@ pub mod StmtMatchUnionTest for virt::Virt {
     //> values.
     wire cmd : Op {
         it := match step {
-            case 0 => @Add(3)
-            case 1 => @Idle()
-            case 2 => @Add(10)
-            case 3 => @Sub(5)
-            case 4 => @Clear()
-            case 5 => @Sub(1)
-            case 6 => @Idle()
-            case 7 => @Add(100)
+            with 0 => @Add(3)
+            with 1 => @Idle()
+            with 2 => @Add(10)
+            with 3 => @Sub(5)
+            with 4 => @Clear()
+            with 5 => @Sub(1)
+            with 6 => @Idle()
+            with 7 => @Add(100)
             else => @Idle()
         }
     }
@@ -96,27 +96,27 @@ pub mod StmtMatchUnionTest for virt::Virt {
     // its own register(s), and the empty `@Idle()` arm drives
     // nothing, so every register holds through idle steps.
     match cmd {
-        case @Add(a) {
+        with @Add(a) {
             count <= count + a
             adds <= adds + 1
         }
-        case @Sub(a) {
+        with @Sub(a) {
             count <= count - a
             subs <= subs + 1
         }
-        case @Clear() {
+        with @Clear() {
             count <= 0
             clears <= clears + 1
         }
-        case @Idle() {
+        with @Idle() {
         }
     }
 
     //> Number of clock edges so far, frozen at 9.
     reg cycles : Word[4] on clock {
         initial it <= 0
-        when {
-            case cycles < 9 {
+        if {
+            when cycles < 9 {
                 it <= it + 1
             }
         }
@@ -132,35 +132,35 @@ pub mod StmtMatchUnionTest for virt::Virt {
     // on, so the `else` cycles are all holds.
     match cycles {
         // Power-on: unchecked, `count` shows its initial value.
-        case 0 {
+        with 0 {
             expect_count := 0
         }
         // Cycle 0 applied `@Add(3)`.
-        case 1 {
+        with 1 {
             expect_count := 3
         }
         // Cycle 1 applied `@Idle()`: hold.
-        case 2 {
+        with 2 {
             expect_count := 3
         }
         // Cycle 2 applied `@Add(10)`.
-        case 3 {
+        with 3 {
             expect_count := 13
         }
         // Cycle 3 applied `@Sub(5)`.
-        case 4 {
+        with 4 {
             expect_count := 8
         }
         // Cycle 4 applied `@Clear()`.
-        case 5 {
+        with 5 {
             expect_count := 0
         }
         // Cycle 5 applied `@Sub(1)`: 0 - 1 wraps to 255.
-        case 6 {
+        with 6 {
             expect_count := 255
         }
         // Cycle 6 applied `@Idle()`: hold.
-        case 7 {
+        with 7 {
             expect_count := 255
         }
         // Cycle 7 applied `@Add(100)`: 255 + 100 wraps to 99.
@@ -195,11 +195,11 @@ pub mod StmtMatchUnionTest for virt::Virt {
     //> in the end-of-walk verdict.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && count == expect_count
             }
-            case done {
+            when done {
                 it <= it && end_ok
             }
         }
@@ -209,8 +209,8 @@ pub mod StmtMatchUnionTest for virt::Virt {
     //> final `all_ok` on the next cycle.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case done {
+        if {
+            when done {
                 it <= true
             }
         }

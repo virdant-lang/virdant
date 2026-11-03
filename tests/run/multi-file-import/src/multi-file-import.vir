@@ -17,8 +17,8 @@ pub mod MultiFileImportTest for virt::Virt {
     //> `@Valid(0)` after every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -47,8 +47,8 @@ pub mod MultiFileImportTest for virt::Virt {
     //> code sees the final `all_ok`.
     reg finished : Bit {
         initial it <= false
-        when {
-            case cycle == 7 {
+        if {
+            when cycle == 7 {
                 it <= true
             }
         }
@@ -59,13 +59,13 @@ pub mod MultiFileImportTest for virt::Virt {
     wire expected : Word[4]
 
     match cycle {
-        case 0 { expected := 0 }
-        case 1 { expected := 1 }
-        case 2 { expected := 2 }
-        case 3 { expected := 3 }
-        case 4 { expected := 4 }
-        case 5 { expected := 0 }
-        case 6 { expected := 1 }
-        case 7 { expected := 2 }
+        with 0 { expected := 0 }
+        with 1 { expected := 1 }
+        with 2 { expected := 2 }
+        with 3 { expected := 3 }
+        with 4 { expected := 4 }
+        with 5 { expected := 0 }
+        with 6 { expected := 1 }
+        with 7 { expected := 2 }
     }
 }

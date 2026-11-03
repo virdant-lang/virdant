@@ -52,19 +52,19 @@ mod RegisterFile {
     incoming read_addr : Word[1]
 
     //> Value of the slot selected by `read_addr`.
-    outgoing read_data : Word[8] {
+    outgoing read_data : Word[8] dependson read_addr {
         it := match read_addr {
-            case 0 => slot0
-            case 1 => slot1
+            with 0 => slot0
+            with 1 => slot1
         }
     }
 
     //> Register 0, written when the write port selects slot 0.
     reg slot0 : Word[8] on clock {
         initial it <= 0
-        when {
-            case write_en match write_addr {
-                case 0 {
+        if {
+            when write_en match write_addr {
+                with 0 {
                     it <= write_data
                 }
             }
@@ -74,9 +74,9 @@ mod RegisterFile {
     //> Register 1, written when the write port selects slot 1.
     reg slot1 : Word[8] on clock {
         initial it <= 0
-        when {
-            case write_en match write_addr {
-                case 1 {
+        if {
+            when write_en match write_addr {
+                with 1 {
                     it <= write_data
                 }
             }
@@ -92,8 +92,8 @@ pub mod RegisterFileTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -110,14 +110,14 @@ pub mod RegisterFileTest for virt::Virt {
     reg phase : Phase on clock {
         initial it <= @Warm()
         it <= match it : Phase {
-            case @Warm() => mux(warmup == 3, @Write0(), @Warm())
-            case @Write0() => @Check0()
-            case @Check0() => @Write1()
-            case @Write1() => @Check1()
-            case @Check1() => @Recheck0()
-            case @Recheck0() => @Recheck1()
-            case @Recheck1() => @Finish()
-            case @Finish() => @Finish()
+            with @Warm() => mux(warmup == 3, @Write0(), @Warm())
+            with @Write0() => @Check0()
+            with @Check0() => @Write1()
+            with @Write1() => @Check1()
+            with @Check1() => @Recheck0()
+            with @Recheck0() => @Recheck1()
+            with @Recheck1() => @Finish()
+            with @Finish() => @Finish()
         }
     }
 
@@ -126,8 +126,8 @@ pub mod RegisterFileTest for virt::Virt {
     //> flushing any garbage committed on the first clock edge.
     reg warmup : Word[2] on clock {
         initial it <= 0
-        when {
-            case warmup != 3 {
+        if {
+            when warmup != 3 {
                 it <= it + 1
             }
         }
@@ -137,8 +137,8 @@ pub mod RegisterFileTest for virt::Virt {
     //> each check folds its verdict in on its check cycle.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && rf.read_data == expected
             }
         }
@@ -148,8 +148,8 @@ pub mod RegisterFileTest for virt::Virt {
     //> sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case is_finishing {
+        if {
+            when is_finishing {
                 it <= true
             }
         }
@@ -159,10 +159,10 @@ pub mod RegisterFileTest for virt::Virt {
     //> `expected`.
     wire checking : Bit {
         it := match phase {
-            case @Check0() => true
-            case @Check1() => true
-            case @Recheck0() => true
-            case @Recheck1() => true
+            with @Check0() => true
+            with @Check1() => true
+            with @Recheck0() => true
+            with @Recheck1() => true
             else => false
         }
     }
@@ -170,7 +170,7 @@ pub mod RegisterFileTest for virt::Virt {
     //> High while the harness is parked in `Finish()`.
     wire is_finishing : Bit {
         it := match phase {
-            case @Finish() => true
+            with @Finish() => true
             else => false
         }
     }
@@ -179,9 +179,9 @@ pub mod RegisterFileTest for virt::Virt {
     //> register under test.
     wire write_en : Bit {
         it := match phase {
-            case @Warm() => true
-            case @Write0() => true
-            case @Write1() => true
+            with @Warm() => true
+            with @Write0() => true
+            with @Write1() => true
             else => false
         }
     }
@@ -190,9 +190,9 @@ pub mod RegisterFileTest for virt::Virt {
     //> slot under test.
     wire write_addr : Word[1] {
         it := match phase {
-            case @Warm() => warmup[1..0]
-            case @Write0() => 0
-            case @Write1() => 1
+            with @Warm() => warmup[1..0]
+            with @Write0() => 0
+            with @Write1() => 1
             else => 0
         }
     }
@@ -200,9 +200,9 @@ pub mod RegisterFileTest for virt::Virt {
     //> Write-port data: zeros during warm-up, then the test pattern.
     wire write_data : Word[8] {
         it := match phase {
-            case @Warm() => 0
-            case @Write0() => 165
-            case @Write1() => 60
+            with @Warm() => 0
+            with @Write0() => 165
+            with @Write1() => 60
             else => 0
         }
     }
@@ -210,8 +210,8 @@ pub mod RegisterFileTest for virt::Virt {
     //> Read mux slot select: the slot being checked, else slot 0.
     wire read_addr : Word[1] {
         it := match phase {
-            case @Check1() => 1
-            case @Recheck1() => 1
+            with @Check1() => 1
+            with @Recheck1() => 1
             else => 0
         }
     }
@@ -220,10 +220,10 @@ pub mod RegisterFileTest for virt::Virt {
     //> register 0 and `60` for register 1.
     wire expected : Word[8] {
         it := match phase {
-            case @Check0() => 165
-            case @Check1() => 60
-            case @Recheck0() => 165
-            case @Recheck1() => 60
+            with @Check0() => 165
+            with @Check1() => 60
+            with @Recheck0() => 165
+            with @Recheck1() => 60
             else => 0
         }
     }

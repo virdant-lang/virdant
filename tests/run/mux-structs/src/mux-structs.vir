@@ -23,8 +23,8 @@ pub mod MuxStructsTest for virt::Virt {
     //> check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case cycle == 3 => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when cycle == 3 => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }

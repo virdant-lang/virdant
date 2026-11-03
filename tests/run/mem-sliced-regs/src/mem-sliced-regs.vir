@@ -25,20 +25,20 @@ mod MemSlicedRegs {
     incoming write : Bit
 
     //> Current contents of the addressed slot.
-    outgoing rdata : Word[8] {
+    outgoing rdata : Word[8] dependson addr {
         it := match addr {
-            case 0 => slot0
-            case 1 => slot1
-            case 2 => slot2
-            case 3 => slot3
+            with 0 => slot0
+            with 1 => slot1
+            with 2 => slot2
+            with 3 => slot3
         }
     }
 
     reg slot0 : Word[8] on clock {
         initial it <= 0
-        when {
-            case write match addr {
-                case 0 {
+        if {
+            when write match addr {
+                with 0 {
                     it <= wdata
                 }
             }
@@ -47,9 +47,9 @@ mod MemSlicedRegs {
 
     reg slot1 : Word[8] on clock {
         initial it <= 0
-        when {
-            case write match addr {
-                case 1 {
+        if {
+            when write match addr {
+                with 1 {
                     it <= wdata
                 }
             }
@@ -58,9 +58,9 @@ mod MemSlicedRegs {
 
     reg slot2 : Word[8] on clock {
         initial it <= 0
-        when {
-            case write match addr {
-                case 2 {
+        if {
+            when write match addr {
+                with 2 {
                     it <= wdata
                 }
             }
@@ -69,9 +69,9 @@ mod MemSlicedRegs {
 
     reg slot3 : Word[8] on clock {
         initial it <= 0
-        when {
-            case write match addr {
-                case 3 {
+        if {
+            when write match addr {
+                with 3 {
                     it <= wdata
                 }
             }
@@ -87,8 +87,8 @@ pub mod MemSlicedRegsTest for virt::Virt {
     //> readback mismatched.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -106,8 +106,8 @@ pub mod MemSlicedRegsTest for virt::Virt {
     //> `!step[0]`.
     reg step : Word[4] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -117,8 +117,8 @@ pub mod MemSlicedRegsTest for virt::Virt {
     //> each read phase folds its verdict in.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case reading {
+        if {
+            when reading {
                 it <= it && mem.rdata == value
             }
         }
@@ -128,8 +128,8 @@ pub mod MemSlicedRegsTest for virt::Virt {
     //> the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case step == 7 {
+        if {
+            when step == 7 {
                 it <= true
             }
         }
@@ -155,10 +155,10 @@ pub mod MemSlicedRegsTest for virt::Virt {
     //> the match is exhaustive.
     wire value : Word[8] {
         it := match slot {
-            case 0 => 10
-            case 1 => 171
-            case 2 => 85
-            case 3 => 255
+            with 0 => 10
+            with 1 => 171
+            with 2 => 85
+            with 3 => 255
         }
     }
 }

@@ -22,12 +22,12 @@ mod WordEqNe {
     incoming y : Word[8]
 
     //> `x == y`.
-    outgoing eq : Bit {
+    outgoing eq : Bit dependson x, y {
         it := x == y
     }
 
     //> `x != y`.
-    outgoing ne : Bit {
+    outgoing ne : Bit dependson x, y {
         it := x != y
     }
 }
@@ -40,8 +40,8 @@ pub mod WordEqNeTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -54,8 +54,8 @@ pub mod WordEqNeTest for virt::Virt {
     //> Index of the vector under test, 0 through 11.
     reg index : Word[4] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -72,8 +72,8 @@ pub mod WordEqNeTest for virt::Virt {
     //> exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 11 {
+        if {
+            when index == 11 {
                 it <= true
             }
         }
@@ -93,19 +93,19 @@ pub mod WordEqNeTest for virt::Virt {
     // are harmless.
     match index {
         // Equal pairs: 0 vs 0, mid vs mid, max vs max.
-        case 0 {
+        with 0 {
             vec_x := 0
             vec_y := 0
             expected_eq := true
             expected_ne := false
         }
-        case 1 {
+        with 1 {
             vec_x := 42
             vec_y := 42
             expected_eq := true
             expected_ne := false
         }
-        case 2 {
+        with 2 {
             vec_x := 255
             vec_y := 255
             expected_eq := true
@@ -113,60 +113,60 @@ pub mod WordEqNeTest for virt::Virt {
         }
         // Equal values spelled differently: binary vs decimal, hex
         // vs decimal.
-        case 3 {
+        with 3 {
             vec_x := 0b0000_1010
             vec_y := 10
             expected_eq := true
             expected_ne := false
         }
-        case 4 {
+        with 4 {
             vec_x := 0xfe
             vec_y := 254
             expected_eq := true
             expected_ne := false
         }
         // Unequal extremes, both orders.
-        case 5 {
+        with 5 {
             vec_x := 0
             vec_y := 255
             expected_eq := false
             expected_ne := true
         }
-        case 6 {
+        with 6 {
             vec_x := 255
             vec_y := 0
             expected_eq := false
             expected_ne := true
         }
         // Adjacent values.
-        case 7 {
+        with 7 {
             vec_x := 42
             vec_y := 43
             expected_eq := false
             expected_ne := true
         }
         // Values differing only around the MSB.
-        case 8 {
+        with 8 {
             vec_x := 128
             vec_y := 127
             expected_eq := false
             expected_ne := true
         }
         // Single-bit differences.
-        case 9 {
+        with 9 {
             vec_x := 0b1000
             vec_y := 0b0001
             expected_eq := false
             expected_ne := true
         }
         // Byte-swapped hex values.
-        case 10 {
+        with 10 {
             vec_x := 0xa5
             vec_y := 0x5a
             expected_eq := false
             expected_ne := true
         }
-        case 11 {
+        with 11 {
             vec_x := 200
             vec_y := 201
             expected_eq := false

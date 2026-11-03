@@ -31,8 +31,8 @@ pub mod LetInWhenArmTest for virt::Virt {
     //> driving `a` from its own binding.
     wire a : Bit
 
-    when {
-        case sel {
+    if {
+        when sel {
             let x = true {
                 a := x
             }
@@ -49,8 +49,8 @@ pub mod LetInWhenArmTest for virt::Virt {
     //> rebinds `hi` alone to a different value.
     wire b : Word[2]
 
-    when {
-        case sel {
+    if {
+        when sel {
             let hi = 3w2,
                 lo = 1w2 {
                 b := hi - lo

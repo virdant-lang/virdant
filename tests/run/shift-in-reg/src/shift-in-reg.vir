@@ -43,8 +43,8 @@ pub mod ShiftInRegTest for virt::Virt {
     //> expected bit stream.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -76,8 +76,8 @@ pub mod ShiftInRegTest for virt::Virt {
     //> so that the exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 30 {
+        if {
+            when index == 30 {
                 it <= true
             }
         }
@@ -99,150 +99,150 @@ pub mod ShiftInRegTest for virt::Virt {
     // stream slides out of the top.
     match index {
         // Idle warm-up: serial low, no checks.
-        case 0 {
+        with 0 {
             serial_in := false
             expected := dontcare
         }
-        case 1 {
+        with 1 {
             serial_in := false
             expected := dontcare
         }
-        case 2 {
+        with 2 {
             serial_in := false
             expected := dontcare
         }
-        case 3 {
+        with 3 {
             serial_in := false
             expected := dontcare
         }
-        case 4 {
+        with 4 {
             serial_in := false
             expected := dontcare
         }
-        case 5 {
+        with 5 {
             serial_in := false
             expected := dontcare
         }
-        case 6 {
+        with 6 {
             serial_in := false
             expected := dontcare
         }
-        case 7 {
+        with 7 {
             serial_in := false
             expected := dontcare
         }
-        case 8 {
+        with 8 {
             serial_in := false
             expected := dontcare
         }
-        case 9 {
+        with 9 {
             serial_in := false
             expected := dontcare
         }
         // Pattern bit 0 (1) absorbed at the edge ending this cycle.
-        case 10 {
+        with 10 {
             serial_in := true
             expected := dontcare
         }
         // Register now holds 0b00000001.
-        case 11 {
+        with 11 {
             serial_in := true
             expected := 0x01
         }
         // Pattern bit 1 (1) absorbed: 0b00000011.
-        case 12 {
+        with 12 {
             serial_in := false
             expected := 0x03
         }
         // Pattern bit 2 (0) absorbed: 0b00000110.
-        case 13 {
+        with 13 {
             serial_in := true
             expected := 0x06
         }
         // Pattern bit 3 (1) absorbed: 0b00001101.
-        case 14 {
+        with 14 {
             serial_in := false
             expected := 0x0d
         }
         // Pattern bit 4 (0) absorbed: 0b00011010.
-        case 15 {
+        with 15 {
             serial_in := false
             expected := 0x1a
         }
         // Pattern bit 5 (0) absorbed: 0b00110100.
-        case 16 {
+        with 16 {
             serial_in := true
             expected := 0x34
         }
         // Pattern bit 6 (1) absorbed: 0b01101001.
-        case 17 {
+        with 17 {
             serial_in := false
             expected := 0x69
         }
         // Pattern bit 7 (0) absorbed: 0b11010010.
-        case 18 {
+        with 18 {
             serial_in := true
             expected := 0xd2
         }
         // Pattern bit 8 (1) absorbed: 0b10100101 (bit 7 of the first
         // byte has slid off the top).
-        case 19 {
+        with 19 {
             serial_in := false
             expected := 0xa5
         }
         // Pattern bit 9 (0) absorbed: 0b01001010.
-        case 20 {
+        with 20 {
             serial_in := true
             expected := 0x4a
         }
         // Pattern bit 10 (1) absorbed: 0b10010101.
-        case 21 {
+        with 21 {
             serial_in := true
             expected := 0x95
         }
         // Pattern bit 11 (1) absorbed: 0b00101011.
-        case 22 {
+        with 22 {
             serial_in := false
             expected := 0x2b
         }
         // Pattern bit 12 (0) absorbed: 0b01010110.
-        case 23 {
+        with 23 {
             serial_in := false
             expected := 0x56
         }
         // Pattern bit 13 (0) absorbed: 0b10101100.
-        case 24 {
+        with 24 {
             serial_in := false
             expected := 0xac
         }
         // Pattern bit 14 (0) absorbed: 0b01011000.
-        case 25 {
+        with 25 {
             serial_in := true
             expected := 0x58
         }
         // Pattern bit 15 (1) absorbed: 0b10110001.
-        case 26 {
+        with 26 {
             serial_in := false
             expected := 0xb1
         }
         // Flush: serial low, stream slides out of the top.
-        case 27 {
+        with 27 {
             serial_in := false
             expected := 0x62
         }
-        case 28 {
+        with 28 {
             serial_in := false
             expected := 0xc4
         }
-        case 29 {
+        with 29 {
             serial_in := false
             expected := 0x88
         }
-        case 30 {
+        with 30 {
             serial_in := false
             expected := 0x10
         }
-        case 31 {
+        with 31 {
             serial_in := false
             expected := dontcare
         }

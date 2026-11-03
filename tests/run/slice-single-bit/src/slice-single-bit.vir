@@ -21,8 +21,8 @@ pub mod SliceSingleBitTest for virt::Virt {
     //> `@Valid(0)` if every slice check passed; `@Valid(1)` if any
     //> check failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -39,8 +39,8 @@ pub mod SliceSingleBitTest for virt::Virt {
     reg x : Word[4] on clock {
         initial it <= 0b0100
         it <= match next {
-            case 0 => 0b0100
-            case 1 => 0b1011
+            with 0 => 0b0100
+            with 1 => 0b1011
         }
     }
 
@@ -78,8 +78,8 @@ pub mod SliceSingleBitTest for virt::Virt {
     //> Truth-table row under test, 0 or 1.
     reg index : Word[1] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= next
             }
         }
@@ -89,8 +89,8 @@ pub mod SliceSingleBitTest for virt::Virt {
     //> the final fold into `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 1 {
+        if {
+            when index == 1 {
                 it <= true
             }
         }
@@ -100,18 +100,18 @@ pub mod SliceSingleBitTest for virt::Virt {
     //> before `finished` folds its verdict in.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it && ok
             }
         }
     }
 
     match index {
-        case 0 {
+        with 0 {
             exp := 1w1
         }
-        case 1 {
+        with 1 {
             exp := 0w1
         }
     }

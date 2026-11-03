@@ -30,15 +30,15 @@ mod NestedWhen {
 
     //> Value from a `when` nested in both a `case` arm and the `else`
     //> arm of an outer `when`.
-    outgoing nested : Word[8] {
-        it := when {
-            case a => when {
-                case b => 0xa1
+    outgoing nested : Word[8] dependson a, b {
+        it := if {
+            when a => if {
+                when b => 0xa1
                 else => 0xa2
             }
-            case b => 0xa3
-            else => when {
-                case !b => 0xa4
+            when b => 0xa3
+            else => if {
+                when !b => 0xa4
                 else => 0xa5
             }
         }
@@ -46,10 +46,10 @@ mod NestedWhen {
 
     //> Value from a `when` nested inside an arm whose outer condition
     //> (`a || b`) overlaps the inner one (`a && b`).
-    outgoing overlap : Word[8] {
-        it := when {
-            case a || b => when {
-                case a && b => 0xb1
+    outgoing overlap : Word[8] dependson a, b {
+        it := if {
+            when a || b => if {
+                when a && b => 0xb1
                 else => 0xb2
             }
             else => 0xb3
@@ -65,8 +65,8 @@ pub mod WhenNestedTest for virt::Virt {
     //> check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -80,8 +80,8 @@ pub mod WhenNestedTest for virt::Virt {
     //> wrapping back to 0.
     reg sel : Word[2] on clock {
         initial it <= 0
-        it <= when {
-            case it == 3 => 0
+        it <= if {
+            when it == 3 => 0
             else => it + 1
         }
     }
@@ -97,8 +97,8 @@ pub mod WhenNestedTest for virt::Virt {
     //> exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case sel == 3 {
+        if {
+            when sel == 3 {
                 it <= true
             }
         }
@@ -111,23 +111,23 @@ pub mod WhenNestedTest for virt::Virt {
     // `Word[2]`, so the match is exhaustive.
     match sel {
         // a=0, b=0: outer `else`, inner `case !b` wins.
-        case 0 {
+        with 0 {
             expected_nested := 0xa4
             expected_overlap := 0xb3
         }
         // a=0, b=1: outer `case b` wins before `case a` is reached.
-        case 1 {
+        with 1 {
             expected_nested := 0xa3
             expected_overlap := 0xb2
         }
         // a=1, b=0: outer `case a`, inner `else`.
-        case 2 {
+        with 2 {
             expected_nested := 0xa2
             expected_overlap := 0xb2
         }
         // a=1, b=1: outer `case a`, inner `case b`; inner `a && b`
         // wins in `overlap`.
-        case 3 {
+        with 3 {
             expected_nested := 0xa1
             expected_overlap := 0xb1
         }

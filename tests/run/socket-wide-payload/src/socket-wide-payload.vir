@@ -49,8 +49,8 @@ pub mod SocketWideTest for virt::Virt {
     //> `@Valid(0)` after every vector checked out; `@Valid(1)` if any
     //> check failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -65,8 +65,8 @@ pub mod SocketWideTest for virt::Virt {
     //> Index of the vector under test, 0 through 7.
     reg index : Word[4] on clock {
         initial it <= 0
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it + 1
             }
         }
@@ -82,8 +82,8 @@ pub mod SocketWideTest for virt::Virt {
     //> folds its verdict in on the cycle its vector is on the wire.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && echo.busif.rsp == vec
             }
         }
@@ -93,8 +93,8 @@ pub mod SocketWideTest for virt::Virt {
     //> code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 8 {
+        if {
+            when index == 8 {
                 it <= true
             }
         }
@@ -107,28 +107,28 @@ pub mod SocketWideTest for virt::Virt {
     wire vec : Word[32]
 
     match index {
-        case 0 {
+        with 0 {
             vec := 0x0000_0001w32
         }
-        case 1 {
+        with 1 {
             vec := 0x8000_0000w32
         }
-        case 2 {
+        with 2 {
             vec := 0x7fff_ffffw32
         }
-        case 3 {
+        with 3 {
             vec := 0xffff_ffffw32
         }
-        case 4 {
+        with 4 {
             vec := 0xdead_beefw32
         }
-        case 5 {
+        with 5 {
             vec := 0x1234_5678w32
         }
-        case 6 {
+        with 6 {
             vec := 0xa5a5_a5a5w32
         }
-        case 7 {
+        with 7 {
             vec := 0x0000_ffffw32
         }
         else {

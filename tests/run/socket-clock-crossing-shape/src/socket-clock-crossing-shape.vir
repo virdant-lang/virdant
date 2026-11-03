@@ -84,8 +84,8 @@ mod Client {
     //> differ and the delay checks are decisive.
     reg stim : Word[8] on clock {
         initial it <= 0
-        when {
-            case enabled {
+        if {
+            when enabled {
                 it <= it + 1w8
             }
         }
@@ -168,8 +168,8 @@ pub mod SocketClockTest for virt::Virt {
     //> check passed; `@Valid(1)` if any check failed.  While
     //> `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case cli.fin => @Valid(mux(cli.ok, 0, 1))
+        it := if {
+            when cli.fin => @Valid(mux(cli.ok, 0, 1))
             else => @Invalid()
         }
     }

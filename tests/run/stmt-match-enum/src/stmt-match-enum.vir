@@ -27,8 +27,8 @@ pub mod StmtMatchEnumTest for virt::Virt {
     //> check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -38,23 +38,23 @@ pub mod StmtMatchEnumTest for virt::Virt {
     reg phase : Phase {
         initial it <= #Alpha
         it <= match it : Phase {
-            case #Alpha => #Beta
-            case #Beta  => #Gamma
-            case #Gamma => #Alpha
+            with #Alpha => #Beta
+            with #Beta  => #Gamma
+            with #Gamma => #Alpha
         }
     }
 
     // Statement-level `match`: each arm drives only its own
     // register(s); the other registers hold.
     match phase {
-        case #Alpha {
+        with #Alpha {
             alpha_count <= alpha_count + 1
         }
-        case #Beta {
+        with #Beta {
             beta_count <= beta_count + 1
             beta_note <= beta_note + 2
         }
-        case #Gamma {
+        with #Gamma {
             gamma_count <= gamma_count + 1
         }
     }
@@ -104,8 +104,8 @@ pub mod StmtMatchEnumTest for virt::Virt {
     //> that ends the `done` cycle.
     reg all_ok : Bit {
         initial it <= true
-        when {
-            case done {
+        if {
+            when done {
                 it <= it && checks_ok
             }
         }
@@ -115,8 +115,8 @@ pub mod StmtMatchEnumTest for virt::Virt {
     //> the exit code sees the result.
     reg finished : Bit {
         initial it <= false
-        when {
-            case done {
+        if {
+            when done {
                 it <= true
             }
         }

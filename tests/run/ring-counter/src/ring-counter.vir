@@ -31,11 +31,11 @@ mod RingCounter {
 
     reg bits : Word[4] on clock {
         initial it <= 0b0001
-        when {
-            case load {
+        if {
+            when load {
                 it <= 0b0001
             }
-            case en {
+            when en {
                 it <= word(it[2], it[1], it[0], it[3])
             }
         }
@@ -52,8 +52,8 @@ pub mod RingCounterTest for virt::Virt {
     //> `@Valid(1)` if any check failed.  While `@Invalid()`, the
     //> simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -70,8 +70,8 @@ pub mod RingCounterTest for virt::Virt {
     //> check the rotation.
     reg index : Word[4] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -81,8 +81,8 @@ pub mod RingCounterTest for virt::Virt {
     //> checked cycle folds in the verdict for the current state.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && ringcounter.state == expected
             }
         }
@@ -92,8 +92,8 @@ pub mod RingCounterTest for virt::Virt {
     //> the exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 9 {
+        if {
+            when index == 9 {
                 it <= true
             }
         }
@@ -123,19 +123,19 @@ pub mod RingCounterTest for virt::Virt {
     // edges.  Unchecked cycles (warm-up, load, parked) fall into
     // `else`.
     match index {
-        case 5 {
+        with 5 {
             expected := 0b0001
         }
-        case 6 {
+        with 6 {
             expected := 0b0010
         }
-        case 7 {
+        with 7 {
             expected := 0b0100
         }
-        case 8 {
+        with 8 {
             expected := 0b1000
         }
-        case 9 {
+        with 9 {
             expected := 0b0001
         }
         else {

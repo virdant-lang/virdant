@@ -6,7 +6,7 @@
 
 import virt
 
-//> Three-phase lifecycle.  `Wait` and `Run` are listed as `case`
+//> Three-phase lifecycle.  `Wait` and `Run` are listed as `with`
 //> arms; `Done` is left for `else`.  A zero-initialized register
 //> reads as the all-zero pattern, which is no declared variant, and
 //> falls into the `else` arm, which fails the exit code.
@@ -34,8 +34,8 @@ pub mod RegInitialEnumTest for virt::Virt {
     //> effect and exits with code 1.
     outgoing exit : Valid[Word[8]] {
         it := match state {
-            case #Run => @Valid(0)
-            case #Wait => @Invalid()
+            with #Run => @Valid(0)
+            with #Wait => @Invalid()
             else => @Valid(1)
         }
     }

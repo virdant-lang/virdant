@@ -28,8 +28,8 @@ pub mod MatchUnionElseTest for virt::Virt {
     reg state : Op on clock {
         initial it <= @Add(3w4, 5w4)
         it <= match it {
-            case @Add(x, y) => @Xor(x, y)
-            case @Xor(x, y) => @Sub(x, y)
+            with @Add(x, y) => @Xor(x, y)
+            with @Xor(x, y) => @Sub(x, y)
             else => @Add(3w4, 5w4)
         }
     }
@@ -38,12 +38,12 @@ pub mod MatchUnionElseTest for virt::Virt {
     wire via_case : Bit
     wire via_else : Bit
     match state {
-        case @Add(x, y) {
+        with @Add(x, y) {
             result := x + y
             via_case := true
             via_else := false
         }
-        case @Xor(x, y) {
+        with @Xor(x, y) {
             result := x ^ y
             via_case := true
             via_else := false
@@ -60,8 +60,8 @@ pub mod MatchUnionElseTest for virt::Virt {
     //> statement-level `else`.
     wire expected : Word[4] {
         it := match state {
-            case @Add(x, y) => x + y
-            case @Xor(x, y) => x ^ y
+            with @Add(x, y) => x + y
+            with @Xor(x, y) => x ^ y
             else => 0
         }
     }
@@ -69,21 +69,21 @@ pub mod MatchUnionElseTest for virt::Virt {
     //> Which state is current, so each arm can be tracked separately.
     wire on_add : Bit {
         it := match state {
-            case @Add(x, y) => true
+            with @Add(x, y) => true
             else => false
         }
     }
 
     wire on_mul : Bit {
         it := match state {
-            case @Xor(x, y) => true
+            with @Xor(x, y) => true
             else => false
         }
     }
 
     wire on_sub : Bit {
         it := match state {
-            case @Sub(x, y) => true
+            with @Sub(x, y) => true
             else => false
         }
     }
@@ -93,8 +93,8 @@ pub mod MatchUnionElseTest for virt::Virt {
     reg seen : Word[3] on clock {
         initial it <= 0w3
         it <= match state {
-            case @Add(x, y) => seen | 1w3
-            case @Xor(x, y) => seen | 2w3
+            with @Add(x, y) => seen | 1w3
+            with @Xor(x, y) => seen | 2w3
             else => seen | 4w3
         }
     }
@@ -121,9 +121,9 @@ pub mod MatchUnionElseTest for virt::Virt {
     //> was ever observed; `@Valid(1)` on any mismatch; `@Invalid()`
     //> while still waiting.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case failed => @Valid(1)
-            case done => @Valid(0)
+        it := if {
+            when failed => @Valid(1)
+            when done => @Valid(0)
             else => @Invalid()
         }
     }

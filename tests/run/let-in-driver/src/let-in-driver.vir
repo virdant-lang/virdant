@@ -32,10 +32,10 @@ pub mod Top for virt::Virt {
     //> 5) must be 10.  `@Valid(1)` on any mismatch; while
     //> `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case count == 0x6 && twice == 0xa => @Valid(0)
-            case count == 0x6 && twice != 0xa => @Valid(1)
-            case count > 0x6 => @Valid(1)
+        it := if {
+            when count == 0x6 && twice == 0xa => @Valid(0)
+            when count == 0x6 && twice != 0xa => @Valid(1)
+            when count > 0x6 => @Valid(1)
             else => @Invalid()
         }
     }

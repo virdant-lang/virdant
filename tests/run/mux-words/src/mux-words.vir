@@ -18,8 +18,8 @@ pub mod MuxWordsTest for virt::Virt {
     //> if any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -49,8 +49,8 @@ pub mod MuxWordsTest for virt::Virt {
     //> Golden selector: the same choice written as a `when`
     //> expression.  `mux()` must agree with it.
     wire golden : Word[8] {
-        it := when {
-            case cond => hi_word
+        it := if {
+            when cond => hi_word
             else => lo_word
         }
     }
@@ -92,8 +92,8 @@ pub mod MuxWordsTest for virt::Virt {
     //> `all_ok`, so the exit code sees the final verdict.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case cond {
+        if {
+            when cond {
                 it <= true
             }
         }

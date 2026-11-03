@@ -28,8 +28,8 @@ pub mod GenericNested for virt::Virt {
     //> payload nested inside two generic types.
     reg some_reg : Valid[Opt[Word[4]]] on clock {
         initial it <= @Valid(@None())
-        when {
-            case cycle == 0 {
+        if {
+            when cycle == 0 {
                 it <= @Valid(@Some(5))
             }
         }
@@ -39,8 +39,8 @@ pub mod GenericNested for virt::Virt {
     //> outer `@Invalid()` arm of the unwrap chain.
     reg none_reg : Valid[Opt[Word[4]]] on clock {
         initial it <= @Invalid()
-        when {
-            case cycle == 0 {
+        if {
+            when cycle == 0 {
                 it <= @Valid(@None())
             }
         }
@@ -51,12 +51,12 @@ pub mod GenericNested for virt::Virt {
     //> payload `Word[4]`.
     wire some_unwrapped : Word[4] {
         it := match some_reg {
-            case @Valid(opt) =>
+            with @Valid(opt) =>
                 match opt {
-                    case @Some(value) => value
-                    case @None() => 0
+                    with @Some(value) => value
+                    with @None() => 0
                 }
-            case @Invalid() => 15
+            with @Invalid() => 15
         }
     }
 
@@ -65,12 +65,12 @@ pub mod GenericNested for virt::Virt {
     //> asserted separately.
     wire none_unwrapped : Word[4] {
         it := match none_reg {
-            case @Valid(opt) =>
+            with @Valid(opt) =>
                 match opt {
-                    case @Some(value) => value
-                    case @None() => 0
+                    with @Some(value) => value
+                    with @None() => 0
                 }
-            case @Invalid() => 15
+            with @Invalid() => 15
         }
     }
 
@@ -81,7 +81,7 @@ pub mod GenericNested for virt::Virt {
     //> `0`).
     wire checks_ok : Bit {
         it := match cycle {
-            case 0 => some_unwrapped == 0 && none_unwrapped == 15
+            with 0 => some_unwrapped == 0 && none_unwrapped == 15
             else => some_unwrapped == 5 && none_unwrapped == 0
         }
     }
@@ -103,8 +103,8 @@ pub mod GenericNested for virt::Virt {
     //> `@Valid(0)` if every check passed, `@Valid(1)` otherwise;
     //> while `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }

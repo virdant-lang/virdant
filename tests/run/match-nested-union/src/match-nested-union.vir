@@ -38,23 +38,23 @@ pub mod MatchNestedUnionTest for virt::Virt {
     //> `@Invalid()`.
     wire sel_vv42 : Word[2] {
         it := match vv42 : Valid[Valid[Word[8]]] {
-            case @Valid(@Valid(x)) => 1w2
-            case @Valid(@Invalid()) => 2w2
-            case @Invalid() => 3w2
+            with @Valid(@Valid(x)) => 1w2
+            with @Valid(@Invalid()) => 2w2
+            with @Invalid() => 3w2
         }
     }
     wire sel_vi : Word[2] {
         it := match vi : Valid[Valid[Word[8]]] {
-            case @Valid(@Valid(x)) => 1w2
-            case @Valid(@Invalid()) => 2w2
-            case @Invalid() => 3w2
+            with @Valid(@Valid(x)) => 1w2
+            with @Valid(@Invalid()) => 2w2
+            with @Invalid() => 3w2
         }
     }
     wire sel_iv : Word[2] {
         it := match iv : Valid[Valid[Word[8]]] {
-            case @Valid(@Valid(x)) => 1w2
-            case @Valid(@Invalid()) => 2w2
-            case @Invalid() => 3w2
+            with @Valid(@Valid(x)) => 1w2
+            with @Valid(@Invalid()) => 2w2
+            with @Invalid() => 3w2
         }
     }
 
@@ -63,16 +63,16 @@ pub mod MatchNestedUnionTest for virt::Virt {
     //> not be confused with `@Invalid()`).
     wire vv42_bind : Bit {
         it := match vv42 : Valid[Valid[Word[8]]] {
-            case @Valid(@Valid(x)) => x == 42w8
-            case @Valid(@Invalid()) => false
-            case @Invalid() => false
+            with @Valid(@Valid(x)) => x == 42w8
+            with @Valid(@Invalid()) => false
+            with @Invalid() => false
         }
     }
     wire vv0_bind : Bit {
         it := match vv0 : Valid[Valid[Word[8]]] {
-            case @Valid(@Valid(x)) => x == 0w8
-            case @Valid(@Invalid()) => false
-            case @Invalid() => false
+            with @Valid(@Valid(x)) => x == 0w8
+            with @Valid(@Invalid()) => false
+            with @Invalid() => false
         }
     }
 
@@ -80,9 +80,9 @@ pub mod MatchNestedUnionTest for virt::Virt {
     //> itself.
     wire extracted : Word[8] {
         it := match vv42 : Valid[Valid[Word[8]]] {
-            case @Valid(@Valid(x)) => x
-            case @Valid(@Invalid()) => 0w8
-            case @Invalid() => 0w8
+            with @Valid(@Valid(x)) => x
+            with @Valid(@Invalid()) => 0w8
+            with @Invalid() => 0w8
         }
     }
 
@@ -92,16 +92,16 @@ pub mod MatchNestedUnionTest for virt::Virt {
     //> must not fire either `@Valid(...)` arm.
     wire vi_sneak : Bit {
         it := match vi : Valid[Valid[Word[8]]] {
-            case @Valid(@Valid(x)) => true
-            case @Valid(@Invalid()) => false
-            case @Invalid() => false
+            with @Valid(@Valid(x)) => true
+            with @Valid(@Invalid()) => false
+            with @Invalid() => false
         }
     }
     wire iv_sneak : Bit {
         it := match iv : Valid[Valid[Word[8]]] {
-            case @Valid(@Valid(x)) => true
-            case @Valid(@Invalid()) => false
-            case @Invalid() => false
+            with @Valid(@Valid(x)) => true
+            with @Valid(@Invalid()) => false
+            with @Invalid() => false
         }
     }
 
@@ -115,7 +115,7 @@ pub mod MatchNestedUnionTest for virt::Virt {
         it := word(sel_vv42 != 1w2, !vv42_bind, !vv0_bind, sel_vi != 2w2,
                     extracted != 42w8, vi_sneak, iv_sneak,
                     match vi : Valid[Valid[Word[8]]] {
-                        case @Invalid() => true
+                        with @Invalid() => true
                         else => false
                     })
     }
@@ -123,8 +123,8 @@ pub mod MatchNestedUnionTest for virt::Virt {
     //> `@Valid(0)` when every check passed; `@Valid(fail_bits)`
     //> otherwise.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case fail_bits == 0 => @Valid(0)
+        it := if {
+            when fail_bits == 0 => @Valid(0)
             else => @Valid(fail_bits)
         }
     }

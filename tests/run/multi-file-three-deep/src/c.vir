@@ -15,8 +15,8 @@ pub mod Counter {
 
     reg count : Word[8] on clock {
         initial it <= 0
-        when {
-            case load {
+        if {
+            when load {
                 it <= start
             }
             else {

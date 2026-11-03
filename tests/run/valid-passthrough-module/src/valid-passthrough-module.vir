@@ -19,7 +19,7 @@ mod Passthrough {
     incoming inp : Valid[Word[8]]
 
     //> Forwards `inp` combinationally.
-    outgoing outp : Valid[Word[8]] {
+    outgoing outp : Valid[Word[8]] dependson inp {
         it := inp
     }
 }
@@ -32,8 +32,8 @@ pub mod ValidPassthroughTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -45,8 +45,8 @@ pub mod ValidPassthroughTest for virt::Virt {
     //> Vector driven into the passthrough this cycle: `@Valid(payload)`
     //> on even `index`, `@Invalid()` on odd `index`.
     wire d : Valid[Word[8]] {
-        it := when {
-            case drive_valid => @Valid(vec)
+        it := if {
+            when drive_valid => @Valid(vec)
             else => @Invalid()
         }
     }
@@ -63,19 +63,19 @@ pub mod ValidPassthroughTest for virt::Virt {
     // Test-vector table: even indices drive `@Valid` payloads (42 and
     // 255), odd indices drive `@Invalid()` gaps.
     match index {
-        case 0 {
+        with 0 {
             vec := 42
             drive_valid := true
         }
-        case 1 {
+        with 1 {
             vec := 0
             drive_valid := false
         }
-        case 2 {
+        with 2 {
             vec := 255
             drive_valid := true
         }
-        case 3 {
+        with 3 {
             vec := 0
             drive_valid := false
         }
@@ -84,8 +84,8 @@ pub mod ValidPassthroughTest for virt::Virt {
     //> Validity flag on the far side of the module boundary.
     wire out_valid : Bit {
         it := match passthrough.outp {
-            case @Valid(dontcare) => true
-            case @Invalid() => false
+            with @Valid(dontcare) => true
+            with @Invalid() => false
         }
     }
 
@@ -93,8 +93,8 @@ pub mod ValidPassthroughTest for virt::Virt {
     //> forwarded value is `@Invalid()`.
     wire out_payload : Word[8] {
         it := match passthrough.outp {
-            case @Valid(x) => x
-            case @Invalid() => 0
+            with @Valid(x) => x
+            with @Invalid() => 0
         }
     }
 
@@ -102,15 +102,15 @@ pub mod ValidPassthroughTest for virt::Virt {
     //> applied to the driven vector.
     wire in_valid : Bit {
         it := match d {
-            case @Valid(dontcare) => true
-            case @Invalid() => false
+            with @Valid(dontcare) => true
+            with @Invalid() => false
         }
     }
 
     wire in_payload : Word[8] {
         it := match d {
-            case @Valid(x) => x
-            case @Invalid() => 0
+            with @Valid(x) => x
+            with @Invalid() => 0
         }
     }
 
@@ -132,8 +132,8 @@ pub mod ValidPassthroughTest for virt::Virt {
     //> code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 3 {
+        if {
+            when index == 3 {
                 it <= true
             }
         }

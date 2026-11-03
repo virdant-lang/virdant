@@ -14,7 +14,7 @@ mod Inc8 {
     incoming a : Word[8]
 
     //> `a + 1`.
-    outgoing sum : Word[8] {
+    outgoing sum : Word[8] dependson a {
         it := a + 1
     }
 }

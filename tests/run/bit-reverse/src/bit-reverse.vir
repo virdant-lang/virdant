@@ -13,7 +13,7 @@ mod BitReverse {
     incoming x : Word[8]
 
     //> Bit-reversed `x`.
-    outgoing reversed : Word[8] {
+    outgoing reversed : Word[8] dependson x {
         it := word(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7])
     }
 }

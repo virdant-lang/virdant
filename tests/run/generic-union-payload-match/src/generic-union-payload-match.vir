@@ -29,11 +29,11 @@ pub mod GenericUnionMatchTest for virt::Virt {
     //> same generic union instantiation.
     reg opt : Opt[Word[8]] on clock {
         initial it <= @None()
-        when {
-            case cycle == 0 {
+        if {
+            when cycle == 0 {
                 it <= @Some(170w8)
             }
-            case cycle == 1 {
+            when cycle == 1 {
                 it <= @Some(204w8)
             }
         }
@@ -43,8 +43,8 @@ pub mod GenericUnionMatchTest for virt::Virt {
     //> below is the `Word[8]` carried by `@Some`.
     wire payload : Word[8] {
         it := match opt {
-            case @Some(value) => value
-            case @None() => 0w8
+            with @Some(value) => value
+            with @None() => 0w8
         }
     }
 
@@ -52,8 +52,8 @@ pub mod GenericUnionMatchTest for virt::Virt {
     //> the payload in a pattern.
     wire is_some : Bit {
         it := match opt {
-            case @Some(value) => true
-            case @None() => false
+            with @Some(value) => true
+            with @None() => false
         }
     }
 
@@ -62,8 +62,8 @@ pub mod GenericUnionMatchTest for virt::Virt {
     //> the loaded `@Some` payloads.
     wire expected : Word[8] {
         it := match cycle {
-            case 0 => 0w8
-            case 1 => 170w8
+            with 0 => 0w8
+            with 1 => 170w8
             else => 204w8
         }
     }
@@ -91,8 +91,8 @@ pub mod GenericUnionMatchTest for virt::Virt {
     //> `@Valid(0)` if every check passed, `@Valid(1)` on any
     //> mismatch; `@Invalid()` while still waiting.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }

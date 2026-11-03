@@ -48,8 +48,8 @@ pub mod XPropGuardTest for virt::Virt {
     //> any check failed, including the pre-first-clock check.
     //> While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -69,8 +69,8 @@ pub mod XPropGuardTest for virt::Virt {
     //> Cycle index, advancing each edge until every check has run.
     reg stage : Word[2] on clock {
         initial it <= 0
-        when {
-            case stage < 3 {
+        if {
+            when stage < 3 {
                 it <= stage + 1
             }
         }
@@ -86,8 +86,8 @@ pub mod XPropGuardTest for virt::Virt {
     //> Rises once the final check has been folded into `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case stage == 2 {
+        if {
+            when stage == 2 {
                 it <= true
             }
         }
@@ -101,9 +101,9 @@ pub mod XPropGuardTest for virt::Virt {
     //> the value the `Sampler` sampled at the previous edge.
     wire check_now : Bit {
         it := match stage {
-            case 0 => sampler.out == 0
-            case 1 => sampler.out == 1
-            case 2 => sampler.out == 0
+            with 0 => sampler.out == 0
+            with 1 => sampler.out == 1
+            with 2 => sampler.out == 0
             else => true
         }
     }

@@ -23,7 +23,7 @@ mod EdgeBoth {
     incoming inp : Bit
 
     //> One-cycle pulse on any 0->1 or 1->0 transition of `inp`.
-    outgoing edge : Bit {
+    outgoing edge : Bit dependson inp {
         it := last != inp
     }
 
@@ -42,8 +42,8 @@ pub mod EdgeBothTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -65,8 +65,8 @@ pub mod EdgeBothTest for virt::Virt {
     //> Index of the stimulus step under test, 0 through 15.
     reg index : Word[4] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -76,8 +76,8 @@ pub mod EdgeBothTest for virt::Virt {
     //> before `finished` folds in the verdict for the current step.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it && edge == expected
             }
         }
@@ -87,8 +87,8 @@ pub mod EdgeBothTest for virt::Virt {
     //> exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 15 {
+        if {
+            when index == 15 {
                 it <= true
             }
         }
@@ -104,72 +104,72 @@ pub mod EdgeBothTest for virt::Virt {
 
     match index {
         // Power-on hold at 0.
-        case 0 {
+        with 0 {
             stim := false
             expected := false
         }
-        case 1 {
+        with 1 {
             stim := false
             expected := false
         }
         // Single rising edge, then holds.
-        case 2 {
+        with 2 {
             stim := true
             expected := true
         }
-        case 3 {
+        with 3 {
             stim := true
             expected := false
         }
-        case 4 {
+        with 4 {
             stim := true
             expected := false
         }
         // Falling edge, then hold.
-        case 5 {
+        with 5 {
             stim := false
             expected := true
         }
-        case 6 {
+        with 6 {
             stim := false
             expected := false
         }
         // Rising edge again (repeat of the 0->1 case), then hold.
-        case 7 {
+        with 7 {
             stim := true
             expected := true
         }
-        case 8 {
+        with 8 {
             stim := true
             expected := false
         }
         // Back-to-back alternating edges.
-        case 9 {
+        with 9 {
             stim := false
             expected := true
         }
-        case 10 {
+        with 10 {
             stim := true
             expected := true
         }
-        case 11 {
+        with 11 {
             stim := false
             expected := true
         }
         // Hold, then a final 0->1, hold, and 1->0.
-        case 12 {
+        with 12 {
             stim := false
             expected := false
         }
-        case 13 {
+        with 13 {
             stim := true
             expected := true
         }
-        case 14 {
+        with 14 {
             stim := true
             expected := false
         }
-        case 15 {
+        with 15 {
             stim := false
             expected := true
         }

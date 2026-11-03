@@ -19,7 +19,7 @@ mod Ne {
     incoming y : Word[8]
 
     //> `x != y`.
-    outgoing out : Bit {
+    outgoing out : Bit dependson x, y {
         it := x != y
     }
 }

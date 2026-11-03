@@ -24,8 +24,8 @@ pub mod UnionNullaryTest for virt::Virt {
     reg state : State on clock {
         initial it <= @Idle()
         it <= match it : State {
-            case @Idle() => @Busy()
-            case @Busy() => @Idle()
+            with @Idle() => @Busy()
+            with @Busy() => @Idle()
         }
     }
 
@@ -33,7 +33,7 @@ pub mod UnionNullaryTest for virt::Virt {
     wire on_idle : Bit
     wire on_busy : Bit
     match state {
-        case @Idle() {
+        with @Idle() {
             on_idle := true
             on_busy := false
         }
@@ -47,8 +47,8 @@ pub mod UnionNullaryTest for virt::Virt {
     //> `1` for `@Busy()`.
     wire tag : Word[1] {
         it := match state {
-            case @Idle() => 0w1
-            case @Busy() => 1w1
+            with @Idle() => 0w1
+            with @Busy() => 1w1
         }
     }
 
@@ -68,8 +68,8 @@ pub mod UnionNullaryTest for virt::Virt {
     reg seen : Word[2] on clock {
         initial it <= 0w2
         it <= match state {
-            case @Idle() => it | 1w2
-            case @Busy() => it | 2w2
+            with @Idle() => it | 1w2
+            with @Busy() => it | 2w2
         }
     }
 
@@ -87,9 +87,9 @@ pub mod UnionNullaryTest for virt::Virt {
     //> `@Valid(0)` once both variants round-tripped without mismatch;
     //> `@Valid(1)` on any mismatch; `@Invalid()` while still waiting.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case failed => @Valid(1)
-            case done => @Valid(0)
+        it := if {
+            when failed => @Valid(1)
+            when done => @Valid(0)
             else => @Invalid()
         }
     }

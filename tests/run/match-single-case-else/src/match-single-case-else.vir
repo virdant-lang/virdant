@@ -19,7 +19,7 @@ pub mod Top for virt::Virt {
     reg sel : Arm on clock {
         initial it <= @Left()
         it <= match it {
-            case @Left() => @Right()
+            with @Left() => @Right()
             else => @Left()
         }
     }
@@ -27,7 +27,7 @@ pub mod Top for virt::Virt {
     wire via_case : Bit
     wire via_else : Bit
     match sel {
-        case @Left() {
+        with @Left() {
             via_case := true
             via_else := false
         }
@@ -54,8 +54,8 @@ pub mod Top for virt::Virt {
     //> `@Valid(0)` once both arms have been exercised; `@Valid(1)` if
     //> the arms ever contradict each other; `@Invalid()` while waiting.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case seen_case && seen_else && via_case != via_else => @Valid(mux(ok, 0, 1))
+        it := if {
+            when seen_case && seen_else && via_case != via_else => @Valid(mux(ok, 0, 1))
             else => @Invalid()
         }
     }

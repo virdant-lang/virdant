@@ -26,22 +26,22 @@ mod VariableShift {
     //> and lost) and append `s` zero bits at the bottom.  The slice
     //> `x[8-s..0]` keeps the bottom `8-s` bits; the top slice index is
     //> exclusive.
-    outgoing left : Word[8] {
-        it := when {
-            case s == 0 => x
-            case s == 1 => word(x[7..0], 0w1)
-            case s == 2 => word(x[6..0], 0w2)
+    outgoing left : Word[8] dependson x, s {
+        it := if {
+            when s == 0 => x
+            when s == 1 => word(x[7..0], 0w1)
+            when s == 2 => word(x[6..0], 0w2)
             else => word(x[5..0], 0w3)
         }
     }
 
     //> `x` shifted right by `s`: prepend `s` zero bits at the top and
     //> drop the bottom `s` bits (shifted out and lost).
-    outgoing right : Word[8] {
-        it := when {
-            case s == 0 => x
-            case s == 1 => word(0w1, x[8..1])
-            case s == 2 => word(0w2, x[8..2])
+    outgoing right : Word[8] dependson x, s {
+        it := if {
+            when s == 0 => x
+            when s == 1 => word(0w1, x[8..1])
+            when s == 2 => word(0w2, x[8..2])
             else => word(0w3, x[8..3])
         }
     }
@@ -55,8 +55,8 @@ pub mod ShiftVarWhenTest for virt::Virt {
     //> check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -70,8 +70,8 @@ pub mod ShiftVarWhenTest for virt::Virt {
     //> wrapping back to 0.
     reg amount : Word[2] on clock {
         initial it <= 0
-        it <= when {
-            case it == 3 => 0
+        it <= if {
+            when it == 3 => 0
             else => it + 1
         }
     }
@@ -80,8 +80,8 @@ pub mod ShiftVarWhenTest for virt::Virt {
     //> of the four amounts, so both vectors see every amount.
     reg vec : Bit on clock {
         initial it <= false
-        when {
-            case amount == 3 {
+        if {
+            when amount == 3 {
                 it <= !it
             }
         }
@@ -98,8 +98,8 @@ pub mod ShiftVarWhenTest for virt::Virt {
     //> checked, so that the exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case vec && amount == 3 {
+        if {
+            when vec && amount == 3 {
                 it <= true
             }
         }
@@ -122,42 +122,42 @@ pub mod ShiftVarWhenTest for virt::Virt {
 
     match key {
         // vec 0 (0xb2), amount 0.
-        case 0 {
+        with 0 {
             expected_left := 0xb2
             expected_right := 0xb2
         }
         // vec 0 (0xb2), amount 1.
-        case 1 {
+        with 1 {
             expected_left := 0x64
             expected_right := 0x59
         }
         // vec 0 (0xb2), amount 2.
-        case 2 {
+        with 2 {
             expected_left := 0xc8
             expected_right := 0x2c
         }
         // vec 0 (0xb2), amount 3.
-        case 3 {
+        with 3 {
             expected_left := 0x90
             expected_right := 0x16
         }
         // vec 1 (0xa5), amount 0.
-        case 4 {
+        with 4 {
             expected_left := 0xa5
             expected_right := 0xa5
         }
         // vec 1 (0xa5), amount 1.
-        case 5 {
+        with 5 {
             expected_left := 0x4a
             expected_right := 0x52
         }
         // vec 1 (0xa5), amount 2.
-        case 6 {
+        with 6 {
             expected_left := 0x94
             expected_right := 0x29
         }
         // vec 1 (0xa5), amount 3.
-        case 7 {
+        with 7 {
             expected_left := 0x28
             expected_right := 0x14
         }

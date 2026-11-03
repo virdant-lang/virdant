@@ -64,8 +64,8 @@ mod Requester {
     //> Index of the vector under test, 0 through 15, holding at 15.
     reg index : Word[4] on clock {
         initial it <= 0
-        when {
-            case !last {
+        if {
+            when !last {
                 it <= it + 1w4
             }
         }
@@ -79,8 +79,8 @@ mod Requester {
     //> Latches once every vector has been checked.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case last {
+        if {
+            when last {
                 it <= true
             }
         }
@@ -90,8 +90,8 @@ mod Requester {
     //> `finished` rises.
     reg checks_ok : Bit on clock {
         initial it <= true
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it && ok
             }
         }
@@ -112,52 +112,52 @@ mod Requester {
     // The 16 cases below exactly cover `Word[4]`, so the match is
     // exhaustive.
     match index {
-        case 0 {
+        with 0 {
             vec := 0x00
         }
-        case 1 {
+        with 1 {
             vec := 0xFF
         }
-        case 2 {
+        with 2 {
             vec := 0x5A
         }
-        case 3 {
+        with 3 {
             vec := 0xA5
         }
-        case 4 {
+        with 4 {
             vec := 0x0F
         }
-        case 5 {
+        with 5 {
             vec := 0xF0
         }
-        case 6 {
+        with 6 {
             vec := 0xAA
         }
-        case 7 {
+        with 7 {
             vec := 0x01
         }
-        case 8 {
+        with 8 {
             vec := 0x80
         }
-        case 9 {
+        with 9 {
             vec := 0x7F
         }
-        case 10 {
+        with 10 {
             vec := 0x33
         }
-        case 11 {
+        with 11 {
             vec := 0xCC
         }
-        case 12 {
+        with 12 {
             vec := 0x3C
         }
-        case 13 {
+        with 13 {
             vec := 0xC3
         }
-        case 14 {
+        with 14 {
             vec := 0x96
         }
-        case 15 {
+        with 15 {
             vec := 0x69
         }
     }
@@ -171,8 +171,8 @@ pub mod SocketChainTest for virt::Virt {
     //> if any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case requester.done => @Valid(mux(requester.all_ok, 0, 1))
+        it := if {
+            when requester.done => @Valid(mux(requester.all_ok, 0, 1))
             else => @Invalid()
         }
     }

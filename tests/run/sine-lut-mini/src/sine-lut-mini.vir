@@ -19,19 +19,19 @@ mod SineLut {
     incoming index : Word[2]
 
     //> Sine sample stored at `index`.
-    outgoing sample : Word[8]
+    outgoing sample : Word[8] dependson index
 
     match index {
-        case 0 {
+        with 0 {
             sample := 0
         }
-        case 1 {
+        with 1 {
             sample := 64
         }
-        case 2 {
+        with 2 {
             sample := 128
         }
-        case 3 {
+        with 3 {
             sample := 255
         }
     }
@@ -44,8 +44,8 @@ pub mod SineLutTest for virt::Virt {
     //> `@Valid(0)` after all 4 entries checked out; `@Valid(1)` if any
     //> check failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -66,10 +66,10 @@ pub mod SineLutTest for virt::Virt {
     //> exhaustive.
     wire expected : Word[8] {
         it := match index {
-            case 0 => 0
-            case 1 => 64
-            case 2 => 128
-            case 3 => 255
+            with 0 => 0
+            with 1 => 64
+            with 2 => 128
+            with 3 => 255
         }
     }
 
@@ -84,8 +84,8 @@ pub mod SineLutTest for virt::Virt {
     //> that `finished` stays high.
     reg checked : Word[3] on clock {
         initial it <= 0
-        when {
-            case checked != 4 {
+        if {
+            when checked != 4 {
                 it <= checked + 1
             }
         }

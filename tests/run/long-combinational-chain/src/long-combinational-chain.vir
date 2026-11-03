@@ -20,8 +20,8 @@ pub mod LongChainTest for virt::Virt {
     //> expected values within a cycle; `@Valid(1)` if any stage is
     //> wrong.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case chain_ok => @Valid(0)
+        it := if {
+            when chain_ok => @Valid(0)
             else => @Valid(1)
         }
     }

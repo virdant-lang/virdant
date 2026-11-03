@@ -30,18 +30,18 @@ pub mod WordOfMatchesTest for virt::Virt {
     //> selects `0b110` and `b = 1` selects `0b10`.
     wire sel_a : Word[3] {
         it := match a : Word[2] {
-            case 0 => 0b000
-            case 1 => 0b001
-            case 2 => 0b110
-            case 3 => 0b111
+            with 0 => 0b000
+            with 1 => 0b001
+            with 2 => 0b110
+            with 3 => 0b111
         }
     }
     wire sel_b : Word[2] {
         it := match b : Word[2] {
-            case 0 => 0b00
-            case 1 => 0b10
-            case 2 => 0b11
-            case 3 => 0b01
+            with 0 => 0b00
+            with 1 => 0b10
+            with 2 => 0b11
+            with 3 => 0b01
         }
     }
 
@@ -52,16 +52,16 @@ pub mod WordOfMatchesTest for virt::Virt {
     //> assembled `Word[5]` is `0b11010` (= 26).
     wire assembled : Word[5] {
         it := word(match a : Word[2] {
-                case 0 => 0b000
-                case 1 => 0b001
-                case 2 => 0b110
-                case 3 => 0b111
+                with 0 => 0b000
+                with 1 => 0b001
+                with 2 => 0b110
+                with 3 => 0b111
             },
             match b : Word[2] {
-                case 0 => 0b00
-                case 1 => 0b10
-                case 2 => 0b11
-                case 3 => 0b01
+                with 0 => 0b00
+                with 1 => 0b10
+                with 2 => 0b11
+                with 3 => 0b01
             })
     }
 
@@ -70,16 +70,16 @@ pub mod WordOfMatchesTest for virt::Virt {
     //> impossible under the wrong argument order.
     wire assembled_reversed : Word[5] {
         it := word(match b : Word[2] {
-                case 0 => 0b00
-                case 1 => 0b10
-                case 2 => 0b11
-                case 3 => 0b01
+                with 0 => 0b00
+                with 1 => 0b10
+                with 2 => 0b11
+                with 3 => 0b01
             },
             match a : Word[2] {
-                case 0 => 0b000
-                case 1 => 0b001
-                case 2 => 0b110
-                case 3 => 0b111
+                with 0 => 0b000
+                with 1 => 0b001
+                with 2 => 0b110
+                with 3 => 0b111
             })
     }
 
@@ -97,8 +97,8 @@ pub mod WordOfMatchesTest for virt::Virt {
     //> `@Valid(0)` when every check passed; `@Valid(fail_bits)`
     //> otherwise.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case fail_bits == 0 => @Valid(0)
+        it := if {
+            when fail_bits == 0 => @Valid(0)
             else => @Valid(fail_bits)
         }
     }

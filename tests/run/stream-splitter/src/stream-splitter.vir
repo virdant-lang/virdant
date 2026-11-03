@@ -39,16 +39,16 @@ mod StreamSplitter {
 
     //> Output stream for items whose header bit is `0`.
     client socket out_a of Pipe[Word[7]] {
-        it.data := when {
-            case inp_fires && !route => @Valid(item_data)
+        it.data := if {
+            when inp_fires && !route => @Valid(item_data)
             else => @Invalid()
         }
     }
 
     //> Output stream for items whose header bit is `1`.
     client socket out_b of Pipe[Word[7]] {
-        it.data := when {
-            case inp_fires && route => @Valid(item_data)
+        it.data := if {
+            when inp_fires && route => @Valid(item_data)
             else => @Invalid()
         }
     }
@@ -57,8 +57,8 @@ mod StreamSplitter {
     //> never reaches an output because `inp_fires` is false then).
     wire in_item : Word[8] {
         it := match inp.data {
-            case @Valid(item) => item
-            case @Invalid() => 0
+            with @Valid(item) => item
+            with @Invalid() => 0
         }
     }
 
@@ -76,8 +76,8 @@ mod StreamSplitter {
     //> selected output ready.
     wire inp_fires : Bit {
         it := match inp.data {
-            case @Valid(dontcare) => mux(route, out_b.ready, out_a.ready)
-            case @Invalid() => false
+            with @Valid(dontcare) => mux(route, out_b.ready, out_a.ready)
+            with @Invalid() => false
         }
     }
 }
@@ -90,8 +90,8 @@ pub mod StreamSplitterTest for virt::Virt {
     //> nothing dropped; `@Valid(1)` if any check failed.  While
     //> `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok && counts_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok && counts_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -145,8 +145,8 @@ pub mod StreamSplitterTest for virt::Virt {
     //> Producer payload: item `send_index`, header in the top bit,
     //> payload in the low 7 bits.
     wire in_data : Valid[Word[8]] {
-        it := when {
-            case sending => @Valid(word(send_route, zext(send_index) : Word[7]))
+        it := if {
+            when sending => @Valid(word(send_route, zext(send_index) : Word[7]))
             else => @Invalid()
         }
     }
@@ -161,8 +161,8 @@ pub mod StreamSplitterTest for virt::Virt {
     //> an accepted transfer.
     reg send_index : Word[4] on clock {
         initial it <= 0
-        when {
-            case in_fires {
+        if {
+            when in_fires {
                 it <= it + 1
             }
         }
@@ -171,24 +171,24 @@ pub mod StreamSplitterTest for virt::Virt {
     //> An item is consumed on output `a` this cycle.
     wire fires_a : Bit {
         it := match splitter.out_a.data {
-            case @Valid(dontcare) => true
-            case @Invalid() => false
+            with @Valid(dontcare) => true
+            with @Invalid() => false
         }
     }
 
     //> An item is consumed on output `b` this cycle.
     wire fires_b : Bit {
         it := match splitter.out_b.data {
-            case @Valid(dontcare) => true
-            case @Invalid() => false
+            with @Valid(dontcare) => true
+            with @Invalid() => false
         }
     }
 
     //> Number of items consumed on output `a`, 0 through 4.
     reg cnt_a : Word[3] on clock {
         initial it <= 0
-        when {
-            case fires_a {
+        if {
+            when fires_a {
                 it <= it + 1
             }
         }
@@ -197,8 +197,8 @@ pub mod StreamSplitterTest for virt::Virt {
     //> Number of items consumed on output `b`, 0 through 4.
     reg cnt_b : Word[3] on clock {
         initial it <= 0
-        when {
-            case fires_b {
+        if {
+            when fires_b {
                 it <= it + 1
             }
         }
@@ -208,8 +208,8 @@ pub mod StreamSplitterTest for virt::Virt {
     //> item, so its payload must be `2 * cnt_a`.
     wire recv_ok_a : Bit {
         it := match splitter.out_a.data {
-            case @Valid(data) => data == zext(cnt_a + cnt_a)
-            case @Invalid() => false
+            with @Valid(data) => data == zext(cnt_a + cnt_a)
+            with @Invalid() => false
         }
     }
 
@@ -217,8 +217,8 @@ pub mod StreamSplitterTest for virt::Virt {
     //> item, so its payload must be `2 * cnt_b + 1`.
     wire recv_ok_b : Bit {
         it := match splitter.out_b.data {
-            case @Valid(data) => data == zext(cnt_b + cnt_b + 1)
-            case @Invalid() => false
+            with @Valid(data) => data == zext(cnt_b + cnt_b + 1)
+            with @Invalid() => false
         }
     }
 
@@ -232,14 +232,14 @@ pub mod StreamSplitterTest for virt::Virt {
     //> verdict folds in on the cycle the item is consumed.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case !enabled {
+        if {
+            when !enabled {
                 it <= true
             }
-            case fires_a {
+            when fires_a {
                 it <= it && recv_ok_a
             }
-            case fires_b {
+            when fires_b {
                 it <= it && recv_ok_b
             }
         }

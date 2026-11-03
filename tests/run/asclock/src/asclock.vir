@@ -49,8 +49,8 @@ pub mod AscClockTest for virt::Virt {
     //> `@Valid(0)` when every check passed; `@Valid(1)` if any check
     //> failed or no check ever ran.  `@Invalid()` while running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok && saw_check, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok && saw_check, 0, 1))
             else => @Invalid()
         }
     }
@@ -90,8 +90,8 @@ pub mod AscClockTest for virt::Virt {
     //> folds its verdict in on the settled platform edges.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && dut.count_out == expected
             }
         }
@@ -101,8 +101,8 @@ pub mod AscClockTest for virt::Virt {
     //> pass if the `checking` case never fired.
     reg saw_check : Bit on clock {
         initial it <= false
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= true
             }
         }

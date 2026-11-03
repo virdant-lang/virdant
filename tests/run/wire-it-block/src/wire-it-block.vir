@@ -17,8 +17,8 @@ pub mod WireItBlockTest for virt::Virt {
     //> `@Valid(0)` when every form pair matched; `@Valid(1)` if any
     //> pair diverged.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -55,8 +55,8 @@ pub mod WireItBlockTest for virt::Virt {
 
     //> Driver-block form: a `when` expression.
     wire block_when : Bit {
-        it := when {
-            case true => false
+        it := if {
+            when true => false
             else => true
         }
     }
@@ -64,8 +64,8 @@ pub mod WireItBlockTest for virt::Virt {
     //> Bare form of the same logic.
     wire bare_when : Bit
 
-    bare_when := when {
-        case true => false
+    bare_when := if {
+        when true => false
         else => true
     }
 

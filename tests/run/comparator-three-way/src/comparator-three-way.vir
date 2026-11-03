@@ -22,11 +22,11 @@ mod ThreeWayComparator {
     //> Comparison code: `0` for `x < y`, `1` for `x == y`, and `2`
     //> for `x > y`.  The `else` arm is unreachable for `Word[2]`
     //> operands, since exactly one of the three relations holds.
-    outgoing code : Word[2] {
-        it := when {
-            case x < y => 0
-            case x == y => 1
-            case x > y => 2
+    outgoing code : Word[2] dependson x, y {
+        it := if {
+            when x < y => 0
+            when x == y => 1
+            when x > y => 2
             else => 3
         }
     }
@@ -40,8 +40,8 @@ pub mod ThreeWayComparatorTest for virt::Virt {
     //> if any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -56,8 +56,8 @@ pub mod ThreeWayComparatorTest for virt::Virt {
     //> so the 16 values sweep every combination of 2-bit operands.
     reg index : Word[4] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -74,8 +74,8 @@ pub mod ThreeWayComparatorTest for virt::Virt {
     //> the exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 15 {
+        if {
+            when index == 15 {
                 it <= true
             }
         }
@@ -98,55 +98,55 @@ pub mod ThreeWayComparatorTest for virt::Virt {
 
     match index {
         // x = 0: equal to y = 0, less than every nonzero y.
-        case 0 {
+        with 0 {
             expected := 1
         }
-        case 1 {
+        with 1 {
             expected := 0
         }
-        case 2 {
+        with 2 {
             expected := 0
         }
-        case 3 {
+        with 3 {
             expected := 0
         }
         // x = 1: greater than 0, equal to 1, less than 2 and 3.
-        case 4 {
+        with 4 {
             expected := 2
         }
-        case 5 {
+        with 5 {
             expected := 1
         }
-        case 6 {
+        with 6 {
             expected := 0
         }
-        case 7 {
+        with 7 {
             expected := 0
         }
         // x = 2: greater than 0 and 1, equal to 2, less than 3.
-        case 8 {
+        with 8 {
             expected := 2
         }
-        case 9 {
+        with 9 {
             expected := 2
         }
-        case 10 {
+        with 10 {
             expected := 1
         }
-        case 11 {
+        with 11 {
             expected := 0
         }
         // x = 3: greater than every y except y = 3.
-        case 12 {
+        with 12 {
             expected := 2
         }
-        case 13 {
+        with 13 {
             expected := 2
         }
-        case 14 {
+        with 14 {
             expected := 2
         }
-        case 15 {
+        with 15 {
             expected := 1
         }
     }

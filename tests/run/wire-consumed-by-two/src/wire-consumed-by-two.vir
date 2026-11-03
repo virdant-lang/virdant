@@ -29,7 +29,7 @@ mod Consumers {
     }
 
     //> First consumer: reads `sum` directly.
-    outgoing out_direct : Word[8] {
+    outgoing out_direct : Word[8] dependson a, b {
         it := sum
     }
 
@@ -39,7 +39,7 @@ mod Consumers {
     }
 
     //> Second consumer: reads `sum` through `double`.
-    outgoing out_recombined : Word[8] {
+    outgoing out_recombined : Word[8] dependson a, b {
         it := double - sum
     }
 }
@@ -52,8 +52,8 @@ pub mod WireConsumedTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }

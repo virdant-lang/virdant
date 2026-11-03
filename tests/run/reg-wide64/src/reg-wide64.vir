@@ -31,11 +31,11 @@ mod WideCounter {
 
     reg count : Word[64] on clock {
         initial it <= 0
-        when {
-            case clear {
+        if {
+            when clear {
                 it <= 0
             }
-            case en {
+            when en {
                 it <= it + 0x8000_0000
             }
         }
@@ -52,8 +52,8 @@ pub mod RegWide64Test for virt::Virt {
     //> check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -83,8 +83,8 @@ pub mod RegWide64Test for virt::Virt {
     //> and validating `exit` on the next cycle.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case checking && check_step == 8 {
+        if {
+            when checking && check_step == 8 {
                 it <= true
             }
         }
@@ -94,8 +94,8 @@ pub mod RegWide64Test for virt::Virt {
     //> folds its verdict in on the cycle after its step is applied.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && mux(check_step == 3, mid_ok, final_ok)
             }
         }

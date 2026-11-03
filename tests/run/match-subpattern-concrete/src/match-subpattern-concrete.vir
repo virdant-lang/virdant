@@ -3,7 +3,7 @@
 //!
 //! A `PairState` union carries a `Pair(a : Bit, b : Bit)` variant.
 //! Each candidate value is fed through a `match` whose concrete arm
-//! is `case @Pair(true, false)`: the arm must fire only for the value
+//! is `with @Pair(true, false)`: the arm must fire only for the value
 //! whose payloads are exactly `true` and `false`, and every
 //! Non-matching vectors -- both payloads flipped one at a time or
 //! together, and the payload-free `@Nothing()` -- must fall through to
@@ -48,34 +48,34 @@ pub mod MatchSubpatternConcreteTest for virt::Virt {
     }
 
     //> One verdict per vector: `true` iff the concrete arm
-    //> `case @Pair(true, false)` fired.
+    //> `with @Pair(true, false)` fired.
     wire hit_hit : Bit {
         it := match u_hit : PairState {
-            case @Pair(true, false) => true
+            with @Pair(true, false) => true
             else => false
         }
     }
     wire hit_ff : Bit {
         it := match u_ff : PairState {
-            case @Pair(true, false) => true
+            with @Pair(true, false) => true
             else => false
         }
     }
     wire hit_ft : Bit {
         it := match u_ft : PairState {
-            case @Pair(true, false) => true
+            with @Pair(true, false) => true
             else => false
         }
     }
     wire hit_tt : Bit {
         it := match u_tt : PairState {
-            case @Pair(true, false) => true
+            with @Pair(true, false) => true
             else => false
         }
     }
     wire hit_none : Bit {
         it := match u_none : PairState {
-            case @Pair(true, false) => true
+            with @Pair(true, false) => true
             else => false
         }
     }
@@ -84,13 +84,13 @@ pub mod MatchSubpatternConcreteTest for virt::Virt {
     //> selects `0`.
     wire sel : Word[2] {
         it := match u_hit : PairState {
-            case @Pair(true, false) => 3w2
+            with @Pair(true, false) => 3w2
             else => 0w2
         }
     }
     wire sel_other : Word[2] {
         it := match u_ft : PairState {
-            case @Pair(true, false) => 3w2
+            with @Pair(true, false) => 3w2
             else => 0w2
         }
     }
@@ -108,8 +108,8 @@ pub mod MatchSubpatternConcreteTest for virt::Virt {
     //> `@Valid(0)` when every check passed; `@Valid(fail_bits)`
     //> otherwise.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case fail_bits == 0 => @Valid(0)
+        it := if {
+            when fail_bits == 0 => @Valid(0)
             else => @Valid(fail_bits)
         }
     }

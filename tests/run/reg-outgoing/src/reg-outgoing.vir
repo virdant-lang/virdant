@@ -34,8 +34,8 @@ pub mod RegOutgoingTest for virt::Virt {
     //> `@Valid(0)` after every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -51,8 +51,8 @@ pub mod RegOutgoingTest for virt::Virt {
     //> starts, then saturates there.
     reg warmup : Word[8] on clock {
         initial it <= 0
-        when {
-            case it != 8 {
+        if {
+            when it != 8 {
                 it <= it + 1
             }
         }
@@ -79,8 +79,8 @@ pub mod RegOutgoingTest for virt::Virt {
     //> last (20th) check folds in.
     reg checks : Word[5] on clock {
         initial it <= 0
-        when {
-            case checking && it != 19 {
+        if {
+            when checking && it != 19 {
                 it <= it + 1
             }
         }
@@ -90,8 +90,8 @@ pub mod RegOutgoingTest for virt::Virt {
     //> validating `exit` on the next cycle.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case checking && checks == 19 {
+        if {
+            when checking && checks == 19 {
                 it <= true
             }
         }
@@ -101,8 +101,8 @@ pub mod RegOutgoingTest for virt::Virt {
     //> folds its verdict in while `checking`.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && counter.count == prev + 1
             }
         }

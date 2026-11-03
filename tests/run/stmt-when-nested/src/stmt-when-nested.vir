@@ -15,9 +15,9 @@ import virt
 //> of nesting.  Every path through the nesting drives `r` with a
 //> distinct code, so each path can be asserted separately:
 //>
-//> `op == 0`, `a` high, `b` high : inner `case b` arm : `r = 1`
-//> `op == 0`, `a` high, `b` low  : inner `else` arm    : `r = 2`
-//> `op == 0`, `a` low            : middle `else` arm   : `r = 3`
+//> `op == 0`, `a` high, `b` high : inner `when b` arm : `r = 1`
+//> `op == 0`, `a` high, `b` low  : inner `else` arm   : `r = 2`
+//> `op == 0`, `a` low            : middle `else` arm  : `r = 3`
 //> `op == 1`                     : outer `match` else  : `r = 4`
 mod WhenNest {
     //> Outer `match` selector: 0 enters the nested `when`s, 1 takes
@@ -27,19 +27,19 @@ mod WhenNest {
     //> Middle `when` condition: its arm contains the inner `when`.
     incoming a : Bit
 
-    //> Inner `when` condition, nested inside the `case a` arm.
+    //> Inner `when` condition, nested inside the `when a` arm.
     incoming b : Bit
 
     //> Code identifying the path taken through the nesting: 1, 2, 3,
     //> or 4 as listed above.
-    outgoing r : Word[3]
+    outgoing r : Word[3] dependson op, a, b
 
     match op {
-        case 0 {
-            when {
-                case a {
-                    when {
-                        case b {
+        with 0 {
+            if {
+                when a {
+                    if {
+                        when b {
                             r := 1
                         }
                         else {
@@ -65,8 +65,8 @@ pub mod StmtWhenNestedTest for virt::Virt {
     //> `@Valid(0)` after all 4 paths checked out; `@Valid(1)` if any
     //> check failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -82,8 +82,8 @@ pub mod StmtWhenNestedTest for virt::Virt {
     //> randomness on the first clock edge cannot leak into a verdict.
     reg warm : Word[2] on clock {
         initial it <= 0
-        when {
-            case it != 3 {
+        if {
+            when it != 3 {
                 it <= it + 1
             }
         }
@@ -94,8 +94,8 @@ pub mod StmtWhenNestedTest for virt::Virt {
     //> during warm-up.
     reg index : Word[2] on clock {
         initial it <= 0
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it + 1
             }
         }
@@ -105,8 +105,8 @@ pub mod StmtWhenNestedTest for virt::Virt {
     //> that `finished` stays high.
     reg checked : Word[3] on clock {
         initial it <= 0
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it + 1
             }
         }
@@ -116,8 +116,8 @@ pub mod StmtWhenNestedTest for virt::Virt {
     //> folds its verdict in on the cycle its vector is on the inputs.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && dut.r == expected_r
             }
         }
@@ -148,25 +148,25 @@ pub mod StmtWhenNestedTest for virt::Virt {
     wire expected_r : Word[3]
 
     match index {
-        case 0 {
+        with 0 {
             op := 0
             a := true
             b := true
             expected_r := 1
         }
-        case 1 {
+        with 1 {
             op := 0
             a := true
             b := false
             expected_r := 2
         }
-        case 2 {
+        with 2 {
             op := 0
             a := false
             b := true
             expected_r := 3
         }
-        case 3 {
+        with 3 {
             op := 1
             a := true
             b := true

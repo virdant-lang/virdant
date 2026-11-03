@@ -34,16 +34,16 @@ pub mod LetReuseNameSiblingsTest for virt::Virt {
 
     // Each sibling arm binds its own `x` to a different value.
     match sel : Word[2] {
-        case 0 let x = 10w8 {
+        with 0 let x = 10w8 {
             a := x
         }
-        case 1 let x = 20w8 {
+        with 1 let x = 20w8 {
             a := x
         }
-        case 2 let x = 30w8 {
+        with 2 let x = 30w8 {
             a := x
         }
-        case 3 let x = 40w8 {
+        with 3 let x = 40w8 {
             a := x
         }
     }
@@ -55,18 +55,18 @@ pub mod LetReuseNameSiblingsTest for virt::Virt {
 
     // Same name, different values, arm by arm.
     match sel : Word[2] {
-        case 0 let hi = 3w2,
+        with 0 let hi = 3w2,
             lo = 1w2 {
             b := hi - lo
         }
-        case 1 let hi = 0w2 {
+        with 1 let hi = 0w2 {
             b := hi
         }
-        case 2 let hi = 2w2,
+        with 2 let hi = 2w2,
             lo = 3w2 {
             b := hi - lo
         }
-        case 3 let hi = 1w2 {
+        with 3 let hi = 1w2 {
             b := hi
         }
     }
@@ -77,16 +77,16 @@ pub mod LetReuseNameSiblingsTest for virt::Virt {
     wire c : Bit
 
     match sel : Word[2] {
-        case 0 let x = 10w8 {
+        with 0 let x = 10w8 {
             c := x == 10
         }
-        case 1 let x = 20w8 {
+        with 1 let x = 20w8 {
             c := x == 20
         }
-        case 2 let x = 30w8 {
+        with 2 let x = 30w8 {
             c := x == 30
         }
-        case 3 let x = 40w8 {
+        with 3 let x = 40w8 {
             c := x == 40
         }
     }
@@ -97,19 +97,19 @@ pub mod LetReuseNameSiblingsTest for virt::Virt {
     wire expected_b : Word[2]
 
     match sel : Word[2] {
-        case 0 {
+        with 0 {
             expected_a := 10
             expected_b := 2
         }
-        case 1 {
+        with 1 {
             expected_a := 20
             expected_b := 0
         }
-        case 2 {
+        with 2 {
             expected_a := 30
             expected_b := 3
         }
-        case 3 {
+        with 3 {
             expected_a := 40
             expected_b := 1
         }

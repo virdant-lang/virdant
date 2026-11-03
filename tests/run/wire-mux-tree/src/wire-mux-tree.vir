@@ -22,8 +22,8 @@ pub mod WireMuxTreeTest for virt::Virt {
     //> `@Valid(1)` if any check failed.  While `@Invalid()`, the
     //> simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -65,40 +65,40 @@ pub mod WireMuxTreeTest for virt::Virt {
     //> Golden stage 1: the same selection written as a `when`
     //> expression straight from `seed`.
     wire exp1 : Word[8] {
-        it := when {
-            case seed[0] => seed + 0x01
+        it := if {
+            when seed[0] => seed + 0x01
             else => seed - 0x01
         }
     }
 
     //> Golden stage 2.
     wire exp2 : Word[8] {
-        it := when {
-            case seed[1] => exp1 ^ 0x3C
+        it := if {
+            when seed[1] => exp1 ^ 0x3C
             else => exp1 | 0x0F
         }
     }
 
     //> Golden stage 3.
     wire exp3 : Word[8] {
-        it := when {
-            case seed[2] => exp2 + 0x10
+        it := if {
+            when seed[2] => exp2 + 0x10
             else => exp2 - 0x10
         }
     }
 
     //> Golden stage 4.
     wire exp4 : Word[8] {
-        it := when {
-            case seed[3] => exp3 & 0xF0
+        it := if {
+            when seed[3] => exp3 & 0xF0
             else => exp3 & 0x0F
         }
     }
 
     //> Golden stage 5: the expected final value of the chain.
     wire exp5 : Word[8] {
-        it := when {
-            case seed[4] => exp4 ^ 0xFF
+        it := if {
+            when seed[4] => exp4 ^ 0xFF
             else => exp4
         }
     }

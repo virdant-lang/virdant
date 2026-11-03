@@ -24,8 +24,8 @@ pub mod EnumOneVariantTest for virt::Virt {
     //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -46,7 +46,7 @@ pub mod EnumOneVariantTest for virt::Virt {
     //> taken and its body evaluated.
     wire matched_only : Bit {
         it := match only : Solo {
-            case #Only => true
+            with #Only => true
         }
     }
 
@@ -61,7 +61,7 @@ pub mod EnumOneVariantTest for virt::Virt {
     //> `#Only` arm.
     wire cast_roundtrip_ok : Bit {
         it := match cast(1w2 : Word[2]) : Solo {
-            case #Only => true
+            with #Only => true
         }
     }
 

@@ -26,17 +26,17 @@ mod BitOps {
     incoming b : Bit
 
     //> Logical AND of the two operands.
-    outgoing and_out : Bit {
+    outgoing and_out : Bit dependson a, b {
         it := a && b
     }
 
     //> Logical OR of the two operands.
-    outgoing or_out : Bit {
+    outgoing or_out : Bit dependson a, b {
         it := a || b
     }
 
     //> Logical XOR of the two operands.
-    outgoing xor_out : Bit {
+    outgoing xor_out : Bit dependson a, b {
         it := a ^^ b
     }
 }
@@ -49,8 +49,8 @@ pub mod BitOpsInputsTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -71,10 +71,10 @@ pub mod BitOpsInputsTest for virt::Virt {
     reg a : Bit on clock {
         initial it <= false
         it <= match next {
-            case 0 => false
-            case 1 => false
-            case 2 => true
-            case 3 => true
+            with 0 => false
+            with 1 => false
+            with 2 => true
+            with 3 => true
         }
     }
 
@@ -82,18 +82,18 @@ pub mod BitOpsInputsTest for virt::Virt {
     reg b : Bit on clock {
         initial it <= false
         it <= match next {
-            case 0 => false
-            case 1 => true
-            case 2 => false
-            case 3 => true
+            with 0 => false
+            with 1 => true
+            with 2 => false
+            with 3 => true
         }
     }
 
     //> Truth-table row under test, 0 through 3.
     reg index : Word[2] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= next
             }
         }
@@ -103,8 +103,8 @@ pub mod BitOpsInputsTest for virt::Virt {
     //> final fold into `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 3 {
+        if {
+            when index == 3 {
                 it <= true
             }
         }
@@ -114,8 +114,8 @@ pub mod BitOpsInputsTest for virt::Virt {
     //> folds its verdict in while the sequencer is stepping.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it && ok
             }
         }
@@ -135,22 +135,22 @@ pub mod BitOpsInputsTest for virt::Virt {
     }
 
     match index {
-        case 0 {
+        with 0 {
             exp_and := false
             exp_or := false
             exp_xor := false
         }
-        case 1 {
+        with 1 {
             exp_and := false
             exp_or := true
             exp_xor := true
         }
-        case 2 {
+        with 2 {
             exp_and := false
             exp_or := true
             exp_xor := true
         }
-        case 3 {
+        with 3 {
             exp_and := true
             exp_or := true
             exp_xor := false

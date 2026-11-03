@@ -26,8 +26,8 @@ mod Counter {
 
     reg count : Word[4] on clock {
         initial it <= 0
-        when {
-            case load {
+        if {
+            when load {
                 it <= start
             }
             else {
@@ -46,8 +46,8 @@ pub mod ModTwoInstancesTest for virt::Virt {
     //> `@Valid(0)` after every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -119,8 +119,8 @@ pub mod ModTwoInstancesTest for virt::Virt {
     //> Rises after the last check (cycle 6) has been folded in.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case tick == 7 {
+        if {
+            when tick == 7 {
                 it <= true
             }
         }

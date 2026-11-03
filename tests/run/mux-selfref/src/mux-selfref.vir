@@ -42,8 +42,8 @@ pub mod MuxSelfrefTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -79,8 +79,8 @@ pub mod MuxSelfrefTest for virt::Virt {
     //> fold and validating `exit` on the next cycle.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case checking && check_index == 15 {
+        if {
+            when checking && check_index == 15 {
                 it <= true
             }
         }
@@ -90,8 +90,8 @@ pub mod MuxSelfrefTest for virt::Virt {
     //> folds its verdict in on the cycle after its step is applied.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && counter.count == expected
             }
         }
@@ -115,52 +115,52 @@ pub mod MuxSelfrefTest for virt::Virt {
     // Golden counts: `expected[i]` is the counter's value on the
     // cycle after step `i` is applied.  Exhaustive over `Word[4]`.
     match check_index {
-        case 0 {
+        with 0 {
             expected := 0
         }
-        case 1 {
+        with 1 {
             expected := 1
         }
-        case 2 {
+        with 2 {
             expected := 2
         }
-        case 3 {
+        with 3 {
             expected := 3
         }
-        case 4 {
+        with 4 {
             expected := 4
         }
-        case 5 {
+        with 5 {
             expected := 0
         }
-        case 6 {
+        with 6 {
             expected := 1
         }
-        case 7 {
+        with 7 {
             expected := 2
         }
-        case 8 {
+        with 8 {
             expected := 3
         }
-        case 9 {
+        with 9 {
             expected := 4
         }
-        case 10 {
+        with 10 {
             expected := 0
         }
-        case 11 {
+        with 11 {
             expected := 1
         }
-        case 12 {
+        with 12 {
             expected := 2
         }
-        case 13 {
+        with 13 {
             expected := 3
         }
-        case 14 {
+        with 14 {
             expected := 0
         }
-        case 15 {
+        with 15 {
             expected := 1
         }
     }

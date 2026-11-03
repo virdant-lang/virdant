@@ -21,8 +21,8 @@ pub mod WhenTwoArmTest for virt::Virt {
     //> `@Valid(1)` otherwise.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok && saw_true && saw_false, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok && saw_true && saw_false, 0, 1))
             else => @Invalid()
         }
     }
@@ -44,8 +44,8 @@ pub mod WhenTwoArmTest for virt::Virt {
     //> Target of the two-arm `when` expression: `0xa` when `sel` is
     //> high, `0x5` when `sel` is low.
     wire out : Word[4] {
-        it := when {
-            case sel => 0xaw4
+        it := if {
+            when sel => 0xaw4
             else => 0x5w4
         }
     }
@@ -87,8 +87,8 @@ pub mod WhenTwoArmTest for virt::Virt {
     //> exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case phase == 6 {
+        if {
+            when phase == 6 {
                 it <= true
             }
         }

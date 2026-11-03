@@ -73,8 +73,8 @@ pub mod ModOutputSplitTest for virt::Virt {
     //> `@Valid(0)` after every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -95,8 +95,8 @@ pub mod ModOutputSplitTest for virt::Virt {
     //> Rises after the last check (tick 8) has been folded in.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case tick == 9 {
+        if {
+            when tick == 9 {
                 it <= true
             }
         }
@@ -113,9 +113,9 @@ pub mod ModOutputSplitTest for virt::Virt {
     //> changes to 7 on the edge after tick 0, and to 12 on the edge
     //> after tick 4.
     wire inp : Word[4] {
-        it := when {
-            case tick < 1 => 3
-            case tick < 5 => 7
+        it := if {
+            when tick < 1 => 3
+            when tick < 5 => 7
             else => 12
         }
     }

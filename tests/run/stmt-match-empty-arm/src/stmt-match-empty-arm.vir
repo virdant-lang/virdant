@@ -24,8 +24,8 @@ pub mod StmtMatchEmptyArmTest for virt::Virt {
     //> if any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -47,8 +47,8 @@ pub mod StmtMatchEmptyArmTest for virt::Virt {
     //> checked cycle folds in its verdict.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && data == expect
             }
         }
@@ -58,8 +58,8 @@ pub mod StmtMatchEmptyArmTest for virt::Virt {
     //> exit code sees the final `all_ok` on the next cycle.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case checking && phase == 15 {
+        if {
+            when checking && phase == 15 {
                 it <= true
             }
         }
@@ -80,46 +80,46 @@ pub mod StmtMatchEmptyArmTest for virt::Virt {
     match phase {
         // First drive also resynchronizes `data` away from the
         // simulator's power-on edge.
-        case 0 {
+        with 0 {
             data <= 0x11
         }
-        case 1 {
+        with 1 {
         }
-        case 2 {
+        with 2 {
             data <= 0x22
         }
-        case 3 {
+        with 3 {
         }
-        case 4 {
+        with 4 {
             data <= 0x33
         }
-        case 5 {
+        with 5 {
         }
-        case 6 {
+        with 6 {
             data <= 0x11
         }
         // Two consecutive empty arms: `data` holds `0x11` throughout.
-        case 7 {
+        with 7 {
         }
-        case 8 {
+        with 8 {
         }
-        case 9 {
+        with 9 {
             data <= 0x22
         }
         // Two consecutive empty arms: `data` holds `0x22`.
-        case 10 {
+        with 10 {
         }
-        case 11 {
+        with 11 {
         }
-        case 12 {
+        with 12 {
             data <= 0x33
         }
         // Two consecutive empty arms: `data` holds `0x33` to the end.
-        case 13 {
+        with 13 {
         }
-        case 14 {
+        with 14 {
         }
-        case 15 {
+        with 15 {
             data <= 0x11
         }
     }
@@ -131,67 +131,67 @@ pub mod StmtMatchEmptyArmTest for virt::Virt {
     // `Word[4]`, so the match is exhaustive.
     match phase {
         // Power-on: unchecked, `data` shows its initial value.
-        case 0 {
+        with 0 {
             expect := 0x42
         }
         // Phase 0 drove `0x11`.
-        case 1 {
+        with 1 {
             expect := 0x11
         }
         // Empty arm: `data` still shows `0x11` (warm-up, unchecked).
-        case 2 {
+        with 2 {
             expect := 0x11
         }
         // Phase 2 drove `0x22`.
-        case 3 {
+        with 3 {
             expect := 0x22
         }
         // Empty arm: holds `0x22`.
-        case 4 {
+        with 4 {
             expect := 0x22
         }
         // Phase 4 drove `0x33`.
-        case 5 {
+        with 5 {
             expect := 0x33
         }
         // Empty arm: holds `0x33`.
-        case 6 {
+        with 6 {
             expect := 0x33
         }
         // Phase 6 drove `0x11`.
-        case 7 {
+        with 7 {
             expect := 0x11
         }
         // Empty arm: holds `0x11`.
-        case 8 {
+        with 8 {
             expect := 0x11
         }
         // Second consecutive empty arm: still holds `0x11`.
-        case 9 {
+        with 9 {
             expect := 0x11
         }
         // Phase 9 drove `0x22`.
-        case 10 {
+        with 10 {
             expect := 0x22
         }
         // Empty arm: holds `0x22`.
-        case 11 {
+        with 11 {
             expect := 0x22
         }
         // Second consecutive empty arm: still holds `0x22`.
-        case 12 {
+        with 12 {
             expect := 0x22
         }
         // Phase 12 drove `0x33`.
-        case 13 {
+        with 13 {
             expect := 0x33
         }
         // Empty arm: holds `0x33`.
-        case 14 {
+        with 14 {
             expect := 0x33
         }
         // Second consecutive empty arm: still holds `0x33`.
-        case 15 {
+        with 15 {
             expect := 0x33
         }
     }

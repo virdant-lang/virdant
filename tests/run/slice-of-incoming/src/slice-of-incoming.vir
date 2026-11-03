@@ -25,7 +25,7 @@ mod Slicer {
 
     //> Upper nibble of `inp`: `inp[8..4]`, a `Word[4]` (top index
     //> exclusive).
-    outgoing high : Word[4] {
+    outgoing high : Word[4] dependson inp {
         it := inp[8..4]
     }
 }
@@ -38,8 +38,8 @@ pub mod SliceOfIncomingTest for virt::Virt {
     //> any cycle's sliced value diverged.  While `@Invalid()`, the
     //> simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -59,8 +59,8 @@ pub mod SliceOfIncomingTest for virt::Virt {
     //> the exit code sees the final verdict.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case step == 7 {
+        if {
+            when step == 7 {
                 it <= true
             }
         }
@@ -71,8 +71,8 @@ pub mod SliceOfIncomingTest for virt::Virt {
     //> upper nibble.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && step_ok
             }
         }
@@ -87,14 +87,14 @@ pub mod SliceOfIncomingTest for virt::Virt {
     //> `Word[8]` per cycle.
     wire stimulus : Word[8] {
         it := match step {
-            case 0 => 0xabw8
-            case 1 => 0x01w8
-            case 2 => 0xf0w8
-            case 3 => 0x3cw8
-            case 4 => 0x87w8
-            case 5 => 0xffw8
-            case 6 => 0x10w8
-            case 7 => 0x0fw8
+            with 0 => 0xabw8
+            with 1 => 0x01w8
+            with 2 => 0xf0w8
+            with 3 => 0x3cw8
+            with 4 => 0x87w8
+            with 5 => 0xffw8
+            with 6 => 0x10w8
+            with 7 => 0x0fw8
         }
     }
 
@@ -102,14 +102,14 @@ pub mod SliceOfIncomingTest for virt::Virt {
     //> literal table — deliberately not computed by slicing.
     wire exp_high : Word[4] {
         it := match step {
-            case 0 => 0xaw4
-            case 1 => 0x0w4
-            case 2 => 0xfw4
-            case 3 => 0x3w4
-            case 4 => 0x8w4
-            case 5 => 0xfw4
-            case 6 => 0x1w4
-            case 7 => 0x0w4
+            with 0 => 0xaw4
+            with 1 => 0x0w4
+            with 2 => 0xfw4
+            with 3 => 0x3w4
+            with 4 => 0x8w4
+            with 5 => 0xfw4
+            with 6 => 0x1w4
+            with 7 => 0x0w4
         }
     }
 

@@ -27,8 +27,8 @@ pub mod DontcareInWhenElse for virt::Virt {
     //> `@Valid(0)` when every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -39,8 +39,8 @@ pub mod DontcareInWhenElse for virt::Virt {
     //> must run; the value itself is implementation-defined and is
     //> never read, so nothing about it is asserted.
     wire unused_wire : Word[8] {
-        it := when {
-            case false => 0w8
+        it := if {
+            when false => 0w8
             else => (dontcare)
         }
     }
@@ -50,8 +50,8 @@ pub mod DontcareInWhenElse for virt::Virt {
     //> The same `when`-with-`dontcare`-else shape, but with the `case`
     //> condition true so the value is deterministic and checkable.
     wire case_taken : Word[8] {
-        it := when {
-            case true => 0xa7w8
+        it := if {
+            when true => 0xa7w8
             else => (dontcare)
         }
     }

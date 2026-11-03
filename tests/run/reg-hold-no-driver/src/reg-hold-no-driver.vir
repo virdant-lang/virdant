@@ -32,8 +32,8 @@ mod HoldReg {
 
     reg value : Word[4] on clock {
         initial it <= 0
-        when {
-            case go {
+        if {
+            when go {
                 it <= it + 1
             }
         }
@@ -50,8 +50,8 @@ pub mod RegHoldTest for virt::Virt {
     //> check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -73,8 +73,8 @@ pub mod RegHoldTest for virt::Virt {
     //> folds its verdict in at the clock edge that ends its cycle.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && dut.out == expect
             }
         }
@@ -84,8 +84,8 @@ pub mod RegHoldTest for virt::Virt {
     //> exit code sees the final `all_ok` on the next cycle.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case checking && phase == 15 {
+        if {
+            when checking && phase == 15 {
                 it <= true
             }
         }
@@ -108,78 +108,78 @@ pub mod RegHoldTest for virt::Virt {
     // `Word[4]`, so the match is exhaustive.
     match phase {
         // Warm-up: idle, unchecked.
-        case 0 {
+        with 0 {
             go := false
             expect := 0
         }
-        case 1 {
+        with 1 {
             go := false
             expect := 0
         }
         // Still idle: the initial value survives the power-on edge.
-        case 2 {
+        with 2 {
             go := false
             expect := 0
         }
         // Pulse: the edge ending this cycle writes 1.
-        case 3 {
+        with 3 {
             go := true
             expect := 0
         }
         // Two consecutive unmatched cycles: the register holds.
-        case 4 {
+        with 4 {
             go := false
             expect := 1
         }
-        case 5 {
+        with 5 {
             go := false
             expect := 1
         }
         // Pulse: writes 2.
-        case 6 {
+        with 6 {
             go := true
             expect := 1
         }
         // Two consecutive unmatched cycles: holds at 2.
-        case 7 {
+        with 7 {
             go := false
             expect := 2
         }
-        case 8 {
+        with 8 {
             go := false
             expect := 2
         }
         // Pulse: writes 3.
-        case 9 {
+        with 9 {
             go := true
             expect := 2
         }
         // One unmatched cycle: holds at 3.
-        case 10 {
+        with 10 {
             go := false
             expect := 3
         }
         // Pulse: writes 4.
-        case 11 {
+        with 11 {
             go := true
             expect := 3
         }
         // Two consecutive unmatched cycles: holds at 4.
-        case 12 {
+        with 12 {
             go := false
             expect := 4
         }
-        case 13 {
+        with 13 {
             go := false
             expect := 4
         }
         // Pulse: writes 5.
-        case 14 {
+        with 14 {
             go := true
             expect := 4
         }
         // Final unmatched cycle: holds at 5, then `finished` latches.
-        case 15 {
+        with 15 {
             go := false
             expect := 5
         }

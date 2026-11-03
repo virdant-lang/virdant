@@ -25,8 +25,8 @@ pub mod MuxEnumsTest for virt::Virt {
     //> if any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -47,8 +47,8 @@ pub mod MuxEnumsTest for virt::Virt {
     //> to false.
     wire light_decodes : Bit {
         it := match light {
-            case #On => true
-            case #Off => false
+            with #On => true
+            with #Off => false
         }
     }
 
@@ -74,8 +74,8 @@ pub mod MuxEnumsTest for virt::Virt {
     //> `all_ok`, so the exit code sees the final verdict.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case cond {
+        if {
+            when cond {
                 it <= true
             }
         }

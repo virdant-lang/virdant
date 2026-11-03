@@ -51,11 +51,11 @@ mod Crc4 {
     //> `data_bit`) is 1.
     reg state : Word[4] on clock {
         initial it <= 0
-        when {
-            case init {
+        if {
+            when init {
                 it <= 0
             }
-            case advance {
+            when advance {
                 it <= mux(it[0] ^^ data_bit,
                     word(0w1, it[4..1]) ^ 0xCw4,
                     word(0w1, it[4..1]))
@@ -72,8 +72,8 @@ pub mod SerialCrcTest for virt::Virt {
     //> if either check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished && step >= 42 => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished && step >= 42 => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -125,8 +125,8 @@ pub mod SerialCrcTest for virt::Virt {
     //> message starts at bit 0.
     reg bit_index : Word[4] on clock {
         initial it <= 0
-        when {
-            case feeding {
+        if {
+            when feeding {
                 it <= it + 1
             }
             else {
@@ -167,11 +167,11 @@ pub mod SerialCrcTest for virt::Virt {
     //> folds its verdict in on its check cycle.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case step == 21 {
+        if {
+            when step == 21 {
                 it <= it && crc.crc == 0x7w4
             }
-            case step == 41 {
+            when step == 41 {
                 it <= it && crc.crc == 0x5w4
             }
         }
@@ -181,8 +181,8 @@ pub mod SerialCrcTest for virt::Virt {
     //> sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case step == 41 {
+        if {
+            when step == 41 {
                 it <= true
             }
         }

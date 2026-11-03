@@ -36,12 +36,12 @@ mod Walker {
     reg walk : WalkState on clock {
         initial it <= @Idle()
         it <= match it : WalkState {
-            case @Idle() => @Count(0)
-            case @Count(n) when {
-                case n == 3 => @Wrapped()
+            with @Idle() => @Count(0)
+            with @Count(n) if {
+                when n == 3 => @Wrapped()
                 else => @Count(n + 1)
             }
-            case @Wrapped() => @Wrapped()
+            with @Wrapped() => @Wrapped()
         }
     }
 
@@ -56,8 +56,8 @@ pub mod MatchOnRegSelfrefTest for virt::Virt {
     //> any step diverged from the expected walk.  While
     //> `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -76,8 +76,8 @@ pub mod MatchOnRegSelfrefTest for virt::Virt {
     //> the exit code sees the final verdict.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case step == 5 {
+        if {
+            when step == 5 {
                 it <= true
             }
         }
@@ -88,8 +88,8 @@ pub mod MatchOnRegSelfrefTest for virt::Virt {
     //> walk.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && step_ok
             }
         }
@@ -105,19 +105,19 @@ pub mod MatchOnRegSelfrefTest for virt::Virt {
     wire step_ok : Bit
 
     match walker.state {
-        case @Idle() {
+        with @Idle() {
             step_ok := step == 0
         }
-        case @Count(n) {
+        with @Count(n) {
             step_ok := match step : Word[3] {
-                case 1 => n == 0
-                case 2 => n == 1
-                case 3 => n == 2
-                case 4 => n == 3
+                with 1 => n == 0
+                with 2 => n == 1
+                with 3 => n == 2
+                with 4 => n == 3
                 else => false
             }
         }
-        case @Wrapped() {
+        with @Wrapped() {
             step_ok := step == 5
         }
     }

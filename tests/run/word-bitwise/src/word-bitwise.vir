@@ -16,17 +16,17 @@ mod WordBitwise {
     incoming b : Word[8]
 
     //> Bitwise AND of the two operands.
-    outgoing and_out : Word[8] {
+    outgoing and_out : Word[8] dependson a, b {
         it := a & b
     }
 
     //> Bitwise OR of the two operands.
-    outgoing or_out : Word[8] {
+    outgoing or_out : Word[8] dependson a, b {
         it := a | b
     }
 
     //> Bitwise XOR of the two operands.
-    outgoing xor_out : Word[8] {
+    outgoing xor_out : Word[8] dependson a, b {
         it := a ^ b
     }
 }
@@ -39,8 +39,8 @@ pub mod WordBitwiseTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -61,14 +61,14 @@ pub mod WordBitwiseTest for virt::Virt {
     reg a : Word[8] on clock {
         initial it <= 0x00w8
         it <= match next {
-            case 0 => 0x00w8
-            case 1 => 0xffw8
-            case 2 => 0xffw8
-            case 3 => 0xf0w8
-            case 4 => 0xaaw8
-            case 5 => 0xa5w8
-            case 6 => 0x96w8
-            case 7 => 0x12w8
+            with 0 => 0x00w8
+            with 1 => 0xffw8
+            with 2 => 0xffw8
+            with 3 => 0xf0w8
+            with 4 => 0xaaw8
+            with 5 => 0xa5w8
+            with 6 => 0x96w8
+            with 7 => 0x12w8
         }
     }
 
@@ -76,22 +76,22 @@ pub mod WordBitwiseTest for virt::Virt {
     reg b : Word[8] on clock {
         initial it <= 0x00w8
         it <= match next {
-            case 0 => 0x00w8
-            case 1 => 0xffw8
-            case 2 => 0x00w8
-            case 3 => 0xffw8
-            case 4 => 0x55w8
-            case 5 => 0x0fw8
-            case 6 => 0x3cw8
-            case 7 => 0x34w8
+            with 0 => 0x00w8
+            with 1 => 0xffw8
+            with 2 => 0x00w8
+            with 3 => 0xffw8
+            with 4 => 0x55w8
+            with 5 => 0x0fw8
+            with 6 => 0x3cw8
+            with 7 => 0x34w8
         }
     }
 
     //> Pair under test, 0 through 7.
     reg index : Word[3] on clock {
         initial it <= 0w3
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= next
             }
         }
@@ -101,8 +101,8 @@ pub mod WordBitwiseTest for virt::Virt {
     //> the final fold into `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 7 {
+        if {
+            when index == 7 {
                 it <= true
             }
         }
@@ -112,8 +112,8 @@ pub mod WordBitwiseTest for virt::Virt {
     //> folds its verdict in while the sequencer is stepping.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it && ok
             }
         }
@@ -139,42 +139,42 @@ pub mod WordBitwiseTest for virt::Virt {
     // Pair 4: complementary alternating patterns.
     // Pairs 5-7: mixed patterns.
     match index {
-        case 0 {
+        with 0 {
             exp_and := 0x00w8
             exp_or := 0x00w8
             exp_xor := 0x00w8
         }
-        case 1 {
+        with 1 {
             exp_and := 0xffw8
             exp_or := 0xffw8
             exp_xor := 0x00w8
         }
-        case 2 {
+        with 2 {
             exp_and := 0x00w8
             exp_or := 0xffw8
             exp_xor := 0xffw8
         }
-        case 3 {
+        with 3 {
             exp_and := 0xf0w8
             exp_or := 0xffw8
             exp_xor := 0x0fw8
         }
-        case 4 {
+        with 4 {
             exp_and := 0x00w8
             exp_or := 0xffw8
             exp_xor := 0xffw8
         }
-        case 5 {
+        with 5 {
             exp_and := 0x05w8
             exp_or := 0xafw8
             exp_xor := 0xaaw8
         }
-        case 6 {
+        with 6 {
             exp_and := 0x14w8
             exp_or := 0xbew8
             exp_xor := 0xaaw8
         }
-        case 7 {
+        with 7 {
             exp_and := 0x10w8
             exp_or := 0x36w8
             exp_xor := 0x26w8

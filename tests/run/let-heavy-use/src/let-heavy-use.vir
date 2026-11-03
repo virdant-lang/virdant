@@ -34,8 +34,8 @@ pub mod Top for virt::Virt {
     //> Exit `@Valid(0)` when all three uses of `shared` agree with
     //> their golden values; `@Invalid()` keeps the simulator running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case shared_check0 && shared_check1 && shared_check2 => @Valid(0)
+        it := if {
+            when shared_check0 && shared_check1 && shared_check2 => @Valid(0)
             else => @Invalid()
         }
     }

@@ -45,8 +45,8 @@ pub mod MatchStructPatternTest for virt::Virt {
     //> The arm's projection of a `p` field, selected by `sel`.
     wire proj : Word[8] {
         it := match sel {
-            case 0 => p->x
-            case 1 => p->y
+            with 0 => p->x
+            with 1 => p->y
         }
     }
 
@@ -79,8 +79,8 @@ pub mod MatchStructPatternTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }

@@ -45,8 +45,8 @@ pub mod RegChainTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -66,8 +66,8 @@ pub mod RegChainTest for virt::Virt {
     //> freezing the fold and validating `exit` on the next cycle.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case count == 14 {
+        if {
+            when count == 14 {
                 it <= true
             }
         }
@@ -77,8 +77,8 @@ pub mod RegChainTest for virt::Virt {
     //> folds its verdict in on the cycle it applies to.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case checking {
+        if {
+            when checking {
                 it <= it && chain.q == expected
             }
         }
@@ -110,52 +110,52 @@ pub mod RegChainTest for virt::Virt {
     // The 16 cases exactly cover `Word[4]`, so the match is
     // exhaustive.
     match count {
-        case 0 {
+        with 0 {
             expected := 0
         }
-        case 1 {
+        with 1 {
             expected := 0
         }
-        case 2 {
+        with 2 {
             expected := 0
         }
-        case 3 {
+        with 3 {
             expected := 0
         }
-        case 4 {
+        with 4 {
             expected := 0
         }
-        case 5 {
+        with 5 {
             expected := 3
         }
-        case 6 {
+        with 6 {
             expected := 4
         }
-        case 7 {
+        with 7 {
             expected := 5
         }
-        case 8 {
+        with 8 {
             expected := 6
         }
-        case 9 {
+        with 9 {
             expected := 7
         }
-        case 10 {
+        with 10 {
             expected := 8
         }
-        case 11 {
+        with 11 {
             expected := 9
         }
-        case 12 {
+        with 12 {
             expected := 10
         }
-        case 13 {
+        with 13 {
             expected := 11
         }
-        case 14 {
+        with 14 {
             expected := 12
         }
-        case 15 {
+        with 15 {
             expected := 0
         }
     }

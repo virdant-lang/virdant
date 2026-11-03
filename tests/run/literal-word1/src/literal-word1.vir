@@ -17,8 +17,8 @@ pub mod LiteralWord1Test for virt::Virt {
     //> `@Valid(0)` after every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -40,8 +40,8 @@ pub mod LiteralWord1Test for virt::Virt {
     //> first cycle on, every cycle folds its verdict in.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case started {
+        if {
+            when started {
                 it <= it && check_ok
             }
         }
@@ -57,8 +57,8 @@ pub mod LiteralWord1Test for virt::Virt {
     //> sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case cycle_num == 7 {
+        if {
+            when cycle_num == 7 {
                 it <= true
             }
         }

@@ -56,8 +56,8 @@ pub mod ValidOfStructTest for virt::Virt {
     //> the `@Valid` cycles, 0 through the `@Invalid()` arm otherwise.
     wire extracted_red : Word[8] {
         it := match v {
-            case @Valid(c) => c->red
-            case @Invalid() => 0
+            with @Valid(c) => c->red
+            with @Invalid() => 0
         }
     }
 
@@ -65,8 +65,8 @@ pub mod ValidOfStructTest for virt::Virt {
     //> the extracted payload.
     wire extracted_sum : Word[8] {
         it := match v {
-            case @Valid(c) => c->red + c->green + c->blue
-            case @Invalid() => 0
+            with @Valid(c) => c->red + c->green + c->blue
+            with @Invalid() => 0
         }
     }
 
@@ -74,8 +74,8 @@ pub mod ValidOfStructTest for virt::Virt {
     //> `@Valid` cycles.
     wire is_valid : Bit {
         it := match v {
-            case @Valid(c) => c->blue == 30
-            case @Invalid() => false
+            with @Valid(c) => c->blue == 30
+            with @Invalid() => false
         }
     }
 
@@ -108,8 +108,8 @@ pub mod ValidOfStructTest for virt::Virt {
     //> have both folded into `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case sel_d1 == 1 {
+        if {
+            when sel_d1 == 1 {
                 it <= true
             }
         }
@@ -118,8 +118,8 @@ pub mod ValidOfStructTest for virt::Virt {
     //> `@Valid(0)` after both variants checked out; `@Valid(1)` if any
     //> check failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }

@@ -21,8 +21,8 @@ pub mod StmtWhenElseOnlyTest for virt::Virt {
     //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
     //> failed.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -32,7 +32,7 @@ pub mod StmtWhenElseOnlyTest for virt::Virt {
     //> every cycle, so `count` must track the cycle counter.
     reg count : Word[4] on clock {
         initial it <= 0
-        when {
+        if {
             else {
                 it <= it + 1
             }
@@ -56,7 +56,7 @@ pub mod StmtWhenElseOnlyTest for virt::Virt {
     //> Third, 1-bit target driven by the same `else` block.
     wire parity : Bit
 
-    when {
+    if {
         else {
             bumped := count + 1
             diminished := count - 1
@@ -99,8 +99,8 @@ pub mod StmtWhenElseOnlyTest for virt::Virt {
     //> exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case phase == 22 {
+        if {
+            when phase == 22 {
                 it <= true
             }
         }

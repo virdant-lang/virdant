@@ -39,8 +39,8 @@ mod RateLimiter {
     //> Outgoing handshake.  Valid during the first cycle of each
     //> 4-cycle window.
     client socket out of Pipe[Word[8]] {
-        it.data := when {
-            case pass_cycle => @Valid(item)
+        it.data := if {
+            when pass_cycle => @Valid(item)
             else => @Invalid()
         }
     }
@@ -50,11 +50,11 @@ mod RateLimiter {
     //> cycle of a window.
     reg window : Word[2] on clock {
         initial it <= 0
-        when {
-            case enable {
+        if {
+            when enable {
                 it <= it + 1
             }
-            case !enable {
+            when !enable {
                 it <= 0
             }
         }
@@ -69,8 +69,8 @@ mod RateLimiter {
     //> accepted transfer.
     reg item : Word[8] on clock {
         initial it <= 0
-        when {
-            case pass_cycle && out.ready {
+        if {
+            when pass_cycle && out.ready {
                 it <= it + 1
             }
         }
@@ -85,8 +85,8 @@ pub mod RateLimiterTest for virt::Virt {
     //> exactly 4 cycles; `@Valid(1)` if any check failed.  While
     //> `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -137,8 +137,8 @@ pub mod RateLimiterTest for virt::Virt {
     //> payload and this consumer is always ready.
     wire fires : Bit {
         it := match limiter.out.data {
-            case @Valid(dontcare) => true
-            case @Invalid() => false
+            with @Valid(dontcare) => true
+            with @Invalid() => false
         }
     }
 
@@ -146,11 +146,11 @@ pub mod RateLimiterTest for virt::Virt {
     //> check only runs between two real transfers.
     reg seen : Bit on clock {
         initial it <= false
-        when {
-            case !enabled {
+        if {
+            when !enabled {
                 it <= false
             }
-            case fires {
+            when fires {
                 it <= true
             }
         }
@@ -159,11 +159,11 @@ pub mod RateLimiterTest for virt::Virt {
     //> Cycle counter value at the most recently accepted transfer.
     reg last_cycle : Word[8] on clock {
         initial it <= 0
-        when {
-            case !enabled {
+        if {
+            when !enabled {
                 it <= 0
             }
-            case fires {
+            when fires {
                 it <= cycle
             }
         }
@@ -173,12 +173,12 @@ pub mod RateLimiterTest for virt::Virt {
     //> sequence check.
     reg last_data : Word[8] on clock {
         initial it <= 0
-        when {
-            case !enabled {
+        if {
+            when !enabled {
                 it <= 0
             }
-            case fires match limiter.out.data {
-                case @Valid(data) {
+            when fires match limiter.out.data {
+                with @Valid(data) {
                     it <= data
                 }
             }
@@ -188,11 +188,11 @@ pub mod RateLimiterTest for virt::Virt {
     //> Number of items accepted so far, 0 through 8.
     reg items : Word[4] on clock {
         initial it <= 0
-        when {
-            case !enabled {
+        if {
+            when !enabled {
                 it <= 0
             }
-            case fires {
+            when fires {
                 it <= it + 1
             }
         }
@@ -208,8 +208,8 @@ pub mod RateLimiterTest for virt::Virt {
     //> limiter really is passing distinct items.
     wire sequence_ok : Bit {
         it := match limiter.out.data {
-            case @Valid(data) => data == last_data + 1
-            case @Invalid() => false
+            with @Valid(data) => data == last_data + 1
+            with @Invalid() => false
         }
     }
 
@@ -218,11 +218,11 @@ pub mod RateLimiterTest for virt::Virt {
     //> the first.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case !enabled {
+        if {
+            when !enabled {
                 it <= true
             }
-            case fires && seen {
+            when fires && seen {
                 it <= it && spacing_ok && sequence_ok
             }
         }

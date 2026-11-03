@@ -12,7 +12,7 @@ pub mod Widen {
     incoming x : Word[4]
 
     //> `x` zero-extended to 8 bits.
-    outgoing y : Word[8] {
+    outgoing y : Word[8] dependson x {
         it := zext(x)
     }
 }

@@ -37,17 +37,17 @@ pub mod ValidNestedTest for virt::Virt {
     //> layer, whose payload must be `0x5`.
     wire vv_ok : Bit {
         match vv : Valid[Valid[Word[4]]] {
-            case @Valid(mid_vv0) {
+            with @Valid(mid_vv0) {
                 match mid_vv0 : Valid[Word[4]] {
-                    case @Valid(x) {
+                    with @Valid(x) {
                         it := x == 0x5
                     }
-                    case @Invalid() {
+                    with @Invalid() {
                         it := false
                     }
                 }
             }
-            case @Invalid() {
+            with @Invalid() {
                 it := false
             }
         }
@@ -57,17 +57,17 @@ pub mod ValidNestedTest for virt::Virt {
     //> `@Invalid()`.
     wire vv0_ok : Bit {
         match vv0 : Valid[Valid[Word[4]]] {
-            case @Valid(mid_vv1) {
+            with @Valid(mid_vv1) {
                 match mid_vv1 : Valid[Word[4]] {
-                    case @Valid(x) {
+                    with @Valid(x) {
                         it := x == 0
                     }
-                    case @Invalid() {
+                    with @Invalid() {
                         it := false
                     }
                 }
             }
-            case @Invalid() {
+            with @Invalid() {
                 it := false
             }
         }
@@ -76,17 +76,17 @@ pub mod ValidNestedTest for virt::Virt {
     //> Double unwrap of `vi`: outer `@Valid`, middle `@Invalid()`.
     wire vi_ok : Bit {
         match vi : Valid[Valid[Word[4]]] {
-            case @Valid(mid_vi0) {
+            with @Valid(mid_vi0) {
                 match mid_vi0 : Valid[Word[4]] {
-                    case @Invalid() {
+                    with @Invalid() {
                         it := true
                     }
-                    case @Valid(x) {
+                    with @Valid(x) {
                         it := false
                     }
                 }
             }
-            case @Invalid() {
+            with @Invalid() {
                 it := false
             }
         }
@@ -96,10 +96,10 @@ pub mod ValidNestedTest for virt::Virt {
     //> payload, so the middle Valid/Invalid distinction collapses).
     wire iv_ok : Bit {
         match iv : Valid[Valid[Word[4]]] {
-            case @Invalid() {
+            with @Invalid() {
                 it := true
             }
-            case @Valid(mid_iv) {
+            with @Valid(mid_iv) {
                 it := false
             }
         }
@@ -109,17 +109,17 @@ pub mod ValidNestedTest for virt::Virt {
     //> payload.
     wire vi_sneak : Bit {
         match vi : Valid[Valid[Word[4]]] {
-            case @Valid(mid_vi1) {
+            with @Valid(mid_vi1) {
                 match mid_vi1 : Valid[Word[4]] {
-                    case @Valid(x) {
+                    with @Valid(x) {
                         it := true
                     }
-                    case @Invalid() {
+                    with @Invalid() {
                         it := false
                     }
                 }
             }
-            case @Invalid() {
+            with @Invalid() {
                 it := false
             }
         }
@@ -128,10 +128,10 @@ pub mod ValidNestedTest for virt::Virt {
     //> Negative guard: `iv` must not unwrap to a middle layer at all.
     wire iv_sneak : Bit {
         match iv : Valid[Valid[Word[4]]] {
-            case @Valid(mid_iv0) {
+            with @Valid(mid_iv0) {
                 it := true
             }
-            case @Invalid() {
+            with @Invalid() {
                 it := false
             }
         }
@@ -141,13 +141,13 @@ pub mod ValidNestedTest for virt::Virt {
     //> `Valid[Word[4]]`.
     wire mid_vv : Valid[Word[4]] {
         it := match vv : Valid[Valid[Word[4]]] {
-            case @Valid(inner) => inner
+            with @Valid(inner) => inner
             else => @Invalid()
         }
     }
     wire mid_vi : Valid[Word[4]] {
         it := match vi : Valid[Valid[Word[4]]] {
-            case @Valid(inner) => inner
+            with @Valid(inner) => inner
             else => @Invalid()
         }
     }
@@ -159,17 +159,17 @@ pub mod ValidNestedTest for virt::Virt {
     }
     wire vv_rewrap_ok : Bit {
         match vv_rewrapped : Valid[Valid[Word[4]]] {
-            case @Valid(mid_vv2) {
+            with @Valid(mid_vv2) {
                 match mid_vv2 : Valid[Word[4]] {
-                    case @Valid(x) {
+                    with @Valid(x) {
                         it := x == 0x5
                     }
-                    case @Invalid() {
+                    with @Invalid() {
                         it := false
                     }
                 }
             }
-            case @Invalid() {
+            with @Invalid() {
                 it := false
             }
         }
@@ -183,17 +183,17 @@ pub mod ValidNestedTest for virt::Virt {
     }
     wire vi_rewrap_ok : Bit {
         match vi_rewrapped : Valid[Valid[Word[4]]] {
-            case @Valid(mid_vi2) {
+            with @Valid(mid_vi2) {
                 match mid_vi2 : Valid[Word[4]] {
-                    case @Invalid() {
+                    with @Invalid() {
                         it := true
                     }
-                    case @Valid(x) {
+                    with @Valid(x) {
                         it := false
                     }
                 }
             }
-            case @Invalid() {
+            with @Invalid() {
                 it := false
             }
         }
@@ -215,8 +215,8 @@ pub mod ValidNestedTest for virt::Virt {
     //> `@Valid(0)` when every check passed; `@Valid(fail_bits)`
     //> otherwise.  While `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case fail_bits == 0 => @Valid(0)
+        it := if {
+            when fail_bits == 0 => @Valid(0)
             else => @Valid(fail_bits)
         }
     }

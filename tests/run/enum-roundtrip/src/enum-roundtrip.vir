@@ -30,8 +30,8 @@ pub mod EnumRoundtripTest for virt::Virt {
     //> if any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -94,28 +94,28 @@ pub mod EnumRoundtripTest for virt::Virt {
     //> variant's arm and no other.
     wire off_decodes : Bit {
         it := match off_roundtrip {
-            case #Off => true
+            with #Off => true
             else => false
         }
     }
 
     wire green_decodes : Bit {
         it := match green_roundtrip {
-            case #Green => true
+            with #Green => true
             else => false
         }
     }
 
     wire yellow_decodes : Bit {
         it := match yellow_roundtrip {
-            case #Yellow => true
+            with #Yellow => true
             else => false
         }
     }
 
     wire red_decodes : Bit {
         it := match red_roundtrip {
-            case #Red => true
+            with #Red => true
             else => false
         }
     }

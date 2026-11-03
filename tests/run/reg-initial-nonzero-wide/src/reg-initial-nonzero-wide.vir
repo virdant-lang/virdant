@@ -18,8 +18,8 @@ pub mod RegInitialWideTest for virt::Virt {
     //> power-on, then free-running once `started` rises.
     reg value : Word[16] on clock {
         initial it <= 0xbeef
-        when {
-            case started {
+        if {
+            when started {
                 it <= it + 1
             }
         }
@@ -35,8 +35,8 @@ pub mod RegInitialWideTest for virt::Virt {
     //> `@Valid(0)` while `value` holds its power-on constant
     //> `0xbeef`; while `@Invalid()`, the simulator keeps running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case value == 0xbeef => @Valid(0)
+        it := if {
+            when value == 0xbeef => @Valid(0)
             else => @Invalid()
         }
     }

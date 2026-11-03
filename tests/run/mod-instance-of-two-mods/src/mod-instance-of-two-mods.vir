@@ -59,8 +59,8 @@ pub mod ModTwoModsTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -101,8 +101,8 @@ pub mod ModTwoModsTest for virt::Virt {
     //> after the first folds its verdict in.
     reg all_ok : Bit on clock {
         initial it <= true
-        when {
-            case started {
+        if {
+            when started {
                 it <= it && check_ok
             }
         }
@@ -112,8 +112,8 @@ pub mod ModTwoModsTest for virt::Virt {
     //> sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case cycle_num == 8 {
+        if {
+            when cycle_num == 8 {
                 it <= true
             }
         }

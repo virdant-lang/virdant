@@ -39,7 +39,7 @@ mod MuxNested {
 
     //> The 4-way selector: `x` when `a` and `b`, `y` when `a` and
     //> `!b`, `z` when `!a` and `c`, `w` when `!a` and `!c`.
-    outgoing sel : Word[3] {
+    outgoing sel : Word[3] dependson a, b, c, x, y, z, w {
         it := mux(a, mux(b, x, y), mux(c, z, w))
     }
 }
@@ -52,8 +52,8 @@ pub mod MuxNestedTest for virt::Virt {
     //> any check failed.  While `@Invalid()`, the simulator keeps
     //> running.
     outgoing exit : Valid[Word[8]] {
-        it := when {
-            case finished => @Valid(mux(all_ok, 0, 1))
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
             else => @Invalid()
         }
     }
@@ -72,8 +72,8 @@ pub mod MuxNestedTest for virt::Virt {
     //> bit 2 drives `a`, bit 1 drives `b`, bit 0 drives `c`.
     reg index : Word[3] on clock {
         initial it <= 0
-        when {
-            case !finished {
+        if {
+            when !finished {
                 it <= it + 1
             }
         }
@@ -90,8 +90,8 @@ pub mod MuxNestedTest for virt::Virt {
     //> the exit code sees the final `all_ok`.
     reg finished : Bit on clock {
         initial it <= false
-        when {
-            case index == 7 {
+        if {
+            when index == 7 {
                 it <= true
             }
         }
@@ -112,49 +112,49 @@ pub mod MuxNestedTest for virt::Virt {
     // `w = 4`, the `b` arm is what matters when `a` is true and the
     // `c` arm when `a` is false.
     match index {
-        case 0 {
+        with 0 {
             vec_a := false
             vec_b := false
             vec_c := false
             expected := 4
         }
-        case 1 {
+        with 1 {
             vec_a := false
             vec_b := false
             vec_c := true
             expected := 3
         }
-        case 2 {
+        with 2 {
             vec_a := false
             vec_b := true
             vec_c := false
             expected := 4
         }
-        case 3 {
+        with 3 {
             vec_a := false
             vec_b := true
             vec_c := true
             expected := 3
         }
-        case 4 {
+        with 4 {
             vec_a := true
             vec_b := false
             vec_c := false
             expected := 2
         }
-        case 5 {
+        with 5 {
             vec_a := true
             vec_b := false
             vec_c := true
             expected := 2
         }
-        case 6 {
+        with 6 {
             vec_a := true
             vec_b := true
             vec_c := false
             expected := 1
         }
-        case 7 {
+        with 7 {
             vec_a := true
             vec_b := true
             vec_c := true
