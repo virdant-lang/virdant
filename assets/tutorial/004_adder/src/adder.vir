@@ -17,8 +17,8 @@ mod FullAdder {
     incoming b : Bit
     incoming carry_in : Bit
 
-    outgoing sum : Bit
-    outgoing carry_out : Bit
+    outgoing sum : Bit dependson a, b, carry_in
+    outgoing carry_out : Bit dependson a, b, carry_in
 
     // first, sum a + b
     mod ha0 of HalfAdder {
@@ -41,8 +41,8 @@ mod Adder4 {
     incoming b : Word[4]
     incoming carry_in : Bit
 
-    outgoing sum : Word[4]
-    outgoing carry_out : Bit
+    outgoing sum : Word[4] dependson a, b, carry_in
+    outgoing carry_out : Bit dependson a, b, carry_in
 
     mod fa0 of FullAdder {
         it.a := a[0]

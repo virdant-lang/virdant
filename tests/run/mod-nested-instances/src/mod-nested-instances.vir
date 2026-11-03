@@ -30,7 +30,7 @@ mod Mid {
     incoming inp : Word[8]
 
     //> Word passed through `Leaf` and back out.
-    outgoing out : Word[8]
+    outgoing out : Word[8] dependson inp
 
     mod leaf of Leaf {
         it.inp := inp

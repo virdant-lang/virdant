@@ -49,7 +49,7 @@ mod HalfAdder {
 mod AllUsed {
     incoming a : Bit
     incoming b : Bit
-    outgoing out : Word[2]
+    outgoing out : Word[2] dependson a, b
 
     mod ha of HalfAdder {
         it.a := a
@@ -64,7 +64,7 @@ mod AllUsed {
 mod OneUnused {
     incoming a : Bit
     incoming b : Bit
-    outgoing out : Bit
+    outgoing out : Bit dependson a, b
 
     mod ha of HalfAdder {
         it.a := a
@@ -94,7 +94,7 @@ mod BothUnused {
 mod ExplicitUnused {
     incoming a : Bit
     incoming b : Bit
-    outgoing out : Bit
+    outgoing out : Bit dependson a, b
 
     mod ha of HalfAdder {
         it.a := a
@@ -114,7 +114,7 @@ mod WireSource {
 // Reading the sub-module's outgoing wire — no warning for it.
 mod SubWireUsed {
     incoming a : Bit
-    outgoing out : Bit
+    outgoing out : Bit dependson a
 
     mod ws of WireSource {
         it.a := a

@@ -42,10 +42,10 @@ mod FullAdder {
     incoming cin : Bit
 
     //> Sum of `a`, `b`, and `cin`.
-    outgoing sum : Bit
+    outgoing sum : Bit dependson a, b, cin
 
     //> Carry-out.
-    outgoing cout : Bit
+    outgoing cout : Bit dependson a, b, cin
 
     //> Adds `a` and `b`.
     mod ha0 of HalfAdder {

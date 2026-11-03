@@ -67,7 +67,6 @@ impl DependencyGraph {
         &self.edges
     }
 
-    #[allow(unused)]
     pub fn dependencies_of(&self, component: ComponentId) -> Option<&[DependencyEdge]> {
         self.edges.get(&component).map(|v| v.as_slice())
     }
@@ -248,29 +247,33 @@ fn collect_driver_edges(
                 }
             }
             AstNodePayload::Submodule(submodule) => {
+                // Drivers of the instance's ports written in its it-block
+                // (`mod chain of RegChain { it.clock := clock }`).  Locate
+                // the block by payload: the node's children also carry
+                // the annotations and the `of` clause.
                 let name = stmt.parsing.string(submodule.name);
-                let children = stmt.children();
-                if children.len() == 2 {
-                    let it_block = &children[1];
-                    if matches!(it_block.payload(), AstNodePayload::It) {
-                        let block = &it_block.children()[0];
-                        let name_with_context = if let Some(ctx) = it_context {
-                            let mut new_name = BString::from(ctx);
-                            new_name.push(b'.');
-                            new_name.extend_from_slice(name);
-                            new_name
-                        } else {
-                            BString::from(name)
-                        };
-                        collect_driver_edges(
-                            &block.children(),
-                            component_analysis,
-                            edges,
-                            Some(name_with_context.as_bstr()),
-                            cond_refs,
-                            let_env,
-                        );
-                    }
+                let it_block = stmt
+                    .children()
+                    .into_iter()
+                    .find(|c| matches!(c.payload(), AstNodePayload::It));
+                if let Some(it_block) = it_block {
+                    let block = &it_block.children()[0];
+                    let name_with_context = if let Some(ctx) = it_context {
+                        let mut new_name = BString::from(ctx);
+                        new_name.push(b'.');
+                        new_name.extend_from_slice(name);
+                        new_name
+                    } else {
+                        BString::from(name)
+                    };
+                    collect_driver_edges(
+                        &block.children(),
+                        component_analysis,
+                        edges,
+                        Some(name_with_context.as_bstr()),
+                        cond_refs,
+                        let_env,
+                    );
                 }
             }
             AstNodePayload::Socket(socket) => {

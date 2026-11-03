@@ -480,11 +480,34 @@ fn walk_expr_refs(parsing: &Parsing, root_id: AstNodeId) -> Vec<BString> {
 /// Rewrite a path of the form `it` or `it.<rest>` to use the binding name
 /// of the nearest enclosing `Submodule` / `Component` / `Socket`.  Returns
 /// the path unchanged when it does not start with `it`.
-///
-/// Thin wrapper over the shared `syntax::ast::rewrite_it_to_binding`, which
-/// the elaboration's alias resolution uses too.
 fn rewrite_it_in_name(parsing: &Parsing, ast_id: AstNodeId, raw: &bstr::BStr) -> BString {
-    crate::syntax::ast::rewrite_it_to_binding(parsing, ast_id, raw)
+    if !raw.starts_with(b"it.") && raw != b"it" {
+        return raw.to_owned();
+    }
+    let mut current_id = ast_id;
+    loop {
+        let current = parsing.ast_node(current_id);
+        if current.is_item() {
+            return raw.to_owned();
+        }
+        let target: Option<BString> = match current.payload() {
+            AstNodePayload::Submodule(m) => Some(parsing.string(m.name).to_owned()),
+            AstNodePayload::Component(c) => Some(parsing.string(c.name).to_owned()),
+            AstNodePayload::Socket(s) => Some(parsing.string(s.name).to_owned()),
+            _ => None,
+        };
+        if let Some(target) = target {
+            if raw == b"it" { return target; }
+            let mut out = target;
+            out.push(b'.');
+            out.extend_from_slice(&raw[3..]);
+            return out;
+        }
+        current_id = match current.parent() {
+            Some(p) => p.id(),
+            None => return raw.to_owned(),
+        };
+    }
 }
 
 /// DFS-walk an `Expr` tree and collect every `Referent` found in a

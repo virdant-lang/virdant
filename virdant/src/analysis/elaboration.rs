@@ -10,7 +10,8 @@ use bstr::{BStr, BString, ByteSlice};
 use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::Location;
-use crate::analysis::component::ComponentAnalysis;
+use crate::analysis::component::{ComponentAnalysis, ComponentId};
+use crate::analysis::dependency::EdgeKind;
 use crate::analysis::drivers::{Driver, DriverAnalysis};
 use crate::analysis::symbols::SymbolId;
 use crate::common::{ComponentKind, DriverType, SocketRole};
@@ -88,6 +89,26 @@ pub struct ElaboratedComponent {
     /// `incoming` ports it is the parent module; for socket channels
     /// it is the module that declares the socket instance.
     driver_scope: BString,
+    /// Where `driver` was written, in module-level terms (see
+    /// `DriverSite`).  `None` when the component has no driver.
+    driver_site: Option<DriverSite>,
+}
+
+/// The module-level identity of a component's driver statement: the
+/// module definition whose body contains the statement, and the component
+/// of that module's `ComponentAnalysis` which the statement targets.
+///
+/// An elaborated component's driver is not always written in the
+/// component's own module (`incoming` ports and parent-driven socket
+/// channels are driven from the parent), so the elaboration records the
+/// site when it looks the driver up and later uses it to consult that
+/// module's per-module analyses — in particular its `DependencyGraph`,
+/// whose reference resolution already handles `it` with the statement's
+/// it-block context — instead of re-resolving paths itself.
+#[derive(Debug, Clone, Copy)]
+struct DriverSite {
+    moddef: SymbolId,
+    target: ComponentId,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -205,6 +226,8 @@ impl ElaboratedComponent {
 /// Context supplied by the parent module when recursing into a submodule.
 /// Needed so that `incoming` ports can look up their driver in the parent scope.
 struct ParentCtx {
+    /// The parent module definition (the scope its drivers are written in).
+    moddef: SymbolId,
     component_analysis: Arc<ComponentAnalysis>,
     driver_analysis: Arc<DriverAnalysis>,
     /// The instance name as it appears in the parent (e.g. `"gcd"`), used to
@@ -212,9 +235,27 @@ struct ParentCtx {
     instance_name: String,
 }
 
-/// Recursively traverse the module at `moddef`, collecting all fully-qualified
-/// component paths into `components`.  `prefix` is the dotted path so far
-/// (e.g. `"top"` or `"top.foo"`).
+/// Look up the first driver of the component at module-level `local_path`
+/// in `moddef`'s analyses, together with its `DriverSite`.
+fn lookup_driver(
+    moddef: SymbolId,
+    component_analysis: &ComponentAnalysis,
+    driver_analysis: &DriverAnalysis,
+    local_path: &BStr,
+) -> Option<(Driver, DriverSite)> {
+    let target = component_analysis.resolve(local_path)?.id();
+    let driver = driver_analysis.drivers().get(&target)?.first().cloned()?;
+    Some((driver, DriverSite { moddef, target }))
+}
+
+/// Look up the driver of a submodule's port or socket channel
+/// (`{instance}.{local_path}`) as written in the parent module.
+fn lookup_parent_driver(ctx: &ParentCtx, local_path: &BStr) -> Option<(Driver, DriverSite)> {
+    let sub_path: BString =
+        format!("{}.{}", ctx.instance_name, local_path.to_str_lossy()).into();
+    lookup_driver(ctx.moddef, &ctx.component_analysis, &ctx.driver_analysis, sub_path.as_bstr())
+}
+
 /// Recursively traverse the module at `moddef`, collecting all fully-qualified
 /// component paths into `components`.  `prefix` is the dotted path so far
 /// (e.g. `"top"` or `"top.foo"`).  `env` holds the mono type arguments of the
@@ -289,22 +330,12 @@ fn elaborate_module(
 
                 // `incoming` ports are driven from the parent scope.
                 // All other kinds (outgoing, wire, reg) are driven within this module.
-                let driver = if component.kind == ComponentKind::Incoming {
-                    parent_ctx.as_ref().and_then(|ctx| {
-                        let sub_port_path: BString =
-                            format!("{}.{}", ctx.instance_name, name.to_str_lossy()).into();
-                        let comp = ctx.component_analysis.resolve(sub_port_path.as_ref())?;
-                        ctx.driver_analysis
-                            .drivers()
-                            .get(&comp.id())?
-                            .first()
-                            .cloned()
-                    })
+                let (driver, driver_site) = if component.kind == ComponentKind::Incoming {
+                    parent_ctx.as_ref().and_then(|ctx| lookup_parent_driver(ctx, name))
                 } else {
-                    component_analysis
-                        .resolve(name)
-                        .and_then(|c| driver_analysis.drivers().get(&c.id())?.first().cloned())
-                };
+                    lookup_driver(moddef, &component_analysis, &driver_analysis, name)
+                }
+                .unzip();
 
                 let initial_expr = component_analysis
                     .resolve(name)
@@ -357,6 +388,7 @@ fn elaborate_module(
                     clock,
                     env: env.clone(),
                     driver_scope,
+                    driver_site,
                 });
             }
             AstNodePayload::Submodule(module) => {
@@ -383,6 +415,7 @@ fn elaborate_module(
                     };
                 let child_prefix = format!("{prefix}.{instance_name}");
                 let ctx = ParentCtx {
+                    moddef,
                     component_analysis: component_analysis.clone(),
                     driver_analysis: driver_analysis.clone(),
                     instance_name: instance_name.clone(),
@@ -497,19 +530,18 @@ fn elaborate_module(
                     // The channel may be driven by this module's socket
                     // it-block, or (like `incoming` ports) from the parent
                     // module's scope (`sub.socket.channel := ...`).
-                    let (driver, parent_driven) = component_analysis
-                        .resolve(local_path.as_bstr())
-                        .and_then(|c| driver_analysis.drivers().get(&c.id()).and_then(|ds| ds.first().cloned()))
-                        .map(|d| (Some(d), false))
-                        .unwrap_or_else(|| (
+                    let (found, parent_driven) = match lookup_driver(
+                        moddef, &component_analysis, &driver_analysis, local_path.as_bstr(),
+                    ) {
+                        Some(found) => (Some(found), false),
+                        None => (
                             parent_ctx.as_ref().and_then(|ctx| {
-                                let sub_path: BString = format!("{}.{}",
-                                    ctx.instance_name, local_path.to_str_lossy()).into();
-                                let comp = ctx.component_analysis.resolve(sub_path.as_bstr())?;
-                                ctx.driver_analysis.drivers().get(&comp.id())?.first().cloned()
+                                lookup_parent_driver(ctx, local_path.as_bstr())
                             }),
                             true,
-                        ));
+                        ),
+                    };
+                    let (driver, driver_site) = found.unzip();
                     let id = SignalId(components.len());
                     // Socket-body drivers are written in the module
                     // that declares the socket instance; parent-driven
@@ -531,6 +563,7 @@ fn elaborate_module(
                         clock: None,
                         env: env.clone(),
                         driver_scope,
+                        driver_site,
                     });
                 }
 
@@ -593,23 +626,19 @@ fn elaborate_module(
             .typ()
             .map(|t| substitute(&t, &env))
             .unwrap_or(Type::Bit);
-        let driver = if component_kind == ComponentKind::Incoming {
+        let (driver, driver_site) = if component_kind == ComponentKind::Incoming {
             // Incoming ports are driven from the parent module's scope.
-            parent_ctx.as_ref().and_then(|ctx| {
-                let sub_port_path: BString = format!(
-                    "{}.{}",
-                    ctx.instance_name,
-                    local_path.to_str_lossy()
-                )
-                .into();
-                let comp = ctx.component_analysis.resolve(sub_port_path.as_bstr())?;
-                ctx.driver_analysis.drivers().get(&comp.id())?.first().cloned()
-            })
+            parent_ctx.as_ref().and_then(|ctx| lookup_parent_driver(ctx, local_path.as_bstr()))
         } else {
             // Outgoing: driver analysis drives it with the platform's
             // default expression.
-            driver_analysis.drivers().get(&component.id()).and_then(|ds| ds.first().cloned())
-        };
+            driver_analysis
+                .drivers()
+                .get(&component.id())
+                .and_then(|ds| ds.first().cloned())
+                .map(|d| (d, DriverSite { moddef, target: component.id() }))
+        }
+        .unzip();
         let driver_scope: BString = if component_kind == ComponentKind::Incoming {
             let last_dot = path.rfind_byte(b'.').expect("elaborated path always has at least one dot");
             let second_last = path[..last_dot].rfind_byte(b'.').unwrap_or(0);
@@ -630,6 +659,7 @@ fn elaborate_module(
             clock: None,
             env: env.clone(),
             driver_scope,
+            driver_site,
         });
     }
 }
@@ -834,16 +864,34 @@ fn rewrite_it_path(path: &BStr, it_context: Option<&[u8]>) -> BString {
     path.to_owned()
 }
 
-/// Returns the `ElaboratedComponentId` that `component`'s driver references, if
-/// the driver is a simple `ExprReference` to another elaborated component.
+/// Returns the `SignalId` that `component`'s driver references, if the
+/// driver is a bare reference (`x := y`, `x := it`, `x := it.y`) to another
+/// elaborated component.
+///
+/// Whether the driver is *syntactically* a bare reference is read from the
+/// AST.  *What* that reference names is not re-resolved here: the module's
+/// `DependencyGraph` already resolved every reference in the driver
+/// statement with the statement's it-block context (so `it` inside
+/// `incoming clock : Clock { cpu.clock := it }` is `clock`, and the
+/// elaboration agrees with every other analysis on that).  A bare
+/// reference has exactly one dependee — its source — whose module-level
+/// path is then placed under the driver's scope prefix.
 fn resolve_alias(
     component: &ElaboratedComponent,
     path_to_id: &IndexMap<BString, SignalId>,
     builder: &mut Builder,
 ) -> Option<SignalId> {
     // Only `Driver::Expr` can be a bare reference; `Driver::If` cannot.
-    let Driver::Expr(_, loc) = component.driver.as_ref()? else {
+    let Driver::Expr(driver_type, loc) = component.driver.as_ref()? else {
         return None;
+    };
+    // A register's bare `it <= y` is an alias too: the runtime still
+    // treats the component as a register (the copied value lands in its
+    // pending slot and commits on the clock edge).  Its dependency edge
+    // is sequential rather than combinational.
+    let edge_kind = match driver_type {
+        DriverType::Latched => EdgeKind::Sequential,
+        DriverType::Continuous => EdgeKind::Combinational,
     };
 
     let parsing = builder.get_parsing(loc.package());
@@ -854,25 +902,36 @@ fn resolve_alias(
         return None;
     }
 
-    // `it` / `it.<rest>` names the binding of the enclosing it-block:
-    // `cpu.clock := it` written inside `incoming clock : Clock { ... }`
-    // refers to `clock`, exactly as `it.clock := clock` inside `mod cpu
-    // of Cpu { ... }` does.  Both spellings must resolve to the same
-    // alias, or the simulator puts the two submodules' registers in
-    // different clock domains and commits them at different points of
-    // the same edge (see `sim::circuit::build_clock_domains`).
-    let raw_path = parsing.string(node.path()?);
-    let ref_path = crate::syntax::ast::rewrite_it_to_binding(&parsing, node.id(), raw_path)
-        .to_str_lossy()
-        .into_owned();
+    // The single dependee of the driver statement, as resolved by the
+    // dependency analysis of the module the statement was written in.
+    let site = component.driver_site?;
+    let graph = builder.get_dependency_graph(site.moddef);
+    let mut sources = graph
+        .dependencies_of(site.target)?
+        .iter()
+        .filter(|edge| edge.kind == edge_kind)
+        .map(|edge| edge.dependee);
+    let source = sources.next()?;
+    if sources.next().is_some() {
+        // Not a bare reference after all (e.g. a reference shadowed by a
+        // `let` whose RHS reads several components).
+        return None;
+    }
+    let source_path = builder
+        .get_component_analysis(site.moddef)
+        .component(source)?
+        .path();
 
-    // The scope in which the driver expression was written was computed
+    // The scope in which the driver statement was written was computed
     // during the elaboration walk (`driver_scope`): the component's own
     // module for most kinds, the parent module for `incoming` ports and
     // parent-driven socket channels.
-    let module_prefix = component.driver_scope().to_str_lossy().into_owned();
-
-    let full_path: BString = format!("{module_prefix}.{ref_path}").into();
+    let full_path: BString = format!(
+        "{}.{}",
+        component.driver_scope().to_str_lossy(),
+        source_path.to_str_lossy()
+    )
+    .into();
     let target = path_to_id.get(&full_path).copied();
     // Never alias a component to itself.
     if target == Some(component.id()) {

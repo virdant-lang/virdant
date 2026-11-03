@@ -31,7 +31,7 @@ pub mod Adder {
 
     //> `widen_x + zext(y) + 1`: the widened operands summed, then
     //> incremented by `Inc8`.
-    outgoing sum : Word[8]
+    outgoing sum : Word[8] dependson x, y
 
     //> Shared cross-file module, instantiated from `bits.vir`.
     mod widen_x of bits::Widen {

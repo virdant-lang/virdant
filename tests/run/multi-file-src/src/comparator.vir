@@ -36,7 +36,7 @@ pub mod Equal {
     incoming y : Word[8]
 
     //> True iff `zext(x) == y`.
-    outgoing eq : Bit
+    outgoing eq : Bit dependson x, y
 
     //> Shared cross-file module, instantiated from `bits.vir`.
     mod wide_x of bits::Widen {

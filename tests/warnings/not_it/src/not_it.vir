@@ -18,8 +18,8 @@ mod HalfAdder {
 mod SubmoduleLhs {
     incoming a : Bit
     incoming b : Bit
-    outgoing sum : Bit
-    outgoing carry_out : Bit
+    outgoing sum : Bit dependson a, b
+    outgoing carry_out : Bit dependson a, b
 
     mod ha of HalfAdder {
         // CHECK: 'ha' should be written as 'it' inside of this driver block
@@ -86,8 +86,8 @@ mod CorrectReg {
 mod CorrectSubmodule {
     incoming a : Bit
     incoming b : Bit
-    outgoing sum : Bit
-    outgoing carry_out : Bit
+    outgoing sum : Bit dependson a, b
+    outgoing carry_out : Bit dependson a, b
 
     mod ha of HalfAdder {
         // CHECK-NOT: 'ha' should be written as 'it'
@@ -111,8 +111,8 @@ mod IncorrectSimpleComponentLhs {
 mod UnusedStmt {
     incoming a : Bit
     incoming b : Bit
-    outgoing sum : Bit
-    outgoing carry_out : Bit
+    outgoing sum : Bit dependson a, b
+    outgoing carry_out : Bit dependson a, b
 
     mod ha of HalfAdder {
         it.a := a
@@ -128,7 +128,7 @@ mod UnusedStmt {
 mod CorrectUnused {
     incoming a : Bit
     incoming b : Bit
-    outgoing sum : Bit
+    outgoing sum : Bit dependson a, b
 
     mod ha of HalfAdder {
         it.a := a
