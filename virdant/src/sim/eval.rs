@@ -424,6 +424,10 @@ impl Expr {
     /// layout: the tag selects the slot, the payload bits are bound to
     /// the pattern's variables.  A subject whose bits do not decode
     /// (out-of-range tag) matches no arm.
+    /// Ctor pattern: decode the subject's tag/payload through the
+    /// layout, require every sub-pattern to match its payload, and
+    /// bind the matched values to the pattern's variables (at any
+    /// nesting depth).
     fn eval_match(&self, context: &Context, match_: &payload::Match) -> Value {
         let subject = match_.subject.eval(context);
         let layouts = Self::layouts(context);
@@ -434,8 +438,9 @@ impl Expr {
                     return body.eval(context);
                 }
                 // Ctor pattern: decode the subject's tag/payload through
-                // the layout and bind the payload to the pattern variables.
-                payload::Pat::Ctor { symbol_id, bound_vars } => {
+                // the layout and match each sub-pattern against its
+                // payload, binding ident sub-patterns.
+                payload::Pat::Ctor { symbol_id, sub_pats, .. } => {
                     let Some((slot, payloads)) =
                         layouts.decode_ctor(subject.typ_id(), &subject.bitpat())
                     else {
@@ -444,18 +449,18 @@ impl Expr {
                     if slot.symbol_id != *symbol_id {
                         continue;
                     }
-                    let extra: Vec<(Referent, Value)> = bound_vars
-                        .iter()
+                    let mut bindings: Vec<(Referent, Value)> = Vec::new();
+                    let matched = sub_pats.iter()
                         .zip(payloads.iter())
                         .zip(slot.param_types.iter())
-                        .map(|(((_var_name, var_loc), bits), typ)| {
-                            (
-                                Referent::Location(var_loc.clone()),
-                                Value::new(layouts.type_id(typ), bits.clone()),
-                            )
-                        })
-                        .collect();
-                    let arm_context = context.extend(extra);
+                        .all(|((pat, bits), typ)| {
+                            let payload_value = Value::new(layouts.type_id(typ), bits.clone());
+                            Self::pat_matches(pat, &payload_value, layouts, &mut bindings)
+                        });
+                    if !matched {
+                        continue;
+                    }
+                    let arm_context = context.extend(bindings);
                     return body.eval(&arm_context);
                 }
                 // WordLit pattern: compare bit patterns.
@@ -471,10 +476,54 @@ impl Expr {
                         return body.eval(context);
                     }
                 }
+                // Bind and Wild arms only occur as sub-patterns, never
+                // at the top level of a match.
+                payload::Pat::Bind { .. } | payload::Pat::Wild => {}
             }
         }
         // No arm matched and no else arm — zero bits of the result type.
         self.val_zeros(self.width_of_typ(context))
+    }
+
+    /// Does `value` match the sub-`pat`?  Ident sub-patterns bind
+    /// `value` into `bindings` (at any nesting depth); nested ctor
+    /// sub-patterns decode `value` through the type layout and match
+    /// their own sub-patterns recursively.
+    fn pat_matches(
+        pat: &payload::Pat,
+        value: &Value,
+        layouts: &TypeLayoutIndex,
+        bindings: &mut Vec<(Referent, Value)>,
+    ) -> bool {
+        match pat {
+            payload::Pat::Bind { location } => {
+                bindings.push((Referent::Location(location.clone()), value.clone()));
+                true
+            }
+            payload::Pat::Wild | payload::Pat::Else => true,
+            payload::Pat::WordLit { width, value: expected } => {
+                value.width() == *width && value.bits_eq(&BitPat::from_u64(*width, *expected))
+            }
+            payload::Pat::BitLit { value: expected } => {
+                value.width() == 1 && value.get_bit(0) == *expected
+            }
+            payload::Pat::Ctor { symbol_id, sub_pats, .. } => {
+                let Some((slot, payloads)) = layouts.decode_ctor(value.typ_id(), &value.bitpat())
+                else {
+                    return false;
+                };
+                if slot.symbol_id != *symbol_id {
+                    return false;
+                }
+                sub_pats.iter()
+                    .zip(payloads.iter())
+                    .zip(slot.param_types.iter())
+                    .all(|((sub_pat, bits), typ)| {
+                        let payload_value = Value::new(layouts.type_id(typ), bits.clone());
+                        Self::pat_matches(sub_pat, &payload_value, layouts, bindings)
+                    })
+            }
+        }
     }
 
     /// Evaluate a binary operator.

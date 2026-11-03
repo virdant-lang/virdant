@@ -158,22 +158,28 @@ fn convert_pattern(
     subject_typ: &Type,
 ) -> payload::Pat {
     match pat_node.payload() {
-        AstNodePayload::PatCtor(pat_ident) => {
-            let ctor_name = parsing.string(pat_ident.name);
-            let Type::Usual(typedef_id, _args) = subject_typ else {
+        AstNodePayload::PatCtor(pat_ctor) => {
+            let ctor_name = parsing.string(pat_ctor.name);
+            let Type::Usual(typedef_id, args) = subject_typ else {
                 return payload::Pat::Else;
             };
             let symboltable = db.get_symboltable();
             let Some(ctor_sym) = symboltable.slot(*typedef_id, ctor_name) else {
                 return payload::Pat::Else;
             };
-            let bound_vars: Vec<(BString, Location)> = pat_node.children().iter()
-                .filter_map(|c| {
-                    let interned = c.path()?;
-                    Some((parsing.string(interned).to_owned(), c.location()))
+            // Convert each sub-pattern against its parameter's mono type.
+            let sig = db.get_ctor_signature(ctor_sym.id());
+            let children = pat_node.children();
+            let sub_pats: Vec<payload::Pat> = sig.parameters.iter()
+                .enumerate()
+                .map(|(i, (_param_name, param_typ))| {
+                    let param_typ = substitute(param_typ, args);
+                    children.get(i)
+                        .map(|child| convert_pattern(db, parsing, child, &param_typ))
+                        .unwrap_or(payload::Pat::Wild)
                 })
                 .collect();
-            payload::Pat::Ctor { symbol_id: ctor_sym.id(), bound_vars }
+            payload::Pat::Ctor { symbol_id: ctor_sym.id(), sub_pats }
         }
         AstNodePayload::PatEnumerant(pat_enum) => {
             let Type::Usual(typedef_id, _args) = subject_typ else {
@@ -184,7 +190,7 @@ fn convert_pattern(
             let Some(sym) = symboltable.slot(*typedef_id, enum_name) else {
                 return payload::Pat::Else;
             };
-            payload::Pat::Ctor { symbol_id: sym.id(), bound_vars: vec![] }
+            payload::Pat::Ctor { symbol_id: sym.id(), sub_pats: vec![] }
         }
         AstNodePayload::PatWordLit(pat_word_lit) => {
             let Type::Word(width) = subject_typ else {
@@ -200,6 +206,13 @@ fn convert_pattern(
             }
             payload::Pat::BitLit { value: pat_bit_lit.literal }
         }
+        AstNodePayload::PatIdent(_) => {
+            // Ident patterns match everything and bind the value.
+            payload::Pat::Bind {
+                location: pat_node.location(),
+            }
+        }
+        AstNodePayload::PatDontcare => payload::Pat::Wild,
         _ => payload::Pat::Else,
     }
 }
@@ -275,12 +288,8 @@ fn resolve_pattern_binding(
                     if body.id() == child_id {
                         if let Some(pat) = pat_opt {
                             if let AstNodePayload::PatCtor(_) = pat.payload() {
-                                for var in pat.children() {
-                                    if let Some(interned) = var.path() {
-                                        if parsing.string(interned) == name {
-                                            return Some(var.location());
-                                        }
-                                    }
+                                if let Some(loc) = find_pattern_var(pat, parsing, name) {
+                                    return Some(loc);
                                 }
                             }
                         }
@@ -292,6 +301,27 @@ fn resolve_pattern_binding(
         if parent.is_item() { return None; }
         child_id = parent_id;
     }
+}
+
+/// Search a ctor pattern tree for an ident pattern named `name`;
+/// returns the location of its AST node.
+fn find_pattern_var(pat_node: &AstNode<'_>, parsing: &Parsing, name: &bstr::BStr) -> Option<Location> {
+    for child in pat_node.children() {
+        match child.payload() {
+            AstNodePayload::PatIdent(pat_ident) => {
+                if parsing.string(pat_ident.name) == name {
+                    return Some(child.location());
+                }
+            }
+            AstNodePayload::PatCtor(_) | AstNodePayload::PatEnumerant(_) => {
+                if let Some(loc) = find_pattern_var(&child, parsing, name) {
+                    return Some(loc);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn parse_word_value(s: &str) -> WordValue {

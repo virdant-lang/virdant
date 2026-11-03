@@ -379,18 +379,6 @@ fn elaborate_module(
                         Some(symbol) => symbol.clone(),
                         None => continue,
                     };
-                // Generic mod defs are not yet implemented (guarded with
-                // an error by the component analysis); skip them here so
-                // their generic (Param-carrying) types never reach mono
-                // artifacts.
-                {
-                    let submodule_location = submodule_symbol.location();
-                    let submodule_parsing = builder.get_parsing(submodule_location.package());
-                    let submodule_ast = submodule_parsing.ast_node(submodule_location.ast_node_id());
-                    if crate::types::typedef::generics_decl_of(&submodule_ast).is_some() {
-                        continue;
-                    }
-                }
                 let child_prefix = format!("{prefix}.{instance_name}");
                 let ctx = ParentCtx {
                     component_analysis: component_analysis.clone(),

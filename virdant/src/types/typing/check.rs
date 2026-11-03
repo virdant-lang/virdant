@@ -58,6 +58,18 @@ impl Typing {
             }
         }
 
+        // The infer pass may have already annotated this node (e.g. an
+        // arm body inferred while synthesizing a match's type, or the
+        // match itself).  Reuse the recorded type instead of
+        // re-traversing: annotations are unique per node.
+        if let Some(existing_typ) = self.typs.get(&node.id()).cloned() {
+            if Self::compatible_typs(&existing_typ, expected_typ) {
+                return Ok(());
+            }
+            self.flag_wrong_type(node, expected_typ, &existing_typ);
+            return Err(());
+        }
+
         if let Some(actual_typ) = self.infer(builder, context.clone(), node)? {
             if !Self::compatible_typs(&actual_typ, expected_typ) {
                 self.flag_wrong_type(node, expected_typ, &actual_typ);
@@ -527,7 +539,13 @@ impl Typing {
         expected_typ: &Type,
     ) -> Result<(), ()> {
         let subject = node.subject().unwrap();
-        let Some(subject_typ) = self.infer(builder, context.clone(), &subject)? else {
+        // The infer pass may have already inferred the subject (when it
+        // inferred this match's type from its arm bodies); reuse it.
+        let subject_typ = if let Some(existing) = self.typs.get(&subject.id()) {
+            existing.clone()
+        } else if let Some(subject_typ) = self.infer(builder, context.clone(), &subject)? {
+            subject_typ
+        } else {
             self.flag_cant_infer(&subject);
             return Err(());
         };
@@ -687,12 +705,11 @@ impl Typing {
                 let mut arm_context = context;
                 for (child, (_param_name, param_typ)) in children.iter().zip(parameters.iter())
                 {
-                    self.annotate(child, param_typ);
-                    if let Some(var_name_interned) = child.path() {
-                        let var_name = child.parsing().string(var_name_interned).to_owned();
-                        arm_context =
-                            arm_context.push_local(var_name, child.location(), param_typ.clone());
-                    }
+                    // Recurse into the sub-pattern: nested ctor patterns
+                    // are checked against the substituted parameter type,
+                    // and ident patterns (at any depth) bind the payload.
+                    arm_context =
+                        self.check_pat(builder, arm_context, child, &param_typ)?;
                 }
                 Ok(arm_context)
             }

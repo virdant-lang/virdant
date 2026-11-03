@@ -195,7 +195,12 @@ impl Typing {
     fn annotate(&mut self, node: &AstNode<'_>, typ: &Type) {
         let previous = self.typs.insert(node.id(), typ.clone());
         if let Some(previous_typ) = previous {
-            panic!("Node is already annotated with {previous_typ:?}, can't annotate with {typ:?} at {:?}", node.region());
+            if previous_typ != *typ {
+                panic!("Node is already annotated with {previous_typ:?}, can't annotate with {typ:?} at {:?}", node.region());
+            }
+            // Redundant but consistent annotation: restore the original
+            // entry (insert already replaced it with an equal type, so
+            // no action is needed).
         }
     }
 
@@ -775,13 +780,14 @@ fn extend_context_with_stmt_match_pat(
             let sig = builder.get_ctor_signature(ctor_symbol_id);
             let children = pat_node.children();
             for (child, (_param_name, param_typ)) in children.iter().zip(sig.parameters.iter()) {
-                if let Some(var_name_interned) = child.path() {
-                    let var_name = child.parsing().string(var_name_interned).to_owned();
-                    // Substitute the def's generic parameters with the
-                    // type arguments of the subject type.
-                    let param_typ = substitute(param_typ, args);
-                    context = context.push_local(var_name, child.location(), param_typ);
-                }
+                // Substitute the def's generic parameters with the
+                // type arguments of the subject type, then recurse:
+                // nested ctor patterns bind their own payloads, and
+                // ident patterns (at any depth) bind the payload.
+                let param_typ = substitute(param_typ, args);
+                context = extend_context_with_stmt_match_pat(
+                    builder, child, &param_typ, context,
+                );
             }
         }
         _ => {}

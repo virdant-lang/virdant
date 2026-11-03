@@ -16,6 +16,7 @@ use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticPayload};
 use crate::syntax::ast::{AstNode, match_arm_children};
 use crate::syntax::payload::AstNodePayload;
+use crate::types::substitute::substitute;
 use crate::types::Type;
 
 pub(crate) fn check_match_coverage(
@@ -79,7 +80,7 @@ pub(crate) fn check_match_coverage(
     // diagnostics inline; expression matches are already covered by check_pat.
     let is_stmt_match = matches!(match_node.payload(), AstNodePayload::Match);
     let mut overlap: Option<(Region, BString)> = None;
-    let mut covered_syms: IndexMap<SymbolId, Region> = IndexMap::new();
+    let mut covered_syms: IndexMap<SymbolId, (&AstNode<'_>, Region)> = IndexMap::new();
     let mut covered_words: IndexMap<WordValue, Region> = IndexMap::new();
     let mut covered_bits: IndexMap<bool, Region> = IndexMap::new();
     let mut any_pattern_seen = false;
@@ -120,10 +121,16 @@ pub(crate) fn check_match_coverage(
                 let name = parsing.string(pat_ctor.name);
                 let Some(sym) = symboltable.slot(*typedef_id, name) else { continue };
                 let sym_id = sym.id();
-                if covered_syms.contains_key(&sym_id) {
-                    overlap = Some((pat.region(), format!("@{}", name.to_str_lossy()).into()));
+                if let Some((prev_pat, _prev_region)) = covered_syms.get(&sym_id) {
+                    // Two arms on the same ctor overlap only when their
+                    // sub-patterns overlap: `@Valid(@Valid(x))` and
+                    // `@Valid(@Invalid())` are disjoint, while
+                    // `@Valid(x)` overlaps any later `@Valid(...)`.
+                    if ctor_pats_overlap(prev_pat, pat, subject_typ, builder) {
+                        overlap = Some((pat.region(), format!("@{}", name.to_str_lossy()).into()));
+                    }
                 } else {
-                    covered_syms.insert(sym_id, pat.region());
+                    covered_syms.insert(sym_id, (pat, pat.region()));
                 }
                 any_pattern_seen = true;
             }
@@ -160,7 +167,7 @@ pub(crate) fn check_match_coverage(
                 if covered_syms.contains_key(&sym_id) {
                     overlap = Some((pat.region(), format!("#{}", name.to_str_lossy()).into()));
                 } else {
-                    covered_syms.insert(sym_id, pat.region());
+                    covered_syms.insert(sym_id, (pat, pat.region()));
                 }
                 any_pattern_seen = true;
             }
@@ -248,6 +255,71 @@ pub(crate) fn check_match_coverage(
                 missing: format_missing(&missing),
             },
         ));
+    }
+}
+
+/// True when two ctor (`@Name(...)`) patterns on the same subject type
+/// can both match a single value.  Arms with different ctors are
+/// disjoint; arms with the same ctor overlap exactly when their
+/// sub-patterns overlap pairwise.
+fn ctor_pats_overlap(
+    a: &AstNode<'_>,
+    b: &AstNode<'_>,
+    subject_typ: &Type,
+    builder: &mut Builder,
+) -> bool {
+    let AstNodePayload::PatCtor(a_ctor) = a.payload() else { return true };
+    let AstNodePayload::PatCtor(b_ctor) = b.payload() else { return true };
+    let Type::Usual(typedef_id, args) = subject_typ else { return true };
+    let symboltable = builder.get_symboltable();
+    let a_name = a.parsing().string(a_ctor.name);
+    let b_name = b.parsing().string(b_ctor.name);
+    let Some(a_sym) = symboltable.slot(*typedef_id, a_name) else { return true };
+    let Some(b_sym) = symboltable.slot(*typedef_id, b_name) else { return true };
+    if a_sym.id() != b_sym.id() {
+        return false;
+    }
+    let sig = builder.get_ctor_signature(a_sym.id());
+    let a_children = a.children();
+    let b_children = b.children();
+    if a_children.len() != b_children.len() {
+        // Arity mismatch is a typing error; stay conservative.
+        return true;
+    }
+    for ((child_a, child_b), (_param_name, param_typ)) in
+        a_children.iter().zip(b_children.iter()).zip(sig.parameters.iter())
+    {
+        let param_typ = substitute(param_typ, args);
+        if !pattern_nodes_overlap(child_a, child_b, &param_typ, builder) {
+            return false;
+        }
+    }
+    true
+}
+
+/// True when two pattern AST nodes can both match a single value of
+/// `typ`.  Ident and dontcare patterns match anything; literal
+/// patterns overlap only with the same value; ctor patterns recurse.
+fn pattern_nodes_overlap(
+    a: &AstNode<'_>,
+    b: &AstNode<'_>,
+    typ: &Type,
+    builder: &mut Builder,
+) -> bool {
+    use AstNodePayload::*;
+    match (a.payload(), b.payload()) {
+        (PatIdent(_), _) | (_, PatIdent(_)) => true,
+        (PatDontcare, _) | (_, PatDontcare) => true,
+        (PatCtor(_), PatCtor(_)) => ctor_pats_overlap(a, b, typ, builder),
+        (PatWordLit(lit_a), PatWordLit(lit_b)) => {
+            let literal_a = a.parsing().string(lit_a.literal).to_str_lossy().into_owned();
+            let literal_b = b.parsing().string(lit_b.literal).to_str_lossy().into_owned();
+            parse_word_literal_value(&literal_a) == parse_word_literal_value(&literal_b)
+        }
+        (PatBitLit(lit_a), PatBitLit(lit_b)) => lit_a.literal == lit_b.literal,
+        // Mismatched kinds (e.g. word literal vs ctor) come from a
+        // typing error; stay conservative.
+        _ => true,
     }
 }
 
@@ -406,7 +478,7 @@ fn subject_category(builder: &mut Builder, subject_typ: &Type) -> Category {
 
 fn compute_missing(
     category: &Category,
-    covered_syms: &IndexMap<SymbolId, Region>,
+    covered_syms: &IndexMap<SymbolId, (&AstNode<'_>, Region)>,
     covered_words: &IndexMap<WordValue, Region>,
     covered_bits: &IndexMap<bool, Region>,
 ) -> (Vec<BString>, bool) {

@@ -6,6 +6,20 @@
 use super::*;
 use crate::util::log2;
 
+/// Natural width of a widthless word literal: binary (`0b...`) digits
+/// count as one bit each and hex (`0x...`) digits as four bits each,
+/// with `_` separators ignored.  Other spellings (e.g. decimal) have
+/// no self-evident width and yield `None`.
+fn natural_word_width(spelling: &[u8]) -> Option<Width> {
+    if let Some(digits) = spelling.strip_prefix(b"0b") {
+        Some(digits.iter().filter(|b| **b != b'_').count() as Width)
+    } else if let Some(digits) = spelling.strip_prefix(b"0x") {
+        Some((digits.iter().filter(|b| **b != b'_').count() * 4) as Width)
+    } else {
+        None
+    }
+}
+
 impl Typing {
     pub(super) fn infer<'p>(
         &mut self,
@@ -42,6 +56,7 @@ impl Typing {
                 Ok(self.infer_index_range(builder, context, &node, indexrange)?)
             }
             AstNodePayload::ExprWord => Ok(self.infer_word(builder, context, &node)?),
+            AstNodePayload::Match => Ok(self.infer_match(builder, context, &node)?),
             AstNodePayload::ExprAs => {
                 let subject = node.child(0);
                 let typ_node = node.child(1);
@@ -81,6 +96,99 @@ impl Typing {
             }
             _ => Ok(None),
         }
+    }
+
+    /// Infer a `match` expression from its arm bodies: every arm body
+    /// must infer to the same type.  Arm patterns are validated (and
+    /// annotated) only by the check pass's `check_match`, which runs
+    /// whenever this inference fails.  When the subject or any arm body
+    /// is uninferable (or the arms disagree), infer nothing: the caller
+    /// falls back to checking the match against an expected type.
+    fn infer_match<'p>(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        node: &AstNode<'p>,
+    ) -> Result<Option<Type>, ()> {
+        let subject = node.subject().unwrap();
+        let Some(subject_typ) = self.infer(builder, context.clone(), &subject)? else {
+            // Do not flag here: the check pass re-infers the subject and
+            // reports CantInfer exactly once.
+            return Ok(None);
+        };
+
+        let children = node.children();
+        let mut result: Option<Type> = None;
+        let mut idx = 1;
+        while idx < children.len() {
+            if children[idx].is_pat() {
+                let pat = &children[idx];
+                let expr = &children[idx + 1];
+                let arm_context = super::extend_context_with_stmt_match_pat(
+                    builder, pat, &subject_typ, context.clone(),
+                );
+                match self.infer_match_arm_expr(builder, arm_context, expr)? {
+                    Some(typ) => {
+                        if let Some(prev) = &result {
+                            if prev != &typ {
+                                return Ok(None);
+                            }
+                        } else {
+                            result = Some(typ);
+                        }
+                    }
+                    None => return Ok(None),
+                }
+                idx += 2;
+            } else {
+                let expr = &children[idx];
+                match self.infer_match_arm_expr(builder, context.clone(), expr)? {
+                    Some(typ) => {
+                        if let Some(prev) = &result {
+                            if prev != &typ {
+                                return Ok(None);
+                            }
+                        } else {
+                            result = Some(typ);
+                        }
+                    }
+                    None => return Ok(None),
+                }
+                idx += 1;
+            }
+        }
+
+        if let Some(typ) = &result {
+            self.annotate(node, typ);
+        }
+        Ok(result)
+    }
+
+    /// Infer the body expression of a match arm.  Falls back to the
+    /// natural width of widthless binary/hex word literals (`0b0001`,
+    /// `0x5A`), whose width comes from their digit count rather than
+    /// from the surrounding context.  The literal node is annotated
+    /// with its natural width so downstream queries find a type even
+    /// when the surrounding `check` short-circuits on the inferred
+    /// match type.
+    fn infer_match_arm_expr<'p>(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        expr: &AstNode<'p>,
+    ) -> Result<Option<Type>, ()> {
+        if let Some(typ) = self.infer(builder, context, expr)? {
+            return Ok(Some(typ));
+        }
+        if let AstNodePayload::ExprWordLit(_) = expr.payload() {
+            let spelling = expr.spelling();
+            if let Some(width) = natural_word_width(spelling) {
+                let typ = Type::Word(width);
+                self.annotate(expr, &typ);
+                return Ok(Some(typ));
+            }
+        }
+        Ok(None)
     }
 
     fn infer_word<'p>(

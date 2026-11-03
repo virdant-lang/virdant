@@ -30,7 +30,19 @@ pub struct If {
 
 #[derive(Debug)]
 pub enum Pat {
-    Ctor { symbol_id: SymbolId, bound_vars: Vec<(BString, Location)> },
+    /// A `@Name(sub...)` ctor (or payload enumerant) pattern: matches
+    /// when the decoded tag selects this ctor and every sub-pattern
+    /// matches the corresponding payload.  Ident sub-patterns at any
+    /// depth bind their payload.
+    Ctor {
+        symbol_id: SymbolId,
+        sub_pats: Vec<Pat>,
+    },
+    /// An ident pattern at any depth: matches everything and binds
+    /// the matched value to the name.
+    Bind { location: Location },
+    /// A dontcare pattern at any depth: matches everything, binds nothing.
+    Wild,
     WordLit { width: Width, value: WordValue },
     BitLit { value: bool },
     Else,
