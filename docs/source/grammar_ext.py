@@ -1,5 +1,21 @@
-from pygments.lexer import RegexLexer, bygroups
+from pygments.lexer import RegexLexer, bygroups, words
 from pygments.token import *
+
+
+# Keywords from the `Tokens:` section of GRAMMAR.txt.
+KEYWORDS = [
+    'builtin', 'bus', 'client', 'cosi', 'default', 'dependson',
+    'dontcare', 'dyn', 'else', 'enum', 'ext', 'for', 'if', 'import',
+    'incoming', 'initial', 'it', 'let', 'match', 'mod', 'net', 'of',
+    'on', 'outgoing', 'platform', 'pub', 'reg', 'server', 'soci',
+    'socket', 'struct', 'tap', 'type', 'union', 'unused', 'when',
+    'wire', 'with',
+]
+
+# Lexical token names, which appear as quoted terminals in GRAMMAR.txt.
+TOKEN_NAMES = [
+    'DocBang', 'DocComment', 'Ident', 'Nat', 'Str', 'Word',
+]
 
 
 class GrammarLexer(RegexLexer):
@@ -11,6 +27,15 @@ class GrammarLexer(RegexLexer):
         'root': [
             # Line comments
             (r'//.*$', Comment.Single),
+
+            # Quoted terminals which are keywords (must come before generic strings)
+            (words(KEYWORDS, prefix=r'"', suffix=r'"'), Keyword),
+
+            # Boolean literals
+            (r'"(true|false)"', Keyword.Constant),
+
+            # Lexical token names like "DocComment", "Ident", "Nat"
+            (words(TOKEN_NAMES, prefix=r'"', suffix=r'"'), Name.Builtin),
 
             # String literals (double-quoted)
             (r'"([^"\\]|\\.)*"', String),
@@ -38,14 +63,25 @@ class GrammarLexer(RegexLexer):
             # The assignment operator
             (r':=', Operator),
 
-            # Ellipsis
+            # Multi-character operators and punctuation
+            # (must come before single-character rules)
+            (r':=:', Punctuation),
+            (r'#=#', Punctuation),
+            (r'#-', Punctuation),
+            (r'#=', Punctuation),
+            (r'::', Punctuation),
+            (r'\.\.', Punctuation),
+            (r'->', Punctuation),
+            (r'<=', Punctuation),
+            (r'>=', Punctuation),
+            (r'==', Punctuation),
+            (r'!=', Punctuation),
+            (r'&&', Punctuation),
+            (r'\|\|', Punctuation),
+            (r'\^\^', Punctuation),
+            (r'\+\.', Punctuation),
+            (r'-\.', Punctuation),
             (r'\.\.\.', Punctuation),
-
-            # Colon (for productions like "ident:")
-            (r':', Punctuation),
-
-            # Hyphen (in character ranges like a-z, or standalone)
-            (r'-', Punctuation),
 
             # The alternation operator
             (r'\|', Operator),
@@ -53,8 +89,11 @@ class GrammarLexer(RegexLexer):
             # Arrow
             (r'=>', Punctuation),
 
-            # Grouping parentheses
-            (r'[()]', Punctuation),
+            # Single-character punctuation
+            (r'[(){}\[\],.;<>$#@~&^!-]', Punctuation),
+
+            # Colon
+            (r':', Punctuation),
 
             # Digits (standalone, like '0', '9' in char class ranges)
             (r'[0-9]', Number),

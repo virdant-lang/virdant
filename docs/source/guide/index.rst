@@ -1,6 +1,6 @@
-Tutorial
-========
-This tutorial will introduce Virdant through a series of examples.
+Guide
+=====
+This guide will introduce Virdant through a series of examples.
 
 .. toctree::
     :maxdepth: 1
@@ -10,5 +10,4 @@ This tutorial will introduce Virdant through a series of examples.
     mux
     arbiter
     adder
-    blink
     spi

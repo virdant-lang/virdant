@@ -15,11 +15,12 @@ class VirdantLexer(RegexLexer):
     filenames = ['*.vir']
 
     KEYWORDS = [
-        'builtin', 'soci', 'client', 'cosi', 'else', 'enum',
-        'export', 'ext', 'fn', 'if', 'import', 'incoming',
-        'match', 'mod', 'of', 'on', 'outgoing', 'pub', 'reg',
-        'server', 'socket', 'struct', 'type', 'union',
-        'unused', 'when', 'width', 'wire', 'with',
+        'builtin', 'bus', 'client', 'cosi', 'default', 'dependson',
+        'dontcare', 'dyn', 'else', 'enum', 'ext', 'for', 'if', 'import',
+        'incoming', 'initial', 'it', 'let', 'match', 'mod', 'net', 'of',
+        'on', 'outgoing', 'platform', 'pub', 'reg', 'server', 'soci',
+        'socket', 'struct', 'tap', 'type', 'union', 'unused', 'when',
+        'wire', 'with',
     ]
 
     BUILTINS = ['Bit', 'Word', 'Vec', 'tuple', 'Nat', 'Shape', 'io']

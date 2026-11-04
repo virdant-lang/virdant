@@ -83,6 +83,41 @@
     color: #C65D3B;
 }
 
+
+/* Keywords: "let", "when", "with", etc. */
+.highlight-grammar .k {
+    color: #556B2F;
+    font-weight: normal;
+}
+
+/* Boolean literals: "true", "false" */
+.highlight-grammar .kc {
+    color: #C65D3B;
+}
+
+/* Lexical token names: "DocComment", "Ident", "Nat", etc. */
+.highlight-grammar .nb {
+    color: #B8851A;
+    font-weight: 500;
+}
+
+/* Keywords: "let", "when", "with", etc. */
+.grammar-inline .k {
+    color: #556B2F;
+    font-weight: normal;
+}
+
+/* Boolean literals: "true", "false" */
+.grammar-inline .kc {
+    color: #C65D3B;
+}
+
+/* Lexical token names: "DocComment", "Ident", "Nat", etc. */
+.grammar-inline .nb {
+    color: #B8851A;
+    font-weight: 500;
+}
+
 /* ----- Dark mode overrides ----- */
 [data-theme="dark"] .highlight-grammar .c1 {
     color: #6a7a6a;
@@ -138,4 +173,28 @@
 
 [data-theme="dark"] .grammar-inline .m {
     color: #c89070;
+}
+
+[data-theme="dark"] .highlight-grammar .k {
+    color: #8a9a7a;
+}
+
+[data-theme="dark"] .highlight-grammar .kc {
+    color: #c89070;
+}
+
+[data-theme="dark"] .highlight-grammar .nb {
+    color: #b8a060;
+}
+
+[data-theme="dark"] .grammar-inline .k {
+    color: #8a9a7a;
+}
+
+[data-theme="dark"] .grammar-inline .kc {
+    color: #c89070;
+}
+
+[data-theme="dark"] .grammar-inline .nb {
+    color: #b8a060;
 }

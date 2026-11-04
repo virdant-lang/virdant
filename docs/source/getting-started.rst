@@ -58,7 +58,7 @@ You will see our hello world design.
     the entry point to a hardware design is traditionally a module called `Top`
 
 We won't worry about how any of this works for now.
-The tutorial will teach you from scratch.
+The guide will teach you from scratch.
 Just get a feel for what Virdant looks like:
 
 .. literalinclude:: /examples/hello/src/top.vir

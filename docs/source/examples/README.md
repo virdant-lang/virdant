@@ -11,14 +11,14 @@ creates one:
 ```
 
 These projects double as the live sources for the documentation: the
-tutorial pages `literalinclude` files from here, and the vir-virtue test
+guide pages `literalinclude` files from here, and the vir-virtue test
 runner (see the root `Makefile`) runs `vir check` on every project, so a
 broken example fails `make test`.
 
 Notes:
 
 - `hello/` contains two packages (`hello` and `strobe`) because the
-  hello tutorial walks through a multi-package design; `testbench.sv`
+  hello guide walks through a multi-package design; `testbench.sv`
   there is the simulator testbench shown in the getting-started guide.
 - `packages/` demonstrates imports across packages (`top` imports
   `buffer`).
