@@ -1,0 +1,54 @@
+pub mod Top {
+    incoming clock : Clock
+    incoming reset : Reset
+    outgoing fin : Bit
+
+    unused clock
+    unused reset
+
+    fin := false
+
+    wire x : Word[4] {
+        it := 0b1010w4
+        unused it
+    }
+
+    wire y : Word[4] {
+        it := 0b0011w4
+        unused it
+    }
+
+    // 10 + 3 = 13, no carry out.
+    wire sum_nc : Word[5] {
+        it := x +. y
+        unused it
+    }
+
+    // 15 + 1 = 16, carry out set (bit 4).
+    wire max : Word[4] {
+        it := 0b1111w4
+        unused it
+    }
+    wire sum_c : Word[5] {
+        it := max +. 0b0001w4
+        unused it
+    }
+
+    // 10 - 3 = 7, no borrow out.
+    wire diff_nb : Word[5] {
+        it := x -. y
+        unused it
+    }
+
+    // 3 - 10 underflows: borrow out set, low bits wrap to 25.
+    wire diff_b : Word[5] {
+        it := y -. x
+        unused it
+    }
+
+    // 15 - 0 = 15, no borrow.
+    wire diff_zero : Word[5] {
+        it := max -. 0b0000w4
+        unused it
+    }
+}

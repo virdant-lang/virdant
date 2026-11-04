@@ -1,0 +1,56 @@
+//! Self-checking `kind = "run"` test for add-with-carry (`+.`) and
+//! subtract-with-borrow (`-.`).
+//!
+//! Both operators act like `+` / `-` but produce a result one bit
+//! wider than their operands: the extra most-significant bit holds
+//! the carry-out (for `+.`) or the borrow-out (for `-.`).  The
+//! harness sweeps `count` over `Word[4]` and checks, every cycle,
+//! that the widened results equal the zero-extended operands combined
+//! with plain wide arithmetic — which pins down both the low bits and
+//! the carry/borrow bit for wraparound and underflow cases.
+
+import virt
+
+pub mod CarryTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Sweep operand, 0 through 0xf.
+    reg count : Word[4] on clock {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> `count +. 0xf`: carry out exactly when `count` overflows
+    //> `Word[4]`, i.e. for every nonzero `count`.
+    wire sum : Word[5] {
+        it := count +. 0xFw4
+    }
+
+    //> `count -. 1`: borrow out exactly when `count` underflows, i.e.
+    //> for `count == 0`.
+    wire diff : Word[5] {
+        it := count -. 0x1w4
+    }
+
+    //> Running AND of every check.  The zero-extended-operand
+    //> expressions compute the golden values with ordinary `Word[5]`
+    //> arithmetic, which cannot wrap for these operand ranges.
+    reg all_ok : Bit on clock {
+        initial it <= true
+        it <= it
+            && sum == word(0w1, count) + 0xFw5
+            && diff == word(0w1, count) - 0x1w5
+    }
+
+    //> `@Valid(0)` after the last cycle checked out; `@Valid(1)` if
+    //> any check failed.  While `@Invalid()`, the simulator keeps
+    //> running.
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when count == 0x9 => @Valid(if { when all_ok => 0 else => 1 })
+            when count > 0x9 => @Valid(1)
+            else => @Invalid()
+        }
+    }
+}

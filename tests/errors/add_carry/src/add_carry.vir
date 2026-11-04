@@ -1,0 +1,22 @@
+// Add-with-carry / subtract-with-borrow require compatible operand
+// types, just like `+` and `-`.
+
+pub mod MismatchedWidths {
+    incoming a : Word[4]
+    incoming b : Word[5]
+    // CHECK: Expected Word[4] but found Word[5]
+    outgoing out : Word[5] dependson a, b {
+        it := a +. b
+    }
+}
+
+pub mod MismatchedWidths2 {
+    incoming a : Word[4]
+    incoming b : Word[4]
+    // CHECK: Expected Word[4] but found Word[5]
+    outgoing out : Word[4] dependson a, b {
+        it := a +. b
+    }
+}
+
+// CHECK: Check failed

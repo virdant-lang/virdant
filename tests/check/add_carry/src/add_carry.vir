@@ -1,0 +1,58 @@
+// Tests typing of add-with-carry (`+.`) and subtract-with-borrow
+// (`-.`): the operands follow the same rules as `+` / `-` (both
+// inferrable and compatible, or one checked against the other), and
+// the result is the operands' common type widened by one bit.
+
+// CHECK: Check OK
+
+pub mod AddCarryBoth {
+    incoming a : Word[4]
+    incoming b : Word[4]
+    outgoing out : Word[5] dependson a, b {
+        // Both operands are Word[4]; the result is one bit wider.
+        it := a +. b
+    }
+}
+
+pub mod AddCarryInferFromLhs {
+    incoming a : Word[4]
+    outgoing out : Word[5] dependson a {
+        // Only the LHS is inferrable; the RHS literal is checked
+        // against Word[4], and the result is widened to Word[5].
+        it := a +. 4w4
+    }
+}
+
+pub mod SubBorrowInferFromRhs {
+    incoming a : Word[4]
+    outgoing out : Word[5] dependson a {
+        // Only the RHS is inferrable; the LHS literal is checked
+        // against Word[4], and the result is widened to Word[5].
+        it := 4w4 -. a
+    }
+}
+
+pub mod SubBorrowBoth {
+    incoming a : Word[8]
+    incoming b : Word[8]
+    outgoing out : Word[9] dependson a, b {
+        it := a -. b
+    }
+}
+
+pub mod CarryBitOperands {
+    // A Bit is a one-bit word: two Bits combined with `+.` produce a
+    // two-bit result.
+    outgoing out : Word[2] {
+        it := true +. false
+    }
+}
+
+pub mod CarryInExpression {
+    incoming a : Word[4]
+    incoming b : Word[4]
+    outgoing out : Word[1] dependson a, b {
+        // The carry bit can be sliced out of the widened result.
+        it := (a +. b)[5..4]
+    }
+}

@@ -54,6 +54,26 @@ fn mask(width: Width) -> u64 {
     if width >= 64 { u64::MAX } else { (1u64 << width) - 1 }
 }
 
+/// Add-with-carry / subtract-with-borrow on same-width patterns:
+/// zero-extend both operands by one bit, then add or subtract.  The
+/// extra most-significant bit of the result holds the carry-out
+/// (`AddCarry`) or borrow-out (`SubBorrow`).
+fn widened_addsub(op: BinOp, lhs: &BitPat, rhs: &BitPat) -> BitPat {
+    assert!(lhs.width() == rhs.width(), "widened_addsub: width mismatch");
+    let w = lhs.width();
+    let mut a = BitPat::zeros(w + 1);
+    let mut b = BitPat::zeros(w + 1);
+    for i in 0..w as usize {
+        a.set_bit(i, lhs.get_bit(i));
+        b.set_bit(i, rhs.get_bit(i));
+    }
+    match op {
+        BinOp::AddCarry => a.add(&b),
+        BinOp::SubBorrow => a.sub(&b),
+        _ => unreachable!("widened_addsub: not a carry/borrow op"),
+    }
+}
+
 impl PartialEq for Value {
     /// Values are equal when they carry the same type tag and the same
     /// bits — regardless of which representation (`Small`/`Big`) each
@@ -533,12 +553,16 @@ impl Expr {
     /// - `And/Or/Xor` operate on `Word` values (bitwise).
     /// - Comparison operators (`Lt`, `Lte`, `Gt`, `Gte`, `Eq`, `Neq`) return `Bit`.
     /// - `Add` / `Sub` wrap modulo 2^width, matching Verilog unsigned arithmetic.
+    /// - `AddCarry` / `SubBorrow` return a result one bit wider than their
+    ///   operands: the extra MSB is the carry-out / borrow-out.
     fn eval_binop(&self, context: &Context, binop: &payload::BinOp) -> Value {
         let lhs_val = binop.lhs.eval(context);
         let rhs_val = binop.rhs.eval(context);
 
         // Hot path: both operands fit in a `u64` — compute in machine
-        // words, no `BitPat` allocation.
+        // words, no `BitPat` allocation.  Carry/borrow results are one
+        // bit wider than their operands, so 64-bit operands fall back
+        // to the `BitPat` path below.
         if let (
             InternalValue::Small { width: lw, bits: a, .. },
             InternalValue::Small { width: rw, bits: b, .. },
@@ -546,22 +570,43 @@ impl Expr {
         {
             assert!(lw == rw, "eval_binop: operand width mismatch ({lw} vs {rw})");
             let (w, a, b) = (*lw, *a, *b);
-            return match binop.op {
-                BinOp::LogicalAnd => self.val_bool((a & 1) != 0 && (b & 1) != 0),
-                BinOp::LogicalOr => self.val_bool((a & 1) != 0 || (b & 1) != 0),
-                BinOp::LogicalXor => self.val_bool(((a & 1) != 0) ^ ((b & 1) != 0)),
-                BinOp::Lt => self.val_bool(a < b),
-                BinOp::Lte => self.val_bool(a <= b),
-                BinOp::Gt => self.val_bool(a > b),
-                BinOp::Gte => self.val_bool(a >= b),
-                BinOp::Eq => self.val_bool(a == b),
-                BinOp::Neq => self.val_bool(a != b),
-                BinOp::Add => Value::from_u64(self.typ_id(), w, a.wrapping_add(b) & mask(w)),
-                BinOp::Sub => Value::from_u64(self.typ_id(), w, a.wrapping_sub(b) & mask(w)),
-                BinOp::And => Value::from_u64(self.typ_id(), w, a & b),
-                BinOp::Or => Value::from_u64(self.typ_id(), w, a | b),
-                BinOp::Xor => Value::from_u64(self.typ_id(), w, a ^ b),
-            };
+            // A carry/borrow result is one bit wider than its
+            // operands, so 64-bit operands would produce a 65-bit
+            // result that does not fit `Small`; those fall back to
+            // the `BitPat` path below.
+            let fits = !matches!(binop.op, BinOp::AddCarry | BinOp::SubBorrow) || w < 64;
+            if fits {
+                return match binop.op {
+                    BinOp::LogicalAnd => self.val_bool((a & 1) != 0 && (b & 1) != 0),
+                    BinOp::LogicalOr => self.val_bool((a & 1) != 0 || (b & 1) != 0),
+                    BinOp::LogicalXor => self.val_bool(((a & 1) != 0) ^ ((b & 1) != 0)),
+                    BinOp::Lt => self.val_bool(a < b),
+                    BinOp::Lte => self.val_bool(a <= b),
+                    BinOp::Gt => self.val_bool(a > b),
+                    BinOp::Gte => self.val_bool(a >= b),
+                    BinOp::Eq => self.val_bool(a == b),
+                    BinOp::Neq => self.val_bool(a != b),
+                    BinOp::Add => Value::from_u64(self.typ_id(), w, a.wrapping_add(b) & mask(w)),
+                    BinOp::Sub => Value::from_u64(self.typ_id(), w, a.wrapping_sub(b) & mask(w)),
+                    BinOp::AddCarry => {
+                        // Both operands are below 2^w, so the sum is
+                        // below 2^(w+1) and the widened result needs
+                        // no masking.
+                        Value::from_u64(self.typ_id(), w + 1, (a as u128 + b as u128) as u64)
+                    }
+                    BinOp::SubBorrow => {
+                        let m = if w + 1 >= 64 { u64::MAX } else { (1u64 << (w + 1)) - 1 };
+                        Value::from_u64(
+                            self.typ_id(),
+                            w + 1,
+                            ((a as u128).wrapping_sub(b as u128) as u64) & m,
+                        )
+                    }
+                    BinOp::And => Value::from_u64(self.typ_id(), w, a & b),
+                    BinOp::Or => Value::from_u64(self.typ_id(), w, a | b),
+                    BinOp::Xor => Value::from_u64(self.typ_id(), w, a ^ b),
+                };
+            }
         }
 
         let lhs = lhs_val.bitpat();
@@ -578,6 +623,7 @@ impl Expr {
             BinOp::Neq => self.val(BitPat::bit(lhs != rhs)),
             BinOp::Add => self.val(lhs.add(&rhs)),
             BinOp::Sub => self.val(lhs.sub(&rhs)),
+            BinOp::AddCarry | BinOp::SubBorrow => self.val(widened_addsub(binop.op, &lhs, &rhs)),
             BinOp::And => self.val(lhs.and(&rhs)),
             BinOp::Or => self.val(lhs.or(&rhs)),
             BinOp::Xor => self.val(lhs.xor(&rhs)),

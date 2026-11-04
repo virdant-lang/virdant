@@ -1,0 +1,3 @@
+kind = "run"
+description = "Add-with-carry (+.) and subtract-with-borrow (-.): widened results match zero-extended wide arithmetic"
+cycle_limit = 20

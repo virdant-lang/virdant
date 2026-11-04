@@ -1,0 +1,2 @@
+kind = "sim"
+description = "Add-with-carry (+.) and subtract-with-borrow (-.) end-to-end through Verilog codegen"

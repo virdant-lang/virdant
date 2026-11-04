@@ -916,7 +916,9 @@ ExprBinOpCompare: AstNodeId = {
 
 BinOpAdditive: BinOp = {
     "+" => BinOp::Add,
+    "+." => BinOp::AddCarry,
     "-" => BinOp::Sub,
+    "-." => BinOp::SubBorrow,
     "&" => BinOp::And,
     "|" => BinOp::Or,
     "^" => BinOp::Xor,
@@ -1220,7 +1222,9 @@ extern {
 
         // Operators
         "+"  => Token::Add,
+        "+." => Token::AddCarry,
         "-"  => Token::Sub,
+        "-." => Token::SubBorrow,
         "<"  => Token::Lt,
         "<=" => Token::LtEq,
         ">"  => Token::Gt,

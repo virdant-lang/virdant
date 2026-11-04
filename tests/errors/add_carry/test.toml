@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "+. with mismatched operand widths is an error"
+filecheck = "src/add_carry.vir"

@@ -1591,12 +1591,41 @@ impl<'d> Converter<'d> {
                 let rhs = node.child(1);
                 let lhs_type = self.node_type(package, &lhs).unwrap();
                 let rhs_type = self.node_type(package, &rhs).unwrap();
-                verilog::Expr::BinOp(verilog::expr::BinOp {
-                    op: convert_binop(expr_bin_op.op),
-                    lhs: Box::new(self.convert_expr(package, lhs, &lhs_type, self.db, scheduler)),
-                    rhs: Box::new(self.convert_expr(package, rhs, &rhs_type, self.db, scheduler)),
-                    width: self.node_width(package, &node),
-                })
+                let lhs_expr = self.convert_expr(package, lhs, &lhs_type, self.db, scheduler);
+                let rhs_expr = self.convert_expr(package, rhs, &rhs_type, self.db, scheduler);
+                let width = self.node_width(package, &node);
+                match expr_bin_op.op {
+                    common::BinOp::AddCarry | common::BinOp::SubBorrow => {
+                        // Verilog arithmetic is self-truncating, so
+                        // zero-extend both operands to the widened
+                        // result width: the extra MSB of `{1'b0, a} op
+                        // {1'b0, b}` is the carry/borrow-out.
+                        let op = match expr_bin_op.op {
+                            common::BinOp::AddCarry => verilog::BinOp::Add,
+                            _ => verilog::BinOp::Sub,
+                        };
+                        verilog::Expr::BinOp(verilog::expr::BinOp {
+                            op,
+                            lhs: Box::new(zero_extend(
+                                lhs_expr,
+                                type_width(&lhs_type, self.db),
+                                width,
+                            )),
+                            rhs: Box::new(zero_extend(
+                                rhs_expr,
+                                type_width(&rhs_type, self.db),
+                                width,
+                            )),
+                            width,
+                        })
+                    }
+                    _ => verilog::Expr::BinOp(verilog::expr::BinOp {
+                        op: convert_binop(expr_bin_op.op),
+                        lhs: Box::new(lhs_expr),
+                        rhs: Box::new(rhs_expr),
+                        width,
+                    }),
+                }
             }
             AstNodePayload::ExprUnOp(expr_un_op) => {
                 let child = node.child(0);
@@ -2703,6 +2732,27 @@ fn case_pattern_matches(pattern: &verilog::CasePattern, subject_bits: &str) -> b
     }
 }
 
+/// Zero-extend `expr` from `from` bits to `to` bits with a
+/// `{1'b0, expr}`-style concatenation.  If no extension is needed,
+/// the expression is returned unchanged.
+fn zero_extend(expr: verilog::Expr, from: Width, to: Width) -> verilog::Expr {
+    if from < to {
+        verilog::Expr::Concat(verilog::expr::Concat {
+            exprs: vec![
+                verilog::Expr::WordLit(verilog::expr::WordLit {
+                    value: 0,
+                    width: to - from,
+                    radix: Radix::Dec,
+                }),
+                expr,
+            ],
+            width: to,
+        })
+    } else {
+        expr
+    }
+}
+
 /// The expression filling `width` bits of unused payload above a ctor's
 /// arguments.  `PADDING_FILL` controls the value: "x" (don't-care),
 /// "z" (high-impedance), "0" (zeros), "1" (ones).
@@ -2740,6 +2790,11 @@ fn convert_binop(op: common::BinOp) -> verilog::BinOp {
         common::BinOp::LogicalAnd => verilog::BinOp::BitAnd,
         common::BinOp::LogicalOr => verilog::BinOp::BitOr,
         common::BinOp::LogicalXor => verilog::BinOp::BitXor,
+        // Carry/borrow ops are handled by the caller, which zero-extends
+        // the operands and emits a plain Verilog `+` / `-`.
+        common::BinOp::AddCarry | common::BinOp::SubBorrow => {
+            unreachable!("convert_binop: carry/borrow ops are handled by the caller")
+        }
     }
 }
 

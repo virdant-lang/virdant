@@ -397,6 +397,47 @@ impl Typing {
                 self.annotate(node, &typ);
                 Ok(Some(typ))
             }
+            BinOp::AddCarry | BinOp::SubBorrow => {
+                // Add-with-carry / subtract-with-borrow work like `Add`
+                // / `Sub`: both operands must be compatible, and a
+                // width-less operand is checked against the other's
+                // type.  The result is the operands' common type
+                // widened by one bit, carrying the carry-out (for
+                // `AddCarry`) or the borrow-out (for `SubBorrow`) in
+                // the most-significant bit.
+                let lhs_typ = self.infer(builder, context.clone(), &lhs)?;
+                let rhs_typ = self.infer(builder, context.clone(), &rhs)?;
+                let typ = match (lhs_typ, rhs_typ) {
+                    (Some(lhs_typ), Some(rhs_typ)) => {
+                        if !Self::compatible_typs(&lhs_typ, &rhs_typ) {
+                            self.flag_wrong_type(node, &lhs_typ, &rhs_typ);
+                            return Err(());
+                        }
+                        lhs_typ
+                    }
+                    (Some(lhs_typ), None) => {
+                        self.check(builder, context.clone(), &rhs, &lhs_typ)?;
+                        lhs_typ
+                    }
+                    (None, Some(rhs_typ)) => {
+                        self.check(builder, context.clone(), &lhs, &rhs_typ)?;
+                        rhs_typ
+                    }
+                    (None, None) => {
+                        self.flag_cant_infer(node);
+                        return Err(());
+                    }
+                };
+                let typ = match typ {
+                    Type::Word(w) => Type::Word(w + 1),
+                    // A `Bit` is a one-bit word: adding two of them
+                    // with carry produces a two-bit result.
+                    Type::Bit => Type::Word(2),
+                    typ => typ,
+                };
+                self.annotate(node, &typ);
+                Ok(Some(typ))
+            }
             BinOp::LogicalAnd | BinOp::LogicalOr | BinOp::LogicalXor => {
                 let lhs_ok = self
                     .check(builder, context.clone(), &lhs, &Type::Bit)

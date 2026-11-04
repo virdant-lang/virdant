@@ -76,7 +76,7 @@ from tightest to loosest binding.
       - `-` `~` `!`
       - Right-to-left
     * - Multiplicative / Additive / Bitwise
-      - `+` `-` `&` `|` `^`
+      - `+` `+.` `-` `-.` `&` `|` `^`
       - Left-to-right
     * - Comparison
       - `<` `<=` `>` `>=` `==` `!=`
@@ -596,8 +596,28 @@ Arithmetic Operators
       - Addition (modular, wraps on overflow)
     * - `a - b`
       - Subtraction (modular, wraps on underflow)
+    * - `a +. b`
+      - Addition with carry: like `a + b`, but the result is
+        `Word[n+1]` and its most-significant bit is the carry-out
+    * - `a -. b`
+      - Subtraction with borrow: like `a - b`, but the result is
+        `Word[n+1]` and its most-significant bit is the borrow-out
 
-Operands must be of type `Word[n]` with the same `n`.
+Operands must be of type `Word[n]` with the same `n`.  The `+` and
+`-` operators wrap their results to `n` bits; `+.` and `-.` instead
+widen the result to `n+1` bits, so no information is lost:
+
+.. code-block:: virdant
+
+    // 0xf + 0x1 wraps to 0x0 ...
+    wire wrapped : Word[4] {
+        it := 0xfw4 + 0x1w4
+    }
+
+    // ... while `+.` keeps the carry out in the top bit.
+    wire carried : Word[5] {
+        it := 0xfw4 +. 0x1w4   // 0x10, carry bit set
+    }
 
 Bitwise Operators
 ~~~~~~~~~~~~~~~~~

@@ -105,6 +105,8 @@ pub enum BinOp {
     Neq,
     Add,
     Sub,
+    AddCarry,
+    SubBorrow,
     And,
     Or,
     Xor,

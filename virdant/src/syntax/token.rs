@@ -71,7 +71,9 @@ pub enum Token {
 
     // Operators
     #[token(b"+")]   Add,
+    #[token(b"+.")]  AddCarry,
     #[token(b"-")]   Sub,
+    #[token(b"-.")]  SubBorrow,
     #[token(b"<")]   Lt,
     #[token(b">")]   Gt,
     #[token(b">=")]  GtEq,
