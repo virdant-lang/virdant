@@ -10,6 +10,12 @@ In this next example, we will demonstrate how to use registers, the stateful com
 
 In this example, we declare four components: `clock` `inp` `out` grouped together, and also `buffer` a bit below.
 
+.. note::
+
+    We're still not ready to talk about `dependson`,
+    but notice how, unlike in the last example,
+    in this example, `out` does *not* have a `dependson` clause.
+
 
 Clocks
 ------
@@ -27,10 +33,12 @@ The heart of our `Buffer` module is a register:
 
 .. code-block:: virdant
 
-    reg buffer : Word[32] on clock
+    reg buffer : Word[32]
 
-Every `reg`\s requires an `on` clause which tells you which clock it runs on.
-Here, `on clock` tells us that `buffer` will update whenever `clock` is pulsed.
+Every `reg` must be synchronized with a clock.
+Virdant sees that `clock` is the only clock available,
+and so that is the one `buffer` is synchronized with.
+
 
 Driver Blocks
 --------------
