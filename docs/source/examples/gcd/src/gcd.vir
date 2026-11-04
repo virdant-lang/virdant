@@ -31,7 +31,7 @@ mod Gcd {
     }
 }
 
-mod Top {
+pub mod Top {
     incoming clock : Clock
     outgoing result : Word[8]
 

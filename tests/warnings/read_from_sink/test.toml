@@ -1,4 +1,5 @@
 kind = "check"
 expect = "ok"
+warnings_ok = true
 description = "Tests for the ReadFromSink warning: reading from a sink (e.g."
 filecheck = "src/read_from_sink.vir"

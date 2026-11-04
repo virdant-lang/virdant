@@ -1,4 +1,5 @@
 kind = "check"
 expect = "ok"
+warnings_ok = true
 description = "Tests for the NotIt warning: using the component name instead of 'it' inside a driver block."
 filecheck = "src/not_it.vir"

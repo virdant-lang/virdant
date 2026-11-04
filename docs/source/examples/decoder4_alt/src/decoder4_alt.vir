@@ -1,4 +1,4 @@
-mod Decoder4 {
+pub mod Decoder4 {
     incoming inp : Word[2]
 
     outgoing out : Word[4] dependson inp {

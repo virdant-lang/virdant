@@ -36,7 +36,7 @@ mod FullAdder {
     carry_out := ha0.carry_out || ha1.carry_out
 }
 
-mod Adder4 {
+pub mod Adder4 {
     incoming a : Word[4]
     incoming b : Word[4]
     incoming carry_in : Bit

@@ -60,7 +60,10 @@ the merged stdout+stderr against CHECK directives with `filecheck`.
 | key        | meaning                                                          |
 |------------|------------------------------------------------------------------|
 | `command`  | `vir` subcommand (default `check`; e.g. `"bitstream"`)           |
-| `expect`   | exit-code contract: `ok`, `ok_no_warnings`, `ok_with_warnings`, `error` |
+| `expect`   | exit-code contract: `ok`/`ok_no_warnings` (default; must exit 0 with no warnings) or `error` (must exit nonzero) |
+
+Warnings are always forbidden in `kind = "check"`: a `WARNING` in the
+merged output fails the test, whatever `expect` says.
 | `filecheck`| check-file relative to the test dir (e.g. `src/top.vir`)         |
 
 `filecheck` consumes stdout ++ stderr concatenated — byte-compatible

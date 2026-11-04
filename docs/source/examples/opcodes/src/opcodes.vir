@@ -1,4 +1,4 @@
-enum type AluOp {
+pub enum type AluOp {
     and = 1w3
     or  = 2
     xor = 3
@@ -6,7 +6,7 @@ enum type AluOp {
     sub = 5
 }
 
-mod Alu {
+pub mod Alu {
     incoming a : Word[8]
     incoming b : Word[8]
     incoming op : AluOp

@@ -1,4 +1,5 @@
 kind = "check"
 expect = "ok"
+warnings_ok = true
 description = "Tests for undriven reg components."
 filecheck = "src/no_reg_drivers.vir"

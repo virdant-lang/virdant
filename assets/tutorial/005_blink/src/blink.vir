@@ -3,7 +3,7 @@
 
 import strobe
 
-mod Blink {
+pub mod Blink {
     incoming clock : Clock
     incoming reset : Reset
 

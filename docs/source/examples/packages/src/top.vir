@@ -1,6 +1,6 @@
 import buffer
 
-mod Top {
+pub mod Top {
     incoming clock : Clock
     outgoing out : Word[4]
 

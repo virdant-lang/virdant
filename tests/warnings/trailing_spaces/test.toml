@@ -1,4 +1,5 @@
 kind = "check"
 expect = "ok"
+warnings_ok = true
 description = "Trailing spaces are a warning (unlike tabs and bad indentation, which are errors)."
 filecheck = "src/trailing_spaces.vir"

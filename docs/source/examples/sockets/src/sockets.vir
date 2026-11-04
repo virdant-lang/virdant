@@ -18,7 +18,7 @@ mod Memory {
     unused mem.addr
 }
 
-mod Top {
+pub mod Top {
     mod core of Core
     mod memory of Memory
 

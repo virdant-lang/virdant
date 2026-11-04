@@ -224,7 +224,7 @@ fn run_check(env: &Env, test: &Test) -> Outcome {
     let contract_err = |why: String| fail(steps.clone(), why, None);
 
     match test.check_cfg.expect {
-        Expect::Ok => {
+        Expect::OkNoWarnings => {
             if steps[0].code != Some(0) {
                 return contract_err(format!(
                     "vir {} failed ({})",
@@ -232,27 +232,8 @@ fn run_check(env: &Env, test: &Test) -> Outcome {
                     steps[0].exit_description()
                 ));
             }
-        }
-        Expect::OkNoWarnings => {
-            if steps[0].code != Some(0) {
-                return contract_err(format!(
-                    "vir check failed ({})",
-                    steps[0].exit_description()
-                ));
-            }
-            if contains_word(&merged, b"WARNING") {
+            if !test.check_cfg.warnings_ok && contains_word(&merged, b"WARNING") {
                 return contract_err("unexpected warnings".to_string());
-            }
-        }
-        Expect::OkWithWarnings => {
-            if steps[0].code != Some(0) {
-                return contract_err(format!(
-                    "vir check reported errors ({})",
-                    steps[0].exit_description()
-                ));
-            }
-            if !contains_word(&merged, b"WARNING") {
-                return contract_err("expected warnings, but none were emitted".to_string());
             }
         }
         Expect::Error => {

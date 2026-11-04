@@ -4,7 +4,7 @@
 
 @fpga("ice40")
 @part("up5k-sg48")
-mod Top {
+pub mod Top {
     @pin(35)
     @period_ns("83.33")
     incoming clock : Clock {
@@ -22,7 +22,7 @@ mod Top {
 
 //> Struct with annotations
 @author("Alice")
-struct type Point {
+pub struct type Point {
     @range(0)
     x : Word[16]
 
@@ -31,7 +31,7 @@ struct type Point {
 }
 
 @deprecated
-union type Result {
+pub union type Result {
     @success
     Ok(value : Word[32])
 
@@ -40,7 +40,7 @@ union type Result {
 }
 
 @experimental
-enum type State {
+pub enum type State {
     @init
     Idle = 0w2
 
@@ -52,7 +52,7 @@ enum type State {
 }
 
 @chip("ice40")
-socket SpiSocket {
+pub socket SpiSocket {
     @master
     cosi data_out : Bit
 
@@ -68,7 +68,7 @@ socket SpiSocket {
 @empty()
 // Bare annotation (no parens)
 @bare
-mod AnnotationsTest {
+pub mod AnnotationsTest {
     // Multi-arg on a port
     @attr("a", "b", 42,)
     // Empty parens on a port

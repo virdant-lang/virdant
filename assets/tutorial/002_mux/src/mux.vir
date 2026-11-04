@@ -1,4 +1,4 @@
-mod Mux2 {
+pub mod Mux2 {
     incoming a : Word[8]
     incoming b : Word[8]
 
@@ -9,7 +9,7 @@ mod Mux2 {
     }
 }
 
-mod Mux3 {
+pub mod Mux3 {
     incoming a : Word[8]
     incoming b : Word[8]
     incoming c : Word[8]
@@ -28,7 +28,7 @@ mod Mux3 {
     }
 }
 
-mod Mux4 {
+pub mod Mux4 {
     incoming a : Word[8]
     incoming b : Word[8]
     incoming c : Word[8]

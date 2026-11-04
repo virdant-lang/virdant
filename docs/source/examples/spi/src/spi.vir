@@ -4,7 +4,7 @@ enum type SpiState {
     Tick = 0b100
 }
 
-mod SpiController {
+pub mod SpiController {
     incoming clock : Clock
     incoming reset : Reset
 

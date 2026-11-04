@@ -1,9 +1,9 @@
-union type MaybeWord {
+pub union type MaybeWord {
     Nothing()
     Something(payload : Word[8])
 }
 
-mod Top {
+pub mod Top {
     incoming inp : MaybeWord
     outgoing out : Word[8] dependson inp
 

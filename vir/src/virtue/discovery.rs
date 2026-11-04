@@ -46,14 +46,13 @@ pub enum Kind {
 }
 
 /// `expect = ...` exit-code/output contract for `kind = "check"`.
+///
+/// Warnings are always forbidden: a `WARNING` in the merged output fails
+/// the test, regardless of `expect`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Expect {
-    /// Must exit 0 (plain project check).
-    Ok,
     /// Must exit 0 and emit no `WARNING` lines.
     OkNoWarnings,
-    /// Must exit 0 and emit at least one `WARNING` line.
-    OkWithWarnings,
     /// Must exit nonzero.
     Error,
 }
@@ -63,6 +62,10 @@ pub struct CheckCfg {
     /// `vir <command>` (default `check`).
     pub command: String,
     pub expect: Expect,
+    /// Allow `WARNING` lines in the output without failing the test
+    /// (`warnings_ok = true`; default false).  For tests that assert
+    /// warnings via `filecheck`.
+    pub warnings_ok: bool,
     /// File holding CHECK directives, relative to the test directory.
     pub filecheck: Option<PathBuf>,
 }
@@ -150,7 +153,8 @@ pub(crate) fn test_stub(name: &str, description: &str) -> Test {
         kind: Kind::Check,
         check_cfg: CheckCfg {
             command: "check".to_string(),
-            expect: Expect::Ok,
+            expect: Expect::OkNoWarnings,
+            warnings_ok: false,
             filecheck: None,
         },
         sim_cfg: SimCfg {
@@ -181,6 +185,8 @@ struct TestToml {
     // kind = "check"
     command: Option<String>,
     expect: Option<String>,
+    #[serde(default)]
+    warnings_ok: bool,
     filecheck: Option<PathBuf>,
     // kind = "sim"
     simulator: Option<String>,
@@ -268,18 +274,17 @@ pub fn parse_test_toml(dir: &Path, text: &str) -> Result<Test, String> {
     let check_cfg = CheckCfg {
         command: raw.command.clone().unwrap_or_else(|| "check".to_string()),
         expect: match raw.expect.as_deref() {
-            None | Some("ok") => Expect::Ok,
-            Some("ok_no_warnings") => Expect::OkNoWarnings,
-            Some("ok_with_warnings") => Expect::OkWithWarnings,
+            None | Some("ok") | Some("ok_no_warnings") => Expect::OkNoWarnings,
             Some("error") => Expect::Error,
             Some(other) => {
                 return Err(format!(
-                    "{}: unknown expect {:?} (use ok | ok_no_warnings | ok_with_warnings | error)",
+                    "{}: unknown expect {:?} (use ok | ok_no_warnings | error)",
                     dir.join("test.toml").display(),
                     other
                 ))
             }
         },
+        warnings_ok: raw.warnings_ok,
         filecheck: raw.filecheck.clone(),
     };
 

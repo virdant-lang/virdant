@@ -37,7 +37,7 @@ pub mod ModuleB for PlatformB {
 }
 
 // Top-level module that instantiates platform-specific modules
-mod Top {
+pub mod Top {
     incoming data : Bit
     incoming clock : Clock
 

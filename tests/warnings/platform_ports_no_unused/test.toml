@@ -1,4 +1,5 @@
 kind = "check"
 expect = "ok"
+warnings_ok = true
 description = "Tests that ports synthesized from platform defaults do not trigger the 'Unused signal'..."
 filecheck = "src/platform_ports_no_unused.vir"

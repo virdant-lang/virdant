@@ -1,4 +1,5 @@
 kind = "check"
 expect = "ok"
+warnings_ok = true
 description = "RedundantDriver: a latched driver (<=) where the source and target refer to the same..."
 filecheck = "src/redundant_driver.vir"

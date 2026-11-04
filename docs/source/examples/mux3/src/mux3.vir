@@ -1,4 +1,4 @@
-mod Mux3 {
+pub mod Mux3 {
     incoming a : Word[8]
     incoming b : Word[8]
     incoming c : Word[8]

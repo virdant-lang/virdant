@@ -4,7 +4,7 @@ struct type Color {
     blue  : Word[8]
 }
 
-mod Top {
+pub mod Top {
     incoming clock : Clock
     outgoing redness : Word[8]
     outgoing blueness : Word[8]
