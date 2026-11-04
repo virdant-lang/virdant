@@ -207,7 +207,7 @@ impl Value {
 
     /// The bits as a [`BitPat`] (materialises the `Small` hot path; the
     /// returned pattern is a fresh heap allocation in that case).
-    pub(crate) fn bitpat(&self) -> BitPat {
+    pub fn bitpat(&self) -> BitPat {
         match &self.0 {
             InternalValue::Big { bits, .. } => bits.clone(),
             InternalValue::Small { width, bits, .. } => BitPat::from_u64(*width, *bits),

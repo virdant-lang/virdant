@@ -13,4 +13,4 @@ mod vcd;
 pub use sim::{Clock, Ctor, InitStrategy, Sim};
 pub use bits::BitPat;
 pub use eval::Value;
-pub use layout::TypeId;
+pub use layout::{TypeId, TypeLayoutIndex};

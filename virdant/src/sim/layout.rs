@@ -143,6 +143,39 @@ pub struct TypeLayoutIndex {
     types: Arc<TypeInterner>,
 }
 
+/// The bit width of `typ`, given the layout map.  `Type::Param` is
+/// generic and never appears in mono artifacts; it yields 0.
+fn layout_width(layouts: &IndexMap<Type, TypeLayout>, typ: &Type) -> Width {
+    match typ {
+        Type::Bit | Type::Clock | Type::Reset => 1,
+        Type::Word(w) => *w,
+        Type::Param(_) => 0,
+        Type::Usual(..) => match layouts.get(typ).map(|l| &l.kind) {
+            Some(TypeLayoutKind::Union { slots }) => {
+                let tag_width: Width = slots.len().try_into().unwrap();
+                tag_width + max_payload_width(layouts, slots)
+            }
+            Some(TypeLayoutKind::Enum { tag_width, slots, .. }) => {
+                *tag_width + max_payload_width(layouts, slots)
+            }
+            Some(TypeLayoutKind::Struct { fields }) => fields
+                .iter()
+                .map(|f| layout_width(layouts, &f.param_types[0]))
+                .sum(),
+            Some(TypeLayoutKind::Other(width)) => *width,
+            None => 0,
+        },
+    }
+}
+
+fn max_payload_width(layouts: &IndexMap<Type, TypeLayout>, slots: &[Slot]) -> Width {
+    slots
+        .iter()
+        .map(|s| s.param_types.iter().map(|t| layout_width(layouts, t)).sum::<Width>())
+        .max()
+        .unwrap_or(0)
+}
+
 impl TypeLayoutIndex {
     /// The bit width of a `Type` without an index (for primitive types;
     /// user types need an index — those never come through this path).
@@ -187,6 +220,23 @@ impl TypeLayoutIndex {
             intern_all(&typ, types);
             let layout = build_type_layout(db, &symboltable, &typ, &mut queue);
             layouts.insert(typ, layout);
+        }
+
+        // Pre-intern every `Word[w]` up to the widest type reachable
+        // from the elaboration (and at least up to 128, for script
+        // literals): tools that build new values at runtime — slices,
+        // arithmetic results, literal coercions, e.g. in the `vir poke`
+        // tester — need a `TypeId` for widths that may not appear as
+        // any component's type.
+        let max_width = elab
+            .components()
+            .iter()
+            .map(|comp| layout_width(&layouts, &comp.typ()))
+            .max()
+            .unwrap_or(0)
+            .max(128);
+        for width in 0..=max_width {
+            types.intern(&Type::Word(width));
         }
 
         // Member types (union/enum slot parameters, struct fields) can
@@ -242,34 +292,7 @@ impl TypeLayoutIndex {
     /// The bit width of a value of `typ`.  `Type::Param` is generic and
     /// never appears in mono artifacts; it yields 0.
     pub fn type_width(&self, typ: &Type) -> Width {
-        match typ {
-            Type::Bit | Type::Clock | Type::Reset => 1,
-            Type::Word(w) => *w,
-            Type::Param(_) => 0,
-            Type::Usual(..) => match self.layout(typ).map(|l| &l.kind) {
-                Some(TypeLayoutKind::Union { slots }) => {
-                    let tag_width: Width = slots.len().try_into().unwrap();
-                    tag_width + self.max_payload_width(slots)
-                }
-                Some(TypeLayoutKind::Enum { tag_width, slots, .. }) => {
-                    *tag_width + self.max_payload_width(slots)
-                }
-                Some(TypeLayoutKind::Struct { fields }) => fields
-                    .iter()
-                    .map(|f| self.type_width(&f.param_types[0]))
-                    .sum(),
-                Some(TypeLayoutKind::Other(width)) => *width,
-                None => 0,
-            },
-        }
-    }
-
-    fn max_payload_width(&self, slots: &[Slot]) -> Width {
-        slots
-            .iter()
-            .map(|s| s.param_types.iter().map(|t| self.type_width(t)).sum::<Width>())
-            .max()
-            .unwrap_or(0)
+        layout_width(&self.layouts, typ)
     }
 
     /// The fields of a struct type, in declaration order.
@@ -279,6 +302,23 @@ impl TypeLayoutIndex {
             Some(TypeLayoutKind::Struct { fields }) => Some(fields),
             _ => None,
         }
+    }
+
+    /// Look up a union/enum constructor of the interned type `typ` by
+    /// name: its symbol id and the types of its parameters, in
+    /// declaration order.  `None` when `typ` is not a union/enum or has
+    /// no constructor with that name.  Used by [`Sim::encode_ctor_by_name`].
+    pub fn ctor_slot_by_name(&self, typ: TypeId, name: &str) -> Option<(SymbolId, Vec<Type>)> {
+        let layout = self.layout_of(typ)?;
+        let slots = match &layout.kind {
+            TypeLayoutKind::Union { slots } => slots,
+            TypeLayoutKind::Enum { slots, .. } => slots,
+            _ => return None,
+        };
+        let slot = slots
+            .iter()
+            .find(|slot| slot.name.as_bstr() == name.as_bytes())?;
+        Some((slot.symbol_id, slot.param_types.clone()))
     }
 
     /// Encode a constructor application as a bit pattern of `typ`:

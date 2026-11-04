@@ -60,11 +60,28 @@ pub struct ElaboratedSocket {
     #[allow(dead_code)]
     socketdef: SymbolId,
     /// Client or Server.
-    #[allow(dead_code)]
     role: SocketRole,
     /// Fully-qualified path prefix (e.g., `top.core.mem`).
-    #[allow(dead_code)]
     prefix: BString,
+}
+
+impl ElaboratedSocket {
+    /// The socket definition symbol (e.g. the `Mem` of a
+    /// `socket mem of Mem[...]` instantiation).
+    pub fn socketdef(&self) -> SymbolId {
+        self.socketdef
+    }
+
+    /// The socket instance's role.
+    pub fn role(&self) -> SocketRole {
+        self.role
+    }
+
+    /// The fully-qualified path prefix of the socket instance's
+    /// channels (e.g. `top.core.mem`).
+    pub fn prefix(&self) -> &BStr {
+        self.prefix.as_bstr()
+    }
 }
 
 #[derive(Debug)]
@@ -137,6 +154,11 @@ impl Elaboration {
 
     pub fn components(&self) -> &[ElaboratedComponent] {
         &self.components
+    }
+
+    /// The socket instances discovered during elaboration.
+    pub fn sockets(&self) -> &[ElaboratedSocket] {
+        &self.sockets
     }
 
     pub fn component(

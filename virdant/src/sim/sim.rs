@@ -209,6 +209,69 @@ impl Sim {
         &self.circuit.type_layout_index
     }
 
+    /// The circuit's [`TypeLayoutIndex`]: the public seam for tools that
+    /// need type information at runtime (bit widths, `Type` <-> `TypeId`
+    /// resolution, constructor encoding/decoding) — e.g. the `vir poke`
+    /// tester, which evaluates script expressions over [`Value`]s and
+    /// renders them round-trippably.
+    pub fn layouts(&self) -> &TypeLayoutIndex {
+        &self.circuit.type_layout_index
+    }
+
+    /// Encode a constructor application as a [`Value`] of type `typ`:
+    /// `ctor_name` selects a constructor of the union/enum `typ` by
+    /// name; each argument is checked against its parameter's type
+    /// (re-tagged) and encoded tag-first through the type layout.
+    /// Returns `None` when `typ` is not a union/enum, the constructor
+    /// name is unknown, or an argument has the wrong width.
+    ///
+    /// The symmetric counterpart of [`Sim::decode_ctor`] — the public
+    /// face of [`TypeLayoutIndex::encode_ctor`].
+    pub fn encode_ctor_by_name(
+        &self,
+        typ: &Type,
+        ctor_name: &str,
+        args: &[Value],
+    ) -> Option<Value> {
+        let typ_id = self.layouts().type_id(typ);
+        let (ctor_sym, param_types) = self.layouts().ctor_slot_by_name(typ_id, ctor_name)?;
+        if param_types.len() != args.len() {
+            return None;
+        }
+        let mut arg_pats = Vec::with_capacity(args.len());
+        for (arg, param_typ) in args.iter().zip(param_types.iter()) {
+            let param_width = self.layouts().type_width(param_typ);
+            if arg.width() != param_width {
+                return None;
+            }
+            arg_pats.push(arg.with_typ(self.layouts().type_id(param_typ)).bitpat());
+        }
+        let bits = self.layouts().encode_ctor(typ_id, ctor_sym, &arg_pats)?;
+        Some(Value::new(typ_id, bits))
+    }
+
+    /// Decode a [`Value`] of struct type into its fields, in
+    /// declaration order: `(field name, field value)` pairs.  Returns
+    /// `None` when the value's type is not a struct (or the bit pattern
+    /// has the wrong width).
+    ///
+    /// The counterpart of [`Sim::decode_ctor`] for structs, which have
+    /// no constructor to decode — the public face of
+    /// [`TypeLayoutIndex::decode_struct`].
+    pub fn decode_struct_fields(&self, value: &Value) -> Option<Vec<(String, Value)>> {
+        let typ = self.layouts().type_of(value.typ_id()).clone();
+        let fields = self.layouts().fields(&typ)?;
+        let bits = self.layouts().decode_struct(&typ, &value.bitpat())?;
+        Some(fields
+            .iter()
+            .zip(bits)
+            .map(|(field, bits)| {
+                let field_value = Value::new(self.layouts().type_id(&field.param_types[0]), bits);
+                (String::from_utf8(field.name.to_vec()).unwrap_or_default(), field_value)
+            })
+            .collect())
+    }
+
     /// Decode a value whose type is a union or enum into the
     /// constructor it currently is.  Returns `None` when the value's
     /// type is not a union/enum (e.g. a plain `Word` or `Bit` — there
@@ -317,7 +380,21 @@ impl Sim {
         self.state.clear_dirty();
     }
 
+    /// Apply one rising clock edge on `signal_id`: transfer every
+    /// register this signal clocks (through the sensitivity graph),
+    /// then settle (`flow`) and dispatch value-change watchers — the
+    /// same settlement an edge applied through `set` would get.
     pub fn tick(&mut self, signal_id: SignalId) {
+        self.tick_inner(signal_id);
+        self.unlock();
+    }
+
+    /// The propagation-only core of [`Sim::tick`]: register transfers
+    /// through the sensitivity graph plus `flow`, with no watcher
+    /// dispatch.  The recursion inside `tick_prop` uses this so inner
+    /// edges settle silently; watchers dispatch once, on the outermost
+    /// `tick`.
+    fn tick_inner(&mut self, signal_id: SignalId) {
         self.tick_prop(signal_id);
         self.flow();
     }
@@ -329,7 +406,7 @@ impl Sim {
         let n = self.circuit.sensitivity_count(signal_id);
         for i in 0..n {
             let inner = self.circuit.sensitivity_at(signal_id, i);
-            self.tick(inner);
+            self.tick_inner(inner);
         }
 
         let m = self.circuit.clock_sensitivity_count(signal_id);
@@ -602,16 +679,101 @@ impl Sim {
     ///
     /// Use `children_of_root()` for the synthetic top scope (`"top"`), since the top
     /// module itself is not a component in the elaboration.
-    pub fn children_of(
-        &self,
+    pub fn children_of(&self,
         parent: SignalId,
     ) -> Vec<(SignalId, BString)> {
         let parent_path = self.elaboration().component(parent).path().clone();
-        self.children_with_prefix(parent_path.as_slice())
+        self.children_of_path(parent_path.as_slice())
     }
 
     pub fn children_of_root(&self) -> Vec<(SignalId, BString)> {
-        self.children_with_prefix(b"top")
+        self.children_of_path(b"top")
+    }
+
+    /// Iterate over the direct child *components* of the module whose
+    /// elaborated path prefix is `prefix` (e.g. `"top"` or
+    /// `"top.foo"`).  Like [`Sim::children_of`], but addressed by path
+    /// instead of by a component id — submodule instances are not
+    /// components, so a nested module has no SignalId to pass.
+    pub fn children_of_path(&self, prefix: &[u8]) -> Vec<(SignalId, BString)> {
+        self.children_with_prefix(prefix)
+    }
+
+    /// The submodule *instances* directly under the module whose
+    /// elaborated path prefix is `prefix`, one leaf name per instance
+    /// (e.g. `"foo"` under `"top"`).  Submodule instances are not
+    /// components, so `cd`-style navigation needs this list to know
+    /// which prefixes name modules at all.
+    pub fn module_children(&self, prefix: &[u8]) -> Vec<BString> {
+        let elaboration = self.elaboration();
+        let mut out = Vec::new();
+        for (_, module_prefix) in elaboration.modules() {
+            let path: &[u8] = module_prefix.as_slice();
+            if path.len() <= prefix.len() + 1 { continue; }
+            if &path[..prefix.len()] != prefix { continue; }
+            if path[prefix.len()] != b'.' { continue; }
+            let rest = &path[prefix.len() + 1..];
+            if rest.contains(&b'.') { continue; }
+            out.push(BString::from(rest.to_vec()));
+        }
+        out
+    }
+
+    /// True when `prefix` names a module in the elaboration — the top
+    /// (`"top"`) or any submodule instance path.
+    pub fn has_module_prefix(&self, prefix: &[u8]) -> bool {
+        let elaboration = self.elaboration();
+        elaboration.modules().iter().any(|(_, module_prefix)| module_prefix.as_slice() == prefix)
+    }
+
+    /// The moddef symbol of the module instance whose elaborated path
+    /// prefix is `prefix` (e.g. `SymbolId(Adder)` for `"top.add"`).
+    /// For the top module itself (`"top"`) this is the top moddef.
+    pub fn module_symbol(&self, prefix: &[u8]) -> Option<SymbolId> {
+        let elaboration = self.elaboration();
+        elaboration
+            .modules()
+            .iter()
+            .find(|(_, module_prefix)| module_prefix.as_slice() == prefix)
+            .map(|(moddef, _)| *moddef)
+    }
+
+    /// The socket instances directly under the module whose elaborated
+    /// path prefix is `prefix`, one `(leaf name, socketdef symbol)`
+    /// pair per instance (e.g. `("mem", SymbolId(Mem))` under
+    /// `"top.core"`).
+    pub fn socket_children(&self, prefix: &[u8]) -> Vec<(BString, SymbolId)> {
+        let elaboration = self.elaboration();
+        let mut out = Vec::new();
+        for socket in elaboration.sockets() {
+            let path = socket.prefix();
+            if path.len() <= prefix.len() + 1 { continue; }
+            if &path[..prefix.len()] != prefix { continue; }
+            if path[prefix.len()] != b'.' { continue; }
+            let rest = &path[prefix.len() + 1..];
+            if rest.contains(&b'.') { continue; }
+            out.push((BString::from(rest.to_vec()), socket.socketdef()));
+        }
+        out
+    }
+
+    /// The module instances in the elaboration: `(moddef symbol, path
+    /// prefix)` pairs, in elaboration order (`"top"` first, then
+    /// submodules as discovered).  Backing for `show`'s per-module
+    /// grouping.
+    pub fn modules(&self) -> Vec<(SymbolId, BString)> {
+        self.elaboration().modules().to_vec()
+    }
+
+    /// The socket instances in the elaboration, each with its
+    /// fully-qualified channel prefix (e.g. `"top.mem"`) and socketdef
+    /// symbol.  Backing for `show`'s per-socket grouping.
+    pub fn sockets(&self) -> Vec<(SymbolId, BString)> {
+        self.elaboration()
+            .sockets()
+            .iter()
+            .map(|socket| (socket.socketdef(), BString::from(socket.prefix())))
+            .collect()
     }
 
     fn children_with_prefix(&self, prefix: &[u8]) -> Vec<(SignalId, BString)> {
