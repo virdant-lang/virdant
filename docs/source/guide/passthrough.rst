@@ -1,7 +1,7 @@
 Passthrough
 ===========
 Modules are the building blocks of digital circuits.
-We will start by showing how to define a module in Virdant.
+Let's start by see how to define a module in Virdant.
 
 `Passthrough` is a module which takes in some data and immediately sends it back out unchanged.
 
@@ -14,6 +14,11 @@ Modules are declared using the `mod` keyword, followed by the name of the module
 
 The body of the module consists of a set of declarations about what the module contains.
 The order these declarations appear in does not matter.
+
+.. note::
+
+    This module definition is also marked `pub`, which is short for "public".
+    We will learn about `pub` later on.
 
 
 Ports
@@ -45,6 +50,13 @@ The second port is an outgoing port named `out`.
 It also has type `Word[8]`.
 It is a value we are sending out to the outside world.
 The module is obligated to drive the value of `out` using a driver statement.
+
+.. note::
+
+    The `out` port is marked `dependson inp`,
+    which means the value of `out` depends on the value of `inp`.
+    We won't worry about this until later.
+
 
 Drivers
 -------
