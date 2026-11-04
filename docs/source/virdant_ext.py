@@ -29,6 +29,11 @@ class VirdantLexer(RegexLexer):
         'root': [
             # Multi-character operators (must come before single-character ones)
             (r':=:', Punctuation),
+            (r'#=#', Punctuation),
+            (r'#=', Punctuation),
+            (r'#-', Punctuation),
+            (r'\+\.', Punctuation),
+            (r'-\.', Punctuation),
             (r'=>', Punctuation),
             (r'<=', Punctuation),
             (r':=', Punctuation),
@@ -48,7 +53,7 @@ class VirdantLexer(RegexLexer):
             (r'\.', Punctuation),
             (r'<', Punctuation),
             (r'>', Punctuation),
-            (r'[-+()<>{}\[\],;]', Punctuation),
+            (r'[-+()<>{}\[\],;~]', Punctuation),
             (r'[&|^~]', Punctuation),
             (r'[#\$\?]', Punctuation),
             # Annotations (@name, @name(...)) must come before plain @
