@@ -1,0 +1,65 @@
+// RedundantOnClause: when a module declares exactly one Clock-typed
+// component, an explicit `on` clause naming that clock is redundant
+// (it is equivalent to omitting it) and warns.
+
+mod RedundantOn {
+    incoming clock : Clock
+    incoming inp : Word[8]
+    outgoing out : Word[8]
+
+    // Explicit `on` clause naming the module's unique clock.
+    reg r : Word[8] on clock
+    // CHECK: Redundant `on` clause: `r` is implicitly clocked by the module's unique clock
+    r <= inp
+
+    // Outgoing regs are covered by the same rule.
+    outgoing reg oreg : Bit on clock {
+        // CHECK: Redundant `on` clause: `oreg` is implicitly clocked by the module's unique clock
+        it <= inp[0]
+    }
+
+    out := r
+    unused oreg
+}
+
+// An `on` clause referencing a submodule's clock output is not
+// redundant: the module's unique clock cannot clock it implicitly.
+mod ClockDiv {
+    incoming clock_inp : Clock
+    outgoing clock_out : Clock dependson clock_inp {
+        it := clock_inp
+    }
+}
+
+mod OtherClock {
+    incoming clock : Clock
+
+    mod divider of ClockDiv {
+        it.clock_inp := clock
+    }
+
+    // Names a different clock: no warning.
+    reg r : Bit on divider.clock_out {
+        it <= !it
+    }
+    unused r
+}
+
+// Two Clock-typed components: no implicit clock, so explicit `on`
+// clauses are required and never warn.
+mod TwoClocks {
+    incoming clock_a : Clock
+    incoming clock_b : Clock
+
+    reg ra : Bit on clock_a {
+        it <= !it
+    }
+
+    reg rb : Bit on clock_b {
+        it <= !it
+    }
+    unused ra
+    unused rb
+}
+
+// CHECK: Check OK

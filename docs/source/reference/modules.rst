@@ -91,7 +91,10 @@ Wires may also be given an initial value through an `it` block.
 Registers
 ---------
 A `reg` declaration creates a sequential (stateful) element.
-Every register must have a clock associated with it via the `on` keyword.
+A register is associated with a clock via the `on` keyword;
+when the module declares exactly one component of type `Clock`,
+the `on` clause may be omitted and the module's unique clock is used
+implicitly.
 
 .. code-block:: virdant
 
@@ -524,6 +527,12 @@ and an omitted `on` clause is equivalent to writing `on` with that
 component (see :doc:`statements`).
 If the module declares zero or more than one component of type `Clock`,
 every `reg` declaration needs an explicit `on` clause.
+When the module does declare exactly one component of type `Clock`,
+an explicit `on` clause that names that clock is redundant:
+it is equivalent to omitting it, and the compiler emits a warning
+encouraging the implicit form.
+An `on` clause that references any other clock (for example, a
+submodule's clock output) is not redundant and never warns.
 
 The register latches its input value on the rising edge of the named clock.
 All registers driven by the same clock form a single clock domain.

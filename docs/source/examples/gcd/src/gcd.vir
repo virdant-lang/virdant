@@ -10,7 +10,7 @@ mod Gcd {
     incoming b : Word[8]
     outgoing result : Word[8]
 
-    reg state : State on clock
+    reg state : State
 
     state <=
         match state {

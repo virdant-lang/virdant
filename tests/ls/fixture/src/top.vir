@@ -15,7 +15,7 @@ pub mod Top {
         it.data := input_data
     }
 
-    reg last : Word[32] on clock {
+    reg last : Word[32] {
         it <= input_data
     }
 

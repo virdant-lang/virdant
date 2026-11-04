@@ -545,6 +545,12 @@ component:
 
 If the module declares zero or more than one component of type `Clock`,
 every `reg` declaration needs an explicit `on` clause.
+When the module does declare exactly one component of type `Clock`,
+an explicit `on` clause that names that clock is redundant:
+it is equivalent to omitting it, and the compiler emits a warning
+encouraging the implicit form.
+An `on` clause that references any other clock (for example, a
+submodule's clock output) is not redundant and never warns.
 
 
 it Block

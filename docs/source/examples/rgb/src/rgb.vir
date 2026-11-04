@@ -10,10 +10,10 @@ pub mod Top {
     outgoing blueness : Word[8]
     outgoing greenness : Word[8]
 
-    reg counter : Word[2] on clock
+    reg counter : Word[2]
     counter <= counter + 1
 
-    reg color : Color on clock
+    reg color : Color
     color <=
         match counter {
             with 0 => ${ red = 0, green = 0, blue = 0 }

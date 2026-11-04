@@ -34,7 +34,7 @@ pub mod Top for xilinx::ArtyA7 {
     outgoing flash_mosi : Bit
     incoming flash_miso : Bit
 
-    reg counter : Word[27] on clock {
+    reg counter : Word[27] {
         it <= it + 1w27
     }
 

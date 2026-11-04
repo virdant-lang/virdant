@@ -17,7 +17,7 @@ mod Arbiter {
     outgoing grant0 : Bit
     outgoing grant1 : Bit
 
-    reg client0_priority : Bit on clock {
+    reg client0_priority : Bit {
         it <= if {
             when reset => true
             else => !it
@@ -82,7 +82,7 @@ Otherwise, if `client0_priority` is `false`, the tie goes to client 1.
 `client0_priority` is given its value with a driver block:
 
 ```virdant
-    reg client0_priority : Bit on clock {
+    reg client0_priority : Bit {
         it <= if {
             when reset => true
             else => !it

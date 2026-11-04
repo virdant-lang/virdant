@@ -9,7 +9,7 @@ pub mod Blink {
 
     //> `led` is the LED output.
     //> It flips on every strobe pulse.
-    outgoing reg led : Bit on clock {
+    outgoing reg led : Bit {
         if {
             when strobe_timer.pulse {
                 it <= !it

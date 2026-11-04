@@ -21,7 +21,7 @@ pub mod Top for ice40::IceStick {
     outgoing flash_mosi : Bit
     incoming flash_miso : Bit
 
-    reg counter : Word[24] on clock {
+    reg counter : Word[24] {
         it <= it + 1w24
     }
 

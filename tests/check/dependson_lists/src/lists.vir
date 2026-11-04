@@ -37,7 +37,7 @@ pub mod Top {
 
     // An `outgoing reg` never carries the list and never needs one:
     // a registered output cannot change in the same cycle.
-    outgoing reg regged : Bit on clk {
+    outgoing reg regged : Bit {
         it <= inp
     }
 

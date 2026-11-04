@@ -3,7 +3,7 @@ pub mod Buffer {
     incoming inp : Word[32]
     outgoing out : Word[32]
 
-    reg buffer : Word[32] on clock {
+    reg buffer : Word[32] {
         it <= inp
         out := it
     }

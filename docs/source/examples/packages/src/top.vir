@@ -4,7 +4,7 @@ pub mod Top {
     incoming clock : Clock
     outgoing out : Word[4]
 
-    reg counter : Word[4] on clock
+    reg counter : Word[4]
     counter <= counter + 1
 
     mod buffer of buffer::Buffer

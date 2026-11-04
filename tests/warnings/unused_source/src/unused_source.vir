@@ -135,4 +135,43 @@ mod SubWireUnused {
     // CHECK: Unused signal ws.s
 }
 
+// A unique clock with no regs at all is an unreferenced signal like
+// any other: it warns unused.
+mod UnusedClockNoRegs {
+    incoming clock : Clock
+    outgoing out : Bit
+    // CHECK: Unused signal clock
+    out := true
+}
+
+// A unique clock implicitly clocking a reg is not unused, even though
+// no expression references it.
+mod ImplicitlyClockedReg {
+    incoming clock : Clock
+    incoming inp : Bit
+    outgoing out : Bit
+
+    reg r : Bit
+    r <= inp
+
+    out := r
+    // CHECK-NOT: Unused signal clock
+}
+
+// A unique clock whose only reg names it explicitly: the `on` clause
+// itself is a use of the clock, so it does not warn unused. (The `on`
+// clause triggers the RedundantOnClause warning instead; see
+// redundant_on_clause.vir.)
+mod ExplicitlyClockedReg {
+    incoming clock : Clock
+    incoming inp : Bit
+    outgoing out : Bit
+
+    reg r : Bit on clock
+    r <= inp
+
+    out := r
+    // CHECK-NOT: Unused signal clock
+}
+
 // CHECK: Check OK

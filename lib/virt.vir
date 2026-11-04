@@ -135,7 +135,7 @@ pub mod Hello {
     // Power-up quiet period.  The simulator trusts the first start bit
     // only after the line has idled high for a while, so hold `tx`
     // high for 256 cycles before sending anything.
-    reg boot : Word[8] on clock {
+    reg boot : Word[8] {
         initial it <= 0
         if {
             when it != 255 {
@@ -157,7 +157,7 @@ pub mod Hello {
     // Index of the next message byte to send.  It advances every time
     // `sender` accepts a byte (that is, on a `data_valid`/`ready`
     // handshake) and stops at the end of the message.
-    reg char_index : Word[4] on clock {
+    reg char_index : Word[4] {
         initial it <= 0
         if {
             when sender.ready && offer_byte {
@@ -223,7 +223,7 @@ mod UartSender {
     // carries the number of cycles (`pulse`) remaining before the next
     // transition; counting down from 8 to 0 gives the 9-cycle bit
     // period.
-    reg state : UartState on clock {
+    reg state : UartState {
         initial it <= @Idle()
         it <= match it : UartState {
             with @Idle() if {
@@ -257,7 +257,7 @@ mod UartSender {
 
     // Snapshot the byte on the accepting clock edge.  The line then
     // reads from the snapshot, so `data` may change while sending.
-    reg latched_data : Word[8] on clock {
+    reg latched_data : Word[8] {
         if {
             when accepting && data_valid {
                 it <= data

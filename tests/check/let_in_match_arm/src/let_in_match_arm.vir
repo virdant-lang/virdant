@@ -19,12 +19,12 @@ pub union type St {
 pub mod LetInMatchArm {
     incoming clock : Clock
 
-    reg value : Word[8] on clock {
+    reg value : Word[8] {
         initial it <= 0
         it <= it + 1
     }
 
-    reg state : St on clock {
+    reg state : St {
         initial it <= @Idle()
         it <= match it : St {
             with @Idle() =>
@@ -51,7 +51,7 @@ pub mod LetInMatchArm {
 pub mod LetWidthlessLiteral {
     incoming clock : Clock
 
-    reg state : St on clock {
+    reg state : St {
         initial it <= @Idle()
         it <= match it : St {
             with @Idle() =>
@@ -73,7 +73,7 @@ pub mod LetWidthlessLiteral {
 pub mod LetInWhenArm {
     incoming clock : Clock
 
-    reg flag : Bit on clock {
+    reg flag : Bit {
         initial it <= false
         it <= if {
             when true =>

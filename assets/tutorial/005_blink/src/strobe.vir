@@ -14,7 +14,7 @@ pub mod Strobe {
 
     //> `counter` repeatedly counts down from `period` to 0.
     //> When it reaches 0, it starts over and asserts `pulse`.
-    reg counter : Word[24] on clock {
+    reg counter : Word[24] {
         it <= if {
             when reset => period - 1
             else match it {

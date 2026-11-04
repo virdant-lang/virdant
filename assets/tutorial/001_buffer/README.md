@@ -10,7 +10,7 @@ pub mod Buffer {
     incoming inp : Word[32]
     outgoing out : Word[32]
 
-    reg buffer : Word[32] on clock {
+    reg buffer : Word[32] {
         it <= inp
         out := it
     }
@@ -33,18 +33,20 @@ Unless you are working with multiple clocks, you should name your clock signal `
 The heart of our `Buffer` module is a register:
 
 ```virdant
-    reg buffer : Word[32] on clock
+    reg buffer : Word[32]
 ```
 
-Every `reg`s requires an `on` clause which tells you which clock it runs on.
-Here, `on clock` tells us that `buffer` will update whenever `clock` is pulsed.
+Every `reg` needs a clock which tells it when to update.
+Since `clock` is the module's only `Clock`-typed component,
+`buffer` picks it up implicitly:
+it will update whenever `clock` is pulsed.
 
 ## Driver Blocks
 
 Just after `buffer` is declared, we see a block containing two drivers:
 
 ```virdant
-    reg buffer : Word[32] on clock {
+    reg buffer : Word[32] {
         it <= inp
         out := it
     }
@@ -93,7 +95,7 @@ mod Buffer {
         it := buffer
     }
 
-    reg buffer : Word[32] on clock {
+    reg buffer : Word[32] {
         it <= inp
     }
 }
@@ -108,7 +110,7 @@ mod Buffer {
     incoming clock : Clock
     incoming inp : Word[32]
     outgoing out : Word[32]
-    reg buffer : Word[32] on clock
+    reg buffer : Word[32]
 
     buffer <= inp
     out := buffer

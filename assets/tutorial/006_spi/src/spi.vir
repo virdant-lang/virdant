@@ -27,7 +27,7 @@ pub mod SpiController {
         it := buffer[7]
     }
 
-    reg state : SpiState on clock
+    reg state : SpiState
 
     state <= if {
         when reset => #Idle
@@ -39,7 +39,7 @@ pub mod SpiController {
     }
 
     // bits left to send
-    reg buffer : Word[8] on clock
+    reg buffer : Word[8]
 
     buffer <= match state {
         with #Idle => mux(valid, data, buffer)
@@ -48,7 +48,7 @@ pub mod SpiController {
     }
 
     // how many bits have been clocked out
-    reg bits  : Word[3] on clock
+    reg bits  : Word[3]
 
     bits <= match state {
         with #Idle => 0

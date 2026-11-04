@@ -47,6 +47,10 @@ pub enum DiagnosticPayload {
     MissingOnClause(MissingOnClause),
     /// A non-`reg` component has an unexpected `on` clause.
     UnexpectedOnClause(UnexpectedOnClause),
+    /// A `reg` component has an explicit `on` clause naming the module's
+    /// unique clock. The module's implicit clock already covers it, so
+    /// the `on` clause can be omitted.
+    RedundantOnClause(RedundantOnClause),
     /// A `driver` statement used the wrong driver type.
     /// Eg, a `reg` used `:=` or a `wire` used `<=`.
     WrongDriverType(WrongDriverType),
@@ -264,6 +268,11 @@ pub struct MissingOnClause {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnexpectedOnClause {
+    pub component: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RedundantOnClause {
     pub component: BString,
 }
 
@@ -662,6 +671,12 @@ impl Diagnostic {
             DiagnosticPayload::UnresolvedType(d) => format!("Unresolved type {}", d.typ).into(),
             DiagnosticPayload::MissingOnClause(d) => format!("Missing on clause for reg {}", d.component).into(),
             DiagnosticPayload::UnexpectedOnClause(d) => format!("Unexpected on clause {}", d.component).into(),
+            DiagnosticPayload::RedundantOnClause(d) => {
+                format!(
+                    "Redundant `on` clause: `{}` is implicitly clocked by the module's unique clock",
+                    d.component,
+                ).into()
+            }
             DiagnosticPayload::WrongDriverType(d) => {
                 let driver_type_str = match d.expected_driver_type {
                     DriverType::Continuous => ":=",
@@ -982,6 +997,7 @@ impl Diagnostic {
             | DiagnosticPayload::RedundantDriver(_)
             | DiagnosticPayload::TrailingSpaces
             | DiagnosticPayload::DependsonUnused(_)
+            | DiagnosticPayload::RedundantOnClause(_)
             | DiagnosticPayload::ReferencedWhileNotPub(_)
             | DiagnosticPayload::UnusedNonPub(_) => DiagnosticLevel::Warning,
             DiagnosticPayload::Todo(_) => DiagnosticLevel::Info,
@@ -1016,7 +1032,7 @@ macro_rules! from_diagnostic {
 from_diagnostic! {
     SyntaxError, ImportCycle, UnresolvedImportError, DuplicateImport, DuplicateItem,
     DuplicateSlot, UnresolvedPackage, UnresolvedItem, UnresolvedType, MissingOnClause,
-    UnexpectedOnClause, WrongDriverType, NoRegDrivers, NoDrivers, MultipleDrivers,
+    UnexpectedOnClause, RedundantOnClause, WrongDriverType, NoRegDrivers, NoDrivers, MultipleDrivers,
     NetReadWithoutTap, TapNotOnNet,
     DriverForSink, UnresolvedComponent, NotIt, UnresolvedCtor, UnusedSource, ReadFromSink,
     UnfilledHole, ModuleCycle, UnresolvedMethod, WrongType, Unknown, DoesntFit, NotWordType,

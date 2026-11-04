@@ -8,7 +8,7 @@ pub mod Arbiter {
     outgoing grant0 : Bit dependson reset, req0, req1
     outgoing grant1 : Bit dependson reset, req0, req1
 
-    reg client0_priority : Bit on clock {
+    reg client0_priority : Bit {
         it <= if {
             when reset => true
             else => !it

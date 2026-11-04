@@ -35,7 +35,7 @@ mod SpiController {
         it := buffer[7]
     }
 
-    reg state : SpiState on clock
+    reg state : SpiState
 
     state <= if {
         when reset => #Idle
@@ -47,7 +47,7 @@ mod SpiController {
     }
 
     // bits left to send
-    reg buffer : Word[8] on clock
+    reg buffer : Word[8]
 
     buffer <= match state {
         with #Idle => mux(valid, data, buffer)
@@ -56,7 +56,7 @@ mod SpiController {
     }
 
     // how many bits have been clocked out
-    reg bits  : Word[3] on clock
+    reg bits  : Word[3]
 
     bits <= match state {
         with #Idle => 0
@@ -194,7 +194,7 @@ The `SpiController` also defines how `state` changes over time.
 This is done with a driver that uses `when` and `match` expressions:
 
 ```virdant
-    reg state : SpiState on clock
+    reg state : SpiState
 
     state <= if {
         when reset => #Idle
@@ -249,7 +249,7 @@ The definition of `buffer` itself comes a bit later:
 
 ```virdant
     // bits left to send
-    reg buffer : Word[8] on clock
+    reg buffer : Word[8]
 
     buffer <= match state {
         with #Idle => mux(valid, data, buffer)
@@ -286,7 +286,8 @@ The `Clock` type is special in Virdant because they affect the timing of our des
 The only things we can do with `Clock`s are:
 
 - pass them around, and
-- feed them to the `on` clause of a `reg`
+- clock a `reg` with them, either explicitly via the `on` clause or
+  implicitly when the module has a single `Clock`
 
 However, we *cannot* use operators like `&&` `||` `!` or apply any other logic to them.
 `Clock`s must be carefully regulated so we don't end up with bad things like

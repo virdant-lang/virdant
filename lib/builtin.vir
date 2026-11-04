@@ -27,12 +27,12 @@ pub mod Sync {
     //> The clock of the output
     incoming clock: Clock
 
-    reg meta : Bit on clock {
+    reg meta : Bit {
         it <= inp
     }
 
     //> The clock of the output
-    outgoing reg out: Bit on clock {
+    outgoing reg out: Bit {
         it <= meta
     }
 }

@@ -4,7 +4,7 @@ pub mod Top {
     incoming inp : Word[8]
     outgoing max_seen : Word[8]
 
-    reg max_seen_reg : Word[8] on clock
+    reg max_seen_reg : Word[8]
 
     // Compute the maximum of the current register value and the input
     wire current_max : Word[8]

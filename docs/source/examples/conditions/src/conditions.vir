@@ -2,7 +2,7 @@ pub mod Top {
     incoming clock : Clock
     incoming reset : Bit
 
-    reg counter : Word[8] on clock
+    reg counter : Word[8]
     counter <= if {
         when reset => 0
         else => counter + 1

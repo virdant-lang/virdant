@@ -282,15 +282,33 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
         // Unused varibles and read from sink warnings
         let component_analysis = component_analysis.as_ref().unwrap();
         // When this module declares exactly one Clock-typed component,
-        // regs may omit their `on` clause and are implicitly clocked by
-        // it.  That implicit use is not written as an expression (no
+        // regs may omit their `on` clause and are implicitly clocked
+        // by it.  That implicit use is not written as an expression (no
         // `on <CLOCK>` reference exists to record a use location), so
-        // the implicit clock is exempt from the unused-signal warning.
+        // the implicit clock is exempt from the unused-signal warning
+        // as long as some reg/outgoing reg actually omits its `on`
+        // clause.  A module whose regs all name their clock explicitly
+        // (or that has no regs at all) has no implicit use, and the
+        // clock is reported unused like any other unreferenced signal.
+        let has_implicitly_clocked_reg = node
+            .children()
+            .into_iter()
+            .any(|stmt| {
+                matches!(
+                    stmt.payload(),
+                    AstNodePayload::Component(component)
+                        if matches!(
+                            component.kind,
+                            ComponentKind::Reg | ComponentKind::OutgoingReg
+                        ) && stmt.clock().is_none()
+                )
+            });
         for (path, component) in component_analysis.components() {
             if component.can_source()
                 && !use_locations.contains_key(&path)
                 && !component.synthetic()
-                && component_analysis.implicit_clock() != Some(component.id())
+                && (component_analysis.implicit_clock() != Some(component.id())
+                    || !has_implicitly_clocked_reg)
                 && !matches!(
                     component.kind(),
                     Some(ComponentKind::OutgoingReg)

@@ -23,9 +23,7 @@ pub mod ImplicitOn {
     outgoing reg oreg : Word[4]
     oreg <= trunc(inp)
 
-    // An explicit `on` clause still refers to the same clock and is
-    // unaffected by the implicit rule.
-    reg explicit : Word[8] on clock {
+    reg explicit : Word[8] {
         it <= data_buf
     }
 

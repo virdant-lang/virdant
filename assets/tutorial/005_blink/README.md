@@ -32,7 +32,7 @@ pub mod Strobe {
 
     //> `counter` repeatedly counts down from `period` to 0.
     //> When it reaches 0, it starts over and asserts `pulse`.
-    reg counter : Word[24] on clock {
+    reg counter : Word[24] {
         it <= if {
             when reset => period - 1
             else match it {
@@ -160,7 +160,7 @@ But if we want to make sure of it, we could have written it with the help of a `
     }
 
     //> `counter` repeatedly counts down from `period` to 0.
-    reg counter : Word[24] on clock {
+    reg counter : Word[24] {
         it <= if {
             when reset => period_minus_one
             else match it {
@@ -195,7 +195,7 @@ mod Blink {
 
     //> `led` is the LED output.
     //> It flips on every strobe pulse.
-    outgoing reg led : Bit on clock {
+    outgoing reg led : Bit {
         if {
             when strobe_timer.pulse {
                 it <= !it
@@ -248,7 +248,7 @@ It is an `outgoing reg`:
 ```virdant
     //> `led` is the LED output.
     //> It flips on every strobe pulse.
-    outgoing reg led : Bit on clock {
+    outgoing reg led : Bit {
         if {
             when strobe_timer.pulse {
                 it <= !it

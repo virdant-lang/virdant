@@ -14,7 +14,7 @@ pub mod Base {
     incoming data : Word[32]
     outgoing result : Word[32]
 
-    reg state : Word[32] on clock {
+    reg state : Word[32] {
         it <= data
     }
 

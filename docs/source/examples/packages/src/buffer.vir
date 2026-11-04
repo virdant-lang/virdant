@@ -3,7 +3,7 @@ pub mod Buffer {
     incoming inp : Word[4]
     outgoing out : Word[4]
 
-    reg queue : Word[4] on clock
+    reg queue : Word[4]
     queue <= inp
 
     out := queue
