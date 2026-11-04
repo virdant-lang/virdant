@@ -1,0 +1,84 @@
+/* ----- VCD waveform directive (.vcd) ----- */
+:root {
+  --vcd-line: #2E7D32;
+  --vcd-x: #c62828;
+}
+
+[data-theme="dark"] {
+  --vcd-line: #8FC225;
+  --vcd-x: #ef5350;
+}
+
+.vcd-block {
+  margin-bottom: 24px;
+}
+
+.vcd-block .vcd-body {
+  background: var(--bg-code);
+  border: 1px solid var(--border-code);
+  border-radius: 0 0 8px 8px;
+  padding: 10px 6px 6px;
+  overflow-x: auto;
+}
+
+/* Without a caption, round the top corners of the body too */
+.vcd-block:not(:has(.code-block-caption)) .vcd-body {
+  border-radius: 8px;
+}
+
+.vcd-svg {
+  display: block;
+  /* Width is computed at build time: the renderer "zooms to fit" the
+     target width (vcd_waveform_width in conf.py) by choosing pixels per
+     tick -- GTKWave-style -- so font sizes stay fixed while the waveform
+     density adapts.  Only traces longer than the target width overflow;
+     they scroll horizontally on .vcd-body below. */
+}
+
+.vcd-svg text {
+  font-family: "Fira Mono", monospace;
+  font-size: 10px;
+}
+
+.vcd-svg .vcd-name {
+  fill: var(--text-main);
+  font-size: 11px;
+}
+
+.vcd-svg .vcd-head {
+  fill: var(--border-light);
+}
+
+.vcd-svg .vcd-line {
+  stroke: var(--vcd-line);
+  stroke-width: 1.5;
+  fill: none;
+  stroke-linejoin: round;
+}
+
+.vcd-svg .vcd-zline {
+  stroke: var(--vcd-line);
+  stroke-width: 1.5;
+  fill: none;
+  opacity: 0.45;
+}
+
+.vcd-svg .vcd-xbox {
+  fill: var(--bg-page);
+  stroke: var(--vcd-x);
+}
+
+.vcd-svg .vcd-cross {
+  stroke: var(--vcd-x);
+  stroke-width: 1.2;
+  fill: none;
+}
+
+.vcd-svg .vcd-dbox {
+  fill: var(--bg-page);
+  stroke: var(--vcd-line);
+}
+
+.vcd-svg .vcd-data {
+  fill: var(--text-main);
+}

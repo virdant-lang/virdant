@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.abspath('.'))
 import virdant_ext
 import verilog_ext
 import grammar_ext
+import vcd_ext
 import sphinx_rtd_theme
 from sphinx.highlighting import lexers
 
@@ -34,6 +35,7 @@ extensions = [
     "sphinx_rtd_theme",
     "virdant_ext",
     "tooltip_ext",
+    "vcd_ext",
     "sphinxext.opengraph",
 ]
 
@@ -57,6 +59,7 @@ html_css_files = [
     'verilog-syntax.css',
     'console-syntax.css',
     'grammar-syntax.css',
+    'vcd.css',
 ]
 
 html_js_files = [
