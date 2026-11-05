@@ -1,3 +1,4 @@
+prop on
 poke inp 0
 vcd trace.vcd
 advance

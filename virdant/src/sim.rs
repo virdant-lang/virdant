@@ -1,6 +1,7 @@
 mod bits;
 pub mod builtins;
 mod circuit;
+mod delay;
 mod eval;
 mod expr;
 mod layout;

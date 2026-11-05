@@ -90,6 +90,22 @@ pub struct Sim {
     /// dispatch happens exactly once per settlement, in the outermost
     /// unlock.
     dispatching: bool,
+    /// Propagation-delay stamping (see `sim/delay.rs` and
+    /// `plans/gates_and_prop`): when on, the VCD dumper stamps value
+    /// changes at `settlement time + pole × unit_ps` instead of the
+    /// settlement time.  Cosmetic only — settlement itself is
+    /// unchanged.
+    propagation: bool,
+    /// The first attached clock's period (ps), recorded even while
+    /// propagation is off so that `with_propagation` after
+    /// `attach_clock` still knows the delay unit.
+    clock_period_ps: Option<u64>,
+    /// Explicit delay-unit override (ps per gate-delay unit), taking
+    /// precedence over the clock-derived / 1 ps fallback unit.  Set by
+    /// drivers with their own notion of a timestep (the poke tester,
+    /// whose ticks are far coarser than a picosecond) so delays render
+    /// visibly; see `with_propagation_unit_ps`.
+    prop_unit_override_ps: Option<u64>,
 }
 
 /// How a watcher decides to fire.
@@ -183,6 +199,9 @@ impl Sim {
             watchers: Vec::new(),
             time_marker: None,
             dispatching: false,
+            propagation: false,
+            clock_period_ps: None,
+            prop_unit_override_ps: None,
         };
 
         sim.apply_initials();
@@ -311,6 +330,97 @@ impl Sim {
     /// end-of-simulation hook.  See `vcd.rs` for the bit-layout seam.
     pub fn attach_vcd<W: Write + 'static>(&mut self, writer: W) {
         crate::sim::vcd::attach(self, writer);
+    }
+
+    /// Enable or disable propagation-delay stamping for the VCD trace
+    /// (cosmetic only; see `sim/delay.rs`).  When enabled:
+    ///
+    /// * panics if the design contains ext-mod builtins (`rf::Rf`,
+    ///   `mem::Mem`, `mem::Csrs`) — they have no delay model yet;
+    /// * if a clock is already attached, runs the eager pole-overflow
+    ///   check against its period.
+    pub fn with_propagation(&mut self, on: bool) {
+        if on {
+            if !self.circuit.builtin_ext_mods.is_empty() {
+                panic!(
+                    "with_propagation: no delay model for builtin ext modules: {}",
+                    self.circuit.builtin_ext_mods.join(", "),
+                );
+            }
+            if let Some(period) = self.clock_period_ps {
+                self.check_pole_overflow(period);
+            }
+        }
+        self.propagation = on;
+    }
+
+    /// Whether propagation-delay stamping is on.
+    pub fn propagation(&self) -> bool {
+        self.propagation
+    }
+
+
+    /// One gate-delay unit in picoseconds: an explicit override if set
+    /// (see [`Sim::with_propagation_unit_ps`]), else 1/400 of the first
+    /// attached clock's period, else 1 ps until a clock is attached.
+    ///
+    /// (The table's nominal scale is period/100; the whole model is
+    /// universally divided by 4 at the unit level — same relative
+    /// proportions, a quarter of the ps everywhere, and a 4× looser
+    /// eager-overflow budget.)
+    fn prop_unit_ps(&self) -> u64 {
+        if let Some(unit) = self.prop_unit_override_ps {
+            return unit;
+        }
+        match self.clock_period_ps {
+            Some(period) => period / 400,
+            None => 1,
+        }
+    }
+
+    /// Override the gate-delay unit (ps per delay unit), taking
+    /// precedence over the clock-derived / 1 ps fallback.  For drivers
+    /// whose timestep is far coarser than a picosecond (the poke
+    /// tester ticks in whole clock periods): without this, a 1-unit
+    /// wire delay stamps 1 ps after its cause — invisible on a
+    /// waveform whose ticks are ~10⁶ ps apart.  The eager overflow
+    /// check still runs against the effective unit, so a clocked sim
+    /// cannot be pushed into timing failure this way.
+    pub fn with_propagation_unit_ps(&mut self, unit_ps: u64) {
+        self.prop_unit_override_ps = Some(unit_ps);
+    }
+
+    /// The VCD stamp offset (ps) for `signal_id`: its pole in delay
+    /// units times the unit in ps; 0 when stamping is off.
+    pub(crate) fn prop_offset_ps(&self, signal_id: SignalId) -> u64 {
+        if self.propagation {
+            self.circuit.poles.pole(signal_id) * self.prop_unit_ps()
+        } else {
+            0
+        }
+    }
+
+    /// Panic when the longest pole, stamped at `pole × unit_ps`, would
+    /// land at or past the next clock edge (`≥ period`).  Poles are
+    /// static, so this is checked eagerly — once per clock attachment
+    /// or enablement — rather than per change.
+    fn check_pole_overflow(&self, period: u64) {
+        let max_pole = self.circuit.poles.max_pole;
+        let stamped = max_pole * self.prop_unit_ps();
+        if stamped >= period {
+            let signal = self
+                .circuit
+                .poles
+                .max_pole_signal
+                .map(|id| self.elaboration().component(id).path().to_string())
+                .unwrap_or_else(|| "?".to_string());
+            panic!(
+                "propagation delay overflow: signal `{signal}` has a pole of \
+                 {max_pole} delay units ({stamped} ps), at or past the clock period \
+                 ({period} ps) — the delay model should sit orders of magnitude \
+                 below the clock"
+            );
+        }
     }
 
     /// Evaluate every driven component, repeating until the
@@ -598,6 +708,12 @@ impl Sim {
     /// fire late); poke mode never schedules any.
     pub fn advance_time(&mut self, ps: u64) {
         self.sched.advance_ps(ps);
+        self.fire_time_marker();
+    }
+
+    /// Fire the time-marker callback (the VCD dumper's flush-and-stamp
+    /// hook) with the current simulated time.
+    fn fire_time_marker(&mut self) {
         if let Some(marker) = &self.time_marker {
             marker(self.sched.time_ps());
         }
@@ -632,6 +748,25 @@ impl Sim {
     /// scheduled `period_ps / 2` from now, so the first rising edge
     /// happens at `now + period_ps / 2`.
     pub fn attach_clock(&mut self, signal: SignalId, clock: Clock) {
+        // Propagation-delay bookkeeping: the first attached clock's
+        // period defines the delay unit; with stamping on, a second
+        // clock with a different period is rejected loudly, and the
+        // eager overflow check runs against the period.
+        if self.clock_period_ps.is_none() {
+            self.clock_period_ps = Some(clock.period_ps);
+        } else if self.propagation && self.clock_period_ps != Some(clock.period_ps) {
+            panic!(
+                "attach_clock: a second clock with a different period ({}) was \
+                 attached while propagation-delay stamping is on; the first clock \
+                 (period {:?} ps) defines the delay unit",
+                clock.period_ps,
+                self.clock_period_ps,
+            );
+        }
+        if self.propagation {
+            self.check_pole_overflow(clock.period_ps);
+        }
+
         let half = clock.period_ps / 2;
         {
             let typ_id = self.component_type_id(signal);
@@ -660,7 +795,18 @@ impl Sim {
         }
 
         while !self.sched.is_shutdown_requested() {
-            if let Some(mut cb) = self.sched.next_after_delay() {
+            if let Some((_, mut cb)) = self.sched.pop_after_delay() {
+                // Time has moved to `at_ps`.  With propagation-delay
+                // stamping on, the VCD dumper flushes every buffered
+                // change stamped at or before this time before the
+                // callback runs (no future change can be stamped
+                // earlier: all future settlements have base ≥ at_ps).
+                // With stamping off this is a no-op flush plus a
+                // marker dedupe — but skipped entirely to keep the
+                // legacy trace byte-identical.
+                if self.propagation {
+                    self.fire_time_marker();
+                }
                 cb(self);
             } else {
                 break;

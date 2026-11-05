@@ -129,7 +129,13 @@ impl Scheduler {
         to_process.into_iter().filter_map(|mut e| e.cb.callback.take()).collect()
     }
 
-    pub(super) fn next_after_delay(&mut self) -> Option<Callback> {
+    /// Pop the soonest `AfterDelay` entry (FIFO tiebreak), advance
+    /// simulated time to its deadline, and return `(deadline,
+    /// callback)`.  The caller fires the time marker (the VCD dumper's
+    /// flush hook) before invoking the callback, so every buffered
+    /// trace event stamped at or before the new time is emitted before
+    /// any change this callback causes.
+    pub(super) fn pop_after_delay(&mut self) -> Option<(u64, Callback)> {
         let idx = self.queue
             .iter()
             .enumerate()
@@ -144,8 +150,9 @@ impl Scheduler {
             let mut entry = self.queue.remove(idx);
             if let Event::AfterDelay { at_ps } = entry.cb.event {
                 self.advance_to(at_ps);
+                return Some((at_ps, entry.cb.callback.take()?));
             }
-            entry.cb.callback.take()
+            unreachable!("queue holds only AfterDelay entries between lifecycle drains")
         } else {
             None
         }

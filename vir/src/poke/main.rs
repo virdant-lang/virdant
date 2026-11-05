@@ -711,8 +711,8 @@ pub fn poke_legal(session: &Session, signal_id: SignalId) -> Result<(), String> 
 }
 
 /// The REPL's command names, for TAB completion (and `help`'s list).
-const COMMANDS: [&str; 16] = [
-    "cd", "peek", "poke", "watch", "break", "advance", "tick", "assert", "print", "ls", "show", "autoshow", "vcd", "restart", "exit", "help",
+const COMMANDS: [&str; 17] = [
+    "cd", "peek", "poke", "watch", "break", "advance", "tick", "assert", "print", "ls", "show", "autoshow", "vcd", "prop", "restart", "exit", "help",
 ];
 
 /// One `show` row: a signal's leaf name, kind, type, and rendered value.

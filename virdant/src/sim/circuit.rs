@@ -17,6 +17,7 @@ use crate::analysis::symbols::SymbolId;
 use crate::analysis::deps::build_dependencies;
 use crate::analysis::elaboration::{SignalId, Elaboration};
 use crate::db::{Builder, Db};
+use crate::sim::delay::{self, PoleTable};
 use crate::sim::expr::{Expr, ExprPayload, Referent, driver_to_expr, initial_to_expr};
 use crate::sim::layout::{TypeInterner, TypeLayoutIndex};
 
@@ -49,6 +50,13 @@ pub(super) struct Circuit {
     /// values to produce an eval `Context`.  Computed once in `Circuit::new`;
     /// the runtime never re-walks the `Expr` tree to find referents.
     pub(super) resolved_referents: IndexMap<SignalId, Vec<(Referent, SignalId)>>,
+    /// Static propagation-delay model (see `sim/delay.rs`): per-signal
+    /// pole delays in gate-delay units, computed once at build time.
+    pub(super) poles: PoleTable,
+    /// Fully-qualified names of `ext mod` instances that have simulator
+    /// builtins (`rf::Rf`, `mem::Mem`, `mem::Csrs`).  The propagation-
+    /// delay model refuses designs containing these.
+    pub(super) builtin_ext_mods: Vec<String>,
 }
 
 impl Circuit {
@@ -151,6 +159,17 @@ impl Circuit {
             dense_exprs[id.index()] = Some(expr.clone());
         }
 
+        // Static propagation-delay model: one pole per signal, plus the
+        // ext-mod builtin census for the propagation flag's panic check.
+        let poles = delay::compute_poles(
+            &elaboration,
+            &dense_exprs,
+            &dense_aliases,
+            &dense_registers,
+            &resolved_referents,
+        );
+        let builtin_ext_mods = builtin_ext_fqns(db, &elaboration);
+
         Circuit {
             elaboration,
             type_layout_index,
@@ -161,6 +180,8 @@ impl Circuit {
             exprs: dense_exprs,
             initial_exprs,
             resolved_referents,
+            poles,
+            builtin_ext_mods,
         }
     }
 
@@ -253,6 +274,23 @@ fn compute_resolved_referents(
         }
     }
     out
+}
+
+/// The fully-qualified names of every `ext mod` instance in the design
+/// that has a simulator builtin (`rf::Rf`, `mem::Mem`, `mem::Csrs`).
+/// The propagation-delay model refuses designs containing these (see
+/// `Sim::with_propagation`).
+fn builtin_ext_fqns(db: &Db, elaboration: &Elaboration) -> Vec<String> {
+    let symboltable = db.get_symboltable();
+    elaboration
+        .modules()
+        .iter()
+        .filter(|(moddef, _)| super::builtins::is_ext_mod(db, *moddef))
+        .filter_map(|(moddef, _)| {
+            let fqn = symboltable.symbol(*moddef).fqn().to_string();
+            matches!(fqn.as_str(), "rf::Rf" | "mem::Mem" | "mem::Csrs").then_some(fqn)
+        })
+        .collect()
 }
 
 /// Invert the dependency map into a sensitivity map.

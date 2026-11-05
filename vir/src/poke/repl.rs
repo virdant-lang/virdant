@@ -311,6 +311,7 @@ fn print_help() {
   show               print the value of every signal in the design, by module
   autoshow [on|off]  show the design after every poke/tick (no arg toggles)
   vcd <file>         write a VCD trace to the file from now on
+  prop [on|off]      stamp VCD changes at t + gate delay (no arg toggles)
   peek <path>        print a signal's value (sets `it`)
   poke <path> <expr> drive a top-level incoming port or a register
   watch <path>       print a signal whenever it changes
@@ -347,6 +348,9 @@ mod tests {
         assert!(matches!(parse("autoshow"), Command::Autoshow(None)));
         assert!(matches!(parse("autoshow on"), Command::Autoshow(Some(true))));
         assert!(matches!(parse("autoshow off"), Command::Autoshow(Some(false))));
+        assert!(matches!(parse("prop"), Command::Prop(None)));
+        assert!(matches!(parse("prop on"), Command::Prop(Some(true))));
+        assert!(matches!(parse("prop off"), Command::Prop(Some(false))));
         assert!(
             matches!(parse("vcd \"trace.vcd\""), Command::Vcd(name) if name == "trace.vcd")
         );

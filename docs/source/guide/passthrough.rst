@@ -86,6 +86,7 @@ What does this module actually do though?
 Let's take a look at a run through the waveform viewer:
 
 .. vcd:: ../examples/passthrough/trace.svg
+   :tick: 50000
 
 When looking at a waveform,
 time advances from left to right.

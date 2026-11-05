@@ -102,4 +102,9 @@ pub enum Command {
     /// file name may be quoted (`vcd "my trace.vcd"`) or bare
     /// (`vcd trace.vcd`, `vcd out/trace.vcd`).
     Vcd(String),
+    /// `prop [on|off]`: toggle (or set) propagation-delay stamping
+    /// for the VCD trace (see `plans/gates_and_prop`): value changes
+    /// are stamped at `settlement time + pole delay` instead of the
+    /// settlement time.  Reset by `restart` (a fresh `Sim`).
+    Prop(Option<bool>),
 }

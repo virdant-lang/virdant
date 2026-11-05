@@ -58,7 +58,7 @@ pub fn attach(sim: &mut Sim, db: &Db, verbose: bool) {
 }
 
 /// True when the moddef at `symbol_id` is declared `ext mod`.
-fn is_ext_mod(db: &Db, symbol_id: SymbolId) -> bool {
+pub(crate) fn is_ext_mod(db: &Db, symbol_id: SymbolId) -> bool {
     let symboltable = db.get_symboltable();
     let symbol = symboltable.symbol(symbol_id);
     let location = symbol.location();

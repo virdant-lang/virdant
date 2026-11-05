@@ -336,6 +336,11 @@ class VcdDirective(Directive):
         'caption': directives.unchanged,
         'file': directives.path,
         'signals': directives.unchanged,
+        # Picoseconds per rendered tick.  Defaults to 500000 (half of the
+        # virt platform's clock period), which quantizes every change onto
+        # a clock edge — traces that illustrate propagation delay need a
+        # finer grid to render the sub-cycle offsets at all.
+        'tick': directives.positive_int,
     }
 
     def resolve_file(self, filename, docdir, srcdir):
@@ -383,6 +388,9 @@ class VcdDirective(Directive):
             cmd = [sys.executable, script, path, out_path]
             if signals:
                 cmd += ['-s', signals]
+            tick = self.options.get('tick')
+            if tick:
+                cmd += ['--tick', str(tick)]
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
                 raise self.error(

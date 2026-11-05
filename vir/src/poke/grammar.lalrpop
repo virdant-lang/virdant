@@ -38,6 +38,7 @@ extern {
         "ls" => Tok::Ls,
         "show" => Tok::Show,
         "autoshow" => Tok::Autoshow,
+        "prop" => Tok::Prop,
         "vcd" => Tok::Vcd,
         "on" => Tok::On,
         "off" => Tok::Off,
@@ -96,6 +97,7 @@ Cmd: Command = {
     "show" => Command::Show,
     "autoshow" <t: AutoshowState> => t,
     "vcd" <t: VcdTarget> => Command::Vcd(t),
+    "prop" <t: PropState> => t,
 };
 
 // The `vcd` file name: either a quoted string (taken verbatim, spaces
@@ -143,6 +145,13 @@ AutoshowState: Command = {
     => Command::Autoshow(None),
     "on" => Command::Autoshow(Some(true)),
     "off" => Command::Autoshow(Some(false)),
+};
+
+// `prop [on|off]`: with no argument the state toggles.
+PropState: Command = {
+    => Command::Prop(None),
+    "on" => Command::Prop(Some(true)),
+    "off" => Command::Prop(Some(false)),
 };
 
 // `cd <path>` drills down one or more levels; `cd ..` goes up one

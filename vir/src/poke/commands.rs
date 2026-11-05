@@ -82,6 +82,28 @@ pub fn exec(
             println!("autoshow is now {}", if now { "on" } else { "off" });
             Ok(Flow::Continue)
         }
+        Command::Prop(on) => {
+            // No argument toggles; an argument sets the state.
+            let now = on.unwrap_or(!session.sim.propagation());
+            session.sim.with_propagation(now);
+            if now {
+                // Poke has no attached clock, so the delay unit would
+                // fall back to 1 ps — invisible against ticks a
+                // million picoseconds wide.  Scale the unit to a
+                // twentieth of the tick timestep (the model's universal
+                // ÷4 on top of the former fifth): a direct connection
+                // costs a visible 5%-of-a-cycle step, and a register
+                // fanout (clk-to-Q + wire = 2 units) lands at 10% —
+                // clear of both edges.  Poke (clockless) never trips
+                // the eager overflow check.
+                let unit = TIMESTEP_PS / 20;
+                session.sim.with_propagation_unit_ps(unit);
+                println!("prop is now on (unit = {unit} ps)");
+            } else {
+                println!("prop is now off");
+            }
+            Ok(Flow::Continue)
+        }
         Command::Vcd(name) => {
             if let Some(old) = &session.vcd {
                 return Err(format!(

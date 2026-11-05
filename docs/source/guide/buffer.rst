@@ -87,6 +87,7 @@ Waveform
 Let's look at the waveform viewer again.
 
 .. vcd:: ../examples/buffer/trace.svg
+   :tick: 50000
    :signals: top.clock,top.inp:dec,top.out:dec,top.buffer:dec
 
 We have a clock this time!

@@ -1,3 +1,4 @@
+prop on
 vcd trace.vcd
 poke inp 0
 tick
