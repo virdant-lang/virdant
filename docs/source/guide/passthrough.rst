@@ -86,7 +86,12 @@ What does this module actually do though?
 Let's take a look at a run through the waveform viewer:
 
 .. vcd:: ../examples/passthrough/trace.svg
-    :signals: top.inp:dec,top.out:dec
+
+    label Input
+    signal top.inp:dec
+
+    label Output
+    signal top.out:dec
 
 When looking at a waveform,
 time advances from left to right.
@@ -107,3 +112,6 @@ How does `top.out` respond?
 
 So how do you feel about the simplicity of Virdant so far?
 It turns out that Simplicity is one of the :doc:`Principles of Virdant </principles>`!
+
+Study the waveforms
+and try to get a sense of what the `FullAdder` really does!

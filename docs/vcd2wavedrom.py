@@ -11,6 +11,17 @@ when no filter is given).
 Each name may carry a value format after a colon ("top.count:dec"), choosing
 how multi-bit values are rendered in the data boxes. The supported formats
 are the keys of FORMATTERS (currently bin, hex, dec); the default is hex.
+
+The signal list may also carry layout separators, via -l/--layout: a file
+with one item per line --
+
+    signal <name>[:<format>]    a signal, exactly as the -s specs
+    space                       a blank row (visually groups signals)
+    label <text>                a labelled separator row (text may have spaces)
+
+Blank lines have no effect. This is what the `.. vcd::` directive's body
+uses (see docs/source/vcd_ext.py); -s remains the plain comma-separated
+spec list.
 """
 import argparse
 import json
@@ -68,6 +79,37 @@ def split_spec(spec):
     return name, fmt if sep else None
 
 
+def parse_layout(text):
+    """Parse layout text into [('signal', spec) | ('space', None) | ('label', str), ...].
+
+    One item per nonblank line (see the module docstring for the syntax).
+    """
+    items = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line == "space":
+            items.append(("space", None))
+            continue
+        kind, _, rest = line.partition(" ")
+        rest = rest.strip()
+        if kind == "signal":
+            if not rest:
+                sys.exit("error: layout line 'signal' needs a signal name")
+            if "," in rest or len(rest.split()) > 1:
+                sys.exit(f"error: layout line must name exactly one signal: {rest!r}")
+            items.append(("signal", rest))
+        elif kind == "label":
+            if not rest:
+                sys.exit("error: layout line 'label' needs label text")
+            items.append(("label", rest))
+        else:
+            sys.exit(f"error: invalid layout line: {line!r} (expected "
+                     f"'signal <name>[:<format>]', 'space', or 'label <text>')")
+    return items
+
+
 def filter_signals(order, wanted):
     """Return (name, format) pairs matching `wanted`, in the order given.
 
@@ -75,6 +117,10 @@ def filter_signals(order, wanted):
     leaf name ("clock", matching every scope containing a signal of that
     name), optionally followed by a format ("top.count:dec").  A leaf entry
     matches in VCD declaration order among its matches.
+
+    A spec that matches nothing is an error: a typo'd signal name would
+    otherwise silently drop a row from the waveform.  The error lists the
+    signals the VCD actually declares, so the fix is usually obvious.
     """
     if not wanted:
         return [(name, None) for name in order]
@@ -92,7 +138,8 @@ def filter_signals(order, wanted):
     missing = [w for w in names
                if w not in order and w not in {n.rsplit(".", 1)[-1] for n in order}]
     if missing:
-        print(f"warning: no match for: {', '.join(missing)}", file=sys.stderr)
+        sys.exit(f"error: no signal matches: {', '.join(missing)}\n"
+                 f"       signals in the trace: {', '.join(order)}")
     return matched
 
 # Multi-bit values are rendered as text inside a data box.  Each supported
@@ -114,9 +161,25 @@ DEFAULT_FORMAT = 'hex'
 CLK_FORMAT = 'clk'
 
 
-def to_wavedrom(changes, names, end_time, tick):
+def to_wavedrom(changes, items, names, end_time, tick):
+    """Build the WaveJSON signal list from layout `items` and resolved `names`.
+
+    `names` is the resolved (full_name, format) pairs for the layout's
+    signal entries, in the same order.  Separator entries become marker
+    dicts the renderer understands: {'space': True} draws an empty row;
+    {'label': text} draws a labelled separator row.
+    """
     signals = []
-    for name, fmt in names:
+    ni = 0
+    for kind, val in items:
+        if kind == "space":
+            signals.append({"space": True})
+            continue
+        if kind == "label":
+            signals.append({"label": val})
+            continue
+        name, fmt = names[ni]
+        ni += 1
         clk = fmt == CLK_FORMAT
         # stable sort by tick only: preserves $dumpvars order for ties
         chs = sorted(((t // tick, v) for t, v in changes[name]),
@@ -212,6 +275,10 @@ def main():
                     help="comma-separated signal specs (full path or leaf name, "
                          "optionally ':format'; e.g. top.count:dec); "
                          "default: all signals")
+    ap.add_argument("-l", "--layout", default=None,
+                    help="path to a layout file, one item per line: "
+                         "'signal <name>[:<format>]'; 'space'; or 'label <text>' "
+                         "(see the module docstring); overrides --signals")
     ap.add_argument("--tick", type=int, default=None,
                     help="picoseconds per WaveDrom tick "
                          "(default: derived from the trace -- the GCD of "
@@ -219,14 +286,21 @@ def main():
                          "the render bounded)")
     args = ap.parse_args()
 
-    wanted = [w.strip() for w in args.signals.split(",") if w.strip()]
+    if args.layout:
+        items = parse_layout(open(args.layout).read())
+        wanted = [spec for kind, spec in items if kind == "signal"]
+        if not wanted:
+            sys.exit("error: layout has no 'signal' lines")
+    else:
+        wanted = [w.strip() for w in args.signals.split(",") if w.strip()]
+        items = [("signal", w) for w in wanted]
     bad = sorted({split_spec(w)[1] for w in wanted} - set(FORMATTERS) - {CLK_FORMAT} - {None})
     if bad:
         sys.exit("error: unknown format(s): {} (known: {})".format(
             ", ".join(bad), ", ".join(sorted(FORMATTERS))))
 
     changes, order, max_t = parse_vcd(args.vcd)
-    names = filter_signals(order, args.signals)
+    names = filter_signals(order, ",".join(wanted))
     if not names:
         sys.exit("error: no signals selected")
     tick = args.tick if args.tick is not None else derive_tick(changes, max_t)
@@ -237,7 +311,7 @@ def main():
     # duration is exactly max_t // tick ticks.
     changed_at_end = any(t == max_t for n, _ in names for t, _ in changes[n])
     end = max(max_t // tick + (1 if changed_at_end else 0), 1)
-    json.dump(to_wavedrom(changes, names, end, tick),
+    json.dump(to_wavedrom(changes, items, names, end, tick),
               open(args.out, "w"), indent=1)
     print(f"wrote {args.out}: {len(names)} signals, {end} ticks "
           f"({tick} ps/tick)")

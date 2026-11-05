@@ -34,7 +34,6 @@ The `outgoing` ports of `HalfAdder` are written a bit differently than before:
     :lines: 5-13
     :dedent:
 
-
 These define `sum` and `carry_out`, both with type `Bit`.
 
 But in both cases, there is a block directly beneath them.
@@ -59,6 +58,20 @@ And so this is the same as if you had written
 Driver blocks are nice because they allow you to tuck away the details
 inside a level of indentation.
 A friend who reads your code can then skim down the margin of a module definition,
+
+
+Comments
+--------
+Before going on to how this module works,
+it's worth pointing out that comments in Virdant begin with `//`
+and go to the end of the line:
+
+.. literalinclude:: /examples/adder/src/adder.vir
+    :language: virdant
+    :lines: 5
+    :dedent:
+
+There are no multi-line comments in Virdant.
 
 
 Truth Table
@@ -179,7 +192,14 @@ Waveform
 The final waveform of `HalfAdder` looks like this:
 
 .. vcd:: ../../examples/adder/halfadder.vcd
-   :signals: top.a,top.b,top.sum,top.carry_out
+
+    label Inputs
+    signal top.a
+    signal top.b
+
+    label Outputs
+    signal top.sum
+    signal top.carry_out
 
 Remember that both `top.a` and `top.b` are inputs.
 All four possible combinations of inputs are represented here.

@@ -110,7 +110,13 @@ Waveform
 Let's look at the waveform viewer again.
 
 .. vcd:: ../examples/buffer/trace.svg
-   :signals: top.clock:clk,top.inp:dec,top.out:dec,top.buffer:dec
+
+    label Clock
+    signal top.clock:clk
+    label Signals
+    signal top.inp:dec
+    signal top.out:dec
+    signal top.buffer:dec
 
 We have a clock!
 Pay close attention to the rising edge of the clock,

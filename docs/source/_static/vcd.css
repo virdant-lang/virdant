@@ -122,6 +122,13 @@
   fill: var(--border-light);
 }
 
+.vcd-svg .vcd-label {
+  /* Group-title rows (layout 'label <text>'): rendered like a signal
+     name but in the muted head color, so a group reads as one visual
+     unit without any rule or other ornament across the waveform. */
+  fill: var(--border-light);
+}
+
 .vcd-svg .vcd-line {
   stroke: var(--vcd-line);
   stroke-width: 1.5;

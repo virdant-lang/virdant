@@ -19,21 +19,21 @@ mod FullAdder {
     incoming carry_in : Bit
 
     outgoing sum : Bit dependson a, b, carry_in {
-        it := ha1.sum
+        it := halfadder_1.sum
     }
     outgoing carry_out : Bit dependson a, b, carry_in {
-        it := ha0.carry_out || ha1.carry_out
+        it := halfadder_0.carry_out || halfadder_1.carry_out
     }
 
     // first, sum a + b
-    mod ha0 of HalfAdder {
+    mod halfadder_0 of HalfAdder {
         it.a := a
         it.b := b
     }
 
     // then, sum the result with carry_in
-    mod ha1 of HalfAdder {
-        it.a := ha0.sum
+    mod halfadder_1 of HalfAdder {
+        it.a := halfadder_0.sum
         it.b := carry_in
     }
 }

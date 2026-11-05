@@ -102,4 +102,7 @@ pub enum Command {
     /// file name may be quoted (`vcd "my trace.vcd"`) or bare
     /// (`vcd trace.vcd`, `vcd out/trace.vcd`).
     Vcd(String),
+    /// `top <module>`: reload the simulator with a new top module
+    /// (`package::ModDef`, or a simple name when unambiguous).
+    Top(String),
 }

@@ -1,3 +1,5 @@
+top adder::HalfAdder
+
 poke a false
 poke b false
 

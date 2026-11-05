@@ -50,6 +50,7 @@ pub enum Tok {
     Hash,
     Dot,
     DotDot,
+    ColonColon,
     LParen,
     RParen,
     LBracket,
@@ -119,6 +120,7 @@ impl std::fmt::Display for Tok {
             Tok::Hash => write!(f, "`#`"),
             Tok::Dot => write!(f, "`.`"),
             Tok::DotDot => write!(f, "`..`"),
+            Tok::ColonColon => write!(f, "`::`"),
             Tok::LParen => write!(f, "`(`"),
             Tok::RParen => write!(f, "`)`"),
             Tok::LBracket => write!(f, "`[`"),
@@ -205,6 +207,8 @@ pub fn lex(line: &str) -> Result<Vec<(usize, Tok, usize)>, LexError> {
         // Multi-character operators first, then single characters.
         let (tok, len) = if bytes[i..].starts_with(b"..") {
             (Tok::DotDot, 2)
+        } else if bytes[i..].starts_with(b"::") {
+            (Tok::ColonColon, 2)
         } else if bytes[i..].starts_with(b"&&") {
             (Tok::AmpAmp, 2)
         } else if bytes[i..].starts_with(b"||") {

@@ -3,14 +3,29 @@
 Renders a VCD trace as a WaveDrom-style SVG inline figure.
 
     .. vcd:: path/to/trace.vcd
-        :caption: Hello World
-        :signals: top.clock,top.count:dec
+       :caption: Hello World
 
-Each entry of ``:signals:`` is a signal name, optionally followed by a
-value format after a colon.  Formats are those of ``docs/vcd2wavedrom.py``
-(``bin``, ``hex``, ``dec``; add more in its FORMATTERS table); the default
-is ``hex``.  The format only affects multi-bit values, which are rendered
-as text in a data box; 1-bit signals draw as 0/1 level lines either way.
+       signal top.clock
+       signal top.count:dec
+
+The directive body is a line-based layout, one item per nonblank line
+(empty lines have no effect):
+
+  ``signal <name>[:<format>]``
+      A signal to draw.  A signal name, optionally followed by a value
+      format after a colon.  Formats are those of ``docs/vcd2wavedrom.py``
+      (``bin``, ``hex``, ``dec``; add more in its FORMATTERS table); the
+      default is ``hex``.  The format only affects multi-bit values, which
+      are rendered as text in a data box; 1-bit signals draw as 0/1 level
+      lines either way.
+  ``space``
+      A blank separator row, for visually grouping signals.
+  ``label <text>``
+      A labelled separator row (the text may contain spaces).
+
+A signal that matches nothing in the trace is an error, so a typo'd name
+fails the build instead of silently dropping a row.  An empty body draws
+every signal in the trace.
 
 The path is given as the directive argument, relative to the document (or
 to the source root).  An ``.svg`` path is accepted as shorthand for the
@@ -190,16 +205,20 @@ def render_svg(wavejson, target_width, extra_class=''):
     signals = wavejson['signal']
 
     # Longest wave string determines the total number of ticks, hence the
-    # width of the waveform area.
+    # width of the waveform area.  Separator rows (space/label, no 'wave')
+    # don't contribute.
     n_ticks = max((len(expand_wave(s['wave'], s.get('data', [])))
-                   for s in signals), default=0)
+                   for s in signals if 'wave' in s), default=0)
 
-    # Width of the left-hand gutter that holds signal names.  Sized to fit
-    # the longest name (CHAR_W per character) plus scaled padding so the
-    # longest name does not visually touch the waveform area; floored at a
-    # scaled minimum so short names still get a reasonable gutter.
+    # Width of the left-hand gutter that holds signal names (and label
+    # rows' group titles).  Sized to fit the longest text (CHAR_W per
+    # character) plus scaled padding so the longest name does not visually
+    # touch the waveform area; floored at a scaled minimum so short names
+    # still get a reasonable gutter.
+    texts = [s['name'] for s in signals if 'name' in s]
+    texts += [s['label'] for s in signals if 'label' in s]
     label_w = max(40 * SCALE,
-                  int(max((len(s['name']) for s in signals), default=0) * CHAR_W)
+                  int(max((len(t) for t in texts), default=0) * CHAR_W)
                   + 24 * SCALE)
 
     # Vertical space above the first signal row: one head line when there is
@@ -278,6 +297,13 @@ def render_svg(wavejson, target_width, extra_class=''):
         # within the row (see the geometry diagram above the constants).
         row_y = head_h + idx * ROW_H
         y_top, y_bot, y_mid = row_y + Y_TOP, row_y + Y_BOT, row_y + Y_MID
+
+        # Separator rows carry no waveform: 'space' is a fully blank row;
+        # 'label' is a row whose title text sits in the gutter (below).
+        if 'label' in sig:
+            continue
+        if 'space' in sig:
+            continue
 
         tokens = expand_wave(sig['wave'], sig.get('data', []))
         runs = runs_of(tokens)
@@ -407,27 +433,38 @@ def render_svg(wavejson, target_width, extra_class=''):
 
     parts.append('</g>')
 
-    # Signal name labels sit in the gutter, outside the translated group.
+    # Gutter text sits outside the translated group: signal names for
+    # signal rows, group titles for label rows, nothing for space rows.
+    # All gutter text is left-justified, so names and group titles share
+    # a common left edge regardless of length.
     for idx, sig in enumerate(signals):
         row_y = head_h + idx * ROW_H
+        if 'name' in sig:
+            text, cls = sig['name'], 'vcd-name'
+        elif 'label' in sig:
+            text, cls = sig['label'], 'vcd-label'
+        else:
+            continue
         parts.append(
-            f'<text class="vcd-name" x="{label_w - 14 * SCALE:.1f}" '
+            f'<text class="{cls}" x="{8 * SCALE:.1f}" '
             f'y="{row_y + Y_MID + 4 * SCALE:.1f}" '
-            f'text-anchor="end">{escape(sig["name"])}</text>')
+            f'text-anchor="start">{escape(text)}</text>')
 
     parts.append('</svg>')
     return ''.join(parts)
 
 
 class VcdDirective(Directive):
-    has_content = False
+    has_content = True
     required_arguments = 0
     optional_arguments = 1
     final_argument_whitespace = True
     option_spec = {
         'caption': directives.unchanged,
         'file': directives.path,
-        'signals': directives.unchanged,
+        # The signal list lives in the directive body, one per line -- not
+        # in an option.  'signals' is deliberately absent from this spec so
+        # that docutils rejects it outright ("unknown option: signals").
         # Picoseconds per rendered tick.  Defaults to 500000 (half of the
         # virt platform's clock period), which quantizes every change onto
         # a clock edge — traces that illustrate propagation delay need a
@@ -473,21 +510,68 @@ class VcdDirective(Directive):
         script = os.path.normpath(os.path.join(
             os.path.abspath(os.path.dirname(__file__)), '..', 'vcd2wavedrom.py'))
 
-        signals = self.options.get('signals')
+        # The directive body is a line-based layout, one item per nonblank
+        # line (empty lines have no effect; they just let authors spread
+        # the layout out):
+        #
+        #     signal <name>[:<format>]   a signal to draw
+        #     space                      a blank row (visually groups signals)
+        #     label <text>               a labelled separator row
+        #
+        # An empty body means "draw every signal in the trace".
+        layout_lines = []
+        for line in self.content:
+            line = line.strip()
+            if not line:
+                continue
+            kind, _, rest = line.partition(' ')
+            rest = rest.strip()
+            if line == 'space':
+                layout_lines.append('space')
+            elif kind == 'signal':
+                if not rest:
+                    raise self.error("'signal' needs a signal name")
+                if ',' in rest:
+                    raise self.error(
+                        f'one signal per line, without commas: {rest!r}')
+                if len(rest.split()) > 1:
+                    raise self.error(
+                        f'one signal per line (is this two signals on one '
+                        f'line?): {rest!r}')
+                layout_lines.append(f'signal {rest}')
+            elif kind == 'label':
+                if not rest:
+                    raise self.error("'label' needs label text")
+                layout_lines.append(f'label {rest}')
+            else:
+                raise self.error(
+                    f'invalid line: {line!r}; expected '
+                    f"'signal <name>[:<format>]', 'space', or 'label <text>'")
+
+        # Hand the body to vcd2wavedrom.py verbatim as a layout file, so it
+        # stays the single place that knows this syntax.
+        layout_path = None
+        if layout_lines:
+            lfd, layout_path = tempfile.mkstemp(suffix='.layout')
+            with os.fdopen(lfd, 'w') as f:
+                f.write('\n'.join(layout_lines) + '\n')
+
         fd, out_path = tempfile.mkstemp(suffix='.json')
         os.close(fd)
         try:
             cmd = [sys.executable, script, path, out_path]
-            if signals:
-                cmd += ['-s', signals]
+            if layout_path:
+                cmd += ['-l', layout_path]
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
                 raise self.error(
                     f'vcd2wavedrom failed for {filename}:\n'
                     f'{result.stderr.strip() or result.stdout.strip()}')
-            # vcd2wavedrom warns on stderr about signals that matched nothing
-            # (exit code is still 0, so it would otherwise be invisible and
-            # the rendering would silently be missing the requested signal).
+            # vcd2wavedrom exits nonzero (reported as a located error above)
+            # when a requested signal matches nothing in the trace, so a
+            # typo'd signal name fails the build instead of silently dropping
+            # a row from the waveform.  Remaining stderr is advisory only
+            # (e.g. ':clk' on a multi-bit signal falls back to hex).
             if result.stderr.strip():
                 logger.warning(
                     f'vcd2wavedrom warning for {filename}: {result.stderr.strip()}',
@@ -501,6 +585,8 @@ class VcdDirective(Directive):
                 head['text'] = f"{filename}  {head['text'].split('  ', 1)[1]}"
         finally:
             os.unlink(out_path)
+            if layout_path:
+                os.unlink(layout_path)
 
         # Two variants of the same figure, swapped by a CSS media query:
         # a desktop one zoomed to fit the ~680px content column, and a

@@ -240,6 +240,10 @@ pub fn exec(
             println!("restarted");
             Ok(Flow::Continue)
         }
+        Command::Top(name) => {
+            session.set_top(name)?;
+            Ok(Flow::Continue)
+        }
         Command::Exit => Ok(Flow::Exit),
     }
 }

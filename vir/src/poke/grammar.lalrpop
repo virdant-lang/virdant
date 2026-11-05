@@ -46,6 +46,8 @@ extern {
         "top" => Tok::Top,
         "it" => Tok::It,
 
+        "::" => Tok::ColonColon,
+
         "#" => Tok::Hash,
         "." => Tok::Dot,
         ".." => Tok::DotDot,
@@ -96,6 +98,22 @@ Cmd: Command = {
     "show" => Command::Show,
     "autoshow" <t: AutoshowState> => t,
     "vcd" <t: VcdTarget> => Command::Vcd(t),
+    "top" <t: TopFqn> => Command::Top(t),
+};
+
+// A top-module name for `top`: a package-qualified FQN
+// (`adder::HalfAdder`) or a bare simple name (`HalfAdder`); resolution
+// happens in the session.  Name soup like `vcd`'s file target, plus
+// `::`.
+TopFqn: String = {
+    <parts: TopFqnPart+> => parts.join(""),
+};
+
+TopFqnPart: String = {
+    <i: Ident> => i,
+    "::" => "::".to_string(),
+    "." => ".".to_string(),
+    <n: AnyNat> => n.to_string(),
 };
 
 // The `vcd` file name: either a quoted string (taken verbatim, spaces

@@ -506,6 +506,25 @@ impl Session {
                     vec![]
                 }
             }
+            "top" => {
+                // Complete against the project's module definitions,
+                // by fully-qualified name.
+                if arg_index == 1 {
+                    let symboltable = self.db.get_symboltable();
+                    let mut names: Vec<String> = symboltable
+                        .items()
+                        .into_iter()
+                        .filter(|sym| sym.kind == SymbolKind::ModDef)
+                        .map(|sym| sym.fqn.to_str_lossy().into_owned())
+                        .filter(|name| name.starts_with(word))
+                        .collect();
+                    names.sort();
+                    names.dedup();
+                    names
+                } else {
+                    vec![]
+                }
+            }
             _ => vec![],
         }
     }
@@ -677,6 +696,58 @@ impl Session {
         // with it); forget it so a fresh trace can be started.
         self.vcd = None;
     }
+
+    /// `top <module>`: reload the simulator with a new top module.
+    /// Resolution mirrors the startup logic: an exact
+    /// `package::ModDef` match first, then a simple-name match
+    /// (ambiguous → error).  Like `restart`, everything tied to the
+    /// old `Sim` resets: the `cd` location, `it`, watches/breaks, and
+    /// any VCD trace.
+    pub fn set_top(&mut self, name: &str) -> Result<(), String> {
+        let symboltable = self.db.get_symboltable();
+        let is_moddef = |sym: &virdant::analysis::symbols::Symbol| {
+            sym.kind == SymbolKind::ModDef
+        };
+        let new_top = match symboltable
+            .items()
+            .into_iter()
+            .find(|sym| is_moddef(sym) && sym.fqn.as_bytes() == name.as_bytes())
+        {
+            Some(sym) => sym,
+            None => {
+                // Fall back to a simple-name match (the module named
+                // without its package qualifier).  Ambiguity is an
+                // error.
+                let matches: Vec<_> = symboltable
+                    .items()
+                    .into_iter()
+                    .filter(|sym| is_moddef(sym) && sym.name.as_bytes() == name.as_bytes())
+                    .collect();
+                match matches.len() {
+                    0 => return Err(format!("top module '{name}' not found")),
+                    1 => matches.into_iter().next().unwrap(),
+                    _ => {
+                        let names: Vec<String> = matches
+                            .iter()
+                            .map(|sym| sym.fqn.to_str_lossy().into_owned())
+                            .collect();
+                        return Err(format!(
+                            "top module '{name}' is ambiguous: {}",
+                            names.join(", ")
+                        ));
+                    }
+                }
+            }
+        };
+        self.top = new_top.id;
+        self.sim = Sim::new(&self.db, new_top.id, InitStrategy::Random);
+        self.cwd.clear();
+        self.it = None;
+        self.break_flag.set(None);
+        self.vcd = None;
+        println!("top: {}", new_top.fqn.to_str_lossy());
+        Ok(())
+    }
 }
 
 /// Whether `signal_id` can be poked: only top-level incoming ports
@@ -711,8 +782,8 @@ pub fn poke_legal(session: &Session, signal_id: SignalId) -> Result<(), String> 
 }
 
 /// The REPL's command names, for TAB completion (and `help`'s list).
-const COMMANDS: [&str; 16] = [
-    "cd", "peek", "poke", "watch", "break", "advance", "tick", "assert", "print", "ls", "show", "autoshow", "vcd", "restart", "exit", "help",
+const COMMANDS: [&str; 17] = [
+    "cd", "peek", "poke", "watch", "break", "advance", "tick", "assert", "print", "ls", "show", "autoshow", "vcd", "top", "restart", "exit", "help",
 ];
 
 /// One `show` row: a signal's leaf name, kind, type, and rendered value.

@@ -3,7 +3,12 @@ Waveforms
 Let's look at the waveforms for the whole example.
 
 .. vcd:: ../../examples/adder/trace.svg
-   :signals: top.a:dec,top.b:dec,top.carry_in,top.sum:dec,top.carry_out
+
+   signal top.a:dec
+   signal top.b:dec
+   signal top.carry_in
+   signal top.sum:dec
+   signal top.carry_out
 
 Notice there is no clock in this example.
 `HalfAdder`, `FullAdder`, and `Adder4` are all *combinational* circuits:

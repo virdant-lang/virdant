@@ -320,6 +320,7 @@ fn print_help() {
   assert <expr>      fail the script if the expression is false
   print <expr>       evaluate and print an expression
   restart            re-initialize the simulation
+  top <module>       reload the simulation with a new top module
   exit               leave the session
 
 TAB completes command and signal-path names; up/down walk the history.
@@ -359,5 +360,9 @@ mod tests {
         assert!(matches!(parse("advance 3"), Command::Advance { count: 3 }));
         assert!(matches!(parse("tick 2"), Command::Tick { .. }));
         assert!(matches!(parse("exit"), Command::Exit));
+        assert!(
+            matches!(parse("top adder::HalfAdder"), Command::Top(name) if name == "adder::HalfAdder")
+        );
+        assert!(matches!(parse("top HalfAdder"), Command::Top(name) if name == "HalfAdder"));
     }
 }
