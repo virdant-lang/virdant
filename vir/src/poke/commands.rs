@@ -38,6 +38,12 @@ pub struct SourceLine {
 /// falling and rising edges.
 const HALF_PERIOD_PS: u64 = 500_000;
 
+/// One full clock period of the virt platform's 1 MHz clock: the
+/// timestep of `advance`.  Deliberately a fixed constant, independent
+/// of the design under test — `advance` must move time even on
+/// designs with no clock at all (where `tick` cannot).
+const TIMESTEP_PS: u64 = 2 * HALF_PERIOD_PS;
+
 /// Execute one command.
 pub fn exec(
     session: &mut Session,
@@ -180,6 +186,19 @@ pub fn exec(
             if session.autoshow {
                 session.show();
             }
+            Ok(Flow::Continue)
+        }
+        Command::Advance { count } => {
+            // Move time forward without driving any clock: the only
+            // way to advance an unclocked design's timeline (and a
+            // way to skip time between `tick`s on clocked ones).
+            // Nothing is scheduled in poke mode and values settle on
+            // `poke`, so a plain time skip needs no settlement pass.
+            // Saturating rather than looping, so an absurd count
+            // cannot hang the session.
+            let total = count.saturating_mul(TIMESTEP_PS);
+            session.sim.advance_time(total);
+            println!("advanced to {} ps", session.sim.now());
             Ok(Flow::Continue)
         }
         Command::Assert { expr, line } => {

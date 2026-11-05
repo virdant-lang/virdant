@@ -77,6 +77,13 @@ pub struct Sim {
     /// once, swept in place at each settlement.  No per-fire
     /// re-registration, no queue rebuild.
     watchers: Vec<Watcher>,
+    /// Optional callback fired whenever simulated time moves forward
+    /// (`advance_time`), handed the new time in picoseconds.  The VCD
+    /// dumper registers one so that pure time advancement — no value
+    /// changes — still stamps the trace's timeline; without it, a
+    /// trace's last segment would be truncated to the last change.
+    /// Set by the VCD dumper; `None` otherwise.
+    time_marker: Option<Box<dyn Fn(u64)>>,
     /// True while the watcher dispatch loop is running.  A nested
     /// `unlock()` (a callback's own `lock()`/`set()`/`unlock()`) must
     /// only settle the circuit (`flow`), never re-sweep the table —
@@ -174,6 +181,7 @@ impl Sim {
             circuit,
             sched: Scheduler::new(),
             watchers: Vec::new(),
+            time_marker: None,
             dispatching: false,
         };
 
@@ -590,6 +598,17 @@ impl Sim {
     /// fire late); poke mode never schedules any.
     pub fn advance_time(&mut self, ps: u64) {
         self.sched.advance_ps(ps);
+        if let Some(marker) = &self.time_marker {
+            marker(self.sched.time_ps());
+        }
+    }
+
+    /// Register the time-marker callback fired by [`Sim::advance_time`]
+    /// (see the `time_marker` field).  The VCD dumper registers the
+    /// only one; a second registration would replace it, but a `Sim`
+    /// carries at most one trace.
+    pub(crate) fn set_time_marker(&mut self, cb: Box<dyn Fn(u64)>) {
+        self.time_marker = Some(cb);
     }
 
     /// Acquire a lock that defers circuit settlement.  While the lock is held,

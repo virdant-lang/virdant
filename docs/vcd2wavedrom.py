@@ -16,6 +16,7 @@ def parse_vcd(path):
     idmap = {}   # id char -> full name
     order = []   # full names in declaration order
     changes = {} # full name -> [(time, value)]
+    max_t = 0    # last timestamp seen, changes or not
     t = 0
     in_defs = True
     for line in open(path):
@@ -40,6 +41,7 @@ def parse_vcd(path):
             continue
         if line.startswith("#"):
             t = int(line[1:])
+            max_t = max(max_t, t)
         elif line.startswith("b"):
             val, ident = line[1:].split()
             changes[idmap[ident]].append((t, val))
@@ -47,7 +49,7 @@ def parse_vcd(path):
             changes[idmap[line[1]]].append((t, line[0]))
         elif line.startswith("$dumpall") or line.startswith("$end"):
             continue
-    return changes, order
+    return changes, order, max_t
 
 def filter_signals(order, wanted):
     """Return names in declaration order matching any entry of `wanted`."""
@@ -104,11 +106,17 @@ def main():
                     help="picoseconds per WaveDrom tick (default 500000)")
     args = ap.parse_args()
 
-    changes, order = parse_vcd(args.vcd)
+    changes, order, max_t = parse_vcd(args.vcd)
     names = filter_signals(order, args.signals)
     if not names:
         sys.exit("error: no signals selected")
-    end = max((t for n in names for t, _ in changes[n]), default=0) // args.tick + 1
+    # The timeline runs to the VCD's last timestamp, change or not (a
+    # bare `#t` marker records pure time advancement, e.g. poke's
+    # `advance`).  Only when a change lands exactly on that timestamp
+    # does it need one extra tick to be visible; otherwise the trace's
+    # duration is exactly max_t // tick ticks.
+    changed_at_end = any(t == max_t for n in names for t, _ in changes[n])
+    end = max(max_t // args.tick + (1 if changed_at_end else 0), 1)
     json.dump(to_wavedrom(changes, names, end, args.tick),
               open(args.out, "w"), indent=1)
     print(f"wrote {args.out}: {len(names)} signals, {end} ticks")

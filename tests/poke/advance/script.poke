@@ -1,0 +1,19 @@
+# `advance` moves simulated time without driving any clock, so it
+# works on this unclocked design, where `tick` cannot.
+
+# Values settle on `poke` (and `advance` must not disturb them).
+poke a false
+poke b false
+assert y == false
+poke a true
+poke b true
+assert y == true
+
+# Bare `advance` is one timestep (a full clock period).
+advance
+assert y == true
+
+# `advance n` is n timesteps.
+advance 2
+assert y == true
+exit

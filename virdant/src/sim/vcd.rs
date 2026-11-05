@@ -81,6 +81,23 @@ pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W) {
     }
 
 
+    // Time advancement with no value changes (`advance_time`: poke's
+    // `advance`, and the half-period steps inside `tick`) would
+    // otherwise leave no trace: value-change watchers only fire on
+    // changes, so the file would end at the last change and renderers
+    // would truncate the final segment.  A marker callback stamps the
+    // moved-to time into the trace, deduplicated against the same
+    // `last_time` the change callbacks use.
+    let writer_marker = writer.clone();
+    let last_time_marker = last_time.clone();
+    sim.set_time_marker(Box::new(move |t| {
+        if last_time_marker.get() != Some(t) {
+            let mut w = writer_marker.borrow_mut();
+            writeln!(w, "#{t}").unwrap();
+            last_time_marker.set(Some(t));
+        }
+    }));
+
     let writer_end = writer.clone();
     sim.at_end(Box::new(move |_| {
         let _ = writer_end.borrow_mut().flush();

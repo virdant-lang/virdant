@@ -29,6 +29,7 @@ extern {
         "poke" => Tok::Poke,
         "watch" => Tok::Watch,
         "break" => Tok::Break,
+        "advance" => Tok::Advance,
         "tick" => Tok::Tick,
         "assert" => Tok::Assert,
         "print" => Tok::Print,
@@ -85,6 +86,7 @@ Cmd: Command = {
     "poke" <p: Path> <e: Expr> => Command::Poke { path: p, expr: e },
     "watch" <p: Path> => Command::Watch { path: p },
     "break" <p: Path> => Command::Break { path: p },
+    "advance" <c: AdvanceCount> => Command::Advance { count: c },
     "tick" <t:TickTail> => Command::Tick { count: t.0, clock: t.1 },
     "assert" <e: Expr> => Command::Assert { expr: e, line: String::new() },
     "print" <e: Expr> => Command::Print { expr: e },
@@ -118,6 +120,7 @@ VcdPart: String = {
     "poke" => "poke".to_string(),
     "watch" => "watch".to_string(),
     "break" => "break".to_string(),
+    "advance" => "advance".to_string(),
     "tick" => "tick".to_string(),
     "assert" => "assert".to_string(),
     "print" => "print".to_string(),
@@ -168,6 +171,12 @@ TickTail: (u64, Option<SPath>) = {
 OptPath: Option<SPath> = {
     => None,
     <p: Path> => Some(p),
+};
+
+// `advance [n]`: with no count, one timestep.
+AdvanceCount: u64 = {
+    => 1,
+    <n: TickCount> => n,
 };
 
 TickCount: u64 = {

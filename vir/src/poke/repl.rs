@@ -315,6 +315,7 @@ fn print_help() {
   poke <path> <expr> drive a top-level incoming port or a register
   watch <path>       print a signal whenever it changes
   break <path>       stop after the next change of a signal
+  advance [n]        move time forward n timesteps, no clock needed (default 1)
   tick [n] [<clock>] apply n clock edges (default 1)
   assert <expr>      fail the script if the expression is false
   print <expr>       evaluate and print an expression
@@ -354,6 +355,8 @@ mod tests {
             matches!(parse("vcd out/my-run.vcd"), Command::Vcd(name) if name == "out/my-run.vcd")
         );
         assert!(matches!(parse("peek ctr"), Command::Peek { .. }));
+        assert!(matches!(parse("advance"), Command::Advance { count: 1 }));
+        assert!(matches!(parse("advance 3"), Command::Advance { count: 3 }));
         assert!(matches!(parse("tick 2"), Command::Tick { .. }));
         assert!(matches!(parse("exit"), Command::Exit));
     }

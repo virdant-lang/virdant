@@ -79,6 +79,10 @@ pub enum Command {
     Poke { path: SPath, expr: Expr },
     Watch { path: SPath },
     Break { path: SPath },
+    /// `advance [n]`: move simulated time forward `n` timesteps
+    /// (a full clock period each), driving no clock.  Works even on
+    /// designs with no clock, where `tick` cannot.
+    Advance { count: u64 },
     Tick { count: u64, clock: Option<SPath> },
     Assert { expr: Expr, line: String },
     Print { expr: Expr },

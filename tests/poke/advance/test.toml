@@ -1,0 +1,2 @@
+kind = "poke"
+description = "`vir poke` script test: `advance` moves time on an unclocked design, where `tick` cannot."

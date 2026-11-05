@@ -1,0 +1,8 @@
+pub mod Top {
+    incoming a : Bit
+    incoming b : Bit
+
+    outgoing y : Bit dependson a, b {
+        it := a & b
+    }
+}
