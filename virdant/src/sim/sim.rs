@@ -579,6 +579,19 @@ impl Sim {
         self.sched.time_ps()
     }
 
+    /// Advance simulated time by `ps` picoseconds without running the
+    /// scheduler.  For the peek/poke tester: clocks are driven by
+    /// manual `tick` edges instead of the `run` event loop (the only
+    /// other thing that moves time), so each tick advances the clock
+    /// explicitly to give the VCD trace — which stamps changes from
+    /// `now()` — a progressing timeline.
+    ///
+    /// Must not be called with scheduled events pending (they would
+    /// fire late); poke mode never schedules any.
+    pub fn advance_time(&mut self, ps: u64) {
+        self.sched.advance_ps(ps);
+    }
+
     /// Acquire a lock that defers circuit settlement.  While the lock is held,
     /// calls to `set()` accumulate signal changes without propagating them.
     /// When the lock is dropped, all accumulated changes are settled in a single

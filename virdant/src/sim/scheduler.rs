@@ -154,6 +154,17 @@ impl Scheduler {
     fn advance_to(&mut self, time_ps: u64) {
         self.time_ps = time_ps;
     }
+
+    /// Advance the clock by `ps` picoseconds without dispatching any
+    /// events.  Only sound when nothing is scheduled: a pending
+    /// `AfterDelay` entry would fire late (its deadline check happens
+    /// on the next pop).  The peek/poke tester drives clock edges
+    /// manually with `Sim::tick` and never schedules anything, so it
+    /// uses this to give the VCD timeline (read through
+    /// [`Scheduler::time_ps`] via `Sim::now`) a progressing clock.
+    pub(super) fn advance_ps(&mut self, ps: u64) {
+        self.time_ps = self.time_ps.saturating_add(ps);
+    }
 }
 
 impl std::fmt::Debug for EventCallback {
