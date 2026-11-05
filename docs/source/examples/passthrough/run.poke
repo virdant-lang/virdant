@@ -3,9 +3,12 @@ vcd trace.vcd
 advance
 poke inp 1
 advance
+advance
 poke inp 2
 advance
 poke inp 3
+advance
+advance
 advance
 poke inp 4
 advance

@@ -87,7 +87,10 @@ Y_TOP, Y_BOT, Y_MID = 8 * SCALE, 22 * SCALE, 15 * SCALE
 # Map from a WaveJSON wave character to its level (see diagram above).
 # Characters not in this map ('x', '4', '.') are drawn as boxes or repeats
 # rather than level lines.
-LEVELS = {'0': Y_BOT, '1': Y_TOP, 'z': Y_MID}
+# 'P' is a posedge marker (emitted by vcd2wavedrom.py's `:clk` format): it
+# renders at the high level, with an up arrow drawn at the tick boundary
+# (see the arrow pass in render_svg).
+LEVELS = {'0': Y_BOT, '1': Y_TOP, 'z': Y_MID, 'P': Y_TOP}
 
 # Approximate advance width of one character of the monospace font used
 # inside the SVG (10px Fira Mono is ~6.6px per character; scaled with
@@ -110,6 +113,10 @@ def expand_wave(wave, data):
       '.'          repeat of the previous value -- no new data entry is
                    consumed, the previous value is carried forward so that
                    runs of equal values stay grouped in runs_of()
+      'P'          posedge marker (from the `:clk` format): renders at the
+                   high level with an up arrow at its tick boundary.  A '.'
+                   following a 'P' carries the high level as a plain '1',
+                   so only the posedge tick itself is marked.
     """
     tokens = []
     prev = None        # last value char seen ('4' stays '4' through '.')
@@ -119,6 +126,10 @@ def expand_wave(wave, data):
         if c == '.':
             if prev is None:
                 continue
+            # A repeat after a posedge marker is a plain high level: the
+            # arrow belongs only to the edge itself.
+            if prev == 'P':
+                prev = '1'
             tokens.append((prev, prev_value))
         else:
             value = None
@@ -283,6 +294,20 @@ def render_svg(wavejson, target_width, extra_class=''):
         if z_path:
             parts.append(f'<path class="vcd-zline" d="{" ".join(z_path)}"/>')
 
+        # Posedge arrows: one arrowhead per 'P' token, drawn ON the rising
+        # edge itself -- apex at the high line, base a little way down the
+        # edge, so the edge reads as an upward arrow in the signal's own
+        # color (see .vcd-clk in vcd.css).
+        for k, (c, _v) in enumerate(tokens):
+            if c != 'P':
+                continue
+            ax = k * tick_w
+            half = 3 * SCALE
+            base = y_top + 5 * SCALE
+            parts.append(
+                f'<path class="vcd-clk" d="M {ax - half:.6g} {base:.6g} '
+                f'L {ax + half:.6g} {base:.6g} L {ax:.6g} {y_top:.6g} Z"/>')
+
         # Boxes: drawn per run, spanning the full Y_TOP..Y_BOT range.
         # 'x'  -> rectangle with a diagonal cross (unknown/bus fighting)
         # '4'  -> rectangle carrying the hex data value as centred text
@@ -336,6 +361,11 @@ class VcdDirective(Directive):
         'caption': directives.unchanged,
         'file': directives.path,
         'signals': directives.unchanged,
+        # Picoseconds per rendered tick.  Defaults to 500000 (half of the
+        # virt platform's clock period), which quantizes every change onto
+        # a clock edge — traces that illustrate propagation delay need a
+        # finer grid to render the sub-cycle offsets at all.
+        'tick': directives.positive_int,
     }
 
     def resolve_file(self, filename, docdir, srcdir):

@@ -1,11 +1,16 @@
+from html import escape
+
 from docutils import nodes
 
 
-def tip_role(name, rawtext, text, lineno, inliner, options={}, content=[]):
+def tooltip_role(name, rawtext, text, lineno, inliner, options={}, content=[]):
     """
     Custom role for tooltips.
-    Usage: :tip:`SPI (Serial Peripheral Interface)`
+    Usage: :tooltip:`SPI (Serial Peripheral Interface)`
     Renders "SPI" with a hover tooltip showing "Serial Peripheral Interface".
+
+    Note: this is intentionally a separate role from the `.. tip::`
+    admonition, with its own CSS class, so the two never share styling.
     """
     # Parse "term (tooltip)" format
     if '(' not in text or not text.endswith(')'):
@@ -17,13 +22,13 @@ def tip_role(name, rawtext, text, lineno, inliner, options={}, content=[]):
     term = term.rstrip()
     tooltip_text = rest.rstrip(')').strip()
 
-    html = '<span class="tip" data-tooltip="%s">%s</span>' % (
-        tooltip_text.replace('"', '&quot;'),
-        term,
+    html = '<span class="tooltip-inline" data-tooltip="%s">%s</span>' % (
+        escape(tooltip_text, quote=True),
+        escape(term),
     )
     node = nodes.raw('', html, format='html')
     return [node], []
 
 
 def setup(app):
-    app.add_role('tip', tip_role)
+    app.add_role('tooltip', tooltip_role)

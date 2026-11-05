@@ -90,6 +90,12 @@ pub fn exec(
             }
             let file = std::fs::File::create(name)
                 .map_err(|e| format!("cannot create `{name}`: {e}"))?;
+            // Educational delay: every non-clock signal's changes render
+            // a twentieth of a clock period after the tick edge that
+            // caused them — the clock stamps at its true time, so
+            // waveforms show logic settling just after the edge, without
+            // the engine modelling delay at all.
+            session.sim.set_vcd_offset_ps(TIMESTEP_PS / 20);
             session.sim.attach_vcd(file);
             session.vcd = Some(name.clone());
             println!("vcd: writing trace to `{name}`");

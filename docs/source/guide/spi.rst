@@ -3,7 +3,7 @@ SPI Controller
 In this next example, we will demonstrate enum types.
 
 `SpiController` is a circuit which sends data to a device
-using the :tip:`SPI (Serial Peripheral Interface)` protocol.
+using the :tooltip:`SPI (Serial Peripheral Interface)` protocol.
 
 .. literalinclude:: /examples/spi/src/spi.vir
     :caption: spi.vir

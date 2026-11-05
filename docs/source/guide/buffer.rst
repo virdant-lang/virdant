@@ -8,26 +8,28 @@ In this next example, we will demonstrate how to use registers, the stateful com
     :caption: buffer.vir
     :language: virdant
 
-In this example, we declare four components: `clock` `inp` `out` grouped together, and also `buffer` a bit below.
-
-.. note::
-
-    We're still not ready to talk about `dependson`,
-    but notice how, unlike in the last example,
-    in this example, `out` does *not* have a `dependson` clause.
+In this example, we declare four components:
+`clock` `inp` `out` grouped together, and also `buffer` a bit below.
+Finally, we have two drivers.
 
 
 Clocks
 ------
 All digital circuits make use of a clock.
-In a typical :tip:`FPGA (Field-Programmable Gate Array)`, clocks can run at anywhere from 10MHz to 500MHz.
+Oscillating high to low to high to low, over and over again,
+the clock is a heartbeat for your design.
+
+Old hardware in the 1980s often ran around 2 Mhz.
+Tdoay, in a typical :tooltip:`FPGA (Field-Programmable Gate Array)`, clocks can run at anywhere from 10 MHz to 500 MHz.
+Your computer's :tooltip:`CPU (Central Processing Unit)` runs even faster than that,
+at anywhere from 2 Ghz to 6 Ghz!
 
 Since clock signals are what synchronize the circuit, they get their own special type.
 The `Clock` type is used for clock signals in Virdant.
-Unless you are working with multiple clocks, you should name your clock signal `clock`.
 
-A clock typically oscillates, going high to low to high to low, over and over again.
-It's like a heartbeat for your design.
+.. tip::
+
+    In Virdant, it is polite to name your clock signal `clock`.
 
 
 Registers
@@ -38,43 +40,45 @@ The centerpiece of our `Buffer` module is a register:
 
     reg buffer : Word[32]
 
+A register is a stateful component:
+a tiny memory cell that can hold a value.
+You can kinda think of them as the "variables" of hardware design.
+This particular register holds 32 bits of data (a `Word[32]`, as we call it in Virdant).
+
 Every `reg` must be synchronized with a clock.
 Virdant sees that `clock` is the only clock available,
 and so that is the one `buffer` is synchronized with.
 
-In Virdant, clocks are assumed to "tick" at the rising edge of the clock.
-At the moment the clock goes from low to high,
-all registers synchronized to that clock latch their new values.
+A clock "ticks" at the very instant it transitions from low to high.
+When this happens, all registers synchronized with that clock latch their new values.
 
 
-Driver Blocks
---------------
-Just after `buffer` is declared, we see a block containing two drivers:
+Latched vs Continuous Drivers
+-----------------------------
+Just after `buffer` is declared, we see two drivers:
 
 .. literalinclude:: /examples/buffer/src/buffer.vir
     :language: virdant
     :dedent:
-    :lines: 6-9
+    :lines: 8-9
 
-This is called a driver block.
-This is a way of grouping our drivers to make the code easier to read.
+You will notice that there are two different kinds of drivers: `:=` and `<=`.
 
-Inside of a driver block, we may use the keyword `it` as a shorthand for referencing the component being declared.
-So in our example, `it` is an alias for `buffer`.
-This reduces the amount of typing we have to do.
-
-Latched vs Continuous Drivers
------------------------------
-We also notice in our driver blocks that there are two different kinds of drivers: `<=` and `:=`.
+We have already seen the first kind.
+The `:=` driver is called a **continuous driver**.
+It is used for all other components *except* for `reg`\s.
+Since `out` is an `outgoing` (and not a `reg`), we use `:=`.
+When we use `:=`,
+the left hand side is made equal to the right hand side *continuously*.
+That is, at every moment in time.
 
 The `<=` driver is called a **latched driver**.
 It is only used when the left hand side is a `reg`.
-It indicates that the value will be latched by the register on the next clock cycle.
+It indicates that the register will save the value (that is, "latch" it)
+on the next clock tick.
 
-The `:=` driver is called a **continuous driver**.
-It is used for all other components *except* for `reg`.
-And since `out` is an `outgoing` (and not a `reg`), we use `:=` instead of `<=`.
-This syntax indicates that the value of the lefthand side is always equal to the expression on the righthand side.
+Don't worry if you ever get the two mixed up.
+Virdant will tell you if you get them wrong.
 
 .. note::
 
@@ -87,79 +91,26 @@ Waveform
 Let's look at the waveform viewer again.
 
 .. vcd:: ../examples/buffer/trace.svg
-   :signals: top.clock,top.inp:dec,top.out:dec,top.buffer:dec
+   :signals: top.clock:clk,top.inp:dec,top.out:dec,top.buffer:dec
 
-We have a clock this time!
-Pay close attention to where the clock ticks
-(transitions from low to high).
+We have a clock!
+Pay close attention to the rising edge of the clock,
+marked by arrows on the signal.
+Remember, these are the points in time where the clock "ticks".
 
-And of course, we have `top.buffer` as well.
-The effect of the continuous driver, `out := it`,
-(where `it` refers to `buffer`),
-the values of `top.buffer` and `top.out` are always equal
-at every point in time.
+We also now have `top.buffer` as well.
+However, if you look very closely,
+you'll see that at every point in time,
+`top.buffer` always seems exactly the same value that `top.out` has.
+This is the effect of the continuous driver, `out := buffer`.
 
-That said, the values of `top.inp` and `top.out` are *not* equal.
-This is the effect of the latched driver, `it <= inp`,
-(where `it` again refers to `buffer`).
-This means whenever the clock goes from low to high,
-the value of `buffer` takes on the existing value of `inp`.
+What is the relationship between `top.inp` and `top.buffer`?
+Put another way, what is `buffer <= inp` doing for us?
 
-.. note::
+If you look very carefully, you'll notice that
+`top.buffer` is always the same as how `top.inp` was *one cycle earlier*.
 
-    The `incoming` port `inp` is also synchronized with the clock.
-    This can make reading the waveforms a bit confusing at first.
-
-    When we say "existing value" of `inp`,
-    we look at the value immediately before the clock tick.
-    This is because, in reality,
-    the `clock` changes *nanoseconds before* the other signals do.
-
-
-Using Driver Blocks
--------------------
-Driver blocks give you a pleasant ability to express yourself in Virdant code.
-
-The example we gave above emphasizes that `buffer` is the centerpiece of our `Buffer` module.
-However, we could have written it a few different ways.
-
-Here is another way that comes to mind:
-
-.. code-block:: virdant
-    :caption: buffer.vir
-
-    mod Buffer {
-        incoming clock : Clock
-        incoming inp : Word[32]
-
-        outgoing out : Word[32] {
-            it := buffer
-        }
-
-        reg buffer : Word[32] on clock {
-            it <= inp
-        }
-    }
-
-This style keeps each component's driver close to where it's declared.
-
-Or you could do it without driver blocks like we saw with the `Passthrough` example:
-
-.. code-block:: virdant
-    :caption: buffer.vir
-
-    mod Buffer {
-        incoming clock : Clock
-        incoming inp : Word[32]
-        outgoing out : Word[32]
-        reg buffer : Word[32] on clock
-
-        buffer <= inp
-        out := buffer
-    }
-
-This style helps emphasize the components themselves,
-treating their definitions as details only for those who are curious.
-
-Can you think of any other ways to group the drivers?
-Which do you like best?
+What happens is this:
+the value of `top.inp` is captured ("latched") at the instant of the clock tick.
+Very soon after (we're talking a few nanoseconds),
+`top.buffer` signal assumes that value.

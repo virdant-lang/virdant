@@ -49,7 +49,7 @@ Easy
 ----
 Virdant is easy to get started with,
 even if you've never touched a piece of hardware
-and even if you don't know what an :tip:`FPGA (Field-Programmable Gate Array)` is.
+and even if you don't know what an :tooltip:`FPGA (Field-Programmable Gate Array)` is.
 
 All you need is `vir` on your command line,
 and you can get started with the builtin simulator.

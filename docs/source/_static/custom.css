@@ -39,6 +39,9 @@
   --wy-nav-content-link-visited: #CC5500;
   --wy-nav-top-bg: #8FC225;
   --wy-nav-top-color: #333;
+  --bg-admonition-tip: #e9f3d3;
+  --accent-tip: #8FC225;
+  --accent-tip-text: #2E7D32;
 }
 
 /* ----- Dark theme ----- */
@@ -80,6 +83,9 @@
   --wy-nav-content-link-visited: #cc9966;
   --wy-nav-top-bg: #0d0d0d;
   --wy-nav-top-color: #b8b8b8;
+  --bg-admonition-tip: #1a2e0a;
+  --accent-tip: #5a8f28;
+  --accent-tip-text: #7ab545;
 }
 
 /* ----- Base element styles using variables ----- */
@@ -375,17 +381,17 @@ div.highlight:hover .copy-button {
   opacity: 1;
 }
 
-/* Tooltip role styling */
-.tip {
+/* Inline hover-tooltip role styling (the :tooltip:`term (expansion)` role,
+   from tooltip_ext.py). Kept visually distinct from the .. tip:: admonition
+   on purpose; the old :tip: role shared the .tip class with the admonition,
+   which caused styling collisions. */
+span.tooltip-inline {
   text-decoration: underline dotted;
   text-underline-offset: 2px;
-  padding: 0 !important;
-  background-color: transparent !important;
-  background: none !important;
   position: relative;
 }
 
-.tip::after {
+span.tooltip-inline::after {
   content: attr(data-tooltip);
   position: absolute;
   bottom: 100%;
@@ -407,7 +413,7 @@ div.highlight:hover .copy-button {
   border: 1px solid var(--border-tooltip);
 }
 
-.tip:hover::after {
+span.tooltip-inline:hover::after {
   opacity: 1;
   visibility: visible;
 }
@@ -628,6 +634,35 @@ div.highlight:hover .copy-button {
   border-bottom-width: 0;
 }
 
+/* Admonitions (notes, tips, warnings) */
+.rst-content .admonition {
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Tips: green accent, matching the code-block captions */
+.rst-content .tip {
+  background: var(--bg-admonition-tip);
+  border-left: 4px solid var(--accent-tip);
+}
+
+.rst-content .tip .admonition-title {
+  background: transparent;
+  color: var(--accent-tip-text);
+  padding: 0;
+  margin: 0 0 8px;
+  font-size: 85%;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.rst-content .tip .admonition-title:before {
+  content: "\f0eb"; /* FontAwesome lightbulb-o */
+  font-family: FontAwesome;
+  font-weight: normal;
+}
+
 /* Dark mode for notes/warnings/admonitions */
 [data-theme="dark"] .rst-content .admonition {
   background-color: var(--bg-code);
@@ -645,8 +680,17 @@ div.highlight:hover .copy-button {
   background-color: #3a2a1a;
 }
 
+[data-theme="dark"] .rst-content .tip {
+  background-color: var(--bg-code);
+  border-left: 1px solid var(--border-code);
+}
+
 [data-theme="dark"] .rst-content .tip .admonition-title {
-  background-color: #1a3a2a;
+  background-color: #223018;
+  color: var(--text-main);
+  padding: 6px 12px;
+  margin: -12px -12px 12px;
+  border-bottom: 1px solid #2e3f20;
 }
 
 /* Dark mode for breadcrumbs */

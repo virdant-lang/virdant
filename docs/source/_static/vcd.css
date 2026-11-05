@@ -113,6 +113,13 @@
   stroke-linejoin: round;
 }
 
+.vcd-svg .vcd-clk {
+  /* Posedge arrowheads ride the rising edge itself, in the signal's own
+     color -- the edge simply reads as an upward arrow. */
+  fill: var(--vcd-line);
+  stroke: none;
+}
+
 .vcd-svg .vcd-zline {
   stroke: var(--vcd-line);
   stroke-width: 1.5;
