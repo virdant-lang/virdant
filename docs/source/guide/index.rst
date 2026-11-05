@@ -7,7 +7,7 @@ This guide will introduce Virdant through a series of examples.
 
     passthrough
     buffer
+    adder/index
     mux
     arbiter
-    adder
     spi

@@ -12,6 +12,15 @@ In this example, we declare four components:
 `clock` `inp` `out` grouped together, and also `buffer` a bit below.
 Finally, we have two drivers.
 
+.. note::
+
+    Notice there's no `dependson` this time.
+    We're not ready to explain why quite yet,
+    but we'll say it has something to do with the `<=` driver on the last line.
+
+    When writing code yourself,
+    Virdant will tell you when you need it or not!
+
 
 Clocks
 ------
@@ -84,6 +93,16 @@ Virdant will tell you if you get them wrong.
 
     The `<=` syntax is *not* Verilog's non-block assignment.
     Virdant has no notion of blocking vs non-blocking assignment.
+
+
+Statements Order
+----------------
+You may have noticed we wrote `out := buffer` *before* `buffer <= inp`.
+The reason was simply that it was easier for us to explain things this way.
+
+In Virdant, the order of things is a matter of style and preference.
+All statements, including even the port and register definitions,
+can occur in any order.
 
 
 Waveform

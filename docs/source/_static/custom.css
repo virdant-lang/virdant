@@ -617,6 +617,25 @@ span.tooltip-inline:hover::after {
   margin: 1px 0 24px;
 }
 
+/* Header cells: the theme sets `html.writer-html5 .rst-content table.docutils th`
+   to `border: 1px solid #e1e4e5` on all four sides, which reads as a white
+   border in dark mode and clashes with the --border-light grid in light mode.
+   Restyle header cells to match the body cells (bottom/left only), with the
+   outer edges falling through to the table's own --border-code border. The
+   html.writer-html5 prefix is required to out-rank the theme's selector. */
+html.writer-html5 .rst-content table.docutils thead th,
+.rst-content table.docutils thead th {
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 1px solid var(--border-light);
+  border-left: 1px solid var(--border-light);
+}
+
+html.writer-html5 .rst-content table.docutils thead th:first-child,
+.rst-content table.docutils thead th:first-child {
+  border-left-width: 0;
+}
+
 .rst-content table.docutils td,
 .rst-content table.docutils th {
   padding: 8px 16px;
@@ -643,15 +662,16 @@ span.tooltip-inline:hover::after {
 
 /* Tips: green accent, matching the code-block captions */
 .rst-content .tip {
-  background: var(--bg-admonition-tip);
+  background: var(--bg-code);
   border-left: 4px solid var(--accent-tip);
 }
 
 .rst-content .tip .admonition-title {
-  background: transparent;
+  background: var(--bg-admonition-tip);
   color: var(--accent-tip-text);
-  padding: 0;
-  margin: 0 0 8px;
+  padding: 6px 12px;
+  margin: -12px -12px 12px;
+  border-bottom: 1px solid var(--accent-tip);
   font-size: 85%;
   letter-spacing: 0.05em;
   text-transform: uppercase;

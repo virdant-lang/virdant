@@ -158,6 +158,14 @@ def to_wavedrom(changes, names, end_time, tick):
         if any(v is not None and len(v) > 1 for v in vals):
             fmt = fmt or DEFAULT_FORMAT
             sig["data"] = [FORMATTERS[fmt](v) for v, w in zip(vals, wave) if w == "4"]
+        elif not clk:
+            # 1-bit non-clock signals keep their plain 0/1 level lines --
+            # the waveform look stays -- but the renderer draws a small
+            # "true"/"false" label at every change (each run's start).
+            # clk signals get no labels: their edges are timing markers
+            # rather than values.  Runs of 'z' or unknown values render
+            # as their own shapes and get no label.
+            sig["bitlabels"] = True
         signals.append(sig)
     return {"signal": signals, "config": {"hscale": 1}}
 

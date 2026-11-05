@@ -5,6 +5,10 @@
   /* Hover time cursor: a warm accent that stands apart from the green
      signal lines on the light code background. */
   --vcd-cursor: #E65100;
+  /* True-state shading for 1-bit signals: a dark, desaturated green,
+     drawn translucently (see .vcd-shade below) so it reads as a wash
+     over the signal's full height rather than a solid block. */
+  --vcd-shade: #3A5340;
 }
 
 [data-theme="dark"] {
@@ -12,6 +16,9 @@
   --vcd-x: #ef5350;
   /* Brighter amber to read against the dark code background. */
   --vcd-cursor: #FFB74D;
+  /* Lightened a touch so the wash stays visible against the dark
+     code background without glowing. */
+  --vcd-shade: #4A6B52;
 }
 
 .vcd-block {
@@ -102,6 +109,15 @@
   font-size: 15px;
 }
 
+.vcd-svg .vcd-bitlabel {
+  /* true/false annotations for 1-bit signals (drawn by vcd_ext.py's
+     bitlabels pass).  Same font, size, and color as multi-bit data
+     labels (.vcd-data): no font-size override, so it inherits the
+     14px Fira Mono from .vcd-svg text, and the fill matches --
+     vcd_ext.py's BITLABEL_CHAR_W assumes this size. */
+  fill: var(--text-main);
+}
+
 .vcd-svg .vcd-head {
   fill: var(--border-light);
 }
@@ -136,6 +152,16 @@
   stroke: var(--vcd-x);
   stroke-width: 1.2;
   fill: none;
+}
+
+.vcd-svg .vcd-shade {
+  /* Full-height shading under a signal's true level (drawn by
+     vcd_ext.py for 1-bit non-clk signals, spanning y_top..y_bot like
+     the 'x' and '4' boxes).  Translucent so the code background and
+     any hover cursor show through, keeping it a wash rather than a
+     solid block. */
+  fill: var(--vcd-shade);
+  fill-opacity: 0.45;
 }
 
 .vcd-svg .vcd-dbox {

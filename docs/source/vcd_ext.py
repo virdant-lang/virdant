@@ -58,6 +58,15 @@ SCALE = FONT_PX / 10.0
 # collapsing into an unreadable smear.
 MIN_TICK_W = 1.0
 
+# Stroke width of the level lines (.vcd-line/.vcd-zline in vcd.css) in
+# SVG user units.  Not scaled with SCALE: the CSS specifies a fixed
+# 1.5px at any diagram size, and geometry here must match to align
+# shapes with the lines' outer edges -- e.g. the true-state shading
+# extends to the bottom of the '0' line's stroke (y_bot + half width)
+# so the wash lies flush with the line instead of stopping at its
+# centreline.  Keep in sync with vcd.css.
+LINE_STROKE_W = 1.5
+
 # Vertical height reserved for one signal row.  Rows are stacked directly on
 # top of each other with no extra spacing, so this is also the row pitch.
 # Must be large enough to contain both Y_TOP and Y_BOT plus a little
@@ -99,6 +108,13 @@ LEVELS = {'0': Y_BOT, '1': Y_TOP, 'z': Y_MID, 'P': Y_TOP}
 #   * deciding whether a data value (e.g. "0x2") fits inside its box, or
 #   whether the box is too narrow and the label should be omitted.
 CHAR_W = 6.6 * SCALE
+
+# Approximate advance width of one character of the font used for the
+# true/false labels that annotate changes on 1-bit signals (see the
+# bitlabels pass in render_svg).  The labels use the same 14px Fira Mono
+# as multi-bit data labels (no font-size override in vcd.css), whose
+# advance is ~0.6em, so 8.4px per character at 14px.
+BITLABEL_CHAR_W = 6.0 * SCALE
 
 
 def expand_wave(wave, data):
@@ -289,6 +305,29 @@ def render_svg(wavejson, target_width, extra_class=''):
                 x = (k + 1) * tick_w
                 h_path.append(f'M {x} {row_y + LEVELS[c1]} L {x} {row_y + LEVELS[c2]}')
 
+        # True-state shading for 1-bit non-clk signals (vcd2wavedrom.py
+        # tags them with bitlabels=True): each run where the signal is
+        # true gets a translucent dark-green wash spanning the full
+        # height of the signal (y_top..y_bot), so the true level reads
+        # as "filled in" -- the same full-height span the 'x' and '4'
+        # boxes use, extended half a line-stroke past y_bot so the wash
+        # lies flush with the bottom of the '0' line's stroke rather
+        # than stopping at its centreline.  Runs at false, 'z', or data
+        # boxes are left unshaded.  Drawn before the level lines so the
+        # lines stay on top of the wash.
+        shade_parts = []
+        if sig.get('bitlabels'):
+            for (i, j, c, _v) in runs:
+                if c != '1':
+                    continue
+                x0, x1 = i * tick_w, j * tick_w
+                shade_parts.append(
+                    f'<rect class="vcd-shade" x="{x0:g}" y="{y_top:.6g}" '
+                    f'width="{x1 - x0:g}" '
+                    f'height="{y_bot - y_top + LINE_STROKE_W / 2:.6g}"/>')
+
+        if shade_parts:
+            parts.extend(shade_parts)
         if h_path:
             parts.append(f'<path class="vcd-line" d="{" ".join(h_path)}"/>')
         if z_path:
@@ -307,6 +346,34 @@ def render_svg(wavejson, target_width, extra_class=''):
             parts.append(
                 f'<path class="vcd-clk" d="M {ax - half:.6g} {base:.6g} '
                 f'L {ax + half:.6g} {base:.6g} L {ax:.6g} {y_top:.6g} Z"/>')
+
+        # True/false labels for 1-bit signals (vcd2wavedrom.py tags them
+        # with bitlabels=True): one label per run, drawn between the two
+        # level lines, just above the '0' line -- the waveform keeps its
+        # plain 0/1 look, the label only annotates what each level means.
+        # Both labels share one baseline (just above the '0' line), so
+        # 'true' sits under the '1' line -- on top of the true-state
+        # shading -- and 'false' sits above the '0' line, vertically
+        # aligned with each other.  Both glyphs fit in the row's middle:
+        if sig.get('bitlabels'):
+            for (i, j, c, _v) in runs:
+                if c not in ('0', '1'):
+                    continue
+                x0, x1 = i * tick_w, j * tick_w
+                label = 'true' if c == '1' else 'false'
+                pad = 2.5 * SCALE
+                # Omit the label when its run is too narrow to hold it
+                # with a little breathing room on each side.
+                if len(label) * BITLABEL_CHAR_W > (x1 - x0) - 2 * pad:
+                    continue
+                # Shared baseline, 3*SCALE above the '0' line: the 14px
+                # glyphs' ascent (~10.5px) clears the '1' line by about a
+                # pixel, and the labels never bleed into a neighbouring
+                # row.
+                y = y_bot - 3 * SCALE
+                parts.append(
+                    f'<text class="vcd-bitlabel" x="{x0 + pad:g}" '
+                    f'y="{y:.2f}" text-anchor="start">{label}</text>')
 
         # Boxes: drawn per run, spanning the full Y_TOP..Y_BOT range.
         # 'x'  -> rectangle with a diagonal cross (unknown/bus fighting)

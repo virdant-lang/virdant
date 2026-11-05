@@ -1,0 +1,35 @@
+/* Styling for figures embedded by the `inline-svg` directive.
+   The SVG itself is inline HTML, so the page's typography and theme
+   variables apply to it; this stylesheet only handles placement. */
+
+.inline-svg {
+  /* The dark theme sets text color per-element (p, li, table td, ...) and
+     never on .rst-content as a whole, so a bare div would not inherit
+     var(--text-main) in dark mode.  Set it explicitly so any SVG relying
+     on currentColor still matches the prose. */
+  color: var(--text-main, #333);
+
+  /* Same bottom spacing as <p> tags (the RTD default and the value used
+     throughout custom.css for content blocks), so an inline SVG figure
+     sits in the text flow exactly like a paragraph. */
+  margin-bottom: 24px !important;
+}
+
+.inline-svg svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.inline-svg--center svg {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.inline-svg--left svg {
+  margin-left: 0;
+}
+
+.inline-svg--right svg {
+  margin-right: 0;
+}
