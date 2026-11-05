@@ -1,6 +1,7 @@
 vcd trace.vcd
 poke inp 0
 tick
+tick
 poke inp 1
 tick
 poke inp 2

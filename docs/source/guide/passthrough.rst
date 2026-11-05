@@ -98,5 +98,11 @@ We imagine someone from the outside passing in different values
 into our circuit as `top.inp`.
 How does `top.out` respond?
 
+.. note::
+
+    You can hover over the waveform diagram with your mouse.
+    The yellow line shows you what the value of every signal is
+    at that exact moment in time.
+
 So how do you feel about the simplicity of Virdant so far?
 It turns out that Simplicity is one of the :doc:`Principles of Virdant </principles>`!

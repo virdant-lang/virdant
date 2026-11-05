@@ -86,22 +86,34 @@ Waveform
 --------
 Let's look at the waveform viewer again.
 
-We think of ourselves as setting `top.inp` from the outside.
-But this time, notice that nothing else changes at the moment `top.inp` does.
-
-That is because our driver, `it <= inp`, is *latched*.
-It only takes effect on the positive edge of the clock.
-
-As soon as the clock goes high again,
-the `it <= inp` driver takes effect,
-and `top.buffer` changes to match `top.inp`.
-
-Furthermore, because of second driver, `out := it`, is continuous,
-it takes effect immediately as soon as `top.buffer` changes.
-So `top.inp` and `top.buffer` always have the exact same value.
-
 .. vcd:: ../examples/buffer/trace.svg
-   :signals: top.clock,top.inp,top.buffer,top.out
+   :signals: top.clock,top.inp:dec,top.out:dec,top.buffer:dec
+
+We have a clock this time!
+Pay close attention to where the clock ticks
+(transitions from low to high).
+
+And of course, we have `top.buffer` as well.
+The effect of the continuous driver, `out := it`,
+(where `it` refers to `buffer`),
+the values of `top.buffer` and `top.out` are always equal
+at every point in time.
+
+That said, the values of `top.inp` and `top.out` are *not* equal.
+This is the effect of the latched driver, `it <= inp`,
+(where `it` again refers to `buffer`).
+This means whenever the clock goes from low to high,
+the value of `buffer` takes on the existing value of `inp`.
+
+.. note::
+
+    The `incoming` port `inp` is also synchronized with the clock.
+    This can make reading the waveforms a bit confusing at first.
+
+    When we say "existing value" of `inp`,
+    we look at the value immediately before the clock tick.
+    This is because, in reality,
+    the `clock` changes *nanoseconds before* the other signals do.
 
 
 Using Driver Blocks

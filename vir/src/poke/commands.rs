@@ -161,24 +161,41 @@ pub fn exec(
                 ));
             }
             for _ in 0..*count {
-                // One full clock cycle, entered and exited on the
-                // falling edge: the tick opens by ensuring the clock
-                // is low (a no-op except at session start and after
-                // `restart`, where the level is random), raises it at
-                // the cycle midpoint — the rising edge is what
-                // transfers the clocked registers, via the sim's `set`
-                // edge detection exactly like the virt board's
-                // free-running clock — and lowers it again to close.
+                // One full clock cycle, closed by the rising edge: the
+                // tick runs the cycle's high phase and low phase, then
+                // raises the clock at the cycle's end — the rising edge
+                // is what transfers the clocked registers, via the sim's
+                // `set` edge detection exactly like the virt board's
+                // free-running clock.
                 //
-                // Ending on the negedge is the point: a `poke` issued
-                // between ticks settles at the exit timestamp, half a
-                // period before the next sampling edge, with the clock
-                // steadily low — classic testbench stimulus phasing.
-                set_clock(session, signal_id, false);
-                session.sim.advance_time(HALF_PERIOD_PS);
+                // Closing on the posedge is the point: a `poke` issued
+                // between ticks settles at the tick boundary, just after
+                // the edge that closed the previous cycle, so it is the
+                // stimulus *for the cycle the next tick runs*.  That
+                // edge — the one this tick ends with — latches it.  This
+                // is true to Virdant's model and draws the textbook
+                // waveform: every transition, stimulus and registers
+                // alike, lines up with a rising edge, and a registered
+                // output's values lag its input by exactly one cycle.
+                //
+                // The tick opens with the clock high (the previous tick
+                // closed on its posedge) — except at session start and
+                // after `restart`, where the level is random.  There the
+                // clock is forced low deterministically and the first
+                // cycle simply has no high phase, so the posedge grid is
+                // the same either way.
+                if session.sim.get(signal_id).get_bit(0) {
+                    // High phase, then the negedge at the cycle midpoint.
+                    session.sim.advance_time(HALF_PERIOD_PS);
+                    set_clock(session, signal_id, false);
+                    session.sim.advance_time(HALF_PERIOD_PS);
+                } else {
+                    // No high phase this cycle: a full period low before
+                    // the first posedge, keeping the posedge grid put.
+                    session.sim.advance_time(HALF_PERIOD_PS);
+                    session.sim.advance_time(HALF_PERIOD_PS);
+                }
                 set_clock(session, signal_id, true);
-                session.sim.advance_time(HALF_PERIOD_PS);
-                set_clock(session, signal_id, false);
                 if let Some(flow) = check_break(session)? {
                     return Ok(flow);
                 }
