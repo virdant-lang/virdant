@@ -26,18 +26,27 @@ struct DumpSig {
     id: SignalId,
     code: String,
     width: Width,
+    /// Timestamp offset (ps) for this signal's changes: the sim's
+    /// `vcd_offset_ps` for every signal except `Clock`-typed ones
+    /// (which stamp at their true time — the clock is the reference
+    /// the offset is measured from).  Lets a driver show tick-caused
+    /// changes a visible sliver after the edge, without the engine
+    /// modelling delay at all.
+    offset: u64,
 }
 
 pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W) {
     let layout_index = sim.type_layout_index().clone();
     let elab = sim.elaboration();
 
+    let offset = sim.vcd_offset_ps();
     let mut sigs: Vec<(DumpSig, BString)> = Vec::new();
     for comp in elab.components() {
         let width = layout_index.type_width(&comp.typ());
         if width == 0 { continue; }
         let code = id_code(sigs.len());
-        sigs.push((DumpSig { id: comp.id(), code, width }, comp.path().clone()));
+        let sig_offset = if matches!(comp.typ(), crate::types::Type::Clock) { 0 } else { offset };
+        sigs.push((DumpSig { id: comp.id(), code, width, offset: sig_offset }, comp.path().clone()));
     }
     sigs.sort_by(|a, b| a.1.cmp(&b.1));
 
@@ -62,14 +71,22 @@ pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W) {
         writeln!(w, "$end").unwrap();
     }
 
-    for (s, _) in sigs {
-        let code = s.code;
+    // Register watchers clocks-first: within one settlement, a clock
+    // stamps at its true time while offset signals stamp `offset` later,
+    // so the clock must emit first or the trace's timestamps would go
+    // backwards.  (The driver must also keep clock events at least
+    // `offset` apart across settlements — true for poke's ticks.)
+    let mut ordered: Vec<&(DumpSig, BString)> = sigs.iter().collect();
+    ordered.sort_by_key(|(s, _)| s.offset != 0);
+    for (s, _) in ordered {
+        let code = s.code.clone();
         let width = s.width;
+        let offset = s.offset;
         let writer_cb = writer.clone();
         let last_time_cb = last_time.clone();
         let sig_id = s.id;
         sim.on_change(sig_id, Box::new(move |s| {
-            let t = s.now();
+            let t = s.now() + offset;
             let mut w = writer_cb.borrow_mut();
             if last_time_cb.get() != Some(t) {
                 writeln!(w, "#{t}").unwrap();
@@ -91,7 +108,11 @@ pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W) {
     let writer_marker = writer.clone();
     let last_time_marker = last_time.clone();
     sim.set_time_marker(Box::new(move |t| {
-        if last_time_marker.get() != Some(t) {
+        // A marker stamps pure time advancement; never write it before
+        // an already-emitted offset stamp (a poke's +offset change can
+        // outlive a same-time marker, e.g. `advance 0`).
+        let behind = last_time_marker.get().is_some_and(|last| t < last);
+        if !behind && last_time_marker.get() != Some(t) {
             let mut w = writer_marker.borrow_mut();
             writeln!(w, "#{t}").unwrap();
             last_time_marker.set(Some(t));

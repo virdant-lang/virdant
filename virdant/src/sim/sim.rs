@@ -84,6 +84,12 @@ pub struct Sim {
     /// trace's last segment would be truncated to the last change.
     /// Set by the VCD dumper; `None` otherwise.
     time_marker: Option<Box<dyn Fn(u64)>>,
+    /// Offset (ps) added to the VCD timestamps of every non-`Clock`
+    /// signal (see `vcd.rs`).  0 by default.  The poke tester sets this
+    /// to a twentieth of its clock period so that tick-driven changes
+    /// render a visible sliver after the clock edge that caused them,
+    /// teaching that logic does not settle instantaneously.
+    vcd_offset_ps: u64,
     /// True while the watcher dispatch loop is running.  A nested
     /// `unlock()` (a callback's own `lock()`/`set()`/`unlock()`) must
     /// only settle the circuit (`flow`), never re-sweep the table —
@@ -182,6 +188,7 @@ impl Sim {
             sched: Scheduler::new(),
             watchers: Vec::new(),
             time_marker: None,
+            vcd_offset_ps: 0,
             dispatching: false,
         };
 
@@ -302,6 +309,17 @@ impl Sim {
             panic!("constructor name was not valid UTF-8: {:?}", slot.name)
         });
         Some(Ctor { name, payloads })
+    }
+
+    /// Set the offset (ps) added to every non-`Clock` signal's VCD
+    /// timestamps (0 by default).  Clocks stamp at their true time: they
+    /// are the reference the offset is measured from.  See `vcd.rs`.
+    pub fn set_vcd_offset_ps(&mut self, ps: u64) {
+        self.vcd_offset_ps = ps;
+    }
+
+    pub(crate) fn vcd_offset_ps(&self) -> u64 {
+        self.vcd_offset_ps
     }
 
     /// Stream a VCD trace of every dumpable signal to `writer`.  The header
