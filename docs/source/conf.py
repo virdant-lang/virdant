@@ -65,6 +65,7 @@ html_css_files = [
 html_js_files = [
     'copy.js',
     'vcd.js',
+    'codefit.js',
 ]
 
 # Set 'vir' as the default role for inline code with Virdant syntax highlighting

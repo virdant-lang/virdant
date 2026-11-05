@@ -4,6 +4,7 @@ plans/
 build
 !/virdant/src/build/
 .cargo
+**/dump.vcd
 *.gtkw
 *.sh
 *.pdf
