@@ -7,6 +7,10 @@ Signal names may be given as full paths ("top.clock") or leaf names ("clock",
 which matches every scope containing a signal of that name). Signals are
 rendered in the order given on the command line (or VCD declaration order
 when no filter is given).
+
+Each name may carry a value format after a colon ("top.count:dec"), choosing
+how multi-bit values are rendered in the data boxes. The supported formats
+are the keys of FORMATTERS (currently bin, hex, dec); the default is hex.
 """
 import argparse
 import json
@@ -52,30 +56,59 @@ def parse_vcd(path):
             continue
     return changes, order, max_t
 
-def filter_signals(order, wanted):
-    """Return names matching `wanted`, in the order given in `wanted`.
+def split_spec(spec):
+    """Split one signal spec into (name, format).
 
-    Each entry of `wanted` may be a full path ("top.clock") or a leaf name
-    ("clock", matching every scope containing a signal of that name).  A
-    leaf entry matches in VCD declaration order among its matches.
+    A spec is a signal name, optionally followed by a format after a colon
+    (e.g. `top.a:dec`).  The format is looked up in FORMATTERS by the caller;
+    a spec without one means "use the default".
+    """
+    name, sep, fmt = spec.partition(":")
+    return name, fmt if sep else None
+
+
+def filter_signals(order, wanted):
+    """Return (name, format) pairs matching `wanted`, in the order given.
+
+    Each entry of `wanted` is a signal spec: a full path ("top.clock") or a
+    leaf name ("clock", matching every scope containing a signal of that
+    name), optionally followed by a format ("top.count:dec").  A leaf entry
+    matches in VCD declaration order among its matches.
     """
     if not wanted:
-        return order
+        return [(name, None) for name in order]
     wanted = [w.strip() for w in wanted.split(",") if w.strip()]
     matched = []
+    taken = set()
     for w in wanted:
-        for name in order:
-            if (name == w or name.rsplit(".", 1)[-1] == w) and name not in matched:
-                matched.append(name)
-    missing = [w for w in wanted
+        name, fmt = split_spec(w)
+        for candidate in order:
+            if (candidate == name or candidate.rsplit(".", 1)[-1] == name) \
+                    and candidate not in taken:
+                matched.append((candidate, fmt))
+                taken.add(candidate)
+    names = [split_spec(w)[0] for w in wanted]
+    missing = [w for w in names
                if w not in order and w not in {n.rsplit(".", 1)[-1] for n in order}]
     if missing:
         print(f"warning: no match for: {', '.join(missing)}", file=sys.stderr)
     return matched
 
+# Multi-bit values are rendered as text inside a data box.  Each supported
+# format turns the raw binary string from the VCD into that text; a signal
+# spec picks one explicitly (`top.a:dec`) or falls back to DEFAULT_FORMAT.
+# Add new formats here (e.g. 'char', 'unsigned') to extend the CLI.
+FORMATTERS = {
+    'hex': lambda bits: hex(int(bits, 2)),
+    'dec': lambda bits: str(int(bits, 2)),
+    'bin': lambda bits: '0b' + bits,
+}
+DEFAULT_FORMAT = 'hex'
+
+
 def to_wavedrom(changes, names, end_time, tick):
     signals = []
-    for name in names:
+    for name, fmt in names:
         # stable sort by tick only: preserves $dumpvars order for ties
         chs = sorted(((t // tick, v) for t, v in changes[name]),
                      key=lambda p: p[0])
@@ -98,11 +131,15 @@ def to_wavedrom(changes, names, end_time, tick):
                 wave += "x"
             elif k > 0 and vals[k] == vals[k - 1]:
                 wave += "."
+            elif len(v) > 1 and set(v) - {"0", "1"}:
+                # Partially unknown vector (e.g. '01xz'): draw an unknown box.
+                wave += "x"
             else:
                 wave += "4" if len(v) > 1 else v
         sig = {"name": name, "wave": wave}
         if any(v is not None and len(v) > 1 for v in vals):
-            sig["data"] = [hex(int(v, 2)) for v, w in zip(vals, wave) if w == "4"]
+            fmt = fmt or DEFAULT_FORMAT
+            sig["data"] = [FORMATTERS[fmt](v) for v, w in zip(vals, wave) if w == "4"]
         signals.append(sig)
     return {"signal": signals, "config": {"hscale": 1}}
 
@@ -111,11 +148,18 @@ def main():
     ap.add_argument("vcd")
     ap.add_argument("out")
     ap.add_argument("-s", "--signals", default="",
-                    help="comma-separated signal names (full path or leaf); "
+                    help="comma-separated signal specs (full path or leaf name, "
+                         "optionally ':format'; e.g. top.count:dec); "
                          "default: all signals")
     ap.add_argument("--tick", type=int, default=500000,
                     help="picoseconds per WaveDrom tick (default 500000)")
     args = ap.parse_args()
+
+    wanted = [w.strip() for w in args.signals.split(",") if w.strip()]
+    bad = sorted({split_spec(w)[1] for w in wanted} - set(FORMATTERS) - {None})
+    if bad:
+        sys.exit("error: unknown format(s): {} (known: {})".format(
+            ", ".join(bad), ", ".join(sorted(FORMATTERS))))
 
     changes, order, max_t = parse_vcd(args.vcd)
     names = filter_signals(order, args.signals)
@@ -126,7 +170,7 @@ def main():
     # `advance`).  Only when a change lands exactly on that timestamp
     # does it need one extra tick to be visible; otherwise the trace's
     # duration is exactly max_t // tick ticks.
-    changed_at_end = any(t == max_t for n in names for t, _ in changes[n])
+    changed_at_end = any(t == max_t for n, _ in names for t, _ in changes[n])
     end = max(max_t // args.tick + (1 if changed_at_end else 0), 1)
     json.dump(to_wavedrom(changes, names, end, args.tick),
               open(args.out, "w"), indent=1)

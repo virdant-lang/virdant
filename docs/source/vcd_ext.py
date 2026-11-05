@@ -4,7 +4,13 @@ Renders a VCD trace as a WaveDrom-style SVG inline figure.
 
     .. vcd:: path/to/trace.vcd
         :caption: Hello World
-        :signals: top.clock,top.toggle.switch
+        :signals: top.clock,top.count:dec
+
+Each entry of ``:signals:`` is a signal name, optionally followed by a
+value format after a colon.  Formats are those of ``docs/vcd2wavedrom.py``
+(``bin``, ``hex``, ``dec``; add more in its FORMATTERS table); the default
+is ``hex``.  The format only affects multi-bit values, which are rendered
+as text in a data box; 1-bit signals draw as 0/1 level lines either way.
 
 The path is given as the directive argument, relative to the document (or
 to the source root).  An ``.svg`` path is accepted as shorthand for the
@@ -294,12 +300,17 @@ def render_svg(wavejson, target_width, extra_class=''):
                     f'<rect class="vcd-dbox" x="{x0}" y="{y_top}" '
                     f'width="{x1 - x0}" height="{y_bot - y_top}"/>')
                 label = v if v is not None else ''
-                # Only render the value text if it fits inside the box with
-                # scaled slack; a too-narrow box just stays empty.
-                if len(label) * CHAR_W <= x1 - x0 - 2 * SCALE:
+                # Values are left-justified inside the box with a small
+                # padding, so runs of changing values read as aligned text
+                # rather than wobbling with each box's width.  Only render
+                # the value text if the label fits within the box; a label
+                # that nearly fills its box may reach into the neighbour's
+                # left padding, but never as far as its label.
+                pad = 2 * SCALE
+                if len(label) * CHAR_W <= x1 - x0:
                     parts.append(
-                        f'<text class="vcd-data" x="{(x0 + x1) / 2}" '
-                        f'y="{row_y + Y_MID + 3.5 * SCALE}" text-anchor="middle">'
+                        f'<text class="vcd-data" x="{x0 + pad:g}" '
+                        f'y="{row_y + Y_MID + 3.5 * SCALE}" text-anchor="start">'
                         f'{escape(label)}</text>')
 
     parts.append('</g>')
