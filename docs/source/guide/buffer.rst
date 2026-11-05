@@ -26,10 +26,13 @@ Since clock signals are what synchronize the circuit, they get their own special
 The `Clock` type is used for clock signals in Virdant.
 Unless you are working with multiple clocks, you should name your clock signal `clock`.
 
+A clock typically oscillates, going high to low to high to low, over and over again.
+It's like a heartbeat for your design.
+
 
 Registers
 ---------
-The heart of our `Buffer` module is a register:
+The centerpiece of our `Buffer` module is a register:
 
 .. code-block:: virdant
 
@@ -38,6 +41,10 @@ The heart of our `Buffer` module is a register:
 Every `reg` must be synchronized with a clock.
 Virdant sees that `clock` is the only clock available,
 and so that is the one `buffer` is synchronized with.
+
+In Virdant, clocks are assumed to "tick" at the rising edge of the clock.
+At the moment the clock goes from low to high,
+all registers synchronized to that clock latch their new values.
 
 
 Driver Blocks
@@ -73,6 +80,28 @@ This syntax indicates that the value of the lefthand side is always equal to the
 
     The `<=` syntax is *not* Verilog's non-block assignment.
     Virdant has no notion of blocking vs non-blocking assignment.
+
+
+Waveform
+--------
+Let's look at the waveform viewer again.
+
+We think of ourselves as setting `top.inp` from the outside.
+But this time, notice that nothing else changes at the moment `top.inp` does.
+
+That is because our driver, `it <= inp`, is *latched*.
+It only takes effect on the positive edge of the clock.
+
+As soon as the clock goes high again,
+the `it <= inp` driver takes effect,
+and `top.buffer` changes to match `top.inp`.
+
+Furthermore, because of second driver, `out := it`, is continuous,
+it takes effect immediately as soon as `top.buffer` changes.
+So `top.inp` and `top.buffer` always have the exact same value.
+
+.. vcd:: ../examples/buffer/trace.svg
+   :signals: top.clock,top.inp,top.buffer,top.out
 
 
 Using Driver Blocks

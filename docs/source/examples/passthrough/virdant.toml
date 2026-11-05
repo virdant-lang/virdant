@@ -1,2 +1,5 @@
 [project]
 name = "passthrough"
+
+[prog]
+top = "passthrough::Passthrough"

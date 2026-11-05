@@ -1,2 +1,5 @@
 [project]
 name = "mux4"
+
+[prog]
+top = "mux4::Mux4"

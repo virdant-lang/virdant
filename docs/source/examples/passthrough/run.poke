@@ -1,0 +1,12 @@
+poke inp 0
+vcd trace.vcd
+advance
+poke inp 1
+advance
+poke inp 2
+advance
+poke inp 3
+advance
+poke inp 4
+advance
+exit

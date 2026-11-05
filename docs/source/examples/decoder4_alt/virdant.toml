@@ -1,2 +1,5 @@
 [project]
 name = "decoder4_alt"
+
+[prog]
+top = "decoder4_alt::Decoder4"

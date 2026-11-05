@@ -2,10 +2,15 @@
 
 Renders a VCD trace as a WaveDrom-style SVG inline figure.
 
-    .. vcd::
+    .. vcd:: path/to/trace.vcd
         :caption: Hello World
-        :file: path/to/trace.vcd
         :signals: top.clock,top.toggle.switch
+
+The path is given as the directive argument, relative to the document (or
+to the source root).  An ``.svg`` path is accepted as shorthand for the
+``.vcd`` file sitting beside it, so documents can reference the rendered
+artifact (e.g. from ``tests/poke/*/run.sh``); the waveform is still
+re-rendered from the VCD so that vcd.css theming (light/dark mode) applies.
 
 Runs ``docs/vcd2wavedrom.py`` on the given VCD file to produce WaveJSON,
 then renders that JSON as an inline SVG (embedded directly in the page so
@@ -32,6 +37,14 @@ logger = logging.getLogger(__name__)
 # diagram consistently.
 # ---------------------------------------------------------------------------
 
+# Font size (px) of the waveform text: signal names, data values, and the
+# head line.  The actual font-size lives in vcd.css (.vcd-svg text and
+# .vcd-name) -- keep the two in sync.  14px matches the docs' .small-code
+# size, one step under the 17px body/code text.  Every vertical geometry
+# constant below is derived from this, so the whole diagram scales with it.
+FONT_PX = 14
+SCALE = FONT_PX / 10.0
+
 # Never let a tick get smaller than this, no matter how long the trace is.
 # This is the "zoomed all the way out" end of the GTKWave-style fit: a trace
 # longer than (target waveform width) ticks will exceed the target width and
@@ -43,7 +56,7 @@ MIN_TICK_W = 1.0
 # top of each other with no extra spacing, so this is also the row pitch.
 # Must be large enough to contain both Y_TOP and Y_BOT plus a little
 # breathing room, otherwise neighbouring rows' lines will collide.
-ROW_H = 26
+ROW_H = 26 * SCALE
 
 # Within a row of height ROW_H, the vertical position of each signal level,
 # measured from the top of that row:
@@ -63,19 +76,20 @@ ROW_H = 26
 # sitting on a level (see the box drawing below).  Y_MID is kept near the
 # midpoint but slightly below true centre so that a 'z' line does not sit
 # exactly on top of the box borders it may abut.
-Y_TOP, Y_BOT, Y_MID = 8, 22, 15
+Y_TOP, Y_BOT, Y_MID = 8 * SCALE, 22 * SCALE, 15 * SCALE
 
 # Map from a WaveJSON wave character to its level (see diagram above).
 # Characters not in this map ('x', '4', '.') are drawn as boxes or repeats
 # rather than level lines.
 LEVELS = {'0': Y_BOT, '1': Y_TOP, 'z': Y_MID}
 
-# Approximate advance width of one character of the 10px monospace font used
-# inside the SVG.  Used only for measuring, never drawing:
+# Approximate advance width of one character of the monospace font used
+# inside the SVG (10px Fira Mono is ~6.6px per character; scaled with
+# FONT_PX).  Used only for measuring, never drawing:
 #   * sizing the label gutter (widest signal name must fit),
 #   * deciding whether a data value (e.g. "0x2") fits inside its box, or
 #   whether the box is too narrow and the label should be omitted.
-CHAR_W = 6.6
+CHAR_W = 6.6 * SCALE
 
 
 def expand_wave(wave, data):
@@ -131,13 +145,14 @@ def runs_of(tokens):
     return runs
 
 
-def render_svg(wavejson, target_width):
+def render_svg(wavejson, target_width, extra_class=''):
     """Render WaveJSON (as produced by vcd2wavedrom.py) into an SVG string.
 
     `target_width` is the width the SVG should occupy, in CSS pixels.  The
     "zoom" is applied at the level of geometry -- pixels per tick -- NOT by
     CSS-scaling the finished SVG, so font sizes stay fixed and crisp no
-    matter how the trace is stretched or compressed.
+    matter how the trace is stretched or compressed.  `extra_class` marks
+    the responsive variant (vcd.css shows/hides desktop/mobile variants).
     """
     signals = wavejson['signal']
 
@@ -147,19 +162,21 @@ def render_svg(wavejson, target_width):
                    for s in signals), default=0)
 
     # Width of the left-hand gutter that holds signal names.  Sized to fit
-    # the longest name (CHAR_W per character) plus 24px of padding so the
-    # longest name does not visually touch the waveform area; floored at 40
-    # so short names still get a reasonable gutter.
-    label_w = max(40, int(max((len(s['name']) for s in signals), default=0) * CHAR_W) + 24)
+    # the longest name (CHAR_W per character) plus scaled padding so the
+    # longest name does not visually touch the waveform area; floored at a
+    # scaled minimum so short names still get a reasonable gutter.
+    label_w = max(40 * SCALE,
+                  int(max((len(s['name']) for s in signals), default=0) * CHAR_W)
+                  + 24 * SCALE)
 
-    # Vertical space above the first signal row: 18px when there is a head
-    # line ("trace.vcd  (1 tick = ...)" rendered top-right), 4px of minimal
+    # Vertical space above the first signal row: one head line when there is
+    # a head text ("trace.vcd  (1 tick = ...)" rendered top-right), minimal
     # padding when there is not.
-    head_h = 18 if wavejson.get('head', {}).get('text') else 4
+    head_h = 18 * SCALE if wavejson.get('head', {}).get('text') else 4 * SCALE
 
     # Right-hand padding between the last tick and the SVG border.  Also
     # anchors the right-aligned head text.
-    pad_r = 12
+    pad_r = 12 * SCALE
 
     # "Zoom to fit": choose the pixels-per-tick so that the waveform area
     # (n_ticks ticks) plus gutter and right padding lands exactly on the
@@ -168,26 +185,60 @@ def render_svg(wavejson, target_width):
     # out, each tick narrow) -- while fonts stay at their fixed pixel sizes.
     # The MIN_TICK_W floor ("zoomed all the way out") is the one case where
     # the SVG may be wider than target_width; it then scrolls horizontally.
-    tick_w = max(MIN_TICK_W, (target_width - label_w - pad_r) / n_ticks) if n_ticks else 0
+    zoom_floored = False
+    if n_ticks:
+        raw_tick_w = (target_width - label_w - pad_r) / n_ticks
+        if raw_tick_w < MIN_TICK_W:
+            tick_w = MIN_TICK_W
+            zoom_floored = True
+        else:
+            tick_w = raw_tick_w
+    else:
+        tick_w = 0
 
     # Total SVG canvas size: gutter + waveform area + right padding across,
     # head line + all signal rows + a little bottom padding down.
     width = label_w + n_ticks * tick_w + pad_r
-    height = head_h + len(signals) * ROW_H + 8
+    height = head_h + len(signals) * ROW_H + 8 * SCALE
+
+    # Extent of the signal-row area: rows run from head_h down to
+    # head_h + n_signals * ROW_H.  The waveform group's translate is
+    # x-only, so these are already SVG-root coordinates.
+    row_y0, row_y1 = head_h, head_h + len(signals) * ROW_H
 
     parts = []
+    # Geometry the hover "current time cursor" in vcd.js needs: the
+    # waveform's x range (excluding the signal-name gutter and right
+    # padding) and the y range spanned by the signal rows.  All values are
+    # SVG-root user units, so the JS needs no transform math.
+    # When the zoom-out floor kicks in the SVG is wider than target_width
+    # by design; tag it so vcd.css lets it scroll instead of CSS-scaling it
+    # down to the column width (which would further compress the trace).
+    # Detected via the floor condition itself, not a width comparison: a
+    # trace that fits exactly can land a few ulps above target_width in
+    # floating point (e.g. 310.00000000000006 > 310) and would be falsely
+    # tagged as overflowing.
+    overflow_class = ' vcd-svg--overflow' if zoom_floored else ''
+    svg_class = f'vcd-svg {extra_class}{overflow_class}'.strip()
+    # :g trims floating-point noise from the geometry (e.g. 310.0 instead of
+    # 310.00000000000006); %g-formatting keeps short decimals readable.
     parts.append(
-        f'<svg class="vcd-svg" viewBox="0 0 {width} {height}" width="{width}" '
-        f'height="{height}" xmlns="http://www.w3.org/2000/svg" role="img">')
+        f'<svg class="{svg_class}" viewBox="0 0 {width:g} {height:g}" width="{width:g}" '
+        f'height="{height:g}" xmlns="http://www.w3.org/2000/svg" role="img" '
+        f'data-waveform-x0="{label_w:g}" data-waveform-x1="{label_w + n_ticks * tick_w:g}" '
+        f'data-waveform-y0="{row_y0:.2f}" data-waveform-y1="{row_y1:.2f}">')
 
     if wavejson.get('head', {}).get('text'):
         head = wavejson['head']['text']
         parts.append(
-            f'<text class="vcd-head" x="{width - pad_r}" y="12" '
+            f'<text class="vcd-head" x="{width - pad_r}" y="{12 * SCALE:.1f}" '
             f'text-anchor="end">{escape(head)}</text>')
 
-    # Waveform drawing area is offset by the label gutter.
-    parts.append(f'<g transform="translate({label_w},0)">')
+    # Waveform drawing area is offset by the label gutter.  The class name
+    # marks the topmost group as the waveform itself: vcd.js uses it to
+    # identify the figure as a waveform, and it is the selector to update
+    # if the structure below the svg ever changes.
+    parts.append(f'<g class="vcd-waveform" transform="translate({label_w},0)">')
 
     for idx, sig in enumerate(signals):
         # Top edge of this row on the canvas, and the three level y-positions
@@ -244,11 +295,11 @@ def render_svg(wavejson, target_width):
                     f'width="{x1 - x0}" height="{y_bot - y_top}"/>')
                 label = v if v is not None else ''
                 # Only render the value text if it fits inside the box with
-                # 2px of slack; a too-narrow box just stays empty.
-                if len(label) * CHAR_W <= x1 - x0 - 2:
+                # scaled slack; a too-narrow box just stays empty.
+                if len(label) * CHAR_W <= x1 - x0 - 2 * SCALE:
                     parts.append(
                         f'<text class="vcd-data" x="{(x0 + x1) / 2}" '
-                        f'y="{row_y + Y_MID + 3.5}" text-anchor="middle">'
+                        f'y="{row_y + Y_MID + 3.5 * SCALE}" text-anchor="middle">'
                         f'{escape(label)}</text>')
 
     parts.append('</g>')
@@ -257,7 +308,8 @@ def render_svg(wavejson, target_width):
     for idx, sig in enumerate(signals):
         row_y = head_h + idx * ROW_H
         parts.append(
-            f'<text class="vcd-name" x="{label_w - 14}" y="{row_y + Y_MID + 4}" '
+            f'<text class="vcd-name" x="{label_w - 14 * SCALE:.1f}" '
+            f'y="{row_y + Y_MID + 4 * SCALE:.1f}" '
             f'text-anchor="end">{escape(sig["name"])}</text>')
 
     parts.append('</svg>')
@@ -267,26 +319,41 @@ def render_svg(wavejson, target_width):
 class VcdDirective(Directive):
     has_content = False
     required_arguments = 0
-    optional_arguments = 0
+    optional_arguments = 1
+    final_argument_whitespace = True
     option_spec = {
         'caption': directives.unchanged,
         'file': directives.path,
         'signals': directives.unchanged,
     }
 
+    def resolve_file(self, filename, docdir, srcdir):
+        """Resolve a :file: path or argument to an existing VCD file.
+
+        Tries each candidate against the document directory first, then the
+        source root.  An ``.svg`` argument is shorthand for the ``.vcd``
+        beside it (see module docstring); only the ``.vcd`` is looked up,
+        even if the ``.svg`` itself exists.
+        """
+        candidates = [filename[:-4] + '.vcd' if filename.endswith('.svg')
+                      else filename]
+        for candidate in candidates:
+            for base in (docdir, srcdir):
+                path = os.path.normpath(os.path.join(base, candidate))
+                if os.path.exists(path):
+                    return path
+        return None
+
     def run(self):
         env = self.state.document.settings.env
-        filename = self.options.get('file')
+        filename = self.arguments[0] if self.arguments else self.options.get('file')
         if not filename:
-            raise self.error('vcd directive requires a :file: option')
+            raise self.error('vcd directive requires a file argument')
 
-        # Resolve :file: relative to the document, then to the source root.
+        # Resolve the path relative to the document, then to the source root.
         docdir = os.path.dirname(env.doc2path(env.docname))
-        for base in (docdir, env.srcdir):
-            path = os.path.normpath(os.path.join(base, filename))
-            if os.path.exists(path):
-                break
-        else:
+        path = self.resolve_file(filename, docdir, env.srcdir)
+        if path is None:
             raise self.error(f'vcd file not found: {filename}')
 
         # Track the VCD as a build dependency of this document, so that
@@ -327,7 +394,17 @@ class VcdDirective(Directive):
         finally:
             os.unlink(out_path)
 
-        html = f'<div class="vcd-body">{render_svg(wavejson, env.config.vcd_waveform_width)}</div>'
+        # Two variants of the same figure, swapped by a CSS media query:
+        # a desktop one zoomed to fit the ~680px content column, and a
+        # mobile one zoomed to fit a ~310px phone column.  Scaling the
+        # desktop SVG down on a phone would shrink the baked-in text to an
+        # unreadable ~7px; re-rendering at the mobile target width keeps
+        # text at a true 14px (vcd.css shows/hides the variants).
+        html = (
+            f'<div class="vcd-body">'
+            f'{render_svg(wavejson, env.config.vcd_waveform_width, "vcd-svg--desktop")}'
+            f'{render_svg(wavejson, env.config.vcd_waveform_width_mobile, "vcd-svg--mobile")}'
+            f'</div>')
         if 'caption' in self.options:
             caption = escape(self.options['caption'])
             html = (f'<div class="vcd-block literal-block-wrapper docutils container">'
@@ -347,6 +424,14 @@ def setup(app):
     # horizontal padding on each side -> 680px for the SVG itself.  (If the
     # .vcd-body border/padding in custom.css changes, update this.)
     app.add_config_value('vcd_waveform_width', 680, 'env')
+    # Target width (px) for the mobile variant of vcd SVGs, swapped in by
+    # the <=768px media query in vcd.css.  A common phone viewport (375px)
+    # yields a ~323px content column, minus .vcd-body's border/padding
+    # -> ~310px for the SVG itself.  On wider phones the mobile SVG is
+    # scaled up slightly by CSS (text grows a little, which reads fine);
+    # on narrower ones it is scaled down (text ~12px at 320px, still
+    # legible).
+    app.add_config_value('vcd_waveform_width_mobile', 310, 'env')
     return {
         'version': '0.1',
         'parallel_read_safe': True,

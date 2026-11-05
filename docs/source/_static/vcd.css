@@ -2,11 +2,16 @@
 :root {
   --vcd-line: #2E7D32;
   --vcd-x: #c62828;
+  /* Hover time cursor: a warm accent that stands apart from the green
+     signal lines on the light code background. */
+  --vcd-cursor: #E65100;
 }
 
 [data-theme="dark"] {
   --vcd-line: #8FC225;
   --vcd-x: #ef5350;
+  /* Brighter amber to read against the dark code background. */
+  --vcd-cursor: #FFB74D;
 }
 
 .vcd-block {
@@ -35,14 +40,66 @@
      they scroll horizontally on .vcd-body below. */
 }
 
+/* Two variants of every figure are rendered at build time (vcd_ext.py):
+   .vcd-svg--desktop is zoomed to fit the ~680px content column, and
+   .vcd-svg--mobile is re-rendered at a ~310px phone column so its text
+   stays a true 14px.  Below 768px -- the theme's own breakpoint where
+   .wy-nav-content switches to narrow padding -- the desktop SVG no longer
+   fits the column and is swapped for the mobile one.  vcd.js attaches the
+   hover time cursor to each SVG independently; the hidden variant simply
+   never receives mouse events. */
+.vcd-svg--mobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .vcd-svg--desktop {
+    display: none;
+  }
+
+  .vcd-svg--mobile {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .vcd-svg--mobile.vcd-svg--overflow {
+    width: auto;
+  }
+}
+
+/* Above the breakpoint, the desktop SVG keeps its build-time 680px width
+   when the column is wide enough, and scales down proportionally when the
+   column is narrower than that -- the 800px content column only exists at
+   full desktop width, and between ~769px and ~1050px viewports it is
+   smaller than the build target, which would otherwise overflow .vcd-body
+   into a horizontal scrollbar for every figure.  The text shrinks with the
+   figure, gracefully in between; vcd.js reads the live scale via
+   getBoundingClientRect(), so the hover time cursor stays accurate. */
+.vcd-svg--desktop {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Traces zoomed all the way out (the MIN_TICK_W floor in vcd_ext.py) are
+   wider than their target by design: they scroll horizontally in .vcd-body
+   rather than compressing further into unreadably small text.  The
+   renderer tags them .vcd-svg--overflow to exempt them from the scaling
+   above. */
+.vcd-svg--overflow {
+  max-width: none;
+}
+
 .vcd-svg text {
   font-family: "Fira Mono", monospace;
-  font-size: 10px;
+  /* Keep in sync with FONT_PX in vcd_ext.py: 14px matches the docs'
+     .small-code size, one step under the 17px body/code text. */
+  font-size: 14px;
 }
 
 .vcd-svg .vcd-name {
   fill: var(--text-main);
-  font-size: 11px;
+  font-size: 15px;
 }
 
 .vcd-svg .vcd-head {
@@ -81,4 +138,12 @@
 
 .vcd-svg .vcd-data {
   fill: var(--text-main);
+}
+
+.vcd-svg .vcd-cursor {
+  stroke: var(--vcd-cursor);
+  stroke-width: 1.5;
+  /* Drawn by vcd.js on hover; never an interaction target itself, so it
+     does not interfere with tracking the mouse over the waveform. */
+  pointer-events: none;
 }

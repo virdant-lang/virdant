@@ -1,2 +1,5 @@
 [project]
 name = "opcodes"
+
+[prog]
+top = "opcodes::Alu"

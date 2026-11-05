@@ -5,7 +5,8 @@ usage: vcd2wavedrom.py <in.vcd> <out.json> [-s name1,name2,...] [--tick PS]
 
 Signal names may be given as full paths ("top.clock") or leaf names ("clock",
 which matches every scope containing a signal of that name). Signals are
-always rendered in VCD declaration order regardless of the filter order.
+rendered in the order given on the command line (or VCD declaration order
+when no filter is given).
 """
 import argparse
 import json
@@ -52,14 +53,20 @@ def parse_vcd(path):
     return changes, order, max_t
 
 def filter_signals(order, wanted):
-    """Return names in declaration order matching any entry of `wanted`."""
+    """Return names matching `wanted`, in the order given in `wanted`.
+
+    Each entry of `wanted` may be a full path ("top.clock") or a leaf name
+    ("clock", matching every scope containing a signal of that name).  A
+    leaf entry matches in VCD declaration order among its matches.
+    """
     if not wanted:
         return order
     wanted = [w.strip() for w in wanted.split(",") if w.strip()]
     matched = []
-    for name in order:
-        if name in wanted or name.rsplit(".", 1)[-1] in wanted:
-            matched.append(name)
+    for w in wanted:
+        for name in order:
+            if (name == w or name.rsplit(".", 1)[-1] == w) and name not in matched:
+                matched.append(name)
     missing = [w for w in wanted
                if w not in order and w not in {n.rsplit(".", 1)[-1] for n in order}]
     if missing:
@@ -72,7 +79,9 @@ def to_wavedrom(changes, names, end_time, tick):
         # stable sort by tick only: preserves $dumpvars order for ties
         chs = sorted(((t // tick, v) for t, v in changes[name]),
                      key=lambda p: p[0])
-        steps = [(0, chs[0][1])] + chs  # force value at t=0
+        # A signal may be declared but never change (no $dumpvars entry);
+        # it renders as an unknown 'x' box for the whole trace.
+        steps = [(0, chs[0][1])] + chs if chs else []
         vals = []
         cur = None
         idx = 0
@@ -85,12 +94,14 @@ def to_wavedrom(changes, names, end_time, tick):
         wave = ""
         for k in range(end_time):
             v = vals[k]
-            if k > 0 and vals[k] == vals[k - 1]:
+            if v is None:
+                wave += "x"
+            elif k > 0 and vals[k] == vals[k - 1]:
                 wave += "."
             else:
                 wave += "4" if len(v) > 1 else v
         sig = {"name": name, "wave": wave}
-        if any(len(v) > 1 for v in vals):
+        if any(v is not None and len(v) > 1 for v in vals):
             sig["data"] = [hex(int(v, 2)) for v, w in zip(vals, wave) if w == "4"]
         signals.append(sig)
     return {"signal": signals, "config": {"hscale": 1}}

@@ -79,5 +79,24 @@ So while our `Passthrough` module doesn't do very much, it *does* pass data thro
 
    The `:=` driver in Virdant is analogous to the `assign` keyword in Verilog.
 
+
+Waveform
+--------
+What does this module actually do though?
+Let's take a look at a run through the waveform viewer:
+
+.. vcd:: ../examples/passthrough/trace.svg
+
+When looking at a waveform,
+time advances from left to right.
+
+Here, we see our two signals.
+We are treating `Passthrough` as our top module,
+so their names are prefixed with `top`.
+
+We imagine someone from the outside passing in different values
+into our circuit as `top.inp`.
+How does `top.out` respond?
+
 So how do you feel about the simplicity of Virdant so far?
 It turns out that Simplicity is one of the :doc:`Principles of Virdant </principles>`!

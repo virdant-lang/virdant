@@ -1,2 +1,5 @@
 [project]
 name = "external"
+
+[prog]
+top = "external::Memory"

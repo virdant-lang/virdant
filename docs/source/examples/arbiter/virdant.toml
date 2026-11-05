@@ -1,2 +1,5 @@
 [project]
 name = "arbiter"
+
+[prog]
+top = "arbiter::Arbiter"

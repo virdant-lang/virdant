@@ -5,9 +5,9 @@ build
 !/virdant/src/build/
 .cargo
 *.gtkw
-*.vcd
 *.sh
 *.pdf
+docs/.build-lock
 
 w
 notes

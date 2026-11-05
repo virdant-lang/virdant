@@ -1,2 +1,5 @@
 [project]
 name = "mux3_alt"
+
+[prog]
+top = "mux3_alt::Mux3"

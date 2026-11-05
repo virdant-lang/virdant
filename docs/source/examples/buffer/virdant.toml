@@ -1,2 +1,6 @@
 [project]
 name = "buffer"
+
+
+[prog]
+top = "buffer::Buffer"
