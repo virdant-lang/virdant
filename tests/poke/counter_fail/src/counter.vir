@@ -1,0 +1,18 @@
+pub mod Top {
+    incoming clock : Clock
+    incoming en : Bit
+
+    reg ctr : Word[4] {
+        if {
+            when en {
+                it <= it + 1w4
+            }
+        }
+    }
+
+    outgoing dbl : Word[4] {
+        it := ctr + ctr
+    }
+
+    unused clock
+}

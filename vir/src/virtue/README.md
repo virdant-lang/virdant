@@ -48,7 +48,7 @@ Common keys:
 
 | key           | meaning                                            |
 |---------------|----------------------------------------------------|
-| `kind`        | `check`, `sim`, `format`, `golden`, or `doc`       |
+| `kind`        | `check`, `sim`, `format`, `golden`, `doc`, or `poke`  |
 | `description` | one-liner shown next to the test name              |
 | `skip`        | `true`, or a string reason; skipped tests show `⚠️` |
 
@@ -111,6 +111,17 @@ Runs `vir doc`, then:
 
 - `expect_files` — list of paths that must have been generated
 - `grep` — list of `{ path, pattern }` content assertions
+
+### `kind = "poke"`
+
+Runs `vir poke <script> --script` (a `.poke` script as a standalone
+assertion test):
+
+| key      | default        |
+|----------|----------------|
+| `script` | `script.poke`  |
+| `top`    | `[prog] top`   |
+| `expect` | `ok` (exit 0) or `error` (exit nonzero) |
 
 ## Output
 

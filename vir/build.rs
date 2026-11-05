@@ -19,6 +19,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn main() {
+    // Generate the `vir poke` grammar (`src/poke/grammar.lalrpop`):
+    // the vanilla lalrpop crate suffices here — no need for the modified
+    // version the `virdant` crate uses.
+    lalrpop::process_root().unwrap();
+    println!("cargo:rerun-if-changed=src/poke/grammar.lalrpop");
+
     let base_dir: PathBuf = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
         .parent()
         .unwrap()

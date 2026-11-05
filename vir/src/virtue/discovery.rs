@@ -27,6 +27,7 @@ pub struct Test {
     pub format_cfg: FormatCfg,
     pub golden_cfg: GoldenCfg,
     pub doc_cfg: DocCfg,
+    pub poke_cfg: PokeCfg,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +44,9 @@ pub enum Kind {
     Golden,
     /// `vir doc` output assertions.
     Doc,
+    /// `vir poke <script> --script`: a `.poke` script run as an
+    /// assertion test; passes iff it exits per the `expect` contract.
+    Poke,
 }
 
 /// `expect = ...` exit-code/output contract for `kind = "check"`.
@@ -142,6 +146,16 @@ pub struct DocCfg {
     pub grep: Vec<Grep>,
 }
 
+/// `kind = "poke"`: run a `.poke` script standalone via
+/// `vir poke <script> --script` (optionally with `--top`).
+#[derive(Debug, Clone)]
+pub struct PokeCfg {
+    /// The script, relative to the test directory.
+    pub script: PathBuf,
+    /// Explicit top module (may be non-pub).
+    pub top: Option<String>,
+}
+
 /// A minimal `Test` for unit tests.  Never built by discovery.
 #[cfg(test)]
 pub(crate) fn test_stub(name: &str, description: &str) -> Test {
@@ -170,6 +184,7 @@ pub(crate) fn test_stub(name: &str, description: &str) -> Test {
         },
         golden_cfg: GoldenCfg { grep: vec![], diff: vec![] },
         doc_cfg: DocCfg { expect_files: vec![], grep: vec![] },
+        poke_cfg: PokeCfg { script: PathBuf::from("script.poke"), top: None },
     }
 }
 
@@ -208,6 +223,9 @@ struct TestToml {
     // kind = "doc"
     #[serde(default)]
     expect_files: Vec<PathBuf>,
+    // kind = "poke"
+    script: Option<PathBuf>,
+    top: Option<String>,
 }
 
 /// `skip = true` or `skip = "reason"`.
@@ -255,9 +273,10 @@ pub fn parse_test_toml(dir: &Path, text: &str) -> Result<Test, String> {
         "format" => Kind::Format,
         "golden" => Kind::Golden,
         "doc" => Kind::Doc,
+        "poke" => Kind::Poke,
         other => {
             return Err(format!(
-                "{}: unknown kind {:?} (use check | sim | run | format | golden | doc)",
+                "{}: unknown kind {:?} (use check | sim | run | format | golden | doc | poke)",
                 dir.join("test.toml").display(),
                 other
             ))
@@ -327,6 +346,11 @@ pub fn parse_test_toml(dir: &Path, text: &str) -> Result<Test, String> {
         grep: raw.grep.iter().cloned().map(Into::into).collect(),
     };
 
+    let poke_cfg = PokeCfg {
+        script: raw.script.clone().unwrap_or_else(|| PathBuf::from("script.poke")),
+        top: raw.top.clone(),
+    };
+
     Ok(Test {
         name: dir.to_string_lossy().to_string(),
         dir: dir.to_path_buf(),
@@ -339,6 +363,7 @@ pub fn parse_test_toml(dir: &Path, text: &str) -> Result<Test, String> {
         format_cfg,
         golden_cfg,
         doc_cfg,
+        poke_cfg,
     })
 }
 

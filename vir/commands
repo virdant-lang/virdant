@@ -16,6 +16,7 @@ Basic:
     new         Create a new Virdant project
     check       Check a Virdant project for problems
     run         Run your design in the Virdant simulator
+    poke        Interactive peek-poke tool for simple testing
 
 Tools:
     doc         Create documentation for your project

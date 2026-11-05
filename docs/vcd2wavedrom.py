@@ -64,7 +64,7 @@ def filter_signals(order, wanted):
         print(f"warning: no match for: {', '.join(missing)}", file=sys.stderr)
     return matched
 
-def to_wavedrom(changes, names, end_time, tick, title):
+def to_wavedrom(changes, names, end_time, tick):
     signals = []
     for name in names:
         # stable sort by tick only: preserves $dumpvars order for ties
@@ -91,8 +91,7 @@ def to_wavedrom(changes, names, end_time, tick, title):
         if any(len(v) > 1 for v in vals):
             sig["data"] = [hex(int(v, 2)) for v, w in zip(vals, wave) if w == "4"]
         signals.append(sig)
-    return {"signal": signals, "config": {"hscale": 1},
-            "head": {"text": title}}
+    return {"signal": signals, "config": {"hscale": 1}}
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -110,8 +109,7 @@ def main():
     if not names:
         sys.exit("error: no signals selected")
     end = max((t for n in names for t, _ in changes[n]), default=0) // args.tick + 1
-    title = f"{args.vcd}  (1 tick = {args.tick // 1000} ns)"
-    json.dump(to_wavedrom(changes, names, end, args.tick, title),
+    json.dump(to_wavedrom(changes, names, end, args.tick),
               open(args.out, "w"), indent=1)
     print(f"wrote {args.out}: {len(names)} signals, {end} ticks")
 

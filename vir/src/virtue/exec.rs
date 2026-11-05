@@ -119,6 +119,7 @@ pub fn run_test(env: &Env, test: &Test) -> Outcome {
         Kind::Format => run_format(env, test),
         Kind::Golden => run_golden(env, test),
         Kind::Doc => run_doc(env, test),
+        Kind::Poke => run_poke(env, test),
     };
     Outcome { duration: start.elapsed(), ..outcome }
 }
@@ -377,6 +378,41 @@ fn run_run(env: &Env, test: &Test) -> Outcome {
 
     if test.run_cfg.trace {
         return check_trace(&dir, steps);
+    }
+
+    Outcome {
+        status: Status::Pass,
+        failure: None,
+        filecheck_stderr: None,
+        steps,
+        duration: Duration::from_secs(0),
+    }
+}
+
+/// `kind = "poke"`: run a `.poke` script standalone.  The script exits
+/// 0 when all its asserts pass and nonzero on the first failure — the
+/// same contract the `expect` field checks (`ok` default, or `error`).
+fn run_poke(env: &Env, test: &Test) -> Outcome {
+    let dir = env.test_dir(test);
+    let target_release = env.root.join("target/release");
+    let mut argv = vec![env.vir.to_string_lossy().to_string(), "poke".to_string()];
+    if let Some(top) = &test.poke_cfg.top {
+        argv.push("--top".to_string());
+        argv.push(top.clone());
+    }
+    argv.push(test.poke_cfg.script.to_string_lossy().to_string());
+    argv.push("--script".to_string());
+
+    let step = run_command(&argv, &dir, Some(&target_release));
+    let steps = vec![step];
+
+    let expected = match test.check_cfg.expect {
+        Expect::OkNoWarnings => 0,
+        Expect::Error => 1,
+    };
+    if steps[0].code != Some(expected) && !(expected == 1 && steps[0].code.is_some_and(|c| c != 0)) {
+        let desc = steps[0].exit_description();
+        return fail(steps, format!("vir poke failed ({desc})"), None);
     }
 
     Outcome {

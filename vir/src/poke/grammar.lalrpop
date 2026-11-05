@@ -1,0 +1,276 @@
+// The `vir poke` scripting language grammar (lalrpop, vanilla crate).
+//
+// Line-based: one command per line.  This parser is shared by the
+// REPL (one line at a time) and standalone `.poke` script runs.
+//
+// Expression precedence mirrors Virdant's `Expr` grammar (see
+// GRAMMAR.txt): `&&`/`||`/`^^` bind loosest, then comparisons, then
+// the additive/bitwise level (`+`, `-`, `&`, `|`, `^` share one
+// level, as in Virdant), then unary, then postfix indexing/slicing,
+// then primaries.
+
+use crate::ast::{BinKind, Command, Expr, PathStart, SPath};
+use crate::lexer::Tok;
+
+grammar;
+
+extern {
+    type Location = usize;
+
+    enum Tok {
+        Ident => Tok::Ident(<String>),
+        Nat => Tok::Nat(<u128>),
+        Word => Tok::Word(<u128>, <u16>),
+        Str => Tok::Str(<String>),
+        "/" => Tok::Slash,
+
+        "cd" => Tok::Cd,
+        "peek" => Tok::Peek,
+        "poke" => Tok::Poke,
+        "watch" => Tok::Watch,
+        "break" => Tok::Break,
+        "tick" => Tok::Tick,
+        "assert" => Tok::Assert,
+        "print" => Tok::Print,
+        "restart" => Tok::Restart,
+        "exit" => Tok::Exit,
+        "ls" => Tok::Ls,
+        "show" => Tok::Show,
+        "autoshow" => Tok::Autoshow,
+        "vcd" => Tok::Vcd,
+        "on" => Tok::On,
+        "off" => Tok::Off,
+        "true" => Tok::True,
+        "false" => Tok::False,
+        "top" => Tok::Top,
+        "it" => Tok::It,
+
+        "#" => Tok::Hash,
+        "." => Tok::Dot,
+        ".." => Tok::DotDot,
+        "(" => Tok::LParen,
+        ")" => Tok::RParen,
+        "[" => Tok::LBracket,
+        "]" => Tok::RBracket,
+        "," => Tok::Comma,
+        "+" => Tok::Plus,
+        "-" => Tok::Minus,
+        "&" => Tok::Amp,
+        "|" => Tok::Pipe,
+        "^" => Tok::Caret,
+        "~" => Tok::Tilde,
+        "!" => Tok::Bang,
+        "==" => Tok::EqEq,
+        "!=" => Tok::Neq,
+        "<" => Tok::Lt,
+        "<=" => Tok::Le,
+        ">" => Tok::Gt,
+        ">=" => Tok::Ge,
+        "&&" => Tok::AmpAmp,
+        "||" => Tok::PipePipe,
+        "^^" => Tok::CaretCaret,
+    }
+}
+
+// One line: exactly one command.  Empty/comment-only lines never
+// reach the parser (the caller skips lines the lexer reduces to
+// nothing).
+pub Line: Command = {
+    <Cmd>
+};
+
+Cmd: Command = {
+    "cd" <t:CdTarget> => t,
+    "peek" <p: Path> => Command::Peek { path: p },
+    "poke" <p: Path> <e: Expr> => Command::Poke { path: p, expr: e },
+    "watch" <p: Path> => Command::Watch { path: p },
+    "break" <p: Path> => Command::Break { path: p },
+    "tick" <t:TickTail> => Command::Tick { count: t.0, clock: t.1 },
+    "assert" <e: Expr> => Command::Assert { expr: e, line: String::new() },
+    "print" <e: Expr> => Command::Print { expr: e },
+    "restart" => Command::Restart,
+    "exit" => Command::Exit,
+    "ls" => Command::Ls,
+    "show" => Command::Show,
+    "autoshow" <t: AutoshowState> => t,
+    "vcd" <t: VcdTarget> => Command::Vcd(t),
+};
+
+// The `vcd` file name: either a quoted string (taken verbatim, spaces
+// allowed) or a bare run of name-ish tokens (`trace.vcd`,
+// `out/my-run.vcd`), joined with no separator.
+VcdTarget: String = {
+    <s: Str> => s,
+    <parts: VcdPart+> => parts.join(""),
+};
+
+VcdPart: String = {
+    <i: Ident> => i,
+    <n: AnyNat> => n.to_string(),
+    "." => ".".to_string(),
+    "-" => "-".to_string(),
+    "/" => "/".to_string(),
+    // The lexer keywordifies these words, so a bare file name may
+    // contain them too (`vcd top.vcd`).  Inside the run only their
+    // literal text matters.
+    "cd" => "cd".to_string(),
+    "peek" => "peek".to_string(),
+    "poke" => "poke".to_string(),
+    "watch" => "watch".to_string(),
+    "break" => "break".to_string(),
+    "tick" => "tick".to_string(),
+    "assert" => "assert".to_string(),
+    "print" => "print".to_string(),
+    "restart" => "restart".to_string(),
+    "exit" => "exit".to_string(),
+    "ls" => "ls".to_string(),
+    "show" => "show".to_string(),
+    "autoshow" => "autoshow".to_string(),
+    "vcd" => "vcd".to_string(),
+    "on" => "on".to_string(),
+    "off" => "off".to_string(),
+    "true" => "true".to_string(),
+    "false" => "false".to_string(),
+    "top" => "top".to_string(),
+    "it" => "it".to_string(),
+};
+
+// `autoshow [on|off]`: with no argument the state toggles.
+AutoshowState: Command = {
+    => Command::Autoshow(None),
+    "on" => Command::Autoshow(Some(true)),
+    "off" => Command::Autoshow(Some(false)),
+};
+
+// `cd <path>` drills down one or more levels; `cd ..` goes up one
+// level; `cd top` returns to the top (parsed as the absolute path
+// `top`, interpreted by the command layer).
+CdTarget: Command = {
+    ".." => Command::CdUp,
+    <p: Path> => match (p.start, p.segments.is_empty()) {
+        (PathStart::Top, true) => Command::CdTop,
+        (PathStart::Top, false) => Command::CdAbs(p.segments),
+        (PathStart::Ident(head), _) => {
+            let mut segments = vec![head];
+            segments.extend(p.segments);
+            Command::Cd(segments)
+        },
+        (PathStart::It, _) => unreachable!("grammar never produces an `it` path for cd"),
+    },
+};
+
+TickTail: (u64, Option<SPath>) = {
+    => (1, None),
+    <n: TickCount> <rest: OptPath> => (n, rest),
+    <p: Path> => (1, Some(p)),
+};
+
+OptPath: Option<SPath> = {
+    => None,
+    <p: Path> => Some(p),
+};
+
+TickCount: u64 = {
+    <n: AnyNat> => u64::try_from(n).unwrap_or(u64::MAX),
+};
+
+// A Nat or Word literal used where only the value matters (tick
+// counts, indexes).
+AnyNat: u128 = {
+    <n: Nat> => n,
+    <w: Word> => { let (v, _) = w; v },
+};
+
+Path: SPath = {
+    <start: PathStart> <segs: PathSegments> => SPath { start, segments: segs },
+};
+
+PathStart: PathStart = {
+    <s: Ident> => PathStart::Ident(s),
+    "top" => PathStart::Top,
+    "it" => PathStart::It,
+};
+
+PathSegments: Vec<String> = {
+    => vec![],
+    <segs: ("." <Ident>)+> => segs,
+};
+
+Expr: Expr = {
+    <e: ExprLogical> => e,
+};
+
+ExprLogical: Expr = {
+    <l: ExprLogical> <op: LogicalOp> <r: ExprCompare> => Expr::Bin(op, Box::new(l), Box::new(r)),
+    <e: ExprCompare> => e,
+};
+
+LogicalOp: BinKind = {
+    "&&" => BinKind::LogAnd,
+    "||" => BinKind::LogOr,
+    "^^" => BinKind::LogXor,
+};
+
+ExprCompare: Expr = {
+    <l: ExprCompare> <op: CompareOp> <r: ExprAdditive> => Expr::Bin(op, Box::new(l), Box::new(r)),
+    <e: ExprAdditive> => e,
+};
+
+CompareOp: BinKind = {
+    "==" => BinKind::Eq,
+    "!=" => BinKind::Neq,
+    "<" => BinKind::Lt,
+    "<=" => BinKind::Lte,
+    ">" => BinKind::Gt,
+    ">=" => BinKind::Gte,
+};
+
+ExprAdditive: Expr = {
+    <l: ExprAdditive> <op: AdditiveOp> <r: ExprUnop> => Expr::Bin(op, Box::new(l), Box::new(r)),
+    <e: ExprUnop> => e,
+};
+
+AdditiveOp: BinKind = {
+    "+" => BinKind::Add,
+    "-" => BinKind::Sub,
+    "&" => BinKind::And,
+    "|" => BinKind::Or,
+    "^" => BinKind::Xor,
+};
+
+ExprUnop: Expr = {
+    "-" <e: ExprUnop> => Expr::Neg(Box::new(e)),
+    "~" <e: ExprUnop> => Expr::Inv(Box::new(e)),
+    "!" <e: ExprUnop> => Expr::Not(Box::new(e)),
+    <e: ExprPostfix> => e,
+};
+
+ExprPostfix: Expr = {
+    <s: ExprPostfix> "[" <i: IndexNat> "]" => Expr::Index(Box::new(s), i),
+    <s: ExprPostfix> "[" <hi: IndexNat> ".." <lo: IndexNat> "]" => Expr::Slice(Box::new(s), hi, lo),
+    <e: ExprPrimary> => e,
+};
+
+IndexNat: u16 = {
+    <n: AnyNat> => u16::try_from(n).unwrap_or(u16::MAX),
+};
+
+ExprPrimary: Expr = {
+    "(" <e: Expr> ")" => e,
+    <n: Nat> => Expr::NatLit(n),
+    <w: Word> => { let (v, width) = w; Expr::WordLit(v, width) },
+    "true" => Expr::BitLit(true),
+    "false" => Expr::BitLit(false),
+    "#" <name: Ident> => Expr::Ctor { name, args: vec![] },
+    "#" <name: Ident> "(" <args: CtorArgs?> ")" => Expr::Ctor { name, args: args.unwrap_or_default() },
+    <p: Path> => Expr::Path(p),
+};
+
+CtorArgs: Vec<Expr> = {
+    <e: Expr> => vec![e],
+    <e: Expr> "," <rest: CtorArgs> => {
+        let mut args = vec![e];
+        args.extend(rest);
+        args
+    },
+};

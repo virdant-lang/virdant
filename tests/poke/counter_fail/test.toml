@@ -1,0 +1,3 @@
+kind = "poke"
+description = "`vir poke` script test: a failing assert exits nonzero."
+expect = "error"

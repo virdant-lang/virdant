@@ -1,0 +1,20 @@
+poke enable false
+vcd trace.vcd
+show
+tick
+tick
+tick
+poke enable true
+tick
+tick
+tick
+tick
+tick
+tick
+tick
+tick
+tick
+tick
+tick
+tick
+tick

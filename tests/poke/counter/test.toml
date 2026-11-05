@@ -1,0 +1,2 @@
+kind = "poke"
+description = "`vir poke` script test: drive a counter, assert on its values."
