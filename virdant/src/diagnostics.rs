@@ -112,6 +112,8 @@ pub enum DiagnosticPayload {
     IndexNotWordType(IndexNotWordType),
     /// A single component is unused multiple times
     RedundantUnused(RedundantUnused),
+    /// A component marked `unused` is actually used in the module.
+    UnusedButUsed(UnusedButUsed),
     /// Latched driver from a component to itself
     RedundantDriver(RedundantDriver),
     /// An `initial` statement targets a component which is not a register.
@@ -448,6 +450,11 @@ pub struct IndexNotWordType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RedundantUnused {
+    pub path: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnusedButUsed {
     pub path: BString,
 }
 
@@ -827,6 +834,7 @@ impl Diagnostic {
                 "For a `let` used as a statement, use `{ ... }` instead of `=>`".into()
             }
             DiagnosticPayload::RedundantUnused(d) => format!("Redundant `unused`: {}", d.path).into(),
+            DiagnosticPayload::UnusedButUsed(d) => format!("Marked `unused` but used: {}", d.path).into(),
             DiagnosticPayload::RedundantDriver(d) => format!("Redundant driver: {}", d.path).into(),
             DiagnosticPayload::InitialForNonReg(d) => {
                 format!("initial targets non-register component {}", d.target).into()
@@ -1038,7 +1046,7 @@ from_diagnostic! {
     UnfilledHole, ModuleCycle, UnresolvedMethod, WrongType, Unknown, DoesntFit, NotWordType,
     CantTruncate, Todo, MatchNotExhaustive, MatchOverlappingArm, InvalidDocstring,
     DuplicateEnumValue, EnumPartiallySpecified, IndexOutOfBounds, IndexRangeOutOfBounds, InvalidIndexRange,
-    InvalidWordIndexWidth, IndexNotWordType, RedundantUnused, RedundantDriver,
+    InvalidWordIndexWidth, IndexNotWordType, RedundantUnused, RedundantDriver, UnusedButUsed,
     CombinationalLoop, DependsonCycle, DependsonBadCarrier, DependsonBadEntry,
     DependsonUndeclared, DependsonUnused,
     InitialForNonReg, InitialMultiple, InitialInsideIfMatch,

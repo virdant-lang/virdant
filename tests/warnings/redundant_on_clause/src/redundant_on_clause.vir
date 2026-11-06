@@ -42,7 +42,6 @@ mod OtherClock {
     reg r : Bit on divider.clock_out {
         it <= !it
     }
-    unused r
 }
 
 // Two Clock-typed components: no implicit clock, so explicit `on`
@@ -58,8 +57,6 @@ mod TwoClocks {
     reg rb : Bit on clock_b {
         it <= !it
     }
-    unused ra
-    unused rb
 }
 
 // CHECK: Check OK

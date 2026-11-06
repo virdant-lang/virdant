@@ -10,12 +10,10 @@ pub mod Top {
 
     wire x : Word[4] {
         it := 0b1010w4
-        unused it
     }
 
     wire y : Word[4] {
         it := 0b0011w4
-        unused it
     }
 
     // 10 + 3 = 13, no carry out.
@@ -27,7 +25,6 @@ pub mod Top {
     // 15 + 1 = 16, carry out set (bit 4).
     wire max : Word[4] {
         it := 0b1111w4
-        unused it
     }
     wire sum_c : Word[5] {
         it := max +. 0b0001w4

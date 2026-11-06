@@ -38,5 +38,4 @@ pub mod Initial {
     }
 
     out := plain + zext(counter) + zext(down) + oreg
-    unused flag
 }

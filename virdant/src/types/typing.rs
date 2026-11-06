@@ -260,6 +260,10 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
     let item = symboltable.symbol(symbol_id);
 
     let mut use_locations: IndexMap<BString, IndexSet<Location>> = IndexMap::new();
+    // Paths marked with an `unused` statement, mapped to the locations
+    // of the `unused` statements themselves.  Kept apart from
+    // `use_locations` so that a mark does not masquerade as a use.
+    let mut unused_marks: IndexMap<BString, IndexSet<Location>> = IndexMap::new();
 
     let parsing = builder.get_parsing(item.package());
     let node: AstNode = parsing.ast_node(item.location().ast_node_id());
@@ -272,7 +276,7 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
     if !node.contains_errors() {
         diagnostics.extend(typecheck_item(builder, item, &exprroots, &mut use_locations));
         let mut already_unused: IndexSet<BString> = IndexSet::new();
-        collect_unused(node.clone(), &mut use_locations, &mut already_unused, &mut diagnostics);
+        collect_unused(node.clone(), &mut use_locations, &mut already_unused, &mut unused_marks, &mut diagnostics);
         if let Some(component_analysis) = &component_analysis {
             collect_bidirectional_drivers(builder, symbol_id, node.clone(), &mut use_locations, component_analysis, &mut diagnostics);
         }
@@ -304,8 +308,28 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
                 )
             });
         for (path, component) in component_analysis.components() {
+            // An `unused` mark claims the component is never used.  If
+            // the component does have use locations (or is the implicit
+            // clock of a reg omitting its `on` clause), the claim is
+            // false and is flagged as an error.
+            let implicitly_used = component_analysis.implicit_clock() == Some(component.id())
+                && has_implicitly_clocked_reg;
+            if unused_marks.contains_key(&path)
+                && (use_locations.contains_key(&path) || implicitly_used)
+            {
+                for location in &unused_marks[&path] {
+                    let region = builder.get_location_region(location.clone());
+                    diagnostics.push(Diagnostic::new(
+                        region,
+                        diagnostics::UnusedButUsed {
+                            path: path.clone(),
+                        },
+                    ));
+                }
+            }
             if component.can_source()
                 && !use_locations.contains_key(&path)
+                && !unused_marks.contains_key(&path)
                 && !component.synthetic()
                 && (component_analysis.implicit_clock() != Some(component.id())
                     || !has_implicitly_clocked_reg)
@@ -369,6 +393,7 @@ fn collect_unused(
     node: AstNode<'_>,
     use_locations: &mut IndexMap<BString, IndexSet<Location>>,
     already_unused: &mut IndexSet<BString>,
+    unused_marks: &mut IndexMap<BString, IndexSet<Location>>,
     diagnostics: &mut Vec<crate::diagnostics::Diagnostic>,
 ) {
     if let AstNodePayload::ModDefStmtUnused = node.payload() {
@@ -439,11 +464,11 @@ fn collect_unused(
             } else {
                 already_unused.insert(resolved_path.clone());
             }
-            use_locations.entry(resolved_path).or_default().insert(path_node.location());
+            unused_marks.entry(resolved_path).or_default().insert(path_node.location());
         }
     }
     for child in node.children() {
-        collect_unused(child, use_locations, already_unused, diagnostics);
+        collect_unused(child, use_locations, already_unused, unused_marks, diagnostics);
     }
 }
 

@@ -43,6 +43,74 @@ mod DupUnusedMixed {
     sum := ha.sum
 }
 
+// A reg it-block's `unused it` and a top-level `unused r` name the
+// same component: the second is redundant.
+mod DupUnusedRegItBlock {
+    incoming clock : Clock
+    incoming inp : Bit
+    outgoing out : Bit
+
+    reg r : Bit {
+        unused it
+        it <= inp
+    }
+
+    // CHECK: Redundant `unused`: r
+    unused r
+
+    out := true
+}
+
+// Same aliasing, reversed order: the top-level `unused r` comes first,
+// so the it-block's `unused it` is the redundant one.
+mod DupUnusedRegItBlockReversed {
+    incoming clock : Clock
+    incoming inp : Bit
+    outgoing out : Bit
+
+    unused r
+
+    // CHECK: Redundant `unused`: r
+    reg r : Bit {
+        unused it
+        it <= inp
+    }
+
+    out := true
+}
+
+// A wire's it-block aliases the same way.
+mod DupUnusedWireItBlock {
+    outgoing out : Bit
+
+    wire w : Bit {
+        unused it
+        it := true
+    }
+
+    // CHECK: Redundant `unused`: w
+    unused w
+
+    out := true
+}
+
+// A whole submodule: `unused it` inside the mod block and `unused ha`
+// at top level are the same path.
+mod DupUnusedWholeSubmod {
+    outgoing out : Bit
+
+    mod ha of HalfAdder {
+        it.a := false
+        it.b := false
+        unused it
+    }
+
+    // CHECK: Redundant `unused`: ha
+    unused ha
+
+    out := true
+}
+
 // Only a single unused per path -- no redundant diagnostic.
 mod SingleUnused {
     incoming clock : Clock

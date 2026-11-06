@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "An `unused` statement on a component that is actually used in the module is an error, including implicit use through the implicit Clock."
+filecheck = "src/unused_but_used.vir"

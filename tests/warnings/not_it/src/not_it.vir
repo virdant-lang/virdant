@@ -112,7 +112,6 @@ mod UnusedStmt {
     incoming a : Bit
     incoming b : Bit
     outgoing sum : Bit dependson a, b
-    outgoing carry_out : Bit dependson a, b
 
     mod ha of HalfAdder {
         it.a := a
@@ -121,7 +120,6 @@ mod UnusedStmt {
         unused ha.carry_out
     }
     sum := ha.sum
-    carry_out := ha.carry_out
 }
 
 // Correct 'unused it.foo' inside an it block should produce no warning.

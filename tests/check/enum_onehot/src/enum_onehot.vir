@@ -36,10 +36,6 @@ pub mod WidthCheck {
     t3 := word(t)
     q4 := word(q)
     e2 := word(e)
-
-    unused t
-    unused q
-    unused e
 }
 
 pub mod MatchCheck {

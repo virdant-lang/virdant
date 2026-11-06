@@ -1,0 +1,82 @@
+// UnusedButUsed: an `unused` statement on a component that is actually
+// used in the module is an error. Uses include implicit ones, such as
+// a unique Clock that implicitly clocks a reg which omits its `on`
+// clause.
+
+// An incoming port marked `unused` but read in an expression.
+mod UnusedPortRead {
+    incoming a : Word[4]
+    incoming b : Word[4]
+    outgoing out : Word[4] dependson a, b
+
+    // CHECK: Marked `unused` but used: a
+    unused a
+
+    out := a + b
+}
+
+// A submodule outgoing port marked `unused` but read at module level.
+mod SubOutRead {
+    outgoing out : Bit
+
+    mod ha of HalfAdder {
+        it.a := false
+        it.b := false
+        // CHECK: Marked `unused` but used: ha.carry_out
+        unused it.carry_out
+    }
+
+    out := ha.sum | ha.carry_out
+}
+
+// A unique clock marked `unused` while a reg relies on the implicit
+// `on` clause: the implicit clocking is a use of the clock.
+mod ImplicitClockUsed {
+    incoming clock : Clock
+    incoming inp : Bit
+    outgoing out : Bit
+
+    // CHECK: Marked `unused` but used: clock
+    unused clock
+
+    reg r : Bit
+    r <= inp
+
+    out := r
+}
+
+// A unique clock marked `unused` in a module with no regs at all is
+// fine: nothing implicitly uses the clock.
+mod UnusedClockNoRegs {
+    incoming clock : Clock
+    outgoing out : Bit
+
+    unused clock
+    // CHECK-NOT: Marked `unused` but used: clock
+
+    out := true
+}
+
+// A genuinely-unused port marked `unused` is fine: that is the whole
+// point of the statement, and it still suppresses UnusedSource.
+mod GenuinelyUnused {
+    incoming unused_val : Word[8]
+    outgoing out : Bit
+
+    unused unused_val
+    // CHECK-NOT: Unused signal unused_val
+
+    out := true
+}
+
+mod HalfAdder {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing sum : Bit dependson a, b
+    outgoing carry_out : Bit dependson a, b
+
+    sum := a ^ b
+    carry_out := a & b
+}
+
+// CHECK: Check failed
