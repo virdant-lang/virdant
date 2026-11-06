@@ -10,8 +10,7 @@ driver blocks, and submodules.
 Our adder is made up of three different module definitions,
 `HalfAdder` `FullAdder` and `Adder4`.
 
-We will look at each of these three modules in turn,
-and then look at the waveforms for the whole example.
+We will look at each of these three modules in turn.
 
 .. toctree::
     :maxdepth: 1
@@ -19,4 +18,3 @@ and then look at the waveforms for the whole example.
     halfadder
     fulladder
     adder4
-    waveforms

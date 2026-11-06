@@ -1,0 +1,33 @@
+poke a 3
+poke b 5
+poke carry_in 0
+vcd trace.vcd
+advance
+
+poke a 7
+poke b 1
+advance
+
+poke a 12
+poke b 3
+advance
+
+poke a 0
+poke b 0
+poke carry_in 1
+advance
+
+poke a 9
+poke b 9
+poke carry_in 0
+advance
+
+poke a 10
+poke b 5
+poke carry_in 1
+advance
+
+poke a 15
+poke b 15
+advance
+exit

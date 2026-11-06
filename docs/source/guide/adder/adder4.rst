@@ -2,22 +2,34 @@
 ===========
 The joy of the `FullAdder` is that they can be chained together to add numbers of any size.
 
-We define a module `Adder4`, which can add together any two `Word[4]`\s:
+We define a module `Adder4`, which can add together any two 4-bit numbers:
 
 .. literalinclude:: /examples/adder/src/adder.vir
     :language: virdant
-    :lines: 39-73
+    :lines: 41-80
 
-We will leave some of the details of this module for you to explore,
-but here are some features to look out for.
+A quick survey of the code shows us that there are three `incoming` ports:
+`a` `b` and `carry_in`,
+and two `outgoing` ports:
+`sum` and `carry_out`.
+
+However, this time, `a` `b` and `sum` are all `Word[4]`,
+which means we can pass any 4-bit number.
+This allows us to add any two numbers between 0 and 15.
+
+The body consists of four `FullAdder` submodules.
+But let's not get ahead of ourselves.
+Let's take a closer look.
 
 Indexing
-~~~~~~~~
+--------
+As we look at our first submodule, `fulladder_0`, find ourselves in a pickle:
 Both `a` and `b` have type `Word[4]`.
-But the inputs to our `FullAdder`\s is `Bit`.
-In order to add corresponding pairs of bits, we need to get access to them.
+But the inputs to `FullAdder` (also named `a` and `b`) have type `Bit`.
+How do we connect them together?
 
-This syntax `a[0]` means "from the word `a`, extract bit number `0`".
+The answer is we need to decompose `a` and `b` into their constituent bits.
+The syntax `a[0]` means "from the word `a`, extract bit number `0`".
 
 When adding numbers by hand, we line up the digits of the two numbers vertically.
 In the same way, in `Adder4`, we line up corresponding pairs of bits:
@@ -27,42 +39,126 @@ In the same way, in `Adder4`, we line up corresponding pairs of bits:
 - `a[2]` and `b[2]`
 - `a[3]` and `b[3]`
 
+Consult this slightly messy diagram for an idea of what goes where:
 
-Concatenation
-~~~~~~~~~~~~~
-The opposite of indexing is concatenation.
-This is used on the last line of `Adder4`.
+.. inline-svg:: guide/adder/adder4.svg
+    :align: center
 
-Virdant uses the syntax `word(a, ..., z)` to concatenate the values `a` `b` `c` ... `z` together.
-You can concatenate as many values as you like,
-and the values you concatenate can be `Bit`\s or `Word`\s.
+.. note::
 
-The result of `cat(a, ..., z)` will be a `Word` type.
-And its size will be computed based on the sum of the sizes of each of the arguments.
+    It's important to note that indexing like this only works
+    when the index is a constant.
+    If you need dynamic indexing, Virdant provides a different syntax: `a[dyn i]`.
 
-For example, because each of the arguments is of type `Bit`,
-the expression `word(fa3.sum, fa2.sum, fa1.sum, fa0.sum)` is `Word[4]`.
-This is good, since it's being assigned to `out`, which is also `Word[4]`.
+    Dynamic indexing is more expensive in terms of hardware.
+    And because it can otherwise lead to undefined behavior,
+    Virdant restricts it to only work for `Word[n]`
+    where `n` is a power of 2.
 
 
 Chaining Full Adders
-~~~~~~~~~~~~~~~~~~~~
-The key of the `Adder4` design is the four `FullAdder`\s which are chained together:
+--------------------
+The operation of `Adder4` is based on the four `FullAdder` which are all chained together.
 
 .. literalinclude:: /examples/adder/src/adder.vir
     :language: virdant
-    :lines: 59-63
+    :lines: 61-65
     :dedent:
 
-To power each `FullAdder`, we must drive its inputs,
-sending the corresponding pair of bits to `it.a` and `it.b`.
-We also mix in the `carry_out` of the previous `FullAdder` to the `carry_in` of the next.
+Each `FullAdder` takes the corresponding pair of bits from `a` and `b`.
+Its `carry_in` is the `carry_out` of the previous `FullAdder`.
+(The `carry_in` of the first, of course, is the `incoming` port `carry_in`).
 
-I wonder what the `carry_in` of the first `FullAdder` should be?
+Each `FullAdder` represents a column of the addition.
+The reason you need a chain is exactly because the "carry" bit
+carries over to the next column.
 
 
-The Complete Example
---------------------
-.. literalinclude:: /examples/adder/src/adder.vir
-    :caption: adder.vir
-    :language: virdant
+Concatenation
+-------------
+The opposite of indexing is concatenation.
+This is used on the last line of `Adder4`
+to produce the final result.
+
+Virdant uses the syntax `word(a, ..., z)`
+to concatenate the values `a` `b` `c` ... `z` together.
+You can concatenate as many values as you like,
+and the values you concatenate can be `Bit`\s or `Word`\s.
+
+The result of `word(a, ..., z)` will be a `Word` type.
+And its size will be computed based on the sum of the sizes of each of the arguments.
+
+For example, because each of the arguments is of type `Bit`,
+the multi-line expression
+
+.. code-block:: virdant
+
+    word(
+        fulladder_3.sum,
+        fulladder_2.sum,
+        fulladder_1.sum,
+        fulladder_0.sum,
+    )
+
+is `Word[4]`.
+This is good, since it's being assigned to `out`, which is also `Word[4]`.
+
+
+About Adders
+------------
+The technical name for this style of adder is called a ripple-carry adder.
+It is the simplest adder circuit.
+
+It's good to understand that adders are relatively expensive pieces of hardware.
+The `HalfAdder` has 2 gates: an AND gate and an XOR gate.
+That means the `FullAdder` has 5:
+two copies of the `HalfAdder` gives 4 gates,
+plus an additional OR gate.
+This brings the total cost of the `Adder4` to 4x5 = 20 gates.
+
+If you wanted to build an `Adder64`,
+it would require 64 `FullAdder`\s,
+and thus 64x5 = 320 gates(!).
+
+Additionally, ripple carry adders can be a bit slow.
+Think of it like this: to add two 4-bit numbers,
+the `carry_in` has to travel through all four `FullAdder`\s.
+(If you work through carefully, it travels through 8 gates.
+And each of those takes time.
+
+If you want to do 64-bit addition, though,
+that's 64 `FullAdder`\s,
+and thus 128 gates it has to pass through.
+On an FPGA, this could easily cap your maximum clock frequency.
+
+There are other kinds of adder circuits.
+The next most famous one is called the carry lookahead adder.
+It does addition much faster,
+but at a cost of a higher gate count.
+
+Waveform
+--------
+I'll leave this waveform for you to look over.
+
+.. vcd:: ../../examples/adder/trace.svg
+
+   label Ports
+   signal top.a:dec
+   signal top.b:dec
+   signal top.carry_in
+   signal top.sum:dec
+   signal top.carry_out
+   space
+
+   label Sum
+   signal top.fulladder_0.sum
+   signal top.fulladder_1.sum
+   signal top.fulladder_2.sum
+   signal top.fulladder_3.sum
+   space
+
+   label Carries
+   signal top.fulladder_0.carry_out
+   signal top.fulladder_1.carry_out
+   signal top.fulladder_2.carry_out
+   signal top.fulladder_3.carry_out

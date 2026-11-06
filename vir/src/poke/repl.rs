@@ -334,7 +334,6 @@ expressions use Virdant syntax (literals, + - & | ^, comparisons,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::Expr;
 
     fn parse(line: &str) -> Command {
         parse_line(line).expect("line parsed").expect("a command")
