@@ -17,7 +17,7 @@ use crate::analysis::symbols::SymbolId;
 use crate::common::{ComponentKind, DriverType, Flow};
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticPayload};
-use crate::syntax::ast::{AstNode, match_arm_children};
+use crate::syntax::ast::{AstNode, if_arm_children, match_arm_children};
 use crate::syntax::payload::AstNodePayload;
 
 #[derive(Debug)]
@@ -582,41 +582,28 @@ fn collect_block_drivers(
                 }
             }
             AstNodePayload::If => {
-                // Children: [guard_0?, body_0, guard_1?, body_1, ...]
-                // when arms have guard + body (2 children), else arms have only body (1 child)
+                // Each `when` arm contributes (guard, body) and each `else`
+                // arm contributes (None, body).  `if_arm_children` pairs the
+                // children by the grammar's encoding (2 per `when`, 1 per
+                // `else`); an `is_expr()` test cannot be used to tell arms
+                // apart because an `else` body may itself be an `If`/`Match`
+                // node, which `is_expr()` reports as an expression.
                 let children = stmt.children();
                 let mut clause_drivers: Vec<(Location, IndexMap<ComponentId, Vec<Driver>>)> = vec![];
                 let mut else_drivers: IndexMap<ComponentId, Vec<Driver>> = IndexMap::new();
 
-                let mut idx = 0;
-                while let Some(first) = children.get(idx) {
-                    if first.is_expr() {
-                        // when arm: guard + body
-                        let guard = first;
-                        if let Some(body) = children.get(idx + 1) {
-                            let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
-                                collect_block_drivers(body.children(), component_analysis, it_context, true, initials)
-                            } else {
-                                // nested if/match or bare expr - recurse as single stmt
-                                collect_block_drivers(vec![body.clone()], component_analysis, it_context, true, initials)
-                            };
-                            diagnostics.append(&mut body_diags);
-                            flag_duplicate_clause_drivers(&body_drivers, component_analysis, &stmt, &mut diagnostics);
-                            clause_drivers.push((guard.location(), body_drivers));
-                        }
-                        idx += 2;
+                for (guard, body) in if_arm_children(&children) {
+                    let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
+                        collect_block_drivers(body.children(), component_analysis, it_context, true, initials)
                     } else {
-                        // else arm: body only
-                        let body = first;
-                        let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
-                            collect_block_drivers(body.children(), component_analysis, it_context, true, initials)
-                        } else {
-                            collect_block_drivers(vec![body.clone()], component_analysis, it_context, true, initials)
-                        };
-                        diagnostics.append(&mut body_diags);
-                        flag_duplicate_clause_drivers(&body_drivers, component_analysis, &stmt, &mut diagnostics);
-                        else_drivers = body_drivers;
-                        idx += 1;
+                        // nested if/match or bare expr - recurse as single stmt
+                        collect_block_drivers(vec![body.clone()], component_analysis, it_context, true, initials)
+                    };
+                    diagnostics.append(&mut body_diags);
+                    flag_duplicate_clause_drivers(&body_drivers, component_analysis, &stmt, &mut diagnostics);
+                    match guard {
+                        Some(guard) => clause_drivers.push((guard.location(), body_drivers)),
+                        None => else_drivers = body_drivers,
                     }
                 }
 

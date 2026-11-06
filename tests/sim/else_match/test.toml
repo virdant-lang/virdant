@@ -1,0 +1,2 @@
+kind = "sim"
+description = "Statement-level `else match` arm in a reg driver block is not dropped."

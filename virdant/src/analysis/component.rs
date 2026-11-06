@@ -14,7 +14,7 @@ use crate::analysis::symbols::{Symbol, SymbolId, SymbolKind};
 use crate::common::source::Region;
 use crate::db::Builder;
 use crate::package::PackageId;
-use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children};
+use crate::syntax::ast::{AstNode, AstNodeId, if_arm_children, match_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 use crate::types::substitute::substitute;
@@ -1066,37 +1066,23 @@ fn collect_references(
                 }
             }
             AstNodePayload::If => {
+                // Pair children via `if_arm_children` (2 per `when` arm, 1 per
+                // `else` arm); an `is_expr()` test cannot distinguish arms
+                // because an `else` body may itself be an `If`/`Match` node.
                 let children = stmt.children();
-                let mut idx = 0;
-                while let Some(first) = children.get(idx) {
-                    if first.is_expr() {
-                        // when arm: guard + body
-                        collect_references_in_expr(first, component_analysis, it_context);
-                        if let Some(body) = children.get(idx + 1) {
-                            if matches!(body.payload(), AstNodePayload::ArmBlock) {
-                                collect_references(
-                                    &body.children(),
-                                    component_analysis,
-                                    it_context,
-                                );
-                            } else {
-                                // nested if/match or bare expr - recurse as single stmt
-                                collect_references(&[body.clone()], component_analysis, it_context);
-                            }
-                        }
-                        idx += 2;
+                for (guard, body) in if_arm_children(&children) {
+                    if let Some(guard) = guard {
+                        collect_references_in_expr(guard, component_analysis, it_context);
+                    }
+                    if matches!(body.payload(), AstNodePayload::ArmBlock) {
+                        collect_references(
+                            &body.children(),
+                            component_analysis,
+                            it_context,
+                        );
                     } else {
-                        // else arm: body only
-                        if matches!(first.payload(), AstNodePayload::ArmBlock) {
-                            collect_references(
-                                &first.children(),
-                                component_analysis,
-                                it_context,
-                            );
-                        } else {
-                            collect_references(&[first.clone()], component_analysis, it_context);
-                        }
-                        idx += 1;
+                        // nested if/match or bare expr - recurse as single stmt
+                        collect_references(&[body.clone()], component_analysis, it_context);
                     }
                 }
             }

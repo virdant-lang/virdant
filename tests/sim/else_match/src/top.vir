@@ -1,0 +1,50 @@
+//! Regression test: a statement-level `else match` arm in a reg driver
+//! block must not be dropped.
+//!
+//! `state_else_match` and `state_flat` describe the same FSM.  The first
+//! uses `when reset { ... } else match it { ... }`; the second uses flat
+//! `when` arms.  Both must reach `#Running` after reset deasserts.
+
+enum type State {
+    Idle    = 0w1
+    Running = 1
+}
+
+pub mod Top {
+    incoming clock : Clock
+    incoming reset : Bit
+    incoming go : Bit
+
+    //> `else match` form: must reach #Running.
+    reg state_else_match : State {
+        initial it <= #Idle
+        if {
+            when reset {
+                it <= #Idle
+            }
+            else match it {
+                with #Idle if {
+                    when go {
+                        it <= #Running
+                    }
+                }
+                with #Running {
+                    it <= it
+                }
+            }
+        }
+    }
+
+    //> Flat `when` form: reference behavior.
+    reg state_flat : State {
+        initial it <= #Idle
+        if {
+            when reset {
+                it <= #Idle
+            }
+            when state_flat == #Idle && go {
+                it <= #Running
+            }
+        }
+    }
+}
