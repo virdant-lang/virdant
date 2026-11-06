@@ -187,6 +187,11 @@ pub enum DiagnosticPayload {
     ExpectedPlatform(ExpectedPlatform),
     /// A module's port set is missing a port required by its platform.
     PlatformMissingPort(PlatformMissingPort),
+    /// A module explicitly drives a platform port which it does not
+    /// declare.  Synthesized platform ports may be left untouched (the
+    /// platform `default` drives them), but driving one requires an
+    /// explicit declaration in the mod def.
+    DriveUndeclaredPlatformPort(DriveUndeclaredPlatformPort),
     /// A module declares a port which its platform does not have.
     PlatformExtraPort(PlatformExtraPort),
     /// A module port's direction does not match its platform's port direction.
@@ -542,6 +547,12 @@ pub struct ExpectedPlatform {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlatformMissingPort {
+    pub platform: BString,
+    pub port: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DriveUndeclaredPlatformPort {
     pub platform: BString,
     pub port: BString,
 }
@@ -932,6 +943,7 @@ impl Diagnostic {
             }
             DiagnosticPayload::ExpectedPlatform(d) => format!("Expected a platform: {} is not a platform", d.item).into(),
             DiagnosticPayload::PlatformMissingPort(d) => format!("Module is missing port {} required by platform {}", d.port, d.platform).into(),
+            DiagnosticPayload::DriveUndeclaredPlatformPort(d) => format!("`{}` is declared in platform `{}`, but not declared in this module; declare it explicitly to drive it", d.port, d.platform).into(),
             DiagnosticPayload::PlatformExtraPort(d) => format!("Module has port {} which platform {} does not declare", d.port, d.platform).into(),
             DiagnosticPayload::DefaultOutsidePlatformPort(d) => format!("`default` on outgoing port {} is only allowed in a platform definition", d.port).into(),
             DiagnosticPayload::PlatformPortDirMismatch(d) => {
@@ -1091,6 +1103,7 @@ from_diagnostic! {
     DependsonUndeclared, DependsonUnused,
     InitialForNonReg, InitialMultiple, InitialInsideIfMatch, InitialNoinitialPlatform,
     ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,
+    DriveUndeclaredPlatformPort,
     PlatformPortTypeMismatch, DefaultOutsidePlatformPort, NotYetImplemented, TypeArgCount,
     TypeArgKind, UnknownKind,
     CtorRequiresArgs, ExtModGenerics, NotPub, ReferencedWhileNotPub, UnusedNonPub, TypeNotPub, TopNotPub, TopGenerics, SocketConnectMismatch,

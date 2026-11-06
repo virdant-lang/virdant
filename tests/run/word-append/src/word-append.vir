@@ -10,6 +10,7 @@
 import virt
 
 pub mod WordAppendTest for virt::Virt {
+    outgoing exit : Valid[Word[8]]
     //> Primary clock.
     incoming clock : Clock
 

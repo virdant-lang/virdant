@@ -38,6 +38,12 @@ pub struct ComponentAnalysis {
     /// channels, and platform-synthesized ports do not.
     implicit_clock: Option<ComponentId>,
 
+    /// The platform this mod def is bound to via its `for` clause, when
+    /// the clause resolved to a platform.  Set when platform ports are
+    /// synthesized into this module; used by driver analysis to explain
+    /// that an explicitly driven synthesized port must be declared.
+    platform: Option<SymbolId>,
+
     references: IndexMap<Location, (ComponentId, ReferenceKind)>,
 }
 
@@ -182,6 +188,12 @@ impl ComponentAnalysis {
     pub fn implicit_clock(&self) -> Option<ComponentId> {
         self.implicit_clock
     }
+
+    /// The platform bound by the module's `for` clause, if it resolved
+    /// (see the field docs).
+    pub fn platform(&self) -> Option<SymbolId> {
+        self.platform
+    }
 }
 
 fn drives_channel(role: SocketRole, dir: ChannelDir) -> bool {
@@ -264,6 +276,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
         components: vec![],
         diagnostics: vec![],
         implicit_clock: None,
+        platform: None,
         references: IndexMap::new(),
     };
 
@@ -695,9 +708,16 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     // Ports missing without a `default` remain missing, so
     // `check_platform_ports_for` still reports `PlatformMissingPort`
     // for them.
+    //
+    // Synthesized ports are otherwise left alone: a module may read
+    // them freely, but an *explicit driver* on a synthesized port is an
+    // error (`DriveUndeclaredPlatformPort`, reported by driver
+    // analysis): driving an `outgoing` requires declaring it in the
+    // mod def.
     if matches!(symboltable.symbol(moddef).kind(), SymbolKind::ModDef) {
         match crate::analysis::platform::resolve_platform_for(builder, moddef) {
             Ok(Some(platform_id)) => {
+                component_analysis.platform = Some(platform_id);
                 let platform_ports =
                     crate::analysis::platform::platform_ports_detailed(builder, platform_id);
                 for platform_port in platform_ports {

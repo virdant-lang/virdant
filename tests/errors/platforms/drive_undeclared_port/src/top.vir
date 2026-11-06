@@ -1,0 +1,28 @@
+// Tests the declaration rule for platform ports synthesized from
+// `default <EXPR>` clauses:
+//
+// 1. A module may leave a defaulted platform port undeclared and
+//    undriven: the platform default drives it.
+// 2. A module may declare the port itself and drive it explicitly.
+// 3. A module may *not* drive a platform port it does not declare:
+//    driving an `outgoing` requires declaring it explicitly in the
+//    mod def (`DriveUndeclaredPlatformPort`).
+
+import virt
+
+// `exit` has `default @Invalid()` in `virt::Virt`, so it is legal to
+// omit it entirely. But explicitly driving it without declaring it is
+// an error.
+pub mod Top for virt::Virt {
+    exit := @Valid(0)
+}
+
+// Declaring the port makes driving it legal.
+pub mod Declared for virt::Virt {
+    outgoing exit : Valid[Word[8]] {
+        it := @Valid(0)
+    }
+}
+
+// CHECK: `exit` is declared in platform `Virt`, but not declared in this module; declare it explicitly to drive it
+// CHECK: FAILED with:

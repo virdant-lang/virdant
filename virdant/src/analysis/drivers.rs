@@ -165,7 +165,15 @@ pub(crate) fn build_driver_analysis(
     let component_analysis = builder.get_component_analysis(symbol_id);
 
     let mut initials = IndexMap::new();
-    let (mut drivers, diagnostics) = collect_block_drivers(item_ast.children(), &component_analysis, None, false, &mut initials);
+    // The name of the platform bound by the module's `for` clause, when
+    // platform ports were synthesized into this module.  Used to
+    // explain `DriveUndeclaredPlatformPort` diagnostics.
+    let platform_name = component_analysis
+        .platform()
+        .map(|platform_id| {
+            symboltable.symbol(platform_id).name().to_owned().into()
+        });
+    let (mut drivers, diagnostics) = collect_block_drivers(item_ast.children(), &component_analysis, platform_name.as_ref(), None, false, &mut initials);
 
     // Ports synthesized from platform `default <EXPR>` clauses have no
     // driver statement in the module's own AST: their driver is the
@@ -276,6 +284,7 @@ fn flag_duplicate_clause_drivers(
 fn collect_block_drivers(
     stmts: Vec<AstNode<'_>>,
     component_analysis: &ComponentAnalysis,
+    platform_name: Option<&BString>,
     it_context: Option<&BStr>,
     in_conditional: bool,
     initials: &mut IndexMap<ComponentId, Vec<Location>>,
@@ -343,6 +352,24 @@ fn collect_block_drivers(
                     }
                     continue;
                 };
+
+                // A platform port synthesized into this module (see
+                // `build_component_analysis`) may be left untouched —
+                // the platform `default` drives it — but an explicit
+                // driver requires the port to be declared in the mod
+                // def.  The driver is not recorded, so the platform
+                // default remains in effect and no undriven-port
+                // diagnostics cascade from the error.
+                if component.synthetic() {
+                    diagnostics.push(Diagnostic::new(
+                        stmt.region(),
+                        diagnostics::DriveUndeclaredPlatformPort {
+                            platform: platform_name.cloned().unwrap_or_default(),
+                            port: target_str.clone(),
+                        },
+                    ));
+                    continue;
+                }
 
                 // `initial` statements are not drivers.
                 if is_initial {
@@ -472,12 +499,35 @@ fn collect_block_drivers(
                     let location = stmt.location();
                     match (lhs_component.flow(), rhs_component.flow()) {
                         (Flow::Source, Flow::Sink) => {
-                            result.entry(rhs_component.id()).or_default()
-                                .push(Driver::Bidirectional(location));
+                            // Driving a synthesized platform port through a
+                            // bidirectional connection requires declaring it
+                            // (same rule as explicit drivers).
+                            if rhs_component.synthetic() {
+                                diagnostics.push(Diagnostic::new(
+                                    stmt.region(),
+                                    diagnostics::DriveUndeclaredPlatformPort {
+                                        platform: platform_name.cloned().unwrap_or_default(),
+                                        port: rhs_full_path,
+                                    },
+                                ));
+                            } else {
+                                result.entry(rhs_component.id()).or_default()
+                                    .push(Driver::Bidirectional(location));
+                            }
                         }
                         (Flow::Sink, Flow::Source) => {
-                            result.entry(lhs_component.id()).or_default()
-                                .push(Driver::Bidirectional(location));
+                            if lhs_component.synthetic() {
+                                diagnostics.push(Diagnostic::new(
+                                    stmt.region(),
+                                    diagnostics::DriveUndeclaredPlatformPort {
+                                        platform: platform_name.cloned().unwrap_or_default(),
+                                        port: lhs_full_path,
+                                    },
+                                ));
+                            } else {
+                                result.entry(lhs_component.id()).or_default()
+                                    .push(Driver::Bidirectional(location));
+                            }
                         }
                         _ => {}
                     }
@@ -512,7 +562,7 @@ fn collect_block_drivers(
                         BString::from(name)
                     };
 
-                    let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, Some(name_with_context.as_bstr()), in_conditional, initials);
+                    let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, platform_name, Some(name_with_context.as_bstr()), in_conditional, initials);
                     for (comp_id, mut drivers) in block_drivers {
                         result.entry(comp_id).or_default().append(&mut drivers);
                     }
@@ -542,7 +592,7 @@ fn collect_block_drivers(
                             BString::from(name)
                         };
 
-                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, Some(name_with_context.as_bstr()), in_conditional, initials);
+                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, platform_name, Some(name_with_context.as_bstr()), in_conditional, initials);
                         for (comp_id, mut drivers) in block_drivers {
                             result.entry(comp_id).or_default().append(&mut drivers);
                         }
@@ -573,7 +623,7 @@ fn collect_block_drivers(
                             BString::from(name)
                         };
 
-                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, Some(name_with_context.as_bstr()), in_conditional, initials);
+                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, platform_name, Some(name_with_context.as_bstr()), in_conditional, initials);
                         for (comp_id, mut drivers) in block_drivers {
                             result.entry(comp_id).or_default().append(&mut drivers);
                         }
@@ -594,10 +644,10 @@ fn collect_block_drivers(
 
                 for (guard, body) in if_arm_children(&children) {
                     let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
-                        collect_block_drivers(body.children(), component_analysis, it_context, true, initials)
+                        collect_block_drivers(body.children(), component_analysis, platform_name, it_context, true, initials)
                     } else {
                         // nested if/match or bare expr - recurse as single stmt
-                        collect_block_drivers(vec![body.clone()], component_analysis, it_context, true, initials)
+                        collect_block_drivers(vec![body.clone()], component_analysis, platform_name, it_context, true, initials)
                     };
                     diagnostics.append(&mut body_diags);
                     flag_duplicate_clause_drivers(&body_drivers, component_analysis, &stmt, &mut diagnostics);
@@ -662,10 +712,10 @@ fn collect_block_drivers(
                 let mut else_arm_drivers: Option<IndexMap<ComponentId, Vec<Driver>>> = None;
                 for (pat_opt, body) in match_arm_children(&children) {
                     let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
-                        collect_block_drivers(body.children(), component_analysis, it_context, true, initials)
+                        collect_block_drivers(body.children(), component_analysis, platform_name, it_context, true, initials)
                     } else {
                         // nested if/match or bare expr - recurse as single stmt
-                        collect_block_drivers(vec![body.clone()], component_analysis, it_context, true, initials)
+                        collect_block_drivers(vec![body.clone()], component_analysis, platform_name, it_context, true, initials)
                     };
                     diagnostics.append(&mut body_diags);
                     flag_duplicate_clause_drivers(&body_drivers, component_analysis, &stmt, &mut diagnostics);
@@ -719,10 +769,10 @@ fn collect_block_drivers(
                 // frontiers, by beta-reduction to the binding's RHS.
                 let Some(body) = stmt.let_body() else { continue };
                 let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
-                    collect_block_drivers(body.children(), component_analysis, it_context, in_conditional, initials)
+                    collect_block_drivers(body.children(), component_analysis, platform_name, it_context, in_conditional, initials)
                 } else {
                     // `if`/`match` bodies recurse as a single statement.
-                    collect_block_drivers(vec![body], component_analysis, it_context, in_conditional, initials)
+                    collect_block_drivers(vec![body], component_analysis, platform_name, it_context, in_conditional, initials)
                 };
                 diagnostics.append(&mut body_diags);
                 for (comp_id, mut drivers) in body_drivers {

@@ -1,0 +1,4 @@
+kind = "check"
+description = "Tests that explicitly driving a platform port which the module does not declare is an error, while declaring it makes driving it legal."
+expect = "error"
+filecheck = "src/top.vir"

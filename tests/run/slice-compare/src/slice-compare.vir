@@ -8,6 +8,7 @@
 import virt
 
 pub mod SliceCompareTest for virt::Virt {
+    outgoing exit : Valid[Word[8]]
     //> Primary clock.
     incoming clock : Clock
 
