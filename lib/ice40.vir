@@ -142,7 +142,7 @@ pub platform IceStick {
 @cell("SB_LUT4")
 pub ext mod SbLut4 {
     //> Lookup table output.
-    outgoing O  : Bit
+    outgoing O  : Bit dependson I0, I1, I2, I3
     //> Lookup table input 0.
     incoming I0 : Bit
     //> Lookup table input 1.
@@ -159,7 +159,7 @@ pub ext mod SbLut4 {
 @cell("SB_CARRY")
 pub ext mod SbCarry {
     //> Carry output: `majority(I0, I1, CI)`.
-    outgoing CO : Bit
+    outgoing CO : Bit dependson I0, I1, CI
     //> Carry-chain input 0.
     incoming I0 : Bit
     //> Carry-chain input 1.
@@ -482,7 +482,7 @@ pub ext mod SbIo {
     //> DDR falling-edge output data (unused in SDR modes).
     incoming D_OUT_1           : Bit
     //> Input data (or DDR rising-edge data).
-    outgoing D_IN_0            : Bit
+    outgoing D_IN_0            : Bit dependson PACKAGE_PIN, LATCH_INPUT_VALUE
     //> DDR falling-edge input data (unused in SDR modes).
     outgoing D_IN_1            : Bit
 }
@@ -500,7 +500,7 @@ pub ext mod SbGbIo {
     //> Physical pad connection.
     incoming PACKAGE_PIN          : Bit
     //> Buffered clock distributed onto the global network.
-    outgoing GLOBAL_BUFFER_OUTPUT : Clock
+    outgoing GLOBAL_BUFFER_OUTPUT : Clock dependson PACKAGE_PIN
     //> Latches the input register value when low (bypasses `INPUT_CLK`).
     incoming LATCH_INPUT_VALUE    : Bit
     //> Clock enable shared by the input and output registers.
@@ -516,7 +516,7 @@ pub ext mod SbGbIo {
     //> DDR falling-edge output data (unused in SDR modes).
     incoming D_OUT_1              : Bit
     //> Input data (or DDR rising-edge data).
-    outgoing D_IN_0               : Bit
+    outgoing D_IN_0               : Bit dependson PACKAGE_PIN, LATCH_INPUT_VALUE
     //> DDR falling-edge input data (unused in SDR modes).
     outgoing D_IN_1               : Bit
 }
@@ -529,7 +529,7 @@ pub ext mod SbGb {
     //> Signal to route onto the global network.
     incoming USER_SIGNAL_TO_GLOBAL_BUFFER : Clock
     //> Buffered signal distributed onto the global network.
-    outgoing GLOBAL_BUFFER_OUTPUT         : Clock
+    outgoing GLOBAL_BUFFER_OUTPUT         : Clock dependson USER_SIGNAL_TO_GLOBAL_BUFFER
 }
 
 // SiliconBlue memory cells.
@@ -711,9 +711,9 @@ pub ext mod SbPll40Core {
     //> Reference clock input from design logic.
     incoming REFERENCECLK    : Clock
     //> PLL output routed to fabric (core) resources.
-    outgoing PLLOUTCORE      : Clock
+    outgoing PLLOUTCORE      : Clock dependson REFERENCECLK
     //> PLL output routed onto the global network.
-    outgoing PLLOUTGLOBAL    : Clock
+    outgoing PLLOUTGLOBAL    : Clock dependson REFERENCECLK
     //> External feedback input, used when the feedback path is routed
     //> off-chip.
     incoming EXTFEEDBACK     : Bit
@@ -761,9 +761,9 @@ pub ext mod SbPll40Pad {
     //> Reference clock input from a package pin.
     incoming PACKAGEPIN      : Clock
     //> PLL output routed to fabric (core) resources.
-    outgoing PLLOUTCORE      : Clock
+    outgoing PLLOUTCORE      : Clock dependson PACKAGEPIN
     //> PLL output routed onto the global network.
-    outgoing PLLOUTGLOBAL    : Clock
+    outgoing PLLOUTGLOBAL    : Clock dependson PACKAGEPIN
     //> External feedback input, used when the feedback path is routed
     //> off-chip.
     incoming EXTFEEDBACK     : Bit
@@ -811,13 +811,13 @@ pub ext mod SbPll40_2Pad {
     //> Reference clock input from a package pin.
     incoming PACKAGEPIN      : Clock
     //> First PLL output routed to fabric (core) resources.
-    outgoing PLLOUTCOREA     : Clock
+    outgoing PLLOUTCOREA     : Clock dependson PACKAGEPIN
     //> First PLL output routed onto the global network.
-    outgoing PLLOUTGLOBALA   : Clock
+    outgoing PLLOUTGLOBALA   : Clock dependson PACKAGEPIN
     //> Second PLL output routed to fabric (core) resources.
-    outgoing PLLOUTCOREB     : Clock
+    outgoing PLLOUTCOREB     : Clock dependson PACKAGEPIN
     //> Second PLL output routed onto the global network.
-    outgoing PLLOUTGLOBALB   : Clock
+    outgoing PLLOUTGLOBALB   : Clock dependson PACKAGEPIN
     //> External feedback input, used when the feedback path is routed
     //> off-chip.
     incoming EXTFEEDBACK     : Bit
@@ -866,13 +866,13 @@ pub ext mod SbPll40_2fCore {
     //> Reference clock input from design logic.
     incoming REFERENCECLK    : Clock
     //> First PLL output routed to fabric (core) resources.
-    outgoing PLLOUTCOREA     : Clock
+    outgoing PLLOUTCOREA     : Clock dependson REFERENCECLK
     //> First PLL output routed onto the global network.
-    outgoing PLLOUTGLOBALA   : Clock
+    outgoing PLLOUTGLOBALA   : Clock dependson REFERENCECLK
     //> Second PLL output routed to fabric (core) resources.
-    outgoing PLLOUTCOREB     : Clock
+    outgoing PLLOUTCOREB     : Clock dependson REFERENCECLK
     //> Second PLL output routed onto the global network.
-    outgoing PLLOUTGLOBALB   : Clock
+    outgoing PLLOUTGLOBALB   : Clock dependson REFERENCECLK
     //> External feedback input, used when the feedback path is routed
     //> off-chip.
     incoming EXTFEEDBACK     : Bit
@@ -921,13 +921,13 @@ pub ext mod SbPll40_2fPad {
     //> Reference clock input from a package pin.
     incoming PACKAGEPIN      : Clock
     //> First PLL output routed to fabric (core) resources.
-    outgoing PLLOUTCOREA     : Clock
+    outgoing PLLOUTCOREA     : Clock dependson PACKAGEPIN
     //> First PLL output routed onto the global network.
-    outgoing PLLOUTGLOBALA   : Clock
+    outgoing PLLOUTGLOBALA   : Clock dependson PACKAGEPIN
     //> Second PLL output routed to fabric (core) resources.
-    outgoing PLLOUTCOREB     : Clock
+    outgoing PLLOUTCOREB     : Clock dependson PACKAGEPIN
     //> Second PLL output routed onto the global network.
-    outgoing PLLOUTGLOBALB   : Clock
+    outgoing PLLOUTGLOBALB   : Clock dependson PACKAGEPIN
     //> External feedback input, routed back from one of the PLL outputs for
     //> feedback-divider configurations.
     incoming EXTFEEDBACK     : Bit
@@ -1017,11 +1017,11 @@ pub ext mod SbRgbaDrv {
     //> PWM input for channel 2.
     incoming RGB2PWM  : Bit
     //> Channel 0 driver output.
-    outgoing RGB0     : Bit
+    outgoing RGB0     : Bit dependson CURREN, RGBLEDEN, RGB0PWM
     //> Channel 1 driver output.
-    outgoing RGB1     : Bit
+    outgoing RGB1     : Bit dependson CURREN, RGBLEDEN, RGB1PWM
     //> Channel 2 driver output.
-    outgoing RGB2     : Bit
+    outgoing RGB2     : Bit dependson CURREN, RGBLEDEN, RGB2PWM
 }
 
 //> Configurable RGB LED driver with an internal current source.
@@ -1044,11 +1044,11 @@ pub ext mod SbRgbDrv {
     //> Power-up enable for the internal current source.
     incoming RGBPU    : Bit
     //> Channel 0 driver output.
-    outgoing RGB0     : Bit
+    outgoing RGB0     : Bit dependson RGBLEDEN, RGB0PWM
     //> Channel 1 driver output.
-    outgoing RGB1     : Bit
+    outgoing RGB1     : Bit dependson RGBLEDEN, RGB1PWM
     //> Channel 2 driver output.
-    outgoing RGB2     : Bit
+    outgoing RGB2     : Bit dependson RGBLEDEN, RGB2PWM
 }
 
 //> Constant-current driver for a single external LED.
@@ -1057,7 +1057,7 @@ pub ext mod SbLedDrvCur {
     //> Enables the constant-current driver.
     incoming EN    : Bit
     //> Current-source output driving the external LED.
-    outgoing LEDPU : Bit
+    outgoing LEDPU : Bit dependson EN
 }
 
 //> The iCE40 UltraPlus LED driver interface, a register file controlling
@@ -1385,11 +1385,11 @@ pub ext mod SbMac16 {
     //> Sign-extension input, for cascading multiple `SB_MAC16` cells.
     incoming SIGNEXTIN   : Bit
     //> 32-bit multiply-accumulate result.
-    outgoing O           : Word[32]
+    outgoing O           : Word[32] dependson A, B, C, D, CI, ACCUMCI, SIGNEXTIN, ADDSUBTOP, ADDSUBBOT, OLOADTOP, OLOADBOT
     //> Carry-out from the adder.
-    outgoing CO          : Bit
+    outgoing CO          : Bit dependson A, B, C, D, CI, ADDSUBTOP, ADDSUBBOT
     //> Carry-out from the accumulator.
-    outgoing ACCUMCO     : Bit
+    outgoing ACCUMCO     : Bit dependson A, B, C, D, ACCUMCI, SIGNEXTIN, OLOADTOP, OLOADBOT, ADDSUBTOP, ADDSUBBOT
     //> Sign-extension output, for cascading multiple `SB_MAC16` cells.
-    outgoing SIGNEXTOUT  : Bit
+    outgoing SIGNEXTOUT  : Bit dependson SIGNEXTIN
 }

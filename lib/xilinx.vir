@@ -115,8 +115,8 @@ pub platform ArtyA7_100T {
 //> output and `O5` sharing only the five lower inputs.
 @cell("LUT6_2")
 pub ext mod Lut6_2 {
-    outgoing O6 : Bit
-    outgoing O5 : Bit
+    outgoing O6 : Bit dependson I5, I4, I3, I2, I1, I0
+    outgoing O5 : Bit dependson I4, I3, I2, I1, I0
     incoming I5 : Bit
     incoming I4 : Bit
     incoming I3 : Bit
@@ -157,5 +157,5 @@ pub ext mod Fdce {
 @cell("BUFG")
 pub ext mod Bufg {
     incoming I : Clock
-    outgoing O : Clock
+    outgoing O : Clock dependson I
 }
