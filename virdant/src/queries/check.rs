@@ -9,7 +9,8 @@ use bstr::BString;
 use bstr::ByteSlice;
 use indexmap::IndexMap;
 
-use crate::analysis::symbols::{SymbolId, SymbolKind};
+use crate::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
+use crate::analysis::Location;
 use crate::common::graph::{Graph, VertIndex};
 use crate::common::source::Region;
 use crate::common::WordValue;
@@ -145,6 +146,11 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
 
     // Check for recursive module instantiations.
     check_mod_cycles(builder, &mut diagnostics);
+
+    // `@noinitial` platforms: every module reachable through the module
+    // hierarchy from a top module bound to such a platform must not
+    // contain `initial` statements.
+    check_platform_noinitial(builder, &mut diagnostics);
 
     // Check for combinational loops in module dependency graphs.
     // The check runs over each module's potentiality graph: local
@@ -559,6 +565,174 @@ fn check_enum_unknown_width(builder: &mut Builder, diagnostics: &mut Vec<Diagnos
             ));
         }
     }
+}
+
+/// For every top module bound (`for`) to a `@noinitial` platform, walk
+/// the module hierarchy reachable from that top (the top itself
+/// included) and flag each `initial` statement as
+/// `InitialNoinitialPlatform`, naming the instantiation chain from the
+/// top module down to the module containing the statement.  Each
+/// `initial` statement is flagged at most once, even when reachable
+/// through several tops or platforms.
+fn check_platform_noinitial(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let symboltable = builder.get_symboltable();
+
+    // Tops: modules whose `for` clause resolves to a `@noinitial`
+    // platform.
+    let mut tops: Vec<(SymbolId, BString)> = vec![];
+    for item in symboltable.items() {
+        if item.kind() != SymbolKind::ModDef {
+            continue;
+        }
+        let platform_id = match crate::analysis::platform::resolve_platform_for(builder, item.id())
+        {
+            Ok(Some(platform_id)) => platform_id,
+            Ok(None) | Err(_) => continue,
+        };
+        if !crate::analysis::platform::platform_noinitial(builder, platform_id) {
+            continue;
+        }
+        let platform_name: BString = symboltable.symbol(platform_id).name().to_owned().into();
+        tops.push((item.id(), platform_name));
+    }
+    if tops.is_empty() {
+        return;
+    }
+
+    let mut flagged: indexmap::IndexSet<Location> = indexmap::IndexSet::new();
+    for (top_id, platform_name) in tops {
+        flag_initials_under_top(builder, top_id, &platform_name, &mut flagged, diagnostics);
+    }
+}
+
+/// Walk the module hierarchy reachable from one top module (the top
+/// itself included) and push an `InitialNoinitialPlatform` diagnostic
+/// for each `initial` statement found, naming the instantiation chain
+/// from the top module down to the module containing the statement.
+/// An `initial` statement whose RHS location is already in `flagged`
+/// is skipped, so a statement reachable through several tops is
+/// reported once.
+fn flag_initials_under_top(
+    builder: &mut Builder,
+    top_id: SymbolId,
+    platform_name: &BString,
+    flagged: &mut indexmap::IndexSet<Location>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let symboltable = builder.get_symboltable();
+
+    // Breadth-first walk from the top.  `parents[child]` is the
+    // module that instantiates `child`, so each reachable module's
+    // chain up to the top can be reconstructed.  Mark-on-enqueue
+    // keeps each module visited once and its parent the shortest
+    // instantiation chain.
+    let mut visited: indexmap::IndexSet<SymbolId> = indexmap::IndexSet::new();
+    visited.insert(top_id);
+    let mut parents: IndexMap<SymbolId, SymbolId> = IndexMap::new();
+    let mut queue: std::collections::VecDeque<SymbolId> = std::collections::VecDeque::new();
+    queue.push_back(top_id);
+    while let Some(mod_id) = queue.pop_front() {
+
+        let module_path = module_path_to_top(&symboltable, &parents, mod_id);
+
+        flag_module_initials(builder, mod_id, &module_path, platform_name, flagged, diagnostics);
+
+        for target in instantiation_targets(builder, mod_id) {
+            if visited.insert(target) {
+                parents.insert(target, mod_id);
+                queue.push_back(target);
+            }
+        }
+    }
+}
+
+/// Chain of fully-qualified module names (`package::Mod`, as the
+/// `ModuleCycle` diagnostic prints them) following the `parents`
+/// instantiation chain from `mod_id` back to its top module, ordered
+/// top module -> ... -> `mod_id`.
+fn module_path_to_top(
+    symboltable: &SymbolTable,
+    parents: &IndexMap<SymbolId, SymbolId>,
+    mod_id: SymbolId,
+) -> Vec<BString> {
+    let mut module_path: Vec<BString> = vec![];
+    let mut cur = mod_id;
+    loop {
+        module_path.push(mod_fqn(symboltable, cur));
+        match parents.get(&cur) {
+            Some(&parent) => cur = parent,
+            None => break,
+        }
+    }
+    module_path.reverse();
+    module_path
+}
+
+/// Fully-qualified name of a symbol (`package::Name`).
+fn mod_fqn(symboltable: &SymbolTable, id: SymbolId) -> BString {
+    symboltable.symbol(id).fqn().to_owned().into()
+}
+
+/// Push an `InitialNoinitialPlatform` diagnostic for every `initial`
+/// statement in `mod_id`, naming `module_path` as the instantiation
+/// chain the statement is reachable through.  An `initial` statement
+/// whose RHS location is already in `flagged` is skipped.
+fn flag_module_initials(
+    builder: &mut Builder,
+    mod_id: SymbolId,
+    module_path: &[BString],
+    platform_name: &BString,
+    flagged: &mut indexmap::IndexSet<Location>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let driver_analysis = builder.get_driver_analysis(mod_id);
+    for (_comp_id, locs) in driver_analysis.initials() {
+        for loc in locs {
+            if flagged.insert(*loc) {
+                diagnostics.push(Diagnostic::new(
+                    crate::queries::check_initial::initial_stmt_region(builder, loc),
+                    diagnostics::InitialNoinitialPlatform {
+                        platform: platform_name.clone(),
+                        path: module_path.to_owned(),
+                    },
+                ));
+            }
+        }
+    }
+}
+
+/// SymbolIds of the ModDefs a module instantiates via its `mod X of Y`
+/// statements.  Unresolvable targets and non-ModDef targets are
+/// skipped (they are reported elsewhere).
+fn instantiation_targets(builder: &mut Builder, mod_id: SymbolId) -> Vec<SymbolId> {
+    let symboltable = builder.get_symboltable();
+    let symbol = symboltable.symbol(mod_id);
+    let location = symbol.location();
+    let parsing = builder.get_parsing(location.package());
+    let node = parsing.ast_node(location.ast_node_id());
+
+    let mut result = vec![];
+    for stmt in node.children() {
+        let AstNodePayload::Submodule(_submodule) = stmt.payload() else { continue };
+        let ofness_node = stmt.child(1);
+        let AstNodePayload::Ofness(ofness) = ofness_node.payload() else { continue };
+        let packages = builder.get_packages();
+        let target_package: Option<PackageId> = match ofness.package {
+            Some(pkg) => packages.id(parsing.string(pkg)),
+            None => Some(location.package()),
+        };
+        let target_name = parsing.string(ofness.name);
+        let Some(target_symbol) =
+            target_package.and_then(|pkg| symboltable.resolve_item(target_name, pkg))
+        else {
+            continue;
+        };
+        if target_symbol.kind() != SymbolKind::ModDef {
+            continue;
+        }
+        result.push(target_symbol.id());
+    }
+    result
 }
 
 /// Build a graph of ModDef items, with edges for each `mod X of Y` statement.

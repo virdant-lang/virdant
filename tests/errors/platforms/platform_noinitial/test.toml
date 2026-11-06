@@ -1,0 +1,4 @@
+kind = "check"
+description = "Tests that `initial` statements are forbidden in modules reachable from a top bound to a `@noinitial` platform."
+expect = "error"
+filecheck = "src/top.vir"

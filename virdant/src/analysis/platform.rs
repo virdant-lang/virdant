@@ -5,7 +5,7 @@
 //! item's AST, not queries, and nothing here validates annotation
 //! values or cardinalities (OVERVIEW Decision 13).
 
-use bstr::BString;
+use bstr::{BStr, BString};
 use bstr::ByteSlice;
 
 use crate::analysis::location::Location;
@@ -75,6 +75,28 @@ pub fn platform_ports_detailed(
         });
     }
     result
+}
+
+/// Does this platform carry a bare `@noinitial` annotation?
+///
+/// `@noinitial` marks the platform as forbidding `initial` statements:
+/// every module reachable through the module hierarchy from a top
+/// module bound (`for`) to this platform must not contain any
+/// `initial` statements (checked in `queries/check.rs`).
+pub fn platform_noinitial(builder: &mut Builder, symbol_id: SymbolId) -> bool {
+    let symboltable = builder.get_symboltable();
+    let symbol = symboltable.symbol(symbol_id);
+    debug_assert_eq!(symbol.kind(), SymbolKind::Platform);
+
+    let package = symbol.location().package();
+    let parsing = builder.get_parsing(package);
+    let node = parsing.ast_node(symbol.location().ast_node_id());
+    node.annotations().iter().any(|annotation| {
+        annotation
+            .annotation_name()
+            .map(|name| parsing.string(name) == BStr::new("noinitial"))
+            .unwrap_or(false)
+    })
 }
 
 pub fn platform_fpga(builder: &mut Builder, symbol_id: SymbolId) -> Option<BString> {

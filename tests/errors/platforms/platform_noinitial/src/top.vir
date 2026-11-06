@@ -1,0 +1,70 @@
+// Tests the `@noinitial` platform annotation: a module bound to a
+// `@noinitial` platform, and every module reachable from it through
+// the module hierarchy, may not contain `initial` statements.
+//
+// 1. An `initial` in the top module itself is flagged.
+// 2. An `initial` in a directly instantiated submodule is flagged.
+// 3. An `initial` in a transitively instantiated submodule is flagged.
+// 4. A module NOT reachable from the top keeps its `initial`.
+
+@noinitial
+platform Virt {
+    incoming clock : Clock
+    outgoing led : Word[4]
+}
+
+pub mod Top for Virt {
+    incoming clock : Clock
+    outgoing led : Word[4]
+
+    reg counter : Word[4]
+    // CHECK: initial statement appears in platform Virt with @noinitial: top::Top
+    initial counter <= 0
+    counter <= counter + 1
+
+    mod sub of Sub {
+        it.clock := clock
+        led := it.out
+    }
+}
+
+mod Sub {
+    incoming clock : Clock
+    outgoing out : Word[4] {
+        it := stage
+    }
+
+    reg stage : Word[4]
+    // CHECK: initial statement appears in platform Virt with @noinitial: top::Top top::Sub
+    initial stage <= 1
+    stage <= stage + 1
+
+    mod leaf of Leaf {
+        it.clock := clock
+        unused it.out
+    }
+}
+
+mod Leaf {
+    incoming clock : Clock
+    outgoing out : Word[4] {
+        it := deep
+    }
+
+    reg deep : Word[4]
+    // CHECK: initial statement appears in platform Virt with @noinitial: top::Top top::Sub top::Leaf
+    initial deep <= 2
+    deep <= deep + 1
+}
+
+// Not reachable from Top: its `initial` is fine.
+pub mod Unrelated {
+    incoming clock : Clock
+
+    reg ok : Word[4]
+    initial ok <= 3
+    ok <= ok + 1
+}
+
+// CHECK-NOT: with @noinitial: top::Unrelated
+// CHECK: FAILED with:

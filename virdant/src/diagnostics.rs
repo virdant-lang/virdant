@@ -129,6 +129,11 @@ pub enum DiagnosticPayload {
     InitialMultiple(InitialMultiple),
     /// An `initial` statement appears inside an `if` or `match` block.
     InitialInsideIfMatch(InitialInsideIfMatch),
+    /// An `initial` statement appears in a module reachable from a top
+    /// module bound to a `@noinitial` platform.  The path names the
+    /// instantiation chain from the top module down to the module
+    /// containing the `initial` statement.
+    InitialNoinitialPlatform(InitialNoinitialPlatform),
     /// A combinational loop was detected in a module's dependency graph.
     /// All edges in the cycle are combinational, which would causal, which would cause
     /// simulation to never converge.
@@ -493,6 +498,14 @@ pub struct InitialMultiple {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitialInsideIfMatch {
     pub target: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InitialNoinitialPlatform {
+    pub platform: BString,
+    /// Fully-qualified module names, from the top module bound to the
+    /// platform down to the module containing the `initial` statement.
+    pub path: Vec<BString>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -868,6 +881,19 @@ impl Diagnostic {
                     d.target,
                 ).into()
             }
+            DiagnosticPayload::InitialNoinitialPlatform(d) => {
+                let path = d
+                    .path
+                    .iter()
+                    .map(|module| module.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                format!(
+                    "initial statement appears in platform {} with @noinitial: {}",
+                    d.platform,
+                    path,
+                ).into()
+            }
             DiagnosticPayload::CombinationalLoop(d) => {
                 format!(
                     "Combinational loop detected: {}",
@@ -1071,7 +1097,7 @@ from_diagnostic! {
     UnusedOnSink, UnusedOnOutgoingWire,
     CombinationalLoop, DependsonCycle, DependsonBadCarrier, DependsonBadEntry,
     DependsonUndeclared, DependsonUnused,
-    InitialForNonReg, InitialMultiple, InitialInsideIfMatch,
+    InitialForNonReg, InitialMultiple, InitialInsideIfMatch, InitialNoinitialPlatform,
     ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,
     PlatformPortTypeMismatch, DefaultOutsidePlatformPort, NotYetImplemented, TypeArgCount,
     TypeArgKind, UnknownKind,

@@ -1,0 +1,5 @@
+[project]
+name = "platform_noinitial"
+
+[prog]
+top = "top::Top"

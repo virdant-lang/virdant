@@ -72,7 +72,7 @@ pub(crate) fn check_initial(builder: &mut Builder, symbol_id: SymbolId) -> Arc<V
 }
 
 /// Region of the whole `initial` statement, given the location of its RHS expression.
-fn initial_stmt_region(builder: &mut Builder, rhs_loc: &Location) -> Region {
+pub(crate) fn initial_stmt_region(builder: &mut Builder, rhs_loc: &Location) -> Region {
     let parsing = builder.get_parsing(rhs_loc.package());
     let rhs_node = parsing.ast_node(rhs_loc.ast_node_id());
     match rhs_node.parent() {

@@ -51,6 +51,8 @@ Item-level annotations describe the board:
   This determines which toolchain the build flow dispatches to.
 * :vir:`@part("...")` --- the part/package string passed to the place
   and route tool (e.g. :vir:`@part("up5k-sg48")`).
+* :vir:`@noinitial` --- forbids `initial` statements for this board
+  (see `The @noinitial Annotation`_ below).
 
 Each port carries annotations describing its physical wiring:
 
@@ -201,6 +203,34 @@ behavior: a module that omits it gets a missing-port error.
 A `default` clause is not allowed on `outgoing` ports of a module
 itself --- only in platform definitions. The compiler reports
 ``DefaultOutsidePlatformPort`` otherwise.
+
+
+The @noinitial Annotation
+-------------------------
+Some boards or flows require that a design has no `initial`
+statements (for example, when registers must power up in a known
+state determined by the bitstream alone). A platform may declare
+this with the bare `@noinitial` annotation:
+
+.. code-block:: virdant
+
+    @noinitial
+    platform StrictBoard {
+        @pin(35) incoming clock : Clock
+        @pin(39) outgoing led   : Bit
+    }
+
+When a top module is bound to such a platform with a `for` clause,
+`vir check` reports an error (``InitialNoinitialPlatform``) on every
+`initial` statement in that top *and* in every module reachable from
+it through the module hierarchy. Initial values are a property of
+the whole design compiled for the board: an `initial` anywhere in
+the hierarchy would be applied to the netlist, so a single top
+module's annotation governs the entire subtree.
+
+Modules that are not reachable from a `@noinitial` top are
+unaffected, and a platform without the annotation imposes no
+restriction.
 
 
 The Shipped ice40 Platform
