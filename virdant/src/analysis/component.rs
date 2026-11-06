@@ -273,12 +273,12 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     //   builtin `Clock`;
     // - regs/outgoing-regs written without an `on` clause, which need
     //   one unless the module has a unique implicit clock;
-    // - regs/outgoing-regs written with an explicit `on` clause, which
-    //   are redundant when the module has a unique implicit clock
-    //   (and the clause names that clock).
+    // - components of every kind written with an explicit `on` clause,
+    //   which are redundant when the module has a unique implicit
+    //   clock (and the clause names that clock).
     let mut clock_ids: Vec<ComponentId> = vec![];
     let mut regs_without_on: Vec<(BString, Region)> = vec![];
-    let mut regs_with_on: Vec<(BString, Region, BString)> = vec![];
+    let mut written_ons: Vec<(BString, Region, BString)> = vec![];
 
     let symboltable = builder.get_symboltable();
     let location = symboltable.symbol(moddef).location();
@@ -339,9 +339,19 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 .path()
                                 .map(|interned| parsing.string(interned).to_owned());
                             if let Some(written_clock) = written_clock {
-                                regs_with_on.push((path.clone(), clock_node.region(), written_clock));
+                                written_ons.push((path.clone(), clock_node.region(), written_clock));
                             }
                         }
+                    }
+                } else if let Some(clock_node) = stmt.on_clause() {
+                    // Non-reg kinds also carry `on` clauses in the
+                    // grammar (though the clause does nothing there),
+                    // so they take part in the redundancy check too.
+                    let written_clock = clock_node
+                        .path()
+                        .map(|interned| parsing.string(interned).to_owned());
+                    if let Some(written_clock) = written_clock {
+                        written_ons.push((path.clone(), clock_node.region(), written_clock));
                     }
                 }
                 if !components_seen.contains(&path) {
@@ -654,10 +664,12 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
             .and_then(|id| component_analysis.component(id))
             .map(|component| component.path());
         // An explicit `on` clause naming the module's unique clock is
-        // redundant: omitting it has exactly the same meaning.  An `on`
-        // clause referencing anything else (eg, a submodule's clock
-        // output) is load-bearing and stays silent.
-        for (component, region, written_clock) in regs_with_on {
+        // redundant: omitting it has exactly the same meaning — on a
+        // `reg` because the implicit clock covers it, and on every other
+        // kind because the clause is inert.  An `on` clause referencing
+        // anything else (eg, a submodule's clock output) is load-bearing
+        // on a reg and stays silent.
+        for (component, region, written_clock) in written_ons {
             if Some(&written_clock) == implicit_clock_path.as_ref() {
                 component_analysis.diagnostics.push(Diagnostic::new(
                     region,

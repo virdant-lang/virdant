@@ -393,12 +393,27 @@ impl<'p> AstNode<'p> {
         match &self.payload {
             AstNodePayload::Component(component) => {
                 if component.kind == ComponentKind::Reg || component.kind == ComponentKind::OutgoingReg {
-                    for child in self.children().into_iter().skip(2) {
-                        if matches!(child.payload(), AstNodePayload::It | AstNodePayload::DefaultClause | AstNodePayload::DependsonList) {
-                            continue;
-                        }
-                        return Some(child);
+                    self.on_clause()
+                } else {
+                    None
+                }
+            }
+            _ => None
+        }
+    }
+
+    /// The `on <CLOCK>` clause of a component declaration, whatever its
+    /// kind.  Unlike `clock`, which only sees the clause on the kinds it
+    /// actually clocks (`reg`/`outgoing reg`), this sees the clause on
+    /// every component kind, so diagnostics can judge its redundancy.
+    pub fn on_clause(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::Component(_) => {
+                for child in self.children().into_iter().skip(2) {
+                    if matches!(child.payload(), AstNodePayload::It | AstNodePayload::DefaultClause | AstNodePayload::DependsonList) {
+                        continue;
                     }
+                    return Some(child);
                 }
                 None
             }

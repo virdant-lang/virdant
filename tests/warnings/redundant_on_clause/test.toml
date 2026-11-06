@@ -1,5 +1,5 @@
 kind = "check"
 expect = "ok"
 warnings_ok = true
-description = "RedundantOnClause: an explicit `on` clause naming the module's unique clock is redundant and warns; `on` clauses referencing other clocks do not."
+description = "RedundantOnClause: an explicit `on` clause naming the module's unique clock is redundant and warns, on every component kind that can carry one; `on` clauses referencing other clocks do not warn."
 filecheck = "src/redundant_on_clause.vir"

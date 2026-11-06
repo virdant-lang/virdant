@@ -45,8 +45,6 @@ pub enum DiagnosticPayload {
     UnresolvedType(UnresolvedType),
     /// A `reg` component is missing an `on` clause.
     MissingOnClause(MissingOnClause),
-    /// A non-`reg` component has an unexpected `on` clause.
-    UnexpectedOnClause(UnexpectedOnClause),
     /// A `reg` component has an explicit `on` clause naming the module's
     /// unique clock. The module's implicit clock already covers it, so
     /// the `on` clause can be omitted.
@@ -277,11 +275,6 @@ pub struct UnresolvedType {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MissingOnClause {
-    pub component: BString,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UnexpectedOnClause {
     pub component: BString,
 }
 
@@ -707,10 +700,9 @@ impl Diagnostic {
             DiagnosticPayload::UnresolvedItem(d) => format!("Unresolved item {}", d.item).into(),
             DiagnosticPayload::UnresolvedType(d) => format!("Unresolved type {}", d.typ).into(),
             DiagnosticPayload::MissingOnClause(d) => format!("Missing on clause for reg {}", d.component).into(),
-            DiagnosticPayload::UnexpectedOnClause(d) => format!("Unexpected on clause {}", d.component).into(),
             DiagnosticPayload::RedundantOnClause(d) => {
                 format!(
-                    "Redundant `on` clause: `{}` is implicitly clocked by the module's unique clock",
+                    "Redundant `on` clause: `{}`",
                     d.component,
                 ).into()
             }
@@ -1087,7 +1079,7 @@ macro_rules! from_diagnostic {
 from_diagnostic! {
     SyntaxError, ImportCycle, UnresolvedImportError, DuplicateImport, DuplicateItem,
     DuplicateSlot, UnresolvedPackage, UnresolvedItem, UnresolvedType, MissingOnClause,
-    UnexpectedOnClause, RedundantOnClause, WrongDriverType, NoRegDrivers, NoDrivers, MultipleDrivers,
+    RedundantOnClause, WrongDriverType, NoRegDrivers, NoDrivers, MultipleDrivers,
     NetReadWithoutTap, TapNotOnNet,
     DriverForSink, UnresolvedComponent, NotIt, UnresolvedCtor, UnusedSource, ReadFromSink,
     UnfilledHole, ModuleCycle, UnresolvedMethod, WrongType, Unknown, DoesntFit, NotWordType,

@@ -6,7 +6,6 @@
 use bstr::{BStr, ByteSlice};
 use crate::analysis::symbols::SymbolId;
 use crate::types::{ExprRoot, Type, TypingContext};
-use crate::common::ComponentKind;
 use crate::db::Builder;
 use crate::syntax::ast::AstNode;
 use crate::syntax::payload::AstNodePayload;
@@ -34,8 +33,10 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
     let parent_node = node.parent().unwrap();
 
     match parent_node.payload() {
-        AstNodePayload::Component(component) if component.kind == ComponentKind::Reg
-            || component.kind == ComponentKind::OutgoingReg => Some(Type::Clock),
+        // A component's `on <CLOCK>` clause: the expression must
+        // evaluate to the builtin `Clock` type, whatever the component
+        // kind (only `reg`/`outgoing reg` are actually clocked by it).
+        AstNodePayload::Component(_) => Some(Type::Clock),
         AstNodePayload::DefaultClause => {
             // A platform `outgoing ... default <EXPR>` clause: the
             // default expression is typed against the port's declared

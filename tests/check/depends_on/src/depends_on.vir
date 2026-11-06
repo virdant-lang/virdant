@@ -24,7 +24,7 @@ pub ext mod ExternalMux {
 // dependency chain without needing the full expression.
 mod Internal {
     incoming clk : Clock
-    incoming inp  : Word[8] on clk
+    incoming inp  : Word[8]
 
     // reg stores the input value.
     reg stored : Word[8]
@@ -32,7 +32,7 @@ mod Internal {
 
     // outgoing wire reads only the register (a clock edge in
     // between), so it needs no `dependson` list.
-    outgoing out_val : Word[8] on clk {
+    outgoing out_val : Word[8] {
         it := stored
     }
 }
@@ -40,8 +40,8 @@ mod Internal {
 // Top module instantiates everything and wires it up.
 pub mod Top {
     incoming clk      : Clock
-    incoming inp      : Word[8] on clk
-    outgoing final_out : Word[8] on clk
+    incoming inp      : Word[8]
+    outgoing final_out : Word[8]
 
     // Instantiate the PLL
     mod pll of PLL

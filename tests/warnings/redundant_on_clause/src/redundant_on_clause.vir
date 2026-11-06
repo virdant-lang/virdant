@@ -9,17 +9,38 @@ mod RedundantOn {
 
     // Explicit `on` clause naming the module's unique clock.
     reg r : Word[8] on clock
-    // CHECK: Redundant `on` clause: `r` is implicitly clocked by the module's unique clock
+    // CHECK: Redundant `on` clause: `r`
     r <= inp
 
     // Outgoing regs are covered by the same rule.
     outgoing reg oreg : Bit on clock {
-        // CHECK: Redundant `on` clause: `oreg` is implicitly clocked by the module's unique clock
+        // CHECK: Redundant `on` clause: `oreg`
         it <= inp[0]
     }
 
     out := r
     unused oreg
+}
+
+// Every other component kind may carry an `on` clause in the grammar,
+// but only `reg`/`outgoing reg` are clocked by it: on any other kind
+// the clause is inert, so naming the module's unique clock there is
+// redundant too.
+mod RedundantOnOtherKinds {
+    incoming clock : Clock
+    incoming inp : Word[8] on clock
+    // CHECK: Redundant `on` clause: `inp`
+
+    wire internal : Word[8] on clock
+    // CHECK: Redundant `on` clause: `internal`
+    outgoing out : Word[8] dependson inp on clock
+    // CHECK: Redundant `on` clause: `out`
+    outgoing wire out_wire : Word[8] dependson inp on clock
+    // CHECK: Redundant `on` clause: `out_wire`
+
+    internal := inp
+    out_wire := internal
+    out := out_wire
 }
 
 // An `on` clause referencing a submodule's clock output is not

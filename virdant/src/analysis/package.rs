@@ -8,7 +8,6 @@ use indexmap::IndexSet;
 use indexmap::IndexMap;
 use std::sync::Arc;
 
-use crate::common::ComponentKind;
 use crate::db::Builder;
 use crate::diagnostics;
 use crate::diagnostics::Diagnostic;
@@ -182,11 +181,14 @@ impl PackageAnalysis {
             // analysis, which resolves the component types.
             for child_node in node.children() {
                 match child_node.payload() {
-                    AstNodePayload::Component(component) => {
-                        if component.kind == ComponentKind::Reg || component.kind == ComponentKind::OutgoingReg {
-                            if let Some(clock_expr) = child_node.clock() {
-                                self.expr_roots.push(clock_expr.id());
-                            }
+                    AstNodePayload::Component(_component) => {
+                        // Every component kind may carry an `on` clause.
+                        // On `reg`/`outgoing reg` it selects the clock;
+                        // on every other kind it is inert, but it is
+                        // still type-checked and still counts as a use
+                        // of the referenced signal.
+                        if let Some(clock_expr) = child_node.on_clause() {
+                            self.expr_roots.push(clock_expr.id());
                         }
                         for child in child_node.children() {
                             if matches!(child.payload(), AstNodePayload::It) {
