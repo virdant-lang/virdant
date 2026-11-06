@@ -75,6 +75,7 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     // scopes are reported with their own diagnostic rather than as
     // missing drivers.
     check_terminator_style(builder, &mut diagnostics);
+    check_async_not_implemented(builder, &mut diagnostics);
 
     for item in symboltable.items() {
         // Platform items are unvalidated data (they have no drivers
@@ -414,6 +415,38 @@ fn check_default_clauses_in(
 /// Check for enumerants of the same enum type that share the same value.
 /// Only the first duplicate per value is reported (as an Error);
 /// further duplicates for the same value are silently ignored.
+/// The `async` modifier is parsed but not yet implemented. Any use of
+/// `async` on a component is reported as a `NotYetImplemented` error.
+fn check_async_not_implemented(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        let location = item.location();
+        let parsing = builder.get_parsing(location.package());
+        let node = parsing.ast_node(location.ast_node_id());
+        check_async_not_implemented_in(&node, &parsing, diagnostics);
+    }
+}
+
+fn check_async_not_implemented_in(
+    node: &crate::syntax::ast::AstNode<'_>,
+    parsing: &crate::syntax::parsing::Parsing,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for child in node.children() {
+        if let AstNodePayload::Component(component) = child.payload() {
+            if component.is_async {
+                diagnostics.push(Diagnostic::new(
+                    child.region(),
+                    diagnostics::NotYetImplemented {
+                        feature: BString::from("the `async` modifier"),
+                    },
+                ));
+            }
+        }
+        check_async_not_implemented_in(&child, parsing, diagnostics);
+    }
+}
+
 fn check_duplicate_enum_values(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
     let symboltable = builder.get_symboltable();
     for item in symboltable.items() {

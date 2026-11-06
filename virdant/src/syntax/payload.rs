@@ -262,6 +262,8 @@ pub struct Component {
     pub name: InternedString,
     pub kind: ComponentKind,
     pub doc_string: Option<InternedString>,
+    /// Whether the component was declared with the `async` modifier.
+    pub is_async: bool,
 }
 
 #[derive(Clone, Debug)]

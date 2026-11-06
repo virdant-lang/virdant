@@ -116,6 +116,7 @@ pub enum Token {
     #[token(b"wire")]      KwWire,
     #[token(b"submod")]    KwSubmod,
     #[token(b"on")]        KwOn,
+    #[token(b"async")]     KwAsync,
     #[token(b"of")]        KwOf,
     #[token(b"socket")]    KwSocket,
     #[token(b"client")]    KwClient,
