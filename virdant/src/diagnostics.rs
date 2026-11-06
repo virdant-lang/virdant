@@ -114,6 +114,13 @@ pub enum DiagnosticPayload {
     RedundantUnused(RedundantUnused),
     /// A component marked `unused` is actually used in the module.
     UnusedButUsed(UnusedButUsed),
+    /// An `unused` statement marks an `outgoing` (sink) component of
+    /// the module itself.
+    UnusedOnSink(UnusedOnSink),
+    /// An `unused` statement marks an `outgoing wire`.  Declaring an
+    /// outgoing wire already signals the intent to use it, so this
+    /// warns (it is not an error like a plain `outgoing` mark).
+    UnusedOnOutgoingWire(UnusedOnOutgoingWire),
     /// Latched driver from a component to itself
     RedundantDriver(RedundantDriver),
     /// An `initial` statement targets a component which is not a register.
@@ -455,6 +462,16 @@ pub struct RedundantUnused {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnusedButUsed {
+    pub path: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnusedOnSink {
+    pub path: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnusedOnOutgoingWire {
     pub path: BString,
 }
 
@@ -835,6 +852,9 @@ impl Diagnostic {
             }
             DiagnosticPayload::RedundantUnused(d) => format!("Redundant `unused`: {}", d.path).into(),
             DiagnosticPayload::UnusedButUsed(d) => format!("Marked `unused` but used: {}", d.path).into(),
+            DiagnosticPayload::UnusedOnSink(d) => format!("`unused` on outgoing {}", d.path).into(),
+            DiagnosticPayload::UnusedOnOutgoingWire(d) =>
+                format!("Marked `unused` but declared `outgoing wire`: {}", d.path).into(),
             DiagnosticPayload::RedundantDriver(d) => format!("Redundant driver: {}", d.path).into(),
             DiagnosticPayload::InitialForNonReg(d) => {
                 format!("initial targets non-register component {}", d.target).into()
@@ -1006,6 +1026,7 @@ impl Diagnostic {
             | DiagnosticPayload::TrailingSpaces
             | DiagnosticPayload::DependsonUnused(_)
             | DiagnosticPayload::RedundantOnClause(_)
+            | DiagnosticPayload::UnusedOnOutgoingWire(_)
             | DiagnosticPayload::ReferencedWhileNotPub(_)
             | DiagnosticPayload::UnusedNonPub(_) => DiagnosticLevel::Warning,
             DiagnosticPayload::Todo(_) => DiagnosticLevel::Info,
@@ -1047,6 +1068,7 @@ from_diagnostic! {
     CantTruncate, Todo, MatchNotExhaustive, MatchOverlappingArm, InvalidDocstring,
     DuplicateEnumValue, EnumPartiallySpecified, IndexOutOfBounds, IndexRangeOutOfBounds, InvalidIndexRange,
     InvalidWordIndexWidth, IndexNotWordType, RedundantUnused, RedundantDriver, UnusedButUsed,
+    UnusedOnSink, UnusedOnOutgoingWire,
     CombinationalLoop, DependsonCycle, DependsonBadCarrier, DependsonBadEntry,
     DependsonUndeclared, DependsonUnused,
     InitialForNonReg, InitialMultiple, InitialInsideIfMatch,

@@ -1,0 +1,60 @@
+// Tests for the UnusedOnOutgoingWire warning: marking an `outgoing
+// wire` `unused` warns, because declaring an outgoing wire already
+// signals the intent to use it.  Unlike the plain `outgoing` port
+// (an error; see tests/errors/drivers/unused_sink), this is only a
+// warning, and the mark still suppresses the UnusedSource warning for
+// the wire itself.
+
+// Marking an outgoing wire unused warns.
+pub mod MarkedWire {
+    outgoing wire w : Bit {
+        it := true
+    }
+    outgoing out : Bit
+
+    // CHECK: Marked `unused` but declared `outgoing wire`: w
+    // CHECK-NOT: `unused` on outgoing
+    unused w
+
+    out := true
+}
+
+// The it-block alias warns the same way.
+pub mod MarkedWireItAlias {
+    outgoing wire w : Bit {
+        it := true
+        // CHECK: Marked `unused` but declared `outgoing wire`: w
+        unused it
+    }
+    outgoing out : Bit
+
+    out := true
+}
+
+// An outgoing wire marked `unused` does not also warn UnusedSource.
+pub mod MarkedWireNoUnusedSource {
+    outgoing wire w : Bit {
+        it := true
+    }
+    outgoing out : Bit
+
+    // CHECK: Marked `unused` but declared `outgoing wire`: w
+    // CHECK-NOT: Unused signal w
+    unused w
+
+    out := true
+}
+
+// Marking an incoming port unused is the normal case: no warning
+// here.
+pub mod IncomingMarkOk {
+    incoming unused_val : Bit
+    outgoing out : Bit
+
+    // CHECK-NOT: outgoing wire
+    unused unused_val
+
+    out := true
+}
+
+// CHECK: Check OK

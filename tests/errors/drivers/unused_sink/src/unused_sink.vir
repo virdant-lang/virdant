@@ -1,0 +1,88 @@
+// UnusedOnSink: `unused` marks a component as never read.  An
+// `outgoing` port of the module itself is a sink-only component -- it
+// is driven here and read only by the parent -- so marking it
+// `unused` is meaningless and is an error.
+
+// `unused` on the module's own outgoing port.
+pub mod UnusedOutgoingPort {
+    incoming a : Bit
+    outgoing out : Bit dependson a
+
+    // CHECK: `unused` on outgoing out
+    unused out
+
+    out := a
+}
+
+// An `outgoing reg` is Duplex (it can be read internally), so it is
+// not sink-only and may be marked `unused`.
+pub mod OutgoingRegMarkOk {
+    incoming clock : Clock
+    incoming inp : Bit
+    outgoing reg oreg : Bit {
+        it <= inp
+    }
+
+    // CHECK-NOT: `unused` on outgoing
+    unused oreg
+}
+
+// The it-block alias on an outgoing reg likewise stays legal.
+pub mod OutgoingRegItAliasOk {
+    incoming clock : Clock
+    incoming inp : Bit
+    outgoing reg oreg : Bit {
+        it <= inp
+        // CHECK-NOT: `unused` on outgoing
+        unused it
+    }
+}
+
+// An `outgoing wire` is likewise Duplex, not sink-only.
+pub mod OutgoingWireMarkOk {
+    outgoing wire w : Bit {
+        it := true
+    }
+
+    // CHECK-NOT: `unused` on outgoing
+    unused w
+}
+
+// `unused` on a submodule's outgoing port is fine: from this module's
+// perspective that port is a source, and the mark means it is never
+// read here.
+pub mod UnusedSubOutgoing {
+    outgoing out : Bit
+
+    mod ha of HalfAdder {
+        it.a := false
+        it.b := false
+        // CHECK-NOT: `unused` on outgoing
+        unused it.carry_out
+    }
+
+    out := ha.sum
+}
+
+// `unused` on an incoming port is the statement's normal use.
+pub mod UnusedIncoming {
+    incoming unused_val : Bit
+    outgoing out : Bit
+
+    // CHECK-NOT: `unused` on outgoing
+    unused unused_val
+
+    out := true
+}
+
+pub mod HalfAdder {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing sum : Bit dependson a, b
+    outgoing carry_out : Bit dependson a, b
+
+    sum := a ^ b
+    carry_out := a & b
+}
+
+// CHECK: Check failed

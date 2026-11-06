@@ -17,10 +17,7 @@ mod BadEntries {
 
     outgoing out_b2 : Bit dependson inp
     out_b2 := inp
-    unused out_a
-    unused out_b
     unused w
-    unused out_b2
     unused inp
 
     mod sub of Sub

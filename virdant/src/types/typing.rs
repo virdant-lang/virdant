@@ -314,17 +314,50 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
             // false and is flagged as an error.
             let implicitly_used = component_analysis.implicit_clock() == Some(component.id())
                 && has_implicitly_clocked_reg;
-            if unused_marks.contains_key(&path)
-                && (use_locations.contains_key(&path) || implicitly_used)
-            {
-                for location in &unused_marks[&path] {
-                    let region = builder.get_location_region(location.clone());
-                    diagnostics.push(Diagnostic::new(
-                        region,
-                        diagnostics::UnusedButUsed {
-                            path: path.clone(),
-                        },
-                    ));
+            // An `outgoing` port of the module itself is a sink-only
+            // component: it is driven here and read only by the parent,
+            // so `unused` (which means "never read here") is
+            // meaningless on it.  An `outgoing wire` is Duplex
+            // (readable internally), but declaring one already signals
+            // the intent to use it, so marking it `unused` warns
+            // rather than errors.  Socket channels carry other kinds,
+            // so they are not caught here.  The mark itself is not a
+            // read and never triggers ReadFromSink; marking a sink is
+            // only ever the error below.
+            let is_outgoing_sink = component.kind() == Some(ComponentKind::Outgoing)
+                && component.flow() == Flow::Sink;
+            let is_outgoing_wire = component.kind() == Some(ComponentKind::OutgoingWire);
+            if unused_marks.contains_key(&path) {
+                if is_outgoing_sink {
+                    for location in &unused_marks[&path] {
+                        let region = builder.get_location_region(location.clone());
+                        diagnostics.push(Diagnostic::new(
+                            region,
+                            diagnostics::UnusedOnSink {
+                                path: path.clone(),
+                            },
+                        ));
+                    }
+                } else if is_outgoing_wire {
+                    for location in &unused_marks[&path] {
+                        let region = builder.get_location_region(location.clone());
+                        diagnostics.push(Diagnostic::new(
+                            region,
+                            diagnostics::UnusedOnOutgoingWire {
+                                path: path.clone(),
+                            },
+                        ));
+                    }
+                } else if use_locations.contains_key(&path) || implicitly_used {
+                    for location in &unused_marks[&path] {
+                        let region = builder.get_location_region(location.clone());
+                        diagnostics.push(Diagnostic::new(
+                            region,
+                            diagnostics::UnusedButUsed {
+                                path: path.clone(),
+                            },
+                        ));
+                    }
                 }
             }
             if component.can_source()

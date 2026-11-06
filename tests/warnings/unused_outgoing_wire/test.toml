@@ -1,0 +1,5 @@
+kind = "check"
+expect = "ok"
+warnings_ok = true
+description = "Marking an `outgoing wire` `unused` warns: declaring an outgoing wire already signals the intent to use it. (A plain `outgoing` port is an error instead; see tests/errors/drivers/unused_sink.)"
+filecheck = "src/unused_outgoing_wire.vir"

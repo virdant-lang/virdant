@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "An `unused` statement on an `outgoing` (sink) component of the module itself is an error: outgoing ports are driven, not read, so there is nothing to mark unused."
+filecheck = "src/unused_sink.vir"
