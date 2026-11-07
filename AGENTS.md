@@ -20,6 +20,10 @@
 * After changing `virdant.lalrpop`, run `make grammar` to regenerate `GRAMMAR.txt`
 * NEVER run rustfmt (Rust) or any other automatic code formatter without ASKING first.
 
+# Rust
+* Do not name modules `mod.rs`
+* Do not write `#[test]`-style tests unless instructed to
+
 # Versions
 The `VERSION` file in the base directory is the canonical version of Virdant
 

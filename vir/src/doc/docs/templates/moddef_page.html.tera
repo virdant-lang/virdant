@@ -44,6 +44,34 @@
 </div>
 {% endif %}
 
+{% if submodules %}
+<h2>Submodules</h2>
+<div class="table-wrapper">
+<table>
+  <thead>
+    <tr>
+      <th>Instance</th>
+      <th>Module</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for sub in submodules %}
+    <tr>
+      <td><code>{{ sub.instance }}</code></td>
+      <td>
+        {% if sub.href %}
+          <a href="{{ sub.href }}"><code>{{ sub.target }}</code></a>
+        {% else %}
+          <code>{{ sub.target }}</code>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
 {% if sockets %}
 <h2>Sockets</h2>
 <div class="table-wrapper">

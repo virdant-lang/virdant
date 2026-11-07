@@ -4,10 +4,16 @@ expect_files = [
   "build/doc/index.html",
   "build/doc/top/index.html",
   "build/doc/top/Top.html",
+  "build/doc/hierarchy.html",
 ]
 grep = [
   { path = "build/doc/top/index.html", pattern = "package-level docstring" },
   { path = "build/doc/top/Top.html", pattern = "Top module" },
   { path = "build/doc/top/Top.html", pattern = "counter and blinking LED" },
+  { path = "build/doc/top/Top.html", pattern = "Submodules" },
+  { path = "build/doc/top/Top.html", pattern = "blinker" },
+  { path = "build/doc/hierarchy.html", pattern = "blinker" },
+  { path = "build/doc/hierarchy.html", pattern = "top::Blink" },
+  { path = "build/doc/index.html", pattern = "Module hierarchy" },
   { path = "build/doc/builtin/Word.html", pattern = "is an n-bit value" },
 ]

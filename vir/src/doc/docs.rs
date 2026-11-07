@@ -9,7 +9,7 @@ use bstr::{BStr, BString, ByteSlice};
 use serde::Serialize;
 use tera::Tera;
 
-use virdant::analysis::symbols::{SymbolKind, SymbolTable};
+use virdant::analysis::symbols::{Symbol, SymbolId, SymbolKind, SymbolTable};
 use virdant::common::PortDir;
 use virdant::db::Db;
 use virdant::package::{PackageId, PackageTable};
@@ -42,6 +42,7 @@ struct ProjectIndexCtx {
     all_packages: Vec<SidebarPkgCtx>,
     packages: Vec<PackageEntry>,
     items: Vec<ItemEntryCtx>,
+    hierarchy: Option<HierarchyLinkCtx>,
 }
 
 #[derive(Serialize)]
@@ -66,6 +67,7 @@ struct PackageIndexCtx {
     package_name: String,
     package_doc: String,
     items: Vec<PackageItemCtx>,
+    hierarchy: Option<HierarchyLinkCtx>,
 }
 
 #[derive(Clone, Serialize)]
@@ -85,6 +87,58 @@ struct ModdefPageCtx {
     doc_body: String,
     ports: Vec<PortCtx>,
     sockets: Vec<SocketCtx>,
+    submodules: Vec<SubmoduleCtx>,
+    hierarchy: Option<HierarchyLinkCtx>,
+}
+
+#[derive(Clone, Serialize)]
+struct SubmoduleCtx {
+    instance: String,
+    /// The referenced moddef's fully-qualified name (or the reference as
+    /// written, when it does not resolve).
+    target: String,
+    /// Relative link to the target moddef's page, when resolved.
+    href: Option<String>,
+}
+
+/// A resolved submodule instantiation, shared by the module-page listing
+/// and the hierarchy tree.
+struct SubmoduleRef {
+    instance: String,
+    /// The reference as written (package-qualified when qualified).
+    written: String,
+    resolved: Option<Symbol>,
+}
+
+#[derive(Serialize)]
+struct HierarchyPageCtx {
+    style_href: String,
+    all_packages: Vec<SidebarPkgCtx>,
+    top_name: String,
+    /// Pre-rendered `<li>` tree (trusted HTML; rendered with `| safe`).
+    tree_html: String,
+    hierarchy: Option<HierarchyLinkCtx>,
+}
+
+#[derive(Clone, Serialize)]
+struct HierarchyLinkCtx {
+    href: String,
+    top_name: String,
+    /// Whether the page being rendered *is* the hierarchy page (used to
+    /// highlight the sidebar link).
+    is_current: bool,
+}
+
+impl HierarchyLinkCtx {
+    /// Build the sidebar/content link context for the hierarchy page
+    /// from the resolved `[prog] top` info.
+    fn link(hierarchy: &Option<(Symbol, String)>, is_current: bool) -> Option<Self> {
+        hierarchy.as_ref().map(|(_symbol, top_name)| HierarchyLinkCtx {
+            href: "hierarchy.html".to_owned(),
+            top_name: top_name.clone(),
+            is_current,
+        })
+    }
 }
 
 #[derive(Clone, Serialize)]
@@ -110,6 +164,7 @@ struct TypePageCtx {
     name: String,
     doc_body: String,
     definition_text: String,
+    hierarchy: Option<HierarchyLinkCtx>,
 }
 
 #[derive(Clone, Serialize)]
@@ -120,6 +175,7 @@ struct SimplePageCtx {
     name: String,
     doc_body: String,
     definition_text: String,
+    hierarchy: Option<HierarchyLinkCtx>,
 }
 
 // ---------------------------------------------------------------------------
@@ -130,31 +186,35 @@ fn make_tera() -> Result<Tera, tera::Error> {
     let mut tera = Tera::default();
     tera.add_raw_template(
         "base.html.tera",
-        include_str!("templates/base.html.tera"),
+        include_str!("docs/templates/base.html.tera"),
     )?;
     tera.add_raw_template(
         "project_index.html.tera",
-        include_str!("templates/project_index.html.tera"),
+        include_str!("docs/templates/project_index.html.tera"),
     )?;
     tera.add_raw_template(
         "package_index.html.tera",
-        include_str!("templates/package_index.html.tera"),
+        include_str!("docs/templates/package_index.html.tera"),
     )?;
     tera.add_raw_template(
         "moddef_page.html.tera",
-        include_str!("templates/moddef_page.html.tera"),
+        include_str!("docs/templates/moddef_page.html.tera"),
     )?;
     tera.add_raw_template(
         "type_page.html.tera",
-        include_str!("templates/type_page.html.tera"),
+        include_str!("docs/templates/type_page.html.tera"),
     )?;
     tera.add_raw_template(
         "socket_page.html.tera",
-        include_str!("templates/socket_page.html.tera"),
+        include_str!("docs/templates/socket_page.html.tera"),
     )?;
     tera.add_raw_template(
         "fn_page.html.tera",
-        include_str!("templates/fn_page.html.tera"),
+        include_str!("docs/templates/fn_page.html.tera"),
+    )?;
+    tera.add_raw_template(
+        "hierarchy_page.html.tera",
+        include_str!("docs/templates/hierarchy_page.html.tera"),
     )?;
     Ok(tera)
 }
@@ -239,6 +299,7 @@ fn build_sidebar_tree(
 pub fn generate_docs(
     db: &Db,
     out_dir: &Path,
+    top: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(out_dir)?;
 
@@ -343,9 +404,24 @@ pub fn generate_docs(
 
     // Project index (no active package, no current item)
     let project_sidebar = build_sidebar_tree(&packages, &all_items, None, None);
+    // Resolve the top module for the hierarchy page, when one is named.
+    let hierarchy: Option<(Symbol, String)> = match top {
+        Some(top_name) => match resolve_top(symboltable.as_ref(), top_name) {
+            Some(symbol) => Some((symbol, top_name.to_owned())),
+            None => {
+                eprintln!(
+                    "Warning: top module '{top_name}' not found; skipping hierarchy page"
+                );
+                None
+            }
+        },
+        None => None,
+    };
+
     let project_ctx = ProjectIndexCtx {
         style_href: style_href(0),
         all_packages: project_sidebar,
+        hierarchy: HierarchyLinkCtx::link(&hierarchy, false),
         packages: packages
             .ids()
             .map(|pkg| {
@@ -377,6 +453,24 @@ pub fn generate_docs(
     let mut file = std::fs::File::create(&project_index_path)?;
     file.write_all(project_index_html.as_bytes())?;
 
+    // Full module-hierarchy page, rooted at the `[prog] top` module.
+    if let Some((top_symbol, top_name)) = &hierarchy {
+        let hierarchy_sidebar = build_sidebar_tree(&packages, &all_items, None, None);
+        let hierarchy_ctx = HierarchyPageCtx {
+            style_href: style_href(0),
+            all_packages: hierarchy_sidebar,
+            top_name: top_name.clone(),
+            tree_html: build_hierarchy_tree(db, &packages, &symboltable, top_symbol),
+            hierarchy: HierarchyLinkCtx::link(&hierarchy, true),
+        };
+        let hierarchy_html = tera.render(
+            "hierarchy_page.html.tera",
+            &tera::Context::from_serialize(&hierarchy_ctx)?,
+        )?;
+        let mut file = std::fs::File::create(out_dir.join("hierarchy.html"))?;
+        file.write_all(hierarchy_html.as_bytes())?;
+    }
+
     // Per-package pages
     for pkg_data in &pkg_datas {
         let pkg_str: String = packages.name(pkg_data.package).to_str_lossy().into_owned();
@@ -392,6 +486,7 @@ pub fn generate_docs(
             package_name: pkg_str.clone(),
             package_doc: pkg_data.package_doc.clone(),
             items: pkg_data.pkg_items.clone(),
+            hierarchy: HierarchyLinkCtx::link(&hierarchy, false),
         };
         let pkg_index_html = tera.render(
             "package_index.html.tera",
@@ -436,6 +531,7 @@ pub fn generate_docs(
                     entry.name.as_bstr(),
                     entry.doc_body.as_bstr(),
                     &item_sidebar,
+                    HierarchyLinkCtx::link(&hierarchy, false),
                 )?,
                 SymbolKind::StructDef
                 | SymbolKind::UnionDef
@@ -449,6 +545,7 @@ pub fn generate_docs(
                     entry.doc_body.as_bstr(),
                     &item_sidebar,
                     &pkg_str,
+                    HierarchyLinkCtx::link(&hierarchy, false),
                 )?,
                 SymbolKind::SocketDef => render_socket_page_with_sidebar(
                     &tera,
@@ -458,6 +555,7 @@ pub fn generate_docs(
                     entry.doc_body.as_bstr(),
                     &item_sidebar,
                     &pkg_str,
+                    HierarchyLinkCtx::link(&hierarchy, false),
                 )?,
                 SymbolKind::FnDef => render_fn_page_with_sidebar(
                     &tera,
@@ -467,6 +565,7 @@ pub fn generate_docs(
                     entry.doc_body.as_bstr(),
                     &item_sidebar,
                     &pkg_str,
+                    HierarchyLinkCtx::link(&hierarchy, false),
                 )?,
                 _ => continue,
             };
@@ -486,6 +585,222 @@ pub fn generate_docs(
 
 fn first_line(body: &BStr) -> String {
     body.to_str_lossy().lines().next().unwrap_or("").to_owned()
+}
+
+// ---------------------------------------------------------------------------
+// Submodule references
+// ---------------------------------------------------------------------------
+
+/// Resolve a moddef reference as written in an ofness: an optional
+/// package qualifier plus an item name.
+fn resolve_moddef_ref(
+    packages: &PackageTable,
+    symboltable: &SymbolTable,
+    pkg: PackageId,
+    ofness: &virdant::syntax::payload::Ofness,
+    parsing: &Parsing,
+) -> Option<Symbol> {
+    let name = parsing.string(ofness.name);
+    let qualifier = ofness.package.and_then(|q| packages.id(parsing.string(q)));
+    let symbol = match qualifier {
+        Some(qualifier) => symboltable.resolve_item_in_package(name, qualifier),
+        None => symboltable.resolve_item(name, pkg),
+    }?;
+    if symbol.kind == SymbolKind::ModDef {
+        Some(symbol.clone())
+    } else {
+        None
+    }
+}
+
+/// Walk a moddef's AST for submodule instantiations, resolving each
+/// reference through the symbol table.
+fn collect_submodule_refs(
+    packages: &PackageTable,
+    symboltable: &SymbolTable,
+    pkg: PackageId,
+    node: &AstNode<'_>,
+    parsing: &Parsing,
+) -> Vec<SubmoduleRef> {
+    let mut result = Vec::new();
+    for child in node.children() {
+        let AstNodePayload::Submodule(submodule) = child.payload() else {
+            continue;
+        };
+        let AstNodePayload::Ofness(ofness) = child.child(1).payload() else {
+            continue;
+        };
+        let instance = parsing.string(submodule.name).to_str_lossy().into_owned();
+        let written = match ofness.package {
+            Some(q) => format!(
+                "{}::{}",
+                parsing.string(q).to_str_lossy(),
+                parsing.string(ofness.name).to_str_lossy(),
+            ),
+            None => parsing.string(ofness.name).to_str_lossy().into_owned(),
+        };
+        let resolved =
+            resolve_moddef_ref(packages, symboltable, pkg, &ofness, parsing);
+        result.push(SubmoduleRef {
+            instance,
+            written,
+            resolved,
+        });
+    }
+    result
+}
+
+/// Relative href from a doc page to another item's page.  Pages live at
+/// `out_dir/{package}/{item}.html`; `from_pkg` is `None` for root-level
+/// pages (eg, the hierarchy page).
+fn item_page_href(
+    from_depth: usize,
+    from_pkg: Option<&str>,
+    target_pkg: &str,
+    target_name: &str,
+) -> String {
+    let mut href = String::new();
+    for _ in 0..from_depth {
+        href.push_str("../");
+    }
+    match from_pkg {
+        Some(p) if p == target_pkg => href.push_str(target_name),
+        _ => {
+            href.push_str(target_pkg);
+            href.push('/');
+            href.push_str(target_name);
+        }
+    }
+    href.push_str(".html");
+    href
+}
+
+fn html_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
+// Module hierarchy
+// ---------------------------------------------------------------------------
+
+/// Guard against pathological (eg, accidentally cyclical) hierarchies.
+const HIERARCHY_MAX_DEPTH: usize = 64;
+
+/// Resolve the top module named in `virdant.toml` (`[prog] top`): an
+/// exact fully-qualified match first, else a simple-name match across
+/// all moddefs (ambiguous simple names do not resolve).
+fn resolve_top(symboltable: &SymbolTable, top_name: &str) -> Option<Symbol> {
+    let top_bstr = BStr::new(top_name.as_bytes());
+    if let Some(sym) = symboltable
+        .items()
+        .into_iter()
+        .find(|sym| sym.kind == SymbolKind::ModDef && sym.fqn.as_bstr() == top_bstr)
+    {
+        return Some(sym.clone());
+    }
+    let matches: Vec<Symbol> = symboltable
+        .items()
+        .into_iter()
+        .filter(|sym| sym.kind == SymbolKind::ModDef && sym.name.as_bstr() == top_bstr)
+        .collect();
+    match matches.len() {
+        1 => Some(matches.into_iter().next().unwrap()),
+        _ => None,
+    }
+}
+
+/// Render the full instantiation hierarchy rooted at `top` as a nested
+/// `<ul>`/`<li>` tree of `<li>` items (the enclosing `<ul>` is supplied
+/// by the template).
+fn build_hierarchy_tree(
+    db: &Db,
+    packages: &PackageTable,
+    symboltable: &SymbolTable,
+    top: &Symbol,
+) -> String {
+    let mut out = String::new();
+    let mut path: Vec<SymbolId> = Vec::new();
+    hierarchy_node(db, packages, symboltable, top, None, 0, &mut path, &mut out);
+    out
+}
+
+fn hierarchy_node(
+    db: &Db,
+    packages: &PackageTable,
+    symboltable: &SymbolTable,
+    symbol: &Symbol,
+    instance: Option<&str>,
+    depth: usize,
+    path: &mut Vec<SymbolId>,
+    out: &mut String,
+) {
+    let pkg_name = packages
+        .name(symbol.location.package())
+        .to_str_lossy()
+        .into_owned();
+    let item_name = symbol.name.to_str_lossy().into_owned();
+    let href = item_page_href(0, None, &pkg_name, &item_name);
+
+    out.push_str("<li>");
+    if let Some(instance) = instance {
+        out.push_str(&format!("<code>{}</code> \u{2192} ", html_escape(instance)));
+    }
+    out.push_str(&format!(
+        "<a href=\"{href}\">{}</a>",
+        html_escape(&symbol.fqn.to_str_lossy()),
+    ));
+
+    let cyclic = path.contains(&symbol.id);
+    if cyclic || depth >= HIERARCHY_MAX_DEPTH {
+        if cyclic {
+            out.push_str(" <span class=\"hierarchy-cycle\">(recursion)</span>");
+        }
+        out.push_str("</li>");
+        return;
+    }
+    path.push(symbol.id);
+
+    let parsing = db.get_parsing(symbol.location.package());
+    let node = parsing.ast_node(symbol.location.ast_node_id());
+    let refs = collect_submodule_refs(packages, symboltable, symbol.location.package(), &node, &parsing);
+    if !refs.is_empty() {
+        out.push_str("<ul>");
+        for r in &refs {
+            match &r.resolved {
+                Some(target) => hierarchy_node(
+                    db,
+                    packages,
+                    symboltable,
+                    target,
+                    Some(&r.instance),
+                    depth + 1,
+                    path,
+                    out,
+                ),
+                None => {
+                    out.push_str(&format!(
+                        "<li><code>{}</code> \u{2192} {}</li>",
+                        html_escape(&r.instance),
+                        html_escape(&r.written),
+                    ));
+                }
+            }
+        }
+        out.push_str("</ul>");
+    }
+
+    path.pop();
+    out.push_str("</li>");
 }
 
 fn node_kind(node: &AstNode<'_>) -> SymbolKind {
@@ -576,7 +891,7 @@ fn kind_label(kind: &SymbolKind) -> &'static str {
 // ---------------------------------------------------------------------------
 
 fn write_css(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let css = include_str!("templates/style.css");
+    let css = include_str!("docs/templates/style.css");
     std::fs::write(out_dir.join("style.css"), css)?;
     Ok(())
 }
@@ -595,6 +910,7 @@ fn render_moddef_page_with_sidebar(
     item_name: &BStr,
     doc_body: &BStr,
     all_packages: &[SidebarPkgCtx],
+    hierarchy: Option<HierarchyLinkCtx>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let pkg_str = db.get_packages().name(pkg).to_str_lossy().into_owned();
     let name_str: String = item_name.to_str_lossy().into_owned();
@@ -626,12 +942,49 @@ fn render_moddef_page_with_sidebar(
         }
     }
 
+    let submodule_refs = collect_submodule_refs(
+        db.get_packages().as_ref(),
+        symboltable,
+        pkg,
+        node,
+        parsing,
+    );
+    let submodules: Vec<SubmoduleCtx> = submodule_refs
+        .iter()
+        .map(|r| {
+            let (target, href) = match &r.resolved {
+                Some(target) => {
+                    let target_pkg = db
+                        .get_packages()
+                        .name(target.location.package())
+                        .to_str_lossy()
+                        .into_owned();
+                    let target_name = target.name.to_str_lossy().into_owned();
+                    let href = item_page_href(
+                        1,
+                        Some(&pkg_str),
+                        &target_pkg,
+                        &target_name,
+                    );
+                    (target.fqn.to_str_lossy().into_owned(), Some(href))
+                }
+                None => (r.written.clone(), None),
+            };
+            SubmoduleCtx {
+                instance: r.instance.clone(),
+                target,
+                href,
+            }
+        })
+        .collect();
+
     let ctx = ModdefPageCtx {
         style_href: style_href(1),
         all_packages: all_packages.to_vec(),
         package_name: pkg_str.clone(),
         name: name_str,
         doc_body: doc_body.to_str_lossy().into_owned(),
+        submodules,
         ports: ports
             .iter()
             .map(|port| {
@@ -652,6 +1005,7 @@ fn render_moddef_page_with_sidebar(
             })
             .collect(),
         sockets,
+        hierarchy,
     };
 
     Ok(tera.render("moddef_page.html.tera", &tera::Context::from_serialize(&ctx)?)?)
@@ -666,6 +1020,7 @@ fn render_type_page_with_sidebar(
     doc_body: &BStr,
     all_packages: &[SidebarPkgCtx],
     package_name: &str,
+    hierarchy: Option<HierarchyLinkCtx>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let name_str: String = item_name.to_str_lossy().into_owned();
 
@@ -680,6 +1035,7 @@ fn render_type_page_with_sidebar(
         name: name_str,
         doc_body: doc_body.to_str_lossy().into_owned(),
         definition_text: definition_text.to_str_lossy().into_owned(),
+        hierarchy,
     };
 
     Ok(tera.render("type_page.html.tera", &tera::Context::from_serialize(&ctx)?)?)
@@ -693,6 +1049,7 @@ fn render_socket_page_with_sidebar(
     doc_body: &BStr,
     all_packages: &[SidebarPkgCtx],
     package_name: &str,
+    hierarchy: Option<HierarchyLinkCtx>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let name_str: String = item_name.to_str_lossy().into_owned();
 
@@ -706,6 +1063,7 @@ fn render_socket_page_with_sidebar(
         name: name_str,
         doc_body: doc_body.to_str_lossy().into_owned(),
         definition_text: definition_text.to_str_lossy().into_owned(),
+        hierarchy,
     };
 
     Ok(tera.render("socket_page.html.tera", &tera::Context::from_serialize(&ctx)?)?)
@@ -719,6 +1077,7 @@ fn render_fn_page_with_sidebar(
     doc_body: &BStr,
     all_packages: &[SidebarPkgCtx],
     package_name: &str,
+    hierarchy: Option<HierarchyLinkCtx>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let name_str: String = item_name.to_str_lossy().into_owned();
 
@@ -732,6 +1091,7 @@ fn render_fn_page_with_sidebar(
         name: name_str,
         doc_body: doc_body.to_str_lossy().into_owned(),
         definition_text: definition_text.to_str_lossy().into_owned(),
+        hierarchy,
     };
 
     Ok(tera.render("fn_page.html.tera", &tera::Context::from_serialize(&ctx)?)?)
@@ -752,7 +1112,7 @@ fn render_moddef_page(
     doc_body: &BStr,
 ) -> Result<String, Box<dyn std::error::Error>> {
     render_moddef_page_with_sidebar(
-        tera, node, parsing, db, symboltable, pkg, item_name, doc_body, &[],
+        tera, node, parsing, db, symboltable, pkg, item_name, doc_body, &[], None,
     )
 }
 
@@ -765,7 +1125,7 @@ fn render_type_page(
     doc_body: &BStr,
 ) -> Result<String, Box<dyn std::error::Error>> {
     render_type_page_with_sidebar(
-        tera, node, parsing, kind, item_name, doc_body, &[], "",
+        tera, node, parsing, kind, item_name, doc_body, &[], "", None,
     )
 }
 
@@ -777,7 +1137,7 @@ fn render_socket_page(
     doc_body: &BStr,
 ) -> Result<String, Box<dyn std::error::Error>> {
     render_socket_page_with_sidebar(
-        tera, node, parsing, item_name, doc_body, &[], "",
+        tera, node, parsing, item_name, doc_body, &[], "", None,
     )
 }
 
@@ -789,6 +1149,6 @@ fn render_fn_page(
     doc_body: &BStr,
 ) -> Result<String, Box<dyn std::error::Error>> {
     render_fn_page_with_sidebar(
-        tera, node, parsing, item_name, doc_body, &[], "",
+        tera, node, parsing, item_name, doc_body, &[], "", None,
     )
 }

@@ -6,6 +6,13 @@
 {% block content %}
 <h1>Virdant Project</h1>
 
+{% if hierarchy %}
+<p class="hierarchy-link">
+  <a href="{{ hierarchy.href }}">Module hierarchy</a>
+  &mdash; full instantiation tree rooted at <code>{{ hierarchy.top_name }}</code>.
+</p>
+{% endif %}
+
 <h2>Packages</h2>
 <div class="package-cards">
   {% for pkg in packages %}

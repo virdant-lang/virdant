@@ -21,6 +21,16 @@
     </a>
   </div>
 
+  {% if hierarchy %}
+  <div class="sidebar-hierarchy">
+    <a href="{{ style_href }}{{ hierarchy.href }}"
+       class="{% if hierarchy.is_current %}current{% endif %}">
+      <span class="kind-dot kind-dot-mod"></span>
+      Module hierarchy
+    </a>
+  </div>
+  {% endif %}
+
   <div class="sidebar-search">
     <input type="search" id="search-input"
            placeholder="Filter items..."

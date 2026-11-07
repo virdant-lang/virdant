@@ -62,8 +62,12 @@ fn doc(location: &ProjectLocation, open: bool) {
         std::process::exit(1);
     }
 
+    // The hierarchy page is generated only when the project names a top
+    // module via `[prog] top` in `virdant.toml`.
+    let top = common::read_prog_key(&cwd, "top");
+
     let out_dir = cwd.join("build").join("doc");
-    match docs::generate_docs(&db, &out_dir) {
+    match docs::generate_docs(&db, &out_dir, top.as_deref()) {
         Ok(()) => {
             println!("Wrote docs to {}", out_dir.to_string_lossy());
             if open {

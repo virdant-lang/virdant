@@ -1,6 +1,19 @@
 //! This is a package-level docstring for the virdoc test.
 //! It demonstrates how package-level documentation works.
 
+//> A helper module, instantiated by `Top` below.
+//> It demonstrates how submodule listings appear in the docs.
+mod Blink {
+    incoming clock : Clock
+
+    outgoing blink : Bit
+
+    reg counter : Word[24]
+    counter <= counter + 1
+
+    blink := counter[21]
+}
+
 //> Top module with both counter and blinking LED logic.
 //> It also shows how item-level docstrings appear in the docs.
 mod Top {
@@ -11,5 +24,9 @@ mod Top {
     reg counter : Word[32]
     counter <= counter + 1
 
-    led := counter[21]
+    mod blinker of Blink {
+        it.clock := clock
+    }
+
+    led := blinker.blink
 }

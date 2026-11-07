@@ -1,0 +1,20 @@
+{% extends "base.html.tera" %}
+{% block title %}Module Hierarchy{% endblock %}
+{% block breadcrumbs %}
+<a href="{{ style_href }}index.html">Project</a>
+<span class="sep">/</span>
+<span class="current">Module Hierarchy</span>
+{% endblock %}
+{% block content %}
+<h1>Module Hierarchy</h1>
+
+<p>Full instantiation hierarchy rooted at <code>{{ top_name }}</code>.</p>
+
+{% if tree_html %}
+<ul class="hierarchy-tree">
+{{ tree_html | safe }}
+</ul>
+{% else %}
+<p class="empty-state">No submodules.</p>
+{% endif %}
+{% endblock %}

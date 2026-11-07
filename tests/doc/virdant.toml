@@ -1,2 +1,5 @@
 [project]
 name = "virdoc"
+
+[prog]
+top = "top::Top"
