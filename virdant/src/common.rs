@@ -87,6 +87,7 @@ pub enum ComponentKind {
     OutgoingWire,
     OutgoingReg,
     Reg,
+    Memory,
     Wire,
     Bus,
     Net,

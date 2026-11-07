@@ -1,0 +1,64 @@
+// Indexing rules for memory reads (MEMORY_PLAN §4.3, §4.4): a dynamic
+// index must be exactly `Word[k]` where `depth == 2^k` — extra address
+// bits would mean silent truncation — a constant index must name a
+// word in range, and a memory is only readable through an index.
+
+mod TooWide {
+    incoming clock : Clock
+    incoming addr : Word[12]
+    incoming write_data : Word[8]
+    outgoing read_data : Word[8] dependson addr {
+        it := mem[dyn addr]
+    }
+
+    memory mem[16] : Word[8] {
+        // The index must be narrowed explicitly: mem[dyn addr[3..0]].
+        it[dyn addr[4..0]] <= write_data
+    }
+}
+
+mod OutOfRange {
+    incoming clock : Clock
+    incoming write_data : Word[8]
+    outgoing read_data : Word[8] {
+        it := mem[8]
+    }
+
+    // Depth 8: constant indices 0..7 only.
+    memory mem[8] : Word[8] {
+        it[9] <= write_data
+    }
+}
+
+mod BareReference {
+    incoming clock : Clock
+    incoming write_data : Word[8]
+    outgoing read_data : Word[8] {
+        // A memory cannot be read whole.
+        it := mem
+    }
+
+    memory mem[16] : Word[8] {
+        it[0] <= write_data
+    }
+}
+
+mod Slice {
+    incoming clock : Clock
+    incoming write_data : Word[8]
+    outgoing read_data : Word[4] {
+        // A memory cannot be sliced; index it to a word first.
+        it := mem[3..1]
+    }
+
+    memory mem[16] : Word[8] {
+        it[0] <= write_data
+    }
+}
+
+// CHECK: index into memory mem must be exactly Word[4] (depth 2^4), found Word[12]
+// CHECK: index 8 out of range for memory depth 8
+// CHECK: index 9 out of range for memory depth 8
+// CHECK: memory mem must be indexed
+// CHECK: memory mem must be indexed
+// CHECK: Check failed

@@ -463,6 +463,18 @@ impl Typing {
         let subject = node.subject().unwrap();
         let index = node.index().unwrap();
 
+        // A memory read: the subject resolves to a `memory`
+        // component; the index must be exactly `Word[k]` where
+        // `depth == 2^k`, and the result is the element type.
+        {
+            let component_analysis = builder.get_component_analysis(self.item.id());
+            if let Some(component) = component_analysis.component_at(subject.location()) {
+                if component.kind() == Some(ComponentKind::Memory) {
+                    return self.infer_memory_read_dyn(builder, context, node, &subject, &index, component.clone());
+                }
+            }
+        }
+
         // Infer subject type: a must be Word[n]
         let Ok(Some(subject_typ)) = self.infer(builder, context.clone(), &subject) else {
             self.flag_cant_infer(&subject);
@@ -501,6 +513,118 @@ impl Typing {
         Ok(Some(Type::Bit))
     }
 
+    /// Mark a memory read's subject (a bare reference to the memory
+    /// component) as a resolved component reference, mirroring what
+    /// `infer_reference` does for ordinary references.  `infer_reference`
+    /// itself never runs for these subjects — the read paths resolve
+    /// the memory directly so the index rule can use the depth,
+    /// not the element width.
+    fn tag_memory_subject(
+        &mut self,
+        component: &crate::analysis::component::Component,
+        subject: &AstNode<'_>,
+        elem_typ: &Type,
+    ) {
+        let referent = Referent::Component(component.id());
+        self.tags
+            .insert(subject.location(), Tag::ReferentResolution(referent));
+        self.use_component(component.path().as_bstr(), subject.location());
+        // Annotate the subject like `infer_reference` would: the node
+        // is an expression in the tree, and the validate pass flags
+        // un-annotated expression nodes.  (The element type is nominal
+        // here — a bare memory reference is not a valid expression,
+        // but the read node's own type is what consumers use.)
+        self.annotate(subject, elem_typ);
+    }
+
+    /// A dynamic memory read `mem[dyn idx]`: the index must be
+    /// exactly `Word[k]` where `depth == 2^k`, and the read's type is
+    /// the element type.
+    fn infer_memory_read_dyn(
+        &mut self,
+        builder: &mut Builder,
+        context: TypingContext,
+        node: &AstNode<'_>,
+        subject: &AstNode<'_>,
+        index: &AstNode<'_>,
+        component: crate::analysis::component::Component,
+    ) -> Result<Option<Type>, ()> {
+        let Some(element_typ) = component.typ() else {
+            return Err(());
+        };
+        self.tag_memory_subject(&component, subject, &element_typ);
+        self.annotate(node, &element_typ);
+        // An invalid depth was already diagnosed at the declaration;
+        // the node keeps its (element) type and the index is typed
+        // unchecked so the validate pass does not cascade "Missing
+        // annotation" noise.
+        let Some(depth) = component.depth() else {
+            let _ = self.infer(builder, context, index);
+            return Err(());
+        };
+        // The depth is validated as a power of two by the component
+        // analysis; `trailing_zeros` extracts `k` (`depth == 2^k`).
+        let k = depth.trailing_zeros() as Width;
+
+        // The index must be exactly `Word[k]`.
+        let expected = Type::Word(k);
+        match self.infer(builder, context, index)? {
+            Some(actual) if actual == expected => {}
+            Some(actual) => {
+                self.diagnostics.push(Diagnostic::new(
+                    index.region(),
+                    diagnostics::MemoryIndexWidth {
+                        component: component.path(),
+                        expected: k,
+                        got: format!("{actual}").into(),
+                    },
+                ));
+                return Err(());
+            }
+            None => {
+                self.flag_cant_infer(index);
+                return Err(());
+            }
+        }
+
+        self.annotate(node, &element_typ);
+        Ok(Some(element_typ))
+    }
+
+    /// A constant memory read `mem[c]`: the result
+    /// is the element type; the index must name a word in range.
+    fn infer_memory_read_const(
+        &mut self,
+        _builder: &mut Builder,
+        node: &AstNode<'_>,
+        subject: &AstNode<'_>,
+        index: payload::ExprIndex,
+        component: crate::analysis::component::Component,
+    ) -> Result<Option<Type>, ()> {
+        let Some(element_typ) = component.typ() else {
+            return Err(());
+        };
+        self.tag_memory_subject(&component, subject, &element_typ);
+        self.annotate(node, &element_typ);
+        let Some(depth) = component.depth() else {
+            return Err(());
+        };
+
+        if index.index as u32 >= depth {
+            self.diagnostics.push(Diagnostic::new(
+                node.region(),
+                diagnostics::MemoryIndexOutOfRange {
+                    depth,
+                    index: index.index as u32,
+                },
+            ));
+            return Err(());
+        }
+
+        self.annotate(node, &element_typ);
+        Ok(Some(element_typ))
+    }
+
     fn infer_index<'p>(
         &mut self,
         builder: &mut Builder,
@@ -510,6 +634,17 @@ impl Typing {
     ) -> Result<Option<Type>, ()> {
         let subject = node.subject().unwrap();
         let region = node.region();
+
+        // A memory read at a constant index: the
+        // result is the element type; the index must be in range.
+        {
+            let component_analysis = builder.get_component_analysis(self.item.id());
+            if let Some(component) = component_analysis.component_at(subject.location()) {
+                if component.kind() == Some(ComponentKind::Memory) {
+                    return self.infer_memory_read_const(builder, node, &subject, index, component.clone());
+                }
+            }
+        }
         if let Some(subject_typ) = self.infer(builder, context, &subject)? {
             self.typs.insert(subject.id(), subject_typ.clone());
             if let Type::Word(width) = &subject_typ {
@@ -556,6 +691,23 @@ impl Typing {
     ) -> Result<Option<Type>, ()> {
         let subject = node.subject().unwrap();
         let region = node.region();
+
+        // A memory cannot be sliced: index it to a
+        // word first, then slice the word.
+        {
+            let component_analysis = builder.get_component_analysis(self.item.id());
+            if let Some(component) = component_analysis.component_at(subject.location()) {
+                if component.kind() == Some(ComponentKind::Memory) {
+                    self.diagnostics.push(Diagnostic::new(
+                        node.region(),
+                        diagnostics::MemoryUsedWithoutIndex {
+                            component: component.path(),
+                        },
+                    ));
+                    return Err(());
+                }
+            }
+        }
         if let Some(subject_typ) = self.infer(builder, context, &subject)? {
             self.typs.insert(subject.id(), subject_typ.clone());
             if let Type::Word(width) = &subject_typ {
@@ -875,6 +1027,17 @@ impl Typing {
         // collection, so no string manipulation is needed here.
         let component_analysis = builder.get_component_analysis(self.item.id());
         if let Some(component) = component_analysis.component_at(node.location()) {
+            if component.kind() == Some(ComponentKind::Memory) {
+                // A memory is readable only through indexing:
+                // `mem[dyn i]` / `mem[c]`.
+                self.diagnostics.push(Diagnostic::new(
+                    node.region(),
+                    diagnostics::MemoryUsedWithoutIndex {
+                        component: component.path(),
+                    },
+                ));
+                return Err(());
+            }
             if matches!(
                 component.kind(),
                 Some(ComponentKind::Bus) | Some(ComponentKind::Net)

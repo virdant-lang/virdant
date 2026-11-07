@@ -117,11 +117,11 @@ The following words are reserved as keywords and may not be used as identifiers:
     builtin   bus       client    cosi      default   dependson
     dontcare  dyn       else      enum      export    ext
     false     fn        for       if        import    incoming
-    initial   it        let       match     mod       net
-    of        on        outgoing  platform  pub       reg
-    server    soci      socket    submod    struct    tap
-    true      type      union     unused    when      width
-    wire      with
+    initial   it        let       match     memory    mod
+    net       of        on        outgoing  platform  pub
+    reg       server    soci      socket    submod    struct
+    tap       true      type      union     unused    when
+    width     wire      with
 
 
 Literals

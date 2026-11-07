@@ -1,0 +1,211 @@
+//! Self-checking `kind = "run"` test for the `memory` construct
+//! (MEMORY_PLAN §5): a 16-word x 8-bit RAM writes every word over 16
+//! cycles and reads each word back one cycle later; read-during-write
+//! sees the OLD value, so the check at cycle i reads the word written
+//! at cycle i-1.  Each verdict folds into a running `all_ok`; the
+//! simulator exits 0 only if all 15 checks passed.
+
+import virt
+
+//> The RAM under test, with a body holding both the write site and a
+//> combinational read port (the introductory example's shape).
+pub mod Ram {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Write enable.
+    incoming write_enable : Bit
+
+    //> Write address.
+    incoming addr : Word[4]
+
+    //> Read address: a second, asynchronous read port.
+    incoming read_addr : Word[4]
+
+    //> Data to write.
+    incoming write_data : Word[8]
+
+    //> Combinational read of the addressed word.
+    outgoing read_data : Word[8] dependson read_addr {
+        it := mem[dyn read_addr]
+    }
+
+    memory mem[16] : Word[8] {
+        if {
+            when write_enable {
+                it[dyn addr] <= write_data
+            }
+        }
+    }
+}
+
+pub mod RamTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod ram of Ram {
+        it.clock := clock
+        it.write_enable := true
+        it.addr := addr
+        it.read_addr := check_index
+        it.write_data := write_value
+    }
+
+    // Free-running step counter: at cycle i the harness presents
+    // address i and the value 10*i to the RAM.
+    reg index : Word[4] {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    // Lags `index` by one cycle: selects the word written the cycle
+    // before, for readback.
+    reg check_index : Word[4] {
+        initial it <= 0
+        it <= index
+    }
+
+    reg started : Bit {
+        initial it <= false
+        it <= true
+    }
+
+    reg finished : Bit {
+        initial it <= false
+        if {
+            when checking && check_index == 15 {
+                it <= true
+            }
+        }
+    }
+
+    reg all_ok : Bit {
+        initial it <= true
+        if {
+            when checking {
+                it <= it && ram.read_data == expected
+            }
+        }
+    }
+
+    wire checking : Bit {
+        it := started && !finished
+    }
+
+    wire addr : Word[4]
+    wire write_value : Word[8]
+    wire expected : Word[8]
+
+    addr := index
+
+    // The value written at step i is 10*i.
+    match index {
+        with 0 {
+            write_value := 0
+        }
+        with 1 {
+            write_value := 10
+        }
+        with 2 {
+            write_value := 20
+        }
+        with 3 {
+            write_value := 30
+        }
+        with 4 {
+            write_value := 40
+        }
+        with 5 {
+            write_value := 50
+        }
+        with 6 {
+            write_value := 60
+        }
+        with 7 {
+            write_value := 70
+        }
+        with 8 {
+            write_value := 80
+        }
+        with 9 {
+            write_value := 90
+        }
+        with 10 {
+            write_value := 100
+        }
+        with 11 {
+            write_value := 110
+        }
+        with 12 {
+            write_value := 120
+        }
+        with 13 {
+            write_value := 130
+        }
+        with 14 {
+            write_value := 140
+        }
+        with 15 {
+            write_value := 150
+        }
+    }
+
+    // Golden readback for the word written the cycle before.
+    match check_index {
+        with 0 {
+            expected := 0
+        }
+        with 1 {
+            expected := 10
+        }
+        with 2 {
+            expected := 20
+        }
+        with 3 {
+            expected := 30
+        }
+        with 4 {
+            expected := 40
+        }
+        with 5 {
+            expected := 50
+        }
+        with 6 {
+            expected := 60
+        }
+        with 7 {
+            expected := 70
+        }
+        with 8 {
+            expected := 80
+        }
+        with 9 {
+            expected := 90
+        }
+        with 10 {
+            expected := 100
+        }
+        with 11 {
+            expected := 110
+        }
+        with 12 {
+            expected := 120
+        }
+        with 13 {
+            expected := 130
+        }
+        with 14 {
+            expected := 140
+        }
+        with 15 {
+            expected := 150
+        }
+    }
+}

@@ -9,7 +9,8 @@ use std::sync::Arc;
 
 use bstr::ByteSlice;
 
-use crate::analysis::drivers::{Driver, DriverIf, DriverMatch};
+use crate::analysis::drivers::{Driver, DriverIf, DriverMatch, WriteIndex};
+use crate::analysis::memory_image::MemoryImageKind;
 use crate::analysis::location::Location;
 use crate::analysis::symbols::{Symbol, SymbolId, SymbolTable};
 use crate::common::{self, ComponentKind, DriverType, Radix, TypeScheme, Width, WordValue};
@@ -571,6 +572,59 @@ impl<'d> Converter<'d> {
                                 expr: None,
                             }));
                         }
+                        ComponentKind::Memory => {
+                            // A behavioral memory:
+                            // `reg [width-1:0] name [0:depth-1];`.
+                            // Writes are lowered in the second pass
+                            // from the driver analysis; reads are
+                            // ordinary index expressions over the name.
+                            let component_info =
+                                component_analysis.resolve(parsing.string(component.name));
+                            let Some(depth) = component_info.and_then(|c| c.depth()) else {
+                                // Invalid depth: already diagnosed.
+                                continue;
+                            };
+                            elements.push(verilog::Element::Memory(verilog::Memory {
+                                name: valid_verilog_name(&name),
+                                width,
+                                depth,
+                                init: self.memory_image_init(package, &stmt, &name),
+                            }));
+                            // A raw-binary `@image` cannot be emitted as
+                            // `$readmemh`; its words become explicit
+                            // initial assignments instead.
+                            if let Some((MemoryImageKind::Raw, path, _)) =
+                                crate::analysis::memory_image::memory_image_annotation(&parsing, &stmt)
+                            {
+                                let image_path =
+                                    crate::analysis::memory_image::resolve_image_path(
+                                        self.db.project_root(),
+                                        path.as_bstr(),
+                                    );
+                                if let Ok(bytes) = std::fs::read(&image_path) {
+                                    if let Some(words) = crate::analysis::memory_image::parse_raw_image(&bytes, width) {
+                                        let mem_name = valid_verilog_name(&name);
+                                        let stmts: Vec<verilog::Stmt> = words
+                                            .into_iter()
+                                            .enumerate()
+                                            .map(|(index, value)| {
+                                                verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
+                                                    name: format!("{mem_name}[{index}]"),
+                                                    expr: verilog::Expr::WordLit(verilog::expr::WordLit {
+                                                        value,
+                                                        width,
+                                                        radix: Radix::Hex,
+                                                    }),
+                                                })
+                                            })
+                                            .collect();
+                                        if !stmts.is_empty() {
+                                            elements.push(verilog::Element::Initial(verilog::Initial { stmts }));
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         ComponentKind::Bus => {}
                     }
                 }
@@ -657,6 +711,31 @@ impl<'d> Converter<'d> {
                     continue;
                 }
 
+                // A memory's driver tree is its write site: lower it
+                // into the memory's own
+                // sequential always block, with indexed nonblocking
+                // assignments for each write.
+                if component.kind() == Some(ComponentKind::Memory) {
+                    let Some(clock) = component.clock() else {
+                        continue; // unresolved clock: already diagnosed
+                    };
+                    let clock_expr = verilog::Expr::Reference(verilog::expr::Reference {
+                        name: valid_verilog_name(&clock.to_str_lossy()),
+                    });
+                    scheduler.in_sequential = true;
+                    let stmts = self.convert_latched_driver_to_stmts(
+                        package, driver, &typ, &path, &mut scheduler,
+                    );
+                    scheduler.in_sequential = false;
+                    let mut all_stmts = scheduler.drain_sequential_stmts();
+                    all_stmts.extend(stmts);
+                    sequential.push(verilog::Element::Always(verilog::Always {
+                        clock: Some(clock_expr),
+                        stmts: all_stmts,
+                    }));
+                    continue;
+                }
+
                 // Collect holes from this driver tree
                 for region in self.collect_driver_holes(driver) {
                     let message = format!("\"HOLE: ? at {region}\"");
@@ -717,6 +796,7 @@ impl<'d> Converter<'d> {
                         _ => {
                             let expr = self.convert_driver_to_expr(package, driver, &typ, net, &mut scheduler);
                             vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                                index: None,
                                 name: valid_verilog_name(&path),
                                 expr,
                             })]
@@ -802,6 +882,31 @@ impl<'d> Converter<'d> {
         verilog::Module { name: module_name, is_ext: mono.is_none() && moddef.is_ext, ports, elements, origin: module_origin }
     }
 
+    /// The `$readmemh` initialization of an `@image_hex` memory, with
+    /// the image path resolved (absolute) at conversion time so the
+    /// emitted Verilog finds the file from any working directory.
+    /// Raw `@image` files are emitted as explicit
+    /// initial assignments by the caller instead.
+    fn memory_image_init(
+        &self,
+        package: PackageId,
+        stmt: &AstNode<'_>,
+        _name: &str,
+    ) -> Option<verilog::MemoryInit> {
+        let parsing = self.db.get_parsing(package);
+        let Some((MemoryImageKind::Hex, path, _)) =
+            crate::analysis::memory_image::memory_image_annotation(&parsing, stmt)
+        else {
+            return None;
+        };
+        let image_path =
+            crate::analysis::memory_image::resolve_image_path(self.db.project_root(), path.as_bstr());
+        let image_path = std::fs::canonicalize(&image_path).unwrap_or(image_path);
+        Some(verilog::MemoryInit::Readmemh {
+            file: image_path.display().to_string(),
+        })
+    }
+
     /// Recursively collects the region strings of all `?` (hole) nodes in a driver tree.
     fn collect_driver_holes(&self, driver: &Driver) -> Vec<String> {
         match driver {
@@ -809,6 +914,19 @@ impl<'d> Converter<'d> {
                 let parsing = self.db.get_parsing(loc.package());
                 let expr_node = parsing.ast_node(loc.ast_node_id());
                 collect_ast_holes(expr_node, self.db)
+            }
+            Driver::Write { index, rhs, .. } => {
+                let mut holes = vec![];
+                let mut parts = vec![rhs.clone()];
+                if let WriteIndex::Dyn(index) = index {
+                    parts.push(index.clone());
+                }
+                for loc in parts {
+                    let parsing = self.db.get_parsing(loc.package());
+                    let expr_node = parsing.ast_node(loc.ast_node_id());
+                    holes.extend(collect_ast_holes(expr_node, self.db));
+                }
+                holes
             }
             Driver::Bidirectional(_) => vec![],
             Driver::Absent => vec![],
@@ -852,6 +970,7 @@ impl<'d> Converter<'d> {
                 self.convert_expr(package, expr_node, typ, self.db, scheduler)
             }
             Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are emitted directly, not via convert_driver_to_expr"),
+            Driver::Write { .. } => unreachable!("memory write drivers are emitted by convert_memory_writes, not convert_driver_to_expr"),
             Driver::Absent => self.driver_default_expr(typ, net),
             Driver::If(driver_if) => self.convert_driver_when_to_expr(package, driver_if, typ, net, scheduler),
             Driver::Match(driver_match) => self.convert_driver_match_to_expr(package, driver_match, typ, net, scheduler),
@@ -878,6 +997,7 @@ impl<'d> Converter<'d> {
                     .unwrap_or(Strength::Strong)
             }
             Driver::Bidirectional(_) => Strength::Strong,
+            Driver::Write { .. } => Strength::Strong,
             Driver::Absent => Strength::Weak,
             Driver::If(driver_if) => {
                 let mut strength = Strength::Weak;
@@ -1142,11 +1262,36 @@ impl<'d> Converter<'d> {
                 }
                 let expr = self.convert_expr(package, expr_node, typ, self.db, scheduler);
                 vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                    index: None,
                     name: valid_verilog_name(path),
                     expr,
                 })]
             }
             Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are emitted directly, not via convert_latched_driver_to_stmts"),
+            // A memory write: `mem[index] <= rhs`.  `path` is the
+            // memory's name and `typ` its element type.
+            Driver::Write { index, rhs, .. } => {
+                let index_expr = match index {
+                    // A constant index: an unconditional write to one
+                    // word.
+                    WriteIndex::Const(index) => constant_index_expr(*index as Width),
+                    WriteIndex::Dyn(index) => {
+                        let index_parsing = self.db.get_parsing(index.package());
+                        let index_node = index_parsing.ast_node(index.ast_node_id());
+                        let index_typ =
+                            self.node_type(package, &index_node).unwrap_or(Type::Word(32));
+                        self.convert_expr(package, index_node, &index_typ, self.db, scheduler)
+                    }
+                };
+                let rhs_parsing = self.db.get_parsing(rhs.package());
+                let rhs_node = rhs_parsing.ast_node(rhs.ast_node_id());
+                let rhs_expr = self.convert_expr(package, rhs_node, typ, self.db, scheduler);
+                vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                    index: Some(index_expr),
+                    name: valid_verilog_name(path),
+                    expr: rhs_expr,
+                })]
+            }
             // No assignment here: inside a clocked always block, emitting
             // nothing means the register holds its value.
             Driver::Absent => vec![],
@@ -1223,6 +1368,7 @@ impl<'d> Converter<'d> {
             case_items.push(verilog::CaseItem {
                 pattern,
                 stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                    index: None,
                     name: assigned_name.clone(),
                     expr: body_expr,
                 })],
@@ -1233,6 +1379,7 @@ impl<'d> Converter<'d> {
             case_items.push(verilog::CaseItem {
                 pattern: verilog::CasePattern::Default,
                 stmts: vec![verilog::Stmt::AssignNonBlocking(verilog::AssignNonBlocking {
+                    index: None,
                     name: assigned_name.clone(),
                     expr: verilog::Expr::XLit(verilog::expr::XLit { width: result_width }),
                 })],

@@ -11,6 +11,7 @@ pub mod elaboration;
 pub mod platform;
 pub mod ports;
 pub mod structs;
+pub mod memory_image;
 
 pub use location::Location; // TODO remove these pub uses
 pub use package::PackageAnalysis;

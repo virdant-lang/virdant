@@ -7,7 +7,8 @@ and behavior of a module.
 The full set of module body statements includes:
 
 * Component declarations (ports, wires, registers)
-* Driver statements (assignments)
+* Memory declarations (`memory`)
+* Driver statements (assignments, including indexed memory writes)
 * Instance declarations
 * Socket instance declarations
 * Conditional statements (`if`)
@@ -71,6 +72,12 @@ Driver statements assign values to components.
         | Path "#=#" Path
         | Path ":=:" Path
 
+    ModDefStmtIndexedDriver :=
+        Path "[" "dyn" Expr "]" "<=" Expr
+        | Path "[" "dyn" Expr "]" ":=" Expr
+        | Path "[" Nat "]" "<=" Expr
+        | Path "[" Nat "]" ":=" Expr
+
 Combinational assignment :=
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The `:=` operator drives a combinational signal continuously.
@@ -95,13 +102,35 @@ The value is latched on the next rising edge of the register's clock.
 
 The target of `<=` must be a `reg` declaration.
 
+Indexed memory writes
+~~~~~~~~~~~~~~~~~~~~~
+The `<=` operator also writes one word of a `memory` component — the only
+indexed left-hand side in the language. The index is dynamic (`dyn`) or a
+constant, and the write commits on the rising edge of the memory's clock:
+
+.. code-block:: virdant
+
+    memory mem[16] : Word[8]
+    if {
+        when write_enable {
+            mem[dyn addr] <= write_data
+        }
+    }
+
+A dynamic index must be *exactly* `Word[k]` where the depth is `2^k`; a
+constant index must be in range. Inside a memory body the write site may
+use `it` (`it[dyn addr] <= write_data`). A memory has exactly one write
+site, and sibling `when` clauses with non-exclusive guards may not both
+write it. `:=` is accepted in place of `<=` with a warning: a memory write
+always commits on the clock edge.
+
 Bidirectional connection :=:
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The `:=:` operator connects two signals bidirectionally.
 
 .. code-block:: virdant
 
-    memory.mem :=: core.mem
+    memsrv.mem :=: core.mem
 
 Both sides of `:=:` must be socket instances of compatible socket types.
 The operator connects every port in the socket, respecting the direction

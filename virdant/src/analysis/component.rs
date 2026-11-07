@@ -77,6 +77,20 @@ pub struct Component {
     /// `default <EXPR>` expression, which driver analysis turns into
     /// the port's driver.
     default_expr: Option<Location>,
+
+    /// For a `memory` component: the number of words it holds (the
+    /// declared depth, `memory mem[1024] : ...`).  `None` for every
+    /// other kind.  A power of two when `Some`: a non-literal or
+    /// non-power-of-two depth is diagnosed and leaves this `None`.
+    depth: Option<u32>,
+
+    /// For a `memory` component: the path of its resolved clock — the
+    /// `on` clause's clock, or the module's unique `Clock` when the
+    /// clause is omitted (the same resolution as a `reg`'s).  `None`
+    /// for every other kind, and for a
+    /// memory whose slot could not be resolved (zero or ≥2 clocks,
+    /// no clause — already reported as `MissingOnClause`).
+    clock: Option<BString>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -114,6 +128,18 @@ impl Component {
 
     pub fn kind(&self) -> Option<ComponentKind> {
         self.kind
+    }
+
+    /// The declared depth of a `memory` component (`1024` in
+    /// `memory mem[1024] : Word[32]`), or `None` for any other kind.
+    pub fn depth(&self) -> Option<u32> {
+        self.depth
+    }
+
+    /// The resolved clock path of a `memory` component, or `None`
+    /// for any other kind (and for an unresolved memory clock slot).
+    pub fn clock(&self) -> Option<BString> {
+        self.clock.clone()
     }
 
     pub fn location(&self) -> Location {
@@ -201,6 +227,87 @@ fn drives_channel(role: SocketRole, dir: ChannelDir) -> bool {
         (role, dir),
         (SocketRole::Client, ChannelDir::Cosi) | (SocketRole::Server, ChannelDir::Soci)
     )
+}
+
+/// The numeric value of a word-literal spelling (`1024`, `10w1024`,
+/// `0x40`, `0b10`), ignoring `_` separators.  `None` when the spelling
+/// is not a plain literal value (or does not fit in a `u32`).
+fn word_lit_value(spelling: &[u8]) -> Option<u32> {
+    let text = std::str::from_utf8(spelling).ok()?;
+    let text: String = text.chars().filter(|c| *c != '_').collect();
+    let value_text = if let Some(rest) = text.strip_prefix("0b") {
+        return u32::from_str_radix(rest, 2).ok();
+    } else if let Some(rest) = text.strip_prefix("0x") {
+        return u32::from_str_radix(rest, 16).ok();
+    } else if let Some((_, value)) = text.split_once('w') {
+        // A width-annotated literal (`10w1024`): the value part is
+        // what names the depth.
+        value.to_owned()
+    } else {
+        text
+    };
+    value_text.parse::<u32>().ok()
+}
+
+/// Validate the shape of a `memory` declaration:
+/// the depth must be a literal power of two, and the element type
+/// must be `Word[n]` with `n` a power of two.  Diagnostics go to
+/// `diagnostics`; the declared depth is returned when valid (`None`
+/// after an error, so downstream stages can skip the memory).
+fn check_memory_shape(
+    stmt: &AstNode<'_>,
+    typ: Option<&Type>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<u32> {
+    // Element type: `Word[n]` with `n` a power of two.
+    let typ_node = stmt.typ().unwrap();
+    match typ {
+        Some(Type::Word(n)) => {
+            if *n == 0 || (*n & (*n - 1)) != 0 {
+                diagnostics.push(Diagnostic::new(
+                    typ_node.region(),
+                    diagnostics::MemoryElementNotPowerOf2Word {
+                        typ: format!("Word[{n}]").into(),
+                    },
+                ));
+                return None;
+            }
+        }
+        Some(other) => {
+            diagnostics.push(Diagnostic::new(
+                typ_node.region(),
+                diagnostics::MemoryElementNotPowerOf2Word {
+                    typ: format!("{other}").into(),
+                },
+            ));
+            return None;
+        }
+        None => return None, // unresolved type: already diagnosed
+    }
+
+    // Depth: a literal power of two.
+    let depth_expr = stmt.depth_expr()?;
+    let depth = match depth_expr.payload() {
+        AstNodePayload::ExprWordLit(_) => {
+            word_lit_value(stmt.parsing.text(depth_expr.span()))
+        }
+        _ => None,
+    };
+    let Some(depth) = depth else {
+        diagnostics.push(Diagnostic::new(
+            depth_expr.region(),
+            diagnostics::MemoryDepthNotLiteral,
+        ));
+        return None;
+    };
+    if depth == 0 || (depth & (depth - 1)) != 0 {
+        diagnostics.push(Diagnostic::new(
+            depth_expr.region(),
+            diagnostics::MemoryDepthNotPowerOf2 { depth },
+        ));
+        return None;
+    }
+    Some(depth)
 }
 
 /// The `GenericsParams` node of an instantiation (`mod f of Fifo[Word[8]]`,
@@ -324,6 +431,15 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     Err(_) => None,
                 };
 
+                // A `memory` declares its depth as a literal
+                // (`memory mem[1024] : Word[32]`); validate the shape
+                // (both powers of two, depth a literal) and record it.
+                let depth = if component.kind == ComponentKind::Memory {
+                    check_memory_shape(&stmt, typ.as_ref(), &mut component_analysis.diagnostics)
+                } else {
+                    None
+                };
+
                 let flow = match component.kind {
                     ComponentKind::Incoming => Flow::Source,
                     ComponentKind::Outgoing => Flow::Sink,
@@ -331,6 +447,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     ComponentKind::OutgoingReg => Flow::Duplex,
                     ComponentKind::Reg => Flow::Duplex,
                     ComponentKind::Wire => Flow::Duplex,
+                    ComponentKind::Memory => Flow::Duplex,
                     ComponentKind::Bus | ComponentKind::Net => Flow::Duplex,
                 };
                 let component_kind = component.kind;
@@ -343,8 +460,29 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     kind: Some(component_kind),
                     synthetic: false,
                     default_expr: None,
+                    depth,
+                    // The resolved clock slot is filled in below, once
+                    // the module's implicit clock is known.
+                    clock: None,
                 };
-                if matches!(component_kind, ComponentKind::Reg | ComponentKind::OutgoingReg) {
+                // An image ROM never writes, so it needs no clock:
+                // keep it out of the `MissingOnClause` machinery.
+                let memory_needs_clock = component_kind != ComponentKind::Memory
+                    || stmt.children().first().map_or(true, |annotations| {
+                        !annotations.children().iter().any(|annotation| {
+                            matches!(
+                                annotation.payload(),
+                                AstNodePayload::Annotation(annotation)
+                                    if matches!(
+                                        parsing.string(annotation.name).as_bytes(),
+                                        b"image" | b"image_hex"
+                                    )
+                            )
+                        })
+                    });
+                if matches!(component_kind, ComponentKind::Reg | ComponentKind::OutgoingReg)
+                    || (component_kind == ComponentKind::Memory && memory_needs_clock)
+                {
                     match stmt.clock() {
                         None => regs_without_on.push((path.clone(), stmt.region())),
                         Some(clock_node) => {
@@ -459,6 +597,11 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 ComponentKind::Reg => Flow::Duplex,
                                 ComponentKind::Wire => Flow::Duplex,
                                 ComponentKind::Bus | ComponentKind::Net => Flow::Duplex,
+                                // A memory is module-local and never a
+                                // port; this arm is unreachable (the
+                                // kind filter above excludes it) but
+                                // keeps the match exhaustive.
+                                ComponentKind::Memory => Flow::Duplex,
                             };
                             let component_kind = component.kind;
                             let component = Component {
@@ -470,6 +613,8 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 kind: Some(component_kind),
                                 synthetic: false,
                                 default_expr: None,
+                                depth: None,
+                                clock: None,
                             };
                             if !components_seen.contains(&path) {
                                 components_seen.insert(path.clone());
@@ -569,6 +714,8 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                     kind,
                                     synthetic: false,
                                     default_expr: None,
+                                    depth: None,
+                                    clock: None,
                                 };
                                 if !components_seen.contains(&path) {
                                     components_seen.insert(path.clone());
@@ -655,6 +802,8 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         kind: None,
                         synthetic: false,
                         default_expr: None,
+                        depth: None,
+                        clock: None,
                     };
                     if !components_seen.contains(&path) {
                         components_seen.insert(path.clone());
@@ -696,6 +845,31 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                 region,
                 diagnostics::MissingOnClause { component },
             ));
+        }
+    }
+
+    // Resolve each `memory`'s clock slot, exactly
+    // like a `reg`'s: an explicit `on <CLOCK>` clause wins; otherwise
+    // the module's unique `Clock` covers it; otherwise the slot is
+    // unresolved (`MissingOnClause` was reported above) and memory
+    // writes report `MemoryWriteOutsideOnRegion`.
+    {
+        let implicit_clock_path = component_analysis
+            .implicit_clock()
+            .and_then(|id| component_analysis.component(id))
+            .map(|component| component.path());
+        for (_path, component) in component_analysis.components.iter_mut() {
+            if component.kind != Some(ComponentKind::Memory) {
+                continue;
+            }
+            let decl = parsing.ast_node(component.location().ast_node_id());
+            let clock = match decl.clock() {
+                Some(clock_node) => clock_node
+                    .path()
+                    .map(|interned| parsing.string(interned).to_owned()),
+                None => implicit_clock_path.clone(),
+            };
+            component.clock = clock;
         }
     }
 
@@ -748,6 +922,8 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         kind,
                         synthetic: true,
                         default_expr,
+                        depth: None,
+                        clock: None,
                     };
                     components_seen.insert(platform_port.name.clone());
                     component_analysis.components.push((platform_port.name, component));
@@ -1054,7 +1230,70 @@ fn collect_references(
                             component_analysis,
                             Some(name_with_context.as_bstr()),
                         );
+                    } else if component.kind == ComponentKind::Memory
+                        && matches!(child.payload(), AstNodePayload::ModDefStmtBlock)
+                    {
+                        // A memory body: `it` refers to the memory,
+                        // exactly like an It-block.
+                        let name_with_context =
+                            if let Some(ctx) = it_context {
+                                let mut new_name = BString::from(ctx);
+                                new_name.push(b'.');
+                                new_name.extend_from_slice(name);
+                                new_name
+                            } else {
+                                BString::from(name)
+                            };
+                        collect_references(
+                            &child.children(),
+                            component_analysis,
+                            Some(name_with_context.as_bstr()),
+                        );
                     }
+                }
+            }
+            AstNodePayload::OnRegion => {
+                // An `on <CLOCK> { ... }` region of a memory body:
+                // record the clock reference and walk the region's
+                // statements with the enclosing `it` context.
+                let children = stmt.children();
+                collect_references_in_expr(&children[0], component_analysis, it_context);
+                collect_references(&children[1].children(), component_analysis, it_context);
+            }
+            AstNodePayload::IndexedDriver(_) => {
+                // An indexed write's target: the LHS `Path` (child 0).
+                let parsing = stmt.parsing;
+                if let Some(target) = stmt.target() {
+                    let mut target_str = parsing.string(target).to_owned();
+                    if let Some(ctx) = it_context {
+                        if target_str.starts_with(b"it.") {
+                            let suffix: BString = target_str[3..].to_owned().into();
+                            target_str = ctx.to_owned();
+                            target_str.push(b'.');
+                            target_str.extend_from_slice(&suffix);
+                        } else if target_str == b"it" {
+                            target_str = ctx.to_owned();
+                        }
+                    }
+                    if let Some(component) = component_analysis.resolve(target_str.as_bstr()) {
+                        let target_loc = stmt.child(0).location();
+                        component_analysis.references.insert(target_loc, (component.id(), ReferenceKind::DriverTarget));
+                    }
+                }
+                // The index and the written value are expressions.
+                if let Some(index_node) = stmt.driver_index() {
+                    collect_references_in_expr(
+                        &index_node,
+                        component_analysis,
+                        it_context,
+                    );
+                }
+                if let Some(expr_node) = stmt.driver() {
+                    collect_references_in_expr(
+                        &expr_node,
+                        component_analysis,
+                        it_context,
+                    );
                 }
             }
             AstNodePayload::Socket(socket) => {

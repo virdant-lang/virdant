@@ -25,7 +25,16 @@ pub enum AstNodePayload {
     Component(Component),
     DefaultClause,
     Driver(Driver),
+    /// An indexed driver (`mem[dyn addr] <= data` / `mem[3] <= data`):
+    /// a write to one word of a `memory` component.  A dynamic index
+    /// has three children (the LHS `Path`, the index `Expr`, and the
+    /// RHS `Expr`); a constant index has two (the LHS `Path` and the
+    /// RHS `Expr`), carrying the index value in the payload.
+    IndexedDriver(IndexedDriver),
     BidirectionalDriver,
+    /// An `on <CLOCK> { ... }` region inside a memory body: children
+    /// are the clock `Expr` and the region's `ModDefStmtBlock`.
+    OnRegion,
     InitialDriver,
     Submodule(Submodule),
     ModDefStmtBlock,
@@ -111,6 +120,8 @@ impl AstNodePayload {
             AstNodePayload::Component(_component) => "Component",
             AstNodePayload::DefaultClause => "DefaultClause",
             AstNodePayload::Driver(_driver) => "Driver",
+            AstNodePayload::IndexedDriver(_driver) => "IndexedDriver",
+            AstNodePayload::OnRegion => "OnRegion",
             AstNodePayload::BidirectionalDriver => "BidirectionalDriver",
             AstNodePayload::InitialDriver => "InitialDriver",
             AstNodePayload::Submodule(_module) => "Module",
@@ -270,6 +281,27 @@ pub struct Component {
 pub struct Driver {
     pub driver_type: DriverType,
     pub strength: Strength,
+}
+
+/// An indexed driver (`mem[dyn addr] <= data` / `mem[3] <= data`):
+/// a write to one word of a `memory` component.
+#[derive(Clone, Debug)]
+pub struct IndexedDriver {
+    pub driver_type: DriverType,
+    pub strength: Strength,
+    /// The index of the LHS: `Dyn` (`mem[dyn addr] <= rhs`) carries the
+    /// index `Expr` as this node's middle child; `Const` (`mem[3] <=
+    /// rhs`) carries the constant index here, with no index child.
+    pub index: IndexedDriverIndex,
+}
+
+/// The index of an indexed driver's LHS.
+#[derive(Clone, Debug)]
+pub enum IndexedDriverIndex {
+    /// `mem[dyn addr] <= rhs`: the index expression is a child node.
+    Dyn,
+    /// `mem[3] <= rhs`: the constant index, carried in the payload.
+    Const(u16),
 }
 
 #[derive(Clone, Debug)]

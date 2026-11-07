@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "MemoryIndexWidth, MemoryIndexOutOfRange, and MemoryUsedWithoutIndex: indexing rules for memory reads"
+filecheck = "src/index.vir"

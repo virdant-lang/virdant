@@ -1,0 +1,33 @@
+// ROMs initialized from image files (MEMORY_PLAN §6): `@image_hex`
+// reads a text hex file one word per line; `@image` reads a raw
+// binary file word-packed in declaration order.  A file shorter than
+// the depth leaves the remaining words unspecified; a memory with an
+// image has no write site, and one word of the raw image is byte
+// `0x01` followed by `0x02`, most-significant byte first.
+
+pub mod HexRom {
+    incoming addr : Word[8]
+    outgoing read_data : Word[32]
+
+    @image_hex("rom_image.hex")
+    memory rom[256] : Word[32] {
+        read_data := it[dyn addr]
+    }
+}
+
+pub mod RawRom {
+    incoming addr : Word[3]
+    outgoing read_data : Word[16]
+
+    @image("rom_raw.bin")
+    memory rom[8] : Word[16] {
+        read_data := it[dyn addr]
+    }
+}
+
+// The raw image file holds four bytes (01 02 03 04): two 16-bit
+// words, 0x0102 and 0x0304; the remaining six words are unspecified.
+// A check-suite file only asserts compilation, not values: the
+// readback lives in tests/run/memory/rom_image.
+
+// CHECK: Check OK

@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "A memory in a multi-clock module: explicit `on` clause and an `on` region as the clocked write context"
+filecheck = "src/multiclock.vir"

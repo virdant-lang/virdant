@@ -42,6 +42,9 @@ pub(super) fn attach<W: Write + 'static>(sim: &mut Sim, writer: W) {
     let offset = sim.vcd_offset_ps();
     let mut sigs: Vec<(DumpSig, BString)> = Vec::new();
     for comp in elab.components() {
+        // A memory's scalar value is a change-detection version
+        // counter, not signal data; its words are not VCD-traced.
+        if comp.component_kind() == crate::common::ComponentKind::Memory { continue; }
         let width = layout_index.type_width(&comp.typ());
         if width == 0 { continue; }
         let code = id_code(sigs.len());

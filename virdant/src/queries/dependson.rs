@@ -261,6 +261,9 @@ fn collect_declared_edges_for_component(
             }
             return;
         }
+        // The grammar gives a `memory` declaration no `dependson`
+        // list, so this arm is unreachable; keep it exhaustive.
+        Some(ComponentKind::Memory) => return,
         None => return,
     }
 

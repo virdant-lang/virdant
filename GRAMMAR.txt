@@ -84,7 +84,9 @@ DependsonPathList := (Path ",")* Path
 
 ModDefStmtCore :=
       ModDefStmtComponent
+    | ModDefStmtMemory
     | ModDefStmtDriver
+    | ModDefStmtIndexedDriver
     | ModDefStmtInstance
     | ModDefStmtSocket
     | ModDefStmtUnused
@@ -111,16 +113,18 @@ LetBinding :=
     | Ident "=" Expr
 
 ModDefStmtComponent :=
-      DocString? Annotations "incoming" Ident ":" Type DependsonList? OnClause? ItBlock?
-    | DocString? Annotations "outgoing" Ident ":" Type DependsonList? DefaultClause? OnClause? ItBlock?
+      DocString? Annotations "incoming" Ident ":" Type DependsonList? OnClause? "async"? ItBlock?
+    | DocString? Annotations "outgoing" Ident ":" Type DependsonList? DefaultClause? OnClause? "async"? ItBlock?
     | DocString? Annotations "bus" Ident ":" Type DependsonList? ItBlock?
     | DocString? Annotations "net" Ident ":" Type DependsonList? ItBlock?
-    | DocString? Annotations "outgoing" "wire" Ident ":" Type DependsonList? DefaultClause? OnClause? ItBlock?
+    | DocString? Annotations "outgoing" "wire" Ident ":" Type DependsonList? DefaultClause? OnClause? "async"? ItBlock?
     | DocString? Annotations "outgoing" "reg" Ident ":" Type DependsonList? DefaultClause? OnClause? ItBlock?
-    | DocString? Annotations "wire" Ident ":" Type DependsonList? OnClause? ItBlock?
+    | DocString? Annotations "wire" Ident ":" Type DependsonList? OnClause? "async"? ItBlock?
     | DocString? Annotations "reg" Ident ":" Type DependsonList? OnClause? ItBlock?
 
 OnClause := "on" Expr
+
+ModDefStmtMemory := DocString? Annotations "memory" Ident "[" Expr "]" ":" Type OnClause? MemoryBlock?
 
 DefaultClause := "default" Expr
 
@@ -131,6 +135,12 @@ ModDefStmtDriver :=
     | Path "#-" Expr
     | Path "#=#" Path
     | Path ":=:" Path
+
+ModDefStmtIndexedDriver :=
+      Path "[" "dyn" Expr "]" "<=" Expr
+    | Path "[" "dyn" Expr "]" ":=" Expr
+    | Path "[" Nat "]" "<=" Expr
+    | Path "[" Nat "]" ":=" Expr
 
 ModDefStmtInstance := DocString? Annotations "mod" Ident "of" Ofness GenericsParams? ItBlock?
 
@@ -174,6 +184,20 @@ ModDefStmtInitial := "initial" Path "<=" Expr
 
 ModDefStmtBlock := "{" ModDefStmt* "}"
 
+MemoryBlock := "{" MemoryBlockStmt* "}"
+
+MemoryBlockStmt :=
+      ModDefStmtDriver
+    | ModDefStmtIndexedDriver
+    | ModDefStmtUnused
+    | ModDefStmtInitial
+    | If
+    | Match
+    | Let
+    | ModDefStmtOnRegion
+
+ModDefStmtOnRegion := "on" Expr ModDefStmtBlock
+
 Kind := Ident
 
 Type := Ofness GenericsParams?
@@ -195,7 +219,27 @@ ArmBlockExpr :=
 
 ArmBlockCompare :=
       ArmBlockCompare BinOpCompareNoLe ExprBinOpAdditive
-    | ExprBinOpAdditive
+    | ArmBlockAdditive
+
+ArmBlockAdditive :=
+      ArmBlockAdditive BinOpAdditive ExprUnOp
+    | ArmBlockUnOp
+
+ArmBlockUnOp :=
+      ExprUnOpPrefix
+    | ArmBlockAscription
+
+ArmBlockAscription :=
+      ArmBlockPrimary ":" Type
+    | ArmBlockPrimary
+
+ArmBlockPrimary :=
+      ExprAtomPath
+    | ExprPrimaryWith<ArmBlockAtom>
+
+ArmBlockAtom :=
+      ExprAtomOther
+    | ExprAtomPath "->" Ident
 
 BinOpCompareNoLe :=
       "<"
@@ -267,26 +311,36 @@ UnOp :=
     | "!"
 
 ExprUnOp :=
+      ExprUnOpPrefix
+    | ExprAscription
+
+ExprUnOpPrefix :=
       UnOp ExprUnOp
     | "tap" Path
-    | ExprAscription
 
 ExprAscription :=
       ExprPrimary ":" Type
     | ExprPrimary
 
-ExprPrimary :=
+ExprPrimary := ExprPrimaryWith<ExprAtom>
+
+ExprPrimaryWith<Atom> :=
       Ofness "(" ArgList? ")"
-    | ExprPrimary "->" Ident
-    | ExprPrimary "[" "dyn" Expr "]"
-    | ExprPrimary "[" Index "]"
-    | ExprPrimary "[" Index ".." Index "]"
+    | ExprPrimaryWith<Atom> "->" Ident
+    | ExprPrimaryWith<Atom> "[" "dyn" Expr "]"
+    | ExprPrimaryWith<Atom> "[" Index "]"
+    | ExprPrimaryWith<Atom> "[" Index ".." Index "]"
     | "@" Ident "(" ArgList? ")"
-    | ExprAtom
+    | Atom
 
 ExprAtom :=
-      Path
-    | WordLit
+      ExprAtomPath
+    | ExprAtomOther
+
+ExprAtomPath := Path
+
+ExprAtomOther :=
+      WordLit
     | BitLit
     | "Str"
     | "#" Ident
@@ -368,6 +422,7 @@ Tokens:
   "]"
   "^"
   "^^"
+  "async"
   "builtin"
   "bus"
   "client"
@@ -388,6 +443,7 @@ Tokens:
   "it"
   "let"
   "match"
+  "memory"
   "mod"
   "net"
   "of"

@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "MemoryInitialUnsupported: initial statements on memories"
+filecheck = "src/memory_initial.vir"

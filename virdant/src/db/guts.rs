@@ -16,6 +16,13 @@ pub struct Db {
     pub(super) dirty_cache: Mutex<HashMap<Query, bool>>,
     pub(super) call_stack: Mutex<Vec<Query>>,
     pub(super) trace: Mutex<Vec<TraceElement>>,
+    /// The project root — the directory holding `virdant.toml` — when
+    /// the tools built this `Db` for a project.  Memory image paths
+    /// (`@image`/`@image_hex`) resolve against it.
+    /// Not a memoized input: the tools set it once, right after
+    /// building the `Db`, before any queries run.  `None` for
+    /// root-less flows (the LSP fallback, core-internal tests).
+    pub(super) project_root: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +74,7 @@ impl Db {
         Db {
             map: Mutex::new(IndexMap::new()),
             dirty_cache: Mutex::new(HashMap::new()),
+            project_root: None,
             rev: 0,
             call_stack: Mutex::new(vec![]),
             trace: Mutex::new(vec![]),
@@ -192,6 +200,18 @@ impl Db {
 }
 
 impl Db {
+    /// The project root (the `virdant.toml` directory), when the tools
+    /// set one.  Memory image paths resolve against it.
+    pub fn project_root(&self) -> Option<&std::path::Path> {
+        self.project_root.as_deref()
+    }
+
+    /// Set the project root (the `virdant.toml` directory).  Must be
+    /// called right after building the `Db`, before any queries.
+    pub fn set_project_root(&mut self, root: std::path::PathBuf) {
+        self.project_root = Some(root);
+    }
+
     pub fn set_packages(&mut self, packages: PackageTable) {
         self.rev += 1;
         self.dirty_cache.lock().unwrap().clear();

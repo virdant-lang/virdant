@@ -1,6 +1,7 @@
 //! Validates `initial` statements per module: the target must be a
 //! register (`reg` / `outgoing reg`), and each register may have at most
-//! one `initial` statement. Emits `InitialForNonReg`, `InitialMultiple`.
+//! one `initial` statement. Emits `InitialForNonReg`, `InitialMultiple`;
+//! a memory target emits `MemoryInitialUnsupported` instead.
 //!
 //! Placement (`InitialInsideIfMatch`) and resolution
 //! (`UnresolvedComponent`) errors are reported during driver analysis.
@@ -41,6 +42,21 @@ pub(crate) fn check_initial(builder: &mut Builder, symbol_id: SymbolId) -> Arc<V
 
     for (comp_id, locs) in driver_analysis.initials() {
         let Some(component) = component_analysis.component(*comp_id) else { continue };
+
+        // `initial` on a memory is not supported: contents come from
+        // `@image`/`@image_hex`.
+        if component.kind() == Some(ComponentKind::Memory) {
+            for loc in locs {
+                diagnostics.push(Diagnostic::new(
+                    initial_stmt_region(builder, loc),
+                    diagnostics::MemoryInitialUnsupported {
+                        component: component.path(),
+                    },
+                ));
+            }
+            continue;
+        }
+
         let is_reg = matches!(
             component.kind(),
             Some(ComponentKind::Reg | ComponentKind::OutgoingReg),

@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "MemoryImageIo, MemoryImageTooLong, MemoryImageWrite, and a missing clock: image rules"
+filecheck = "src/image.vir"

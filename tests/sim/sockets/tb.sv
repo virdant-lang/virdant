@@ -16,11 +16,11 @@ module Tb;
             $fatal;
         end
 
-        if (top.\memory.mem.addr !== 8) begin
+        if (top.\memsrv.mem.addr !== 8) begin
             $fatal;
         end
 
-        if (top.\memory.mem.data !== 10) begin
+        if (top.\memsrv.mem.data !== 10) begin
             $fatal;
         end
 
@@ -32,11 +32,11 @@ module Tb;
             $fatal;
         end
 
-        if (top.memory.\mem.addr !== 8) begin
+        if (top.memsrv.\mem.addr !== 8) begin
             $fatal;
         end
 
-        if (top.memory.\mem.data !== 10) begin
+        if (top.memsrv.\mem.data !== 10) begin
             $fatal;
         end
 

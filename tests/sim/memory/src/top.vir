@@ -1,0 +1,91 @@
+//! Sim-suite test top for the `memory` construct: exercises the RAM
+//! and ROM lowering in the generated Verilog (`always @(posedge ...)`
+//! with indexed nonblocking writes, continuous read assigns, and
+//! `$readmemh` for the hex-image ROM).
+
+//> The RAM under test: 16 words of 8 bits, one write port and one
+//> asynchronous read port.
+pub mod Ram {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> Write enable.
+    incoming write_enable : Bit
+
+    //> Write address.
+    incoming addr : Word[4]
+
+    //> Read address.
+    incoming read_addr : Word[4]
+
+    //> Data to write.
+    incoming write_data : Word[8]
+
+    //> Combinational read of the addressed word.
+    outgoing read_data : Word[8] dependson read_addr {
+        it := mem[dyn read_addr]
+    }
+
+    memory mem[16] : Word[8] {
+        if {
+            when write_enable {
+                it[dyn addr] <= write_data
+            }
+        }
+    }
+}
+
+//> An 8-word ROM from a text hex file, one word per line.
+pub mod HexRom {
+    //> Read address.
+    incoming read_addr : Word[3]
+
+    //> The addressed word.
+    outgoing read_data : Word[8] dependson read_addr {
+        it := rom[dyn read_addr]
+    }
+
+    @image_hex("hex_words.hex")
+    memory rom[8] : Word[8]
+}
+
+pub mod Top {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> RAM write-enable stimulus.
+    incoming write_enable : Bit
+
+    //> RAM write address stimulus.
+    incoming addr : Word[4]
+
+    //> RAM read address stimulus.
+    incoming read_addr : Word[4]
+
+    //> RAM write-data stimulus.
+    incoming write_data : Word[8]
+
+    //> ROM address stimulus.
+    incoming rom_addr : Word[3]
+
+    //> RAM read port.
+    outgoing ram_read : Word[8] dependson read_addr
+
+    //> ROM read port.
+    outgoing rom_read : Word[8] dependson rom_addr
+
+    mod ram of Ram {
+        it.clock := clock
+        it.write_enable := write_enable
+        it.addr := addr
+        it.read_addr := read_addr
+        it.write_data := write_data
+    }
+
+    mod rom of HexRom {
+        it.read_addr := rom_addr
+    }
+
+    ram_read := ram.read_data
+    rom_read := rom.read_data
+}

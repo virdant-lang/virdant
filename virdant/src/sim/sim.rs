@@ -183,7 +183,7 @@ impl Sim {
         let circuit = Circuit::new(db, top);
 
         let mut sim = Sim {
-            state: State::new(circuit.elaboration.as_ref(), &circuit.type_layout_index, &strategy),
+            state: State::new(circuit.elaboration.as_ref(), &circuit.type_layout_index, &strategy, &circuit.memories),
             circuit,
             sched: Scheduler::new(),
             watchers: Vec::new(),
@@ -425,6 +425,46 @@ impl Sim {
         self.flow();
     }
 
+    /// Commit one clocked component on a rising edge: a register
+    /// transfers its pending value; a memory evaluates its write site
+    /// against pre-edge values and applies the write.
+    fn commit_clocked(&mut self, id: SignalId) {
+        if self.circuit.is_memory(id) {
+            self.commit_memory(id);
+        } else {
+            self.state.transfer(id);
+        }
+    }
+
+    /// Apply a memory's write site for this cycle: sample the (enable,
+    /// address, data) expressions against pre-edge values and write the
+    /// addressed word (read-during-write sees the old value because
+    /// reads snapshot the pre-commit words; at most one write fires —
+    /// overlapping guards are rejected by analysis).
+    fn commit_memory(&mut self, mem_id: SignalId) {
+        // At most one commit per settlement, like a register: a clock
+        // alias rising again later in the same flow must not re-write
+        // with post-edge values.
+        if !self.state.mark_committed(mem_id) {
+            return;
+        }
+        let (enable, address, data) = {
+            let writes = &self.circuit.memory(mem_id).writes;
+            (
+                writes.enable.clone(),
+                writes.address.clone(),
+                writes.data.clone(),
+            )
+        };
+        let context = Context::context_for_component(&self.circuit, &self.state, mem_id);
+        if !enable.eval(&context).get_bit(0) {
+            return;
+        }
+        let index = address.eval(&context).to_u64() as usize;
+        let value = data.eval(&context);
+        self.state.set_memory_word(mem_id, index, value);
+    }
+
     fn tick_prop(&mut self, signal_id: SignalId) {
         // Iterate by index against the immutable Circuit so we can recurse
         // mutably into `self.tick` / `self.transfer` without cloning the
@@ -438,7 +478,7 @@ impl Sim {
         let m = self.circuit.clock_sensitivity_count(signal_id);
         for i in 0..m {
             let reg_signal_id = self.circuit.clock_sensitivity_at(signal_id, i);
-            self.state.transfer(reg_signal_id);
+            self.commit_clocked(reg_signal_id);
         }
     }
 
@@ -476,7 +516,7 @@ impl Sim {
                         let m = self.circuit.clock_sensitivity_count(update_signal_id);
                         for j in 0..m {
                             let reg_id = self.circuit.clock_sensitivity_at(update_signal_id, j);
-                            self.state.transfer(reg_id);
+                            self.commit_clocked(reg_id);
                         }
                     }
                 }
@@ -586,7 +626,7 @@ impl Sim {
             let n = self.circuit.clock_sensitivity_count(signal_id);
             for i in 0..n {
                 let reg_id = self.circuit.clock_sensitivity_at(signal_id, i);
-                self.state.transfer(reg_id);
+                self.commit_clocked(reg_id);
             }
         }
     }
@@ -713,6 +753,16 @@ impl Sim {
 
     pub fn component_kind(&self, signal_id: SignalId) -> ComponentKind {
         self.elaboration().component(signal_id).component_kind()
+    }
+
+    /// The live words of memory `signal_id`, or `None` for any other
+    /// component (surfaces memory words to `vir poke`).
+    pub fn memory_words(&self, signal_id: SignalId) -> Option<std::sync::Arc<Vec<Value>>> {
+        if self.circuit.is_memory(signal_id) {
+            Some(self.state.memory_words(signal_id))
+        } else {
+            None
+        }
     }
 
     pub fn component_type(&self, signal_id: SignalId) -> Type {

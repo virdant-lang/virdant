@@ -1,0 +1,2 @@
+kind = "sim"
+description = "Behavioral test of the `memory` construct against the generated Verilog: a write/read RAM cycle and a $readmemh-initialized ROM"

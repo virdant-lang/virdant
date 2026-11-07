@@ -1,0 +1,5 @@
+[project]
+name = "memory_rom_image"
+
+[prog]
+top = "memory_rom_image::RomImageTest"

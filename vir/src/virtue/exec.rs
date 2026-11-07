@@ -139,8 +139,12 @@ fn run_command(argv: &[String], cwd: &Path, extra_path: Option<&Path>) -> StepRe
     cmd.stderr(Stdio::piped());
     if let Some(extra) = extra_path {
         let old = std::env::var_os("PATH").unwrap_or_default();
+        // Prepend the tree's own `target/release` so the freshly
+        // built `vir-*` companion binaries are found before any
+        // installed ones: the runner tests this tree's build, and an
+        // older installed Virdant would otherwise shadow it.
         let new = std::env::join_paths(
-            std::env::split_paths(&old).chain(std::iter::once(extra.to_path_buf())),
+            std::iter::once(extra.to_path_buf()).chain(std::env::split_paths(&old)),
         )
         .expect("PATH");
         cmd.env("PATH", new);

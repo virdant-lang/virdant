@@ -1,0 +1,46 @@
+// Image rules (MEMORY_PLAN §6): the file must be readable and no
+// longer than the declared depth, and a memory initialized from an
+// image is a ROM — writes to it are not supported.
+
+mod TooLong {
+    incoming clock : Clock
+    incoming addr : Word[2]
+    outgoing read_data : Word[8] dependson addr {
+        it := rom[dyn addr]
+    }
+
+    // The file holds six words; the depth is four.
+    @image_hex("words_too_long.hex")
+    memory rom[4] : Word[8]
+}
+
+mod Unreadable {
+    incoming clock : Clock
+    incoming addr : Word[2]
+    outgoing read_data : Word[8] dependson addr {
+        it := rom[dyn addr]
+    }
+
+    @image_hex("does_not_exist.hex")
+    memory rom[4] : Word[8]
+}
+
+mod WriteToImage {
+    incoming clock : Clock
+    incoming addr : Word[2]
+    incoming write_data : Word[8]
+    outgoing read_data : Word[8] dependson addr {
+        it := rom[dyn addr]
+    }
+
+    @image_hex("short.hex")
+    memory rom[4] : Word[8] {
+        // Contents come from the image; writes are not supported.
+        it[dyn addr] <= write_data
+    }
+}
+
+// CHECK: memory image words_too_long.hex holds more words than the declared depth 4
+// CHECK: could not read memory image for rom
+// CHECK: memory rom is initialized by @image/@image_hex
+// CHECK: Check failed

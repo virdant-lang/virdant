@@ -1,0 +1,5 @@
+[project]
+name = "memory_ram"
+
+[prog]
+top = "memory_ram::RamTest"

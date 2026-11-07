@@ -15,10 +15,14 @@ use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::symbols::SymbolId;
 use crate::analysis::Location;
-use crate::analysis::drivers::Driver;
+use crate::analysis::drivers::{Driver, WriteIndex};
+use crate::analysis::memory_image::{self, MemoryImageKind};
+use crate::types::Type;
+use crate::common::ComponentKind;
+use crate::sim::eval::Value;
 use crate::analysis::elaboration::{SignalId, Elaboration};
 use crate::db::Db;
-use crate::sim::expr::{Expr, ExprPayload, Referent, driver_to_expr, initial_to_expr};
+use crate::sim::expr::{Expr, ExprPayload, Referent, driver_to_expr, initial_to_expr, memwrite_to_exprs, MemWriteExprs};
 use crate::sim::layout::{TypeInterner, TypeLayoutIndex};
 use crate::syntax::ast::AstNodeId;
 use crate::syntax::parsing::Parsing;
@@ -47,6 +51,11 @@ pub(super) struct Circuit {
     pub(super) exprs: Vec<Option<Arc<Expr>>>,
     /// Constant expressions from `initial` statements, keyed by register.
     pub(super) initial_exprs: IndexMap<SignalId, Arc<Expr>>,
+    /// Memories, densely indexed by `SignalId::index()`; `None` for
+    /// non-memory components.  Holds the depth, the `@image` words
+    /// (the rest are random-initialized by `State::new`), and the
+    /// lowered write site.
+    pub(super) memories: Vec<Option<MemoryCircuit>>,
     /// Pre-resolved referents for every component that has a driver expression.
     /// Keyed by the owning component; each value is the DFS-ordered list of
     /// `(referent, target_id)` pairs that `Sim::build_context` zips with live
@@ -55,7 +64,30 @@ pub(super) struct Circuit {
     pub(super) resolved_referents: IndexMap<SignalId, Vec<(Referent, SignalId)>>,
 }
 
+/// Per-memory precomputed simulation data.
+#[derive(Clone)]
+pub(super) struct MemoryCircuit {
+    /// The declared depth (a power of two).
+    pub(super) depth: u32,
+    /// Words provided by `@image`/`@image_hex`, as `Value`s of the
+    /// element type; indices past this are random-initialized by
+    /// `State::new` (never-written words read as unspecified).
+    pub(super) image: Vec<Option<Value>>,
+    /// The write site lowered to (enable, address, data) expressions.
+    pub(super) writes: MemWriteExprs,
+}
+
 impl Circuit {
+    /// Whether `signal_id` is a memory component.
+    pub(super) fn is_memory(&self, signal_id: SignalId) -> bool {
+        self.memories[signal_id.index()].is_some()
+    }
+
+    /// The precomputed data of a memory component.
+    pub(super) fn memory(&self, signal_id: SignalId) -> &MemoryCircuit {
+        self.memories[signal_id.index()].as_ref().expect("not a memory")
+    }
+
     /// Elaborate `top` against `db` and precompute every dataflow
     /// table the runtime needs.  Walks the elaboration once inside
     /// `build_dependencies` (per-component reference walk to derive `deps`),
@@ -77,9 +109,49 @@ impl Circuit {
         let mut initial_exprs: IndexMap<SignalId, Arc<Expr>> = IndexMap::new();
         let mut registers: IndexSet<SignalId> = IndexSet::new();
         let mut aliases: IndexMap<SignalId, SignalId> = IndexMap::new();
+        // Memories, in elaboration order (dense by signal index below).
+        let mut memories: Vec<(SignalId, MemoryCircuit)> = vec![];
+        // Referent lists of memory write sites, keyed by the memory.
+        let mut memory_referents: IndexMap<SignalId, Vec<(Referent, SignalId)>> = IndexMap::new();
         for elab_component in elaboration.components() {
             let elab_id = elab_component.id();
             let env = elab_component.env();
+            if elab_component.component_kind() == ComponentKind::Memory {
+                // A memory has no scalar driver expression: its write
+                // site lowers to (enable, address, data) expressions,
+                // and its scalar `vals` entry is only
+                // a change-detection version counter.
+                let Some(depth) = elab_component.depth() else { continue };
+                let elem_typ = elab_component.typ();
+                let addr_width = depth.trailing_zeros() as crate::common::Width;
+                let image = load_memory_image(elab_component, &elem_typ, &mut interner);
+                // The fallback location is only carried by synthetic
+                // never-firing constant exprs (no-write arms); any
+                // location works because they are never re-resolved.
+                let fallback = Location::new(db.get_packages().builtin(), AstNodeId(0));
+                let writes = match elab_component.driver() {
+                    Some(driver) => memwrite_to_exprs(
+                        db,
+                        driver,
+                        &elem_typ,
+                        addr_width,
+                        fallback,
+                        env,
+                        &mut interner,
+                    ),
+                    None => {
+                        // No write site: an image ROM (or a diagnosed
+                        // error).  Never fires.
+                        crate::sim::expr::never_writes(fallback, &elem_typ, addr_width, &mut interner)
+                    }
+                };
+                let mut referents = compute_resolved_referents(db, &elaboration, elab_id, &writes.enable);
+                referents.extend(compute_resolved_referents(db, &elaboration, elab_id, &writes.address));
+                referents.extend(compute_resolved_referents(db, &elaboration, elab_id, &writes.data));
+                memory_referents.insert(elab_id, referents);
+                memories.push((elab_id, MemoryCircuit { depth, image, writes }));
+                continue;
+            }
             if let Some(peer_id) = elab_component.alias() {
                 // Socket connection (`:=:`): the Sink-side channel's value
                 // is its peer's; handled by the runtime, not an Expr.
@@ -108,6 +180,7 @@ impl Circuit {
             let entries = compute_resolved_referents(db, &elaboration, *signal_id, expr);
             resolved_referents.insert(*signal_id, entries);
         }
+        resolved_referents.extend(memory_referents);
 
         let type_layout_index = TypeLayoutIndex::from_parts(layouts, interner);
 
@@ -153,6 +226,10 @@ impl Circuit {
         for (id, expr) in &exprs {
             dense_exprs[id.index()] = Some(expr.clone());
         }
+        let mut dense_memories: Vec<Option<MemoryCircuit>> = vec![None; n];
+        for (id, memory) in memories {
+            dense_memories[id.index()] = Some(memory);
+        }
 
         Circuit {
             elaboration,
@@ -162,6 +239,7 @@ impl Circuit {
             registers: dense_registers,
             aliases: dense_aliases,
             exprs: dense_exprs,
+            memories: dense_memories,
             initial_exprs,
             resolved_referents,
         }
@@ -273,6 +351,17 @@ fn build_dependencies(
 
     for component in elaboration.components() {
         let mut deps: IndexSet<SignalId> = IndexSet::new();
+
+        // A memory's write site samples its guards/address/data at the
+        // clock edge, not through combinational propagation; and the
+        // memory has no scalar driver expression for `flow` to
+        // re-evaluate.  (Reads of the memory by *other* components
+        // still create dependencies on the memory itself, which is
+        // what the post-commit version bump propagates through.)
+        if component.component_kind() == ComponentKind::Memory {
+            dep_map.insert(component.id(), deps);
+            continue;
+        }
 
         if let Some(driver) = component.driver() {
             let prefix = component.driver_scope().to_str_lossy().into_owned();
@@ -412,6 +501,12 @@ fn collect_locations(driver: &Driver) -> Vec<Location> {
 fn collect_locations_inner(driver: &Driver, locs: &mut Vec<Location>) {
     match driver {
         Driver::Expr(_, loc) => locs.push(loc.clone()),
+        Driver::Write { index, rhs, .. } => {
+            if let WriteIndex::Dyn(index) = index {
+                locs.push(index.clone());
+            }
+            locs.push(rhs.clone());
+        }
         Driver::Bidirectional(_) => {}
         Driver::Absent => {}
         Driver::If(driver_if) => {
@@ -578,4 +673,45 @@ fn collect_referents_inner(expr: &Expr, out: &mut Vec<Referent>) {
         | ExprPayload::Hole(_)
         | ExprPayload::Dontcare(_)     => {}
     }
+}
+
+
+/// Read a memory's `@image`/`@image_hex` file and pack it into words of
+/// the element type.  Unreadable or malformed files
+/// yield no words — the check phase has already reported the problem —
+/// leaving every word at its random initial value.
+fn load_memory_image(
+    elab_component: &crate::analysis::elaboration::ElaboratedComponent,
+    elem_typ: &Type,
+    interner: &mut TypeInterner,
+) -> Vec<Option<Value>> {
+    let Some((kind, path)) = elab_component.image() else {
+        return vec![];
+    };
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(_) => return vec![],
+    };
+    let width = match elem_typ {
+        Type::Word(width) => *width,
+        _ => return vec![],
+    };
+    let typ_id = interner.intern(elem_typ);
+    let words: Vec<u64> = match kind {
+        MemoryImageKind::Hex => {
+            let text = String::from_utf8_lossy(&bytes);
+            match memory_image::parse_hex_image(&text, width) {
+                Ok(words) => words,
+                Err(_) => return vec![],
+            }
+        }
+        MemoryImageKind::Raw => match memory_image::parse_raw_image(&bytes, width) {
+            Some(words) => words,
+            None => return vec![],
+        },
+    };
+    words
+        .into_iter()
+        .map(|value| Some(Value::from_u64(typ_id, width, value)))
+        .collect()
 }

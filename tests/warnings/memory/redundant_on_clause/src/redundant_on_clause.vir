@@ -1,0 +1,18 @@
+// An explicit `on` clause naming the module's unique clock is
+// redundant on a memory exactly as on a reg (MEMORY_PLAN §3.1).
+
+pub mod Ram {
+    incoming clock : Clock
+    incoming addr : Word[4]
+    incoming write_data : Word[8]
+    outgoing read_data : Word[8] dependson addr {
+        it := mem[dyn addr]
+    }
+
+    memory mem[16] : Word[8] on clock {
+        it[dyn addr] <= write_data
+    }
+}
+
+// CHECK: Redundant `on` clause
+// CHECK: Check OK

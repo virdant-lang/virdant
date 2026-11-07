@@ -266,6 +266,10 @@ impl Value {
 pub struct Context {
     pub(crate) layouts: TypeLayoutIndex,
     context: IndexMap<Referent, Value>,
+    /// Memory words keyed by the memory's referent, for `mem[dyn i]` /
+    /// `mem[c]` reads.  Cheap `Arc` clones of the
+    /// live arrays, snapshotted at context build time.
+    memories: IndexMap<Referent, std::sync::Arc<Vec<Value>>>,
 }
 
 impl Context {
@@ -275,7 +279,21 @@ impl Context {
         for (r, v) in entries {
             context.insert(r, v);
         }
-        Context { layouts, context }
+        Context { layouts, context, memories: IndexMap::new() }
+    }
+
+    /// The words of the memory referenced by `referent`, if it is one
+    /// (a read of `mem[...]` consults these; the memory's scalar
+    /// `Context` value is only a change-detection version counter).
+    pub(crate) fn memory_words(&self, referent: &Referent) -> Option<&std::sync::Arc<Vec<Value>>> {
+        self.memories.get(referent)
+    }
+
+    /// Bind a memory's words to its referent (used when building an
+    /// evaluation context for a component whose expressions read the
+    /// memory).
+    pub(crate) fn insert_memory(&mut self, referent: Referent, words: std::sync::Arc<Vec<Value>>) {
+        self.memories.insert(referent, words);
     }
 
     pub fn get(&self, referent: &Referent) -> Value {
@@ -294,7 +312,7 @@ impl Context {
         for (r, v) in extra {
             context.insert(r, v);
         }
-        Context { layouts: self.layouts.clone(), context }
+        Context { layouts: self.layouts.clone(), context, memories: self.memories.clone() }
     }
 
     /// Build an eval `Context` for `signal_id`'s driver expression.
@@ -315,7 +333,14 @@ impl Context {
             .iter()
             .map(|(r, id)| (r.clone(), state.get(*id)))
             .collect();
-        Context::new(entries, circuit.type_layout_index.clone())
+        let mut context = Context::new(entries, circuit.type_layout_index.clone());
+        // Memory reads fetch the words, not the version counter.
+        for (r, id) in circuit.referents(signal_id) {
+            if circuit.is_memory(*id) {
+                context.insert_memory(r.clone(), state.memory_words(*id));
+            }
+        }
+        context
     }
 }
 
@@ -699,15 +724,46 @@ impl Expr {
     }
 
     /// Evaluate a single-bit index expression: `subject[index]`.
+    /// For a memory subject this is a constant-index word read
+    /// (`mem[3]`): the result is the element value,
+    /// not a bit.
     fn eval_index(&self, context: &Context, index: &payload::Index) -> Value {
+        if let Some(value) = self.eval_memory_read(context, &index.subject, index.index as usize) {
+            return value;
+        }
         let val = index.subject.eval(context);
         self.val_bool(val.get_bit(index.index as usize))
     }
 
     fn eval_index_dyn(&self, context: &Context, index_dyn: &payload::IndexDyn) -> Value {
+        // A dynamic memory read (`mem[dyn i]`): the subject is a
+        // reference to a memory component whose index is exactly
+        // `Word[k]` (`depth == 2^k`), so it is always in range.
+        if let ExprPayload::Reference(reference) = index_dyn.subject.payload() {
+            if let Some(words) = context.memory_words(&reference.referent) {
+                let index = index_dyn.index.eval(context).to_u64() as usize;
+                return words[index].clone();
+            }
+        }
         let val = index_dyn.subject.eval(context);
         let idx_val = index_dyn.index.eval(context);
         self.val_bool(val.get_bit(idx_val.to_u64() as usize))
+    }
+
+    /// A constant-index memory read (`mem[c]`): `Some` of the word
+    /// when `subject` references a memory, `None` for the ordinary
+    /// bit-select path.
+    fn eval_memory_read(
+        &self,
+        context: &Context,
+        subject: &std::sync::Arc<Expr>,
+        index: usize,
+    ) -> Option<Value> {
+        let ExprPayload::Reference(reference) = subject.payload() else {
+            return None;
+        };
+        let words = context.memory_words(&reference.referent)?;
+        Some(words.get(index)?.clone())
     }
 
     /// Evaluate a bit-range index expression: `subject[index_hi..index_lo]`.

@@ -1,0 +1,3 @@
+[package]
+name = "assign_instead_of_lassign"
+version = "1.0.0"

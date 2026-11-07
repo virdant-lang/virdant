@@ -1,0 +1,3 @@
+kind = "run"
+description = "ROMs initialized from @image_hex and @image files; readback checks the loaded words"
+cycle_limit = 16

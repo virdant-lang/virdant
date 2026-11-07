@@ -1,0 +1,44 @@
+// A memory in a module with more than one Clock (MEMORY_PLAN §3.1):
+// the memory must declare an explicit `on <CLOCK>` clause, and inside
+// its body the clocked write context is an `on <CLOCK> { ... }`
+// region naming the memory's own clock (§2.2).  Combinational reads
+// stay at the top level of the body.
+
+pub mod DualClockRam {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+
+    incoming addr : Word[6]
+    incoming write_data : Word[16]
+    outgoing read_data : Word[16]
+
+    unused clk_b
+
+    memory mem[64] : Word[16] on clk_a {
+        on clk_a {
+            it[dyn addr] <= write_data
+        }
+        read_data := it[dyn addr]
+    }
+}
+
+// With an explicit `on` clause, the write site may also appear
+// elsewhere in the module (§3.3), exactly as with a `reg`.
+pub mod BlocklessMultiClock {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+
+    incoming addr : Word[4]
+    incoming write_data : Word[8]
+    outgoing read_data : Word[8] dependson addr {
+        it := mem[dyn addr]
+    }
+
+    memory mem[16] : Word[8] on clk_b
+
+    unused clk_a
+
+    mem[dyn addr] <= write_data
+}
+
+// CHECK: Check OK

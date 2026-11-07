@@ -161,6 +161,52 @@ mod MatchLoop {
   * Bit pattern on an enum subject: `Wrong type`.
 * Payload-bearing constructors match with `@Some(x)`, never `#Some`.
 
+### memory
+
+The `memory` statement: shape, indexing, write-site, and image rules.  See
+./memory.md for the full picture.
+
+* `memory depth must be a power of 2, found N` — the bracketed depth must be
+  a literal power of two; `memory mem[8 + 8]` is
+  `memory depth must be a literal constant`.
+* `memory element type must be `Word[n]` with n a power of 2, found T` — the
+  element type must be `Word[n]` (`Bit` or `Word[12]` are rejected).
+* `index into memory mem must be exactly Word[K] (depth 2^K), found T` — a
+  dynamic index must have *exactly* the address width; narrow a wider
+  address explicitly (`addr[4..0]`), never rely on truncation.
+* `index N out of range for memory depth D` — a constant index past the
+  last word.
+* `memory mem must be indexed: `mem[dyn i]` or `mem[c]`` — a memory cannot
+  be read whole or sliced; index it to a word first.
+* `overlapping writes to memory mem` — two sibling `when` clauses with
+  non-exclusive guards both write the memory and may collide in one cycle;
+  use `when`/`else` or `match` arms instead.
+* `write to memory mem outside a clocked write context` — a write outside an
+  `on` region needs a resolvable clock (explicit clause or a single-Clock
+  module), and a body with an `on` region keeps its writes inside it.
+* `` `on` region in memory mem must name the memory's clock CLK`` — a body
+  region's clock must be the memory's own clock slot.
+* `only writes to the memory are allowed inside an `on` region` — reads and
+  drivers of other components belong at the top level of the body.
+* `indexed driver target X is not a memory` — indexed LHSes write memory
+  words only.
+* `Multiple drivers for mem` — a memory has exactly one write site (the
+  existing multiple-drivers machinery).
+* ``use `<=` to write memory mem`` (warning) — `:=` parses and writes but
+  warns; a memory write commits on the clock edge.
+* `initial` errors:
+  * `` `initial` is not supported on memory mem; initialize with
+    @image/@image_hex instead``.
+* Image errors:
+  * `could not read memory image for mem: PATH: ...`.
+  * `memory image PATH holds more words than the declared depth D`.
+  * `memory image for mem not supported: ...` (element widths above 64
+    bits in v1, malformed hex lines).
+  * `memory mem is initialized by @image/@image_hex; writes to it are not
+    supported` — an image memory is a ROM.
+  * `memory image initialization for mem is disallowed on `@noinitial`
+    platform P` — images are gated exactly like `initial`.
+
 ### naming
 
 * File names must be valid package identifiers

@@ -130,7 +130,7 @@ A path refers to a named component, port, or instance field.
 
     counter        // a local register or wire
     ha1.sum        // port on a submodule instance
-    memory.mem.addr // port on a socket instance
+    memsrv.mem.addr // port on a socket instance
 
 The special path `it` refers to the enclosing declaration's target
 (available inside declaration blocks).

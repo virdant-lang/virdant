@@ -20,7 +20,7 @@ mod Memory {
 
 pub mod Top {
     mod core of Core
-    mod memory of Memory
+    mod memsrv of Memory
 
-    memory.mem :=: core.mem
+    memsrv.mem :=: core.mem
 }

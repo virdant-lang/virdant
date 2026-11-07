@@ -149,7 +149,12 @@ impl ProjectLocation {
                     std::process::exit(1);
                 }
             }
-            return db_from_files(paths);
+            let cwd = self.resolve_cwd();
+            let mut db = db_from_files(paths);
+            // The explicit-file flow has no manifest; the working
+            // directory is the best project root available.
+            db.set_project_root(cwd);
+            return db;
         }
 
         let cwd = self.resolve_cwd();
@@ -179,7 +184,8 @@ impl ProjectLocation {
 /// package identifier (such a package could never be `import`ed).
 /// Reporting the error is the caller's job.
 pub fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Result<Db, String> {
-    let scan = scan_source_dir(&source_dir.into()).map_err(|e| e.to_string())?;
+    let source_dir = source_dir.into();
+    let scan = scan_source_dir(&source_dir).map_err(|e| e.to_string())?;
     if !scan.invalid_names.is_empty() {
         let messages: Vec<String> = scan
             .invalid_names
@@ -188,7 +194,15 @@ pub fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Result<Db, Str
             .collect();
         return Err(messages.join("\n"));
     }
-    Ok(db_from_source_dir_scan(scan))
+    let mut db = db_from_source_dir_scan(scan);
+    // The scanned directory sits inside the project root (the
+    // `virdant.toml` directory): `vir check`/`build`/`run`/`compile`
+    // all pass `<root>/src` (or, for `compile`, the `src`-style dir
+    // itself).  Memory image paths resolve against it.
+    if let Some(root) = source_dir.parent() {
+        db.set_project_root(root.to_path_buf());
+    }
+    Ok(db)
 }
 
 /// Reason phrase for a `.vir` file whose name is not a valid package
@@ -246,6 +260,7 @@ pub fn read_project_name_from(manifest: &Path) -> Option<String> {
     let text = std::fs::read_to_string(manifest).ok()?;
     let toml: toml::Value = toml::from_str(&text).ok()?;
     toml.get("project")
+        .or_else(|| toml.get("package"))
         .and_then(|project| project.get("name"))
         .and_then(|value| value.as_str())
         .map(|s| s.to_owned())

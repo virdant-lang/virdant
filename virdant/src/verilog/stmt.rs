@@ -36,7 +36,15 @@ impl Stmt {
                 verilog_writeln!(writer, ";")?;
             }
             Stmt::AssignNonBlocking(assign_non_blocking) => {
-                verilog_write!(writer, "{} <= ", &assign_non_blocking.name)?;
+                verilog_write!(writer, "{}", &assign_non_blocking.name)?;
+                if let Some(index) = &assign_non_blocking.index {
+                    // Mid-line writes are raw: `verilog_write!` emits
+                    // indentation on every call.
+                    write!(writer.file, "[")?;
+                    index.write(writer)?;
+                    write!(writer.file, "]")?;
+                }
+                write!(writer.file, " <= ")?;
                 writer.skip_indent();
                 assign_non_blocking.expr.write(writer)?;
                 writer.skip_indent();
@@ -129,6 +137,9 @@ pub struct AssignBlocking {
 #[derive(Debug)]
 pub struct AssignNonBlocking {
     pub name: String,
+    /// The word index when the target is a memory (`mem[idx] <= v`);
+    /// `None` for a plain register write.
+    pub index: Option<Expr>,
     pub expr: Expr,
 }
 
