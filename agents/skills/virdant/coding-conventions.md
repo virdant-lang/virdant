@@ -1,24 +1,28 @@
-Coding Conventions
-==================
+# Coding Conventions
 Virdant is a language we created so that hardware can be designed in a way that is lush and beautiful.
 
 To help with this, we insist on adhering to certain coding conventions when writing Virdant.
 
 
-Filenames
----------
-Virdant files have the `.vir` extension and should begin with a lowercase letter.
-For files with multiple words, we use snake case.
+## Filenames
+Virdant files have the `.vir` extension.
+The filename defines the package name, so it must be a valid package identifier:
+
+* Begin with a lowercase letter; use snake_case for multi-word names.
+* No hyphens, uppercase letters, or other characters that cannot appear
+  in an identifier.
+  A file named `my-top.vir` is a compile error (`InvalidPackageName`):
+  write `my_top.vir` instead.
 
 
-Spaces not Tabs
----------------
-Please use only spaces in Virdant designs.
-When indenting, always use 4 spaces.
+## Whitespace
+* Tabs are a compile error. Use spaces only.
+* Every indentation must be a multiple of 4 spaces (compile error otherwise).
+* Trailing whitespace at the end of a line is a warning. Do not leave any.
+* Keep lines under 100 characters.
 
 
-Naming Things
--------------
+## Naming Things
 Names are incredibly important.
 They should be descriptive and accurate.
 
@@ -45,8 +49,7 @@ Unless it is conventional for the technology, consider using "client" instead of
 Alternatively, you may use the terms "controller" for "master" and "device" for "slave" as well.
 
 
-Module Definition Slot Ordering
--------------------------------
+## Module Definition Slot Ordering
 The general order for slots defined inside `mod` definition is:
 
 * First, port components (`incoming` `outgoing` `bus`) and `socket`s
@@ -56,8 +59,7 @@ The general order for slots defined inside `mod` definition is:
 * Fifth, any drivers which were intentionally not placed in driver blocks (especially FSM state transitions)
 
 
-Types
------
+## Types
 Whenever you give the type of a component, you should put a space both before and after the colon.
 That is, we write `wire w : Bit` instead of `wire w: Bit`.
 
@@ -65,8 +67,7 @@ When declaring many components on consecutive lines, if adding a few extra space
 you may insert them to make it easier to read off the types.
 
 
-Keep Code Organized
----------------------
+## Keep Code Organized
 The order of statements inside module definitions is irrelevant in Virdant.
 Please use this to your advantage to make code easy to read!
 
@@ -75,96 +76,101 @@ Think about whether the order you have defined things will make it easy for the 
 Use blank spaces to help separate your statements into meaningful groups.
 
 
-Curly Braces
-------------
+## Curly Braces
 Virdant should be written with the opening curly brace at the end of the line that needs to open it.
 So we write the following:
 
-.. code-block:: virdant
-
-  mod Top {
-      // ...
-  }
+```virdant
+mod Top {
+    // ...
+}
+```
 
 And similarly, the correct ways to write `if` and `match` expressions are:
 
-.. code-block:: virdant
-
-  if {
-      when condition => 0
-      else => 1
-  }
+```virdant
+if {
+    when condition => 0
+    else => 1
+}
+```
 
 and
 
-.. code-block:: virdant
+```virdant
+match maybe_data {
+    with @Invalid() => 0
+    with @Valid(payload) => payload
+}
+```
 
-  match maybe_data {
-      with @Invalid() => 0
-      with @Valid(payload) => payload
-  }
+and
+
+```virdant
+match maybe_data {
+    with @Invalid() {
+        has_data <= false
+    }
+    with @Valid(payload) {
+        has_data <= true
+    }
+}
+```
 
 
-Expressions
------------
+## Expressions
 When writing driver statements, if the expression on the right-hand side is short, you can write it on the same line:
 
-.. code-block:: virdant
-
-   out := is_valid && counter[3]
+```virdant
+out := is_valid && counter[3]
+```
 
 If an expression is longer, especially if it contains an `if` or `match` expression, it may be written in one of two ways.
 
 The first is to write it inline, as if the driver is part of the expression:
 
-.. code-block:: virdant
-
-  counter <= if {
-      when reset => 0
-      else => counter + 1
-  }
-
-
-Or if it makes it clearer, with a newline and an extra layer of indentation:
-
-.. code-block:: virdant
-
-  counter <=
-      if {
-          when reset => 0
-          else => counter + 1
-      }
+```virdant
+counter <= if {
+    when reset => 0
+    else => counter + 1
+}
+```
 
 The expression for each arm of a match expression follows a similar rule:
 
 Inline:
 
-.. code-block:: virdant
-
-  match maybe_data {
-      with @Invalid() => 0
-      with @Valid(payload) => payload
-  }
+```virdant
+match maybe_data {
+    with @Invalid() => 0
+    with @Valid(payload) => payload
+}
+```
 
 
 Newline and extra indentation:
 
-.. code-block:: virdant
-
-  match maybe_data {
-      with @Invalid() =>
-          if {
-              when default_payload => default_payload
-              else => 0
-          }
-      with @Valid(payload) => payload
-  }
+```virdant
+match maybe_data {
+    with @Invalid() if {
+        when default_payload => default_payload
+        else => 0
+    }
+    with @Valid(payload) => payload
+}
+```
 
 
 ## Doc Comments
 Use `//>` to write documentation comments on types, ports, and modules.
 The `//>` prefix introduces a doc comment line that is extracted for
 documentation tooling.
+
+* The marker must be followed by a space or a newline: `//> text`, never `//>text`.
+  A docstring without the space after the marker is a compile error
+  (`InvalidDocstring`).
+* Use `//` (two slashes, no marker) for inline comments explaining a
+  single line of logic.
 
 ```virdant
 //> `UartState` is used to model the state machine of `UartSender`
@@ -187,9 +193,6 @@ Doc comments are appropriate for:
 - Type definitions (what each variant or field means)
 - Top-level socket definitions
 
-For inline comments that explain a single line of logic, use `//` (two
-slashes) instead.
-
 ```virdant
 // Randomize LEDs on every new UART byte
 edge_detector.clock := clock
@@ -198,7 +201,8 @@ edge_detector.inp := uart_receiver.data_valid
 
 
 ## Package Docstrings
-Use `//!` at the top of a `.vir` file to document the package or
+
+Use `//!` at line 1 of a `.vir` file to document the package or
 compilation unit.
 These docstrings describe the purpose of the file as a whole.
 
@@ -210,9 +214,11 @@ These docstrings describe the purpose of the file as a whole.
 //! Address bit 31 selects the server (0 -> server_0, 1 -> server_1).
 
 socket TlUl {
-    ...
+    // ...
 }
 ```
+
+The same space rule applies as for `//>`: `//! text`, never `//!text`.
 
 Write one `//!` line per sentence.
 Keep line length under 100 characters.
@@ -221,6 +227,34 @@ Put a blank `//!` line between paragraphs.
 A package docstring typically appears at line 1 of the file, before any
 `import` statements or module definitions.
 It may be omitted for very small files whose purpose is obvious.
+
+
+## The `pub` keyword
+
+* Mark an item `pub` when it is referenced from another package.
+  Only `pub` items may be used cross-package.
+* Conversely, items that are not `pub` and never referenced warn at
+  the declaration site (`UnusedNonPub`).
+  If you meant the item to be used by other packages, make it `pub`.
+
+```virdant
+// buffer.vir
+pub mod Buffer {
+    // ...
+}
+
+// top.vir
+import buffer
+
+mod Top {
+    mod buf of buffer::Buffer {
+        // ...
+    }
+}
+```
+
+See ./modules.md for module definitions and ./sockets.md for socket
+interfaces.
 
 
 ## The `Valid[T]` type and the `Pipe[T]` socket

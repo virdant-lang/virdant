@@ -23,6 +23,27 @@ wire m : Word[32]
 m := 100w32           // explicit: Word[32]
 ```
 
+### Over-wide inferred literals are errors, not truncation
+
+If an inferred-width literal's value does not fit the inferred width,
+it is a hard compile error (`DoesntFit`) — the value is never
+silently truncated:
+
+```virdant
+wire n : Word[4]
+n := 16              // ERROR: 16 needs 5 bits (Value doesn't fit)
+n := 15              // OK: 15 is the Word[4] maximum
+```
+
+If you want a wider value, widen the type; if you want truncation,
+do it explicitly with `trunc` (see below).
+
+The behavior differs for explicit-width literals: `0xffw4` declares
+itself as `Word[4]` and the value is silently truncated to it
+(it evaluates to `0xf`).
+Prefer writing the value to fit the width you declare — an
+over-wide `w` suffix is usually a typo.
+
 ## Base prefixes
 
 Binary literals use the `0b` prefix:
@@ -53,6 +74,10 @@ h := 0xfew8
 
 Use underscores to group digits for readability.
 They are ignored by the compiler.
+Make use of them for strange groupings of bits
+(such as RISC-V's 5.2 opcodes)
+or for 32- or 64-bit addresses
+(such as 0x8000_0000 or 0x8000_0000_0000_0000).
 
 ```virdant
 wire n : Word[32]
@@ -81,14 +106,18 @@ r <= word(r[3..0], serial_in)
 The width of the result is the sum of the widths of all arguments.
 Each argument must be `Bit` or `Word[n]`.
 
-## `zext()` and `sext()`
+## `zext()`, `sext()`, and `trunc()`
 
-Zero-extend or sign-extend a word to a wider target.
+Change the width of a word. The target width is inferred from the
+context of the assignment.
 
 - `zext(x)` — zero-extend.
   Pads the most-significant bits with `0`.
 - `sext(x)` — sign-extend.
   Pads the most-significant bits with the original most-significant bit.
+- `trunc(x)` — truncate.
+  Keeps the low bits of the word, dropping the most-significant bits.
+  Truncating to a width at least as wide as the input is a no-op.
 
 ```virdant
 wire z : Word[8]
@@ -96,6 +125,9 @@ z := zext(0x8w4)    // result: 0x08
 
 wire s : Word[8]
 s := sext(0x8w4)    // result: 0xf8 (0x8 = 0b1000, MSB is 1)
+
+wire t : Word[4]
+t := trunc(0xabw8)  // result: 0xb (keeps the low 4 bits)
 ```
 
 The target width is inferred from the context of the assignment.
@@ -121,7 +153,7 @@ Reinterpret the bit pattern of a `Word[n]` as an enum type, or vice versa:
 opcode := cast(opcode_bits)   // Word[4] -> Opcode
 ```
 
-See `types-and-patterns.md` for more details.
+See ./types-and-patterns.md for more details.
 
 ## `dontcare`
 
@@ -145,10 +177,38 @@ ports.
 
 It's especially useful as the RHS of `if` and `match` arms where the value is irrelevant or unused.
 
+## `?` holes
+
+`?` is a hole: a placeholder that typechecks as whatever type the
+context requires, but leaves the driver unimplemented.
+It produces a warning (`UnfilledHole`), not an error.
+
+Use `?` while scaffolding — when you need the design to typecheck
+but have not written the real logic yet — and fill in the holes
+before finishing:
+
+```virdant
+mod WithHole {
+    outgoing out : Word[4]
+    out := ?      // WARNING: Unfilled hole: ? : Word[4]
+}
+```
+
+Unlike `dontcare`, a hole is a deliberate "not written yet" marker
+the compiler reminds you about.
+
+## `tap` and tristate reads
+
+Use the unary `tap` operator to read a tristate `bus` or `net`
+component (`net sda : Bit` then `tap sda`); a plain reference to a
+net is a compile error (`NetReadWithoutTap`).
+See ./tristate.md.
+
 ## `mux()` ternary selector
 
 `mux(sel, a, b)` returns `a` when `sel` is true and `b` when `sel` is false.
 Use it for simple ternary selection instead of a `if` expression.
+See ./driver-blocks.md for when a full `if` block is preferable.
 
 ```virdant
 r <= mux(reset, 0, r + 1)
@@ -158,16 +218,64 @@ state <= mux(data_valid, @Start(1250w11), @Idle())
 
 Both `a` and `b` must have the same type.
 
+## Unary operators: `-`, `~`, `!`
+
+- `-x` — arithmetic negation (two's complement) of a `Word[n]`:
+  equivalent to `0 - x` with wraparound.
+- `~x` — bitwise NOT of a `Word[n]`: inverts every bit.
+- `!x` — logical NOT of a `Bit`.
+
+Unary operators have the highest precedence and are right-associative.
+
+```virdant
+wire neg : Word[8]
+neg := -value       // two's-complement negation
+
+wire inv : Word[8]
+inv := ~value       // invert all bits
+
+wire not_bit : Bit
+not_bit := !ready
+```
+
 ## Operators on `Bit` and `Word[n]`
 
 Virdant provides the usual operators:
 
 - `Bit`: `!` (not), `&&` (and), `||` (or), `^^` (xor)
-- `Word[n]`: `&` (and), `|` (or), `^` (xor), `+`, `-`, `==`, `!=`,
+- `Word[n]`: `&` (and), `|` (or), `^` (xor), `-`, `~`, `==`, `!=`,
   `<`, `>`, `<=`, `>=`
-- `any(x)` — true if any bit in `x` is set.
-  Equivalent to `x != 0`.
+- `any(x)` — true if any bit in `x` is set. Equivalent to `x != 0`.
+- `all(x)` — true if every bit in `x` is set. Equivalent to `!any(~x)`.
 - `word(...)` — concatenation (see above).
+
+See below for the `+` family, which has wrapping and widening forms.
+
+## Arithmetic: `+`/`-` (wrapping) and `+.`/`-.` (widening)
+
+- `a + b` and `a - b` are modular: the result wraps to the operand
+  width, so overflow/underflow information is lost.
+- `a +. b` (add with carry) and `a -. b` (subtract with borrow)
+  require the same `Word[n]` operands but produce a `Word[n+1]`: the
+  low `n` bits are the wrapped result and the most-significant bit
+  is the carry-out (for `+.`) or borrow-out (for `-.`).
+
+```virdant
+wire wrapped : Word[4] {
+    it := 0xfw4 + 0x1w4     // wraps to 0x0
+}
+
+wire carried : Word[5] {
+    it := 0xfw4 +. 0x1w4    // 0x10: carry-out set in the top bit
+}
+
+wire diff : Word[5] {
+    it := count -. 0x1w4    // top bit is the borrow-out (count is Word[4])
+}
+```
+
+Prefer `+.`/`-.` when you need to detect overflow or chain a carry
+between additions.
 
 ## Bit shifting
 
@@ -186,7 +294,6 @@ result := word(x[5..0], 0w3)
 ```
 
 The slice `x[5..0]` keeps the bottom 5 bits of the original word and
-
 discards bits 7..5 (the bits shifted out and lost).
 Then `0w3` pads the result with 3 zero bits at the bottom (the LSB side).
 
@@ -208,7 +315,8 @@ Variable-distance shifts require an `if` or `match` expression:
 
 ```virdant
 // x is Word[8], shift left by a variable amount (0..3)
-reg result : Word[8] on clock {
+// shift_amount is Word[2], so the four arms are exhaustive.
+reg result : Word[8] {
     it <= match shift_amount {
         with 0 => x
         with 1 => word(x[7..0], 0w1)

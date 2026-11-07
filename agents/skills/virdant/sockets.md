@@ -138,3 +138,166 @@ mod Top {
 When a module has multiple sockets of the same type, disambiguate with
 a prefix or a numbered suffix:
 `host_0`, `host_1`, `device`, `inp`, `out`.
+
+## Generic sockets
+
+A socket definition may declare generic parameters, exactly like type
+and module definitions (see ./generics.md). The parameter names are in
+scope in the channel types of the body:
+
+```virdant
+socket Bus[T : Type] {
+    cosi req : T
+    soci rsp : T
+}
+```
+
+An instantiation supplies type arguments after the socket definition
+name, in declaration order:
+
+```virdant
+mod Master {
+    incoming d : Word[8]
+    client socket busif of Bus[Word[8]] {
+        it.req := d
+    }
+    unused busif.rsp
+}
+
+mod Slave {
+    server socket busif of Bus[Word[8]] {
+        it.rsp := it.req
+    }
+}
+```
+
+- Channel types are the definition's channel types with the arguments
+  substituted: `busif.req` and `busif.rsp` are `Word[8]` above.
+- The builtin `Pipe[T]` is a generic socket: `client socket p of Pipe[Word[8]]`.
+  Omitting the arguments is an error:
+  `Type builtin::Pipe takes 1 type argument, but 0 were given`
+- A `Type` parameter given a number (`client socket busif of Bus[8]`) reports
+  `Type argument mismatch: parameter T of Bus expects a type, but found a Nat literal`
+- Multiple parameters are allowed and can differ per channel
+  (`Bus[A : Type, B : Type]` with a wide request and narrow response).
+
+## Mono-socket matching for `:=:`
+
+- `:=:` matches on the **mono socket**: the socket definition together
+  with its type arguments. Same definition AND same args connect;
+  same definition at different args are different mono sockets and do
+  not connect.
+- A mismatch is an error naming both instantiations and pointing at the
+  connection:
+
+```virdant
+socket Link[T : Type] {
+    cosi data : T
+    soci ready : Bit
+}
+
+mod Client {
+    client socket pipe of Link[Word[8]] {
+        it.data := 7w8
+        unused it.ready
+    }
+}
+
+mod Server {
+    server socket pipe of Link[Word[9]] {
+        it.ready := true
+    }
+    unused pipe.data
+}
+
+pub mod Top {
+    mod master of Client
+    mod slave of Server
+    slave.pipe :=: master.pipe
+}
+```
+
+reports:
+
+```text
+Cannot connect socket_connect_mismatch::Link[Word[9]] to socket_connect_mismatch::Link[Word[8]]: mismatched socket instantiations
+```
+
+(the package prefix matches where the socket is defined).
+
+### Composition through generic module instances
+
+Arguments written at a socket instantiation inside a generic module
+compose with the arguments of the enclosing module's instantiation:
+
+```virdant
+mod Master[W : Type] {
+    incoming d : W
+    client socket busif of Bus[W] {
+        it.req := d
+    }
+    unused busif.rsp
+}
+
+mod Slave[W : Type] {
+    server socket busif of Bus[W] {
+        it.rsp := it.req
+    }
+}
+
+pub mod Top {
+    incoming inp : Word[8]
+
+    mod masterg of MasterG[Word[8]] {
+        it.d := inp
+    }
+    mod slaveg of SlaveG[Word[8]] {
+        masterg.busif :=: it.busif
+    }
+
+    outgoing out : Word[8]
+    out := slaveg.busif.rsp
+}
+```
+
+`masterg.busif` instantiates `Bus` at `W`, and `master` supplies `Word[8]`
+for `W`, so both sides are the mono socket `Bus[Word[8]]` and the
+connection checks. Connections written inside an it-block are checked
+the same way: `it` resolves to the instance, and the instance's
+arguments compose with the socket's.
+
+## `dependson` on socket channels
+
+A socket channel may carry a `dependson` list naming channels of the
+opposite direction word of the same socket:
+
+```virdant
+socket Wishbone {
+    cosi cyc : Bit
+    cosi stb : Bit
+    soci ack : Bit dependson cyc, stb
+}
+```
+
+- The list applies when the socket is instantiated in the channel's
+  **driving** role: `client` for `cosi` channels, `server` for `soci`
+  channels. It places the same obligation on the containing module as
+  if the `dependson` were declared on the resulting port: the module's
+  drive on that channel may combinationally depend on its reads of the
+  listed channels.
+- In the **receiving** role the list is inert: a `soci` list says
+  nothing about a `client` instantiation, a `cosi` list says nothing
+  about a `server` instantiation.
+- Socket-derived obligations are **exempt from the unused-`dependson`
+  warning** when the drive does not actually exercise the list: bus
+  protocols legitimately vary their latency, so the declared potential
+  may stay dormant. It is still a contract: the module must not drive
+  the channel with anything outside the declared set, and cycles in
+  the composed `dependson` relation are errors.
+- See ./dependson.md for the module-port rules this builds on.
+
+## Cross-references
+
+- Generic parameters and mono modules: ./generics.md
+- Instances, it-blocks, ext mods, `@parameter`: ./modules.md
+- `dependson` on module ports and the potentiality/cycle rules: ./dependson.md

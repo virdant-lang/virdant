@@ -42,19 +42,77 @@ out := buffer.out
 Prefer the `it` block form when connecting three or more ports,
 especially for clock, reset, and data signals.
 
-## `export` keyword
+## `pub` visibility
 
-Mark a module as the top-level entry point with `export`:
+Mark an item `pub` to make it visible to other packages:
 
 ```virdant
-export mod Top {
+// buffer.vir
+pub mod Buffer {
     incoming clock : Clock
-    outgoing fin    : Bit
+    incoming inp : Word[8]
+    outgoing out : Word[8]
 }
 ```
 
-Only exported modules are visible outside the compilation unit.
-Typically exactly one module per file is exported.
+- `pub` is available on every top-level item kind: `mod`, `ext mod`,
+  `struct type`, `union type`, `enum type`, `builtin type`, `socket`,
+  and `platform`.
+- An item without `pub` is private to its package. Referencing it from
+  another package is an **error at the reference site**:
+
+  - `` `Priv` is not pub in package `lib`; mark it `pub` to reference it from other packages ``
+
+- A warning is also emitted at the non-`pub` item's *definition*,
+  naming the referencing package, reported once per referencing
+  package no matter how many times it is referenced:
+
+  - `` `Priv` is not pub but referenced from package `top` ``
+
+- The `import` statement itself never fails for visibility reasons.
+- Within the defining package, every item is visible to every other
+  item, `pub` or not: `pub` only matters at package boundaries.
+- An unused non-`pub` item warns at its declaration site
+  (``Item `UnusedMod` is unused and not `pub```). `pub` items and mod
+  defs are exempt: any uninstantiated mod is a potential `--top`
+  target.
+
+### Top modules
+
+There is no `export` keyword. The entry point of a program is the
+module named by `[prog] top` in `virdant.toml`, written as
+`package::ModName`:
+
+```toml
+[prog]
+top = "top::Top"
+```
+
+- A module implementing a platform with a `for` clause must be `pub`
+  (top modules implement platforms):
+  ``Top module top::Top must be `pub` ``
+- `pub mod`s may be generic; the `[prog] top` module must be a
+  concrete instantiation.
+- See ./generics.md for generic modules and instantiation.
+
+### The pub surface must be transitively pub
+
+A `pub` item may not leak a non-`pub` type: every type appearing in a
+`pub` item's public surface must itself be transitively `pub`. The
+public surface covers:
+
+- module port types (`incoming`, `outgoing`, `bus`)
+- struct field types
+- union variant payload types and enum variant payload types
+- socket `cosi`/`soci` channel types
+- platform port types
+
+A leak is an error at the offending type's span:
+
+`` `Priv` is not pub: the public surface of `pkg::PubShell` must be transitively pub ``
+
+Generic parameters (`T` in `Word[T]`) are exempt: they are bound at
+the instantiation site.
 
 ## `ext mod` (external modules)
 
@@ -63,21 +121,56 @@ Declare a module that is defined externally (e.g., in Verilog) with
 
 ```virdant
 ext mod Memory {
-    incoming clock    : Clock
+    incoming clock     : Clock
     incoming read_addr : Word[16]
     outgoing read_data : Word[8]
 }
+```
 
-ext mod LedDriver {
-    incoming clock : Clock
-    incoming inp   : Bit
-    outgoing out   : Bit
+- External modules can be instantiated and connected just like
+  ordinary modules.
+- The `ext mod` body lists only ports (no internal logic).
+- `pub ext mod` makes the external module visible to other packages.
+- An `ext mod` cannot have generic parameters: it parameterizes
+  through `@parameter` annotations instead (below).
+
+### `@parameter` on `ext mod`
+
+Declare Verilog parameters on the ext mod definition; each
+`@parameter` takes a string name and an optional default:
+
+```virdant
+@parameter("WIDTH", 8)
+@parameter("MODE", "SYNC")
+ext mod Cell {
+    incoming clk : Clock
+    outgoing data : Word[16]
 }
 ```
 
-External modules can be instantiated and connected just like ordinary
-modules.
-The `ext mod` body lists only ports (no internal logic).
+Override per instance by attaching `@parameter` to the
+`mod ... of` statement; instance values override declared defaults,
+and parameter names not declared on the target are appended:
+
+```virdant
+pub mod Top {
+    incoming clk : Clock
+    outgoing a : Word[16]
+
+    @parameter("WIDTH", 4)
+    mod u0 of Cell {
+        it.clk := clk
+        a := it.data
+    }
+}
+```
+
+Rendering to Verilog:
+
+- numbers render in decimal (`.WIDTH(4)`)
+- strings render quoted (`.MODE("SYNC")`)
+- booleans render as single-bit literals (`true` → `1'b1`,
+  `false` → `1'b0`)
 
 ## `import` directive
 
@@ -89,14 +182,21 @@ import resetter
 import edge
 ```
 
-Imports are file-level (placed at the top of the `.vir` file, before any
-module definitions).
-The import path is the stem of the `.vir` file, resolved against the
-library/include search paths.
+- Imports are file-level: placed at the top of the `.vir` file,
+  before any item definitions.
+- The package name is the stem of the `.vir` filename (`buffer.vir`
+  defines the `buffer` package), resolved against the importing
+  file's directory and library search paths.
+- A file's filename must be a valid package identifier: snake_case,
+  no hyphens. `bad-name.vir` is rejected at load time
+  (`bad-name.vir: file name is not a valid package identifier`).
+- Circular imports are not permitted: if A imports B, B may not
+  import A, directly or transitively
+  (`Import cycle: ...`).
 
 ## Module path syntax (`::`)
 
-Refer to a module inside an imported file with `::`:
+Refer to an item inside an imported package with `::`:
 
 ```virdant
 import uart
@@ -105,8 +205,13 @@ mod sender of uart::UartSender
 sender.clock := clock
 ```
 
-The part before `::` is the import name.
-The part after `::` is the module name as defined inside that file.
+The part before `::` is the package name.
+The part after `::` is the item name as defined inside that package.
+
+- Bare names (no `::`) resolve in the defining package first, then
+  across the package's imports.
+- Only `pub` items of the imported package are visible (see `pub`
+  visibility above).
 
 ## `incoming { ... }` forwarding block
 
@@ -127,3 +232,8 @@ This is especially useful for `clock` and `reset` ports.
 Inside the block, `it` refers to the incoming port.
 This pattern eliminates the need for an intermediate wire when fanning
 out a signal, and makes the forwarding explicit at the declaration site.
+
+## `dependson` on outgoing ports
+
+Outgoing ports declare which `incoming` ports they may combinationally
+depend on; `vir check` enforces the list. See ./dependson.md.
