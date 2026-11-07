@@ -5,6 +5,10 @@
 //! `vir poke` execs this binary via the `vir-*` companion-binary
 //! mechanism; see `vir/src/vir/cli.rs`.
 //!
+//! A script passed bare (or via `--script`) runs standalone as an
+//! assertion test; `--repl` instead drops into the interactive REPL
+//! on the first failure.
+//!
 //! This module owns the session (the live `Sim` plus the `cd`-style
 //! current-module location); `repl` drives the line loop, `commands`
 //! executes parsed commands, `eval` evaluates expressions, and
@@ -33,11 +37,16 @@ fn command() -> clap::Command {
             .help("Top module (may be non-pub); defaults to [prog] top"))
         .arg(clap::Arg::new("file").value_name("SCRIPT").num_args(0..=1)
             .value_parser(value_parser!(String))
-            .help("Script to preload into the REPL"))
+            .help("Script to run standalone as an assertion test"))
+        .arg(clap::Arg::new("repl").long("repl").short('r')
+            .num_args(0)
+            .requires("file")
+            .conflicts_with("script")
+            .help("Run SCRIPT, dropping into the REPL on the first failure"))
         .arg(clap::Arg::new("script").long("script").value_name("SCRIPT").num_args(0..=1)
             .default_missing_value("")
             .value_parser(value_parser!(String))
-            .help("Run a script standalone as an assertion test"));
+            .help("Run a script standalone as an assertion test (same as passing SCRIPT bare)"));
     common::add_project_args(&mut cmd, false);
     cmd
 }
@@ -48,27 +57,43 @@ fn main() {
     let top = matches.get_one::<String>("top").cloned();
     let file = matches.get_one::<String>("file").cloned();
     let script = matches.get_one::<String>("script").cloned();
+    let repl_flag = matches.get_flag("repl");
 
-    // Three forms:
+    // Forms:
     //   vir poke                  — REPL
-    //   vir poke test.poke        — REPL, script preloaded
+    //   vir poke test.poke        — standalone script run (assertion test)
     //   vir poke test.poke --script / vir poke --script test.poke
-    //                             — standalone script run
-    let (preload, standalone) = match (file, script.as_deref()) {
-        // `vir poke test.poke --script`: bare --script flag.
-        (Some(file), Some("")) => (None, Some(file)),
-        // `vir poke a.poke --script b.poke`: conflicting.
-        (Some(_), Some(_)) => {
-            eprintln!("error: cannot give both a script and --script <path>");
-            std::process::exit(2);
+    //                             — standalone script run (same as bare)
+    //   vir poke test.poke --repl — run the script, dropping into the
+    //                               REPL on the first failure
+    let (preload, standalone) = if repl_flag {
+        // clap enforces `--repl` requires a file and conflicts with
+        // `--script`, so `file` is always present here.
+        match file {
+            Some(file) => (Some(file), None),
+            None => {
+                eprintln!("error: --repl needs a script file");
+                std::process::exit(2);
+            }
         }
-        (Some(file), None) => (Some(file), None),
-        (None, Some("")) => {
-            eprintln!("error: --script needs a script file");
-            std::process::exit(2);
+    } else {
+        match (file, script.as_deref()) {
+            // `vir poke test.poke --script`: bare --script flag.
+            (Some(file), Some("")) => (None, Some(file)),
+            // `vir poke a.poke --script b.poke`: conflicting.
+            (Some(_), Some(_)) => {
+                eprintln!("error: cannot give both a script and --script <path>");
+                std::process::exit(2);
+            }
+            // `vir poke test.poke`: standalone run, like `--script`.
+            (Some(file), None) => (None, Some(file)),
+            (None, Some("")) => {
+                eprintln!("error: --script needs a script file");
+                std::process::exit(2);
+            }
+            (None, Some(path)) => (None, Some(path.to_string())),
+            (None, None) => (None, None),
         }
-        (None, Some(path)) => (None, Some(path.to_string())),
-        (None, None) => (None, None),
     };
 
     let code = run(&location, top, preload, standalone);
@@ -824,9 +849,10 @@ fn kind_name(kind: ComponentKind) -> &'static str {
 /// Run `vir poke`.
 ///
 /// `top_arg` is the explicit `--top` (may be non-pub); when absent, the
-/// top comes from `[prog] top` in `virdant.toml`.  `preload` is a
-/// script preloaded into the REPL; `standalone` a script run as an
-/// assertion test.  Returns the process exit code.
+/// top comes from `[prog] top` in `virdant.toml`.  `standalone` is a
+/// script run as an assertion test; `preload` (from `--repl`) a script
+/// run with the REPL taking over on the first failure.  Returns the
+/// process exit code.
 pub fn run(
     location: &vircommon::ProjectLocation,
     top_arg: Option<String>,
