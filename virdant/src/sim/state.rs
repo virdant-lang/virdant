@@ -6,6 +6,8 @@
 //! `InitStrategy` (random by default), so even never-written registers
 //! and top-level incoming ports carry fully-defined bit patterns.
 
+use std::sync::Arc;
+
 use indexmap::IndexSet;
 
 use crate::analysis::elaboration::{Elaboration, SignalId};
@@ -22,6 +24,12 @@ use super::*;
 /// and comparing one never touches the heap.
 pub(super) struct State {
     vals: Vec<Value>,
+    /// Memory words, densely indexed by `SignalId::index()`;
+    /// `None` for non-memory components.  A memory's `vals` entry is
+    /// not its contents — it is a version counter bumped by every
+    /// committed write so combinational readers re-evaluate (the
+    /// dirty-propagation channel for `mem[dyn i]` reads).
+    memories: Vec<Option<MemoryState>>,
     /// Pending next-values for registers, densely indexed by
     /// `SignalId::index()` (`None` for non-registers).
     set_vals: Vec<Option<Value>>,
@@ -42,11 +50,13 @@ impl State {
         elaboration: &Elaboration,
         layouts: &crate::sim::layout::TypeLayoutIndex,
         strategy: &InitStrategy,
+        memory_images: &[Option<crate::sim::circuit::MemoryCircuit>],
     ) -> State {
         let n_components = elaboration.components().len();
         let mut rng: u64 = initial_seed();
         let mut vals: Vec<Value> = Vec::with_capacity(n_components);
         let mut set_vals: Vec<Option<Value>> = vec![None; n_components];
+        let mut memories: Vec<Option<MemoryState>> = vec![None; n_components];
         for elab_component in elaboration.components() {
             let elab_component_id = elab_component.id();
             let typ = elab_component.typ();
@@ -54,6 +64,23 @@ impl State {
             let width = layouts.type_width(&typ);
 
             vals.push(strategy.value(typ_id, width, &mut rng));
+
+            if let Some(memory) = &memory_images[elab_component_id.index()] {
+                // One word per declared depth: image words where the
+                // image provides them, pseudorandom otherwise
+                // (never-written words read as unspecified).
+                let words: Vec<Value> = (0..memory.depth)
+                    .map(|index| {
+                        memory.image
+                            .get(index as usize)
+                            .and_then(|word| word.clone())
+                            .unwrap_or_else(|| strategy.value(typ_id, width, &mut rng))
+                    })
+                    .collect();
+                memories[elab_component_id.index()] = Some(MemoryState {
+                    words: Arc::new(words),
+                });
+            }
 
             if elab_component.is_reg() {
                 set_vals[elab_component_id.index()] =
@@ -63,10 +90,58 @@ impl State {
 
         State {
             vals,
+            memories,
             set_vals,
             dirty: IndexSet::new(),
             committed: IndexSet::new(),
         }
+    }
+
+    /// The words of memory `signal_id` (shared cheaply through an
+    /// `Arc`; the read path never copies the array).
+    pub(super) fn memory_words(&self, signal_id: SignalId) -> Arc<Vec<Value>> {
+        self.memories[signal_id.index()]
+            .as_ref()
+            .expect("memory_words: not a memory")
+            .words
+            .clone()
+    }
+
+    /// Store `value` at `index` of memory `signal_id`, returning
+    /// whether the word changed.  A change bumps the memory's version
+    /// counter (`vals`) and marks it dirty, so combinational readers
+    /// re-evaluate after the clock-edge commit.
+    pub(super) fn set_memory_word(
+        &mut self,
+        signal_id: SignalId,
+        index: usize,
+        value: Value,
+    ) -> bool {
+        let words = match self.memories[signal_id.index()].as_mut() {
+            Some(MemoryState { words }) => Arc::make_mut(words),
+            None => panic!("set_memory_word: not a memory"),
+        };
+        if let Some(word) = words.get_mut(index) {
+            if *word == value {
+                return false;
+            }
+            *word = value;
+        }
+        // Bump the version counter (any visible change works; the
+        // counter is only a change detector).
+        let old = self.vals[signal_id.index()].clone();
+        let bits = old.to_u64().wrapping_add(1);
+        let new = Value::from_u64(old.typ_id(), old.width(), bits);
+        self.vals[signal_id.index()] = new;
+        self.dirty.insert(signal_id);
+        true
+    }
+
+    /// Mark `signal_id` as committed for this settlement, returning
+    /// whether it was newly marked (registers and memories commit at
+    /// most once per settlement — see `transfer`).
+    pub(super) fn mark_committed(&mut self, signal_id: SignalId) -> bool {
+        self.committed.insert(signal_id)
     }
 
     pub(super) fn get(&self, signal_id: SignalId) -> Value {
@@ -91,7 +166,7 @@ impl State {
         // the same settlement, and only the committed flag keeps that
         // recomputed pending from being committed by a late alias-edge
         // detection.
-        if !self.committed.insert(component_id) {
+        if !self.mark_committed(component_id) {
             return;
         }
         let new_value = self.set_vals[component_id.index()]
@@ -136,6 +211,15 @@ fn initial_seed() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(0x9E3779B97F4A7C15)
+}
+
+/// The live contents of one memory.
+#[derive(Debug, Clone)]
+struct MemoryState {
+    /// One `Value` per declared word, shared through an `Arc` so the
+    /// read path (which snapshots words into evaluation contexts)
+    /// never copies the array.
+    words: Arc<Vec<Value>>,
 }
 
 impl State {

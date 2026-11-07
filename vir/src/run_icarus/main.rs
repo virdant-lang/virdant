@@ -52,11 +52,11 @@ fn main() {
 fn run_icarus(location: &ProjectLocation, vcd: Option<&str>) {
     let cwd = location.resolve_cwd();
 
-    let virdant_toml_text =
-        std::fs::read_to_string(common::project_manifest_or_exit(&cwd)).unwrap();
-    let virtant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
-
-    let project = virtant_toml["project"]["name"].as_str().unwrap();
+    let manifest = common::project_manifest_or_exit(&cwd);
+    let project = common::read_project_name_from(&manifest).unwrap_or_else(|| {
+        eprintln!("virdant.toml is missing [project] name");
+        std::process::exit(1);
+    });
     let builddir = cwd.join("build");
 
     let source_dir = cwd.join("src");

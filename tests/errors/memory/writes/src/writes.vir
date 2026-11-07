@@ -1,0 +1,70 @@
+// Write-site rules (MEMORY_PLAN §3.3, §3.4): exactly one write site
+// per memory, sibling `when` clauses whose guards are not exclusive
+// may not both write the memory, indexed drivers write memories only,
+// and a write outside a clocked context is an error when the memory's
+// clock is unresolved.
+
+mod Overlapping {
+    incoming clock : Clock
+    incoming write_enable : Bit
+    incoming flush : Bit
+    incoming addr : Word[4]
+    incoming flush_addr : Word[4]
+    incoming write_data : Word[8]
+
+    memory mem[16] : Word[8] {
+        if {
+            when write_enable {
+                it[dyn addr] <= write_data
+            }
+            // A second `when` is not exclusive with the first: both
+            // may fire in one cycle and collide.
+            when flush {
+                it[dyn flush_addr] <= 0w8
+            }
+        }
+    }
+}
+
+mod TwoSites {
+    incoming clock : Clock
+    incoming addr : Word[4]
+    incoming write_data : Word[8]
+
+    memory mem[16] : Word[8]
+
+    mem[dyn addr] <= write_data
+    mem[dyn addr] <= write_data
+}
+
+mod NotAMemory {
+    incoming clock : Clock
+    incoming addr : Word[4]
+    incoming write_data : Word[8]
+
+    // An indexed driver targets a memory component only.
+    some_wire[dyn addr] <= write_data
+
+    wire some_wire : Word[8] {
+        it := write_data
+    }
+}
+
+mod OutsideClockedContext {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+    incoming addr : Word[4]
+    incoming write_data : Word[8]
+
+    // Two clocks and no explicit `on` clause: no implicit clocked
+    // context exists, so this write site has no clock.
+    memory mem[16] : Word[8]
+
+    mem[dyn addr] <= write_data
+}
+
+// CHECK: overlapping writes to memory mem
+// CHECK: Multiple drivers for mem
+// CHECK: indexed driver target some_wire is not a memory
+// CHECK: write to memory mem outside a clocked write context
+// CHECK: Check failed

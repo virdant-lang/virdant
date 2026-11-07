@@ -1,0 +1,39 @@
+// The `on <CLOCK> { ... }` region of a memory body (MEMORY_PLAN §2.2):
+// it must name the memory's own clock, and only writes to the memory
+// are allowed inside.
+
+mod ClockMismatch {
+    incoming clk_a : Clock
+    incoming clk_b : Clock
+    incoming addr : Word[4]
+    incoming write_data : Word[8]
+
+    // The memory is clocked by clk_a; the region names clk_b.
+    memory mem[16] : Word[8] on clk_a {
+        on clk_b {
+            it[dyn addr] <= write_data
+        }
+    }
+}
+
+mod NonWriteInsideRegion {
+    incoming clock : Clock
+    incoming addr : Word[4]
+    incoming write_data : Word[8]
+    outgoing read_data : Word[8] dependson addr {
+        it := mem[dyn addr]
+    }
+
+    memory mem[16] : Word[8] {
+        on clock {
+            it[dyn addr] <= write_data
+            // Reads and drivers of other components belong at the top
+            // level of the body, not inside the region.
+            read_data := it[dyn addr]
+        }
+    }
+}
+
+// CHECK: `on` region in memory mem must name the memory's clock clk_a
+// CHECK: only writes to the memory are allowed inside an `on` region
+// CHECK: Check failed

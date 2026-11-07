@@ -1,0 +1,142 @@
+//! Self-checking `kind = "run"` test for `@image`/`@image_hex` memory
+//! initialization (MEMORY_PLAN §6): a hex-image ROM (one word per
+//! line) and a raw-binary ROM (word-packed, most-significant byte
+//! first).  The harness walks all addresses, checking each read
+//! against a golden table.
+
+import virt
+
+//> An 8-word ROM from a text hex file, one word per line.
+pub mod HexRom {
+    //> Read address.
+    incoming read_addr : Word[3]
+
+    //> The addressed word.
+    outgoing read_data : Word[8] dependson read_addr {
+        it := rom[dyn read_addr]
+    }
+
+    @image_hex("hex_words.hex")
+    memory rom[8] : Word[8]
+}
+
+//> A 4-word ROM from a raw binary file: the 8 bytes are two per word,
+//> most-significant byte first (0x0102, 0x0304, 0x0506, 0x0708).
+pub mod RawRom {
+    //> Read address.
+    incoming read_addr : Word[2]
+
+    //> The addressed word.
+    outgoing read_data : Word[16] dependson read_addr {
+        it := rom[dyn read_addr]
+    }
+
+    @image("raw_words.bin")
+    memory rom[4] : Word[16]
+}
+
+pub mod RomImageTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod hex_rom of HexRom {
+        it.read_addr := index[3..0]
+    }
+
+    mod raw_rom of RawRom {
+        it.read_addr := index[2..0]
+    }
+
+    // Free-running step counter through the 8 addresses.
+    reg index : Word[3] {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    reg started : Bit {
+        initial it <= false
+        it <= true
+    }
+
+    reg finished : Bit {
+        initial it <= false
+        if {
+            when started && index == 7 {
+                it <= true
+            }
+        }
+    }
+
+    reg all_ok : Bit {
+        initial it <= true
+        if {
+            when started && !finished {
+                it <= it && hex_rom.read_data == hex_expected && raw_rom.read_data == raw_expected
+            }
+        }
+    }
+
+    // Golden tables, selected by the address.
+    wire hex_expected : Word[8]
+    match index {
+        with 0 {
+            hex_expected := 0x11
+        }
+        with 1 {
+            hex_expected := 0x22
+        }
+        with 2 {
+            hex_expected := 0x33
+        }
+        with 3 {
+            hex_expected := 0x44
+        }
+        with 4 {
+            hex_expected := 0x55
+        }
+        with 5 {
+            hex_expected := 0x66
+        }
+        with 6 {
+            hex_expected := 0x77
+        }
+        with 7 {
+            hex_expected := 0x88
+        }
+    }
+
+    wire raw_expected : Word[16]
+    match index {
+        with 0 {
+            raw_expected := 258
+        }
+        with 1 {
+            raw_expected := 772
+        }
+        with 2 {
+            raw_expected := 1286
+        }
+        with 3 {
+            raw_expected := 1800
+        }
+        with 4 {
+            raw_expected := 258
+        }
+        with 5 {
+            raw_expected := 772
+        }
+        with 6 {
+            raw_expected := 1286
+        }
+        with 7 {
+            raw_expected := 1800
+        }
+    }
+}

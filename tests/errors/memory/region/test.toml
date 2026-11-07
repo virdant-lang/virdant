@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "MemoryOnRegionClockMismatch and MemoryOnRegionNonWrite: the on region of a memory body"
+filecheck = "src/region.vir"

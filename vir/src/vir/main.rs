@@ -154,10 +154,8 @@ fn build(args: &Args) {
     } else {
         let cwd = resolve_cwd(args);
 
-        let virdant_toml_text =
-            std::fs::read_to_string(common::project_manifest_or_exit(&cwd)).unwrap();
-        let virtant_toml: toml::Value = toml::from_str(&virdant_toml_text).unwrap();
-        let _ = virtant_toml["project"]["name"].as_str().unwrap();
+        let manifest = common::project_manifest_or_exit(&cwd);
+        let _ = read_project_name_from(&manifest);
         let builddir = cwd.join("build");
         let source_dir = cwd.join("src");
         let db = match common::db_from_dir(source_dir) {

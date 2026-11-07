@@ -429,13 +429,35 @@ impl Session {
     }
 
     fn show_row(&self, signal_id: SignalId, leaf: &bstr::BStr) -> ShowRow {
-        let value = self.sim.get(signal_id);
         let typ = self.sim.component_type(signal_id);
-        // Clocks are opaque: the `show` row carries no value.
-        let value_str = if matches!(typ, Type::Clock) {
-            String::new()
+        // A memory's scalar value is a change-detection version
+        // counter; `show` its words instead (first few, then an
+        // ellipsis) so a 1024-word ROM stays printable.
+        let value_str = if let Some(words) = self.sim.memory_words(signal_id) {
+            const SHOW_WORDS: usize = 8;
+            let shown: Vec<String> = words
+                .iter()
+                .take(SHOW_WORDS)
+                .enumerate()
+                .map(|(index, word)| format!("[{index}] {}", display::render(&self.sim, word)))
+                .collect();
+            if words.len() > SHOW_WORDS {
+                format!(
+                    "{} words: {} ...",
+                    words.len(),
+                    shown.join(", ")
+                )
+            } else {
+                format!("{} words: {}", words.len(), shown.join(", "))
+            }
         } else {
-            display::render(&self.sim, &value)
+            let value = self.sim.get(signal_id);
+            // Clocks are opaque: the `show` row carries no value.
+            if matches!(typ, Type::Clock) {
+                String::new()
+            } else {
+                display::render(&self.sim, &value)
+            }
         };
         ShowRow {
             name: leaf.to_str_lossy().into_owned(),
@@ -840,6 +862,7 @@ fn kind_name(kind: ComponentKind) -> &'static str {
         ComponentKind::OutgoingWire => "wire",
         ComponentKind::OutgoingReg => "reg",
         ComponentKind::Reg => "reg",
+        ComponentKind::Memory => "memory",
         ComponentKind::Wire => "wire",
         ComponentKind::Bus => "bus",
         ComponentKind::Net => "net",

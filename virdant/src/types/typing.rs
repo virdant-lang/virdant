@@ -290,10 +290,11 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
         // by it.  That implicit use is not written as an expression (no
         // `on <CLOCK>` reference exists to record a use location), so
         // the implicit clock is exempt from the unused-signal warning
-        // as long as some reg/outgoing reg actually omits its `on`
-        // clause.  A module whose regs all name their clock explicitly
-        // (or that has no regs at all) has no implicit use, and the
-        // clock is reported unused like any other unreferenced signal.
+        // as long as some reg/outgoing reg/memory actually omits its
+        // `on` clause.  A module whose regs all name their clock
+        // explicitly (or that has no regs or memories at all) has no
+        // implicit use, and the clock is reported unused like any other
+        // unreferenced signal.
         let has_implicitly_clocked_reg = node
             .children()
             .into_iter()
@@ -303,7 +304,9 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
                     AstNodePayload::Component(component)
                         if matches!(
                             component.kind,
-                            ComponentKind::Reg | ComponentKind::OutgoingReg
+                            ComponentKind::Reg
+                                | ComponentKind::OutgoingReg
+                                | ComponentKind::Memory
                         ) && stmt.clock().is_none()
                 )
             });

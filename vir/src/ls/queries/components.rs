@@ -28,6 +28,7 @@ pub fn component_kind_str(kind: ComponentKind) -> &'static str {
         ComponentKind::OutgoingWire => "outgoing-wire",
         ComponentKind::OutgoingReg => "outgoing-reg",
         ComponentKind::Reg => "reg",
+        ComponentKind::Memory => "memory",
         ComponentKind::Wire => "wire",
         ComponentKind::Bus => "bus",
         ComponentKind::Net => "net",

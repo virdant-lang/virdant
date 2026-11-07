@@ -1,0 +1,4 @@
+kind = "format"
+description = "memory declarations, indexed writes, on regions, and image annotations"
+input = "memory.vir"
+golden = "memory.golden.vir"

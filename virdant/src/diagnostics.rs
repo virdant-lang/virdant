@@ -61,6 +61,54 @@ pub enum DiagnosticPayload {
     NoDrivers(NoDrivers),
     /// Component has multiple drivers.
     MultipleDrivers(MultipleDrivers),
+    /// A `memory` component's element type is not `Word[n]` with `n` a
+    /// power of two.
+    MemoryElementNotPowerOf2Word(MemoryElementNotPowerOf2Word),
+    /// A `memory` component's depth is not a literal constant
+    MemoryDepthNotLiteral(MemoryDepthNotLiteral),
+    /// A `memory` component's depth is not a power of two.
+    MemoryDepthNotPowerOf2(MemoryDepthNotPowerOf2),
+    /// A memory index is not exactly `Word[k]` where `depth == 2^k`.
+    MemoryIndexWidth(MemoryIndexWidth),
+    /// A constant memory index is not within the declared depth.
+    MemoryIndexOutOfRange(MemoryIndexOutOfRange),
+    /// A write to a memory appears outside a clocked write context
+    /// (an `on` region, or the implicit single-clock context).
+    MemoryWriteOutsideOnRegion(MemoryWriteOutsideOnRegion),
+    /// Two sibling write clauses with non-exclusive guards write the
+    /// same memory in one write site.
+    OverlappingMemoryWrites(OverlappingMemoryWrites),
+    /// A memory word was written with `:=` instead of `<=`.  Accepted
+    /// with this warning so fixing it never changes legality.
+    MemoryAssignInsteadOfLassign(MemoryAssignInsteadOfLassign),
+    /// A memory component was referenced without an index
+    /// (`mem` instead of `mem[dyn i]` / `mem[3]`).
+    MemoryUsedWithoutIndex(MemoryUsedWithoutIndex),
+    /// An indexed driver targets a component that is not a memory.
+    IndexedDriverNotMemory(IndexedDriverNotMemory),
+    /// An `on` region inside a memory body names a clock other than
+    /// the memory's own clock.
+    MemoryOnRegionClockMismatch(MemoryOnRegionClockMismatch),
+    /// A statement other than a memory write appeared inside a memory
+    /// body's `on` region.
+    MemoryOnRegionNonWrite(MemoryOnRegionNonWrite),
+    /// An `initial` statement targets a memory (not supported; use
+    /// `@image`/`@image_hex`).
+    MemoryInitialUnsupported(MemoryInitialUnsupported),
+    /// A write to a memory initialized by `@image`/`@image_hex`: its
+    /// contents come from the file.
+    MemoryImageWrite(MemoryImageWrite),
+    /// A memory image file could not be read.
+    MemoryImageIo(MemoryImageIo),
+    /// A memory image file holds more words than the declared depth
+    /// (a shorter file is fine: the rest reads as unspecified).
+    MemoryImageTooLong(MemoryImageTooLong),
+    /// A memory image in a form not supported (e.g. an element
+    /// width above 64 bits).
+    MemoryImageNotSupported(MemoryImageNotSupported),
+    /// A memory image on a `@noinitial` platform: image initialization
+    /// is disallowed, exactly like `initial` statements.
+    MemoryImageNoinitial(MemoryImageNoinitial),
     /// A `bus`/`net` component was referenced without `tap`.
     NetReadWithoutTap(NetReadWithoutTap),
     /// `tap` was applied to a component that is not a `bus` or `net`.
@@ -317,6 +365,109 @@ pub struct NoDrivers {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultipleDrivers {
     pub target: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryElementNotPowerOf2Word {
+    /// The offending element type, rendered (`Word[12]`, `Bit`, ...).
+    pub typ: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryDepthNotLiteral;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryDepthNotPowerOf2 {
+    pub depth: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryIndexWidth {
+    pub component: BString,
+    /// The required index width `k` (`depth == 2^k`).
+    pub expected: Width,
+    /// The offending index type, rendered.
+    pub got: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryIndexOutOfRange {
+    pub depth: u32,
+    pub index: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryWriteOutsideOnRegion {
+    pub component: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OverlappingMemoryWrites {
+    pub component: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryAssignInsteadOfLassign {
+    pub component: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryUsedWithoutIndex {
+    pub component: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexedDriverNotMemory {
+    pub target: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryOnRegionClockMismatch {
+    pub component: BString,
+    /// The memory's resolved clock, rendered.
+    pub clock: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryOnRegionNonWrite;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryInitialUnsupported {
+    pub component: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryImageWrite {
+    pub component: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryImageIo {
+    pub component: BString,
+    pub path: BString,
+    pub error: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryImageTooLong {
+    pub component: BString,
+    pub path: BString,
+    pub depth: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryImageNotSupported {
+    pub component: BString,
+    pub reason: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryImageNoinitial {
+    pub component: BString,
+    pub platform: BString,
+    /// Fully-qualified module names, from the top module bound to the
+    /// platform down to the module declaring the memory.
+    pub path: Vec<BString>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -746,6 +897,76 @@ impl Diagnostic {
             DiagnosticPayload::NoRegDrivers(d) => format!("No drivers for {}", d.target).into(),
             DiagnosticPayload::NoDrivers(d) => format!("No drivers for {}", d.target).into(),
             DiagnosticPayload::MultipleDrivers(d) => format!("Multiple drivers for {}", d.target).into(),
+            DiagnosticPayload::MemoryElementNotPowerOf2Word(d) => format!(
+                "memory element type must be `Word[n]` with n a power of 2, found {}",
+                d.typ,
+            ).into(),
+            DiagnosticPayload::MemoryDepthNotLiteral(_) =>
+                "memory depth must be a literal constant".into(),
+            DiagnosticPayload::MemoryDepthNotPowerOf2(d) => format!(
+                "memory depth must be a power of 2, found {}",
+                d.depth,
+            ).into(),
+            DiagnosticPayload::MemoryIndexWidth(d) => format!(
+                "index into memory {} must be exactly Word[{}] (depth 2^{}), found {}",
+                d.component, d.expected, d.expected, d.got,
+            ).into(),
+            DiagnosticPayload::MemoryIndexOutOfRange(d) => format!(
+                "index {} out of range for memory depth {}",
+                d.index, d.depth,
+            ).into(),
+            DiagnosticPayload::MemoryWriteOutsideOnRegion(d) => format!(
+                "write to memory {} outside a clocked write context (an `on` region, or a module with exactly one `Clock`)",
+                d.component,
+            ).into(),
+            DiagnosticPayload::OverlappingMemoryWrites(d) => format!(
+                "overlapping writes to memory {}: sibling write clauses with non-exclusive guards may both fire in one cycle",
+                d.component,
+            ).into(),
+            DiagnosticPayload::MemoryAssignInsteadOfLassign(d) => format!(
+                "use `<=` to write memory {} (a memory write commits on the clock edge)",
+                d.component,
+            ).into(),
+            DiagnosticPayload::MemoryUsedWithoutIndex(d) => format!(
+                "memory {} must be indexed: `{}[dyn i]` or `{}[c]`",
+                d.component, d.component, d.component,
+            ).into(),
+            DiagnosticPayload::IndexedDriverNotMemory(d) => format!(
+                "indexed driver target {} is not a memory",
+                d.target,
+            ).into(),
+            DiagnosticPayload::MemoryOnRegionClockMismatch(d) => format!(
+                "`on` region in memory {} must name the memory's clock {}",
+                d.component, d.clock,
+            ).into(),
+            DiagnosticPayload::MemoryOnRegionNonWrite(_) =>
+                "only writes to the memory are allowed inside an `on` region".into(),
+            DiagnosticPayload::MemoryInitialUnsupported(d) => format!(
+                "`initial` is not supported on memory {}; initialize with @image/@image_hex instead",
+                d.component,
+            ).into(),
+            DiagnosticPayload::MemoryImageWrite(d) => format!(
+                "memory {} is initialized by @image/@image_hex; writes to it are not supported",
+                d.component,
+            ).into(),
+            DiagnosticPayload::MemoryImageIo(d) => format!(
+                "could not read memory image for {}: {}: {}",
+                d.component, d.path, d.error,
+            ).into(),
+            DiagnosticPayload::MemoryImageTooLong(d) => format!(
+                "memory image {} holds more words than the declared depth {}",
+                d.path, d.depth,
+            ).into(),
+            DiagnosticPayload::MemoryImageNotSupported(d) => format!(
+                "memory image for {} not supported: {}",
+                d.component, d.reason,
+            ).into(),
+            DiagnosticPayload::MemoryImageNoinitial(d) => format!(
+                "memory image initialization for {} is disallowed on `@noinitial` platform {} (reachable via {})",
+                d.component,
+                d.platform,
+                d.path.iter().map(|m| m.to_str_lossy().into_owned()).collect::<Vec<_>>().join(" -> "),
+            ).into(),
             DiagnosticPayload::DriverForSink(d) => format!("Driver for sink {}", d.target).into(),
             DiagnosticPayload::UnresolvedComponent(d) => format!("Unresolved component {}", d.path).into(),
             DiagnosticPayload::ItNotInItBlock => "'it' used outside of an it block".into(),
@@ -1074,6 +1295,7 @@ impl Diagnostic {
             | DiagnosticPayload::RedundantOnClause(_)
             | DiagnosticPayload::UnusedOnOutgoingWire(_)
             | DiagnosticPayload::ReferencedWhileNotPub(_)
+            | DiagnosticPayload::MemoryAssignInsteadOfLassign(_)
             | DiagnosticPayload::UnusedNonPub(_) => DiagnosticLevel::Warning,
             DiagnosticPayload::Todo(_) => DiagnosticLevel::Info,
             _ => DiagnosticLevel::Error,
@@ -1108,6 +1330,12 @@ from_diagnostic! {
     SyntaxError, ImportCycle, UnresolvedImportError, DuplicateImport, DuplicateItem,
     DuplicateSlot, UnresolvedPackage, InvalidPackageName, UnresolvedItem, UnresolvedType, MissingOnClause,
     RedundantOnClause, WrongDriverType, NoRegDrivers, NoDrivers, MultipleDrivers,
+    MemoryElementNotPowerOf2Word, MemoryDepthNotLiteral, MemoryDepthNotPowerOf2, MemoryIndexWidth,
+    MemoryIndexOutOfRange, MemoryWriteOutsideOnRegion, OverlappingMemoryWrites,
+    MemoryAssignInsteadOfLassign, MemoryUsedWithoutIndex, IndexedDriverNotMemory,
+    MemoryOnRegionClockMismatch, MemoryOnRegionNonWrite, MemoryInitialUnsupported,
+    MemoryImageWrite, MemoryImageIo, MemoryImageTooLong, MemoryImageNotSupported,
+    MemoryImageNoinitial,
     NetReadWithoutTap, TapNotOnNet,
     DriverForSink, UnresolvedComponent, NotIt, UnresolvedCtor, UnusedSource, ReadFromSink,
     UnfilledHole, ModuleCycle, UnresolvedMethod, WrongType, Unknown, DoesntFit, NotWordType,

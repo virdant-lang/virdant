@@ -1,0 +1,94 @@
+// Positive tests for the `memory` construct (MEMORY_PLAN §1-§4): the
+// canonical single-clock RAM with a body, a blockless declaration with
+// its write site at module level, and static-index reads and writes.
+
+// The introductory example, valid verbatim (§1): a duplex, clocked,
+// word-addressable RAM, read combinationally.
+pub mod Ram {
+    incoming clock : Clock
+
+    incoming write_data : Word[32]
+    incoming addr : Word[10]
+    incoming write_enable : Bit
+    outgoing read_data : Word[32] dependson addr {
+        it := mem[dyn addr]
+    }
+
+    memory mem[1024] : Word[32] {
+        if {
+            when write_enable {
+                it[dyn addr] <= write_data
+            }
+        }
+    }
+}
+
+// A blockless declaration (§2.3): the write site appears at module
+// level, guarded like any driver block; reads go through the
+// component name.
+pub mod Blockless {
+    incoming clock : Clock
+    incoming write_enable : Bit
+    incoming addr : Word[4]
+    incoming write_data : Word[8]
+    outgoing read_data : Word[8] dependson addr {
+        it := mem[dyn addr]
+    }
+    outgoing other_read : Word[8] dependson addr {
+        it := mem[dyn addr]
+    }
+
+    memory mem[16] : Word[8]
+
+    if {
+        when write_enable {
+            mem[dyn addr] <= write_data
+        }
+    }
+}
+
+// Static indices (§4.4): a constant read lowers to a plain select and
+// a constant write to an unconditional write of that one word.
+pub mod StaticIndex {
+    incoming clock : Clock
+    incoming write_enable : Bit
+    incoming write_data : Word[8]
+    outgoing read_zero : Word[8] {
+        it := mem[0]
+    }
+
+    memory mem[8] : Word[8] {
+        if {
+            when write_enable {
+                it[0] <= write_data
+            }
+        }
+    }
+}
+
+// Mutually exclusive arms write one word per cycle (§3.4): the
+// `when`/`else` pair is exclusive, so exactly one write happens.
+pub mod ExclusiveArms {
+    incoming clock : Clock
+    incoming sel : Bit
+    incoming addr_a : Word[3]
+    incoming addr_b : Word[3]
+    incoming data_a : Word[4]
+    incoming data_b : Word[4]
+    outgoing read_a : Word[4] dependson addr_a {
+        it := mem[dyn addr_a]
+    }
+
+    memory mem[8] : Word[4] {
+        if {
+            when sel {
+                it[dyn addr_a] <= data_a
+            }
+            else {
+                it[dyn addr_b] <= data_b
+            }
+        }
+    }
+}
+
+// CHECK: Check OK

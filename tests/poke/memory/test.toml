@@ -1,0 +1,2 @@
+kind = "poke"
+description = "`vir poke` with a memory: show its words, tick a write through, and read it back"

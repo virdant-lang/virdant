@@ -169,6 +169,10 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     // contain `initial` statements.
     check_platform_noinitial(builder, &mut diagnostics);
 
+    // Memory image validation: the image file must be
+    // readable, well-formed, and no longer than the declared depth.
+    check_memory_images(builder, &mut diagnostics);
+
     // Check for combinational loops in module dependency graphs.
     // The check runs over each module's potentiality graph: local
     // actual edges plus declared edges (its own and its immediate
@@ -716,6 +720,31 @@ fn flag_module_initials(
             }
         }
     }
+
+    // Memory images are gated exactly like `initial` statements: a
+    // memory whose contents come from `@image`/`@image_hex` cannot
+    // exist under a `@noinitial` platform.
+    let location = builder.get_symboltable().symbol(mod_id).location();
+    let parsing = builder.get_parsing(location.package());
+    let moddef_node = parsing.ast_node(location.ast_node_id());
+    for stmt in moddef_node.children() {
+        let AstNodePayload::Component(component) = stmt.payload() else { continue };
+        if component.kind != crate::common::ComponentKind::Memory {
+            continue;
+        }
+        if let Some((_, _, arg_region)) =
+            crate::analysis::memory_image::memory_image_annotation(&parsing, &stmt)
+        {
+            diagnostics.push(Diagnostic::new(
+                arg_region,
+                diagnostics::MemoryImageNoinitial {
+                    component: parsing.string(component.name).to_owned(),
+                    platform: platform_name.clone(),
+                    path: module_path.to_owned(),
+                },
+            ));
+        }
+    }
 }
 
 /// SymbolIds of the ModDefs a module instantiates via its `mod X of Y`
@@ -1099,3 +1128,113 @@ fn check_ext_mod_generics(builder: &mut Builder, diagnostics: &mut Vec<Diagnosti
     }
 }
 
+
+
+/// Validate every `@image`/`@image_hex` memory annotation: the file
+/// must exist and parse, and hold no more words than the declared
+/// depth (shorter files are fine: the rest reads as unspecified).
+/// Element widths above 64 bits are not supported (hex parsing is
+/// `u64`-based).
+fn check_memory_images(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        if item.kind() != SymbolKind::ModDef {
+            continue;
+        }
+        let component_analysis = builder.get_component_analysis(item.id());
+        let location = item.location();
+        let parsing = builder.get_parsing(location.package());
+        for (_path, component) in component_analysis.components() {
+            if component.kind() != Some(crate::common::ComponentKind::Memory) {
+                continue;
+            }
+            let Some(depth) = component.depth() else { continue };
+            let Some((kind, image_path_str, arg_region)) =
+                crate::analysis::memory_image::memory_image_annotation(
+                    &parsing,
+                    &parsing.ast_node(component.location().ast_node_id()),
+                )
+            else {
+                continue;
+            };
+            let elem_width = match component.typ() {
+                Some(crate::types::Type::Word(width)) => width,
+                _ => continue,
+            };
+            if elem_width > 64 {
+                diagnostics.push(Diagnostic::new(
+                    arg_region,
+                    diagnostics::MemoryImageNotSupported {
+                        component: component.path(),
+                        reason: format!(
+                            "element widths above 64 bits are not supported for images in v1 (Word[{elem_width}])"
+                        ).into(),
+                    },
+                ));
+                continue;
+            }
+            let image_path = crate::analysis::memory_image::resolve_image_path(
+                builder.db().project_root(),
+                image_path_str.as_bstr(),
+            );
+            let bytes = match std::fs::read(&image_path) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    diagnostics.push(Diagnostic::new(
+                        arg_region,
+                        diagnostics::MemoryImageIo {
+                            component: component.path(),
+                            path: image_path_str,
+                            error: error.to_string().into(),
+                        },
+                    ));
+                    continue;
+                }
+            };
+            let words = match kind {
+                crate::analysis::memory_image::MemoryImageKind::Hex => {
+                    let text = String::from_utf8_lossy(&bytes);
+                    match crate::analysis::memory_image::parse_hex_image(&text, elem_width) {
+                        Ok(words) => words,
+                        Err(reason) => {
+                            diagnostics.push(Diagnostic::new(
+                                arg_region,
+                                diagnostics::MemoryImageNotSupported {
+                                    component: component.path(),
+                                    reason: reason.into(),
+                                },
+                            ));
+                            continue;
+                        }
+                    }
+                }
+                crate::analysis::memory_image::MemoryImageKind::Raw => {
+                    match crate::analysis::memory_image::parse_raw_image(&bytes, elem_width) {
+                        Some(words) => words,
+                        None => {
+                            diagnostics.push(Diagnostic::new(
+                                arg_region,
+                                diagnostics::MemoryImageNotSupported {
+                                    component: component.path(),
+                                    reason: "raw binary images need an element width of at most 64 bits in v1"
+                                        .into(),
+                                },
+                            ));
+                            continue;
+                        }
+                    }
+                }
+            };
+            if words.len() as u32 > depth {
+                diagnostics.push(Diagnostic::new(
+                    arg_region,
+                    diagnostics::MemoryImageTooLong {
+                        component: component.path(),
+                        path: image_path_str,
+                        depth,
+                    },
+                ));
+            }
+        }
+    }
+}

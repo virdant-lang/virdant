@@ -33,6 +33,20 @@ pub struct DriverAnalysis {
 #[derive(Debug, Clone)]
 pub enum Driver {
     Expr(DriverType, Location),
+    /// A write to one word of a memory: `mem[dyn idx] <= rhs` or
+    /// `mem[3] <= rhs`.  `index` is either the location of the index
+    /// `Expr` (dynamic) or the constant itself (carried in the
+    /// `IndexedDriver` payload); `rhs` is the written expression;
+    /// `stmt` is the whole indexed-driver statement (used for
+    /// diagnostics).  `driver_type` is `Latched` for `<=` and
+    /// `Continuous` for `:=` (which warns
+    /// `MemoryAssignInsteadOfLassign` but still writes).
+    Write {
+        driver_type: DriverType,
+        stmt: Location,
+        index: WriteIndex,
+        rhs: Location,
+    },
     Bidirectional(Location),
     If(DriverIf),
     Match(DriverMatch),
@@ -51,6 +65,7 @@ impl Driver {
     pub fn driver_type(&self) -> DriverType {
         match self {
             Driver::Expr(dt, _) => *dt,
+            Driver::Write { driver_type, .. } => *driver_type,
             Driver::Bidirectional(_) => DriverType::Continuous,
             Driver::If(driver_if) => driver_if.driver_type,
             Driver::Match(driver_match) => driver_match.driver_type,
@@ -63,12 +78,31 @@ impl Driver {
     pub fn location(&self) -> Option<Location> {
         match self {
             Driver::Expr(_, loc) => Some(loc.clone()),
+            Driver::Write { stmt, .. } => Some(stmt.clone()),
             Driver::Bidirectional(loc) => Some(loc.clone()),
             Driver::If(driver_if) => driver_if.clauses.first().map(|(loc, _)| loc.clone()),
             Driver::Match(driver_match) => Some(driver_match.subject.clone()),
             Driver::Absent => None,
         }
     }
+
+    /// The `(index, rhs)` parts of a memory write, or `None` for
+    /// any other driver kind.
+    pub fn write_parts(&self) -> Option<(WriteIndex, Location)> {
+        match self {
+            Driver::Write { index, rhs, .. } => Some((index.clone(), rhs.clone())),
+            _ => None,
+        }
+    }
+}
+
+/// The index of a memory write: the location of the index `Expr`
+/// (`mem[dyn addr] <= rhs`) or the constant itself (`mem[3] <= rhs`,
+/// carried in the `IndexedDriver` payload).
+#[derive(Debug, Clone)]
+pub enum WriteIndex {
+    Dyn(Location),
+    Const(u16),
 }
 
 #[derive(Debug, Clone)]
@@ -127,6 +161,7 @@ fn dump_driver(driver: &Driver, level: usize) {
     let pad = "    ".repeat(level);
     match driver {
         Driver::Expr(driver_type, loc) => eprintln!("{pad} {driver_type:?}{loc:?}"),
+        Driver::Write { driver_type, stmt, .. } => eprintln!("{pad} Write{driver_type:?}{stmt:?}"),
         Driver::Bidirectional(loc) => eprintln!("{pad} Bidirectional{loc:?}"),
         Driver::If(driver_if) => {
             eprintln!("{pad}if:");
@@ -173,7 +208,7 @@ pub(crate) fn build_driver_analysis(
         .map(|platform_id| {
             symboltable.symbol(platform_id).name().to_owned().into()
         });
-    let (mut drivers, diagnostics) = collect_block_drivers(item_ast.children(), &component_analysis, platform_name.as_ref(), None, false, &mut initials);
+    let (mut drivers, diagnostics) = collect_block_drivers(item_ast.children(), &component_analysis, platform_name.as_ref(), None, &WriteCtx::Module, false, &mut initials);
 
     // Ports synthesized from platform `default <EXPR>` clauses have no
     // driver statement in the module's own AST: their driver is the
@@ -206,6 +241,36 @@ pub(crate) fn build_driver_analysis(
         initials,
         diagnostics,
     })
+}
+
+/// The write-placement context for the statement sequence being
+/// walked: where memory writes are legal, and which memory's clock
+/// an `on` region must name.  `None` outside memory-related walks
+/// (plain module level).
+///
+/// At module level, indexed writes target a memory by name from
+/// anywhere, so `WriteCtx::Module` imposes no structural
+/// constraint — the target's own clock slot (explicit `on` clause or
+/// the module's unique clock) decides legality.
+#[derive(Debug, Clone)]
+enum WriteCtx {
+    /// Module level (or a body of something that is not a memory):
+    /// writes legal anywhere, clocked by the target memory's slot.
+    Module,
+    /// Top level of memory `mem`'s body.  Writes are legal only when
+    /// the body has no `on` region (the either/or rule) and the
+    /// memory's clock slot is resolved.
+    MemoryBodyTop {
+        mem: Option<ComponentId>,
+        /// Whether this body contains any `on <clock> { ... }` region.
+        body_has_region: bool,
+    },
+    /// Inside an `on <clock> { ... }` region of memory `mem`'s body:
+    /// only writes to `mem` are legal, and the region's clock
+    /// has already been checked to match the memory's slot.
+    MemoryOnRegion {
+        mem: ComponentId,
+    },
 }
 
 /// Walk an expression subtree and emit a `NotIt` warning for every
@@ -286,6 +351,7 @@ fn collect_block_drivers(
     component_analysis: &ComponentAnalysis,
     platform_name: Option<&BString>,
     it_context: Option<&BStr>,
+    write_ctx: &WriteCtx,
     in_conditional: bool,
     initials: &mut IndexMap<ComponentId, Vec<Location>>,
 ) -> (IndexMap<ComponentId, Vec<Driver>>, Vec<Diagnostic>) {
@@ -293,6 +359,25 @@ fn collect_block_drivers(
     let mut diagnostics: Vec<Diagnostic> = vec![];
 
     for stmt in stmts {
+        // Inside a memory body's `on` region, only writes to the
+        // memory are allowed; `if`/`match` are the
+        // guard structure around writes, and `unused` is inert.
+        if matches!(write_ctx, WriteCtx::MemoryOnRegion { .. })
+            && !matches!(
+                stmt.payload(),
+                AstNodePayload::IndexedDriver(_)
+                    | AstNodePayload::If
+                    | AstNodePayload::Match
+                    | AstNodePayload::ModDefStmtUnused
+            )
+        {
+            diagnostics.push(Diagnostic::new(
+                stmt.region(),
+                diagnostics::MemoryOnRegionNonWrite,
+            ));
+            continue;
+        }
+
         match stmt.payload() {
             AstNodePayload::Driver(_) | AstNodePayload::InitialDriver => {
                 let is_initial = matches!(stmt.payload(), AstNodePayload::InitialDriver);
@@ -410,6 +495,132 @@ fn collect_block_drivers(
 
                 let expr = stmt.driver().unwrap().location();
                 result.entry(component.id()).or_default().push(Driver::Expr(driver_type, expr));
+            }
+            AstNodePayload::IndexedDriver(_) => {
+                // A write to one word of a memory:
+                // `mem[dyn idx] <= rhs` or `it[3] <= rhs`.
+                let Some(target) = stmt.target() else { continue };
+                let mut target_str = stmt.parsing.string(target).to_owned();
+
+                // `it` / `it.`-prefix rewriting, as for plain drivers.
+                if let Some(ctx) = it_context {
+                    if target_str.starts_with(b"it.") {
+                        let suffix = target_str[3..].to_owned();
+                        target_str.clear();
+                        target_str.extend_from_slice(ctx);
+                        target_str.push(b'.');
+                        target_str.extend_from_slice(&suffix);
+                    } else if target_str == b"it" {
+                        target_str = ctx.to_owned();
+                    } else {
+                        let mut ctx_dot = ctx.to_owned();
+                        ctx_dot.push(b'.');
+                        if target_str == ctx.as_bytes()
+                            || target_str.starts_with(ctx_dot.as_bytes())
+                        {
+                            diagnostics.push(Diagnostic::new(
+                                stmt.child(0).region(),
+                                diagnostics::NotIt {
+                                    component: ctx.to_owned(),
+                                },
+                            ));
+                        }
+                    }
+                    if let Some(rhs_node) = stmt.driver() {
+                        collect_not_it_in_expr(&rhs_node, ctx, &mut diagnostics);
+                    }
+                } else if target_str.starts_with(b"it.") || target_str == b"it" {
+                    diagnostics.push(Diagnostic::new(
+                        stmt.region(),
+                        DiagnosticPayload::ItNotInItBlock,
+                    ));
+                    continue;
+                }
+
+                let Some(component) = component_analysis.resolve(target_str.as_bstr()) else {
+                    diagnostics.push(Diagnostic::new(
+                        stmt.region(),
+                        diagnostics::UnresolvedComponent {
+                            path: target_str,
+                        },
+                    ));
+                    continue;
+                };
+
+                // Indexed drivers write memories only.
+                if component.kind() != Some(ComponentKind::Memory) {
+                    diagnostics.push(Diagnostic::new(
+                        stmt.region(),
+                        diagnostics::IndexedDriverNotMemory {
+                            target: target_str.clone(),
+                        },
+                    ));
+                    continue;
+                }
+
+                let legal = match write_ctx {
+                    WriteCtx::Module => component.clock().is_some(),
+                    WriteCtx::MemoryBodyTop {
+                        mem,
+                        body_has_region,
+                        ..
+                    } => {
+                        if *mem == Some(component.id()) {
+                            // A body uses either an `on` region or
+                            // top-level writes, never both; and
+                            // top-level writes need a resolved clock.
+                            !*body_has_region && component.clock().is_some()
+                        } else {
+                            // A write to a *different* memory from this
+                            // body is an ordinary module-level write
+                            // site for it.
+                            component.clock().is_some()
+                        }
+                    }
+                    WriteCtx::MemoryOnRegion { mem } => component.id() == *mem,
+                };
+                if !legal {
+                    let payload = if matches!(write_ctx, WriteCtx::MemoryOnRegion { .. }) {
+                        DiagnosticPayload::MemoryOnRegionNonWrite(diagnostics::MemoryOnRegionNonWrite)
+                    } else {
+                        DiagnosticPayload::MemoryWriteOutsideOnRegion(
+                            diagnostics::MemoryWriteOutsideOnRegion {
+                                component: target_str.clone(),
+                            },
+                        )
+                    }
+                    ;
+                    diagnostics.push(Diagnostic::new(stmt.region(), payload));
+                    continue;
+                }
+
+                // A constant index must name a word in range.
+                if let Some(depth) = component.depth() {
+                    if let Some(index) = stmt.const_driver_index() {
+                        if index as u32 >= depth {
+                            diagnostics.push(Diagnostic::new(
+                                stmt.region(),
+                                diagnostics::MemoryIndexOutOfRange {
+                                    depth,
+                                    index: index as u32,
+                                },
+                            ));
+                            continue;
+                        }
+                    }
+                }
+
+                let index = match stmt.driver_index() {
+                    Some(index) => WriteIndex::Dyn(index.location()),
+                    None => WriteIndex::Const(stmt.const_driver_index().unwrap()),
+                };
+                let driver_type = stmt.driver_type().unwrap();
+                result.entry(component.id()).or_default().push(Driver::Write {
+                    driver_type,
+                    stmt: stmt.location(),
+                    index,
+                    rhs: stmt.driver().unwrap().location(),
+                });
             }
             AstNodePayload::BidirectionalDriver => {
                 let parsing = stmt.parsing;
@@ -562,7 +773,7 @@ fn collect_block_drivers(
                         BString::from(name)
                     };
 
-                    let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, platform_name, Some(name_with_context.as_bstr()), in_conditional, initials);
+                    let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, platform_name, Some(name_with_context.as_bstr()), write_ctx, in_conditional, initials);
                     for (comp_id, mut drivers) in block_drivers {
                         result.entry(comp_id).or_default().append(&mut drivers);
                     }
@@ -592,7 +803,7 @@ fn collect_block_drivers(
                             BString::from(name)
                         };
 
-                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, platform_name, Some(name_with_context.as_bstr()), in_conditional, initials);
+                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, platform_name, Some(name_with_context.as_bstr()), write_ctx, in_conditional, initials);
                         for (comp_id, mut drivers) in block_drivers {
                             result.entry(comp_id).or_default().append(&mut drivers);
                         }
@@ -623,13 +834,93 @@ fn collect_block_drivers(
                             BString::from(name)
                         };
 
-                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, platform_name, Some(name_with_context.as_bstr()), in_conditional, initials);
+                        let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, platform_name, Some(name_with_context.as_bstr()), write_ctx, in_conditional, initials);
+                        for (comp_id, mut drivers) in block_drivers {
+                            result.entry(comp_id).or_default().append(&mut drivers);
+                        }
+                        diagnostics.append(&mut block_diags);
+                    } else if component.kind == ComponentKind::Memory
+                        && matches!(child.payload(), AstNodePayload::ModDefStmtBlock)
+                    {
+                        // The memory body: `it` is
+                        // the memory; writes inside it are checked
+                        // against the placement rules, and `on`
+                        // regions are handled by their own arm below.
+                        if child.children().is_empty() {
+                            diagnostics.push(Diagnostic::new(
+                                child.region(),
+                                DiagnosticPayload::EmptyDriverBlock,
+                            ));
+                            continue;
+                        }
+
+                        let name_with_context = if let Some(ctx) = it_context {
+                            let mut new_name = BString::from(ctx);
+                            new_name.push(b'.');
+                            new_name.extend_from_slice(name);
+                            new_name
+                        } else {
+                            BString::from(name)
+                        };
+
+                        let mem_id =
+                            component_analysis.resolve(name_with_context.as_bstr()).map(|c| c.id());
+                        let body_has_region = child
+                            .children()
+                            .iter()
+                            .any(|s| matches!(s.payload(), AstNodePayload::OnRegion));
+                        let body_write_ctx = WriteCtx::MemoryBodyTop {
+                            mem: mem_id,
+                            body_has_region,
+                        };
+
+                        let (block_drivers, mut block_diags) = collect_block_drivers(child.children(), component_analysis, platform_name, Some(name_with_context.as_bstr()), &body_write_ctx, in_conditional, initials);
                         for (comp_id, mut drivers) in block_drivers {
                             result.entry(comp_id).or_default().append(&mut drivers);
                         }
                         diagnostics.append(&mut block_diags);
                     }
                 }
+            }
+            AstNodePayload::OnRegion => {
+                // An `on <CLOCK> { ... }` region of a memory body:
+                // only writes to the memory are
+                // legal inside (enforced by the guard at the top of
+                // this loop), and the region's clock must be the
+                // memory's own resolved clock.
+                let children = stmt.children();
+                let clock_node = &children[0];
+                let block = &children[1];
+
+                let Some(ctx) = it_context else { continue };
+                let Some(mem_component) = component_analysis.resolve(ctx) else { continue };
+
+                // The region's clock must name the memory's clock
+                // slot.  An unresolved slot (no clause, zero or ≥2
+                // clocks) is already reported at the declaration.
+                if let Some(mem_clock) = mem_component.clock() {
+                    let region_clock = clock_node
+                        .path()
+                        .map(|interned| stmt.parsing.string(interned).to_owned());
+                    if region_clock != Some(mem_clock.clone()) {
+                        diagnostics.push(Diagnostic::new(
+                            clock_node.region(),
+                            diagnostics::MemoryOnRegionClockMismatch {
+                                component: ctx.to_owned(),
+                                clock: mem_clock,
+                            },
+                        ));
+                    }
+                }
+
+                let region_write_ctx = WriteCtx::MemoryOnRegion {
+                    mem: mem_component.id(),
+                };
+                let (block_drivers, mut block_diags) = collect_block_drivers(block.children(), component_analysis, platform_name, it_context, &region_write_ctx, true, initials);
+                for (comp_id, mut drivers) in block_drivers {
+                    result.entry(comp_id).or_default().append(&mut drivers);
+                }
+                diagnostics.append(&mut block_diags);
             }
             AstNodePayload::If => {
                 // Each `when` arm contributes (guard, body) and each `else`
@@ -650,10 +941,10 @@ fn collect_block_drivers(
                         collect_not_it_in_expr(guard, ctx, &mut diagnostics);
                     }
                     let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
-                        collect_block_drivers(body.children(), component_analysis, platform_name, it_context, true, initials)
+                        collect_block_drivers(body.children(), component_analysis, platform_name, it_context, write_ctx, true, initials)
                     } else {
                         // nested if/match or bare expr - recurse as single stmt
-                        collect_block_drivers(vec![body.clone()], component_analysis, platform_name, it_context, true, initials)
+                        collect_block_drivers(vec![body.clone()], component_analysis, platform_name, it_context, write_ctx, true, initials)
                     };
                     diagnostics.append(&mut body_diags);
                     flag_duplicate_clause_drivers(&body_drivers, component_analysis, &stmt, &mut diagnostics);
@@ -723,10 +1014,10 @@ fn collect_block_drivers(
                 let mut else_arm_drivers: Option<IndexMap<ComponentId, Vec<Driver>>> = None;
                 for (pat_opt, body) in match_arm_children(&children) {
                     let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
-                        collect_block_drivers(body.children(), component_analysis, platform_name, it_context, true, initials)
+                        collect_block_drivers(body.children(), component_analysis, platform_name, it_context, write_ctx, true, initials)
                     } else {
                         // nested if/match or bare expr - recurse as single stmt
-                        collect_block_drivers(vec![body.clone()], component_analysis, platform_name, it_context, true, initials)
+                        collect_block_drivers(vec![body.clone()], component_analysis, platform_name, it_context, write_ctx, true, initials)
                     };
                     diagnostics.append(&mut body_diags);
                     flag_duplicate_clause_drivers(&body_drivers, component_analysis, &stmt, &mut diagnostics);
@@ -792,10 +1083,10 @@ fn collect_block_drivers(
                     }
                 }
                 let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
-                    collect_block_drivers(body.children(), component_analysis, platform_name, it_context, in_conditional, initials)
+                    collect_block_drivers(body.children(), component_analysis, platform_name, it_context, write_ctx, in_conditional, initials)
                 } else {
                     // `if`/`match` bodies recurse as a single statement.
-                    collect_block_drivers(vec![body], component_analysis, platform_name, it_context, in_conditional, initials)
+                    collect_block_drivers(vec![body], component_analysis, platform_name, it_context, write_ctx, in_conditional, initials)
                 };
                 diagnostics.append(&mut body_diags);
                 for (comp_id, mut drivers) in body_drivers {

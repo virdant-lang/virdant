@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "MemoryDepthNotPowerOf2 and MemoryDepthNotLiteral: the depth must be a literal power of two"
+filecheck = "src/depth.vir"

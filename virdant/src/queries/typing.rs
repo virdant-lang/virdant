@@ -92,6 +92,67 @@ pub(crate) fn build_expected_type(builder: &mut Builder, exprroot: ExprRoot) -> 
             let component_analysis = builder.get_component_analysis(moddef.id());
             component_analysis.type_of(lhs_path.as_bstr())
         }
+        // An `on <CLOCK> { ... }` region of a memory body: the clock
+        // expression is typed exactly like a component's `on` clause.
+        AstNodePayload::OnRegion => Some(Type::Clock),
+        // An indexed memory write: the written
+        // expression is typed against the memory's element type; a
+        // dynamic index against exactly `Word[k]` (`depth == 2^k`).
+        AstNodePayload::IndexedDriver(_) => {
+            let mut lhs_path = parsing.string(parent_node.child(0).path().unwrap()).to_owned();
+
+            // Same `it`-resolution walk as a plain driver's: the
+            // enclosing Component (a memory body) or Submodule/Socket
+            // It-block names the target.
+            let mut ancestor_id = parent_node.parent().unwrap().id();
+            let mut resolved_it_name = None;
+            loop {
+                let ancestor = parsing.ast_node(ancestor_id);
+                if ancestor.is_item() { break; }
+                if lhs_path.starts_with(b"it.") || lhs_path == b"it" {
+                    if let AstNodePayload::Submodule(module) = ancestor.payload() {
+                        resolved_it_name = Some(parsing.string(module.name));
+                    } else if let AstNodePayload::Component(component) = ancestor.payload() {
+                        resolved_it_name = Some(parsing.string(component.name));
+                    } else if let AstNodePayload::Socket(socket) = ancestor.payload() {
+                        resolved_it_name = Some(parsing.string(socket.name));
+                    }
+                }
+                ancestor_id = ancestor.parent().unwrap().id();
+            }
+
+            if let Some(name) = resolved_it_name {
+                if lhs_path.starts_with(b"it.") {
+                    let suffix = lhs_path[3..].to_owned();
+                    lhs_path.clear();
+                    lhs_path.extend_from_slice(name);
+                    lhs_path.push(b'.');
+                    lhs_path.extend_from_slice(&suffix);
+                } else {
+                    lhs_path = name.to_owned();
+                }
+            }
+
+            let moddef_node = parsing.ast_node(ancestor_id);
+            let moddef_name = parsing.string(moddef_node.name().unwrap());
+            let moddef = symboltable
+                .resolve_item_in_package(moddef_name, location.package())
+                .unwrap();
+            let component_analysis = builder.get_component_analysis(moddef.id());
+            let component = component_analysis.resolve(lhs_path.as_bstr())?;
+            let children = parent_node.children();
+            // The written expression is always the last child (the
+            // middle child, a dynamic index, exists only for `[dyn ...]`).
+            if node.id() == children.last()?.id() {
+                // The written expression: the element type.
+                component.typ()
+            } else {
+                // A dynamic index: exactly `Word[k]`.
+                component
+                    .depth()
+                    .map(|depth| Type::Word(depth.trailing_zeros() as u16))
+            }
+        }
         AstNodePayload::LetBinding(_) => {
             // A `let` binding's RHS: typed against the binding's
             // ascribed type when there is one.  For an untyped binding,

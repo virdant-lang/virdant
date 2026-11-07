@@ -109,6 +109,14 @@ pub struct ElaboratedComponent {
     /// Where `driver` was written, in module-level terms (see
     /// `DriverSite`).  `None` when the component has no driver.
     driver_site: Option<DriverSite>,
+    /// For a `memory` component: the number of words it holds.  The
+    /// component's `typ` is the *element* type (a memory introduces no
+    /// new type), so the depth lives here.
+    depth: Option<u32>,
+    /// For a `memory` component: its image annotation (`@image` /
+    /// `@image_hex`), with the image path resolved against the
+    /// project root.  `None` otherwise.
+    image: Option<(crate::analysis::memory_image::MemoryImageKind, std::path::PathBuf)>,
 }
 
 /// The module-level identity of a component's driver statement: the
@@ -226,6 +234,18 @@ impl ElaboratedComponent {
 
     pub fn clock(&self) -> Option<SignalId> {
         self.clock
+    }
+
+    /// The declared depth of a `memory` component, or `None` for any
+    /// other kind.
+    pub fn depth(&self) -> Option<u32> {
+        self.depth
+    }
+
+    /// The image annotation of a `memory` component with its resolved
+    /// path, or `None`.
+    pub fn image(&self) -> Option<&(crate::analysis::memory_image::MemoryImageKind, std::path::PathBuf)> {
+        self.image.as_ref()
     }
 
     pub fn component_kind(&self) -> ComponentKind {
@@ -378,7 +398,8 @@ fn elaborate_module(
                             .map(SignalId)
                     })
                 } else if (component.kind == ComponentKind::Reg
-                    || component.kind == ComponentKind::OutgoingReg)
+                    || component.kind == ComponentKind::OutgoingReg
+                    || component.kind == ComponentKind::Memory)
                     && let Some(implicit_clock_name) = &implicit_clock
                 {
                     // The reg omitted its `on` clause and this module has a
@@ -411,6 +432,22 @@ fn elaborate_module(
                     env: env.clone(),
                     driver_scope,
                     driver_site,
+                    depth: component_analysis
+                        .resolve(name)
+                        .and_then(|c| c.depth()),
+                    image: if component.kind == ComponentKind::Memory {
+                        crate::analysis::memory_image::memory_image_annotation(
+                            &parsing, &stmt,
+                        )
+                        .map(|(kind, path, _)| {
+                            (kind, crate::analysis::memory_image::resolve_image_path(
+                                builder.db().project_root(),
+                                path.as_bstr(),
+                            ))
+                        })
+                    } else {
+                        None
+                    },
                 });
             }
             AstNodePayload::Submodule(module) => {
@@ -586,6 +623,8 @@ fn elaborate_module(
                         env: env.clone(),
                         driver_scope,
                         driver_site,
+                        depth: None,
+                        image: None,
                     });
                 }
 
@@ -682,6 +721,8 @@ fn elaborate_module(
             env: env.clone(),
             driver_scope,
             driver_site,
+            depth: None,
+            image: None,
         });
     }
 }

@@ -1,0 +1,32 @@
+// The element type must be `Word[n]` with `n` a power of two
+// (MEMORY_PLAN §4.2).
+
+mod NotPow2Width {
+    incoming clock : Clock
+    incoming addr : Word[4]
+    incoming write_data : Word[12]
+    outgoing read_data : Word[12]
+
+    // 12 is not a power of two.
+    memory mem[16] : Word[12] {
+        it[dyn addr] <= write_data
+        read_data := it[dyn addr]
+    }
+}
+
+mod NotAWord {
+    incoming clock : Clock
+    incoming addr : Word[4]
+    incoming write_data : Bit
+    outgoing read_data : Bit
+
+    // `Bit` is not a Word type.
+    memory mem[16] : Bit {
+        it[dyn addr] <= write_data
+        read_data := it[dyn addr]
+    }
+}
+
+// CHECK: memory element type must be `Word[n]` with n a power of 2, found Word[12]
+// CHECK: memory element type must be `Word[n]` with n a power of 2, found Bit
+// CHECK: Check failed

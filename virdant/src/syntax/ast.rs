@@ -9,7 +9,7 @@ use crate::analysis::Location;
 use crate::common::{ComponentKind, DriverType, Strength};
 use crate::package::PackageId;
 use crate::common::source::{Region, Span};
-use crate::syntax::payload::AstNodePayload;
+use crate::syntax::payload::{self, AstNodePayload};
 use crate::syntax::parsing::{InternedString, Parsing};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -215,6 +215,8 @@ impl<'p> AstNode<'p> {
             AstNodePayload::Component(component) => format!("Component {:?} {}", component.kind, parsing.string(component.name.clone())),
             AstNodePayload::DefaultClause => format!("DefaultClause"),
             AstNodePayload::Driver(_driver) => format!("Driver"),
+            AstNodePayload::IndexedDriver(driver) => format!("IndexedDriver {:?}", driver.index),
+            AstNodePayload::OnRegion => format!("OnRegion"),
             AstNodePayload::BidirectionalDriver => format!("BidirectionalDriver"),
             AstNodePayload::InitialDriver => format!("InitialDriver"),
             AstNodePayload::Submodule(_module) => format!("Module"),
@@ -327,8 +329,26 @@ impl<'p> AstNode<'p> {
 
     pub fn typ(&self) -> Option<AstNode<'_>> {
         match &self.payload {
+            // A `memory` statement's children are [Annotations, DEPTH,
+            // TYPE, OnClause?, ItBlock?]: the type sits behind the
+            // depth expression.
+            AstNodePayload::Component(component) if component.kind == ComponentKind::Memory => {
+                Some(self.child(2))
+            }
             AstNodePayload::Component(_component) => Some(self.child(1)),
             AstNodePayload::Channel(_channel) => Some(self.child(1)),
+            _ => None,
+        }
+    }
+
+    /// The depth expression of a `memory` statement (`1024` in
+    /// `memory mem[1024] : Word[32]`): the first child after the
+    /// Annotations wrapper.  `None` for non-memory statements.
+    pub fn depth_expr(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::Component(component) if component.kind == ComponentKind::Memory => {
+                Some(self.child(1))
+            }
             _ => None,
         }
     }
@@ -360,7 +380,7 @@ impl<'p> AstNode<'p> {
 
     pub fn target(&self) -> Option<InternedString> {
         match &self.payload {
-            AstNodePayload::Driver(_) | AstNodePayload::InitialDriver => {
+            AstNodePayload::Driver(_) | AstNodePayload::InitialDriver | AstNodePayload::IndexedDriver(_) => {
                 let target_node = self.child(0);
                 target_node.path()
             }
@@ -371,6 +391,7 @@ impl<'p> AstNode<'p> {
     pub fn driver_type(&self) -> Option<DriverType> {
         match &self.payload {
             AstNodePayload::Driver(driver) => Some(driver.driver_type),
+            AstNodePayload::IndexedDriver(driver) => Some(driver.driver_type),
             _ => None
         }
     }
@@ -378,6 +399,7 @@ impl<'p> AstNode<'p> {
     pub fn driver_strength(&self) -> Option<Strength> {
         match &self.payload {
             AstNodePayload::Driver(driver) => Some(driver.strength),
+            AstNodePayload::IndexedDriver(driver) => Some(driver.strength),
             _ => None
         }
     }
@@ -385,6 +407,39 @@ impl<'p> AstNode<'p> {
     pub fn driver(&self) -> Option<AstNode<'_>> {
         match &self.payload {
             AstNodePayload::Driver(_) | AstNodePayload::InitialDriver => Some(self.child(1)),
+            // An indexed driver's RHS: child 2 when the index is
+            // dynamic (the index `Expr` is child 1), child 1 when the
+            // index is a constant carried in the payload.
+            AstNodePayload::IndexedDriver(payload::IndexedDriver {
+                index: payload::IndexedDriverIndex::Const(_),
+                ..
+            }) => Some(self.child(1)),
+            AstNodePayload::IndexedDriver(_) => Some(self.child(2)),
+            _ => None
+        }
+    }
+
+    /// The index expression of an indexed driver with a dynamic index
+    /// (`addr` in `it[dyn addr] <= data`), or `None` for a constant
+    /// index, whose value the payload carries (`const_driver_index`).
+    pub fn driver_index(&self) -> Option<AstNode<'_>> {
+        match &self.payload {
+            AstNodePayload::IndexedDriver(payload::IndexedDriver {
+                index: payload::IndexedDriverIndex::Dyn,
+                ..
+            }) => Some(self.child(1)),
+            _ => None
+        }
+    }
+
+    /// The constant index of an indexed driver (`3` in `mem[3] <= data`),
+    /// or `None` for a dynamic index (`mem[dyn addr] <= data`).
+    pub fn const_driver_index(&self) -> Option<u16> {
+        match &self.payload {
+            AstNodePayload::IndexedDriver(payload::IndexedDriver {
+                index: payload::IndexedDriverIndex::Const(index),
+                ..
+            }) => Some(*index),
             _ => None
         }
     }
@@ -392,7 +447,10 @@ impl<'p> AstNode<'p> {
     pub fn clock(&self) -> Option<AstNode<'_>> {
         match &self.payload {
             AstNodePayload::Component(component) => {
-                if component.kind == ComponentKind::Reg || component.kind == ComponentKind::OutgoingReg {
+                if component.kind == ComponentKind::Reg
+                    || component.kind == ComponentKind::OutgoingReg
+                    || component.kind == ComponentKind::Memory
+                {
                     self.on_clause()
                 } else {
                     None
@@ -408,9 +466,22 @@ impl<'p> AstNode<'p> {
     /// every component kind, so diagnostics can judge its redundancy.
     pub fn on_clause(&self) -> Option<AstNode<'_>> {
         match &self.payload {
-            AstNodePayload::Component(_) => {
-                for child in self.children().into_iter().skip(2) {
-                    if matches!(child.payload(), AstNodePayload::It | AstNodePayload::DefaultClause | AstNodePayload::DependsonList) {
+            AstNodePayload::Component(component) => {
+                // A `memory` statement's children are [Annotations,
+                // DEPTH, TYPE, OnClause?, ItBlock?]: skip the depth
+                // expression as well.
+                let skip = 2 + if component.kind == ComponentKind::Memory { 1 } else { 0 };
+                for child in self.children().into_iter().skip(skip) {
+                    if matches!(
+                        child.payload(),
+                        AstNodePayload::It
+                            | AstNodePayload::DefaultClause
+                            | AstNodePayload::DependsonList
+                            // A memory's body block: never the `on`
+                            // clause (an `It`-wrapped block is skipped
+                            // above; a memory body is bare).
+                            | AstNodePayload::ModDefStmtBlock,
+                    ) {
                         continue;
                     }
                     return Some(child);

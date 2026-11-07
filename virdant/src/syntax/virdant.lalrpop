@@ -355,7 +355,9 @@ DependsonPathList: usize = {
 
 ModDefStmtCore: AstNodeId = {
     <component:ModDefStmtComponent> => component,
+    <memory:ModDefStmtMemory> => memory,
     <driver:ModDefStmtDriver> => driver,
+    <driver:ModDefStmtIndexedDriver> => driver,
     <instance:ModDefStmtInstance> => instance,
     <socket:ModDefStmtSocket> => socket,
     <unused_:ModDefStmtUnused> => unused_,
@@ -532,6 +534,25 @@ OnClause: AstNodeId = {
     "on" <expr:Expr> => expr,
 }
 
+/// A `memory` statement: `memory mem[1024] : Word[32] on clock { ... }`.
+/// The depth expression (between the brackets) is the first child after
+/// the Annotations wrapper; the element type is the next child; the
+/// optional `on <CLOCK>` clause and body follow.
+ModDefStmtMemory: AstNodeId = {
+    <docstring:DocString?> <annotations:Annotations> <ll:@L> "memory" <ident:Ident> "[" <depth:Expr> "]" ":" <typ:Type> <on:OnClause?> <it:MemoryBlock?> <rr:@R> => {
+        let payload = AstNodePayload::Component(payload::Component {
+            name: ident,
+            kind: ComponentKind::Memory,
+            doc_string: docstring,
+            is_async: false,
+        });
+        let span = parser.span(ll, rr);
+        let num_children: u16 = 1u16 + 1u16 + 1u16 + if on.is_none() { 0u16 } else { 1u16 } + if it.is_none() { 0u16 } else { 1u16 };
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
 DefaultClause: AstNodeId = {
     <ll:@L> "default" <expr:Expr> <rr:@R> => {
         let payload = AstNodePayload::DefaultClause;
@@ -592,6 +613,73 @@ ModDefStmtDriver: AstNodeId = {
     },
     <ll:@L> <lhs:Path> ":=:" <rhs:Path> <rr:@R> => {
         let payload = AstNodePayload::BidirectionalDriver;
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+/// An indexed driver: a write to one word of a `memory` component.
+/// The first indexed LHS in the language:
+/// `it[dyn addr] <= write_data` / `mem[3] := data`.
+/// A dynamic index (`[dyn EXPR]`) is a child `Expr` between the LHS
+/// `Path` and the RHS `Expr`; a constant index (`[NAT]`) is carried
+/// directly in the payload (no child node).
+/// A `:=` still parses (it warns, `MemoryAssignInsteadOfLassign`) and
+/// otherwise behaves exactly like `<=`.
+///
+/// The LHS is a plain `Path`.  This is only unambiguous because the
+/// arm-block expression form (`ArmBlockExpr`) refuses a leftmost
+/// `Path [`, so after `{ Path` a `[` always begins an indexed driver.
+ModDefStmtIndexedDriver: AstNodeId = {
+    <ll:@L> <lhs:Path> "[" "dyn" Expr "]" "<=" <rhs:Expr> <rr:@R> => {
+        let payload = AstNodePayload::IndexedDriver(payload::IndexedDriver {
+            driver_type: DriverType::Latched,
+            strength: Strength::Strong,
+            index: payload::IndexedDriverIndex::Dyn,
+        });
+        let span = parser.span(ll, rr);
+        let num_children = 3;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <lhs:Path> "[" "dyn" Expr "]" ":=" <rhs:Expr> <rr:@R> => {
+        let payload = AstNodePayload::IndexedDriver(payload::IndexedDriver {
+            driver_type: DriverType::Continuous,
+            strength: Strength::Strong,
+            index: payload::IndexedDriverIndex::Dyn,
+        });
+        let span = parser.span(ll, rr);
+        let num_children = 3;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <lhs:Path> "[" <nat:Nat> "]" "<=" <rhs:Expr> <rr:@R> => {
+        let text = parser.string(nat);
+        let text = std::str::from_utf8(text).unwrap();
+        let cleaned: String = text.chars().filter(|c| *c != '_').collect();
+        let index = cleaned.parse::<u16>().unwrap_or(u16::MAX);
+        let payload = AstNodePayload::IndexedDriver(payload::IndexedDriver {
+            driver_type: DriverType::Latched,
+            strength: Strength::Strong,
+            index: payload::IndexedDriverIndex::Const(index),
+        });
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <ll:@L> <lhs:Path> "[" <nat:Nat> "]" ":=" <rhs:Expr> <rr:@R> => {
+        let text = parser.string(nat);
+        let text = std::str::from_utf8(text).unwrap();
+        let cleaned: String = text.chars().filter(|c| *c != '_').collect();
+        let index = cleaned.parse::<u16>().unwrap_or(u16::MAX);
+        let payload = AstNodePayload::IndexedDriver(payload::IndexedDriver {
+            driver_type: DriverType::Continuous,
+            strength: Strength::Strong,
+            index: payload::IndexedDriverIndex::Const(index),
+        });
         let span = parser.span(ll, rr);
         let num_children = 2;
 
@@ -718,6 +806,56 @@ ModDefStmtBlock: AstNodeId = {
     },
 }
 
+/// The body of a `memory` statement.  Produces an ordinary
+/// `ModDefStmtBlock` node, but its statement set differs from an
+/// It-block's: it adds the `on <CLOCK> { ... }` region and drops the
+/// declaration forms (components, memories, instances, sockets).
+///
+/// The declarations must be excluded because they end in an optional
+/// `on <CLOCK>` clause followed by an optional block, so
+/// `reg r : T` + `on clk { ... }` would be genuinely ambiguous with
+/// `reg r : T on clk { ... }`.  Declarations inside a body are never
+/// meaningful anyway (components are collected from the module's
+/// direct children only).
+MemoryBlock: AstNodeId = {
+    <ll:@L> "{" <stmts:MemoryBlockStmt*> "}" <rr:@R> => {
+        let num_children = u16::try_from(stmts.len()).unwrap();
+        let payload = AstNodePayload::ModDefStmtBlock;
+        let span = parser.span(ll, rr);
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
+MemoryBlockStmt: AstNodeId = {
+    <driver:ModDefStmtDriver> => driver,
+    <driver:ModDefStmtIndexedDriver> => driver,
+    <unused_:ModDefStmtUnused> => unused_,
+    <initial:ModDefStmtInitial> => initial,
+    <w:If> => w,
+    <m:Match> => m,
+    <l:Let> => l,
+    <r:ModDefStmtOnRegion> => r,
+    <ll:@L> <error:!> <rr:@R> => {
+        let span = parser.span(ll, rr);
+        parser.add_error_node(span, error)
+    },
+}
+
+/// An `on <CLOCK> { ... }` region: a clocked write context inside a
+/// memory body.  (Analysis enforces that only `it[...]` writes appear
+/// inside it.)
+/// Children: the clock `Expr`, then the region's `ModDefStmtBlock`.
+ModDefStmtOnRegion: AstNodeId = {
+    <ll:@L> "on" <clock:Expr> <block:ModDefStmtBlock> <rr:@R> => {
+        let payload = AstNodePayload::OnRegion;
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+}
+
 Kind: AstNodeId = {
     <ll:@L> <name:Ident> <rr:@R> => {
         let payload = AstNodePayload::Kind(payload::Kind { name } );
@@ -764,11 +902,22 @@ ArmBlock: AstNodeId = {
     },
 }
 
-/// A single-expression arm block body: `{ <expr> }`.  This mirrors the
-/// ordinary expression chain except that the top-level comparison may
-/// not use `<=`, which at block-item position is a latched driver
-/// (`lhs <= rhs`), not a comparison.  A top-level `<=` comparison in
-/// this position must be parenthesized.
+/// A single-expression arm block body: `{ <expr> }`.  This form exists
+/// only so that `when c { expr }` parses and can be reported as
+/// `ArmBlockNeedsArrow`; the real expression arm is `=> expr`.
+///
+/// It mirrors the ordinary expression chain except where a statement
+/// and an expression would be indistinguishable after `{ Path`:
+///
+/// * the top-level comparison may not use `<=`, which at block-item
+///   position is a latched driver (`lhs <= rhs`), not a comparison;
+/// * the leftmost operand may not be a bare `Path` followed by `[`
+///   (`{ mem[3] }`), which at block-item position is the start of an
+///   indexed driver (`mem[dyn addr] <= rhs`).
+///
+/// Both must be parenthesized to be accepted in this position.  Only
+/// the leftmost operand is restricted: after any operator or prefix the
+/// ordinary expression chain resumes.
 ArmBlockExpr: AstNodeId = {
     <ll:@L> <lhs:ArmBlockExpr> <op:BinOpLogical> <rhs:ArmBlockCompare> <rr:@R> => {
         let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op });
@@ -788,7 +937,56 @@ ArmBlockCompare: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <e:ExprBinOpAdditive> => e,
+    <e:ArmBlockAdditive> => e,
+}
+
+ArmBlockAdditive: AstNodeId = {
+    <ll:@L> <lhs:ArmBlockAdditive> <op:BinOpAdditive> <rhs:ExprUnOp> <rr:@R> => {
+        let payload = AstNodePayload::ExprBinOp(payload::ExprBinOp { op });
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <e:ArmBlockUnOp> => e,
+}
+
+ArmBlockUnOp: AstNodeId = {
+    <e:ExprUnOpPrefix> => e,
+    <e:ArmBlockAscription> => e,
+}
+
+ArmBlockAscription: AstNodeId = {
+    <ll:@L> <e:ArmBlockPrimary> ":" <typ:Type> <rr:@R> => {
+        let payload = AstNodePayload::ExprAs;
+        let span = parser.span(ll, rr);
+        let num_children = 2;
+
+        parser.add_node(payload, span, num_children)
+    },
+    <e:ArmBlockPrimary> => e,
+}
+
+/// The leftmost primary of an arm-block expression: a bare `Path`
+/// (no postfix), or the ordinary postfix chain rooted at anything
+/// other than a bare `Path`.
+ArmBlockPrimary: AstNodeId = {
+    <e:ExprAtomPath> => e,
+    <e:ExprPrimaryWith<ArmBlockAtom>> => e,
+}
+
+/// Atoms that may root a postfix chain at the leftmost position of an
+/// arm-block expression.  A `Path` may do so only once it has been
+/// disambiguated from a driver LHS by a `->` field access.
+ArmBlockAtom: AstNodeId = {
+    <e:ExprAtomOther> => e,
+    <ll:@L> <e:ExprAtomPath> "->" <field:Ident> <rr:@R> => {
+        let payload = AstNodePayload::ExprField(payload::ExprField { field });
+        let span = parser.span(ll, rr);
+        let num_children = 1;
+
+        parser.add_node(payload, span, num_children)
+    },
 }
 
 BinOpCompareNoLe: BinOp = {
@@ -950,6 +1148,11 @@ UnOp: UnOp = {
 }
 
 ExprUnOp: AstNodeId = {
+    <e:ExprUnOpPrefix> => e,
+    <e:ExprAscription> => e,
+}
+
+ExprUnOpPrefix: AstNodeId = {
     <ll:@L> <op:UnOp> <rhs:ExprUnOp> <rr:@R> => {
         let payload = AstNodePayload::ExprUnOp(payload::ExprUnOp { op });
         let span = parser.span(ll, rr);
@@ -964,7 +1167,6 @@ ExprUnOp: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <e:ExprAscription> => e,
 }
 
 ExprAscription: AstNodeId = {
@@ -978,7 +1180,12 @@ ExprAscription: AstNodeId = {
     <e:ExprPrimary> => e,
 }
 
-ExprPrimary: AstNodeId = {
+ExprPrimary: AstNodeId = ExprPrimaryWith<ExprAtom>;
+
+/// The postfix chain (`->field`, `[dyn e]`, `[i]`, `[hi..lo]`) rooted
+/// at a given atom nonterminal.  Parameterized so `ArmBlockPrimary` can
+/// reuse it with a different root (see `ArmBlockAtom`).
+ExprPrimaryWith<Atom>: AstNodeId = {
     <ll:@L> <ofness:Ofness> "(" <args:ArgList?> ")" <rr:@R> => {
         let payload = AstNodePayload::ExprFn;
         let span = parser.span(ll, rr);
@@ -986,28 +1193,28 @@ ExprPrimary: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> <e:ExprPrimary> "->" <field:Ident> <rr:@R> => {
+    <ll:@L> <e:ExprPrimaryWith<Atom>> "->" <field:Ident> <rr:@R> => {
         let payload = AstNodePayload::ExprField(payload::ExprField { field });
         let span = parser.span(ll, rr);
         let num_children = 1;
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> <e:ExprPrimary> "[" "dyn" <idx:Expr> "]" <rr:@R> => {
+    <ll:@L> <e:ExprPrimaryWith<Atom>> "[" "dyn" <idx:Expr> "]" <rr:@R> => {
         let payload = AstNodePayload::ExprIndexDyn;
         let span = parser.span(ll, rr);
         let num_children = 2;
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> <e:ExprPrimary> "[" <index:Index> "]" <rr:@R> => {
+    <ll:@L> <e:ExprPrimaryWith<Atom>> "[" <index:Index> "]" <rr:@R> => {
         let payload = AstNodePayload::ExprIndex(payload::ExprIndex { index });
         let span = parser.span(ll, rr);
         let num_children = 1;
 
         parser.add_node(payload, span, num_children)
     },
-    <ll:@L> <e:ExprPrimary> "[" <index_hi:Index> ".." <index_lo:Index> "]" <rr:@R> => {
+    <ll:@L> <e:ExprPrimaryWith<Atom>> "[" <index_hi:Index> ".." <index_lo:Index> "]" <rr:@R> => {
         let payload = AstNodePayload::ExprIndexRange(payload::ExprIndexRange { index_hi, index_lo });
         let span = parser.span(ll, rr);
         let num_children = 1;
@@ -1021,10 +1228,17 @@ ExprPrimary: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
-    <e:ExprAtom> => e,
+    <e:Atom> => e,
 }
 
 ExprAtom: AstNodeId = {
+    <e:ExprAtomPath> => e,
+    <e:ExprAtomOther> => e,
+}
+
+/// A bare path reference.  Split from the other atoms so the arm-block
+/// expression form can treat it specially (see `ArmBlockPrimary`).
+ExprAtomPath: AstNodeId = {
     <ll:@L> <path:Path> <rr:@R> => {
         let payload = AstNodePayload::ExprReference;
         let span = parser.span(ll, rr);
@@ -1032,6 +1246,9 @@ ExprAtom: AstNodeId = {
 
         parser.add_node(payload, span, num_children)
     },
+}
+
+ExprAtomOther: AstNodeId = {
     <ll:@L> <lit:WordLit> <rr:@R> => {
         let payload = AstNodePayload::ExprWordLit(payload::ExprWordLit { literal: lit });
         let span = parser.span(ll, rr);
@@ -1256,6 +1473,7 @@ extern {
 
         // Keywords
         "pub" => Token::KwPub,
+        "memory" => Token::KwMemory,
         "export" => Token::KwExport,
         "import" => Token::KwImport,
         "mod" => Token::KwMod,
@@ -1273,6 +1491,7 @@ extern {
         "net" => Token::KwNet,
         "tap" => Token::KwTap,
         "reg" => Token::KwReg,
+        "memory" => Token::KwMemory,
         "wire" => Token::KwWire,
         "submod" => Token::KwSubmod,
         "on" => Token::KwOn,

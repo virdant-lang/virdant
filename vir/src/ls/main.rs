@@ -68,6 +68,22 @@ fn new_db() -> Db {
     db
 }
 
+/// The project root for an opened file: the nearest ancestor directory
+/// (starting at the file's own directory) holding `virdant.toml`.
+/// Falls back to the file's directory when no manifest is found, so
+/// standalone files still resolve image paths against something
+/// sensible.
+fn project_root_for(dir: &std::path::Path) -> std::path::PathBuf {
+    let mut current = Some(dir);
+    while let Some(dir) = current {
+        if vircommon::project_manifest(dir).is_some() {
+            return dir.to_path_buf();
+        }
+        current = dir.parent();
+    }
+    dir.to_path_buf()
+}
+
 fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
     // Load every *.vir in the standard library directory (builtin.vir,
     // ice40.vir, ...) so that `import` can resolve platform libraries, then
@@ -93,7 +109,13 @@ fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
                     vircommon::INVALID_PACKAGE_NAME_REASON,
                 );
             }
-            vircommon::db_from_source_dir_scan(scan)
+            let mut db = vircommon::db_from_source_dir_scan(scan);
+            // The scanned directory is the opened file's directory;
+            // the project root for memory image paths
+            // (`@image`/`@image_hex`) is the nearest ancestor holding
+            // `virdant.toml`.
+            db.set_project_root(project_root_for(&source_dir));
+            db
         }
         Err(e) => {
             eprintln!("warning: cannot read source directory {}: {e}", source_dir.display());

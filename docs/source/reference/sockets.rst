@@ -154,22 +154,22 @@ direction for each instance.
 
     mod Top {
         mod core of Core
-        mod memory of Memory
+        mod memsrv of Memory
 
-        memory.mem :=: core.mem
+        memsrv.mem :=: core.mem
     }
 
 The `:=:` operator connects every port in the `Mem` socket between
-the `core` and `memory` instances.
-The `addr` port is driven by `core` and received by `memory`.
-The `data` port is driven by `memory` and received by `core`.
+the `core` and `memsrv` instances.
+The `addr` port is driven by `core` and received by `memsrv`.
+The `data` port is driven by `memsrv` and received by `core`.
 
 This is equivalent to manually wiring each port:
 
 .. code-block:: virdant
 
-    memory.mem.addr := core.mem.addr
-    core.mem.data := memory.mem.data
+    memsrv.mem.addr := core.mem.addr
+    core.mem.data := memsrv.mem.data
 
 
 Mono-Socket Matching
@@ -250,7 +250,7 @@ Individual ports on a socket instance are accessed through a two-level path:
 .. code-block:: virdant
 
     core.mem.addr := 0
-    result := memory.mem.data
+    result := memsrv.mem.data
 
 The first component is the module instance name, the second is the socket
 instance name, and the third is the port name within the socket definition.

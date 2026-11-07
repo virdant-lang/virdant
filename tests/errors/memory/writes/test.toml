@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "OverlappingMemoryWrites, MultipleDrivers, IndexedDriverNotMemory, and MemoryWriteOutsideOnRegion: write-site rules"
+filecheck = "src/writes.vir"

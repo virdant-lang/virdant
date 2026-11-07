@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "MemoryElementNotPowerOf2Word: the element type must be Word[n] with n a power of two"
+filecheck = "src/element.vir"

@@ -14,7 +14,9 @@ ports, components, instances, and control flow.
 
     ModDefStmtCore :=
         ModDefStmtComponent
+        | ModDefStmtMemory
         | ModDefStmtDriver
+        | ModDefStmtIndexedDriver
         | ModDefStmtInstance
         | ModDefStmtSocket
         | ModDefStmtUnused
@@ -120,6 +122,115 @@ Inside the register's block, the special identifier `it` refers to the
 register itself.
 
 
+Memories
+--------
+A `memory` declaration creates a module-local, clocked, word-addressable
+memory (a behavioral RAM or ROM) with dynamic indexing and explicit write
+drivers. The depth is written in brackets after the component name —
+mirroring how the memory is read — and the element type follows the colon:
+
+.. code-block:: grammar
+
+    ModDefStmtMemory :=
+        DocString? Annotations "memory" Ident "[" Expr "]" ":" Type
+                       OnClause? MemoryBlock?
+
+    MemoryBlock := "{" MemoryBlockStmt* "}"
+
+    MemoryBlockStmt :=
+        ModDefStmtDriver
+        | ModDefStmtIndexedDriver
+        | ModDefStmtUnused
+        | ModDefStmtInitial
+        | If
+        | Match
+        | Let
+        | ModDefStmtOnRegion
+
+    ModDefStmtOnRegion := "on" Expr ModDefStmtBlock
+
+.. code-block:: virdant
+
+    mod Ram {
+        incoming clock : Clock
+        incoming write_data : Word[32]
+        incoming addr : Word[10]
+        incoming write_enable : Bit
+        outgoing read_data : Word[32] dependson addr {
+            it := mem[dyn addr]
+        }
+
+        memory mem[1024] : Word[32] {
+            if {
+                when write_enable {
+                    it[dyn addr] <= write_data
+                }
+            }
+        }
+    }
+
+`memory mem[1024] : Word[32]` reads as "a memory `mem` with 1024 slots, each
+a `Word[32]`".
+
+Shape rules:
+
+* Both the depth and the element width must be literal powers of two; no
+  generics are supported in these positions.
+* A dynamic index must be *exactly* `Word[k]` where `depth == 2^k` — a wider
+  address must be narrowed explicitly, never truncated silently.
+* Static indices read and write one word (`mem[3]`); they must be in range.
+* A memory is readable only through an index: a bare `mem` or a slice of a
+  memory is an error.
+
+Clocking and writes:
+
+* A memory has one clock slot, resolved exactly like a `reg`'s: the `on`
+  clause may be omitted when the module declares exactly one `Clock`.
+* A write is an indexed latched driver: `mem[dyn idx] <= data` (the first
+  indexed left-hand side in the language; `:=` is accepted with a warning).
+* Inside a memory body, writes live either in an `on <CLOCK> { ... }`
+  region (for multi-clock modules) or at the top level of the body (the
+  same single-clock inference as `reg`); only writes to the memory are
+  allowed inside an `on` region. A blockless memory may be written from a
+  guarded module-level write site.
+* A memory has exactly one write site, and sibling `when` clauses whose
+  guards are not exclusive may not both write it — use `when`/`else` or
+  `match` arms, whose arms are disjoint.
+
+Reads are combinational and usable anywhere an expression is; multiple reads
+at different addresses in one cycle are legal (multiple asynchronous read
+ports). A write commits on the clock edge, and a read of an address written
+in the same cycle sees the *old* value (read-before-write). Words never
+written read as unspecified (pseudorandom in simulation). An `outgoing` port
+that combinationally reads a memory declares `dependson` naming the index's
+incoming ports: the only combinational dependency a read introduces is on
+the index expression.
+
+Memories lower to behavioral Verilog (inferred as block RAM by synthesis
+tools):
+
+.. code-block:: verilog
+
+    reg [31:0] mem [0:1023];
+
+    always @(posedge clock) begin
+        if (write_enable) begin
+            mem[addr] <= write_data;
+        end
+    end
+
+    assign read_data = mem[addr];
+
+Initialization: the `@image("path")` annotation loads a raw binary file
+word-packed in declaration order (most-significant byte first within each
+word), and `@image_hex("path")` a text hex file with one word per line (à
+la `$readmemh`). Paths resolve relative to the project root — the
+directory where `virdant.toml` is found. A file shorter than the depth leaves the remaining words
+unspecified; a longer file is an error. A memory with an image is a ROM: it
+has no write site, needs no clock, and writes to it are rejected. On
+platforms annotated `@noinitial`, memory images are disallowed, exactly like
+`initial` statements.
+
 Tristate Nets
 -------------
 Tristate components model wires that more than one driver can drive,
@@ -199,7 +310,7 @@ Virdant provides three assignment operators for driving signals.
 
     .. code-block:: virdant
 
-        memory.mem :=: core.mem
+        memsrv.mem :=: core.mem
 
 
 Module Instances

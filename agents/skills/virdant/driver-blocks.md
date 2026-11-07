@@ -105,7 +105,8 @@ mod Foo {
   of type `Clock`: the register is clocked by it implicitly.
 * Writing `on clock` anyway is a warning (`RedundantOnClause`).
 * The rule applies to every component kind that can carry an `on`
-  clause, but only `reg`/`outgoing reg` are actually clocked by it.
+  clause, but only `reg`/`outgoing reg`/`memory` are actually clocked
+  by it.
 
 ```virdant
 mod Counter {

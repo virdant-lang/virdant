@@ -1,0 +1,46 @@
+// A RAM with a body: the write site and a combinational read.
+pub mod Ram {
+    incoming clock        : Clock
+    incoming write_enable : Bit
+    incoming addr         : Word[4]
+    incoming write_data   : Word[8]
+    outgoing read_data    : Word[8] dependson addr {
+        it        := mem[dyn addr]
+    }
+    memory mem[16]        : Word[8] {
+        if {
+            when write_enable {
+                it[dyn addr] <= write_data
+            }
+        }
+        read_data := it[dyn addr]
+    }
+}
+
+// A blockless memory with a module-level write site.
+pub mod Blockless {
+    incoming clock      : Clock
+    incoming addr       : Word[4]
+    incoming write_data : Word[8]
+    memory mem[16]      : Word[8]
+    mem[dyn addr] <= write_data
+}
+
+// A ROM from a hex image, and an on region in a multi-clock module.
+pub mod Roms {
+    incoming clk_a    : Clock
+    incoming clk_b    : Clock
+    incoming rom_addr : Word[3]
+    outgoing rom_data : Word[8] dependson rom_addr {
+        it        := rom[dyn rom_addr]
+    }
+    @image_hex("rom.hex")
+    memory rom[8]     : Word[8] {
+        read_data := it[dyn rom_addr]
+    }
+    memory ram[8]     : Word[8] on clk_b {
+        on clk_b {
+            it[0]     <= 0w8
+        }
+    }
+}

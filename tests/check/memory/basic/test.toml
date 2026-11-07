@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "Positive tests for the `memory` construct: the canonical RAM, a blockless declaration with a module-level write site, and static-index reads and writes"
+filecheck = "src/basic.vir"

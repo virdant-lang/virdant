@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "A ROM initialized from `@image_hex` and `@image` files"
+filecheck = "src/image.vir"

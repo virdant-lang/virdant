@@ -1,0 +1,20 @@
+// `:=` on a memory word parses and behaves as a write site — fixing
+// the warning never changes whether the program is legal — but the
+// required spelling is `<=` (MEMORY_PLAN §3.2), because a memory
+// write commits on the clock edge.
+
+pub mod Ram {
+    incoming clock : Clock
+    incoming addr : Word[4]
+    incoming write_data : Word[8]
+    outgoing read_data : Word[8] dependson addr {
+        it := mem[dyn addr]
+    }
+
+    memory mem[16] : Word[8] {
+        it[dyn addr] := write_data
+    }
+}
+
+// CHECK: use `<=` to write memory mem
+// CHECK: Check OK

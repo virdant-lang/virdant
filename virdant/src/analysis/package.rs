@@ -13,6 +13,7 @@ use crate::diagnostics;
 use crate::diagnostics::Diagnostic;
 use crate::package::{PackageId, PackageTable};
 use crate::common::source::Region;
+use crate::common::ComponentKind;
 use crate::syntax::ast::{AstNode, AstNodeId, match_arm_children, if_arm_children};
 use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
@@ -194,10 +195,27 @@ impl PackageAnalysis {
                             if matches!(child.payload(), AstNodePayload::It) {
                                 let block = &child.children()[0];
                                 self.add_moddefstmt_block_expr_roots(block);
+                            } else if matches!(child.payload(), AstNodePayload::ModDefStmtBlock)
+                                && matches!(_component.kind, ComponentKind::Memory)
+                            {
+                                // A memory body: its statements' expressions
+                                // are expr roots like any block's.
+                                self.add_moddefstmt_block_expr_roots(&child);
                             }
                         }
                     }
                     AstNodePayload::Driver(_) | AstNodePayload::InitialDriver => {
+                        let node_id = child_node.driver().unwrap().id();
+                        self.expr_roots.push(node_id);
+                    }
+                    AstNodePayload::IndexedDriver(_) => {
+                        // A memory write: the dynamic index and the
+                        // written value are expr roots.  (A constant
+                        // index carries its value in the payload and
+                        // is not an expression node.)
+                        if let Some(index_node) = child_node.driver_index() {
+                            self.expr_roots.push(index_node.id());
+                        }
                         let node_id = child_node.driver().unwrap().id();
                         self.expr_roots.push(node_id);
                     }
@@ -427,6 +445,25 @@ impl PackageAnalysis {
                     self.expr_roots.push(driver_expr.id());
                     // Trace into When/Match nodes inside the driver expression
                     self.add_expr_if_match_roots(driver_expr);
+                }
+                AstNodePayload::IndexedDriver(_) => {
+                    // A memory write: the dynamic index and the written
+                    // value are expr roots.  A constant index carries
+                    // its value in the payload, so it has no expr root.
+                    if let Some(index_node) = stmt.driver_index() {
+                        self.expr_roots.push(index_node.id());
+                    }
+                    let driver_expr = stmt.driver().unwrap();
+                    self.expr_roots.push(driver_expr.id());
+                    self.add_expr_if_match_roots(driver_expr);
+                }
+                AstNodePayload::OnRegion => {
+                    // An `on <CLOCK> { ... }` region of a memory body:
+                    // the clock expression and the region's statements'
+                    // expressions are expr roots.
+                    let children = stmt.children();
+                    self.expr_roots.push(children[0].id());
+                    self.add_moddefstmt_block_expr_roots(&children[1]);
                 }
                 AstNodePayload::If => {
                     self.add_moddefstmtif_expr_roots(stmt);

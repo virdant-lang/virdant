@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bstr::{BString, ByteSlice};
 
 use crate::analysis::component::ComponentId;
-use crate::analysis::drivers::{Driver, DriverIf, DriverMatch};
+use crate::analysis::drivers::{Driver, DriverIf, DriverMatch, WriteIndex};
 use crate::common::WordValue;
 use crate::db::Db;
 use crate::sim::payload;
@@ -99,10 +99,228 @@ pub fn driver_to_expr(db: &Db, driver: &Driver, component_typ: &Type, env: &[Typ
     match driver {
         Driver::Expr(_, loc) => convert_ast_expr(db, loc.clone(), env, types),
         Driver::Bidirectional(_) => unreachable!("Bidirectional drivers are resolved into aliases, not simulation"),
+        Driver::Write { .. } => unreachable!("memory write drivers are lowered by memwrite_to_exprs, not driver_to_expr"),
         Driver::Absent => unreachable!("Absent drivers only appear inside when clauses"),
         Driver::If(driver_if) => convert_driver_if(db, driver_if, component_typ, env, types),
         Driver::Match(driver_match) => convert_driver_match(db, driver_match, component_typ, env, types),
     }
+}
+
+/// A memory's write site lowered for simulation: three expressions
+/// sharing the write site's guard structure — whether a write fires
+/// this cycle, the address to write, and the value to write.  At a
+/// clock edge the simulator evaluates all three against pre-edge
+/// values: `if enable { words[address] = data }`, exactly the
+/// semantics of a Verilog `always @(posedge clk)` block.
+///
+/// Encoding the guard structure three times keeps the whole existing
+/// `Expr` machinery (ternary `if`s, `match` patterns, let bindings)
+/// working for writes unchanged; the three trees are derived from one
+/// `Driver` tree, so they are consistent by construction.
+#[derive(Debug, Clone)]
+pub struct MemWriteExprs {
+    /// `Bit`: whether the write site writes this cycle.
+    pub enable: Arc<Expr>,
+    /// `Word[k]`: the address to write (`depth == 2^k`).
+    pub address: Arc<Expr>,
+    /// The element type: the value to write.
+    pub data: Arc<Expr>,
+}
+
+/// Lower a memory's write-site driver tree into [`MemWriteExprs`].
+/// `elem_typ` is the (mono) element type; `addr_width` is `k` where
+/// `depth == 2^k`.
+pub fn memwrite_to_exprs(
+    db: &Db,
+    driver: &Driver,
+    elem_typ: &Type,
+    addr_width: crate::common::Width,
+    fallback: Location,
+    env: &[Type],
+    types: &mut TypeInterner,
+) -> MemWriteExprs {
+    let addr_typ = Type::Word(addr_width);
+    let triple = convert_memwrite(db, driver, elem_typ, &addr_typ, &fallback, env, types);
+    MemWriteExprs {
+        enable: triple.0,
+        address: triple.1,
+        data: triple.2,
+    }
+}
+
+/// The write-site lowering of a memory with no write site at all (an
+/// image ROM, or a diagnosed error): an enable that never fires.
+pub fn never_writes(location: Location, elem_typ: &Type, addr_width: crate::common::Width, types: &mut TypeInterner) -> MemWriteExprs {
+    let addr_typ = Type::Word(addr_width);
+    let enable = const_bit_expr(location.clone(), false, types);
+    let address = const_word_expr(location.clone(), &addr_typ, 0, types);
+    let data = const_word_expr(location, elem_typ, 0, types);
+    MemWriteExprs { enable, address, data }
+}
+
+/// One `(enable, address, data)` triple for a write-tree node, with
+/// `no_write` used for `Absent` / missing `else` arms.
+fn convert_memwrite(
+    db: &Db,
+    driver: &Driver,
+    elem_typ: &Type,
+    addr_typ: &Type,
+    fallback: &Location,
+    env: &[Type],
+    types: &mut TypeInterner,
+) -> (Arc<Expr>, Arc<Expr>, Arc<Expr>) {
+    match driver {
+        Driver::Write { stmt, index, rhs, .. } => {
+            let address = match index {
+                // A constant index: a literal of the address width.
+                WriteIndex::Const(index) => {
+                    const_word_expr(stmt.clone(), addr_typ, *index as u64, types)
+                }
+                WriteIndex::Dyn(index) => convert_ast_expr(db, index.clone(), env, types),
+            };
+            let data = convert_ast_expr(db, rhs.clone(), env, types);
+            let enable = const_bit_expr(stmt.clone(), true, types);
+            (enable, address, data)
+        }
+        // No write here: `Absent` appears for clauses of the enclosing
+        // `if` that write some other component (or nothing).
+        Driver::Absent | Driver::Expr(..) | Driver::Bidirectional(_) => {
+            let location = driver.location().unwrap_or_else(|| fallback.clone());
+            (
+                const_bit_expr(location.clone(), false, types),
+                const_word_expr(location.clone(), addr_typ, 0, types),
+                const_word_expr(location, elem_typ, 0, types),
+            )
+        }
+        Driver::If(driver_if) => {
+            let location = match driver_if.clauses.first() {
+                Some((cond_loc, _)) => cond_loc.clone(),
+                None => driver_if
+                    .else_clause
+                    .as_ref()
+                    .and_then(|else_driver| else_driver.location())
+                    .unwrap_or_else(|| fallback.clone()),
+            };
+            let mut enable_branches: Vec<(Arc<Expr>, Arc<Expr>)> = Vec::new();
+            let mut address_branches: Vec<(Arc<Expr>, Arc<Expr>)> = Vec::new();
+            let mut data_branches: Vec<(Arc<Expr>, Arc<Expr>)> = Vec::new();
+            for (cond_loc, sub_driver) in &driver_if.clauses {
+                let cond = convert_ast_expr(db, cond_loc.clone(), env, types);
+                let sub = convert_memwrite(db, sub_driver, elem_typ, addr_typ, fallback, env, types);
+                enable_branches.push((cond.clone(), sub.0));
+                address_branches.push((cond.clone(), sub.1));
+                data_branches.push((cond, sub.2));
+            }
+            let else_triple = match &driver_if.else_clause {
+                Some(else_driver) => {
+                    convert_memwrite(db, else_driver, elem_typ, addr_typ, fallback, env, types)
+                }
+                None => {
+                    // No else clause: the memory holds (no write).
+                    (
+                        const_bit_expr(location.clone(), false, types),
+                        const_word_expr(location.clone(), addr_typ, 0, types),
+                        const_word_expr(location.clone(), elem_typ, 0, types),
+                    )
+                }
+            };
+            let enable = if_expr(location.clone(), Type::Bit, enable_branches, else_triple.0, types);
+            let address = if_expr(location.clone(), addr_typ.clone(), address_branches, else_triple.1, types);
+            let data = if_expr(location, elem_typ.clone(), data_branches, else_triple.2, types);
+            (enable, address, data)
+        }
+        Driver::Match(driver_match) => {
+            let location = driver_match.subject.clone();
+            let subject = convert_ast_expr(db, driver_match.subject.clone(), env, types);
+            let subject_typ = mono_type(db, &driver_match.subject.clone(), env);
+            let parsing = db.get_parsing(driver_match.subject.package());
+            let mut enable_arms: Vec<(payload::Pat, Arc<Expr>)> = Vec::new();
+            let mut address_arms: Vec<(payload::Pat, Arc<Expr>)> = Vec::new();
+            let mut data_arms: Vec<(payload::Pat, Arc<Expr>)> = Vec::new();
+            for (pat_loc, sub_driver) in &driver_match.arms {
+                let pat_node = parsing.ast_node(pat_loc.ast_node_id());
+                let sub = convert_memwrite(db, sub_driver, elem_typ, addr_typ, fallback, env, types);
+                enable_arms.push((convert_pattern(db, &parsing, &pat_node, &subject_typ), sub.0));
+                address_arms.push((convert_pattern(db, &parsing, &pat_node, &subject_typ), sub.1));
+                data_arms.push((convert_pattern(db, &parsing, &pat_node, &subject_typ), sub.2));
+            }
+            let else_triple = match &driver_match.else_clause {
+                Some(else_driver) => {
+                    convert_memwrite(db, else_driver, elem_typ, addr_typ, fallback, env, types)
+                }
+                None => (
+                    const_bit_expr(location.clone(), false, types),
+                    const_word_expr(location.clone(), addr_typ, 0, types),
+                    const_word_expr(location.clone(), elem_typ, 0, types),
+                ),
+            };
+            enable_arms.push((payload::Pat::Else, else_triple.0));
+            address_arms.push((payload::Pat::Else, else_triple.1));
+            data_arms.push((payload::Pat::Else, else_triple.2));
+            let enable = match_expr(location.clone(), Type::Bit, subject.clone(), enable_arms, types);
+            let address = match_expr(location.clone(), addr_typ.clone(), subject.clone(), address_arms, types);
+            let data = match_expr(location, elem_typ.clone(), subject, data_arms, types);
+            (enable, address, data)
+        }
+    }
+}
+
+fn const_bit_expr(location: Location, value: bool, types: &mut TypeInterner) -> Arc<Expr> {
+    let typ = Type::Bit;
+    let typ_id = types.intern(&typ);
+    Arc::new(Expr {
+        location,
+        typ,
+        typ_id,
+        payload: ExprPayload::BitLit(payload::BitLit { value }),
+    })
+}
+
+fn const_word_expr(location: Location, typ: &Type, value: u64, types: &mut TypeInterner) -> Arc<Expr> {
+    let width = match typ {
+        Type::Word(width) => *width,
+        Type::Bit => 1,
+        _ => 0,
+    };
+    let typ_id = types.intern(typ);
+    Arc::new(Expr {
+        location,
+        typ: typ.clone(),
+        typ_id,
+        payload: ExprPayload::WordLit(payload::WordLit { width, value }),
+    })
+}
+
+fn if_expr(
+    location: Location,
+    typ: Type,
+    branches: Vec<(Arc<Expr>, Arc<Expr>)>,
+    else_branch: Arc<Expr>,
+    types: &mut TypeInterner,
+) -> Arc<Expr> {
+    let typ_id = types.intern(&typ);
+    Arc::new(Expr {
+        location,
+        typ,
+        typ_id,
+        payload: ExprPayload::If(payload::If { branches, else_branch }),
+    })
+}
+
+fn match_expr(
+    location: Location,
+    typ: Type,
+    subject: Arc<Expr>,
+    arms: Vec<(payload::Pat, Arc<Expr>)>,
+    types: &mut TypeInterner,
+) -> Arc<Expr> {
+    let typ_id = types.intern(&typ);
+    Arc::new(Expr {
+        location,
+        typ,
+        typ_id,
+        payload: ExprPayload::Match(payload::Match { subject, arms }),
+    })
 }
 
 /// Convert the RHS of an `initial` statement (at `loc`) into a sim

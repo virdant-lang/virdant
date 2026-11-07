@@ -381,6 +381,7 @@ macro_rules! assign_blocking {
 macro_rules! assign_non_blocking {
     ($name:ident, $expr:expr) => {
         Stmt::AssignNonBlocking(stmt::AssignNonBlocking {
+            index: None,
             name: stringify!($name).to_string(),
             expr: $expr.into(),
         })

@@ -99,6 +99,8 @@ If `vir check` fails, find the message in `./diagnostics.md` for cause and fix.
   and style rules.
 * `./driver-blocks.md` — writing drivers with `it`, clock inference,
   `initial`, push-in drivers, direct chaining.
+* `./memory.md` — the `memory` statement: RAMs and ROMs, indexed writes,
+  `on` regions, `@image`/`@image_hex`, the one-write-site rules.
 * `./control-flow.md` — `if`/`match` in statement and expression position,
   the five arm forms, guards, exhaustiveness.
 * `./let-bindings.md` — `let` in statements and expressions, binding lists,

@@ -1,0 +1,3 @@
+kind = "run"
+description = "16-word x 8-bit RAM: writes every word, reads each back one cycle later (MEMORY_PLAN §5)"
+cycle_limit = 32

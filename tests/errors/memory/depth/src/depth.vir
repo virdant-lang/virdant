@@ -1,0 +1,33 @@
+// The depth in brackets must be a literal power of two:
+// generics are not supported in v1, and non-power-of-two
+// depths have no exact index width
+
+mod NotPow2 {
+    incoming clock : Clock
+    incoming addr : Word[4]
+    incoming write_data : Word[8]
+    outgoing read_data : Word[8]
+
+    // 12 is not a power of two.
+    memory mem[12] : Word[8] {
+        it[dyn addr] <= write_data
+        read_data := it[dyn addr]
+    }
+}
+
+mod NotALiteral {
+    incoming clock : Clock
+    incoming addr : Word[4]
+    incoming write_data : Word[8]
+    outgoing read_data : Word[8]
+
+    // A depth must be a literal constant, not an expression.
+    memory mem[8 + 8] : Word[8] {
+        it[dyn addr] <= write_data
+        read_data := it[dyn addr]
+    }
+}
+
+// CHECK: memory depth must be a power of 2, found 12
+// CHECK: memory depth must be a literal constant
+// CHECK: Check failed

@@ -67,6 +67,7 @@ pub struct Port {
 pub enum Element {
     Wire(Wire),
     Reg(Reg),
+    Memory(Memory),
     Assign(Assign),
     Always(Always),
     Initial(Initial),
@@ -86,6 +87,31 @@ pub struct Reg {
     pub name: String,
     pub width: Width,
     pub expr: Option<Expr>,
+}
+
+/// A behavioral memory: `reg [width-1:0] name [0:depth-1];`
+/// Writes live in an `Always` element's indexed
+/// nonblocking assignments; reads are ordinary `Index` expressions
+/// over the memory name; `init` emits the image initialization.
+#[derive(Debug)]
+pub struct Memory {
+    pub name: String,
+    /// Element width (`n` in `Word[n]`).
+    pub width: Width,
+    /// Number of words (a power of two).
+    pub depth: u32,
+    pub init: Option<MemoryInit>,
+}
+
+/// How a memory's contents are initialized at simulation start.
+#[derive(Debug)]
+pub enum MemoryInit {
+    /// A text hex file, one word per line: emitted as
+    /// `$readmemh("<file>", name);` in an initial block.  The path is
+    /// resolved (absolute) at conversion time; a file shorter than
+    /// the depth leaves the remaining words at their simulation
+    /// initial values.
+    Readmemh { file: String },
 }
 
 #[derive(Debug)]
@@ -331,6 +357,7 @@ impl Element {
         match self {
             Element::Wire(wire) => wire.write(f),
             Element::Reg(reg) => reg.write(f),
+            Element::Memory(memory) => memory.write(f),
             Element::Assign(assign) => assign.write(f),
             Element::Always(always) => always.write(f),
             Element::Initial(initial) => initial.write(f),
@@ -370,6 +397,21 @@ impl Wire {
         }
         f.skip_indent();
         verilog_writeln!(f, ";")?;
+        Ok(())
+    }
+}
+
+impl Memory {
+    fn write(&self, f: &mut Writer) -> std::io::Result<()> {
+        let name = &self.name;
+        let width = display_width(self.width);
+        let last = self.depth - 1;
+        // The array range renders in the zero column: the memory is a
+        // declaration, not a driven signal.
+        verilog_writeln!(f, "reg {width:>WIDTH_WIDTH$}  {name} [0:{last}];")?;
+        if let Some(MemoryInit::Readmemh { file }) = &self.init {
+            verilog_writeln!(f, "initial $readmemh(\"{file}\", {name});")?;
+        }
         Ok(())
     }
 }
@@ -726,6 +768,7 @@ impl Module {
             .chain(self.elements.iter().filter_map(|e| match e {
                 Element::Wire(w) => Some(w.name.clone()),
                 Element::Reg(r) => Some(r.name.clone()),
+                Element::Memory(m) => Some(m.name.clone()),
                 _ => None,
             }))
             .collect();
@@ -748,6 +791,7 @@ impl Module {
                         norm.normalize_stmt(stmt);
                     }
                 }
+                Element::Memory(_) => {}
                 Element::Wire(wire) => {
                     if let Some(expr) = wire.expr.as_mut() {
                         norm.normalize_expr(expr);
