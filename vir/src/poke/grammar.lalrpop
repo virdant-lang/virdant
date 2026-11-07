@@ -110,7 +110,7 @@ TopFqn: String = {
 };
 
 TopFqnPart: String = {
-    <i: Ident> => i,
+    <n: Name> => n,
     "::" => "::".to_string(),
     "." => ".".to_string(),
     <n: AnyNat> => n.to_string(),
@@ -125,35 +125,11 @@ VcdTarget: String = {
 };
 
 VcdPart: String = {
-    <i: Ident> => i,
+    <n: Name> => n,
     <n: AnyNat> => n.to_string(),
     "." => ".".to_string(),
     "-" => "-".to_string(),
     "/" => "/".to_string(),
-    // The lexer keywordifies these words, so a bare file name may
-    // contain them too (`vcd top.vcd`).  Inside the run only their
-    // literal text matters.
-    "cd" => "cd".to_string(),
-    "peek" => "peek".to_string(),
-    "poke" => "poke".to_string(),
-    "watch" => "watch".to_string(),
-    "break" => "break".to_string(),
-    "advance" => "advance".to_string(),
-    "tick" => "tick".to_string(),
-    "assert" => "assert".to_string(),
-    "print" => "print".to_string(),
-    "restart" => "restart".to_string(),
-    "exit" => "exit".to_string(),
-    "ls" => "ls".to_string(),
-    "show" => "show".to_string(),
-    "autoshow" => "autoshow".to_string(),
-    "vcd" => "vcd".to_string(),
-    "on" => "on".to_string(),
-    "off" => "off".to_string(),
-    "true" => "true".to_string(),
-    "false" => "false".to_string(),
-    "top" => "top".to_string(),
-    "it" => "it".to_string(),
 };
 
 // `autoshow [on|off]`: with no argument the state toggles.
@@ -168,12 +144,20 @@ AutoshowState: Command = {
 // `top`, interpreted by the command layer).
 CdTarget: Command = {
     ".." => Command::CdUp,
-    <p: Path> => match (p.start, p.segments.is_empty()) {
+    <p: Path> => match (&p.start, p.segments.is_empty()) {
+        // Absolute paths now always carry at least one segment (the
+        // grammar requires it); the `(Top, true)` case is kept for
+        // defense in depth.
         (PathStart::Top, true) => Command::CdTop,
-        (PathStart::Top, false) => Command::CdAbs(p.segments),
+        (PathStart::Top, false) => Command::CdAbs(p.segments.clone()),
+        // `cd top` still returns to the top module: a bare `top`
+        // parses as a plain name, but as a `cd` target the historical
+        // meaning wins.  (A submodule instance actually named `top`
+        // must be entered from elsewhere, e.g. `cd other.top`.)
+        (PathStart::Ident(head), true) if head == "top" => Command::CdTop,
         (PathStart::Ident(head), _) => {
-            let mut segments = vec![head];
-            segments.extend(p.segments);
+            let mut segments = vec![head.clone()];
+            segments.extend(p.segments.clone());
             Command::Cd(segments)
         },
         (PathStart::It, _) => unreachable!("grammar never produces an `it` path for cd"),
@@ -208,19 +192,83 @@ AnyNat: u128 = {
     <w: Word> => { let (v, _) = w; v },
 };
 
-Path: SPath = {
-    <start: PathStart> <segs: PathSegments> => SPath { start, segments: segs },
+// Any word the lexer knows about: a plain identifier or a keyword.
+// The lexer classifies each word once and for all (`top` is always
+// `Tok::Top`, never `Tok::Ident`), so keywords keep their special
+// meanings only in the positions that belong to them — command heads,
+// `on`/`off` after `autoshow`, `true`/`false` as bit literals.  Where
+// a *name* is expected — path segments, module names, file names,
+// constructor names — a keyword is just its spelling.
+Name: String = {
+    <i: Ident> => i,
+    "cd" => "cd".to_string(),
+    "peek" => "peek".to_string(),
+    "poke" => "poke".to_string(),
+    "watch" => "watch".to_string(),
+    "break" => "break".to_string(),
+    "advance" => "advance".to_string(),
+    "tick" => "tick".to_string(),
+    "assert" => "assert".to_string(),
+    "print" => "print".to_string(),
+    "restart" => "restart".to_string(),
+    "exit" => "exit".to_string(),
+    "ls" => "ls".to_string(),
+    "show" => "show".to_string(),
+    "autoshow" => "autoshow".to_string(),
+    "vcd" => "vcd".to_string(),
+    "on" => "on".to_string(),
+    "off" => "off".to_string(),
+    "true" => "true".to_string(),
+    "false" => "false".to_string(),
+    "top" => "top".to_string(),
+    "it" => "it".to_string(),
 };
 
-PathStart: PathStart = {
-    <s: Ident> => PathStart::Ident(s),
-    "top" => PathStart::Top,
-    "it" => PathStart::It,
+// The subset of `Name` that may *start* a relative path.  `true`/
+// `false` are left out because they own their tokens as bit literals
+// in expression position, and `it` keeps its meaning as the value of
+// the last `peek`.  Bare `top` is handled directly in `Path` (see
+// there).
+PathStartName: String = {
+    <i: Ident> => i,
+    "cd" => "cd".to_string(),
+    "peek" => "peek".to_string(),
+    "poke" => "poke".to_string(),
+    "watch" => "watch".to_string(),
+    "break" => "break".to_string(),
+    "advance" => "advance".to_string(),
+    "tick" => "tick".to_string(),
+    "assert" => "assert".to_string(),
+    "print" => "print".to_string(),
+    "restart" => "restart".to_string(),
+    "exit" => "exit".to_string(),
+    "ls" => "ls".to_string(),
+    "show" => "show".to_string(),
+    "autoshow" => "autoshow".to_string(),
+    "vcd" => "vcd".to_string(),
+    "on" => "on".to_string(),
+    "off" => "off".to_string(),
+};
+
+Path: SPath = {
+    // `top.foo.bar` — absolute.  The `.` is required, which is what
+    // keeps `top` two-faced but unambiguous: with a segment to come,
+    // `top` opens an absolute path; bare, it is an ordinary name (a
+    // signal, register, or instance called `top`).
+    "top" "." <h: Name> <segs: PathSegments> => {
+        let mut segments = vec![h];
+        segments.extend(segs);
+        SPath { start: PathStart::Top, segments }
+    },
+    // A name that happens to be spelled `top`.
+    "top" => SPath { start: PathStart::Ident("top".to_string()), segments: vec![] },
+    <n: PathStartName> <segs: PathSegments> => SPath { start: PathStart::Ident(n), segments: segs },
+    "it" <segs: PathSegments> => SPath { start: PathStart::It, segments: segs },
 };
 
 PathSegments: Vec<String> = {
     => vec![],
-    <segs: ("." <Ident>)+> => segs,
+    <segs: ("." <Name>)+> => segs,
 };
 
 Expr: Expr = {
@@ -288,8 +336,8 @@ ExprPrimary: Expr = {
     <w: Word> => { let (v, width) = w; Expr::WordLit(v, width) },
     "true" => Expr::BitLit(true),
     "false" => Expr::BitLit(false),
-    "#" <name: Ident> => Expr::Ctor { name, args: vec![] },
-    "#" <name: Ident> "(" <args: CtorArgs?> ")" => Expr::Ctor { name, args: args.unwrap_or_default() },
+    "#" <name: Name> => Expr::Ctor { name, args: vec![] },
+    "#" <name: Name> "(" <args: CtorArgs?> ")" => Expr::Ctor { name, args: args.unwrap_or_default() },
     <p: Path> => Expr::Path(p),
 };
 

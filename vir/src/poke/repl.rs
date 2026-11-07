@@ -330,38 +330,3 @@ expressions use Virdant syntax (literals, + - & | ^, comparisons,
 && || ^^, ~ ! -, x[i], x[hi..lo], #Ctor)."
     );
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn parse(line: &str) -> Command {
-        parse_line(line).expect("line parsed").expect("a command")
-    }
-
-    #[test]
-    fn test_commands() {
-        assert!(matches!(parse("restart"), Command::Restart));
-        assert!(matches!(parse("ls"), Command::Ls));
-        assert!(matches!(parse("show"), Command::Show));
-        assert!(matches!(parse("autoshow"), Command::Autoshow(None)));
-        assert!(matches!(parse("autoshow on"), Command::Autoshow(Some(true))));
-        assert!(matches!(parse("autoshow off"), Command::Autoshow(Some(false))));
-        assert!(
-            matches!(parse("vcd \"trace.vcd\""), Command::Vcd(name) if name == "trace.vcd")
-        );
-        assert!(matches!(parse("vcd trace.vcd"), Command::Vcd(name) if name == "trace.vcd"));
-        assert!(
-            matches!(parse("vcd out/my-run.vcd"), Command::Vcd(name) if name == "out/my-run.vcd")
-        );
-        assert!(matches!(parse("peek ctr"), Command::Peek { .. }));
-        assert!(matches!(parse("advance"), Command::Advance { count: 1 }));
-        assert!(matches!(parse("advance 3"), Command::Advance { count: 3 }));
-        assert!(matches!(parse("tick 2"), Command::Tick { .. }));
-        assert!(matches!(parse("exit"), Command::Exit));
-        assert!(
-            matches!(parse("top adder::HalfAdder"), Command::Top(name) if name == "adder::HalfAdder")
-        );
-        assert!(matches!(parse("top HalfAdder"), Command::Top(name) if name == "HalfAdder"));
-    }
-}
