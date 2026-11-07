@@ -643,6 +643,12 @@ fn collect_block_drivers(
                 let mut else_drivers: IndexMap<ComponentId, Vec<Driver>> = IndexMap::new();
 
                 for (guard, body) in if_arm_children(&children) {
+                    // Guards are expressions too: a reference to the
+                    // it-block's component by its own name belongs in the
+                    // guard as much as in a driver RHS.
+                    if let (Some(ctx), Some(guard)) = (it_context, guard) {
+                        collect_not_it_in_expr(guard, ctx, &mut diagnostics);
+                    }
                     let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
                         collect_block_drivers(body.children(), component_analysis, platform_name, it_context, true, initials)
                     } else {
@@ -704,6 +710,11 @@ fn collect_block_drivers(
                 // (pattern, block) and each `else` arm contributes (block) only.
                 let children = stmt.children();
                 let subject = &children[0];
+                // The match subject is an expression: check it for
+                // references to the it-block's component by its own name.
+                if let Some(ctx) = it_context {
+                    collect_not_it_in_expr(subject, ctx, &mut diagnostics);
+                }
 
                 // Recursively collect drivers from each arm's block.  `case_arm_drivers`
                 // holds the per-case (pat_loc, drivers) pairs; `else_arm_drivers` holds
@@ -768,6 +779,18 @@ fn collect_block_drivers(
                 // names resolve later, at the typing/sim/Verilog
                 // frontiers, by beta-reduction to the binding's RHS.
                 let Some(body) = stmt.let_body() else { continue };
+                // Each binding's RHS is an expression evaluated in the
+                // enclosing it context: a reference to the it-block's
+                // component by its own name belongs there as much as in
+                // a driver RHS.  The binding name does not shadow the
+                // component inside its own RHS.
+                if let Some(ctx) = it_context {
+                    for binding in stmt.let_bindings() {
+                        if let Some(rhs) = binding.let_binding_expr() {
+                            collect_not_it_in_expr(&rhs, ctx, &mut diagnostics);
+                        }
+                    }
+                }
                 let (body_drivers, mut body_diags) = if matches!(body.payload(), AstNodePayload::ArmBlock) {
                     collect_block_drivers(body.children(), component_analysis, platform_name, it_context, in_conditional, initials)
                 } else {

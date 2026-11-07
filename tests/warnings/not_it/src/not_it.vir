@@ -137,4 +137,90 @@ mod CorrectUnused {
     sum := ha.sum
 }
 
+// Using a reg's own name in a `when` guard inside its own it block
+// should warn.  The guard is an expression context just like a driver
+// RHS.
+mod RegWhenGuard {
+    incoming clk : Clock
+    outgoing out : Word[8]
+
+    reg counter : Word[8] {
+        initial it <= 0
+        if {
+            // CHECK: 'counter' should be written as 'it' inside of this driver block
+            when counter == 5 {
+                it <= 0
+            }
+            // CHECK-NOT: 'counter' should be written as 'it'
+            else {
+                it <= it + 1
+            }
+        }
+    }
+    out := counter
+}
+
+// Using a reg's own name as a `match` subject inside its own it block
+// should warn.
+mod RegMatchSubject {
+    incoming clk : Clock
+    outgoing out : Word[8]
+
+    reg counter : Word[8] {
+        initial it <= 0
+        // CHECK: 'counter' should be written as 'it' inside of this driver block
+        match counter {
+            with 0w8 {
+                it <= 0
+            }
+            // CHECK-NOT: 'counter' should be written as 'it'
+            else {
+                it <= it + 1
+            }
+        }
+    }
+    out := counter
+}
+
+// Using a reg's own name in the RHS of a `let` binding inside its own
+// it block should warn.  The binding's RHS is evaluated in the
+// enclosing it context (and the binding name does not shadow the
+// component there).
+mod RegLetRhs {
+    incoming clk : Clock
+    outgoing out : Word[8]
+
+    reg counter : Word[8] {
+        initial it <= 0
+        // CHECK: 'counter' should be written as 'it' inside of this driver block
+        let x = counter + 1 {
+            it <= x
+        }
+    }
+    out := counter
+}
+
+// A `let` RHS that reads the component through `it` produces no
+// warning, and neither does a let inside a `when` arm.
+mod CorrectLet {
+    incoming clk : Clock
+    outgoing out : Word[8]
+
+    reg counter : Word[8] {
+        initial it <= 0
+        if {
+            // CHECK-NOT: 'counter' should be written as 'it'
+            when it == 5 {
+                let x = it + 1 {
+                    it <= x
+                }
+            }
+            else {
+                it <= it + 1
+            }
+        }
+    }
+    out := counter
+}
+
 // CHECK: Check OK
