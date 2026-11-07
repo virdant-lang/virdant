@@ -1,0 +1,121 @@
+//! Regression test for `vir run`'s explicit-baud UART: a `virt::Virt`
+//! design that starts transmitting at cycle ~3, with no boot quiet
+//! period, and streams its bytes back-to-back.  Under the old
+//! auto-baud TX decoder this design printed nothing -- the idle-high
+//! trust gate never opened on an immediately-transmitting,
+//! back-to-back stream -- and designs needed a boot quiet period to
+//! work around it.  With the fixed, configured period the message
+//! prints and the design exits 0.
+//!
+//! The bit period is 9 clock cycles (1 MHz / 9 is about 111.1 kbaud),
+//! the nearest integer divisor to the default 115200 baud.
+
+import virt
+
+//> State machine of the transmitter, one state per UART bit.
+//>
+//> `Idle` - the line idles high, waiting to send.
+//> `Start(pulse)` - sending the start bit, `pulse` cycles to go.
+//> `Data(bit, pulse)` - sending data bit `bit` (LSB first), `pulse`
+//> cycles to go.
+//> `Stop(pulse)` - sending the stop bit, `pulse` cycles to go.
+union type TxState {
+    Idle()
+    Start(pulse : Word[4])
+    Data(bit : Word[3], pulse : Word[4])
+    Stop(pulse : Word[4])
+}
+
+pub mod ImmediateTx for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> UART transmit data to the host (stdout).
+    outgoing tx : Bit {
+        it := tx_level
+    }
+
+    //> `@Valid(0)` once the whole message has been sent.
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when sent_all => @Valid(0)
+            else => @Invalid()
+        }
+    }
+
+    //> Serializes the message onto the `tx` line, one byte at a time,
+    //> back-to-back: the next start bit begins as soon as the stop
+    //> bit ends.  The first start bit falls within a few cycles of
+    //> power-up -- there is deliberately no boot quiet period.
+    reg state : TxState {
+        initial it <= @Idle()
+        it <= match it : TxState {
+            with @Idle() if {
+                when !sent_all => @Start(8)
+                else => @Idle()
+            }
+            with @Start(pulse) if {
+                when pulse == 0 => @Data(0, 8)
+                else => @Start(pulse - 1)
+            }
+            with @Data(bit, pulse) if {
+                when pulse > 0 => @Data(bit, pulse - 1)
+                when bit == 7 => @Stop(8)
+                else => @Data(bit + 1, 8)
+            }
+            with @Stop(pulse) if {
+                when pulse == 0 && char_index == 0 => @Start(8)
+                when pulse == 0 => @Idle()
+                else => @Stop(pulse - 1)
+            }
+        }
+    }
+
+    //> Index of the byte being sent: 0 = 'H', 1 = 'i'.  Advances on
+    //> the last cycle of each byte's stop bit.
+    reg char_index : Word[1] {
+        initial it <= 0
+        if {
+            when byte_end && it == 0 {
+                it <= 1
+            }
+        }
+    }
+
+    //> True on the final cycle of a byte's stop bit.
+    wire byte_end : Bit {
+        it := match state : TxState {
+            with @Stop(pulse) => pulse == 0
+            else => false
+        }
+    }
+
+    //> Message bytes: "Hi".
+    wire char : Word[8] {
+        it := match char_index {
+            with 0 => 0x48 // 'H'
+            with 1 => 0x69 // 'i'
+        }
+    }
+
+    //> True once both bytes have been sent.
+    wire sent_all : Bit {
+        it := match state : TxState {
+            with @Idle() => char_index == 1
+            else => false
+        }
+    }
+
+    //> The line level for the current state: low start bit, eight
+    //> data bits LSB first (from the current message byte, which is
+    //> stable for the whole byte), high stop bit, and high while
+    //> idle.
+    wire tx_level : Bit {
+        it := match state : TxState {
+            with @Idle() => true
+            with @Start(pulse) => false
+            with @Data(bit, pulse) => char[dyn bit]
+            with @Stop(pulse) => true
+        }
+    }
+}

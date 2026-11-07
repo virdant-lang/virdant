@@ -213,6 +213,28 @@ pub fn read_prog_key_from(manifest: &Path, key: &str) -> Option<String> {
         .map(|s| s.to_owned())
 }
 
+/// Read `[virt].baud` from `virdant.toml` in `cwd`, tolerating a
+/// missing file, a missing `[virt]` table, or a missing `baud` key.
+/// A non-integer `baud` is a hard error (exit 1), not silently
+/// ignored.
+pub fn read_virt_baud(cwd: &Path) -> Option<u64> {
+    let manifest = project_manifest(cwd)?;
+    let text = std::fs::read_to_string(&manifest).ok()?;
+    let toml: toml::Value = toml::from_str(&text).ok()?;
+    let value = toml.get("virt")
+        .and_then(|virt| virt.get("baud"))?;
+    match value.as_integer().and_then(|baud| u64::try_from(baud).ok()) {
+        Some(baud) => Some(baud),
+        None => {
+            eprintln!(
+                "error: [virt].baud in {} must be an unsigned integer",
+                manifest.display()
+            );
+            std::process::exit(1);
+        }
+    }
+}
+
 /// Read `[project].name` from `virdant.toml` in `cwd`.
 pub fn read_project_name(cwd: &Path) -> Option<String> {
     read_project_name_from(&project_manifest(cwd)?)

@@ -1,0 +1,3 @@
+kind = "run"
+description = "Explicit-baud UART via virdant.toml: [virt].baud = 100000 (no --baud on the command line) and a design transmitting at exactly 10 cycles/bit; prints its message and exits 0"
+cycle_limit = 400

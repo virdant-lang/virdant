@@ -36,6 +36,7 @@ pub enum Command {
         fps: bool,
         flash: Option<PathBuf>,
         cycles: Option<u64>,
+        baud: Option<u64>,
         verbose: bool,
     },
     New { project: String, no_git: bool },
@@ -75,6 +76,10 @@ fn command_filtered(listed_only: bool) -> ClapCommand {
                 .value_parser(value_parser!(PathBuf)))
             .arg(Arg::new("cycles").long("cycles").num_args(1)
                 .value_parser(value_parser!(u64)))
+            .arg(Arg::new("baud").long("baud").num_args(1)
+                .value_name("BAUD")
+                .value_parser(value_parser!(u64))
+                .help("UART baud rate for the virt board (default 115200, overridable via [virt] in virdant.toml)"))
             .arg(Arg::new("verbose").short('v').long("verbose").action(ArgAction::SetTrue)),
         ClapCommand::new("new")
             .arg(Arg::new("project").value_name("PROJECT").required(true))
@@ -329,6 +334,7 @@ fn from_matches(matches: ArgMatches) -> Args {
             fps: m.get_flag("fps"),
             flash: m.get_one::<PathBuf>("flash").cloned(),
             cycles: m.get_one::<u64>("cycles").copied(),
+            baud: m.get_one::<u64>("baud").copied(),
             verbose: m.get_flag("verbose"),
         },
         Some(("new", m)) => Command::New {

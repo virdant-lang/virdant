@@ -5,7 +5,8 @@
 //! Verilator harness): a board that presents the `virt::Virt` platform
 //! contract to the design —
 //!
-//!   - UART at 115200 8N1, wired to stdin/stdout;
+//!   - UART at the configured baud (default 115200), 8N1, wired to
+//!     stdin/stdout;
 //!   - a 16 MiB SPI flash device (initially all `0xFF`), readable with
 //!     the standard `0x03` READ command, continuously, with
 //!     auto-incrementing address until CS deasserts;
@@ -53,10 +54,16 @@ pub struct VirtOptions {
     /// Print informational board messages (builtin attachments, flash
     /// load).  Errors print regardless.
     pub verbose: bool,
+    /// UART baud rate (8N1).  Resolved before the board starts:
+    /// `--baud` on the command line, else `[virt].baud` in
+    /// `virdant.toml`, else 115200 — and validated against the
+    /// platform's declared clock (at least one bit per two cycles).
+    /// The design must clock its UART bits at `clock_hz / baud` cycles
+    /// per bit in both directions.
+    pub baud: u64,
 }
 
 const FLASH_SIZE: u64 = 1 << 24; // 16 MiB
-const BAUD: u64 = 115_200; // fixed 115200 8N1
 
 // Port names required by the `virt::Virt` platform contract.
 const PORT_CLOCK: &str = "clock";
@@ -152,15 +159,17 @@ pub fn run(db: &Db, top: SymbolId, clock_hz: u64, opts: VirtOptions) -> i32 {
         spi_miso,
         flash: SpiFlash::new(opts.flash.as_ref(), opts.verbose),
     };
+    // The UART bit period is explicit configuration, not something
+    // the board measures: `clock_hz / baud`, as an exact rational
+    // (see `BaudTiming`).  Both the TX decoder and the RX transmitter
+    // run at it from the first cycle.
+    let uart_timing = baud_timing(clock_hz, opts.baud);
     let mut per_cycle = PerCycle {
         tx,
         rx,
         exit,
-        // Idle-high gate for auto-baud: ten nominal bit periods at
-        // the platform-declared clock.  A floor against startup line
-        // glitches, not a decode assumption.
-        uart_tx: UartTx::new(10 * clock_hz / BAUD),
-        uart_rx: UartRx::new(&baud_timing(clock_hz, BAUD)),
+        uart_rx: UartRx::new(&uart_timing),
+        uart_tx: UartTx::new(uart_timing),
         prev_exit: None,
         cycles: cycles.clone(),
         max_cycles,
@@ -265,7 +274,6 @@ impl PerCycle {
         let tx = bit(sim, self.tx);
 
         self.uart_tx.cycle(tx);
-        self.uart_rx.set_bit_period(self.uart_tx.bit_period());
         if self.cycles.get() % 1000 == 0 {
             self.uart_rx.poll_stdin(receiver);
         }
@@ -480,86 +488,58 @@ fn gcd(mut a: u64, mut b: u64) -> u64 {
     a
 }
 
-/// TX: decode the design's transmission on `tx` (design → host stdout).
+/// TX: decode the design's transmission on `tx` (design → host stdout)
+/// at the explicitly configured baud.
 ///
-/// Auto-baud: the design's bit period is *measured* from the `tx`
-/// line rather than derived from the platform's declared clock.  A
-/// design's UART divisor is fixed in cycles, so no frequency the
-/// platform declares can be trusted to predict it.  The measurement
-/// rests on two properties of every UART stream: no pulse is ever
-/// shorter than one bit period, and two adjacent bits that differ
-/// are exactly one period apart — so the minimum distance between
-/// consecutive edges *within a frame* is the bit period.  (Edges
-/// land on whole cycles in simulation, so the measurement is exact.)
+/// The bit period is `clock_hz / baud`, fixed by configuration
+/// (`--baud` / `[virt].baud`; see `VirtOptions::baud`) — nothing is
+/// measured and nothing is gated.  The contract on designs is
+/// explicit: a design targeting `virt::Virt` must clock its UART bits
+/// at `clock_hz / baud` cycles per bit, the same divisor in both
+/// directions.  A design using a different divisor fails the frame
+/// validation below and its bytes are dropped; run with a matching
+/// `--baud` instead.
 ///
 /// Frames are decoded retrospectively: transitions are buffered from
-/// each start-bit falling edge until the frame closes — either when
-/// ten estimated bit periods elapse (no new start bit yet), or when a
-/// falling edge arrives that far into the frame (that fall is the
-/// next start bit; anything sooner is a data-bit transition and
-/// belongs to this frame) — then sampled at mid-bit points.  A frame
-/// only produces a byte if every transition lands on a bit boundary
-/// and the start/stop framing is valid; otherwise it is dropped, so
-/// an unconverged period estimate cannot emit garbage for long — the
-/// first frame with two adjacent differing bits pins the true period
-/// down exactly.
+/// each start-bit falling edge until the frame closes — either when a
+/// falling edge arrives past the stop-bit sample point (that fall is
+/// the next start bit; anything sooner is a data-bit transition and
+/// belongs to this frame), or when ten bit periods elapse with no new
+/// start bit — then sampled at mid-bit points.  A frame only produces
+/// a byte if the start/stop framing is valid and every recorded
+/// transition is consistent with the decoded byte at the configured
+/// period; otherwise it is dropped.
 ///
-/// Because the sim starts every register at a random value, the line
-/// can glitch low for a few cycles before the design's reset settles
-/// it.  Such a glitch would otherwise be measured as a tiny "bit
-/// period" and poison the estimate, so until a period is confirmed a
-/// start bit is only trusted after the line has idled high for
-/// `gate_cycles` (ten nominal bit periods at the platform-declared
-/// clock — a floor, not a decode assumption).
+/// That drop rule is what makes power-up safe without a gate: the sim
+/// starts every register at a random value, so `tx` can glitch low
+/// for a few cycles before the design's reset settles it.  Nothing
+/// is learned from a glitch (no period estimate to poison); the
+/// glitch opens a frame that fails validation and is dropped, and
+/// the next frame decodes normally.
 struct UartTx {
     /// Total clock cycles observed (`cycle` is called once per cycle).
     cycles: u64,
-    /// Cycle number of the most recent `tx` edge.
-    prev_edge: u64,
-    /// Minimum distance between consecutive edges within a frame,
-    /// ever observed, in cycles: the best-known bit-period estimate.
-    /// Intra-frame only, so idle gaps and pre-reset line states
-    /// cannot poison it.
-    min_edge: Option<u64>,
-    /// Bit period confirmed by a successfully decoded frame.  This,
-    /// not the raw estimate, is what `rx` transmission should use.
-    confirmed: Option<u64>,
+    /// Exact cycles-per-bit: `clock_hz / baud` as a reduced rational
+    /// p/q (see `BaudTiming`).  Boundaries and sample points are
+    /// compared in units of 1/q cycle, so a non-integer period (1 MHz
+    /// / 115200 = 8.68…) is handled without drift.
+    timing: BaudTiming,
     /// Start-bit falling edge of the frame being buffered, if any.
     frame_start: Option<u64>,
-    /// Minimum distance between edges inside the buffered frame.
-    frame_min: Option<u64>,
     /// Edge timestamps (absolute cycles) since the start bit.
     frame_edges: Vec<u64>,
-    /// Cycle the line last became (or started out) high, for the
-    /// idle-high gate.
-    high_since: u64,
-    /// Idle-high a start bit must have before it is trusted, while
-    /// no period has been confirmed yet.
-    gate_cycles: u64,
     last: bool,
 }
 
 impl UartTx {
-    fn new(gate_cycles: u64) -> UartTx {
+    fn new(timing: BaudTiming) -> UartTx {
         UartTx {
             cycles: 0,
-            prev_edge: 0,
-            min_edge: None,
-            confirmed: None,
+            timing,
             frame_start: None,
-            frame_min: None,
             frame_edges: Vec::new(),
-            high_since: 0,
-            gate_cycles,
             last: true,
         }
-    }
-
-    /// The design's bit period as confirmed by a decoded frame, in
-    /// cycles.  A UART uses the same divisor for both directions, so
-    /// this is also the period at which the design samples `rx`.
-    fn bit_period(&self) -> Option<u64> {
-        self.confirmed
     }
 
     /// Decode and emit the buffered frame, then reset for the next.
@@ -568,36 +548,10 @@ impl UartTx {
     fn finalize(&mut self) {
         let Some(t0) = self.frame_start.take() else { return };
         let edges = std::mem::take(&mut self.frame_edges);
-        let frame_min = self.frame_min.take();
-
-        // Candidate bit periods, best first: the confirmed period
-        // (frames should decode with it; trying anything else first
-        // would let a stale estimate hijack the decode), then the
-        // running estimate, then this frame's own minimum (which
-        // covers the very first frame, before any estimate exists).
-        let mut candidates: Vec<u64> = Vec::new();
-        if let Some(bit) = self.confirmed {
-            candidates.push(bit);
-        }
-        if let Some(bit) = self.min_edge {
-            if !candidates.contains(&bit) {
-                candidates.push(bit);
-            }
-        }
-        if let Some(bit) = frame_min {
-            if !candidates.contains(&bit) {
-                candidates.push(bit);
-            }
-        }
-
-        for bit in candidates {
-            if let Some(byte) = decode_frame(t0, &edges, bit) {
-                self.confirmed = Some(bit);
-                let mut stdout = std::io::stdout().lock();
-                let _ = stdout.write_all(&[byte]);
-                let _ = stdout.flush();
-                break;
-            }
+        if let Some(byte) = decode_frame(t0, &edges, &self.timing) {
+            let mut stdout = std::io::stdout().lock();
+            let _ = stdout.write_all(&[byte]);
+            let _ = stdout.flush();
         }
     }
 
@@ -611,109 +565,132 @@ impl UartTx {
     fn cycle(&mut self, tx: bool) {
         self.cycles += 1;
         let c = self.cycles;
+        // Frame position in ticks (1/q cycle) — exact under the
+        // rational period, so the close thresholds below hold for
+        // non-integer bit periods too.
+        let into_frame = |t0: u64| -> u64 { (c - t0) * self.timing.ticks_per_cycle };
         if tx != self.last {
-            let dist = c - self.prev_edge;
-            self.prev_edge = c;
             if tx {
-                // Rising edge within the buffered frame.
+                // Rising edge within the buffered frame: a data-bit
+                // transition.
                 if self.frame_start.is_some() {
-                    self.min_edge = Some(self.min_edge.map_or(dist, |m| m.min(dist)));
-                    self.frame_min = Some(self.frame_min.map_or(dist, |m| m.min(dist)));
                     self.frame_edges.push(c);
-                }
-                if self.confirmed.is_none() {
-                    // The idle-high gate restarts.
-                    self.high_since = c;
                 }
             } else if let Some(t0) = self.frame_start {
                 // A falling edge inside an open frame is either a
-                // data-bit transition (less than ten bit periods in)
-                // or the next frame's start bit.  Only a period
-                // estimate can tell them apart.
-                match self.min_edge.or(self.frame_min) {
-                    Some(bit) if c - t0 >= 10 * bit => {
-                        // Next start bit: close this frame, then open
-                        // the next — but until a period is confirmed,
-                        // only trust a start bit after a long idle
-                        // (random-init line glitches don't get to
-                        // poison the estimate).
-                        self.finalize();
-                        let trusted = self.confirmed.is_some()
-                            || c - self.high_since >= self.gate_cycles;
-                        if trusted {
-                            self.frame_start = Some(c);
-                        }
-                    }
-                    _ => {
-                        // Data-bit transition within the frame.
-                        self.min_edge = Some(self.min_edge.map_or(dist, |m| m.min(dist)));
-                        self.frame_min = Some(self.frame_min.map_or(dist, |m| m.min(dist)));
-                        self.frame_edges.push(c);
-                    }
+                // data-bit transition (before the stop-bit sample
+                // point) or the next frame's start bit.  Data
+                // transitions only happen at bit boundaries 1..9,
+                // which a conforming design reaches before 9.5
+                // configured bit periods; the next start bit of a
+                // back-to-back stream arrives at 10 design bit
+                // periods, at or past 9.5 configured ones.
+                if into_frame(t0) >= 19 * self.timing.ticks_per_bit / 2 {
+                    // Next start bit: close this frame, then open
+                    // the next.
+                    self.finalize();
+                    self.frame_start = Some(c);
+                } else {
+                    // Data-bit transition within the frame.
+                    self.frame_edges.push(c);
                 }
             } else {
-                // No frame open: a candidate start bit.  Until a
-                // period is confirmed, only trust one after a long
-                // idle (see struct doc).
-                let trusted = self.confirmed.is_some()
-                    || c - self.high_since >= self.gate_cycles;
-                if trusted {
-                    self.frame_start = Some(c);
-                }
+                // No frame open: a start bit.  Nothing is gated and
+                // nothing is measured: a power-up glitch opens a
+                // frame that fails validation and is dropped.
+                self.frame_start = Some(c);
             }
         } else if let Some(t0) = self.frame_start {
             // Ten bit periods with no new start bit: the frame is
             // complete (this flushes the final byte before a long
             // idle or exit).
-            if let Some(bit) = self.min_edge.or(self.frame_min) {
-                if c - t0 >= 10 * bit {
-                    self.finalize();
-                }
+            if into_frame(t0) >= 10 * self.timing.ticks_per_bit {
+                self.finalize();
             }
         }
         self.last = tx;
     }
 }
 
-/// Decode one buffered UART frame: sample the recorded edge timeline
-/// at mid-bit points, `bit` cycles per bit.  Returns the byte only if
-/// every transition lands on a bit boundary and the framing holds.
-fn decode_frame(t0: u64, edges: &[u64], bit: u64) -> Option<u8> {
-    for &e in edges {
-        if (e - t0) % bit != 0 {
-            return None; // a transition lands mid-bit: wrong period
-        }
-    }
-    // Line value at 2*rel half-cycles after the start edge (sample
-    // points sit at half-bit offsets; everything is compared doubled
-    // to stay in integers).  The line starts low and toggles with
-    // each recorded edge.
-    let value_at = |rel2: u64| -> bool {
+/// Decode one buffered UART frame at the configured period: sample
+/// the recorded edge timeline at mid-bit points, `clock_hz / baud`
+/// cycles per bit.  Returns the byte only if the start/stop framing
+/// holds and every recorded transition is consistent with the decoded
+/// byte at that period; otherwise the frame is dropped.
+fn decode_frame(t0: u64, edges: &[u64], timing: &BaudTiming) -> Option<u8> {
+    let q = timing.ticks_per_cycle;
+    let p = timing.ticks_per_bit;
+    // Edge positions in ticks after the start edge.
+    let ticks: Vec<u64> = edges.iter().map(|&e| (e - t0) * q).collect();
+    // Line value at sample point `s2` (in doubled ticks: the sample
+    // sits at s2/2 ticks after the start edge; sample points sit at
+    // half-bit offsets, and doubling keeps everything integral when p
+    // is odd).  The line starts low and toggles with each recorded
+    // edge.
+    let value_at = |s2: u64| -> bool {
         let mut high = false;
-        for &e in edges {
-            if 2 * (e - t0) > rel2 {
+        for &w in &ticks {
+            if 2 * w > s2 {
                 break;
             }
             high = !high;
         }
         high
     };
-    if value_at(1 * bit) {
+    if value_at(1 * p) {
         return None; // start bit: expect low
     }
     let mut data = 0u8;
     for j in 1..=8 {
-        if value_at((2 * j + 1) * bit) {
+        if value_at((2 * j + 1) * p) {
             data |= 1 << (j - 1); // LSB first
         }
     }
-    if !value_at(19 * bit) {
+    if !value_at(19 * p) {
         return None; // stop bit: expect high
+    }
+    // Validate the recorded transitions against the decoded byte: the
+    // byte's bit pattern determines where transitions belong (the
+    // boundaries between differing consecutive bits), and every
+    // recorded edge must be one of those transitions, in order, close
+    // enough to its ideal position (k bit periods in) that the
+    // mid-bit samples above are guaranteed to have landed in the
+    // right bits.  That budget is the classic UART one: the design's
+    // bit period may drift from the configured one by at most one
+    // twentieth of a bit per bit position.  A frame whose edges fit
+    // no byte at the configured period — a power-up glitch, or a
+    // design running at a different divisor — is dropped.
+    let mut bits = Vec::with_capacity(10);
+    bits.push(false); // start bit
+    for j in 1..=8 {
+        bits.push((data >> (j - 1)) & 1 != 0); // LSB first
+    }
+    bits.push(true); // stop bit
+    let mut expected: Vec<u64> = Vec::new();
+    for k in 1..10 {
+        if bits[k] != bits[k - 1] {
+            expected.push(k as u64);
+        }
+    }
+    if expected.len() != ticks.len() {
+        return None;
+    }
+    for (&k, &w) in expected.iter().zip(&ticks) {
+        let ideal = k * p;
+        let drift = w.abs_diff(ideal);
+        if drift * 20 > k * p {
+            return None; // transition too far from its bit boundary
+        }
     }
     Some(data)
 }
 
 /// RX: shift bytes from stdin into the design on `rx` (host → design).
+///
+/// Transmits at the same fixed, configured period as the TX decoder
+/// (see `UartTx`): a UART shares one divisor in both directions, so
+/// the first byte goes out at `clock_hz / baud` with nothing to
+/// confirm.
 struct UartRx {
     sending: bool,
     t: u64,
@@ -724,13 +701,6 @@ struct UartRx {
     pending: std::collections::VecDeque<u8>,
     ticks_per_cycle: u64,
     ticks_per_bit: u64,
-    /// Auto-baud: the design's measured bit period in cycles (its
-    /// `tx` divisor), applied from the next byte on.  `None` until
-    /// the design has transmitted something decodable; `rx` then
-    /// falls back to `clock_hz / BAUD`.
-    bit_cycles: Option<u64>,
-    /// Ticks per bit captured when the current byte started.
-    cur_ticks_per_bit: u64,
 }
 
 impl UartRx {
@@ -745,15 +715,7 @@ impl UartRx {
             pending: std::collections::VecDeque::new(),
             ticks_per_cycle: timing.ticks_per_cycle,
             ticks_per_bit: timing.ticks_per_bit,
-            bit_cycles: None,
-            cur_ticks_per_bit: timing.ticks_per_bit,
         }
-    }
-
-    /// Adopt the bit period the TX decoder confirmed from the
-    /// design's `tx` line, applied from the next byte on.
-    fn set_bit_period(&mut self, cycles: Option<u64>) {
-        self.bit_cycles = cycles;
     }
 
     fn poll_stdin(&mut self, receiver: &mut mpsc::Receiver<u8>) {
@@ -775,14 +737,12 @@ impl UartRx {
                 self.sending = true;
                 self.bit = 0;
                 self.t = 0;
-                self.cur_ticks_per_bit = self.bit_cycles
-                    .map_or(self.ticks_per_bit, |b| b * self.ticks_per_cycle);
-                self.next = self.cur_ticks_per_bit;
+                self.next = self.ticks_per_bit;
             }
         } else {
             self.t += self.ticks_per_cycle;
             if self.t >= self.next {
-                self.next += self.cur_ticks_per_bit;
+                self.next += self.ticks_per_bit;
                 self.bit += 1;
                 if self.bit == 10 { // start + 8 data + stop all done
                     self.sending = false;

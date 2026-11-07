@@ -2,7 +2,9 @@
 //!
 //! `virt` is not a physical board: designs written `for Virt` are
 //! simulated with Verilator via the `virt` tool (repo `virdant-virt/`).
-//! The simulated board emulates a UART (115200 8N1, stdin/stdout) and a
+//! The simulated board emulates a UART (8N1 at the configured baud,
+//! 115200 by default; `vir run --baud` or `[virt].baud` in
+//! `virdant.toml` overrides it, stdin/stdout) and a
 //! 16 MiB SPI flash device (initially all 0xFF, preloadable with
 //! `--flash=<FILE>`).
 //!
@@ -132,9 +134,12 @@ pub mod Hello {
     // Bytes are offered only after the boot quiet period (see below).
     sender.data_valid := offer_byte
 
-    // Power-up quiet period.  The simulator trusts the first start bit
-    // only after the line has idled high for a while, so hold `tx`
-    // high for 256 cycles before sending anything.
+    // Power-up quiet period.  The simulator decodes `tx` at the
+    // configured baud from the first cycle and no longer requires
+    // any idle time, but idling before the first byte remains good
+    // practice: a real host terminal does no auto-baud either, and
+    // holding the line high through power-up guarantees a clean
+    // first byte.
     reg boot : Word[8] {
         initial it <= 0
         if {
@@ -201,8 +206,10 @@ mod CharRom {
 //> A byte is accepted (and latched) on a cycle when `data_valid` and
 //> `ready` are both high; `ready` is high only while idle.  The bit
 //> period is 9 clock cycles, which at the virtual board's 1 MHz clock
-//> is about 111 kbaud.  The `virt` simulator auto-bauds on the `tx`
-//> line, so the exact rate does not matter.
+//> is about 111 kbaud.  The `virt` simulator decodes `tx` at its
+//> configured baud (`vir run --baud`, default 115200, an 8.68-cycle
+//> period at 1 MHz), so a design must stay within tolerance of it;
+//> 9 cycles is, at about 3.7% drift over a frame.
 mod UartSender {
     incoming clock : Clock
     incoming data : Word[8]

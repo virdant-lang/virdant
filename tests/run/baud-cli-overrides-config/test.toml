@@ -1,0 +1,4 @@
+kind = "run"
+description = "Explicit-baud UART: --baud on the command line overrides [virt].baud in virdant.toml (9600 there, 100000 on the CLI, design at 10 cycles/bit); prints its message and exits 0"
+cycle_limit = 400
+run_args = ["--baud=100000"]

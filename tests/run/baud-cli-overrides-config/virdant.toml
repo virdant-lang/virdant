@@ -1,0 +1,8 @@
+[project]
+name = "baud-cli-overrides-config"
+
+[prog]
+top = "baud_cli_overrides::BaudCliOverrides"
+
+[virt]
+baud = 9600
