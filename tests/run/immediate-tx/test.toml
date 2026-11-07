@@ -1,0 +1,3 @@
+kind = "run"
+description = "Explicit-baud UART: a design transmitting from cycle ~3 with no boot quiet period, back-to-back bytes at 9 cycles/bit, prints its message and exits 0 under the default baud.  Regression test for the removal of the auto-baud idle-high trust gate (the harness checks the exit code; a frame failing the fixed-period validation is dropped, so a decode regression would need a panic or a hang to fail here)"
+cycle_limit = 400

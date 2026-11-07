@@ -1,0 +1,5 @@
+kind = "check"
+description = "Explicit-baud UART: [virt].baud exceeding half the platform's 1 MHz clock is a hard error from vir run before the simulator starts"
+command = "run"
+expect = "error"
+filecheck = "expected.txt"

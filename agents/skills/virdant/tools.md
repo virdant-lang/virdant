@@ -100,6 +100,12 @@ pub mod Top for virt::Virt {
   - `--fps` — print `Average clock frequency: X MHz` on exit or Ctrl-C.
     Tests commonly combine both: `vir run --fps-no-cap --fps --verbose`.
   - `--flash <FILE>` — preload the simulated 16 MiB SPI flash device.
+  - `--baud <BAUD>` — UART baud rate for the board (default 115200;
+    `[virt].baud` in `virdant.toml` is another way to set it, and the
+    CLI wins when both are given). The board decodes `tx` and drives
+    `rx` at `clock_hz / baud` cycles per bit — the design must clock
+    its UART bits at that divisor; there is no auto-baud. Must leave
+    at least 2 cycles per bit on the platform clock.
 
 ```console
 $ vir run --cycles 1000

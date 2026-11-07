@@ -23,6 +23,15 @@ so the design behaves like an ordinary command-line program.
 
 Options
 -------
+``--baud <BAUD>``
+    UART baud rate for the virt board (default 115200, overridable via
+    ``[virt]`` in ``virdant.toml``).
+    The board decodes the design's ``tx`` and drives ``rx`` at exactly
+    ``clock_hz / baud`` cycles per bit: a design must clock its UART
+    bits at that divisor (within the usual UART tolerance of half a
+    bit over a frame) in both directions.
+    The baud must leave at least two clock cycles per bit.
+
 ``--cycles <N>``
     Put an upper bound on the number of cycles simulated.
     When the limit is reached, the simulation stops.

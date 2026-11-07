@@ -99,7 +99,7 @@ fn main() {
         Command::Check { } => check(&args),
         Command::Compile { path } => compile(path),
         Command::Build { } => build(&args),
-        Command::Run { ref trace, fps_no_cap, fps, ref flash, ref cycles, verbose } => run(&args, trace, fps_no_cap, fps, flash, cycles, verbose),
+        Command::Run { ref trace, fps_no_cap, fps, ref flash, ref cycles, ref baud, verbose } => run(&args, trace, fps_no_cap, fps, flash, cycles, baud, verbose),
         Command::New { ref project, no_git } => new_project(&args, project, no_git),
         Command::Bitstream { } => { bitstream(&args); },
         Command::Synth { } => synth(&args),
@@ -318,7 +318,7 @@ fn compile(path: PathBuf) {
     println!("Wrote Verilog to {}", builddir.to_string_lossy());
 }
 
-fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: &Option<PathBuf>, cycles: &Option<u64>, verbose: bool) {
+fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: &Option<PathBuf>, cycles: &Option<u64>, baud: &Option<u64>, verbose: bool) {
     let cwd = resolve_cwd(args);
     let manifest = common::project_manifest_or_exit(&cwd);
     let Some(top_name) = read_prog_key_from(&manifest, "top") else {
@@ -386,6 +386,25 @@ fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: 
     let _ = clock_port; // resolved by name inside the board
     let clock_hz = (1e9 / period_ns) as u64;
 
+    // Resolve the UART baud: --baud (CLI) > [virt].baud
+    // (virdant.toml) > 115200.  Validated here, before the simulator
+    // starts: at least 1, and slow enough for at least 2 cycles per
+    // bit on the platform's clock.
+    let baud = match baud {
+        Some(baud) => *baud,
+        None => common::read_virt_baud(&cwd).unwrap_or(115_200),
+    };
+    if baud < 1 {
+        eprintln!("error: baud must be at least 1");
+        std::process::exit(1);
+    }
+    if baud > clock_hz / 2 {
+        eprintln!(
+            "error: baud {baud} is too fast for a {clock_hz} Hz clock (need at least 2 cycles per bit)"
+        );
+        std::process::exit(1);
+    }
+
     let exit_code = virt::run(
         &db,
         top_symbol.id(),
@@ -395,6 +414,7 @@ fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: 
             trace: trace.clone().map(PathBuf::from),
             fps_no_cap: fps_no_cap,
             cycles: cycles.clone(),
+            baud,
             fps: fps,
             verbose,
         },
