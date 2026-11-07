@@ -237,10 +237,19 @@ pub fn read_project_name_from(manifest: &Path) -> Option<String> {
 pub fn dump_diagnostic(db: &Db, diagnostic: &virdant::diagnostics::Diagnostic) {
     println!(
         "{}   {}   {}",
-        "ERROR  ".red(),
+        level_label(diagnostic.level()),
         region_string(db, diagnostic.region()),
         diagnostic.message(),
     );
+}
+
+fn level_label(level: DiagnosticLevel) -> colored::ColoredString {
+    use colored::Colorize as _;
+    match level {
+        DiagnosticLevel::Error => "ERROR  ".red(),
+        DiagnosticLevel::Warning => "WARNING".yellow(),
+        DiagnosticLevel::Info => "INFO   ".green(),
+    }
 }
 
 pub fn region_string(db: &Db, region: Region) -> String {
@@ -269,14 +278,16 @@ pub fn dump_diagnostics(db: &Db) {
     for diagnostic in diagnostics.iter() {
         let unpadded_region = region_string(db, diagnostic.region());
         let padded_region = format!("{}{}", unpadded_region, " ".repeat(longest_region - unpadded_region.len()));
-        if diagnostic.level() == DiagnosticLevel::Error {
-            println!("{}   {}   {}", "ERROR  ".red(), padded_region, diagnostic.message());
-            error_count += 1;
-        } else if diagnostic.level() == DiagnosticLevel::Warning {
-            println!("{}   {}   {}", "WARNING".yellow(), padded_region, diagnostic.message());
-            warning_count += 1;
-        } else {
-            println!("{}   {}   {}", "INFO   ".green(), padded_region, diagnostic.message());
+        println!(
+            "{}   {}   {}",
+            level_label(diagnostic.level()),
+            padded_region,
+            diagnostic.message(),
+        );
+        match diagnostic.level() {
+            DiagnosticLevel::Error => error_count += 1,
+            DiagnosticLevel::Warning => warning_count += 1,
+            DiagnosticLevel::Info => {}
         }
     }
 
