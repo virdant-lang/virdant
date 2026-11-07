@@ -2,4 +2,4 @@
 name = "bit-shortcircuit-shape"
 
 [prog]
-top = "bit-shortcircuit-shape::BitShortcircuitShape"
+top = "bit_shortcircuit_shape::BitShortcircuitShape"

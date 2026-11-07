@@ -2,4 +2,4 @@
 name = "min-max"
 
 [prog]
-top = "min-max::MinMaxTest"
+top = "min_max::MinMaxTest"

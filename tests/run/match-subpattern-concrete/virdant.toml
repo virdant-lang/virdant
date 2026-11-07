@@ -2,4 +2,4 @@
 name = "match-subpattern-concrete"
 
 [prog]
-top = "match-subpattern-concrete::MatchSubpatternConcreteTest"
+top = "match_subpattern_concrete::MatchSubpatternConcreteTest"

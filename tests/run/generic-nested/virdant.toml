@@ -2,4 +2,4 @@
 name = "generic-nested"
 
 [prog]
-top = "generic-nested::GenericNested"
+top = "generic_nested::GenericNested"

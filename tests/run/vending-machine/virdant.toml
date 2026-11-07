@@ -2,4 +2,4 @@
 name = "vending-machine"
 
 [prog]
-top = "vending-machine::VendingMachineTest"
+top = "vending_machine::VendingMachineTest"

@@ -2,4 +2,4 @@
 name = "socket-of-union"
 
 [prog]
-top = "socket-of-union::SocketOfUnionTest"
+top = "socket_of_union::SocketOfUnionTest"

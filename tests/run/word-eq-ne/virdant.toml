@@ -2,4 +2,4 @@
 name = "word-eq-ne"
 
 [prog]
-top = "word-eq-ne::WordEqNeTest"
+top = "word_eq_ne::WordEqNeTest"

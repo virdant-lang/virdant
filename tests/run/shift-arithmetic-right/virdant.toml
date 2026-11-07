@@ -2,4 +2,4 @@
 name = "shift-arithmetic-right"
 
 [prog]
-top = "shift-arithmetic-right::ShiftArithRightTest"
+top = "shift_arithmetic_right::ShiftArithRightTest"

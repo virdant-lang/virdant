@@ -2,4 +2,4 @@
 name = "wire-consumed-by-two"
 
 [prog]
-top = "wire-consumed-by-two::WireConsumedTest"
+top = "wire_consumed_by_two::WireConsumedTest"

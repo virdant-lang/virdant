@@ -2,4 +2,4 @@
 name = "clock-gating-shape"
 
 [prog]
-top = "clock-gating-shape::ClockGatingShapeTest"
+top = "clock_gating_shape::ClockGatingShapeTest"

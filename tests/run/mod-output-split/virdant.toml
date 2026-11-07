@@ -2,4 +2,4 @@
 name = "mod-output-split"
 
 [prog]
-top = "mod-output-split::ModOutputSplitTest"
+top = "mod_output_split::ModOutputSplitTest"

@@ -2,4 +2,4 @@
 name = "union-match-in-driver"
 
 [prog]
-top = "union-match-in-driver::UnionMatchInDriverTest"
+top = "union_match_in_driver::UnionMatchInDriverTest"

@@ -2,4 +2,4 @@
 name = "stmt-when-else-only"
 
 [prog]
-top = "stmt-when-else-only::StmtWhenElseOnlyTest"
+top = "stmt_when_else_only::StmtWhenElseOnlyTest"

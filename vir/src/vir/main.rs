@@ -14,7 +14,7 @@ use vircommon as common;
 
 use bstr::{BStr, BString, ByteSlice};
 use nix::unistd::execvp;
-use virdant::util::{check_db, db_from_dir, db_from_files};
+use virdant::util::check_db;
 use std::ffi::{CString, OsString};
 use std::sync::OnceLock;
 use std::os::unix::ffi::OsStrExt;
@@ -148,7 +148,7 @@ fn build(args: &Args) {
                 std::process::exit(1);
             }
         }
-        let db = db_from_files(paths);
+        let db = common::db_from_files(paths);
         let builddir = std::env::current_dir().unwrap().join("build");
         (db, builddir)
     } else {
@@ -160,7 +160,13 @@ fn build(args: &Args) {
         let _ = virtant_toml["project"]["name"].as_str().unwrap();
         let builddir = cwd.join("build");
         let source_dir = cwd.join("src");
-        let db = db_from_dir(source_dir);
+        let db = match common::db_from_dir(source_dir) {
+            Ok(db) => db,
+            Err(e) => {
+                eprintln!("ERROR: {e}");
+                std::process::exit(1);
+            }
+        };
         (db, builddir)
     };
 
@@ -295,7 +301,13 @@ fn compile(path: PathBuf) {
     let project = path.file_name().unwrap().to_string_lossy().to_owned();
     let builddir = PathBuf::from("build").join(project.as_ref());
 
-    let db = db_from_dir(path.clone());
+    let db = match common::db_from_dir(&path) {
+        Ok(db) => db,
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(1);
+        }
+    };
     dump_diagnostics(&db);
     if check_db(&db).is_err() {
         eprintln!("Build failed");
@@ -316,7 +328,13 @@ fn run(args: &Args, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: 
         std::process::exit(1);
     };
 
-    let db = db_from_dir(cwd.join("src"));
+    let db = match common::db_from_dir(cwd.join("src")) {
+        Ok(db) => db,
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(1);
+        }
+    };
     dump_diagnostics(&db);
     if check_db(&db).is_err() {
         eprintln!("Check failed");
@@ -489,7 +507,13 @@ fn plan_bitstream(args: &Args) -> BitstreamPlan {
     let builddir = cwd.join("build");
     let source_dir = cwd.join("src");
 
-    let db = db_from_dir(source_dir);
+    let db = match common::db_from_dir(source_dir) {
+        Ok(db) => db,
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(1);
+        }
+    };
     dump_diagnostics(&db);
     if check_db(&db).is_err() {
         eprintln!("Build failed");

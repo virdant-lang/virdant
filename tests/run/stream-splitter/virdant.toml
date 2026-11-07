@@ -2,4 +2,4 @@
 name = "stream-splitter"
 
 [prog]
-top = "stream-splitter::StreamSplitterTest"
+top = "stream_splitter::StreamSplitterTest"

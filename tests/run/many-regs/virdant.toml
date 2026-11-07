@@ -2,4 +2,4 @@
 name = "many-regs"
 
 [prog]
-top = "many-regs::ManyRegsTest"
+top = "many_regs::ManyRegsTest"

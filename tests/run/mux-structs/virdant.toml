@@ -2,4 +2,4 @@
 name = "mux-structs"
 
 [prog]
-top = "mux-structs::MuxStructsTest"
+top = "mux_structs::MuxStructsTest"

@@ -2,4 +2,4 @@
 name = "enum-implicit-values"
 
 [prog]
-top = "enum-implicit-values::EnumImplicitValuesTest"
+top = "enum_implicit_values::EnumImplicitValuesTest"

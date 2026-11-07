@@ -2,4 +2,4 @@
 name = "reg-enabled-write"
 
 [prog]
-top = "reg-enabled-write::RegEnabledWriteTest"
+top = "reg_enabled_write::RegEnabledWriteTest"

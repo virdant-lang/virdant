@@ -2,4 +2,4 @@
 name = "onehot-encoder"
 
 [prog]
-top = "onehot-encoder::OnehotEncoderTest"
+top = "onehot_encoder::OnehotEncoderTest"

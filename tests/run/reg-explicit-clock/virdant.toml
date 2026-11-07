@@ -2,4 +2,4 @@
 name = "reg-explicit-clock"
 
 [prog]
-top = "reg-explicit-clock::RegExplicitClockTest"
+top = "reg_explicit_clock::RegExplicitClockTest"

@@ -2,4 +2,4 @@
 name = "mux-unions"
 
 [prog]
-top = "mux-unions::MuxUnionsTest"
+top = "mux_unions::MuxUnionsTest"

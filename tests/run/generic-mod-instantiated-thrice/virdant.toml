@@ -2,4 +2,4 @@
 name = "generic-mod-instantiated-thrice"
 
 [prog]
-top = "generic-mod-instantiated-thrice::Top"
+top = "generic_mod_instantiated_thrice::Top"

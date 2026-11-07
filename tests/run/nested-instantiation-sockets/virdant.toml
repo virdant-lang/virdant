@@ -2,4 +2,4 @@
 name = "nested-instantiation-sockets"
 
 [prog]
-top = "nested-instantiation-sockets::NestedSocketsTest"
+top = "nested_instantiation_sockets::NestedSocketsTest"

@@ -2,4 +2,4 @@
 name = "slice-of-slice"
 
 [prog]
-top = "slice-of-slice::SliceOfSliceTest"
+top = "slice_of_slice::SliceOfSliceTest"

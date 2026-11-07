@@ -2,4 +2,4 @@
 name = "slice-zero-width"
 
 [prog]
-top = "slice-zero-width::SliceZeroWidthTest"
+top = "slice_zero_width::SliceZeroWidthTest"

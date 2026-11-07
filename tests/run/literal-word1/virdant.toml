@@ -2,4 +2,4 @@
 name = "literal-word1"
 
 [prog]
-top = "literal-word1::LiteralWord1Test"
+top = "literal_word1::LiteralWord1Test"

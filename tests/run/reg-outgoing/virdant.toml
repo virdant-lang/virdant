@@ -2,4 +2,4 @@
 name = "reg-outgoing"
 
 [prog]
-top = "reg-outgoing::RegOutgoingTest"
+top = "reg_outgoing::RegOutgoingTest"

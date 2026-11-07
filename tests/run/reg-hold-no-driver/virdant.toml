@@ -2,4 +2,4 @@
 name = "reg-hold-no-driver"
 
 [prog]
-top = "reg-hold-no-driver::RegHoldTest"
+top = "reg_hold_no_driver::RegHoldTest"

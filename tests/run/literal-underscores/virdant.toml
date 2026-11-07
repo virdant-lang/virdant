@@ -2,4 +2,4 @@
 name = "literal-underscores"
 
 [prog]
-top = "literal-underscores::LiteralUnderscores"
+top = "literal_underscores::LiteralUnderscores"

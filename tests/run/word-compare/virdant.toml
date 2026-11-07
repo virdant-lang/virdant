@@ -2,4 +2,4 @@
 name = "word-compare"
 
 [prog]
-top = "word-compare::WordCompareTest"
+top = "word_compare::WordCompareTest"

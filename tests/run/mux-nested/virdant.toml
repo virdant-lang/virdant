@@ -2,4 +2,4 @@
 name = "mux-nested"
 
 [prog]
-top = "mux-nested::MuxNestedTest"
+top = "mux_nested::MuxNestedTest"

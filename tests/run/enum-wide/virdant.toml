@@ -2,4 +2,4 @@
 name = "enum-wide"
 
 [prog]
-top = "enum-wide::EnumWideTest"
+top = "enum_wide::EnumWideTest"

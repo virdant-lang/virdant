@@ -2,4 +2,4 @@
 name = "two-drivers-disjoint-bits"
 
 [prog]
-top = "two-drivers-disjoint-bits::TwoDriversTest"
+top = "two_drivers_disjoint_bits::TwoDriversTest"

@@ -2,4 +2,4 @@
 name = "word-concat-mixed"
 
 [prog]
-top = "word-concat-mixed::WordConcatMixedTest"
+top = "word_concat_mixed::WordConcatMixedTest"

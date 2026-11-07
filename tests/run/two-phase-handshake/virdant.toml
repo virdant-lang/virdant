@@ -2,4 +2,4 @@
 name = "two-phase-handshake"
 
 [prog]
-top = "two-phase-handshake::TwoPhaseTest"
+top = "two_phase_handshake::TwoPhaseTest"

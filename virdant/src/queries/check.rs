@@ -1,10 +1,12 @@
 //! Top-level diagnostic aggregator running all front-end checks over the
-//! database (syntax errors, package-name keyword collisions, per-item
+//! database (syntax errors, package-name checks (keyword collisions,
+//! invalid identifiers), per-item
 //! driver/match-coverage checks, typechecking, enum checks,
 //! instantiation cycles), sorted by source region.
 
 use std::sync::Arc;
 
+use bstr::BStr;
 use bstr::BString;
 use bstr::ByteSlice;
 use indexmap::IndexMap;
@@ -12,7 +14,7 @@ use indexmap::IndexMap;
 use crate::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
 use crate::analysis::Location;
 use crate::common::graph::{Graph, VertIndex};
-use crate::common::source::Region;
+use crate::common::source::{LineCol, Region, Span};
 use crate::common::WordValue;
 use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticPayload};
@@ -35,7 +37,7 @@ fn package_name_is_keyword(name: &str) -> bool {
 }
 
 /// Check that no package name (except `builtin`) collides with a keyword.
-fn check_package_name_not_keyword(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+fn check_package_names(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
     let packages = builder.get_packages();
     for package in packages.ids() {
         let package_name = packages.name(package).to_str_lossy().into_owned();
@@ -54,6 +56,21 @@ fn check_package_name_not_keyword(builder: &mut Builder, diagnostics: &mut Vec<D
                     ).into(),
                 },
             ));
+        } else if !crate::util::is_valid_package_name(BStr::new(package_name.as_bytes())) {
+            // The package name comes from the `.vir` file's stem, so a
+            // bad name is fixed by renaming the file.  Anchor the
+            // diagnostic at the very start of the file: the problem is
+            // with the file as a whole, not any one construct in it.
+            let region = Region::new(
+                package,
+                Span::new(LineCol::new(1, 1), LineCol::new(1, 2)),
+            );
+            diagnostics.push(Diagnostic::new(
+                region,
+                diagnostics::InvalidPackageName {
+                    package: package_name.into(),
+                },
+            ));
         }
     }
 }
@@ -63,7 +80,7 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
 
     diagnostics.extend(builder.get_syntax_errors().iter().cloned());
 
-    check_package_name_not_keyword(builder, &mut diagnostics);
+    check_package_names(builder, &mut diagnostics);
 
     let symboltable = builder.get_symboltable();
     diagnostics.extend(symboltable.diagnostics.clone());

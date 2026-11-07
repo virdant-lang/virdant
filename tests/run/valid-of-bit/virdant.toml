@@ -2,4 +2,4 @@
 name = "valid-of-bit"
 
 [prog]
-top = "valid-of-bit::ValidOfBitTest"
+top = "valid_of_bit::ValidOfBitTest"

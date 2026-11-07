@@ -2,4 +2,4 @@
 name = "match-union-else"
 
 [prog]
-top = "match-union-else::MatchUnionElseTest"
+top = "match_union_else::MatchUnionElseTest"

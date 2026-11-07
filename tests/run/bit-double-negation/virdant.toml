@@ -2,4 +2,4 @@
 name = "bit-double-negation"
 
 [prog]
-top = "bit-double-negation::BitDoubleNegation"
+top = "bit_double_negation::BitDoubleNegation"

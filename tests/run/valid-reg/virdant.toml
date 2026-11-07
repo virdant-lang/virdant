@@ -2,4 +2,4 @@
 name = "valid-reg"
 
 [prog]
-top = "valid-reg::ValidRegTest"
+top = "valid_reg::ValidRegTest"

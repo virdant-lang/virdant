@@ -2,4 +2,4 @@
 name = "comparator-three-way"
 
 [prog]
-top = "comparator-three-way::ThreeWayComparatorTest"
+top = "comparator_three_way::ThreeWayComparatorTest"

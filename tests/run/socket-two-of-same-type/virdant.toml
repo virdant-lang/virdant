@@ -2,4 +2,4 @@
 name = "socket-two-of-same-type"
 
 [prog]
-top = "socket-two-of-same-type::SocketTwoSameTest"
+top = "socket_two_of_same_type::SocketTwoSameTest"

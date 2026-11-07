@@ -2,4 +2,4 @@
 name = "slice-single-bit"
 
 [prog]
-top = "slice-single-bit::SliceSingleBitTest"
+top = "slice_single_bit::SliceSingleBitTest"

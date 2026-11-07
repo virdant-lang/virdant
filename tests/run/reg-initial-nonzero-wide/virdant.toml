@@ -2,4 +2,4 @@
 name = "reg-initial-nonzero-wide"
 
 [prog]
-top = "reg-initial-nonzero-wide::RegInitialWideTest"
+top = "reg_initial_nonzero_wide::RegInitialWideTest"

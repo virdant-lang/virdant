@@ -2,4 +2,4 @@
 name = "match-struct-pattern"
 
 [prog]
-top = "match-struct-pattern::MatchStructPatternTest"
+top = "match_struct_pattern::MatchStructPatternTest"

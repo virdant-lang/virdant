@@ -2,4 +2,4 @@
 name = "socket-multi-channel"
 
 [prog]
-top = "socket-multi-channel::SocketMultiChannelTest"
+top = "socket_multi_channel::SocketMultiChannelTest"

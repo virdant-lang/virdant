@@ -2,4 +2,4 @@
 name = "virdant-toml-defaults"
 
 [prog]
-top = "virdant-toml-defaults::VirdantTomlDefaultsTest"
+top = "virdant_toml_defaults::VirdantTomlDefaultsTest"

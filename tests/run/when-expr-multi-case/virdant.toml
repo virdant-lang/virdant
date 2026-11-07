@@ -2,4 +2,4 @@
 name = "when-expr-multi-case"
 
 [prog]
-top = "when-expr-multi-case::WhenMultiCaseTest"
+top = "when_expr_multi_case::WhenMultiCaseTest"

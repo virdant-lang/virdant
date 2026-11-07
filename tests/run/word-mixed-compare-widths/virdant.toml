@@ -2,4 +2,4 @@
 name = "word-mixed-compare-widths"
 
 [prog]
-top = "word-mixed-compare-widths::WordMixedCompareTest"
+top = "word_mixed_compare_widths::WordMixedCompareTest"

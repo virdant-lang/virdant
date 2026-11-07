@@ -2,4 +2,4 @@
 name = "mod-two-instances"
 
 [prog]
-top = "mod-two-instances::ModTwoInstancesTest"
+top = "mod_two_instances::ModTwoInstancesTest"

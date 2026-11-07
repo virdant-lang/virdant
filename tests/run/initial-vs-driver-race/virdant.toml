@@ -2,4 +2,4 @@
 name = "initial-vs-driver-race"
 
 [prog]
-top = "initial-vs-driver-race::Top"
+top = "initial_vs_driver_race::Top"

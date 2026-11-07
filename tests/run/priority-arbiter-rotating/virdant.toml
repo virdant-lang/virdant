@@ -2,4 +2,4 @@
 name = "priority-arbiter-rotating"
 
 [prog]
-top = "priority-arbiter-rotating::RotatingArbiterTest"
+top = "priority_arbiter_rotating::RotatingArbiterTest"

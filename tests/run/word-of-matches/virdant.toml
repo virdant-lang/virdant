@@ -2,4 +2,4 @@
 name = "word-of-matches"
 
 [prog]
-top = "word-of-matches::WordOfMatchesTest"
+top = "word_of_matches::WordOfMatchesTest"

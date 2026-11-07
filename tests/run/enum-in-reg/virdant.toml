@@ -2,4 +2,4 @@
 name = "enum-in-reg"
 
 [prog]
-top = "enum-in-reg::EnumInRegTest"
+top = "enum_in_reg::EnumInRegTest"

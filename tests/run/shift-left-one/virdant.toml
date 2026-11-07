@@ -2,4 +2,4 @@
 name = "shift-left-one"
 
 [prog]
-top = "shift-left-one::ShiftLeftOneTest"
+top = "shift_left_one::ShiftLeftOneTest"

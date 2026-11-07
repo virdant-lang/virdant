@@ -73,17 +73,31 @@ fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
     // ice40.vir, ...) so that `import` can resolve platform libraries, then
     // every *.vir in the source directory.  The loading logic lives in
     // `virdant::util`, shared with the CLI queries — but the LSP server
-    // must not die on an unreadable source directory, so it uses the
-    // fallible `try_db_from_dir` and degrades to a warning plus the
-    // library-only Db.  That is the same warn-and-continue behavior the
-    // pre-`vir ls` inline loader here had; the CLI keeps strict error
-    // handling on top of the same fallible loader.
+    // must not die on an unreadable source directory, so it uses a
+    // fallible loader and degrades to a warning plus the library-only
+    // Db.  That is the same warn-and-continue behavior the pre-`vir ls`
+    // inline loader here had; the CLI keeps strict error handling on top
+    // of the same fallible loader.
+    //
+    // Files whose names are not valid package identifiers are skipped
+    // rather than failing the load: the rest of the project stays
+    // analyzed, and the skipped file reports its own diagnostic (the
+    // package-name check) once opened in the editor.
     let source_dir = source_dir.into();
-    match virdant::util::try_db_from_dir(&source_dir) {
-        Ok(db) => db,
+    match vircommon::scan_source_dir(&source_dir) {
+        Ok(scan) => {
+            for path in &scan.invalid_names {
+                eprintln!(
+                    "warning: skipping {}: {}",
+                    path.display(),
+                    vircommon::INVALID_PACKAGE_NAME_REASON,
+                );
+            }
+            vircommon::db_from_source_dir_scan(scan)
+        }
         Err(e) => {
             eprintln!("warning: cannot read source directory {}: {e}", source_dir.display());
-            virdant::util::db_from_lib_dir()
+            vircommon::db_from_lib_dir()
         }
     }
 }

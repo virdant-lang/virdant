@@ -2,4 +2,4 @@
 name = "ring-counter"
 
 [prog]
-top = "ring-counter::RingCounterTest"
+top = "ring_counter::RingCounterTest"

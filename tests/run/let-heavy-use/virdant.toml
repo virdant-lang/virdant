@@ -2,4 +2,4 @@
 name = "let-heavy-use"
 
 [prog]
-top = "let-heavy-use::Top"
+top = "let_heavy_use::Top"

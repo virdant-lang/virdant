@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "A .vir file whose name is not a valid package identifier is rejected at load time"
+filecheck = "src/bad-name.vir"

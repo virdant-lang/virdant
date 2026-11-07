@@ -2,4 +2,4 @@
 name = "literal-truncate-decimal"
 
 [prog]
-top = "literal-truncate-decimal::LiteralTruncateDecimal"
+top = "literal_truncate_decimal::LiteralTruncateDecimal"

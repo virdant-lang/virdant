@@ -2,7 +2,7 @@
 name = "struct-nested"
 
 [prog]
-top = "struct-nested::StructNestedTest"
+top = "struct_nested::StructNestedTest"
 kind = "run"
 description = "Struct containing a struct; chained projection `outer->inner->field`; assert the value"
 cycle_limit = 6

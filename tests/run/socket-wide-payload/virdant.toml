@@ -2,4 +2,4 @@
 name = "socket-wide-payload"
 
 [prog]
-top = "socket-wide-payload::SocketWideTest"
+top = "socket_wide_payload::SocketWideTest"

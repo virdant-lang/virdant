@@ -2,4 +2,4 @@
 name = "multi-file-src"
 
 [prog]
-top = "multi-file-src::Top"
+top = "multi_file_src::Top"

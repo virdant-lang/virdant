@@ -2,4 +2,4 @@
 name = "generic-socket-two-args"
 
 [prog]
-top = "generic-socket-two-args::Top"
+top = "generic_socket_two_args::Top"

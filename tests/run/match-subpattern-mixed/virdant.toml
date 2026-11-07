@@ -2,4 +2,4 @@
 name = "match-subpattern-mixed"
 
 [prog]
-top = "match-subpattern-mixed::MatchSubpatternMixedTest"
+top = "match_subpattern_mixed::MatchSubpatternMixedTest"

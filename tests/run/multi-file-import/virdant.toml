@@ -2,4 +2,4 @@
 name = "multi-file-import"
 
 [prog]
-top = "multi-file-import::MultiFileImportTest"
+top = "multi_file_import::MultiFileImportTest"

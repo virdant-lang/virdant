@@ -2,4 +2,4 @@
 name = "serial-crc"
 
 [prog]
-top = "serial-crc::SerialCrcTest"
+top = "serial_crc::SerialCrcTest"

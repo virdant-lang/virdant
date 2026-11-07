@@ -2,4 +2,4 @@
 name = "wire-it-block"
 
 [prog]
-top = "wire-it-block::WireItBlockTest"
+top = "wire_it_block::WireItBlockTest"

@@ -2,4 +2,4 @@
 name = "word-add"
 
 [prog]
-top = "word-add::WordAddTest"
+top = "word_add::WordAddTest"

@@ -2,7 +2,7 @@
 name = "edge-both"
 
 [prog]
-top = "edge-both::EdgeBothTest"
+top = "edge_both::EdgeBothTest"
 kind = "run"
 description = "Any-edge detector (`last != inp`)"
 cycle_limit = 20

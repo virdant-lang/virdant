@@ -2,4 +2,4 @@
 name = "mux-words"
 
 [prog]
-top = "mux-words::MuxWordsTest"
+top = "mux_words::MuxWordsTest"

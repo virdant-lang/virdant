@@ -2,5 +2,5 @@
 name = "socket-unused-member"
 
 [prog]
-top = "socket-unused-member::SocketUnusedMemberTest"
+top = "socket_unused_member::SocketUnusedMemberTest"
 kind = "run"

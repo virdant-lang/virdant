@@ -2,4 +2,4 @@
 name = "stream-join"
 
 [prog]
-top = "stream-join::StreamJoinTest"
+top = "stream_join::StreamJoinTest"

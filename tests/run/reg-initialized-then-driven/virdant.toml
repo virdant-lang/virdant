@@ -2,4 +2,4 @@
 name = "reg-initialized-then-driven"
 
 [prog]
-top = "reg-initialized-then-driven::RegInitThenDriveTest"
+top = "reg_initialized_then_driven::RegInitThenDriveTest"

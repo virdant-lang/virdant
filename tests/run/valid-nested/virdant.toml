@@ -2,4 +2,4 @@
 name = "valid-nested"
 
 [prog]
-top = "valid-nested::ValidNestedTest"
+top = "valid_nested::ValidNestedTest"

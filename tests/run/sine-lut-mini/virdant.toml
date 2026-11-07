@@ -2,4 +2,4 @@
 name = "sine-lut-mini"
 
 [prog]
-top = "sine-lut-mini::SineLutTest"
+top = "sine_lut_mini::SineLutTest"

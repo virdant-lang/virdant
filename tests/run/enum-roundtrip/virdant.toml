@@ -2,4 +2,4 @@
 name = "enum-roundtrip"
 
 [prog]
-top = "enum-roundtrip::EnumRoundtripTest"
+top = "enum_roundtrip::EnumRoundtripTest"

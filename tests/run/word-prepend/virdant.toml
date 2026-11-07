@@ -2,4 +2,4 @@
 name = "word-prepend"
 
 [prog]
-top = "word-prepend::WordPrependTest"
+top = "word_prepend::WordPrependTest"

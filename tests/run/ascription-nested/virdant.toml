@@ -2,4 +2,4 @@
 name = "ascription-nested"
 
 [prog]
-top = "ascription-nested::AscriptionNested"
+top = "ascription_nested::AscriptionNested"

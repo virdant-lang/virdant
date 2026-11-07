@@ -2,4 +2,4 @@
 name = "stmt-match-empty-arm"
 
 [prog]
-top = "stmt-match-empty-arm::StmtMatchEmptyArmTest"
+top = "stmt_match_empty_arm::StmtMatchEmptyArmTest"

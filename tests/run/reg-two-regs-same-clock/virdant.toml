@@ -2,4 +2,4 @@
 name = "reg-two-regs-same-clock"
 
 [prog]
-top = "reg-two-regs-same-clock::RegTwoRegsTest"
+top = "reg_two_regs_same_clock::RegTwoRegsTest"

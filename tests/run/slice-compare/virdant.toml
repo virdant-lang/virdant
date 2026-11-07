@@ -2,4 +2,4 @@
 name = "slice-compare"
 
 [prog]
-top = "slice-compare::SliceCompareTest"
+top = "slice_compare::SliceCompareTest"

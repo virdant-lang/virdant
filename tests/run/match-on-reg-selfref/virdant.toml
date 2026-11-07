@@ -2,4 +2,4 @@
 name = "match-on-reg-selfref"
 
 [prog]
-top = "match-on-reg-selfref::MatchOnRegSelfrefTest"
+top = "match_on_reg_selfref::MatchOnRegSelfrefTest"

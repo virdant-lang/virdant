@@ -60,7 +60,13 @@ fn run_icarus(location: &ProjectLocation, vcd: Option<&str>) {
     let builddir = cwd.join("build");
 
     let source_dir = cwd.join("src");
-    let db = virdant::util::db_from_dir(source_dir);
+    let db = match common::db_from_dir(source_dir) {
+        Ok(db) => db,
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(1);
+        }
+    };
     common::dump_diagnostics(&db);
     if virdant::util::check_db(&db).is_err() {
         eprintln!("Build failed");

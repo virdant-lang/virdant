@@ -2,4 +2,4 @@
 name = "johnson-counter"
 
 [prog]
-top = "johnson-counter::JohnsonCounterTest"
+top = "johnson_counter::JohnsonCounterTest"

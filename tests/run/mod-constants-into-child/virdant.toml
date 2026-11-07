@@ -2,4 +2,4 @@
 name = "mod-constants-into-child"
 
 [prog]
-top = "mod-constants-into-child::ModConstantsTest"
+top = "mod_constants_into_child::ModConstantsTest"

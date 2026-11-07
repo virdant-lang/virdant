@@ -2,4 +2,4 @@
 name = "when-expr-chaining"
 
 [prog]
-top = "when-expr-chaining::WhenChainingTest"
+top = "when_expr_chaining::WhenChainingTest"

@@ -2,4 +2,4 @@
 name = "wire-multi-driver-when"
 
 [prog]
-top = "wire-multi-driver-when::WireMultiDriverTest"
+top = "wire_multi_driver_when::WireMultiDriverTest"

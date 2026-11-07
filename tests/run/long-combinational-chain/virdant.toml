@@ -2,4 +2,4 @@
 name = "long-combinational-chain"
 
 [prog]
-top = "long-combinational-chain::LongChainTest"
+top = "long_combinational_chain::LongChainTest"

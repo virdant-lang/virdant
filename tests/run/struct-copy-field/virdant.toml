@@ -2,4 +2,4 @@
 name = "struct-copy-field"
 
 [prog]
-top = "struct-copy-field::StructCopyFieldTest"
+top = "struct_copy_field::StructCopyFieldTest"

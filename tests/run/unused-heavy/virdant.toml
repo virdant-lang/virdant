@@ -2,4 +2,4 @@
 name = "unused-heavy"
 
 [prog]
-top = "unused-heavy::UnusedHeavyTest"
+top = "unused_heavy::UnusedHeavyTest"

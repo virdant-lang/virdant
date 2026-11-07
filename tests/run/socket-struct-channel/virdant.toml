@@ -2,4 +2,4 @@
 name = "socket-struct-channel"
 
 [prog]
-top = "socket-struct-channel::SocketStructTest"
+top = "socket_struct_channel::SocketStructTest"

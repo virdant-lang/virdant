@@ -2,4 +2,4 @@
 name = "reg-chain"
 
 [prog]
-top = "reg-chain::RegChainTest"
+top = "reg_chain::RegChainTest"

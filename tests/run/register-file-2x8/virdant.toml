@@ -2,4 +2,4 @@
 name = "register-file-2x8"
 
 [prog]
-top = "register-file-2x8::RegisterFileTest"
+top = "register_file_2x8::RegisterFileTest"

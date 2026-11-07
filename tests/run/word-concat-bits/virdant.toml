@@ -2,4 +2,4 @@
 name = "word-concat-bits"
 
 [prog]
-top = "word-concat-bits::WordConcatBitsTest"
+top = "word_concat_bits::WordConcatBitsTest"

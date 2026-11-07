@@ -2,4 +2,4 @@
 name = "half-adder-full-adder"
 
 [prog]
-top = "half-adder-full-adder::Top"
+top = "half_adder_full_adder::Top"

@@ -2,4 +2,4 @@
 name = "union-nullary"
 
 [prog]
-top = "union-nullary::UnionNullaryTest"
+top = "union_nullary::UnionNullaryTest"

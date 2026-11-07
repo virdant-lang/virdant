@@ -2,4 +2,4 @@
 name = "abs-diff"
 
 [prog]
-top = "abs-diff::AbsDiffTest"
+top = "abs_diff::AbsDiffTest"

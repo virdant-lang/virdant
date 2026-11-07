@@ -2,4 +2,4 @@
 name = "pulse-stretcher"
 
 [prog]
-top = "pulse-stretcher::PulseStretcherTest"
+top = "pulse_stretcher::PulseStretcherTest"

@@ -2,4 +2,4 @@
 name = "mod-input-from-reg"
 
 [prog]
-top = "mod-input-from-reg::ModInputFromRegTest"
+top = "mod_input_from_reg::ModInputFromRegTest"

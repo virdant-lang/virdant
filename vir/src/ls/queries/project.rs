@@ -78,9 +78,11 @@ impl Project {
 }
 
 fn db_from_dir(source_dir: std::path::PathBuf) -> Result<Db, String> {
-    // Strict CLI handling: an unreadable source directory is a tool
+    // Strict CLI handling: an unreadable source directory, or a `.vir`
+    // file whose name is not a valid package identifier, is a tool
     // failure (the caller turns it into exit 2).  The LSP server has
-    // its own warn-and-continue wrapper around the same fallible
-    // `virdant::util::try_db_from_dir` loader.
-    virdant::util::try_db_from_dir(source_dir).map_err(|e| e.to_string())
+    // its own warn-and-continue wrapper around the same
+    // `virdant::util::scan_source_dir` scan, which skips bad-named
+    // files instead of failing the load.
+    vircommon::db_from_dir(source_dir)
 }

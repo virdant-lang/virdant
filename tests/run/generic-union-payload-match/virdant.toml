@@ -2,4 +2,4 @@
 name = "generic-union-payload-match"
 
 [prog]
-top = "generic-union-payload-match::GenericUnionMatchTest"
+top = "generic_union_payload_match::GenericUnionMatchTest"

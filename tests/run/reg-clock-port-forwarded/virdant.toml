@@ -2,4 +2,4 @@
 name = "reg-clock-port-forwarded"
 
 [prog]
-top = "reg-clock-port-forwarded::RegClockForwardedTest"
+top = "reg_clock_port_forwarded::RegClockForwardedTest"

@@ -2,4 +2,4 @@
 name = "reg-of-struct"
 
 [prog]
-top = "reg-of-struct::Top"
+top = "reg_of_struct::Top"

@@ -2,4 +2,4 @@
 name = "reg-wide64"
 
 [prog]
-top = "reg-wide64::RegWide64Test"
+top = "reg_wide64::RegWide64Test"

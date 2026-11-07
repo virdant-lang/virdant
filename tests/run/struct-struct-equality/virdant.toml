@@ -2,4 +2,4 @@
 name = "struct-struct-equality"
 
 [prog]
-top = "struct-struct-equality::StructEqualityTest"
+top = "struct_struct_equality::StructEqualityTest"

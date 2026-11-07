@@ -2,4 +2,4 @@
 name = "shift-variable-match"
 
 [prog]
-top = "shift-variable-match::ShiftVarMatchTest"
+top = "shift_variable_match::ShiftVarMatchTest"

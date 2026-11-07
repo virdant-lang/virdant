@@ -2,4 +2,4 @@
 name = "type-ascription"
 
 [prog]
-top = "type-ascription::TypeAscriptionTest"
+top = "type_ascription::TypeAscriptionTest"

@@ -2,4 +2,4 @@
 name = "word-bitwise"
 
 [prog]
-top = "word-bitwise::WordBitwiseTest"
+top = "word_bitwise::WordBitwiseTest"

@@ -2,4 +2,4 @@
 name = "deep-nested-chaining"
 
 [prog]
-top = "deep-nested-chaining::DeepNestedChainingTest"
+top = "deep_nested_chaining::DeepNestedChainingTest"

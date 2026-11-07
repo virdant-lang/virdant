@@ -2,4 +2,4 @@
 name = "mux-bit"
 
 [prog]
-top = "mux-bit::MuxBitTest"
+top = "mux_bit::MuxBitTest"

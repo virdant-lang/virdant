@@ -2,4 +2,4 @@
 name = "bit-ops-inputs"
 
 [prog]
-top = "bit-ops-inputs::BitOpsInputsTest"
+top = "bit_ops_inputs::BitOpsInputsTest"

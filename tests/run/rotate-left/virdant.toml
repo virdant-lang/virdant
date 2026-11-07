@@ -2,4 +2,4 @@
 name = "rotate-left"
 
 [prog]
-top = "rotate-left::RotateLeftTest"
+top = "rotate_left::RotateLeftTest"

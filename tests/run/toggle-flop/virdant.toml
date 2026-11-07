@@ -2,4 +2,4 @@
 name = "toggle-flop"
 
 [prog]
-top = "toggle-flop::ToggleFlopTest"
+top = "toggle_flop::ToggleFlopTest"

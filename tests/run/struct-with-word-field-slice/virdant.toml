@@ -2,4 +2,4 @@
 name = "struct-with-word-field-slice"
 
 [prog]
-top = "struct-with-word-field-slice::StructFieldSliceTest"
+top = "struct_with_word_field_slice::StructFieldSliceTest"

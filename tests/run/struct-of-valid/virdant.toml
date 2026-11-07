@@ -2,4 +2,4 @@
 name = "struct-of-valid"
 
 [prog]
-top = "struct-of-valid::StructOfValidTest"
+top = "struct_of_valid::StructOfValidTest"

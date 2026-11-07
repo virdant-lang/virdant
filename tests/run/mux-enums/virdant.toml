@@ -2,4 +2,4 @@
 name = "mux-enums"
 
 [prog]
-top = "mux-enums::MuxEnumsTest"
+top = "mux_enums::MuxEnumsTest"

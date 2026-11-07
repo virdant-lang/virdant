@@ -1,141 +1,38 @@
-//! Standalone utility functions: constructing a `Db` from directories or
-//! files (loading the builtin library automatically), word/nat literal
-//! parsing, bit-width helpers (`min_word_width`, `log2`), and `check_db`
-//! to run all checks and partition diagnostics by severity.
+//! Standalone utility functions: the package-name rule shared by the
+//! compiler and the tools, word/nat literal parsing, bit-width helpers
+//! (`min_word_width`, `log2`), and `check_db` to run all checks and
+//! partition diagnostics by severity.
+//!
+//! Filesystem loading of `.vir` files (directory scans, `Db`
+//! construction from files) lives in the tools' crate
+//! (`vircommon::load`), since the core is also built for wasm.
 
 use std::sync::Arc;
 
-use bstr::BString;
+use bstr::BStr;
 use bstr::ByteSlice as _;
 
 use crate::common::{Width, WordValue};
 use crate::db::Db;
 use crate::diagnostics::{Diagnostic, DiagnosticLevel};
-#[cfg(not(target_arch = "wasm32"))]
-use crate::common::source::Source;
-#[cfg(not(target_arch = "wasm32"))]
-use crate::package::PackageTable;
 
-#[cfg(not(target_arch = "wasm32"))]
-fn db_from_name_text_pairs(files: Vec<(BString, BString)>) -> Db {
-    let mut db = Db::new();
-
-    let deduped: indexmap::IndexMap<BString, BString> = files.into_iter().collect();
-    db.set_packages(PackageTable::new(deduped.keys().cloned().collect()));
-    let packages = db.get_packages();
-    for (name, text) in deduped {
-        let package = packages.id(name.as_bstr()).expect("package missing from table");
-        db.set_source(package, Source::new(package, text));
+/// Whether `name` is a valid package name: it must match the lexer's
+/// identifier rule `[_a-zA-Z][_a-zA-Z0-9]*` (see `syntax/token.rs`),
+/// because `import` accepts only an `Ident`.  Package names come from
+/// `.vir` file stems, so a file whose stem is not a valid identifier
+/// yields a package that no other file can ever import.
+pub fn is_valid_package_name(name: &BStr) -> bool {
+    let bytes = name.as_bytes();
+    match bytes.split_first() {
+        None => false,
+        Some((first, rest)) => {
+            let first_ok = first.is_ascii_alphabetic() || *first == b'_';
+            let rest_ok = rest
+                .iter()
+                .all(|b| b.is_ascii_alphanumeric() || *b == b'_');
+            first_ok && rest_ok
+        }
     }
-    db
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn load_lib_dir<P: Into<std::path::PathBuf>>(lib_dir: P) -> Vec<(BString, BString)> {
-    let lib_dir = std::fs::canonicalize(lib_dir.into())
-        .expect("Could not find lib directory");
-    let mut filepaths: Vec<std::path::PathBuf> = std::fs::read_dir(&lib_dir)
-        .expect(&format!("Could not open directory: {lib_dir:?}"))
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|filepath| match filepath.extension() {
-            Some(ext) => ext.to_string_lossy() == "vir",
-            None => false,
-        })
-        .collect();
-    // Deterministic package ordering regardless of read_dir order.
-    filepaths.sort();
-    filepaths.into_iter().map(Source::load_file).collect()
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn try_load_source_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> std::io::Result<Vec<(BString, BString)>> {
-    let source_dir: std::path::PathBuf = source_dir.into();
-    let mut filepaths: Vec<std::path::PathBuf> = std::fs::read_dir(&source_dir)
-        .map_err(|e| std::io::Error::new(e.kind(), format!("Could not open directory: {source_dir:?}: {e}")))?
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|filepath| match filepath.extension() {
-            Some(ext) => ext.to_string_lossy() == "vir",
-            None => false,
-        })
-        .collect();
-    filepaths.sort();
-    Ok(filepaths.into_iter().map(Source::load_file).collect())
-}
-
-fn load_source_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Vec<(BString, BString)> {
-    try_load_source_dir(source_dir)
-        .unwrap_or_else(|e| panic!("{e}"))
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn load_vir_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Vec<(BString, BString)> {
-    // Load every *.vir in LIB_DIR (builtin.vir, ice40.vir, ...) plus
-    // the source dir.  Loading is not scoping: only `import` puts a
-    // package's items in scope.
-    let mut files = load_lib_dir(crate::LIB_DIR.as_path());
-    files.extend(load_source_dir(source_dir));
-    files
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Db {
-    db_from_name_text_pairs(load_vir_dir(source_dir))
-}
-
-/// Fallible variant of [`db_from_dir`]: the same whole-project `Db`
-/// (standard library plus source directory), but an unreadable source
-/// directory is an `Err` instead of a panic.  The `vir ls` CLI treats
-/// the error as a tool failure (exit 2); the `vir ls serve` LSP server
-/// catches it and degrades to a library-only `Db` with a warning,
-/// matching the warn-and-continue behavior its pre-`vir ls` inline
-/// loader had.
-pub fn try_db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> std::io::Result<Db> {
-    let mut files = load_lib_dir(crate::LIB_DIR.as_path());
-    files.extend(try_load_source_dir(source_dir)?);
-    Ok(db_from_name_text_pairs(files))
-}
-
-/// The library half of [`db_from_dir`]: builtin.vir, ice40.vir, ...
-/// Used as the degraded fallback when the LSP server cannot read the
-/// project's source directory (see [`try_db_from_dir`]).
-pub fn db_from_lib_dir() -> Db {
-    db_from_name_text_pairs(load_lib_dir(crate::LIB_DIR.as_path()))
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn db_from_dir_with_lib<P, Q>(source_dir: P, lib_dir: Q) -> Db
-where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
-    let mut files = load_lib_dir(lib_dir);
-    files.extend(load_source_dir(source_dir));
-    db_from_name_text_pairs(files)
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn db_from_file<P: Into<std::path::PathBuf>>(source_file: P) -> Db {
-    db_from_files_with_lib(vec![source_file], crate::LIB_DIR.as_path())
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn db_from_file_with_lib<P, Q>(source_file: P, lib_dir: Q) -> Db
-where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
-    db_from_files_with_lib(vec![source_file], lib_dir)
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn db_from_files<P: Into<std::path::PathBuf>>(source_files: Vec<P>) -> Db {
-    db_from_files_with_lib(source_files, crate::LIB_DIR.as_path())
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn db_from_files_with_lib<P, Q>(source_files: Vec<P>, lib_dir: Q) -> Db
-where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
-    let mut files = load_lib_dir(lib_dir);
-
-    for source_file in source_files {
-        files.push(Source::load_file(source_file.into()));
-    }
-
-    db_from_name_text_pairs(files)
 }
 
 pub fn min_word_width(value: WordValue) -> Width {

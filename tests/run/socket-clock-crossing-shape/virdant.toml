@@ -2,4 +2,4 @@
 name = "socket-clock-crossing-shape"
 
 [prog]
-top = "socket-clock-crossing-shape::SocketClockTest"
+top = "socket_clock_crossing_shape::SocketClockTest"

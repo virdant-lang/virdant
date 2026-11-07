@@ -2,4 +2,4 @@
 name = "match-on-slice"
 
 [prog]
-top = "match-on-slice::MatchOnSliceTest"
+top = "match_on_slice::MatchOnSliceTest"

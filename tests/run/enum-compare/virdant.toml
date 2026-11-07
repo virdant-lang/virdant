@@ -2,4 +2,4 @@
 name = "enum-compare"
 
 [prog]
-top = "enum-compare::EnumCompareTest"
+top = "enum_compare::EnumCompareTest"

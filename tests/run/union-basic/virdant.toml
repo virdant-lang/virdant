@@ -2,4 +2,4 @@
 name = "union-basic"
 
 [prog]
-top = "union-basic::UnionBasicTest"
+top = "union_basic::UnionBasicTest"

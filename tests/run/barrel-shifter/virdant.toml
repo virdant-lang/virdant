@@ -2,4 +2,4 @@
 name = "barrel-shifter"
 
 [prog]
-top = "barrel-shifter::BarrelShifterTest"
+top = "barrel_shifter::BarrelShifterTest"

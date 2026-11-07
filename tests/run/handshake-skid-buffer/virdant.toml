@@ -2,4 +2,4 @@
 name = "handshake-skid-buffer"
 
 [prog]
-top = "handshake-skid-buffer::Top"
+top = "handshake_skid_buffer::Top"

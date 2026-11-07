@@ -2,4 +2,4 @@
 name = "slice-of-struct-field"
 
 [prog]
-top = "slice-of-struct-field::SliceOfStructFieldTest"
+top = "slice_of_struct_field::SliceOfStructFieldTest"

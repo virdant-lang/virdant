@@ -2,4 +2,4 @@
 name = "word-of-bits-ops"
 
 [prog]
-top = "word-of-bits-ops::WordOfBitsOpsTest"
+top = "word_of_bits_ops::WordOfBitsOpsTest"

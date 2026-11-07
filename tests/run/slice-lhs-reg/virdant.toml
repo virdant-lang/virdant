@@ -2,4 +2,4 @@
 name = "slice-lhs-reg"
 
 [prog]
-top = "slice-lhs-reg::SliceLhsRegTest"
+top = "slice_lhs_reg::SliceLhsRegTest"

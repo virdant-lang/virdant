@@ -2,4 +2,4 @@
 name = "match-enum-else"
 
 [prog]
-top = "match-enum-else::MatchEnumElseTest"
+top = "match_enum_else::MatchEnumElseTest"

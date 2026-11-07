@@ -2,4 +2,4 @@
 name = "mod-nested-instances"
 
 [prog]
-top = "mod-nested-instances::ModNestedTest"
+top = "mod_nested_instances::ModNestedTest"

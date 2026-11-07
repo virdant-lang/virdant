@@ -2,4 +2,4 @@
 name = "dontcare-outgoing"
 
 [prog]
-top = "dontcare-outgoing::DontcareOutgoingTest"
+top = "dontcare_outgoing::DontcareOutgoingTest"

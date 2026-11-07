@@ -2,4 +2,4 @@
 name = "stmt-when-arm-order"
 
 [prog]
-top = "stmt-when-arm-order::StmtWhenOrderTest"
+top = "stmt_when_arm_order::StmtWhenOrderTest"

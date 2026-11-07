@@ -2,4 +2,4 @@
 name = "match-nested-union"
 
 [prog]
-top = "match-nested-union::MatchNestedUnionTest"
+top = "match_nested_union::MatchNestedUnionTest"

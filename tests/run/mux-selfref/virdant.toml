@@ -2,4 +2,4 @@
 name = "mux-selfref"
 
 [prog]
-top = "mux-selfref::MuxSelfrefTest"
+top = "mux_selfref::MuxSelfrefTest"

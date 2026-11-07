@@ -2,4 +2,4 @@
 name = "valid-passthrough-module"
 
 [prog]
-top = "valid-passthrough-module::ValidPassthroughTest"
+top = "valid_passthrough_module::ValidPassthroughTest"

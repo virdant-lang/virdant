@@ -14,7 +14,10 @@ use colored::Colorize;
 use virdant::common::source::Region;
 use virdant::db::Db;
 use virdant::diagnostics::DiagnosticLevel;
-use virdant::util::{check_db, db_from_dir, db_from_files};
+use virdant::util::check_db;
+
+pub mod load;
+pub use load::{db_from_files, db_from_lib_dir, db_from_source_dir_scan, scan_source_dir};
 
 // ---------------------------------------------------------------------------
 // Project manifest (`virdant.toml`)
@@ -159,9 +162,39 @@ impl ProjectLocation {
             std::process::exit(1);
         }
 
-        db_from_dir(src_dir)
+        match db_from_dir(src_dir) {
+            Ok(db) => db,
+            Err(e) => {
+                eprintln!("ERROR: {e}");
+                std::process::exit(1);
+            }
+        }
     }
 }
+
+/// Build the analysis `Db` for a source directory: the standard library
+/// plus every `.vir` file in the directory whose stem is a valid
+/// package name.  `Err` — with a fully formatted message — when the
+/// directory cannot be read, or when any file's stem is not a valid
+/// package identifier (such a package could never be `import`ed).
+/// Reporting the error is the caller's job.
+pub fn db_from_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Result<Db, String> {
+    let scan = scan_source_dir(&source_dir.into()).map_err(|e| e.to_string())?;
+    if !scan.invalid_names.is_empty() {
+        let messages: Vec<String> = scan
+            .invalid_names
+            .iter()
+            .map(|path| format!("{}: {}", path.display(), INVALID_PACKAGE_NAME_REASON))
+            .collect();
+        return Err(messages.join("\n"));
+    }
+    Ok(db_from_source_dir_scan(scan))
+}
+
+/// Reason phrase for a `.vir` file whose name is not a valid package
+/// identifier; tools print it after the file path.  (The predicate
+/// itself lives in the core: `virdant::util::is_valid_package_name`.)
+pub const INVALID_PACKAGE_NAME_REASON: &str = "file name is not a valid package identifier (expected [_a-zA-Z][_a-zA-Z0-9]*); rename the file (eg, replacing '-' with '_') so it can be imported";
 
 /// Read `[prog].<key>` from `virdant.toml` in `cwd`, tolerating a
 /// missing file or missing keys.

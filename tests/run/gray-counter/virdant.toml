@@ -2,4 +2,4 @@
 name = "gray-counter"
 
 [prog]
-top = "gray-counter::GrayCounterTest"
+top = "gray_counter::GrayCounterTest"

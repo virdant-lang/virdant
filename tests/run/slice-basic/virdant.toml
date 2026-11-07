@@ -2,4 +2,4 @@
 name = "slice-basic"
 
 [prog]
-top = "slice-basic::SliceBasicTest"
+top = "slice_basic::SliceBasicTest"

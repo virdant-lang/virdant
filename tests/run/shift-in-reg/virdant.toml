@@ -2,4 +2,4 @@
 name = "shift-in-reg"
 
 [prog]
-top = "shift-in-reg::ShiftInRegTest"
+top = "shift_in_reg::ShiftInRegTest"

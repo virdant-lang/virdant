@@ -2,4 +2,4 @@
 name = "wire-mux-tree"
 
 [prog]
-top = "wire-mux-tree::WireMuxTreeTest"
+top = "wire_mux_tree::WireMuxTreeTest"

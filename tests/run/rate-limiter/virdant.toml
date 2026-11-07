@@ -2,4 +2,4 @@
 name = "rate-limiter"
 
 [prog]
-top = "rate-limiter::RateLimiterTest"
+top = "rate_limiter::RateLimiterTest"

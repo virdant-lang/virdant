@@ -2,4 +2,4 @@
 name = "socket-chain"
 
 [prog]
-top = "socket-chain::SocketChainTest"
+top = "socket_chain::SocketChainTest"

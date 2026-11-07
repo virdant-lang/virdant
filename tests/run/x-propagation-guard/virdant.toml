@@ -2,4 +2,4 @@
 name = "x-propagation-guard"
 
 [prog]
-top = "x-propagation-guard::XPropGuardTest"
+top = "x_propagation_guard::XPropGuardTest"

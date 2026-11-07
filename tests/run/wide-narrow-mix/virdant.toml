@@ -2,4 +2,4 @@
 name = "wide-narrow-mix"
 
 [prog]
-top = "wide-narrow-mix::WideNarrowMixTest"
+top = "wide_narrow_mix::WideNarrowMixTest"

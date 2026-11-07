@@ -2,4 +2,4 @@
 name = "slice-full"
 
 [prog]
-top = "slice-full::SliceFullTest"
+top = "slice_full::SliceFullTest"

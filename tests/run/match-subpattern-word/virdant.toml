@@ -2,4 +2,4 @@
 name = "match-subpattern-word"
 
 [prog]
-top = "match-subpattern-word::MatchSubpatternWord"
+top = "match_subpattern_word::MatchSubpatternWord"

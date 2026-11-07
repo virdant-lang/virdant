@@ -2,4 +2,4 @@
 name = "enum-non-power-of-two"
 
 [prog]
-top = "enum-non-power-of-two::EnumNonPowerOfTwoTest"
+top = "enum_non_power_of_two::EnumNonPowerOfTwoTest"

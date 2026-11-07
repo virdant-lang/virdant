@@ -2,4 +2,4 @@
 name = "same-name-shadow-hierarchy"
 
 [prog]
-top = "same-name-shadow-hierarchy::ShadowHierarchyTest"
+top = "same_name_shadow_hierarchy::ShadowHierarchyTest"

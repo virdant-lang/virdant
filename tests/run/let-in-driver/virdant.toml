@@ -2,4 +2,4 @@
 name = "let-in-driver"
 
 [prog]
-top = "let-in-driver::Top"
+top = "let_in_driver::Top"

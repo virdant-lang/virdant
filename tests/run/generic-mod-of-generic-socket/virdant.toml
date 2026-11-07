@@ -2,4 +2,4 @@
 name = "generic-mod-of-generic-socket"
 
 [prog]
-top = "generic-mod-of-generic-socket::Top"
+top = "generic_mod_of_generic_socket::Top"

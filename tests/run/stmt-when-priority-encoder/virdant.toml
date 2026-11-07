@@ -2,4 +2,4 @@
 name = "stmt-when-priority-encoder"
 
 [prog]
-top = "stmt-when-priority-encoder::StmtWhenPrioEncTest"
+top = "stmt_when_priority_encoder::StmtWhenPrioEncTest"

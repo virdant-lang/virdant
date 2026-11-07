@@ -2,4 +2,4 @@
 name = "when-reg-hold"
 
 [prog]
-top = "when-reg-hold::WhenRegHoldTest"
+top = "when_reg_hold::WhenRegHoldTest"

@@ -2,4 +2,4 @@
 name = "valid-to-word"
 
 [prog]
-top = "valid-to-word::ValidToWordTest"
+top = "valid_to_word::ValidToWordTest"

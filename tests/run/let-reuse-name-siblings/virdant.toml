@@ -2,4 +2,4 @@
 name = "let-reuse-name-siblings"
 
 [prog]
-top = "let-reuse-name-siblings::LetReuseNameSiblingsTest"
+top = "let_reuse_name_siblings::LetReuseNameSiblingsTest"

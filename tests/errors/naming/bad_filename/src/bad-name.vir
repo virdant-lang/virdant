@@ -1,0 +1,8 @@
+// A `.vir` file whose name is not a valid package identifier.
+//
+// The directory scan rejects the file before the compiler ever runs on it:
+// `import` only accepts an `Ident` (the lexer's `[_a-zA-Z][_a-zA-Z0-9]*`),
+// so a package named `bad-name` could never be imported by another file.
+// The error message names the file and suggests the usual fix.
+
+// CHECK: bad-name.vir: file name is not a valid package identifier

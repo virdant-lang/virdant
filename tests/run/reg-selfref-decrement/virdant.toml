@@ -2,4 +2,4 @@
 name = "reg-selfref-decrement"
 
 [prog]
-top = "reg-selfref-decrement::RegSelfrefDecrementTest"
+top = "reg_selfref_decrement::RegSelfrefDecrementTest"

@@ -2,4 +2,4 @@
 name = "shift-variable-when"
 
 [prog]
-top = "shift-variable-when::ShiftVarWhenTest"
+top = "shift_variable_when::ShiftVarWhenTest"

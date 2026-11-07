@@ -2,4 +2,4 @@
 name = "mod-fanout-forwarding"
 
 [prog]
-top = "mod-fanout-forwarding::ModFanoutTest"
+top = "mod_fanout_forwarding::ModFanoutTest"

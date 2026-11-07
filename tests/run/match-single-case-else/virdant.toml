@@ -2,4 +2,4 @@
 name = "match-single-case-else"
 
 [prog]
-top = "match-single-case-else::Top"
+top = "match_single_case_else::Top"

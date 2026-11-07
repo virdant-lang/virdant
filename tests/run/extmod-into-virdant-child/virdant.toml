@@ -2,4 +2,4 @@
 name = "extmod-into-virdant-child"
 
 [prog]
-top = "extmod-into-virdant-child::Top"
+top = "extmod_into_virdant_child::Top"

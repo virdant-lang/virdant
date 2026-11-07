@@ -2,4 +2,4 @@
 name = "word-sub"
 
 [prog]
-top = "word-sub::WordSubTest"
+top = "word_sub::WordSubTest"

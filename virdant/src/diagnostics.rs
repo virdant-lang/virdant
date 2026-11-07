@@ -39,6 +39,9 @@ pub enum DiagnosticPayload {
     DuplicateSlot(DuplicateSlot),
     /// Failed to resolve a package.
     UnresolvedPackage(UnresolvedPackage),
+    /// A package's name — derived from its `.vir` file's stem — is not
+    /// a valid identifier, so no other file can ever `import` it.
+    InvalidPackageName(InvalidPackageName),
     /// Failed to resolve an item.
     UnresolvedItem(UnresolvedItem),
     /// Failed to resolve a type.
@@ -265,6 +268,13 @@ pub struct DuplicateSlot {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnresolvedPackage {
+    pub package: BString,
+}
+
+/// A package name that is not a valid identifier.  Package names come
+/// from `.vir` file stems, so the fix is renaming the file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidPackageName {
     pub package: BString,
 }
 
@@ -708,6 +718,12 @@ impl Diagnostic {
             DiagnosticPayload::DuplicateItem(_) => "Duplicate Item".to_owned().into(),
             DiagnosticPayload::DuplicateSlot(_) => "Duplicate slot".into(),
             DiagnosticPayload::UnresolvedPackage(d) => format!("Unresolved package {}", d.package).into(),
+            DiagnosticPayload::InvalidPackageName(d) => {
+                format!(
+                    "Package name '{}' is not a valid identifier; rename the source file",
+                    d.package,
+                ).into()
+            }
             DiagnosticPayload::UnresolvedItem(d) => format!("Unresolved item {}", d.item).into(),
             DiagnosticPayload::UnresolvedType(d) => format!("Unresolved type {}", d.typ).into(),
             DiagnosticPayload::MissingOnClause(d) => format!("Missing on clause for reg {}", d.component).into(),
@@ -1090,7 +1106,7 @@ macro_rules! from_diagnostic {
 
 from_diagnostic! {
     SyntaxError, ImportCycle, UnresolvedImportError, DuplicateImport, DuplicateItem,
-    DuplicateSlot, UnresolvedPackage, UnresolvedItem, UnresolvedType, MissingOnClause,
+    DuplicateSlot, UnresolvedPackage, InvalidPackageName, UnresolvedItem, UnresolvedType, MissingOnClause,
     RedundantOnClause, WrongDriverType, NoRegDrivers, NoDrivers, MultipleDrivers,
     NetReadWithoutTap, TapNotOnNet,
     DriverForSink, UnresolvedComponent, NotIt, UnresolvedCtor, UnusedSource, ReadFromSink,

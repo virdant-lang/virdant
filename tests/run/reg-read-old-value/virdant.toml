@@ -2,4 +2,4 @@
 name = "reg-read-old-value"
 
 [prog]
-top = "reg-read-old-value::RegReadOldValueTest"
+top = "reg_read_old_value::RegReadOldValueTest"

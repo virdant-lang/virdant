@@ -2,4 +2,4 @@
 name = "any-builtin"
 
 [prog]
-top = "any-builtin::AnyBuiltinTest"
+top = "any_builtin::AnyBuiltinTest"

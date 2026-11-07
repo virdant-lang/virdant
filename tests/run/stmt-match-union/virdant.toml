@@ -2,4 +2,4 @@
 name = "stmt-match-union"
 
 [prog]
-top = "stmt-match-union::StmtMatchUnionTest"
+top = "stmt_match_union::StmtMatchUnionTest"

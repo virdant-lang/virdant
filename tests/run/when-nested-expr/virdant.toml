@@ -2,4 +2,4 @@
 name = "when-nested-expr"
 
 [prog]
-top = "when-nested-expr::WhenNestedTest"
+top = "when_nested_expr::WhenNestedTest"
