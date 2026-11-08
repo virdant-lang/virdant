@@ -112,6 +112,28 @@ Runs `vir doc`, then:
 - `expect_files` — list of paths that must have been generated
 - `grep` — list of `{ path, pattern }` content assertions
 
+### `kind = "run"`
+
+Runs `vir run` on the test's project (the project in the test
+directory, top from `[prog] top`). The test passes iff the command
+exits 0.
+
+| key           | default | meaning                                            |
+|---------------|---------|----------------------------------------------------|
+| `cycle_limit` | none    | pass `--cycles=N` (exit code 124 when reached)     |
+| `trace`       | false   | pass `--trace=build/trace.vcd` and compare the VCD byte-for-byte against `trace.golden.vcd` |
+| `args`        | `[]`    | extra arguments appended after `vir run`           |
+
+The environment variable `VIR_RUN_FLAGS` appends extra flags to every
+`kind = "run"` invocation (whitespace-separated), e.g.
+
+```sh
+VIR_RUN_FLAGS=--legacy make test
+```
+
+runs the whole run-suite on the legacy interpreter engine instead of
+the default VM engine. Without the knob nothing changes.
+
 ### `kind = "poke"`
 
 Runs `vir poke <script> --script` (a `.poke` script as a standalone

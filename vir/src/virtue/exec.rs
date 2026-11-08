@@ -372,6 +372,16 @@ fn run_run(env: &Env, test: &Test) -> Outcome {
     }
     argv.extend(test.run_cfg.args.iter().cloned());
 
+    // `VIR_RUN_FLAGS`: extra flags appended to every `kind = "run"
+    // invocation (split on whitespace), e.g. `VIR_RUN_FLAGS=--legacy
+    // make test` runs the whole run-suite on the legacy engine instead
+    // of the default VM engine.  Appended after the test's own
+    // arguments, so the flags apply regardless of what the test
+    // configures (and `make test` without the knob is unaffected).
+    if let Ok(extra_flags) = std::env::var("VIR_RUN_FLAGS") {
+        argv.extend(extra_flags.split_whitespace().map(str::to_string));
+    }
+
     let step = run_command(&argv, &dir, Some(&target_release));
     let steps = vec![step];
 
