@@ -8,18 +8,23 @@ A `FullAdder` is a famous circuit which can sum two 1-bit numbers *and* a carry.
 (This is a total of three 1-bit numbers).
 It is made up of two `HalfAdder`\s, thus the name:
 
-.. literalinclude:: /examples/adder/src/adder.vir
+.. literalinclude:: /guide/adder/src/adder.vir
     :language: virdant
     :lines: 16-39
 
+.. note::
+
+    This is the second in a series of three modules which appear in full in :doc:`../adder/index`.
+
 In addition to `a` and `b`, `FullAdder` takes an additional 1-bit input called `carry_in`.
 The circuit then adds `a`, `b`, and `carry_in` together and returns their sum as `carry_out` and `sum`.
+
 
 The First Half Adder
 --------------------
 The first `HalfAdder` is this:
 
-.. literalinclude:: /examples/adder/src/adder.vir
+.. literalinclude:: /guide/adder/src/adder.vir
     :language: virdant
     :dedent:
     :lines: 28-32
@@ -67,7 +72,7 @@ Second Half Adder
 -----------------
 Our second `HalfAdder` submodule is this:
 
-.. literalinclude:: /examples/adder/src/adder.vir
+.. literalinclude:: /guide/adder/src/adder.vir
     :language: virdant
     :dedent:
     :lines: 34-38
@@ -87,7 +92,7 @@ which drive the outputs `sum` and `carry_out`.
 These lines should be straightforward,
 as long as you remember `||` is how we say logical OR in Virdant:
 
-.. literalinclude:: /examples/adder/src/adder.vir
+.. literalinclude:: /guide/adder/src/adder.vir
     :language: virdant
     :dedent:
     :lines: 21-26
@@ -97,7 +102,7 @@ Waveform
 --------
 The waveform for this example is much larger:
 
-.. vcd:: ../../examples/adder/fulladder.vcd
+.. vcd:: ../adder/fulladder.vcd
 
     label inputs
     signal top.a
@@ -133,7 +138,7 @@ This is because we have a driver `it.a <= a` (where `it` refers to `halfadder_0`
 If we were only interested in the behavior of the top-level ports,
 we could trim it down:
 
-.. vcd:: ../../examples/adder/fulladder.vcd
+.. vcd:: ../adder/fulladder.vcd
 
     label Inputs
     signal top.a
@@ -148,7 +153,7 @@ Or if we were trying to understand a bug in a design,
 we might look at a few key ports from different levels of
 the module hierarchy:
 
-.. vcd:: ../../examples/adder/fulladder.vcd
+.. vcd:: ../adder/fulladder.vcd
 
     label Inputs
     signal top.a

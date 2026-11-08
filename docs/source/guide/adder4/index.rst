@@ -4,9 +4,13 @@ The joy of the `FullAdder` is that they can be chained together to add numbers o
 
 We define a module `Adder4`, which can add together any two 4-bit numbers:
 
-.. literalinclude:: /examples/adder/src/adder.vir
+.. literalinclude:: /guide/adder/src/adder.vir
     :language: virdant
     :lines: 41-80
+
+.. note::
+
+    This is the last in a series of three modules which appear in full in :doc:`../adder/index`.
 
 A quick survey of the code shows us that there are three `incoming` ports:
 `a` `b` and `carry_in`,
@@ -41,7 +45,7 @@ In the same way, in `Adder4`, we line up corresponding pairs of bits:
 
 Consult this slightly messy diagram for an idea of what goes where:
 
-.. inline-svg:: guide/adder/adder4.svg
+.. inline-svg:: guide/adder4/adder4.svg
     :align: center
 
 .. note::
@@ -60,7 +64,7 @@ Chaining Full Adders
 --------------------
 The operation of `Adder4` is based on the four `FullAdder` which are all chained together.
 
-.. literalinclude:: /examples/adder/src/adder.vir
+.. literalinclude:: /guide/adder/src/adder.vir
     :language: virdant
     :lines: 61-65
     :dedent:
@@ -140,7 +144,7 @@ Waveform
 --------
 I'll leave this waveform for you to look over.
 
-.. vcd:: ../../examples/adder/trace.svg
+.. vcd:: ../adder/trace.svg
 
    label Ports
    signal top.a:dec

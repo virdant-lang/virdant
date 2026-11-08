@@ -1,20 +1,10 @@
-Adder
-=====
-This next example is easy, but a bit long.
-We will split it up into multiple lessons.
+:orphan:
 
-We will learn how to add numbers together (the hard way).
-In doing so, we will learn about combinational logic,
-driver blocks, and submodules.
+Complete Adder Example
+----------------------
+Here is the complete adder example code used in
+:doc:`../halfadder/index`, :doc:`../fulladder/index`, and :doc:`../adder4/index`:
 
-Our adder is made up of three different module definitions,
-`HalfAdder` `FullAdder` and `Adder4`.
-
-We will look at each of these three modules in turn.
-
-.. toctree::
-    :maxdepth: 1
-
-    halfadder
-    fulladder
-    adder4
+.. literalinclude:: /guide/adder/src/adder.vir
+    :caption: adder.vir
+    :language: virdant

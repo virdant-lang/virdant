@@ -15,7 +15,11 @@ DIRTY         = $(shell test -n "$$(git -C $(BASEDIR) status --porcelain 2>/dev/
 export VIRDANT_COMMIT = $(COMMIT)$(DIRTY)
 
 auto: Makefile # rustdocs
-	retry=0; until $(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O); do \
+	# dirhtml writes each document as <docname>/index.html, so internal
+	# links read .../guide/halfadder/ instead of .../guide/halfadder/index.html.
+	# (Invoked with -b rather than -M so output lands in build/html,
+	# where serve.sh, push, and rustdocs expect it.)
+	retry=0; until $(SPHINXBUILD) -b dirhtml "$(SOURCEDIR)" "$(BUILDDIR)/html" $(SPHINXOPTS) $(O); do \
 	  if [ $$retry -ge 5 ]; then exit 1; fi; \
 	  if grep -q "FileNotFoundError.*searchindexfn" /tmp/sphinx-err-*.log 2>/dev/null; then \
 	    echo "Sphinx race condition detected, retrying in 1s..."; \

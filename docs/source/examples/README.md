@@ -10,10 +10,13 @@ creates one:
 └── src/            the example's packages (one package per .vir file)
 ```
 
-These projects double as the live sources for the documentation: the
-guide pages `literalinclude` files from here, and the vir-virtue test
-runner (see the root `Makefile`) runs `vir check` on every project, so a
-broken example fails `make test`.
+These are standalone Virdant projects exercised by the vir-virtue test
+runner (see the root `Makefile`): it runs `vir check` on every project,
+so a broken example fails `make test`.
+
+The guide lessons each carry their own copy of their project directly
+inside `guide/<lesson>/` (so each lesson is a self-contained Virdant
+project); this directory holds the examples used by other docs pages.
 
 Notes:
 

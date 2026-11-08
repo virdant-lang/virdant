@@ -5,7 +5,7 @@ Let's start by see how to define a module in Virdant.
 
 `Passthrough` is a module which takes in some data and immediately sends it back out unchanged.
 
-.. literalinclude:: /examples/passthrough/src/passthrough.vir
+.. literalinclude:: /guide/passthrough/src/passthrough.vir
     :caption: passthrough.vir
     :language: virdant
 
@@ -25,7 +25,7 @@ Ports
 -----
 Ports are signals that allow communication between the module and the outside world.
 
-.. literalinclude:: /examples/passthrough/src/passthrough.vir
+.. literalinclude:: /guide/passthrough/src/passthrough.vir
     :language: virdant
     :dedent:
     :lines: 2-3
@@ -62,7 +62,7 @@ Drivers
 -------
 The last statement in our module is a driver statement:
 
-.. literalinclude:: /examples/passthrough/src/passthrough.vir
+.. literalinclude:: /guide/passthrough/src/passthrough.vir
     :language: virdant
     :dedent:
     :lines: 5
@@ -85,7 +85,7 @@ Waveform
 What does this module actually do though?
 Let's take a look at a run through the waveform viewer:
 
-.. vcd:: ../examples/passthrough/trace.svg
+.. vcd:: trace.svg
 
     label Input
     signal top.inp:dec

@@ -4,7 +4,7 @@ In this next example, we will demonstrate how to use registers, the stateful com
 
 `Buffer` is a module which takes in some data and then, on the next clock cycle, sends it back out.
 
-.. literalinclude:: /examples/buffer/src/buffer.vir
+.. literalinclude:: /guide/buffer/src/buffer.vir
     :caption: buffer.vir
     :language: virdant
 
@@ -66,7 +66,7 @@ Latched vs Continuous Drivers
 -----------------------------
 Just after `buffer` is declared, we see two drivers:
 
-.. literalinclude:: /examples/buffer/src/buffer.vir
+.. literalinclude:: /guide/buffer/src/buffer.vir
     :language: virdant
     :dedent:
     :lines: 8-9
@@ -109,7 +109,7 @@ Waveform
 --------
 Let's look at the waveform viewer again.
 
-.. vcd:: ../examples/buffer/trace.svg
+.. vcd:: trace.svg
 
     label Clock
     signal top.clock:clk
