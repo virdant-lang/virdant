@@ -1,20 +1,88 @@
 //! Standalone utility functions: the package-name rule shared by the
 //! compiler and the tools, word/nat literal parsing, bit-width helpers
-//! (`min_word_width`, `log2`), and `check_db` to run all checks and
-//! partition diagnostics by severity.
+//! (`min_word_width`, `log2`), `check_db` to run all checks and
+//! partition diagnostics by severity, and (for tests and in-crate
+//! tooling such as the simulator's `#[cfg(test)]` fixtures) a
+//! self-contained `Db` builder from a source directory plus an
+//! explicit library directory.
 //!
-//! Filesystem loading of `.vir` files (directory scans, `Db`
-//! construction from files) lives in the tools' crate
-//! (`vircommon::load`), since the core is also built for wasm.
+//! The tools' full loading machinery lives in the tools' crate
+//! (`vircommon::load`), since the core is also built for wasm; the
+//! `db_from_dir_with_lib` here is the minimal in-crate seam the sim
+//! tests need.
 
 use std::sync::Arc;
 
-use bstr::{BStr, BString};
+use bstr::BStr;
+use bstr::BString;
 use bstr::ByteSlice as _;
 
 use crate::common::{Width, WordValue};
 use crate::db::Db;
 use crate::diagnostics::{Diagnostic, DiagnosticLevel};
+
+#[cfg(not(target_arch = "wasm32"))]
+use crate::common::source::Source;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::package::PackageTable;
+
+#[cfg(not(target_arch = "wasm32"))]
+fn db_from_name_text_pairs(files: Vec<(BString, BString)>) -> Db {
+    let mut db = Db::new();
+
+    let deduped: indexmap::IndexMap<BString, BString> = files.into_iter().collect();
+    db.set_packages(PackageTable::new(deduped.keys().cloned().collect()));
+    let packages = db.get_packages();
+    for (name, text) in deduped {
+        let package = packages.id(name.as_bstr()).expect("package missing from table");
+        db.set_source(package, Source::new(package, text));
+    }
+    db
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn load_lib_dir<P: Into<std::path::PathBuf>>(lib_dir: P) -> Vec<(BString, BString)> {
+    let lib_dir = std::fs::canonicalize(lib_dir.into())
+        .expect("Could not find lib directory");
+    let mut filepaths: Vec<std::path::PathBuf> = std::fs::read_dir(&lib_dir)
+        .expect(&format!("Could not open directory: {lib_dir:?}"))
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|filepath| match filepath.extension() {
+            Some(ext) => ext.to_string_lossy() == "vir",
+            None => false,
+        })
+        .collect();
+    // Deterministic package ordering regardless of read_dir order.
+    filepaths.sort();
+    filepaths.into_iter().map(Source::load_file).collect()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn load_source_dir<P: Into<std::path::PathBuf>>(source_dir: P) -> Vec<(BString, BString)> {
+    let source_dir: std::path::PathBuf = source_dir.into();
+    let mut filepaths: Vec<std::path::PathBuf> = std::fs::read_dir(&source_dir)
+        .expect(&format!("Could not open directory: {source_dir:?}"))
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|filepath| match filepath.extension() {
+            Some(ext) => ext.to_string_lossy() == "vir",
+            None => false,
+        })
+        .collect();
+    filepaths.sort();
+    filepaths.into_iter().map(Source::load_file).collect()
+}
+
+/// Build a self-contained `Db` from a source directory plus an explicit
+/// library directory (the in-crate seam the sim's `#[cfg(test)]`
+/// fixtures need; tools use `vircommon::load` instead).  Every `.vir`
+/// file in either directory is loaded, package name = file stem.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn db_from_dir_with_lib<P, Q>(source_dir: P, lib_dir: Q) -> Db
+where P: Into<std::path::PathBuf>, Q: Into<std::path::PathBuf> {
+    let mut files = load_lib_dir(lib_dir);
+    files.extend(load_source_dir(source_dir));
+    db_from_name_text_pairs(files)
+}
 
 /// Whether `name` is a valid package name: it must match the lexer's
 /// identifier rule `[_a-zA-Z][_a-zA-Z0-9]*` (see `syntax/token.rs`),

@@ -138,7 +138,7 @@ pub(crate) struct TypeLayout {
     /// The typedef's (simple) name, for display.
     #[allow(dead_code)]
     name: BString,
-    kind: TypeLayoutKind,
+    pub(crate) kind: TypeLayoutKind,
 }
 
 /// Index of precomputed bit-layout data for every user-defined type
@@ -233,7 +233,7 @@ impl TypeLayoutIndex {
         self.types.type_of(id)
     }
 
-    fn layout_of(&self, typ: TypeId) -> Option<&TypeLayout> {
+    pub(crate) fn layout_of(&self, typ: TypeId) -> Option<&TypeLayout> {
         self.layouts.get(self.types.type_of(typ))
     }
 

@@ -19,7 +19,7 @@ use crate::analysis::drivers::{Driver, WriteIndex};
 use crate::analysis::memory_image::{self, MemoryImageKind};
 use crate::types::Type;
 use crate::common::ComponentKind;
-use crate::sim::eval::Value;
+use crate::sim::value::Value;
 use crate::analysis::elaboration::{SignalId, Elaboration};
 use crate::db::Db;
 use crate::sim::expr::{Expr, ExprPayload, Referent, driver_to_expr, initial_to_expr, memwrite_to_exprs, MemWriteExprs};

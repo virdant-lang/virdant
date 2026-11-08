@@ -1,19 +1,28 @@
-//! The `Sim` runtime: combinational propagation (`flow`), register
-//! transfer on clock edges, a `SimLock` for batching writes, clock
-//! attachment, and the `run` loop draining the scheduler, plus
-//! elaboration lookup and callback registration helpers (`at`,
-//! `after`, `on_change`, `on_clock`).
+//! The `Sim` facade: the single public simulator type.  It owns every
+//! engine-agnostic piece of the runtime — the event scheduler, the
+//! free-running clock table, the persistent watcher table with its
+//! bucketed dispatch, simulated time, and the VCD offset/time-marker
+//! hooks — and forwards value-level work to the engine selected at
+//! construction (`Inner`).  Today that is always the legacy
+//! interpreter engine (`sim::legacy::engine::LegacySim`); the VM
+//! engine arrives behind the same facade in a later phase, at which
+//! point `Sim::new`'s default switches to `Engine::Vm`.
+//!
+//! Engines expose value-level primitives only (`flow`, `flow_all`,
+//! `set_without_flow`, `tick_prop`, `get`, `peek`, `circuit`, the
+//! changed-set/watched bookkeeping, and the
+//! `on_structural_change`/`on_clock_attached` hooks), so watcher
+//! callbacks — `Box<dyn FnMut(&mut Sim)>` — are always invoked with
+//! the facade, never with an engine.
 
 use crate::analysis::symbols::SymbolId;
 use crate::analysis::elaboration::{SignalId, Elaboration};
 use crate::common::{ComponentKind, Width};
 use crate::db::Db;
 use crate::sim::bits::BitPat;
-use crate::sim::circuit::Circuit;
-use crate::sim::eval::{Context, Value};
 use crate::sim::layout::{TypeId, TypeLayoutIndex};
 use crate::sim::scheduler::{Callback, Event, EventCallback, Scheduler};
-use crate::sim::state::State;
+use crate::sim::value::Value;
 use crate::types::Type;
 use std::cell::RefCell;
 use std::io::Write;
@@ -23,6 +32,41 @@ use std::sync::Arc;
 
 use bstr::{BStr, BString};
 
+/// Which simulation engine a [`Sim`] runs on.
+///
+/// `Vm` is the compiled-bytecode engine (`sim::vm`, ported in a later
+/// phase); `Legacy` is the tree-walking interpreter (`sim::legacy`).
+/// `Sim::new` currently defaults to `Legacy`; once the VM engine lands
+/// the default becomes `Vm` and `Legacy` is selected explicitly (e.g.
+/// by `vir run --legacy`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Engine {
+    Vm,
+    Legacy,
+}
+
+/// The engine behind a [`Sim`].  Only the legacy engine exists so far;
+/// the `Vm` arm is added with `sim::vm` in a later phase.
+enum Inner {
+    Legacy(crate::sim::legacy::engine::LegacySim),
+}
+
+macro_rules! dispatch_mut {
+    ($inner:expr, $engine:ident => $body:expr) => {
+        match &mut $inner {
+            Inner::Legacy($engine) => $body,
+        }
+    };
+}
+
+macro_rules! dispatch_ref {
+    ($inner:expr, $engine:ident => $body:expr) => {
+        match &$inner {
+            Inner::Legacy($engine) => $body,
+        }
+    };
+}
+
 /// Strategy for choosing the value of uninitialized registers and
 /// top-level incoming ports.  There are no X or Z values: every cell
 /// always carries a fully-defined bit pattern.
@@ -31,14 +75,39 @@ pub enum InitStrategy {
     /// Pseudorandom bit patterns (seeded from the wall clock).
     #[default]
     Random,
+    /// Pseudorandom bit patterns, seeded from an explicit value: two
+    /// sims built with the same seed over the same design carry
+    /// bit-identical uninitialized values, so their traces are
+    /// directly comparable (differential testing).
+    Seeded(u64),
 }
 
 impl InitStrategy {
-    pub(super) fn value(&self, typ_id: TypeId, width: Width, rng: &mut u64) -> Value {
+    /// The seed for the uninitialized-value RNG: a fresh wall-clock
+    /// value for `Random`, the given value for `Seeded`.
+    pub(super) fn rng_seed(&self) -> u64 {
         match self {
-            InitStrategy::Random => Value::new(typ_id, BitPat::random(width, rng)),
+            InitStrategy::Random => initial_seed(),
+            InitStrategy::Seeded(seed) => *seed,
         }
     }
+
+    pub(super) fn value(&self, typ_id: TypeId, width: Width, rng: &mut u64) -> Value {
+        match self {
+            InitStrategy::Random | InitStrategy::Seeded(_) =>
+                Value::new(typ_id, BitPat::random(width, rng)),
+        }
+    }
+}
+
+/// A seed for the random init strategy, derived from the wall clock so
+/// two runs see different uninitialized values.
+fn initial_seed() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0x9E3779B97F4A7C15)
 }
 
 
@@ -70,13 +139,40 @@ impl<'a> Drop for SimLock<'a> {
 }
 
 pub struct Sim {
-    circuit: Circuit,
-    state: State,
+    inner: Inner,
     sched: Scheduler,
+    /// Free-running clocks registered by `attach_clock`.  Each edge is
+    /// stepped directly by the run loop when it beats every queued
+    /// user event; see `ClockHandle` and `Sim::run`.
+    clocks: Vec<ClockHandle>,
     /// Persistent watcher table (`on_change`/`on_clock`): registered
     /// once, swept in place at each settlement.  No per-fire
     /// re-registration, no queue rebuild.
     watchers: Vec<Watcher>,
+    /// Watchers bucketed by the signal they observe:
+    /// Watcher buckets, densely indexed by the observed signal's
+    /// index: `watcher_buckets[signal_index]` lists the registration
+    /// indices (into `watchers`) of every watcher observing that
+    /// signal, in registration order.  Built by `on_change`/`on_clock`
+    /// (registration appends to the table and to the signal's bucket)
+    /// and rebuilt after the shutdown retain prunes dead entries, so
+    /// the buckets always cover exactly the live table.  A dispatch
+    /// pass visits only the buckets of signals that changed since the
+    /// last sweep (or the table itself, when the changed set
+    /// outnumbers the table), so the sweep cost follows what could
+    /// actually fire, not the table size.
+    watcher_buckets: Vec<Vec<usize>>,
+    /// Reusable queue of registration indices for one bucket-walk
+    /// dispatch pass: the union of the changed signals' buckets,
+    /// sorted ascending.  Cleared and refilled each pass, never
+    /// reallocated.
+    dispatch_queue: Vec<usize>,
+    /// True while the watcher dispatch loop is running.  A nested
+    /// `unlock()` (a callback's own `lock()`/`set()`/`unlock()`) must
+    /// only settle the circuit (`flow`), never re-sweep the table —
+    /// dispatch happens exactly once per settlement, in the outermost
+    /// unlock.
+    dispatching: bool,
     /// Optional callback fired whenever simulated time moves forward
     /// (`advance_time`), handed the new time in picoseconds.  The VCD
     /// dumper registers one so that pure time advancement — no value
@@ -90,12 +186,28 @@ pub struct Sim {
     /// render a visible sliver after the clock edge that caused them,
     /// teaching that logic does not settle instantaneously.
     vcd_offset_ps: u64,
-    /// True while the watcher dispatch loop is running.  A nested
-    /// `unlock()` (a callback's own `lock()`/`set()`/`unlock()`) must
-    /// only settle the circuit (`flow`), never re-sweep the table —
-    /// dispatch happens exactly once per settlement, in the outermost
-    /// unlock.
-    dispatching: bool,
+}
+
+/// One free-running clock registered by `Sim::attach_clock`.
+///
+/// Replaces the self-re-arming `AfterDelay` toggle event the engine
+/// used to schedule per half period: the run loop steps an edge
+/// directly whenever it beats every queued user event, so a clock
+/// cycle costs no heap push (with its boxed-callback allocation), no
+/// heap pop, and no scheduler dispatch.
+///
+/// `next` is the pending edge's `(time_ps, seq)` pair, compared in the
+/// scheduler heap's own order — earliest time, then FIFO sequence —
+/// so a tie against a user event fires in exactly the order the edge
+/// would have had as a heap entry.  It is `None` only while the edge
+/// is being processed, mirroring the old heap state during the toggle
+/// callback: the popped entry was gone and the next one was registered
+/// only after the settlement, so a re-entrant `run()` from a
+/// settlement callback saw no pending edge for this clock.
+struct ClockHandle {
+    signal: SignalId,
+    half_period_ps: u64,
+    next: Option<(u64, u64)>,
 }
 
 /// How a watcher decides to fire.
@@ -179,49 +291,35 @@ impl std::fmt::Debug for Sim {
 }
 
 impl Sim {
+    /// Build a `Sim` with the default engine.  The default is the
+    /// legacy interpreter engine until the VM engine lands on this
+    /// facade (a later phase), at which point it becomes `Engine::Vm`.
     pub fn new(db: &Db, top: SymbolId, strategy: InitStrategy) -> Sim {
-        let circuit = Circuit::new(db, top);
-
-        let mut sim = Sim {
-            state: State::new(circuit.elaboration.as_ref(), &circuit.type_layout_index, &strategy, &circuit.memories),
-            circuit,
-            sched: Scheduler::new(),
-            watchers: Vec::new(),
-            time_marker: None,
-            vcd_offset_ps: 0,
-            dispatching: false,
-        };
-
-        sim.apply_initials();
-        sim.flow_all();
-        sim
+        Self::with_engine(db, top, strategy, Engine::Legacy)
     }
 
-    /// Set every register with an `initial` statement to its initial value
-    /// (registers without one keep their `InitStrategy` value).
-    /// `initial` expressions are constant, so they are evaluated in an
-    /// empty context; propagation happens in the following `flow_all`.
-    fn apply_initials(&mut self) {
-        let initials: Vec<(SignalId, Arc<crate::sim::expr::Expr>)> = self
-            .circuit
-            .initial_exprs
-            .iter()
-            .map(|(id, expr)| (*id, expr.clone()))
-            .collect();
-        if initials.is_empty() {
-            return;
-        }
+    /// Build a `Sim` on an explicit engine.
+    pub fn with_engine(db: &Db, top: SymbolId, strategy: InitStrategy, engine: Engine) -> Sim {
+        let inner = match engine {
+            Engine::Vm => todo!("the VM simulator arrives in a later phase"),
+            Engine::Legacy => Inner::Legacy(crate::sim::legacy::engine::LegacySim::new(db, top, &strategy)),
+        };
 
-        let context = Context::new(vec![], self.circuit.type_layout_index.clone());
-        for (signal_id, expr) in initials {
-            let value = expr.eval(&context);
-            self.state.set_val(signal_id, value);
+        Sim {
+            inner,
+            sched: Scheduler::new(),
+            clocks: Vec::new(),
+            watchers: Vec::new(),
+            watcher_buckets: Vec::new(),
+            dispatch_queue: Vec::new(),
+            dispatching: false,
+            time_marker: None,
+            vcd_offset_ps: 0,
         }
-        self.flow();
     }
 
     pub(super) fn type_layout_index(&self) -> &TypeLayoutIndex {
-        &self.circuit.type_layout_index
+        dispatch_ref!(self.inner, engine => &engine.circuit().type_layout_index)
     }
 
     /// The circuit's [`TypeLayoutIndex`]: the public seam for tools that
@@ -230,7 +328,7 @@ impl Sim {
     /// tester, which evaluates script expressions over [`Value`]s and
     /// renders them round-trippably.
     pub fn layouts(&self) -> &TypeLayoutIndex {
-        &self.circuit.type_layout_index
+        self.type_layout_index()
     }
 
     /// Encode a constructor application as a [`Value`] of type `typ`:
@@ -296,14 +394,13 @@ impl Sim {
     /// logic has settled).
     pub fn decode_ctor(&self, value: &Value) -> Option<Ctor> {
         let (slot, payload_bits) = self
-            .circuit
-            .type_layout_index
+            .type_layout_index()
             .decode_ctor(value.typ_id(), &value.bitpat())?;
         let payloads = slot
             .param_types
             .iter()
             .zip(payload_bits)
-            .map(|(typ, bits)| Value::new(self.circuit.type_layout_index.type_id(typ), bits))
+            .map(|(typ, bits)| Value::new(self.type_layout_index().type_id(typ), bits))
             .collect();
         let name = String::from_utf8(slot.name.to_vec()).unwrap_or_else(|_| {
             panic!("constructor name was not valid UTF-8: {:?}", slot.name)
@@ -331,228 +428,16 @@ impl Sim {
         crate::sim::vcd::attach(self, writer);
     }
 
-    /// Evaluate every driven component, repeating until the
-    /// combinational network reaches a fixpoint.
-    ///
-    /// Used at construction: there are no X values, so a component whose
-    /// random-initialized bits happen to equal its computed value would
-    /// never look "changed" and its dependents would keep stale random
-    /// values.  A full-network pass makes every value consistent with
-    /// the (initial) register values before the run starts.
-    fn flow_all(&mut self) {
-        loop {
-            let mut changed = false;
-
-            let ids: Vec<SignalId> = self
-                .circuit
-                .elaboration
-                .components()
-                .iter()
-                .map(|c| c.id())
-                .collect();
-            for signal_id in ids {
-                // Alias-driven components (bare-reference drivers and
-                // socket connections) have no expr of their own: their
-                // value is a copy of the peer's.  A register in this
-                // position must still get its pending staged here —
-                // otherwise it would carry the random `InitStrategy`
-                // pending into the first clock edge (the dirty-driven
-                // `flow` only restages it when the peer's value changes,
-                // which may not happen before the first edge).
-                if let Some(peer_id) = self.circuit.aliases[signal_id.index()] {
-                    if self.circuit.registers[signal_id.index()] {
-                        self.state.set_reg(signal_id, self.state.get(peer_id));
-                    }
-                    continue;
-                }
-                let Some(expr) = self.circuit.exprs[signal_id.index()].clone() else {
-                    continue;
-                };
-                let context = Context::context_for_component(&self.circuit, &self.state, signal_id);
-                let new_value = expr.eval(&context);
-                if self.circuit.registers[signal_id.index()] {
-                    // A register's driver computes its *next* value; the
-                    // current value only changes on a clock edge.
-                    self.state.set_reg(signal_id, new_value);
-                } else if self.state.get(signal_id) != new_value {
-                    self.state.set_val(signal_id, new_value);
-                    changed = true;
-                }
-            }
-
-            // Socket-connection aliases copy their peer's value.
-            let alias_pairs: Vec<(SignalId, SignalId)> = self
-                .circuit
-                .elaboration
-                .components()
-                .iter()
-                .filter_map(|c| {
-                    self.circuit.aliases[c.id().index()]
-                        .map(|source| (c.id(), source))
-                })
-                .collect();
-            for (sink, source) in alias_pairs {
-                let value = self.state.get(source);
-                if self.state.get(sink) != value {
-                    self.state.set_val(sink, value);
-                    changed = true;
-                }
-            }
-
-            if !changed {
-                break;
-            }
-        }
-        self.state.clear_dirty();
-    }
-
     /// Apply one rising clock edge on `signal_id`: transfer every
     /// register this signal clocks (through the sensitivity graph),
     /// then settle (`flow`) and dispatch value-change watchers — the
     /// same settlement an edge applied through `set` would get.
     pub fn tick(&mut self, signal_id: SignalId) {
-        self.tick_inner(signal_id);
+        dispatch_mut!(self.inner, engine => {
+            engine.tick_prop(signal_id);
+            engine.flow();
+        });
         self.unlock();
-    }
-
-    /// The propagation-only core of [`Sim::tick`]: register transfers
-    /// through the sensitivity graph plus `flow`, with no watcher
-    /// dispatch.  The recursion inside `tick_prop` uses this so inner
-    /// edges settle silently; watchers dispatch once, on the outermost
-    /// `tick`.
-    fn tick_inner(&mut self, signal_id: SignalId) {
-        self.tick_prop(signal_id);
-        self.flow();
-    }
-
-    /// Commit a rising edge of `signal_id`'s clock domain, in two
-    /// phases so that no member of the domain ever sees another
-    /// member's post-edge value — the nonblocking semantics of the
-    /// emitted Verilog.
-    ///
-    /// Phase 1 evaluates every memory's write site — (enable,
-    /// address, data) — against pre-edge values and stages the
-    /// resulting writes (registers need no staging: `flow` already
-    /// sampled their next values into the `set_vals` pendings, so
-    /// their write sites ran pre-edge too).  Phase 2 then transfers
-    /// the registers and applies the staged memory writes together.
-    /// Committing member by member instead — the register
-    /// immediately, the memory write site evaluated against live
-    /// values — would let a memory declared after a register sample
-    /// that register's post-edge value, making a write site's
-    /// sampling depend on declaration order.
-    ///
-    /// Each member commits at most once per settlement (the
-    /// `mark_committed` guard), so a clock alias rising again later
-    /// in the same flow re-runs both phases as a no-op.
-    fn commit_domain(&mut self, signal_id: SignalId) {
-        let m = self.circuit.clock_sensitivity_count(signal_id);
-        // Phase 1: stage memory write sites against pre-edge values.
-        for i in 0..m {
-            let id = self.circuit.clock_sensitivity_at(signal_id, i);
-            if self.circuit.is_memory(id) {
-                self.stage_memory_write(id);
-            }
-        }
-        // Phase 2: transfer the registers, then apply the staged
-        // writes.  Neither reads live values (the register copies
-        // its staged pending; the write applies a sampled word), so
-        // the two loops cannot interact.
-        for i in 0..m {
-            let id = self.circuit.clock_sensitivity_at(signal_id, i);
-            if !self.circuit.is_memory(id) {
-                self.state.transfer(id);
-            }
-        }
-        for (mem_id, index, value) in self.state.drain_pending_memory_writes() {
-            self.state.set_memory_word(mem_id, index, value);
-        }
-    }
-
-    /// Stage a memory's write site for the current clock-edge commit:
-    /// sample the (enable, address, data) expressions against
-    /// pre-edge values and queue the write
-    /// (`State::stage_memory_write`) without touching the words
-    /// (read-during-write sees the old value because the words are
-    /// only updated by phase 2; at most one write fires — overlapping
-    /// guards are rejected by analysis).
-    fn stage_memory_write(&mut self, mem_id: SignalId) {
-        // At most one commit per settlement, like a register: a clock
-        // alias rising again later in the same flow must not re-write
-        // with post-edge values.
-        if !self.state.mark_committed(mem_id) {
-            return;
-        }
-        let (enable, address, data) = {
-            let writes = &self.circuit.memory(mem_id).writes;
-            (
-                writes.enable.clone(),
-                writes.address.clone(),
-                writes.data.clone(),
-            )
-        };
-        let context = Context::context_for_component(&self.circuit, &self.state, mem_id);
-        if !enable.eval(&context).get_bit(0) {
-            return;
-        }
-        let index = address.eval(&context).to_u64() as usize;
-        let value = data.eval(&context);
-        self.state.stage_memory_write(mem_id, index, value);
-    }
-
-    fn tick_prop(&mut self, signal_id: SignalId) {
-        // Iterate by index against the immutable Circuit so we can recurse
-        // mutably into `self.tick` / `self.transfer` without cloning the
-        // sensitivity IndexSet on every step.
-        let n = self.circuit.sensitivity_count(signal_id);
-        for i in 0..n {
-            let inner = self.circuit.sensitivity_at(signal_id, i);
-            self.tick_inner(inner);
-        }
-
-        self.commit_domain(signal_id);
-    }
-
-    fn flow(&mut self) {
-        while let Some(signal_id) = self.state.pop_dirty() {
-            let n = self.circuit.sensitivity_count(signal_id);
-            for i in 0..n {
-                let update_signal_id = self.circuit.sensitivity_at(signal_id, i);
-                // Aliases (socket connections `:=:`, and bare-reference
-                // drivers resolved by the elaboration): the value is a
-                // copy of the peer's.  Edge detection below applies to
-                // alias copies too (e.g. a clock routed through a bare
-                // reference or a socket connection).
-                let new_value = if let Some(peer_id) = self.circuit.aliases[update_signal_id.index()] {
-                    self.state.get(peer_id)
-                } else {
-                    let expr = self.circuit.exprs[update_signal_id.index()].clone().unwrap();
-                    let context = Context::context_for_component(&self.circuit, &self.state, update_signal_id);
-                    let v = expr.eval(&context);
-                    v
-                };
-                if self.circuit.registers[update_signal_id.index()] {
-                    self.state.set_reg(update_signal_id, new_value);
-                } else {
-                    // orchestrator (flow + edge transfers + watchers) and
-                    // would recurse re-entrantly into the loop we're in.
-                    let old = self.state.get(update_signal_id);
-                    let rising = is_rising(&old, &new_value);
-                    self.state.set_val(update_signal_id, new_value);
-                    // If this signal is a clock wire that just had a
-                    // rising edge (e.g. a submodule port driven by `clk`),
-                    // transfer the registers it clocks — the same thing
-                    // `set()` does for the top-level clock.
-                    if rising {
-                        self.commit_domain(update_signal_id);
-                    }
-                }
-            }
-        }
-        // The settlement has reached quiescence.  Reset the per-settlement
-        // commit markers so the next settlement's clock edges (including
-        // alias-domain edges detected mid-`flow`) commit fresh.
-        self.state.clear_committed();
     }
 
     /// Settle the circuit after a batch of writes: propagate (`flow`),
@@ -566,102 +451,242 @@ impl Sim {
     /// while transitions were still uncommitted, re-draining freshly
     /// re-registered watchers (one extra callback fire per event).
     fn unlock(&mut self) {
-        self.flow();
+        dispatch_mut!(self.inner, engine => engine.flow());
 
         if self.dispatching {
             return;
         }
 
-        self.dispatching = true;
-        // Sweep-and-fire loop: each pass fires, in registration order,
-        // every watcher whose observed value differs from the last value
-        // it saw.  Callbacks may drive signals (settled by their nested
-        // flow-only unlocks) or register more watchers; if any callback
-        // fired, sweep again until a full pass fires nothing — cascades
-        // still settle within this same unlock, without nested sweeps.
-        // The loop runs to quiescence even past `finish()`: watchers
-        // firing after the shutdown request die instead of persisting
-        // (as the old re-arm check did), but their final cascades still
-        // fire.
-        loop {
-            if !self.dispatch_pass() {
-                break;
+        // Skip the sweep entirely when no watched signal's stored value
+        // has changed since the last sweep pass that observed
+        // everything: a watcher fires only on a value change (`Change`)
+        // or a 0→1 transition of bit 0 (`ClockRising`), and both
+        // require the observed signal's stored value to have changed,
+        // so a settlement with no write to a watched signal cannot fire
+        // anything.  The flag is raised by the engine `State`'s write
+        // primitives on every write to a watched signal (watched-only
+        // marking: unwatched signals have no watcher to observe them,
+        // so their writes skip the changed-set bookkeeping entirely),
+        // including `set_without_flow` (edge-driven register transfers
+        // included) and the register transfers inside this sweep's own
+        // callbacks; each sweep pass consumes it together with the
+        // per-signal changed set.
+        if self.changed_since_dispatch() {
+            self.dispatching = true;
+            // Sweep-and-fire loop: each pass fires, in registration
+            // order, every watcher whose observed value differs from
+            // the last value it saw — visiting only the watchers whose
+            // signals were actually written since the previous pass
+            // started.  Callbacks may drive signals (settled by their
+            // nested flow-only unlocks) or register more watchers; the
+            // loop ends when the changed set is empty, i.e. when a pass
+            // has observed everything with no fresh writes — the same
+            // quiescence the old fired-until-nothing loop reached,
+            // without re-walking watchers over changes they already
+            // observed.  The loop runs to quiescence even past
+            // `finish()`: watchers firing after the shutdown request
+            // die instead of persisting (as the old re-arm check did),
+            // but their final cascades still fire.
+            while self.changed_signal_count() != 0 {
+                self.dispatch_pass();
             }
+            self.dispatching = false;
         }
-        self.dispatching = false;
 
         // Watchers whose callback ran after `finish()` was requested do
         // not survive into a subsequent `run()` (the old one-shot queue
-        // achieved this by skipping the re-register step).
+        // achieved this by skipping the re-register step).  Skipped
+        // sweeps cannot affect it: a watcher only becomes dead inside
+        // `dispatch_pass`, and a skipped sweep runs no callback, so the
+        // table is unchanged either way.
         if self.sched.is_shutdown_requested() {
             self.watchers.retain(|w| w.alive);
+            self.rebuild_buckets();
         }
     }
 
-    /// One sweep-and-fire pass over the watcher table, in registration
-    /// order.  Each watcher compares the live value against its own
-    /// last-seen value; watchers that observe a change fire (for
-    /// `ClockRising`, only on a 0→1 transition of bit 0), each updating
-    /// its own last-seen value as it fires.  Returns true when any
-    /// callback fired (the circuit state may have changed; the caller
-    /// sweeps again).
-    fn dispatch_pass(&mut self) -> bool {
-        let mut fired = false;
-        let mut i = 0;
-        while i < self.watchers.len() {
-            // Decide (and observe) with immutable access, then act, so
-            // the callback call below can take `&mut self`.  Watchers
-            // registered by callbacks during this pass append to the
-            // table and are visited here too; their `last` starts at the
-            // current value, so they first fire on a later transition.
-            let (fire, observed) = {
-                let watcher = &self.watchers[i];
-                let current = self.state.peek(watcher.signal);
-                if *current == watcher.last {
-                    (false, None)
-                } else {
-                    let fire = match watcher.kind {
-                        WatchKind::Change => true,
-                        WatchKind::ClockRising => {
-                            !watcher.last.get_bit(0) && current.get_bit(0)
-                        }
-                    };
-                    (fire, Some(current.clone()))
+    /// One sweep-and-fire pass over the watcher table.  Only the
+    /// watchers whose observed signal has an actual write pending
+    /// since the previous pass started are visited, in registration
+    /// order.  Each visited watcher compares the live value against
+    /// its own last-seen value; watchers that observe a change fire
+    /// (for `ClockRising`, only on a 0→1 transition of bit 0), each
+    /// updating its own last-seen value as it fires.
+    ///
+    /// Order-equivalence with the old whole-table sweep: a watcher can
+    /// only fire (or need its `last` refreshed) over a signal someone
+    /// actually wrote since the watcher's last observation, and every
+    /// write to a watched signal marks its signal in the changed set
+    /// (watched-only marking: unwatched signals have no watcher, so
+    /// they never need an entry).  So the fired
+    /// watchers are exactly the whole-table sweep's, and both walks go
+    /// in ascending registration index: the bucket walk sorts the
+    /// union of the changed signals' buckets; the table walk goes in
+    /// table order.  Firing order among simultaneously-changed
+    /// watchers is therefore identical to the unbucketed sweep,
+    /// including when watchers on different signals change in the same
+    /// settlement.
+    ///
+    /// The pass consumes the changed set at its start: it observes the
+    /// watchers whose signals somebody wrote since the previous pass
+    /// started, and any write landing while it runs (callbacks and
+    /// their nested settlements) re-marks the set for the next pass.
+    /// Two strategies, chosen per pass by whichever set is smaller:
+    /// the bucket walk visits the changed signals' buckets (cost
+    /// proportional to the watched signals that changed — the set
+    /// carries watched signals only), collapsing
+    /// the sweep toward watcher-fire cost on designs where few signals
+    /// change per settlement; the table walk visits every watcher and
+    /// pays the value compare (cost proportional to the table), which
+    /// is the cheaper side on chain designs where most signals change
+    /// every cycle but few have watchers.  Never worse than the old
+    /// whole-table sweep, which paid a full value compare per table
+    /// entry per pass.
+    fn dispatch_pass(&mut self) {
+        if self.changed_signal_count() < self.watchers.len() {
+            // Bucket walk: visit only the changed signals' buckets, in
+            // registration order (ascending index across buckets and
+            // within each).
+            self.dispatch_queue.clear();
+            let mut queue = std::mem::take(&mut self.dispatch_queue);
+            for signal_id in self.changed_signal_ids() {
+                let index = signal_id.index();
+                if let Some(bucket) = self.watcher_buckets.get(index) {
+                    queue.extend_from_slice(bucket);
                 }
-            };
-            if let Some(value) = observed {
-                self.watchers[i].last = value;
             }
-            if fire {
-                fired = true;
-                let callback = self.watchers[i].callback.clone();
-                (callback.borrow_mut())(self);
-                if self.sched.is_shutdown_requested() {
-                    self.watchers[i].alive = false;
+            self.dispatch_queue = queue;
+            self.dispatch_queue.sort_unstable();
+            // The queue now covers every watcher whose signal was
+            // written since the previous pass started.  Consuming the
+            // set here, before any callback runs, lets the pass's own
+            // writes re-mark it for the next pass; the dispatch loop
+            // ends when the set is empty, since a pass over an empty
+            // set would observe nothing.
+            self.clear_changed_since_dispatch();
+            let mut table_len = self.watchers.len();
+            let mut qi = 0;
+            while qi < self.dispatch_queue.len() {
+                let i = self.dispatch_queue[qi];
+                qi += 1;
+                self.dispatch_visit(i);
+                // Watchers registered by callbacks during this pass are
+                // visited at the end of this same pass: their indices
+                // are larger than every queued one, so the queue stays
+                // ascending and registration order is preserved —
+                // exactly as the whole-table sweep did.
+                while table_len < self.watchers.len() {
+                    self.dispatch_queue.push(table_len);
+                    table_len += 1;
                 }
             }
-            i += 1;
+        } else {
+            // Table walk: every watcher, in table (registration) order
+            // — the old whole-table sweep, which is cheaper than
+            // queueing a changed set no smaller than the table.
+            self.clear_changed_since_dispatch();
+            let mut i = 0;
+            while i < self.watchers.len() {
+                self.dispatch_visit(i);
+                i += 1;
+            }
         }
-        fired
+    }
+
+    /// Visit one watcher: compare the live value against its own
+    /// last-seen value and fire if it observed a change.  Watchers
+    /// registered by callbacks during the pass are appended to the
+    /// table by the registration methods and picked up by the caller's
+    /// walk; their `last` starts at the current value, so they first
+    /// fire on a later transition.
+    fn dispatch_visit(&mut self, i: usize) {
+        // Decide (and observe) with immutable access, then act, so
+        // the callback call below can take `&mut self`.
+        let (fire, observed) = {
+            let watcher = &self.watchers[i];
+            let current = dispatch_ref!(self.inner, engine => engine.peek(watcher.signal));
+            if *current == watcher.last {
+                (false, None)
+            } else {
+                let fire = match watcher.kind {
+                    WatchKind::Change => true,
+                    WatchKind::ClockRising => {
+                        !watcher.last.get_bit(0) && current.get_bit(0)
+                    }
+                };
+                (fire, Some(current.clone()))
+            }
+        };
+        if let Some(value) = observed {
+            self.watchers[i].last = value;
+        }
+        if fire {
+            let callback = self.watchers[i].callback.clone();
+            (callback.borrow_mut())(self);
+            if self.sched.is_shutdown_requested() {
+                self.watchers[i].alive = false;
+            }
+        }
+    }
+
+    /// Rebuild `watcher_buckets` from the live table: called after the
+    /// shutdown retain prunes dead watchers, so the buckets keep
+    /// covering exactly the table, in registration order.
+    fn rebuild_buckets(&mut self) {
+        self.watcher_buckets.clear();
+        // The prune may have dropped a signal's last watcher: rebuild
+        // the watched flags alongside the buckets, so watched-only
+        // marking keeps covering exactly the signals the live table
+        // observes.  The changed set is empty here (the sweep loop
+        // exits only when the set is empty), so no stale bit for a
+        // newly-unwatched signal survives the rebuild.
+        dispatch_mut!(self.inner, engine => engine.clear_watched());
+        for (index, watcher) in self.watchers.iter().enumerate() {
+            let idx = watcher.signal.index();
+            if self.watcher_buckets.len() <= idx {
+                self.watcher_buckets.resize(idx + 1, Vec::new());
+            }
+            self.watcher_buckets[idx].push(index);
+            dispatch_mut!(self.inner, engine => engine.set_watched(watcher.signal, true));
+        }
     }
 
     fn set_without_flow(&mut self, signal_id: SignalId, value: Value) {
-        let old = self.state.get(signal_id);
-        let rising = is_rising(&old, &value);
-        self.state.set_val(signal_id, value);
-        if rising {
-            self.commit_domain(signal_id);
-        }
+        dispatch_mut!(self.inner, engine => engine.set_without_flow(signal_id, value));
     }
 
     pub fn get(&self, signal_id: SignalId) -> Value {
-        self.state.get(signal_id)
+        dispatch_ref!(self.inner, engine => engine.get(signal_id))
+    }
+
+    /// True when some watched signal's stored value changed since the
+    /// last sweep pass that observed everything (or since
+    /// construction): the facade's sweep-skip gate, read from the
+    /// engine's changed-set bookkeeping.  Exposed for the ported
+    /// watcher-dispatch tests.
+    fn changed_since_dispatch(&self) -> bool {
+        dispatch_ref!(self.inner, engine => engine.changed_since_dispatch())
+    }
+
+    /// The number of watched signals with an actual write since the
+    /// last dispatch pass started (or since the last clear): the
+    /// dispatch loop's quiescence check and per-pass strategy switch.
+    fn changed_signal_count(&self) -> usize {
+        dispatch_ref!(self.inner, engine => engine.changed_signal_count())
+    }
+
+    fn changed_signal_ids(&self) -> impl Iterator<Item = SignalId> + '_ {
+        dispatch_ref!(self.inner, engine => engine.changed_signal_ids())
+    }
+
+    fn clear_changed_since_dispatch(&mut self) {
+        dispatch_mut!(self.inner, engine => engine.clear_changed_since_dispatch());
     }
 
     /// The interned [`TypeId`] of `signal_id`'s type — for constructing
     /// `Value`s of that type without cloning the `Type`.
     pub fn component_type_id(&self, signal_id: SignalId) -> TypeId {
-        self.circuit.type_layout_index.type_id(&self.elaboration().component(signal_id).typ())
+        self.type_layout_index().type_id(&self.elaboration().component(signal_id).typ())
     }
 
     pub fn now(&self) -> u64 {
@@ -706,12 +731,24 @@ impl Sim {
     /// and does not survive into a subsequent `run()`.
     pub fn finish(&mut self) {
         self.sched.request_shutdown();
+        // A structural change from the engines' point of view (the VM
+        // engine invalidates its schedule caches here); the legacy
+        // engine has nothing cached, so this is a no-op today.
+        dispatch_mut!(self.inner, engine => engine.on_structural_change());
     }
 
     /// Drive `signal` as a free-running square wave described by `clock`.
-    /// The signal is initialised low immediately and the first toggle is
-    /// scheduled `period_ps / 2` from now, so the first rising edge
-    /// happens at `now + period_ps / 2`.
+    /// The signal is initialised low immediately and the first rising
+    /// edge happens at `now + period_ps / 2`.
+    ///
+    /// The clock registers in the free-running clock table instead of
+    /// as a scheduler event: the run loop advances time and toggles the
+    /// signal directly whenever the next edge beats every queued user
+    /// event, skipping the per-half-period heap push/pop and callback
+    /// dispatch.  The edge keeps its old scheduler-event ordering
+    /// against user `at`/`after` events: deadline `now + half`, FIFO
+    /// sequence allocated after this settlement, exactly as the old
+    /// `after(half)` registration.
     pub fn attach_clock(&mut self, signal: SignalId, clock: Clock) {
         let half = clock.period_ps / 2;
         {
@@ -719,21 +756,38 @@ impl Sim {
             let mut lock = self.lock();
             lock.set(signal, Value::from_bool(typ_id, false));
         }
-        self.register_clock_toggle(signal, half);
+        // Engine hook for the first clock attachment (the VM engine
+        // computes its whole-design cycle plan here); a no-op on the
+        // legacy engine.
+        dispatch_mut!(self.inner, engine => engine.on_clock_attached(signal));
+        let at_ps = self.sched.time_ps().saturating_add(half);
+        let seq = self.sched.alloc_seq();
+        self.clocks.push(ClockHandle {
+            signal,
+            half_period_ps: half,
+            next: Some((at_ps, seq)),
+        });
     }
 
     /// Drain the queue.  Order:
     ///   1. All `Event::StartOfSimulation` entries fire, in FIFO order.
-    ///   2. While the queue contains an `Event::AfterDelay` entry and
-    ///      `finish()` has not been requested: pop the soonest one (FIFO
-    ///      tiebreak), advance simulated time to its deadline, and fire
-    ///      it.  Each callback may itself register more entries and
-    ///      trigger `set()`s; value-change watchers are dispatched by
-    ///      the persistent watcher table at each settlement
-    ///      (`Sim::unlock`), not through the queue.
+    ///   2. While `finish()` has not been requested, repeatedly fire
+    ///      whichever comes next, free-running clock edge or
+    ///      `Event::AfterDelay` entry, compared in the heap's own
+    ///      `(time, seq)` order — so a tie between an edge and a user
+    ///      event keeps the sequence order the edge would have had as a
+    ///      heap entry.  Each callback may itself register more entries
+    ///      and trigger `set()`s; value-change watchers are dispatched
+    ///      by the persistent watcher table at each settlement
+    ///      (`Sim::unlock`), not through the queue.  An edge that beats
+    ///      every queued event is stepped directly (`Sim::step_clock`),
+    ///      without touching the heap.
     ///   3. All `Event::EndOfSimulation` entries fire, in FIFO order.
     /// Watchers (`on_change`/`on_clock`) persist across `run()` calls;
     /// only a watcher whose callback called `finish()` is removed.
+    /// Free-running clocks likewise persist: an edge armed at the end
+    /// of one `run()` is still pending when the next one starts, as it
+    /// was as a leftover heap entry.
     pub fn run(&mut self) -> Result<(), SimError> {
         let start_callbacks = self.sched.drain_lifecycle(|e| matches!(e, Event::StartOfSimulation));
         for mut cb in start_callbacks {
@@ -741,7 +795,21 @@ impl Sim {
         }
 
         while !self.sched.is_shutdown_requested() {
-            if let Some(mut cb) = self.sched.next_after_delay() {
+            let event_next = self.sched.peek_next_timed();
+            let clock_next = self.next_clock_edge();
+            // The clock edge fires first when it beats the soonest
+            // queued user event in the heap's own `(time, seq)` order.
+            let clock_first = match (event_next, clock_next) {
+                (Some((t, s)), Some((_, (edge_ps, edge_seq)))) => {
+                    (edge_ps, edge_seq) < (t, s)
+                }
+                (None, Some(_)) => true,
+                _ => false,
+            };
+            if clock_first {
+                let (index, _) = clock_next.unwrap();
+                self.step_clock(index);
+            } else if let Some(mut cb) = self.sched.next_after_delay() {
                 cb(self);
             } else {
                 break;
@@ -755,6 +823,64 @@ impl Sim {
         Ok(())
     }
 
+    /// The soonest pending edge across all free-running clocks, as
+    /// `(handle index, (time, seq))`, compared in the heap's `(time,
+    /// seq)` order so same-time edges fire in registration order,
+    /// exactly as they did as heap entries.  `None` when no clock has
+    /// a pending edge (every armed handle, or none at all).
+    fn next_clock_edge(&self) -> Option<(usize, (u64, u64))> {
+        let mut best: Option<(usize, (u64, u64))> = None;
+        for (i, handle) in self.clocks.iter().enumerate() {
+            if let Some(next) = handle.next {
+                best = match best {
+                    None => Some((i, next)),
+                    Some((_, best_next)) if next < best_next => Some((i, next)),
+                    _ => best,
+                };
+            }
+        }
+        best
+    }
+
+    /// Step one free-running clock edge through exactly the work the
+    /// old toggle callback did: advance `time_ps` to the edge, toggle
+    /// the signal through the same commit path (`set_without_flow`,
+    /// preserving rising-edge register transfer), settle exactly as a
+    /// `SimLock` drop (`unlock`: flow plus the outermost dispatch
+    /// sweep, `changed_since_dispatch` skip included), then re-arm the
+    /// next edge without touching the heap or allocating.
+    ///
+    /// The handle is marked in-flight (no pending edge) across the
+    /// settlement, mirroring the old heap state: the popped toggle
+    /// entry was gone and the next one was only registered after the
+    /// settlement, so a re-entrant `run()` from a settlement callback
+    /// saw no pending edge for this clock.
+    fn step_clock(&mut self, index: usize) {
+        let (edge_ps, _seq) = self.clocks[index]
+            .next
+            .take()
+            .expect("stepping a clock edge that is not armed");
+        let signal = self.clocks[index].signal;
+        let half = self.clocks[index].half_period_ps;
+        self.sched.advance_to(edge_ps);
+        // The old callback's toggle: read the live value, flip it,
+        // commit through the lock's write path.  Toggling the live
+        // value (not a stored phase) keeps the behavior when another
+        // writer drove the signal between edges.
+        let current = self.get(signal);
+        let next = current.toggled();
+        self.set_without_flow(signal, next);
+        // The same settlement a `SimLock` drop runs.
+        self.unlock();
+        // Re-arm exactly as the old callback's `after(half)` did after
+        // the settlement: deadline `edge + half` (a settlement cannot
+        // move time), sequence allocated after any events the
+        // settlement's callbacks registered.
+        let at_ps = self.sched.time_ps().saturating_add(half);
+        let seq = self.sched.alloc_seq();
+        self.clocks[index].next = Some((at_ps, seq));
+    }
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -762,7 +888,7 @@ impl Sim {
 ////////////////////////////////////////////////////////////////////////////////
 impl Sim {
     pub(super) fn elaboration(&self) -> Arc<Elaboration> {
-        self.circuit.elaboration.clone()
+        dispatch_ref!(self.inner, engine => engine.elaboration())
     }
 
     pub fn signal<S: AsRef<BStr>>(&mut self, path: S) -> SignalId {
@@ -781,11 +907,7 @@ impl Sim {
     /// The live words of memory `signal_id`, or `None` for any other
     /// component (surfaces memory words to `vir poke`).
     pub fn memory_words(&self, signal_id: SignalId) -> Option<std::sync::Arc<Vec<Value>>> {
-        if self.circuit.is_memory(signal_id) {
-            Some(self.state.memory_words(signal_id))
-        } else {
-            None
-        }
+        dispatch_ref!(self.inner, engine => engine.memory_words(signal_id))
     }
 
     pub fn component_type(&self, signal_id: SignalId) -> Type {
@@ -823,8 +945,9 @@ impl Sim {
     }
 
     /// The submodule *instances* directly under the module whose
-    /// elaborated path prefix is `prefix`, one leaf name per instance
-    /// (e.g. `"foo"` under `"top"`).  Submodule instances are not
+    /// elaborated path prefix is `prefix` (e.g. `"top"` or
+    /// `"top.foo"`).  Like [`Sim::children_of`], but addressed by path
+    /// instead of by a component id — submodule instances are not
     /// components, so `cd`-style navigation needs this list to know
     /// which prefixes name modules at all.
     pub fn module_children(&self, prefix: &[u8]) -> Vec<BString> {
@@ -963,13 +1086,27 @@ impl Sim {
     /// If `cb` calls `sim.finish()`, the watcher is removed from the
     /// table: it does not survive into a subsequent `run()`.
     pub fn on_change(&mut self, signal: SignalId, cb: Callback) {
-        let last = self.state.get(signal);
+        let last = self.get(signal);
         self.watchers.push(Watcher {
             signal,
             kind: WatchKind::Change,
             last,
             alive: true,
             callback: Rc::new(RefCell::new(cb)),
+        });
+        let index = self.watchers.len() - 1;
+        let idx = signal.index();
+        if self.watcher_buckets.len() <= idx {
+            self.watcher_buckets.resize(idx + 1, Vec::new());
+        }
+        self.watcher_buckets[idx].push(index);
+        // Watched-only marking: from here on, writes to this signal pay
+        // the changed-set bookkeeping (and this watcher can fire).  A
+        // write before registration could not have been observed anyway:
+        // `last` starts at the live value.
+        dispatch_mut!(self.inner, engine => {
+            engine.set_watched(signal, true);
+            engine.on_structural_change();
         });
     }
 
@@ -985,13 +1122,24 @@ impl Sim {
     /// If `cb` calls `sim.finish()`, the watcher is removed from the
     /// table: it does not survive into a subsequent `run()`.
     pub fn on_clock(&mut self, clock: SignalId, cb: Callback) {
-        let last = self.state.get(clock);
+        let last = self.get(clock);
         self.watchers.push(Watcher {
             signal: clock,
             kind: WatchKind::ClockRising,
             last,
             alive: true,
             callback: Rc::new(RefCell::new(cb)),
+        });
+        let index = self.watchers.len() - 1;
+        let idx = clock.index();
+        if self.watcher_buckets.len() <= idx {
+            self.watcher_buckets.resize(idx + 1, Vec::new());
+        }
+        self.watcher_buckets[idx].push(index);
+        // Watched-only marking, as in `on_change`.
+        dispatch_mut!(self.inner, engine => {
+            engine.set_watched(clock, true);
+            engine.on_structural_change();
         });
     }
 
@@ -1010,20 +1158,6 @@ impl Sim {
             _ => self.sched.register(event_cb),
         }
     }
-
-    /// Internal: schedule one half-period toggle for `clock`.  The callback
-    /// toggles the signal and re-arms itself for `half_period_ps` later.
-    fn register_clock_toggle(&mut self, clock: SignalId, half_period_ps: u64) {
-        self.after(half_period_ps, Box::new(move |sim| {
-            let current = sim.state.get(clock);
-            let next = current.toggled();
-            {
-                let mut lock = sim.lock();
-                lock.set(clock, next);
-            }
-            sim.register_clock_toggle(clock, half_period_ps);
-        }));
-    }
 }
 
 /// Intentionally-empty hook for tracing register transfers when
@@ -1031,8 +1165,650 @@ impl Sim {
 pub fn debug_transfer(_id: crate::analysis::elaboration::SignalId, _v: &Value) {
 }
 
-/// 0→1 transition on a 1-bit signal.  Keeps `set()`'s edge detection
-/// safe on non-clock (and multi-bit) signals.
-fn is_rising(old: &Value, new: &Value) -> bool {
-    old.width() == 1 && !old.get_bit(0) && new.get_bit(0)
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::util::{check_db, db_from_dir_with_lib};
+    use std::cell::Cell;
+    use std::path::Path;
+
+    /// Build a settled `Sim` for the `tests/sim/gcd` design (its source
+    /// file is `top.vir`, so the ModDef symbol path is `top::Top`).
+    fn gcd_sim(engine: Engine) -> Sim {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let source = manifest.join("../tests/sim/gcd/src");
+        let lib = manifest.join("../lib");
+        let db = db_from_dir_with_lib(&source, &lib);
+        if let Err(diagnostics) = check_db(&db) {
+            for diag in diagnostics.iter() {
+                eprintln!("{diag:?}");
+            }
+            panic!("gcd test design failed to build");
+        }
+        let symboltable = db.get_symboltable();
+        let top = symboltable.resolve(b"top::Top".into()).unwrap();
+        Sim::with_engine(&db, top.id(), InitStrategy::Seeded(42), engine)
+    }
+
+    /// The sweep-skip predicate, witnessed by callback counts: a real
+    /// value change fires a `Change` watcher exactly once, and a
+    /// lock/unlock that writes the same value (a settlement whose
+    /// `changed_since_dispatch` flag stays down, so the sweep is
+    /// skipped entirely) fires nothing.
+    #[test]
+    fn watcher_fires_on_change_and_skips_quiescent_settlements() {
+        let mut sim = gcd_sim(Engine::Legacy);
+        let fire = sim.signal("top.fire");
+        let fire_typ = sim.component_type_id(fire);
+        let initial_high = sim.get(fire).get_bit(0);
+
+        let fires = Rc::new(RefCell::new(0u32));
+        {
+            let count = fires.clone();
+            sim.on_change(fire, Box::new(move |_sim| {
+                *count.borrow_mut() += 1;
+            }));
+        }
+
+        // A real change: drive fire to the opposite of its seeded
+        // initial value.
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, !initial_high));
+        }
+        assert_eq!(*fires.borrow(), 1, "a real value change must fire the watcher");
+
+        // A settlement with no actual write: the sweep is skipped, so
+        // the watcher cannot fire again.
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, !initial_high));
+        }
+        assert_eq!(*fires.borrow(), 1, "a same-value write must not fire the watcher");
+
+        // A second real change fires again; repeating it does not.
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, initial_high));
+        }
+        assert_eq!(*fires.borrow(), 2, "a second real change must fire again");
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, initial_high));
+        }
+        assert_eq!(*fires.borrow(), 2, "a repeated same-value write must not fire");
+    }
+
+    /// `ClockRising` watchers under the skip: the first settlement
+    /// drives the clock low (no fire: no change or a falling edge),
+    /// the second is a real rising edge (one fire), the third writes
+    /// the same high value (sweep skipped, no fire), the fourth is a
+    /// falling edge (observed but no fire), the fifth is a second
+    /// rising edge (one more fire).  Rising edges also transfer the
+    /// gcd registers, exercising `transfer`'s flag updates.
+    #[test]
+    fn on_clock_watcher_fires_only_on_rising_edges() {
+        let mut sim = gcd_sim(Engine::Legacy);
+        let clock = sim.signal("top.clock");
+        let clock_typ = sim.component_type_id(clock);
+
+        let rises = Rc::new(RefCell::new(0u32));
+        {
+            let count = rises.clone();
+            sim.on_clock(clock, Box::new(move |_sim| {
+                *count.borrow_mut() += 1;
+            }));
+        }
+
+        let mut settle = |sim: &mut Sim, high: bool| {
+            let mut lock = sim.lock();
+            lock.set(clock, Value::from_bool(clock_typ, high));
+        };
+
+        settle(&mut sim, false);
+        assert_eq!(*rises.borrow(), 0, "driving low must not fire an on_clock watcher");
+
+        settle(&mut sim, true);
+        assert_eq!(*rises.borrow(), 1, "a rising edge must fire exactly once");
+
+        settle(&mut sim, true);
+        assert_eq!(*rises.borrow(), 1, "a same-value write must not fire again");
+
+        settle(&mut sim, false);
+        assert_eq!(*rises.borrow(), 1, "a falling edge must not fire");
+
+        settle(&mut sim, true);
+        assert_eq!(*rises.borrow(), 2, "a second rising edge must fire once more");
+    }
+
+    /// A watcher callback that drives a signal during the sweep: the
+    /// fire watcher fires on the settlement's change and drives `x`,
+    /// whose own watcher fires within the same unlock (the dispatching
+    /// loop re-sweeps after the nested flow-only unlock re-settled the
+    /// driven write).  A later quiescent unlock (same fire value) fires
+    /// neither: the flag was cleared by the quiescent pass and the
+    /// no-op settlement skips the sweep.
+    #[test]
+    fn watcher_cascade_settles_within_one_unlock() {
+        let mut sim = gcd_sim(Engine::Legacy);
+        let fire = sim.signal("top.fire");
+        let x = sim.signal("top.x");
+        let fire_typ = sim.component_type_id(fire);
+        let x_typ = sim.component_type_id(x);
+        let initial_high = sim.get(fire).get_bit(0);
+
+        // Pre-drive x to a known value so the cascade write below is
+        // guaranteed to be a real change regardless of the seeded init.
+        {
+            let mut lock = sim.lock();
+            lock.set(x, Value::new(x_typ, BitPat::from_u64(8, 5)));
+        }
+
+        let fire_fires = Rc::new(RefCell::new(0u32));
+        let x_fires = Rc::new(RefCell::new(0u32));
+        {
+            let count = fire_fires.clone();
+            sim.on_change(fire, Box::new(move |sim| {
+                *count.borrow_mut() += 1;
+                let mut lock = sim.lock();
+                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, 6)));
+            }));
+        }
+        {
+            let count = x_fires.clone();
+            sim.on_change(x, Box::new(move |_sim| {
+                *count.borrow_mut() += 1;
+            }));
+        }
+
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, !initial_high));
+        }
+        assert_eq!(*fire_fires.borrow(), 1, "the fire change must fire its watcher");
+        assert_eq!(*x_fires.borrow(), 1, "the cascade-driven x change must fire too");
+
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, !initial_high));
+        }
+        assert_eq!(*fire_fires.borrow(), 1, "a quiescent settlement must not re-fire");
+        assert_eq!(*x_fires.borrow(), 1, "a quiescent settlement must not re-fire");
+    }
+
+    /// Bucketed dispatch keeps registration order across different
+    /// signals: two watchers observing different signals, both changed
+    /// by the same settlement, fire in registration order — for both
+    /// registration orders, so the test pins order to registration,
+    /// not to signal identity or bucket visit order.
+    #[test]
+    fn watchers_on_different_signals_fire_in_registration_order() {
+        let run_phase = |register_fire_first: bool| -> Vec<&'static str> {
+            let mut sim = gcd_sim(Engine::Legacy);
+            let fire = sim.signal("top.fire");
+            let x = sim.signal("top.x");
+            let fire_typ = sim.component_type_id(fire);
+            let x_typ = sim.component_type_id(x);
+
+            let order: Rc<RefCell<Vec<&'static str>>> = Rc::new(RefCell::new(Vec::new()));
+            let fire_watcher = {
+                let order = order.clone();
+                Box::new(move |_sim: &mut Sim| {
+                    order.borrow_mut().push("fire");
+                })
+            };
+            let x_watcher = {
+                let order = order.clone();
+                Box::new(move |_sim: &mut Sim| {
+                    order.borrow_mut().push("x");
+                })
+            };
+            if register_fire_first {
+                sim.on_change(fire, fire_watcher);
+                sim.on_change(x, x_watcher);
+            } else {
+                sim.on_change(x, x_watcher);
+                sim.on_change(fire, fire_watcher);
+            }
+
+            // One settlement changes both signals: a single dispatch
+            // pass fires both, in registration order.
+            let fire_val = sim.get(fire).get_bit(0);
+            let x_val = sim.get(x).to_u64();
+            {
+                let mut lock = sim.lock();
+                lock.set(fire, Value::from_bool(fire_typ, !fire_val));
+                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_val ^ 0xFF)));
+            }
+
+            // A second settlement toggles both again: the order holds.
+            let fire_val = sim.get(fire).get_bit(0);
+            let x_val = sim.get(x).to_u64();
+            {
+                let mut lock = sim.lock();
+                lock.set(fire, Value::from_bool(fire_typ, !fire_val));
+                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_val ^ 0xFF)));
+            }
+
+            order.borrow().clone()
+        };
+
+        assert_eq!(
+            run_phase(true),
+            vec!["fire", "x", "fire", "x"],
+            "fire registered first: the pass fires in registration order"
+        );
+        assert_eq!(
+            run_phase(false),
+            vec!["x", "fire", "x", "fire"],
+            "x registered first: the pass fires in registration order"
+        );
+    }
+
+    /// A `Change` watcher on the clock signal fires on every value
+    /// change, including falling edges: the bucketed sweep visits the
+    /// clock's bucket on any write to it, so the opposite-direction
+    /// edge (which a `ClockRising` watcher ignores) still fires a
+    /// `Change` watcher watching the same signal.
+    #[test]
+    fn on_change_watcher_on_clock_fires_on_falling_edges() {
+        let mut sim = gcd_sim(Engine::Legacy);
+        let clock = sim.signal("top.clock");
+        let clock_typ = sim.component_type_id(clock);
+
+        let fires = Rc::new(RefCell::new(0u32));
+        {
+            let count = fires.clone();
+            sim.on_change(clock, Box::new(move |_sim| {
+                *count.borrow_mut() += 1;
+            }));
+        }
+
+        let initial_high = sim.get(clock).get_bit(0);
+        let mut settle = |sim: &mut Sim, high: bool| {
+            let mut lock = sim.lock();
+            lock.set(clock, Value::from_bool(clock_typ, high));
+        };
+
+        // Drive to the opposite of the seeded initial value: one
+        // change, one fire (the edge direction depends on the seed).
+        settle(&mut sim, !initial_high);
+        assert_eq!(*fires.borrow(), 1, "the first change must fire");
+
+        // Drive back: the opposite-direction edge (falling when the
+        // initial value was high) fires a Change watcher too.
+        settle(&mut sim, initial_high);
+        assert_eq!(
+            *fires.borrow(),
+            2,
+            "the opposite-direction edge must fire a Change watcher"
+        );
+
+        // A same-value write is not a change: no fire.
+        settle(&mut sim, initial_high);
+        assert_eq!(*fires.borrow(), 2, "a same-value write must not fire");
+    }
+
+    /// Unregister edge case: a watcher whose callback calls `finish()`
+    /// is pruned from the table (and its bucket rebuilt) at the end of
+    /// the unlock, while watchers on other signals survive it and keep
+    /// firing.  The surviving watcher's own later fire then dies to the
+    /// post-shutdown rule (watchers firing after the shutdown request
+    /// do not persist), so a final settlement of its signal fires
+    /// nothing.
+    #[test]
+    fn finish_prunes_only_the_calling_watcher_and_rebuilds_buckets() {
+        let mut sim = gcd_sim(Engine::Legacy);
+        let fire = sim.signal("top.fire");
+        let x = sim.signal("top.x");
+        let fire_typ = sim.component_type_id(fire);
+        let x_typ = sim.component_type_id(x);
+
+        let x_fires = Rc::new(RefCell::new(0u32));
+        {
+            let count = x_fires.clone();
+            sim.on_change(x, Box::new(move |_sim| {
+                *count.borrow_mut() += 1;
+            }));
+        }
+        {
+            sim.on_change(fire, Box::new(move |sim| {
+                sim.finish();
+            }));
+        }
+
+        // The fire watcher fires, calls finish(), and is pruned; the
+        // x watcher (registered earlier, on another signal) survives
+        // the retain and the bucket rebuild.
+        let fire_initial = sim.get(fire).get_bit(0);
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, !fire_initial));
+        }
+        let x_initial = sim.get(x).to_u64();
+        {
+            let mut lock = sim.lock();
+            lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_initial ^ 0xFF)));
+        }
+        assert_eq!(
+            *x_fires.borrow(),
+            1,
+            "the surviving watcher must still fire after the finish() prune and bucket rebuild"
+        );
+
+        // The survivor's next fire runs after the shutdown request, so
+        // it dies (existing post-finish semantics): no third fire.
+        let x_now = sim.get(x).to_u64();
+        {
+            let mut lock = sim.lock();
+            lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_now ^ 0xFF)));
+        }
+        assert_eq!(
+            *x_fires.borrow(),
+            1,
+            "a watcher firing after the shutdown request must not persist"
+        );
+    }
+
+    /// Watched-only marking must not lose fires: a watcher on `x`
+    /// still fires on every one of `x`'s transitions even though each
+    /// settlement also writes `fire`, an unwatched signal whose writes
+    /// no longer touch the changed set.  A watched signal's write is
+    /// marked regardless of what else the settlement does, so the
+    /// watcher's fires are exactly the whole-table sweep's.
+    #[test]
+    fn watcher_fires_alongside_unwatched_signal_writes() {
+        let mut sim = gcd_sim(Engine::Legacy);
+        let fire = sim.signal("top.fire");
+        let x = sim.signal("top.x");
+        let fire_typ = sim.component_type_id(fire);
+        let x_typ = sim.component_type_id(x);
+
+        let fires = Rc::new(RefCell::new(0u32));
+        {
+            let count = fires.clone();
+            sim.on_change(x, Box::new(move |_sim| {
+                *count.borrow_mut() += 1;
+            }));
+        }
+
+        // Each settlement writes both signals: `fire` (unwatched) and
+        // `x` (watched).  The watcher fires once per settlement, once
+        // per real change of `x` — the unwatched signal's write in the
+        // same settlement neither suppresses nor delays it.
+        for i in 0..3u32 {
+            let x_val = sim.get(x).to_u64();
+            let fire_val = sim.get(fire).get_bit(0);
+            {
+                let mut lock = sim.lock();
+                lock.set(fire, Value::from_bool(fire_typ, !fire_val));
+                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_val ^ 0xFF)));
+            }
+            assert_eq!(*fires.borrow(), i + 1, "settlement {} must fire the x watcher once", i);
+        }
+    }
+
+    /// Zero-watcher designs skip the changed-set bookkeeping entirely:
+    /// with no watcher anywhere, every write leaves the changed set
+    /// empty (the sweep-skip gate stays down and the dispatch loop
+    /// never runs), while the circuit still settles normally.
+    #[test]
+    fn zero_watcher_design_leaves_the_changed_set_empty() {
+        let mut sim = gcd_sim(Engine::Legacy);
+        let fire = sim.signal("top.fire");
+        let fire_typ = sim.component_type_id(fire);
+
+        // A settlement with no watcher anywhere: the circuit still
+        // settles, and the changed set stays empty.
+        let initial = sim.get(fire).get_bit(0);
+        {
+            let mut lock = sim.lock();
+            lock.set(fire, Value::from_bool(fire_typ, !initial));
+        }
+        assert_eq!(sim.get(fire).get_bit(0), !initial, "the write must land");
+        assert!(
+            !sim.changed_since_dispatch(),
+            "no watcher: a write must not raise the sweep-skip gate"
+        );
+        assert_eq!(
+            sim.changed_signal_count(),
+            0,
+            "no watcher: a write must not touch the changed set"
+        );
+    }
+
+    /// The narrow commit path end to end: `top.valid`'s `on_change`
+    /// watcher fires once per actual value transition and never on a
+    /// same-value re-commit, even though the narrow drivers are
+    /// re-evaluated every cycle.  Pins the watched-signal change
+    /// protocol across a full clocked gcd run.
+    #[test]
+    fn narrow_bits_commit_path_runs_gcd_to_completion() {
+        let mut sim = gcd_sim(Engine::Legacy);
+        let clock = sim.signal("top.clock");
+        let clock_typ = sim.component_type_id(clock);
+        let reset = sim.signal("top.reset");
+        let reset_typ = sim.component_type_id(reset);
+        let fire = sim.signal("top.fire");
+        let fire_typ = sim.component_type_id(fire);
+        let x = sim.signal("top.x");
+        let x_typ = sim.component_type_id(x);
+        let y = sim.signal("top.y");
+        let y_typ = sim.component_type_id(y);
+        let result = sim.signal("top.result");
+        let valid = sim.signal("top.valid");
+
+        let mut settle = |sim: &mut Sim, high: bool| {
+            let mut lock = sim.lock();
+            lock.set(clock, Value::from_bool(clock_typ, high));
+        };
+
+        // Drive the inputs: gcd(9, 6) = 3, with reset held for the
+        // first edge so the seeded-random register state starts at
+        // `Idle`.
+        {
+            let mut lock = sim.lock();
+            lock.set(reset, Value::from_bool(reset_typ, true));
+            lock.set(fire, Value::from_bool(fire_typ, true));
+            lock.set(x, Value::new(x_typ, BitPat::from_u64(8, 9)));
+            lock.set(y, Value::new(y_typ, BitPat::from_u64(8, 6)));
+        }
+
+        // First rising edge: reset transfers `state` to `Idle`, so
+        // `result`/`valid` are 0/false from here on.
+        settle(&mut sim, true);
+        assert_eq!(sim.get(result).to_u64(), 0);
+        assert!(!sim.get(valid).get_bit(0));
+
+        // Deassert reset: the pending next-value recomputes to
+        // `Running(9, 6)` (Idle + fire), transferred at the next edge.
+        {
+            let mut lock = sim.lock();
+            lock.set(reset, Value::from_bool(reset_typ, false));
+        }
+
+        // Watch the alias copy of the narrow `valid` driver's output:
+        // the driver is re-evaluated and re-committed every cycle, and
+        // only the two real transitions (false->true at Done, true->false
+        // back at Idle) may fire.
+        let fires = Rc::new(RefCell::new(0u32));
+        {
+            let count = fires.clone();
+            sim.on_change(valid, Box::new(move |_sim| {
+                *count.borrow_mut() += 1;
+            }));
+        }
+
+        // Rising-edge sequence for `state`: Running(9,6), Running(3,6),
+        // Running(3,3), Running(0,3), Running(3,0), Done(3), Idle.  The
+        // register driver re-evaluates on the clock edges, so the first
+        // edge after deasserting reset still commits the `Idle` pending.
+        for _ in 0..6 {
+            settle(&mut sim, true);
+            settle(&mut sim, false);
+        }
+        // Eighth rising edge after Idle: `Done(3)`.
+        settle(&mut sim, true);
+        assert_eq!(sim.get(result).to_u64(), 3, "gcd(9, 6) = 3");
+        assert!(sim.get(valid).get_bit(0));
+        assert_eq!(*fires.borrow(), 1, "the false->true transition fires once");
+        settle(&mut sim, false);
+        // Ninth: `Done` returns to `Idle`.
+        settle(&mut sim, true);
+        assert_eq!(sim.get(result).to_u64(), 0);
+        assert!(!sim.get(valid).get_bit(0));
+        assert_eq!(*fires.borrow(), 2, "the true->false transition fires once");
+    }
+
+    /// A `Write` sink over a shared buffer, so a test can attach the
+    /// VCD dumper and inspect the bytes it produced.
+    struct SharedSink(Rc<RefCell<Vec<u8>>>);
+
+    impl std::io::Write for SharedSink {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.borrow_mut().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Event interleaving between the free-running clock and user
+    /// `after` events: exact (tag, time) order of every dispatched
+    /// callback, captured from the pre-fast-path engine (where each
+    /// clock edge was a scheduler heap entry) on the same design and
+    /// seed.  Covers:
+    ///
+    /// - an `after` strictly between two edges (7500) fires there;
+    /// - an `after` registered later (7500) for an edge's exact time
+    ///   (10000) fires after that edge: the edge's heap entry was
+    ///   registered at 5000, so it holds the lower seq;
+    /// - an `after` registered from inside an edge's settlement (at
+    ///   5000) for the next edge's exact time (15000) fires BEFORE
+    ///   that edge: it holds the lower seq, because the clock re-arms
+    ///   only after its settlement;
+    /// - `finish()` from a rising-edge watcher stops the run cleanly
+    ///   with time parked at the last edge (15000).
+    #[test]
+    fn clock_and_after_events_interleave_like_the_heap_engine() {
+        let mut sim = gcd_sim(Engine::Legacy);
+        let clock = sim.signal("top.clock");
+        sim.attach_clock(clock, Clock::with_period_ps(10_000));
+
+        let log: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+        let push = |log: &Rc<RefCell<Vec<String>>>, tag: &str, t: u64| {
+            log.borrow_mut().push(format!("{tag} {t}"));
+        };
+
+        {
+            let log_cb = log.clone();
+            let armed = Rc::new(Cell::new(false));
+            let armed_cb = armed.clone();
+            sim.on_clock(clock, Box::new(move |sim| {
+                push(&log_cb, "clock-rise", sim.now());
+                if !armed_cb.get() {
+                    armed_cb.set(true);
+                    let log2 = log_cb.clone();
+                    sim.after(10_000, Box::new(move |sim| {
+                        push(&log2, "watcher-after", sim.now());
+                    }));
+                }
+            }));
+        }
+        {
+            let log_cb = log.clone();
+            sim.at_start(Box::new(move |sim| {
+                push(&log_cb, "start", sim.now());
+            }));
+        }
+        {
+            let log_cb = log.clone();
+            sim.at_start(Box::new(move |sim| {
+                let log2 = log_cb.clone();
+                sim.after(7_500, Box::new(move |sim| {
+                    push(&log2, "between", sim.now());
+                    let log3 = log2.clone();
+                    sim.after(2_600, Box::new(move |sim| {
+                        push(&log3, "late", sim.now());
+                    }));
+                    let log3 = log2.clone();
+                    sim.after(2_500, Box::new(move |sim| {
+                        push(&log3, "tie-after", sim.now());
+                    }));
+                }));
+            }));
+        }
+        {
+            let rises: Rc<Cell<u64>> = Rc::new(Cell::new(0));
+            let rises_cb = rises.clone();
+            sim.on_clock(clock, Box::new(move |sim| {
+                let n = rises_cb.get() + 1;
+                rises_cb.set(n);
+                if n >= 2 {
+                    sim.finish();
+                }
+            }));
+        }
+
+        sim.run().unwrap();
+        let log = log.borrow();
+        let expected = [
+            "start 0",
+            "clock-rise 5000",
+            "between 7500",
+            "tie-after 10000",
+            "late 10100",
+            "watcher-after 15000",
+            "clock-rise 15000",
+        ];
+        for (got, want) in log.iter().zip(expected.iter()) {
+            assert_eq!(got, want, "dispatch order diverged from the heap engine");
+        }
+        assert_eq!(log.len(), expected.len(), "unexpected extra dispatches");
+        assert_eq!(sim.now(), 15_000, "finish() parks time at the last edge");
+    }
+
+    /// The VCD dump of a clocked run must be byte-identical to the
+    /// pre-fast-path engine's, timestamp lines included: the fast path
+    /// advances `time_ps` exactly where the heap-event engine did.
+    /// Golden captured from the pre-change engine on the gcd design,
+    /// seed 42, 16 rising edges, period 10000 ps.
+    #[test]
+    fn vcd_trace_is_byte_identical_to_the_heap_engine() {
+        let mut sim = gcd_sim(Engine::Legacy);
+        let clock = sim.signal("top.clock");
+        let sink = SharedSink(Rc::new(RefCell::new(Vec::new())));
+        let sink_ref = sink.0.clone();
+        sim.attach_vcd(sink);
+        sim.attach_clock(clock, Clock::with_period_ps(10_000));
+
+        let rises: Rc<Cell<u64>> = Rc::new(Cell::new(0));
+        {
+            let rises_cb = rises.clone();
+            sim.on_clock(clock, Box::new(move |sim| {
+                let n = rises_cb.get() + 1;
+                rises_cb.set(n);
+                if n >= 16 {
+                    sim.finish();
+                }
+            }));
+        }
+        sim.run().unwrap();
+        assert_eq!(rises.get(), 16);
+
+        let golden_path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../sim-bench/golden/gcd.vcd");
+        let golden = std::fs::read(&golden_path).unwrap_or_else(|e| {
+            panic!(
+                "cannot read VCD golden {:?}: {e} (run the pre-change capture first)",
+                golden_path
+            )
+        });
+        assert_eq!(
+            sink_ref.borrow().as_slice(),
+            golden.as_slice(),
+            "VCD output diverged from the heap-event engine"
+        );
+    }
 }

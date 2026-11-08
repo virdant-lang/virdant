@@ -4,23 +4,41 @@
 //! shutdown flag — mirroring a subset of VPI callback reasons.
 //! Value-change watching is not queue-based: `Sim` keeps a persistent
 //! watcher table swept in place at each settlement (see `Sim::unlock`).
+//!
+//! The queue is split in two: timed events live in a min-`BinaryHeap`
+//! ordered by `(at_ps, seq)` — popping the soonest deadline, FIFO
+//! tiebreak, is O(log n) instead of a linear min-scan plus `Vec::remove`
+//! shift — while lifecycle events keep their registration (FIFO) order
+//! in their own deque.  `Sim::run` drains them separately (lifecycle
+//! before/after the timed loop), so the split changes nothing observable.
 
 use crate::sim::Sim;
 use crate::analysis::elaboration::SignalId;
 
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, VecDeque};
+
 /// Event scheduler and dispatch state.  Owns simulated time, the
-/// one-shot callback queue for timed and lifecycle events, the FIFO
+/// one-shot callback queues for timed and lifecycle events, the FIFO
 /// tie-breaker counter, and the early-termination flag toggled by
-/// `Sim::finish`.  Every registration pushes one entry into `queue`;
-/// every fire removes one.  Value-change watchers live in `Sim`'s
-/// persistent watcher table instead.  See `Event` for the trigger
-/// conditions.
+/// `Sim::finish`.  Every registration pushes one entry into `timed`
+/// (`AfterDelay`) or `lifecycle` (start/end); every fire removes one.
+/// Value-change watchers live in `Sim`'s persistent watcher table
+/// instead.  See `Event` for the trigger conditions.
 #[derive(Debug)]
 pub(super) struct Scheduler {
     time_ps: u64,
     next_seq: u64,
     shutdown_requested: bool,
-    queue: Vec<QueueEntry>,
+    /// Timed events, min-ordered by `(at_ps, seq)`: earliest deadline
+    /// pops first, same-deadline entries fire in registration (FIFO)
+    /// order.  Popping is O(log n); the old linear min-scan + remove
+    /// was O(n).
+    timed: BinaryHeap<TimedEntry>,
+    /// Lifecycle events (`StartOfSimulation`/`EndOfSimulation`), in
+    /// registration order.  `drain_lifecycle` drains only this deque —
+    /// today it partitions the whole queue and re-inserts the rest.
+    lifecycle: VecDeque<EventCallback>,
 }
 
 /// Trigger condition for a queued callback.  Mirrors a subset of the VPI
@@ -49,12 +67,36 @@ pub enum Event {
 }
 
 
-/// Internal queue slot: an `EventCallback` plus a monotonic sequence
-/// number used for FIFO tie-breaking among same-trigger entries.
+/// Timed-queue slot: an `AfterDelay` callback with its deadline and
+/// sequence number, wrapped in an inverted `Ord` so `BinaryHeap` pops
+/// the earliest deadline (FIFO-tiebroken) first.
 #[derive(Debug)]
-struct QueueEntry {
+struct TimedEntry {
+    at_ps: u64,
     seq: u64,
     cb: EventCallback,
+}
+
+impl PartialEq for TimedEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.at_ps == other.at_ps && self.seq == other.seq
+    }
+}
+
+impl Eq for TimedEntry {}
+
+impl PartialOrd for TimedEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for TimedEntry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // BinaryHeap pops the *greatest* entry, so the inverted order
+        // turns it into a min-heap over (at_ps, seq).
+        other.at_ps.cmp(&self.at_ps).then(other.seq.cmp(&self.seq))
+    }
 }
 
 /// One queueable (event, callback) pair.  Public so users can build
@@ -77,7 +119,8 @@ impl Scheduler {
             time_ps: 0,
             next_seq: 0,
             shutdown_requested: false,
-            queue: Vec::new(),
+            timed: BinaryHeap::new(),
+            lifecycle: VecDeque::new(),
         }
     }
 
@@ -89,7 +132,9 @@ impl Scheduler {
     /// `at`, `after`, `at_start`, and `at_end` are built; value-change
     /// events do not belong in the queue (register them through
     /// `Sim::register`, which routes them into the watcher table).
-    /// Same-trigger entries fire in registration (FIFO) order.
+    /// Timed entries land in the `(at_ps, seq)` min-heap; lifecycle
+    /// entries land in the FIFO deque.  Same-trigger entries fire in
+    /// registration (FIFO) order.
     pub fn register(&mut self, event_cb: EventCallback) {
         if matches!(event_cb.event, Event::ValueChange { .. }) {
             panic!(
@@ -99,7 +144,22 @@ impl Scheduler {
         }
         let seq = self.next_seq;
         self.next_seq += 1;
-        self.queue.push(QueueEntry { seq, cb: event_cb });
+        match event_cb.event {
+            Event::AfterDelay { at_ps } => {
+                // Sampled, not per-call `Instant`: the push is this
+                // module's own addition, and keeping it cheap keeps
+                // the derived floor clean.  The tick also counts it.
+                #[cfg(feature = "sim-profile")]
+                let _profile_sample = crate::sim::profile::sample_sched_push();
+                self.timed.push(TimedEntry { at_ps, seq, cb: event_cb });
+            }
+            Event::StartOfSimulation | Event::EndOfSimulation => {
+                self.lifecycle.push_back(event_cb);
+            }
+            Event::ValueChange { .. } => unreachable!(
+                "Event::ValueChange is rejected by the check above"
+            ),
+        }
     }
 
     pub(super) fn request_shutdown(&mut self) {
@@ -110,48 +170,72 @@ impl Scheduler {
         self.shutdown_requested
     }
 
+    /// Drain the lifecycle entries matching `pred`, returning the
+    /// callbacks in registration order; non-matching lifecycle entries
+    /// stay queued, and the timed heap is not touched.  Draining
+    /// `StartOfSimulation` also clears a pending `finish()` so the
+    /// timed loop below still runs.
     pub(super) fn drain_lifecycle<F: Fn(&Event) -> bool>(&mut self, pred: F) -> Vec<Callback> {
         if pred(&Event::StartOfSimulation) {
             self.shutdown_requested = false;
         }
-        let queue = std::mem::take(&mut self.queue);
-        let mut keep: Vec<QueueEntry> = Vec::with_capacity(queue.len());
-        let mut to_process: Vec<QueueEntry> = Vec::new();
-        for entry in queue {
-            if pred(&entry.cb.event) {
-                to_process.push(entry);
+        let lifecycle = std::mem::take(&mut self.lifecycle);
+        let mut taken: Vec<Callback> = Vec::new();
+        for mut entry in lifecycle {
+            if pred(&entry.event) {
+                if let Some(cb) = entry.callback.take() {
+                    taken.push(cb);
+                }
             } else {
-                keep.push(entry);
+                self.lifecycle.push_back(entry);
             }
         }
-        self.queue = keep;
-        to_process.sort_by_key(|q| q.seq);
-        to_process.into_iter().filter_map(|mut e| e.cb.callback.take()).collect()
+        taken
     }
 
+    /// Pop the soonest timed entry (earliest `at_ps`, FIFO tiebreak),
+    /// advance simulated time to its deadline, and return its callback.
+    /// `None` when the timed queue is empty.
     pub(super) fn next_after_delay(&mut self) -> Option<Callback> {
-        let idx = self.queue
-            .iter()
-            .enumerate()
-            .filter_map(|(i, q)| match q.cb.event {
-                Event::AfterDelay { at_ps } => Some((i, at_ps, q.seq)),
-                _ => None,
-            })
-            .min_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)))
-            .map(|(i, _, _)| i);
-
-        if let Some(idx) = idx {
-            let mut entry = self.queue.remove(idx);
-            if let Event::AfterDelay { at_ps } = entry.cb.event {
-                self.advance_to(at_ps);
-            }
-            entry.cb.callback.take()
-        } else {
-            None
+        // Phase-granularity timing only: one `Instant` pair per event
+        // dispatch (see `sim::profile`).
+        #[cfg(feature = "sim-profile")]
+        let _profile_phase = crate::sim::profile::time_sched();
+        let mut entry = self.timed.pop()?;
+        if let Event::AfterDelay { at_ps } = entry.cb.event {
+            self.advance_to(at_ps);
         }
+        #[cfg(feature = "sim-profile")]
+        crate::sim::profile::bump_events_popped();
+        entry.cb.callback.take()
     }
 
-    fn advance_to(&mut self, time_ps: u64) {
+    /// Peek the soonest timed entry without popping it: its
+    /// `(at_ps, seq)` pair.  `None` when the timed queue is empty.  The
+    /// run loop compares this against the free-running clocks' next
+    /// edges in the heap's own `(time, seq)` order, so ties between an
+    /// edge and a user event keep the sequence order the edge would
+    /// have had as a heap entry.
+    pub(super) fn peek_next_timed(&self) -> Option<(u64, u64)> {
+        self.timed.peek().map(|e| (e.at_ps, e.seq))
+    }
+
+    /// Allocate and return the next FIFO sequence number, the
+    /// tie-breaker the heap orders same-time entries by.  The
+    /// free-running clock fast path allocates one per re-armed edge so
+    /// its ordering against user events matches the heap-entry order
+    /// it replaced.
+    pub(super) fn alloc_seq(&mut self) -> u64 {
+        let seq = self.next_seq;
+        self.next_seq += 1;
+        seq
+    }
+
+    /// Move simulated time to `time_ps` without dispatching anything.
+    /// The free-running clock fast path calls this to park `time_ps` at
+    /// an edge before stepping it; the timed-event path advances inside
+    /// `next_after_delay`.
+    pub(super) fn advance_to(&mut self, time_ps: u64) {
         self.time_ps = time_ps;
     }
 
