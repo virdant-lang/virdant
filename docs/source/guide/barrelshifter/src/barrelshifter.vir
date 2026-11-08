@@ -1,0 +1,33 @@
+//! A barrel shifter: shifting by any amount, all at once.
+//!
+//! `BarrelShifter8` logically left-shifts an 8-bit word by a
+//! variable amount, using three stages of conditional shifts.
+
+//> Logically left-shifts `x` by `s`, filling with zeros.
+pub mod BarrelShifter8 {
+    //> The word to shift.
+    incoming x : Word[8]
+
+    //> How far to shift, from 0 through 7.
+    incoming s : Word[3]
+
+    //> Stage that shifts by 4 when `s[2]` says so.
+    wire stage4 : Word[8] {
+        it := mux(s[2], word(x[4..0], 0w4), x)
+    }
+
+    //> Stage that shifts by 2 when `s[1]` says so.
+    wire stage2 : Word[8] {
+        it := mux(s[1], word(stage4[6..0], 0w2), stage4)
+    }
+
+    //> Stage that shifts by 1 when `s[0]` says so.
+    wire stage1 : Word[8] {
+        it := mux(s[0], word(stage2[7..0], 0w1), stage2)
+    }
+
+    //> `x` shifted left by `s`; bits shifted out are lost.
+    outgoing shifted : Word[8] dependson x, s {
+        it := stage1
+    }
+}

@@ -1,0 +1,50 @@
+//! Multiplication, the way you do it on paper.
+//!
+//! `Multiplier4` builds the four partial products of `a` and `b`,
+//! slides each one into position, and adds them up
+//! with the widening add.
+
+//> The product of two 4-bit words.
+//>
+//> Each bit of `a` masks down a copy of `b`,
+//> forming a partial product; the rows are shifted into
+//> place and summed with widening adds.
+pub mod Multiplier4 {
+    //> The first factor.
+    incoming a : Word[4]
+
+    //> The second factor.
+    incoming b : Word[4]
+
+    //> The bits of `b`, kept only where `a[0]` is set.
+    wire row0 : Word[4] {
+        it := b & word(a[0], a[0], a[0], a[0])
+    }
+
+    //> The bits of `b`, kept only where `a[1]` is set.
+    wire row1 : Word[4] {
+        it := b & word(a[1], a[1], a[1], a[1])
+    }
+
+    //> The bits of `b`, kept only where `a[2]` is set.
+    wire row2 : Word[4] {
+        it := b & word(a[2], a[2], a[2], a[2])
+    }
+
+    //> The bits of `b`, kept only where `a[3]` is set.
+    wire row3 : Word[4] {
+        it := b & word(a[3], a[3], a[3], a[3])
+    }
+
+    //> The product of `a` and `b`.
+    //>
+    //> Each row is shifted into place by appending zeros,
+    //> and the widening adds keep every carry on the way up.
+    outgoing product : Word[8] dependson a, b {
+        it :=
+            word(0w1, row0)
+                +. word(row1, 0w1)
+                +. word(row2, 0w2)
+                +. word(row3, 0w3)
+    }
+}

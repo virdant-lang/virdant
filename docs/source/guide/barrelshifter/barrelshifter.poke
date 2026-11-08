@@ -1,0 +1,21 @@
+top barrelshifter::BarrelShifter8
+poke x 178
+vcd trace.vcd
+advance
+poke s 0
+advance
+poke s 1
+advance
+poke s 2
+advance
+poke s 3
+advance
+poke s 4
+advance
+poke s 5
+advance
+poke s 6
+advance
+poke s 7
+advance
+exit

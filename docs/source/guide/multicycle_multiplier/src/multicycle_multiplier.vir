@@ -1,0 +1,74 @@
+//! A multi-cycle multiplier: one small adder, four clock cycles.
+//!
+//! `MulticycleMultiplier` multiplies two 4-bit words by shifting
+//! and adding one bit of `a` per cycle, trading time for gates.
+
+//> The phases of a multiplication.
+//>
+//> `Idle` waits for `start`; `Mul(bit)` processes bit `bit` of
+//> `a`; `Done` holds a finished product.
+union type MulState {
+    Idle()
+    Mul(bit : Word[2])
+    Done()
+}
+
+//> Multiplies `a` by `b` over four clock cycles.
+pub mod MulticycleMultiplier {
+    //> The clock.
+    incoming clock : Clock
+
+    //> Pulse high for one cycle to begin a multiplication.
+    //> Ignored while a multiplication is in flight.
+    incoming start : Bit
+
+    //> The first factor, sampled when `start` is high.
+    incoming a : Word[4]
+
+    //> The second factor, held steady until `done`.
+    incoming b : Word[4]
+
+    //> The phase of the multiplier.
+    reg state : MulState {
+        initial it <= @Idle()
+        it <= match it : MulState {
+            with @Idle() => mux(start, @Mul(0w2), it)
+            with @Mul(bit) if {
+                when bit == 3w2 => @Done()
+                else => @Mul(bit + 1w2)
+            }
+            with @Done() => mux(start, @Mul(0w2), it)
+        }
+    }
+
+    //> The product under construction.
+    //> Holds the answer whenever `done` is high.
+    outgoing reg product : Word[8] {
+        initial it <= 0w8
+        it <= match state : MulState {
+            with @Mul(bit) => mux(
+                areg[3],
+                word(it[7..0], 0w1) + word(0w4, b),
+                word(it[7..0], 0w1),
+            )
+            else => mux(start, 0w8, it)
+        }
+    }
+
+    //> The bits of `a`, marching MSB-first past bit 3.
+    reg areg : Word[4] {
+        initial it <= 0w4
+        it <= match state : MulState {
+            with @Mul(bit) => word(it[3..0], 0w1)
+            else => mux(start, a, it)
+        }
+    }
+
+    //> High exactly when `product` holds a finished answer.
+    outgoing done : Bit {
+        it := match state {
+            with @Done() => true
+            else => false
+        }
+    }
+}

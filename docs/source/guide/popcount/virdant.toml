@@ -1,0 +1,5 @@
+[project]
+name = "popcount"
+
+[prog]
+top = "popcount::Popcount4"

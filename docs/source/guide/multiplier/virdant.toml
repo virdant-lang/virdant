@@ -1,0 +1,5 @@
+[project]
+name = "multiplier"
+
+[prog]
+top = "multiplier::Multiplier4"
