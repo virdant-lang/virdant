@@ -292,6 +292,15 @@ impl PerCycle {
         }
 
 
+        // Ctrl-C: shut down gracefully, flushing any pending UART
+        // output (a completed frame not yet emitted, or a byte still
+        // on the wire, which `flush` drops if it fails validation).
+        if SIGINT_REQUESTED.load(Ordering::Relaxed) {
+            self.uart_tx.flush();
+            sim.finish();
+            return;
+        }
+
         // Exit request (virt::Virt `exit` port): a @Valid(n) on a
         // clock tick ends the simulation with exit code n.  The
         // decode allocates (heap `BitPat` + layout slot clones), so
@@ -766,9 +775,12 @@ impl UartRx {
 // Average clock frequency report (--fps)
 // ─────────────────────────────────────────────────────────────
 
-// Shared with the SIGINT handler, which must print the summary
-// itself before exiting immediately.
 static FPS_START: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// Set by the SIGINT handler.  The main loop notices it on the next
+/// clock tick and shuts down gracefully (flushing pending UART
+/// output) instead of dying mid-frame.
+static SIGINT_REQUESTED: AtomicBool = AtomicBool::new(false);
 static FPS_CYCLES: AtomicU64 = AtomicU64::new(0);
 static FPS_REPORT: AtomicBool = AtomicBool::new(false);
 
@@ -793,10 +805,10 @@ fn fmt_mhz(mhz: f64) -> String {
         .to_string()
 }
 
-/// Print the `--fps` summary (the average clock frequency in MHz),
-/// on a natural exit or, via the SIGINT handler, on Ctrl-C.  Writes
-/// straight to stdout because the handler cannot take the stdout
-/// lock.
+/// Print the `--fps` summary (the average clock frequency in MHz)
+/// after the simulation loop ends (naturally or via Ctrl-C).  Writes
+/// straight to stdout so it works even when stdout has been closed
+/// or redirected oddly.
 fn report_fps() {
     if !FPS_REPORT.load(Ordering::Relaxed) {
         return;
@@ -815,11 +827,12 @@ static SAVED_TERM: Mutex<Option<nix::sys::termios::Termios>> = Mutex::new(None);
 static TERM_RESTORED: AtomicBool = AtomicBool::new(false);
 
 extern "C" fn sigint_handler(_sig: i32) {
+    // Restore the terminal right away (the main loop may take a
+    // moment to notice the flag), then ask the main loop to shut
+    // down gracefully so pending UART output is flushed instead of
+    // being dropped mid-frame.
     restore_term();
-    report_fps();
-    // Immediate exit, bypassing atexit (matches the C++ harness's
-    // _exit; termios is already restored above).
-    std::process::exit(0);
+    SIGINT_REQUESTED.store(true, Ordering::SeqCst);
 }
 
 fn restore_term() {
