@@ -224,9 +224,14 @@ tools):
 Initialization: the `@image("path")` annotation loads a raw binary file
 word-packed in declaration order (most-significant byte first within each
 word), and `@image_hex("path")` a text hex file with one word per line (à
-la `$readmemh`). Paths resolve relative to the project root — the
-directory where `virdant.toml` is found. A file shorter than the depth leaves the remaining words
-unspecified; a longer file is an error. A memory with an image is a ROM: it
+la `$readmemh`). The `@image_inline("bytes")` annotation embeds the image
+directly: the string literal's C-style escapes (`\a \b \e \f \n \r \t \v`,
+`\\ \" \?`, octal `\ooo`, hex `\xNN`) are decoded into the image's bytes,
+packed like a raw binary file — `"Hello, world!\r\n\0"` is the same 15
+bytes as `"Hello, world!\x0d\x0a\x00"`. Paths resolve relative to the
+project root — the
+directory where `virdant.toml` is found. An image shorter than the depth leaves the remaining words
+unspecified; a longer image is an error. A memory with an image is a ROM: it
 has no write site, needs no clock, and writes to it are rejected. On
 platforms annotated `@noinitial`, memory images are disallowed, exactly like
 `initial` statements.

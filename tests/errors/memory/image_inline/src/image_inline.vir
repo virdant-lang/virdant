@@ -1,0 +1,17 @@
+// Image rules (MEMORY_PLAN §6) for `@image_inline`: the decoded bytes
+// are word-packed like a raw `@image` file, and an image longer than
+// the declared depth is an error.
+
+mod TooLong {
+    incoming addr : Word[2]
+    outgoing read_data : Word[8]
+
+    // The string decodes to eight bytes; the depth is four.
+    @image_inline("12345678")
+    memory rom[4] : Word[8] {
+        read_data := it[dyn addr]
+    }
+}
+
+// CHECK: memory image 12345678 holds more words than the declared depth 4
+// CHECK: Check failed

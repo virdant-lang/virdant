@@ -1,0 +1,50 @@
+// ROMs initialized from `@image_inline` string literals (MEMORY_PLAN
+// §6): the literal's C-style escapes are decoded into the image's
+// bytes, then word-packed in declaration order, most-significant byte
+// first — exactly like a raw `@image` file.  `"Hello, world!\r\n\0"`
+// and `"Hello, world!\x0d\x0a\x00"` are the same 15 bytes.
+
+pub mod EscRom {
+    incoming addr : Word[4]
+    outgoing read_data : Word[8]
+
+    @image_inline("Hello, world!\r\n\0")
+    memory rom[16] : Word[8] {
+        read_data := it[dyn addr]
+    }
+}
+
+pub mod HexEscRom {
+    incoming addr : Word[4]
+    outgoing read_data : Word[8]
+
+    @image_inline("Hello, world!\x0d\x0a\x00")
+    memory rom[16] : Word[8] {
+        read_data := it[dyn addr]
+    }
+}
+
+pub mod QuoteRom {
+    incoming addr : Word[3]
+    outgoing read_data : Word[8]
+
+    // The escapes for quote, backslash, and question mark, plus an
+    // octal escape: `\a` rings (0x07), `\?` is '?', `\101` is 'A'.
+    @image_inline("\"\\\?\a\101")
+    memory rom[8] : Word[8] {
+        read_data := it[dyn addr]
+    }
+}
+
+pub mod WordRom {
+    incoming addr : Word[1]
+    outgoing read_data : Word[16]
+
+    // Two bytes per word, most-significant byte first: 0x4142, 0x0102.
+    @image_inline("AB\x01\x02")
+    memory rom[2] : Word[16] {
+        read_data := it[dyn addr]
+    }
+}
+
+// CHECK: Check OK

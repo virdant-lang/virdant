@@ -43,7 +43,12 @@ pub enum Token {
     #[regex(br"0x[0-9a-fA-F]([_]?[0-9a-fA-F])*w[0-9]+")]
     Word,
 
-    #[regex(br#""([^"\\]|\\t|\\n|\\r|\\0)*""#)]
+    // String literal: any bytes except `"` and `\` verbatim, or a
+    // C-style escape — single-character (`\a \b \e \f \n \r \t \v`,
+    // `\\ \' \" \?`), octal (`\0` through `\777`), or hex (`\xNN`,
+    // exactly two hex digits).  The escapes are decoded when a string
+    // literal's bytes are consumed (see `util::decode_string_escapes`).
+    #[regex(br#""([^"\\]|\\[abefnrtv\\'"?]|\\x[0-9a-fA-F]{2}|\\[0-7]{1,3})*""#)]
     Str,
 
     // Punctuation

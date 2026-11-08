@@ -73,7 +73,7 @@ how the memory is read (`mem[dyn addr]`).  `memory` is a reserved keyword.
   address written in the same cycle sees the **old** value
   (read-before-write); never-written words read as pseudorandom.
 
-## Initialization: `@image` / `@image_hex`
+## Initialization: `@image` / `@image_hex` / `@image_inline`
 
 ```virdant
 @image_hex("rom_image.hex")
@@ -84,10 +84,16 @@ memory rom[256] : Word[32] {
 
 * `@image_hex("path")` — text hex file, one word per line (à la
   `$readmemh`); `@image("path")` — raw binary, word-packed in declaration
-  order (most-significant byte first within each word).
+  order (most-significant byte first within each word);
+  `@image_inline("bytes")` — a string literal whose bytes *are* the image,
+  packed like a raw binary file.  The literal supports C-style escapes:
+  `\a \b \e \f \n \r \t \v`, `\\ \" \?` (and `\'`), octal `\ooo` of one
+  to three octal digits (`\0` is NUL), and hex `\xNN` — so
+  `"Hello, world!\r\n\0"` is the same 15 bytes as
+  `"Hello, world!\x0d\x0a\x00"`.
 * Paths resolve **relative to the project root** — the directory where
-  `virdant.toml` is found.
-* A file shorter than the depth leaves the rest unspecified; longer is an
+  `virdant.toml` is found.  `@image_inline` needs no file.
+* An image shorter than the depth leaves the rest unspecified; longer is an
   error (`MemoryImageTooLong`).  Element widths above 64 bits are not
   supported for images in v1.
 * An image memory is a ROM: it has no write site and needs no clock; writes
@@ -113,13 +119,14 @@ end
 assign read_data = mem[addr];
 ```
 
-`@image_hex` emits an `initial $readmemh(...)`; `@image` emits explicit
-per-word initial assignments.
+`@image_hex` emits an `initial $readmemh(...)`; `@image` and
+`@image_inline` emit explicit per-word initial assignments.
 
 ## Idioms
 
 * A register file: one write port, several read ports at different
   addresses — declare each read's `dependson` list.
-* A ROM: `@image_hex` + read-only body; no write site, no clock needed.
+* A ROM: `@image_hex` (or `@image`/`@image_inline`) + read-only body; no
+  write site, no clock needed.
 * One write per cycle: guard the single write site with `if`/`match`
   structure whose arms are mutually exclusive.

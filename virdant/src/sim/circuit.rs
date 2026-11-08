@@ -69,7 +69,7 @@ pub(super) struct Circuit {
 pub(super) struct MemoryCircuit {
     /// The declared depth (a power of two).
     pub(super) depth: u32,
-    /// Words provided by `@image`/`@image_hex`, as `Value`s of the
+    /// Words provided by an image annotation, as `Value`s of the
     /// element type; indices past this are random-initialized by
     /// `State::new` (never-written words read as unspecified).
     pub(super) image: Vec<Option<Value>>,
@@ -676,20 +676,21 @@ fn collect_referents_inner(expr: &Expr, out: &mut Vec<Referent>) {
 }
 
 
-/// Read a memory's `@image`/`@image_hex` file and pack it into words of
-/// the element type.  Unreadable or malformed files
-/// yield no words — the check phase has already reported the problem —
-/// leaving every word at its random initial value.
+/// Read a memory's `@image`/`@image_hex` file (or `@image_inline`
+/// string) and pack it into words of the element type.  Unreadable or
+/// malformed images yield no words — the check phase has already
+/// reported the problem — leaving every word at its random initial
+/// value.
 fn load_memory_image(
     elab_component: &crate::analysis::elaboration::ElaboratedComponent,
     elem_typ: &Type,
     interner: &mut TypeInterner,
 ) -> Vec<Option<Value>> {
-    let Some((kind, path)) = elab_component.image() else {
+    let Some(image) = elab_component.image() else {
         return vec![];
     };
-    let bytes = match std::fs::read(path) {
-        Ok(bytes) => bytes,
+    let bytes: Vec<u8> = match image.bytes() {
+        Ok(bytes) => bytes.into(),
         Err(_) => return vec![],
     };
     let width = match elem_typ {
@@ -697,7 +698,7 @@ fn load_memory_image(
         _ => return vec![],
     };
     let typ_id = interner.intern(elem_typ);
-    let words: Vec<u64> = match kind {
+    let words: Vec<u64> = match image.kind {
         MemoryImageKind::Hex => {
             let text = String::from_utf8_lossy(&bytes);
             match memory_image::parse_hex_image(&text, width) {
@@ -705,10 +706,12 @@ fn load_memory_image(
                 Err(_) => return vec![],
             }
         }
-        MemoryImageKind::Raw => match memory_image::parse_raw_image(&bytes, width) {
-            Some(words) => words,
-            None => return vec![],
-        },
+        MemoryImageKind::Raw | MemoryImageKind::Inline => {
+            match memory_image::parse_raw_image(&bytes, width) {
+                Some(words) => words,
+                None => return vec![],
+            }
+        }
     };
     words
         .into_iter()

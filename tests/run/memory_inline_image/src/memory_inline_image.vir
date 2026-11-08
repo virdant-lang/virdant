@@ -1,0 +1,168 @@
+//! Self-checking `kind = "run"` test for `@image_inline` memory
+//! initialization (MEMORY_PLAN §6): two byte-ROMs initialized from
+//! equivalent inline strings — one written with C-style escapes, one
+//! with `\xNN` hex escapes — and a 16-bit ROM word-packed from an
+//! inline string, most-significant byte first.  The harness walks all
+//! addresses, checking each read against a golden table.
+
+import virt
+
+//> An 8-word ROM from an inline string with C-style escapes:
+//> `Virdant` followed by a NUL byte.
+pub mod EscRom {
+    //> Read address.
+    incoming read_addr : Word[3]
+
+    //> The addressed word.
+    outgoing read_data : Word[8] dependson read_addr {
+        it := rom[dyn read_addr]
+    }
+
+    @image_inline("Virdant\0")
+    memory rom[8] : Word[8]
+}
+
+//> An 8-word ROM from an inline string with the same bytes written as
+//> `\xNN` hex escapes: 0x56 0x69 0x72 0x64 0x61 0x6e 0x74 0x00.
+pub mod HexEscRom {
+    //> Read address.
+    incoming read_addr : Word[3]
+
+    //> The addressed word.
+    outgoing read_data : Word[8] dependson read_addr {
+        it := rom[dyn read_addr]
+    }
+
+    @image_inline("\x56\x69\x72\x64\x61\x6e\x74\x00")
+    memory rom[8] : Word[8]
+}
+
+//> An 8-word 16-bit ROM from an inline string: two bytes per word,
+//> most-significant byte first (0x4142, 0x0102, 0x4344, 0x0304, ...).
+pub mod WordRom {
+    //> Read address.
+    incoming read_addr : Word[3]
+
+    //> The addressed word.
+    outgoing read_data : Word[16] dependson read_addr {
+        it := rom[dyn read_addr]
+    }
+
+    @image_inline("AB\x01\x02CD\x03\x04EFGHIJKL")
+    memory rom[8] : Word[16]
+}
+
+pub mod InlineImageTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    mod esc_rom of EscRom {
+        it.read_addr := index[3..0]
+    }
+
+    mod hex_esc_rom of HexEscRom {
+        it.read_addr := index[3..0]
+    }
+
+    mod word_rom of WordRom {
+        it.read_addr := index[3..0]
+    }
+
+    // Free-running step counter through the 8 addresses.
+    reg index : Word[3] {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    reg started : Bit {
+        initial it <= false
+        it <= true
+    }
+
+    reg finished : Bit {
+        initial it <= false
+        if {
+            when started && index == 7 {
+                it <= true
+            }
+        }
+    }
+
+    reg all_ok : Bit {
+        initial it <= true
+        if {
+            when started && !finished {
+                it <= it && esc_rom.read_data == esc_expected
+                    && hex_esc_rom.read_data == esc_expected
+                    && word_rom.read_data == word_expected
+            }
+        }
+    }
+
+    // Golden byte table, selected by the address: the bytes of
+    // `Virdant\0`.
+    wire esc_expected : Word[8]
+    match index {
+        with 0 {
+            esc_expected := 0x56
+        }
+        with 1 {
+            esc_expected := 0x69
+        }
+        with 2 {
+            esc_expected := 0x72
+        }
+        with 3 {
+            esc_expected := 0x64
+        }
+        with 4 {
+            esc_expected := 0x61
+        }
+        with 5 {
+            esc_expected := 0x6e
+        }
+        with 6 {
+            esc_expected := 0x74
+        }
+        with 7 {
+            esc_expected := 0x00
+        }
+    }
+
+    // Golden word table, selected by the address: the inline bytes
+    // packed two per word, most-significant byte first.
+    wire word_expected : Word[16]
+    match index {
+        with 0 {
+            word_expected := 0x4142
+        }
+        with 1 {
+            word_expected := 0x0102
+        }
+        with 2 {
+            word_expected := 0x4344
+        }
+        with 3 {
+            word_expected := 0x0304
+        }
+        with 4 {
+            word_expected := 0x4546
+        }
+        with 5 {
+            word_expected := 0x4748
+        }
+        with 6 {
+            word_expected := 0x494a
+        }
+        with 7 {
+            word_expected := 0x4b4c
+        }
+    }
+}

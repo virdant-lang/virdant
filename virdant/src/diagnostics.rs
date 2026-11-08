@@ -93,9 +93,9 @@ pub enum DiagnosticPayload {
     /// body's `on` region.
     MemoryOnRegionNonWrite(MemoryOnRegionNonWrite),
     /// An `initial` statement targets a memory (not supported; use
-    /// `@image`/`@image_hex`).
+    /// image annotations).
     MemoryInitialUnsupported(MemoryInitialUnsupported),
-    /// A write to a memory initialized by `@image`/`@image_hex`: its
+    /// A write to a memory initialized by an image annotation: its
     /// contents come from the file.
     MemoryImageWrite(MemoryImageWrite),
     /// A memory image file could not be read.
@@ -946,7 +946,7 @@ impl Diagnostic {
                 d.component,
             ).into(),
             DiagnosticPayload::MemoryImageWrite(d) => format!(
-                "memory {} is initialized by @image/@image_hex; writes to it are not supported",
+                "memory {} is initialized by @image/@image_hex/@image_inline; writes to it are not supported",
                 d.component,
             ).into(),
             DiagnosticPayload::MemoryImageIo(d) => format!(

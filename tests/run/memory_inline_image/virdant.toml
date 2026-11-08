@@ -1,0 +1,5 @@
+[project]
+name = "memory_inline_image"
+
+[prog]
+top = "memory_inline_image::InlineImageTest"
