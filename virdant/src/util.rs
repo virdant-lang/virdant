@@ -9,7 +9,7 @@
 
 use std::sync::Arc;
 
-use bstr::BStr;
+use bstr::{BStr, BString};
 use bstr::ByteSlice as _;
 
 use crate::common::{Width, WordValue};
@@ -50,6 +50,84 @@ pub fn log2(n: Width) -> Option<Width> {
     } else {
         Some(n.trailing_zeros() as Width)
     }
+}
+
+/// Decodes the C-style escapes of a string literal's raw text (the
+/// text between the quotes, as written in the source): the
+/// single-character escapes `\a \b \e \f \n \r \t \v` and
+/// `\\ \' \" \?`, octal escapes `\ooo` of one to three octal digits
+/// (so `\0` is the NUL byte), and hex escapes `\xNN` of exactly two
+/// hex digits.  An octal escape above `\377` wraps modulo 256, as in
+/// C.  The lexer's `Str` rule (syntax/token.rs) accepts exactly these
+/// escape forms; anything else reaching this function is copied
+/// through verbatim.
+pub fn decode_string_escapes(raw: &[u8]) -> BString {
+    let mut decoded = BString::new(vec![]);
+    let mut index = 0;
+    while index < raw.len() {
+        if raw[index] != b'\\' || index + 1 >= raw.len() {
+            decoded.push(raw[index]);
+            index += 1;
+            continue;
+        }
+        let escape = raw[index + 1];
+        match escape {
+            b'a' => { decoded.push(0x07); index += 2; }
+            b'b' => { decoded.push(0x08); index += 2; }
+            b'e' => { decoded.push(0x1b); index += 2; }
+            b'f' => { decoded.push(0x0c); index += 2; }
+            b'n' => { decoded.push(b'\n'); index += 2; }
+            b'r' => { decoded.push(b'\r'); index += 2; }
+            b't' => { decoded.push(b'\t'); index += 2; }
+            b'v' => { decoded.push(0x0b); index += 2; }
+            b'\\' | b'\'' | b'"' | b'?' => {
+                decoded.push(escape);
+                index += 2;
+            }
+            b'x' => {
+                // `\xNN`: exactly two hex digits (the lexer's `Str`
+                // rule requires them); anything else is copied
+                // through verbatim.
+                let digits = raw.get(index + 2..index + 4);
+                let Some(digits) = digits else {
+                    decoded.push(raw[index]);
+                    index += 1;
+                    continue;
+                };
+                match std::str::from_utf8(digits).ok().and_then(|digits| u8::from_str_radix(digits, 16).ok()) {
+                    Some(value) => {
+                        decoded.push(value);
+                        index += 4;
+                    }
+                    None => {
+                        decoded.push(raw[index]);
+                        index += 1;
+                    }
+                }
+            }
+            b'0'..=b'7' => {
+                // `\ooo`: one to three octal digits; values above
+                // `\377` wrap modulo 256, as in C.
+                let mut value: u32 = 0;
+                let mut digits = 0;
+                while digits < 3
+                    && index + 1 + digits < raw.len()
+                    && (b'0'..=b'7').contains(&raw[index + 1 + digits])
+                {
+                    value = value * 8 + (raw[index + 1 + digits] - b'0') as u32;
+                    digits += 1;
+                }
+                decoded.push((value & 0xff) as u8);
+                index += 1 + digits;
+            }
+            _ => {
+                // Not an escape form the lexer accepts; copy through.
+                decoded.push(raw[index]);
+                index += 1;
+            }
+        }
+    }
+    decoded
 }
 
 pub fn parse_word_literal(literal: &str) -> (WordValue, Option<Width>) {

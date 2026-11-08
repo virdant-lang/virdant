@@ -11,6 +11,7 @@ use bstr::BString;
 use bstr::ByteSlice;
 use indexmap::IndexMap;
 
+use crate::analysis::memory_image::{self, memory_image_annotation, MemoryImage, MemoryImageKind};
 use crate::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
 use crate::analysis::Location;
 use crate::common::graph::{Graph, VertIndex};
@@ -722,7 +723,7 @@ fn flag_module_initials(
     }
 
     // Memory images are gated exactly like `initial` statements: a
-    // memory whose contents come from `@image`/`@image_hex` cannot
+    // memory whose contents come from an image annotation cannot
     // exist under a `@noinitial` platform.
     let location = builder.get_symboltable().symbol(mod_id).location();
     let parsing = builder.get_parsing(location.package());
@@ -733,7 +734,7 @@ fn flag_module_initials(
             continue;
         }
         if let Some((_, _, arg_region)) =
-            crate::analysis::memory_image::memory_image_annotation(&parsing, &stmt)
+            memory_image_annotation(&parsing, &stmt)
         {
             diagnostics.push(Diagnostic::new(
                 arg_region,
@@ -1130,11 +1131,11 @@ fn check_ext_mod_generics(builder: &mut Builder, diagnostics: &mut Vec<Diagnosti
 
 
 
-/// Validate every `@image`/`@image_hex` memory annotation: the file
-/// must exist and parse, and hold no more words than the declared
-/// depth (shorter files are fine: the rest reads as unspecified).
-/// Element widths above 64 bits are not supported (hex parsing is
-/// `u64`-based).
+/// Validate every `@image`/`@image_hex`/`@image_inline` memory
+/// annotation: the file must exist and parse (for the file-based
+/// kinds), and hold no more words than the declared depth (shorter
+/// images are fine: the rest reads as unspecified).  Element widths
+/// above 64 bits are not supported (hex parsing is `u64`-based).
 fn check_memory_images(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
     let symboltable = builder.get_symboltable();
     for item in symboltable.items() {
@@ -1149,8 +1150,8 @@ fn check_memory_images(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>)
                 continue;
             }
             let Some(depth) = component.depth() else { continue };
-            let Some((kind, image_path_str, arg_region)) =
-                crate::analysis::memory_image::memory_image_annotation(
+            let Some((kind, image_arg, arg_region)) =
+                memory_image_annotation(
                     &parsing,
                     &parsing.ast_node(component.location().ast_node_id()),
                 )
@@ -1173,18 +1174,22 @@ fn check_memory_images(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>)
                 ));
                 continue;
             }
-            let image_path = crate::analysis::memory_image::resolve_image_path(
+            // The image's bytes: an `@image_inline` literal carries
+            // its own (escape-decoded) bytes; the file-based kinds are
+            // read from disk, relative to the project root.
+            let image = MemoryImage::resolve(
                 builder.db().project_root(),
-                image_path_str.as_bstr(),
+                kind,
+                image_arg.as_bstr(),
             );
-            let bytes = match std::fs::read(&image_path) {
+            let image_bytes: bstr::BString = match image.bytes() {
                 Ok(bytes) => bytes,
                 Err(error) => {
                     diagnostics.push(Diagnostic::new(
                         arg_region,
                         diagnostics::MemoryImageIo {
                             component: component.path(),
-                            path: image_path_str,
+                            path: image_arg.clone(),
                             error: error.to_string().into(),
                         },
                     ));
@@ -1192,9 +1197,9 @@ fn check_memory_images(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>)
                 }
             };
             let words = match kind {
-                crate::analysis::memory_image::MemoryImageKind::Hex => {
-                    let text = String::from_utf8_lossy(&bytes);
-                    match crate::analysis::memory_image::parse_hex_image(&text, elem_width) {
+                MemoryImageKind::Hex => {
+                    let text = String::from_utf8_lossy(&image_bytes);
+                    match memory_image::parse_hex_image(&text, elem_width) {
                         Ok(words) => words,
                         Err(reason) => {
                             diagnostics.push(Diagnostic::new(
@@ -1208,8 +1213,9 @@ fn check_memory_images(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>)
                         }
                     }
                 }
-                crate::analysis::memory_image::MemoryImageKind::Raw => {
-                    match crate::analysis::memory_image::parse_raw_image(&bytes, elem_width) {
+                MemoryImageKind::Raw
+                | MemoryImageKind::Inline => {
+                    match memory_image::parse_raw_image(&image_bytes, elem_width) {
                         Some(words) => words,
                         None => {
                             diagnostics.push(Diagnostic::new(
@@ -1230,7 +1236,7 @@ fn check_memory_images(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>)
                     arg_region,
                     diagnostics::MemoryImageTooLong {
                         component: component.path(),
-                        path: image_path_str,
+                        path: image_arg,
                         depth,
                     },
                 ));

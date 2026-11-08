@@ -1,0 +1,3 @@
+kind = "run"
+description = "ROMs initialized from @image_inline string literals (C-style and \\xNN escapes); readback checks the loaded words"
+cycle_limit = 16

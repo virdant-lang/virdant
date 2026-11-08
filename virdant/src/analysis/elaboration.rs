@@ -13,6 +13,7 @@ use crate::analysis::Location;
 use crate::analysis::component::{ComponentAnalysis, ComponentId};
 use crate::analysis::dependency::EdgeKind;
 use crate::analysis::drivers::{Driver, DriverAnalysis};
+use crate::analysis::memory_image::{memory_image_annotation, MemoryImage};
 use crate::analysis::symbols::SymbolId;
 use crate::common::{ComponentKind, DriverType, SocketRole};
 use crate::db::Builder;
@@ -113,10 +114,10 @@ pub struct ElaboratedComponent {
     /// component's `typ` is the *element* type (a memory introduces no
     /// new type), so the depth lives here.
     depth: Option<u32>,
-    /// For a `memory` component: its image annotation (`@image` /
-    /// `@image_hex`), with the image path resolved against the
-    /// project root.  `None` otherwise.
-    image: Option<(crate::analysis::memory_image::MemoryImageKind, std::path::PathBuf)>,
+    /// For a `memory` component: its image annotation (`@image`,
+    /// `@image_hex`, or `@image_inline`) resolved to a `MemoryImage` —
+    /// its format and the source of its bytes.  `None` otherwise.
+    image: Option<MemoryImage>,
 }
 
 /// The module-level identity of a component's driver statement: the
@@ -242,9 +243,9 @@ impl ElaboratedComponent {
         self.depth
     }
 
-    /// The image annotation of a `memory` component with its resolved
-    /// path, or `None`.
-    pub fn image(&self) -> Option<&(crate::analysis::memory_image::MemoryImageKind, std::path::PathBuf)> {
+    /// The image annotation of a `memory` component, resolved to its
+    /// format and the source of its bytes, or `None`.
+    pub fn image(&self) -> Option<&MemoryImage> {
         self.image.as_ref()
     }
 
@@ -436,14 +437,15 @@ fn elaborate_module(
                         .resolve(name)
                         .and_then(|c| c.depth()),
                     image: if component.kind == ComponentKind::Memory {
-                        crate::analysis::memory_image::memory_image_annotation(
+                        memory_image_annotation(
                             &parsing, &stmt,
                         )
-                        .map(|(kind, path, _)| {
-                            (kind, crate::analysis::memory_image::resolve_image_path(
+                        .map(|(kind, arg, _)| {
+                            MemoryImage::resolve(
                                 builder.db().project_root(),
-                                path.as_bstr(),
-                            ))
+                                kind,
+                                arg.as_bstr(),
+                            )
                         })
                     } else {
                         None

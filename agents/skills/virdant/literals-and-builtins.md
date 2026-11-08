@@ -3,6 +3,15 @@
 This document covers the syntax for numeric literals and the built-in
 functions that operate on `Bit` and `Word[n]`.
 
+## String literals
+
+A string literal is text in double quotes.  Between the quotes, any byte
+except `"` and `\\` stands for itself; a backslash introduces a C-style
+escape: `\\a \\b \\e \\f \\n \\r \\t \\v`, `\\\\ \\' \" \\?`, octal `\\ooo` of one
+to three octal digits (`\\0` is the NUL byte), and hex `\\xNN` of exactly
+two hex digits (`\\x0d` is carriage return).  Escapes are decoded where
+string bytes are consumed — e.g. by `@image_inline` (see `./memory.md`).
+
 ## Numeric literals
 
 A plain integer literal (e.g., `0`, `42`, `100000`) infers a width

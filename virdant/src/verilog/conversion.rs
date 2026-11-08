@@ -10,7 +10,7 @@ use std::sync::Arc;
 use bstr::ByteSlice;
 
 use crate::analysis::drivers::{Driver, DriverIf, DriverMatch, WriteIndex};
-use crate::analysis::memory_image::MemoryImageKind;
+use crate::analysis::memory_image::{self, memory_image_annotation, MemoryImage, MemoryImageKind};
 use crate::analysis::location::Location;
 use crate::analysis::symbols::{Symbol, SymbolId, SymbolTable};
 use crate::common::{self, ComponentKind, DriverType, Radix, TypeScheme, Width, WordValue};
@@ -590,38 +590,48 @@ impl<'d> Converter<'d> {
                                 depth,
                                 init: self.memory_image_init(package, &stmt, &name),
                             }));
-                            // A raw-binary `@image` cannot be emitted as
-                            // `$readmemh`; its words become explicit
+                            // A raw-binary `@image` file or an
+                            // `@image_inline` string cannot be emitted
+                            // as `$readmemh`; its words become explicit
                             // initial assignments instead.
-                            if let Some((MemoryImageKind::Raw, path, _)) =
-                                crate::analysis::memory_image::memory_image_annotation(&parsing, &stmt)
+                            let image_words = match
+                                memory_image_annotation(&parsing, &stmt)
+                                    .map(|(kind, arg, _)| {
+                                        MemoryImage::resolve(
+                                            self.db.project_root(),
+                                            kind,
+                                            arg.as_bstr(),
+                                        )
+                                    })
                             {
-                                let image_path =
-                                    crate::analysis::memory_image::resolve_image_path(
-                                        self.db.project_root(),
-                                        path.as_bstr(),
-                                    );
-                                if let Ok(bytes) = std::fs::read(&image_path) {
-                                    if let Some(words) = crate::analysis::memory_image::parse_raw_image(&bytes, width) {
-                                        let mem_name = valid_verilog_name(&name);
-                                        let stmts: Vec<verilog::Stmt> = words
-                                            .into_iter()
-                                            .enumerate()
-                                            .map(|(index, value)| {
-                                                verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
-                                                    name: format!("{mem_name}[{index}]"),
-                                                    expr: verilog::Expr::WordLit(verilog::expr::WordLit {
-                                                        value,
-                                                        width,
-                                                        radix: Radix::Hex,
-                                                    }),
-                                                })
-                                            })
-                                            .collect();
-                                        if !stmts.is_empty() {
-                                            elements.push(verilog::Element::Initial(verilog::Initial { stmts }));
-                                        }
+                                Some(image) => match image.kind {
+                                    MemoryImageKind::Raw | MemoryImageKind::Inline => {
+                                        image.bytes().ok().and_then(|bytes| {
+                                            memory_image::parse_raw_image(&bytes, width)
+                                        })
                                     }
+                                    MemoryImageKind::Hex => None,
+                                },
+                                None => None,
+                            };
+                            if let Some(words) = image_words {
+                                let mem_name = valid_verilog_name(&name);
+                                let stmts: Vec<verilog::Stmt> = words
+                                    .into_iter()
+                                    .enumerate()
+                                    .map(|(index, value)| {
+                                        verilog::Stmt::AssignBlocking(verilog::AssignBlocking {
+                                            name: format!("{mem_name}[{index}]"),
+                                            expr: verilog::Expr::WordLit(verilog::expr::WordLit {
+                                                value,
+                                                width,
+                                                radix: Radix::Hex,
+                                            }),
+                                        })
+                                    })
+                                    .collect();
+                                if !stmts.is_empty() {
+                                    elements.push(verilog::Element::Initial(verilog::Initial { stmts }));
                                 }
                             }
                         }
@@ -885,8 +895,8 @@ impl<'d> Converter<'d> {
     /// The `$readmemh` initialization of an `@image_hex` memory, with
     /// the image path resolved (absolute) at conversion time so the
     /// emitted Verilog finds the file from any working directory.
-    /// Raw `@image` files are emitted as explicit
-    /// initial assignments by the caller instead.
+    /// Raw `@image` files and `@image_inline` strings are emitted as
+    /// explicit initial assignments by the caller instead.
     fn memory_image_init(
         &self,
         package: PackageId,
@@ -894,14 +904,22 @@ impl<'d> Converter<'d> {
         _name: &str,
     ) -> Option<verilog::MemoryInit> {
         let parsing = self.db.get_parsing(package);
-        let Some((MemoryImageKind::Hex, path, _)) =
-            crate::analysis::memory_image::memory_image_annotation(&parsing, stmt)
+        let Some(image) = memory_image_annotation(&parsing, stmt)
+            .map(|(kind, arg, _)| {
+                MemoryImage::resolve(
+                    self.db.project_root(),
+                    kind,
+                    arg.as_bstr(),
+                )
+            })
+            .filter(|image| image.kind == MemoryImageKind::Hex)
         else {
             return None;
         };
-        let image_path =
-            crate::analysis::memory_image::resolve_image_path(self.db.project_root(), path.as_bstr());
-        let image_path = std::fs::canonicalize(&image_path).unwrap_or(image_path);
+        let Some(path) = image.file_path() else {
+            return None;
+        };
+        let image_path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
         Some(verilog::MemoryInit::Readmemh {
             file: image_path.display().to_string(),
         })

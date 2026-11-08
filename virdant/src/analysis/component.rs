@@ -475,7 +475,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 AstNodePayload::Annotation(annotation)
                                     if matches!(
                                         parsing.string(annotation.name).as_bytes(),
-                                        b"image" | b"image_hex"
+                                        b"image" | b"image_hex" | b"image_inline"
                                     )
                             )
                         })

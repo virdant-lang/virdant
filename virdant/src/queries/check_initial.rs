@@ -44,7 +44,7 @@ pub(crate) fn check_initial(builder: &mut Builder, symbol_id: SymbolId) -> Arc<V
         let Some(component) = component_analysis.component(*comp_id) else { continue };
 
         // `initial` on a memory is not supported: contents come from
-        // `@image`/`@image_hex`.
+        // `@image`/`@image_hex`/`@image_inline`.
         if component.kind() == Some(ComponentKind::Memory) {
             for loc in locs {
                 diagnostics.push(Diagnostic::new(

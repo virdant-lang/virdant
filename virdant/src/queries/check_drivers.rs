@@ -132,9 +132,9 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<V
     Arc::new(diagnostics)
 }
 
-/// Whether a memory declaration carries an `@image`/`@image_hex`
-/// annotation (its contents come from a file; writes are not allowed
-/// and a missing write site is not an error).
+/// Whether a memory declaration carries an `@image`/`@image_hex`/
+/// `@image_inline` annotation (its contents come from the image;
+/// writes are not allowed and a missing write site is not an error).
 fn memory_has_image(parsing: &Parsing, decl: &AstNode<'_>) -> bool {
     let children = decl.children();
     let Some(annotations) = children.first() else { return false };
@@ -147,7 +147,7 @@ fn memory_has_image(parsing: &Parsing, decl: &AstNode<'_>) -> bool {
             AstNodePayload::Annotation(annotation)
                 if matches!(
                     parsing.string(annotation.name).as_bytes(),
-                    b"image" | b"image_hex"
+                    b"image" | b"image_hex" | b"image_inline"
                 ),
         )
     })

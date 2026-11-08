@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "An @image_inline image longer than the declared depth is an error"
+filecheck = "src/image_inline.vir"

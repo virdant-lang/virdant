@@ -1,0 +1,4 @@
+kind = "check"
+expect = "ok_no_warnings"
+description = "ROMs initialized from @image_inline string literals: C-style escapes, hex \\xNN escapes, and word packing"
+filecheck = "src/image_inline.vir"

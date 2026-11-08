@@ -42,5 +42,5 @@ mod WriteToImage {
 
 // CHECK: memory image words_too_long.hex holds more words than the declared depth 4
 // CHECK: could not read memory image for rom
-// CHECK: memory rom is initialized by @image/@image_hex
+// CHECK: memory rom is initialized by @image/@image_hex/@image_inline
 // CHECK: Check failed

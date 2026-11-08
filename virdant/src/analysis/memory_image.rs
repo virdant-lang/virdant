@@ -1,6 +1,6 @@
-//! `@image`/`@image_hex` memory initialization: annotation parsing,
-//! path resolution (relative to the project root), and word packing
-//! for the two formats.
+//! `@image`/`@image_hex`/`@image_inline` memory initialization:
+//! annotation parsing, path resolution (relative to the project root),
+//! and word packing for the formats.
 //!
 //! Validation (existence, length, well-formedness) lives in the check
 //! phase (`queries/check.rs`); the simulator and the Verilog backend
@@ -27,10 +27,76 @@ pub enum MemoryImageKind {
     /// `@image_hex("path")`: a text hex file, one word per line (à la
     /// `$readmemh`).
     Hex,
+    /// `@image_inline("bytes")`: a string literal whose C-style
+    /// escapes are decoded into the image's bytes, packed like a raw
+    /// binary image.
+    Inline,
 }
 
-/// The `@image`/`@image_hex` annotation of a memory declaration: its
-/// kind, its path argument, and the argument's region (for
+/// Where an image's bytes come from: a file path (resolved against
+/// the project root) or the decoded bytes of an `@image_inline`
+/// string literal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MemoryImageSource {
+    File(PathBuf),
+    Inline(BString),
+}
+
+/// A memory image annotation resolved to the source its bytes come
+/// from: the declared format plus a file path or the inline bytes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemoryImage {
+    /// The image format declared by the annotation.
+    pub kind: MemoryImageKind,
+    /// Where the image's bytes come from.
+    pub source: MemoryImageSource,
+}
+
+impl MemoryImage {
+    /// Resolve an image annotation's argument to the image its bytes
+    /// come from: the file-based kinds resolve the path against the
+    /// project root; `@image_inline` decodes the string literal's
+    /// C-style escapes (see `util::decode_string_escapes`) into the
+    /// embedded bytes.
+    pub fn resolve(
+        project_root: Option<&Path>,
+        kind: MemoryImageKind,
+        arg: &BStr,
+    ) -> MemoryImage {
+        let source = match kind {
+            MemoryImageKind::Inline => {
+                MemoryImageSource::Inline(crate::util::decode_string_escapes(arg))
+            }
+            MemoryImageKind::Raw | MemoryImageKind::Hex => {
+                MemoryImageSource::File(resolve_image_path(project_root, arg))
+            }
+        };
+        MemoryImage { kind, source }
+    }
+
+    /// The image's bytes: the decoded bytes of an `@image_inline`
+    /// literal, or the contents of the image file read from disk.
+    pub fn bytes(&self) -> std::io::Result<BString> {
+        match &self.source {
+            MemoryImageSource::Inline(bytes) => Ok(bytes.clone()),
+            MemoryImageSource::File(path) => std::fs::read(path).map(Into::into),
+        }
+    }
+
+    /// The resolved image file's path, or `None` for an
+    /// `@image_inline` (whose bytes are embedded).
+    pub fn file_path(&self) -> Option<&Path> {
+        match &self.source {
+            MemoryImageSource::File(path) => Some(path),
+            MemoryImageSource::Inline(_) => None,
+        }
+    }
+}
+
+/// The `@image`/`@image_hex`/`@image_inline` annotation of a memory
+/// declaration: its kind, its raw argument (the string literal's text
+/// between the quotes, *not* escape-decoded — call
+/// `resolve_image_source` for that), and the argument's region (for
 /// diagnostics).  `None` when the declaration has no image annotation
 /// (or its argument is malformed — the first annotation wins).
 pub fn memory_image_annotation(
@@ -49,6 +115,7 @@ pub fn memory_image_annotation(
         let kind = match parsing.string(payload.name).as_bytes() {
             b"image" => MemoryImageKind::Raw,
             b"image_hex" => MemoryImageKind::Hex,
+            b"image_inline" => MemoryImageKind::Inline,
             _ => continue,
         };
         // The path argument: a `Str` literal child.
@@ -75,7 +142,7 @@ pub fn memory_image_annotation(
 /// holding `virdant.toml`.  Falls back to the path as
 /// written (relative to the process working directory, like
 /// `$readmemh`) when no project root is known.
-pub fn resolve_image_path(project_root: Option<&Path>, path: &BStr) -> PathBuf {
+fn resolve_image_path(project_root: Option<&Path>, path: &BStr) -> PathBuf {
     match project_root {
         Some(root) => root.join(Path::new(&path.to_str_lossy().into_owned())),
         None => PathBuf::from(path.to_str_lossy().into_owned()),
