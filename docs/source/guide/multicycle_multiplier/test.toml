@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide multi-cycle multiplier example: shift-and-add over four cycles."
+expect = "ok"

@@ -1,0 +1,35 @@
+top multicycle_multiplier::MulticycleMultiplier
+poke start 0
+poke a 13
+poke b 11
+vcd trace.vcd
+tick
+poke start 1
+tick
+poke start 0
+tick
+tick
+tick
+tick
+tick
+poke a 9
+poke b 5
+poke start 1
+tick
+poke start 0
+tick
+tick
+tick
+tick
+tick
+poke a 15
+poke b 15
+poke start 1
+tick
+poke start 0
+tick
+tick
+tick
+tick
+tick
+exit

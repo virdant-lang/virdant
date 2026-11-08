@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide popcount example: population count built from widening adds."
+expect = "ok"

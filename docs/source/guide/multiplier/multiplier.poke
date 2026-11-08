@@ -1,0 +1,51 @@
+top multiplier::Multiplier4
+poke a 0
+poke b 0
+vcd trace.vcd
+advance
+poke a 1
+poke b 5
+advance
+poke a 2
+poke b 3
+advance
+poke a 3
+poke b 3
+advance
+poke a 4
+poke b 12
+advance
+poke a 5
+poke b 9
+advance
+poke a 6
+poke b 6
+advance
+poke a 7
+poke b 15
+advance
+poke a 8
+poke b 4
+advance
+poke a 9
+poke b 9
+advance
+poke a 10
+poke b 2
+advance
+poke a 11
+poke b 13
+advance
+poke a 12
+poke b 7
+advance
+poke a 13
+poke b 1
+advance
+poke a 14
+poke b 11
+advance
+poke a 15
+poke b 15
+advance
+exit
