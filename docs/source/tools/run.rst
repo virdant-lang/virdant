@@ -23,6 +23,16 @@ so the design behaves like an ordinary command-line program.
 
 Options
 -------
+``--legacy``
+    Force the legacy tree-walking interpreter simulator instead of the
+    VM simulator (the default).
+    Incompatible with ``--bytecode``.
+
+``--bytecode``
+    Dump the compiled VM bytecode (one disassembled program per driven
+    component) and exit, without simulating.
+    Requires the VM simulator: combining it with ``--legacy`` is an error.
+
 ``--baud <BAUD>``
     UART baud rate for the virt board (default 115200, overridable via
     ``[virt]`` in ``virdant.toml``).

@@ -48,7 +48,11 @@ fn command() -> clap::Command {
             .value_parser(value_parser!(u64))
             .help("UART baud rate for the virt board (default 115200, overridable via [virt] in virdant.toml)"))
         .arg(Arg::new("verbose").short('v').long("verbose").action(ArgAction::SetTrue)
-            .help("Print informational board messages"));
+            .help("Print informational board messages"))
+        .arg(Arg::new("legacy").long("legacy").action(ArgAction::SetTrue)
+            .help("Force the legacy tree-walking interpreter simulator instead of the VM simulator"))
+        .arg(Arg::new("bytecode").long("bytecode").action(ArgAction::SetTrue)
+            .help("Dump the compiled VM bytecode and exit"));
     common::add_project_args(&mut cmd, false);
     cmd
 }
@@ -61,6 +65,8 @@ fn main() {
     let flash = matches.get_one::<PathBuf>("flash").cloned();
     let cycles = matches.get_one::<u64>("cycles").copied();
     let baud = matches.get_one::<u64>("baud").copied();
+    let legacy = matches.get_flag("legacy");
+    let bytecode = matches.get_flag("bytecode");
 
     run(
         &location,
@@ -71,10 +77,26 @@ fn main() {
         &cycles,
         &baud,
         matches.get_flag("verbose"),
+        legacy,
+        bytecode,
     );
 }
 
-fn run(location: &ProjectLocation, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: &Option<PathBuf>, cycles: &Option<u64>, baud: &Option<u64>, verbose: bool) {
+fn run(location: &ProjectLocation, trace: &Option<String>, fps_no_cap: bool, fps: bool, flash: &Option<PathBuf>, cycles: &Option<u64>, baud: &Option<u64>, verbose: bool, legacy: bool, bytecode: bool) {
+    // Resolve the simulation engine: `--legacy` forces the old
+    // tree-walking interpreter, the VM simulator is the default.
+    // `--bytecode` dumps the VM's compiled programs, so it has no
+    // meaning on the legacy engine.
+    if legacy && bytecode {
+        eprintln!("error: --bytecode requires the VM simulator");
+        std::process::exit(1);
+    }
+    let engine = if legacy {
+        virdant::sim::Engine::Legacy
+    } else {
+        virdant::sim::Engine::Vm
+    };
+
     let cwd = location.resolve_cwd();
     let manifest = project_manifest_or_exit(&cwd);
     let Some(top_name) = read_prog_key_from(&manifest, "top") else {
@@ -104,6 +126,15 @@ fn run(location: &ProjectLocation, trace: &Option<String>, fps_no_cap: bool, fps
             eprintln!("Top module '{top_name}' not found");
             std::process::exit(1);
         });
+
+    // `--bytecode`: dump the compiled VM programs and exit, before any
+    // platform/board setup (bytecode dumping does not require virt).
+    if bytecode {
+        let sim = virdant::sim::Sim::with_engine(&db, top_symbol.id(),
+            virdant::sim::InitStrategy::Seeded(0), virdant::sim::Engine::Vm);
+        print!("{}", sim.dump_bytecode());
+        std::process::exit(0);
+    }
 
     // The top module's `for` clause selects the platform; `vir run`
     // simulates the `virt::Virt` and `virt::VirtVga` boards.
@@ -170,6 +201,7 @@ fn run(location: &ProjectLocation, trace: &Option<String>, fps_no_cap: bool, fps
         top_symbol.id(),
         clock_hz,
         board,
+        engine,
         virt::VirtOptions {
             flash: flash.clone(),
             trace: trace.clone().map(PathBuf::from),
