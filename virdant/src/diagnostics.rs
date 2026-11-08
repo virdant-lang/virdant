@@ -95,11 +95,6 @@ pub enum DiagnosticPayload {
     /// An `initial` statement targets a memory (not supported; use
     /// image annotations).
     MemoryInitialUnsupported(MemoryInitialUnsupported),
-    /// A write to a memory initialized by an image annotation: its
-    /// contents come from the file.
-    MemoryImageWrite(MemoryImageWrite),
-    /// A memory image file could not be read.
-    MemoryImageIo(MemoryImageIo),
     /// A memory image file holds more words than the declared depth
     /// (a shorter file is fine: the rest reads as unspecified).
     MemoryImageTooLong(MemoryImageTooLong),
@@ -434,18 +429,6 @@ pub struct MemoryOnRegionNonWrite;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemoryInitialUnsupported {
     pub component: BString,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MemoryImageWrite {
-    pub component: BString,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MemoryImageIo {
-    pub component: BString,
-    pub path: BString,
-    pub error: BString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -945,14 +928,7 @@ impl Diagnostic {
                 "`initial` is not supported on memory {}; initialize with @image/@image_hex instead",
                 d.component,
             ).into(),
-            DiagnosticPayload::MemoryImageWrite(d) => format!(
-                "memory {} is initialized by @image/@image_hex/@image_inline; writes to it are not supported",
-                d.component,
-            ).into(),
-            DiagnosticPayload::MemoryImageIo(d) => format!(
-                "could not read memory image for {}: {}: {}",
-                d.component, d.path, d.error,
-            ).into(),
+
             DiagnosticPayload::MemoryImageTooLong(d) => format!(
                 "memory image {} holds more words than the declared depth {}",
                 d.path, d.depth,
@@ -1334,7 +1310,7 @@ from_diagnostic! {
     MemoryIndexOutOfRange, MemoryWriteOutsideOnRegion, OverlappingMemoryWrites,
     MemoryAssignInsteadOfLassign, MemoryUsedWithoutIndex, IndexedDriverNotMemory,
     MemoryOnRegionClockMismatch, MemoryOnRegionNonWrite, MemoryInitialUnsupported,
-    MemoryImageWrite, MemoryImageIo, MemoryImageTooLong, MemoryImageNotSupported,
+    MemoryImageTooLong, MemoryImageNotSupported,
     MemoryImageNoinitial,
     NetReadWithoutTap, TapNotOnNet,
     DriverForSink, UnresolvedComponent, NotIt, UnresolvedCtor, UnusedSource, ReadFromSink,

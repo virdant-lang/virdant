@@ -14,6 +14,23 @@ pub enum Toolchain {
     Xilinx,
 }
 
+impl Toolchain {
+    /// Whether the toolchain supports memory initialization: BRAM
+    /// contents loaded from an `initial` block, encoded into the
+    /// bitstream.  iCE40 block RAMs load their contents during
+    /// configuration; so do Xilinx BRAMs.  A family that cannot
+    /// (an FPGA whose memories are not initialized at configuration
+    /// time) rejects image memories with write sites here — a
+    /// late-binding check, since the family is only known when a
+    /// build is attempted.
+    pub fn supports_memory_init(self) -> bool {
+        match self {
+            Toolchain::Ice40 => true,
+            Toolchain::Xilinx => true,
+        }
+    }
+}
+
 pub fn toolchain_for(fpga: &str) -> Option<Toolchain> {
     match fpga {
         "ice40" => Some(Toolchain::Ice40),

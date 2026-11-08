@@ -134,7 +134,7 @@ pub(crate) fn check_drivers(builder: &mut Builder, symbol_id: SymbolId) -> Arc<V
 
 /// Whether a memory declaration carries an `@image`/`@image_hex`/
 /// `@image_inline` annotation (its contents come from the image;
-/// writes are not allowed and a missing write site is not an error).
+/// a missing write site is not an error).
 fn memory_has_image(parsing: &Parsing, decl: &AstNode<'_>) -> bool {
     let children = decl.children();
     let Some(annotations) = children.first() else { return false };
@@ -172,25 +172,6 @@ fn check_overlapping_memory_writes(
             continue;
         }
         let path = component.path();
-        // A memory initialized from an image is a ROM: its contents
-        // come from the file and writes are not supported.
-        let location = component.location();
-        let decl_parsing = builder.get_parsing(location.package());
-        let decl = decl_parsing.ast_node(location.ast_node_id());
-        if memory_has_image(&decl_parsing, &decl) {
-            for driver in drivers {
-                if let Some(location) = driver.location() {
-                    let region = builder.get_location_region(location);
-                    diagnostics.push(Diagnostic::new(
-                        region,
-                        diagnostics::MemoryImageWrite {
-                            component: path.clone(),
-                        },
-                    ));
-                }
-            }
-            continue;
-        }
         for driver in drivers {
             collect_overlapping_memory_writes(builder, driver, &path, diagnostics);
         }

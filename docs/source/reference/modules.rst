@@ -231,10 +231,13 @@ packed like a raw binary file — `"Hello, world!\r\n\0"` is the same 15
 bytes as `"Hello, world!\x0d\x0a\x00"`. Paths resolve relative to the
 project root — the
 directory where `virdant.toml` is found. An image shorter than the depth leaves the remaining words
-unspecified; a longer image is an error. A memory with an image is a ROM: it
-has no write site, needs no clock, and writes to it are rejected. On
-platforms annotated `@noinitial`, memory images are disallowed, exactly like
-`initial` statements.
+unspecified; a longer image is an error. An image memory may also declare a
+write site, in which case the image words are its initial contents and writes
+commit on the clock edge (a pure ROM has no write site and needs no clock).
+Whether image initialization with writes is supported is a toolchain property,
+checked late-binding when a bitstream build resolves the FPGA family, not at
+``vir check`` time. On platforms annotated ``@noinitial``, memory images are
+disallowed, exactly like ``initial`` statements.
 
 Tristate Nets
 -------------

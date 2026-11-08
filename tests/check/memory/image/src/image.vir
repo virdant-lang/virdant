@@ -1,9 +1,11 @@
-// ROMs initialized from image files (MEMORY_PLAN §6): `@image_hex`
-// reads a text hex file one word per line; `@image` reads a raw
-// binary file word-packed in declaration order.  A file shorter than
-// the depth leaves the remaining words unspecified; a memory with an
-// image has no write site, and one word of the raw image is byte
+// ROMs initialized from image files: `@image_hex` reads a text hex
+// file one word per line; `@image` reads a raw binary file word-packed
+// in declaration order.  A file shorter than the depth leaves the
+// remaining words unspecified; one word of the raw image is byte
 // `0x01` followed by `0x02`, most-significant byte first.
+//
+// An image memory may also declare a write site: the image words are
+// its initial contents, and writes commit on the clock edge.
 
 pub mod HexRom {
     incoming addr : Word[8]
@@ -23,6 +25,32 @@ pub mod RawRom {
     memory rom[8] : Word[16] {
         read_data := it[dyn addr]
     }
+}
+
+pub mod WriteToImage {
+    incoming clock : Clock
+    incoming addr : Word[2]
+    incoming write_data : Word[8]
+    outgoing read_data : Word[8] dependson addr {
+        it := rom[dyn addr]
+    }
+
+    @image_hex("rom_image.hex")
+    memory rom[4] : Word[8] {
+        it[dyn addr] <= write_data
+    }
+}
+
+pub mod Unreadable {
+    incoming addr : Word[2]
+    outgoing read_data : Word[8] dependson addr {
+        it := rom[dyn addr]
+    }
+
+    // A file that cannot be read is not a compile error: whether an
+    // image can be loaded is a build-time check.
+    @image_hex("does_not_exist.hex")
+    memory rom[4] : Word[8]
 }
 
 // The raw image file holds four bytes (01 02 03 04): two 16-bit

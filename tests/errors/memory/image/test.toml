@@ -1,4 +1,4 @@
 kind = "check"
 expect = "error"
-description = "MemoryImageIo, MemoryImageTooLong, MemoryImageWrite, and a missing clock: image rules"
+description = "MemoryImageTooLong and a missing clock: image rules; a missing image file is a build-time check"
 filecheck = "src/image.vir"

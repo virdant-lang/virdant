@@ -564,6 +564,24 @@ fn plan_bitstream(args: &Args) -> BitstreamPlan {
         }
     }
 
+    // Late-binding check: image files are read at build time.  A
+    // missing or unreadable image file is not a compile error; the
+    // design only fails here, where the image is actually loaded.
+    {
+        let elaboration = db.get_elaboration(top_symbol.id());
+        for component in elaboration.components() {
+            let Some(image) = component.image() else { continue };
+            if let Err(error) = image.bytes() {
+                eprintln!(
+                    "Could not read memory image for '{}': {}",
+                    component.path().to_str_lossy(),
+                    error,
+                );
+                std::process::exit(1);
+            }
+        }
+    }
+
     // The top module's `for` clause selects the platform.
     let mut builder = virdant::db::Builder::new(&db);
     let platform_id = match virdant::analysis::platform::resolve_platform_for(
@@ -612,6 +630,27 @@ fn plan_bitstream(args: &Args) -> BitstreamPlan {
         eprintln!("FPGA family '{}' is not supported", fpga.to_str_lossy());
         std::process::exit(1);
     };
+
+    // Late-binding check: an image memory with a write site is only
+    // supported when the toolchain can load memory contents at
+    // configuration time.  The source-level check is toolchain-agnostic,
+    // so this runs here, where the family is known.
+    if !toolchain.supports_memory_init() {
+        let elaboration = db.get_elaboration(top_symbol.id());
+        for component in elaboration.components() {
+            if component.component_kind() == virdant::common::ComponentKind::Memory
+                && component.image().is_some()
+                && component.driver().is_some()
+            {
+                eprintln!(
+                    "Memory '{}' is initialized by an image annotation, but the FPGA family '{}' does not support memory initialization",
+                    component.path().to_str_lossy(),
+                    fpga.to_str_lossy(),
+                );
+                std::process::exit(1);
+            }
+        }
+    }
 
     match virdant::build::emit_constraints(&mut builder, platform_id, toolchain) {
         Ok((extension, mut constraints_text)) => {
