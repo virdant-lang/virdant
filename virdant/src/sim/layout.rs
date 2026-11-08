@@ -39,6 +39,11 @@ pub(super) struct CtorGeometry {
     /// `[tag_width + sum_{j>k} w_j, tag_width + sum_{j>=k} w_j)`.
     /// Consumed by the `match` lowering's `Extract` emission.
     pub params: Vec<(Width, Width)>,
+    /// The interned type of each parameter, in the same declaration
+    /// order as `params`.  The nested-pattern `match` lowering
+    /// recurses through it: a nested `Ctor` sub-pattern decodes its
+    /// payload slot through `ctor_geometry(param_typ, ..)`.
+    pub param_typs: Vec<TypeId>,
 }
 
 impl TypeLayoutIndex {
@@ -80,13 +85,15 @@ impl TypeLayoutIndex {
         };
         let payload_width: Width = slot.param_types.iter().map(|t| self.type_width(t)).sum();
         let mut params = Vec::with_capacity(slot.param_types.len());
+        let mut param_typs = Vec::with_capacity(slot.param_types.len());
         let mut hi = tag_width + payload_width;
         for param_type in &slot.param_types {
             let w = self.type_width(param_type);
             params.push((hi - w, hi));
+            param_typs.push(self.type_id(param_type));
             hi -= w;
         }
-        Some(CtorGeometry { total_width, tag_width, tag, params })
+        Some(CtorGeometry { total_width, tag_width, tag, params, param_typs })
     }
 
     /// Build the bit-layout map for every user-defined type

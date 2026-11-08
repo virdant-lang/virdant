@@ -335,7 +335,7 @@ impl LegacySim {
         self.state.changed_signal_count()
     }
 
-    pub(crate) fn changed_signal_ids(&self) -> impl Iterator<Item = SignalId> + '_ {
+    pub(crate) fn changed_signal_ids(&self) -> Box<dyn Iterator<Item = SignalId> + '_> {
         self.state.changed_signal_ids()
     }
 
@@ -362,6 +362,36 @@ impl LegacySim {
     /// computes the whole-design cycle plan; the legacy interpreter has
     /// no cycle plan, so it is a no-op.
     pub(crate) fn on_clock_attached(&mut self, _signal: SignalId) {
+    }
+
+    /// Disassemble the compiled driver programs: VM-only, so a legacy
+    /// `Sim` has no bytecode to dump.
+    pub(crate) fn dump_bytecode(&self) -> String {
+        panic!("dump_bytecode: the legacy engine has no compiled bytecode")
+    }
+
+    /// The whole-design cycle plan verdict: VM-only.  The legacy
+    /// engine never qualifies a cycle plan, so the verdict is simply
+    /// "legacy".
+    pub(crate) fn cycle_plan_verdict(&self) -> String {
+        "legacy".to_string()
+    }
+
+    /// The cycle plan verdict with any disqualification decoded: VM-only.
+    pub(crate) fn cycle_plan_diagnostic(&self) -> String {
+        "legacy".to_string()
+    }
+
+    /// The legacy engine has no cycle plan.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn cycle_plan(&self) -> Option<&'static crate::sim::vm::CyclePlanResult> {
+        None
+    }
+
+    /// The legacy engine never builds a static topological schedule.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn has_topo_schedule(&self) -> bool {
+        false
     }
 }
 

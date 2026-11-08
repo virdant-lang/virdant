@@ -3,8 +3,15 @@
 VIR    ?= $(CURDIR)/target/release/vir
 RUNNER ?= $(CURDIR)/target/release/vir-virtue
 
+# Optional cargo features for the simulator build (branch knob
+# 0e186f0, e.g. `make build VIR_FEATURES=virdant/jit` for the Cranelift
+# replay-phase backend, or `virdant/sim-profile` for the phase
+# counters).  Empty by default: the JIT backend is not on by default in
+# this tree.
+VIR_FEATURES ?=
+
 build: virdant/target/lib
-	cargo build --release -p vir
+	cargo build --release -p vir $(if $(VIR_FEATURES),--features $(VIR_FEATURES),)
 
 # Cargo's build script places generated artifacts in OUT_DIR, which has the
 # concrete form: target/<profile>/build/<crate>-<hash>/out/foo.grammar

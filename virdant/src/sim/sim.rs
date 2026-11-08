@@ -3,10 +3,10 @@
 //! free-running clock table, the persistent watcher table with its
 //! bucketed dispatch, simulated time, and the VCD offset/time-marker
 //! hooks — and forwards value-level work to the engine selected at
-//! construction (`Inner`).  Today that is always the legacy
-//! interpreter engine (`sim::legacy::engine::LegacySim`); the VM
-//! engine arrives behind the same facade in a later phase, at which
-//! point `Sim::new`'s default switches to `Engine::Vm`.
+//! construction (`Inner`).  The default is the VM engine
+//! (`sim::vm::engine::VmSim`, compiled bytecode); `Sim::with_engine(..,
+//! Engine::Legacy)` runs the tree-walking interpreter
+//! (`sim::legacy::engine::LegacySim`).
 //!
 //! Engines expose value-level primitives only (`flow`, `flow_all`,
 //! `set_without_flow`, `tick_prop`, `get`, `peek`, `circuit`, the
@@ -34,26 +34,26 @@ use bstr::{BStr, BString};
 
 /// Which simulation engine a [`Sim`] runs on.
 ///
-/// `Vm` is the compiled-bytecode engine (`sim::vm`, ported in a later
-/// phase); `Legacy` is the tree-walking interpreter (`sim::legacy`).
-/// `Sim::new` currently defaults to `Legacy`; once the VM engine lands
-/// the default becomes `Vm` and `Legacy` is selected explicitly (e.g.
-/// by `vir run --legacy`).
+/// `Vm` is the compiled-bytecode engine (`sim::vm::engine::VmSim`,
+/// the default); `Legacy` is the tree-walking interpreter
+/// (`sim::legacy::engine::LegacySim`, e.g. selected by
+/// `vir run --legacy`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Engine {
     Vm,
     Legacy,
 }
 
-/// The engine behind a [`Sim`].  Only the legacy engine exists so far;
-/// the `Vm` arm is added with `sim::vm` in a later phase.
+/// The engine behind a [`Sim`].
 enum Inner {
+    Vm(crate::sim::vm::engine::VmSim),
     Legacy(crate::sim::legacy::engine::LegacySim),
 }
 
 macro_rules! dispatch_mut {
     ($inner:expr, $engine:ident => $body:expr) => {
         match &mut $inner {
+            Inner::Vm($engine) => $body,
             Inner::Legacy($engine) => $body,
         }
     };
@@ -62,6 +62,7 @@ macro_rules! dispatch_mut {
 macro_rules! dispatch_ref {
     ($inner:expr, $engine:ident => $body:expr) => {
         match &$inner {
+            Inner::Vm($engine) => $body,
             Inner::Legacy($engine) => $body,
         }
     };
@@ -291,17 +292,15 @@ impl std::fmt::Debug for Sim {
 }
 
 impl Sim {
-    /// Build a `Sim` with the default engine.  The default is the
-    /// legacy interpreter engine until the VM engine lands on this
-    /// facade (a later phase), at which point it becomes `Engine::Vm`.
+    /// Build a `Sim` with the default engine (`Engine::Vm`).
     pub fn new(db: &Db, top: SymbolId, strategy: InitStrategy) -> Sim {
-        Self::with_engine(db, top, strategy, Engine::Legacy)
+        Self::with_engine(db, top, strategy, Engine::Vm)
     }
 
     /// Build a `Sim` on an explicit engine.
     pub fn with_engine(db: &Db, top: SymbolId, strategy: InitStrategy, engine: Engine) -> Sim {
         let inner = match engine {
-            Engine::Vm => todo!("the VM simulator arrives in a later phase"),
+            Engine::Vm => Inner::Vm(crate::sim::vm::engine::VmSim::new(db, top, &strategy)),
             Engine::Legacy => Inner::Legacy(crate::sim::legacy::engine::LegacySim::new(db, top, &strategy)),
         };
 
@@ -1011,6 +1010,19 @@ impl Sim {
         self.elaboration().modules().to_vec()
     }
 
+    /// Every elaborated component as `(id, path)`, in elaboration
+    /// order.  Unlike [`Sim::children_of`], this is the exhaustive flat
+    /// list: module instances are not themselves components, so a
+    /// `children_of` walk cannot reach components nested inside one
+    /// (e.g. `top.gcd.state`); this can.
+    pub fn components(&self) -> Vec<(SignalId, BString)> {
+        self.elaboration()
+            .components()
+            .iter()
+            .map(|comp| (comp.id(), comp.path().clone()))
+            .collect()
+    }
+
     /// The socket instances in the elaboration, each with its
     /// fully-qualified channel prefix (e.g. `"top.mem"`) and socketdef
     /// symbol.  Backing for `show`'s per-socket grouping.
@@ -1160,6 +1172,58 @@ impl Sim {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// VM-only inspection
+////////////////////////////////////////////////////////////////////////////////
+impl Sim {
+    /// Disassemble every compiled driver program in human-readable
+    /// form: one section per driven component, branch targets as
+    /// labels, signal references by path.  The format `vir run
+    /// --bytecode` prints and `vm/INSTRUCTIONS.md` documents.
+    ///
+    /// VM-only: the legacy engine has no compiled bytecode.
+    pub fn dump_bytecode(&self) -> String {
+        dispatch_ref!(self.inner, engine => engine.dump_bytecode())
+    }
+
+    /// The whole-design cycle plan verdict as a machine-readable
+    /// string: `"qualified"` or `"disqualified(reason)"`, or
+    /// `"pending"` when no clock has been attached yet.  For tests and
+    /// `simprof`.  VM-only: `"legacy"` on the legacy engine, which has
+    /// no cycle plan.
+    pub fn cycle_plan_verdict(&self) -> String {
+        dispatch_ref!(self.inner, engine => engine.cycle_plan_verdict())
+    }
+
+    /// The cycle plan verdict with any disqualification decoded to
+    /// full signal names (the offending component's elaborated path),
+    /// for `simprof` and load-time diagnostics.  `"pending"` before
+    /// the first `attach_clock`.  VM-only: `"legacy"` on the legacy
+    /// engine, which has no cycle plan.
+    pub fn cycle_plan_diagnostic(&self) -> String {
+        dispatch_ref!(self.inner, engine => engine.cycle_plan_diagnostic())
+    }
+
+    /// The whole-design cycle plan verdict, once the primary clock has
+    /// been attached: the static schedule data for a qualified design,
+    /// or the precise disqualification reason.  `None` before the
+    /// first `attach_clock` (and on the legacy engine, which has no
+    /// cycle plan).  Internal: tests inspect it; a later phase
+    /// consumes it.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(in crate::sim) fn cycle_plan(&self) -> Option<&crate::sim::vm::CyclePlanResult> {
+        dispatch_ref!(self.inner, engine => engine.cycle_plan())
+    }
+
+    /// Whether the engine's program carries a static topological
+    /// schedule (the VM engine's stage-A schedule; the legacy engine
+    /// never builds one).  For the ported schedule/epoch tests.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(in crate::sim) fn has_topo_schedule(&self) -> bool {
+        dispatch_ref!(self.inner, engine => engine.has_topo_schedule())
+    }
+}
+
 /// Intentionally-empty hook for tracing register transfers when
 /// debugging; params kept for call-site readability.
 pub fn debug_transfer(_id: crate::analysis::elaboration::SignalId, _v: &Value) {
@@ -1168,9 +1232,12 @@ pub fn debug_transfer(_id: crate::analysis::elaboration::SignalId, _v: &Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagnostics::DiagnosticPayload;
+    use crate::sim::vm;
     use crate::util::{check_db, db_from_dir_with_lib};
     use std::cell::Cell;
     use std::path::Path;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     /// Build a settled `Sim` for the `tests/sim/gcd` design (its source
     /// file is `top.vir`, so the ModDef symbol path is `top::Top`).
@@ -1197,46 +1264,48 @@ mod tests {
     /// skipped entirely) fires nothing.
     #[test]
     fn watcher_fires_on_change_and_skips_quiescent_settlements() {
-        let mut sim = gcd_sim(Engine::Legacy);
-        let fire = sim.signal("top.fire");
-        let fire_typ = sim.component_type_id(fire);
-        let initial_high = sim.get(fire).get_bit(0);
+    for engine in [Engine::Vm, Engine::Legacy] {
+            let mut sim = gcd_sim(engine);
+            let fire = sim.signal("top.fire");
+            let fire_typ = sim.component_type_id(fire);
+            let initial_high = sim.get(fire).get_bit(0);
 
-        let fires = Rc::new(RefCell::new(0u32));
-        {
-            let count = fires.clone();
-            sim.on_change(fire, Box::new(move |_sim| {
-                *count.borrow_mut() += 1;
-            }));
-        }
+            let fires = Rc::new(RefCell::new(0u32));
+            {
+                let count = fires.clone();
+                sim.on_change(fire, Box::new(move |_sim| {
+                    *count.borrow_mut() += 1;
+                }));
+            }
 
-        // A real change: drive fire to the opposite of its seeded
-        // initial value.
-        {
-            let mut lock = sim.lock();
-            lock.set(fire, Value::from_bool(fire_typ, !initial_high));
-        }
-        assert_eq!(*fires.borrow(), 1, "a real value change must fire the watcher");
+            // A real change: drive fire to the opposite of its seeded
+            // initial value.
+            {
+                let mut lock = sim.lock();
+                lock.set(fire, Value::from_bool(fire_typ, !initial_high));
+            }
+            assert_eq!(*fires.borrow(), 1, "a real value change must fire the watcher");
 
-        // A settlement with no actual write: the sweep is skipped, so
-        // the watcher cannot fire again.
-        {
-            let mut lock = sim.lock();
-            lock.set(fire, Value::from_bool(fire_typ, !initial_high));
-        }
-        assert_eq!(*fires.borrow(), 1, "a same-value write must not fire the watcher");
+            // A settlement with no actual write: the sweep is skipped, so
+            // the watcher cannot fire again.
+            {
+                let mut lock = sim.lock();
+                lock.set(fire, Value::from_bool(fire_typ, !initial_high));
+            }
+            assert_eq!(*fires.borrow(), 1, "a same-value write must not fire the watcher");
 
-        // A second real change fires again; repeating it does not.
-        {
-            let mut lock = sim.lock();
-            lock.set(fire, Value::from_bool(fire_typ, initial_high));
-        }
-        assert_eq!(*fires.borrow(), 2, "a second real change must fire again");
-        {
-            let mut lock = sim.lock();
-            lock.set(fire, Value::from_bool(fire_typ, initial_high));
-        }
-        assert_eq!(*fires.borrow(), 2, "a repeated same-value write must not fire");
+            // A second real change fires again; repeating it does not.
+            {
+                let mut lock = sim.lock();
+                lock.set(fire, Value::from_bool(fire_typ, initial_high));
+            }
+            assert_eq!(*fires.borrow(), 2, "a second real change must fire again");
+            {
+                let mut lock = sim.lock();
+                lock.set(fire, Value::from_bool(fire_typ, initial_high));
+            }
+            assert_eq!(*fires.borrow(), 2, "a repeated same-value write must not fire");
+    }
     }
 
     /// `ClockRising` watchers under the skip: the first settlement
@@ -1248,37 +1317,39 @@ mod tests {
     /// gcd registers, exercising `transfer`'s flag updates.
     #[test]
     fn on_clock_watcher_fires_only_on_rising_edges() {
-        let mut sim = gcd_sim(Engine::Legacy);
-        let clock = sim.signal("top.clock");
-        let clock_typ = sim.component_type_id(clock);
+    for engine in [Engine::Vm, Engine::Legacy] {
+            let mut sim = gcd_sim(engine);
+            let clock = sim.signal("top.clock");
+            let clock_typ = sim.component_type_id(clock);
 
-        let rises = Rc::new(RefCell::new(0u32));
-        {
-            let count = rises.clone();
-            sim.on_clock(clock, Box::new(move |_sim| {
-                *count.borrow_mut() += 1;
-            }));
-        }
+            let rises = Rc::new(RefCell::new(0u32));
+            {
+                let count = rises.clone();
+                sim.on_clock(clock, Box::new(move |_sim| {
+                    *count.borrow_mut() += 1;
+                }));
+            }
 
-        let mut settle = |sim: &mut Sim, high: bool| {
-            let mut lock = sim.lock();
-            lock.set(clock, Value::from_bool(clock_typ, high));
-        };
+            let mut settle = |sim: &mut Sim, high: bool| {
+                let mut lock = sim.lock();
+                lock.set(clock, Value::from_bool(clock_typ, high));
+            };
 
-        settle(&mut sim, false);
-        assert_eq!(*rises.borrow(), 0, "driving low must not fire an on_clock watcher");
+            settle(&mut sim, false);
+            assert_eq!(*rises.borrow(), 0, "driving low must not fire an on_clock watcher");
 
-        settle(&mut sim, true);
-        assert_eq!(*rises.borrow(), 1, "a rising edge must fire exactly once");
+            settle(&mut sim, true);
+            assert_eq!(*rises.borrow(), 1, "a rising edge must fire exactly once");
 
-        settle(&mut sim, true);
-        assert_eq!(*rises.borrow(), 1, "a same-value write must not fire again");
+            settle(&mut sim, true);
+            assert_eq!(*rises.borrow(), 1, "a same-value write must not fire again");
 
-        settle(&mut sim, false);
-        assert_eq!(*rises.borrow(), 1, "a falling edge must not fire");
+            settle(&mut sim, false);
+            assert_eq!(*rises.borrow(), 1, "a falling edge must not fire");
 
-        settle(&mut sim, true);
-        assert_eq!(*rises.borrow(), 2, "a second rising edge must fire once more");
+            settle(&mut sim, true);
+            assert_eq!(*rises.borrow(), 2, "a second rising edge must fire once more");
+    }
     }
 
     /// A watcher callback that drives a signal during the sweep: the
@@ -1290,50 +1361,52 @@ mod tests {
     /// no-op settlement skips the sweep.
     #[test]
     fn watcher_cascade_settles_within_one_unlock() {
-        let mut sim = gcd_sim(Engine::Legacy);
-        let fire = sim.signal("top.fire");
-        let x = sim.signal("top.x");
-        let fire_typ = sim.component_type_id(fire);
-        let x_typ = sim.component_type_id(x);
-        let initial_high = sim.get(fire).get_bit(0);
+    for engine in [Engine::Vm, Engine::Legacy] {
+            let mut sim = gcd_sim(engine);
+            let fire = sim.signal("top.fire");
+            let x = sim.signal("top.x");
+            let fire_typ = sim.component_type_id(fire);
+            let x_typ = sim.component_type_id(x);
+            let initial_high = sim.get(fire).get_bit(0);
 
-        // Pre-drive x to a known value so the cascade write below is
-        // guaranteed to be a real change regardless of the seeded init.
-        {
-            let mut lock = sim.lock();
-            lock.set(x, Value::new(x_typ, BitPat::from_u64(8, 5)));
-        }
-
-        let fire_fires = Rc::new(RefCell::new(0u32));
-        let x_fires = Rc::new(RefCell::new(0u32));
-        {
-            let count = fire_fires.clone();
-            sim.on_change(fire, Box::new(move |sim| {
-                *count.borrow_mut() += 1;
+            // Pre-drive x to a known value so the cascade write below is
+            // guaranteed to be a real change regardless of the seeded init.
+            {
                 let mut lock = sim.lock();
-                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, 6)));
-            }));
-        }
-        {
-            let count = x_fires.clone();
-            sim.on_change(x, Box::new(move |_sim| {
-                *count.borrow_mut() += 1;
-            }));
-        }
+                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, 5)));
+            }
 
-        {
-            let mut lock = sim.lock();
-            lock.set(fire, Value::from_bool(fire_typ, !initial_high));
-        }
-        assert_eq!(*fire_fires.borrow(), 1, "the fire change must fire its watcher");
-        assert_eq!(*x_fires.borrow(), 1, "the cascade-driven x change must fire too");
+            let fire_fires = Rc::new(RefCell::new(0u32));
+            let x_fires = Rc::new(RefCell::new(0u32));
+            {
+                let count = fire_fires.clone();
+                sim.on_change(fire, Box::new(move |sim| {
+                    *count.borrow_mut() += 1;
+                    let mut lock = sim.lock();
+                    lock.set(x, Value::new(x_typ, BitPat::from_u64(8, 6)));
+                }));
+            }
+            {
+                let count = x_fires.clone();
+                sim.on_change(x, Box::new(move |_sim| {
+                    *count.borrow_mut() += 1;
+                }));
+            }
 
-        {
-            let mut lock = sim.lock();
-            lock.set(fire, Value::from_bool(fire_typ, !initial_high));
-        }
-        assert_eq!(*fire_fires.borrow(), 1, "a quiescent settlement must not re-fire");
-        assert_eq!(*x_fires.borrow(), 1, "a quiescent settlement must not re-fire");
+            {
+                let mut lock = sim.lock();
+                lock.set(fire, Value::from_bool(fire_typ, !initial_high));
+            }
+            assert_eq!(*fire_fires.borrow(), 1, "the fire change must fire its watcher");
+            assert_eq!(*x_fires.borrow(), 1, "the cascade-driven x change must fire too");
+
+            {
+                let mut lock = sim.lock();
+                lock.set(fire, Value::from_bool(fire_typ, !initial_high));
+            }
+            assert_eq!(*fire_fires.borrow(), 1, "a quiescent settlement must not re-fire");
+            assert_eq!(*x_fires.borrow(), 1, "a quiescent settlement must not re-fire");
+    }
     }
 
     /// Bucketed dispatch keeps registration order across different
@@ -1343,66 +1416,68 @@ mod tests {
     /// not to signal identity or bucket visit order.
     #[test]
     fn watchers_on_different_signals_fire_in_registration_order() {
-        let run_phase = |register_fire_first: bool| -> Vec<&'static str> {
-            let mut sim = gcd_sim(Engine::Legacy);
-            let fire = sim.signal("top.fire");
-            let x = sim.signal("top.x");
-            let fire_typ = sim.component_type_id(fire);
-            let x_typ = sim.component_type_id(x);
+    for engine in [Engine::Vm, Engine::Legacy] {
+            let run_phase = |register_fire_first: bool| -> Vec<&'static str> {
+                let mut sim = gcd_sim(engine);
+                let fire = sim.signal("top.fire");
+                let x = sim.signal("top.x");
+                let fire_typ = sim.component_type_id(fire);
+                let x_typ = sim.component_type_id(x);
 
-            let order: Rc<RefCell<Vec<&'static str>>> = Rc::new(RefCell::new(Vec::new()));
-            let fire_watcher = {
-                let order = order.clone();
-                Box::new(move |_sim: &mut Sim| {
-                    order.borrow_mut().push("fire");
-                })
+                let order: Rc<RefCell<Vec<&'static str>>> = Rc::new(RefCell::new(Vec::new()));
+                let fire_watcher = {
+                    let order = order.clone();
+                    Box::new(move |_sim: &mut Sim| {
+                        order.borrow_mut().push("fire");
+                    })
+                };
+                let x_watcher = {
+                    let order = order.clone();
+                    Box::new(move |_sim: &mut Sim| {
+                        order.borrow_mut().push("x");
+                    })
+                };
+                if register_fire_first {
+                    sim.on_change(fire, fire_watcher);
+                    sim.on_change(x, x_watcher);
+                } else {
+                    sim.on_change(x, x_watcher);
+                    sim.on_change(fire, fire_watcher);
+                }
+
+                // One settlement changes both signals: a single dispatch
+                // pass fires both, in registration order.
+                let fire_val = sim.get(fire).get_bit(0);
+                let x_val = sim.get(x).to_u64();
+                {
+                    let mut lock = sim.lock();
+                    lock.set(fire, Value::from_bool(fire_typ, !fire_val));
+                    lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_val ^ 0xFF)));
+                }
+
+                // A second settlement toggles both again: the order holds.
+                let fire_val = sim.get(fire).get_bit(0);
+                let x_val = sim.get(x).to_u64();
+                {
+                    let mut lock = sim.lock();
+                    lock.set(fire, Value::from_bool(fire_typ, !fire_val));
+                    lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_val ^ 0xFF)));
+                }
+
+                order.borrow().clone()
             };
-            let x_watcher = {
-                let order = order.clone();
-                Box::new(move |_sim: &mut Sim| {
-                    order.borrow_mut().push("x");
-                })
-            };
-            if register_fire_first {
-                sim.on_change(fire, fire_watcher);
-                sim.on_change(x, x_watcher);
-            } else {
-                sim.on_change(x, x_watcher);
-                sim.on_change(fire, fire_watcher);
-            }
 
-            // One settlement changes both signals: a single dispatch
-            // pass fires both, in registration order.
-            let fire_val = sim.get(fire).get_bit(0);
-            let x_val = sim.get(x).to_u64();
-            {
-                let mut lock = sim.lock();
-                lock.set(fire, Value::from_bool(fire_typ, !fire_val));
-                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_val ^ 0xFF)));
-            }
-
-            // A second settlement toggles both again: the order holds.
-            let fire_val = sim.get(fire).get_bit(0);
-            let x_val = sim.get(x).to_u64();
-            {
-                let mut lock = sim.lock();
-                lock.set(fire, Value::from_bool(fire_typ, !fire_val));
-                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_val ^ 0xFF)));
-            }
-
-            order.borrow().clone()
-        };
-
-        assert_eq!(
-            run_phase(true),
-            vec!["fire", "x", "fire", "x"],
-            "fire registered first: the pass fires in registration order"
-        );
-        assert_eq!(
-            run_phase(false),
-            vec!["x", "fire", "x", "fire"],
-            "x registered first: the pass fires in registration order"
-        );
+            assert_eq!(
+                run_phase(true),
+                vec!["fire", "x", "fire", "x"],
+                "fire registered first: the pass fires in registration order"
+            );
+            assert_eq!(
+                run_phase(false),
+                vec!["x", "fire", "x", "fire"],
+                "x registered first: the pass fires in registration order"
+            );
+    }
     }
 
     /// A `Change` watcher on the clock signal fires on every value
@@ -1412,41 +1487,43 @@ mod tests {
     /// `Change` watcher watching the same signal.
     #[test]
     fn on_change_watcher_on_clock_fires_on_falling_edges() {
-        let mut sim = gcd_sim(Engine::Legacy);
-        let clock = sim.signal("top.clock");
-        let clock_typ = sim.component_type_id(clock);
+    for engine in [Engine::Vm, Engine::Legacy] {
+            let mut sim = gcd_sim(engine);
+            let clock = sim.signal("top.clock");
+            let clock_typ = sim.component_type_id(clock);
 
-        let fires = Rc::new(RefCell::new(0u32));
-        {
-            let count = fires.clone();
-            sim.on_change(clock, Box::new(move |_sim| {
-                *count.borrow_mut() += 1;
-            }));
-        }
+            let fires = Rc::new(RefCell::new(0u32));
+            {
+                let count = fires.clone();
+                sim.on_change(clock, Box::new(move |_sim| {
+                    *count.borrow_mut() += 1;
+                }));
+            }
 
-        let initial_high = sim.get(clock).get_bit(0);
-        let mut settle = |sim: &mut Sim, high: bool| {
-            let mut lock = sim.lock();
-            lock.set(clock, Value::from_bool(clock_typ, high));
-        };
+            let initial_high = sim.get(clock).get_bit(0);
+            let mut settle = |sim: &mut Sim, high: bool| {
+                let mut lock = sim.lock();
+                lock.set(clock, Value::from_bool(clock_typ, high));
+            };
 
-        // Drive to the opposite of the seeded initial value: one
-        // change, one fire (the edge direction depends on the seed).
-        settle(&mut sim, !initial_high);
-        assert_eq!(*fires.borrow(), 1, "the first change must fire");
+            // Drive to the opposite of the seeded initial value: one
+            // change, one fire (the edge direction depends on the seed).
+            settle(&mut sim, !initial_high);
+            assert_eq!(*fires.borrow(), 1, "the first change must fire");
 
-        // Drive back: the opposite-direction edge (falling when the
-        // initial value was high) fires a Change watcher too.
-        settle(&mut sim, initial_high);
-        assert_eq!(
-            *fires.borrow(),
-            2,
-            "the opposite-direction edge must fire a Change watcher"
-        );
+            // Drive back: the opposite-direction edge (falling when the
+            // initial value was high) fires a Change watcher too.
+            settle(&mut sim, initial_high);
+            assert_eq!(
+                *fires.borrow(),
+                2,
+                "the opposite-direction edge must fire a Change watcher"
+            );
 
-        // A same-value write is not a change: no fire.
-        settle(&mut sim, initial_high);
-        assert_eq!(*fires.borrow(), 2, "a same-value write must not fire");
+            // A same-value write is not a change: no fire.
+            settle(&mut sim, initial_high);
+            assert_eq!(*fires.borrow(), 2, "a same-value write must not fire");
+    }
     }
 
     /// Unregister edge case: a watcher whose callback calls `finish()`
@@ -1458,56 +1535,58 @@ mod tests {
     /// nothing.
     #[test]
     fn finish_prunes_only_the_calling_watcher_and_rebuilds_buckets() {
-        let mut sim = gcd_sim(Engine::Legacy);
-        let fire = sim.signal("top.fire");
-        let x = sim.signal("top.x");
-        let fire_typ = sim.component_type_id(fire);
-        let x_typ = sim.component_type_id(x);
+    for engine in [Engine::Vm, Engine::Legacy] {
+            let mut sim = gcd_sim(engine);
+            let fire = sim.signal("top.fire");
+            let x = sim.signal("top.x");
+            let fire_typ = sim.component_type_id(fire);
+            let x_typ = sim.component_type_id(x);
 
-        let x_fires = Rc::new(RefCell::new(0u32));
-        {
-            let count = x_fires.clone();
-            sim.on_change(x, Box::new(move |_sim| {
-                *count.borrow_mut() += 1;
-            }));
-        }
-        {
-            sim.on_change(fire, Box::new(move |sim| {
-                sim.finish();
-            }));
-        }
+            let x_fires = Rc::new(RefCell::new(0u32));
+            {
+                let count = x_fires.clone();
+                sim.on_change(x, Box::new(move |_sim| {
+                    *count.borrow_mut() += 1;
+                }));
+            }
+            {
+                sim.on_change(fire, Box::new(move |sim| {
+                    sim.finish();
+                }));
+            }
 
-        // The fire watcher fires, calls finish(), and is pruned; the
-        // x watcher (registered earlier, on another signal) survives
-        // the retain and the bucket rebuild.
-        let fire_initial = sim.get(fire).get_bit(0);
-        {
-            let mut lock = sim.lock();
-            lock.set(fire, Value::from_bool(fire_typ, !fire_initial));
-        }
-        let x_initial = sim.get(x).to_u64();
-        {
-            let mut lock = sim.lock();
-            lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_initial ^ 0xFF)));
-        }
-        assert_eq!(
-            *x_fires.borrow(),
-            1,
-            "the surviving watcher must still fire after the finish() prune and bucket rebuild"
-        );
+            // The fire watcher fires, calls finish(), and is pruned; the
+            // x watcher (registered earlier, on another signal) survives
+            // the retain and the bucket rebuild.
+            let fire_initial = sim.get(fire).get_bit(0);
+            {
+                let mut lock = sim.lock();
+                lock.set(fire, Value::from_bool(fire_typ, !fire_initial));
+            }
+            let x_initial = sim.get(x).to_u64();
+            {
+                let mut lock = sim.lock();
+                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_initial ^ 0xFF)));
+            }
+            assert_eq!(
+                *x_fires.borrow(),
+                1,
+                "the surviving watcher must still fire after the finish() prune and bucket rebuild"
+            );
 
-        // The survivor's next fire runs after the shutdown request, so
-        // it dies (existing post-finish semantics): no third fire.
-        let x_now = sim.get(x).to_u64();
-        {
-            let mut lock = sim.lock();
-            lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_now ^ 0xFF)));
-        }
-        assert_eq!(
-            *x_fires.borrow(),
-            1,
-            "a watcher firing after the shutdown request must not persist"
-        );
+            // The survivor's next fire runs after the shutdown request, so
+            // it dies (existing post-finish semantics): no third fire.
+            let x_now = sim.get(x).to_u64();
+            {
+                let mut lock = sim.lock();
+                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_now ^ 0xFF)));
+            }
+            assert_eq!(
+                *x_fires.borrow(),
+                1,
+                "a watcher firing after the shutdown request must not persist"
+            );
+    }
     }
 
     /// Watched-only marking must not lose fires: a watcher on `x`
@@ -1518,34 +1597,36 @@ mod tests {
     /// watcher's fires are exactly the whole-table sweep's.
     #[test]
     fn watcher_fires_alongside_unwatched_signal_writes() {
-        let mut sim = gcd_sim(Engine::Legacy);
-        let fire = sim.signal("top.fire");
-        let x = sim.signal("top.x");
-        let fire_typ = sim.component_type_id(fire);
-        let x_typ = sim.component_type_id(x);
+    for engine in [Engine::Vm, Engine::Legacy] {
+            let mut sim = gcd_sim(engine);
+            let fire = sim.signal("top.fire");
+            let x = sim.signal("top.x");
+            let fire_typ = sim.component_type_id(fire);
+            let x_typ = sim.component_type_id(x);
 
-        let fires = Rc::new(RefCell::new(0u32));
-        {
-            let count = fires.clone();
-            sim.on_change(x, Box::new(move |_sim| {
-                *count.borrow_mut() += 1;
-            }));
-        }
-
-        // Each settlement writes both signals: `fire` (unwatched) and
-        // `x` (watched).  The watcher fires once per settlement, once
-        // per real change of `x` — the unwatched signal's write in the
-        // same settlement neither suppresses nor delays it.
-        for i in 0..3u32 {
-            let x_val = sim.get(x).to_u64();
-            let fire_val = sim.get(fire).get_bit(0);
+            let fires = Rc::new(RefCell::new(0u32));
             {
-                let mut lock = sim.lock();
-                lock.set(fire, Value::from_bool(fire_typ, !fire_val));
-                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_val ^ 0xFF)));
+                let count = fires.clone();
+                sim.on_change(x, Box::new(move |_sim| {
+                    *count.borrow_mut() += 1;
+                }));
             }
-            assert_eq!(*fires.borrow(), i + 1, "settlement {} must fire the x watcher once", i);
-        }
+
+            // Each settlement writes both signals: `fire` (unwatched) and
+            // `x` (watched).  The watcher fires once per settlement, once
+            // per real change of `x` — the unwatched signal's write in the
+            // same settlement neither suppresses nor delays it.
+            for i in 0..3u32 {
+                let x_val = sim.get(x).to_u64();
+                let fire_val = sim.get(fire).get_bit(0);
+                {
+                    let mut lock = sim.lock();
+                    lock.set(fire, Value::from_bool(fire_typ, !fire_val));
+                    lock.set(x, Value::new(x_typ, BitPat::from_u64(8, x_val ^ 0xFF)));
+                }
+                assert_eq!(*fires.borrow(), i + 1, "settlement {} must fire the x watcher once", i);
+            }
+    }
     }
 
     /// Zero-watcher designs skip the changed-set bookkeeping entirely:
@@ -1554,27 +1635,29 @@ mod tests {
     /// never runs), while the circuit still settles normally.
     #[test]
     fn zero_watcher_design_leaves_the_changed_set_empty() {
-        let mut sim = gcd_sim(Engine::Legacy);
-        let fire = sim.signal("top.fire");
-        let fire_typ = sim.component_type_id(fire);
+    for engine in [Engine::Vm, Engine::Legacy] {
+            let mut sim = gcd_sim(engine);
+            let fire = sim.signal("top.fire");
+            let fire_typ = sim.component_type_id(fire);
 
-        // A settlement with no watcher anywhere: the circuit still
-        // settles, and the changed set stays empty.
-        let initial = sim.get(fire).get_bit(0);
-        {
-            let mut lock = sim.lock();
-            lock.set(fire, Value::from_bool(fire_typ, !initial));
-        }
-        assert_eq!(sim.get(fire).get_bit(0), !initial, "the write must land");
-        assert!(
-            !sim.changed_since_dispatch(),
-            "no watcher: a write must not raise the sweep-skip gate"
-        );
-        assert_eq!(
-            sim.changed_signal_count(),
-            0,
-            "no watcher: a write must not touch the changed set"
-        );
+            // A settlement with no watcher anywhere: the circuit still
+            // settles, and the changed set stays empty.
+            let initial = sim.get(fire).get_bit(0);
+            {
+                let mut lock = sim.lock();
+                lock.set(fire, Value::from_bool(fire_typ, !initial));
+            }
+            assert_eq!(sim.get(fire).get_bit(0), !initial, "the write must land");
+            assert!(
+                !sim.changed_since_dispatch(),
+                "no watcher: a write must not raise the sweep-skip gate"
+            );
+            assert_eq!(
+                sim.changed_signal_count(),
+                0,
+                "no watcher: a write must not touch the changed set"
+            );
+    }
     }
 
     /// The narrow commit path end to end: `top.valid`'s `on_change`
@@ -1584,80 +1667,82 @@ mod tests {
     /// protocol across a full clocked gcd run.
     #[test]
     fn narrow_bits_commit_path_runs_gcd_to_completion() {
-        let mut sim = gcd_sim(Engine::Legacy);
-        let clock = sim.signal("top.clock");
-        let clock_typ = sim.component_type_id(clock);
-        let reset = sim.signal("top.reset");
-        let reset_typ = sim.component_type_id(reset);
-        let fire = sim.signal("top.fire");
-        let fire_typ = sim.component_type_id(fire);
-        let x = sim.signal("top.x");
-        let x_typ = sim.component_type_id(x);
-        let y = sim.signal("top.y");
-        let y_typ = sim.component_type_id(y);
-        let result = sim.signal("top.result");
-        let valid = sim.signal("top.valid");
+    for engine in [Engine::Vm, Engine::Legacy] {
+            let mut sim = gcd_sim(engine);
+            let clock = sim.signal("top.clock");
+            let clock_typ = sim.component_type_id(clock);
+            let reset = sim.signal("top.reset");
+            let reset_typ = sim.component_type_id(reset);
+            let fire = sim.signal("top.fire");
+            let fire_typ = sim.component_type_id(fire);
+            let x = sim.signal("top.x");
+            let x_typ = sim.component_type_id(x);
+            let y = sim.signal("top.y");
+            let y_typ = sim.component_type_id(y);
+            let result = sim.signal("top.result");
+            let valid = sim.signal("top.valid");
 
-        let mut settle = |sim: &mut Sim, high: bool| {
-            let mut lock = sim.lock();
-            lock.set(clock, Value::from_bool(clock_typ, high));
-        };
+            let mut settle = |sim: &mut Sim, high: bool| {
+                let mut lock = sim.lock();
+                lock.set(clock, Value::from_bool(clock_typ, high));
+            };
 
-        // Drive the inputs: gcd(9, 6) = 3, with reset held for the
-        // first edge so the seeded-random register state starts at
-        // `Idle`.
-        {
-            let mut lock = sim.lock();
-            lock.set(reset, Value::from_bool(reset_typ, true));
-            lock.set(fire, Value::from_bool(fire_typ, true));
-            lock.set(x, Value::new(x_typ, BitPat::from_u64(8, 9)));
-            lock.set(y, Value::new(y_typ, BitPat::from_u64(8, 6)));
-        }
+            // Drive the inputs: gcd(9, 6) = 3, with reset held for the
+            // first edge so the seeded-random register state starts at
+            // `Idle`.
+            {
+                let mut lock = sim.lock();
+                lock.set(reset, Value::from_bool(reset_typ, true));
+                lock.set(fire, Value::from_bool(fire_typ, true));
+                lock.set(x, Value::new(x_typ, BitPat::from_u64(8, 9)));
+                lock.set(y, Value::new(y_typ, BitPat::from_u64(8, 6)));
+            }
 
-        // First rising edge: reset transfers `state` to `Idle`, so
-        // `result`/`valid` are 0/false from here on.
-        settle(&mut sim, true);
-        assert_eq!(sim.get(result).to_u64(), 0);
-        assert!(!sim.get(valid).get_bit(0));
-
-        // Deassert reset: the pending next-value recomputes to
-        // `Running(9, 6)` (Idle + fire), transferred at the next edge.
-        {
-            let mut lock = sim.lock();
-            lock.set(reset, Value::from_bool(reset_typ, false));
-        }
-
-        // Watch the alias copy of the narrow `valid` driver's output:
-        // the driver is re-evaluated and re-committed every cycle, and
-        // only the two real transitions (false->true at Done, true->false
-        // back at Idle) may fire.
-        let fires = Rc::new(RefCell::new(0u32));
-        {
-            let count = fires.clone();
-            sim.on_change(valid, Box::new(move |_sim| {
-                *count.borrow_mut() += 1;
-            }));
-        }
-
-        // Rising-edge sequence for `state`: Running(9,6), Running(3,6),
-        // Running(3,3), Running(0,3), Running(3,0), Done(3), Idle.  The
-        // register driver re-evaluates on the clock edges, so the first
-        // edge after deasserting reset still commits the `Idle` pending.
-        for _ in 0..6 {
+            // First rising edge: reset transfers `state` to `Idle`, so
+            // `result`/`valid` are 0/false from here on.
             settle(&mut sim, true);
+            assert_eq!(sim.get(result).to_u64(), 0);
+            assert!(!sim.get(valid).get_bit(0));
+
+            // Deassert reset: the pending next-value recomputes to
+            // `Running(9, 6)` (Idle + fire), transferred at the next edge.
+            {
+                let mut lock = sim.lock();
+                lock.set(reset, Value::from_bool(reset_typ, false));
+            }
+
+            // Watch the alias copy of the narrow `valid` driver's output:
+            // the driver is re-evaluated and re-committed every cycle, and
+            // only the two real transitions (false->true at Done, true->false
+            // back at Idle) may fire.
+            let fires = Rc::new(RefCell::new(0u32));
+            {
+                let count = fires.clone();
+                sim.on_change(valid, Box::new(move |_sim| {
+                    *count.borrow_mut() += 1;
+                }));
+            }
+
+            // Rising-edge sequence for `state`: Running(9,6), Running(3,6),
+            // Running(3,3), Running(0,3), Running(3,0), Done(3), Idle.  The
+            // register driver re-evaluates on the clock edges, so the first
+            // edge after deasserting reset still commits the `Idle` pending.
+            for _ in 0..6 {
+                settle(&mut sim, true);
+                settle(&mut sim, false);
+            }
+            // Eighth rising edge after Idle: `Done(3)`.
+            settle(&mut sim, true);
+            assert_eq!(sim.get(result).to_u64(), 3, "gcd(9, 6) = 3");
+            assert!(sim.get(valid).get_bit(0));
+            assert_eq!(*fires.borrow(), 1, "the false->true transition fires once");
             settle(&mut sim, false);
-        }
-        // Eighth rising edge after Idle: `Done(3)`.
-        settle(&mut sim, true);
-        assert_eq!(sim.get(result).to_u64(), 3, "gcd(9, 6) = 3");
-        assert!(sim.get(valid).get_bit(0));
-        assert_eq!(*fires.borrow(), 1, "the false->true transition fires once");
-        settle(&mut sim, false);
-        // Ninth: `Done` returns to `Idle`.
-        settle(&mut sim, true);
-        assert_eq!(sim.get(result).to_u64(), 0);
-        assert!(!sim.get(valid).get_bit(0));
-        assert_eq!(*fires.borrow(), 2, "the true->false transition fires once");
+            // Ninth: `Done` returns to `Idle`.
+            settle(&mut sim, true);
+            assert_eq!(sim.get(result).to_u64(), 0);
+            assert!(!sim.get(valid).get_bit(0));
+            assert_eq!(*fires.borrow(), 2, "the true->false transition fires once");
+    }
     }
 
     /// A `Write` sink over a shared buffer, so a test can attach the
@@ -1692,81 +1777,83 @@ mod tests {
     ///   with time parked at the last edge (15000).
     #[test]
     fn clock_and_after_events_interleave_like_the_heap_engine() {
-        let mut sim = gcd_sim(Engine::Legacy);
-        let clock = sim.signal("top.clock");
-        sim.attach_clock(clock, Clock::with_period_ps(10_000));
+    for engine in [Engine::Vm, Engine::Legacy] {
+            let mut sim = gcd_sim(engine);
+            let clock = sim.signal("top.clock");
+            sim.attach_clock(clock, Clock::with_period_ps(10_000));
 
-        let log: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
-        let push = |log: &Rc<RefCell<Vec<String>>>, tag: &str, t: u64| {
-            log.borrow_mut().push(format!("{tag} {t}"));
-        };
+            let log: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+            let push = |log: &Rc<RefCell<Vec<String>>>, tag: &str, t: u64| {
+                log.borrow_mut().push(format!("{tag} {t}"));
+            };
 
-        {
-            let log_cb = log.clone();
-            let armed = Rc::new(Cell::new(false));
-            let armed_cb = armed.clone();
-            sim.on_clock(clock, Box::new(move |sim| {
-                push(&log_cb, "clock-rise", sim.now());
-                if !armed_cb.get() {
-                    armed_cb.set(true);
+            {
+                let log_cb = log.clone();
+                let armed = Rc::new(Cell::new(false));
+                let armed_cb = armed.clone();
+                sim.on_clock(clock, Box::new(move |sim| {
+                    push(&log_cb, "clock-rise", sim.now());
+                    if !armed_cb.get() {
+                        armed_cb.set(true);
+                        let log2 = log_cb.clone();
+                        sim.after(10_000, Box::new(move |sim| {
+                            push(&log2, "watcher-after", sim.now());
+                        }));
+                    }
+                }));
+            }
+            {
+                let log_cb = log.clone();
+                sim.at_start(Box::new(move |sim| {
+                    push(&log_cb, "start", sim.now());
+                }));
+            }
+            {
+                let log_cb = log.clone();
+                sim.at_start(Box::new(move |sim| {
                     let log2 = log_cb.clone();
-                    sim.after(10_000, Box::new(move |sim| {
-                        push(&log2, "watcher-after", sim.now());
-                    }));
-                }
-            }));
-        }
-        {
-            let log_cb = log.clone();
-            sim.at_start(Box::new(move |sim| {
-                push(&log_cb, "start", sim.now());
-            }));
-        }
-        {
-            let log_cb = log.clone();
-            sim.at_start(Box::new(move |sim| {
-                let log2 = log_cb.clone();
-                sim.after(7_500, Box::new(move |sim| {
-                    push(&log2, "between", sim.now());
-                    let log3 = log2.clone();
-                    sim.after(2_600, Box::new(move |sim| {
-                        push(&log3, "late", sim.now());
-                    }));
-                    let log3 = log2.clone();
-                    sim.after(2_500, Box::new(move |sim| {
-                        push(&log3, "tie-after", sim.now());
+                    sim.after(7_500, Box::new(move |sim| {
+                        push(&log2, "between", sim.now());
+                        let log3 = log2.clone();
+                        sim.after(2_600, Box::new(move |sim| {
+                            push(&log3, "late", sim.now());
+                        }));
+                        let log3 = log2.clone();
+                        sim.after(2_500, Box::new(move |sim| {
+                            push(&log3, "tie-after", sim.now());
+                        }));
                     }));
                 }));
-            }));
-        }
-        {
-            let rises: Rc<Cell<u64>> = Rc::new(Cell::new(0));
-            let rises_cb = rises.clone();
-            sim.on_clock(clock, Box::new(move |sim| {
-                let n = rises_cb.get() + 1;
-                rises_cb.set(n);
-                if n >= 2 {
-                    sim.finish();
-                }
-            }));
-        }
+            }
+            {
+                let rises: Rc<Cell<u64>> = Rc::new(Cell::new(0));
+                let rises_cb = rises.clone();
+                sim.on_clock(clock, Box::new(move |sim| {
+                    let n = rises_cb.get() + 1;
+                    rises_cb.set(n);
+                    if n >= 2 {
+                        sim.finish();
+                    }
+                }));
+            }
 
-        sim.run().unwrap();
-        let log = log.borrow();
-        let expected = [
-            "start 0",
-            "clock-rise 5000",
-            "between 7500",
-            "tie-after 10000",
-            "late 10100",
-            "watcher-after 15000",
-            "clock-rise 15000",
-        ];
-        for (got, want) in log.iter().zip(expected.iter()) {
-            assert_eq!(got, want, "dispatch order diverged from the heap engine");
-        }
-        assert_eq!(log.len(), expected.len(), "unexpected extra dispatches");
-        assert_eq!(sim.now(), 15_000, "finish() parks time at the last edge");
+            sim.run().unwrap();
+            let log = log.borrow();
+            let expected = [
+                "start 0",
+                "clock-rise 5000",
+                "between 7500",
+                "tie-after 10000",
+                "late 10100",
+                "watcher-after 15000",
+                "clock-rise 15000",
+            ];
+            for (got, want) in log.iter().zip(expected.iter()) {
+                assert_eq!(got, want, "dispatch order diverged from the heap engine");
+            }
+            assert_eq!(log.len(), expected.len(), "unexpected extra dispatches");
+            assert_eq!(sim.now(), 15_000, "finish() parks time at the last edge");
+    }
     }
 
     /// The VCD dump of a clocked run must be byte-identical to the
@@ -1776,39 +1863,366 @@ mod tests {
     /// seed 42, 16 rising edges, period 10000 ps.
     #[test]
     fn vcd_trace_is_byte_identical_to_the_heap_engine() {
-        let mut sim = gcd_sim(Engine::Legacy);
-        let clock = sim.signal("top.clock");
-        let sink = SharedSink(Rc::new(RefCell::new(Vec::new())));
-        let sink_ref = sink.0.clone();
-        sim.attach_vcd(sink);
-        sim.attach_clock(clock, Clock::with_period_ps(10_000));
+    for engine in [Engine::Vm, Engine::Legacy] {
+            let mut sim = gcd_sim(engine);
+            let clock = sim.signal("top.clock");
+            let sink = SharedSink(Rc::new(RefCell::new(Vec::new())));
+            let sink_ref = sink.0.clone();
+            sim.attach_vcd(sink);
+            sim.attach_clock(clock, Clock::with_period_ps(10_000));
 
-        let rises: Rc<Cell<u64>> = Rc::new(Cell::new(0));
-        {
-            let rises_cb = rises.clone();
-            sim.on_clock(clock, Box::new(move |sim| {
-                let n = rises_cb.get() + 1;
-                rises_cb.set(n);
-                if n >= 16 {
-                    sim.finish();
-                }
-            }));
+            let rises: Rc<Cell<u64>> = Rc::new(Cell::new(0));
+            {
+                let rises_cb = rises.clone();
+                sim.on_clock(clock, Box::new(move |sim| {
+                    let n = rises_cb.get() + 1;
+                    rises_cb.set(n);
+                    if n >= 16 {
+                        sim.finish();
+                    }
+                }));
+            }
+            sim.run().unwrap();
+            assert_eq!(rises.get(), 16);
+
+            let golden_path =
+                Path::new(env!("CARGO_MANIFEST_DIR")).join("../sim-bench/golden/gcd.vcd");
+            let golden = std::fs::read(&golden_path).unwrap_or_else(|e| {
+                panic!(
+                    "cannot read VCD golden {:?}: {e} (run the pre-change capture first)",
+                    golden_path
+                )
+            });
+            assert_eq!(
+                sink_ref.borrow().as_slice(),
+                golden.as_slice(),
+                "VCD output diverged from the heap-event engine"
+            );
+    }
+    }
+
+    /// Materialize a generated chain design (the `sim-bench/gen.py`
+    /// shape: `Word[32]` registers chained with `+`, every register
+    /// changing on every cycle) in a fresh temp directory, and build a
+    /// seeded `Sim` over it.  The per-test directory name carries a
+    /// process-unique counter so parallel test threads never collide.
+    /// VM-only: the schedule/cycle-plan tests inspect VM internals.
+    fn chain_sim(stages: usize) -> Sim {
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "virdant-chain-test-{}-{}-{stages}",
+            std::process::id(),
+            SEQ.fetch_add(1, Ordering::Relaxed),
+        ));
+        let src_dir = dir.join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        let mut regs = String::new();
+        for i in 0..stages {
+            if i == 0 {
+                regs.push_str("    reg r0 : Word[32] on clock {\n        it <= it + 1w32\n    }\n");
+            } else {
+                regs.push_str(&format!(
+                    "    reg r{i} : Word[32] on clock {{\n        it <= it + r{} + 1w32\n    }}\n",
+                    i - 1
+                ));
+            }
         }
-        sim.run().unwrap();
-        assert_eq!(rises.get(), 16);
-
-        let golden_path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../sim-bench/golden/gcd.vcd");
-        let golden = std::fs::read(&golden_path).unwrap_or_else(|e| {
-            panic!(
-                "cannot read VCD golden {:?}: {e} (run the pre-change capture first)",
-                golden_path
-            )
-        });
-        assert_eq!(
-            sink_ref.borrow().as_slice(),
-            golden.as_slice(),
-            "VCD output diverged from the heap-event engine"
+        let top_vir = format!(
+            "//! Generated test bench: {stages}-stage register chain.\n\npub mod Top for virt::Virt {{\n    incoming clock : Clock\n\n    outgoing tx : Bit\n\n{regs}    tx := r0[0]\n}}\n"
         );
+        std::fs::write(src_dir.join("top.vir"), top_vir).unwrap();
+        std::fs::write(
+            dir.join("virdant.toml"),
+            "[project]\nname = \"chain\"\n\n[prog]\ntop = \"top::Top\"\n",
+        )
+        .unwrap();
+
+        let lib = Path::new(env!("CARGO_MANIFEST_DIR")).join("../lib");
+        let db = db_from_dir_with_lib(&src_dir, &lib);
+        if let Err(diagnostics) = check_db(&db) {
+            for diag in diagnostics.iter() {
+                eprintln!("{diag:?}");
+            }
+            panic!("chain test design failed to build");
+        }
+        let symboltable = db.get_symboltable();
+        let top = symboltable.resolve(b"top::Top".into()).unwrap();
+        Sim::new(&db, top.id(), InitStrategy::Seeded(42))
+    }
+
+    /// The static combinational schedule engages on acyclic designs
+    /// (both a real fixture and a generated chain) and is absent only
+    /// when the driver graph cannot be ordered; the epoch machinery in
+    /// `flow` is live exactly then.  VM-only: the schedule is the VM
+    /// engine's stage-A artifact.
+    #[test]
+    fn static_schedule_engages_on_acyclic_designs() {
+        let sim = gcd_sim(Engine::Vm);
+        assert!(
+            sim.has_topo_schedule(),
+            "gcd's driver graph is acyclic, so the schedule must engage"
+        );
+        let sim = chain_sim(4);
+        assert!(
+            sim.has_topo_schedule(),
+            "the chain's driver graph is acyclic, so the schedule must engage"
+        );
+    }
+
+    /// Build a `Sim` for a design whose source is `source` (one `top::Top`
+    /// module, same `virt::Virt` library the other fixtures use), attach
+    /// the primary clock, and return it.  The temp directory is removed
+    /// as soon as the `Db` is built (the `Db` is self-contained), so the
+    /// tests do not accumulate files in `/tmp`.
+    fn design_sim(stem: &str, source: &str) -> Sim {
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "virdant-cycle-plan-test-{}-{}-{stem}",
+            std::process::id(),
+            SEQ.fetch_add(1, Ordering::Relaxed),
+        ));
+        let src_dir = dir.join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        std::fs::write(src_dir.join("top.vir"), source).unwrap();
+        std::fs::write(
+            dir.join("virdant.toml"),
+            "[project]\nname = \"cycletest\"\n\n[prog]\ntop = \"top::Top\"\n",
+        )
+        .unwrap();
+        let lib = Path::new(env!("CARGO_MANIFEST_DIR")).join("../lib");
+        let db = db_from_dir_with_lib(&src_dir, &lib);
+        std::fs::remove_dir_all(&dir).unwrap();
+        // The `cyclic` fixture is the qualification checker's clause-2
+        // case, so its design intentionally carries a CombinationalLoop
+        // diagnostic; any other diagnostic is a broken fixture.
+        let diagnostics = match check_db(&db) {
+            Ok(diagnostics) => diagnostics,
+            Err(diagnostics) => diagnostics,
+        };
+        for diag in diagnostics.iter() {
+            if matches!(diag.payload, DiagnosticPayload::CombinationalLoop(_)) {
+                continue;
+            }
+            eprintln!("{diag:?}");
+            panic!("cycle-plan test design `{stem}` failed to build");
+        }
+        let symboltable = db.get_symboltable();
+        let top = symboltable.resolve(b"top::Top".into()).unwrap();
+        let mut sim = Sim::new(&db, top.id(), InitStrategy::Seeded(42));
+        let clock = sim.signal("top.clock");
+        sim.attach_clock(clock, Clock::with_period_ps(10_000));
+        sim
+    }
+
+    /// The 512-stage chain qualifies and its static plan is the honest
+    /// structure.  Region 0 is one eval settlement over every driver in
+    /// topo order: `tx` first (its only input is the inert `r0`
+    /// register, which propagates nothing, so `tx` carries no topo
+    /// constraint), then the 512 register drivers in component order,
+    /// then the four undriven `virt::Virt` interface outputs.  Region 1
+    /// is the transfer point over all 512 registers in
+    /// `clock_sensitivities` (declaration) order.  Region 2 is the
+    /// combinational tail: `tx` (which reads `r0`'s live value) plus
+    /// the 512 register drivers (dirty as transfer seeds, inert as
+    /// propagators), while the interface outputs read nothing and stay
+    /// out.
+    #[test]
+    fn chain_cycle_plan_regions() {
+        let stages = 512;
+        let mut sim = chain_sim(stages);
+        let clock = sim.signal("top.clock");
+        sim.attach_clock(clock, Clock::with_period_ps(10_000));
+        let plan = sim.cycle_plan().expect("the chain must have a cycle plan");
+        let vm::CyclePlanResult::Qualified(vm::cycle::CyclePlan { regions }) = plan else {
+            panic!("the 512-stage chain must qualify, got {plan:?}");
+        };
+        let name = |id: SignalId| sim.full_name(id).to_string();
+        assert_eq!(regions.len(), 3, "one eval, one transfer, one tail");
+
+        let vm::cycle::Region::Eval { drivers, after_transfer: false } = &regions[0] else {
+            panic!("region 0 must be the pre-transfer eval region");
+        };
+        assert_eq!(
+            drivers.len(),
+            stages + 5,
+            "512 register drivers + tx + the 4 virt interface outputs"
+        );
+        assert_eq!(name(drivers[0].driver), "top.tx", "tx has no topo constraint");
+        assert_eq!(
+            drivers[0].inputs.iter().map(|s| name(*s)).collect::<Vec<_>>(),
+            vec!["top.r0".to_string()],
+            "tx's driver input list"
+        );
+        for (i, d) in drivers.iter().enumerate().skip(1).take(stages) {
+            assert_eq!(name(d.driver), format!("top.r{}", i - 1), "register drivers in component order");
+        }
+        assert_eq!(
+            drivers[stages + 1..]
+                .iter()
+                .map(|d| name(d.driver))
+                .collect::<Vec<_>>(),
+            vec!["top.exit", "top.spi_ck", "top.spi_cs", "top.spi_mosi"],
+            "the undriven virt::Virt interface outputs close the topo order"
+        );
+        assert!(drivers[stages + 1].inputs.is_empty(), "interface outputs read nothing");
+
+        let vm::cycle::Region::Transfer { registers, clock: plan_clock } = &regions[1] else {
+            panic!("region 1 must be the transfer point");
+        };
+        assert_eq!(plan_clock, &clock, "the transfer's clock is the primary");
+        assert_eq!(registers.len(), stages, "every register transfers");
+        for (i, reg) in registers.iter().enumerate() {
+            assert_eq!(name(*reg), format!("top.r{i}"), "registers transfer in declaration order");
+        }
+
+        let vm::cycle::Region::Eval { drivers, after_transfer: true } = &regions[2] else {
+            panic!("region 2 must be the post-transfer tail");
+        };
+        assert_eq!(
+            drivers.len(),
+            stages + 1,
+            "tx plus the 512 register drivers are downstream of the transfer"
+        );
+        assert_eq!(name(drivers[0].driver), "top.tx", "the tail keeps the topo order");
+        for (i, d) in drivers.iter().enumerate().skip(1) {
+            assert_eq!(name(d.driver), format!("top.r{}", i - 1), "the tail keeps the topo order");
+        }
+    }
+
+    /// A register clocked by an internal wire (not the primary free-
+    /// running clock) disqualifies the design, naming the register, the
+    /// wire, and the primary clock.
+    #[test]
+    fn wire_clocked_register_disqualifies() {
+        let mut sim = design_sim(
+            "wire-clock",
+            r"
+pub mod Top {
+    incoming clock : Clock
+    outgoing out : Bit
+
+    wire gated : Clock {
+        it := clock
+    }
+
+    reg r : Word[8] on gated {
+        it <= it + 1w8
+    }
+
+    out := r[0]
+}
+",
+        );
+        let clock = sim.signal("top.clock");
+        let gated = sim.signal("top.gated");
+        let reg = sim.signal("top.r");
+        let plan = sim.cycle_plan().expect("the wire-clock design must have a verdict");
+        let vm::CyclePlanResult::Disqualified(vm::Disqualification::RegisterClockedByNonPrimary { register, clock: bad_clock, primary }) = plan else {
+            panic!("the wire-clocked design must disqualify, got {plan:?}");
+        };
+        assert_eq!(register, &reg, "the diagnostic names the register");
+        assert_eq!(bad_clock, &gated, "the diagnostic names the wire");
+        assert_eq!(primary, &clock, "the diagnostic names the primary clock");
+    }
+
+    /// A combinational cycle (a wire driver reading its own live value)
+    /// is refused by the stage-A topological schedule, and the whole-
+    /// design qualification falls back to that existing refusal.
+    #[test]
+    fn cyclic_design_falls_back_to_existing_refusal() {
+        let sim = design_sim(
+            "cyclic",
+            r"
+pub mod Top {
+    incoming clock : Clock
+    outgoing out : Bit
+
+    wire a : Bit {
+        it := it
+    }
+
+    reg r : Word[8] {
+        it <= it + 1w8
+    }
+
+    out := r[0]
+}
+",
+        );
+        let plan = sim.cycle_plan().expect("the cyclic design must have a verdict");
+        let vm::CyclePlanResult::Disqualified(vm::Disqualification::CyclicCombinationalGraph) = plan else {
+            panic!("the cyclic design must fall back, got {plan:?}");
+        };
+    }
+
+    /// The change-epoch skip, witnessed by the profiler counters (runs
+    /// under `--features sim-profile`): in one rising-edge settlement
+    /// of the 32-stage chain, every register's driver is visited twice
+    /// (once for its own transfer's pop, once for its predecessor's),
+    /// but the second visit's trigger epoch predates the driver's
+    /// first evaluation this settlement, so exactly the repeat visits
+    /// are skipped: 33 driver evals (32 register drivers + tx), 31
+    /// skips.  The chain is 32 stages on purpose: the settlement must
+    /// enter `flow` above `EPOCH_CHECK_MIN_DIRTY` for the check to run
+    /// at all (small settlements keep the plain loop).  The falling
+    /// edge visits nothing, and the next rising edge re-evaluates
+    /// everything (the skip never carries across settlements), while
+    /// the register values advance exactly as the chain defines.
+    #[test]
+    #[cfg(feature = "sim-profile")]
+    fn epoch_skip_dedups_repeat_driver_visits_within_a_settlement() {
+        let mut sim = chain_sim(32);
+        assert!(sim.has_topo_schedule());
+        let clock = sim.signal("top.clock");
+        let clock_typ = sim.component_type_id(clock);
+        let regs: Vec<SignalId> =
+            (0..32).map(|i| sim.signal(format!("top.r{i}").as_bytes())).collect();
+
+        let before: Vec<u64> = regs.iter().map(|&r| sim.get(r).to_u64()).collect();
+
+        let settle = |sim: &mut Sim, high: bool| {
+            let mut lock = sim.lock();
+            lock.set(clock, Value::from_bool(clock_typ, high));
+        };
+
+        // Warm-up settlement (drives the clock low; may be a no-op
+        // write), then measure the rising edge alone.
+        settle(&mut sim, false);
+        crate::sim::profile::reset();
+        settle(&mut sim, true);
+        let snap = crate::sim::profile::snapshot();
+        assert_eq!(snap.evals_total, 33, "32 register drivers + tx, each once");
+        assert_eq!(snap.epoch_skips, 31, "each driver's repeat visit is skipped");
+        // Word[32] arithmetic wraps at 32 bits.
+        const M32: u64 = 0xFFFF_FFFF;
+        assert_eq!(sim.get(regs[0]).to_u64(), (before[0] + 1) & M32, "r0 advanced by one");
+        assert_eq!(
+            sim.get(regs[1]).to_u64(),
+            (before[1] + before[0] + 1) & M32,
+            "r1 = r1 + r0 + 1 over the pre-edge values"
+        );
+        assert_eq!(
+            sim.get(regs[3]).to_u64(),
+            (before[3] + before[2] + 1) & M32,
+            "r3 = r3 + r2 + 1 over the pre-edge values"
+        );
+
+        // Falling edge: the clock's write has no AST reader, so no
+        // driver is visited at all.
+        crate::sim::profile::reset();
+        settle(&mut sim, false);
+        let snap = crate::sim::profile::snapshot();
+        assert_eq!(snap.evals_total, 0, "no driver reads the clock by AST reference");
+        assert_eq!(snap.epoch_skips, 0);
+
+        // Second rising edge: the transfer re-dirties every register,
+        // so every driver is re-evaluated - the skip is strictly a
+        // within-settlement dedup and never carries across settlements.
+        crate::sim::profile::reset();
+        settle(&mut sim, true);
+        let snap = crate::sim::profile::snapshot();
+        assert_eq!(snap.evals_total, 33, "the next settlement re-evaluates every driver");
+        assert_eq!(snap.epoch_skips, 31);
+        assert_eq!(sim.get(regs[0]).to_u64(), (before[0] + 2) & M32, "r0 advanced again");
     }
 }

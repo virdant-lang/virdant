@@ -374,8 +374,9 @@ impl State {
     /// The walk skips directly between set bits (`trailing_zeros`),
     /// never scanning unset bits: the cost is proportional to the
     /// number of changed signals, not the size of the bitset.
-    pub(super) fn changed_signal_ids(&self) -> impl Iterator<Item = SignalId> + '_ {
-        self.changed_signals
+    pub(super) fn changed_signal_ids(&self) -> Box<dyn Iterator<Item = SignalId> + '_> {
+        Box::new(self
+            .changed_signals
             .iter()
             .enumerate()
             .flat_map(move |(word, &bits)| {
@@ -389,7 +390,7 @@ impl State {
                         Some(SignalId::from_index(word * CHANGE_WORD_BITS + bit as usize))
                     }
                 })
-            })
+            }))
     }
 
     /// Consume the changed-set: empties the per-signal bitset (and the
