@@ -48,6 +48,26 @@ pub(super) enum Ins {
         signal: SignalId,
         dst: Dst,
     },
+    /// Read one word of a memory component (`mem[c]`): the live word
+    /// array indexed at compile time.  Only emitted for an in-range
+    /// constant index (the compiler lowers an out-of-range one to the
+    /// ordinary bit-select path, matching the interpreter's
+    /// `eval_memory_read` `None` fall-through).
+    LoadWord {
+        signal: SignalId,
+        index: u32,
+        dst: Dst,
+    },
+    /// Read one word of a memory component with a dynamic index
+    /// (`mem[dyn i]`) from narrow slot `index`.  The interpreter
+    /// indexes the word array directly (`words[index]`), panicking on
+    /// an out-of-range index — analysis guarantees `depth == 2^k`, so
+    /// this is unreachable for well-typed designs.
+    LoadWordDyn {
+        signal: SignalId,
+        index: SlotN,
+        dst: Dst,
+    },
     /// A referent that `compute_resolved_referents` could not resolve:
     /// it evaluates as a width-1 zero value, re-tagged with the
     /// reading node's type (the old interpreter's `Context::get`
@@ -512,7 +532,8 @@ impl Ins {
         };
 
         match self {
-            Ins::Load { dst, .. } | Ins::Zero { dst, .. } => {
+            Ins::Load { dst, .. } | Ins::LoadWord { dst, .. } | Ins::LoadWordDyn { dst, .. }
+            | Ins::Zero { dst, .. } => {
                 check_dst(dst);
             }
             Ins::LoadUnresolved { dst, .. } => check_narrow(*dst),

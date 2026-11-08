@@ -103,6 +103,7 @@ struct VVal {
 struct DriverCompiler<'a> {
     layouts: &'a TypeLayoutIndex,
     elaboration: &'a Elaboration,
+    circuit: &'a Circuit,
     /// Resolved referents for this driver, last-write-wins (the same
     /// shadowing order `Context`'s `IndexMap` inserts produce).
     referents: HashMap<Referent, SignalId>,
@@ -140,6 +141,7 @@ impl<'a> DriverCompiler<'a> {
         DriverCompiler {
             layouts: &circuit.type_layout_index,
             elaboration: &circuit.elaboration,
+            circuit,
             referents,
             bindings: HashMap::new(),
             code: Vec::new(),
@@ -160,6 +162,43 @@ impl<'a> DriverCompiler<'a> {
     fn signal_value_width(&self, signal: SignalId) -> Width {
         let typ = self.elaboration.component(signal).typ();
         self.layouts.type_width(&typ)
+    }
+
+    /// A constant-index memory read (`mem[c]`): `Some` of the memory
+    /// signal and the index when `subject` is a reference to a memory
+    /// and `index` is in range — the lowering of the interpreter's
+    /// `eval_memory_read` `Some` arm.  `None` falls through to the
+    /// ordinary bit-select (including an out-of-range index on a
+    /// memory, which reads the version counter's bits, exactly as the
+    /// interpreter does).
+    fn memory_read_const(&self, subject: &Expr, index: u64) -> Option<(SignalId, u64)> {
+        let ExprPayload::Reference(reference) = subject.payload() else {
+            return None;
+        };
+        let signal = *self.referents.get(&reference.referent)?;
+        if !self.circuit.is_memory(signal) {
+            return None;
+        }
+        let depth = self.circuit.memory(signal).depth;
+        if index >= depth as u64 {
+            return None;
+        }
+        Some((signal, index))
+    }
+
+    /// A dynamic memory read (`mem[dyn i]`): `Some` of the memory
+    /// signal when `subject` is a reference to a memory — the
+    /// interpreter's `eval_index_dyn` memory arm (the index is
+    /// guaranteed in range by typing: `depth == 2^k`).
+    fn memory_read_dyn(&self, subject: &Expr) -> Option<SignalId> {
+        let ExprPayload::Reference(reference) = subject.payload() else {
+            return None;
+        };
+        let signal = *self.referents.get(&reference.referent)?;
+        if !self.circuit.is_memory(signal) {
+            return None;
+        }
+        Some(signal)
     }
 
     fn alloc_narrow(&mut self) -> SlotN {
@@ -289,6 +328,26 @@ impl<'a> DriverCompiler<'a> {
                 self.compile_splice(self.static_width(expr), fields)
             }
             ExprPayload::Index(index) => {
+                // A constant-index memory read (`mem[c]`): the whole
+                // word, not a bit of the version counter.  Mirrors the
+                // interpreter's `eval_memory_read`: only a Reference
+                // subject naming a memory with an in-range index takes
+                // this path; anything else falls through to the
+                // ordinary bit-select below (an out-of-range index
+                // reads the version counter's bits, exactly as the
+                // interpreter does).
+                if let Some((mem_signal, mem_index)) =
+                    self.memory_read_const(&index.subject, index.index as u64)
+                {
+                    let width = self.signal_value_width(mem_signal);
+                    let dst = self.slot_for(width);
+                    self.code.push(Ins::LoadWord {
+                        signal: mem_signal,
+                        index: mem_index as u32,
+                        dst,
+                    });
+                    return VVal { dst, width };
+                }
                 let subj = self.compile_expr(&index.subject);
                 let dst = Dst::Narrow(self.alloc_narrow());
                 match subj.dst {
@@ -312,6 +371,35 @@ impl<'a> DriverCompiler<'a> {
                 VVal { dst, width: 1 }
             }
             ExprPayload::IndexDyn(index_dyn) => {
+                // A dynamic memory read (`mem[dyn i]`): the subject is
+                // a reference to a memory component whose index is
+                // exactly `Word[k]` (`depth == 2^k`), so it is always
+                // in range.  Mirrors the interpreter's
+                // `eval_index_dyn`.
+                if let Some(mem_signal) = self.memory_read_dyn(&index_dyn.subject) {
+                    let width = self.signal_value_width(mem_signal);
+                    let dst = self.slot_for(width);
+                    let index = self.compile_expr(&index_dyn.index);
+                    let index_slot = match index.dst {
+                        Dst::Narrow(i) => i,
+                        Dst::Wide(s) => {
+                            let reduced = self.alloc_narrow();
+                            self.code.push(Ins::ExtractWide {
+                                subj: s,
+                                lo: 0,
+                                width: 64,
+                                dst: Dst::Narrow(reduced),
+                            });
+                            reduced
+                        }
+                    };
+                    self.code.push(Ins::LoadWordDyn {
+                        signal: mem_signal,
+                        index: index_slot,
+                        dst,
+                    });
+                    return VVal { dst, width };
+                }
                 let subj = self.compile_expr(&index_dyn.subject);
                 let index = self.compile_expr(&index_dyn.index);
                 let dst = Dst::Narrow(self.alloc_narrow());
@@ -1555,13 +1643,16 @@ pub(in crate::sim) fn compile_program(circuit: &Circuit) -> Program {
         // `Ins` sequences within the existing opcode set.
         optimize_driver(&mut compiler.code);
         // The static schedule's per-driver input list: every signal the
-        // optimized bytecode loads (`Load` is the only instruction that
-        // reads engine state), deduped.
+        // optimized bytecode reads from engine state (`Load` and the
+        // memory-word loads; everything else reads frame slots),
+        // deduped.
         let mut loads: Vec<u32> = compiler
             .code
             .iter()
             .filter_map(|ins| match ins {
-                Ins::Load { signal, .. } => Some(signal.index() as u32),
+                Ins::Load { signal, .. }
+                | Ins::LoadWord { signal, .. }
+                | Ins::LoadWordDyn { signal, .. } => Some(signal.index() as u32),
                 _ => None,
             })
             .collect();

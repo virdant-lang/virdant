@@ -11,5 +11,5 @@
 //! dispatch reads.
 
 pub(crate) mod engine;
-mod eval;
-mod state;
+pub(crate) mod eval;
+pub(crate) mod state;

@@ -35,6 +35,13 @@ pub(in crate::sim) trait VmState {
     fn narrow_bits(&self, signal: SignalId) -> u64;
     /// The live value's whole bit pattern (only read into wide slots).
     fn wide_bits(&self, signal: SignalId) -> BitPat;
+    /// One word of a memory's live contents (`mem[c]`): `None` for a
+    /// non-memory or an out-of-range index (both unreachable for
+    /// compiled programs — the compiler only emits `LoadWord` for an
+    /// in-range index of a memory signal).
+    fn memory_word_narrow(&self, signal: SignalId, index: usize) -> Option<u64>;
+    /// Wide variant of [`VmState::memory_word_narrow`].
+    fn memory_word_wide(&self, signal: SignalId, index: usize) -> Option<BitPat>;
 }
 
 /// `(1 << width) - 1` for `width < 64`; `u64::MAX` for `width >= 64`.
@@ -114,6 +121,39 @@ impl Vm {
                         Dst::Narrow(d) => frame.narrow[*d as usize] = state.narrow_bits(*signal),
                         Dst::Wide(d) => {
                             let pat = state.wide_bits(*signal);
+                            frame.wide[*d as usize].set(&pat);
+                        }
+                    }
+                    ip += 1;
+                }
+                Ins::LoadWord { signal, index, dst } => {
+                    match dst {
+                        Dst::Narrow(d) => {
+                            frame.narrow[*d as usize] = state
+                                .memory_word_narrow(*signal, *index as usize)
+                                .expect("LoadWord: memory word missing or not narrow");
+                        }
+                        Dst::Wide(d) => {
+                            let pat = state
+                                .memory_word_wide(*signal, *index as usize)
+                                .expect("LoadWord: memory word missing");
+                            frame.wide[*d as usize].set(&pat);
+                        }
+                    }
+                    ip += 1;
+                }
+                Ins::LoadWordDyn { signal, index, dst } => {
+                    let index = frame.narrow[*index as usize] as usize;
+                    match dst {
+                        Dst::Narrow(d) => {
+                            frame.narrow[*d as usize] = state
+                                .memory_word_narrow(*signal, index)
+                                .expect("LoadWordDyn: memory word missing or not narrow");
+                        }
+                        Dst::Wide(d) => {
+                            let pat = state
+                                .memory_word_wide(*signal, index)
+                                .expect("LoadWordDyn: memory word missing");
                             frame.wide[*d as usize].set(&pat);
                         }
                     }
@@ -566,6 +606,12 @@ mod tests {
         fn wide_bits(&self, _signal: SignalId) -> BitPat {
             // No test loads into a wide slot through the stub.
             BitPat::zeros(0)
+        }
+        fn memory_word_narrow(&self, _signal: SignalId, _index: usize) -> Option<u64> {
+            None
+        }
+        fn memory_word_wide(&self, _signal: SignalId, _index: usize) -> Option<BitPat> {
+            None
         }
     }
 

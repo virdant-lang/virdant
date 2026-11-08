@@ -121,20 +121,49 @@ impl Context {
         state: &State,
         signal_id: SignalId,
     ) -> Context {
-        let entries = circuit
-            .referents(signal_id)
-            .iter()
-            .map(|(r, id)| (r.clone(), state.get(*id)))
-            .collect();
-        let mut context = Context::new(entries, circuit.type_layout_index.clone());
-        // Memory reads fetch the words, not the version counter.
-        for (r, id) in circuit.referents(signal_id) {
-            if circuit.is_memory(*id) {
-                context.insert_memory(r.clone(), state.memory_words(*id));
-            }
-        }
-        context
+        context_for_values(circuit, state, signal_id)
     }
+}
+
+/// The state-level view a context builder needs: the live value of a
+/// signal, and the words of a memory signal (only consulted for
+/// signals `Circuit::is_memory` accepts).  Implemented by both
+/// engines' `State` so the memory write-site evaluation (and any
+/// other shared tree-walk) can run against either engine.
+pub(crate) trait ComponentValues {
+    fn value_of(&self, signal_id: SignalId) -> Value;
+    fn memory_words_of(&self, signal_id: SignalId) -> std::sync::Arc<Vec<Value>>;
+}
+
+impl ComponentValues for State {
+    fn value_of(&self, signal_id: SignalId) -> Value {
+        self.get(signal_id)
+    }
+
+    fn memory_words_of(&self, signal_id: SignalId) -> std::sync::Arc<Vec<Value>> {
+        State::memory_words(self, signal_id)
+    }
+}
+
+/// Build an eval `Context` for `signal_id` over any engine's state.
+pub(crate) fn context_for_values(
+    circuit: &crate::sim::circuit::Circuit,
+    values: &dyn ComponentValues,
+    signal_id: SignalId,
+) -> Context {
+    let entries = circuit
+        .referents(signal_id)
+        .iter()
+        .map(|(r, id)| (r.clone(), values.value_of(*id)))
+        .collect();
+    let mut context = Context::new(entries, circuit.type_layout_index.clone());
+    // Memory reads fetch the words, not the version counter.
+    for (r, id) in circuit.referents(signal_id) {
+        if circuit.is_memory(*id) {
+            context.insert_memory(r.clone(), values.memory_words_of(*id));
+        }
+    }
+    context
 }
 
 impl Expr {

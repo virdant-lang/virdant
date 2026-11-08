@@ -61,6 +61,12 @@ fn print_ins(ins: &Ins, nm: &dyn Fn(&SignalId) -> String) -> String {
     let lbl = |to: &u32| format!("L{to}");
     match ins {
         Ins::Load { signal, dst } => format!("load {}, {}", slot(dst), nm(signal)),
+        Ins::LoadWord { signal, index, dst } => {
+            format!("loadword {}, {}[{}]", slot(dst), nm(signal), index)
+        }
+        Ins::LoadWordDyn { signal, index, dst } => {
+            format!("loadword {}, {}[{}]", slot(dst), nm(signal), slot(&Dst::Narrow(*index)))
+        }
         Ins::LoadUnresolved { dst } => format!("loadunresolved s{dst}"),
         Ins::Const { bits, dst } => format!("const s{dst}, {bits:#x}"),
         Ins::WideConst { bits, dst } => format!("const.w w{dst}, {bits:?}"),

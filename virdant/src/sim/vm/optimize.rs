@@ -94,6 +94,8 @@ fn def_dst(ins: &Ins) -> Option<Dst> {
     match ins {
         // `Dst` destinations (may be narrow or wide).
         Ins::Load { dst, .. }
+        | Ins::LoadWord { dst, .. }
+        | Ins::LoadWordDyn { dst, .. }
         | Ins::Zero { dst, .. }
         | Ins::ExtractWide { dst, .. }
         | Ins::BinWide { dst, .. }
@@ -200,8 +202,12 @@ fn for_each_slot(ins: &Ins, f: &mut dyn FnMut(Dst)) {
         Ins::MoveWide { src, .. } => w!(src),
         Ins::Any { subj, .. } | Ins::All { subj, .. } => n!(subj),
         Ins::AnyWide { subj, .. } | Ins::AllWide { subj, .. } => w!(subj),
-        // `Load` reads state, not frame slots.
-        Ins::Load { .. } | Ins::LoadUnresolved { .. } => {}
+        // `Load`/`LoadWord` read state, not frame slots;
+        // `LoadWordDyn` reads its index slot.
+        Ins::Load { .. }
+        | Ins::LoadWord { .. }
+        | Ins::LoadUnresolved { .. } => {}
+        Ins::LoadWordDyn { index, .. } => n!(index),
         Ins::Const { .. } | Ins::WideConst { .. } | Ins::Zero { .. } => {}
         Ins::Ret { src } => n!(src),
         Ins::RetWide { src } => w!(src),
@@ -390,7 +396,7 @@ fn fold_one(
         };
     }
     match ins {
-        Ins::Load { dst, .. } => {
+        Ins::Load { dst, .. } | Ins::LoadWord { dst, .. } | Ins::LoadWordDyn { dst, .. } => {
             invalidate_dst(*dst, cn, cw);
             *arrival = Arrival::Fresh;
             ip + 1
@@ -1127,6 +1133,8 @@ fn dst_of(ins: &Ins) -> Dst {
         | Ins::MoveWide { dst, .. } => Dst::Wide(*dst),
         // `Dst` destinations.
         Ins::Load { dst, .. }
+        | Ins::LoadWord { dst, .. }
+        | Ins::LoadWordDyn { dst, .. }
         | Ins::Zero { dst, .. }
         | Ins::ExtractWide { dst, .. }
         | Ins::BinWide { dst, .. }
@@ -1339,6 +1347,8 @@ fn rewrite_dst(ins: &mut Ins, new_dst: Dst) {
     match ins {
         // `Dst` destinations: assign directly.
         Ins::Load { dst, .. }
+        | Ins::LoadWord { dst, .. }
+        | Ins::LoadWordDyn { dst, .. }
         | Ins::Zero { dst, .. }
         | Ins::ExtractWide { dst, .. }
         | Ins::BinWide { dst, .. }
@@ -1461,8 +1471,13 @@ fn rewrite_uses(ins: &mut Ins, from: Dst, to: Dst) {
         Ins::MoveWide { src, .. } => sub_w(src),
         Ins::Any { subj, .. } | Ins::All { subj, .. } => sub_n(subj),
         Ins::AnyWide { subj, .. } | Ins::AllWide { subj, .. } => sub_w(subj),
-        Ins::Load { .. } | Ins::LoadUnresolved { .. } | Ins::Const { .. } | Ins::WideConst { .. }
+        Ins::Load { .. }
+        | Ins::LoadWord { .. }
+        | Ins::LoadUnresolved { .. }
+        | Ins::Const { .. }
+        | Ins::WideConst { .. }
         | Ins::Zero { .. } => {}
+        Ins::LoadWordDyn { index, .. } => sub_n(index),
         Ins::Trap => {}
         Ins::Ret { src } => sub_n(src),
         Ins::RetWide { src } => sub_w(src),
@@ -1668,6 +1683,12 @@ mod tests {
         }
         fn wide_bits(&self, _signal: SignalId) -> BitPat {
             BitPat::zeros(0)
+        }
+        fn memory_word_narrow(&self, _signal: SignalId, _index: usize) -> Option<u64> {
+            None
+        }
+        fn memory_word_wide(&self, _signal: SignalId, _index: usize) -> Option<BitPat> {
+            None
         }
     }
 
