@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "A combinational loop across a `:=:` link between two submodule instances' sockets, composed from the socketdef channels' `dependson` obligations."
+filecheck = "src/socket_link_cycle.vir"

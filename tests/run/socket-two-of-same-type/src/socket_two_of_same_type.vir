@@ -17,7 +17,7 @@ import virt
 //> answers with `rsp`.
 socket Link {
     cosi req : Word[8]
-    soci rsp : Word[8]
+    soci rsp : Word[8] dependson req
 }
 
 //> First peer: answers every request with `req + 1`.

@@ -18,8 +18,8 @@ import virt
 socket Bus {
     cosi addr : Word[8]
     cosi sel : Bit
-    soci rsp : Word[8]
-    soci aux : Word[4]
+    soci rsp : Word[8] dependson addr
+    soci aux : Word[4] dependson addr
 }
 
 //> Server side of the socket under test: answers `addr` with a

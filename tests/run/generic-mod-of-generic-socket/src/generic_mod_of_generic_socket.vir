@@ -12,7 +12,7 @@ import virt
 //> parameterized by the payload type `T`.
 socket Chan[T : Type] {
     cosi req : T
-    soci rsp : T
+    soci rsp : T dependson req
 }
 
 //> A generic module with a client socket port of the generic socket

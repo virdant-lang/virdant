@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "A socketdef channel's `dependson` list obliges the module driving that channel: a drive combinationally reading an undeclared channel of the same socket is an error."
+filecheck = "src/socket_obligation.vir"

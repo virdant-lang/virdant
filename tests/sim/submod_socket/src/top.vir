@@ -2,7 +2,7 @@
 // Two submodules connected with `:=:` inside an instantiation block.
 socket Bus {
     cosi req : Word[8]
-    soci rsp : Word[8]
+    soci rsp : Word[8] dependson req
 }
 
 mod Master {

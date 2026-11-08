@@ -37,7 +37,7 @@ struct type Resp {
 //> Socket with struct-typed channels in both directions.
 socket Chan {
     cosi req : Req
-    soci resp : Resp
+    soci resp : Resp dependson req
 }
 
 //> Server endpoint: reads the request's fields, responds field-wise.

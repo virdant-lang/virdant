@@ -1,0 +1,32 @@
+// Both sides of the link declare same-cycle response through their
+// socketdef channels, and each submodule drives its channel from the
+// opposite channel.  The composed `dependson` relation cycles at the
+// module containing the link, which is the only module that sees all
+// the edges: the children's obligations are imported as declarations.
+//
+// CHECK: Cycle in the `dependson` relation: bar.sock.do -> foo.sock.do -> foo.sock.di -> bar.sock.di
+socket Sock {
+    cosi do : Bit dependson di
+    soci di : Bit dependson do
+}
+
+mod Foo {
+    client socket sock of Sock {
+        it.do := it.di
+    }
+}
+
+mod Bar {
+    server socket sock of Sock {
+        it.di := it.do
+    }
+}
+
+pub mod Top {
+    mod foo of Foo
+    mod bar of Bar
+
+    bar.sock :=: foo.sock
+}
+
+// CHECK: Check failed

@@ -16,7 +16,7 @@ import virt
 //> Request/response link used by both hops of the chain.
 socket Link {
     cosi req : Word[8]
-    soci resp : Word[8]
+    soci resp : Word[8] dependson req
 }
 
 //> Top of the chain: server role.  Answers every request by

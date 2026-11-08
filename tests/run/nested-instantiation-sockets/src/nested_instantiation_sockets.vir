@@ -24,7 +24,7 @@ import virt
 //> answers with `rsp`.
 socket Handshake {
     cosi req : Word[8]
-    soci rsp : Word[8]
+    soci rsp : Word[8] dependson req
 }
 
 //> Pure combinational relay between two `Handshake` sockets.

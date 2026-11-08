@@ -19,7 +19,7 @@ import virt
 //> asymmetric (wide request, narrow response) or the reverse.
 socket Bus[A : Type, B : Type] {
     cosi req : A
-    soci rsp : B
+    soci rsp : B dependson req
 }
 
 //> Client side of the wide-request instantiation: drives an 8-bit

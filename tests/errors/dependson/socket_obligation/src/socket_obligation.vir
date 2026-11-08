@@ -1,0 +1,20 @@
+// A socketdef channel's `dependson` list applies when the socket is
+// instantiated in the channel's driving role (`client` for `cosi`,
+// `server` for `soci`): the module's drive on that channel may
+// combinationally depend only on the listed channels of the same socket.
+// A drive that reads an undeclared channel of the same socket is an
+// error, even though the socket link itself would still carry the values.
+//
+// CHECK: `s.ack` could combinationally depend on `s.req` but does not declare it; add `s.req` to `s.ack`'s `dependson`
+socket Chan {
+    cosi req : Word[8]
+    soci ack : Word[8]
+}
+
+mod Server {
+    server socket s of Chan {
+        it.ack := it.req + 1w8
+    }
+}
+
+// CHECK: Check failed

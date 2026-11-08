@@ -25,19 +25,19 @@ pub mod Sync {
     incoming inp : Bit
 
     //> The clock of the output
-    incoming clock: Clock
+    incoming clock : Clock
 
     reg meta : Bit {
         it <= inp
     }
 
     //> The clock of the output
-    outgoing reg out: Bit {
+    outgoing reg out : Bit {
         it <= meta
     }
 }
 
 pub socket Pipe[T : Type] {
-    cosi data  : Valid[T]
-    soci ready : Bit
+    cosi data : Valid[T]
+    soci ready : Bit dependson data
 }

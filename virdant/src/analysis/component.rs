@@ -91,6 +91,16 @@ pub struct Component {
     /// memory whose slot could not be resolved (zero or ≥2 clocks,
     /// no clause — already reported as `MissingOnClause`).
     clock: Option<BString>,
+
+    /// True for the channels of a socket instance (the module's own or
+    /// a submodule instance's), false for every other component.  A
+    /// socket channel in its driving role has kind `Outgoing`, and one
+    /// in its receiving role has kind `Incoming`, but unlike a plain
+    /// port a channel's `dependson` obligations come from the
+    /// socketdef's channel list rather than a `dependson` list written
+    /// in this module, and its exhaustiveness is checked against
+    /// receiving *channels* rather than plain `incoming` ports.
+    socket_channel: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -116,6 +126,11 @@ impl Component {
 
     pub fn path(&self) -> BString {
         self.path.clone()
+    }
+
+    /// Whether this component is a channel of a socket instance.
+    pub fn socket_channel(&self) -> bool {
+        self.socket_channel
     }
 
     pub fn typ(&self) -> Option<Type> {
@@ -460,6 +475,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     kind: Some(component_kind),
                     synthetic: false,
                     default_expr: None,
+                    socket_channel: false,
                     depth,
                     // The resolved clock slot is filled in below, once
                     // the module's implicit clock is known.
@@ -611,6 +627,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 typ,
                                 flow,
                                 kind: Some(component_kind),
+                                socket_channel: false,
                                 synthetic: false,
                                 default_expr: None,
                                 depth: None,
@@ -712,6 +729,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                     typ,
                                     flow,
                                     kind,
+                                    socket_channel: true,
                                     synthetic: false,
                                     default_expr: None,
                                     depth: None,
@@ -788,10 +806,21 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         Ok(typ) => Some(substitute(&typ, &socket_args)),
                         Err(_) => None,
                     };
-                    let flow = if drives_channel(socket.role, channel.dir) {
+                    // The channel in its driving role (`client` for
+                    // `cosi`, `server` for `soci`) is an outgoing port of
+                    // this module; in the receiving role it is an incoming
+                    // one.  (The submodule-socket arm below assigns the
+                    // same kinds from the parent's opposite perspective.)
+                    let drives = drives_channel(socket.role, channel.dir);
+                    let flow = if drives {
                         Flow::Sink
                     } else {
                         Flow::Source
+                    };
+                    let kind = if drives {
+                        Some(ComponentKind::Outgoing)
+                    } else {
+                        Some(ComponentKind::Incoming)
                     };
                     let component = Component {
                         id,
@@ -799,7 +828,8 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         location: stmt.location(),
                         typ,
                         flow,
-                        kind: None,
+                        kind,
+                        socket_channel: true,
                         synthetic: false,
                         default_expr: None,
                         depth: None,
@@ -920,6 +950,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         typ: platform_port.typ,
                         flow,
                         kind,
+                        socket_channel: false,
                         synthetic: true,
                         default_expr,
                         depth: None,

@@ -5,8 +5,8 @@
 socket Quad {
     cosi req_a : Word[8]
     cosi req_b : Word[8]
-    soci rsp_a : Word[8]
-    soci rsp_b : Word[8]
+    soci rsp_a : Word[8] dependson req_a
+    soci rsp_b : Word[8] dependson req_b
 }
 
 //> Server side: answers each request channel with a channel-distinct

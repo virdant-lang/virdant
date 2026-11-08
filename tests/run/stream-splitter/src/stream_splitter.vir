@@ -14,11 +14,29 @@
 
 import virt
 
-//> Local valid/ready handshake socket, structurally identical to the
-//> builtin `Pipe`: the producer drives `data`, the consumer drives
-//> `ready`.
-socket Pipe[T : Type] {
+//> A purely combinational forwarder needs a same-cycle response in
+//> both directions, which cannot live in one socketdef: declared in
+//> both directions, any client/server `:=:` link of the socket would
+//> compose into a cycle in the `dependson` relation.  So the input side
+//> and the output side get separate sockets, each declaring one
+//> direction.
+//>
+//> (Distinct names are also required: an unqualified `Pipe` resolves to
+//> the builtin, which deliberately declares only the server-side
+//> obligation.)
+
+//> Input side: the producer drives `data`; the splitter's `ready` may
+//> combinationally depend on the offered payload (same-cycle accept).
+socket InPipe[T : Type] {
     cosi data  : Valid[T]
+    soci ready : Bit dependson data
+}
+
+//> Output side: the splitter's `data` presentation may combinationally
+//> depend on the readiness it receives back (same-cycle forward); the
+//> consumer's `ready` drive is its own business.
+socket OutPipe[T : Type] {
+    cosi data  : Valid[T] dependson ready
     soci ready : Bit
 }
 
@@ -33,12 +51,12 @@ socket Pipe[T : Type] {
 //> `ready`.
 mod StreamSplitter {
     //> Upstream input stream.  The header bit routes each item.
-    server socket inp of Pipe[Word[8]] {
+    server socket inp of InPipe[Word[8]] {
         it.ready := inp_fires
     }
 
     //> Output stream for items whose header bit is `0`.
-    client socket out_a of Pipe[Word[7]] {
+    client socket out_a of OutPipe[Word[7]] {
         it.data := if {
             when inp_fires && !route => @Valid(item_data)
             else => @Invalid()
@@ -46,7 +64,7 @@ mod StreamSplitter {
     }
 
     //> Output stream for items whose header bit is `1`.
-    client socket out_b of Pipe[Word[7]] {
+    client socket out_b of OutPipe[Word[7]] {
         it.data := if {
             when inp_fires && route => @Valid(item_data)
             else => @Invalid()
@@ -97,7 +115,7 @@ pub mod StreamSplitterTest for virt::Virt {
     }
 
     mod splitter of StreamSplitter {
-        it.inp.data := in_data
+        it.inp.data    := in_data
         it.out_a.ready := true
         it.out_b.ready := true
     }
@@ -144,7 +162,7 @@ pub mod StreamSplitterTest for virt::Virt {
 
     //> Producer payload: item `send_index`, header in the top bit,
     //> payload in the low 7 bits.
-    wire in_data : Valid[Word[8]] {
+    wire in_data                                             : Valid[Word[8]] {
         it := if {
             when sending => @Valid(word(send_route, zext(send_index) : Word[7]))
             else => @Invalid()

@@ -7,7 +7,7 @@
 
 socket Bus[T : Type] {
     cosi req : T
-    soci rsp : T
+    soci rsp : T dependson req
 }
 
 mod Master[W : Type] {

@@ -14,7 +14,7 @@ import virt
 //> A socket whose request and response channels are both 32 bits wide.
 socket Wide {
     cosi req : Word[32]
-    soci rsp : Word[32]
+    soci rsp : Word[32] dependson req
 }
 
 //> Echo server for the `Wide` socket.

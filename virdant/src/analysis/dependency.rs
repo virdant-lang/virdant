@@ -15,7 +15,7 @@ use crate::analysis::component::Component;
 use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::component::ComponentId;
 use crate::analysis::symbols::SymbolId;
-use crate::common::{ComponentKind, DriverType, Flow};
+use crate::common::{ComponentKind, DriverType};
 use crate::db::Builder;
 use crate::syntax::ast::{match_arm_children, if_arm_children, AstNode};
 use crate::syntax::payload::AstNodePayload;
@@ -220,25 +220,33 @@ fn collect_driver_edges(
                         continue;
                     };
                     // A socket link transfers values along each channel:
-                    // the receiving side (Source flow: the side that reads
-                    // the channel) combinationally depends on the driving
-                    // side (Sink flow: the side that drives the channel).
-                    // For cosi the client drives and the server reads; for
-                    // soci the server drives and the client reads.
-                    match (lhs_component.flow(), rhs_component.flow()) {
-                        (Flow::Source, Flow::Sink) => {
+                    // the receiving side combinationally depends on the
+                    // driving side.  The driving side is the one whose
+                    // *owner* drives the channel (client for `cosi`, server
+                    // for `soci`), which is exactly the side with component
+                    // kind `Outgoing`; the receiving side has kind
+                    // `Incoming`.  `Flow` cannot decide the direction: it is
+                    // module-centric (Source = the value enters this
+                    // module's scope), so for a link between a module's own
+                    // sockets the receiver is the `Source` side, while for a
+                    // link between two submodule instances' sockets the
+                    // receiver is the `Sink` side.  The kinds agree in both
+                    // cases.  Degenerate pairs (both sides driving or both
+                    // reading the channel) get no edge.
+                    match (lhs_component.kind(), rhs_component.kind()) {
+                        (Some(ComponentKind::Outgoing), Some(ComponentKind::Incoming)) => {
                             add_edge(
                                 edges,
-                                lhs_component.id(),
                                 rhs_component.id(),
+                                lhs_component.id(),
                                 EdgeKind::Combinational,
                             );
                         }
-                        (Flow::Sink, Flow::Source) => {
+                        (Some(ComponentKind::Incoming), Some(ComponentKind::Outgoing)) => {
                             add_edge(
                                 edges,
-                                rhs_component.id(),
                                 lhs_component.id(),
+                                rhs_component.id(),
                                 EdgeKind::Combinational,
                             );
                         }

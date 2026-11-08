@@ -180,6 +180,8 @@ pub(crate) fn build_dependson_analysis(
         &own_components,
         &own_incoming_paths,
         is_ext,
+        &item_ast,
+        location.package(),
         &mut analysis,
     );
 
@@ -604,12 +606,15 @@ fn collect_imported_edges(
 ///   Suppressed entirely for `ext mod`, whose internals are invisible:
 ///   the declaration is the only statement of what the port may
 ///   depend on.
+#[allow(clippy::too_many_arguments)]
 fn check_exhaustiveness_and_unused(
     builder: &mut Builder,
     component_analysis: &ComponentAnalysis,
     own_components: &[(BString, crate::analysis::component::Component)],
     own_incoming_paths: &[BString],
     is_ext: bool,
+    item_ast: &AstNode<'_>,
+    package: PackageId,
     analysis: &mut DependsonAnalysis,
 ) {
     // The potentiality graph, over module-local paths, plus the
@@ -674,7 +679,13 @@ fn check_exhaustiveness_and_unused(
         if !matches!(
             component.kind(),
             Some(ComponentKind::Outgoing) | Some(ComponentKind::OutgoingWire)
-        ) {
+        ) || component.socket_channel()
+        {
+            // Socket channels are exhaustiveness-checked against their
+            // socketdef obligations below, not against plain `incoming`
+            // ports: a socketdef list can only name same-socket channels,
+            // so a channel driven from a plain `incoming` port (the
+            // canonical `Pipe` producer) is legal and undeclarable here.
             continue;
         }
 
@@ -738,7 +749,112 @@ fn check_exhaustiveness_and_unused(
             }
         }
     }
+
+    // Socket-channel obligations: a socket channel driven by this module
+    // (its socket instantiated in the channel's driving role) may
+    // combinationally depend only on the same socket's receiving channels
+    // that its socketdef `dependson` list declares.  The check universe is
+    // therefore exactly the driven socket's own receiving channels — the
+    // only channels its socketdef list can name.  Dependencies on other
+    // sockets' channels or on plain `incoming` ports are exempt: they are
+    // undeclarable at the socketdef, and legitimate (flow control routinely
+    // gates one stream's readiness on another's data).  As with ports,
+    // absence of a list is an empty declaration, and the socket-derived
+    // obligation never produces an unused warning.
+    if !is_ext {
+        for (drive_path, declared, receive_channels, region) in
+            own_socket_drives(builder, item_ast, package, component_analysis)
+        {
+            let reachable = reachable_from(&adj, drive_path.as_bstr());
+            for recv in &receive_channels {
+                if reachable.contains(recv) && !declared.contains(recv) {
+                    analysis.diagnostics.push(Diagnostic::new(
+                        region.clone(),
+                        diagnostics::DependsonUndeclared {
+                            port: drive_path.clone(),
+                            missing: recv.clone(),
+                        },
+                    ));
+                }
+            }
+        }
+    }
 }
+
+/// Every channel this module drives through its own socket instances:
+/// `(drive path, declared same-socket entry paths, the same instance's
+/// receiving channel paths, socket statement region)`.  A channel is in
+/// its driving role when the socket is instantiated as `client` and the
+/// channel is `cosi`, or as `server` and the channel is `soci`.
+fn own_socket_drives(
+    builder: &mut Builder,
+    ast: &AstNode<'_>,
+    package: PackageId,
+    component_analysis: &ComponentAnalysis,
+) -> Vec<(BString, IndexSet<BString>, Vec<BString>, Region)> {
+    let symboltable = builder.get_symboltable();
+    let parsing = builder.get_parsing(package);
+    let packages = builder.get_packages();
+    let mut result = vec![];
+    for stmt in ast.children() {
+        let AstNodePayload::Socket(socket) = stmt.payload() else {
+            continue;
+        };
+        let instance_name: BString = parsing.string(socket.name).to_owned();
+        let ofness_node = stmt.child(1);
+        let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
+            continue;
+        };
+        let socket_package: Option<PackageId> = match ofness.package {
+            Some(pkg) => packages.id(parsing.string(pkg)),
+            None => Some(package),
+        };
+        let socket_name = parsing.string(ofness.name);
+        let Some(socket_symbol) =
+            socket_package.and_then(|pkg| symboltable.resolve_item(socket_name, pkg))
+        else {
+            continue;
+        };
+        if socket_symbol.kind() != SymbolKind::SocketDef {
+            continue;
+        }
+        let instance_prefix = format!("{}.", instance_name.to_str_lossy());
+        let receive_channels: Vec<BString> = component_analysis
+            .components()
+            .into_iter()
+            .filter(|(path, component)| {
+                component.socket_channel()
+                    && component.kind() == Some(ComponentKind::Incoming)
+                    && path.starts_with(instance_prefix.as_bytes())
+            })
+            .map(|(path, _)| path)
+            .collect();
+        for decl in socketdef_channel_decls(builder, &socket_symbol) {
+            if !drives_channel(socket.role, decl.dir) {
+                continue;
+            }
+            let drive_path = BString::from(format!(
+                "{}.{}",
+                instance_name.to_str_lossy(),
+                decl.name.to_str_lossy()
+            ));
+            let declared: IndexSet<BString> = decl
+                .entries
+                .iter()
+                .map(|entry| {
+                    BString::from(format!(
+                        "{}.{}",
+                        instance_name.to_str_lossy(),
+                        entry.to_str_lossy()
+                    ))
+                })
+                .collect();
+            result.push((drive_path, declared, receive_channels.clone(), stmt.region()));
+        }
+    }
+    result
+}
+
 
 /// All paths reachable from `source` (excluding `source` itself unless
 /// it lies on a cycle).
