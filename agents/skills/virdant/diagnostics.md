@@ -198,14 +198,16 @@ The `memory` statement: shape, indexing, write-site, and image rules.  See
   * `` `initial` is not supported on memory mem; initialize with
     @image/@image_hex instead``.
 * Image errors:
-  * `could not read memory image for mem: PATH: ...`.
   * `memory image PATH holds more words than the declared depth D`.
   * `memory image for mem not supported: ...` (element widths above 64
     bits in v1, malformed hex lines).
-  * `memory mem is initialized by @image/@image_hex/@image_inline; writes
-    to it are not supported` — an image memory is a ROM.
   * `memory image initialization for mem is disallowed on `@noinitial`
     platform P` — images are gated exactly like `initial`.
+  * An image memory may also declare a write site: the image words are
+    its initial contents and writes commit on the clock edge.  Whether
+    the combination is supported is a toolchain property, checked
+    late-binding when a bitstream build resolves the FPGA family — not
+    at `vir check` time.
 
 ### naming
 

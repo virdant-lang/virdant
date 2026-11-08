@@ -1176,7 +1176,10 @@ fn check_memory_images(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>)
             }
             // The image's bytes: an `@image_inline` literal carries
             // its own (escape-decoded) bytes; the file-based kinds are
-            // read from disk, relative to the project root.
+            // read from disk, relative to the project root.  A file
+            // that cannot be read is not diagnosed here: whether an
+            // image can be loaded is a build-time check, so a missing
+            // file compiles and the content checks below are skipped.
             let image = MemoryImage::resolve(
                 builder.db().project_root(),
                 kind,
@@ -1184,17 +1187,7 @@ fn check_memory_images(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>)
             );
             let image_bytes: bstr::BString = match image.bytes() {
                 Ok(bytes) => bytes,
-                Err(error) => {
-                    diagnostics.push(Diagnostic::new(
-                        arg_region,
-                        diagnostics::MemoryImageIo {
-                            component: component.path(),
-                            path: image_arg.clone(),
-                            error: error.to_string().into(),
-                        },
-                    ));
-                    continue;
-                }
+                Err(_) => continue,
             };
             let words = match kind {
                 MemoryImageKind::Hex => {

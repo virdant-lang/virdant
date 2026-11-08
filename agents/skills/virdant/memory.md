@@ -94,11 +94,16 @@ memory rom[256] : Word[32] {
 * Paths resolve **relative to the project root** — the directory where
   `virdant.toml` is found.  `@image_inline` needs no file.
 * An image shorter than the depth leaves the rest unspecified; longer is an
-  error (`MemoryImageTooLong`).  Element widths above 64 bits are not
-  supported for images in v1.
-* An image memory is a ROM: it has no write site and needs no clock; writes
-  to it are `MemoryImageWrite`.  `initial` statements on memories are not
-  supported in v1 (`MemoryInitialUnsupported`).
+  error (`MemoryImageTooLong`).  A missing or unreadable image file is not
+  a compile error — it is a build-time check, so `vir check` passes and a
+  bitstream build fails where the file is actually loaded.  Element widths
+  above 64 bits are not supported for images.
+* An image memory may also declare a write site: the image words are its
+  initial contents, and writes commit on the clock edge.  A pure ROM has
+  no write site and needs no clock.  Whether image initialization with
+  writes is supported is a toolchain property, checked when a bitstream
+  build resolves the FPGA family — not at `vir check` time.  `initial`
+  statements on memories are not supported (`MemoryInitialUnsupported`).
 * On platforms annotated `@noinitial`, memory images are disallowed, exactly
   like `initial` statements.
 
