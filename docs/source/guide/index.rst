@@ -6,6 +6,8 @@ This guide will introduce Virdant through a series of examples.
     :maxdepth: 1
 
     passthrough/index
+    logic_gates/index
+
     buffer/index
 
     halfadder/index
@@ -20,7 +22,6 @@ This guide will introduce Virdant through a series of examples.
     arbiter/index
     spi/index
 
-    operators/index
     counter_mux/index
     shift_register/index
     counter_wrap/index
