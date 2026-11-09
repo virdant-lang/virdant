@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide Wishbone memory example: a full Wishbone master/server transaction over a RAM."
+expect = "ok"

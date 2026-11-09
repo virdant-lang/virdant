@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide shift register example: serial shifting with mux and slices."
+expect = "ok"

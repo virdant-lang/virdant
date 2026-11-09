@@ -1,0 +1,261 @@
+//> A depth-4 first-in, first-out queue built on the builtin `Pipe[T]`
+//> socket: a producer pushes known bytes in, a consumer drains them
+//> out, and `Top` wires the three together with `:=:`.
+
+//> The FIFO itself.  It plays the *server* role on `inp` (it accepts
+//> bytes pushed by a client) and the *client* role on `outp` (it
+//> pushes drained bytes to a server downstream).
+pub mod Fifo {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    server socket inp of Pipe[Word[8]] {
+        it.ready := count < 4w3
+    }
+
+    client socket outp of Pipe[Word[8]] {
+        it.data := out_data
+    }
+
+    //> How many bytes are parked in the FIFO right now.
+    outgoing count_out : Word[3] {
+        it := count
+    }
+
+    //> Four one-byte slots forming a ring.  `tail` is where the next
+    //> pushed byte lands; `head` is where the next drained byte comes
+    //> from.
+    memory slots[4] : Word[8] {
+        if {
+            when inp_fires {
+                it[dyn tail] <= in_payload
+            }
+        }
+    }
+
+    reg head : Word[2] {
+        initial it <= 0
+        if {
+            when reset {
+                it <= 0
+            }
+            when !reset && out_fires {
+                it <= it + 1w2
+            }
+        }
+    }
+
+    reg tail : Word[2] {
+        initial it <= 0
+        if {
+            when reset {
+                it <= 0
+            }
+            when !reset && inp_fires {
+                it <= it + 1w2
+            }
+        }
+    }
+
+    reg count : Word[3] {
+        initial it <= 0
+        if {
+            when reset {
+                it <= 0
+            }
+            when !reset && inp_fires && !out_fires {
+                it <= it + 1w3
+            }
+            when !reset && out_fires && !inp_fires {
+                it <= it - 1w3
+            }
+        }
+    }
+
+    //> The payload offered on `outp`.  When the FIFO is empty, `inp.data`
+    //> is forwarded combinationally, so a push into an empty FIFO can be
+    //> consumed in the very same cycle.  Otherwise, the head slot is
+    //> offered as `@Valid(...)`.
+    wire out_data : Valid[Word[8]] {
+        it := if {
+            when count == 0w3 => inp.data
+            else => @Valid(slots[dyn head])
+        }
+    }
+
+    wire in_payload : Word[8] {
+        it := match inp.data {
+            with @Valid(data) => data
+            with @Invalid() => 0w8
+        }
+    }
+
+    wire inp_fires : Bit {
+        it := match inp.data {
+            with @Valid(_) => count < 4w3
+            with @Invalid() => false
+        }
+    }
+
+    wire out_fires : Bit {
+        it := match out_data {
+            with @Valid(_) => outp.ready
+            with @Invalid() => false
+        }
+    }
+}
+
+//> Pushes four known bytes, one per cycle, but only while the FIFO's
+//> `ready` says the push will be accepted.
+pub mod Producer {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    client socket outp of Pipe[Word[8]] {
+        it.data := if {
+            when sending => @Valid(payload)
+            else => @Invalid()
+        }
+    }
+
+    //> How many bytes have been accepted so far.
+    reg sent : Word[3] {
+        initial it <= 0
+        if {
+            when reset {
+                it <= 0
+            }
+            when !reset && push_fires {
+                it <= it + 1w3
+            }
+        }
+    }
+
+    wire sending : Bit {
+        it := !reset && sent < 4w3
+    }
+
+    wire payload : Word[8] {
+        it := match sent[2..0] {
+            with 0 => 0xA1w8
+            with 1 => 0x2Bw8
+            with 2 => 0xC7w8
+            with 3 => 0x44w8
+        }
+    }
+
+    wire push_fires : Bit {
+        it := sending && outp.ready
+    }
+}
+
+//> Accepts every byte offered to it while `drain_enable` is high,
+//> counting how many it has taken and remembering the most recent one.
+pub mod Consumer {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    //> When low, the consumer holds its socket's `ready` low,
+    //> backpressuring everything upstream.
+    incoming drain_enable : Bit
+
+    server socket inp of Pipe[Word[8]] {
+        it.ready := drain_enable
+    }
+
+    wire in_payload : Word[8] {
+        it := match inp.data {
+            with @Valid(data) => data
+            with @Invalid() => 0w8
+        }
+    }
+
+    wire pop_fires : Bit {
+        it := match inp.data {
+            with @Valid(_) => drain_enable
+            with @Invalid() => false
+        }
+    }
+
+    //> How many bytes this consumer has accepted, all-time.
+    outgoing reg drained_count : Word[8] {
+        initial it <= 0
+        if {
+            when reset {
+                it <= 0
+            }
+            when !reset && pop_fires {
+                it <= it + 1w8
+            }
+        }
+    }
+
+    //> The most recently accepted byte.
+    outgoing reg last_drained : Word[8] {
+        initial it <= 0
+        if {
+            when reset {
+                it <= 0
+            }
+            when !reset && pop_fires {
+                it <= in_payload
+            }
+        }
+    }
+}
+
+pub mod Top {
+    incoming clock : Clock
+    incoming reset : Reset
+
+    //> Poke this low to pile bytes up inside the FIFO.
+    incoming drain_enable : Bit
+
+    mod producer of Producer {
+        it.clock := clock
+        it.reset := reset
+    }
+
+    mod fifo of Fifo {
+        it.clock := clock
+        it.reset := reset
+    }
+
+    mod consumer of Consumer {
+        it.clock := clock
+        it.reset := reset
+        it.drain_enable := drain_enable
+    }
+
+    producer.outp :=: fifo.inp
+    fifo.outp :=: consumer.inp
+
+    outgoing fifo_count : Word[3] {
+        it := fifo.count_out
+    }
+
+    //> The FIFO's outgoing payload: `#Valid(b)` when a byte sits at the
+    //> head, `#Invalid()` when the FIFO is empty.
+    outgoing fifo_peek : Valid[Word[8]] {
+        it := fifo.outp.data
+    }
+
+    outgoing fifo_ready : Bit {
+        it := fifo.inp.ready
+    }
+
+    outgoing drained_count : Word[8] {
+        it := consumer.drained_count
+    }
+
+    outgoing last_drained : Word[8] {
+        it := consumer.last_drained
+    }
+
+    //> True when a byte is stuck in the FIFO because the drain is shut.
+    //> This reads the incoming `drain_enable` combinationally, so it
+    //> declares `dependson drain_enable`.
+    outgoing held : Bit dependson drain_enable {
+        it := !drain_enable && fifo.count_out != 0w3
+    }
+}

@@ -1,0 +1,65 @@
+//> The Wishbone bus, trimmed down to what a read-only slave needs.
+//>
+//> `cosi` channels flow from client to server: `cyc` says a
+//> transaction is in progress, `stb` says a request is strobed this
+//> cycle, and `addr` selects a word.
+//>
+//> `soci` channels flow from server back to client: `ack` accepts the
+//> request and `data` carries the word read.  Their `dependson` lists
+//> say that a server's drives of `ack` and `data` may read `cyc`,
+//> `stb`, and `addr` in the same cycle.
+socket Wishbone {
+    cosi cyc : Bit
+    cosi stb : Bit
+    cosi addr : Word[8]
+    soci ack : Bit dependson cyc, stb
+    soci data : Word[16] dependson cyc, stb, addr
+}
+
+//> `Rom` serves a fixed message from a read-only memory over Wishbone.
+mod Rom {
+    //> Server end of the bus: every strobed request is answered
+    //> combinationally, in the same cycle.
+    server socket wishbone of Wishbone {
+        it.ack := it.cyc && it.stb
+        it.data := rom[dyn it.addr]
+    }
+
+    //> 256 words of 16 bits, two characters packed per word.
+    @image_inline("Hello, Wishbone!")
+    memory rom[256] : Word[16]
+}
+
+//> `Reader` is a client which keeps one fixed address strobed and
+//> exposes the word that comes back.
+mod Reader {
+    //> Client end of the bus: one read of address 0, forever.
+    client socket wishbone of Wishbone {
+        it.cyc := true
+        it.stb := true
+        it.addr := 0w8
+    }
+
+    //> The word read from the ROM.
+    outgoing word : Word[16] {
+        it := wishbone.data
+    }
+
+    // The client ignores the acknowledgement: the ROM answers
+    // combinationally, so there is nothing to wait for.
+    unused wishbone.ack
+}
+
+//> `Top` wires the ROM server to the reader client with one bulk
+//> connect per socket.
+pub mod Top {
+    mod rom of Rom
+    mod reader of Reader
+
+    rom.wishbone :=: reader.wishbone
+
+    //> The word the client read from the ROM.
+    outgoing word : Word[16] {
+        it := reader.word
+    }
+}

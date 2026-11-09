@@ -1,0 +1,45 @@
+# gcd(48, 18) = 6
+poke valid 0
+tick
+assert ready == true
+assert out == #Invalid
+poke a 48
+poke b 18
+poke valid 1
+tick
+poke valid 0
+assert ready == false
+tick 5
+assert out == #Valid(6w8)
+tick
+assert out == #Invalid
+
+# gcd(100, 75) = 25
+poke a 100
+poke b 75
+poke valid 1
+tick
+poke valid 0
+tick 4
+assert out == #Valid(25w8)
+tick
+
+# gcd(60, 45) = 15
+poke a 60
+poke b 45
+poke valid 1
+tick
+poke valid 0
+tick 4
+assert out == #Valid(15w8)
+tick
+
+# gcd(13, 13) = 13 (equal inputs finish in one step)
+poke a 13
+poke b 13
+poke valid 1
+tick
+poke valid 0
+tick 1
+assert out == #Valid(13w8)
+exit

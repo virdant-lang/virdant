@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide lesson: synchronizing an external button with the builtin Sync module."
+expect = "ok"

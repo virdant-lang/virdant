@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide counter example: counters driven with the mux primitive."
+expect = "ok"

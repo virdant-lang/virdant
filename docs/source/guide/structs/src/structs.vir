@@ -1,0 +1,73 @@
+//> An RGB color: three 8-bit channels bundled into one value.
+pub struct type Color {
+    red   : Word[8]
+    green : Word[8]
+    blue  : Word[8]
+}
+
+pub mod ColorMixer {
+    incoming clock : Clock
+    incoming enable : Bit
+
+    //> Round-robin selector: which channel fades on this cycle.
+    reg phase : Word[2] {
+        initial it <= 0
+        if {
+            when enable {
+                it <= it + 1w2
+            }
+        }
+    }
+
+    //> The color currently held by the mixer.
+    //> On each enabled cycle, exactly one channel fades toward zero.
+    reg current : Color {
+        initial it <= ${
+            red   = 200,
+            green = 128,
+            blue  = 255,
+        }
+        if {
+            when enable {
+                it <= ${
+                    red   = mux(phase == 0, mux(it->red == 0, 0, it->red - 1), it->red),
+                    green = mux(phase == 1, mux(it->green == 0, 0, it->green - 1), it->green),
+                    blue  = mux(phase == 2, mux(it->blue == 0, 0, it->blue - 1), it->blue),
+                }
+            }
+        }
+    }
+
+    //> Pure black, the color every channel fades toward.
+    wire black : Color {
+        it := ${
+            red   = 0,
+            green = 0,
+            blue  = 0,
+        }
+    }
+
+    //> True once every channel of the current color has reached zero.
+    outgoing at_black : Bit {
+        it := current == black
+    }
+
+    //> The red channel of the current color, on its own.
+    outgoing red_level : Word[8] {
+        it := current->red
+    }
+
+    //> The current color halfway to black, channel by channel.
+    outgoing wire dimmed : Color {
+        it := ${
+            red   = (word(false, current->red))[9..1],
+            green = (word(false, current->green))[9..1],
+            blue  = (word(false, current->blue))[9..1],
+        }
+    }
+
+    //> The red channel of `dimmed`, read back out of the struct.
+    outgoing dimmed_red : Word[8] {
+        it := dimmed->red
+    }
+}

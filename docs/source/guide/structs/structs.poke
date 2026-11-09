@@ -1,0 +1,21 @@
+# The mixer starts at ${red = 200, green = 128, blue = 255}.
+assert red_level == 200
+assert dimmed_red == 100
+print current
+print dimmed
+
+# Each enabled cycle fades exactly one channel: red first.
+poke enable true
+tick 1
+assert red_level == 199
+assert dimmed_red == 99
+print current
+
+# Fast-forward through the whole fade.
+# (blue needs 255 decrements, one every 4 cycles)
+tick 1030
+assert at_black == true
+assert red_level == 0
+assert dimmed_red == 0
+print current
+exit

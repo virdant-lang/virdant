@@ -1,0 +1,61 @@
+# Shift the pattern 1,0,1,1 in one bit per cycle,
+# then watch the same pattern emerge at serial_out
+# eight cycles after each bit entered.
+
+poke enable 1
+poke serial_in 0
+assert contents == 0b0000_0000
+assert serial_out == 0
+
+# Shift in: first bit in is 1, then 0, then 1, then 1.
+poke serial_in 1
+tick
+assert contents == 0b1000_0000
+poke serial_in 0
+tick
+assert contents == 0b0100_0000
+poke serial_in 1
+tick
+assert contents == 0b1010_0000
+poke serial_in 1
+tick
+assert contents == 0b1101_0000
+
+# Hold serial_in at 0 and let the pattern walk out the bottom.
+poke serial_in 0
+tick
+assert contents == 0b0110_1000
+assert serial_out == 0
+tick
+assert contents == 0b0011_0100
+assert serial_out == 0
+tick
+assert contents == 0b0001_1010
+assert serial_out == 0
+tick
+assert contents == 0b0000_1101
+assert serial_out == 1
+tick
+assert contents == 0b0000_0110
+assert serial_out == 0
+tick
+assert contents == 0b0000_0011
+assert serial_out == 1
+tick
+assert contents == 0b0000_0001
+assert serial_out == 1
+tick
+assert contents == 0b0000_0000
+assert serial_out == 0
+
+# With enable low, the register holds still no matter what serial_in does.
+poke serial_in 1
+poke enable 0
+tick
+assert contents == 0b0000_0000
+
+# Back to shifting.
+poke enable 1
+tick
+assert contents == 0b1000_0000
+exit

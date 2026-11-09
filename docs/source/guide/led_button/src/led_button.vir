@@ -1,0 +1,28 @@
+//> Toggle an LED each time a (noisy, unsynchronized) button is pressed.
+pub mod LedButton {
+    incoming clock  : Clock
+    incoming button : Bit
+
+    //> The button pin lives outside our clock domain,
+    //> so we pass it through the builtin two-flop synchronizer.
+    mod sync_button of Sync {
+        it.clock := clock
+        it.inp   := button
+    }
+
+    //> The previous synchronized value, for edge detection.
+    reg button_prev : Bit {
+        initial it <= false
+        it <= sync_button.out
+    }
+
+    //> A rising edge on the synchronized button toggles the LED.
+    outgoing reg led : Bit {
+        initial it <= false
+        if {
+            when sync_button.out && !button_prev {
+                it <= !it
+            }
+        }
+    }
+}

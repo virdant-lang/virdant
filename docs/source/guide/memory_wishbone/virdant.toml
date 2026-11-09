@@ -1,0 +1,5 @@
+[project]
+name = "memory_wishbone"
+
+[prog]
+top = "memory_wishbone::Top"

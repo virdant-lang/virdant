@@ -1,0 +1,48 @@
+# Guide FIFO demo: fill the FIFO with the drain shut, then open the
+# drain and watch it empty.  Run with: vir poke fifo.poke --script
+
+# Reset with the drain shut.
+poke reset true
+poke drain_enable false
+tick
+poke reset false
+
+# The producer pushes 0xA1, 0x2B, 0xC7, 0x44 -- one per cycle, while
+# the FIFO is not full.  With the drain shut, every byte parks in a
+# slot.
+tick
+assert fifo_count == 1
+assert fifo_peek == #Valid(0xA1w8)
+tick
+assert fifo_count == 2
+tick
+assert fifo_count == 3
+tick
+assert fifo_count == 4
+
+# The FIFO is full now: its ready drops and nothing has been drained.
+assert fifo_ready == false
+assert held == true
+assert drained_count == 0
+
+# Open the drain: held falls combinationally, before any clock edge.
+poke drain_enable true
+assert held == false
+
+# The consumer pops one byte per cycle; with three bytes left after
+# the first pop, the FIFO is ready for more.
+tick
+assert drained_count == 1
+assert last_drained == 0xA1w8
+assert fifo_count == 3
+assert fifo_peek == #Valid(0x2Bw8)
+assert fifo_ready == true
+tick
+tick
+tick
+assert drained_count == 4
+assert last_drained == 0x44w8
+assert fifo_count == 0
+assert fifo_peek == #Invalid()
+assert held == false
+exit

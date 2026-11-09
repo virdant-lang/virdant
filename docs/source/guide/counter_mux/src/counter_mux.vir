@@ -1,0 +1,25 @@
+//! Counters whose next value is chosen with the `mux` primitive.
+
+pub mod CounterMux {
+    incoming clock : Clock
+    incoming enable : Bit
+    incoming limit : Word[4]
+
+    reg free_count : Word[4] {
+        initial it <= 0
+        it <= mux(it == 15, 0, it + 1)
+    }
+
+    reg count : Word[4] {
+        initial it <= 0
+        it <= mux(enable, mux(it == limit, 0, it + 1), it)
+    }
+
+    outgoing free_value : Word[4] {
+        it := free_count
+    }
+
+    outgoing value : Word[4] {
+        it := count
+    }
+}

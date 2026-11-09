@@ -1,0 +1,60 @@
+# The `operators` design is purely combinational: every `poke`
+# settles immediately, no clock is needed, and every result is an
+# outgoing port we can assert on.
+#
+# Reminder: slices are exclusive on top, so `arithmetic[9..5]`
+# is bits 8..5 of the packed word.
+
+# ---- Scenario 1: a = 0b1010 (10), b = 0b0110 (6), select = true ----
+poke a 0b1010
+poke b 0b0110
+poke select true
+
+# Word-wise bitwise, packed as word(a & b, a | b, a ^ b):
+#   1010 & 0110 = 0010,  1010 | 0110 = 1110,  1010 ^ 0110 = 1100
+assert bitwise == 0b0010_1110_1100
+assert a ^ b == 0b1100
+assert ~a == 0b0101
+
+# Bit-logical on the low bits (a[0] = 0, b[0] = 0), packed as
+# word(a[0] && b[0], a[0] || b[0], a[0] ^^ b[0], !select):
+assert logical == 0b0000
+
+# Comparisons of 10 against 6, packed as
+# word(a > b, a >= b, a < b, a <= b, a != b, a == b):
+assert comparison == 0b110010
+
+# Wrapping arithmetic, packed as word(a + b, a - b, a +. b):
+assert arithmetic == 0b0000_0100_10000
+assert arithmetic[13..9] == 0b0000    # 10 + 6 = 16 wraps to 0
+assert arithmetic[9..5] == 0b0100     # 10 - 6 = 4
+assert arithmetic[5..0] == 0b10000    # 10 +. 6 = 16: carry-out set
+
+# Selection: `select` is true, so `mux` picks `a`.
+assert selected == 0b1010
+
+# Concatenation: word(a[4..2], b[2..0]) = word(0b10, 0b10).
+assert concatenated == 0b1010
+assert a[4..2] == 0b10
+assert b[2..0] == 0b10
+
+# ---- Scenario 2: a = 0b0011 (3), b = 0b0101 (5), select = false ----
+poke a 0b0011
+poke b 0b0101
+poke select false
+
+assert bitwise == 0b0001_0111_0110    # (3 & 5, 3 | 5, 3 ^ 5) = (1, 7, 6)
+assert logical == 0b1101              # 1 && 1, 1 || 1, 1 ^^ 1, !false
+assert comparison == 0b001110         # 3 < 5: only <, <=, != are set
+assert arithmetic == 0b1000_1110_01000
+assert arithmetic[13..9] == 0b1000    # 3 + 5 = 8
+assert arithmetic[9..5] == 0b1110     # 3 - 5 wraps to 14
+assert arithmetic[5..0] == 0b01000    # 3 +. 5 = 8: no carry-out
+
+# Selection: `select` is false, so `mux` picks `b`.
+assert selected == 0b0101
+
+# Concatenation: word(a[4..2], b[2..0]) = word(0b00, 0b01).
+assert concatenated == 0b0001
+
+exit

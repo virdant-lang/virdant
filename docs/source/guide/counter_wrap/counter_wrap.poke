@@ -1,0 +1,35 @@
+top counter_wrap::CounterWrap
+
+# The initial seed gives us 0 before any clock edge.
+assert count == 0
+
+# While reset is asserted, count stays pinned at 0.
+poke reset true
+tick
+tick
+assert count == 0
+
+# Release reset and count up to 9.
+poke reset false
+tick 9
+assert count == 9
+
+# The next edge wraps 9 back to 0.
+tick
+assert count == 0
+
+# Count a few steps, then reset mid-stream.
+tick 3
+assert count == 3
+poke reset true
+tick
+assert count == 0
+
+# Release reset again and check the wrap once more.
+poke reset false
+tick 9
+assert count == 9
+tick
+assert count == 0
+
+exit

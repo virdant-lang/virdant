@@ -1,0 +1,19 @@
+pub mod CounterWrap {
+    incoming clock : Clock
+    incoming reset : Bit
+
+    reg count : Word[4] {
+        initial it <= 0
+        if {
+            when reset {
+                it <= 0
+            }
+            when it == 9 {
+                it <= 0
+            }
+            else {
+                it <= it + 1
+            }
+        }
+    }
+}

@@ -1,0 +1,51 @@
+//! A tour of the combinational operators: no clock, no registers.
+//!
+//! `Operators` applies each operator family to the same two 4-bit
+//! operands, plus one select bit, and reports every result as an
+//! outgoing port.
+
+pub mod Operators {
+    //> First operand, shared by every operator family.
+    incoming a : Word[4]
+
+    //> Second operand, shared by every operator family.
+    incoming b : Word[4]
+
+    //> Select bit for the logical-not and `mux` examples.
+    incoming select : Bit
+
+    //> Word-wise bitwise results, packed most-significant first: AND, OR, and XOR.
+    outgoing bitwise : Word[12] dependson a, b {
+        it := word(a & b, a | b, a ^ b)
+    }
+
+    //> Logical results on single bits, packed: AND, OR, XOR, and NOT.
+    outgoing logical : Word[4] dependson a, b, select {
+        it := word(
+            a[0] && b[0],
+            a[0] || b[0],
+            a[0] ^^ b[0],
+            !select,
+        )
+    }
+
+    //> All six comparisons, packed most-significant first: >, >=, <, <=, !=, ==.
+    outgoing comparison : Word[6] dependson a, b {
+        it := word(a > b, a >= b, a < b, a <= b, a != b, a == b)
+    }
+
+    //> Arithmetic, packed: wrapped sum, wrapped difference, and widened sum.
+    outgoing arithmetic : Word[13] dependson a, b {
+        it := word(a + b, a - b, a +. b)
+    }
+
+    //> Two-way selection: `a` when `select` is true, else `b`.
+    outgoing selected : Word[4] dependson a, b, select {
+        it := mux(select, a, b)
+    }
+
+    //> Concatenation: the top half of `a` over the low half of `b`.
+    outgoing concatenated : Word[4] dependson a, b {
+        it := word(a[4..2], b[2..0])
+    }
+}
