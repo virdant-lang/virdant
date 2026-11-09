@@ -1,22 +1,80 @@
-Combinational Operators
-=======================
-Everything we have built so far eventually comes down to a handful of
-operators: combining bits, comparing values, doing arithmetic, choosing
-between alternatives, and gluing words together.
+Logic Gates
+===========
+The heard of all digital hardware are logic gates: AND OR NOT and XOR.
 
-In this lesson we tour them all at once, in one module.
-`Operators` has no clock and no registers: every output is computed
-combinationally from the inputs, in the same cycle.
+`LogicGates` is a simple circuit which shows how you write each of these in Virdant:
 
-.. literalinclude:: /guide/operators/src/operators.vir
-    :caption: operators.vir
+.. literalinclude:: src/logicgates.vir
+    :caption: logicgates.vir
     :language: virdant
+    :lines: 1-20
 
-The module takes two 4-bit operands, `a` and `b`, and one extra bit,
-`select`, and reports one outgoing port per operator family.
-Each port declares a `dependson` list naming exactly the incoming ports
-it may read, which is how Virdant records the combinational contract of
-a module (see :doc:`passing data <../passthrough/index>`).
+The module takes two 1-bit operands, `a` and `b`.
+We use the `Bit` type to indicate they are 1-bit values.
+
+Driver Blocks
+-------------
+The `outgoing` ports of `LogicGates` are written a bit differently than before.
+For example:
+
+.. literalinclude:: src/logicgates.vir
+    :caption: logicgates.vir
+    :language: virdant
+    :lines: 5-7
+    :dedent:
+
+This is called a driver block.
+Inside a driver block, we can write driver statements.
+When we do, the special `it` keyword refers to the component being declared.
+In this example, `it` becomes shorthand for `a_and_b`.
+
+Driver blocks let you type less, which is always nice.
+You can just write `it` instead of the full name of the component.
+We'll see later on how they end up saving a *lot* of typing!
+
+But perhaps more importantly, they keep the margin of the module definition tidy.
+As you scroll through the code,
+your eyes are drawn towards the component declarations: `incoming a` `incoming b`
+`outgoing a_and_b` `outgoing a_or_b` etc.
+You don't have to worry about getting stuck on the details of how a component is driven.
+Only once you find the thing you're actually interested,
+then you can look in the block to see how it's defined.
+
+
+Driver blocks are optional, and a matter of style but highly encouraged.
+
+
+Next
+----
+These define `sum` and `carry_out`, both with type `Bit`.
+
+But in both cases, there is a block directly beneath them.
+This is called a **driver block**.
+
+Inside a driver block, you can put drivers related to that component.
+As a convenience, rather than spelling the name of the component over and over again,
+you can just write it as `it`.
+
+And so this is the same as if you had written
+
+.. code-block:: virdant
+
+    // sum is true when one of a and b is true (but not both)
+    outgoing sum : Bit dependson a, b
+    sum := a ^^ b
+
+    // carry is true when a and b are both true
+    outgoing carry_out : Bit dependson a, b
+    carry_out := a && b
+
+Driver blocks are nice because they allow you to tuck away the details
+inside a level of indentation.
+A friend who reads your code can then skim down the margin of a module definition,
+
+.. literalinclude:: src/logicgates.vir
+    :caption: logicgates.vir
+    :language: virdant
+    :lines: 22-49
 
 
 Word-Wise Bitwise Operators

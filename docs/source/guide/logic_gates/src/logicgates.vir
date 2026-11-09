@@ -1,0 +1,49 @@
+pub mod LogicGates {
+    incoming a : Bit
+    incoming b : Bit
+
+    outgoing a_and_b : Bit dependson a, b {
+        it := a && b
+    }
+
+    outgoing a_or_b : Bit dependson a, b {
+        it := a || b
+    }
+
+    outgoing a_xor_b : Bit dependson a, b {
+        it := a ^^ b
+    }
+
+    outgoing not_a : Bit dependson a {
+        it := !a
+    }
+}
+
+pub mod BitwiseLogicGates {
+    incoming a : Word[8]
+    incoming b : Word[8]
+
+    outgoing a_and_b : Word[8] dependson a, b {
+        it := a & b
+    }
+
+    outgoing a_or_b : Word[8] dependson a, b {
+        it := a | b
+    }
+
+    outgoing a_xor_b : Word[8] dependson a, b {
+        it := a ^ b
+    }
+
+    outgoing not_a : Word[8] dependson a {
+        it := ~a
+    }
+
+    outgoing all_a : Bit dependson a {
+        it := all(a)
+    }
+
+    outgoing any_a : Bit dependson a {
+        it := any(a)
+    }
+}
