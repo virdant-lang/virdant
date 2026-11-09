@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide FIFO example: a depth-4 FIFO over the builtin Pipe[Word[8]] socket."
+expect = "ok"

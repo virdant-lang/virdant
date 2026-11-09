@@ -1,0 +1,28 @@
+import virt
+
+//> Blinks the virtual board's UART line, then exits with code 0.
+pub mod Hello for virt::Virt {
+    incoming clock : Clock
+    incoming rx : Bit
+
+    //> Free-running counter: one tick per clock cycle.
+    reg counter : Word[24] {
+        initial it <= 0
+        it <= it + 0x1w24
+    }
+
+    //> The "blink": the UART line follows the counter's top bit.
+    outgoing tx : Bit {
+        it := !counter[23]
+    }
+
+    //> Exit with code 0 once the counter wraps back to zero.
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when counter == 0xFF_FFFFw24 => @Valid(0)
+            else => @Invalid()
+        }
+    }
+
+    unused rx
+}

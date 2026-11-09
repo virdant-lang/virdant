@@ -1,0 +1,182 @@
+//> A full Wishbone example: a master performs one write and one
+//> readback against a real RAM, connected with a single `:=:`.
+
+//> The Wishbone classic protocol as a socket: the client drives the
+//> request channels (`cyc` `stb` `we` `addr` `write_data`), the server
+//> answers with `ack` and `read_data`.
+socket Wishbone {
+    cosi cyc : Bit
+    cosi stb : Bit
+    cosi we : Bit
+    cosi addr : Word[8]
+    cosi write_data : Word[16]
+    soci ack : Bit dependson cyc, stb
+    soci read_data : Word[16] dependson cyc, stb
+}
+
+//> The server: a 256-word x 16-bit RAM behind a Wishbone socket.
+mod RamServer {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> The Wishbone slave socket.
+    server socket wishbone of Wishbone {
+        it.ack := ack_pending
+        it.read_data := ram[dyn addr_latch]
+    }
+
+    //> The RAM itself.  This is the memory's *one write site*: a write
+    //> commits on the clock edge whenever the master strobes a write.
+    memory ram[256] : Word[16] {
+        if {
+            when wishbone.cyc && wishbone.stb && wishbone.we {
+                it[dyn wishbone.addr] <= wishbone.write_data
+            }
+        }
+    }
+
+    //> Latches the read address on the request cycle, so `read_data`
+    //> can present the word combinationally one cycle later.
+    reg addr_latch : Word[8] {
+        initial it <= 0w8
+        if {
+            when wishbone.cyc && wishbone.stb && !wishbone.we {
+                it <= wishbone.addr
+            }
+        }
+    }
+
+    //> A one-cycle acknowledge pulse, asserted the cycle after each
+    //> strobed request.
+    reg ack_pending : Bit {
+        initial it <= false
+        if {
+            when wishbone.cyc && wishbone.stb {
+                it <= true
+            }
+            else {
+                it <= false
+            }
+        }
+    }
+}
+
+//> The master's tiny program, one-hot encoded.
+enum type Phase {
+    WriteRequest
+    WriteWaitAck
+    ReadRequest
+    ReadWaitAck
+    Done
+}
+
+//> The master: writes one word, then reads it back, and exposes the
+//> result once `finished` rises.
+mod WishboneMaster {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> The word read back from the RAM.
+    outgoing readback : Word[16] {
+        it := result
+    }
+
+    //> True once the readback has been captured.
+    outgoing finished : Bit {
+        it := done
+    }
+
+    //> The Wishbone master socket.
+    client socket wishbone of Wishbone {
+        it.cyc := phase != #Done
+        it.stb := strobe
+        it.we := phase == #WriteRequest
+        it.addr := target_addr
+        it.write_data := write_value
+    }
+
+    //> The address the master writes and reads back.
+    wire target_addr : Word[8] {
+        it := 42w8
+    }
+
+    //> The value the master writes.
+    wire write_value : Word[16] {
+        it := 0xBEEFw16
+    }
+
+    //> High on exactly the two request cycles: one for the write,
+    //> one for the read.
+    wire strobe : Bit {
+        it := phase == #WriteRequest || phase == #ReadRequest
+    }
+
+    //> The program counter: walk one request, wait for its ack, then
+    //> the next.
+    reg phase : Phase {
+        initial it <= #WriteRequest
+        if {
+            when it == #WriteRequest {
+                it <= #WriteWaitAck
+            }
+            when it == #WriteWaitAck && wishbone.ack {
+                it <= #ReadRequest
+            }
+            when it == #ReadRequest {
+                it <= #ReadWaitAck
+            }
+            when it == #ReadWaitAck && wishbone.ack {
+                it <= #Done
+            }
+        }
+    }
+
+    //> The captured readback value.
+    reg result : Word[16] {
+        initial it <= 0w16
+        if {
+            when phase == #ReadWaitAck && wishbone.ack {
+                it <= wishbone.read_data
+            }
+        }
+    }
+
+    //> Latches `finished` when the readback is captured.
+    reg done : Bit {
+        initial it <= false
+        if {
+            when phase == #ReadWaitAck && wishbone.ack {
+                it <= true
+            }
+        }
+    }
+}
+
+//> The top module: one line of `:=:` wires every Wishbone channel.
+pub mod Top {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> The word the master read back.
+    outgoing readback : Word[16] {
+        it := cpu.readback
+    }
+
+    //> True once the readback has been captured.
+    outgoing finished : Bit {
+        it := cpu.finished
+    }
+
+    //> The master.
+    mod cpu of WishboneMaster {
+        it.clock := clock
+    }
+
+    //> The RAM server.
+    mod ram of RamServer {
+        it.clock := clock
+    }
+
+    // Bulk connect: every cosi and soci channel crosses in one go.
+    cpu.wishbone :=: ram.wishbone
+}

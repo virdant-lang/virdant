@@ -1,0 +1,10 @@
+# The ROM answers the reader combinationally: settle, then assert.
+advance
+assert reader.wishbone.cyc == true
+assert reader.wishbone.stb == true
+assert reader.wishbone.ack == true
+# Address 0 holds "He": 0x48 ("H") and 0x65 ("e").
+assert reader.wishbone.data == 0x4865
+assert word == 0x4865
+print word
+exit

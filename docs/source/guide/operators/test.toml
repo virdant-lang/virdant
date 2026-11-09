@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide combinational operators: bitwise, comparison, arithmetic, mux, and word() demonstration."
+expect = "ok"

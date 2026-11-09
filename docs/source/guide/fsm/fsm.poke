@@ -1,0 +1,49 @@
+# fsm.poke — run a full red -> green -> yellow -> red cycle.
+#
+# Each state lasts exactly its duration (red 6, green 4, yellow 2),
+# and each lamp is lit exactly while its state is active.
+
+# Power-on: the controller starts in #Red, timer at 5.
+assert state == #Red
+assert timer == 5
+assert red
+assert !yellow
+assert !green
+
+# Red holds for 6 cycles: 5 countdowns, then the transition.
+tick 4
+assert state == #Red
+assert timer == 1
+tick 1
+assert state == #Red
+assert timer == 0
+tick 1
+assert state == #Green
+assert timer == 3
+assert green
+assert !red
+assert !yellow
+
+# Green holds for 4 cycles: 3 countdowns, then the transition.
+tick 3
+assert state == #Green
+assert timer == 0
+tick 1
+assert state == #Yellow
+assert timer == 1
+assert yellow
+assert !red
+assert !green
+
+# Yellow holds for 2 cycles: 1 countdown, then the transition.
+tick 1
+assert state == #Yellow
+assert timer == 0
+tick 1
+assert state == #Red
+assert timer == 5
+assert red
+assert !yellow
+assert !green
+
+exit

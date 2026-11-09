@@ -1,0 +1,38 @@
+top memory_wishbone::Top
+
+# Reset state: the master starts in #WriteRequest, so the write
+# request (cyc, stb, we) is already on the wires.
+assert cpu.wishbone.cyc == true
+assert cpu.wishbone.stb == true
+assert cpu.wishbone.we == true
+assert cpu.wishbone.addr == 42
+assert cpu.wishbone.write_data == 0xBEEF
+
+# Edge 1: the RAM commits the write, the server latches its
+# one-cycle ack, the master moves to #WriteWaitAck.
+tick
+assert ram.wishbone.ack == true
+assert cpu.wishbone.we == false
+
+# Edge 2: the ack pulse ends, the master moves to #ReadRequest.
+tick
+assert ram.wishbone.ack == false
+assert cpu.wishbone.stb == true
+assert cpu.wishbone.we == false
+
+# Edge 3: the server latches the read address and its ack; the
+# master moves to #ReadWaitAck.  read_data now shows the word.
+tick
+assert ram.wishbone.ack == true
+assert ram.wishbone.read_data == 0xBEEF
+
+# Edge 4: the master captures the readback and finishes.
+tick
+assert readback == 0xBEEF
+assert finished == true
+
+# The bus goes quiet once the program is done.
+assert cpu.wishbone.cyc == false
+assert cpu.wishbone.stb == false
+
+exit

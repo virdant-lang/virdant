@@ -1,0 +1,37 @@
+# counter_mux.poke — tick the counters with and without `enable`.
+
+# Both registers start at 0, thanks to their `initial` drivers.
+peek free_count
+peek count
+
+# Without `enable`, the free-running counter ticks every cycle,
+# while `count` holds.
+tick 3
+assert free_count == 3
+assert count == 0
+
+# Turn `enable` on with a small limit so the wrap is easy to see.
+poke enable true
+poke limit 5
+
+# `count` marches 0, 1, 2, 3 while `free_count` keeps climbing.
+tick 3
+assert free_count == 6
+assert count == 3
+
+# `count` reaches `limit` ...
+tick 2
+assert free_count == 8
+assert count == 5
+
+# ... and the next tick wraps it back to 0.
+tick
+assert free_count == 9
+assert count == 0
+
+# Drop `enable` again: `count` freezes, `free_count` never stops.
+poke enable false
+tick 2
+assert free_count == 11
+assert count == 0
+exit

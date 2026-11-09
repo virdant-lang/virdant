@@ -1,0 +1,5 @@
+[project]
+name = "fsm"
+
+[prog]
+top = "fsm::TrafficLight"

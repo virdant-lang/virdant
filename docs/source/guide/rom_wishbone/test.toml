@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide read-only memory + Wishbone sockets: ROM server, client reader, bulk connect."
+expect = "ok"

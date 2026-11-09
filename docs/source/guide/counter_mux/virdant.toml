@@ -1,0 +1,5 @@
+[project]
+name = "counter_mux"
+
+[prog]
+top = "counter_mux::CounterMux"

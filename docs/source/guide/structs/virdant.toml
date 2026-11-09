@@ -1,0 +1,5 @@
+[project]
+name = "structs"
+
+[prog]
+top = "structs::ColorMixer"

@@ -1,0 +1,75 @@
+//> A pulse-width modulator, split into a reusable `Pwm` block and a
+//> small demo top module.
+
+//> PWM generator block: a free-running 8-bit counter compared against
+//> a settable duty-cycle register.
+//>
+//> `count` free-runs 0 through 255, wrapping every 256 cycles.
+//> `out` is high while `count < duty`, so it is high for exactly
+//> `duty` cycles of every 256-cycle period.  `duty` is loaded from
+//> `duty_in` on a clock edge while `load` is high, and holds its
+//> value between loads.
+mod Pwm {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> While high, loads `duty` with `duty_in` on the next clock edge.
+    incoming load : Bit
+
+    //> Duty cycle to load: the number of cycles `out` is high in each period.
+    incoming duty_in : Word[8]
+
+    //> PWM output: high for `duty` cycles of every 256-cycle period.
+    outgoing out : Bit {
+        it := count < duty
+    }
+
+    //> Free-running counter, 0 through 255, wrapping every 256 cycles.
+    reg count : Word[8] {
+        initial it <= 0
+        it <= it + 1w8
+    }
+
+    //> Current duty cycle; holds its value between loads.
+    reg duty : Word[8] {
+        initial it <= 0
+        if {
+            when load {
+                it <= duty_in
+            }
+        }
+    }
+}
+
+//> Demo top module: instantiates `Pwm` and loads a fixed 25% duty
+//> cycle once at power-on, then lets it free-run.
+pub mod PwmDemo {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> The PWM waveform itself.
+    outgoing pwm_out : Bit {
+        it := pwm.out
+    }
+
+    mod pwm of Pwm {
+        it.clock := clock
+        it.load := do_load
+        it.duty_in := 64w8
+    }
+
+    //> Rises on the first clock edge and stays high, so `do_load`
+    //> pulses for exactly one cycle at power-on.
+    reg loaded : Bit {
+        initial it <= false
+        if {
+            when !it {
+                it <= true
+            }
+        }
+    }
+
+    wire do_load : Bit {
+        it := !loaded
+    }
+}

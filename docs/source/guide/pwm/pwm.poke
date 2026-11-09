@@ -1,0 +1,37 @@
+top pwm::Pwm
+
+# Inputs power on in an unknown state, so pin them down first:
+# with `load` low, `duty` keeps its power-on value of 0.
+poke load false
+poke duty_in 0
+
+# Power-on: `duty` is 0, so `out` is low.
+tick 1
+assert !out
+
+# Load a 25% duty cycle: `duty` becomes 64 on the next clock edge.
+poke load true
+poke duty_in 64
+tick 1
+poke load false
+
+# `out` is high while `count < duty`.
+# `count` is 2 now, so we should still be in the high part.
+assert out
+
+# Count up to 63, the last cycle of the high part.
+tick 61
+assert out
+
+# `count` reaches 64: the comparison fails and `out` drops low.
+tick 1
+assert !out
+
+# Ride out the rest of the period; `out` stays low until the wrap.
+tick 191
+assert !out
+
+# `count` wraps 255 back to 0, and a new period begins.
+tick 1
+assert out
+exit

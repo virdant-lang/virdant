@@ -19,3 +19,17 @@ This guide will introduce Virdant through a series of examples.
     multicycle_multiplier/index
     arbiter/index
     spi/index
+
+    operators/index
+    counter_mux/index
+    shift_register/index
+    counter_wrap/index
+    fsm/index
+    gcd/index
+    pwm/index
+    led_button/index
+    platform/index
+    rom_wishbone/index
+    memory_wishbone/index
+    fifo/index
+    structs/index

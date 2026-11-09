@@ -1,0 +1,32 @@
+//! An 8-bit serial-in/serial-out shift register with an enable.
+//!
+//! On each enabled clock edge, `serial_in` enters at the top (bit 7)
+//! and every bit slides one place down; bit 0 falls out the bottom.
+
+//> Shifts `serial_in` through 8 bits, one bit per enabled clock edge.
+pub mod ShiftRegister {
+    //> The system clock.
+    incoming clock : Clock
+
+    //> The bit to shift in at the top of the register.
+    incoming serial_in : Bit
+
+    //> When true, the register shifts on the next clock edge.
+    incoming enable : Bit
+
+    //> The eight flip-flops doing the shifting.
+    reg contents : Word[8] {
+        initial it <= 0
+        it <= mux(enable, word(serial_in, it[8..1]), it)
+    }
+
+    //> The whole register, readable all at once.
+    outgoing parallel : Word[8] {
+        it := contents
+    }
+
+    //> The bit currently at the bottom, about to fall out.
+    outgoing serial_out : Bit {
+        it := contents[0]
+    }
+}

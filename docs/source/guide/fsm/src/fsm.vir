@@ -1,0 +1,102 @@
+//! A traffic-light controller.
+//!
+//! The controller runs forever:
+//! red -> green -> yellow -> red -> ...
+//! A countdown timer decides how long each lamp stays lit.
+
+//> The states of the traffic light.
+//
+//  The first enumerant's value, `0b001w3`, also gives the enum its
+//  width: `0b` is binary, `001` is the value, and `w3` pins the type
+//  at Word[3].  Every enumerant has a value (all-or-nothing), so this
+//  is one-hot encoding spelled out by hand.
+enum type LightState {
+    Red    = 0b001w3
+    Yellow = 0b010
+    Green  = 0b100
+}
+
+pub mod TrafficLight {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> The red lamp.  True exactly when the controller is in #Red.
+    outgoing red : Bit {
+        it := match state { with #Red => true else => false }
+    }
+
+    //> The yellow lamp.  True exactly when the controller is in #Yellow.
+    outgoing yellow : Bit {
+        it := match state { with #Yellow => true else => false }
+    }
+
+    //> The green lamp.  True exactly when the controller is in #Green.
+    outgoing green : Bit {
+        it := match state { with #Green => true else => false }
+    }
+
+    //> The current state of the controller.
+    reg state : LightState {
+        initial it <= #Red
+    }
+
+    //> Countdown until this state ends.  Starts at `red_duration - 1`
+    //> and counts down one cycle per clock: six cycles of red read
+    //> five -> four -> three -> two -> one -> zero.
+    reg timer : Word[8] {
+        initial it <= 5w8
+    }
+
+    //> How many cycles the red lamp lights before moving on.
+    wire red_duration : Word[8] {
+        it := 6
+    }
+
+    //> How many cycles the green lamp lights before moving on.
+    wire green_duration : Word[8] {
+        it := 4
+    }
+
+    //> How many cycles the yellow lamp lights before moving on.
+    wire yellow_duration : Word[8] {
+        it := 2
+    }
+
+    // The driver of both registers: one statement-level `match` on `state`.
+    // When the timer expires, advance and reload; otherwise keep counting.
+    match state {
+        with #Red {
+            if {
+                when timer == 0 {
+                    state <= #Green
+                    timer <= green_duration - 1w8
+                }
+                else {
+                    timer <= timer - 1w8
+                }
+            }
+        }
+        with #Green {
+            if {
+                when timer == 0 {
+                    state <= #Yellow
+                    timer <= yellow_duration - 1w8
+                }
+                else {
+                    timer <= timer - 1w8
+                }
+            }
+        }
+        with #Yellow {
+            if {
+                when timer == 0 {
+                    state <= #Red
+                    timer <= red_duration - 1w8
+                }
+                else {
+                    timer <= timer - 1w8
+                }
+            }
+        }
+    }
+}

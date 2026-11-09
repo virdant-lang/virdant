@@ -1,0 +1,28 @@
+# The button pin is asynchronous, so give the synchronizer a few cycles
+# to settle with the button released.
+poke button false
+tick 4
+assert !led
+
+# First press: the synchronized button rises, and the LED toggles on.
+# It takes two cycles for the press to make it through the synchronizer,
+# and one more for the edge detector to see it.
+poke button true
+tick
+assert !led
+tick
+assert !led
+tick
+assert led
+
+# Release: a falling edge is not a press, so the LED stays on.
+poke button false
+tick 4
+assert led
+
+# Second press: another rising edge toggles the LED back off.
+poke button true
+tick 3
+assert !led
+
+exit

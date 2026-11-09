@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide PWM example: settable pulse-width modulator."
+expect = "ok"
