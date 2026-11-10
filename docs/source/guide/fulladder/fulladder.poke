@@ -1,0 +1,43 @@
+poke a false
+poke b false
+poke carry_in false
+
+vcd fulladder.vcd
+advance
+
+poke a false
+poke b false
+poke carry_in true
+advance
+
+poke a false
+poke b true
+poke carry_in false
+advance
+
+poke a false
+poke b true
+poke carry_in true
+advance
+
+poke a true
+poke b false
+poke carry_in false
+advance
+
+poke a true
+poke b false
+poke carry_in true
+advance
+
+poke a true
+poke b true
+poke carry_in false
+advance
+
+poke a true
+poke b true
+poke carry_in true
+advance
+
+exit

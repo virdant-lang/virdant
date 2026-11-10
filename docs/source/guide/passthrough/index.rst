@@ -13,7 +13,6 @@ Let's start by see how to define a module in Virdant.
 Modules are declared using the `mod` keyword, followed by the name of the module.
 
 The body of the module consists of a set of declarations about what the module contains.
-The order these declarations appear in does not matter.
 
 .. note::
 

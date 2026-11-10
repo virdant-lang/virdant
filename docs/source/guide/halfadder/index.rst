@@ -5,13 +5,9 @@ In this example, we will learn about a few basic operators in Virdant.
 A `HalfAdder` module is the simplest circuit which does something you might call "arithmetic".
 This is a classic circuit everyone should know.
 
-.. literalinclude:: src/adder.vir
+.. literalinclude:: src/halfadder.vir
     :language: virdant
     :lines: 1-15
-
-.. note::
-
-    This is the first in a series of three modules which appear in full in :doc:`../adder/index`.
 
 
 The `Bit` Type
@@ -35,7 +31,7 @@ The `outgoing` ports of `HalfAdder` are written a bit differently than before:
 
 .. literalinclude:: src/halfadder.vir
     :language: virdant
-    :lines: 5-13
+    :lines: 5-14
     :dedent:
 
 These define `sum` and `carry_out`, both with type `Bit`.
@@ -70,7 +66,7 @@ Before going on to how this module works,
 it's worth pointing out that comments in Virdant begin with `//`
 and go to the end of the line:
 
-.. literalinclude:: src/adder.vir
+.. literalinclude:: src/halfadder.vir
     :language: virdant
     :lines: 5
     :dedent:
@@ -169,9 +165,9 @@ when when *both* `a` and `b` are true.
 Therefore, `carry_out` is the logical AND of `a` and `b`,
 which we write as `a && b` in Virdant:
 
-.. literalinclude:: src/adder.vir
+.. literalinclude:: src/halfadder.vir
     :language: virdant
-    :lines: 11-13
+    :lines: 12-14
     :dedent:
 
 Again, looking *very* carefully at the table,
@@ -179,9 +175,9 @@ we see `sum` is only `true` when `a` and `b` are opposites of each other.
 Therefore, `sum` is the logical XOR of `a` and `b`.
 We write this as `a ^^ b` (which is a bit unique) in Virdant:
 
-.. literalinclude:: src/adder.vir
+.. literalinclude:: src/halfadder.vir
     :language: virdant
-    :lines: 5-9
+    :lines: 6-10
     :dedent:
 
 

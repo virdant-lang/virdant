@@ -1,0 +1,39 @@
+mod HalfAdder {
+    incoming a : Bit
+    incoming b : Bit
+
+    // sum is true when one of a and b is true (but not both)
+    outgoing sum : Bit dependson a, b {
+        it := a ^^ b
+    }
+
+    // carry is true when a and b are both true
+    outgoing carry_out : Bit dependson a, b {
+        it := a && b
+    }
+}
+
+pub mod FullAdder {
+    incoming a : Bit
+    incoming b : Bit
+    incoming carry_in : Bit
+
+    outgoing sum : Bit dependson a, b, carry_in {
+        it := halfadder_1.sum
+    }
+    outgoing carry_out : Bit dependson a, b, carry_in {
+        it := halfadder_0.carry_out || halfadder_1.carry_out
+    }
+
+    // first, sum a + b
+    mod halfadder_0 of HalfAdder {
+        it.a := a
+        it.b := b
+    }
+
+    // then, sum the result with carry_in
+    mod halfadder_1 of HalfAdder {
+        it.a := halfadder_0.sum
+        it.b := carry_in
+    }
+}

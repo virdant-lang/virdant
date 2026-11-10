@@ -1,8 +1,22 @@
 Counter
 =======
+In this next example, we'll see a common use for `reg`\s: counting things.
+
+`Counter` is a module which can count up or down, one at a time.
+
 .. literalinclude:: src/counter.vir
     :caption: counter.vir
     :language: virdant
+
+`Counter` has four `incoming` ports: `clock` `reset `increment` and `decrement`.
+It also has one `outgoing` port.
+But let's take a closer look at it:
+
+Counter
+-------
+The `counter` port is declared as `outgoing reg`.
+This means that it acts *both* as an `outgoing` port and as a `reg`.
+
 
 - `if`
 - resets

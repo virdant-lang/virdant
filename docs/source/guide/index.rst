@@ -8,9 +8,11 @@ This guide will introduce Virdant through a series of examples.
     passthrough/index
     buffer/index
     halfadder/index
+    pwm/index
+    popcount/index
+    fulladder/index
     incrementer/index
     counter/index
-    pwm/index
     shiftreg/index
     gcd/index
     hello/index

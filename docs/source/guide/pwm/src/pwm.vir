@@ -1,17 +1,12 @@
 pub mod Pwm {
     incoming clock : Clock
-
     incoming duty : Word[3]
-
-    reg sweep : Word[3] {
-        it <= it + 1
-    }
-
-    outgoing cycle_start : Bit {
-        it := sweep == 0
-    }
 
     outgoing out : Bit dependson duty {
         it := sweep < duty
+    }
+
+    reg sweep : Word[3] {
+        it <= it + 1
     }
 }
