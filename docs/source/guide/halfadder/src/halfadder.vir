@@ -2,7 +2,8 @@ pub mod HalfAdder {
     incoming a : Bit
     incoming b : Bit
 
-    // sum is true when one of a and b is true (but not both)
+    // sum is true when one of a and b is true
+    // (but not both)
     outgoing sum : Bit dependson a, b {
         it := a ^^ b
     }

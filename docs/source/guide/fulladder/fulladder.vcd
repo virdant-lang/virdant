@@ -1,0 +1,120 @@
+$timescale 1ps $end
+$scope module top $end
+$var wire 1 ! a $end
+$var wire 1 " b $end
+$var wire 1 # carry_in $end
+$var wire 1 % carry_out $end
+$scope module halfadder_0 $end
+$var wire 1 & a $end
+$var wire 1 ' b $end
+$var wire 1 ) carry_out $end
+$var wire 1 ( sum $end
+$upscope $end
+$scope module halfadder_1 $end
+$var wire 1 * a $end
+$var wire 1 + b $end
+$var wire 1 - carry_out $end
+$var wire 1 , sum $end
+$upscope $end
+$var wire 1 $ sum $end
+$upscope $end
+$enddefinitions $end
+#0
+$dumpvars
+0!
+0"
+0#
+0%
+0&
+0'
+0)
+0(
+0*
+0+
+0-
+0,
+0$
+$end
+#1000000
+#1050000
+1#
+1+
+1,
+1$
+#2000000
+#2050000
+1"
+1%
+1'
+1(
+1*
+1-
+0,
+0$
+0#
+0%
+0+
+0-
+1,
+1$
+#3000000
+#3050000
+1#
+1%
+1+
+1-
+0,
+0$
+#4000000
+#4050000
+1!
+1&
+1)
+0(
+0*
+0-
+1,
+1$
+0"
+0'
+0)
+1(
+1*
+1-
+0,
+0$
+0#
+0%
+0+
+0-
+1,
+1$
+#5000000
+#5050000
+1#
+1%
+1+
+1-
+0,
+0$
+#6000000
+#6050000
+1"
+1'
+1)
+0(
+0*
+0-
+1,
+1$
+0#
+0+
+0,
+0$
+#7000000
+#7050000
+1#
+1+
+1,
+1$
+#8000000
