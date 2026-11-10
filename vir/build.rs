@@ -24,6 +24,7 @@ fn main() {
     // version the `virdant` crate uses.
     lalrpop::process_root().unwrap();
     println!("cargo:rerun-if-changed=src/poke/grammar.lalrpop");
+    println!("cargo:rerun-if-changed=src/value/grammar.lalrpop");
 
     let base_dir: PathBuf = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
         .parent()
