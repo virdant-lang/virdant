@@ -1,0 +1,73 @@
+import spiflash
+import uart
+import virt
+
+//> Streams the SPI flash's contents from address 0 out of the UART.
+//>
+//> `flash` issues the 0x03 READ command at address 0 and streams the
+//> incoming bytes onto its `out` pipe, which feeds `sender` one byte
+//> per handshake.  The bytes go out on `tx` until the NUL (0x00)
+//> terminator shows up on the stream, at which point the program
+//> exits with code 0 once the sender has accepted the NUL.
+pub mod Top for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> UART transmit data to the host (stdout).
+    outgoing tx : Bit {
+        it := sender.tx
+    }
+
+    //> `@Valid(0)` on the cycle the sender accepts the NUL
+    //> terminator; `@Invalid()` while the stream continues.
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when sender.inp.ready && null_pending => @Valid(0)
+            else => @Invalid()
+        }
+    }
+
+    //> SPI flash serial clock.
+    outgoing spi_ck : Bit {
+        it := flash.spi.clock
+    }
+
+    //> SPI flash chip select, active low.
+    outgoing spi_cs : Bit {
+        it := flash.spi.cs
+    }
+
+    //> SPI flash controller-out serial data.
+    outgoing spi_mosi : Bit {
+        it := flash.spi.mosi
+    }
+
+    //> SPI flash controller-in serial data.
+    incoming spi_miso : Bit
+
+    //> Reads the flash from address 0 and streams the bytes out of
+    //> `out` one per handshake.
+    mod flash of spiflash::SpiFlash {
+        it.clock := clock
+    }
+
+    //> Serializes each byte onto the `tx` line, 8N1.
+    mod sender of uart::UartSender {
+        it.clock := clock
+    }
+
+    // The flash's byte stream feeds the UART sender directly.
+    sender.inp :=: flash.out
+
+    // The flash controller rides the board's SPI flash pins.
+    flash.spi.miso := spi_miso
+
+    //> The byte the flash reader is currently offering is the NUL
+    //> terminator.
+    wire null_pending : Bit {
+        it := match flash.out.data {
+            with @Valid(byte) => byte == 0w8
+            with @Invalid() => false
+        }
+    }
+}

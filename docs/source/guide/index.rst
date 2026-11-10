@@ -13,5 +13,7 @@ This guide will introduce Virdant through a series of examples.
     pwm/index
     shiftreg/index
     gcd/index
+    hello/index
     uart/index
+    spiflash/index
     fifo/index
