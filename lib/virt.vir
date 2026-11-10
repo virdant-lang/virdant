@@ -24,10 +24,18 @@ pub platform Virt {
     //> UART receive data from the host (stdin).
     incoming rx : Bit
 
-    //> Program exit request.  While `@Invalid()`, the simulator runs.
-    //> When it reads `@Valid(n)` on a clock tick, the simulator exits with
-    //   exit code `n`.
+    //> Program exit request.
+    //>
+    //> While `@Invalid()`, the simulator runs.
+    //> When it reads `@Valid(n)` on a clock tick,
+    //> the simulator exits with exit code `n`.
     outgoing exit : Valid[Word[8]] default @Invalid()
+
+    //> Debug output
+    //>
+    //> Each cycle, if debug is `@Valid(ch)`,
+    //> Virt will print `ch` as an ASCII character to stderr.
+    outgoing debug : Valid[Word[8]] default @Invalid()
 
     //> SPI flash clock.
     outgoing spi_ck : Bit default true

@@ -1,28 +1,24 @@
-//! Hello World!
-
-// Import the `virt` package
-// This gives us the `Virt` platform and the `Hello` module.
 import virt
 
-//> `Top` is the top module and entry point to your design.
-//> It targets `Virt`, the virtual Virdant platform.
 pub mod Top for virt::Virt {
-    //> `clock` is the system clock
     incoming clock : Clock
 
-    //> `tx` is the UART data transmit line.
-    //> It's used for printing things to the terminal.
-    outgoing tx : Bit
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when mem[dyn index] == 0 => @Valid(0)
+            else => @Invalid()
+        }
+    }
 
-    //> `exit` determines when to exit and with what return code.
-    outgoing exit : Valid[Word[8]]
+    @image_inline("Hello, Virdant!\n\r\0")
+    memory mem[64] : Word[8]
 
-    //> `hello` is a submodule which instantiates
-    //> a module called `Hello` from the `virt` package.
-    //> It contains all the logic to print "Hello, world!" to the screen.
-    mod hello of virt::Hello {
-        it.clock := clock
-        tx       := it.tx
-        exit     := it.exit
+    reg index : Word[6] {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    outgoing debug : Valid[Word[8]] {
+        it := @Valid(mem[dyn index])
     }
 }

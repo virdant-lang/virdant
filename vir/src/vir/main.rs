@@ -464,7 +464,7 @@ fn new_project(args: &Args, project: &str, no_git: bool) {
             std::process::exit(1);
         }
     } else {
-        let top_vir_content = include_str!("../../../assets/vir_new_top.vir");
+        let top_vir_content = include_str!("../../../assets/new/src/top.vir");
         std::fs::write(project_dir.join("src").join("top.vir"), top_vir_content).unwrap();
     }
 
