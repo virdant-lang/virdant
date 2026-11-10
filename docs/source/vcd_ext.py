@@ -38,7 +38,13 @@ The directive body is a line-based layout, one item per nonblank line
       a mild overflow is squeezed back down to fit by CSS-scaling the whole
       SVG (the text shrinks a couple of px but every label stays visible);
       only an overflow too large for the text to remain legible falls back
-      to horizontal scrolling.
+      to horizontal scrolling.  In a scrolling figure the gutter is a
+      separate sticky SVG (vcd.css pins it at the left edge of the box,
+      over an opaque background, while the waveform slides beneath --
+      compositor-driven, so it never jitters), and vcd.js clamps each
+      value label to the gutter's right edge while its box is at least
+      partly visible, hiding the box and label once the box has scrolled
+      fully off.
       The type may be fully-qualified
       (``pkg::Name[...]``) or bare for builtin types; vir-value resolves it
       against the project found by walking up from the trace file.
@@ -99,8 +105,8 @@ SCALE = FONT_PX / 10.0
 # Never let a tick get smaller than this, no matter how long the trace is.
 # This is the "zoomed all the way out" end of the GTKWave-style fit: a trace
 # longer than (target waveform width) ticks will exceed the target width and
-# be tagged .vcd-svg--overflow (scrolling on .vcd-body) rather than
-# collapsing into an unreadable smear.
+# be tagged .vcd-fig--overflow (scrolling on .vcd-body, sticky gutter) rather
+# than collapsing into an unreadable smear.
 MIN_TICK_W = 1.0
 
 # When a figure's natural width exceeds its target width -- a stretched
@@ -111,7 +117,8 @@ MIN_TICK_W = 1.0
 # the stylesheet's ordinary fit-to-column scaling (max-width:100% /
 # width:100%), so no scrollbar appears and every label stays visible -- the
 # text is merely a few px smaller.  A severe overflow is tagged
-# .vcd-svg--overflow and keeps its natural width, scrolling instead: CSS
+# .vcd-fig--overflow: it keeps its natural width, scrolling instead, with
+# the signal-name gutter split into its own sticky SVG (see render_svg): CSS
 # scaling has no natural stopping point (decoded type text can be
 # arbitrarily long), so this floor is the bound.  11px: the stylesheet's
 # narrow-phone guidance treats ~12px as still legible, and dipping slightly
@@ -287,14 +294,16 @@ def clock_period_ticks(signals):
     return None
 
 
-def render_svg(wavejson, target_width, extra_class=''):
-    """Render WaveJSON (as produced by vcd2wavedrom.py) into an SVG string.
+def render_svg(wavejson, target_width, variant='desktop'):
+    """Render WaveJSON (as produced by vcd2wavedrom.py) into SVG markup.
 
     `target_width` is the width the SVG should occupy, in CSS pixels.  The
     "zoom" is applied at the level of geometry -- pixels per tick -- NOT by
     CSS-scaling the finished SVG, so font sizes stay fixed and crisp no
-    matter how the trace is stretched or compressed.  `extra_class` marks
-    the responsive variant (vcd.css shows/hides desktop/mobile variants).
+    matter how the trace is stretched or compressed.  `variant` marks the
+    responsive variant (vcd.css shows/hides desktop/mobile variants).  A
+    figure that overflows returns a .vcd-fig flex row of two SVGs (sticky
+    gutter + waveform); any other figure returns a single SVG string.
     """
     signals = wavejson['signal']
 
@@ -466,42 +475,60 @@ def render_svg(wavejson, target_width, extra_class=''):
     # of px of text size for a label-complete, scrollbar-free figure.  (The
     # SVG is vector, so the downscale stays crisp, and vcd.js reads the
     # live scale via getBoundingClientRect, so the hover time cursor stays
-    # accurate.)  Otherwise tag .vcd-svg--overflow: the stylesheet exempts
-    # those figures from the scaling rules, keeping the natural width and
-    # scrolling horizontally in .vcd-body instead of collapsing the text
-    # (or the post-stretch timing proportions) into unreadability.
+    # accurate.)  Otherwise the figure becomes a .vcd-fig--overflow flex
+    # row: it keeps its natural width, scrolling horizontally in
+    # .vcd-body with the gutter pinned sticky, instead of collapsing the
+    # text (or the post-stretch timing proportions) into unreadability.
     overflows = zoom_floored or (xs is not None and width > target_width * (1 + 1e-4))
     if not overflows:
         overflow_class = ''
     elif FONT_PX * target_width / width >= MIN_SQUEEZE_FONT_PX:
         overflow_class = ' vcd-svg--squeeze'
     else:
-        overflow_class = ' vcd-svg--overflow'
-    svg_class = f'vcd-svg {extra_class}{overflow_class}'.strip()
-    # :g trims floating-point noise from the geometry (e.g. 310.0 instead of
-    # 310.00000000000006); %g-formatting keeps short decimals readable.
-    # The hover data attributes (vcd.js): the number of ticks, to resolve
-    # the cursor's tick, and the per-signal runs carrying the *full* value
-    # text.
-    parts.append(
-        f'<svg class="{svg_class}" viewBox="0 0 {width:g} {height:g}" width="{width:g}" '
-        f'height="{height:g}" xmlns="http://www.w3.org/2000/svg" role="img" '
-        f'data-waveform-x0="{label_w:g}" data-waveform-x1="{label_w + wave_w:g}" '
-        f'data-waveform-y0="{row_y0:.2f}" data-waveform-y1="{row_y1:.2f}" '
-        f'data-ticks="{n_ticks}" '
-        f'data-values="{escape(json.dumps(hover_rows, separators=(",", ":")))}">')
-
-    if wavejson.get('head', {}).get('text'):
-        head = wavejson['head']['text']
+        # Not a class: a severe overflow is emitted as a .vcd-fig flex row
+        # (see below), not tagged on the SVG.
+        overflow_class = ''
+    split_gutter = overflows and not overflow_class
+    if split_gutter:
+        # The waveform SVG spans just the waveform area plus the right
+        # padding -- no gutter.  Its coordinates (and the data-* hover
+        # attributes below) are therefore gutter-free: the waveform starts
+        # at x0 = 0, not label_w.
+        wave_svg_w = wave_w + pad_r
+        svg_class = 'vcd-svg'
+        # :g trims floating-point noise from the geometry (e.g. 310.0 instead of
+        # 310.00000000000006); %g-formatting keeps short decimals readable.
+        # The hover data attributes (vcd.js): the number of ticks, to resolve
+        # the cursor's tick, and the per-signal runs carrying the *full* value
+        # text.
         parts.append(
-            f'<text class="vcd-head" x="{width - pad_r}" y="{12 * SCALE:.1f}" '
-            f'text-anchor="end">{escape(head)}</text>')
+            f'<svg class="{svg_class}" viewBox="0 0 {wave_svg_w:g} {height:g}" '
+            f'width="{wave_svg_w:g}" height="{height:g}" '
+            f'xmlns="http://www.w3.org/2000/svg" role="img" '
+            f'data-waveform-x0="0" data-waveform-x1="{wave_w:g}" '
+            f'data-waveform-y0="{row_y0:.2f}" data-waveform-y1="{row_y1:.2f}" '
+            f'data-ticks="{n_ticks}" '
+            f'data-values="{escape(json.dumps(hover_rows, separators=(",", ":")))}">')
+    else:
+        svg_class = f'vcd-svg vcd-svg--{variant}{overflow_class}'.strip()
+        parts.append(
+            f'<svg class="{svg_class}" viewBox="0 0 {width:g} {height:g}" width="{width:g}" '
+            f'height="{height:g}" xmlns="http://www.w3.org/2000/svg" role="img" '
+            f'data-waveform-x0="{label_w:g}" data-waveform-x1="{label_w + wave_w:g}" '
+            f'data-waveform-y0="{row_y0:.2f}" data-waveform-y1="{row_y1:.2f}" '
+            f'data-ticks="{n_ticks}" '
+            f'data-values="{escape(json.dumps(hover_rows, separators=(",", ":")))}">')
 
-    # Waveform drawing area is offset by the label gutter.  The class name
-    # marks the topmost group as the waveform itself: vcd.js uses it to
-    # identify the figure as a waveform, and it is the selector to update
-    # if the structure below the svg ever changes.
-    parts.append(f'<g class="vcd-waveform" transform="translate({label_w},0)">')
+    # Waveform drawing area.  In the split figure the SVG is already
+    # gutter-free, so there is no translate; in the single-SVG figure the
+    # group is offset by the label gutter.  The class name marks the group
+    # as the waveform itself: vcd.js uses it to identify the figure as a
+    # waveform, and it is the selector to update if the structure below
+    # the svg ever changes.
+    if split_gutter:
+        parts.append('<g class="vcd-waveform">')
+    else:
+        parts.append(f'<g class="vcd-waveform" transform="translate({label_w},0)">')
 
     for idx, sig in enumerate(signals):
         # Top edge of this row on the canvas, and the three level y-positions
@@ -610,7 +637,8 @@ def render_svg(wavejson, target_width, extra_class=''):
                 y = y_bot - 3 * SCALE
                 parts.append(
                     f'<text class="vcd-bitlabel" x="{x0 + pad:g}" '
-                    f'y="{y:.2f}" text-anchor="start">{label}</text>')
+                    f'y="{y:.2f}" text-anchor="start" '
+                    f'data-x0="{x0:g}" data-x1="{x1:g}">{label}</text>')
 
         # Boxes: drawn per run, spanning the full Y_TOP..Y_BOT range.
         # 'x'  -> rectangle with a diagonal cross (unknown/bus fighting)
@@ -625,6 +653,13 @@ def render_svg(wavejson, target_width, extra_class=''):
                     f'<path class="vcd-cross" d="M {x0} {y_top} L {x1} {y_bot} '
                     f'M {x0} {y_bot} L {x1} {y_top}"/>')
             elif c == '4':
+                # The box and its value label travel in a group tagged with
+                # the run's extent (vcd.js clamps the label to the left edge
+                # of the visible waveform while the box is at least partly
+                # on screen, and hides the group once the box has scrolled
+                # fully off -- a clamped label over nothing would mislead).
+                parts.append(
+                    f'<g class="vcd-run" data-x0="{x0:g}" data-x1="{x1:g}">')
                 parts.append(
                     f'<rect class="vcd-dbox" x="{x0}" y="{y_top}" '
                     f'width="{x1 - x0}" height="{y_bot - y_top}"/>')
@@ -641,6 +676,7 @@ def render_svg(wavejson, target_width, extra_class=''):
                 avail = x1 - x0 - pad
                 max_chars = int(avail / CHAR_W)
                 if max_chars <= 0:
+                    parts.append('</g>')
                     continue
                 if len(label) > max_chars:
                     label = label[:max_chars - 1] + ELLIPSIS
@@ -648,13 +684,75 @@ def render_svg(wavejson, target_width, extra_class=''):
                     f'<text class="vcd-data" x="{x0 + pad:g}" '
                     f'y="{row_y + Y_MID + 3.5 * SCALE}" text-anchor="start">'
                     f'{escape(label)}</text>')
+                parts.append('</g>')
 
     parts.append('</g>')
 
-    # Gutter text sits outside the translated group: signal names for
-    # signal rows, group titles for label rows, nothing for space rows.
-    # All gutter text is left-justified, so names and group titles share
-    # a common left edge regardless of length.
+    if split_gutter:
+        # Split figure: the waveform SVG above carries the head line and
+        # the waveform, and the gutter is a separate SVG returned beside
+        # it inside a .vcd-fig flex row.  vcd.css pins the gutter SVG
+        # with position:sticky -- compositor-driven, so the names stay
+        # pinned with zero lag while the waveform slides beneath the
+        # gutter's opaque background.
+        if wavejson.get('head', {}).get('text'):
+            head = wavejson['head']['text']
+            parts.append(
+                f'<text class="vcd-head" x="{wave_svg_w - pad_r:g}" '
+                f'y="{12 * SCALE:.1f}" '
+                f'text-anchor="end">{escape(head)}</text>')
+        parts.append('</svg>')
+
+        # Gutter SVG: an opaque background (so the waveform content
+        # passing underneath while the figure is scrolled is masked), a
+        # hairline rule just inside its right edge, and the gutter text
+        # -- signal names for signal rows, group titles for label rows,
+        # nothing for space rows.  All gutter text is left-justified, so
+        # names and group titles share a common left edge regardless of
+        # length.  Same vertical geometry as the waveform SVG (head_h,
+        # one ROW_H per row), so the rows align exactly across the two
+        # SVGs.  aria-hidden: the names are decorative duplicates of the
+        # hover popup's signal names, not reachable content.
+        gutter = [
+            f'<svg class="vcd-svg vcd-gutter-svg" '
+            f'viewBox="0 0 {label_w:g} {height:g}" '
+            f'width="{label_w:g}" height="{height:g}" '
+            f'xmlns="http://www.w3.org/2000/svg" aria-hidden="true">',
+            f'<rect class="vcd-gutter-bg" x="0" y="0" width="{label_w:g}" '
+            f'height="{height:g}"/>',
+            f'<line class="vcd-gutter-rule" x1="{label_w - 0.5:g}" y1="0" '
+            f'x2="{label_w - 0.5:g}" y2="{height:g}"/>',
+        ]
+        for idx, sig in enumerate(signals):
+            row_y = head_h + idx * ROW_H
+            if 'name' in sig:
+                text, cls = sig['name'], 'vcd-name'
+            elif 'label' in sig:
+                text, cls = sig['label'], 'vcd-label'
+            else:
+                continue
+            gutter.append(
+                f'<text class="{cls}" x="{8 * SCALE:.1f}" '
+                f'y="{row_y + Y_MID + 4 * SCALE:.1f}" '
+                f'text-anchor="start">{escape(text)}</text>')
+        gutter.append('</svg>')
+        return (f'<div class="vcd-fig vcd-fig--{variant} vcd-fig--overflow">'
+                f'{"".join(gutter)}{"".join(parts)}</div>')
+
+    # Single-SVG figure (fit or squeeze): it never scrolls, so the gutter
+    # stays an ordinary group inside the SVG: an opaque background (harmless
+    # here -- nothing ever passes beneath it), a hairline rule at the
+    # gutter's right edge, and the gutter text -- signal names for signal
+    # rows, group titles for label rows, nothing for space rows.  All
+    # gutter text is left-justified, so names and group titles share a
+    # common left edge regardless of length.
+    parts.append('<g class="vcd-gutter">')
+    parts.append(
+        f'<rect class="vcd-gutter-bg" x="0" y="0" width="{label_w:g}" '
+        f'height="{height:g}"/>')
+    parts.append(
+        f'<line class="vcd-gutter-rule" x1="{label_w:g}" y1="0" '
+        f'x2="{label_w:g}" y2="{height:g}"/>')
     for idx, sig in enumerate(signals):
         row_y = head_h + idx * ROW_H
         if 'name' in sig:
@@ -667,6 +765,17 @@ def render_svg(wavejson, target_width, extra_class=''):
             f'<text class="{cls}" x="{8 * SCALE:.1f}" '
             f'y="{row_y + Y_MID + 4 * SCALE:.1f}" '
             f'text-anchor="start">{escape(text)}</text>')
+    parts.append('</g>')
+
+    # The head line is drawn last, on top of the gutter group: it is
+    # right-aligned at the figure's right edge, and only a very long head
+    # text would intrude into the gutter's x range -- drawing it above the
+    # gutter background reads better there than having it masked.
+    if wavejson.get('head', {}).get('text'):
+        head = wavejson['head']['text']
+        parts.append(
+            f'<text class="vcd-head" x="{width - pad_r}" y="{12 * SCALE:.1f}" '
+            f'text-anchor="end">{escape(head)}</text>')
 
     parts.append('</svg>')
     return ''.join(parts)
@@ -814,8 +923,8 @@ class VcdDirective(Directive):
         # text at a true 13px (vcd.css shows/hides the variants).
         html = (
             f'<div class="vcd-body">'
-            f'{render_svg(wavejson, env.config.vcd_waveform_width, "vcd-svg--desktop")}'
-            f'{render_svg(wavejson, env.config.vcd_waveform_width_mobile, "vcd-svg--mobile")}'
+            f'{render_svg(wavejson, env.config.vcd_waveform_width, "desktop")}'
+            f'{render_svg(wavejson, env.config.vcd_waveform_width_mobile, "mobile")}'
             f'</div>')
         if 'caption' in self.options:
             caption = escape(self.options['caption'])

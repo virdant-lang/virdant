@@ -139,9 +139,8 @@ sending the first few characters of the message:
     signal top.clock:clk
 
     label Sender
-    signal top.sender.state
+    signal top.sender.state:uart::UartState
     signal top.sender.buffer:dec
-    signal top.sender.baud_timer
 
     label Serial output
     signal top.tx
