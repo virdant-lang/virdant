@@ -12,7 +12,10 @@
 //!     auto-incrementing address until CS deasserts;
 //!   - the `exit : Valid[Word[8]]` port: while `@Invalid()`, the
 //!     simulation runs; a `@Valid(n)` read on a clock tick ends the
-//!     run with exit code `n`.
+//!     run with exit code `n`;
+//!   - the `debug : Valid[Word[8]]` port: each cycle, `@Valid(ch)`
+//!     appends `ch` to a 256-character buffer, flushed to stderr by a
+//!     side thread when the buffer fills or 100 ms elapse.
 //!
 //! The clock runs at the frequency the platform declares
 //! (`@period_ns`).  The run is paced to real time unless
@@ -30,7 +33,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, TryRecvError};
-use std::sync::Mutex;
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use virdant::analysis::elaboration::SignalId;
@@ -70,6 +73,7 @@ const PORT_CLOCK: &str = "clock";
 const PORT_TX: &str = "tx";
 const PORT_RX: &str = "rx";
 const PORT_EXIT: &str = "exit";
+const PORT_DEBUG: &str = "debug";
 const PORT_SPI_CK: &str = "spi_ck";
 const PORT_SPI_CS: &str = "spi_cs";
 const PORT_SPI_MOSI: &str = "spi_mosi";
@@ -95,6 +99,10 @@ pub fn run(db: &Db, top: SymbolId, clock_hz: u64, opts: VirtOptions) -> i32 {
     let tx = port(&sim, PORT_TX);
     let rx = port(&sim, PORT_RX);
     let exit = port(&sim, PORT_EXIT);
+    // `debug` is optional: it was added to the platform with a
+    // `default @Invalid()`, so designs written before it need not
+    // declare it.  When absent, the board just ignores it.
+    let debug = sim.try_resolve(format!("top.{PORT_DEBUG}").as_bytes());
     let spi_ck = port(&sim, PORT_SPI_CK);
     let spi_cs = port(&sim, PORT_SPI_CS);
     let spi_mosi = port(&sim, PORT_SPI_MOSI);
@@ -148,6 +156,21 @@ pub fn run(db: &Db, top: SymbolId, clock_hz: u64, opts: VirtOptions) -> i32 {
     FPS_REPORT.store(opts.fps, Ordering::Relaxed);
     setup_terminal();
 
+    // Buffered debug output: the per-cycle logic appends bytes, a
+    // side thread flushes them to stderr (256 bytes or 100 ms).
+    let debug_out = DebugOut::spawn();
+
+    // The design is settled at time 0 (Sim::new applied `initial`s and
+    // propagated them), so if `debug` reads `@Valid(ch)` before the
+    // first clock edge, print that character too — it would otherwise
+    // never be sampled, since the per-cycle logic only sees post-edge
+    // values.
+    if let Some(debug) = debug {
+        if let Some(ch) = decode_debug(&sim, &sim.get(debug)) {
+            debug_out.append(ch);
+        }
+    }
+
     let exit_code: Rc<Cell<Option<i32>>> = Rc::new(Cell::new(None));
     let cycles: Rc<Cell<u64>> = Rc::new(Cell::new(0));
     let max_cycles = opts.cycles.unwrap_or(u64::MAX);
@@ -168,9 +191,13 @@ pub fn run(db: &Db, top: SymbolId, clock_hz: u64, opts: VirtOptions) -> i32 {
         tx,
         rx,
         exit,
+        debug,
         uart_rx: UartRx::new(&uart_timing),
         uart_tx: UartTx::new(uart_timing),
         prev_exit: None,
+        prev_debug: None,
+        debug_valid_char: None,
+        debug_out: debug_out.clone(),
         cycles: cycles.clone(),
         max_cycles,
         exit_code: exit_code.clone(),
@@ -190,6 +217,10 @@ pub fn run(db: &Db, top: SymbolId, clock_hz: u64, opts: VirtOptions) -> i32 {
 
     let _ = sim.run();
     restore_term();
+    // Flush whatever the design left in the debug buffer (a run that
+    // exits right after a debug write would otherwise drop it, since
+    // the side thread only flushes when full or 100 ms stale).
+    debug_out.flush();
     report_fps();
 
     // Distinct status for hitting the cycle cap without an exit
@@ -245,11 +276,24 @@ struct PerCycle {
     tx: SignalId,
     rx: SignalId,
     exit: SignalId,
+    /// The `debug` port, when the design declares one (`None` when it
+    /// does not: the port is optional, with a `default @Invalid()`).
+    debug: Option<SignalId>,
     uart_tx: UartTx,
     uart_rx: UartRx,
     /// Last seen `exit`-port value; `decode_exit` is a pure function
     /// of the value, so it only needs to rerun when it changes.
     prev_exit: Option<Value>,
+    /// Last seen `debug`-port raw value; the (allocating) decode only
+    /// reruns when it changes.
+    prev_debug: Option<Value>,
+    /// The decoded character while `debug` reads `@Valid(ch)` (`None`
+    /// while `@Invalid()`).  Unlike `exit`, `debug` appends on EVERY
+    /// cycle it is valid — a design holding `@Valid(ch)` prints `ch`
+    /// once per cycle, so consecutive identical characters survive —
+    /// but the decode itself only reruns on a value change.
+    debug_valid_char: Option<u8>,
+    debug_out: DebugOut,
     cycles: Rc<Cell<u64>>,
     max_cycles: u64,
     exit_code: Rc<Cell<Option<i32>>>,
@@ -317,6 +361,23 @@ impl PerCycle {
             self.prev_exit = Some(exit_value);
         }
 
+        // Debug output (virt::Virt `debug` port): every cycle that
+        // `debug` is `@Valid(ch)` appends `ch` to the shared buffer;
+        // the side thread flushes it.  The decode allocates, so it
+        // only reruns when the port's raw value changes; while the
+        // value is unchanged and was valid, the cached character is
+        // re-appended without decoding.
+        if let Some(debug) = self.debug {
+            let debug_value = sim.get(debug);
+            if self.prev_debug.as_ref() != Some(&debug_value) {
+                self.debug_valid_char = decode_debug(sim, &debug_value);
+                self.prev_debug = Some(debug_value);
+            }
+            if let Some(ch) = self.debug_valid_char {
+                self.debug_out.append(ch);
+            }
+        }
+
         self.cycles.set(self.cycles.get() + 1);
         FPS_CYCLES.store(self.cycles.get(), Ordering::Relaxed);
         if self.cycles.get() >= self.max_cycles {
@@ -336,6 +397,103 @@ fn decode_exit(sim: &Sim, value: &Value) -> Option<i32> {
     }
     let code = ctor.payloads.first()?.to_u64();
     Some(code as u8 as i32)
+}
+
+/// Decode the `debug : Valid[Word[8]]` value into the character byte.
+fn decode_debug(sim: &Sim, value: &Value) -> Option<u8> {
+    let ctor = sim.decode_ctor(value)?;
+    if ctor.name != "Valid" {
+        return None;
+    }
+    let ch = ctor.payloads.first()?.to_u64();
+    Some(ch as u8)
+}
+
+// ─────────────────────────────────────────────────────────────
+// Debug output (`debug` port → stderr, buffered in a side thread)
+// ─────────────────────────────────────────────────────────────
+
+/// Buffered debug output.
+///
+/// The simulation loop appends bytes ([`DebugOut::append`]) and a
+/// side thread flushes them to stderr — when the buffer fills (256
+/// characters) or when 100 ms have passed since the last flush with
+/// something still buffered, whichever comes first.  Keeping the
+/// writes off the hot loop and batching them bounds the per-cycle
+/// cost of debug tracing: appending is a lock plus a push, and stderr
+/// is written at most every 100 ms for slow-tracing designs.
+/// [`DebugOut::flush`] drains the remainder at shutdown.
+#[derive(Clone)]
+struct DebugOut {
+    shared: Arc<DebugShared>,
+}
+
+/// Capacity of the debug buffer, in characters.
+const DEBUG_BUF_CHARS: usize = 256;
+
+/// How long a nonempty debug buffer may sit unflushed.
+const DEBUG_FLUSH_INTERVAL: Duration = Duration::from_millis(100);
+
+struct DebugShared {
+    buf: Mutex<Vec<u8>>,
+    /// Notified when the buffer fills (flush sooner than the timer).
+    filled: Condvar,
+}
+
+impl DebugOut {
+    /// Create the shared buffer and spawn the flushing side thread.
+    fn spawn() -> DebugOut {
+        let shared = Arc::new(DebugShared {
+            buf: Mutex::new(Vec::with_capacity(DEBUG_BUF_CHARS)),
+            filled: Condvar::new(),
+        });
+        let thread_shared = shared.clone();
+        std::thread::spawn(move || {
+            let mut last_flush = Instant::now();
+            let mut buf = thread_shared.buf.lock().unwrap();
+            loop {
+                // Sleep until either the timer expires or the buffer
+                // fills; then flush if either condition holds.
+                let (guard, _) = thread_shared
+                    .filled
+                    .wait_timeout(buf, DEBUG_FLUSH_INTERVAL)
+                    .unwrap();
+                buf = guard;
+                let full = buf.len() >= DEBUG_BUF_CHARS;
+                let stale = !buf.is_empty() && last_flush.elapsed() >= DEBUG_FLUSH_INTERVAL;
+                if full || stale {
+                    let bytes = std::mem::take(&mut *buf);
+                    drop(buf);
+                    let stderr = std::io::stderr();
+                    let _ = stderr.lock().write_all(&bytes);
+                    last_flush = Instant::now();
+                    buf = thread_shared.buf.lock().unwrap();
+                }
+            }
+        });
+        DebugOut { shared }
+    }
+
+    /// Append one character to the buffer.  Called from the
+    /// simulation loop, once per changed `debug` value at most.
+    fn append(&self, ch: u8) {
+        let mut buf = self.shared.buf.lock().unwrap();
+        buf.push(ch);
+        let full = buf.len() >= DEBUG_BUF_CHARS;
+        drop(buf);
+        if full {
+            self.shared.filled.notify_all();
+        }
+    }
+
+    /// Drain and write whatever is buffered right now (shutdown).
+    fn flush(&self) {
+        let bytes = std::mem::take(&mut *self.shared.buf.lock().unwrap());
+        if !bytes.is_empty() {
+            let stderr = std::io::stderr();
+            let _ = stderr.lock().write_all(&bytes);
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────

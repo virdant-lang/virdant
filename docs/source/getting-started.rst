@@ -38,9 +38,9 @@ Next, we can run our project in the Virdant simulator.
   :caption: console
 
   $ vir run
-  Hello, world!
+  Hello, Virdant!
 
-Oh! Why hello, Virdant!
+Hello to you too, Virdant!
 
 
 What Virdant Looks Like
