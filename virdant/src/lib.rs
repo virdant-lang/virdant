@@ -7,6 +7,7 @@ pub mod queries;
 pub mod diagnostics;
 pub mod verilog;
 pub mod types;
+pub mod typelayout;
 pub mod util;
 pub mod sim;
 #[cfg(not(target_arch = "wasm32"))]

@@ -1,0 +1,165 @@
+// The `vir value` value-expression grammar (lalrpop, vanilla crate).
+//
+// One invocation: the CLI joins its positional arguments with spaces
+// and parses the whole string with the `Top` start rule, which
+// accepts either an `encode` value expression or a `decode`
+// pattern/type pair.
+//
+// The language is a sturdy subset of Virdant's `Expr` (see
+// GRAMMAR.txt and plans/vir-value/PLAN.md §3): literals (all forms,
+// including `0b`/`0x` prefixes, `_` separators, and `w<N>` suffixes),
+// constructor and enumerant applications (`@Valid(0w8)`, `@Invalid`),
+// struct literals (`${Pair(a = 1, b = 2)}` and the source-style
+// `${a = 1, b = 2}`), parentheses, and type ascription
+// (`0 : Word[8]`).  No operators, paths, `if`/`match`/`let`,
+// `dontcare`, or `?`.
+
+use crate::ast::{PatternLit, Top, ValueExpr, VType, VTypeArg};
+use crate::lexer::Tok;
+
+grammar;
+
+extern {
+    type Location = usize;
+
+    enum Tok {
+        Ident => Tok::Ident(<String>),
+        Nat => Tok::Nat(<u128>),
+        Word => Tok::Word(<u128>, <u16>),
+        "true" => Tok::True,
+        "false" => Tok::False,
+        "@" => Tok::At,
+        "#" => Tok::Hash,
+        "$" => Tok::Dollar,
+        "(" => Tok::LParen,
+        ")" => Tok::RParen,
+        "[" => Tok::LBracket,
+        "]" => Tok::RBracket,
+        "{" => Tok::LBrace,
+        "}" => Tok::RBrace,
+        "," => Tok::Comma,
+        ":" => Tok::Colon,
+        "::" => Tok::ColonColon,
+        "=" => Tok::Eq,
+    }
+}
+
+// One invocation.  After a leading numeric literal the parser shifts
+// when an identifier follows (decode: pattern + type) and reduces
+// only at end-of-input (encode: a bare Nat/Word literal).
+pub Top: Top = {
+    <v:Value> => Top::Encode(v),
+    <p:PatternLit> <t:VType> => Top::Decode(p, t),
+};
+
+// An `encode` value expression.
+pub Encode: ValueExpr = {
+    <v:Value> => v,
+};
+
+// A `decode` input: bit pattern and type, in that order.
+pub Decode: (PatternLit, VType) = {
+    <p:PatternLit> <t:VType> => (p, t),
+};
+
+PatternLit: PatternLit = {
+    <Nat> => PatternLit::Nat(<>),
+    <w:Word> => PatternLit::Word(w.0, w.1),
+};
+
+Value: ValueExpr = {
+    <l:Atom> ":" <t:VType> => ValueExpr::Ascribe { expr: Box::new(l), typ: t },
+    <a:Atom> => a,
+};
+
+Atom: ValueExpr = {
+    <Nat> => ValueExpr::NatLit(<>),
+    <w:Word> => ValueExpr::WordLit(w.0, w.1),
+    "true" => ValueExpr::BitLit(true),
+    "false" => ValueExpr::BitLit(false),
+
+    "@" <name:Name> => ValueExpr::Ctor { name, args: vec![] },
+    "@" <name:Name> "(" ")" => ValueExpr::Ctor { name, args: vec![] },
+    "@" <name:Name> "(" <args:CommaList<Value>> ")" =>
+        ValueExpr::Ctor { name, args },
+
+    // poke-style constructor spelling, accepted as an alias for `@`:
+    "#" <name:Name> => ValueExpr::Ctor { name, args: vec![] },
+    "#" <name:Name> "(" ")" => ValueExpr::Ctor { name, args: vec![] },
+    "#" <name:Name> "(" <args:CommaList<Value>> ")" =>
+        ValueExpr::Ctor { name, args },
+
+    "$" "{" <fields:AssignList> "}" =>
+        ValueExpr::StructLit { name: None, fields },
+    "$" "{" <name:Name> "(" <fields:AssignList> ")" "}" =>
+        ValueExpr::StructLit { name: Some(name), fields },
+
+    "(" <v:Value> ")" => v,
+};
+
+Name: String = {
+    <Ident> => <>,
+};
+
+// `Assign ("," Assign)* ","?` (including the empty list, `${}`).
+// Written in recursive form: after `Assign ,` the parser shifts when a
+// field name follows and reduces only at `}`.
+AssignList: Vec<(String, ValueExpr)> = {
+    => vec![],
+    <a:Assign> => vec![a],
+    <a:Assign> "," <rest:AssignList> => {
+        let mut out = vec![a];
+        out.extend(rest);
+        out
+    },
+};
+
+Assign: (String, ValueExpr) = {
+    <name:Name> "=" <v:Value> => (name, v),
+};
+
+// `<E> ("," <E>)* ","?` for constructor arguments (non-empty; the
+// empty `@Foo()` form has its own production).
+CommaList<T>: Vec<T> = {
+    <v:T> => vec![v],
+    <v:T> "," => vec![v],
+    <v:T> "," <rest:CommaList<T>> => {
+        let mut out = vec![v];
+        out.extend(rest);
+        out
+    },
+};
+
+// A type spelling: bare names resolve in the `builtin` package
+// (`Bit`, `Word[8]`, `Valid[Word[8]]`); everything else must be
+// package-qualified (`mypkg::Pair[Word[8], Bit]`).
+VType: VType = {
+    <package:Name> "::" <name:Name> <args:TypeArgs?> =>
+        VType::Qualified { package, name, args: args.unwrap_or_default() },
+    <name:Name> <args:TypeArgs?> =>
+        VType::Bare { name, args: args.unwrap_or_default() },
+};
+
+TypeArgs: Vec<VTypeArg> = {
+    "[" <a:VTypeArg> "]" => vec![a],
+    "[" <a:VTypeArg> "," <rest:TypeArgsTail> "]" => {
+        let mut out = vec![a];
+        out.extend(rest);
+        out
+    },
+};
+
+// The inside of a type-argument list: `Arg ("," Arg)*`, no trailing
+// comma (matching Virdant's own `GenericsArgList`).
+TypeArgsTail: Vec<VTypeArg> = {
+    <a:VTypeArg> => vec![a],
+    <a:VTypeArg> "," <rest:TypeArgsTail> => {
+        let mut out = vec![a];
+        out.extend(rest);
+        out
+    },
+};
+VTypeArg: VTypeArg = {
+    <Nat> => VTypeArg::Nat(<>),
+    <t:VType> => VTypeArg::Type(t),
+};

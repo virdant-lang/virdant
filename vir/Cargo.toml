@@ -38,6 +38,12 @@ path = "src/vir/main.rs"
 name = "vir-poke"
 path = "src/poke/main.rs"
 
+# The standalone value encode/decode tool (`vir value`); see
+# src/value/main.rs.
+[[bin]]
+name = "vir-value"
+path = "src/value/main.rs"
+
 [build-dependencies]
 lalrpop = "0.23"
 
