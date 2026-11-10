@@ -1,0 +1,24 @@
+import virt
+
+pub mod Top for virt::Virt {
+    incoming clock : Clock
+
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when mem[dyn index] == 0 => @Valid(0)
+            else => @Invalid()
+        }
+    }
+
+    @image_inline("Hello, Virdant!\n\r\0")
+    memory mem[64] : Word[8]
+
+    reg index : Word[6] {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    outgoing debug : Valid[Word[8]] {
+        it := @Valid(mem[dyn index])
+    }
+}
