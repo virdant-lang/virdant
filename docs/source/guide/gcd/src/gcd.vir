@@ -1,4 +1,4 @@
-union type State {
+union type GcdState {
     Idle()
     Running(x : Word[8], y : Word[8])
     Done(result : Word[8])
@@ -12,7 +12,7 @@ pub mod Gcd {
     incoming fire : Bit
     outgoing result : Valid[Word[8]]
 
-    reg state : State
+    reg state : GcdState
 
     if {
         when reset {

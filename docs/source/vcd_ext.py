@@ -18,6 +18,35 @@ The directive body is a line-based layout, one item per nonblank line
       default is ``hex``.  The format only affects multi-bit values, which
       are rendered as text in a data box; 1-bit signals draw as 0/1 level
       lines either way.
+
+      A format that is not one of those keys is instead taken as the
+      signal's *Virdant type*, e.g. ``signal top.load_value:Valid[Word[8]]``
+      or ``signal top.cmd:shiftreg::Command[Word[2]]``.  Each distinct bit
+      pattern is decoded by the ``vir-value`` tool and rendered as its
+      round-trippable value text (``@Valid(179w8)``, ``@Invalid``,
+      ``${Pair(lo = 1w4, hi = 2w4)}``); type names in the output (struct
+      literals) are printed package-free.  A value box too narrow for its
+      text stretches the timeline rather than dropping the label.  The
+      stretch is uniform -- one zoom factor for the whole figure, large
+      enough for the widest label -- so the shared grid stays even and the
+      clock keeps its visual period.  The factor is capped by readability:
+      at least VIS_CLK_PERIODS clock periods must stay visible without
+      scrolling.  A label wider than its run at the capped zoom is
+      abbreviated with an ellipsis rather than dropped: the full value is
+      always available in the hover popup (vcd.js), which shows every
+      signal's value at the cursor's time.  If that pushes the figure past its target width,
+      a mild overflow is squeezed back down to fit by CSS-scaling the whole
+      SVG (the text shrinks a couple of px but every label stays visible);
+      only an overflow too large for the text to remain legible falls back
+      to horizontal scrolling.
+      The type may be fully-qualified
+      (``pkg::Name[...]``) or bare for builtin types; vir-value resolves it
+      against the project found by walking up from the trace file.
+      An unknown type fails the build; a pattern that is not a valid
+      inhabitant of the type (the sim random-initializes uninitialized
+      cells, so never-written enum inputs carry undecodable garbage at
+      time 0) renders as ``<invalid>`` instead, matching how the sim
+      itself displays such values.
   ``space``
       A blank separator row, for visually grouping signals.
   ``label <text>``
@@ -60,18 +89,52 @@ logger = logging.getLogger(__name__)
 
 # Font size (px) of the waveform text: signal names, data values, and the
 # head line.  The actual font-size lives in vcd.css (.vcd-svg text and
-# .vcd-name) -- keep the two in sync.  14px matches the docs' .small-code
-# size, one step under the 17px body/code text.  Every vertical geometry
-# constant below is derived from this, so the whole diagram scales with it.
-FONT_PX = 14
+# .vcd-name) -- keep the two in sync.  13px is one step under the docs'
+# .small-code size (14px), itself one step under the 17px body/code text.
+# Every vertical geometry constant below is derived from this, so the
+# whole diagram scales with it.
+FONT_PX = 13
 SCALE = FONT_PX / 10.0
 
 # Never let a tick get smaller than this, no matter how long the trace is.
 # This is the "zoomed all the way out" end of the GTKWave-style fit: a trace
 # longer than (target waveform width) ticks will exceed the target width and
-# fall back to horizontal scrolling (overflow-x on .vcd-body) rather than
+# be tagged .vcd-svg--overflow (scrolling on .vcd-body) rather than
 # collapsing into an unreadable smear.
 MIN_TICK_W = 1.0
+
+# When a figure's natural width exceeds its target width -- a stretched
+# value box pushing past the target, or the MIN_TICK_W floor above -- it may
+# still fit by CSS-scaling the whole SVG down to the column width, but only
+# while the baked-in text stays legible.  A mild overflow squeezes down
+# "just enough": the figure is tagged .vcd-svg--squeeze, which falls under
+# the stylesheet's ordinary fit-to-column scaling (max-width:100% /
+# width:100%), so no scrollbar appears and every label stays visible -- the
+# text is merely a few px smaller.  A severe overflow is tagged
+# .vcd-svg--overflow and keeps its natural width, scrolling instead: CSS
+# scaling has no natural stopping point (decoded type text can be
+# arbitrarily long), so this floor is the bound.  11px: the stylesheet's
+# narrow-phone guidance treats ~12px as still legible, and dipping slightly
+# under that is preferable to dropping a decoded value label or adding a
+# scrollbar for a figure that is only a quarter too wide.
+MIN_SQUEEZE_FONT_PX = 11.0
+
+# How many clock periods of a stretched figure must stay visible inside one
+# screenful (the plain viewport width, no horizontal scrolling).  A type-
+# decoded value box can demand an arbitrarily long label, and stretching a
+# label's whole run uniformly still inflates the figure's zoom, so the
+# uniform factor is capped: at least this many periods of the figure's
+# clock signal (the first wave with 'P' posedge markers) must fit inside
+# the waveform area of the viewport.  Scrolling is therefore never needed
+# to see a run of cycles -- only to reach later cycles of a long trace.
+# 7 rather than fewer: enough to follow a rule spanning several beats
+# without losing count.  Chosen by eye, not derived; a figure with no
+# clock signal is not capped, and neither is one whose whole trace spans
+# fewer than this many periods -- there, the condition is unsatisfiable at
+# any zoom (shrinking cannot conjure cycles the trace does not contain),
+# so applying it would only suppress the stretch a label legitimately
+# needs, at no readability gain.
+VIS_CLK_PERIODS = 7
 
 # Stroke width of the level lines (.vcd-line/.vcd-zline in vcd.css) in
 # SVG user units.  Not scaled with SCALE: the CSS specifies a fixed
@@ -124,11 +187,18 @@ LEVELS = {'0': Y_BOT, '1': Y_TOP, 'z': Y_MID, 'P': Y_TOP}
 #   whether the box is too narrow and the label should be omitted.
 CHAR_W = 6.6 * SCALE
 
+# Truncation marker for a value label that does not fit its box: drawn as
+# the last character of the abbreviated label, at the same monospace
+# advance width (Fira Mono has the ellipsis glyph).  The full value stays
+# available in the hover popup (vcd.js), so the abbreviation is only a
+# visual hint, never a loss of information.
+ELLIPSIS = '…'
+
 # Approximate advance width of one character of the font used for the
 # true/false labels that annotate changes on 1-bit signals (see the
-# bitlabels pass in render_svg).  The labels use the same 14px Fira Mono
+# bitlabels pass in render_svg).  The labels use the same 13px Fira Mono
 # as multi-bit data labels (no font-size override in vcd.css), whose
-# advance is ~0.6em, so 8.4px per character at 14px.
+# advance is ~0.6em, so 7.8px per character at 13px.
 BITLABEL_CHAR_W = 6.0 * SCALE
 
 
@@ -179,7 +249,8 @@ def runs_of(tokens):
     A run is a maximal stretch of consecutive ticks with the same value
     character AND the same data value (so consecutive multi-bit values with
     different hex text still get one box each).  start is inclusive, end is
-    exclusive: x-coordinates of a run are start*tick_w .. end*tick_w.
+    exclusive: tick indices, mapped to x-coordinates through the tick
+    x-grid (gx in render_svg) -- uniform k*tick_w when no run stretches.
     """
     runs = []
     i = 0
@@ -191,6 +262,29 @@ def runs_of(tokens):
         runs.append((i, j, c, v))
         i = j
     return runs
+
+
+def clock_period_ticks(signals):
+    """The figure's clock period on its tick grid, in ticks, or None.
+
+    The first signal whose wave carries 'P' posedge markers defines the
+    clock (vcd2wavedrom.py emits 'P' only for the ':clk' format).  The
+    period is the median gap between consecutive 'P' markers: the median
+    shrugs off a rare irregular edge (clock gating, a glitch) that a
+    minimum would latch onto.  Fewer than two markers means no period is
+    observable, so the caller gets None and skips the visibility cap.
+    """
+    for sig in signals:
+        if 'P' not in sig.get('wave', ''):
+            continue
+        edges = [i for i, c in enumerate(expand_wave(sig['wave'],
+                                                     sig.get('data', [])))
+                 if c[0] == 'P']
+        if len(edges) < 2:
+            continue
+        gaps = sorted(b - a for a, b in zip(edges, edges[1:]))
+        return gaps[len(gaps) // 2]
+    return None
 
 
 def render_svg(wavejson, target_width, extra_class=''):
@@ -248,9 +342,107 @@ def render_svg(wavejson, target_width, extra_class=''):
     else:
         tick_w = 0
 
+    # WaveDrom-style stretch: a data label too wide for its run's natural
+    # span stretches the timeline instead of the label being omitted.  The
+    # stretch is applied uniformly -- one zoom factor for the whole trace,
+    # the largest any label needs -- rather than stretching each label's
+    # run locally.  Local stretching would make the shared grid non-uniform:
+    # the clock's visual period would vary with the label widths around it
+    # (a run of long state labels reads as a clock slowdown).  With the
+    # uniform factor every tick keeps the same width, so clock edges stay
+    # evenly spaced, and every label still fits its box (its run's box
+    # grows to (j - i) * tick_w * factor >= w -- the run's own width is
+    # distributed proportionally, so a run ending one settle-sliver tick
+    # after a clock edge (the sim stamps non-clock changes at edge +
+    # period/20) stays proportional to that edge instead of ballooning).
+    # Only rows tagged "stretch" (Virdant type-decoded signals, whose ctor
+    # text is far wider than a hex label) demand room, so ordinary figures
+    # keep the uniform grid and render exactly as before.  When nothing
+    # stretches, xs stays None and x(tick) is the plain k*tick_w grid.
+    needs = []   # (start, end, minimum x-width) per stretched run
+    for sig in signals:
+        if not sig.get('stretch'):
+            continue
+        stoks = expand_wave(sig['wave'], sig.get('data', []))
+        for (i, j, c, v) in runs_of(stoks):
+            if c == '4' and v is not None:
+                needs.append((i, j, len(v) * CHAR_W + 2 * 2 * SCALE))
+    xs = None
+    if n_ticks and needs:
+        # One zoom factor for the whole trace: the largest stretch any label
+        # needs.  Every tick then has the same width, so clock edges stay
+        # evenly spaced and the waveform reads as constant-rate, while each
+        # label still fits its box.
+        factor = max(w / ((j - i) * tick_w) for i, j, w in needs)
+        # The visibility cap: however far the widest label demands the
+        # figure zoom, the figure's tick width must stay small enough that
+        # VIS_CLK_PERIODS clock periods still fit inside the waveform area
+        # of the viewport (the plain target width, no horizontal
+        # scrolling).  Labels too long for their run at the capped zoom are
+        # abbreviated with an ellipsis rather than dropped, so the reader
+        # still sees the shape of the value (the state name, the leading
+        # digits) -- the full text is never lost, because the hover popup
+        # (vcd.js) shows the full value of the run under the cursor.
+        # The cap only applies to traces that actually span that many
+        # periods: a short trace shows every cycle it has regardless of
+        # zoom, so capping there cannot buy any readability -- it would
+        # only clamp away the stretch a label needs to stay whole (e.g.
+        # @Valid(11) on a 6-period trace would ellipsize to @Valid(1...)).
+        period_ticks = clock_period_ticks(signals)
+        if (period_ticks is not None
+                and n_ticks >= VIS_CLK_PERIODS * period_ticks):
+            wave_area = target_width - label_w - pad_r
+            factor = min(factor, wave_area / (VIS_CLK_PERIODS * period_ticks
+                                               * tick_w))
+        if factor > 1.0:
+            xs = [t * tick_w * factor for t in range(n_ticks + 1)]
+
+    # Hover data for the time popup (vcd.js): for every signal row, in
+    # drawing order, the runs as (start tick, end tick, full value text).
+    # Tick indices rather than x-coordinates: the popup resolves the
+    # cursor's tick arithmetically (the grid is uniform), which is exact
+    # regardless of how the figure is CSS-scaled or scrolled, and the
+    # attribute payload stays small.  The text is the *full* value -- the
+    # inline label may be abbreviated, but the popup must show the whole
+    # thing, so no information is lost by the ellipsis.
+    # Clock signals (the ':clk' format, whose wave string carries 'P'
+    # posedge markers) are excluded: their edges are timing markers, not
+    # values, so a clock line in the popup would just repeat '1'/'0'
+    # noise.  The WaveJSON has no separate clk flag, but the 'P' marker
+    # is emitted only for the ':clk' format, so the wave string is the
+    # marker (vcd2wavedrom.py falls back to hex for a multi-bit :clk,
+    # which emits no 'P').
+    hover_rows = []
+    for sig in signals:
+        if 'name' not in sig or 'wave' not in sig:
+            continue
+        if 'P' in sig['wave']:
+            continue
+        tokens = expand_wave(sig['wave'], sig.get('data', []))
+        bitlabels = sig.get('bitlabels')
+        runs = []
+        for (i, j, c, v) in runs_of(tokens):
+            if c == '4':
+                text = v if v is not None else 'x'
+            elif c == 'x':
+                text = 'x'
+            elif c == 'z':
+                text = 'z'
+            elif bitlabels and c in ('0', '1'):
+                text = 'true' if c == '1' else 'false'
+            else:
+                text = c
+            runs.append([i, j, text])
+        hover_rows.append({'n': sig['name'], 'runs': runs})
+
+    # The x of a tick index, through the (possibly stretched) grid.
+    def gx(k):
+        return xs[k] if xs is not None else k * tick_w
+
     # Total SVG canvas size: gutter + waveform area + right padding across,
     # head line + all signal rows + a little bottom padding down.
-    width = label_w + n_ticks * tick_w + pad_r
+    wave_w = xs[-1] if xs else n_ticks * tick_w
+    width = label_w + wave_w + pad_r
     height = head_h + len(signals) * ROW_H + 8 * SCALE
 
     # Extent of the signal-row area: rows run from head_h down to
@@ -263,22 +455,41 @@ def render_svg(wavejson, target_width, extra_class=''):
     # waveform's x range (excluding the signal-name gutter and right
     # padding) and the y range spanned by the signal rows.  All values are
     # SVG-root user units, so the JS needs no transform math.
-    # When the zoom-out floor kicks in the SVG is wider than target_width
-    # by design; tag it so vcd.css lets it scroll instead of CSS-scaling it
-    # down to the column width (which would further compress the trace).
-    # Detected via the floor condition itself, not a width comparison: a
-    # trace that fits exactly can land a few ulps above target_width in
-    # floating point (e.g. 310.00000000000006 > 310) and would be falsely
-    # tagged as overflowing.
-    overflow_class = ' vcd-svg--overflow' if zoom_floored else ''
+    # An overflow -- detected via the floor condition itself, not a raw
+    # width comparison, because a trace that fits exactly can land a few
+    # ulps above target_width in floating point (e.g.
+    # 310.00000000000006 > 310) and would be falsely tagged -- is split by
+    # magnitude.  If CSS-scaling the whole SVG down to the target width
+    # would leave the baked-in text at MIN_SQUEEZE_FONT_PX or larger, tag
+    # .vcd-svg--squeeze: the stylesheet's ordinary fit-to-column scaling
+    # rules then shrink the figure exactly enough to fit, trading a couple
+    # of px of text size for a label-complete, scrollbar-free figure.  (The
+    # SVG is vector, so the downscale stays crisp, and vcd.js reads the
+    # live scale via getBoundingClientRect, so the hover time cursor stays
+    # accurate.)  Otherwise tag .vcd-svg--overflow: the stylesheet exempts
+    # those figures from the scaling rules, keeping the natural width and
+    # scrolling horizontally in .vcd-body instead of collapsing the text
+    # (or the post-stretch timing proportions) into unreadability.
+    overflows = zoom_floored or (xs is not None and width > target_width * (1 + 1e-4))
+    if not overflows:
+        overflow_class = ''
+    elif FONT_PX * target_width / width >= MIN_SQUEEZE_FONT_PX:
+        overflow_class = ' vcd-svg--squeeze'
+    else:
+        overflow_class = ' vcd-svg--overflow'
     svg_class = f'vcd-svg {extra_class}{overflow_class}'.strip()
     # :g trims floating-point noise from the geometry (e.g. 310.0 instead of
     # 310.00000000000006); %g-formatting keeps short decimals readable.
+    # The hover data attributes (vcd.js): the number of ticks, to resolve
+    # the cursor's tick, and the per-signal runs carrying the *full* value
+    # text.
     parts.append(
         f'<svg class="{svg_class}" viewBox="0 0 {width:g} {height:g}" width="{width:g}" '
         f'height="{height:g}" xmlns="http://www.w3.org/2000/svg" role="img" '
-        f'data-waveform-x0="{label_w:g}" data-waveform-x1="{label_w + n_ticks * tick_w:g}" '
-        f'data-waveform-y0="{row_y0:.2f}" data-waveform-y1="{row_y1:.2f}">')
+        f'data-waveform-x0="{label_w:g}" data-waveform-x1="{label_w + wave_w:g}" '
+        f'data-waveform-y0="{row_y0:.2f}" data-waveform-y1="{row_y1:.2f}" '
+        f'data-ticks="{n_ticks}" '
+        f'data-values="{escape(json.dumps(hover_rows, separators=(",", ":")))}">')
 
     if wavejson.get('head', {}).get('text'):
         head = wavejson['head']['text']
@@ -317,7 +528,7 @@ def render_svg(wavejson, target_width, extra_class=''):
         # One horizontal segment per run of consecutive ticks sharing a value:
         # drawn at that value's level, spanning tick i through tick j.
         for (i, j, c, _v) in runs:
-            x0, x1 = i * tick_w, j * tick_w
+            x0, x1 = gx(i), gx(j)
             if c in LEVELS:
                 y = row_y + LEVELS[c]
                 (z_path if c == 'z' else h_path).append(f'M {x0} {y} L {x1} {y}')
@@ -328,7 +539,7 @@ def render_svg(wavejson, target_width, extra_class=''):
         for k in range(len(tokens) - 1):
             c1, c2 = tokens[k][0], tokens[k + 1][0]
             if c1 != c2 and c1 in LEVELS and c2 in LEVELS:
-                x = (k + 1) * tick_w
+                x = gx(k + 1)
                 h_path.append(f'M {x} {row_y + LEVELS[c1]} L {x} {row_y + LEVELS[c2]}')
 
         # True-state shading for 1-bit non-clk signals (vcd2wavedrom.py
@@ -346,7 +557,7 @@ def render_svg(wavejson, target_width, extra_class=''):
             for (i, j, c, _v) in runs:
                 if c != '1':
                     continue
-                x0, x1 = i * tick_w, j * tick_w
+                x0, x1 = gx(i), gx(j)
                 shade_parts.append(
                     f'<rect class="vcd-shade" x="{x0:g}" y="{y_top:.6g}" '
                     f'width="{x1 - x0:g}" '
@@ -366,7 +577,7 @@ def render_svg(wavejson, target_width, extra_class=''):
         for k, (c, _v) in enumerate(tokens):
             if c != 'P':
                 continue
-            ax = k * tick_w
+            ax = gx(k)
             half = 3 * SCALE
             base = y_top + 5 * SCALE
             parts.append(
@@ -385,15 +596,15 @@ def render_svg(wavejson, target_width, extra_class=''):
             for (i, j, c, _v) in runs:
                 if c not in ('0', '1'):
                     continue
-                x0, x1 = i * tick_w, j * tick_w
+                x0, x1 = gx(i), gx(j)
                 label = 'true' if c == '1' else 'false'
                 pad = 2.5 * SCALE
                 # Omit the label when its run is too narrow to hold it
                 # with a little breathing room on each side.
                 if len(label) * BITLABEL_CHAR_W > (x1 - x0) - 2 * pad:
                     continue
-                # Shared baseline, 3*SCALE above the '0' line: the 14px
-                # glyphs' ascent (~10.5px) clears the '1' line by about a
+                # Shared baseline, 3*SCALE above the '0' line: the 13px
+                # glyphs' ascent (~9.8px) clears the '1' line by about a
                 # pixel, and the labels never bleed into a neighbouring
                 # row.
                 y = y_bot - 3 * SCALE
@@ -405,7 +616,7 @@ def render_svg(wavejson, target_width, extra_class=''):
         # 'x'  -> rectangle with a diagonal cross (unknown/bus fighting)
         # '4'  -> rectangle carrying the hex data value as centred text
         for (i, j, c, v) in runs:
-            x0, x1 = i * tick_w, j * tick_w
+            x0, x1 = gx(i), gx(j)
             if c == 'x':
                 parts.append(
                     f'<rect class="vcd-xbox" x="{x0}" y="{y_top}" '
@@ -420,16 +631,23 @@ def render_svg(wavejson, target_width, extra_class=''):
                 label = v if v is not None else ''
                 # Values are left-justified inside the box with a small
                 # padding, so runs of changing values read as aligned text
-                # rather than wobbling with each box's width.  Only render
-                # the value text if the label fits within the box; a label
-                # that nearly fills its box may reach into the neighbour's
-                # left padding, but never as far as its label.
+                # rather than wobbling with each box's width.  A label that
+                # does not fit its box is truncated with an ellipsis rather
+                # than dropped: the reader sees the shape of the value (the
+                # state name, the leading digits) and the full text is
+                # always available in the hover popup (vcd.js), which
+                # shows the full value of the run under the cursor.
                 pad = 2 * SCALE
-                if len(label) * CHAR_W <= x1 - x0:
-                    parts.append(
-                        f'<text class="vcd-data" x="{x0 + pad:g}" '
-                        f'y="{row_y + Y_MID + 3.5 * SCALE}" text-anchor="start">'
-                        f'{escape(label)}</text>')
+                avail = x1 - x0 - pad
+                max_chars = int(avail / CHAR_W)
+                if max_chars <= 0:
+                    continue
+                if len(label) > max_chars:
+                    label = label[:max_chars - 1] + ELLIPSIS
+                parts.append(
+                    f'<text class="vcd-data" x="{x0 + pad:g}" '
+                    f'y="{row_y + Y_MID + 3.5 * SCALE}" text-anchor="start">'
+                    f'{escape(label)}</text>')
 
     parts.append('</g>')
 
@@ -593,7 +811,7 @@ class VcdDirective(Directive):
         # mobile one zoomed to fit a ~310px phone column.  Scaling the
         # desktop SVG down on a phone would shrink the baked-in text to an
         # unreadable ~7px; re-rendering at the mobile target width keeps
-        # text at a true 14px (vcd.css shows/hides the variants).
+        # text at a true 13px (vcd.css shows/hides the variants).
         html = (
             f'<div class="vcd-body">'
             f'{render_svg(wavejson, env.config.vcd_waveform_width, "vcd-svg--desktop")}'
