@@ -1,0 +1,19 @@
+poke a false
+poke b false
+
+vcd halfadder.vcd
+advance
+
+poke a false
+poke b true
+advance
+
+poke a true
+poke b false
+advance
+
+poke a true
+poke b true
+advance
+
+exit

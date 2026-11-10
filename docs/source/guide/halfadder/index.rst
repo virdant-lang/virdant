@@ -18,7 +18,7 @@ The `Bit` Type
 --------------
 `HalfAdder` takes two 1-bit inputs, `a` and `b`:
 
-.. literalinclude:: /guide/adder/src/adder.vir
+.. literalinclude:: src/halfadder.vir
     :language: virdant
     :lines: 2-3
     :dedent:
@@ -33,7 +33,7 @@ Driver Blocks
 -------------
 The `outgoing` ports of `HalfAdder` are written a bit differently than before:
 
-.. literalinclude:: /guide/adder/src/adder.vir
+.. literalinclude:: src/halfadder.vir
     :language: virdant
     :lines: 5-13
     :dedent:
@@ -70,7 +70,7 @@ Before going on to how this module works,
 it's worth pointing out that comments in Virdant begin with `//`
 and go to the end of the line:
 
-.. literalinclude:: /guide/adder/src/adder.vir
+.. literalinclude:: src/adder.vir
     :language: virdant
     :lines: 5
     :dedent:
@@ -86,7 +86,7 @@ You learned how to add all combinations of numbers this way.
 Let's do that with binary numbers.
 It's much easier, since there's only four possibilities:
 
-.. inline-svg:: guide/halfadder/halfadder_addition.svg
+.. inline-svg:: halfadder_addition.svg
     :align: center
 
 The only difference is the last one: 1 + 1 = '10'.
@@ -169,7 +169,7 @@ when when *both* `a` and `b` are true.
 Therefore, `carry_out` is the logical AND of `a` and `b`,
 which we write as `a && b` in Virdant:
 
-.. literalinclude:: /guide/adder/src/adder.vir
+.. literalinclude:: src/adder.vir
     :language: virdant
     :lines: 11-13
     :dedent:
@@ -179,7 +179,7 @@ we see `sum` is only `true` when `a` and `b` are opposites of each other.
 Therefore, `sum` is the logical XOR of `a` and `b`.
 We write this as `a ^^ b` (which is a bit unique) in Virdant:
 
-.. literalinclude:: /guide/adder/src/adder.vir
+.. literalinclude:: src/adder.vir
     :language: virdant
     :lines: 5-9
     :dedent:
@@ -195,7 +195,7 @@ Waveform
 --------
 The final waveform of `HalfAdder` looks like this:
 
-.. vcd:: ../adder/halfadder.vcd
+.. vcd:: halfadder.vcd
 
     label Inputs
     signal top.a

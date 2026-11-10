@@ -9,6 +9,9 @@
      drawn translucently (see .vcd-shade below) so it reads as a wash
      over the signal's full height rather than a solid block. */
   --vcd-shade: #3A5340;
+  /* Hover value popup: the signal-name column is de-emphasised against
+     the value column, so the eye lands on the value first. */
+  --vcd-tip-name: #767676;
 }
 
 [data-theme="dark"] {
@@ -19,6 +22,7 @@
   /* Lightened a touch so the wash stays visible against the dark
      code background without glowing. */
   --vcd-shade: #4A6B52;
+  --vcd-tip-name: #9a9a9a;
 }
 
 .vcd-block {
@@ -50,7 +54,7 @@
 /* Two variants of every figure are rendered at build time (vcd_ext.py):
    .vcd-svg--desktop is zoomed to fit the ~680px content column, and
    .vcd-svg--mobile is re-rendered at a ~310px phone column so its text
-   stays a true 14px.  Below 768px -- the theme's own breakpoint where
+   stays a true 13px.  Below 768px -- the theme's own breakpoint where
    .wy-nav-content switches to narrow padding -- the desktop SVG no longer
    fits the column and is swapped for the mobile one.  vcd.js attaches the
    hover time cursor to each SVG independently; the hidden variant simply
@@ -88,32 +92,37 @@
   height: auto;
 }
 
-/* Traces zoomed all the way out (the MIN_TICK_W floor in vcd_ext.py) are
-   wider than their target by design: they scroll horizontally in .vcd-body
-   rather than compressing further into unreadably small text.  The
-   renderer tags them .vcd-svg--overflow to exempt them from the scaling
-   above. */
+/* The renderer splits overflowing figures (vcd_ext.py) by magnitude: a
+   mild overflow (a stretched value box just past the target, or a trace a
+   hair past the MIN_TICK_W floor) is tagged .vcd-svg--squeeze and falls
+   under the scaling rules above, which shrink it exactly enough to fit --
+   "just enough", since the text only drops a few px.  A severe overflow
+   (a trace far past the MIN_TICK_W floor, or a stretch far beyond any
+   legible squeeze) is tagged .vcd-svg--overflow to exempt it from the
+   scaling above: it keeps its natural width and scrolls horizontally in
+   .vcd-body rather than compressing into unreadably small text. */
 .vcd-svg--overflow {
   max-width: none;
 }
 
 .vcd-svg text {
   font-family: "Fira Mono", monospace;
-  /* Keep in sync with FONT_PX in vcd_ext.py: 14px matches the docs'
-     .small-code size, one step under the 17px body/code text. */
-  font-size: 14px;
+  /* Keep in sync with FONT_PX in vcd_ext.py: 13px is one step under the
+     docs' .small-code size (14px), itself one step under the 17px
+     body/code text. */
+  font-size: 13px;
 }
 
 .vcd-svg .vcd-name {
   fill: var(--text-main);
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .vcd-svg .vcd-bitlabel {
   /* true/false annotations for 1-bit signals (drawn by vcd_ext.py's
      bitlabels pass).  Same font, size, and color as multi-bit data
      labels (.vcd-data): no font-size override, so it inherits the
-     14px Fira Mono from .vcd-svg text, and the fill matches --
+     13px Fira Mono from .vcd-svg text, and the fill matches --
      vcd_ext.py's BITLABEL_CHAR_W assumes this size. */
   fill: var(--text-main);
 }
@@ -186,4 +195,53 @@
   /* Drawn by vcd.js on hover; never an interaction target itself, so it
      does not interfere with tracking the mouse over the waveform. */
   pointer-events: none;
+}
+
+/* Hover value popup (vcd.js): a fixed-position box anchored to the hover
+   cursor, listing every signal's value at the cursor's time.  It lives
+   outside the SVG, so the figure's scrollable box and its CSS scaling
+   never clip or shrink it; the text stays at a true 13px at any figure
+   size.  Inline labels that were abbreviated with an ellipsis are
+   therefore recoverable in full: the popup shows the whole value. */
+.vcd-tip {
+  position: fixed;
+  z-index: 40;
+  background: var(--bg-code);
+  border: 1px solid var(--border-code);
+  border-radius: 4px;
+  padding: 6px 10px 7px;
+  font-family: "Fira Mono", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  /* The popup is a table: a name column and a value column.  The grid
+     lives on the popup itself -- the row divs are display:contents, so
+     their spans become the grid items -- so the name column is sized
+     once by the widest name (max-content) and the value column's left
+     edge is perfectly aligned across every row.  A per-row flex layout
+     cannot do that: each row's name span would be sized by its own
+     text (min-width only sets a floor), so a long name like
+     "top.load_value" would push that row's value further right than
+     the others. */
+  display: grid;
+  grid-template-columns: max-content auto;
+  column-gap: 10px;
+  align-items: baseline;
+}
+
+.vcd-tip .vcd-tip-row {
+  display: contents;
+}
+
+.vcd-tip .vcd-tip-name {
+  color: var(--vcd-tip-name);
+}
+
+.vcd-tip .vcd-tip-val {
+  /* The value column: readable, and the same font as the inline
+     labels, so an abbreviated inline label is recognisable in the
+     popup. */
+  color: var(--text-main);
 }

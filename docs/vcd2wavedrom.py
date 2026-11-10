@@ -11,6 +11,15 @@ when no filter is given).
 Each name may carry a value format after a colon ("top.count:dec"), choosing
 how multi-bit values are rendered in the data boxes. The supported formats
 are the keys of FORMATTERS (currently bin, hex, dec); the default is hex.
+Any other format text is taken as the signal's *Virdant type*
+("top.cmd:shiftreg::Command[Word[2]]"): each distinct bit pattern is decoded
+by the `vir-value` tool and rendered as its round-trippable value text
+(`@Valid(179w8)`, `@Invalid`, `${Pair(lo = 1w4, hi = 2w4)}`).  Type names may
+be fully-qualified (`pkg::Name[...]`) or bare for builtin types; type names
+appearing in the decoded output (struct literals) are printed package-free.
+vir-value needs a project context, found by walking up from the VCD file to
+the nearest virdant.toml (overridable with --project; builtin-only fallback
+otherwise).
 
 The signal list may also carry layout separators, via -l/--layout: a file
 with one item per line --
@@ -26,6 +35,10 @@ spec list.
 import argparse
 import json
 import math
+import os
+import re
+import shutil
+import subprocess
 import sys
 
 def parse_vcd(path):
@@ -161,13 +174,137 @@ DEFAULT_FORMAT = 'hex'
 CLK_FORMAT = 'clk'
 
 
-def to_wavedrom(changes, items, names, end_time, tick):
+# ---------------------------------------------------------------------------
+# Virdant type formats (`vir-value`).  A signal spec whose format is none of
+# the FORMATTERS keys above (nor 'clk') is taken as the *Virdant type* of the
+# signal, e.g. `top.load_value:Valid[Word[8]]` or `top.cmd:shiftreg::Command`.
+# Each distinct bit pattern on the trace is decoded by the `vir-value` tool
+# (see vir/src/value/) and rendered as its round-trippable value text:
+# `@Valid(179w8)`, `@Invalid`, `${Pair(lo = 1w4, hi = 2w4)}`.  Type names may
+# be written fully-qualified (`pkg::Name[...]`) or bare for builtin types;
+# type names appearing in the output (struct literals) are always printed
+# package-free.
+# ---------------------------------------------------------------------------
+
+# Where this script lives.  The repo root (its parent) carries the fallback
+# builtin-only project (lib/builtin.vir) for traces that sit outside any
+# project directory.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# A struct literal's type name is the only place a package prefix could show
+# up in decoded output; print type names package-free, whatever vir-value
+# does today (`${pkg::Pair(...)` -> `${Pair(...)`).
+_STRIP_PKG = re.compile(r'\$\{[A-Za-z_][A-Za-z0-9_]*::')
+
+
+def is_type_format(fmt):
+    """True when `fmt` is a Virdant type name rather than a value format.
+
+    A spec format that is neither a FORMATTERS key nor 'clk' is a type; a
+    typo in a real format (`:decmal`) therefore surfaces as a vir-value
+    "unknown type" error -- still a build failure, just with a pointer at
+    the type spelling instead of the format table.
+    """
+    return fmt is not None and fmt not in FORMATTERS and fmt != CLK_FORMAT
+
+
+def find_project(vcd_path):
+    """The nearest directory at or above the VCD's holding a virdant.toml.
+
+    vir-value always resolves types against a project, even for builtin-only
+    types; guide/example traces live beside one, so walking up finds it.
+    Returns None when there is no project above the trace.
+    """
+    d = os.path.dirname(os.path.abspath(vcd_path))
+    while True:
+        if os.path.isfile(os.path.join(d, 'virdant.toml')):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            return None
+        d = parent
+
+
+def vir_value_binary():
+    """Locate the `vir-value` companion binary.
+
+    $VIR_VALUE overrides (for tests); else PATH, which is how `vir` finds
+    its own companions; else the repo's build outputs, so docs builds work
+    from a fresh checkout without `make install`.
+    """
+    candidates = []
+    override = os.environ.get('VIR_VALUE')
+    if override:
+        if os.path.isfile(override) and os.access(override, os.X_OK):
+            return override
+        sys.exit(f"error: $VIR_VALUE={override} is not an executable file")
+    on_path = shutil.which('vir-value')
+    if on_path:
+        candidates.append(on_path)
+    for profile in ('release', 'debug'):
+        candidates.append(os.path.join(REPO_ROOT, 'target', profile, 'vir-value'))
+    for candidate in candidates:
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    sys.exit("error: cannot find the vir-value binary "
+             "(tried $VIR_VALUE, PATH, and target/{release,debug})")
+
+
+_DECODE_CACHE = {}
+
+
+# Substrings identifying a decode failure as "not a valid inhabitant of
+# the type" rather than a configuration error; see decode_value.
+_INVALID_MARKERS = re.compile(
+    r'unknown tag|not a valid inhabitant|non-zero padding')
+
+
+def decode_value(typ, bits, project):
+    """Decode one bit pattern as Virdant type `typ`, as text.
+
+    `project` is a project directory (or None for the builtin-only
+    fallback).  Results are cached per (type, pattern): a trace typically
+    revisits a handful of values, and each vir-value call builds a whole
+    project Db.
+    """
+    key = (typ, bits, project)
+    if key not in _DECODE_CACHE:
+        cmd = [vir_value_binary()]
+        if project:
+            cmd += ['-C', project]
+        else:
+            cmd += ['-F', os.path.join(REPO_ROOT, 'lib', 'builtin.vir')]
+        cmd += ['decode', '0b' + bits, typ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            message = result.stderr.strip() or result.stdout.strip()
+            # The sim random-initializes uninitialized cells, so a trace
+            # can carry bit patterns that are not valid inhabitants of
+            # the signal's type (unknown enum/union tag, non-zero
+            # padding) -- either from never-written ports at time 0 or
+            # transiently mid-settlement.  The sim itself prints those
+            # as `<invalid>` (see poke's display), so render them that
+            # way here too instead of failing the build.  Anything else
+            # (typo'd type, missing project) is still a hard error.
+            if _INVALID_MARKERS.search(message):
+                _DECODE_CACHE[key] = '<invalid>'
+            else:
+                sys.exit(f"error: vir-value decode failed for {typ} = 0b{bits}:\n"
+                         f"       {message}")
+        else:
+            _DECODE_CACHE[key] = _STRIP_PKG.sub('${', result.stdout.strip())
+    return _DECODE_CACHE[key]
+
+
+def to_wavedrom(changes, items, names, end_time, tick, project=None):
     """Build the WaveJSON signal list from layout `items` and resolved `names`.
 
     `names` is the resolved (full_name, format) pairs for the layout's
     signal entries, in the same order.  Separator entries become marker
     dicts the renderer understands: {'space': True} draws an empty row;
-    {'label': text} draws a labelled separator row.
+    {'label': text} draws a labelled separator row.  `project` is the
+    vir-value project directory for type-formatted signals (see
+    is_type_format).
     """
     signals = []
     ni = 0
@@ -181,6 +318,7 @@ def to_wavedrom(changes, items, names, end_time, tick):
         name, fmt = names[ni]
         ni += 1
         clk = fmt == CLK_FORMAT
+        type_fmt = is_type_format(fmt)
         # stable sort by tick only: preserves $dumpvars order for ties
         chs = sorted(((t // tick, v) for t, v in changes[name]),
                      key=lambda p: p[0])
@@ -216,9 +354,16 @@ def to_wavedrom(changes, items, names, end_time, tick):
                 # Posedge: the renderer draws an up arrow here.
                 wave += "P"
             else:
-                wave += "4" if len(v) > 1 else v
+                # A type-formatted signal always draws data boxes, even at
+                # width 1: the point is the value text (@Invalid), which a
+                # bare 0/1 level line cannot carry.
+                wave += "4" if (len(v) > 1 or type_fmt) else v
         sig = {"name": name, "wave": wave}
-        if any(v is not None and len(v) > 1 for v in vals):
+        if type_fmt:
+            sig["stretch"] = True
+            sig["data"] = [decode_value(fmt, v, project)
+                           for v, w in zip(vals, wave) if w == "4"]
+        elif any(v is not None and len(v) > 1 for v in vals):
             fmt = fmt or DEFAULT_FORMAT
             sig["data"] = [FORMATTERS[fmt](v) for v, w in zip(vals, wave) if w == "4"]
         elif not clk:
@@ -284,6 +429,10 @@ def main():
                          "(default: derived from the trace -- the GCD of "
                          "all change timestamps, raised if needed to keep "
                          "the render bounded)")
+    ap.add_argument("--project", default=None,
+                    help="project directory (holding a virdant.toml) for "
+                         "vir-value type decoding (default: the nearest one "
+                         "at or above the VCD file, else builtin-only)")
     args = ap.parse_args()
 
     if args.layout:
@@ -294,15 +443,18 @@ def main():
     else:
         wanted = [w.strip() for w in args.signals.split(",") if w.strip()]
         items = [("signal", w) for w in wanted]
-    bad = sorted({split_spec(w)[1] for w in wanted} - set(FORMATTERS) - {CLK_FORMAT} - {None})
-    if bad:
-        sys.exit("error: unknown format(s): {} (known: {})".format(
-            ", ".join(bad), ", ".join(sorted(FORMATTERS))))
+    # A spec format that is none of the known formats is a Virdant type
+    # name, decoded by vir-value (is_type_format).  Typos in real formats
+    # surface there as "unknown type" build errors, so no up-front check
+    # against the format table is needed (or possible: types are open-ended).
 
     changes, order, max_t = parse_vcd(args.vcd)
     names = filter_signals(order, ",".join(wanted))
     if not names:
         sys.exit("error: no signals selected")
+    project = args.project
+    if project is None and any(is_type_format(split_spec(w)[1]) for w in wanted):
+        project = find_project(args.vcd)
     tick = args.tick if args.tick is not None else derive_tick(changes, max_t)
     # The timeline runs to the VCD's last timestamp, change or not (a
     # bare `#t` marker records pure time advancement, e.g. poke's
@@ -311,7 +463,7 @@ def main():
     # duration is exactly max_t // tick ticks.
     changed_at_end = any(t == max_t for n, _ in names for t, _ in changes[n])
     end = max(max_t // tick + (1 if changed_at_end else 0), 1)
-    json.dump(to_wavedrom(changes, items, names, end, tick),
+    json.dump(to_wavedrom(changes, items, names, end, tick, project),
               open(args.out, "w"), indent=1)
     print(f"wrote {args.out}: {len(names)} signals, {end} ticks "
           f"({tick} ps/tick)")

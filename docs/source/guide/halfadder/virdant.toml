@@ -1,0 +1,5 @@
+[project]
+name = "Half Adder"
+
+[prog]
+top = "halfadder::HalfAdder"

@@ -19,6 +19,7 @@ without a reset, `gcd(21, 14) = 7`.
 
     signal top.clock:clk
     signal top.reset
+    signal top.state:gcd::GcdState
     signal top.fire
     signal top.x:dec
     signal top.y:dec
