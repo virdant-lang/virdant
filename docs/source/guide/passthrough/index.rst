@@ -54,7 +54,8 @@ The module is obligated to drive the value of `out` using a driver statement.
 
     The `out` port is marked `dependson inp`,
     which means the value of `out` depends on the value of `inp`.
-    We won't worry about this until later.
+    Virdant will tell you if you get it wrong,
+    so we won't worry about this until later.
 
 
 Drivers

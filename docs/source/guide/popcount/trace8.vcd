@@ -1,0 +1,113 @@
+$timescale 1ps $end
+$scope module top $end
+$var wire 4 . count $end
+$scope module lower $end
+$var wire 3 ' count $end
+$scope module lower $end
+$var wire 2 $ count $end
+$var wire 2 # x $end
+$upscope $end
+$scope module upper $end
+$var wire 2 & count $end
+$var wire 2 % x $end
+$upscope $end
+$var wire 4 " x $end
+$upscope $end
+$scope module upper $end
+$var wire 3 - count $end
+$scope module lower $end
+$var wire 2 * count $end
+$var wire 2 ) x $end
+$upscope $end
+$scope module upper $end
+$var wire 2 , count $end
+$var wire 2 + x $end
+$upscope $end
+$var wire 4 ( x $end
+$upscope $end
+$var wire 8 ! x $end
+$upscope $end
+$enddefinitions $end
+#0
+$dumpvars
+b0101 .
+b011 '
+b10 $
+b11 #
+b01 &
+b01 %
+b0111 "
+b010 -
+b01 *
+b10 )
+b01 ,
+b01 +
+b0110 (
+b01100111 !
+$end
+#50000
+b0000 .
+b000 '
+b00 $
+b00 #
+b00 &
+b00 %
+b0000 "
+b000 -
+b00 *
+b00 )
+b00 ,
+b00 +
+b0000 (
+b00000000 !
+#1000000
+#1050000
+b0100 .
+b100 '
+b10 $
+b11 #
+b10 &
+b11 %
+b1111 "
+b00001111 !
+#2000000
+#2050000
+b010 '
+b01 $
+b01 #
+b01 &
+b01 %
+b0101 "
+b010 -
+b01 *
+b01 )
+b01 ,
+b01 +
+b0101 (
+b01010101 !
+#3000000
+#3050000
+b0101 .
+b10 #
+b0110 "
+b011 -
+b10 )
+b10 ,
+b11 +
+b1110 (
+b11100110 !
+#4000000
+#4050000
+b1000 .
+b100 '
+b10 $
+b11 #
+b10 &
+b11 %
+b1111 "
+b100 -
+b10 *
+b11 )
+b1111 (
+b11111111 !
+#5000000

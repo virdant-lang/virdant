@@ -1,0 +1,26 @@
+$timescale 1ps $end
+$scope module top $end
+$var wire 2 " count $end
+$var wire 2 ! x $end
+$upscope $end
+$enddefinitions $end
+#0
+$dumpvars
+b01 "
+b01 !
+$end
+#50000
+b00 "
+b00 !
+#1000000
+#1050000
+b01 "
+b01 !
+#2000000
+#2050000
+b10 !
+#3000000
+#3050000
+b10 "
+b11 !
+#4000000

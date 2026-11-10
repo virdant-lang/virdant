@@ -9,9 +9,9 @@ You can install it by cloning the repository and running `make install`:
 .. code-block:: console
   :caption: console
 
-  $ git clone https://github.com/virdant-lang/virdant
-  $ cd virdant
-  $ make install
+   $ git clone https://github.com/virdant-lang/virdant
+   $ cd virdant
+   $ make install
 
 This will build Virdant from source (in release mode) and then copy everything to `$HOME/.local/virdant`.
 
@@ -27,18 +27,18 @@ Running Hello World
 Create a new Virdant project by running:
 
 .. code-block:: console
-  :caption: console
+    :caption: console
 
-  $ vir new hello
-  $ cd hello
+    $ vir new hello
+    $ cd hello
 
 Next, we can run our project in the Virdant simulator.
 
 .. code-block:: console
-  :caption: console
+    :caption: console
 
-  $ vir run
-  Hello, Virdant!
+    $ vir run
+    Hello, Virdant!
 
 Hello to you too, Virdant!
 
@@ -62,9 +62,9 @@ The guide will teach you from scratch.
 Just get a feel for what Virdant looks like:
 
 .. literalinclude:: /examples/hello/src/top.vir
-   :caption: src/top.vir
-   :language: virdant
-   :class: small-code
+    :caption: src/top.vir
+    :language: virdant
+    :class: small-code
 
 
 Compiling to Verilog
@@ -72,9 +72,9 @@ Compiling to Verilog
 You can compile Virdant to Verilog with the following:
 
 .. code-block:: console
-  :caption: console
+    :caption: console
 
-  $ vir build
+    $ vir build
 
 We won't be using this feature for now.
 But I'll mention it for those who are experienced with hardware design.

@@ -1,0 +1,16 @@
+top popcount::PopCount2
+vcd trace2.vcd
+
+poke x 0b00
+advance
+
+poke x 0b01
+advance
+
+poke x 0b10
+advance
+
+poke x 0b11
+advance
+
+exit

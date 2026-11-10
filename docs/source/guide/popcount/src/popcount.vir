@@ -1,39 +1,44 @@
-//! Population count: counting the number of set bits in a word.
-//!
-//! `Popcount4` splits a 4-bit word into two pairs, counts each pair
-//! with `Popcount2`, and adds the two counts with the widening add.
-
-//> Counts how many bits of a two-bit word are set, from 0 to 2.
-//>
-//> Turning each bit into a 1-bit word lets the widening add
-//> do the counting for us.
-mod Popcount2 {
-    //> The two bits to count.
+pub mod PopCount2 {
     incoming x : Word[2]
 
-    //> How many bits of `x` are set.
     outgoing count : Word[2] dependson x {
-        it := word(x[1]) +. word(x[0])
+        it := match x {
+            with 0b00 => 0
+            with 0b01 => 1
+            with 0b10 => 1
+            with 0b11 => 2
+        }
     }
 }
 
-//> Counts how many bits of `x` are set, from 0 to 4.
-pub mod Popcount4 {
-    //> The 4-bit word whose set bits are counted.
+pub mod PopCount4 {
     incoming x : Word[4]
 
-    // Count of the upper pair, bits 3 and 2.
-    mod upper_pair of Popcount2 {
-        it.x := word(x[3], x[2])
+    mod lower of PopCount2 {
+        it.x := x[2..0]
     }
 
-    // Count of the lower pair, bits 1 and 0.
-    mod lower_pair of Popcount2 {
-        it.x := word(x[1], x[0])
+    mod upper of PopCount2 {
+        it.x := x[4.. 2]
     }
 
-    //> How many bits of `x` are set.
     outgoing count : Word[3] dependson x {
-        it := upper_pair.count +. lower_pair.count
+        it := lower.count +. upper.count
+    }
+}
+
+pub mod PopCount8 {
+    incoming x : Word[8]
+
+    mod lower of PopCount4 {
+        it.x := x[4..0]
+    }
+
+    mod upper of PopCount4 {
+        it.x := x[8..4]
+    }
+
+    outgoing count : Word[4] dependson x {
+        it := upper.count +. lower.count
     }
 }
