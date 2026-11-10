@@ -33,7 +33,13 @@
   background: var(--bg-code);
   border: 1px solid var(--border-code);
   border-radius: 0 0 8px 8px;
-  padding: 10px 6px 6px;
+  /* The horizontal padding is exposed to a sticky child: Chrome pins
+     position:sticky relative to the scroller's CONTENT box, so the padding
+     strip would show scrolled waveform content left of the pinned gutter
+     (see .vcd-fig .vcd-gutter-svg below).  The gutter offsets itself by
+     this same variable to cover the padding, so keep the two in sync. */
+  --vcd-body-pad-x: 6px;
+  padding: 10px var(--vcd-body-pad-x) 6px;
   overflow-x: auto;
 }
 
@@ -57,8 +63,9 @@
    stays a true 13px.  Below 768px -- the theme's own breakpoint where
    .wy-nav-content switches to narrow padding -- the desktop SVG no longer
    fits the column and is swapped for the mobile one.  vcd.js attaches the
-   hover time cursor to each SVG independently; the hidden variant simply
-   never receives mouse events. */
+   hover time cursor to each figure independently; the hidden variant
+   simply never receives mouse events.  Overflowing figures use the same
+   variant swap at the .vcd-fig wrapper (below). */
 .vcd-svg--mobile {
   display: none;
 }
@@ -73,10 +80,6 @@
     width: 100%;
     height: auto;
   }
-
-  .vcd-svg--mobile.vcd-svg--overflow {
-    width: auto;
-  }
 }
 
 /* Above the breakpoint, the desktop SVG keeps its build-time 680px width
@@ -86,23 +89,67 @@
    smaller than the build target, which would otherwise overflow .vcd-body
    into a horizontal scrollbar for every figure.  The text shrinks with the
    figure, gracefully in between; vcd.js reads the live scale via
-   getBoundingClientRect(), so the hover time cursor stays accurate. */
+   getBoundingClientRect(), so the hover time cursor stays accurate.  The
+   same applies to a .vcd-svg--squeeze figure (see below), which shrinks
+   exactly enough to fit. */
 .vcd-svg--desktop {
   max-width: 100%;
   height: auto;
 }
 
-/* The renderer splits overflowing figures (vcd_ext.py) by magnitude: a
-   mild overflow (a stretched value box just past the target, or a trace a
-   hair past the MIN_TICK_W floor) is tagged .vcd-svg--squeeze and falls
-   under the scaling rules above, which shrink it exactly enough to fit --
-   "just enough", since the text only drops a few px.  A severe overflow
-   (a trace far past the MIN_TICK_W floor, or a stretch far beyond any
-   legible squeeze) is tagged .vcd-svg--overflow to exempt it from the
-   scaling above: it keeps its natural width and scrolls horizontally in
-   .vcd-body rather than compressing into unreadably small text. */
-.vcd-svg--overflow {
-  max-width: none;
+/* Overflowing figures (vcd_ext.py) split into a .vcd-fig flex row of two
+   SVGs: the gutter, and the waveform itself.  The gutter is pinned with
+   position:sticky -- the browser keeps a sticky element in place on the
+   compositor thread, exactly in step with scrolling, so the names never
+   jitter or leave a gap the way a JS scroll-event counter-translate does
+   (main-thread scroll events are coalesced, always at least one frame
+   behind).  SVG elements cannot be position:sticky themselves, which is
+   why the gutter is its own SVG; the two SVGs share the build-time vertical
+   geometry, so their rows align exactly.  The waveform slides beneath the
+   gutter's opaque background (.vcd-gutter-bg).  Non-overflowing figures
+   never scroll and stay a single SVG. */
+.vcd-fig {
+  display: flex;
+  /* Span the full scrollable width of the figure: a sticky element is
+     constrained to its containing block, so a wrapper only as wide as the
+     viewport would let the pinned gutter scroll away once the scroll
+     offset passed the wrapper's right edge. */
+  width: max-content;
+}
+
+.vcd-fig--mobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .vcd-fig--desktop {
+    display: none;
+  }
+
+  .vcd-fig--mobile {
+    display: flex;
+  }
+}
+
+.vcd-fig > .vcd-svg {
+  /* The two SVGs keep their natural attribute sizes: the figure itself
+     overflows and scrolls in .vcd-body, so the flex items must not
+     shrink. */
+  flex: none;
+}
+
+.vcd-fig .vcd-gutter-svg {
+  position: sticky;
+  /* Chrome pins sticky relative to the scroller's content box, which
+     leaves the scroller's left padding (the left margin) showing scrolled
+     waveform content left of the pinned gutter.  Offset the gutter left
+     by the padding width so it pins flush with the box's inner border
+     edge and the waveform can never appear left of it.  Must track
+     --vcd-body-pad-x on .vcd-block .vcd-body. */
+  left: calc(-1 * var(--vcd-body-pad-x, 0px));
+  /* Above the waveform SVG, so scrolled waveform content slides under
+     the gutter rather than over its names. */
+  z-index: 1;
 }
 
 .vcd-svg text {
@@ -116,6 +163,23 @@
 .vcd-svg .vcd-name {
   fill: var(--text-main);
   font-size: 14px;
+}
+
+.vcd-svg .vcd-gutter-bg {
+  /* Opaque background inside the sticky gutter SVG (position:sticky in
+     .vcd-gutter-svg): masks the waveform content sliding underneath so
+     the signal names stay readable.  Matches the figure's code
+     background, so it is invisible until content actually passes under
+     it. */
+  fill: var(--bg-code);
+}
+
+.vcd-svg .vcd-gutter-rule {
+  /* Hairline separating the pinned gutter from the waveform.  Reads as
+     part of the figure's border vocabulary and marks where the gutter
+     masks the waveform once the figure is scrolled. */
+  stroke: var(--border-code);
+  stroke-width: 1;
 }
 
 .vcd-svg .vcd-bitlabel {

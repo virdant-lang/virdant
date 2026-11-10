@@ -393,9 +393,20 @@ def derive_tick(changes, max_t):
     -- the wave shows changes exactly where they happened, including
     sub-cycle offsets (a 50,000 ps propagation delay renders as its own
     tick).  If the GCD is finer than the render can afford (more than
-    MAX_TICKS ticks over the trace's span), it is raised to the smallest
-    multiple of itself that fits -- still a divisor of every change time,
-    so nothing is misrepresented, only drawn coarser.
+    MAX_TICKS ticks over the trace's span), it is raised to the largest
+    multiple of itself that (a) fits and (b) still lands every change
+    time on-grid.
+
+    Condition (b) is the binding one: floor-quantization plus
+    last-change-wins per tick only round-trips when every change time is
+    a multiple of the tick.  A tick that some change time straddles
+    collapses that change onto the same tick as its neighbors and the
+    sampling erases it -- a clock whose period is 2x the raised tick
+    would lose its low phase entirely and render as a constant.  When no
+    multiple of the GCD both fits and stays exact, the exact GCD wins:
+    the render may exceed MAX_TICKS ticks, which the renderer's
+    horizontal-overflow path (vcd_ext.py's MIN_TICK_W floor) already
+    handles.
     """
     times = {t for lst in changes.values() for t, _v in lst}
     if not times:
@@ -408,7 +419,11 @@ def derive_tick(changes, max_t):
     span = max(max_t, 1)
     steps = -(-span // g)  # ceil(span / g)
     if steps > MAX_TICKS:
-        g *= -(-steps // MAX_TICKS)
+        raise_by = -(-steps // MAX_TICKS)
+        for m in range(raise_by, 1, -1):
+            if all(t % (m * g) == 0 for t in times):
+                g *= m
+                break
     return g
 
 

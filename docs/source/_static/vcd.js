@@ -23,6 +23,23 @@
  * it is repositioned on every scroll event rather than scrolling away.
  * The cursor is hidden while the pointer is over the signal-name gutter
  * or outside the figure.
+ *
+ * Overflowing figures (vcd_ext.py emits them as a .vcd-fig--overflow flex
+ * row: a sticky gutter SVG pinned by the browser plus the waveform SVG)
+ * scroll horizontally in .vcd-body.  The gutter needs no JS -- position:
+ * sticky is pinned by the compositor, exactly in step with scrolling --
+ * but value labels do: each multi-bit value run (g.vcd-run, tagged
+ * data-x0/data-x1 with the run's extent in waveform-local user units) and
+ * each bitlabel (text.vcd-bitlabel, same data attributes) has its label
+ * clamped to the left edge of the visible waveform -- i.e. the gutter's
+ * right edge -- while its box is at least partly on screen, and hidden
+ * with the box once the box has scrolled fully under the gutter: a
+ * clamped label floating over nothing would mislead.  (A label whose
+ * clamp update lags a frame during fast scrolling simply slides under the
+ * sticky gutter, which masks it, so the lag is invisible.)
+ *
+ * Only overflowing figures scroll, so only they are wired up; with JS
+ * disabled everything renders in the natural (unscrolled) state.
  */
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -184,5 +201,87 @@ document.addEventListener('DOMContentLoaded', function () {
             show(e.clientX);
         });
         svg.addEventListener('mouseleave', hide);
+
+        // ----- Clamped value labels -----
+        // Only the waveform SVG of a .vcd-fig--overflow figure (the split
+        // emission in vcd_ext.py) can scroll.  All coordinates here are
+        // waveform-local user units (the run/bitlabel data-x0/data-x1 are
+        // emitted inside g.vcd-waveform, so they are 0-based).  Because the
+        // sticky gutter's right edge sits exactly at the waveform's left
+        // edge, one number serves both jobs: local x = scroll/scale is
+        // simultaneously (a) where the gutter's right edge now sits on
+        // screen and (b) the local x left of which a run is fully hidden
+        // under the gutter.
+        const fig = svg.closest('.vcd-fig--overflow');
+        if (!fig) return;
+        const scroller = svg.closest('.vcd-body');
+        const runs = Array.from(svg.querySelectorAll('g.vcd-run')).map(
+            function (g) {
+                const text = g.querySelector('text.vcd-data');
+                return {
+                    el: g,
+                    text: text,
+                    x0: parseFloat(g.getAttribute('data-x0')),
+                    x1: parseFloat(g.getAttribute('data-x1')),
+                    natX: text ? parseFloat(text.getAttribute('x')) : null,
+                };
+            });
+        const bits = Array.from(
+            svg.querySelectorAll('text.vcd-bitlabel[data-x0]')).map(
+            function (t) {
+                return {
+                    el: t,
+                    x0: parseFloat(t.getAttribute('data-x0')),
+                    x1: parseFloat(t.getAttribute('data-x1')),
+                    natX: parseFloat(t.getAttribute('x')),
+                };
+            });
+        if (!runs.length && !bits.length) return;
+
+        function applyPin() {
+            if (!scroller) return;
+            // A display:none variant (desktop SVG on a phone, or vice
+            // versa) measures zero width: skip it, and re-apply on the
+            // resize listener if the breakpoint later swaps it in.
+            const rect = svg.getBoundingClientRect();
+            if (!rect.width) return;
+            const scale = rect.width / svg.viewBox.baseVal.width;
+            const visibleLeft = scroller.scrollLeft / scale;
+            // Clamped label x: the label keeps its own padding over the
+            // clamp edge -- natX - x0 is the gap it was drawn with from
+            // its run's start, so no geometry constant is duplicated.
+            for (const r of runs) {
+                const off = r.x1 <= visibleLeft;
+                r.el.style.display = off ? 'none' : '';
+                if (!off && r.text && r.natX !== null) {
+                    r.text.setAttribute('x',
+                        Math.max(r.natX, visibleLeft + r.natX - r.x0));
+                }
+            }
+            for (const b of bits) {
+                const off = b.x1 <= visibleLeft;
+                b.el.style.display = off ? 'none' : '';
+                if (!off) {
+                    b.el.setAttribute('x',
+                        Math.max(b.natX, visibleLeft + b.natX - b.x0));
+                }
+            }
+        }
+
+        let pinRaf = false;
+        function onPinScroll() {
+            if (pinRaf) return;
+            pinRaf = true;
+            requestAnimationFrame(function () {
+                pinRaf = false;
+                applyPin();
+            });
+        }
+        // Capture phase, like the popup repositioner above: scroll events
+        // do not bubble, so scrolling .vcd-body must be caught at the
+        // document level.
+        document.addEventListener('scroll', onPinScroll, true);
+        window.addEventListener('resize', onPinScroll);
+        applyPin();
     });
 });
