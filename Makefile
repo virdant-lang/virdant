@@ -1,4 +1,4 @@
-.PHONY: build test clean install grammar docs release
+.PHONY: build test clean install grammar ideal-grammar docs release
 
 VIR    ?= $(CURDIR)/target/release/vir
 RUNNER ?= $(CURDIR)/target/release/vir-virtue
@@ -12,6 +12,12 @@ build: virdant/target/lib
 grammar:
 	cargo build -p virdant
 	cp $$(ls -t target/debug/build/virdant-*/out/syntax/virdant.grammar | head -n1) GRAMMAR.txt
+
+# The `vir-parse` ideal grammar, rendered the same way (see
+# GRAMMAR_REPORT.md and vir-parse/src/syntax/ideal.lalrpop).
+ideal-grammar:
+	cargo build -p vir-parse
+	cp $$(ls -t target/debug/build/vir-parse-*/out/syntax/ideal.grammar | head -n1) IDEAL_GRAMMAR.txt
 
 virdant/target/lib:
 	mkdir -p target/lib

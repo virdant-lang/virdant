@@ -1,0 +1,28 @@
+[package]
+name = "vir-parse"
+version = "0.4.0"
+edition = "2024"
+rust-version = "1.88"
+
+# vir-parse: a standalone parser for Virdant built around the *ideal*
+# grammar (src/syntax/ideal.lalrpop), a deliberately simplified
+# counterpart to the production grammar in virdant/src/syntax/virdant.lalrpop.
+#
+# See GRAMMAR_REPORT.md at the repository root for the full story.
+
+[dependencies]
+# The lexer (logos `Token` set and `tokenize`) is reused verbatim from
+# the production compiler: vir-parse varies the *grammar*, not the
+# token stream.
+virdant = { path = "../virdant" }
+lalrpop-util = { version = "0.23.1", features = ["lexer"], git = "https://github.com/virdant-lang/lalrpop" }
+bstr = "1"
+
+[build-dependencies]
+# The same lalrpop fork the `virdant` crate uses, so the grammar
+# rendering (`emit_grammar`) behaves identically.
+lalrpop = { version = "0.23.1", git = "https://github.com/virdant-lang/lalrpop" }
+
+[[bin]]
+name = "vir-parse"
+path = "src/main.rs"

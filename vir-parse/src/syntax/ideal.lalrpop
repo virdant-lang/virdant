@@ -1,0 +1,1098 @@
+// The *ideal* grammar for Virdant.
+//
+// This is a standalone, simplified counterpart of the production
+// grammar in `virdant/src/syntax/virdant.lalrpop`.  The production
+// grammar deliberately contains a number of productions whose only
+// purpose is to accept slightly-wrong programs so that the compiler
+// can reject them with an informative error message, plus a fair
+// amount of accidental duplication (one production per keyword
+// spelling, per driver operator, per list shape).  This grammar keeps
+// the *language* and drops the *diagnostics*: every production here
+// describes something the user can write, and nothing else.
+//
+// The node structure is redesigned too — see the `payload` module and
+// GRAMMAR_REPORT.md.  The two rules that shape it:
+//
+// * A node exists when it marks a decision (a clause, an arm, a
+//   block); wrapper-only nodes and always-present-but-often-empty
+//   wrappers are gone.
+// * Names are data, not subtrees: paths and qualified names live in
+//   payloads as interned text (`Sym`, `Ofness`), never as child nodes.
+//
+// Conventions used throughout:
+//
+// * Every nonterminal that produces a node returns a `NodeId` into the
+//   flat `Parsing` arena, together with an explicit, ordered child
+//   list — no count-based children anywhere.
+// * A statement's children begin with its annotation nodes (if any),
+//   then its payload-relevant children in written order.
+// * `DocAnn` is the shared `DocString? Annotation*` prefix that opens
+//   every documentable statement.
+// * `CommaList<T>` / `CommaListTrail<T>` are the two comma-list shapes
+//   (the latter with an optional trailing comma, only inside brackets,
+//   braces, or parentheses).
+// * Statements come in three sets (see `ExecStmt`/`DeclStmt` below):
+//   executable statements are the one true statement set; module-level
+//   contexts add declarations; memory bodies add clocked `on` regions.
+//   Declarations and `on` regions never share a context — see the
+//   comment on `MemStmt` for why that split is forced by the language.
+//
+// The lexer is not part of this grammar: it is the production lexer
+// (`virdant::syntax::token`), reused verbatim.
+
+use virdant::common::source::SourceOffset;
+use virdant::common::{BinOp, ChannelDir, ComponentKind, DriverType, SocketRole, Strength, UnOp};
+use virdant::syntax::token::{Token, TokenError};
+use crate::syntax::parsing::Parsing;
+use crate::syntax::payload::{
+    Assign, Annotation, BuiltinDef, BidirectionalDriver, Channel, Component, Ctor, Driver, EnumDef, Enumerant,
+    ExprBinOp, ExprBitLit, ExprTap, ExprCtor, ExprEnumerant, ExprField, ExprIndex,
+    ExprIndexRange, ExprStrLit, ExprUnOp, ExprWordLit, Field, GenericsNat, Import, IndexedDriver, Initial, KindParam,
+    LetBinding, ModDef, NodeId, Ofness, Package, Param, PatBitLit, PatCtor, PatEnumerant, PatIdent, PatWordLit,
+    Payload, PlatformDef, SocketDef, SocketInstance, StructDef, Submodule, Sym, Type, UnionDef, Unused, Memory,
+};
+
+grammar<'i>(parser: &mut Parsing);
+
+// ---------------------------------------------------------------------------
+// Package
+// ---------------------------------------------------------------------------
+
+/// A whole `.vir` file: an optional package docstring (`//!`) followed
+/// by imports and top-level items.
+pub Package: NodeId = {
+    <doc:DocBang?> <ll:@L> <stmts:PackageStmt*> <rr:@R> => {
+        parser.node(Payload::Package(Package { doc_string: doc }), ll, rr, stmts)
+    },
+}
+
+PackageStmt: NodeId = {
+    <import:Import> => import,
+    <item:Item> => item,
+}
+
+Import: NodeId = {
+    <ll:@L> "import" <package:Ident> <rr:@R> => {
+        parser.node(Payload::Import(Import { package }), ll, rr, vec![])
+    },
+}
+
+/// A package-level docstring: one or more `//!` lines.
+DocBang: Sym = {
+    <ll:@L> ("DocBang")+ <rr:@R> => parser.intern(ll, rr),
+}
+
+/// A docstring: one or more `//>` lines.
+DocString: Sym = {
+    <ll:@L> ("DocComment")+ <rr:@R> => parser.intern(ll, rr),
+}
+
+/// The shared prefix of every documentable statement: an optional
+/// docstring, then the annotations (possibly none).  The annotation
+/// nodes become the statement's first children.
+DocAnn: (Option<Sym>, Vec<NodeId>) = {
+    <doc:DocString?> <annotations:Annotation*> => (doc, annotations),
+}
+
+/// One annotation: `@name`, `@name(args)`, or `@name()`.  The
+/// arguments are the node's children.
+Annotation: NodeId = {
+    <ll:@L> "@" <name:Ident> <args:ArgList?> <rr:@R> => {
+        parser.node(Payload::Annotation(Annotation { name }), ll, rr, args.unwrap_or_default())
+    },
+}
+
+// ---------------------------------------------------------------------------
+// Top-level items
+// ---------------------------------------------------------------------------
+
+Item: NodeId = {
+    <moddef:ModDef> => moddef,
+    <structdef:StructDef> => structdef,
+    <uniondef:UnionDef> => uniondef,
+    <enumdef:EnumDef> => enumdef,
+    <builtindef:BuiltinDef> => builtindef,
+    <socketdef:SocketDef> => socketdef,
+    <platformdef:PlatformDef> => platformdef,
+}
+
+ModDef: NodeId = {
+    <docann:DocAnn> <ll:@L> <pub_:"pub"?> <ext:"ext"?> "mod" <name:Ident>
+        <for_clause:ForClause?> <generics:Generics?> "{" <stmts:ModStmt*> "}" <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.extend(generics);
+        children.extend(stmts);
+        parser.node(
+            Payload::ModDef(ModDef {
+                name,
+                is_ext: ext.is_some(),
+                is_pub: pub_.is_some(),
+                doc_string,
+                for_clause,
+            }),
+            ll, rr, children,
+        )
+    },
+}
+
+/// A `for` clause; the platform name is payload (names are data).
+ForClause: Ofness = {
+    "for" <ofness:Ofness> => ofness,
+}
+
+StructDef: NodeId = {
+    <docann:DocAnn> <ll:@L> <pub_:"pub"?> "struct" "type" <name:Ident> <generics:Generics?>
+        "{" <stmts:StructStmt*> "}" <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.extend(generics);
+        children.extend(stmts);
+        parser.node(
+            Payload::StructDef(StructDef { name, is_pub: pub_.is_some(), doc_string }),
+            ll, rr, children,
+        )
+    },
+}
+
+UnionDef: NodeId = {
+    <docann:DocAnn> <ll:@L> <pub_:"pub"?> "union" "type" <name:Ident> <generics:Generics?>
+        "{" <stmts:UnionStmt*> "}" <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.extend(generics);
+        children.extend(stmts);
+        parser.node(
+            Payload::UnionDef(UnionDef { name, is_pub: pub_.is_some(), doc_string }),
+            ll, rr, children,
+        )
+    },
+}
+
+EnumDef: NodeId = {
+    <docann:DocAnn> <ll:@L> <pub_:"pub"?> "enum" "type" <name:Ident> <generics:Generics?>
+        "{" <stmts:EnumStmt*> "}" <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.extend(generics);
+        children.extend(stmts);
+        parser.node(
+            Payload::EnumDef(EnumDef { name, is_pub: pub_.is_some(), doc_string }),
+            ll, rr, children,
+        )
+    },
+}
+
+BuiltinDef: NodeId = {
+    <docann:DocAnn> <ll:@L> <pub_:"pub"?> "builtin" "type" <name:Ident> <generics:Generics?> "{" "}" <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.extend(generics);
+        parser.node(
+            Payload::BuiltinDef(BuiltinDef { name, is_pub: pub_.is_some(), doc_string }),
+            ll, rr, children,
+        )
+    },
+}
+
+SocketDef: NodeId = {
+    <docann:DocAnn> <ll:@L> <pub_:"pub"?> "socket" <name:Ident> <generics:Generics?>
+        "{" <stmts:ChannelStmt*> "}" <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.extend(generics);
+        children.extend(stmts);
+        parser.node(
+            Payload::SocketDef(SocketDef { name, is_pub: pub_.is_some(), doc_string }),
+            ll, rr, children,
+        )
+    },
+}
+
+/// A socket channel: `cosi name : Type` or `soci name : Type`, with an
+/// optional `dependson` list.
+ChannelStmt: NodeId = {
+    <docann:DocAnn> <ll:@L> <dir:ChannelDir> <name:Ident> ":" <typ:Type> <dependson:DependsonList?> <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.push(typ);
+        children.extend(dependson);
+        parser.node(Payload::Channel(Channel { name, dir, doc_string }), ll, rr, children)
+    },
+}
+
+ChannelDir: ChannelDir = {
+    "cosi" => ChannelDir::Cosi,
+    "soci" => ChannelDir::Soci,
+}
+
+PlatformDef: NodeId = {
+    <docann:DocAnn> <ll:@L> <pub_:"pub"?> "platform" <name:Ident> "{" <stmts:ComponentStmt*> "}" <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.extend(stmts);
+        parser.node(
+            Payload::PlatformDef(PlatformDef { name, is_pub: pub_.is_some(), doc_string }),
+            ll, rr, children,
+        )
+    },
+}
+
+// ---------------------------------------------------------------------------
+// Type-like statements (struct fields, union constructors, enumerants,
+// parameters)
+// ---------------------------------------------------------------------------
+
+/// A struct field: `name : Type`.
+StructStmt: NodeId = {
+    <docann:DocAnn> <ll:@L> <name:Ident> ":" <typ:Type> <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.push(typ);
+        parser.node(Payload::Field(Field { name, doc_string }), ll, rr, children)
+    },
+}
+
+/// A union constructor: `name` or `name(param : Type, ...)`.
+UnionStmt: NodeId = {
+    <docann:DocAnn> <ll:@L> <name:Ident> <params:ParamList?> <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.extend(params.into_iter().flatten());
+        parser.node(Payload::Ctor(Ctor { name, doc_string }), ll, rr, children)
+    },
+}
+
+/// An enumerant: `name`, `name = value`, `name(params)`, or
+/// `name(params) = value` — one production for all four shapes.
+EnumStmt: NodeId = {
+    <docann:DocAnn> <ll:@L> <name:Ident> <params:ParamList?> <value:EnumValue?> <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.extend(params.into_iter().flatten());
+        children.extend(value);
+        parser.node(Payload::Enumerant(Enumerant { name, doc_string }), ll, rr, children)
+    },
+}
+
+/// The `= Expr` tail of an enumerant.
+EnumValue: NodeId = {
+    "=" <value:Expr> => value,
+}
+
+ParamList: Vec<NodeId> = {
+    "(" <params:CommaList<Param>?> ")" => params.unwrap_or_default(),
+}
+
+/// A parameter: `name : Type`.
+Param: NodeId = {
+    <docann:DocAnn> <ll:@L> <name:Ident> ":" <typ:Type> <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.push(typ);
+        parser.node(Payload::Param(Param { name, doc_string }), ll, rr, children)
+    },
+}
+
+// ---------------------------------------------------------------------------
+// Generic parameter declarations `[A : Type, n : Nat]` and generic
+// arguments `[Bit, 8]`
+// ---------------------------------------------------------------------------
+
+/// A generic parameter declaration list.  The node's children are one
+/// `KindParam` per parameter.
+Generics: NodeId = {
+    <ll:@L> "[" <params:CommaList<KindParam>> "]" <rr:@R> => {
+        parser.node(Payload::Generics, ll, rr, params)
+    },
+}
+
+/// One generic parameter declaration: `name : Kind`.  A kind is just a
+/// name, so it is payload text, not a child node.
+KindParam: NodeId = {
+    <ll:@L> <name:Ident> ":" <kind:Ident> <rr:@R> => {
+        parser.node(Payload::KindParam(KindParam { name, kind }), ll, rr, vec![])
+    },
+}
+
+/// A generic argument list (a type application): `Word[8]`,
+/// `Pair[Word[4], Bit]`.  The arguments are the node's children.
+GenericsParams: NodeId = {
+    <ll:@L> "[" <args:CommaList<GenericsArg>> "]" <rr:@R> => {
+        parser.node(Payload::GenericsParams, ll, rr, args)
+    },
+}
+
+/// One generic argument: a `Nat` width or a full type.
+GenericsArg: NodeId = {
+    <ll:@L> <n:Nat> <rr:@R> => {
+        parser.node(Payload::GenericsNat(GenericsNat { value: n }), ll, rr, vec![])
+    },
+    <typ:Type> => typ,
+}
+
+/// A type: the (possibly qualified) name is payload; the optional
+/// generic argument list is the only child.
+Type: NodeId = {
+    <ll:@L> <ofness:Ofness> <generics:GenericsParams?> <rr:@R> => {
+        let mut children = Vec::new();
+        children.extend(generics);
+        parser.node(
+            Payload::Type(Type { package: ofness.package, name: ofness.name }),
+            ll, rr, children,
+        )
+    },
+}
+
+// ---------------------------------------------------------------------------
+// Statements
+//
+// There is one true statement set, `ExecStmt`: everything that can
+// appear in any body.  Two contexts extend it, and the two extensions
+// are deliberately disjoint:
+//
+// * module-level contexts (module bodies, it-blocks, arm blocks) add
+//   the *declarations* (`DeclStmt`);
+// * memory bodies add the *clocked regions* (`OnRegion`).
+//
+// The extensions cannot be merged: a declaration's optional
+// `on <CLOCK>` clause and a memory body's `on <CLOCK> { ... }` region
+// begin with the same token, so `reg r : T on clk { ... }` would have
+// two parses (declaration-with-clause, or declaration followed by a
+// region) if both could follow a declaration.  See GRAMMAR_REPORT.md.
+// ---------------------------------------------------------------------------
+
+/// An executable statement: drivers, `unused`, `initial`, and the
+/// control-flow forms.
+ExecStmt: NodeId = {
+    <driver:DriverStmt> => driver,
+    <bidir:BidirectionalDriverStmt> => bidir,
+    <indexeddriver:IndexedDriverStmt> => indexeddriver,
+    <unused:UnusedStmt> => unused,
+    <initial:InitialStmt> => initial,
+    <w:If> => w,
+    <m:Match> => m,
+    <l:Let> => l,
+}
+
+/// A declaration statement: components (including memories),
+/// submodule and socket instances.
+DeclStmt: NodeId = {
+    <component:ComponentStmt> => component,
+    <memory:MemoryStmt> => memory,
+    <submodule:SubmoduleStmt> => submodule,
+    <socket:SocketStmt> => socket,
+}
+
+/// The statements of a module body, an it-block, or an arm block.
+ModStmt: NodeId = {
+    <decl:DeclStmt> => decl,
+    <exec:ExecStmt> => exec,
+}
+
+/// The statements of a memory body.
+MemStmt: NodeId = {
+    <exec:ExecStmt> => exec,
+    <region:OnRegion> => region,
+}
+
+/// A component declaration.  One production covers all eight keyword
+/// spellings (`incoming`, `outgoing`, `bus`, `net`, `wire`, `reg`,
+/// `outgoing wire`, `outgoing reg`); which clauses each kind admits is
+/// a semantic question, not a syntactic one (see GRAMMAR_REPORT.md).
+///
+/// Children: annotations, the `Type`, then the optional clauses in
+/// written order.
+ComponentStmt: NodeId = {
+    <docann:DocAnn> <ll:@L> <kind:ComponentKind> <name:Ident> ":" <typ:Type>
+        <dependson:DependsonList?> <default:DefaultClause?> <on:OnClause?> <async_:"async"?> <body:Block?> <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.push(typ);
+        children.extend(dependson);
+        children.extend(default);
+        children.extend(on);
+        children.extend(body);
+        parser.node(
+            Payload::Component(Component {
+                name,
+                kind,
+                doc_string,
+                is_async: async_.is_some(),
+            }),
+            ll, rr, children,
+        )
+    },
+}
+
+/// The eight component keyword spellings.
+ComponentKind: ComponentKind = {
+    "incoming" => ComponentKind::Incoming,
+    "outgoing" => ComponentKind::Outgoing,
+    "bus" => ComponentKind::Bus,
+    "net" => ComponentKind::Net,
+    "wire" => ComponentKind::Wire,
+    "reg" => ComponentKind::Reg,
+    "outgoing" "wire" => ComponentKind::OutgoingWire,
+    "outgoing" "reg" => ComponentKind::OutgoingReg,
+}
+
+/// A memory declaration: `memory mem[DEPTH] : Type on CLOCK { ... }`.
+/// Children: annotations, the depth `Expr`, the element `Type`, then
+/// the optional `OnClause` and body.
+MemoryStmt: NodeId = {
+    <docann:DocAnn> <ll:@L> "memory" <name:Ident> "[" <depth:Expr> "]" ":" <typ:Type>
+        <on:OnClause?> <body:MemoryBody?> <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.push(depth);
+        children.push(typ);
+        children.extend(on);
+        children.extend(body);
+        parser.node(Payload::Memory(Memory { name, doc_string }), ll, rr, children)
+    },
+}
+
+/// A submodule instance: `mod name of Ofness[args] { ... }`.  The
+/// instantiation target is payload (names are data).
+SubmoduleStmt: NodeId = {
+    <docann:DocAnn> <ll:@L> "mod" <name:Ident> "of" <target:Ofness> <generics:GenericsParams?> <body:Block?> <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.extend(generics);
+        children.extend(body);
+        parser.node(
+            Payload::Submodule(Submodule { name, doc_string, target }),
+            ll, rr, children,
+        )
+    },
+}
+
+/// A socket instance: `client|server socket name of Ofness[args] { ... }`.
+SocketStmt: NodeId = {
+    <docann:DocAnn> <ll:@L> <role:SocketRole> "socket" <name:Ident> "of" <target:Ofness>
+        <generics:GenericsParams?> <body:Block?> <rr:@R> => {
+        let (doc_string, annotations) = docann;
+        let mut children = annotations;
+        children.extend(generics);
+        children.extend(body);
+        parser.node(
+            Payload::SocketInstance(SocketInstance { name, role, doc_string, target }),
+            ll, rr, children,
+        )
+    },
+}
+
+SocketRole: SocketRole = {
+    "client" => SocketRole::Client,
+    "server" => SocketRole::Server,
+}
+
+/// A driver: one of `:=`, `<=`, `#=`, `#-` from a path to an
+/// expression.  The LHS path is payload; the RHS is the only child.
+DriverStmt: NodeId = {
+    <ll:@L> <lhs:Path> <op:DriverOp> <rhs:Expr> <rr:@R> => {
+        let (driver_type, strength) = op;
+        parser.node(
+            Payload::Driver(Driver { lhs, driver_type, strength }),
+            ll, rr, vec![rhs],
+        )
+    },
+}
+
+/// The four driver operators.  (`#=` carries the same payload as `:=`
+/// in the production grammar and does here too — see
+/// GRAMMAR_REPORT.md.)
+DriverOp: (DriverType, Strength) = {
+    ":=" => (DriverType::Continuous, Strength::Strong),
+    "<=" => (DriverType::Latched, Strength::Strong),
+    "#=" => (DriverType::Continuous, Strength::Strong),
+    "#-" => (DriverType::Continuous, Strength::Weak),
+}
+
+/// A bidirectional driver: `#=#` or `:=:` between two paths.  Both
+/// paths are payload; the node has no children.
+BidirectionalDriverStmt: NodeId = {
+    <ll:@L> <lhs:Path> <op:BiDriverOp> <rhs:Path> <rr:@R> => {
+        parser.node(Payload::BidirectionalDriver(BidirectionalDriver { lhs, rhs }), ll, rr, vec![])
+    },
+}
+
+BiDriverOp: () = {
+    "#=#" => (),
+    ":=:" => (),
+}
+
+/// An indexed driver: a write to one word of a `memory` component.
+/// The children are always the index `Expr` and the value `Expr` — a
+/// dynamic index (`[dyn e]`) is an arbitrary expression, a constant
+/// one (`[NAT]`) an `ExprWordLit`; `is_dyn` in the payload says which.
+/// Only `<=` and `:=` are accepted (`:=` warns downstream and behaves
+/// like `<=`).
+IndexedDriverStmt: NodeId = {
+    <ll:@L> <lhs:Path> "[" <index:IndexSpec> "]" <op:IndexedDriverOp> <rhs:Expr> <rr:@R> => {
+        let (index, is_dyn) = index;
+        let (driver_type, strength) = op;
+        parser.node(
+            Payload::IndexedDriver(IndexedDriver { lhs, driver_type, strength, is_dyn }),
+            ll, rr, vec![index, rhs],
+        )
+    },
+}
+
+/// The bracketed index of an indexed driver.
+IndexSpec: (NodeId, bool) = {
+    "dyn" <expr:Expr> => (expr, true),
+    <ll:@L> <n:Nat> <rr:@R> => {
+        let literal = parser.intern(ll, rr);
+        let literal = parser.node(Payload::ExprWordLit(ExprWordLit { literal }), ll, rr, vec![]);
+        (literal, false)
+    },
+}
+
+/// The two indexed-driver operators.
+IndexedDriverOp: (DriverType, Strength) = {
+    "<=" => (DriverType::Latched, Strength::Strong),
+    ":=" => (DriverType::Continuous, Strength::Strong),
+}
+
+/// `unused path`.
+UnusedStmt: NodeId = {
+    <ll:@L> "unused" <path:Path> <rr:@R> => {
+        parser.node(Payload::Unused(Unused { path }), ll, rr, vec![])
+    },
+}
+
+/// `initial path <= expr`.
+InitialStmt: NodeId = {
+    <ll:@L> "initial" <lhs:Path> "<=" <rhs:Expr> <rr:@R> => {
+        parser.node(Payload::Initial(Initial { lhs }), ll, rr, vec![rhs])
+    },
+}
+
+/// A `dependson` list: `dependson path, path, ...`.  The paths are
+/// payload (names are data); the node exists to mark the clause.
+DependsonList: NodeId = {
+    <ll:@L> "dependson" <paths:CommaList<Path>> <rr:@R> => {
+        parser.node(Payload::DependsonList(crate::syntax::payload::DependsonList { paths }), ll, rr, vec![])
+    },
+}
+
+/// An `on <CLOCK>` clause marking a component's clock.  The node
+/// exists to mark the clause; the clock expression is its child.
+OnClause: NodeId = {
+    <ll:@L> "on" <expr:Expr> <rr:@R> => {
+        parser.node(Payload::OnClause, ll, rr, vec![expr])
+    },
+}
+
+/// A `default expr` clause.
+DefaultClause: NodeId = {
+    <ll:@L> "default" <expr:Expr> <rr:@R> => {
+        parser.node(Payload::DefaultClause, ll, rr, vec![expr])
+    },
+}
+
+// ---------------------------------------------------------------------------
+// Blocks and control flow
+// ---------------------------------------------------------------------------
+
+/// A brace-delimited block of module statements — the body of a
+/// component, an `if`/`match`/`let` arm, or an `on` region.  One node
+/// kind for all of them: what the block *means* comes from its parent.
+Block: NodeId = {
+    <ll:@L> "{" <stmts:ModStmt*> "}" <rr:@R> => {
+        parser.node(Payload::Block, ll, rr, stmts)
+    },
+}
+
+/// The brace body of a `memory` statement.  A separate production (the
+/// statement set differs: `MemStmt`), the same `Block` node.
+MemoryBody: NodeId = {
+    <ll:@L> "{" <stmts:MemStmt*> "}" <rr:@R> => {
+        parser.node(Payload::Block, ll, rr, stmts)
+    },
+}
+
+/// An `on <CLOCK> { ... }` clocked-write region inside a memory body.
+/// Children: the clock `Expr`, then the region's `Block`.
+OnRegion: NodeId = {
+    <ll:@L> "on" <clock:Expr> <block:Block> <rr:@R> => {
+        parser.node(Payload::OnRegion, ll, rr, vec![clock, block])
+    },
+}
+
+/// An `if` block: a sequence of `when`/`else` arms, each an `IfArm`
+/// node.
+If: NodeId = {
+    <ll:@L> "if" "{" <arms:IfArm*> "}" <rr:@R> => {
+        parser.node(Payload::If, ll, rr, arms)
+    },
+}
+
+/// One arm.  A `when` arm's children are its guard `Expr` and its
+/// body; an `else` arm has no guard child.
+IfArm: NodeId = {
+    <ll:@L> "when" <cond:Expr> <body:ArmBody> <rr:@R> => {
+        parser.node(Payload::IfArm, ll, rr, vec![cond, body])
+    },
+    <ll:@L> "else" <body:ArmBody> <rr:@R> => {
+        parser.node(Payload::IfArm, ll, rr, vec![body])
+    },
+}
+
+/// A `match` block: a scrutinee `Expr` and a sequence of
+/// `with`/`else` arms, each a `MatchArm` node.
+Match: NodeId = {
+    <ll:@L> "match" <scrutinee:Expr> "{" <arms:MatchArm*> "}" <rr:@R> => {
+        let mut children = vec![scrutinee];
+        children.extend(arms);
+        parser.node(Payload::Match, ll, rr, children)
+    },
+}
+
+/// One arm.  A `with` arm's children are its pattern and its body; an
+/// `else` arm has no pattern child.
+MatchArm: NodeId = {
+    <ll:@L> "with" <pat:Pat> <body:ArmBody> <rr:@R> => {
+        parser.node(Payload::MatchArm, ll, rr, vec![pat, body])
+    },
+    <ll:@L> "else" <body:ArmBody> <rr:@R> => {
+        parser.node(Payload::MatchArm, ll, rr, vec![body])
+    },
+}
+
+/// The body of an `if`/`match`/`let` head: either `=> Expr`, or —
+/// without the arrow — a braced block, `if`, `match`, or `let`.
+/// One nonterminal replaces the production grammar's ten-arm flat
+/// lists (and its `let`-body quadruplication).
+ArmBody: NodeId = {
+    "=>" <expr:Expr> => expr,
+    <block:Block> => block,
+    <w:If> => w,
+    <m:Match> => m,
+    <l:Let> => l,
+}
+
+/// A `let`: one or more bindings, then an arm body.
+Let: NodeId = {
+    <ll:@L> "let" <bindings:CommaList<LetBinding>> <body:ArmBody> <rr:@R> => {
+        let mut children = bindings;
+        children.push(body);
+        parser.node(Payload::Let, ll, rr, children)
+    },
+}
+
+/// One binding: `name = Expr` or `name : Type = Expr`.
+LetBinding: NodeId = {
+    <ll:@L> <name:Ident> <typ:LetBindingType?> "=" <expr:Expr> <rr:@R> => {
+        let mut children = Vec::new();
+        children.extend(typ);
+        children.push(expr);
+        parser.node(Payload::LetBinding(LetBinding { name }), ll, rr, children)
+    },
+}
+
+LetBindingType: NodeId = {
+    ":" <typ:Type> => typ,
+}
+
+// ---------------------------------------------------------------------------
+// Patterns
+// ---------------------------------------------------------------------------
+
+Pat: NodeId = {
+    <ll:@L> "#" <name:Ident> <rr:@R> => {
+        parser.node(Payload::PatEnumerant(PatEnumerant { name }), ll, rr, vec![])
+    },
+    <ll:@L> "@" <name:Ident> <args:PatArgs?> <rr:@R> => {
+        parser.node(Payload::PatCtor(PatCtor { name }), ll, rr, args.unwrap_or_default())
+    },
+    <ll:@L> <lit:WordLit> <rr:@R> => {
+        parser.node(Payload::PatWordLit(PatWordLit { literal: lit }), ll, rr, vec![])
+    },
+    <ll:@L> <lit:BitLit> <rr:@R> => {
+        parser.node(Payload::PatBitLit(PatBitLit { literal: lit }), ll, rr, vec![])
+    },
+    <ll:@L> <name:Ident> <rr:@R> => {
+        parser.node(Payload::PatIdent(PatIdent { name }), ll, rr, vec![])
+    },
+    <ll:@L> "dontcare" <rr:@R> => {
+        parser.node(Payload::PatDontcare, ll, rr, vec![])
+    },
+}
+
+PatArgs: Vec<NodeId> = {
+    "(" <args:CommaListTrail<Pat>?> ")" => args.unwrap_or_default(),
+}
+
+// ---------------------------------------------------------------------------
+// Expressions
+// ---------------------------------------------------------------------------
+
+/// An expression.  The control-flow forms (`if`, `match`, `let`) and
+/// struct literals are expressions too, sitting at the loosest
+/// precedence level.
+Expr: NodeId = {
+    <w:If> => w,
+    <m:Match> => m,
+    <l:Let> => l,
+    <s:ExprStruct> => s,
+    <e:ExprBinOpLogical> => e,
+}
+
+/// Struct literal: `${ name = expr, ... }` (trailing comma allowed,
+/// empty allowed).
+ExprStruct: NodeId = {
+    <ll:@L> "$" "{" <assigns:AssignList?> "}" <rr:@R> => {
+        let children = assigns.unwrap_or_default();
+        parser.node(Payload::ExprStruct, ll, rr, children)
+    },
+}
+
+AssignList: Vec<NodeId> = {
+    <assigns:CommaListTrail<Assign>> => assigns,
+}
+
+Assign: NodeId = {
+    <ll:@L> <name:Ident> "=" <expr:Expr> <rr:@R> => {
+        parser.node(Payload::Assign(Assign { name }), ll, rr, vec![expr])
+    },
+}
+
+/// Precedence tier 1: logical operators (`&&`, `||`, `^^`), left
+/// associative.
+ExprBinOpLogical: NodeId = {
+    <ll:@L> <lhs:ExprBinOpLogical> <op:BinOpLogical> <rhs:ExprBinOpCompare> <rr:@R> => {
+        parser.node(Payload::ExprBinOp(ExprBinOp { op }), ll, rr, vec![lhs, rhs])
+    },
+    <e:ExprBinOpCompare> => e,
+}
+
+BinOpLogical: BinOp = {
+    "&&" => BinOp::LogicalAnd,
+    "||" => BinOp::LogicalOr,
+    "^^" => BinOp::LogicalXor,
+}
+
+/// Precedence tier 2: comparisons (`<`, `<=`, `>`, `>=`, `==`, `!=`),
+/// left associative.
+ExprBinOpCompare: NodeId = {
+    <ll:@L> <lhs:ExprBinOpCompare> <op:BinOpCompare> <rhs:ExprBinOpAdditive> <rr:@R> => {
+        parser.node(Payload::ExprBinOp(ExprBinOp { op }), ll, rr, vec![lhs, rhs])
+    },
+    <e:ExprBinOpAdditive> => e,
+}
+
+BinOpCompare: BinOp = {
+    "<" => BinOp::Lt,
+    "<=" => BinOp::Lte,
+    ">" => BinOp::Gt,
+    ">=" => BinOp::Gte,
+    "==" => BinOp::Eq,
+    "!=" => BinOp::Neq,
+}
+
+/// Precedence tier 3: additive and bitwise operators (`+`, `+.`, `-`,
+/// `-.`, `&`, `|`, `^`), left associative.
+ExprBinOpAdditive: NodeId = {
+    <ll:@L> <lhs:ExprBinOpAdditive> <op:BinOpAdditive> <rhs:ExprUnOp> <rr:@R> => {
+        parser.node(Payload::ExprBinOp(ExprBinOp { op }), ll, rr, vec![lhs, rhs])
+    },
+    <e:ExprUnOp> => e,
+}
+
+BinOpAdditive: BinOp = {
+    "+" => BinOp::Add,
+    "+." => BinOp::AddCarry,
+    "-" => BinOp::Sub,
+    "-." => BinOp::SubBorrow,
+    "&" => BinOp::And,
+    "|" => BinOp::Or,
+    "^" => BinOp::Xor,
+}
+
+/// Precedence tier 4: prefix unary operators and `tap`.
+ExprUnOp: NodeId = {
+    <ll:@L> <op:UnOp> <rhs:ExprUnOp> <rr:@R> => {
+        parser.node(Payload::ExprUnOp(ExprUnOp { op }), ll, rr, vec![rhs])
+    },
+    <ll:@L> "tap" <path:Path> <rr:@R> => {
+        parser.node(Payload::ExprTap(ExprTap { path }), ll, rr, vec![])
+    },
+    <e:ExprAscription> => e,
+}
+
+UnOp: UnOp = {
+    "-" => UnOp::Neg,
+    "~" => UnOp::Inv,
+    "!" => UnOp::Not,
+}
+
+/// Precedence tier 5: type ascription (`expr : Type`).
+ExprAscription: NodeId = {
+    <ll:@L> <e:ExprPrimary> ":" <typ:Type> <rr:@R> => {
+        parser.node(Payload::ExprAscription, ll, rr, vec![e, typ])
+    },
+    <e:ExprPrimary> => e,
+}
+
+/// Precedence tier 6: the postfix chain (`->field`, `[dyn e]`, `[i]`,
+/// `[hi..lo]`) rooted at an atom.
+ExprPrimary: NodeId = {
+    <ll:@L> <e:ExprPrimary> "->" <field:Ident> <rr:@R> => {
+        parser.node(Payload::ExprField(ExprField { field }), ll, rr, vec![e])
+    },
+    <ll:@L> <e:ExprPrimary> "[" "dyn" <idx:Expr> "]" <rr:@R> => {
+        parser.node(Payload::ExprIndexDyn, ll, rr, vec![e, idx])
+    },
+    <ll:@L> <e:ExprPrimary> "[" <index:Index> "]" <rr:@R> => {
+        parser.node(Payload::ExprIndex(ExprIndex { index }), ll, rr, vec![e])
+    },
+    <ll:@L> <e:ExprPrimary> "[" <hi:Index> ".." <lo:Index> "]" <rr:@R> => {
+        parser.node(
+            Payload::ExprIndexRange(ExprIndexRange { index_hi: hi, index_lo: lo }),
+            ll, rr, vec![e],
+        )
+    },
+    <atom:Atom> => atom,
+}
+
+/// An atom: a path, a function call, a constructor, a literal, a hole,
+/// or a parenthesized expression.
+Atom: NodeId = {
+    <ll:@L> <path:Path> <rr:@R> => {
+        parser.node(Payload::ExprReference, ll, rr, vec![])
+    },
+    <ll:@L> <callee:Ofness> <args:ArgList> <rr:@R> => {
+        parser.node(Payload::ExprFn, ll, rr, args)
+    },
+    <ll:@L> "@" <ctor:Ident> <args:ArgList?> <rr:@R> => {
+        parser.node(Payload::ExprCtor(ExprCtor { ctor }), ll, rr, args.unwrap_or_default())
+    },
+    <ll:@L> <lit:WordLit> <rr:@R> => {
+        parser.node(Payload::ExprWordLit(ExprWordLit { literal: lit }), ll, rr, vec![])
+    },
+    <ll:@L> <lit:BitLit> <rr:@R> => {
+        parser.node(Payload::ExprBitLit(ExprBitLit { literal: lit }), ll, rr, vec![])
+    },
+    <ll:@L> "Str" <rr:@R> => {
+        let literal = parser.intern(ll, rr);
+        parser.node(Payload::ExprStrLit(ExprStrLit { literal }), ll, rr, vec![])
+    },
+    <ll:@L> "#" <enumerant:Ident> <rr:@R> => {
+        parser.node(Payload::ExprEnumerant(ExprEnumerant { enumerant }), ll, rr, vec![])
+    },
+    <ll:@L> "?" <rr:@R> => {
+        parser.node(Payload::ExprHole, ll, rr, vec![])
+    },
+    <ll:@L> "dontcare" <rr:@R> => {
+        parser.node(Payload::ExprDontcare, ll, rr, vec![])
+    },
+    <ll:@L> "(" <e:Expr> ")" <rr:@R> => {
+        parser.node(Payload::ExprParen, ll, rr, vec![e])
+    },
+}
+
+/// A parenthesized argument list: `(expr, expr, ...)` with an optional
+/// trailing comma, possibly empty.  The parentheses are part of the
+/// production; call sites decide whether the list itself is optional.
+/// Used for annotation arguments, function-call arguments, and
+/// constructor arguments.
+ArgList: Vec<NodeId> = {
+    "(" <args:CommaListTrail<Expr>?> ")" => args.unwrap_or_default(),
+}
+
+// ---------------------------------------------------------------------------
+// Names (values, not nodes)
+// ---------------------------------------------------------------------------
+
+/// A (possibly package-qualified) name: `Ident` or `Ident::Ident`.
+/// This is a *value*, consumed into the payload of whatever references
+/// it — never a node of its own.
+Ofness: Ofness = {
+    <name:Ident> => Ofness { package: None, name },
+    <package:Ident> "::" <name:Ident> => Ofness { package: Some(package), name },
+}
+
+/// A dotted path: `it`, `it.foo`, `a.b.c`.  Also a *value*: the whole
+/// path text is interned and carried in payloads.
+Path: Sym = {
+    <ll:@L> <start:PathStart> <rest:("." Ident)*> <rr:@R> => parser.intern(ll, rr),
+}
+
+PathStart: () = {
+    "Ident" => (),
+    "it" => (),
+}
+
+// ---------------------------------------------------------------------------
+// Lexical helpers
+// ---------------------------------------------------------------------------
+
+/// A constant index: a `Nat` literal.
+Index: u16 = {
+    <ll:@L> "Nat" <rr:@R> => parser.nat_u16(ll, rr),
+}
+
+/// A word literal: a `Nat` or `Word` token's raw text (e.g. `4w8`,
+/// `0b101`, `0xDEAD_BEEF`).
+WordLit: Sym = {
+    <ll:@L> "Nat" <rr:@R> => parser.intern(ll, rr),
+    <ll:@L> "Word" <rr:@R> => parser.intern(ll, rr),
+}
+
+BitLit: bool = {
+    "true" => true,
+    "false" => false,
+}
+
+Ident: Sym = {
+    <ll:@L> "Ident" <rr:@R> => parser.intern(ll, rr),
+}
+
+Nat: Sym = {
+    <ll:@L> "Nat" <rr:@R> => parser.intern(ll, rr),
+}
+
+// ---------------------------------------------------------------------------
+// Comma lists: the production grammar's proven LR(1)-friendly shapes.
+//
+// * `CommaList<T>` -- one or more `T`, comma-separated, no trailing
+//   comma.  Used for lists that end at a statement boundary, where a
+//   trailing comma would be ambiguous with the next statement.
+// * `CommaListTrail<T>` -- the same, plus an optional trailing comma.
+//   Only used inside brackets, braces, and parentheses, where the
+//   closing delimiter makes the trailing comma unambiguous.
+//
+// Both may be made empty at the call site with `?`.
+// ---------------------------------------------------------------------------
+
+CommaList<T>: Vec<NodeId> = {
+    <start:(<T> ",")*> <last:T> => {
+        let mut items = start;
+        items.push(last);
+        items
+    },
+}
+
+CommaListTrail<T>: Vec<NodeId> = {
+    <start:(<T> ",")*> <last:T> <_trail:","?> => {
+        let mut items = start;
+        items.push(last);
+        items
+    },
+}
+
+// ---------------------------------------------------------------------------
+// Terminals.  The lexer is the production lexer; this table maps
+// grammar terminals onto its `Token` variants.  Tokens the ideal
+// grammar never uses (`;`, `export`, `fn`, `width`, `submod`, `/*`,
+// `*/`, `ERROR`) are omitted: the production grammar's extern table
+// lists them, but no production references them.
+// ---------------------------------------------------------------------------
+
+extern {
+    type Location = SourceOffset;
+    type Error = TokenError;
+
+    enum Token {
+        "Ident" => Token::Ident,
+        "Nat" => Token::Nat,
+        "Word" => Token::Word,
+
+        // Punctuation
+        "."   => Token::Dot,
+        ".."  => Token::DotDot,
+        "::"  => Token::ColonColon,
+        "="   => Token::Eq,
+        "=="  => Token::EqEq,
+        "!="  => Token::BangEq,
+        ":="  => Token::EqColon,
+        ":=:" => Token::EqColoneq,
+        "#=#" => Token::OpAttach,
+        "#="  => Token::OpStrongDriver,
+        "#-"  => Token::OpWeakDriver,
+        "<="  => Token::LtEq,
+        "=>"  => Token::FatArrow,
+        "->"  => Token::Arrow,
+        ":"   => Token::Colon,
+        ","   => Token::Comma,
+        "$"   => Token::Dollar,
+        "#"   => Token::Hash,
+        "@"   => Token::At,
+        "?"   => Token::Question,
+
+        // Operators
+        "+"  => Token::Add,
+        "+." => Token::AddCarry,
+        "-"  => Token::Sub,
+        "-." => Token::SubBorrow,
+        "<"  => Token::Lt,
+        ">"  => Token::Gt,
+        ">=" => Token::GtEq,
+        "&&" => Token::AndAnd,
+        "&"  => Token::And,
+        "||" => Token::PipePipe,
+        "|"  => Token::Pipe,
+        "!"  => Token::Bang,
+        "~"  => Token::Tilde,
+        "^"  => Token::Hat,
+        "^^" => Token::HatHat,
+
+        // Groupings
+        "(" => Token::ParenLeft,
+        ")" => Token::ParenRight,
+        "{" => Token::CurlyLeft,
+        "}" => Token::CurlyRight,
+        "[" => Token::BracketLeft,
+        "]" => Token::BracketRight,
+
+        // Keywords
+        "pub" => Token::KwPub,
+        "import" => Token::KwImport,
+        "mod" => Token::KwMod,
+        "ext" => Token::KwExt,
+        "builtin" => Token::KwBuiltin,
+        "type" => Token::KwType,
+        "union" => Token::KwUnion,
+        "struct" => Token::KwStruct,
+        "enum" => Token::KwEnum,
+        "incoming" => Token::KwIncoming,
+        "outgoing" => Token::KwOutgoing,
+        "bus" => Token::KwBus,
+        "net" => Token::KwNet,
+        "tap" => Token::KwTap,
+        "reg" => Token::KwReg,
+        "memory" => Token::KwMemory,
+        "wire" => Token::KwWire,
+        "on" => Token::KwOn,
+        "async" => Token::KwAsync,
+        "of" => Token::KwOf,
+        "socket" => Token::KwSocket,
+        "client" => Token::KwClient,
+        "server" => Token::KwServer,
+        "cosi" => Token::KwCosi,
+        "soci" => Token::KwSoci,
+        "if" => Token::KwIf,
+        "it" => Token::KwIt,
+        "else" => Token::KwElse,
+        "when" => Token::KwWhen,
+        "with" => Token::KwWith,
+        "match" => Token::KwMatch,
+        "let" => Token::KwLet,
+        "unused" => Token::KwUnused,
+        "initial" => Token::KwInitial,
+        "true" => Token::KwTrue,
+        "false" => Token::KwFalse,
+        "dontcare" => Token::KwDontcare,
+        "dyn" => Token::KwDyn,
+        "dependson" => Token::KwDependsOn,
+        "platform" => Token::KwPlatform,
+        "for" => Token::KwFor,
+        "default" => Token::KwDefault,
+        "Str" => Token::Str,
+        "DocComment" => Token::DocComment,
+        "DocBang" => Token::DocBang,
+    }
+}

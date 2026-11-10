@@ -1,0 +1,392 @@
+Package := DocBang? PackageStmt*
+
+PackageStmt :=
+      Import
+    | Item
+
+Import := "import" Ident
+
+DocBang := ("DocBang")+
+
+DocString := ("DocComment")+
+
+DocAnn := DocString? Annotation*
+
+Annotation := "@" Ident ArgList?
+
+Item :=
+      ModDef
+    | StructDef
+    | UnionDef
+    | EnumDef
+    | BuiltinDef
+    | SocketDef
+    | PlatformDef
+
+ModDef := DocAnn "pub"? "ext"? "mod" Ident ForClause? Generics? "{" ModStmt* "}"
+
+ForClause := "for" Ofness
+
+StructDef := DocAnn "pub"? "struct" "type" Ident Generics? "{" StructStmt* "}"
+
+UnionDef := DocAnn "pub"? "union" "type" Ident Generics? "{" UnionStmt* "}"
+
+EnumDef := DocAnn "pub"? "enum" "type" Ident Generics? "{" EnumStmt* "}"
+
+BuiltinDef := DocAnn "pub"? "builtin" "type" Ident Generics? "{" "}"
+
+SocketDef := DocAnn "pub"? "socket" Ident Generics? "{" ChannelStmt* "}"
+
+ChannelStmt := DocAnn ChannelDir Ident ":" Type DependsonList?
+
+ChannelDir :=
+      "cosi"
+    | "soci"
+
+PlatformDef := DocAnn "pub"? "platform" Ident "{" ComponentStmt* "}"
+
+StructStmt := DocAnn Ident ":" Type
+
+UnionStmt := DocAnn Ident ParamList?
+
+EnumStmt := DocAnn Ident ParamList? EnumValue?
+
+EnumValue := "=" Expr
+
+ParamList := "(" CommaList<Param>? ")"
+
+Param := DocAnn Ident ":" Type
+
+Generics := "[" CommaList<KindParam> "]"
+
+KindParam := Ident ":" Ident
+
+GenericsParams := "[" CommaList<GenericsArg> "]"
+
+GenericsArg :=
+      Nat
+    | Type
+
+Type := Ofness GenericsParams?
+
+ExecStmt :=
+      DriverStmt
+    | BidirectionalDriverStmt
+    | IndexedDriverStmt
+    | UnusedStmt
+    | InitialStmt
+    | If
+    | Match
+    | Let
+
+DeclStmt :=
+      ComponentStmt
+    | MemoryStmt
+    | SubmoduleStmt
+    | SocketStmt
+
+ModStmt :=
+      DeclStmt
+    | ExecStmt
+
+MemStmt :=
+      ExecStmt
+    | OnRegion
+
+ComponentStmt := DocAnn ComponentKind Ident ":" Type DependsonList? DefaultClause? OnClause? "async"? Block?
+
+ComponentKind :=
+      "incoming"
+    | "outgoing"
+    | "bus"
+    | "net"
+    | "wire"
+    | "reg"
+    | "outgoing" "wire"
+    | "outgoing" "reg"
+
+MemoryStmt := DocAnn "memory" Ident "[" Expr "]" ":" Type OnClause? MemoryBody?
+
+SubmoduleStmt := DocAnn "mod" Ident "of" Ofness GenericsParams? Block?
+
+SocketStmt := DocAnn SocketRole "socket" Ident "of" Ofness GenericsParams? Block?
+
+SocketRole :=
+      "client"
+    | "server"
+
+DriverStmt := Path DriverOp Expr
+
+DriverOp :=
+      ":="
+    | "<="
+    | "#="
+    | "#-"
+
+BidirectionalDriverStmt := Path BiDriverOp Path
+
+BiDriverOp :=
+      "#=#"
+    | ":=:"
+
+IndexedDriverStmt := Path "[" IndexSpec "]" IndexedDriverOp Expr
+
+IndexSpec :=
+      "dyn" Expr
+    | Nat
+
+IndexedDriverOp :=
+      "<="
+    | ":="
+
+UnusedStmt := "unused" Path
+
+InitialStmt := "initial" Path "<=" Expr
+
+DependsonList := "dependson" CommaList<Path>
+
+OnClause := "on" Expr
+
+DefaultClause := "default" Expr
+
+Block := "{" ModStmt* "}"
+
+MemoryBody := "{" MemStmt* "}"
+
+OnRegion := "on" Expr Block
+
+If := "if" "{" IfArm* "}"
+
+IfArm :=
+      "when" Expr ArmBody
+    | "else" ArmBody
+
+Match := "match" Expr "{" MatchArm* "}"
+
+MatchArm :=
+      "with" Pat ArmBody
+    | "else" ArmBody
+
+ArmBody :=
+      "=>" Expr
+    | Block
+    | If
+    | Match
+    | Let
+
+Let := "let" CommaList<LetBinding> ArmBody
+
+LetBinding := Ident LetBindingType? "=" Expr
+
+LetBindingType := ":" Type
+
+Pat :=
+      "#" Ident
+    | "@" Ident PatArgs?
+    | WordLit
+    | BitLit
+    | Ident
+    | "dontcare"
+
+PatArgs := "(" CommaListTrail<Pat>? ")"
+
+Expr :=
+      If
+    | Match
+    | Let
+    | ExprStruct
+    | ExprBinOpLogical
+
+ExprStruct := "$" "{" AssignList? "}"
+
+AssignList := CommaListTrail<Assign>
+
+Assign := Ident "=" Expr
+
+ExprBinOpLogical :=
+      ExprBinOpLogical BinOpLogical ExprBinOpCompare
+    | ExprBinOpCompare
+
+BinOpLogical :=
+      "&&"
+    | "||"
+    | "^^"
+
+ExprBinOpCompare :=
+      ExprBinOpCompare BinOpCompare ExprBinOpAdditive
+    | ExprBinOpAdditive
+
+BinOpCompare :=
+      "<"
+    | "<="
+    | ">"
+    | ">="
+    | "=="
+    | "!="
+
+ExprBinOpAdditive :=
+      ExprBinOpAdditive BinOpAdditive ExprUnOp
+    | ExprUnOp
+
+BinOpAdditive :=
+      "+"
+    | "+."
+    | "-"
+    | "-."
+    | "&"
+    | "|"
+    | "^"
+
+ExprUnOp :=
+      UnOp ExprUnOp
+    | "tap" Path
+    | ExprAscription
+
+UnOp :=
+      "-"
+    | "~"
+    | "!"
+
+ExprAscription :=
+      ExprPrimary ":" Type
+    | ExprPrimary
+
+ExprPrimary :=
+      ExprPrimary "->" Ident
+    | ExprPrimary "[" "dyn" Expr "]"
+    | ExprPrimary "[" Index "]"
+    | ExprPrimary "[" Index ".." Index "]"
+    | Atom
+
+Atom :=
+      Path
+    | Ofness ArgList
+    | "@" Ident ArgList?
+    | WordLit
+    | BitLit
+    | "Str"
+    | "#" Ident
+    | "?"
+    | "dontcare"
+    | "(" Expr ")"
+
+ArgList := "(" CommaListTrail<Expr>? ")"
+
+Ofness :=
+      Ident
+    | Ident "::" Ident
+
+Path := PathStart ("." Ident)*
+
+PathStart :=
+      "Ident"
+    | "it"
+
+Index := "Nat"
+
+WordLit :=
+      "Nat"
+    | "Word"
+
+BitLit :=
+      "true"
+    | "false"
+
+Ident := "Ident"
+
+Nat := "Nat"
+
+CommaList<T> := (T ",")* T
+
+CommaListTrail<T> := (T ",")* T ","?
+
+Tokens:
+  "!"
+  "!="
+  "#"
+  "#-"
+  "#="
+  "#=#"
+  "$"
+  "&"
+  "&&"
+  "("
+  ")"
+  "+"
+  "+."
+  ","
+  "-"
+  "-."
+  "->"
+  "."
+  ".."
+  ":"
+  "::"
+  ":="
+  ":=:"
+  "<"
+  "<="
+  "="
+  "=="
+  "=>"
+  ">"
+  ">="
+  "?"
+  "@"
+  "DocBang"
+  "DocComment"
+  "Ident"
+  "Nat"
+  "Str"
+  "Word"
+  "["
+  "]"
+  "^"
+  "^^"
+  "async"
+  "builtin"
+  "bus"
+  "client"
+  "cosi"
+  "default"
+  "dependson"
+  "dontcare"
+  "dyn"
+  "else"
+  "enum"
+  "ext"
+  "false"
+  "for"
+  "if"
+  "import"
+  "incoming"
+  "initial"
+  "it"
+  "let"
+  "match"
+  "memory"
+  "mod"
+  "net"
+  "of"
+  "on"
+  "outgoing"
+  "platform"
+  "pub"
+  "reg"
+  "server"
+  "soci"
+  "socket"
+  "struct"
+  "tap"
+  "true"
+  "type"
+  "union"
+  "unused"
+  "when"
+  "wire"
+  "with"
+  "{"
+  "|"
+  "||"
+  "}"
+  "~"

@@ -1950,6 +1950,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "vir-parse"
+version = "0.4.0"
+dependencies = [
+ "bstr",
+ "lalrpop 0.23.1",
+ "lalrpop-util 0.23.1",
+ "virdant",
+]
+
+[[package]]
 name = "virdant"
 version = "0.4.0"
 dependencies = [
