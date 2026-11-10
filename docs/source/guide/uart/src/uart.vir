@@ -1,0 +1,72 @@
+union type UartState {
+    Idle()
+    Start()
+    Data(data : Word[3])
+    Stop()
+}
+
+pub mod UartSender {
+    incoming clock : Clock
+
+    server socket inp of Pipe[Word[8]] {
+        it.ready := state == @Idle && baud_timer == 0
+    }
+
+    outgoing tx : Bit {
+        it := match state {
+            with @Idle() => true
+            with @Start() => false
+            with @Data(index) => buffer[dyn index]
+            with @Stop() => true
+        }
+    }
+
+    reg buffer : Word[8]
+
+    reg state : UartState {
+        initial it <= #Idle
+    }
+
+    wire baud_limit : Word[4] {
+        it := 8
+    }
+
+    reg baud_timer : Word[4] {
+        initial it <= 0
+
+        it <= if {
+            when it > 0 => it - 1
+            else match state {
+                with @Stop() => 0
+                else => baud_limit
+            }
+        }
+    }
+
+    if {
+        when baud_timer == 0 match state {
+            with @Idle() {
+                match inp.data {
+                    with @Valid(data) {
+                        buffer <= data
+                        state <= @Start()
+                    }
+                }
+            }
+            with @Start() {
+                state <= @Data(0)
+            }
+            with @Data(data) if {
+                when data < 7 {
+                    state <= @Data(data + 1)
+                }
+                else {
+                    state <= @Stop()
+                }
+            }
+            with @Stop() {
+                state <= @Idle()
+            }
+        }
+    }
+}

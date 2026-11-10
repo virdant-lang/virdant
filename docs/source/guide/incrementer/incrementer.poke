@@ -1,0 +1,30 @@
+#> Demonstrates the 3-bit Incrementer: hold, count up, and overflow wraparound.
+vcd trace.vcd
+
+#> `counter` starts at 0, thanks to `initial it <= 0`.
+assert counter == 0
+
+#> With `increment` low, the counter holds its value.
+poke increment false
+tick 2
+assert counter == 0
+
+#> Raise `increment`: the counter counts up on every cycle.
+poke increment true
+tick 1
+assert counter == 1
+tick 3
+assert counter == 4
+
+#> Three more ticks reach the top of the 3-bit range...
+tick 3
+assert counter == 7
+
+#> ...and the next tick overflows, wrapping back to 0.
+tick 1
+assert counter == 0
+tick 2
+assert counter == 2
+
+show
+exit

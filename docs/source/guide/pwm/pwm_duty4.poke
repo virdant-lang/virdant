@@ -1,0 +1,13 @@
+vcd trace_duty4.vcd
+
+# Duty 4: out is high while sweep > duty, so out is high for
+# 3 of every 8 cycles.
+
+# Zero the sweep so the run starts with out low and the first
+# pulse is easy to spot.
+poke sweep 0
+
+poke duty 4
+tick 16
+
+exit

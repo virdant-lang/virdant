@@ -1,0 +1,53 @@
+import virt
+import uart
+
+pub mod Top for virt::Virt {
+    incoming clock : Clock
+
+    outgoing tx : Bit
+    outgoing exit : Valid[Word[8]]
+
+    mod sender of uart::UartSender {
+        it.clock := clock
+        tx       := it.tx
+    }
+
+    mod char_rom of CharRom {
+        it.clock := clock
+        it.index := char_index
+    }
+
+    reg char_index : Word[5] {
+        initial it <= 0
+        if {
+            when sender.inp.ready {
+                it <= it + 1
+            }
+        }
+    }
+
+    let done = char_rom.char == 0 && sender.inp.ready {
+        if {
+            when done {
+                sender.inp.data := @Valid(char_rom.char)
+                exit := @Valid(0)
+            }
+            else {
+                sender.inp.data := @Invalid()
+                exit := @Invalid()
+            }
+        }
+    }
+}
+
+mod CharRom {
+    incoming clock : Clock
+
+    incoming index : Word[5]
+    outgoing char : Word[8] dependson index {
+        it := rom[dyn index]
+    }
+
+    @image_inline("Hello, world!\r\n\0")
+    memory rom[32] : Word[8]
+}

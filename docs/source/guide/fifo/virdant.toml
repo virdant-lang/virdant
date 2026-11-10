@@ -2,4 +2,4 @@
 name = "fifo"
 
 [prog]
-top = "fifo::Top"
+top = "top::Fifo"

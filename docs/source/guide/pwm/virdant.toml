@@ -1,5 +1,5 @@
 [project]
-name = "pwm"
+name = "counter"
 
 [prog]
-top = "pwm::PwmDemo"
+top = "pwm::Pwm"

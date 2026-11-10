@@ -1,0 +1,48 @@
+vcd trace.vcd
+
+# Load a byte into the register.
+poke shift_in false
+poke load_value #Valid(0b10110011w8)
+tick
+poke load_value #Invalid()
+assert value == 0b10110011w8
+
+# Now clock it out one bit at a time.
+# Notice `shift_out` emits the byte MSB-first: 1, 0, 1, 1, 0, 0, 1, 1 --
+# no matter what wanders in through `shift_in` at the bottom.
+poke shift_in false
+tick
+assert shift_out == 0b0
+assert value == 0b01100110w8
+
+poke shift_in true
+tick
+assert shift_out == 0b1
+assert value == 0b11001101w8
+
+poke shift_in false
+tick
+assert shift_out == 0b1
+assert value == 0b10011010w8
+
+poke shift_in true
+tick
+assert shift_out == 0b0
+assert value == 0b00110101w8
+
+poke shift_in true
+tick
+assert shift_out == 0b0
+assert value == 0b01101011w8
+
+poke shift_in false
+tick
+assert shift_out == 0b1
+assert value == 0b11010110w8
+
+poke shift_in true
+tick
+assert shift_out == 0b1
+assert value == 0b10101101w8
+
+exit

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 212 176" width="212" height="176" role="img" aria-label="Vertical addition for the four binary cases of the HalfAdder">
+  <style>
+    .virdant-adder-svg {
+      font-family: "Nunito", sans-serif;
+      font-weight: 600;
+      font-size: 17px;
+      fill: var(--text-main, #333);
+    }
+    .virdant-adder-svg .adder-cell text {
+      text-anchor: end;
+      fill: var(--text-main, #333);
+    }
+    .virdant-adder-svg .adder-cell .separator {
+      stroke: var(--text-main, #333);
+      stroke-width: 2;
+    }
+  </style>
+  <g class="virdant-adder-svg">
+
+    <!-- Row 0, Col 0: 0 + 0 = 00 -->
+    <g class="adder-cell" transform="translate(34, 12)">
+      <text x="36" y="14">0</text>
+      <text class="operator" x="11" y="35">+</text>
+      <text x="36" y="35">0</text>
+      <line class="separator" x1="-3" y1="43" x2="40" y2="43" />
+      <text x="36" y="65">00</text>
+    </g>
+
+    <!-- Row 0, Col 1: 0 + 1 = 01 -->
+    <g class="adder-cell" transform="translate(146, 12)">
+      <text x="36" y="14">0</text>
+      <text class="operator" x="11" y="35">+</text>
+      <text x="36" y="35">1</text>
+      <line class="separator" x1="-3" y1="43" x2="40" y2="43" />
+      <text x="36" y="65">01</text>
+    </g>
+
+    <!-- Row 1, Col 0: 1 + 0 = 01 -->
+    <g class="adder-cell" transform="translate(34, 106)">
+      <text x="36" y="14">1</text>
+      <text class="operator" x="11" y="35">+</text>
+      <text x="36" y="35">0</text>
+      <line class="separator" x1="-3" y1="43" x2="40" y2="43" />
+      <text x="36" y="65">01</text>
+    </g>
+
+    <!-- Row 1, Col 1: 1 + 1 = 10 -->
+    <g class="adder-cell" transform="translate(146, 106)">
+      <text x="36" y="14">1</text>
+      <text class="operator" x="11" y="35">+</text>
+      <text x="36" y="35">1</text>
+      <line class="separator" x1="-3" y1="43" x2="40" y2="43" />
+      <text x="36" y="65">10</text>
+    </g>
+
+  </g>
+</svg>

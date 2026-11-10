@@ -1,0 +1,20 @@
+pub mod ShiftReg {
+    incoming clock : Clock
+
+    incoming shift_in  : Bit
+    outgoing shift_out : Bit
+
+    incoming load_value : Valid[Word[8]]
+
+    outgoing reg value : Word[8] {
+        match load_value {
+            with @Valid(new_value) {
+                it <= new_value
+            }
+            with @Invalid() {
+                it <= word(it[7..0], shift_in)
+            }
+        }
+        shift_out := it[7]
+    }
+}

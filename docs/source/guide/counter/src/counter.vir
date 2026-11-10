@@ -1,0 +1,21 @@
+pub mod Counter {
+    incoming clock : Clock
+    incoming reset : Bit
+
+    incoming increment : Bit
+    incoming decrement : Bit
+
+    reg counter : Word[2] {
+        if {
+            when reset {
+                it <= 0
+            }
+            when increment && !decrement {
+                it <= it + 1
+            }
+            when decrement && !increment {
+                it <= it - 1
+            }
+        }
+    }
+}
