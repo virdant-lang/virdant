@@ -1,0 +1,27 @@
+$timescale 1ps $end
+$scope module top $end
+$var wire 8 ! inp $end
+$var wire 8 " out $end
+$upscope $end
+$enddefinitions $end
+#0
+$dumpvars
+b00000000 !
+b00000000 "
+$end
+#1000000
+b00000001 !
+b00000001 "
+#2000000
+#3000000
+b00000010 !
+b00000010 "
+#4000000
+b00000011 !
+b00000011 "
+#5000000
+#6000000
+#7000000
+b00000100 !
+b00000100 "
+#8000000

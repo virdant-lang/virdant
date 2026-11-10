@@ -1,0 +1,9 @@
+pub mod Incrementer {
+    incoming clock : Clock
+    incoming increment : Bit
+
+    reg counter : Word[4] {
+        initial it <= 0
+        it <= mux(increment, it + 1, it)
+    }
+}

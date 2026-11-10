@@ -1,0 +1,81 @@
+pub mod Fifo {
+    incoming clock : Clock
+
+    server socket inp of Pipe[Word[8]] {
+        it.ready := !is_full
+    }
+
+    client socket out of Pipe[Word[8]] {
+        it.data := out_data
+    }
+
+    reg count : Word[2] {
+        initial it <= 0
+
+        if {
+            when inp_fires && !out_fires {
+                it <= it + 1
+            }
+            when out_fires && !inp_fires {
+                it <= it - 1
+            }
+        }
+    }
+
+    reg head : Word[1] {
+        initial it <= 0
+        if {
+            when out_fires {
+                it <= it + 1
+            }
+        }
+    }
+
+    reg tail : Word[1] {
+        initial it <= 0
+        if {
+            when inp_fires {
+                it <= it + 1
+            }
+        }
+    }
+
+    memory slots[2] : Word[8] {
+        if {
+            when !is_full match inp.data {
+                with @Valid(data) {
+                    it[dyn tail] <= data
+                }
+            }
+        }
+    }
+
+    wire is_empty : Bit {
+        it := count == 0
+    }
+
+    wire is_full : Bit {
+        it := count == 2
+    }
+
+    wire inp_fires : Bit {
+        it := match inp.data {
+            with @Valid(dontcare) => !is_full
+            with @Invalid() => false
+        }
+    }
+
+    wire out_fires : Bit {
+        it := match out_data {
+            with @Valid(dontcare) => out.ready
+            with @Invalid() => false
+        }
+    }
+
+    wire out_data : Valid[Word[8]] {
+        it := if {
+            when is_empty => @Invalid()
+            else => @Valid(slots[dyn head])
+        }
+    }
+}

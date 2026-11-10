@@ -1,208 +1,99 @@
 Pulse-Width Modulation
 ======================
-In this example, we will demonstrate how to build a design out of
-reusable blocks.
-
-`Pwm` is a *pulse-width modulator*: a circuit which outputs a square
-wave whose duty cycle you can set while the circuit is running.
-
-PWM is everywhere in digital electronics.
-A PWM output might drive the brightness of an LED
-(the LED averages the on/off time and appears dimmer),
-control the speed of a motor,
-or approximate an analog voltage with nothing but a digital pin
-and a low-pass filter.
-
-The idea is simple.
-The output toggles with a fixed *period*:
-it is high for some number of cycles, then low for the rest.
-The fraction of the period spent high is the *duty cycle*.
-By changing the duty cycle, you change how "on" the output is,
-without ever leaving the digital world.
-
-.. literalinclude:: /guide/pwm/src/pwm.vir
+.. literalinclude:: src/pwm.vir
     :caption: pwm.vir
     :language: virdant
 
+- no need for initial
 
-The `Pwm` Block
----------------
-Our design is split in two:
-a `Pwm` block that does the actual work,
-and a `PwmDemo` top module that instantiates it.
+`out` is high while `sweep < duty`.
+Since `sweep` runs 0 through 7 and wraps, each value of `duty` holds
+`out` high for a fixed share of the 8-cycle period:
+`duty` cycles out of 8.
 
-`Pwm` has three inputs and one output:
+Each poke script below zeroes `sweep` at power-on, pins one `duty`
+value, and ticks through two full periods.
+Because nothing changes mid-run, the two periods come out identical;
+because `sweep` starts at 0, every trace opens at the start of a
+period -- `out` rises immediately for every `duty` above 0, holds
+high while `sweep` counts up to `duty`, then stays low until the
+wrap.
+Watch the high stretch grow as `duty` grows -- from nothing at all
+at `duty` 0 up to seven of eight cycles at `duty` 7.
+(In each waveform, `duty` is rendered in decimal.)
 
-.. literalinclude:: /guide/pwm/src/pwm.vir
-    :language: virdant
-    :dedent:
-    :lines: 13-20
+Waveforms
+---------
+Here are a few waveforms with various values of `duty`.
 
-.. literalinclude:: /guide/pwm/src/pwm.vir
-    :language: virdant
-    :dedent:
-    :lines: 22-25
+Duty 0 -- always low:
 
-Inside `Pwm` there are two registers.
+`sweep` is never below 0, so `out` never rises: the zero duty value
+is a completely flat output.
 
-The first is a free-running counter.
-It increments by 1 on every clock edge, and when it passes 255 it
-wraps back to 0, giving a period of 256 cycles:
+.. vcd:: trace_duty0.vcd
 
-.. literalinclude:: /guide/pwm/src/pwm.vir
-    :language: virdant
-    :dedent:
-    :lines: 27-31
+    signal top.clock:clk
+    signal top.duty:dec
+    signal top.out
 
-Notice there is no `if` block and no special case for the wrap.
-The `+` operator in Virdant is *modular*: a result wider than its
-operands is truncated, so `255w8 + 1w8` is simply `0w8`.
-The wrap-around comes for free.
+Duty 1 -- 12.5%:
 
-The second register holds the current duty cycle.
-While `load` is high, it picks up `duty_in` on the next clock edge;
-otherwise, it keeps its old value:
+A single high pulse per period.
 
-.. literalinclude:: /guide/pwm/src/pwm.vir
-    :language: virdant
-    :dedent:
-    :lines: 33-41
+.. vcd:: trace_duty1.vcd
 
-This is what makes the block *settable*:
-`duty` stays put between loads, so the waveform keeps its shape until
-you ask for a new one.
+    signal top.clock:clk
+    signal top.duty:dec
+    signal top.out
 
+Duty 2 -- 25%:
 
-The Comparison
---------------
-The output itself is one comparison:
+.. vcd:: trace_duty2.vcd
 
-.. literalinclude:: /guide/pwm/src/pwm.vir
-    :language: virdant
-    :dedent:
-    :lines: 23-25
+    signal top.clock:clk
+    signal top.duty:dec
+    signal top.out
 
-`out` is high exactly when `count < duty`.
-Since `count` sweeps 0 through 255 each period,
-`out` is high for the first `duty` cycles of every period
-and low for the remaining `256 - duty`.
+Duty 3 -- 37.5%:
 
-The `:=` here is a *continuous* driver:
-it is combinational logic, not a clocked register.
-Every cycle, the counter's new value flows straight through the
-comparator and out of the module in the same cycle, with no clock edge
-in between.
-That is exactly what we want for a PWM output —
-the duty cycle change takes effect on the very next cycle —
-and it is also why the comparison costs no registers:
-an FPGA synthesizer will turn `count < duty` into a small chain of
-adder-style lookup tables, not flip-flops.
+.. vcd:: trace_duty3.vcd
 
-.. note::
+    signal top.clock:clk
+    signal top.duty:dec
+    signal top.out
 
-    The `out` port needs no `dependson` list.
-    `dependson` declares which *incoming ports* an outgoing port may
-    depend on combinationally, and `out` reads only the two registers
-    `count` and `duty`.
-    Registers are clocked, so their values cannot change mid-cycle,
-    and a registered value is never a combinational dependency.
+Duty 4 -- 50%:
+A perfect square wave: four cycles high, four low.
 
-.. note::
+.. vcd:: trace_duty4.vcd
 
-    `out` is written as a driver block on the port itself, with `it`
-    referring to the port being driven.
-    This is the preferred Virdant style:
-    the port's declaration and its driver live in one place.
+    signal top.clock:clk
+    signal top.duty:dec
+    signal top.out
 
+Duty 5 -- 62.5%:
 
-Instantiating a Block
----------------------
-Now the top module.
-`PwmDemo` exists only to *use* a `Pwm`:
+.. vcd:: trace_duty5.vcd
 
-.. literalinclude:: /guide/pwm/src/pwm.vir
-    :language: virdant
-    :dedent:
-    :lines: 46-59
+    signal top.clock:clk
+    signal top.duty:dec
+    signal top.out
 
-The line `mod pwm of Pwm` creates an *instance*:
-a copy of the `Pwm` block's hardware, named `pwm`.
-Its ports are connected with dot notation,
-and because we connect three ports, we group the connections in an
-`it` block.
-Inside the block, `it` refers to the instance, so `it.clock := clock`
-means "wire the instance's `clock` port to our `clock`".
+Duty 6 -- 75%:
 
-The duty cycle is a constant here: `it.duty_in := 64w8`.
-256 × 25% = 64, so this demo blinks at a 25% duty cycle.
+.. vcd:: trace_duty6.vcd
 
-`it.load := do_load` makes `load` a one-cycle power-on pulse,
-generated by a tiny `loaded` register which flips itself to `true`
-after the first clock edge:
+    signal top.clock:clk
+    signal top.duty:dec
+    signal top.out
 
-.. literalinclude:: /guide/pwm/src/pwm.vir
-    :language: virdant
-    :dedent:
-    :lines: 61-74
+Duty 7 -- almost always high:
+Out of every 8 cycles, `out` is high for 7; it dips low only for the
+one cycle where `sweep` reaches 7, just before the wrap.
 
-So `PwmDemo` loads `duty` with 64 exactly once, then leaves the block
-alone to free-run forever.
+.. vcd:: trace_duty7.vcd
 
-
-Why the Split?
---------------
-`Pwm` and `PwmDemo` could have been one module —
-the hardware would be identical.
-The split is for *reuse*.
-
-Because the PWM machinery lives in its own module with a clean port
-list, the next design can instantiate `Pwm` too:
-a motor controller with a ramp generator feeding `duty_in`,
-an LED fader, a fan speed regulator.
-Each one is just a new top module with new wiring;
-the block itself never changes.
-
-This is the same idea as a function in software:
-write the tricky part once, give it a name and an interface,
-and call it from wherever you need it.
-
-.. note::
-
-    In Verilog you would write `pwm u_pwm (.clock(clock), ...)` to
-    instantiate a module.
-    Virdant's `mod pwm of Pwm` plus the `it` block is the same idea,
-    with the connections checked by the type system:
-    connect a `Word[4]` to a `Word[8]` port and `vir check` will
-    refuse to build it.
-
-
-Watching It Run
----------------
-The lesson ships with a poke script, `pwm.poke`, which drives the
-`Pwm` block directly and checks the waveform cycle by cycle.
-Run it from this directory with:
-
-.. code-block:: console
-
-    $ vir poke pwm.poke --script
-
-.. literalinclude:: /guide/pwm/pwm.poke
-    :caption: pwm.poke
-    :language: virdant
-
-The script first pins its inputs down —
-input ports power on in an unknown state, so `load` is driven low
-before the first tick — and confirms the power-on state
-(`duty` is 0, so `out` is low).
-It then loads a duty of 64 with a one-cycle `load` pulse.
-From there it walks the output through one period:
-high while `count` is below 64, low the moment `count` reaches 64,
-and still low all the way to the wrap at 255,
-where a new period begins and `out` goes high again.
-
-Every `assert` is checked by the simulator;
-if any of them fails, `vir poke --script` exits nonzero.
-
-If every assertion passes, the script exits 0 —
-which is exactly what our `test.toml` asks for when the guide is
-built.
+    signal top.clock:clk
+    signal top.duty:dec
+    signal top.out

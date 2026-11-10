@@ -8,6 +8,7 @@ The Virdant Hardware Language
 
     getting-started
     guide/index
+    guide_dev/index
     tools/index
     principles
     coding-conventions

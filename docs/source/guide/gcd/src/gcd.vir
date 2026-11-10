@@ -1,57 +1,45 @@
-//> The phases of a GCD computation.
-//>
-//> `Idle` waits for a request; `Running(lhs, rhs)` holds the two numbers
-//> still being reduced; `Done(result)` holds the finished answer.
-union type GcdState {
+union type State {
     Idle()
-    Running(lhs : Word[8], rhs : Word[8])
+    Running(x : Word[8], y : Word[8])
     Done(result : Word[8])
 }
 
-//> Computes the greatest common divisor of two 8-bit words,
-//> one subtraction step per clock cycle.
 pub mod Gcd {
-    //> The clock.
     incoming clock : Clock
+    incoming reset : Bit
+    incoming x : Word[8]
+    incoming y : Word[8]
+    incoming fire : Bit
+    outgoing result : Valid[Word[8]]
 
-    //> Pulse high to request a GCD.
-    //> Sampled whenever `ready` is high.
-    incoming valid : Bit
+    reg state : State
 
-    //> The first operand, sampled together with `valid`.
-    incoming a : Word[8]
-
-    //> The second operand, sampled together with `valid`.
-    incoming b : Word[8]
-
-    //> The phase of the computation.
-    reg state : GcdState {
-        initial it <= @Idle()
-        it <= match it : GcdState {
-            with @Idle() => mux(valid, @Running(a, b), it)
-            with @Running(lhs, rhs) => if {
-                when lhs == rhs => @Done(lhs)
-                when lhs > rhs => @Running(lhs - rhs, rhs)
-                else => @Running(lhs, rhs - lhs)
+    if {
+        when reset {
+            state <= @Idle()
+        }
+        else match state {
+            with @Idle() {
+                state <= mux(fire, @Running(x, y), @Idle())
             }
-            with @Done(_) => @Idle()
-        }
-    }
-
-    //> High whenever a request would be accepted this cycle.
-    outgoing ready : Bit {
-        it := match state {
-            with @Idle() => true
-            with @Running(_, _) => false
-            with @Done(_) => false
-        }
-    }
-
-    //> The result, valid exactly when the computation has finished.
-    outgoing out : Valid[Word[8]] {
-        it := match state {
-            with @Done(result) => @Valid(result)
-            else => @Invalid()
+            with @Running(x, y) if {
+                when y == 0 {
+                    state <= @Done(x)
+                }
+                when x == 0 {
+                    state <= @Done(y)
+                }
+                when x < y {
+                    state <= @Running(y - x, x)
+                }
+                else {
+                    state <= @Running(x - y, y)
+                }
+            }
+            with @Done(r) {
+                state <= @Idle()
+                result := @Valid(r)
+            }
         }
     }
 }

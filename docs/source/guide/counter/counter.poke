@@ -1,0 +1,30 @@
+vcd trace.vcd
+
+poke increment false
+poke decrement false
+
+poke reset true
+tick
+poke reset false
+
+poke increment true
+tick 7
+
+poke increment false
+tick 3
+
+poke decrement true
+tick 2
+
+poke increment true
+tick 2
+
+poke decrement false
+tick
+
+poke increment false
+tick
+
+assert counter == 2
+
+exit

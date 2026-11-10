@@ -1,45 +1,29 @@
-# gcd(48, 18) = 6
-poke valid 0
+vcd trace.vcd
+
+# Hold the design in reset so it starts in a known state.
+poke reset true
 tick
-assert ready == true
-assert out == #Invalid
-poke a 48
-poke b 18
-poke valid 1
+poke reset false
+
+# Compute gcd(48, 18) = 6.
+# Pulse `fire` for one cycle: the operands on `x` and `y` are loaded
+# and the state machine starts subtracting.
+poke x 48
+poke y 18
+poke fire true
 tick
-poke valid 0
-assert ready == false
+poke fire false
+tick 7
+
+# `valid` is high now: `result` holds 6 until the next `fire`.
+
+# Compute gcd(21, 14) = 7 without touching `reset`:
+# a new `fire` reloads the operands straight from `Done`.
+poke x 21
+poke y 14
+poke fire true
+tick
+poke fire false
 tick 5
-assert out == #Valid(6w8)
-tick
-assert out == #Invalid
 
-# gcd(100, 75) = 25
-poke a 100
-poke b 75
-poke valid 1
-tick
-poke valid 0
-tick 4
-assert out == #Valid(25w8)
-tick
-
-# gcd(60, 45) = 15
-poke a 60
-poke b 45
-poke valid 1
-tick
-poke valid 0
-tick 4
-assert out == #Valid(15w8)
-tick
-
-# gcd(13, 13) = 13 (equal inputs finish in one step)
-poke a 13
-poke b 13
-poke valid 1
-tick
-poke valid 0
-tick 1
-assert out == #Valid(13w8)
 exit

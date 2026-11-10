@@ -1,0 +1,5 @@
+[project]
+name = "incrementer"
+
+[prog]
+top = "incrementer::Incrementer"

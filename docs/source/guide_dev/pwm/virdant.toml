@@ -1,0 +1,5 @@
+[project]
+name = "pwm"
+
+[prog]
+top = "pwm::PwmDemo"

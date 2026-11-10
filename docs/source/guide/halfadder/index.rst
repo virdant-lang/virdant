@@ -5,7 +5,7 @@ In this example, we will learn about a few basic operators in Virdant.
 A `HalfAdder` module is the simplest circuit which does something you might call "arithmetic".
 This is a classic circuit everyone should know.
 
-.. literalinclude:: /guide/adder/src/adder.vir
+.. literalinclude:: src/adder.vir
     :language: virdant
     :lines: 1-15
 
