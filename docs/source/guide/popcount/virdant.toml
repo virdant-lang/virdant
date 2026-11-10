@@ -2,4 +2,4 @@
 name = "popcount"
 
 [prog]
-top = "popcount::Popcount4"
+top = "popcount::PopCount4"

@@ -1,0 +1,19 @@
+top popcount::PopCount8
+vcd trace8.vcd
+
+poke x 0b00000000
+advance
+
+poke x 0b00001111
+advance
+
+poke x 0b01010101
+advance
+
+poke x 0b11100110
+advance
+
+poke x 0b11111111
+advance
+
+exit
