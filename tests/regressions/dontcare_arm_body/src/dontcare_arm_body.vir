@@ -1,0 +1,99 @@
+//! Self-checking `kind = "run"` regression test: a bare `dontcare`
+//! expression as the body of an arm in an expression-position `if`
+//! or `match`.
+//!
+//! A bare `dontcare` arm body was once rejected by the type checker
+//! with `Invalid arm body type`: `AstNodePayload::ExprDontcare` was
+//! missing from `AstNode::is_expr` (virdant/src/syntax/ast.rs), so the
+//! arm-body dispatch in `check_if`/`check_match` fell through to its
+//! catch-all.  `dontcare` is a first-class expression everywhere else
+//! (typing, simulation, Verilog conversion), so the fix was to add it
+//! to `is_expr`.
+//!
+//! The harness exercises the bare `dontcare` form in both dispatchers:
+//!
+//! - an `if` whose untaken `else` arm is `dontcare` (the value is
+//!   never read, so nothing about it is asserted);
+//! - an `if` whose taken arm produces a real value and whose untaken
+//!   `else` arm is `dontcare` (the taken value is asserted);
+//! - a `match` with both an untaken bare-`dontcare` arm and a bare-
+//!   `dontcare` `else` arm (the taken arm's value is asserted).
+//!
+//! Every check is ANDed into a running `all_ok`; the simulator exits
+//! with code 0 only if all checks passed, and 1 otherwise.
+
+import virt
+
+pub mod Top for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` when every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> An `if` whose untaken `else` arm is bare `dontcare`: the
+    //> design must build and the simulation must run; the value is
+    //> implementation-defined and never read, so nothing about it is
+    //> asserted.
+    wire unused_if_wire : Word[8] {
+        it := if {
+            when false => 0w8
+            else => dontcare
+        }
+    }
+
+    unused unused_if_wire
+
+    //> An `if` whose taken arm yields a real value and whose untaken
+    //> `else` arm is bare `dontcare`.
+    wire taken_if_wire : Word[8] {
+        it := if {
+            when true => 0xa7w8
+            else => dontcare
+        }
+    }
+
+    //> A `match` with a bare-`dontcare` untaken arm and a bare-
+    //> `dontcare` `else` arm.  `selector` powers on as 0, so the
+    //> `with 0` arm is taken and its value is deterministic.
+    wire taken_match_wire : Word[8] {
+        it := match selector {
+            with 0 => 0x5cw8
+            with 1 => dontcare
+            else => dontcare
+        }
+    }
+
+    //> Check that the taken `if` arm produced its value.
+    wire ok_taken_if : Bit {
+        it := taken_if_wire == 0xa7w8
+    }
+
+    //> Check that the taken `match` arm produced its value.
+    wire ok_taken_match : Bit {
+        it := taken_match_wire == 0x5cw8
+    }
+
+    //> AND of every check.
+    wire all_ok : Bit {
+        it := ok_taken_if && ok_taken_match
+    }
+
+    //> Match subject: 0 selects the `with 0` arm on every cycle.
+    wire selector : Word[2] {
+        it := 0w2
+    }
+
+    //> Rises on the first clock edge, so that `exit` never observes
+    //> the vacuous power-on `all_ok`.
+    reg finished : Bit {
+        initial it <= false
+        it <= true
+    }
+}

@@ -558,6 +558,7 @@ impl<'p> AstNode<'p> {
             AstNodePayload::ExprIndexRange(_) |
             AstNodePayload::ExprWord |
             AstNodePayload::ExprZext |
+            AstNodePayload::ExprDontcare |
             AstNodePayload::ExprSext |
             AstNodePayload::ExprHole
         )

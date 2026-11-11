@@ -1,0 +1,4 @@
+kind = "run"
+description = "A bare `dontcare` expression is accepted as an arm body of an expression-position `if` or `match`"
+cycle_limit = 4
+trace = false
