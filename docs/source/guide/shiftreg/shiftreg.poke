@@ -1,29 +1,19 @@
-# Start with a defined load_value so the time-0 snapshot has a
-# decodable value (the sim random-initializes unwritten inputs).
-poke load_value #Invalid()
-poke shift_in false
+# Load a nibble, then shift it out one bit per cycle.
+poke load_value #Valid(0b0110)
+poke shift_in #Invalid()
 
-# Load a nibble into the register.
-poke load_value #Valid(13)
 vcd trace.vcd
 tick
+
 poke load_value #Invalid()
-
-# Now clock it out one bit at a time.
-# Notice `shift_out` emits the nibble MSB-first: 1, 0, 1, 1 --
-# no matter what wanders in through `shift_in` at the bottom.
-poke shift_in false
+poke shift_in #Valid(true)
 tick
 
-poke shift_in true
+poke shift_in #Valid(false)
 tick
 
-poke shift_in false
+poke shift_in #Valid(true)
 tick
 
-poke shift_in true
+poke shift_in #Valid(true)
 tick
-
-tick
-
-exit

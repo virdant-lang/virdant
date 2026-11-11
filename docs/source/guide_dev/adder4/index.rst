@@ -45,7 +45,7 @@ In the same way, in `Adder4`, we line up corresponding pairs of bits:
 
 Consult this slightly messy diagram for an idea of what goes where:
 
-.. inline-svg:: guide_dev/adder4/adder4.svg
+.. inline-svg:: adder4.svg
     :align: center
 
 .. note::

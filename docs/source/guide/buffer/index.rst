@@ -109,7 +109,7 @@ Waveform
 --------
 Let's look at the waveform viewer again.
 
-.. vcd:: trace.svg
+.. vcd:: trace.vcd
 
     label Clock
     signal top.clock:clk

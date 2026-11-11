@@ -7,11 +7,12 @@
 #
 # Usage:
 #
-#     .. inline-svg:: guide/adder/halfadder_addition.svg
+#     .. inline-svg:: halfadder_addition.svg
 #         :align: center
 #
-# The path is relative to the doc's source directory (the same root that
-# `.. image::` resolves against).
+# The path is relative to the current document's directory (the same
+# resolution `.. image::` uses). A leading '/' makes it relative to the
+# Sphinx source root instead.
 
 import os
 
@@ -35,10 +36,9 @@ class InlineSvgDirective(Directive):
         env = self.state.document.settings.env
         filename = self.arguments[0]
 
-        # Resolve relative to the source root, not the doc's directory:
-        # an <img>-style path (e.g. guide/adder/foo.svg) is more natural in
-        # a directive that might be used from any page.
-        path = os.path.join(env.srcdir, filename)
+        # Resolve relative to the doc's directory (like `.. image::`),
+        # or the source root if the path starts with '/'.
+        _, path = env.relfn2path(filename)
         if not os.path.isfile(path):
             logger.warning(
                 f'inline-svg: file not found: {filename}',

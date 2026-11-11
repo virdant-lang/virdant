@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 250" width="440" height="250" role="img" aria-label="Internal structure of the ShiftReg module: a row of four register cells fed by shift_in on the left, shifting toward shift_out on the right, with the whole register read out as value through the bottom and load_value entering from the top">
+  <defs>
+    <marker id="virdant-shiftreg-internal-arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" class="shiftreg-internal-arrowhead"/>
+    </marker>
+  </defs>
+  <style>
+    .virdant-shiftreg-internal-svg {
+      font-family: "Nunito", sans-serif;
+      font-weight: 600;
+      font-size: 17px;
+      fill: var(--text-main, #333);
+    }
+    .virdant-shiftreg-internal-svg .shiftreg-internal-port {
+      font-family: "Fira Mono", monospace;
+      font-weight: 400;
+      font-size: 14px;
+      fill: var(--text-main, #333);
+    }
+    .virdant-shiftreg-internal-svg .shiftreg-internal-bit {
+      font-family: "Fira Mono", monospace;
+      font-weight: 400;
+      font-size: 11px;
+      fill: var(--text-main, #333);
+      fill-opacity: 0.55;
+    }
+    .virdant-shiftreg-internal-svg .shiftreg-internal-box {
+      fill: var(--bg-page, #ffffff);
+      fill-opacity: 0;
+      stroke: var(--text-main, #333);
+      stroke-width: 2;
+    }
+    .virdant-shiftreg-internal-svg .shiftreg-internal-cell {
+      fill: var(--text-main, #333);
+      fill-opacity: 0.08;
+      stroke: var(--text-main, #333);
+      stroke-width: 1.5;
+    }
+    .virdant-shiftreg-internal-svg .shiftreg-internal-divider {
+      stroke: var(--text-main, #333);
+      stroke-opacity: 0.35;
+      stroke-width: 1;
+    }
+    .virdant-shiftreg-internal-svg .shiftreg-internal-wire {
+      stroke: var(--text-main, #333);
+      stroke-opacity: 0.6;
+      stroke-width: 1.5;
+      fill: none;
+      marker-end: url(#virdant-shiftreg-internal-arrowhead);
+    }
+    .shiftreg-internal-arrowhead {
+      fill: var(--text-main, #333);
+    }
+  </style>
+  <g class="virdant-shiftreg-internal-svg">
+
+    <!-- Module box -->
+    <rect class="shiftreg-internal-box" x="120" y="78" width="200" height="112" rx="6" ry="6"/>
+
+    <!-- load_value: from the top, down to the register -->
+    <line class="shiftreg-internal-wire" x1="220" y1="40" x2="220" y2="122"/>
+
+    <text x="130" y="100" text-anchor="start">ShiftReg</text>
+
+    <!-- Register cells, bit 0 receiving shift_in, bit 3 driving shift_out -->
+    <rect class="shiftreg-internal-cell" x="176" y="123" width="88" height="22"/>
+    <line class="shiftreg-internal-divider" x1="198" y1="123" x2="198" y2="145"/>
+    <line class="shiftreg-internal-divider" x1="220" y1="123" x2="220" y2="145"/>
+    <line class="shiftreg-internal-divider" x1="242" y1="123" x2="242" y2="145"/>
+    <text class="shiftreg-internal-bit" x="187" y="138" text-anchor="middle">3</text>
+    <text class="shiftreg-internal-bit" x="209" y="138" text-anchor="middle">2</text>
+    <text class="shiftreg-internal-bit" x="231" y="138" text-anchor="middle">1</text>
+    <text class="shiftreg-internal-bit" x="253" y="138" text-anchor="middle">0</text>
+
+    <!-- load_value port label -->
+    <text class="shiftreg-internal-port" x="220" y="26" text-anchor="middle">load_value</text>
+
+    <!-- shift_in: left, into bit 0 -->
+    <line class="shiftreg-internal-wire" x1="105" y1="134" x2="174" y2="134"/>
+    <text class="shiftreg-internal-port" x="95" y="139" text-anchor="end">shift_in</text>
+
+    <!-- shift_out: right, out of bit 3 -->
+    <line class="shiftreg-internal-wire" x1="266" y1="134" x2="335" y2="134"/>
+    <text class="shiftreg-internal-port" x="345" y="139" text-anchor="start">shift_out</text>
+
+    <!-- value: the whole register, out through the bottom -->
+    <line class="shiftreg-internal-wire" x1="220" y1="147" x2="220" y2="208"/>
+    <text class="shiftreg-internal-port" x="220" y="230" text-anchor="middle">value</text>
+
+  </g>
+</svg>
