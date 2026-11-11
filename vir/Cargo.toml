@@ -33,6 +33,13 @@ tower-lsp = "0.20.0"
 name = "vir"
 path = "src/vir/main.rs"
 
+# The `vir run` simulator (`vir-run`): a companion binary simulating
+# the `virt::Virt` board on top of the sim engine; see
+# src/run/main.rs.
+[[bin]]
+name = "vir-run"
+path = "src/run/main.rs"
+
 # The `vir-poke` REPL tester (`vir poke`); see src/poke/main.rs.
 [[bin]]
 name = "vir-poke"

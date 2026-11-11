@@ -74,6 +74,7 @@ release: build
 	mkdir -p build/deb/virdant/usr/local/bin
 	mkdir -p build/deb/virdant/usr/lib/virdant
 	cp -r ./target/release/vir     build/deb/virdant/usr/local/bin/
+	cp -r ./target/release/vir-run build/deb/virdant/usr/local/bin/
 	cp -r ./target/release/vir-ls build/deb/virdant/usr/local/bin/
 	cp -r ./lib                    build/deb/virdant/usr/lib/virdant
 	cp -r ./assets                 build/deb/virdant/usr/lib/virdant/
