@@ -1,0 +1,128 @@
+//! 640x480@60 color bars on the virt::VirtVga platform.
+//!
+//! The board clock is 50 MHz; the pixel clock is 50/2 = 25 MHz, so
+//! every VGA signal advances once every two board cycles (`tick`).
+//! Sync timings follow VESA DMT 640x480@60, with the Nexys4's
+//! active-high syncs.  Counters are aligned to the sync pulse starts:
+//! `hcount` 0 is the pixel time the HSYNC pulse begins, `vcount` 0
+//! the line the VSYNC pulse begins.  The visible area is hcount
+//! 144..783 (after the 96 sync + 48 back porch pixels) and vcount
+//! 35..514 (after the 2 sync + 33 back porch lines).
+//!
+//! After 4 frames the design requests simulator exit with code 0.
+//!
+//! Four frames is enough to exercise the whole monitor path: the
+//! monitor needs two full pulses of each sync to measure the timings
+//! (frames 1-2), adopts the mode and arms capture at the next vsync
+//! (frame 3), and presents the captured frame at the frame-4
+//! boundary, where the exit request lands.
+
+import virt
+
+pub mod VgaBars for virt::VirtVga {
+    //> 50 MHz board clock.
+    incoming clock : Clock
+
+    //> Toggles every board cycle; VGA state advances when true, giving
+    //> a 25 MHz pixel clock (every signal held for two board cycles).
+    reg tick : Bit {
+        initial it <= false
+        it <= !it
+    }
+
+    //> Horizontal position within the line, counted from the HSYNC
+    //> pulse start, 0 through 799 (VESA total 800).
+    reg hcount : Word[10] {
+        initial it <= 0
+        if {
+            when tick {
+                it <= mux(it == 799, 0, it + 1)
+            }
+        }
+    }
+
+    //> True on the last pixel time of a line and of a frame.
+    wire last_line : Bit {
+        it := tick && hcount == 799
+    }
+    wire last_frame : Bit {
+        it := tick && hcount == 799 && vcount == 524
+    }
+
+    //> Vertical position, counted in lines from the VSYNC pulse
+    //> start, 0 through 524 (VESA total 525).
+    reg vcount : Word[10] {
+        initial it <= 0
+        if {
+            when last_line {
+                it <= mux(last_frame, 0, it + 1)
+            }
+        }
+    }
+
+    //> Completed frames since reset.
+    reg frames : Word[4] {
+        initial it <= 0
+        if {
+            when last_frame {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> HSYNC: active-high pulse for the first 96 pixel times of each
+    //> line (12% duty, so the monitor reads it as the pulse level).
+    outgoing vga_hs : Bit {
+        it := hcount < 96
+    }
+
+    //> VSYNC: active-high pulse for the first 2 lines of each frame.
+    outgoing vga_vs : Bit {
+        it := vcount < 2
+    }
+
+    //> Inside the visible area, `x` counts visible pixels 0..639.
+    wire in_visible : Bit {
+        it := hcount >= 144 && hcount < 784 && vcount >= 35 && vcount < 515
+    }
+    wire x : Word[10] {
+        it := hcount - 144
+    }
+
+    //> Color bars: eight vertical bars cycling through the primary
+    //> and secondary colors, 80 pixels each (bar bits of x).
+    outgoing vga_r : Word[4] {
+        it := mux(in_visible && x[8], 15w4, 0w4)
+    }
+    outgoing vga_g : Word[4] {
+        it := mux(in_visible && x[7], 15w4, 0w4)
+    }
+    outgoing vga_b : Word[4] {
+        it := mux(in_visible && x[6], 15w4, 0w4)
+    }
+
+    //> UART transmit: idle high (unused in this design).
+    outgoing tx : Bit {
+        it := true
+    }
+
+    //> SPI flash: idle (unused in this design).
+    outgoing spi_ck : Bit {
+        it := true
+    }
+    outgoing spi_cs : Bit {
+        it := true
+    }
+    outgoing spi_mosi : Bit {
+        it := true
+    }
+
+    //> `@Valid(0)` after the 10th frame; while `@Invalid()`, the
+    //> simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when frames == 4 => @Valid(0)
+            else => @Invalid()
+        }
+    }
+}

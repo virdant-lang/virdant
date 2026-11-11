@@ -1,0 +1,5 @@
+kind = "run"
+description = "640x480@60 color bars on virt::VirtVga: the board identifies the mode, captures, and the design exits cleanly after 4 frames"
+cycle_limit = 5000000
+skip = "Disable vga output for testing"
+

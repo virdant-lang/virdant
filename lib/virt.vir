@@ -48,11 +48,13 @@ pub platform Virt {
 }
 
 //> Virtual FPGA with VGA output, simulated by Verilator via the `virt`
-//> tool.  `VirtVga` extends `Virt` with a VGA connector modelled on the
-//> Digilent Nexys4: 4 bits per RGB channel (driving an ADV7123-class
-//> DAC in hardware) and active-high HSYNC/VSYNC.  The `virt` tool
-//> renders the output with SDL2 (`sim_vga.cpp`) using VESA timing
-//> tables to recover the frame geometry from the sync signals.
+//> tool, or natively by `vir run`.  `VirtVga` extends `Virt` with a VGA
+//> connector modelled on the Digilent Nexys4: 4 bits per RGB channel
+//> (driving an ADV7123-class DAC in hardware) and active-high
+//> HSYNC/VSYNC.  The `virt` tool renders the output with SDL2
+//> (`sim_vga.cpp`) using VESA timing tables to recover the frame
+//> geometry from the sync signals; `vir run` (the `vir-run` companion)
+//> simulates the same monitor logic in Rust (`vir/src/run/vga.rs`).
 @fpga("virt")
 @part("virt-vga")
 pub platform VirtVga {

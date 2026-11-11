@@ -10,6 +10,7 @@
 //! engine.
 
 mod virt;
+mod vga;
 
 // Shared helpers, compiled once as the `vircommon` library.
 use vircommon as common;
@@ -105,7 +106,7 @@ fn run(location: &ProjectLocation, trace: &Option<String>, fps_no_cap: bool, fps
         });
 
     // The top module's `for` clause selects the platform; `vir run`
-    // simulates the `virt::Virt` board only.
+    // simulates the `virt::Virt` and `virt::VirtVga` boards.
     let mut builder = virdant::db::Builder::new(&db);
     let platform_id = match virdant::analysis::platform::resolve_platform_for(
         &mut builder, top_symbol.id())
@@ -122,13 +123,17 @@ fn run(location: &ProjectLocation, trace: &Option<String>, fps_no_cap: bool, fps
     };
     let platform_name = symboltable.symbol(platform_id).name().to_string();
     let fpga = virdant::analysis::platform::platform_fpga(&mut builder, platform_id);
-    if platform_name != "Virt" || fpga.as_deref().map(|f| f.as_bytes()) != Some(b"virt".as_bstr()) {
-        eprintln!(
-            "Top module '{top_name}' implements platform '{}', but `vir run` simulates virt::Virt only",
-            platform_name
-        );
-        std::process::exit(1);
-    }
+    let board = match (platform_name.as_str(), fpga.as_deref().map(|f| f.as_bytes())) {
+        ("Virt", Some(f)) if f == b"virt" => virt::VirtBoard::Virt,
+        ("VirtVga", Some(f)) if f == b"virt" => virt::VirtBoard::VirtVga,
+        (platform_name, _) => {
+            eprintln!(
+                "Top module '{top_name}' implements platform '{platform_name}', \
+                 but `vir run` simulates virt::Virt and virt::VirtVga only"
+            );
+            std::process::exit(1);
+        }
+    };
 
     // The clock runs at the frequency the platform declares (@period_ns).
     // `platform_clock_meta` allows the virtual platforms' pinless clocks
@@ -164,6 +169,7 @@ fn run(location: &ProjectLocation, trace: &Option<String>, fps_no_cap: bool, fps
         &db,
         top_symbol.id(),
         clock_hz,
+        board,
         virt::VirtOptions {
             flash: flash.clone(),
             trace: trace.clone().map(PathBuf::from),

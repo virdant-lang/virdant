@@ -1,5 +1,5 @@
-//! The `virt::Virt` board, simulated in Rust on top of the [`Sim`]
-//! engine.
+//! The `virt::Virt`/`virt::VirtVga` board, simulated in Rust on top of
+//! the [`Sim`] engine.
 //!
 //! This is the Rust twin of `virdant-virt/assets/sim.cpp` (the
 //! Verilator harness): a board that presents the `virt::Virt` platform
@@ -16,6 +16,12 @@
 //!   - the `debug : Valid[Word[8]]` port: each cycle, `@Valid(ch)`
 //!     appends `ch` to a 256-character buffer, flushed to stderr by a
 //!     side thread when the buffer fills or 100 ms elapse.
+//!
+//! For `virt::VirtVga` ([`VirtBoard::VirtVga`]) it additionally drives
+//! the VGA monitor of `virdant-virt/assets/sim_vga.cpp`, ported to Rust
+//! in [`crate::vga`]: the `vga_r`/`vga_g`/`vga_b` RGB444 buses and the
+//! `vga_hs`/`vga_vs` syncs are sampled each cycle and rendered into an
+//! SDL2 window.
 //!
 //! The clock runs at the frequency the platform declares
 //! (`@period_ns`).  The run is paced to real time unless
@@ -40,6 +46,18 @@ use virdant::analysis::elaboration::SignalId;
 use virdant::analysis::symbols::SymbolId;
 use virdant::db::Db;
 use virdant::sim::{Clock, Sim, Value};
+
+use crate::vga::VgaMonitor;
+
+/// Which board [`run`] simulates, from the top module's `for` clause.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VirtBoard {
+    /// The `virt::Virt` platform.
+    Virt,
+    /// The `virt::VirtVga` platform: everything [`VirtBoard::Virt`]
+    /// emulates plus an RGB444 + HSYNC/VSYNC VGA monitor (see `vga.rs`).
+    VirtVga,
+}
 
 /// Options for [`run`], straight from the `vir run` CLI.
 #[derive(Debug, Default)]
@@ -79,9 +97,26 @@ const PORT_SPI_CS: &str = "spi_cs";
 const PORT_SPI_MOSI: &str = "spi_mosi";
 const PORT_SPI_MISO: &str = "spi_miso";
 
-/// Run the `virt::Virt` board for the elaborated design rooted at
-/// `top`.  Returns the process exit code.
-pub fn run(db: &Db, top: SymbolId, clock_hz: u64, opts: VirtOptions) -> i32 {
+// Port names required by the `virt::VirtVga` platform contract (in
+// addition to the `virt::Virt` ones above).
+const PORT_VGA_R: &str = "vga_r";
+const PORT_VGA_G: &str = "vga_g";
+const PORT_VGA_B: &str = "vga_b";
+const PORT_VGA_HS: &str = "vga_hs";
+const PORT_VGA_VS: &str = "vga_vs";
+
+/// The `virt::VirtVga` port ids, resolved once at startup.
+struct VgaPorts {
+    r: SignalId,
+    g: SignalId,
+    b: SignalId,
+    hs: SignalId,
+    vs: SignalId,
+}
+
+/// Run the `virt::Virt` or `virt::VirtVga` board for the elaborated
+/// design rooted at `top`.  Returns the process exit code.
+pub fn run(db: &Db, top: SymbolId, clock_hz: u64, board: VirtBoard, opts: VirtOptions) -> i32 {
     let mut sim = Sim::new(db, top, Default::default());
     virdant::sim::builtins::attach(&mut sim, db, opts.verbose);
 
@@ -107,6 +142,18 @@ pub fn run(db: &Db, top: SymbolId, clock_hz: u64, opts: VirtOptions) -> i32 {
     let spi_cs = port(&sim, PORT_SPI_CS);
     let spi_mosi = port(&sim, PORT_SPI_MOSI);
     let spi_miso = port(&sim, PORT_SPI_MISO);
+
+    // The VGA connector is a VirtVga-only addition to the contract.
+    let vga_ports = match board {
+        VirtBoard::Virt => None,
+        VirtBoard::VirtVga => Some(VgaPorts {
+            r: port(&sim, PORT_VGA_R),
+            g: port(&sim, PORT_VGA_G),
+            b: port(&sim, PORT_VGA_B),
+            hs: port(&sim, PORT_VGA_HS),
+            vs: port(&sim, PORT_VGA_VS),
+        }),
+    };
 
     if let Some(path) = &opts.trace {
         let file = std::fs::File::create(path)
@@ -201,6 +248,11 @@ pub fn run(db: &Db, top: SymbolId, clock_hz: u64, opts: VirtOptions) -> i32 {
         cycles: cycles.clone(),
         max_cycles,
         exit_code: exit_code.clone(),
+        vga_ports,
+        vga: match board {
+            VirtBoard::Virt => None,
+            VirtBoard::VirtVga => Some(VgaMonitor::new(clock_hz, opts.verbose)),
+        },
     };
 
     // Step the SPI flash on EVERY clock edge (rising and falling):
@@ -297,6 +349,10 @@ struct PerCycle {
     cycles: Rc<Cell<u64>>,
     max_cycles: u64,
     exit_code: Rc<Cell<Option<i32>>>,
+    /// The `virt::VirtVga` port ids, when simulating that board.
+    vga_ports: Option<VgaPorts>,
+    /// The VGA monitor, when simulating `virt::VirtVga`.
+    vga: Option<VgaMonitor>,
 }
 
 impl PerCycle {
@@ -333,6 +389,26 @@ impl PerCycle {
             let rx_typ = sim.component_type_id(self.rx);
             let mut lock = sim.lock();
             lock.set(self.rx, Value::from_bool(rx_typ, self.uart_rx.pin));
+        }
+
+        // VGA monitor (virt::VirtVga board only): sample the sync and
+        // RGB pins post-edge, run the sync-driven capture, and end the
+        // run when the monitor window is closed (or ESC/q pressed).
+        // Matches the C++ sim_vga.cpp per-cycle ordering: the monitor
+        // runs after the UART and before the exit check.
+        if let (Some(vga), Some(ports)) = (&mut self.vga, &self.vga_ports) {
+            vga.cycle(
+                bit(sim, ports.hs),
+                bit(sim, ports.vs),
+                sim.get(ports.r).to_u64() as u8,
+                sim.get(ports.g).to_u64() as u8,
+                sim.get(ports.b).to_u64() as u8,
+            );
+            if vga.quit() {
+                self.uart_tx.flush();
+                sim.finish();
+                return;
+            }
         }
 
 
