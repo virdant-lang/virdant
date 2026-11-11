@@ -1,20 +1,23 @@
 pub mod ShiftReg {
     incoming clock : Clock
 
-    incoming shift_in  : Bit
-    outgoing reg shift_out : Bit
+    incoming shift_in  : Valid[Bit]
+    outgoing shift_out : Bit
 
     incoming load_value : Valid[Word[4]]
 
     outgoing reg value : Word[4] {
+        shift_out := it[0]
+
         match load_value {
             with @Valid(new_value) {
                 it <= new_value
             }
-            with @Invalid() {
-                it <= word(it[3..0], shift_in)
+            with @Invalid() match shift_in {
+                with @Valid(new_msb) {
+                    it <= word(new_msb, it[4..1])
+                }
             }
         }
-        shift_out <= it[3]
     }
 }

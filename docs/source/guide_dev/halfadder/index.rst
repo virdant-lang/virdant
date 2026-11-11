@@ -86,7 +86,7 @@ You learned how to add all combinations of numbers this way.
 Let's do that with binary numbers.
 It's much easier, since there's only four possibilities:
 
-.. inline-svg:: guide_dev/halfadder/halfadder_addition.svg
+.. inline-svg:: halfadder_addition.svg
     :align: center
 
 The only difference is the last one: 1 + 1 = '10'.

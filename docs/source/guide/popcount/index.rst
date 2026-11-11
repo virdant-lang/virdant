@@ -41,7 +41,7 @@ since it needs to be able to represent `0` `1` or `2`.
 To implement the logic of `PopCount2`,
 we make use of the fact that `x` can only take on four values.
 Written in binary, these are:
- `0b00` `0b01` `0b10` and `0b11`.
+`0b00` `0b01` `0b10` and `0b11`.
 
 We use a `match` expression to look at the value of `x` and assign the answer:
 
