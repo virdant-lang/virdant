@@ -112,6 +112,3 @@ How does `top.out` respond?
 
 So how do you feel about the simplicity of Virdant so far?
 It turns out that Simplicity is one of the :doc:`Principles of Virdant </principles>`!
-
-Study the waveforms
-and try to get a sense of what the `FullAdder` really does!
