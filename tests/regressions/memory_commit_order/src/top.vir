@@ -1,0 +1,216 @@
+//! Self-checking `kind = "run"` test for memory write-site sampling.
+//!
+//! A memory's (enable, address, data) write site must sample pre-edge
+//! register values: committing a clock domain member by member, in
+//! declaration order, would let a memory declared after a register see
+//! that register's post-edge value at the same edge — making the
+//! write fire one edge early (at the edge the enable rises) and drop
+//! the write at the edge the enable falls.  This harness reproduces
+//! the hazard in both shapes and their controls:
+//!
+//! - a log memory whose write-enable register is declared *before*
+//!   the memory (the hazard), plus controls with the register
+//!   declared *after* it and read through a wire;
+//! - a self read-modify-write pixel memory (a CHIP-8 DXYN-style XOR
+//!   draw) whose enable is likewise declared before it, plus a
+//!   control with the enable declared after.
+//!
+//! Every `busy_*` signal is high during cycles 2..5, so every memory
+//! must see exactly four writes, at the edges ending cycles 2..5: the
+//! log memories at slots 2..5 (`0b0011_1100`), the pixel memories at
+//! pixels 0..3 (`0b0000_1111`).  Each verdict folds into the exit
+//! code as a bitmask; the simulator exits 0 only if every memory
+//! checked out.
+
+import virt
+
+pub mod Top for virt::Virt {
+    incoming clock : Clock
+
+    //> Enable register declared BEFORE the memories that use it.
+    reg busy_declared_first : Bit {
+        initial it <= false
+        if {
+            when step == 1 {
+                it <= true
+            }
+            when step == 5 {
+                it <= false
+            }
+        }
+    }
+
+    //> Same enable, read through a wire.
+    wire busy_through_wire : Bit {
+        it := busy_declared_first
+    }
+
+    //> Log the cycle number into slot `step` while busy.  Expected
+    //> slots 2..5 set (mask 0b0011_1100).
+    @image_inline("\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0")
+    memory log_enable_declared_first[16] : Word[8] {
+        if {
+            when busy_declared_first {
+                it[dyn step] <= 1
+            }
+        }
+    }
+
+    //> Control: identical, but the enable register is declared last.
+    @image_inline("\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0")
+    memory log_enable_declared_last[16] : Word[8] {
+        if {
+            when busy_declared_last {
+                it[dyn step] <= 1
+            }
+        }
+    }
+
+    //> Control: identical, but the enable goes through a wire.
+    @image_inline("\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0")
+    memory log_enable_through_wire[16] : Word[8] {
+        if {
+            when busy_through_wire {
+                it[dyn step] <= 1
+            }
+        }
+    }
+
+    //> Self read-modify-write: toggle pixel `cursor` while busy (like
+    //> a CHIP-8 DXYN XOR draw).  Expected pixels 0..3 == 1
+    //> (mask 0b0000_1111).
+    @image_inline("\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0")
+    memory pixels_enable_declared_first[16] : Word[8] {
+        if {
+            when busy_declared_first {
+                it[dyn cursor] <= it[dyn cursor] ^ 1
+            }
+        }
+    }
+
+    //> Control: identical RMW, enable register declared last.
+    @image_inline("\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0")
+    memory pixels_enable_declared_last[16] : Word[8] {
+        if {
+            when busy_declared_last {
+                it[dyn cursor] <= it[dyn cursor] ^ 1
+            }
+        }
+    }
+
+    //> Enable register declared AFTER the memories (same driver as
+    //> `busy_declared_first`).
+    reg busy_declared_last : Bit {
+        initial it <= false
+        if {
+            when step == 1 {
+                it <= true
+            }
+            when step == 5 {
+                it <= false
+            }
+        }
+    }
+
+    //> Cycle counter, declared after the memories: cycle n has
+    //> `step == n`.
+    reg step : Word[4] {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> Pixel cursor: advances once per busy cycle (0, 1, 2, 3).
+    reg cursor : Word[4] {
+        initial it <= 0
+        if {
+            when busy_declared_last {
+                it <= it + 1
+            }
+        }
+    }
+
+    //> Bitmask of the slots 0..7 of a log or pixel memory that are
+    //> nonzero.
+    wire first_log_mask : Word[8] {
+        it := word(
+            log_enable_declared_first[7] != 0,
+            log_enable_declared_first[6] != 0,
+            log_enable_declared_first[5] != 0,
+            log_enable_declared_first[4] != 0,
+            log_enable_declared_first[3] != 0,
+            log_enable_declared_first[2] != 0,
+            log_enable_declared_first[1] != 0,
+            log_enable_declared_first[0] != 0
+        )
+    }
+
+    wire last_log_mask : Word[8] {
+        it := word(
+            log_enable_declared_last[7] != 0,
+            log_enable_declared_last[6] != 0,
+            log_enable_declared_last[5] != 0,
+            log_enable_declared_last[4] != 0,
+            log_enable_declared_last[3] != 0,
+            log_enable_declared_last[2] != 0,
+            log_enable_declared_last[1] != 0,
+            log_enable_declared_last[0] != 0
+        )
+    }
+
+    wire wire_log_mask : Word[8] {
+        it := word(
+            log_enable_through_wire[7] != 0,
+            log_enable_through_wire[6] != 0,
+            log_enable_through_wire[5] != 0,
+            log_enable_through_wire[4] != 0,
+            log_enable_through_wire[3] != 0,
+            log_enable_through_wire[2] != 0,
+            log_enable_through_wire[1] != 0,
+            log_enable_through_wire[0] != 0
+        )
+    }
+
+    wire first_pixel_mask : Word[8] {
+        it := word(
+            pixels_enable_declared_first[7] != 0,
+            pixels_enable_declared_first[6] != 0,
+            pixels_enable_declared_first[5] != 0,
+            pixels_enable_declared_first[4] != 0,
+            pixels_enable_declared_first[3] != 0,
+            pixels_enable_declared_first[2] != 0,
+            pixels_enable_declared_first[1] != 0,
+            pixels_enable_declared_first[0] != 0
+        )
+    }
+
+    wire last_pixel_mask : Word[8] {
+        it := word(
+            pixels_enable_declared_last[7] != 0,
+            pixels_enable_declared_last[6] != 0,
+            pixels_enable_declared_last[5] != 0,
+            pixels_enable_declared_last[4] != 0,
+            pixels_enable_declared_last[3] != 0,
+            pixels_enable_declared_last[2] != 0,
+            pixels_enable_declared_last[1] != 0,
+            pixels_enable_declared_last[0] != 0
+        )
+    }
+
+    //> Exit code bits: 1 = log (enable declared first) wrong,
+    //> 2 = log (enable declared last) wrong, 4 = log (enable through
+    //> wire) wrong, 8 = pixels (enable declared first) wrong,
+    //> 16 = pixels (enable declared last) wrong.  0 = all correct.
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when step == 12 => @Valid(word(
+                0w3,
+                last_pixel_mask != 0b0000_1111,
+                first_pixel_mask != 0b0000_1111,
+                wire_log_mask != 0b0011_1100,
+                last_log_mask != 0b0011_1100,
+                first_log_mask != 0b0011_1100
+            ))
+            else => @Invalid()
+        }
+    }
+}

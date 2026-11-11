@@ -1,0 +1,5 @@
+[project]
+name = "memory_write_pre_edge"
+
+[prog]
+top = "top::Top"

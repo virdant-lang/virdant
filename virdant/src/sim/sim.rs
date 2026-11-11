@@ -425,23 +425,58 @@ impl Sim {
         self.flow();
     }
 
-    /// Commit one clocked component on a rising edge: a register
-    /// transfers its pending value; a memory evaluates its write site
-    /// against pre-edge values and applies the write.
-    fn commit_clocked(&mut self, id: SignalId) {
-        if self.circuit.is_memory(id) {
-            self.commit_memory(id);
-        } else {
-            self.state.transfer(id);
+    /// Commit a rising edge of `signal_id`'s clock domain, in two
+    /// phases so that no member of the domain ever sees another
+    /// member's post-edge value — the nonblocking semantics of the
+    /// emitted Verilog.
+    ///
+    /// Phase 1 evaluates every memory's write site — (enable,
+    /// address, data) — against pre-edge values and stages the
+    /// resulting writes (registers need no staging: `flow` already
+    /// sampled their next values into the `set_vals` pendings, so
+    /// their write sites ran pre-edge too).  Phase 2 then transfers
+    /// the registers and applies the staged memory writes together.
+    /// Committing member by member instead — the register
+    /// immediately, the memory write site evaluated against live
+    /// values — would let a memory declared after a register sample
+    /// that register's post-edge value, making a write site's
+    /// sampling depend on declaration order.
+    ///
+    /// Each member commits at most once per settlement (the
+    /// `mark_committed` guard), so a clock alias rising again later
+    /// in the same flow re-runs both phases as a no-op.
+    fn commit_domain(&mut self, signal_id: SignalId) {
+        let m = self.circuit.clock_sensitivity_count(signal_id);
+        // Phase 1: stage memory write sites against pre-edge values.
+        for i in 0..m {
+            let id = self.circuit.clock_sensitivity_at(signal_id, i);
+            if self.circuit.is_memory(id) {
+                self.stage_memory_write(id);
+            }
+        }
+        // Phase 2: transfer the registers, then apply the staged
+        // writes.  Neither reads live values (the register copies
+        // its staged pending; the write applies a sampled word), so
+        // the two loops cannot interact.
+        for i in 0..m {
+            let id = self.circuit.clock_sensitivity_at(signal_id, i);
+            if !self.circuit.is_memory(id) {
+                self.state.transfer(id);
+            }
+        }
+        for (mem_id, index, value) in self.state.drain_pending_memory_writes() {
+            self.state.set_memory_word(mem_id, index, value);
         }
     }
 
-    /// Apply a memory's write site for this cycle: sample the (enable,
-    /// address, data) expressions against pre-edge values and write the
-    /// addressed word (read-during-write sees the old value because
-    /// reads snapshot the pre-commit words; at most one write fires —
-    /// overlapping guards are rejected by analysis).
-    fn commit_memory(&mut self, mem_id: SignalId) {
+    /// Stage a memory's write site for the current clock-edge commit:
+    /// sample the (enable, address, data) expressions against
+    /// pre-edge values and queue the write
+    /// (`State::stage_memory_write`) without touching the words
+    /// (read-during-write sees the old value because the words are
+    /// only updated by phase 2; at most one write fires — overlapping
+    /// guards are rejected by analysis).
+    fn stage_memory_write(&mut self, mem_id: SignalId) {
         // At most one commit per settlement, like a register: a clock
         // alias rising again later in the same flow must not re-write
         // with post-edge values.
@@ -462,7 +497,7 @@ impl Sim {
         }
         let index = address.eval(&context).to_u64() as usize;
         let value = data.eval(&context);
-        self.state.set_memory_word(mem_id, index, value);
+        self.state.stage_memory_write(mem_id, index, value);
     }
 
     fn tick_prop(&mut self, signal_id: SignalId) {
@@ -475,11 +510,7 @@ impl Sim {
             self.tick_inner(inner);
         }
 
-        let m = self.circuit.clock_sensitivity_count(signal_id);
-        for i in 0..m {
-            let reg_signal_id = self.circuit.clock_sensitivity_at(signal_id, i);
-            self.commit_clocked(reg_signal_id);
-        }
+        self.commit_domain(signal_id);
     }
 
     fn flow(&mut self) {
@@ -513,11 +544,7 @@ impl Sim {
                     // transfer the registers it clocks — the same thing
                     // `set()` does for the top-level clock.
                     if rising {
-                        let m = self.circuit.clock_sensitivity_count(update_signal_id);
-                        for j in 0..m {
-                            let reg_id = self.circuit.clock_sensitivity_at(update_signal_id, j);
-                            self.commit_clocked(reg_id);
-                        }
+                        self.commit_domain(update_signal_id);
                     }
                 }
             }
@@ -623,11 +650,7 @@ impl Sim {
         let rising = is_rising(&old, &value);
         self.state.set_val(signal_id, value);
         if rising {
-            let n = self.circuit.clock_sensitivity_count(signal_id);
-            for i in 0..n {
-                let reg_id = self.circuit.clock_sensitivity_at(signal_id, i);
-                self.commit_clocked(reg_id);
-            }
+            self.commit_domain(signal_id);
         }
     }
 

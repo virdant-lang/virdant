@@ -1,6 +1,7 @@
 //! Live circuit values and the propagation worklist: `vals` for current
-//! signal values, `set_vals` for pending register inputs, and the
-//! `dirty` set driven by `flow`.
+//! signal values, `set_vals` for pending register inputs,
+//! `pending_memory_writes` for memory writes staged at a clock edge,
+//! and the `dirty` set driven by `flow`.
 //!
 //! There are no X or Z values: every cell is initialized by the sim's
 //! `InitStrategy` (random by default), so even never-written registers
@@ -43,6 +44,13 @@ pub(super) struct State {
     /// recomputed with post-edge values, and committing it a second
     /// time would clobber the value sampled at the edge.
     committed: IndexSet<SignalId>,
+    /// Memory writes staged by phase 1 of a clock-edge commit:
+    /// `(memory, index, value)` triples sampled against pre-edge
+    /// values.  Applied (drained) by phase 2 once the whole clock
+    /// domain has been staged, so a memory write site never sees a
+    /// register transferred at the same edge (see
+    /// `Sim::commit_domain`).
+    pending_memory_writes: Vec<(SignalId, usize, Value)>,
 }
 
 impl State {
@@ -94,6 +102,7 @@ impl State {
             set_vals,
             dirty: IndexSet::new(),
             committed: IndexSet::new(),
+            pending_memory_writes: Vec::new(),
         }
     }
 
@@ -135,6 +144,31 @@ impl State {
         self.vals[signal_id.index()] = new;
         self.dirty.insert(signal_id);
         true
+    }
+
+    /// Stage a memory write sampled at a clock edge: the write
+    /// site's (enable, address, data) were evaluated against
+    /// pre-edge values by phase 1 of the commit (`Sim::commit_domain`);
+    /// the word itself is only updated when phase 2 drains the
+    /// staged writes, after every register of the domain has
+    /// transferred.
+    pub(super) fn stage_memory_write(
+        &mut self,
+        signal_id: SignalId,
+        index: usize,
+        value: Value,
+    ) {
+        self.pending_memory_writes.push((signal_id, index, value));
+    }
+
+    /// Take every memory write staged for the current clock-edge
+    /// commit.  Called by phase 2 (`Sim::commit_domain`) after the
+    /// registers transferred, so the writes apply together with
+    /// them.
+    pub(super) fn drain_pending_memory_writes(
+        &mut self,
+    ) -> Vec<(SignalId, usize, Value)> {
+        std::mem::take(&mut self.pending_memory_writes)
     }
 
     /// Mark `signal_id` as committed for this settlement, returning

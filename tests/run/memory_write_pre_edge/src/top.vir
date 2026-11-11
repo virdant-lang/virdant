@@ -1,0 +1,60 @@
+//! A memory write site must sample its (enable,
+//! address, data) against pre-edge values, even when the register it
+//! reads is declared before the memory.
+//!
+//! `en` is high during cycle 2 only, so the single write must land at
+//! the edge ending cycle 2, in slot `step == 2`.  Committing the clock
+//! domain member by member instead (register transferred, then the
+//! write site evaluated against live values) fires the write one edge
+//! early — at the edge `en` rises, landing in slot 1 — and drops the
+//! enabled write at the edge `en` falls.  The test exits 0 iff slot 2
+//! was written.
+//!
+//! The address register `step` is declared after the memory so the
+//! spurious early write lands in slot 1 (its pre-edge value at the
+//! rise edge), distinct from the correct slot 2.
+
+import virt
+
+pub mod Top for virt::Virt {
+    incoming clock : Clock
+
+    //> Write enable, declared BEFORE the memory: high during cycle 2
+    //> only.
+    reg en : Bit {
+        initial it <= false
+        if {
+            when step == 1 {
+                it <= true
+            }
+            when step == 2 {
+                it <= false
+            }
+        }
+    }
+
+    //> Marks slot `step` while enabled.
+    @image_inline("\0\0\0\0")
+    memory log[4] : Word[8] {
+        if {
+            when en {
+                it[dyn step] <= 1
+            }
+        }
+    }
+
+    //> Cycle counter, declared AFTER the memory: cycle n has
+    //> `step == n`.
+    reg step : Word[2] {
+        initial it <= 0
+        it <= it + 1
+    }
+
+    //> 0 once the one enabled write has landed in slot 2; 1 otherwise.
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when step == 3 => @Valid(word(0w7, log[2] != 1))
+            else => @Invalid()
+        }
+    }
+}

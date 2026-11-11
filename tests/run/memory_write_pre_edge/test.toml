@@ -1,0 +1,3 @@
+kind = "run"
+description = "A memory write site samples its enable pre-edge even when the enable register is declared before the memory: the write fires at the enabled edge, not one edge early"
+cycle_limit = 8
