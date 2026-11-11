@@ -5,7 +5,9 @@ pub mod Counter {
     incoming increment : Bit
     incoming decrement : Bit
 
-    outgoing reg counter : Word[2] {
+    outgoing reg counter : Word[10] {
+        initial it <= 0
+
         if {
             when reset {
                 it <= 0

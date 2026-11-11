@@ -5,7 +5,7 @@ In this example, we will learn about modules which contain other modules!
 Our example will contain three module definitions:
 `PopCount2` `PopCount4` and `PopCount8`.
 These each perform a population count, or pop count for short.
-The pop count of a number is how many `1`'s there are
+The pop count of a number is how many 1's there are
 in the binary representation of the number.
 
 We will look at each module in turn,
@@ -251,11 +251,6 @@ For `PopCount2`, we will look at all possible inputs:
     label Count
     signal top.count:dec
 
-Nothing mysterious here:
-for `x` = `0b00` the count is `0`,
-for `x` = `0b01` the count is `1`,
-for `x` = `0b10` the count is `1`,
-and for `x` = `0b11` both bits are set and the count is `2`.
 
 For `PopCount4`, we'll just look at a sample of the 16 possible inputs:
 
@@ -264,7 +259,7 @@ For `PopCount4`, we'll just look at a sample of the 16 possible inputs:
     label Input
     signal top.x:bin
 
-    label Pair Counts
+    label Half Counts
     signal top.lower.count:dec
     signal top.upper.count:dec
 

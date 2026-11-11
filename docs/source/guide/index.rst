@@ -10,8 +10,6 @@ This guide will introduce Virdant through a series of examples.
     halfadder/index
     pwm/index
     popcount/index
-    fulladder/index
-    incrementer/index
     counter/index
     shiftreg/index
     gcd/index
@@ -19,3 +17,5 @@ This guide will introduce Virdant through a series of examples.
     uart/index
     spiflash/index
     fifo/index
+    incrementer/index
+    fulladder/index

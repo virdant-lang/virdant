@@ -126,7 +126,7 @@ the precise initial value won't make any difference.
 
 Waveforms
 ---------
-Here are a few waveforms with various values of `duty`.
+Here are a few waveforms with various values of `top.duty`.
 
 Duty 4 -- 50%:
 A perfect square wave: four cycles high, four low.
