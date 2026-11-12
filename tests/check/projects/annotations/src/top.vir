@@ -1,7 +1,6 @@
-//> Test that annotations can be parsed on various items and slots
-
 // CHECK: Check OK
 
+//> Test that annotations can be parsed on various items and slots
 @fpga("ice40")
 @part("up5k-sg48")
 pub mod Top {
@@ -60,9 +59,9 @@ pub socket SpiSocket {
     soci data_in : Bit
 }
 
-//> Module exercising new annotation arg syntax
-
 // Multi-arg annotation with trailing comma
+
+//> Module exercising new annotation arg syntax
 @multi_arg(1, 2, 3,)
 // Empty parens
 @empty()

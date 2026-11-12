@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Trailing spaces are an error, like tabs and bad indentation. Each offending line is flagged, spanning the trailing whitespace."
+filecheck = "src/trailing_spaces.vir"

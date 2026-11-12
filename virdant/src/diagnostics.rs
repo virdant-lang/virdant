@@ -25,6 +25,9 @@ pub struct Diagnostic {
 pub enum DiagnosticPayload {
     /// `import` statement names a package which does not exist.
     SyntaxError(SyntaxError),
+    /// A purely lexical/formatting problem: something about how the
+    /// source text is laid out, not what it means.
+    FormattingError(FormattingError),
     ImportCycle(ImportCycle),
     /// `import` statement names a package which does not exist.
     UnresolvedImportError(UnresolvedImportError),
@@ -197,8 +200,6 @@ pub enum DiagnosticPayload {
     /// cannot potentially) depend on. Warning: an unused `dependson`.
     DependsonUnused(DependsonUnused),
     ImportNotAtTopError,
-    InvalidIndentation,
-    TrailingSpaces,
     /// `it` keyword used outside of an `ItBlock`.
     ItNotInItBlock,
     CantInfer,
@@ -280,6 +281,13 @@ pub enum DiagnosticPayload {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SyntaxError {
+    pub message: BString,
+}
+
+/// A purely lexical/formatting problem: something about how the source
+/// text is laid out, not what it means.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FormattingError {
     pub message: BString,
 }
 
@@ -830,9 +838,8 @@ impl Diagnostic {
         use bstr::ByteSlice;
         match &self.payload {
             DiagnosticPayload::SyntaxError(d) => format!("Syntax Error: {}", d.message).into(),
+            DiagnosticPayload::FormattingError(d) => format!("Formatting Error: {}", d.message).into(),
             DiagnosticPayload::ImportNotAtTopError => "Import not at top of file".into(),
-            DiagnosticPayload::InvalidIndentation => "Line must be indented by a multiple of 4 spaces".into(),
-            DiagnosticPayload::TrailingSpaces => "Line should not end with trailing space".into(),
             DiagnosticPayload::ImportCycle(d) => {
                 debug_assert!(d.package_cycle.len() > 0);
                 if d.package_cycle.len() > 1 {
@@ -1266,7 +1273,6 @@ impl Diagnostic {
             | DiagnosticPayload::UnfilledHole(_)
             | DiagnosticPayload::EmptyDriverBlock
             | DiagnosticPayload::RedundantDriver(_)
-            | DiagnosticPayload::TrailingSpaces
             | DiagnosticPayload::DependsonUnused(_)
             | DiagnosticPayload::RedundantOnClause(_)
             | DiagnosticPayload::UnusedOnOutgoingWire(_)
@@ -1303,7 +1309,7 @@ macro_rules! from_diagnostic {
 }
 
 from_diagnostic! {
-    SyntaxError, ImportCycle, UnresolvedImportError, DuplicateImport, DuplicateItem,
+    SyntaxError, FormattingError, ImportCycle, UnresolvedImportError, DuplicateImport, DuplicateItem,
     DuplicateSlot, UnresolvedPackage, InvalidPackageName, UnresolvedItem, UnresolvedType, MissingOnClause,
     RedundantOnClause, WrongDriverType, NoRegDrivers, NoDrivers, MultipleDrivers,
     MemoryElementNotPowerOf2Word, MemoryDepthNotLiteral, MemoryDepthNotPowerOf2, MemoryIndexWidth,

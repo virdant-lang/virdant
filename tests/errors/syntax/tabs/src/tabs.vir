@@ -2,8 +2,8 @@
 // before parsing so a stray tab cannot cascade into parse errors,
 // and each offending line is flagged with a single clear error.
 
-// CHECK: Syntax Error: Tabs are not allowed in Virdant. Use 4 spaces instead.
-// CHECK: Syntax Error: Tabs are not allowed in Virdant. Use 4 spaces instead.
+// CHECK: Formatting Error: Tabs are not allowed in Virdant. Use 4 spaces instead.
+// CHECK: Formatting Error: Tabs are not allowed in Virdant. Use 4 spaces instead.
 // CHECK-NOT: Unexpected token
 
 mod HalfAdder {

@@ -24,7 +24,7 @@ import virt
 //> (Distinct names are also required: an unqualified `Pipe` resolves to
 //> the builtin, which deliberately declares only the server-side
 //> obligation.)
-
+//>
 //> Input side: the producer drives `data`; the splitter's `ready` may
 //> combinationally depend on the offered payload (same-cycle accept).
 socket InPipe[T : Type] {

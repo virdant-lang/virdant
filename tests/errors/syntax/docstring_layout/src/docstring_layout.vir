@@ -1,0 +1,58 @@
+// One file exercising every doc-comment block layout rule.
+//
+// An item doc block is a maximal run of consecutive lines starting
+// with `//>` in the same column; while a block is open, the next line
+// must be another `//>` line in the same column or a token in the
+// block's column. Blank lines, regular comments, `//!` lines, other
+// columns, and end of file are all errors while an item doc block is
+// open.
+//
+// A `//!` run is a maximal run of consecutive `//!` lines in column 1.
+// `//!` prefixes nothing, so nothing is demanded after a `//!` run,
+// and it may end in a blank line; but a blank line separating two
+// `//!` lines is an error.
+//
+// Diagnostics are sorted by source position, so the CHECK directives
+// below appear in the same order as the violations they match.
+
+// CHECK: Formatting Error: Blank line inside docstring block
+// CHECK: Formatting Error: Blank line inside docstring block
+// CHECK: Formatting Error: Expected docstring line or code in same column, got comment
+// CHECK: Formatting Error: Docstring line does not line up with its docstring block
+// CHECK: Formatting Error: Docstring block must be followed by a token in the same column
+// CHECK: Formatting Error: Docstring block mixes //! and //>
+// CHECK: Unexpected token
+// CHECK: Formatting Error: Docstring block must be followed by a token in the same column
+// CHECK: Unexpected end of file
+// CHECK: Check failed
+
+//! Package doc
+
+//! package docs may not be split by a blank line
+pub mod Foo {
+    //> documents `inp`
+
+    incoming inp : Bit
+    outgoing out : Bit dependson inp
+    out := inp
+
+    //> documents `pout`
+    // this comment breaks the block
+        //> indented too far to join the block
+    outgoing pout : Bit dependson inp
+    pout := inp
+
+    //> documents `qout`
+        outgoing qout : Bit dependson inp
+        qout := inp
+}
+
+//> item doc at top level
+//! this line has the other marker
+pub mod Bar {
+    incoming inp : Bit
+    outgoing out : Bit dependson inp
+    out := inp
+}
+
+//> dangling at end of file

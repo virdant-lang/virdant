@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Doc-comment block layout rules: a `//>` item doc block demands another `//>` line or a token in the same column on the next line (blank lines, comments, `//!` lines, other columns, and end of file are errors). A `//!` run must be in column 1 and may not be split by a blank line, but demands nothing after it."
+filecheck = "src/docstring_layout.vir"

@@ -83,7 +83,7 @@ pub fn parse(source: &Source) -> Parsing {
                 let region = source.to_region(start, start + 1);
                 let diagnostic = Diagnostic::new(
                     region,
-                    diagnostics::SyntaxError {
+                    diagnostics::FormattingError {
                         message: "Tabs are not allowed in Virdant. Use 4 spaces instead.".into(),
                     },
                 );
@@ -98,7 +98,31 @@ pub fn parse(source: &Source) -> Parsing {
     // spaces which is a multiple of 4. Blank lines and comment-only lines
     // are exempt. Scan the raw source line by line and flag each offending
     // line, spanning its leading whitespace.
+    //
+    // The same scan enforces the doc-comment block layout rules. An
+    // item doc block is a maximal run of consecutive lines starting
+    // with `//>` in the same column. Once a block is open, the next
+    // line must be another `//>` line in the same column or a line
+    // whose first token is in the block's column — that token line
+    // terminates the block and is what the block documents. Blank
+    // lines, regular comments, `//!` lines, other columns, and end of
+    // file are all errors while an item doc block is open.
+    //
+    // A `//!` run is a maximal run of consecutive `//!` lines, each of
+    // which must be in column 1. `//!` is a suffix of the very start of
+    // the file — it prefixes nothing — so nothing is demanded after a
+    // `//!` run: a blank line, a regular comment, an item doc line, or
+    // a token all simply end it. The one violation is a blank line
+    // separating two `//!` lines: it is flagged once the second `//!`
+    // line appears, blamed on the blank.
     let mut line_start: u32 = 0;
+    // Open `//>` doc block: (column, last doc line start, last doc line end).
+    let mut item_block: Option<(u32, u32, u32)> = None;
+    // Open `//!` package doc run.
+    let mut package_open = false;
+    // Blank line seen since the last `//!` line, pending: an error iff
+    // another `//!` line follows.
+    let mut package_blank: Option<(u32, u32)> = None;
     for raw_line in source.text().split_str(b"\n") {
         let line = if raw_line.last() == Some(&b'\r') {
             &raw_line[..raw_line.len() - 1]
@@ -115,7 +139,12 @@ pub fn parse(source: &Source) -> Parsing {
             let start = SourceOffset(line_start);
             let end = SourceOffset(line_start + spaces as u32);
             let region = source.to_region(start, end);
-            let diagnostic = Diagnostic::new(region, diagnostics::DiagnosticPayload::InvalidIndentation);
+            let diagnostic = Diagnostic::new(
+                region,
+                diagnostics::FormattingError {
+                    message: "Line must be indented by a multiple of 4 spaces".into(),
+                },
+            );
             parsing.indentation_diagnostics.push(diagnostic);
         }
 
@@ -129,7 +158,12 @@ pub fn parse(source: &Source) -> Parsing {
             let start = SourceOffset(line_start + (line.len() - trailing) as u32);
             let end = SourceOffset(line_start + line.len() as u32);
             let region = source.to_region(start, end);
-            let diagnostic = Diagnostic::new(region, diagnostics::DiagnosticPayload::TrailingSpaces);
+            let diagnostic = Diagnostic::new(
+                region,
+                diagnostics::FormattingError {
+                    message: "Line should not end with trailing space".into(),
+                },
+            );
             parsing.trailing_space_diagnostics.push(diagnostic);
         }
 
@@ -149,7 +183,7 @@ pub fn parse(source: &Source) -> Parsing {
             let region = source.to_region(start, end);
             let diagnostic = Diagnostic::new(
                 region,
-                diagnostics::SyntaxError {
+                diagnostics::FormattingError {
                     message: format!(
                         "Doccomment must be followed by a space (or end of line), got {:?}",
                         BStr::new(&rest[..4.min(rest.len())]),
@@ -158,7 +192,146 @@ pub fn parse(source: &Source) -> Parsing {
             );
             parsing.docstring_diagnostics.push(diagnostic);
         }
+
+        // Doc-comment block layout checks. A line whose leading whitespace
+        // contains a tab has no meaningful column, and is already flagged
+        // by the tab check above; skip it to avoid cascading errors.
+        let mut lead = 0;
+        while lead < line.len() && (line[lead] == b' ' || line[lead] == b'\t') {
+            lead += 1;
+        }
+        if !line[..lead].contains(&b'\t') {
+            let doc_marker = if comment {
+                if rest.starts_with(b"//>") {
+                    Some(b'>')
+                } else if rest.starts_with(b"//!") {
+                    Some(b'!')
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            let line_end = line_start + line.len() as u32;
+            let line_region = source.to_region(SourceOffset(line_start), SourceOffset(line_end));
+            match doc_marker {
+                Some(b'!') => {
+                    if spaces != 0 {
+                        let start = SourceOffset(line_start);
+                        let end = SourceOffset(line_start + spaces as u32);
+                        let region = source.to_region(start, end);
+                        let diagnostic = Diagnostic::new(
+                            region,
+                            diagnostics::FormattingError {
+                                message: "//! must be in column 1".into(),
+                            },
+                        );
+                        parsing.docstring_diagnostics.push(diagnostic);
+                    } else if item_block.is_some() {
+                        let diagnostic = Diagnostic::new(
+                            line_region,
+                            diagnostics::FormattingError {
+                                message: "Docstring block mixes //! and //>".into(),
+                            },
+                        );
+                        parsing.docstring_diagnostics.push(diagnostic);
+                    } else {
+                        if let Some((start, end)) = package_blank.take() {
+                            let region = source.to_region(SourceOffset(start), SourceOffset(end));
+                            let diagnostic = Diagnostic::new(
+                                region,
+                                diagnostics::FormattingError {
+                                    message: "Blank line inside docstring block".into(),
+                                },
+                            );
+                            parsing.docstring_diagnostics.push(diagnostic);
+                        }
+                        package_open = true;
+                    }
+                }
+                Some(b'>') => {
+                    // Nothing is demanded after a `//!` run, so an item
+                    // doc line simply ends it.
+                    package_open = false;
+                    package_blank = None;
+                    match item_block {
+                        None => {
+                            item_block = Some((spaces as u32, line_start, line_end));
+                        }
+                        Some((col, _, _)) => {
+                            if spaces as u32 != col {
+                                let diagnostic = Diagnostic::new(
+                                    line_region,
+                                    diagnostics::FormattingError {
+                                        message: "Docstring line does not line up with its docstring block".into(),
+                                    },
+                                );
+                                parsing.docstring_diagnostics.push(diagnostic);
+                            } else {
+                                item_block = Some((col, line_start, line_end));
+                            }
+                        }
+                    }
+                }
+                None => {
+                    if blank {
+                        if package_open {
+                            package_open = false;
+                            package_blank = Some((line_start, line_end));
+                        }
+                        if item_block.is_some() {
+                            let diagnostic = Diagnostic::new(
+                                line_region,
+                                diagnostics::FormattingError {
+                                    message: "Blank line inside docstring block".into(),
+                                },
+                            );
+                            parsing.docstring_diagnostics.push(diagnostic);
+                        }
+                    } else if comment {
+                        // A regular comment is inert for the `//!` state:
+                        // it neither errors nor settles a pending blank.
+                        if item_block.is_some() {
+                            let diagnostic = Diagnostic::new(
+                                line_region,
+                                diagnostics::FormattingError {
+                                    message: "Expected docstring line or code in same column, got comment".into(),
+                                },
+                            );
+                            parsing.docstring_diagnostics.push(diagnostic);
+                        }
+                    } else {
+                        package_open = false;
+                        package_blank = None;
+                        if let Some((col, _, _)) = item_block.take() {
+                            if spaces as u32 != col {
+                                let diagnostic = Diagnostic::new(
+                                    line_region,
+                                    diagnostics::FormattingError {
+                                        message: "Docstring block must be followed by a token in the same column".into(),
+                                    },
+                                );
+                                parsing.docstring_diagnostics.push(diagnostic);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
         line_start += raw_line.len() as u32 + 1;
+    }
+
+    // An item doc block still open at end of file was never terminated.
+    if let Some((_, start, end)) = item_block {
+        let region = source.to_region(SourceOffset(start), SourceOffset(end));
+        let diagnostic = Diagnostic::new(
+            region,
+            diagnostics::FormattingError {
+                message: "Docstring block must be followed by a token in the same column".into(),
+            },
+        );
+        parsing.docstring_diagnostics.push(diagnostic);
     }
 
     let parser = PackageParser::new();
