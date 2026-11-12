@@ -2019,7 +2019,7 @@ mod tests {
     /// topo order: `tx` first (its only input is the inert `r0`
     /// register, which propagates nothing, so `tx` carries no topo
     /// constraint), then the 512 register drivers in component order,
-    /// then the four undriven `virt::Virt` interface outputs.  Region 1
+    /// then the five undriven `virt::Virt` interface outputs.  Region 1
     /// is the transfer point over all 512 registers in
     /// `clock_sensitivities` (declaration) order.  Region 2 is the
     /// combinational tail: `tx` (which reads `r0`'s live value) plus
@@ -2044,8 +2044,8 @@ mod tests {
         };
         assert_eq!(
             drivers.len(),
-            stages + 5,
-            "512 register drivers + tx + the 4 virt interface outputs"
+            stages + 6,
+            "512 register drivers + tx + the 5 virt interface outputs"
         );
         assert_eq!(name(drivers[0].driver), "top.tx", "tx has no topo constraint");
         assert_eq!(
@@ -2061,7 +2061,7 @@ mod tests {
                 .iter()
                 .map(|d| name(d.driver))
                 .collect::<Vec<_>>(),
-            vec!["top.exit", "top.spi_ck", "top.spi_cs", "top.spi_mosi"],
+            vec!["top.exit", "top.debug", "top.spi_ck", "top.spi_cs", "top.spi_mosi"],
             "the undriven virt::Virt interface outputs close the topo order"
         );
         assert!(drivers[stages + 1].inputs.is_empty(), "interface outputs read nothing");

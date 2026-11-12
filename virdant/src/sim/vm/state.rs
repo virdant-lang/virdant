@@ -153,6 +153,13 @@ pub(super) struct State {
     /// O(committed) clear, so `clear_committed` never scans the whole
     /// table.
     committed_touched: Vec<SignalId>,
+    /// Memory writes staged by phase 1 of a clock-edge commit:
+    /// `(memory, index, value)` triples sampled against pre-edge
+    /// values.  Applied (drained) by phase 2 once the whole clock
+    /// domain has been staged, so a memory write site never sees a
+    /// register transferred at the same edge (see
+    /// `VmSim::commit_domain_split`).
+    pending_memory_writes: Vec<(SignalId, usize, Value)>,
 }
 
 impl State {
@@ -216,6 +223,7 @@ impl State {
             epoch_clock: 0,
             committed: vec![false; n_components],
             committed_touched: Vec::new(),
+            pending_memory_writes: Vec::new(),
         }
     }
 
@@ -331,6 +339,23 @@ impl State {
         let new = Value::from_u64(old.typ_id(), old.width(), bits);
         self.set_val(signal_id, new);
         true
+    }
+
+    /// Stage a memory write sampled at a clock edge: the write site's
+    /// (enable, address, data) were evaluated against pre-edge values
+    /// by phase 1 of the commit (`VmSim::commit_domain_split`); the
+    /// word itself is only updated when phase 2 drains the staged
+    /// writes, after every register of the domain has transferred.
+    pub(super) fn stage_memory_write(&mut self, signal_id: SignalId, index: usize, value: Value) {
+        self.pending_memory_writes.push((signal_id, index, value));
+    }
+
+    /// Take every memory write staged for the current clock-edge
+    /// commit.  Called by phase 2 (`VmSim::commit_domain_split`) after
+    /// the registers transferred, so the writes apply together with
+    /// them.
+    pub(super) fn drain_pending_memory_writes(&mut self) -> Vec<(SignalId, usize, Value)> {
+        std::mem::take(&mut self.pending_memory_writes)
     }
 
     /// Mark `signal_id` as committed for this settlement, returning
@@ -677,6 +702,7 @@ mod tests {
             epoch_clock: 0,
             committed: vec![false; 2],
             committed_touched: Vec::new(),
+            pending_memory_writes: Vec::new(),
         }
     }
 

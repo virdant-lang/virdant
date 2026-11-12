@@ -390,13 +390,11 @@ impl VmSim {
             self.tick(inner);
         }
 
-        let m = self.circuit.clock_sensitivity_count(signal_id);
-        for i in 0..m {
-            let reg_signal_id = self.circuit.clock_sensitivity_at(signal_id, i);
-            Self::commit_clocked_split(&self.circuit, &mut self.state, reg_signal_id);
-        }
+        let m = Self::commit_domain_split(&self.circuit, &mut self.state, signal_id);
         #[cfg(feature = "sim-profile")]
         crate::sim::profile::bump_transfers(m as u64);
+        #[cfg(not(feature = "sim-profile"))]
+        let _ = m;
     }
 
     pub(crate) fn flow(&mut self) {
@@ -1079,29 +1077,69 @@ impl VmSim {
         }
     }
 
-    /// Commit one clocked component on a rising edge: a register
-    /// transfers its pending value; a memory evaluates its write site
-    /// against pre-edge values and applies the write.  Split-field
-    /// form (circuit and state instead of `&mut self`), matching the
-    /// `transfer_clock*` call convention.
+    /// Commit a rising edge of `clock`'s clock domain, in two phases
+    /// so that no member of the domain ever sees another member's
+    /// post-edge value — the nonblocking semantics of the emitted
+    /// Verilog (the VM twin of `LegacySim::commit_domain`).
+    ///
+    /// Phase 1 evaluates every memory's write site — (enable,
+    /// address, data) — against pre-edge values and stages the
+    /// resulting writes (registers need no staging: their pendings
+    /// were already sampled pre-edge).  Phase 2 then transfers the
+    /// registers and applies the staged memory writes together.
+    /// Committing member by member instead would let a memory
+    /// declared after a register sample that register's post-edge
+    /// value, making a write site's sampling depend on declaration
+    /// order.
+    ///
+    /// Each member commits at most once per settlement (the
+    /// `mark_committed` guard), so a clock alias rising again later
+    /// in the same flow re-runs both phases as a no-op.  Returns the
+    /// domain's member count.  Split-field form (circuit and state
+    /// instead of `&mut self`), matching the `transfer_clock*` call
+    /// convention.
     #[inline]
-    fn commit_clocked_split(circuit: &Circuit, state: &mut State, id: SignalId) {
-        if circuit.is_memory(id) {
-            Self::commit_memory_split(circuit, state, id);
-        } else {
-            state.transfer(id);
+    fn commit_domain_split(circuit: &Circuit, state: &mut State, clock: SignalId) -> usize {
+        let m = circuit.clock_sensitivity_count(clock);
+        // Phase 1: stage memory write sites against pre-edge values.
+        // Skipped outright for memory-free designs (the common case,
+        // and the per-cycle hot path).
+        let mut any_memory = false;
+        for i in 0..m {
+            let id = circuit.clock_sensitivity_at(clock, i);
+            if circuit.is_memory(id) {
+                any_memory = true;
+                Self::stage_memory_write_split(circuit, state, id);
+            }
         }
+        // Phase 2: transfer the registers, then apply the staged
+        // writes.  Neither reads live values, so the two loops cannot
+        // interact.
+        for i in 0..m {
+            let id = circuit.clock_sensitivity_at(clock, i);
+            if !any_memory || !circuit.is_memory(id) {
+                state.transfer(id);
+            }
+        }
+        if any_memory {
+            for (mem_id, index, value) in state.drain_pending_memory_writes() {
+                state.set_memory_word(mem_id, index, value);
+            }
+        }
+        m
     }
 
-    /// Apply a memory's write site for this cycle: sample the (enable,
-    /// address, data) expressions against pre-edge values and write the
-    /// addressed word (read-during-write sees the old value because
-    /// reads snapshot the pre-commit words; at most one write fires —
-    /// overlapping guards are rejected by analysis).  The write-site
+    /// Stage a memory's write site for the current clock-edge commit:
+    /// sample the (enable, address, data) expressions against pre-edge
+    /// values and queue the write (`State::stage_memory_write`)
+    /// without touching the words (read-during-write sees the old
+    /// value because the words are only updated by phase 2 of
+    /// `commit_domain_split`; at most one write fires — overlapping
+    /// guards are rejected by analysis).  The write-site
     /// expressions run through the shared tree-walking evaluator —
     /// three small evaluations once per cycle per memory, not per
     /// driver — against either engine's state via `ComponentValues`.
-    fn commit_memory_split(circuit: &Circuit, state: &mut State, mem_id: SignalId) {
+    fn stage_memory_write_split(circuit: &Circuit, state: &mut State, mem_id: SignalId) {
         // At most one commit per settlement, like a register: a clock
         // alias rising again later in the same flow must not re-write
         // with post-edge values.
@@ -1123,7 +1161,7 @@ impl VmSim {
         }
         let index = address.eval(&context).to_u64() as usize;
         let value = data.eval(&context);
-        state.set_memory_word(mem_id, index, value);
+        state.stage_memory_write(mem_id, index, value);
     }
 
     /// The live words of memory `signal_id`, or `None` for any other
@@ -1169,13 +1207,11 @@ impl VmSim {
         };
         let wrote = state.set_val(signal_id, new);
         if rising {
-            let n = circuit.clock_sensitivity_count(signal_id);
-            for i in 0..n {
-                let reg_id = circuit.clock_sensitivity_at(signal_id, i);
-                Self::commit_clocked_split(circuit, state, reg_id);
-            }
+            let n = Self::commit_domain_split(circuit, state, signal_id);
             #[cfg(feature = "sim-profile")]
             crate::sim::profile::bump_transfers(n as u64);
+            #[cfg(not(feature = "sim-profile"))]
+            let _ = n;
         }
         wrote
     }
@@ -1218,13 +1254,11 @@ impl VmSim {
         };
         let wrote = state.set_val_bits(signal_id, typ, width, bits);
         if rising {
-            let n = circuit.clock_sensitivity_count(signal_id);
-            for i in 0..n {
-                let reg_id = circuit.clock_sensitivity_at(signal_id, i);
-                Self::commit_clocked_split(circuit, state, reg_id);
-            }
+            let n = Self::commit_domain_split(circuit, state, signal_id);
             #[cfg(feature = "sim-profile")]
             crate::sim::profile::bump_transfers(n as u64);
+            #[cfg(not(feature = "sim-profile"))]
+            let _ = n;
         }
         wrote
     }
