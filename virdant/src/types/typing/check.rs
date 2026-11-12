@@ -642,7 +642,11 @@ impl Typing {
         };
 
         let Some(field_typ) = struct_field.typ() else {
-            self.flag_todo(&subject, "Field missing type");
+            // The field's declared type failed to resolve; the type
+            // index already diagnosed it at the struct definition.
+            // Error-level so the validate pass does not cascade
+            // "Missing annotation" noise.
+            self.flag_unknown(node, format!("Type of field {field_name} could not be resolved"));
             return Err(());
         };
         // Substitute the generic parameters of the struct def with the

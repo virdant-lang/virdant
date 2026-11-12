@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Regression test for the 'Missing annotation' internal error: an upstream resolution failure (uninferrable unop subject, unresolved ascription type, unresolved struct field type) must not leave expression nodes unannotated."
+filecheck = "src/missing_annotation.vir"

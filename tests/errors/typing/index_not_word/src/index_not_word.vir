@@ -1,0 +1,30 @@
+// Regression tests for the "Missing annotation" internal error: every
+// inferencer bail-out must push an Error-level diagnostic.  A constant
+// or range index on a non-Word subject used to push only an Info-level
+// TODO, leaving the index node unannotated and tripping the validate
+// pass's "Missing annotation" guard.
+//
+// The wrong driver type (`<=` on an `outgoing`) means the RHS is
+// inferred without an expected type, which routes into infer_index /
+// infer_index_range instead of their check-mode twins.
+
+mod SingleBitOnBit {
+    outgoing out : Bit {
+        // CHECK: Expected a Word type: Bit
+        // CHECK: Wrong driver type for out, expected :=
+        // CHECK-NOT: Missing annotation
+        it <= it[0]
+    }
+}
+
+mod RangeOnBit {
+    outgoing out : Bit {
+        // CHECK: Expected a Word type: Bit
+        // CHECK: Wrong driver type for out, expected :=
+        // CHECK-NOT: Missing annotation
+        it <= it[1..0]
+    }
+}
+
+// CHECK-NOT: TODO
+// CHECK: Check failed

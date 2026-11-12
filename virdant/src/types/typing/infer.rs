@@ -69,6 +69,11 @@ impl Typing {
                     self.annotate(&node, &typ);
                     Ok(Some(typ))
                 } else {
+                    // The `as` type failed to resolve; the type index
+                    // already diagnosed it at the type node.  Flag the
+                    // expression so the validate pass does not cascade
+                    // "Missing annotation" noise.
+                    self.flag_unknown(node, "The type in `as` could not be resolved");
                     Err(())
                 }
             }
@@ -485,7 +490,7 @@ impl Typing {
             self.diagnostics.push(Diagnostic::new(
                 subject.region(),
                 diagnostics::IndexNotWordType {
-                    typ: format!("Subject is not a Word type: {:?}", subject_typ).into(),
+                    typ: subject_typ.to_string().into(),
                 },
             ));
             return Err(());
@@ -550,16 +555,29 @@ impl Typing {
         component: crate::analysis::component::Component,
     ) -> Result<Option<Type>, ()> {
         let Some(element_typ) = component.typ() else {
+            // The memory's element type failed to resolve; the type
+            // index already diagnosed it at the declaration.  Record
+            // the referent so the validate pass's
+            // `has_unresolved_referent` guard recognizes the cascade
+            // instead of flagging "Missing annotation".
+            self.tags.insert(
+                subject.location(),
+                Tag::ReferentResolution(Referent::Component(component.id())),
+            );
+            self.use_component(component.path().as_bstr(), subject.location());
             return Err(());
         };
         self.tag_memory_subject(&component, subject, &element_typ);
         self.annotate(node, &element_typ);
         // An invalid depth was already diagnosed at the declaration;
-        // the node keeps its (element) type and the index is typed
-        // unchecked so the validate pass does not cascade "Missing
+        // the node keeps its (element) type.  Type the index so its
+        // nodes carry annotations, and flag it if it stays
+        // uninferred so the validate pass does not cascade "Missing
         // annotation" noise.
         let Some(depth) = component.depth() else {
-            let _ = self.infer(builder, context, index);
+            if matches!(self.infer(builder, context.clone(), index), Ok(None)) {
+                self.flag_cant_infer(index);
+            }
             return Err(());
         };
         // The depth is validated as a power of two by the component
@@ -602,6 +620,16 @@ impl Typing {
         component: crate::analysis::component::Component,
     ) -> Result<Option<Type>, ()> {
         let Some(element_typ) = component.typ() else {
+            // The memory's element type failed to resolve; the type
+            // index already diagnosed it at the declaration.  Record
+            // the referent so the validate pass's
+            // `has_unresolved_referent` guard recognizes the cascade
+            // instead of flagging "Missing annotation".
+            self.tags.insert(
+                subject.location(),
+                Tag::ReferentResolution(Referent::Component(component.id())),
+            );
+            self.use_component(component.path().as_bstr(), subject.location());
             return Err(());
         };
         self.tag_memory_subject(&component, subject, &element_typ);
@@ -663,21 +691,20 @@ impl Typing {
                     Err(())
                 }
             } else {
-                    self.diagnostics.push(Diagnostic::new(
-                        region,
-                        diagnostics::Todo {
-                            message: "infer_index subject not a Word type".into(),
-                        },
-                    ));
+                // Mirror infer_index_dyn: a non-Word subject is a real
+                // error, not a TODO.  The Error-level diagnostic also
+                // keeps the validate pass from cascading "Missing
+                // annotation" noise.
+                self.diagnostics.push(Diagnostic::new(
+                    subject.region(),
+                    diagnostics::IndexNotWordType {
+                        typ: subject_typ.to_string().into(),
+                    },
+                ));
                 Err(())
             }
         } else {
-            self.diagnostics.push(Diagnostic::new(
-                region,
-                diagnostics::Todo {
-                    message: "infer_index can't infer subject".into(),
-                },
-            ));
+            self.flag_cant_infer(&subject);
             Err(())
         }
     }
@@ -737,21 +764,20 @@ impl Typing {
                     Ok(Some(typ))
                 }
             } else {
+                // Mirror infer_index_dyn: a non-Word subject is a real
+                // error, not a TODO.  The Error-level diagnostic also
+                // keeps the validate pass from cascading "Missing
+                // annotation" noise.
                 self.diagnostics.push(Diagnostic::new(
-                    region,
-                    diagnostics::Todo {
-                        message: "infer_index_range subject not a Word type".into(),
+                    subject.region(),
+                    diagnostics::IndexNotWordType {
+                        typ: subject_typ.to_string().into(),
                     },
                 ));
                 Err(())
             }
         } else {
-            self.diagnostics.push(Diagnostic::new(
-                region,
-                diagnostics::Todo {
-                    message: "infer_index_range can't infer subject".into(),
-                },
-            ));
+            self.flag_cant_infer(&subject);
             Err(())
         }
     }
@@ -791,7 +817,11 @@ impl Typing {
         };
 
         let Some(field_typ) = struct_field.typ() else {
-            self.flag_todo(&subject, "Field missing type");
+            // The field's declared type failed to resolve; the type
+            // index already diagnosed it at the struct definition.
+            // Error-level so the validate pass does not cascade
+            // "Missing annotation" noise.
+            self.flag_unknown(node, format!("Type of field {field_name} could not be resolved"));
             return Err(());
         };
         // Substitute the generic parameters of the struct def with the
@@ -946,8 +976,7 @@ impl Typing {
         match op {
             UnOp::Inv | UnOp::Neg => {
                 let Some(subject_typ) = self.infer(builder, context, &subject)? else {
-                    //self.flag_cant_infer(&subject);
-                    self.flag_todo(&subject, "OK");
+                    self.flag_cant_infer(&subject);
                     return Err(());
                 };
 
@@ -961,8 +990,7 @@ impl Typing {
             }
             UnOp::Not => {
                 let Some(subject_typ) = self.infer(builder, context, &subject)? else {
-                    //self.flag_cant_infer(&subject);
-                    self.flag_todo(&subject, "OK2");
+                    self.flag_cant_infer(&subject);
                     return Err(());
                 };
 
@@ -1105,15 +1133,18 @@ impl Typing {
                         Ok(Some(typ))
                     }
                     Err(_) => {
-                        self.diagnostics.push(Diagnostic::new(
-                            node.region(),
-                            diagnostics::Todo {
-                                message: format!(
-                                    "Can't infer the type of let binding `{}`; annotate it (`let {} : T = ...`) or use it where a type is expected",
-                                    path_str.to_str_lossy(), path_str.to_str_lossy(),
-                                ).into(),
-                            },
-                        ));
+                        // Error-level (not a Todo): an untyped let
+                        // binding really can't be typed here, and the
+                        // validate pass must not add "Missing
+                        // annotation" noise on top.
+                        self.flag_unknown(
+                            node,
+                            format!(
+                                "Can't infer the type of let binding `{}`; annotate it (`let {} : T = ...`) or use it where a type is expected",
+                                path_str.to_str_lossy(),
+                                path_str.to_str_lossy(),
+                            ),
+                        );
                         Err(())
                     }
                 }

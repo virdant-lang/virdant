@@ -27,6 +27,25 @@ mod NotAWord {
     }
 }
 
+// An unresolved element type must not cascade into "Missing
+// annotation" noise on the reads: the real error is the unresolved
+// type at the declaration.
+mod ElemUnresolved {
+    incoming clock : Clock
+    incoming addr : Word[3]
+
+    memory mem[8] : Nonsense
+
+    outgoing const_read : Bit {
+        it := mem[0]
+    }
+    outgoing dyn_read : Bit dependson addr {
+        it := mem[dyn addr]
+    }
+}
+
 // CHECK: memory element type must be `Word[n]` with n a power of 2, found Word[12]
 // CHECK: memory element type must be `Word[n]` with n a power of 2, found Bit
+// CHECK: Unresolved type Nonsense
+// CHECK-NOT: Missing annotation
 // CHECK: Check failed

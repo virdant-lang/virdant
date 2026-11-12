@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "IndexNotWordType from the inference paths: a constant or range index on a non-Word subject is a real error, not an Info-level TODO that leaves the index node unannotated (the 'Missing annotation' ICE)."
+filecheck = "src/index_not_word.vir"

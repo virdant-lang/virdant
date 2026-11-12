@@ -1,0 +1,50 @@
+// Regression tests for the "Missing annotation" internal error: an
+// inferencer bail-out must push an Error-level diagnostic (or annotate
+// what it can), so a failing sub-expression never cascades into the
+// validate pass's "Missing annotation" guard on top of the real error.
+//
+// The wrong driver type (`<=` on an `outgoing`) makes each RHS infer
+// without an expected type, which is what exercises the infer paths.
+
+// A unary operator whose subject can't be inferred flags the subject
+// instead of emitting an Info-level TODO.
+mod UnopCantInfer {
+    outgoing out : Bit {
+        // CHECK: Wrong driver type for out, expected :=
+        // CHECK: Can't infer
+        // CHECK-NOT: Missing annotation
+        it <= !0
+    }
+}
+
+// An ascription whose type failed to resolve reports it here too; the
+// type index already diagnosed the type itself.
+mod AscriptionUnresolved {
+    wire a : Word[4] { it := 0 }
+    outgoing out : Bit {
+        // CHECK: Wrong driver type for out, expected :=
+        // CHECK: The type in `as` could not be resolved
+        // CHECK: Unresolved type Nonsense
+        // CHECK-NOT: Missing annotation
+        it <= a : Nonsense
+    }
+}
+
+// Projecting a field whose declared type failed to resolve reports the
+// field; the type index already diagnosed the struct definition.
+struct type S {
+    bad : Nonsense
+    good : Bit
+}
+
+mod FieldUnresolved {
+    incoming s_in : S
+    outgoing out : Bit dependson s_in {
+        // CHECK: Type of field bad could not be resolved
+        // CHECK-NOT: Missing annotation
+        it := s_in->bad
+    }
+}
+
+// CHECK-NOT: TODO
+// CHECK: Check failed

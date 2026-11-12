@@ -157,16 +157,6 @@ impl Typing {
         self.diagnostics.push(diag);
     }
 
-    #[allow(unused)]
-    fn flag_todo<'p, S: Into<BString>>(&mut self, node: &AstNode<'p>, message: S) {
-        self.diagnostics.push(Diagnostic::new(
-            node.region(),
-            diagnostics::Todo {
-                message: message.into(),
-            },
-        ));
-    }
-
     fn flag_unknown<'p, S: Into<BString>>(&mut self, node: &AstNode<'p>, message: S) {
         self.diagnostics.push(Diagnostic::new(
             node.region(),
