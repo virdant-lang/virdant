@@ -14,7 +14,9 @@
 
 /* Number literals */
 .highlight-verilog .m,
-.highlight-verilog .mh {
+.highlight-verilog .mh,
+.highlight-verilog .mb,
+.highlight-verilog .mi {
     color: #C65D3B;
 }
 
@@ -69,7 +71,9 @@
 
 /* Number literals */
 .verilog-inline .m,
-.verilog-inline .mh {
+.verilog-inline .mh,
+.verilog-inline .mb,
+.verilog-inline .mi {
     color: #C65D3B;
 }
 
@@ -116,7 +120,9 @@
 }
 
 [data-theme="dark"] .highlight-verilog .m,
-[data-theme="dark"] .highlight-verilog .mh {
+[data-theme="dark"] .highlight-verilog .mh,
+[data-theme="dark"] .highlight-verilog .mb,
+[data-theme="dark"] .highlight-verilog .mi {
     color: #c89070;
 }
 
@@ -154,7 +160,9 @@
 }
 
 [data-theme="dark"] .verilog-inline .m,
-[data-theme="dark"] .verilog-inline .mh {
+[data-theme="dark"] .verilog-inline .mh,
+[data-theme="dark"] .verilog-inline .mb,
+[data-theme="dark"] .verilog-inline .mi {
     color: #c89070;
 }
 
