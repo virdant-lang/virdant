@@ -542,6 +542,60 @@ pre.doc {
     border: 1px solid var(--color-code-border);
 }
 
+/* ---------- Type slots ---------- */
+
+.slot-toc {
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
+    margin-bottom: 1rem;
+}
+
+.slot-toc a {
+    color: var(--color-link, #3B6EA5);
+    text-decoration: none;
+}
+
+.slot-toc a:hover {
+    text-decoration: underline;
+}
+
+dl.slots {
+    margin: 0 0 1.5rem 0;
+}
+
+dl.slots dt {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--color-table-border);
+    background: var(--color-table-hover);
+    border-radius: 6px 6px 0 0;
+    margin-top: 0.75rem;
+}
+
+dl.slots dt:first-child {
+    margin-top: 0;
+}
+
+dl.slots dd {
+    margin: 0;
+    padding: 0.5rem 0.75rem 0.75rem 0.75rem;
+    border: 1px solid var(--color-table-border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+}
+
+dl.slots dd:last-child {
+    margin-bottom: 1rem;
+}
+
+dl.slots dd pre.doc {
+    margin-bottom: 0;
+}
+
+table.slot-params td,
+table.slot-params th {
+    font-size: 0.85rem;
+}
+
 /* ---------- Definition blocks ---------- */
 
 pre.definition {
@@ -667,6 +721,10 @@ span.kind-enum   { background: var(--color-kind-enum);   color: #FFFFFF; }
 span.kind-builtin{ background: var(--color-kind-builtin);color: #FFFFFF; }
 span.kind-fn     { background: var(--color-kind-fn);     color: #FFFFFF; }
 span.kind-socket { background: var(--color-kind-socket); color: #FFFFFF; }
+span.kind-slot   { background: #6B7280;                 color: #FFFFFF; }
+span.kind-field  { background: var(--color-kind-struct); color: #FFFFFF; }
+span.kind-ctor   { background: var(--color-kind-union);  color: #FFFFFF; }
+span.kind-enumerant { background: var(--color-kind-enum); color: #FFFFFF; }
 
 /* ---------- Lists ---------- */
 

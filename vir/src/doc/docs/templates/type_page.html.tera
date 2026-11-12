@@ -14,6 +14,44 @@
 <pre class="doc">{{ doc_body }}</pre>
 {% endif %}
 
+{% if slots %}
+<p class="slot-toc">
+  {% for slot in slots %}{% if not loop.first %} &middot; {% endif %}<a href="#slot-{{ slot.name }}">{{ slot.name }}</a>{% endfor %}
+</p>
+<h2>Slots</h2>
+<dl class="slots">
+  {% for slot in slots %}
+  <dt id="slot-{{ slot.name }}">
+    <span class="kind kind-{{ slot.kind_label }}">{{ slot.kind_label }}</span>
+    <code>{{ slot.spelling }}</code>
+  </dt>
+  {% if slot.doc_body %}
+  <dd><pre class="doc">{{ slot.doc_body }}</pre></dd>
+  {% endif %}
+  {% if slot.params %}
+  <dd>
+    <div class="table-wrapper">
+    <table class="slot-params">
+      <thead>
+        <tr><th>Param</th><th>Type</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        {% for param in slot.params %}
+        <tr>
+          <td><code>{{ param.name }}</code></td>
+          <td><code>{{ param.type_str }}</code></td>
+          <td>{{ param.doc_body }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </dd>
+  {% endif %}
+  {% endfor %}
+</dl>
+{% endif %}
+
 <h2>Definition</h2>
 <div class="definition-wrapper">
 <button class="copy-btn" onclick="copyDefinition(this)">&#x1F4CB;</button>

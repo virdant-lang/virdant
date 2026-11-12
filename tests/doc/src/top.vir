@@ -1,6 +1,43 @@
 //! This is a package-level docstring for the virdoc test.
 //! It demonstrates how package-level documentation works.
 
+//> A struct type with a doccomment on every field.
+pub struct type Reading {
+    //> The temperature, in hundredths of a degree Celsius.
+    temperature : Word[16]
+
+    //> The relative humidity, in percent.
+    humidity : Word[8]
+}
+
+//> A union type with a doccomment on every constructor and payload.
+pub union type Shape {
+    //> A circle with the given radius.
+    Circle(
+        //> The radius, in pixels.
+        r : Word[8]
+    )
+
+    //> A square with the given side length.
+    Square(
+        //> The side length, in pixels.
+        s : Word[8]
+    )
+}
+
+//> An enum type with a doccomment on every enumerant.
+pub enum type Op {
+    //> Start a new conversion.
+    Start = 0w2
+
+    //> Read the previous result.
+    Read = 1w2
+
+    //> Power down the device.
+    //> The device wakes on the next `Start`.
+    Sleep = 2w2
+}
+
 //> A helper module, instantiated by `Top` below.
 //> It demonstrates how submodule listings appear in the docs.
 mod Blink {

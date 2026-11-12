@@ -15,6 +15,7 @@ use virdant::db::Db;
 use virdant::package::{PackageId, PackageTable};
 use virdant::syntax::ast::AstNode;
 use virdant::syntax::parsing::Parsing;
+use virdant::syntax::parsing::InternedString;
 use virdant::syntax::payload::AstNodePayload;
 
 // ---------------------------------------------------------------------------
@@ -164,7 +165,29 @@ struct TypePageCtx {
     name: String,
     doc_body: String,
     definition_text: String,
+    slots: Vec<SlotCtx>,
     hierarchy: Option<HierarchyLinkCtx>,
+}
+
+/// One payload parameter of a union constructor or payload
+/// enumerant, with its own docstring (if any).
+#[derive(Clone, Serialize)]
+struct SlotParamCtx {
+    name: String,
+    type_str: String,
+    doc_body: String,
+}
+
+/// One "slot" of a type definition: a field of a struct, a
+/// constructor of a union, or an enumerant of an enum.  Each slot
+/// carries its own docstring (if any) and its definition text.
+#[derive(Clone, Serialize)]
+struct SlotCtx {
+    kind_label: &'static str,
+    name: String,
+    spelling: String,
+    doc_body: String,
+    params: Vec<SlotParamCtx>,
 }
 
 #[derive(Clone, Serialize)]
@@ -824,27 +847,117 @@ fn node_kind(node: &AstNode<'_>) -> SymbolKind {
 /// Extract the body of a docstring (//> ...) from an AST node.
 /// Returns the text with the `//> ` prefix stripped from each line.
 fn extract_doc_body(node: &AstNode<'_>, parsing: &Parsing) -> BString {
-    if let Some(doc) = node.doc_string() {
-        let raw = parsing.string(doc.clone());
-        let mut body = BString::default();
-        for line in raw.lines() {
-            // Strip leading "//>" (3 bytes) from each line
-            let stripped = if line.len() >= 3 && &line[..3] == b"//>" {
-                &line[3..]
-            } else {
-                line
-            };
-            body.extend_from_slice(stripped);
-            body.push(b'\n');
-        }
-        // Trim trailing newline
-        while body.last() == Some(&b'\n') {
-            body.pop();
-        }
-        body
-    } else {
-        BString::default()
+    match node.doc_string() {
+        Some(doc) => docstring_body(doc.clone(), parsing),
+        None => BString::default(),
     }
+}
+
+/// Extract the body of a `//> ...` docstring: the text with the
+/// `//> ` prefix stripped from each line.
+fn docstring_body(doc: InternedString, parsing: &Parsing) -> BString {
+    let raw = parsing.string(doc);
+    let mut body = BString::default();
+    for line in raw.lines() {
+        // Skip leading indentation, then strip the leading "//>"
+        // (3 bytes) from each line of the block.
+        let mut start = 0;
+        while start < line.len() && (line[start] == b' ' || line[start] == b'\t') {
+            start += 1;
+        }
+        let stripped = if line.len() - start >= 3 && &line[start..start + 3] == b"//>" {
+            &line[start + 3..]
+        } else {
+            &line[start..]
+        };
+        let stripped = stripped.strip_prefix(&b" "[..]).unwrap_or(stripped);
+        body.extend_from_slice(stripped);
+        body.push(b'\n');
+    }
+    // Trim trailing newline
+    while body.last() == Some(&b'\n') {
+        body.pop();
+    }
+    body
+}
+
+/// Collect the "slots" of a type definition: every field of a struct,
+/// every constructor of a union, and every enumerant of an enum.  Each
+/// slot carries its own docstring and, for union constructors and
+/// payload enumerants, the docstrings of its payload parameters.
+fn collect_type_slots(node: &AstNode<'_>, parsing: &Parsing) -> Vec<SlotCtx> {
+    let mut slots = Vec::new();
+    for child in node.children() {
+        let (kind_label, name) = match child.payload() {
+            AstNodePayload::Field(field) => ("field", field.name.clone()),
+            AstNodePayload::Ctor(ctor) => ("ctor", ctor.name.clone()),
+            AstNodePayload::Enumerant(enumerant) => ("enumerant", enumerant.name.clone()),
+            _ => continue,
+        };
+        let doc_body = child
+            .doc_string()
+            .map(|doc| docstring_body(doc.clone(), parsing))
+            .unwrap_or_default();
+
+        // A constructor's or enumerant's children are the Annotations
+        // wrapper, then one `Param` node per payload parameter, then
+        // (for payload enumerants) the value expression.
+        let mut params: Vec<SlotParamCtx> = Vec::new();
+        let mut value: Option<String> = None;
+        for (index, sub) in child.children().into_iter().enumerate() {
+            match sub.payload() {
+                AstNodePayload::Param(param) => params.push(SlotParamCtx {
+                    name: parsing.string(param.name.clone()).to_str_lossy().into_owned(),
+                    type_str: sub.child(1).spelling().to_str_lossy().into_owned(),
+                    doc_body: sub
+                        .doc_string()
+                        .map(|doc| docstring_body(doc.clone(), parsing))
+                        .unwrap_or_default()
+                        .to_str_lossy()
+                        .into_owned(),
+                }),
+                // For enumerants, the trailing (non-`Param`) child is
+                // the value expression.
+                _ if index > 0 && kind_label == "enumerant" => {
+                    value = Some(sub.spelling().to_str_lossy().into_owned());
+                }
+                _ => {}
+            }
+        }
+
+        // Reconstruct a clean one-line signature when the slot has
+        // payload parameters or an explicit value: the raw spelling
+        // would otherwise embed the nested parameter doccomments.
+        let name_str = parsing.string(name.clone()).to_str_lossy().into_owned();
+        let spelling = if params.is_empty() && value.is_none() {
+            child.spelling().to_str_lossy().into_owned()
+        } else {
+            let mut signature = name_str.clone();
+            if !params.is_empty() {
+                signature.push('(');
+                for (index, param) in params.iter().enumerate() {
+                    if index > 0 {
+                        signature.push_str(", ");
+                    }
+                    signature.push_str(&format!("{} : {}", param.name, param.type_str));
+                }
+                signature.push(')');
+            }
+            if let Some(value) = &value {
+                signature.push_str(&format!(" = {value}"));
+            }
+            signature
+        };
+
+        slots.push(SlotCtx {
+            kind_label,
+            name: name_str,
+            spelling,
+            doc_body: doc_body.to_str_lossy().into_owned(),
+            params,
+        });
+    }
+    slots
 }
 
 /// Extract the package-level docstring (//! ...) from the parsing.
@@ -855,12 +968,18 @@ fn extract_package_doc(parsing: &Parsing) -> BString {
             let raw = parsing.string(doc.clone());
             let mut body = BString::default();
             for line in raw.lines() {
-                // Strip leading "//!" (3 bytes) from each line
-                let stripped = if line.len() >= 3 && &line[..3] == b"//!" {
-                    &line[3..]
+                // Skip leading indentation, then strip the leading
+                // "//!" (3 bytes) from each line of the block.
+                let mut start = 0;
+                while start < line.len() && (line[start] == b' ' || line[start] == b'\t') {
+                    start += 1;
+                }
+                let stripped = if line.len() - start >= 3 && &line[start..start + 3] == b"//!" {
+                    &line[start + 3..]
                 } else {
-                    line
+                    &line[start..]
                 };
+                let stripped = stripped.strip_prefix(&b" "[..]).unwrap_or(stripped);
                 body.extend_from_slice(stripped);
                 body.push(b'\n');
             }
@@ -1026,6 +1145,7 @@ fn render_type_page_with_sidebar(
 
     let definition_span = node.span();
     let definition_text = parsing.text(definition_span);
+    let slots = collect_type_slots(node, parsing);
 
     let ctx = TypePageCtx {
         style_href: style_href(1),
@@ -1035,6 +1155,7 @@ fn render_type_page_with_sidebar(
         name: name_str,
         doc_body: doc_body.to_str_lossy().into_owned(),
         definition_text: definition_text.to_str_lossy().into_owned(),
+        slots,
         hierarchy,
     };
 
