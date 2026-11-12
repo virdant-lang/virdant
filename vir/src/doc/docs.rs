@@ -153,7 +153,13 @@ struct PortCtx {
 struct SocketCtx {
     role: String,
     name: String,
-    ofness: String,
+    /// The referenced socket-def's fully-qualified name (or the
+    /// reference as written, when it does not resolve).
+    target: String,
+    /// Type arguments of the ofness, as written (empty when absent).
+    args: String,
+    /// Relative link to the socket-def's page, when resolved.
+    href: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -623,13 +629,52 @@ fn resolve_moddef_ref(
     ofness: &virdant::syntax::payload::Ofness,
     parsing: &Parsing,
 ) -> Option<Symbol> {
+    resolve_ref_of_kind(
+        packages,
+        symboltable,
+        pkg,
+        ofness,
+        parsing,
+        SymbolKind::ModDef,
+    )
+}
+
+/// Resolve a socket reference as written in a socket declaration's
+/// ofness: an optional package qualifier plus a socket-def name.
+fn resolve_socket_ref(
+    packages: &PackageTable,
+    symboltable: &SymbolTable,
+    pkg: PackageId,
+    ofness: &virdant::syntax::payload::Ofness,
+    parsing: &Parsing,
+) -> Option<Symbol> {
+    resolve_ref_of_kind(
+        packages,
+        symboltable,
+        pkg,
+        ofness,
+        parsing,
+        SymbolKind::SocketDef,
+    )
+}
+
+/// Resolve a reference as written in an ofness: an optional package
+/// qualifier plus an item name, which must be of `expected_kind`.
+fn resolve_ref_of_kind(
+    packages: &PackageTable,
+    symboltable: &SymbolTable,
+    pkg: PackageId,
+    ofness: &virdant::syntax::payload::Ofness,
+    parsing: &Parsing,
+    expected_kind: SymbolKind,
+) -> Option<Symbol> {
     let name = parsing.string(ofness.name);
     let qualifier = ofness.package.and_then(|q| packages.id(parsing.string(q)));
     let symbol = match qualifier {
         Some(qualifier) => symboltable.resolve_item_in_package(name, qualifier),
         None => symboltable.resolve_item(name, pkg),
     }?;
-    if symbol.kind == SymbolKind::ModDef {
+    if symbol.kind == expected_kind {
         Some(symbol.clone())
     } else {
         None
@@ -676,6 +721,10 @@ fn collect_submodule_refs(
 /// Relative href from a doc page to another item's page.  Pages live at
 /// `out_dir/{package}/{item}.html`; `from_pkg` is `None` for root-level
 /// pages (eg, the hierarchy page).
+///
+/// `from_depth` counts how many `../` to climb; it only applies when
+/// the target is in a different package, since a same-package target
+/// lives in the same directory as the linking page.
 fn item_page_href(
     from_depth: usize,
     from_pkg: Option<&str>,
@@ -683,12 +732,12 @@ fn item_page_href(
     target_name: &str,
 ) -> String {
     let mut href = String::new();
-    for _ in 0..from_depth {
-        href.push_str("../");
-    }
     match from_pkg {
         Some(p) if p == target_pkg => href.push_str(target_name),
         _ => {
+            for _ in 0..from_depth {
+                href.push_str("../");
+            }
             href.push_str(target_pkg);
             href.push('/');
             href.push_str(target_name);
@@ -1052,11 +1101,53 @@ fn render_moddef_page_with_sidebar(
                 virdant::common::SocketRole::Server => "server",
             };
             let ofness_node = child.child(1);
-            let ofness_str = ofness_node.spelling().to_str_lossy().into_owned();
+            let AstNodePayload::Ofness(ofness) = ofness_node.payload() else {
+                continue;
+            };
+            // Type arguments of the ofness (eg, the `[DivSqrtRequest]`
+            // in `of Pipe[DivSqrtRequest]`), spelled as written.
+            let args = child
+                .children()
+                .into_iter()
+                .skip(2)
+                .take_while(|c| matches!(c.payload(), AstNodePayload::GenericsParams(_)))
+                .map(|c| c.spelling().to_str_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("");
+            let written = match ofness.package {
+                Some(q) => format!(
+                    "{}::{}",
+                    parsing.string(q).to_str_lossy(),
+                    parsing.string(ofness.name).to_str_lossy(),
+                ),
+                None => parsing.string(ofness.name).to_str_lossy().into_owned(),
+            };
+            let (target, href) = match resolve_socket_ref(
+                db.get_packages().as_ref(),
+                symboltable,
+                pkg,
+                &ofness,
+                &parsing,
+            ) {
+                Some(target) => {
+                    let target_pkg = db
+                        .get_packages()
+                        .name(target.location.package())
+                        .to_str_lossy()
+                        .into_owned();
+                    let target_name = target.name.to_str_lossy().into_owned();
+                    let href =
+                        item_page_href(1, Some(&pkg_str), &target_pkg, &target_name);
+                    (target.fqn.to_str_lossy().into_owned(), Some(href))
+                }
+                None => (written, None),
+            };
             sockets.push(SocketCtx {
                 name: parsing.string(socket.name).to_str_lossy().into_owned(),
                 role: role_str.to_owned(),
-                ofness: ofness_str,
+                target,
+                args,
+                href,
             });
         }
     }
@@ -1118,7 +1209,7 @@ fn render_moddef_page_with_sidebar(
                     type_str: port
                         .typ
                         .as_ref()
-                        .map(|t| format!("{t:?}"))
+                        .map(|t| virdant::types::render::render_type(db, t))
                         .unwrap_or_else(|| "?".to_owned()),
                 }
             })

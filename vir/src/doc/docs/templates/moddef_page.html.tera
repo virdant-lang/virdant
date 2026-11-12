@@ -14,8 +14,9 @@
 <pre class="doc">{{ doc_body }}</pre>
 {% endif %}
 
-{% if ports %}
+{% if ports or sockets %}
 <h2>Ports</h2>
+{% if ports %}
 <div class="table-wrapper">
 <table>
   <thead>
@@ -42,6 +43,36 @@
   </tbody>
 </table>
 </div>
+{% endif %}
+{% if sockets %}
+<h3>Sockets</h3>
+<div class="table-wrapper">
+<table>
+  <thead>
+    <tr>
+      <th>Role</th>
+      <th>Name</th>
+      <th>Type</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for sock in sockets %}
+    <tr>
+      <td><code>{{ sock.role }}</code></td>
+      <td><code>{{ sock.name }}</code></td>
+      <td>
+        {% if sock.href %}
+          <a href="{{ sock.href }}"><code>{{ sock.target }}</code></a>
+        {% else %}
+          <code>{{ sock.target }}</code>
+        {% endif %}{% if sock.args %}<code>{{ sock.args }}</code>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
 {% endif %}
 
 {% if submodules %}
@@ -72,27 +103,4 @@
 </div>
 {% endif %}
 
-{% if sockets %}
-<h2>Sockets</h2>
-<div class="table-wrapper">
-<table>
-  <thead>
-    <tr>
-      <th>Role</th>
-      <th>Name</th>
-      <th>Type</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for sock in sockets %}
-    <tr>
-      <td><code>{{ sock.role }}</code></td>
-      <td><code>{{ sock.name }}</code></td>
-      <td><code>{{ sock.ofness }}</code></td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-</div>
-{% endif %}
 {% endblock %}

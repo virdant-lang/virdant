@@ -59,9 +59,9 @@ code, pre, kbd, samp {
     --color-text-heading:   #111111;
 
     /* Links */
-    --color-link:           #2E7D32;
-    --color-link-visited:   #CC5500;
-    --color-link-hover:     #1B5E20;
+    --color-link:           #0F7B3F;
+    --color-link-visited:   #0F7B3F;
+    --color-link-hover:     #0A5A2D;
 
     /* Code */
     --color-code-bg:        #EDF0F2;
@@ -111,7 +111,7 @@ code, pre, kbd, samp {
     --color-text-heading:   #E6EDF3;
 
     --color-link:           #58A6FF;
-    --color-link-visited:   #D29922;
+    --color-link-visited:   #58A6FF;
     --color-link-hover:     #79C0FF;
 
     --color-code-bg:        #1C2128;
@@ -132,6 +132,25 @@ code, pre, kbd, samp {
     --color-kind-builtin:   #8B949E;
     --color-kind-fn:        #BC8CFF;
     --color-kind-socket:    #FF7B72;
+}
+
+/* ---------- Links ---------- */
+
+/* Global default for content links; component rules below override
+   where they need to.  Without this, links not covered by a component
+   rule fall back to the browser's default blue/purple. */
+main.content a {
+    color: var(--color-link);
+    text-decoration: none;
+}
+
+main.content a:visited {
+    color: var(--color-link);
+}
+
+main.content a:hover {
+    color: var(--color-link-hover);
+    text-decoration: underline;
 }
 
 /* ---------- Layout ---------- */
