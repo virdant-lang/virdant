@@ -672,11 +672,12 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
     let node = parsing.ast_node(location.ast_node_id());
     let expected_typ = builder.get_expected_type(exprroot.clone());
 
-    // Check if the expression is the RHS of a driver whose LHS target
-    // component does not exist in the component analysis.  If so, we still
-    // type-check the RHS to catch errors like unknown references, but we
-    // skip validate() so that cascading "Missing annotation" diagnostics
-    // (caused by the absent expected type) are suppressed.
+    // Check if the expression is the RHS of a driver whose LHS target is
+    // unusable in the component analysis: either the component does not
+    // exist, or it exists but its declared type failed to resolve.  If so,
+    // we still type-check the RHS to catch errors like unknown references,
+    // but we skip validate() so that cascading "Missing annotation"
+    // diagnostics (caused by the absent expected type) are suppressed.
     let mut skip_validate = false;
     if expected_typ.is_none() {
         if let Some(parent) = node.parent() {
@@ -711,8 +712,20 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
                     }
                 }
                 let component_analysis = builder.get_component_analysis(item.id());
-                if component_analysis.resolve(lhs_path.as_bstr()).is_none() {
-                    skip_validate = true;
+                match component_analysis.resolve(lhs_path.as_bstr()) {
+                    // The LHS component does not exist (already diagnosed).
+                    None => {
+                        skip_validate = true;
+                    }
+                    // The LHS component exists but its declared type failed
+                    // to resolve (already diagnosed at the declaration): the
+                    // driver has no expected type, so the RHS stays
+                    // unannotated.  Skip validate() to suppress the
+                    // cascading "Missing annotation" diagnostics.
+                    Some(component) if component.typ().is_none() => {
+                        skip_validate = true;
+                    }
+                    Some(_) => {}
                 }
             }
         }

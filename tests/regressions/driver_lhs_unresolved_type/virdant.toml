@@ -1,0 +1,3 @@
+[package]
+name = "driver_lhs_unresolved_type"
+version = "1.0.0"

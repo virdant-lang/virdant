@@ -1,0 +1,23 @@
+// Regression test for the "Missing annotation" internal error: a
+// driver whose LHS component exists but whose declared type failed to
+// resolve must not cascade into a spurious "Missing annotation" on
+// the RHS.
+//
+// `Instruction` is undefined, so `wire instruction` is diagnosed
+// `Unresolved type Instruction` and the component analysis records the
+// component with no type.  The driver `it := #Lda` then has no expected
+// type, so `#Lda` is left unannotated.  The `skip_validate` guard in
+// `build_typing` (virdant/src/types/typing.rs) must recognize this case
+// (LHS resolves, but its type is unresolved) alongside the already-
+// handled case of an LHS path that does not resolve at all, and skip
+// the validate pass instead of flagging every unannotated node.
+
+pub mod Test {
+    wire instruction : Instruction {
+        // CHECK: Unresolved type Instruction
+        // CHECK-NOT: Missing annotation
+        it := #Lda
+    }
+}
+
+// CHECK: Check failed

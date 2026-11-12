@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "A driver whose LHS component's declared type failed to resolve must not cascade into a spurious 'Missing annotation' error on the RHS: the guard in build_typing (virdant/src/types/typing.rs) treats an existing-but-untyped LHS component like a nonexistent one and skips validate()"
+filecheck = "src/top.vir"
