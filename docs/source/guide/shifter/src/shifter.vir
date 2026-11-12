@@ -1,0 +1,122 @@
+pub enum type ShiftDirection {
+    LeftLogical
+    RightLogical
+    RightArithmetic
+}
+
+pub mod Shifter {
+    incoming direction : ShiftDirection
+    incoming value     : Word[32]
+    incoming amount    : Word[5]
+
+    mod left of ShiftLeft {
+        it.value  := value
+        it.amount := amount
+    }
+
+    mod right of ShiftRightLogical {
+        it.value  := value
+        it.amount := amount
+    }
+
+    mod signed_right of ShiftRightArithmetic {
+        it.value  := value
+        it.amount := amount
+    }
+
+    outgoing result : Word[32]
+        dependson direction, value, amount {
+        it := match direction {
+            with #LeftLogical => left.result
+            with #RightLogical => right.result
+            with #RightArithmetic => signed_right.result
+        }
+    }
+}
+
+mod ShiftLeft {
+    incoming value  : Word[32]
+    incoming amount : Word[5]
+
+    wire left_4 : Word[32] {
+        it := mux(amount[4], word(value[16..0], 0w16), value)
+    }
+
+    wire left_4_3 : Word[32] {
+        it := mux(amount[3], word(left_4[24..0], 0w8), left_4)
+    }
+
+    wire left_4_3_2 : Word[32] {
+        it := mux(amount[2], word(left_4_3[28..0], 0w4), left_4_3)
+    }
+
+    wire left_4_3_2_1 : Word[32] {
+        it := mux(amount[1], word(left_4_3_2[30..0], 0w2), left_4_3_2)
+    }
+
+    wire left_4_3_2_1_0 : Word[32] {
+        it := mux(amount[0], word(left_4_3_2_1[31..0], 0w1), left_4_3_2_1)
+    }
+
+    outgoing result : Word[32] dependson value, amount {
+        it := left_4_3_2_1_0
+    }
+}
+
+mod ShiftRightLogical {
+    incoming value  : Word[32]
+    incoming amount : Word[5]
+
+    wire right_4 : Word[32] {
+        it := mux(amount[4], zext(value[32..16]), value)
+    }
+
+    wire right_4_3 : Word[32] {
+        it := mux(amount[3], zext(right_4[32..8]), right_4)
+    }
+
+    wire right_4_3_2 : Word[32] {
+        it := mux(amount[2], zext(right_4_3[32..4]), right_4_3)
+    }
+
+    wire right_4_3_2_1 : Word[32] {
+        it := mux(amount[1], zext(right_4_3_2[32..2]), right_4_3_2)
+    }
+
+    wire right_4_3_2_1_0 : Word[32] {
+        it := mux(amount[0], zext(right_4_3_2_1[32..1]), right_4_3_2_1)
+    }
+
+    outgoing result : Word[32] dependson value, amount {
+        it := right_4_3_2_1_0
+    }
+}
+
+mod ShiftRightArithmetic {
+    incoming value  : Word[32]
+    incoming amount : Word[5]
+
+    wire signed_right_4 : Word[32] {
+        it := mux(amount[4], sext(value[32..16]), value)
+    }
+
+    wire signed_right_4_3 : Word[32] {
+        it := mux(amount[3], sext(signed_right_4[32..8]), signed_right_4)
+    }
+
+    wire signed_right_4_3_2 : Word[32] {
+        it := mux(amount[2], sext(signed_right_4_3[32..4]), signed_right_4_3)
+    }
+
+    wire signed_right_4_3_2_1 : Word[32] {
+        it := mux(amount[1], sext(signed_right_4_3_2[32..2]), signed_right_4_3_2)
+    }
+
+    wire signed_right_4_3_2_1_0 : Word[32] {
+        it := mux(amount[0], sext(signed_right_4_3_2_1[32..1]), signed_right_4_3_2_1)
+    }
+
+    outgoing result : Word[32] dependson value, amount {
+        it := signed_right_4_3_2_1_0
+    }
+}

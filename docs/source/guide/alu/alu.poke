@@ -1,0 +1,50 @@
+poke funct3 #Add
+poke funct7 0b0000000
+poke operand_a 0x45
+poke operand_b 0x2a
+assert result == 0x6f
+
+poke funct7 0b0100000
+assert result == 0x1b
+
+poke funct3 #And
+poke operand_a 0xff00ff00
+poke operand_b 0x0f0f0f0f
+assert result == 0x0f000f00
+
+poke funct3 #Or
+assert result == 0xff0fff0f
+
+poke funct3 #Xor
+assert result == 0xf00ff00f
+
+poke funct3 #Slt
+poke operand_a 0x00000007
+poke operand_b 0xfffffffa
+assert result == 0x00000000
+
+poke operand_a 0xfffffffa
+poke operand_b 0x00000007
+assert result == 0x00000001
+
+poke funct3 #Sltu
+peek result
+
+poke funct3 #Sll
+poke funct7 0b0000000
+poke operand_a 0x0000abcd
+poke operand_b 0x00000008
+assert result == 0x00abcd00
+
+poke funct3 #Srl
+poke funct7 0b0000000
+poke operand_a 0xdeadbeef
+poke operand_b 0x00000004
+assert result == 0x0deadbee
+
+poke funct7 0b0100000
+assert result == 0xfdeadbee
+
+poke operand_a 0x80000000
+poke operand_b 0x0000001f
+assert result == 0xffffffff

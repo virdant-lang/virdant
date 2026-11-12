@@ -1,0 +1,54 @@
+import shifter
+
+//> The `funct3` field of a RISC-V register-register instruction.
+pub enum type Funct3 {
+    Add  = 0b000w3
+    Sll  = 0b001
+    Slt  = 0b010
+    Sltu = 0b011
+    Xor  = 0b100
+    Srl  = 0b101
+    Or   = 0b110
+    And  = 0b111
+}
+
+pub mod Alu {
+    incoming funct3    : Funct3
+    incoming funct7    : Word[7]
+    incoming operand_a : Word[32]
+    incoming operand_b : Word[32]
+
+    //> Barrel shifter for SLL, SRL, and SRA.
+    mod shifter of Shifter {
+        it.direction := match funct3 {
+            with #Sll => #ShiftLeftLogical
+            with #Srl if {
+                when funct7[5] => #ShiftRightArithmetic
+                else => #ShiftRightLogical
+            }
+            else => dontcare
+        }
+        it.value  := operand_a
+        it.amount := operand_b[5..0]
+    }
+
+    outgoing result : Word[32]
+        dependson funct3, funct7, operand_a, operand_b {
+        it := match funct3 {
+            with #And => operand_a & operand_b
+            with #Or => operand_a | operand_b
+            with #Xor => operand_a ^ operand_b
+            with #Add => if {
+                when funct7[5] => operand_a - operand_b
+                else => operand_a + operand_b
+            }
+            with #Slt if {
+                when operand_a[31] ^ operand_b[31] => zext(operand_a[31])
+                else => zext(operand_a < operand_b)
+            }
+            with #Sltu => dontcare
+            with #Srl => shifter.result
+            with #Sll => shifter.result
+        }
+    }
+}
