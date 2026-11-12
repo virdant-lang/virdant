@@ -11,6 +11,8 @@ This guide will introduce Virdant through a series of examples.
     pwm/index
     popcount/index
     counter/index
+    shifter/index
+    alu/index
     shiftreg/index
     gcd/index
     hello/index
