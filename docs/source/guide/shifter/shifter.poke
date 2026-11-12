@@ -1,34 +1,34 @@
-poke direction #ShiftLeftLogical
-poke value 0x00000001
-poke amount 0x0000001f
-assert result == 0x80000000
+poke direction #LeftLogical
+poke value 0x01
+poke amount 0x07
+assert result == 0x80
 
-poke value 0x0000abcd
-poke amount 0x00000008
-assert result == 0x00abcd00
+poke value 0xab
+poke amount 0x04
+assert result == 0xb0
 
-poke value 0xdeadbeef
-poke amount 0x00000000
-assert result == 0xdeadbeef
+poke value 0xab
+poke amount 0x00
+assert result == 0xab
 
-poke direction #ShiftRightLogical
-poke value 0x80000000
-poke amount 0x0000001f
-assert result == 0x00000001
+poke direction #RightLogical
+poke value 0x80
+poke amount 0x07
+assert result == 0x01
 
-poke value 0xdeadbeef
-poke amount 0x00000004
-assert result == 0x0deadbee
+poke value 0xab
+poke amount 0x04
+assert result == 0x0a
 
-poke direction #ShiftRightArithmetic
-poke value 0x80000000
-poke amount 0x0000001f
-assert result == 0xffffffff
+poke direction #RightArithmetic
+poke value 0x80
+poke amount 0x07
+assert result == 0xff
 
-poke value 0xdeadbeef
-poke amount 0x00000004
-assert result == 0xfdeadbee
+poke value 0xab
+poke amount 0x04
+assert result == 0xfa
 
-poke value 0x7fffffff
-poke amount 0x00000004
-assert result == 0x07ffffff
+poke value 0x7f
+poke amount 0x04
+assert result == 0x07
