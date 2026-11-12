@@ -13,8 +13,8 @@ Here we have our shifter module.
 It has three `incoming` ports: `direction` `value` and `amount`,
 and one `outgoing` port: `result`.
 
-Operation
----------
+Operation of `Shifter`
+----------------------
 The operation of `Shifter` is pretty simple:
 You specify `value` and `amount`,
 and say which `direction` to shift,
@@ -124,11 +124,119 @@ this `match` expression is the thing that looks at `direction` to select between
 
 Shifting Left
 -------------
-Let's go over the `ShiftLeft` module.
+Let's go over the `ShiftLeft` module:
 
 .. literalinclude:: src/shifter.vir
     :language: virdant
     :lines: 37-64
+
+Wires
+-----
+Once we understand one of these drivers, we can understand the whole thing:
+
+.. literalinclude:: src/shifter.vir
+    :language: virdant
+    :lines: 41-43
+    :dedent:
+
+This component is one we haven't seen before.
+It's a `wire`.
+We use `wire` when we want to give a name to a value.
+We drive it it using `:=`.
+
+Words with Widths
+-----------------
+If we squint, we'll see nestled in this driver a value written `0w16`.
+This is how we say `0` but with 16-bits.
+The `w` stands for "of width".
+
+.. note::
+
+    In Verilog, you would write this :verilog:`16'b0`.
+
+Concatenation
+-------------
+If we zoom out, we see the expression `word(value[16..0], 0w16)`.
+The `word` function will convert each of the arguments to a `Word` type,
+and then, it will concanenate them all together into one long `Word` type.
+In this case, we take the first 16 bits of `value` and add on 16 `0` bits.
+But another way, this expression gives us the result of shifting `value` 16 bit to the left.
+
+Mux
+---
+Finally, we see an the full expression:
+`mux(amount[4], word(value[16..0], 0w16), value)`.
+The `mux` function (short for multiplexer) is a compact way of writing simple `if` statement.
+
+Putting this all together,
+`left_4` is a value which is either:
+
+- `value` 16 bits to the left (if bit 4 of `amount` is set)
+- otherwise it is `amount` with no shifting at all
+
+Operation of `ShiftLeft`
+------------------------
+Now that we have seen all of the pieces,
+let's zoom out and look at the structure of the module.
+
+We think of the 5-bit input `amount` as 5 requests:
+
+- if bit 4 is set, please shift left by 16
+- if bit 3 is set, please shift left by 8 more
+- if bit 2 is set, please shift left by 4 more
+- if bit 1 is set, please shift left by 2 more
+- if bit 0 is set, please shift left by 1 more
+
+Each of the five wires represents the result after the given requests:
+
+.. list-table::
+    :header-rows: 1
+
+    * - Wire
+      - Value
+    * - `left_4`
+      - `value` shifted (or not) by 16 (based on bit 4)
+    * - `left_4_3`
+      - `value` shifted (or not) by 8 more (based on bit 3)
+    * - `left_4_3_2`
+      - `value` shifted (or not) by 4 more still (based on bit 2)
+    * - `left_4_3_2_1`
+      - `value` shifted (or not) by 2 more still! (etc)
+    * - `left_4_3_2_1_0`
+      - `value` shifted (or not) by 1 more if needed (etc)
+
+The final `result` is just an alias for `left_4_3_2_1_0`,
+which is when we have taken each of the five bits of `amount` into account.
+
+`ShiftLeft` Waveform
+--------------------
+Normally, we would save the waveforms for the end,
+but let's look at this one so we understand it.
+We'll just shift `1` by various amounts
+(but we'll write the amounts in binary to make it easier to see).
+Each bit of `amount` is one stage's request:
+`0b11111` is all five requests firing at once.
+
+.. vcd:: trace.vcd
+
+    signal top.value:hex
+    signal top.amount:bin
+    space
+    signal top.left_4:bin
+    signal top.left_4_3:bin
+    signal top.left_4_3_2:bin
+    signal top.left_4_3_2_1:bin
+    signal top.left_4_3_2_1_0:bin
+    signal top.result:bin
+
+Watch the cascade do its work:
+whenever `amount` gains a set bit,
+the corresponding wire slides `value` further up the row,
+pasting zeros in underneath,
+and the wires *below* it in the list inherit the shift.
+By the bottom of the figure, `result` is just
+`left_4_3_2_1_0` doing its final pass.
+
 
 Shifting Right
 --------------

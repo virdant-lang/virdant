@@ -1,0 +1,33 @@
+top shifter::ShiftLeft
+vcd trace.vcd
+
+# Hold `value` at 1 the whole time and just vary `amount`.
+# Amounts are written in binary, one bit per stage:
+# the k-th bit "requests" a shift by 2^k.
+
+poke value 0x00000001
+poke amount 0b00000
+advance
+assert result == 0x00000001
+
+poke amount 0b00001
+advance
+assert result == 0x00000002
+
+poke amount 0b00011
+advance
+assert result == 0x00000008
+
+poke amount 0b00101
+advance
+assert result == 0x00000020
+
+poke amount 0b01111
+advance
+assert result == 0x00008000
+
+poke amount 0b11111
+advance
+assert result == 0x80000000
+
+exit
