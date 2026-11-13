@@ -140,6 +140,58 @@ fn check_unused_imports(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>
     }
 }
 
+/// Error on qualified references (`pkg::Item`) to packages which are
+/// not imported. Imports enable qualified references, so `pkg::Item`
+/// requires an `import pkg` statement — except for the implicitly
+/// imported builtin package and a package referencing itself.
+///
+/// This also catches qualifiers naming a package which does not exist
+/// at all (`UnresolvedPackage`): without this check such a reference
+/// would silently fall back to a bare-name lookup in the referencing
+/// package.
+fn check_qualified_references(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let packages = builder.get_packages();
+
+    for package in packages.ids() {
+        let parsing = builder.get_parsing(package);
+        let imports: IndexSet<PackageId> = builder
+            .get_package_analysis(package)
+            .imports()
+            .into_iter()
+            .collect();
+        let mut stack = vec![parsing.root()];
+        while let Some(node) = stack.pop() {
+            if let AstNodePayload::Ofness(ofness) = node.payload() {
+                if let Some(pkg_name) = ofness.package {
+                    let pkg_name = parsing.string(pkg_name);
+                    match packages.id(pkg_name) {
+                        Some(pkg) if pkg == package || imports.contains(&pkg) => {}
+                        Some(_) => {
+                            diagnostics.push(Diagnostic::new(
+                                node.region(),
+                                diagnostics::PackageNotImported {
+                                    package: pkg_name.to_owned(),
+                                },
+                            ));
+                        }
+                        None => {
+                            diagnostics.push(Diagnostic::new(
+                                node.region(),
+                                diagnostics::UnresolvedPackage {
+                                    package: pkg_name.to_owned(),
+                                },
+                            ));
+                        }
+                    }
+                }
+            }
+            for child in node.children() {
+                stack.push(child);
+            }
+        }
+    }
+}
+
 fn check_annotations_in(
     node: &crate::syntax::ast::AstNode<'_>,
     parsing: &crate::syntax::parsing::Parsing,
@@ -169,6 +221,7 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     check_package_names(builder, &mut diagnostics);
     check_annotations(builder, &mut diagnostics);
     check_unused_imports(builder, &mut diagnostics);
+    check_qualified_references(builder, &mut diagnostics);
 
     let symboltable = builder.get_symboltable();
     diagnostics.extend(symboltable.diagnostics.clone());

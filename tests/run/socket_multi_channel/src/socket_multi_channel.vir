@@ -1,3 +1,5 @@
+import virt
+
 //> Four-channel socket: two client-out/server-in request channels
 //> and two server-out/client-in response channels.  Each channel
 //> carries its own stream so that swapping any two of the four wires

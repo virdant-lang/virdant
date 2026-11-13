@@ -3150,7 +3150,9 @@ mod tests {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let builtin = std::fs::read_to_string(root.join("../lib/builtin.vir")).unwrap();
         let ice40 = std::fs::read_to_string(root.join("../lib/ice40.vir")).unwrap();
-        let design = r#"pub mod Top {
+        let design = r#"import ice40
+
+pub mod Top {
     incoming clock : Clock
     outgoing rdata : Word[16]
     mod ram of ice40::SbRam40_4k {

@@ -1,0 +1,5 @@
+[project]
+name = "unimported_qualified_ref"
+
+[prog]
+top = "top::Top"

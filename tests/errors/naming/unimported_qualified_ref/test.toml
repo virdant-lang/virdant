@@ -1,0 +1,4 @@
+kind = "check"
+description = "A qualified reference (`pkg::Item`) requires `import pkg`: imports enable qualified references, so referencing an unimported package's item is an error."
+expect = "error"
+filecheck = "src/top.vir"

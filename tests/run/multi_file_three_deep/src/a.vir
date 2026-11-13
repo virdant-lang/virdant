@@ -9,6 +9,7 @@
 // passed.
 
 import b
+import virt
 
 pub mod MultiFileThreeDeepTest for virt::Virt {
     //> Primary clock.

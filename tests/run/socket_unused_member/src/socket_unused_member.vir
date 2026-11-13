@@ -7,6 +7,8 @@
 //! the used channel (`data`) still crosses the bulk connect with its
 //! expected value on every cycle.
 
+import virt
+
 //> Socket under test: a memory-style request (`addr`, client to
 //> server) and response (`data`, server to client) pair.
 socket Mem {

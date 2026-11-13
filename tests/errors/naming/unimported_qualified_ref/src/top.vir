@@ -1,0 +1,11 @@
+// A qualified reference (`pkg::Item`) to a package which the current
+// package does not `import` is an error: imports enable qualified
+// references.  The builtin package is imported implicitly, so
+// `builtin::Item` needs no import.
+
+// CHECK: Package `helper` is not imported: add `import helper`
+pub mod Top {
+    mod helper_inst of helper::Helper
+}
+
+// CHECK: Check failed

@@ -37,6 +37,9 @@ pub enum DiagnosticPayload {
     /// Package imports a package but never references it via a
     /// qualified name (`pkg::Item`).
     UnusedImport(UnusedImport),
+    /// A qualified reference (`pkg::Item`) names a package which the
+    /// referencing package does not import.
+    PackageNotImported(PackageNotImported),
     /// Two items share the same name in the same package.
     /// Lists regions to all such item declarations.
     DuplicateItem(DuplicateItem),
@@ -322,6 +325,15 @@ pub struct DuplicateImport {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnusedImport {
     pub imported_package: BString,
+}
+
+/// A qualified reference `pkg::Item` names a package which is not
+/// imported by the referencing package. Imports enable qualified
+/// references, so the fix is adding `import pkg`. Reported as an
+/// `Error` at the qualified reference.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackageNotImported {
+    pub package: BString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -886,6 +898,10 @@ impl Diagnostic {
                 "Import `{}` is unused",
                 d.imported_package,
             ).into(),
+            DiagnosticPayload::PackageNotImported(d) => format!(
+                "Package `{}` is not imported: add `import {}`",
+                d.package, d.package,
+            ).into(),
             DiagnosticPayload::DuplicateItem(_) => "Duplicate Item".to_owned().into(),
             DiagnosticPayload::DuplicateSlot(_) => "Duplicate slot".into(),
             DiagnosticPayload::UnresolvedPackage(d) => format!("Unresolved package {}", d.package).into(),
@@ -1346,6 +1362,7 @@ macro_rules! from_diagnostic {
 from_diagnostic! {
     SyntaxError, FormattingError, ImportCycle, UnresolvedImportError, DuplicateImport, DuplicateItem,
     DuplicateSlot, UnresolvedPackage, InvalidPackageName, UnresolvedItem, UnresolvedType, MissingOnClause,
+    PackageNotImported,
     RedundantOnClause, WrongDriverType, NoRegDrivers, NoDrivers, MultipleDrivers,
     MemoryElementNotPowerOf2Word, MemoryDepthNotLiteral, MemoryDepthNotPowerOf2, MemoryIndexWidth,
     MemoryIndexOutOfRange, MemoryWriteOutsideOnRegion, OverlappingMemoryWrites,
