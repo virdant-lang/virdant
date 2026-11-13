@@ -56,11 +56,10 @@ pub enum Expr {
     /// of a comparison, or the `poke` target), resolved at evaluation
     /// time.
     Ctor { name: String, args: Vec<Expr> },
-    /// A struct literal: the named `${Name(f = expr, ...)}` form or
-    /// the source-style `${f = expr, ...}` (fields may come in any
-    /// order; every declared field must be given exactly once).  Its
+    /// A struct literal: `${f = expr, ...}`.  (Fields may come in any
+    /// order; every declared field must be given exactly once.)  Its
     /// type comes from context, like [`Expr::Ctor`].
-    StructLit { name: Option<String>, fields: Vec<(String, Expr)> },
+    StructLit { fields: Vec<(String, Expr)> },
     Neg(Box<Expr>),
     Inv(Box<Expr>),
     Not(Box<Expr>),

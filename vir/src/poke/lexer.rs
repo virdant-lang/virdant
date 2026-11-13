@@ -26,7 +26,7 @@ pub enum Tok {
     /// `/` — only legal inside a bare `vcd` file name; the expression
     /// grammar never produces it.
     Slash,
-    /// `$` — the struct-literal prefix (`${Point(x = 1, y = 2)}`).
+    /// `$` — the struct-literal prefix (`${x = 1, y = 2}`).
     Dollar,
     /// `{` / `}` — struct-literal braces.
     LBrace,

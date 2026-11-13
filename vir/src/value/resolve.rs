@@ -227,32 +227,6 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// Find a struct typedef by simple name (for `${Name(...)}` struct
-    /// literals).  Bare names search every package; an ambiguous name
-    /// is an error listing the candidates.
-    pub fn find_struct(&self, name: &str) -> Result<SymbolId, String> {
-        let matches: Vec<Symbol> = self
-            .symboltable
-            .typedefs()
-            .into_iter()
-            .filter(|sym| sym.kind() == SymbolKind::StructDef && sym.name().as_bstr() == name.as_bytes())
-            .collect();
-        match matches.len() {
-            0 => Err(format!("no struct type named '{name}'")),
-            1 => Ok(matches[0].id()),
-            n => {
-                let mut names: Vec<BString> =
-                    matches.iter().map(|sym| sym.fqn().to_owned()).collect();
-                names.sort();
-                let names: Vec<String> =
-                    names.iter().map(|f| f.to_str_lossy().into_owned()).collect();
-                Err(format!(
-                    "struct '{name}' is ambiguous ({n} candidates): {}",
-                    names.join(", ")
-                ))
-            }
-        }
-    }
 }
 
 fn type_args(vt: &VType) -> Option<&Vec<VTypeArg>> {

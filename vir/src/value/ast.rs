@@ -40,11 +40,8 @@ pub enum ValueExpr {
     /// A constructor or enumerant application: `@Valid(0w8)`,
     /// `@Invalid`.
     Ctor { name: String, args: Vec<ValueExpr> },
-    /// A struct literal.  Two spellings (see PLAN §3):
-    /// `${Pair(a = 1, b = 2)}` (named, round-trippable decode output)
-    /// and `${a = 1, b = 2}` (as written in Virdant source).
+    /// A struct literal: `${a = 1, b = 2}`.
     StructLit {
-        name: Option<String>,
         fields: Vec<(String, ValueExpr)>,
     },
     /// Type ascription: `0 : Word[8]`.  The ascribed type must equal

@@ -347,14 +347,10 @@ ExprPrimary: Expr = {
     "@" <name: Name> "(" <args: CtorArgs?> ")" => Expr::Ctor { name, args: args.unwrap_or_default() },
     "#" <name: Name> => Expr::Ctor { name, args: vec![] },
     "#" <name: Name> "(" <args: CtorArgs?> ")" => Expr::Ctor { name, args: args.unwrap_or_default() },
-    // Struct literals, matching Virdant's own struct-value syntax
-    // (see `vir value`): the named form `${Name(f = expr, ...)}` and
-    // the source-style `${f = expr, ...}`; both allow a trailing
-    // comma, and the empty `${}` covers fieldless structs.
+    // Struct literals: `${f = expr, ...}`; a trailing comma is
+    // allowed, and the empty `${}` covers fieldless structs.
     "$" "{" <fields: StructFields> "}" =>
-        Expr::StructLit { name: None, fields },
-    "$" "{" <name: Name> "(" <fields: StructFields> ")" "}" =>
-        Expr::StructLit { name: Some(name), fields },
+        Expr::StructLit { fields },
     <p: Path> => Expr::Path(p),
 };
 

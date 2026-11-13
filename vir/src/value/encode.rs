@@ -41,24 +41,9 @@ pub fn infer_type(resolver: &Resolver, expr: &ValueExpr) -> Result<Option<Type>,
         ValueExpr::BitLit(_) => Ok(Some(Type::Bit)),
         ValueExpr::NatLit(_) => Ok(None),
         ValueExpr::Ascribe { typ, .. } => resolver.resolve_type(typ).map(Some),
-        ValueExpr::StructLit { name: Some(name), .. } => {
-            let sym = resolver.find_struct(name)?;
-            let typedef = resolver_typedef(resolver, sym);
-            if typedef.params.is_empty() {
-                Ok(Some(Type::Usual(sym, vec![])))
-            } else {
-                // `${Name(...)}` carries no type arguments; a generic
-                // struct's arguments must come from context.
-                Ok(None)
-            }
-        }
-        ValueExpr::StructLit { name: None, .. } => Ok(None),
+        ValueExpr::StructLit { .. } => Ok(None),
         ValueExpr::Ctor { name, args } => infer_ctor(resolver, name, args),
     }
-}
-
-fn resolver_typedef(resolver: &Resolver, sym: virdant::analysis::symbols::SymbolId) -> virdant::types::typedef::TypeDef {
-    resolver.db().get_typedef(sym).as_ref().clone()
 }
 
 fn infer_ctor(resolver: &Resolver, name: &str, args: &[ValueExpr]) -> Result<Option<Type>, String> {
@@ -183,8 +168,8 @@ pub fn encode(
             )),
         },
         ValueExpr::Ctor { name, args } => encode_ctor(resolver, layouts, expected, name, args),
-        ValueExpr::StructLit { name, fields } => {
-            encode_struct(resolver, layouts, expected, name.as_deref(), fields)
+        ValueExpr::StructLit { fields } => {
+            encode_struct(resolver, layouts, expected, fields)
         }
     }
 }
@@ -251,7 +236,6 @@ fn encode_struct(
     resolver: &Resolver,
     layouts: &TypeLayoutIndex,
     expected: &Type,
-    name: Option<&str>,
     fields: &[(String, ValueExpr)],
 ) -> Result<BitPat, String> {
     let Type::Usual(..) = expected else {
@@ -266,20 +250,6 @@ fn encode_struct(
             type_display(resolver, layouts, expected)
         ));
     };
-
-    // A named struct literal (`${Name(...)}`) must name this type.
-    if let Some(name) = name {
-        let sym = resolver.find_struct(name)?;
-        let Type::Usual(expected_sym, _) = expected else {
-            return Err(format!("internal error: expected type is not Usual"));
-        };
-        if sym != *expected_sym {
-            return Err(format!(
-                "struct literal '{name}' does not name the expected type {}",
-                type_display(resolver, layouts, expected)
-            ));
-        }
-    }
 
     // Every declared field must be assigned exactly once; no extras.
     let mut assigned: Vec<Option<&ValueExpr>> = vec![None; declared.len()];

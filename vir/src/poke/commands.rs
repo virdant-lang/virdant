@@ -377,15 +377,12 @@ fn render_expr(expr: &Expr) -> String {
                 format!("@{}({})", name, rendered.join(", "))
             }
         }
-        Expr::StructLit { name, fields } => {
+        Expr::StructLit { fields } => {
             let rendered: Vec<String> = fields
                 .iter()
                 .map(|(field, expr)| format!("{} = {}", field, render_expr(expr)))
                 .collect();
-            match name {
-                Some(name) => format!("${{{}({})}}", name, rendered.join(", ")),
-                None => format!("${{{}}}", rendered.join(", ")),
-            }
+            format!("${{{}}}", rendered.join(", "))
         }
         Expr::Neg(e) => format!("-{}", render_expr(e)),
         Expr::Inv(e) => format!("~{}", render_expr(e)),

@@ -11,8 +11,7 @@
 //!   `tick`, not by values); `Reset` renders as `0b0` / `0b1`;
 //! - enums and unions render as their constructor syntax, recursively:
 //!   `@Valid(0b00000000)`, `@Invalid`;
-//! - structs render as their source-style literal syntax, recursively:
-//!   `${f = value, ...}`;
+//! - structs render as struct literals, recursively: `${f = value, ...}`;
 //! - a bit pattern that is not a valid inhabitant of its type prints
 //!   as `<invalid>`.
 

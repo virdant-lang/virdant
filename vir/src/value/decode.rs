@@ -158,7 +158,7 @@ fn invalid_reason(
 ///   as `@Valid(0)`, zero-param enumerants as `#Invalid`;
 /// - unions as constructor syntax, recursively: `@Some(0)`,
 ///   `@Idle()`;
-/// - structs as `${Name(f = value, ...)}`.
+/// - structs as `${f = value, ...}`.
 pub fn render(layouts: &TypeLayoutIndex, typ: &Type, bits: &BitPat) -> String {
     match typ {
         Type::Bit => {
@@ -181,11 +181,7 @@ pub fn render(layouts: &TypeLayoutIndex, typ: &Type, bits: &BitPat) -> String {
                         )
                     })
                     .collect();
-                let name = layouts
-                    .type_name(typ)
-                    .map(|n| n.to_str_lossy().into_owned())
-                    .unwrap_or_default();
-                format!("${{{name}({})}}", rendered.join(", "))
+                format!("${{{}}}", rendered.join(", "))
             } else if let Some((slot, payloads)) =
                 layouts.decode_ctor(layouts.type_id(typ), bits)
             {
