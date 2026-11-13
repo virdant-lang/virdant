@@ -1725,17 +1725,27 @@ fn package_id_to_uri(db: &Db, package: PackageId, sibling: &Url) -> Url {
     use bstr::ByteSlice as _;
 
     let packages = db.get_packages();
-    if package == packages.builtin() {
-        let path = LIB_DIR.join("builtin.vir");
-        Url::from_file_path(&path).unwrap()
+    let name = packages.name(package).to_str_lossy();
+    // Project packages live as `<sibling dir>/<name>.vir` next to the
+    // open file; library packages (builtin, ice40, ...) live in the
+    // standard `lib/` directory.  Prefer the project file when it
+    // exists, and fall back to the library copy when the project
+    // sibling is missing (eg, goto-definition into `ice40::...`).
+    let project_path = Path::new(sibling.path())
+        .parent()
+        .unwrap()
+        .join(format!("{name}.vir"));
+    let path = if project_path.exists() {
+        project_path
     } else {
-        let name = packages.name(package).to_str_lossy();
-        let path = Path::new(sibling.path())
-            .parent()
-            .unwrap()
-            .join(format!("{name}.vir"));
-        Url::from_file_path(&path).unwrap()
-    }
+        let lib_path = LIB_DIR.join(format!("{name}.vir"));
+        if lib_path.exists() {
+            lib_path
+        } else {
+            project_path
+        }
+    };
+    Url::from_file_path(&path).unwrap()
 }
 
 fn span_to_range(span: Span) -> Range {
