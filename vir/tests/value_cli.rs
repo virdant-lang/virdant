@@ -19,6 +19,11 @@ const SCRATCH: &str = r#"
         Empty
         Full(value : T)
     }
+
+    pub enum type Mode {
+        Idle
+        Run
+    }
 "#;
 
 fn builtin_source() -> String {
@@ -135,6 +140,26 @@ fn decode_examples() {
     );
     assert_eq!(code, 0, "stderr: {err}");
     assert_eq!(out.trim(), "@Full(0)");
+}
+
+#[test]
+fn decode_enum_examples() {
+    let (_dir, files) = project_dir();
+    // Zero-payload enum enumerants decode to the `#` spelling.
+    let (code, out, err) = run_value(&["decode", "0b01", "scratch::Mode"], &files);
+    assert_eq!(code, 0, "stderr: {err}");
+    assert_eq!(out.trim(), "#Idle");
+
+    let (code, out, err) = run_value(&["decode", "0b10", "scratch::Mode"], &files);
+    assert_eq!(code, 0, "stderr: {err}");
+    assert_eq!(out.trim(), "#Run");
+
+    // ... and both spellings round-trip through encode.
+    for spelling in &["#Run", "@Run()", "@Run"] {
+        let (code, out, err) = run_value(&["encode", spelling, ":", "scratch::Mode"], &files);
+        assert_eq!(code, 0, "stderr: {err}");
+        assert_eq!(out.trim(), "0b10");
+    }
 }
 
 #[test]

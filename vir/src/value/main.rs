@@ -248,17 +248,14 @@ mod tests {
 
     #[test]
     fn decode_ctors_prefixed_with_at() {
-        // Decode output always spells constructors with `@` (the
-        // Virdant source syntax), even though `#` is accepted on
-        // input — at the top level and at every nesting level.
+        // Payload constructors (union variants and payload-carrying
+        // enum enumerants) decode with `@Name(...)` — the Virdant
+        // source syntax — even though `#` is accepted on input.  At
+        // the top level and at every nesting level.
         let db = scratch_db();
         assert_eq!(
             run(&db, "decode", "0b0000000010 Valid[Word[8]]").unwrap(),
             "@Valid(0)"
-        );
-        assert_eq!(
-            run(&db, "decode", "0b0000000001 Valid[Word[8]]").unwrap(),
-            "@Invalid()"
         );
         assert_eq!(
             run(&db, "decode", "0b1010011110 scratch::Scratch[Word[8]]").unwrap(),
@@ -283,7 +280,8 @@ mod tests {
         let out = run(&db, "decode", "0b0000000010 Valid[Word[8]]").unwrap();
         assert_eq!(out, "@Valid(0)");
         let out = run(&db, "decode", "0b0000000001 Valid[Word[8]]").unwrap();
-        assert_eq!(out, "@Invalid()");
+        // Zero-payload enum enumerants decode to the `#` spelling.
+        assert_eq!(out, "#Invalid");
     }
 
     #[test]

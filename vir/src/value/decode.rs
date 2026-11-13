@@ -154,8 +154,10 @@ fn invalid_reason(
 ///   the `wN` suffix is stripped for now);
 /// - `Bit` as `true`/`false`;
 /// - `Clock`/`Reset` as full-width binary (`0b0`);
-/// - enums and unions as constructor syntax, recursively:
-///   `@Valid(0)`, `@Invalid()`;
+/// - enums as constructor syntax, recursively: payload enumerants
+///   as `@Valid(0)`, zero-param enumerants as `#Invalid`;
+/// - unions as constructor syntax, recursively: `@Some(0)`,
+///   `@Idle()`;
 /// - structs as `${Name(f = value, ...)}`.
 pub fn render(layouts: &TypeLayoutIndex, typ: &Type, bits: &BitPat) -> String {
     match typ {
@@ -187,15 +189,27 @@ pub fn render(layouts: &TypeLayoutIndex, typ: &Type, bits: &BitPat) -> String {
             } else if let Some((slot, payloads)) =
                 layouts.decode_ctor(layouts.type_id(typ), bits)
             {
-                // Constructors ALWAYS print with parens — `@Invalid()`
-                // even with no payload — so every decode output is a
-                // valid round-trippable value expression.
+                // Enumerants without payload print as `#A` (the
+                // source-level spelling for zero-param enums);
+                // union variants — and payload-carrying enum
+                // enumerants — always print with parens, `@A()` /
+                // `@Valid(0)`, so every decode output is a valid
+                // round-trippable value expression.
+                let ctor_prefix = match layouts.kind_of(typ) {
+                    Some(TypeLayoutKind::Enum { .. }) if payloads.is_empty() => "#",
+                    _ => "@",
+                };
                 let args: Vec<String> = payloads
                     .iter()
                     .zip(slot.param_types.iter())
                     .map(|(pat, t)| render(layouts, t, pat))
                     .collect();
-                format!("@{}({})", slot.name.to_str_lossy(), args.join(", "))
+                let arg_list = args.join(", ");
+                if args.is_empty() && ctor_prefix == "#" {
+                    format!("#{name}", name = slot.name.to_str_lossy())
+                } else {
+                    format!("{ctor_prefix}{}({arg_list})", slot.name.to_str_lossy())
+                }
             } else {
                 // Unreachable: callers validate before rendering.
                 "<invalid>".to_string()
