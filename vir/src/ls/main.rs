@@ -704,12 +704,8 @@ fn missing_match_cases_action(
     let is_stmt = !match_node.is_expression_position();
     let arm_body = if is_stmt { "{ }" } else { "?" };
 
-    let arms = match_arm_children(&children);
-    let first_pat_col = arms.iter().find_map(|(p, _)| p.map(|n| n.span().start().col()));
-    let indent_col = match first_pat_col {
-        Some(col) => col.saturating_sub(5).max(1),
-        None => match_node.span().start().col().saturating_add(4),
-    };
+    // A `with` clause is always indented 4 spaces relative to its `match`.
+    let indent_col = match_node.span().start().col().saturating_add(4);
     let indent_str = " ".repeat(indent_col.saturating_sub(1));
 
     // Find an insertion point immediately after the last non-whitespace byte
@@ -738,7 +734,7 @@ fn missing_match_cases_action(
     for pat in &missing {
         new_text.push('\n');
         new_text.push_str(&indent_str);
-        new_text.push_str("case ");
+        new_text.push_str("with ");
         new_text.push_str(pat);
         new_text.push_str(" => ");
         new_text.push_str(arm_body);

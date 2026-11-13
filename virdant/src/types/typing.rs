@@ -838,7 +838,7 @@ pub(crate) fn build_typing(builder: &mut Builder, exprroot: ExprRoot) -> Arc<Typ
 
 /// Walk up from `start_id` through the AST, collecting pattern-bound variable bindings
 /// from any enclosing `ModDefStmtMatch` arms, and push them onto `context`.
-/// This allows pattern-bound variables (e.g. `r` in `case @Done(r) => { result := r }`)
+/// This allows pattern-bound variables (e.g. `r` in `with @Done(r) => { result := r }`)
 /// to be resolved when type-checking driver expressions inside statement-level match arms.
 fn extend_context_for_enclosing_stmt_matches(
     builder: &mut Builder,
