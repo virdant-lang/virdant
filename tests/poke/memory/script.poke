@@ -1,4 +1,4 @@
-# Write 0xA5 to address 3, one clock edge later it reads back.
+// Write 0xA5 to address 3, one clock edge later it reads back.
 poke write_enable true
 poke addr 3
 poke write_data 165
@@ -6,6 +6,6 @@ tick 1
 poke write_enable false
 assert read_data == 165
 
-# The words are visible: show prints them.
+// The words are visible: show prints them.
 show
 exit

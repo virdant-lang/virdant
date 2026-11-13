@@ -49,6 +49,7 @@ extern {
         "::" => Tok::ColonColon,
 
         "#" => Tok::Hash,
+        "@" => Tok::At,
         "." => Tok::Dot,
         ".." => Tok::DotDot,
         "(" => Tok::LParen,
@@ -336,6 +337,10 @@ ExprPrimary: Expr = {
     <w: Word> => { let (v, width) = w; Expr::WordLit(v, width) },
     "true" => Expr::BitLit(true),
     "false" => Expr::BitLit(false),
+    // Constructor values: `@Foo` / `@Foo(arg, ...)` (Virdant's own
+    // union-value syntax), plus the older `#Foo` spelling.
+    "@" <name: Name> => Expr::Ctor { name, args: vec![] },
+    "@" <name: Name> "(" <args: CtorArgs?> ")" => Expr::Ctor { name, args: args.unwrap_or_default() },
     "#" <name: Name> => Expr::Ctor { name, args: vec![] },
     "#" <name: Name> "(" <args: CtorArgs?> ")" => Expr::Ctor { name, args: args.unwrap_or_default() },
     <p: Path> => Expr::Path(p),

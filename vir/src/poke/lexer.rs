@@ -1,11 +1,13 @@
 //! Hand-written tokenizer for the `vir poke` scripting language.
 //!
 //! One [`lex`] call tokenizes one line (a whole `.poke` script is a
-//! sequence of lines, so the parser runs per line).  `#` starts a
-//! comment *unless* it is immediately followed by an identifier
-//! character, in which case it lexes as the enum-constructor prefix
-//! (`#Foo`); this keeps `#` doing double duty as comment marker and
-//! constructor syntax without ambiguity in practice.
+//! sequence of lines, so the parser runs per line).  `//` starts a
+//! comment running to the end of the line.
+//!
+//! `@` is the constructor prefix matching Virdant's own union-value
+//! syntax (`@Valid`, `@Valid(true)`); `@` not followed by an
+//! identifier character is a lexing error.  The older `#Foo` spelling
+//! is still accepted as a constructor prefix.
 
 use bstr::ByteSlice;
 
@@ -48,6 +50,7 @@ pub enum Tok {
     It,
     // Punctuation & operators
     Hash,
+    At,
     Dot,
     DotDot,
     ColonColon,
@@ -118,6 +121,7 @@ impl std::fmt::Display for Tok {
             Tok::Top => write!(f, "`top`"),
             Tok::It => write!(f, "`it`"),
             Tok::Hash => write!(f, "`#`"),
+            Tok::At => write!(f, "`@`"),
             Tok::Dot => write!(f, "`.`"),
             Tok::DotDot => write!(f, "`..`"),
             Tok::ColonColon => write!(f, "`::`"),
@@ -158,10 +162,25 @@ pub fn lex(line: &str) -> Result<Vec<(usize, Tok, usize)>, LexError> {
             i += 1;
             continue;
         }
-        // `#` comment, unless followed by an identifier character
-        // (constructor syntax: `#Foo`).
-        if b == b'#' && !ident_start(bytes.get(i + 1).copied()) {
+        // `//` comment: the rest of the line is ignored.  (A single
+        // `/` stays a `Slash` token — vcd file names use it.)
+        if b == b'/' && bytes.get(i + 1).copied() == Some(b'/') {
             break;
+        }
+        // `@` constructor prefix (`@Valid`, `@Valid(true)`): matches
+        // Virdant's union-value syntax.  A bare `@` falls through to
+        // the single-character error below.
+        if b == b'@' && ident_start(bytes.get(i + 1).copied()) {
+            let at = i;
+            i += 1;
+            let name_start = i;
+            while i < bytes.len() && ident_continue(bytes[i]) {
+                i += 1;
+            }
+            let name = bytes[name_start..i].to_str_lossy().into_owned();
+            out.push((at, Tok::At, name_start));
+            out.push((name_start, Tok::Ident(name), i));
+            continue;
         }
         let start = i;
         // Identifiers and keywords.
@@ -232,6 +251,7 @@ pub fn lex(line: &str) -> Result<Vec<(usize, Tok, usize)>, LexError> {
                 b']' => (Tok::RBracket, 1),
                 b',' => (Tok::Comma, 1),
                 b'#' => (Tok::Hash, 1),
+                b'@' => (Tok::At, 1),
                 b'+' => (Tok::Plus, 1),
                 b'-' => (Tok::Minus, 1),
                 b'&' => (Tok::Amp, 1),
@@ -401,12 +421,24 @@ mod tests {
 
     #[test]
     fn test_comments_vs_ctor() {
-        // `#` followed by a space starts a comment.
-        assert_eq!(toks("peek x # rest of line"), vec![Tok::Peek, Tok::Ident("x".to_string())]);
-        // `#` followed by an identifier char is a constructor.
+        // `//` starts a comment.
+        assert_eq!(toks("peek x // rest of line"), vec![Tok::Peek, Tok::Ident("x".to_string())]);
+        // A single `/` is not a comment (vcd file names use it).
         assert_eq!(
-            toks("print #Valid"),
-            vec![Tok::Print, Tok::Hash, Tok::Ident("Valid".to_string())]
+            toks("vcd out/trace.vcd"),
+            vec![Tok::Vcd, Tok::Ident("out".to_string()), Tok::Slash, Tok::Ident("trace".to_string()), Tok::Dot, Tok::Vcd]
+        );
+        // `@` (and the older `#`) followed by an identifier char is a
+        // constructor.
+        assert_eq!(
+            toks("print @Valid #Invalid"),
+            vec![
+                Tok::Print,
+                Tok::At,
+                Tok::Ident("Valid".to_string()),
+                Tok::Hash,
+                Tok::Ident("Invalid".to_string()),
+            ]
         );
     }
 

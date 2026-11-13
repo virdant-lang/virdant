@@ -7,7 +7,7 @@
 //!
 //! Evaluation is bidirectional: a bare `Nat` literal (`42`) has no
 //! width of its own and takes it from context (the other side of a
-//! comparison, or a `poke` target), and an enum constructor (`#Foo`)
+//! comparison, or a `poke` target), and an enum constructor (`@Foo`)
 //! takes its type from context the same way.  Where no context exists,
 //! a `Nat` literal materializes as a `Word` of its minimal width.
 

@@ -10,7 +10,7 @@
 //! - `Clock` is opaque: it has no printed value (time is driven by
 //!   `tick`, not by values); `Reset` renders as `0b0` / `0b1`;
 //! - enums and unions render as their constructor syntax, recursively:
-//!   `#Valid(0b00000000)`, `#Invalid`;
+//!   `@Valid(0b00000000)`, `@Invalid`;
 //! - structs render as `${Name(f = value, ...)}` (struct literals are
 //!   not yet in the script grammar, so this form is display-only for
 //!   now);
@@ -40,14 +40,14 @@ pub fn render(sim: &Sim, value: &Value) -> String {
             // non-zero padding).
             if let Some(ctor) = sim.decode_ctor(value) {
                 if ctor.payloads.is_empty() {
-                    format!("#{}", ctor.name)
+                    format!("@{}", ctor.name)
                 } else {
                     let args: Vec<String> = ctor
                         .payloads
                         .iter()
                         .map(|payload| render(sim, payload))
                         .collect();
-                    format!("#{}({})", ctor.name, args.join(", "))
+                    format!("@{}({})", ctor.name, args.join(", "))
                 }
             } else if let Some(fields) = sim.decode_struct_fields(value) {
                 let rendered: Vec<String> = fields

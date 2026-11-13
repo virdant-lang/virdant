@@ -1,4 +1,4 @@
-# The counter counts up while `enable` is high.
+// The counter counts up while `enable` is high.
 poke counter 0
 poke enable true
 tick 3
@@ -7,14 +7,14 @@ peek counter
 assert double == 6
 assert double == counter + counter
 
-# Bit slicing, Virdant convention: x[hi..lo] is bits [lo, hi).
+// Bit slicing, Virdant convention: x[hi..lo] is bits [lo, hi).
 poke counter 0b1010
 assert counter[0] == false
 assert counter[1] == true
 assert counter[4..0] == 0b1010
 assert counter[3..1] == 0b01
 
-# Enum-free expression coverage.
+// Enum-free expression coverage.
 assert true && !false
 assert 5 >= 5
 print counter + 1

@@ -86,7 +86,7 @@ enum ScriptStop {
 fn run_script(session: &mut Session, lines: &[(usize, String)], mode: &Mode) -> ScriptStop {
     for (number, text) in lines {
         let trimmed = text.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
+        if trimmed.is_empty() || trimmed.starts_with("//") {
             continue;
         }
         match handle_line(session, text, Some((*number, text.clone()))) {
@@ -147,7 +147,7 @@ fn interactive_basic(session: &mut Session) -> i32 {
             print_help();
             continue;
         }
-        if trimmed.is_empty() || trimmed.starts_with('#') {
+        if trimmed.is_empty() || trimmed.starts_with("//") {
             continue;
         }
         match handle_line(session, &line, None) {
@@ -189,7 +189,7 @@ fn interactive_tty(session: Rc<RefCell<Session>>) -> i32 {
                 }
                 if trimmed == "help" {
                     print_help();
-                } else if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                } else if !trimmed.is_empty() && !trimmed.starts_with("//") {
                     let mut borrowed = session.borrow_mut();
                     match handle_line(&mut borrowed, &line, None) {
                         LineResult::Continue => {}
@@ -327,6 +327,6 @@ TAB completes command and signal-path names; up/down walk the history.
 
 paths are relative to the current module; `top.` prefixes are absolute;
 expressions use Virdant syntax (literals, + - & | ^, comparisons,
-&& || ^^, ~ ! -, x[i], x[hi..lo], #Ctor)."
+&& || ^^, ~ ! -, x[i], x[hi..lo], @Ctor)."
     );
 }
