@@ -123,6 +123,11 @@ pub enum DiagnosticPayload {
     UnresolvedComponent(UnresolvedComponent),
     /// A path uses the component name instead of `it` inside a driver block.
     NotIt(NotIt),
+    /// A driver block (it-block) makes no use of the component it is
+    /// attached to: nothing inside the block reads or drives `it`, so
+    /// the block's drivers do not depend on (or drive) the component at
+    /// all and the block is irrelevant.
+    IrrelevantDriverBlock(IrrelevantDriverBlock),
     /// A component could not be resolved.
     UnresolvedCtor(UnresolvedCtor),
     /// A component could not be resolved.
@@ -513,6 +518,11 @@ pub struct UnresolvedComponent {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NotIt {
+    pub component: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrrelevantDriverBlock {
     pub component: BString,
 }
 
@@ -1005,6 +1015,12 @@ impl Diagnostic {
                     d.component,
                 ).into()
             }
+            DiagnosticPayload::IrrelevantDriverBlock(d) => {
+                format!(
+                    "Driver block for '{}' is irrelevant: it makes no use of 'it'",
+                    d.component,
+                ).into()
+            }
             DiagnosticPayload::NetReadWithoutTap(d) => {
                 format!(
                     "{} is not guaranteed to have a value. Use `tap {}` to assert it will.",
@@ -1318,6 +1334,7 @@ impl Diagnostic {
         match self.payload {
             DiagnosticPayload::NoRegDrivers(_)
             | DiagnosticPayload::NotIt(_)
+            | DiagnosticPayload::IrrelevantDriverBlock(_)
             | DiagnosticPayload::UnusedSource(_)
             | DiagnosticPayload::ReadFromSink(_)
             | DiagnosticPayload::UnfilledHole(_)
@@ -1371,7 +1388,7 @@ from_diagnostic! {
     MemoryImageTooLong, MemoryImageNotSupported,
     MemoryImageNoinitial,
     NetReadWithoutTap, TapNotOnNet,
-    DriverForSink, UnresolvedComponent, NotIt, UnresolvedCtor, UnusedSource, ReadFromSink,
+    DriverForSink, UnresolvedComponent, NotIt, IrrelevantDriverBlock, UnresolvedCtor, UnusedSource, ReadFromSink,
     UnfilledHole, ModuleCycle, UnresolvedMethod, WrongType, Unknown, DoesntFit, NotWordType,
     CantTruncate, Todo, MatchNotExhaustive, MatchOverlappingArm, InvalidDocstring,
     DuplicateEnumValue, EnumPartiallySpecified, IndexOutOfBounds, IndexRangeOutOfBounds, InvalidIndexRange,

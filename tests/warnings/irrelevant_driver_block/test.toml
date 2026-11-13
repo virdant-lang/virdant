@@ -1,0 +1,5 @@
+kind = "check"
+expect = "ok"
+warnings_ok = true
+description = "IrrelevantDriverBlock: an it-block in which nothing references the component it is attached to warns; the block's drivers are unconditional and can be hoisted to moddef level."
+filecheck = "src/irrelevant_driver_block.vir"

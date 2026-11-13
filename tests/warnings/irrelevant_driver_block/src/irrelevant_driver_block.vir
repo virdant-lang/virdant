@@ -1,0 +1,185 @@
+// Tests for the IrrelevantDriverBlock warning: an it-block in which
+// nothing references the component it is attached to.
+// All cases here are warnings only, so the run ends with "Check OK".
+
+socket Bus[T : Type] {
+    cosi req : T
+    soci rsp : T dependson req
+}
+
+mod Master[W : Type] {
+    incoming d : W
+    client socket busif of Bus[W] {
+        it.req := d
+    }
+    unused busif.rsp
+}
+
+mod Slave[W : Type] {
+    server socket busif of Bus[W] {
+        it.rsp := it.req
+    }
+}
+
+// The canonical case: an it-block on an `incoming` that drives another
+// component unconditionally, without ever reading `it`.  The block
+// does nothing that depends on `inp` and can be hoisted to moddef
+// level.
+pub mod IrrelevantIncoming {
+    incoming inp : Bit {
+        // CHECK: Driver block for 'inp' is irrelevant: it makes no use of 'it'
+        out := true
+    }
+    unused inp
+
+    outgoing out : Bit
+}
+
+// Same for a `reg` whose it-block never drives or reads the reg.
+// (The reg is left undriven, which warns via NoRegDrivers.)
+pub mod IrrelevantReg {
+    incoming clk : Clock
+    incoming a : Bit
+    outgoing out : Bit dependson a
+
+    reg r : Bit {
+        // CHECK: Driver block for 'r' is irrelevant: it makes no use of 'it'
+        out := a
+    }
+    unused r
+}
+
+// A submodule instance whose it-block drives an unrelated component,
+// never touching the instance (or any of its channels).
+pub mod Source {
+    outgoing out : Bit
+    out := false
+}
+
+pub mod IrrelevantSubmodule {
+    outgoing out : Bit
+    wire w : Bit
+
+    mod src of Source {
+        // CHECK: Driver block for 'src' is irrelevant: it makes no use of 'it'
+        w := true
+    }
+    out := w
+}
+
+// A whole-socket `:=:` connection naming the instance through `it`
+// counts as a use, even though the socket instance itself is not a
+// component and resolves to no reference.
+pub mod RelevantSocketConnect {
+    incoming d : Word[8]
+    outgoing out : Word[8]
+
+    wire passthru : Bit
+
+    mod m of Master[Word[8]] {
+        it.d := d
+    }
+    mod s of Slave[Word[8]] {
+        // CHECK-NOT: Driver block for 's' is irrelevant
+        m.busif :=: it.busif
+        passthru := false
+    }
+
+    out := s.busif.rsp
+}
+
+// A block that reads `it` is relevant, even if it also drives other
+// components.
+pub mod RelevantRead {
+    incoming inp : Bit {
+        out := it
+    }
+    outgoing out : Bit dependson inp
+}
+
+// A block that drives `it` is relevant (this is how a reg's value is
+// defined).
+pub mod RelevantDrive {
+    incoming clk : Clock
+    outgoing out : Word[8]
+
+    reg counter : Word[8] {
+        it <= it + 1
+    }
+    out := counter
+}
+
+// For a submodule instance, driving any of its channels (`it.a`)
+// counts as using the instance.
+pub mod HalfAdder {
+    incoming a : Bit
+    incoming b : Bit
+
+    outgoing sum : Bit dependson a, b
+    outgoing carry_out : Bit dependson a, b
+
+    sum := a ^^ b
+    carry_out := a && b
+}
+
+pub mod RelevantSubmodule {
+    incoming a : Bit
+    incoming b : Bit
+    outgoing sum : Bit dependson a, b
+    outgoing carry_out : Bit dependson a, b
+
+    mod ha of HalfAdder {
+        // CHECK-NOT: Driver block for 'ha' is irrelevant
+        it.a := a
+        it.b := b
+    }
+    sum := ha.sum
+    carry_out := ha.carry_out
+}
+
+// A reference to the component by its bare name still counts as a
+// use; the NotIt warning already asks for it to be spelled `it`.
+// (No IrrelevantDriverBlock here -- only the CHECK'd NotIt line.)
+pub mod BareNameStillCounts {
+    incoming inp : Bit {
+        // CHECK: 'inp' should be written as 'it' inside of this driver block
+        out := inp
+    }
+    outgoing out : Bit dependson inp
+}
+
+// A block whose only content is `unused it` is the idiom for
+// silencing the unused-signal warning; it is deliberate, not
+// irrelevant.
+pub mod UnusedMarkCounts {
+    incoming clk : Clock {
+        unused it
+    }
+
+    outgoing out : Bit
+    out := false
+}
+
+// An it-block that reads `it` through a `let` binding inside a `when`
+// arm is still relevant.
+pub mod RelevantLet {
+    incoming clk : Clock
+    incoming a : Word[4]
+    outgoing out : Word[4]
+
+    reg r : Word[4] {
+        if {
+            when a == 0w4 {
+                let x = it + 1 {
+                    it <= x
+                }
+            }
+            else {
+                it <= 0w4
+            }
+        }
+    }
+    out := r
+}
+
+// CHECK: Check OK

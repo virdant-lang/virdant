@@ -221,6 +221,23 @@ impl ComponentAnalysis {
         None
     }
 
+    /// The ids of the components that belong to `name`: the component
+    /// named `name` itself, plus, when `name` names a submodule
+    /// instance or a socket, each of its channels (components whose
+    /// path is `name.x`).
+    pub fn components_owned_by(&self, name: &BStr) -> IndexSet<ComponentId> {
+        self.components
+            .iter()
+            .filter(|(path, _)| {
+                path.as_bstr() == name
+                    || (path.starts_with(name.as_bytes())
+                        && path.len() > name.len()
+                        && path.as_bytes()[name.len()] == b'.')
+            })
+            .map(|(_, component)| component.id())
+            .collect()
+    }
+
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         self.diagnostics.clone()
     }

@@ -12,6 +12,7 @@ use bstr::{BStr, BString, ByteSlice};
 use indexmap::IndexSet;
 use indexmap::IndexMap;
 
+use crate::analysis::component::ComponentAnalysis;
 use crate::analysis::dependency::{find_it_context, resolve_it_path};
 use crate::analysis::symbols::{Symbol, SymbolId};
 use crate::common::WordValue;
@@ -271,6 +272,7 @@ pub(crate) fn typecheck(builder: &mut Builder, symbol_id: SymbolId) -> Arc<Vec<D
         collect_unused(node.clone(), &mut use_locations, &mut already_unused, &mut unused_marks, &mut diagnostics);
         if let Some(component_analysis) = &component_analysis {
             collect_bidirectional_drivers(builder, symbol_id, node.clone(), &mut use_locations, component_analysis, &mut diagnostics);
+            collect_irrelevant_driver_blocks(node.clone(), component_analysis, &mut diagnostics);
         }
     }
 
@@ -478,6 +480,110 @@ fn collect_unused(
     }
 }
 
+
+/// Warns about it-blocks that make no use of the component they are
+/// attached to.
+///
+/// An it-block exists to describe how the component it is attached to
+/// relates to the rest of the module: its drivers should read `it`
+/// (the component flows into what the block drives) or drive `it`
+/// (the block defines the component's value).  A block in which no
+/// reference resolves to the component at all is irrelevant: its
+/// drivers run unconditionally, exactly as they would if they were
+/// written at moddef level, so the block communicates nothing and can
+/// be removed (or is missing the `it` it meant to use).
+///
+/// For a submodule instance or socket, a reference to any of its
+/// channels (`it.a`, spelled `it` or by the instance's name) counts
+/// as a use of the instance.
+///
+/// An `it`-prefixed path that resolves to no component -- eg a side of
+/// a whole-socket `:=:` connection (`m.busif :=: it.busif`), where the
+/// socket instance itself is not a component -- still counts: the
+/// path's it-context is checked, so `it` is only credited to the block
+/// it actually refers to.
+///
+/// A reference to the component by its bare name still counts as a
+/// use (the block does depend on it); the `NotIt` warning already
+/// asks for it to be spelled `it`.  So does an `unused` mark: a block
+/// whose only content is `unused it` (the idiom for silencing the
+/// unused-signal warning on, say, a clock) is deliberate, not
+/// irrelevant.
+///
+/// An empty block is not reported here: `EmptyDriverBlock` already
+/// covers it.
+fn collect_irrelevant_driver_blocks(
+    node: AstNode<'_>,
+    component_analysis: &ComponentAnalysis,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if matches!(
+        node.payload(),
+        AstNodePayload::Component(_)
+            | AstNodePayload::Submodule(_)
+            | AstNodePayload::Socket(_)
+    ) {
+        let parsing = node.parsing();
+        let name = match node.payload() {
+            AstNodePayload::Component(component) => parsing.string(component.name).to_owned(),
+            AstNodePayload::Submodule(module) => parsing.string(module.name).to_owned(),
+            AstNodePayload::Socket(socket) => parsing.string(socket.name).to_owned(),
+            _ => unreachable!(),
+        };
+        if let Some(it_block) = node
+            .children()
+            .into_iter()
+            .find(|c| matches!(c.payload(), AstNodePayload::It))
+        {
+            let block = &it_block.children()[0];
+            // An empty block already warns via `EmptyDriverBlock`.
+            if !block.children().is_empty() {
+                let owner_ids = component_analysis.components_owned_by(name.as_bstr());
+                if !walk_uses_owner(&block, component_analysis, &owner_ids, name.as_bstr()) {
+                    diagnostics.push(Diagnostic::new(
+                        node.region(),
+                        diagnostics::IrrelevantDriverBlock {
+                            component: name,
+                        },
+                    ));
+                }
+            }
+        }
+    }
+    for child in node.children() {
+        collect_irrelevant_driver_blocks(child, component_analysis, diagnostics);
+    }
+}
+
+/// Whether `node` or any node in its subtree records a reference (of
+/// any kind: expression use, driver target, or `unused` mark) to one
+/// of the components in `owner_ids`, or contains an `it`-prefixed
+/// path in the owner's it-context that resolves to no component
+/// (eg a whole-socket `:=:` side).
+fn walk_uses_owner(
+    node: &AstNode<'_>,
+    component_analysis: &ComponentAnalysis,
+    owner_ids: &IndexSet<crate::analysis::component::ComponentId>,
+    owner_name: &BStr,
+) -> bool {
+    if component_analysis
+        .component_at(node.location())
+        .is_some_and(|component| owner_ids.contains(&component.id()))
+    {
+        return true;
+    }
+    if let Some(path_interned) = node.path() {
+        let raw = node.parsing().string(path_interned);
+        if (raw.as_bytes() == b"it" || raw.starts_with(b"it."))
+            && find_it_context(node).is_some_and(|ctx| ctx.as_bstr() == owner_name)
+        {
+            return true;
+        }
+    }
+    node.children()
+        .into_iter()
+        .any(|child| walk_uses_owner(&child, component_analysis, owner_ids, owner_name))
+}
 
 fn collect_bidirectional_drivers(
     builder: &mut Builder,
