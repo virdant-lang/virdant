@@ -34,13 +34,14 @@ it becomes the new :tooltip:`MSB (Most Significant Bit)` of the register.
 Each of the register's bits shift over one spot,
 and the :tooltip:`LSB (Least Significant Bit)` is pushed out through `shift_out`.
 
+On the other hand, we can load a new value by supplying `load_value`,
+replacing the old value of the register.
 
-Shifting Out
-------------
+At any point, we can read the value of the register with `value`.
 
 
-The `Valid[T]` Type
--------------------
+The `Valid` Type
+----------------
 Most of the `incoming` ports we've seen so far had simple types: `Bit` or `Word[n]`.
 The `shift_in` port has type `Valid[Bit]`
 and `load_value` port has type `Valid[Word[4]]`.
@@ -64,8 +65,8 @@ On cycles when it's *not*, it still has to send something -- so it sends `@Inval
     That's something Verilog cannot do!
 
 
-Implementation
---------------
+Matching on `Valid`
+-------------------
 Here is the heart of the module:
 
 .. literalinclude:: src/shiftreg.vir
@@ -76,158 +77,60 @@ Here is the heart of the module:
 This is a bit heavy to take in at a glance,
 so let's break it down.
 
-Shifting Out
-------------
-The `shift_out` port is simply always set to the :tooltip:`LSB (Least Significant Bit)` of `value`.
-We do this by indexing into `value` with `value[0]`.
-
-.. literalinclude:: src/shiftreg.vir
-    :language: virdant
-    :lines: 10
-    :dedent:
-
-The type of indexing into a `Word` type is a `Bit`.
-
-.. note::
-
-    Contrast this with slicing.
-    `x[1..0]` would have type `Word[1]`.
-    A `Word[1]` and a `Bit` are both 1-bit values,
-    but the operations on them are different.
-
-
-Matching on `Valid`
--------------------
-The remaining logic combines three new ideas.
-Let's tackle them one at a time, starting with the question:
-
-> How do we look inside a `Valid[T]` to see if it's `@Valid` or `@Invalid`?
-
-With `match`:
-
-For the sake of clarity, let's look at a simplified version of our `match` statement:
+We see this `match` statement.
 
 .. code-block:: virdant
 
     match load_value {
         with @Valid(new_value) {
-            // ...
+            it <= new_value
         }
-        with @Invalid() {
-            // ...
-        }
+        with @Invalid() // ...
     }
 
-The first pattern, `with @Valid(new_value)`,
-matches whenever `load_value` is `@Valid`.
-But when it matches, it also *binds* the payload (the actual valid value) to the name `new_value`.
-That is, `new_value` is available for use -- but only inside this block!
 
-The second pattern, `with @Invalid()`,
-matches when there is no value to load.
+The first pattern is `with @Valid(new_value)`.
+This matches whenever `load_value` is a valid value.
+When it matches, it also *binds* the payload to the name `new_value`.
+
+.. tip::
+
+    This value is only accessible from within the block.
+    This means you can't accidentally use it in a place later on when the value isn't actually valid.
+    (This means less bugs!)
+
+The second pattern is `with @Invalid()`.
+It matches when there is no value to load.
 
 
 Chained Conditionals
 --------------------
 Occasionally, the arm of a `match` (or `if`) statement (or expression)
-naturally lends itself to immediately performing *another* `match` (or `if`):
+naturally leads to immediately performing *another* `match` (or `if`):
 
 .. code-block:: virdant
 
-    match load_value {
-        with @Valid(new_value) {
-            // ...
-        }
-        with @Invalid() {
-            match shift_in {
-                with @Valid(new_msb) {
-                    // ...
-                }
-            }
-        }
-    }
-
-Virdant allows us to save a single pair of parentheses when we do this:
-
-.. code-block:: virdant
-
-    match load_value {
-        with @Valid(new_value) {
-            // ...
-        }
-        with @Invalid() match shift_in {
+    with @Invalid() {
+        match shift_in {
             with @Valid(new_msb) {
-                // ...
+                it <= word(new_msb, it[4..1])
             }
         }
     }
 
-Doing this also saves us a level of indendation.
-
-In general, we should always write nested conditionals this simplified form
-whenever we have the opportunity.
-
-
-Concatenation
--------------
-Finally, to perform the shift, we need to concatenate
-Instead, we build shifts out of `word()`,
-which concatenates bits and words into a wider word.
-Its arguments are listed from most-significant to least-significant,
-and the width of the result is the sum of the widths of its arguments.
-
-So `word(it[3..0], shift_in)` builds a `Word[4]`:
-
-- `it[3..0]` is a `Word[3]`: bits 2, 1, and 0 of the current register,
-- `shift_in` is a single `Bit`.
-
-Reading the result from left to right:
-old bit 2 lands in the new bit 3, old bit 1 in new bit 2, old bit 0 in new bit 1,
-and `shift_in` in new bit 0.
-In other words: shift everything up by one,
-and insert the new bit at the bottom.
-Old bit 3, which has nowhere to go, simply falls off the top ---
-which is exactly what we want,
-since that bit is what `shift_out` will emit this cycle.
-
-A left-shift-by-one is just the simplest case of this recipe.
-Shifting a `Word[8]` left by four? `word(x[4..0], 0w4)`.
-A rotate? `word(it[3..0], it[4..3])`.
-Without shift operators, `word()` and slices *are* the shifting story in Virdant.
-
-
-Bit Indexing
-------------
-Finally, look at how `shift_out` is driven:
+Virdant allows us to write the above block like this instead (which we do in our example):
 
 .. literalinclude:: src/shiftreg.vir
     :language: virdant
-    :lines: 18-19
+    :lines: 14-18
     :dedent:
 
-`it[3]` is *bit indexing*: it picks out a single bit of a `Word[n]`,
-by its position counted from the least-significant bit.
-Bit 0 is the LSB, bit 3 is the MSB of a `Word[4]`.
-The result has type `Bit`.
+This syntax is called condition chaining.
+It lets us save a pair of parentheses.
+It also avoids a level of indendation.
 
-Don't confuse this with *bit slicing*, from the :doc:`Pop Count example <../popcount/index>`,
-which picks out a *range* of bits:
-
-.. code-block:: virdant
-
-    it[3]      // a Bit     : just bit 3
-    it[3..0]   // a Word[3] : bits 2, 1, and 0
-
-The two notations differ in both width and type,
-and Virdant's type system will catch you if you mix them up.
-(In `it[3..0]` the top index is exclusive, as we saw before:
-the slice starts *below* it.)
-
-Notice that this gives us the whole shift register in four lines of code:
-one multiplexer driven by a `match`,
-one concatenation,
-and one bit selected out to the output.
-Eight of these side by side, and you have a byte-wide serial link.
+In general, we should always write nested conditionals this simplified form
+whenever we have the opportunity.
 
 
 Waveform
