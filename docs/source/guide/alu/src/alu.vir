@@ -17,7 +17,7 @@ pub mod Alu {
     incoming operand_a : Word[32]
     incoming operand_b : Word[32]
 
-    mod shifter of Shifter {
+    mod shifter of shifter::Shifter {
         it.direction := match funct3 {
             with #Sll => #ShiftLeftLogical
             with #SrlSra if {
@@ -40,7 +40,7 @@ pub mod Alu {
             with #And => operand_a & operand_b
             with #Or => operand_a | operand_b
             with #Xor => operand_a ^ operand_b
-            with #Add => if {
+            with #Add if {
                 when funct7[5] => operand_a - operand_b
                 else => operand_a + operand_b
             }
