@@ -27,9 +27,10 @@ pub(crate) fn build_package_analysis(builder: &mut Builder, package: PackageId) 
 
 /// Resolve an item reference written in `package`.  A qualified name
 /// (`pkg::Item`) resolves in the named package only; a bare name
-/// resolves in the defining package first, then across the package's
-/// import set (the same fallback platform references use).  Returns
-/// `None` when the name resolves nowhere.
+/// resolves in the defining package (builtin names resolve in the
+/// builtin package).  Imports enable only qualified references; a bare
+/// name never resolves in an imported package.  Returns `None` when
+/// the name resolves nowhere.
 pub(crate) fn resolve_item_reference(
     builder: &mut Builder,
     name: &BStr,
@@ -37,24 +38,8 @@ pub(crate) fn resolve_item_reference(
     qualifier: Option<PackageId>,
 ) -> Option<crate::analysis::symbols::Symbol> {
     let symboltable = builder.get_symboltable();
-    match qualifier {
-        Some(pkg) => symboltable.resolve_item(name, pkg).cloned(),
-        None => symboltable
-            .resolve_item(name, package)
-            .cloned()
-            .or_else(|| {
-                let package_analysis = builder.get_package_analysis(package);
-                for import in package_analysis.imports() {
-                    if import == package {
-                        continue;
-                    }
-                    if let Some(symbol) = symboltable.resolve_item_in_package(name, import) {
-                        return Some(symbol.clone());
-                    }
-                }
-                None
-            }),
-    }
+    let package = qualifier.unwrap_or(package);
+    symboltable.resolve_item(name, package).cloned()
 }
 
 

@@ -208,8 +208,11 @@ sender.clock := clock
 The part before `::` is the package name.
 The part after `::` is the item name as defined inside that package.
 
-- Bare names (no `::`) resolve in the defining package first, then
-  across the package's imports.
+- Bare names (no `::`) resolve relative to the current package.  If
+  that fails, they resolve relative to the builtin package.  Bare
+  names never resolve in imported packages: referencing an item from
+  another package requires the qualified `pkg::Item` form, and
+  `import` makes the package name usable as a qualifier.
 - Only `pub` items of the imported package are visible (see `pub`
   visibility above).
 

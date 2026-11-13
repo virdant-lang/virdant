@@ -1,6 +1,7 @@
 //! Self-checking `kind = "run"` test for multi-file imports: the
 //! `Counter` module lives in `counter.vir` (a separate package) and is
-//! instantiated here by its plain module name after `import counter`.
+//! instantiated here by its qualified name `counter::Counter` after
+//! `import counter`.
 //!
 //! The harness drives the imported `Counter` with `limit = 4` (so it
 //! cycles 0, 1, 2, 3, 4, 0, ...) for eight cycles, checks the count
@@ -24,8 +25,8 @@ pub mod MultiFileImportTest for virt::Virt {
     }
 
     // The module under test, imported from `counter.vir` and
-    // instantiated by its plain module name.
-    mod dut of Counter {
+    // instantiated by its qualified name.
+    mod dut of counter::Counter {
         it.clock := clock
         it.limit := 4
     }

@@ -1,0 +1,16 @@
+//! A bare item reference never resolves in an imported package, even
+//! when the item is `pub` there: bare names resolve in the current
+//! package, then in the builtin package.  Referencing an item from
+//! another package requires the qualified `pkg::Item` form, which the
+//! `ok` instance shows still works after the failing bare reference.
+
+import foo
+
+pub mod Top {
+    // CHECK: Unresolved item Bar
+    mod bar of Bar
+
+    mod ok of foo::Bar
+    // CHECK-NOT: Unresolved item
+}
+// CHECK: Check failed

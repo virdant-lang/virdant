@@ -28,7 +28,7 @@ import virt
 //> `ready`.
 socket Pipe[T : Type] {
     cosi data  : Valid[T]
-    soci ready : Bit
+    soci ready : Bit dependson data
 }
 
 //> Joined pair: the payload carried by the output stream.

@@ -159,8 +159,8 @@ pub platform IceSugar {
 - `lib/ice40.vir` defines the iCE40 boards: `IceSugar`, `IceStick`,
   `Fomu` (plus `@cell` ext mods for the iCE40 hard cells).
 - `lib/xilinx.vir` defines the Arty A7 boards: `ArtyA7`, `ArtyA7_100T`.
-- Every `lib/*.vir` auto-loads; `import ice40` (etc.) puts its items in
-  scope.
+- Every `lib/*.vir` auto-loads; `import ice40` (etc.) lets you name its
+  items with the qualified `ice40::` prefix.
 - `vir upload` infers the programmer from the platform name:
   `IceSugar` => `icesprog`, `IceStick` => `iceprog`, `Fomu` =>
   `dfu-util`, `ArtyA7`/`ArtyA7_100T` => `openFPGALoader`.

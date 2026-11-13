@@ -3,7 +3,7 @@
 //!
 //! This module lives in its own `.vir` file (package `counter`) and is
 //! imported by `multi_file_import.vir`, which instantiates it by its
-//! plain module name.
+//! qualified name `counter::Counter`.
 
 //> Free-running 4-bit counter: counts 0, 1, ..., `limit`, then wraps
 //> back to 0.

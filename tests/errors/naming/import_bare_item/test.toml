@@ -1,0 +1,4 @@
+kind = "check"
+description = "Importing a package does not bring its items into bare-name scope: a bare reference to an imported package's item must stay unresolved, while the qualified form resolves."
+expect = "error"
+filecheck = "src/top.vir"

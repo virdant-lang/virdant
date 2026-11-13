@@ -124,10 +124,10 @@ impl SymbolTable {
     pub fn resolve_item(&self, name: &BStr, in_package: PackageId) -> Option<&Symbol> {
         if let Some((_package_name, _item_name)) = try_split_qualification(name) {
             self.resolve_item_fqn(name)
-        } else if self.builtin_names.contains(name) {
-            self.resolve_item_in_package(name, self.builtin)
+        } else if let Some(symbol) = self.resolve_item_in_package(name, in_package) {
+            Some(symbol)
         } else {
-            self.resolve_item_in_package(name, in_package)
+            self.resolve_item_in_package(name, self.builtin)
         }
     }
 

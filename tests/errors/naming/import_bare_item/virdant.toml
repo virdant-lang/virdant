@@ -1,0 +1,5 @@
+[project]
+name = "import_bare_item"
+
+[prog]
+top = "top::Top"

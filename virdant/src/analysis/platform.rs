@@ -317,24 +317,10 @@ pub fn resolve_platform_for(
             pkg_id.and_then(|pkg_id| symboltable.resolve_item(name.as_bstr(), pkg_id).cloned())
         }
         None => {
-            // Bare name: the defining package first, then the import set.
-            symboltable
-                .resolve_item(name.as_bstr(), package)
-                .cloned()
-                .or_else(|| {
-                    let package_analysis = builder.get_package_analysis(package);
-                    for import in package_analysis.imports() {
-                        if import == package {
-                            continue;
-                        }
-                        if let Some(symbol) =
-                            symboltable.resolve_item_in_package(name.as_bstr(), import)
-                        {
-                            return Some(symbol.clone());
-                        }
-                    }
-                    None
-                })
+            // Bare name: the defining package only (builtin names resolve
+            // in the builtin package); imports enable only qualified
+            // references.
+            symboltable.resolve_item(name.as_bstr(), package).cloned()
         }
     };
 
