@@ -6,7 +6,7 @@
 
 use crate::analysis::symbols::SymbolId;
 use crate::analysis::elaboration::{SignalId, Elaboration};
-use crate::common::{ComponentKind, Width};
+use crate::common::{ComponentKind, SocketRole, Width};
 use crate::db::Db;
 use crate::sim::bits::BitPat;
 use crate::sim::circuit::Circuit;
@@ -917,6 +917,18 @@ impl Sim {
             out.push((BString::from(rest.to_vec()), socket.socketdef()));
         }
         out
+    }
+
+    /// The role of the socket instance whose elaborated path prefix is
+    /// `prefix` (e.g. `SocketRole::Server` for `"top.inp"`), or `None`
+    /// when `prefix` does not name a socket instance.
+    pub fn socket_role(&self, prefix: &[u8]) -> Option<SocketRole> {
+        let elaboration = self.elaboration();
+        elaboration
+            .sockets()
+            .iter()
+            .find(|socket| socket.prefix().as_bstr() == prefix.as_bstr())
+            .map(|socket| socket.role())
     }
 
     /// The module instances in the elaboration: `(moddef symbol, path

@@ -114,8 +114,9 @@ use bstr::ByteSlice;
 
 use virdant::analysis::elaboration::SignalId;
 use virdant::analysis::symbols::{SymbolId, SymbolKind};
-use virdant::common::ComponentKind;
+use virdant::common::{ChannelDir, ComponentKind, SocketRole};
 use virdant::db::Db;
+use virdant::syntax::payload::AstNodePayload;
 use virdant::sim::{InitStrategy, Sim, Value};
 use virdant::types::Type;
 
@@ -797,11 +798,11 @@ impl Session {
     }
 }
 
-/// Whether `signal_id` can be poked: only top-level incoming ports
-/// (paths of the form `top.<port>`) and registers at any depth.
-/// Anything else is immediately overridden by the next combinational
-/// settle, so the tool rejects it rather than silently doing something
-/// misleading.
+/// Whether `signal_id` can be poked: top-level incoming ports (paths
+/// of the form `top.<port>`), registers at any depth, and top-level
+/// socket channels on the side the testbench drives.  Anything else
+/// is immediately overridden by the next combinational settle, so the
+/// tool rejects it rather than silently doing something misleading.
 pub fn poke_legal(session: &Session, signal_id: SignalId) -> Result<(), String> {
     // Clocks are never poked: time is driven with `tick`, and the
     // clock path itself only makes sense as a `tick` argument.
@@ -822,10 +823,63 @@ pub fn poke_legal(session: &Session, signal_id: SignalId) -> Result<(), String> 
             return Ok(());
         }
     }
+    // A channel of a socket instance declared directly in the top
+    // module (`top.<inst>.<channel>`) is poked exactly like a
+    // top-level incoming port when it sits on the socket's incoming
+    // side: the testbench plays the peer role there, so nothing in the
+    // design overrides the written value.  (The module drives the
+    // other side itself, so pokes there would not stick.)
+    if kind == ComponentKind::Net {
+        if let Some((role, dir)) = top_socket_channel(session, signal_id) {
+            let incoming = match role {
+                SocketRole::Server => dir == ChannelDir::Cosi,
+                SocketRole::Client => dir == ChannelDir::Soci,
+            };
+            if incoming {
+                return Ok(());
+            }
+        }
+    }
     let path = session.sim.full_name(signal_id).to_str_lossy().into_owned();
     Err(format!(
-        "cannot poke `{path}`: only top-level incoming ports and registers can be poked (anything else is overridden by the next settle)"
+        "cannot poke `{path}`: only top-level incoming ports, registers, and top-level socket input channels can be poked (anything else is overridden by the next settle)"
     ))
+}
+
+/// If `signal_id` is a channel of a socket instance declared directly
+/// in the top module — a path of the form `top.<inst>.<channel>` —
+/// return the instance's role and the channel's declared direction
+/// (`cosi`/`soci`).  `None` for anything deeper, anything not under
+/// `top`, and any name that is not a socket channel.
+fn top_socket_channel(session: &Session, signal_id: SignalId) -> Option<(SocketRole, ChannelDir)> {
+    let path = session.sim.full_name(signal_id).to_str_lossy().into_owned();
+    let mut segments = path.split('.');
+    let top = segments.next()?;
+    let instance = segments.next()?;
+    let chan = segments.next()?;
+    if segments.next().is_some() || top != "top" {
+        return None;
+    }
+    let socket_prefix = format!("top.{instance}");
+    let socketdef = session
+        .sim
+        .sockets()
+        .into_iter()
+        .find(|(_, prefix)| prefix.as_slice() == socket_prefix.as_bytes())
+        .map(|(socketdef, _)| socketdef)?;
+    let role = session.sim.socket_role(socket_prefix.as_bytes())?;
+    let symboltable = session.db.get_symboltable();
+    let socketdef_symbol = symboltable.symbol(socketdef);
+    let parsing = session.db.get_parsing(socketdef_symbol.location().package());
+    let socketdef_ast = parsing.ast_node(session.db.get_symbol_ast(socketdef));
+    for stmt in socketdef_ast.children() {
+        if let AstNodePayload::Channel(channel) = stmt.payload() {
+            if parsing.string(channel.name).as_bytes() == chan.as_bytes() {
+                return Some((role, channel.dir));
+            }
+        }
+    }
+    None
 }
 
 /// The REPL's command names, for TAB completion (and `help`'s list).
