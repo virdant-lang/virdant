@@ -1,0 +1,2 @@
+kind = "sim"
+description = "trycast(word) through Verilog codegen: @Valid(e) for valid encodings, @Invalid() otherwise"

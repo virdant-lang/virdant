@@ -162,6 +162,10 @@ Reinterpret the bit pattern of a `Word[n]` as an enum type, or vice versa:
 opcode := cast(opcode_bits)   // Word[4] -> Opcode
 ```
 
+`trycast(v)` is the checked variant: it converts a `Word[n]` into a
+`Valid[E]` (for an enum type `E` as wide as the word), `@Valid(e)`
+when the bits decode cleanly, `@Invalid()` otherwise.
+
 See ./types-and-patterns.md for more details.
 
 ## `dontcare`

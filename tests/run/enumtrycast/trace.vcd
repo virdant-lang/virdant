@@ -1,0 +1,68 @@
+$timescale 1ps $end
+$scope module top $end
+$var wire 1 4 all_ok $end
+$var wire 1 3 checks_ok $end
+$var wire 1 ! clock $end
+$var wire 10 8 debug $end
+$var wire 10 " exit $end
+$var wire 1 5 finished $end
+$var wire 1 , green_ok $end
+$var wire 5 $ green_try $end
+$var wire 5 ( invalid_five $end
+$var wire 1 0 invalid_five_ok $end
+$var wire 5 * invalid_seven $end
+$var wire 1 2 invalid_seven_ok $end
+$var wire 5 ) invalid_six $end
+$var wire 1 1 invalid_six_ok $end
+$var wire 5 ' invalid_three $end
+$var wire 1 / invalid_three_ok $end
+$var wire 1 + off_ok $end
+$var wire 5 # off_try $end
+$var wire 1 . red_ok $end
+$var wire 5 & red_try $end
+$var wire 1 7 rx $end
+$var wire 1 9 spi_ck $end
+$var wire 1 : spi_cs $end
+$var wire 1 < spi_miso $end
+$var wire 1 ; spi_mosi $end
+$var wire 1 6 tx $end
+$var wire 1 - yellow_ok $end
+$var wire 5 % yellow_try $end
+$upscope $end
+$enddefinitions $end
+#0
+$dumpvars
+14
+13
+0!
+b0000000001 8
+b0000000001 "
+05
+1,
+b00110 $
+b00001 (
+10
+b00001 *
+12
+b00001 )
+11
+b00001 '
+1/
+1+
+b00010 #
+1.
+b10010 &
+17
+19
+1:
+1<
+1;
+16
+1-
+b01010 %
+$end
+0<
+#500000
+1!
+b0000000010 "
+15

@@ -50,6 +50,7 @@ pub enum ExprPayload {
     Sext(payload::Sext),
     AsClock(payload::AsClock),
     Cast(payload::Cast),
+    TryCast(payload::TryCast),
     Trunc(payload::Trunc),
     Any(payload::Any),
     All(payload::All),
@@ -741,6 +742,10 @@ fn convert_ast_expr(db: &Db, loc: Location, env: &[Type], types: &mut TypeIntern
                     Primitive::Cast => {
                         assert!(args.len() == 1, "cast expects exactly 1 argument");
                         ExprPayload::Cast(payload::Cast { subject: args[0].clone() })
+                    }
+                    Primitive::TryCast => {
+                        assert!(args.len() == 1, "trycast expects exactly 1 argument");
+                        ExprPayload::TryCast(payload::TryCast { subject: args[0].clone() })
                     }
                     Primitive::Trunc => {
                         assert!(args.len() == 1, "trunc expects exactly 1 argument");

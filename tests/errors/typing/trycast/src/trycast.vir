@@ -1,0 +1,53 @@
+// Error cases for `trycast(v)`: it converts a `Word[n]` into a
+// `Valid[E]` for an enum type `E` whose full bit-width is `n`, so the
+// expected type must be the builtin `Valid[E]` with an enum `E`, and
+// the subject must be a word as wide as `E`'s representation.
+
+enum type Phase {
+    Off    = 0w3
+    Green  = 1w3
+    Yellow = 2w3
+    Red    = 4w3
+}
+
+struct type Color {
+    red   : Word[8]
+    green : Word[8]
+    blue  : Word[8]
+}
+
+// The expected type must be `Valid[E]`: `trycast` cannot target a
+// bare enum type (that is what `cast()` is for).
+mod NotAValidType {
+    outgoing out : Phase {
+        // CHECK: trycast must return the builtin Valid[..] enum type
+        it := trycast(0w3)
+    }
+}
+
+// The element type of the expected `Valid[E]` must be an enum.
+mod ElementNotEnum {
+    outgoing out : Valid[Color] {
+        // CHECK: trycast element type must be an enum type
+        it := trycast(0w19)
+    }
+}
+
+// The subject must be a word as wide as the enum's full
+// representation (here `Word[3]`, since `Phase` has no payloads).
+mod WrongWidth {
+    outgoing out : Valid[Phase] {
+        // CHECK: Expected Word[3] but found Word[4]
+        it := trycast(0w4)
+    }
+}
+
+// The subject must be a word at all.
+mod NotAWord {
+    outgoing out : Valid[Phase] {
+        // CHECK: Expected type Bit which is not a Word type
+        it := trycast(true)
+    }
+}
+
+// CHECK: Check failed

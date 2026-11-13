@@ -137,6 +137,24 @@ opcode := cast(opcode_bits)      // Word[4] -> Opcode
 Conversion works in both directions.
 The underlying width is determined by the enum's value widths.
 
+`cast()` is a reinterpretation, not a check: a word whose bits are not
+a valid enumerant encoding casts into an out-of-contract enum value.
+When the word may not be a valid encoding, use `trycast()` instead:
+it takes a `Word[n]` and produces a `Valid[E]`, `@Valid(e)` when the
+word's bits decode cleanly as an inhabitant of the enum type `E`,
+`@Invalid()` otherwise.
+Because the enum type comes from the expected type, `trycast()` needs
+its result type to be known (e.g. driven by a typed component):
+
+```virdant
+wire opcode : Valid[Opcode]
+opcode := trycast(opcode_bits)   // Word[4] -> Valid[Opcode]
+```
+
+"Decodes cleanly" means the tag bits match an enumerant value and (for
+enums whose enumerants carry payloads) the padding above the payload
+is zero.
+
 ## Struct types
 
 A struct type bundles several named fields into a single value.

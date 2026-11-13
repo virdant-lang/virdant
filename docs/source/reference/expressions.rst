@@ -530,6 +530,12 @@ The remaining builtin functions are:
   the target width is checked against the expected type.
 - :vir:`cast(x)` — reinterpret the bit pattern of a :vir:`Word[n]` as an enum
   type, or vice versa.
+- :vir:`trycast(x)` — checked conversion from a :vir:`Word[n]` into a
+  :vir:`Valid[E]` for an enum type :vir:`E` whose full bit-width is
+  :vir:`n`: :vir:`@Valid(e)` when the word's bits decode cleanly as an
+  inhabitant of :vir:`E`, :vir:`@Invalid()` otherwise.  The enum type
+  comes from the expected type, so :vir:`trycast` needs its result type
+  to be known (e.g. driven by a typed component).
 
 
 Unary Operators

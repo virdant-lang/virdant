@@ -1,0 +1,155 @@
+//! Self-checking `kind = "run"` test for `trycast()`: converting a
+//! `Word[n]` into a `Valid[E]` for an enum type `E`.
+//!
+//! Every valid encoding of a four-variant `Phase` enum must `trycast`
+//! to `@Valid(phase)` whose payload equals the original variant, and
+//! every non-encoding word pattern must `trycast` to `@Invalid()`.
+//! Every verdict is folded into a running `all_ok`; the simulator
+//! exits with code 0 only if every check passed, and 1 otherwise.
+
+import virt
+
+//> Traffic-light phase with sparse, non-sequential encodings, so a
+//> trycast bug that mangles bit patterns cannot alias one variant
+//> onto another.
+enum type Phase {
+    Off    = 0w3
+    Green  = 1w3
+    Yellow = 2w3
+    Red    = 4w3
+}
+
+pub mod EnumTrycastTest for virt::Virt {
+    //> Primary clock.
+    incoming clock : Clock
+
+    //> `@Valid(0)` if every check passed; `@Valid(1)` if any check
+    //> failed.  While `@Invalid()`, the simulator keeps running.
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when finished => @Valid(mux(all_ok, 0, 1))
+            else => @Invalid()
+        }
+    }
+
+    //> Each `trycast()` of a valid encoding must yield `@Valid(..)`.
+    wire off_try : Valid[Phase] {
+        it := trycast(0w3)
+    }
+
+    wire green_try : Valid[Phase] {
+        it := trycast(1w3)
+    }
+
+    wire yellow_try : Valid[Phase] {
+        it := trycast(2w3)
+    }
+
+    wire red_try : Valid[Phase] {
+        it := trycast(4w3)
+    }
+
+    //> Each `trycast()` of a non-encoding word pattern must yield
+    //> `@Invalid()`.  `3w3` and `5w3` through `7w3` are not
+    //> encodings of `Phase`.
+    wire invalid_three : Valid[Phase] {
+        it := trycast(3w3)
+    }
+
+    wire invalid_five : Valid[Phase] {
+        it := trycast(5w3)
+    }
+
+    wire invalid_six : Valid[Phase] {
+        it := trycast(6w3)
+    }
+
+    wire invalid_seven : Valid[Phase] {
+        it := trycast(7w3)
+    }
+
+    //> Each valid trycast must carry the payload equal to the
+    //> variant its bits encode.
+    wire off_ok : Bit {
+        it := match off_try {
+            with @Valid(#Off) => true
+            else => false
+        }
+    }
+
+    wire green_ok : Bit {
+        it := match green_try {
+            with @Valid(#Green) => true
+            else => false
+        }
+    }
+
+    wire yellow_ok : Bit {
+        it := match yellow_try {
+            with @Valid(#Yellow) => true
+            else => false
+        }
+    }
+
+    wire red_ok : Bit {
+        it := match red_try {
+            with @Valid(#Red) => true
+            else => false
+        }
+    }
+
+    //> Each non-encoding trycast must be `@Invalid()`.
+    wire invalid_three_ok : Bit {
+        it := match invalid_three {
+            with @Invalid() => true
+            else => false
+        }
+    }
+
+    wire invalid_five_ok : Bit {
+        it := match invalid_five {
+            with @Invalid() => true
+            else => false
+        }
+    }
+
+    wire invalid_six_ok : Bit {
+        it := match invalid_six {
+            with @Invalid() => true
+            else => false
+        }
+    }
+
+    wire invalid_seven_ok : Bit {
+        it := match invalid_seven {
+            with @Invalid() => true
+            else => false
+        }
+    }
+
+    //> All eight checks must have passed.
+    wire checks_ok : Bit {
+        it := off_ok
+            && green_ok
+            && yellow_ok
+            && red_ok
+            && invalid_three_ok
+            && invalid_five_ok
+            && invalid_six_ok
+            && invalid_seven_ok
+    }
+
+    //> Running AND of every check.  Power-on true; the checks fold in
+    //> on the first clock edge.
+    reg all_ok : Bit {
+        initial it <= true
+        it <= it && checks_ok
+    }
+
+    //> Rises on the first clock edge, after the checks are folded
+    //> into `all_ok`, so the exit code sees the final verdict.
+    reg finished : Bit {
+        initial it <= false
+        it <= true
+    }
+}

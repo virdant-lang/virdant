@@ -1,0 +1,58 @@
+//> Traffic-light phase with sparse, non-sequential encodings, so a
+//> trycast bug that mangles bit patterns cannot alias one variant
+//> onto another.
+enum type Phase {
+    Off    = 0w3
+    Green  = 1w3
+    Yellow = 2w3
+    Red    = 4w3
+}
+
+pub mod Top {
+    incoming clock : Clock
+    incoming reset : Reset
+    outgoing fin : Bit
+
+    unused clock
+    unused reset
+
+    fin := true
+
+    //> Each valid encoding of `Phase`, trycast into `Valid[Phase]`.
+    //> Layout (LSB->MSB): the 2-bit one-hot `Valid` tag above the
+    //> 3-bit payload, so `@Valid(#Off)` is `5'b00010` and `@Invalid()`
+    //> is `5'b00001`.
+    wire off_try : Valid[Phase] {
+        it := trycast(0w3)
+    }
+
+    wire green_try : Valid[Phase] {
+        it := trycast(1w3)
+    }
+
+    wire yellow_try : Valid[Phase] {
+        it := trycast(2w3)
+    }
+
+    wire red_try : Valid[Phase] {
+        it := trycast(4w3)
+    }
+
+    //> Each non-encoding word pattern, which must trycast to
+    //> `@Invalid()`.
+    wire invalid_three : Valid[Phase] {
+        it := trycast(3w3)
+    }
+
+    wire invalid_five : Valid[Phase] {
+        it := trycast(5w3)
+    }
+
+    wire invalid_six : Valid[Phase] {
+        it := trycast(6w3)
+    }
+
+    wire invalid_seven : Valid[Phase] {
+        it := trycast(7w3)
+    }
+}

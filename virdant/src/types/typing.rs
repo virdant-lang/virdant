@@ -68,6 +68,7 @@ pub enum Primitive {
     Any,
     All,
     Cast,
+    TryCast,
     Word,
     Sext,
     Zext,

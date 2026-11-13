@@ -1563,6 +1563,144 @@ impl<'d> Converter<'d> {
         }
     }
 
+    /// Convert a `trycast(v)` expression into its packed Verilog
+    /// value.
+    ///
+    /// The node's type is `Valid[E]` for an enum type `E` as wide as
+    /// the subject word.  Validity is the disjunction over the
+    /// enumerants of `E`: each enumerant requires its tag bits — and
+    /// any padding above its payload — to match the canonical
+    /// encoding, while its payload bits are don't-cares.  The result
+    /// is `@Valid(v)` (the `Valid` tag above the subject bits) when
+    /// valid, and the canonical `@Invalid()` encoding otherwise.
+    fn convert_trycast(
+        &self,
+        package: PackageId,
+        node: AstNode,
+        typ: &Type,
+        scheduler: &mut ExprScheduler,
+    ) -> verilog::Expr {
+        let Type::Usual(valid_sym, valid_args) = typ else {
+            unreachable!("trycast expression must have a Usual (Valid[E]) type, got {typ:?}")
+        };
+        let Type::Usual(elem_sym, elem_args) = &valid_args[0] else {
+            unreachable!("trycast element type must be a Usual (enum) type")
+        };
+        let layout = tagged_layout(self.db, *valid_sym, valid_args);
+        let elem_layout = tagged_layout(self.db, *elem_sym, elem_args);
+        let elem_width = elem_layout.tag_width + elem_layout.max_payload;
+        let total = layout.tag_width + layout.max_payload;
+
+        let subject = node.child(1);
+        let subject_typ = self.node_type(package, &subject).unwrap();
+        let v = self.convert_expr(package, subject, &subject_typ, self.db, scheduler);
+
+        // Validity of the subject word as an inhabitant of the element
+        // enum: one comparison per enumerant, (v & mask) == required,
+        // where the mask keeps the enumerant's tag bits and the
+        // padding above its payload (within the enum's own width), and
+        // required is the enumerant's tag value (payload bits
+        // don't-care, padding must be zero).
+        let mut terms = Vec::new();
+        for (_slot_sym, tag_value, arg_widths) in &elem_layout.slots {
+            let payload_width: Width = arg_widths.iter().sum();
+            let mut mask: WordValue = 0;
+            for bit in 0..elem_layout.tag_width {
+                mask |= 1u64 << bit;
+            }
+            for bit in (elem_layout.tag_width + payload_width)..elem_width {
+                mask |= 1u64 << bit;
+            }
+            let required = tag_value & mask;
+            let word_lit = |value: WordValue| {
+                verilog::Expr::WordLit(verilog::expr::WordLit {
+                    value,
+                    width: elem_width,
+                    radix: Radix::Bin,
+                })
+            };
+            terms.push(verilog::Expr::BinOp(verilog::expr::BinOp {
+                op: verilog::BinOp::Eq,
+                width: 1,
+                lhs: Box::new(verilog::Expr::BinOp(verilog::expr::BinOp {
+                    op: verilog::BinOp::BitAnd,
+                    width: elem_width,
+                    lhs: Box::new(v.clone()),
+                    rhs: Box::new(word_lit(mask)),
+                })),
+                rhs: Box::new(word_lit(required)),
+            }));
+        }
+
+        let valid = match terms.len() {
+            0 => verilog::Expr::BitLit(verilog::expr::BitLit { value: false }),
+            _ => {
+                let mut iter = terms.into_iter();
+                let mut acc = iter.next().unwrap();
+                for term in iter {
+                    acc = verilog::Expr::BinOp(verilog::expr::BinOp {
+                        op: verilog::BinOp::LogOr,
+                        width: 1,
+                        lhs: Box::new(acc),
+                        rhs: Box::new(term),
+                    });
+                }
+                acc
+            }
+        };
+
+        // Result: `@Valid(v)` when the subject decodes, the canonical
+        // `@Invalid()` encoding otherwise.  Tag at the LSB, payload
+        // (the subject bits, or zeros) above.
+        let Some((valid_tag, _)) = layout
+            .slots
+            .iter()
+            .find(|(_, _, arg_widths)| !arg_widths.is_empty())
+            .map(|(_, tag, _)| (*tag, ()))
+        else {
+            panic!("trycast result type has no payload enumerant: {typ:?}");
+        };
+        let Some((invalid_tag, _)) = layout
+            .slots
+            .iter()
+            .find(|(_, _, arg_widths)| arg_widths.is_empty())
+            .map(|(_, tag, _)| (*tag, ()))
+        else {
+            panic!("trycast result type has no payload-less enumerant: {typ:?}");
+        };
+        let tag_lit = |value: WordValue| {
+            verilog::Expr::WordLit(verilog::expr::WordLit {
+                value,
+                width: layout.tag_width,
+                radix: Radix::Bin,
+            })
+        };
+        let mut then_exprs = vec![v];
+        then_exprs.push(tag_lit(valid_tag));
+        let mut else_exprs = Vec::new();
+        if layout.max_payload > 0 {
+            else_exprs.push(verilog::Expr::Repeat(verilog::expr::Repeat {
+                count: Box::new(constant_index_expr(layout.max_payload)),
+                exprs: vec![verilog::Expr::BitLit(verilog::expr::BitLit { value: false })],
+                width: layout.max_payload,
+            }));
+        }
+        else_exprs.push(tag_lit(invalid_tag));
+
+        verilog::Expr::If(verilog::expr::If {
+            cond: Box::new(valid),
+            then_expr: Box::new(verilog::Expr::Concat(verilog::expr::Concat {
+                exprs: then_exprs,
+                width: total,
+            })),
+            else_expr: Box::new(verilog::Expr::Concat(verilog::expr::Concat {
+                exprs: else_exprs,
+                width: total,
+            })),
+            width: total,
+        })
+    }
+
     /// Convert a constructor expression (`@Name(args)`) of a union ctor
     /// or an enum payload enumerant into its packed Verilog value.
     ///
@@ -1873,6 +2011,7 @@ impl<'d> Converter<'d> {
                                 })
                             }
                             Primitive::Cast => arg_expr,
+                            Primitive::TryCast => self.convert_trycast(package, node, typ, scheduler),
                             Primitive::Zext => self.convert_zext(package, node, typ, scheduler),
                             Primitive::Sext => self.convert_sext(package, node, typ, scheduler),
                             Primitive::AsClock => self.convert_asclock(package, node, typ, scheduler),

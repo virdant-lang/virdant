@@ -414,6 +414,7 @@ impl Expr {
             ExprPayload::Sext(sext) => self.eval_sext(context, sext),
             ExprPayload::AsClock(asclock) => self.eval_passthrough(context, &asclock.subject),
             ExprPayload::Cast(cast) => self.eval_passthrough(context, &cast.subject),
+            ExprPayload::TryCast(trycast) => self.eval_trycast(context, &trycast.subject),
             ExprPayload::Trunc(trunc) => self.eval_trunc(context, trunc),
             ExprPayload::Any(any) => self.eval_any(context, any),
             ExprPayload::All(all) => self.eval_all(context, all),
@@ -431,6 +432,47 @@ impl Expr {
     fn eval_passthrough(&self, context: &Context, subject: &Expr) -> Value {
         let subject_val = subject.eval(context);
         self.val_value(subject_val)
+    }
+
+    /// Evaluate a `trycast(v)` expression.
+    ///
+    /// This node's type is `Valid[E]` for an enum type `E` as wide as
+    /// the subject word.  The subject's bits are decoded against the
+    /// enumerant values of `E` (same "decodes cleanly" rule as every
+    /// other constructor-typed value: a known tag and zero padding
+    /// above the selected slot's payload).  A clean decode yields
+    /// `@Valid(e)` whose payload is the subject's bits re-tagged as
+    /// `E`; anything else yields `@Invalid()`.
+    fn eval_trycast(&self, context: &Context, subject: &Expr) -> Value {
+        let subject_val = subject.eval(context);
+        let layouts = Self::layouts(context);
+        let Type::Usual(_, valid_args) = self.typ() else {
+            unreachable!(
+                "trycast node must have a Usual (Valid[E]) type, got {:?}",
+                self.typ()
+            )
+        };
+        let elem_typ = &valid_args[0];
+        let elem_typ_id = layouts.type_id(elem_typ);
+        if layouts.decode_ctor(elem_typ_id, &subject_val.bitpat()).is_some() {
+            // @Valid(e): the `Valid` enumerant's tag above the subject
+            // bits, re-tagged as `E`.
+            let (valid_ctor, _) = layouts
+                .ctor_slot_by_name(self.typ_id(), "Valid")
+                .expect("builtin Valid enum has a `Valid` enumerant");
+            let bits = layouts
+                .encode_ctor(self.typ_id(), valid_ctor, &[subject_val.bitpat()])
+                .expect("`Valid` enumerant encodes into its own type");
+            Value::new(self.typ_id(), bits)
+        } else {
+            let (invalid_ctor, _) = layouts
+                .ctor_slot_by_name(self.typ_id(), "Invalid")
+                .expect("builtin Valid enum has an `Invalid` enumerant");
+            let bits = layouts
+                .encode_ctor(self.typ_id(), invalid_ctor, &[])
+                .expect("`Invalid` enumerant encodes into its own type");
+            Value::new(self.typ_id(), bits)
+        }
     }
 
     /// Truthiness of a condition value: a `Bit` is true when its bit is

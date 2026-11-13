@@ -1,0 +1,4 @@
+kind = "run"
+description = "trycast(word) yields @Valid(e) for valid encodings and @Invalid() otherwise"
+cycle_limit = 5
+trace = false

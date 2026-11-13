@@ -1,0 +1,5 @@
+[project]
+name = "enumtrycast"
+
+[prog]
+top = "enum_trycast::EnumTrycastTest"

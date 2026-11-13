@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "trycast typing errors: non-Valid expected type, non-enum element type, and subject width mismatch."
+filecheck = "src/trycast.vir"

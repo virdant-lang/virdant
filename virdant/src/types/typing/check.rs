@@ -322,6 +322,21 @@ impl Typing {
                     Err(())
                 }
             }
+            b"trycast" => {
+                if args.len() != 1 {
+                    self.flag_unknown(
+                        node,
+                        format!("trycast requires exactly 1 argument, got {}", args.len()),
+                    );
+                    return Err(());
+                }
+                let subject = &args[0];
+                let Some(subject_typ) = self.infer(builder, context, subject)? else {
+                    self.flag_cant_infer(subject);
+                    return Err(());
+                };
+                self.check_trycast(builder, node, subject, &subject_typ, expected_typ)
+            }
             b"zext" => {
                 self.tags
                     .insert(node.location(), Tag::PrimitiveResolution(Primitive::Zext));
@@ -344,6 +359,95 @@ impl Typing {
             }
             _ => {
                 self.flag_unknown(node, format!("Unknown function: {}", BStr::new(fn_name)));
+                Err(())
+            }
+        }
+    }
+
+    /// Check a `trycast(v)` expression against its expected type.
+    ///
+    /// `trycast` converts a `Word[n]` into a `Valid[E]` for an enum
+    /// type `E` whose full bit-width is `n`: `@Valid(e)` when the
+    /// word's bit pattern decodes cleanly as an inhabitant of `E`,
+    /// `@Invalid()` otherwise.  The enum type is taken from the
+    /// expected type, so `trycast` is only usable where `Valid[E]` is
+    /// already known (e.g. driven by a typed component).
+    fn check_trycast<'p>(
+        &mut self,
+        builder: &mut Builder,
+        node: &AstNode<'p>,
+        subject: &AstNode<'p>,
+        subject_typ: &Type,
+        expected_typ: &Type,
+    ) -> Result<(), ()> {
+        // The expected type must be the builtin `Valid[E]` enum,
+        // instantiated at exactly one type argument.
+        let Type::Usual(valid_sym, valid_args) = expected_typ else {
+            self.flag_unknown(
+                node,
+                "trycast must return the builtin Valid[..] enum type",
+            );
+            return Err(());
+        };
+        let packages = builder.get_packages();
+        let builtin_package = packages.builtin();
+        let symboltable = builder.get_symboltable();
+        let Some(valid_symbol) =
+            symboltable.resolve_item_in_package(BStr::new(b"Valid"), builtin_package)
+        else {
+            unreachable!("builtin `Valid` enum definition is missing");
+        };
+        if *valid_sym != valid_symbol.id() || valid_args.len() != 1 {
+            self.flag_unknown(
+                node,
+                "trycast must return the builtin Valid[..] enum type",
+            );
+            return Err(());
+        }
+
+        // The element type must be a mono enum type.  (`trycast`
+        // decodes the word's bits against the enumerant values, which
+        // only makes sense for an enum.)
+        let elem_typ = &valid_args[0];
+        let Type::Usual(elem_sym, _) = elem_typ else {
+            self.flag_unknown(
+                node,
+                format!("trycast element type must be an enum type, got {elem_typ:?}"),
+            );
+            return Err(());
+        };
+        let elem_typedef = builder.get_typedef(*elem_sym);
+        if elem_typedef.kind != crate::common::TypeScheme::EnumDef {
+            self.flag_unknown(
+                node,
+                format!("trycast element type must be an enum type, got {elem_typ:?}"),
+            );
+            return Err(());
+        }
+        if !elem_typ.is_mono() {
+            self.flag_unknown(
+                node,
+                "trycast requires a mono (non-generic) enum type",
+            );
+            return Err(());
+        }
+
+        // The subject must be a word as wide as the enum's full
+        // representation (tag plus widest payload).
+        let elem_width = crate::types::width::type_width(builder, elem_typ);
+        match subject_typ {
+            Type::Word(width) if *width == elem_width => {
+                self.tags
+                    .insert(node.location(), Tag::PrimitiveResolution(Primitive::TryCast));
+                self.annotate(node, expected_typ);
+                Ok(())
+            }
+            Type::Word(width) => {
+                self.flag_wrong_type(subject, &Type::Word(elem_width), &Type::Word(*width));
+                Err(())
+            }
+            other => {
+                self.flag_not_word_type(subject, other);
                 Err(())
             }
         }
