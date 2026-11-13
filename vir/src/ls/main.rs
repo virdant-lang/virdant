@@ -1094,6 +1094,22 @@ fn diagnostic_quickfixes(
                 format!("Remove redundant `unused` mark on `{}`", d.path.to_str_lossy()),
                 uri,
             ),
+            // The component is used, so the mark is contradictory —
+            // removing it is the only mechanical fix (adding a mark
+            // anywhere can never clear this diagnostic: marks are
+            // module-wide and it fires precisely when a marked path
+            // has a use).
+            DiagnosticPayload::UnusedButUsed(d) => remove_unused_action(
+                db,
+                parsing,
+                package,
+                region,
+                format!(
+                    "Remove `unused` mark on `{}` — it is used",
+                    d.path.to_str_lossy(),
+                ),
+                uri,
+            ),
             DiagnosticPayload::RedundantOnClause(d) => remove_on_clause_action(
                 db,
                 package,
@@ -1153,6 +1169,15 @@ fn diagnostic_quickfixes(
                     d.port.to_str_lossy(),
                     d.platform.to_str_lossy(),
                 ),
+                uri,
+            ),
+            DiagnosticPayload::UnusedSource(d) => silence_unused_source_action(
+                db,
+                parsing,
+                package,
+                region,
+                &d.path,
+                format!("Mark `{}` as unused", d.path.to_str_lossy()),
                 uri,
             ),
             DiagnosticPayload::PackageNotImported(d) => add_import_action(
@@ -1223,10 +1248,12 @@ fn remove_import_action(
     Some(quickfix_action(title, uri, vec![edit]))
 }
 
-/// The quickfix for `RedundantUnused`: delete the duplicate `unused`
-/// statement.  The diagnostic's region covers only the path inside
-/// `unused <path>`, so jump to the enclosing `ModDefStmtUnused` node
-/// for the full statement before deleting its line.
+/// The quickfix for `RedundantUnused` and `UnusedButUsed`: delete the
+/// offending `unused` statement — a duplicate mark, or a mark on a
+/// component that is actually used.  Both diagnostics' regions cover
+/// only the path inside `unused <path>`, so jump to the enclosing
+/// `ModDefStmtUnused` node for the full statement before deleting its
+/// line.
 fn remove_unused_action(
     db: &Db,
     parsing: &Parsing,
@@ -1469,6 +1496,118 @@ fn move_import_to_top_action(
         uri,
         vec![insert, delete],
     ))
+}
+
+/// The quickfix for `UnusedSource` ("Unused signal X"): silence the
+/// warning with the idiomatic in-block `unused` mark — `unused it`
+/// inside the unused component's own driver block, or
+/// `unused it.<member>` inside the submodule/socket block carrying
+/// the unused member (the `it`-relative spelling of the payload
+/// path).  The mark is inserted at the top of the block, and a block
+/// is attached to the declaration when it has none.  A block whose
+/// only content is `unused it` is the sanctioned idiom (exempt from
+/// `IrrelevantDriverBlock`), and the mark suppresses `UnusedSource`.
+fn silence_unused_source_action(
+    db: &Db,
+    parsing: &Parsing,
+    package: PackageId,
+    region: Region,
+    path: &BString,
+    title: String,
+    uri: &Url,
+) -> Option<CodeAction> {
+    let source = db.get_source(package);
+
+    // The declaring statement the diagnostic's region points at: the
+    // component's own declaration, or the submodule/socket statement
+    // carrying the unused member (their member components take the
+    // statement's location).
+    let carrier = find_enclosing(
+        parsing,
+        parsing.at(region.start())?,
+        |payload| matches!(
+            payload,
+            AstNodePayload::Component(_)
+                | AstNodePayload::Submodule(_)
+                | AstNodePayload::Socket(_)
+        ),
+    )?;
+
+    // The mark, spelled `it`-relatively inside the carrier's block:
+    // the first path segment names the carrier itself.
+    let path_str = path.to_str_lossy();
+    let mark = match path_str.find('.') {
+        Some(dot) => format!("unused it.{}", &path_str[dot + 1..]),
+        None => "unused it".to_string(),
+    };
+
+    let indent_col = carrier.span().start().col();
+    let indent_str = " ".repeat(indent_col.saturating_sub(1));
+    let inner_indent_str = format!("{indent_str}    ");
+
+    // The driver block under the declaration: an `It`-wrapped block on
+    // components, submodules and sockets; a memory's bare body block.
+    let block = carrier
+        .children()
+        .into_iter()
+        .find(|child| matches!(
+            child.payload(),
+            AstNodePayload::It | AstNodePayload::ModDefStmtBlock
+        ))
+        .map(|wrapper| match wrapper.payload() {
+            AstNodePayload::It => wrapper.child(0),
+            _ => wrapper,
+        });
+
+    let edit = match block {
+        Some(block) => {
+            if let Some(first) = block.children().first() {
+                // Top of the block: before its first statement.
+                let lc = first.span().start();
+                let offset: usize = source.to_offset(lc).into();
+                insert_edit_at(
+                    &source,
+                    offset,
+                    format!("{mark}\n{}", " ".repeat(lc.col().saturating_sub(1))),
+                )
+            } else {
+                // An empty `{ }` block: give the mark a line of its
+                // own, replacing the whitespace between the braces.
+                let open_off: usize = source.to_offset(block.span().start()).into();
+                let close_off = usize::from(source.to_offset(block.span().end())) - 1;
+                let start = linecol_to_position(
+                    source.to_linecol(SourceOffset::new((open_off + 1) as u32)),
+                );
+                let end = linecol_to_position(
+                    source.to_linecol(SourceOffset::new(close_off as u32)),
+                );
+                TextEdit {
+                    range: Range { start, end },
+                    new_text: format!("\n{inner_indent_str}{mark}\n{indent_str}"),
+                }
+            }
+        }
+        None => {
+            // No block yet: attach one holding just the mark.
+            let offset: usize = source.to_offset(carrier.span().end()).into();
+            insert_edit_at(
+                &source,
+                offset,
+                format!(" {{\n{inner_indent_str}{mark}\n{indent_str}}}"),
+            )
+        }
+    };
+
+    Some(quickfix_action(title, uri, vec![edit]))
+}
+
+/// A `TextEdit` inserting `new_text` at the byte `offset`.
+fn insert_edit_at(source: &Source, offset: usize, new_text: String) -> TextEdit {
+    let position = linecol_to_position(source.to_linecol(SourceOffset::new(offset as u32)));
+    TextEdit {
+        range: Range { start: position, end: position },
+        new_text,
+    }
 }
 
 /// An edit inserting `import <name>` at the top of the file: right
