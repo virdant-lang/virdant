@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use clap::{CommandFactory, Parser, Subcommand};
 
-use bstr::{BString, ByteSlice as _};
+use bstr::{BStr, BString, ByteSlice as _};
 use indexmap::IndexSet;
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
@@ -20,11 +20,12 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 use serde_json::json;
 
 use virdant::LIB_DIR;
+use virdant::diagnostics::DiagnosticPayload;
 use virdant::analysis::platform::resolve_platform_for;
 use virdant::analysis::ports::Port;
 use virdant::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
 use virdant::types::{ExprRoot, Type};
-use virdant::common::{ComponentKind, PortDir};
+use virdant::common::{ComponentKind, DriverType, PortDir};
 use virdant::db::{Builder, Db};
 
 #[path = "../common/help_json.rs"]
@@ -37,7 +38,7 @@ use queries::{NameResolution, Project};
 use queries::type_to_source;
 
 use virdant::package::{PackageId, PackageTable};
-use virdant::common::source::{LineCol, Source, SourceOffset, Span};
+use virdant::common::source::{LineCol, Region, Source, SourceOffset, Span};
 use virdant::syntax::ast::{AstNode, AstNodeId, item_children, match_arm_children};
 use virdant::syntax::payload::AstNodePayload;
 use virdant::syntax::parsing::Parsing;
@@ -486,15 +487,23 @@ impl LanguageServer for Backend {
         let package = uri_to_package(db, &uri);
         let parsing = db.get_parsing(package);
 
-        let Some(node_id) = parsing.at(linecol) else { return Ok(None); };
-
         let mut actions = vec![];
 
-        if let Some(action) = missing_match_cases_action(db, &parsing, package, node_id, &uri) {
-            actions.push(CodeActionOrCommand::CodeAction(action));
+        // The two syntax-derived actions below trigger on the node
+        // under the cursor (no diagnostics involved).
+        if let Some(node_id) = parsing.at(linecol) {
+            if let Some(action) = missing_match_cases_action(db, &parsing, package, node_id, &uri) {
+                actions.push(CodeActionOrCommand::CodeAction(action));
+            }
+
+            if let Some(action) = missing_platform_ports_action(db, &parsing, package, node_id, &uri) {
+                actions.push(CodeActionOrCommand::CodeAction(action));
+            }
         }
 
-        if let Some(action) = missing_platform_ports_action(db, &parsing, package, node_id, &uri) {
+        // Quickfixes derived from the compiler's own diagnostics at
+        // the cursor's line (see `diagnostic_quickfixes`).
+        for action in diagnostic_quickfixes(db, &parsing, package, linecol, &uri) {
             actions.push(CodeActionOrCommand::CodeAction(action));
         }
 
@@ -551,7 +560,11 @@ impl Backend {
             let diagnostic = Diagnostic {
                 range: span_to_range(diag.region().span()),
                 severity: Some(severity),
-                code: None,
+                // The stable payload-variant code ("UnusedImport",
+                // "WrongDriverType", ...): lets clients filter or
+                // suppress diagnostics, and mirrors what the quickfix
+                // dispatch below matches on.
+                code: Some(NumberOrString::String(diag.code().to_string())),
                 code_description: None,
                 source: Some("virdant".to_string()),
                 message: diag.message().to_string(),
@@ -725,10 +738,7 @@ fn missing_match_cases_action(
         }
     }
     let insert_lc = source.to_linecol(SourceOffset::new(insert_offset as u32));
-    let insert_position = Position {
-        line: (insert_lc.line().saturating_sub(1)) as u32,
-        character: (insert_lc.col().saturating_sub(1)) as u32,
-    };
+    let insert_position = linecol_to_position(insert_lc);
 
     let mut new_text = String::new();
     for pat in &missing {
@@ -745,39 +755,31 @@ fn missing_match_cases_action(
         new_text,
     };
 
-    let mut changes = std::collections::HashMap::new();
-    changes.insert(uri.clone(), vec![edit]);
-
-    let workspace_edit = WorkspaceEdit {
-        changes: Some(changes),
-        document_changes: None,
-        change_annotations: None,
-    };
-
-    Some(CodeAction {
-        title: "Add missing match cases".into(),
-        kind: Some(CodeActionKind::QUICKFIX),
-        diagnostics: None,
-        edit: Some(workspace_edit),
-        command: None,
-        is_preferred: Some(true),
-        disabled: None,
-        data: None,
-    })
+    Some(quickfix_action("Add missing match cases".into(), uri, vec![edit]))
 }
 
-fn find_enclosing_match<'p>(parsing: &'p Parsing, node_id: AstNodeId) -> Option<AstNode<'p>> {
+/// The nearest ancestor-or-self of `node_id` (inclusive of the node
+/// itself) whose payload satisfies `matches_payload`.
+fn find_enclosing<'p>(
+    parsing: &'p Parsing,
+    node_id: AstNodeId,
+    matches_payload: impl Fn(AstNodePayload) -> bool,
+) -> Option<AstNode<'p>> {
     let mut current_id = node_id;
     loop {
         let node = parsing.ast_node(current_id);
-        match node.payload() {
-            AstNodePayload::Match => return Some(node),
-            _ => match node.parent().map(|p| p.id()) {
-                Some(id) => current_id = id,
-                None => return None,
-            }
+        if matches_payload(node.payload()) {
+            return Some(node);
+        }
+        match node.parent().map(|p| p.id()) {
+            Some(id) => current_id = id,
+            None => return None,
         }
     }
+}
+
+fn find_enclosing_match<'p>(parsing: &'p Parsing, node_id: AstNodeId) -> Option<AstNode<'p>> {
+    find_enclosing(parsing, node_id, |payload| matches!(payload, AstNodePayload::Match))
 }
 
 fn missing_match_patterns(
@@ -939,32 +941,10 @@ fn missing_platform_ports_action(
 
     let platform_name = db.get_symboltable().symbol(platform_id).name.to_str_lossy().into_owned();
 
-    // Find where to insert the new port declarations: right before the
-    // first statement in the module body (skipping the `for`-clause
-    // child, which is not a statement), or right after the opening `{`
-    // if the body is empty.
-    let mut stmt_children = item_children(&moddef_node);
-    if matches!(stmt_children.first().map(|c| c.payload()), Some(AstNodePayload::Ofness(_))) {
-        stmt_children.remove(0);
-    }
-
     let source = db.get_source(package);
 
-    let (insert_offset, indent_col, insert_before_stmt) = if let Some(first) = stmt_children.first() {
-        let lc = first.span().start();
-        let offset: usize = source.to_offset(lc).into();
-        (offset, lc.col(), true)
-    } else {
-        // Empty body: insert right after the opening `{`.
-        let text = source.text();
-        let node_span = moddef_node.span();
-        let start_off: usize = source.to_offset(node_span.start()).into();
-        let end_off: usize = source.to_offset(node_span.end()).into();
-        let brace_off = text[start_off..end_off].iter().position(|&b| b == b'{')
-            .map(|i| start_off + i + 1)?;
-        let indent_col = node_span.start().col().saturating_add(4);
-        (brace_off, indent_col, false)
-    };
+    let (insert_offset, indent_col, insert_before_stmt) =
+        moddef_statement_insertion_point(&source, &moddef_node)?;
     let indent_str = " ".repeat(indent_col.saturating_sub(1));
     let inner_indent_str = format!("{indent_str}    ");
 
@@ -1002,49 +982,543 @@ fn missing_platform_ports_action(
     }
 
     let insert_lc = source.to_linecol(SourceOffset::new(insert_offset as u32));
-    let insert_position = Position {
-        line: (insert_lc.line().saturating_sub(1)) as u32,
-        character: (insert_lc.col().saturating_sub(1)) as u32,
-    };
+    let insert_position = linecol_to_position(insert_lc);
 
     let edit = TextEdit {
         range: Range { start: insert_position, end: insert_position },
         new_text,
     };
 
+    Some(quickfix_action(
+        format!("Add missing ports required by platform {platform_name}"),
+        uri,
+        vec![edit],
+    ))
+}
+
+/// Where a new statement should be inserted in a mod def's body: right
+/// before the first body statement (skipping the `for`-clause child,
+/// which is not a statement), or right after the opening `{` when the
+/// body is empty.  Returns the insertion offset, the body's indent
+/// column (1-based), and whether the offset sits at the start of an
+/// existing statement (as opposed to just after the `{`).
+fn moddef_statement_insertion_point(
+    source: &Source,
+    moddef_node: &AstNode<'_>,
+) -> Option<(usize, usize, bool)> {
+    let mut stmt_children = item_children(&moddef_node);
+    if matches!(stmt_children.first().map(|c| c.payload()), Some(AstNodePayload::Ofness(_))) {
+        stmt_children.remove(0);
+    }
+
+    if let Some(first) = stmt_children.first() {
+        let lc = first.span().start();
+        let offset: usize = source.to_offset(lc).into();
+        Some((offset, lc.col(), true))
+    } else {
+        // Empty body: insert right after the opening `{`.
+        let text = source.text();
+        let node_span = moddef_node.span();
+        let start_off: usize = source.to_offset(node_span.start()).into();
+        let end_off: usize = source.to_offset(node_span.end()).into();
+        let brace_off = text[start_off..end_off].iter().position(|&b| b == b'{')
+            .map(|i| start_off + i + 1)?;
+        let indent_col = node_span.start().col().saturating_add(4);
+        Some((brace_off, indent_col, false))
+    }
+}
+
+fn find_enclosing_moddef<'p>(parsing: &'p Parsing, node_id: AstNodeId) -> Option<AstNode<'p>> {
+    find_enclosing(parsing, node_id, |payload| matches!(payload, AstNodePayload::ModDef(_)))
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostic-driven quickfixes
+//
+// The actions above derive their context from the cursor's syntax node;
+// these dispatch off the compiler's own diagnostics instead.  Rather
+// than trusting the client to echo `params.context.diagnostics` back,
+// `code_action` re-runs `db.check()` and keeps the diagnostics whose
+// region contains or abuts the cursor's line, so each fix works from a
+// typed `DiagnosticPayload` instead of re-deriving context from syntax.
+// ---------------------------------------------------------------------------
+
+/// The quickfix actions for every diagnostic whose region touches
+/// `linecol`'s line in `package`.
+fn diagnostic_quickfixes(
+    db: &Db,
+    parsing: &Parsing,
+    package: PackageId,
+    linecol: LineCol,
+    uri: &Url,
+) -> Vec<CodeAction> {
+    let mut actions = vec![];
+    for diag in db.check().iter() {
+        let region = diag.region();
+        if region.package() != package {
+            continue;
+        }
+        // "At the cursor" is line-granular: the cursor may sit anywhere
+        // on the diagnostic's line, including in whitespace where
+        // `parsing.at` finds no node.
+        let span = region.span();
+        if linecol.line() < span.start().line() || linecol.line() > span.end().line() {
+            continue;
+        }
+
+        let action = match &diag.payload {
+            DiagnosticPayload::UnusedImport(d) => remove_import_action(
+                db,
+                package,
+                span,
+                format!("Remove unused import `{}`", d.imported_package.to_str_lossy()),
+                uri,
+            ),
+            DiagnosticPayload::DuplicateImport(d) => remove_import_action(
+                db,
+                package,
+                span,
+                format!("Remove duplicate import `{}`", d.imported_package.to_str_lossy()),
+                uri,
+            ),
+            DiagnosticPayload::RedundantUnused(d) => remove_unused_action(
+                db,
+                parsing,
+                package,
+                region,
+                format!("Remove redundant `unused` mark on `{}`", d.path.to_str_lossy()),
+                uri,
+            ),
+            DiagnosticPayload::RedundantOnClause(d) => remove_on_clause_action(
+                db,
+                package,
+                region,
+                format!("Remove redundant `on` clause on `{}`", d.component.to_str_lossy()),
+                uri,
+            ),
+            DiagnosticPayload::WrongDriverType(d) => {
+                let op = match d.expected_driver_type {
+                    DriverType::Continuous => ":=",
+                    DriverType::Latched => "<=",
+                };
+                fix_driver_type_action(
+                    db,
+                    parsing,
+                    package,
+                    region,
+                    d.expected_driver_type,
+                    format!("Use `{op}` to drive `{}`", d.target.to_str_lossy()),
+                    uri,
+                )
+            }
+            DiagnosticPayload::MemoryAssignInsteadOfLassign(d) => fix_memory_write_action(
+                db,
+                parsing,
+                package,
+                region,
+                format!("Use `<=` to write memory `{}`", d.component.to_str_lossy()),
+                uri,
+            ),
+            DiagnosticPayload::DriveUndeclaredPlatformPort(d) => declare_platform_port_action(
+                db,
+                parsing,
+                package,
+                region,
+                &d.port,
+                format!(
+                    "Declare port `{}` required by platform `{}`",
+                    d.port.to_str_lossy(),
+                    d.platform.to_str_lossy(),
+                ),
+                uri,
+            ),
+            DiagnosticPayload::PackageNotImported(d) => add_import_action(
+                db,
+                parsing,
+                package,
+                &d.package,
+                format!("Add `import {}`", d.package.to_str_lossy()),
+                uri,
+            ),
+            DiagnosticPayload::ImportNotAtTopError => move_import_to_top_action(
+                db,
+                parsing,
+                package,
+                region,
+                uri,
+            ),
+            _ => None,
+        };
+        if let Some(action) = action {
+            actions.push(action);
+        }
+    }
+    actions
+}
+
+/// Builds a quickfix `CodeAction` applying `edits` to `uri`.
+fn quickfix_action(title: String, uri: &Url, edits: Vec<TextEdit>) -> CodeAction {
     let mut changes = std::collections::HashMap::new();
-    changes.insert(uri.clone(), vec![edit]);
+    changes.insert(uri.clone(), edits);
 
-    let workspace_edit = WorkspaceEdit {
-        changes: Some(changes),
-        document_changes: None,
-        change_annotations: None,
-    };
-
-    Some(CodeAction {
-        title: format!("Add missing ports required by platform {platform_name}"),
+    CodeAction {
+        title,
         kind: Some(CodeActionKind::QUICKFIX),
         diagnostics: None,
-        edit: Some(workspace_edit),
+        edit: Some(WorkspaceEdit {
+            changes: Some(changes),
+            document_changes: None,
+            change_annotations: None,
+        }),
         command: None,
         is_preferred: Some(true),
         disabled: None,
         data: None,
-    })
+    }
 }
 
-fn find_enclosing_moddef<'p>(parsing: &'p Parsing, node_id: AstNodeId) -> Option<AstNode<'p>> {
-    let mut current_id = node_id;
-    loop {
-        let node = parsing.ast_node(current_id);
-        if matches!(node.payload(), AstNodePayload::ModDef(_)) {
-            return Some(node);
-        }
-        match node.parent().map(|p| p.id()) {
-            Some(id) => current_id = id,
-            None => return None,
-        }
+/// An LSP (0-based) `Position` for a 1-based `LineCol`.
+fn linecol_to_position(linecol: LineCol) -> Position {
+    Position {
+        line: (linecol.line().saturating_sub(1)) as u32,
+        character: (linecol.col().saturating_sub(1)) as u32,
     }
+}
+
+/// The quickfix for `UnusedImport` and `DuplicateImport`: delete the
+/// import statement's line.  The diagnostic's region is the whole
+/// `import pkg` statement, and imports are one-per-line, so deleting
+/// the region's lines deletes the statement cleanly.
+fn remove_import_action(
+    db: &Db,
+    package: PackageId,
+    span: Span,
+    title: String,
+    uri: &Url,
+) -> Option<CodeAction> {
+    let edit = delete_lines_edit(&db.get_source(package), span);
+    Some(quickfix_action(title, uri, vec![edit]))
+}
+
+/// The quickfix for `RedundantUnused`: delete the duplicate `unused`
+/// statement.  The diagnostic's region covers only the path inside
+/// `unused <path>`, so jump to the enclosing `ModDefStmtUnused` node
+/// for the full statement before deleting its line.
+fn remove_unused_action(
+    db: &Db,
+    parsing: &Parsing,
+    package: PackageId,
+    region: Region,
+    title: String,
+    uri: &Url,
+) -> Option<CodeAction> {
+    let stmt = find_enclosing(
+        parsing,
+        parsing.at(region.start())?,
+        |payload| matches!(payload, AstNodePayload::ModDefStmtUnused),
+    )?;
+    let edit = delete_lines_edit(&db.get_source(package), stmt.span());
+    Some(quickfix_action(title, uri, vec![edit]))
+}
+
+/// The quickfix for `RedundantOnClause`: remove the redundant
+/// `on <clock>` clause from a declaration.  The diagnostic's region is
+/// the clock expression only (the `OnClause` grammar rule contributes
+/// just the expression, so the span starts at the clock name), so the
+/// fix back-scans from there over the `on` keyword: deleting the
+/// whitespace before `on` through the end of the clock expression
+/// leaves the declaration single-spaced (`reg r : Bit on clock {`
+/// becomes `reg r : Bit {`).
+fn remove_on_clause_action(
+    db: &Db,
+    package: PackageId,
+    region: Region,
+    title: String,
+    uri: &Url,
+) -> Option<CodeAction> {
+    let source = db.get_source(package);
+    let text = source.text();
+    let expr_start: usize = source.to_offset(region.start()).into();
+    let expr_end: usize = source.to_offset(region.end()).into();
+
+    // Back-scan over the whitespace separating `on` from the clock
+    // expression, then require the `on` keyword itself.
+    let mut i = expr_start;
+    while i > 0 && matches!(text[i - 1], b' ' | b'\t') {
+        i -= 1;
+    }
+    if i < 2 || text[i - 2..i] != b"on" {
+        return None;
+    }
+    // Swallow the whitespace before `on` too, so the tokens around the
+    // removed clause end up with exactly one space between them.
+    let mut del_start = i - 2;
+    while del_start > 0 && matches!(text[del_start - 1], b' ' | b'\t') {
+        del_start -= 1;
+    }
+
+    let edit = TextEdit {
+        range: Range {
+            start: linecol_to_position(source.to_linecol(SourceOffset::new(del_start as u32))),
+            end: linecol_to_position(source.to_linecol(SourceOffset::new(expr_end as u32))),
+        },
+        new_text: String::new(),
+    };
+    Some(quickfix_action(title, uri, vec![edit]))
+}
+
+/// The quickfix for `WrongDriverType`: respell the driver operator as
+/// the expected type (`:=` for continuous, `<=` for latched).  The
+/// diagnostic's region is the driver statement's RHS expression (see
+/// `Driver::Expr`, which carries the RHS location), so walk up to the
+/// enclosing `Driver` statement for the operator site.
+fn fix_driver_type_action(
+    db: &Db,
+    parsing: &Parsing,
+    package: PackageId,
+    region: Region,
+    expected: DriverType,
+    title: String,
+    uri: &Url,
+) -> Option<CodeAction> {
+    let stmt = find_enclosing(
+        parsing,
+        parsing.at(region.start())?,
+        |payload| matches!(payload, AstNodePayload::Driver(_)),
+    )?;
+    let op = match expected {
+        DriverType::Continuous => ":=",
+        DriverType::Latched => "<=",
+    };
+    let edit = replace_driver_operator_edit(&db.get_source(package), &stmt, op)?;
+    Some(quickfix_action(title, uri, vec![edit]))
+}
+
+/// The quickfix for `MemoryAssignInsteadOfLassign`: respell a memory
+/// write's `:=` as `<=`.  Safe by construction — the warning exists
+/// precisely because both spellings write.  The diagnostic's region is
+/// the whole write statement; the operator sits between the index and
+/// the RHS expression.
+fn fix_memory_write_action(
+    db: &Db,
+    parsing: &Parsing,
+    package: PackageId,
+    region: Region,
+    title: String,
+    uri: &Url,
+) -> Option<CodeAction> {
+    let stmt = find_enclosing(
+        parsing,
+        parsing.at(region.start())?,
+        |payload| matches!(payload, AstNodePayload::IndexedDriver(_)),
+    )?;
+    let edit = replace_driver_operator_edit(&db.get_source(package), &stmt, "<=")?;
+    Some(quickfix_action(title, uri, vec![edit]))
+}
+
+/// The quickfix for `DriveUndeclaredPlatformPort`: declare the missing
+/// port in the module, dir keyword and type copied from the platform
+/// port.  The offending driver statement stays where it is and becomes
+/// the port's legal driver once the declaration exists, so — unlike
+/// `missing_platform_ports_action`'s stubs — the declaration carries no
+/// it-block: a `?` stub would double-drive the port, and an empty block
+/// would warn `EmptyDriverBlock`.
+fn declare_platform_port_action(
+    db: &Db,
+    parsing: &Parsing,
+    package: PackageId,
+    region: Region,
+    port_name: &BString,
+    title: String,
+    uri: &Url,
+) -> Option<CodeAction> {
+    let moddef_node = find_enclosing_moddef(parsing, parsing.at(region.start())?)?;
+    let item_name = parsing.string(moddef_node.name()?);
+    let moddef_symbol = db
+        .get_symboltable()
+        .resolve_item_in_package(item_name, package)?
+        .clone();
+
+    let mut builder = Builder::new(db);
+    let platform_id = resolve_platform_for(&mut builder, moddef_symbol.id).ok()??;
+    let platform_ports = db.get_ports_of(platform_id);
+    let port = platform_ports
+        .iter()
+        .find(|port| port.path.as_bstr() == port_name.as_bstr())?;
+
+    let dir_kw = match port.dir {
+        PortDir::Input => "incoming",
+        PortDir::Output => "outgoing",
+        PortDir::Bidir => "bus",
+    };
+    let typ_str = port
+        .typ
+        .as_ref()
+        .map(|typ| type_to_source(db, package, typ))
+        .unwrap_or_else(|| "Bit".to_string());
+    let name = port.path.to_str_lossy();
+    let declaration = format!("{dir_kw} {name} : {typ_str}");
+
+    let source = db.get_source(package);
+    let (insert_offset, indent_col, insert_before_stmt) =
+        moddef_statement_insertion_point(&source, &moddef_node)?;
+    let indent_str = " ".repeat(indent_col.saturating_sub(1));
+    let new_text = if insert_before_stmt {
+        format!("{declaration}\n{indent_str}")
+    } else {
+        format!("\n{indent_str}{declaration}")
+    };
+
+    let insert_lc = source.to_linecol(SourceOffset::new(insert_offset as u32));
+    let insert_position = linecol_to_position(insert_lc);
+    let edit = TextEdit {
+        range: Range { start: insert_position, end: insert_position },
+        new_text,
+    };
+
+    Some(quickfix_action(title, uri, vec![edit]))
+}
+
+/// An edit deleting the whole lines spanned by `span`: from the first
+/// line's start through the last line's trailing newline (or through
+/// the text end when the file has no trailing newline).  Virdant
+/// statements are one-per-line (formatting is compiler-enforced), so
+/// deleting a statement means deleting its lines.
+fn delete_lines_edit(source: &Source, span: Span) -> TextEdit {
+    let text = source.text();
+    let start_off: usize = source.to_offset(LineCol::new(span.start().line(), 1)).into();
+    let mut end_off: usize = source.to_offset(LineCol::new(span.end().line(), 1)).into();
+    while end_off < text.len() && text[end_off] != b'\n' {
+        end_off += 1;
+    }
+    if end_off < text.len() {
+        end_off += 1;
+    }
+    TextEdit {
+        range: Range {
+            start: linecol_to_position(source.to_linecol(SourceOffset::new(start_off as u32))),
+            end: linecol_to_position(source.to_linecol(SourceOffset::new(end_off as u32))),
+        },
+        new_text: String::new(),
+    }
+}
+
+/// The quickfix for `PackageNotImported`: insert `import pkg` at the
+/// top of the file, in the existing top-of-file import block (or
+/// starting one after the package docstring when no imports exist).
+fn add_import_action(
+    db: &Db,
+    parsing: &Parsing,
+    package: PackageId,
+    imported: &BString,
+    title: String,
+    uri: &Url,
+) -> Option<CodeAction> {
+    let source = db.get_source(package);
+    let edit = insert_import_edit(&source, parsing, imported.as_bstr());
+    Some(quickfix_action(title, uri, vec![edit]))
+}
+
+/// The quickfix for `ImportNotAtTopError`: move the misplaced `import`
+/// statement to the top of the file — delete it here, insert it after
+/// the package docstring and the existing top-of-file import block.
+/// The payload carries no data, so the imported name comes from the
+/// statement's AST node.
+fn move_import_to_top_action(
+    db: &Db,
+    parsing: &Parsing,
+    package: PackageId,
+    region: Region,
+    uri: &Url,
+) -> Option<CodeAction> {
+    let source = db.get_source(package);
+    let stmt = find_enclosing(
+        parsing,
+        parsing.at(region.start())?,
+        |payload| matches!(payload, AstNodePayload::Import(_)),
+    )?;
+    let imported = parsing.string(stmt.import_package()?);
+    let insert = insert_import_edit(&source, parsing, imported);
+    let delete = delete_lines_edit(&source, stmt.span());
+    Some(quickfix_action(
+        format!("Move `import {}` to the top of the file", imported.to_str_lossy()),
+        uri,
+        vec![insert, delete],
+    ))
+}
+
+/// An edit inserting `import <name>` at the top of the file: right
+/// after the last statement of the leading run of `import`
+/// statements, or — when the file has no imports yet — before its
+/// first statement, past the leading `//!` package docstring (which
+/// the `Package` node's span starts after, so the doc lines are
+/// skipped in the raw text).
+fn insert_import_edit(source: &Source, parsing: &Parsing, imported: &BStr) -> TextEdit {
+    let text = source.text();
+    let root = parsing.root();
+
+    let top_imports_end: Option<usize> = root
+        .children()
+        .into_iter()
+        .take_while(|child| matches!(child.payload(), AstNodePayload::Import(_)))
+        .last()
+        .map(|last| source.to_offset(last.span().end()).into());
+
+    let (offset, new_text) = match top_imports_end {
+        // Existing imports: extend the block on a new line of its own.
+        Some(end) => (
+            end,
+            format!("\nimport {}", imported.to_str_lossy()),
+        ),
+        // No imports yet: the insertion point is the start of the
+        // first non-docstring line.
+        None => {
+            let mut off = 0;
+            loop {
+                let Some(line_len) = text[off..].find(b"\n") else { break };
+                if !text[off..].starts_with(b"//!") {
+                    break;
+                }
+                off += line_len + 1;
+            }
+            (off, format!("import {}\n", imported.to_str_lossy()))
+        }
+    };
+
+    let position = linecol_to_position(source.to_linecol(SourceOffset::new(offset as u32)));
+    TextEdit {
+        range: Range { start: position, end: position },
+        new_text,
+    }
+}
+
+/// An edit replacing the driver operator of the driver statement
+/// `stmt_node` (a `Driver` or `IndexedDriver` node) with `new_op`.  The
+/// operator is the two bytes just before the RHS expression start,
+/// after back-scanning whitespace — every driver operator (`:=`,
+/// `<=`, `#=`, `#-`) is exactly two bytes.
+fn replace_driver_operator_edit(
+    source: &Source,
+    stmt_node: &AstNode<'_>,
+    new_op: &str,
+) -> Option<TextEdit> {
+    let rhs = stmt_node.driver()?;
+    let text = source.text();
+    let mut i: usize = source.to_offset(rhs.span().start()).into();
+    while i > 0 && matches!(text[i - 1], b' ' | b'\t' | b'\r' | b'\n') {
+        i -= 1;
+    }
+    let op = &text[i - 2..i];
+    if op != b":=" && op != b"<=" && op != b"#=" && op != b"#-" {
+        return None;
+    }
+    Some(TextEdit {
+        range: Range {
+            start: linecol_to_position(source.to_linecol(SourceOffset::new((i - 2) as u32))),
+            end: linecol_to_position(source.to_linecol(SourceOffset::new(i as u32))),
+        },
+        new_text: new_op.to_string(),
+    })
 }
 
 fn parse_word_literal_value(literal: &str) -> u64 {
@@ -1103,14 +1577,8 @@ fn package_id_to_uri(db: &Db, package: PackageId, sibling: &Url) -> Url {
 
 fn span_to_range(span: Span) -> Range {
     Range {
-        start: Position {
-            line: span.start().line().saturating_sub(1) as u32,
-            character: span.start().col().saturating_sub(1) as u32,
-        },
-        end: Position {
-            line: span.end().line().saturating_sub(1) as u32,
-            character: span.end().col().saturating_sub(1) as u32,
-        },
+        start: linecol_to_position(span.start()),
+        end: linecol_to_position(span.end()),
     }
 }
 

@@ -69,8 +69,20 @@ impl PackageAnalysis {
 
     fn add_and_validate_imports(&mut self, packages: &PackageTable, parsing: Arc<Parsing>) {
         let root = parsing.root();
+        // Imports belong at the top of the file: once any non-import
+        // statement has appeared, every later `import` is misplaced.
+        // The import still takes effect (it resolves and joins the
+        // duplicate check like any other) — the error only reports
+        // the placement.
+        let mut seen_non_import = false;
         for child_node in root.children() {
             if let AstNodePayload::Import(import) = child_node.payload() {
+                if seen_non_import {
+                    self.diagnostics.push(Diagnostic::new(
+                        Region::new(self.package(), child_node.span()),
+                        diagnostics::DiagnosticPayload::ImportNotAtTopError,
+                    ));
+                }
                 let name = parsing.string(import.package);
                 match packages.id(name) {
                     Some(package_id) => {
@@ -92,6 +104,8 @@ impl PackageAnalysis {
                         ));
                     }
                 }
+            } else {
+                seen_non_import = true;
             }
         }
     }
