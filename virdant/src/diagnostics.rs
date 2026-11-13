@@ -34,6 +34,9 @@ pub enum DiagnosticPayload {
     /// Package contains two or more `import` statements naming the same package.
     /// Lists regions to all such statements.
     DuplicateImport(DuplicateImport),
+    /// Package imports a package but never references it via a
+    /// qualified name (`pkg::Item`).
+    UnusedImport(UnusedImport),
     /// Two items share the same name in the same package.
     /// Lists regions to all such item declarations.
     DuplicateItem(DuplicateItem),
@@ -310,6 +313,14 @@ pub struct UnresolvedImportError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuplicateImport {
+    pub imported_package: BString,
+}
+
+/// An `import` statement names a package that the importing package
+/// never uses via a qualified name (`pkg::Item`). Reported at the
+/// `import` statement as a warning; the fix is deleting the import.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnusedImport {
     pub imported_package: BString,
 }
 
@@ -871,6 +882,10 @@ impl Diagnostic {
             }
             DiagnosticPayload::UnresolvedImportError(d) => format!("Unresolved import: {}", d.imported_package).into(),
             DiagnosticPayload::DuplicateImport(_) => "Duplicate import".into(),
+            DiagnosticPayload::UnusedImport(d) => format!(
+                "Import `{}` is unused",
+                d.imported_package,
+            ).into(),
             DiagnosticPayload::DuplicateItem(_) => "Duplicate Item".to_owned().into(),
             DiagnosticPayload::DuplicateSlot(_) => "Duplicate slot".into(),
             DiagnosticPayload::UnresolvedPackage(d) => format!("Unresolved package {}", d.package).into(),
@@ -1297,7 +1312,8 @@ impl Diagnostic {
             | DiagnosticPayload::UnusedOnOutgoingWire(_)
             | DiagnosticPayload::ReferencedWhileNotPub(_)
             | DiagnosticPayload::MemoryAssignInsteadOfLassign(_)
-            | DiagnosticPayload::UnusedNonPub(_) => DiagnosticLevel::Warning,
+            | DiagnosticPayload::UnusedNonPub(_)
+            | DiagnosticPayload::UnusedImport(_) => DiagnosticLevel::Warning,
             DiagnosticPayload::Todo(_) => DiagnosticLevel::Info,
             _ => DiagnosticLevel::Error,
         }
@@ -1352,4 +1368,5 @@ from_diagnostic! {
     PlatformPortTypeMismatch, DefaultOutsidePlatformPort, UnknownAnnotation, NotYetImplemented, TypeArgCount,
     TypeArgKind, UnknownKind,
     CtorRequiresArgs, ExtModGenerics, NotPub, ReferencedWhileNotPub, UnusedNonPub, TypeNotPub, TopNotPub, TopGenerics, SocketConnectMismatch,
+    UnusedImport,
 }

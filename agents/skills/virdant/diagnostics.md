@@ -219,6 +219,9 @@ The `memory` statement: shape, indexing, write-site, and image rules.  See
   second is flagged). `Duplicate slot` — an enumerant repeated in an enum.
 * `Unresolved import: X` — the imported package does not exist. Imports only
   accept identifiers, another reason file names cannot contain hyphens.
+* `` Import `X` is unused `` (unused_import) — a package is imported but never
+  referenced via a qualified name (`pkg::Item`); delete the import. Unresolved
+  imports are exempt (they get the error above instead).
 * `Unresolved type X` — a port/type annotation names a nonexistent type.
 * `Unresolved component X` — a driver statement names a nonexistent target.
 * `Unknown component X` — an expression references a nonexistent name,

@@ -1,0 +1,5 @@
+// A tiny package imported (and used) by `unused_imports.vir`.
+
+pub struct type UsedStruct {
+    x : Word[8]
+}

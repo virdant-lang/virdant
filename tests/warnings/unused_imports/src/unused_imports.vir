@@ -1,0 +1,22 @@
+// An unused `import` warns at the import statement.
+//
+// Imports only enable qualified references (`pkg::Item`), so a package
+// that never appears as a qualifier contributes nothing and should be
+// deleted. Unresolved imports are exempt: they already get their own
+// error (`Unresolved import`), and doubling up would just add noise.
+
+// CHECK: Import `ice40` is unused
+import ice40
+
+import helper
+
+// CHECK: Check OK
+pub mod Top {
+    incoming inp : Word[8]
+    outgoing out : Word[8] dependson inp
+
+    wire used : helper::UsedStruct
+    used := ${ x = inp }
+
+    out := used->x
+}

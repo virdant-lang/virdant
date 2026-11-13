@@ -10,6 +10,7 @@ use bstr::BStr;
 use bstr::BString;
 use bstr::ByteSlice;
 use indexmap::IndexMap;
+use indexmap::IndexSet;
 
 use crate::analysis::memory_image::{self, memory_image_annotation, MemoryImage, MemoryImageKind};
 use crate::analysis::dependency::resolve_it_path_to_owned;
@@ -88,6 +89,57 @@ fn check_annotations(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
     }
 }
 
+/// Warn about `import` statements that are never exercised: imports
+/// only enable qualified references (`pkg::Item`), so a package that
+/// never appears as a qualifier contributes nothing and should be
+/// deleted. Reported as a `Warning` at the `import` statement.
+///
+/// Unresolved imports are skipped: they already produce an
+/// `UnresolvedImportError`, and warning about them too would just add
+/// noise on top of the resolution failure. The builtin package is
+/// imported implicitly, so an explicit `import builtin` is treated like
+/// any other import: only used if some `builtin::Item` appears.
+fn check_unused_imports(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let packages = builder.get_packages();
+
+    for package in packages.ids() {
+        let parsing = builder.get_parsing(package);
+        let mut imported: IndexMap<PackageId, Region> = IndexMap::new();
+        let mut used: IndexSet<PackageId> = IndexSet::new();
+        let mut stack = vec![parsing.root()];
+        while let Some(node) = stack.pop() {
+            match node.payload() {
+                AstNodePayload::Import(import) => {
+                    if let Some(pkg) = packages.id(parsing.string(import.package)) {
+                        imported.insert(pkg, node.region());
+                    }
+                }
+                AstNodePayload::Ofness(ofness) => {
+                    if let Some(pkg) = ofness.package {
+                        if let Some(pkg) = packages.id(parsing.string(pkg)) {
+                            used.insert(pkg);
+                        }
+                    }
+                }
+                _ => {}
+            }
+            for child in node.children() {
+                stack.push(child);
+            }
+        }
+        for (pkg, region) in imported {
+            if !used.contains(&pkg) {
+                diagnostics.push(Diagnostic::new(
+                    region,
+                    diagnostics::UnusedImport {
+                        imported_package: packages.name(pkg).to_owned(),
+                    },
+                ));
+            }
+        }
+    }
+}
+
 fn check_annotations_in(
     node: &crate::syntax::ast::AstNode<'_>,
     parsing: &crate::syntax::parsing::Parsing,
@@ -116,6 +168,7 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
 
     check_package_names(builder, &mut diagnostics);
     check_annotations(builder, &mut diagnostics);
+    check_unused_imports(builder, &mut diagnostics);
 
     let symboltable = builder.get_symboltable();
     diagnostics.extend(symboltable.diagnostics.clone());

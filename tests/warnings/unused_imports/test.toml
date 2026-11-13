@@ -1,0 +1,5 @@
+kind = "check"
+expect = "ok"
+warnings_ok = true
+description = "An unused `import` warns at the import statement."
+filecheck = "src/unused_imports.vir"
