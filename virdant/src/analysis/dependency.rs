@@ -469,7 +469,7 @@ fn collect_cond_refs_in_expr(
         if matches!(node.payload(), AstNodePayload::ExprReference) {
             if let Some(path) = node.path() {
                 let mut name = parsing.string(path).to_owned();
-                resolve_it_path_simple(&mut name, it_context);
+                resolve_it_path(&mut name, it_context);
                 // A `let`-bound name beta-reduces to its binding's
                 // references.  Checked first: the binding is the
                 // innermost declaration of the name.
@@ -520,7 +520,7 @@ fn collect_references_in_expr(
         if matches!(node.payload(), AstNodePayload::ExprReference) {
             if let Some(path) = node.path() {
                 let mut name = parsing.string(path).to_owned();
-                resolve_it_path_simple(&mut name, it_context);
+                resolve_it_path(&mut name, it_context);
                 // A `let`-bound name beta-reduces to its binding's
                 // references.  Checked first: the binding is the
                 // innermost declaration of the name (it also shadows
@@ -597,21 +597,40 @@ pub(crate) fn resolve_it_path(
     }
 }
 
-/// Simple `it` resolution without parent-walking (used inside expressions
-/// where the it-context is already known).
-fn resolve_it_path_simple(path: &mut BString, it_context: Option<&BStr>) {
-    if (path.starts_with(b"it.") || path == b"it") && it_context.is_some() {
-        let ctx = it_context.unwrap();
-        if path == b"it" {
-            *path = ctx.to_owned();
-        } else {
-            let suffix: BString = path[3..].to_owned().into();
-            path.clear();
-            path.extend_from_slice(ctx);
-            path.push(b'.');
-            path.extend_from_slice(&suffix);
+/// Resolve `it` references in a borrowed path, returning an owned copy.
+pub(crate) fn resolve_it_path_to_owned(
+    path: &BStr,
+    it_context: Option<&BStr>,
+) -> BString {
+    let mut resolved = BString::from(path);
+    resolve_it_path(&mut resolved, it_context);
+    resolved
+}
+
+/// Find the nearest enclosing it-context (Submodule / Component /
+/// Socket) by walking up the AST from `node`.  This is the context
+/// against which bare `it` / `it.*` paths are resolved when no explicit
+/// it-context has been threaded down from the caller.
+pub(crate) fn find_it_context(node: &AstNode<'_>) -> Option<BString> {
+    let parsing = node.parsing();
+    let mut current_id = node.id();
+    while let Some(parent_id) = parsing.ast_node(current_id).parent {
+        let parent = parsing.ast_node(parent_id);
+        match parent.payload() {
+            AstNodePayload::Submodule(module) => {
+                return Some(parsing.string(module.name).to_owned());
+            }
+            AstNodePayload::Component(component) => {
+                return Some(parsing.string(component.name).to_owned());
+            }
+            AstNodePayload::Socket(socket) => {
+                return Some(parsing.string(socket.name).to_owned());
+            }
+            _ => {}
         }
+        current_id = parent_id;
     }
+    None
 }
 
 /// Resolve a Path node to a Component, handling `it` resolution.

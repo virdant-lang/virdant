@@ -12,6 +12,7 @@ use bstr::{BStr, BString, ByteSlice};
 use indexmap::IndexSet;
 use indexmap::IndexMap;
 
+use crate::analysis::dependency::{find_it_context, resolve_it_path};
 use crate::analysis::symbols::{Symbol, SymbolId};
 use crate::common::WordValue;
 use crate::common::{BinOp, ComponentKind, Flow, UnOp as UnOp, Width};
@@ -429,31 +430,11 @@ fn collect_unused(
             let parsing = node.parsing();
             let path_str = parsing.string(path);
             let mut resolved_path = path_str.to_owned();
-
-            // Always walk up to find the nearest enclosing it-context
-            // (Submodule / Component / Socket).
-            let mut ctx_name: Option<BString> = None;
-            let mut current_id = node.id();
-            while let Some(parent_id) = parsing.ast_node(current_id).parent {
-                let parent = parsing.ast_node(parent_id);
-                let mut resolved_name = None;
-                if let AstNodePayload::Submodule(module) = parent.payload() {
-                    resolved_name = Some(parsing.string(module.name));
-                } else if let AstNodePayload::Component(component) = parent.payload() {
-                    resolved_name = Some(parsing.string(component.name));
-                } else if let AstNodePayload::Socket(socket) = parent.payload() {
-                    resolved_name = Some(parsing.string(socket.name));
-                }
-                if let Some(name) = resolved_name {
-                    ctx_name = Some(name.to_owned());
-                    break;
-                }
-                current_id = parent_id;
-            }
+            let it_context = find_it_context(&node);
 
             if resolved_path.starts_with(b"it.") || resolved_path == b"it" {
                 // `it` outside an it block is an error.
-                let Some(ctx) = &ctx_name else {
+                let Some(ctx) = &it_context else {
                     diagnostics.push(Diagnostic::new(
                         path_node.region(),
                         diagnostics::DiagnosticPayload::ItNotInItBlock,
@@ -461,16 +442,8 @@ fn collect_unused(
                     return;
                 };
                 // Rewrite `it` / `it.foo` to the enclosing context name.
-                if resolved_path.starts_with(b"it.") {
-                    let suffix = resolved_path[3..].to_owned();
-                    resolved_path.clear();
-                    resolved_path.extend_from_slice(ctx);
-                    resolved_path.push(b'.');
-                    resolved_path.extend_from_slice(&suffix);
-                } else {
-                    resolved_path = ctx.to_owned();
-                }
-            } else if let Some(ctx) = &ctx_name {
+                resolve_it_path(&mut resolved_path, Some(ctx.as_bstr()));
+            } else if let Some(ctx) = &it_context {
                 // Inside an it-block: flag paths that use the component name
                 // directly instead of 'it'.
                 let mut ctx_dot = ctx.to_owned();
@@ -521,37 +494,12 @@ fn collect_bidirectional_drivers(
             let path_node = node.child(child_idx);
             if let Some(path) = path_node.path() {
                 let path_str = parsing.string(path);
-                let mut resolved_path = path_str.to_owned();
                 let original_path = path_str.to_owned();
-
-                if resolved_path.starts_with(b"it.") || resolved_path == b"it" {
-                    let mut current_id = node.id();
-                    while let Some(parent_id) = parsing.ast_node(current_id).parent {
-                        let parent = parsing.ast_node(parent_id);
-                        let mut resolved_name = None;
-                        if let AstNodePayload::Submodule(module) = parent.payload() {
-                            resolved_name = Some(parsing.string(module.name));
-                        } else if let AstNodePayload::Component(component) = parent.payload() {
-                            resolved_name = Some(parsing.string(component.name));
-                        } else if let AstNodePayload::Socket(socket) = parent.payload() {
-                            resolved_name = Some(parsing.string(socket.name));
-                        }
-
-                        if let Some(name) = resolved_name {
-                            if resolved_path.starts_with(b"it.") {
-                                let suffix = resolved_path[3..].to_owned();
-                                resolved_path.clear();
-                                resolved_path.extend_from_slice(name);
-                                resolved_path.push(b'.');
-                                resolved_path.extend_from_slice(&suffix);
-                            } else {
-                                resolved_path = name.to_owned();
-                            }
-                            break;
-                        }
-                        current_id = parent_id;
-                    }
-                }
+                let mut resolved_path = path_str.to_owned();
+                resolve_it_path(
+                    &mut resolved_path,
+                    find_it_context(&node).as_deref().map(BStr::new),
+                );
 
                 if let Some(comp) = component_analysis.resolve(resolved_path.as_slice().into()) {
                     if comp.can_source() {

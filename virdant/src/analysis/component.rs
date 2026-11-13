@@ -10,6 +10,7 @@ use bstr::ByteSlice;
 use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::Location;
+use crate::analysis::dependency::{find_it_context, resolve_it_path};
 use crate::analysis::symbols::{Symbol, SymbolId, SymbolKind};
 use crate::common::source::Region;
 use crate::db::Builder;
@@ -1422,54 +1423,10 @@ fn collect_references(
                 if let Some(path_interned) = path_node.path() {
                     let mut resolved =
                         parsing.string(path_interned).to_owned();
-                    if resolved.starts_with(b"it.")
-                        || resolved == b"it"
-                    {
-                        // Walk up to find the enclosing it-context.
-                        let mut ctx_name: Option<BString> = None;
-                        let mut current_id = stmt.id();
-                        while let Some(pid) =
-                            parsing.ast_node(current_id).parent
-                        {
-                            let parent = parsing.ast_node(pid);
-                            if let AstNodePayload::Submodule(m) =
-                                parent.payload()
-                            {
-                                ctx_name = Some(
-                                    parsing.string(m.name).to_owned(),
-                                );
-                                break;
-                            } else if let AstNodePayload::Component(
-                                c,
-                            ) = parent.payload()
-                            {
-                                ctx_name = Some(
-                                    parsing.string(c.name).to_owned(),
-                                );
-                                break;
-                            } else if let AstNodePayload::Socket(
-                                s,
-                            ) = parent.payload()
-                            {
-                                ctx_name = Some(
-                                    parsing.string(s.name).to_owned(),
-                                );
-                                break;
-                            }
-                            current_id = pid;
-                        }
-                        if let Some(ctx) = ctx_name {
-                            if resolved.starts_with(b"it.") {
-                                let suffix: BString =
-                                    resolved[3..].to_owned().into();
-                                resolved = ctx;
-                                resolved.push(b'.');
-                                resolved.extend_from_slice(&suffix);
-                            } else {
-                                resolved = ctx;
-                            }
-                        }
-                    }
+                    resolve_it_path(
+                        &mut resolved,
+                        find_it_context(&stmt).as_deref().map(BStr::new),
+                    );
                     if let Some(component) =
                         component_analysis.resolve(resolved.as_bstr())
                     {

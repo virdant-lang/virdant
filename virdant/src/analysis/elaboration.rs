@@ -11,7 +11,7 @@ use indexmap::{IndexMap, IndexSet};
 
 use crate::analysis::Location;
 use crate::analysis::component::{ComponentAnalysis, ComponentId};
-use crate::analysis::dependency::EdgeKind;
+use crate::analysis::dependency::{EdgeKind, resolve_it_path_to_owned};
 use crate::analysis::drivers::{Driver, DriverAnalysis};
 use crate::analysis::memory_image::{memory_image_annotation, MemoryImage};
 use crate::analysis::symbols::SymbolId;
@@ -806,8 +806,14 @@ fn collect_connects(
                 let (Some(lhs_path), Some(rhs_path)) = (lhs_node.path(), rhs_node.path()) else {
                     continue;
                 };
-                let lhs = rewrite_it_path(parsing.string(lhs_path), it_context);
-                let rhs = rewrite_it_path(parsing.string(rhs_path), it_context);
+                let lhs = resolve_it_path_to_owned(
+                    parsing.string(lhs_path),
+                    it_context.map(BStr::new),
+                );
+                let rhs = resolve_it_path_to_owned(
+                    parsing.string(rhs_path),
+                    it_context.map(BStr::new),
+                );
 
                 let lhs_prefix = format!("{}.", lhs.to_str_lossy());
                 let rhs_prefix = format!("{}.", rhs.to_str_lossy());
@@ -914,21 +920,6 @@ fn recurse_it_block(
 /// Rewrite `it` / `it.<rest>` against an it-block context (the instance
 /// name, dotted for nesting), matching the rewriting performed by
 /// driver analysis.
-fn rewrite_it_path(path: &BStr, it_context: Option<&[u8]>) -> BString {
-    if let Some(ctx) = it_context {
-        if path.starts_with(b"it.") {
-            let mut out = BString::from(ctx);
-            out.push(b'.');
-            out.extend_from_slice(&path[3..]);
-            return out;
-        }
-        if path == b"it" {
-            return BString::from(ctx);
-        }
-    }
-    path.to_owned()
-}
-
 /// Returns the `SignalId` that `component`'s driver references, if the
 /// driver is a bare reference (`x := y`, `x := it`, `x := it.y`) to another
 /// elaborated component.

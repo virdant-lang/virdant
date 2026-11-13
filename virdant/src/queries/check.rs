@@ -12,6 +12,7 @@ use bstr::ByteSlice;
 use indexmap::IndexMap;
 
 use crate::analysis::memory_image::{self, memory_image_annotation, MemoryImage, MemoryImageKind};
+use crate::analysis::dependency::resolve_it_path_to_owned;
 use crate::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
 use crate::analysis::Location;
 use crate::common::graph::{Graph, VertIndex};
@@ -942,8 +943,12 @@ fn check_connection_nodes(
             let parsing = node.parsing();
             let lhs = node.child(0);
             let rhs = node.child(1);
-            let lhs_path = rewrite_connection_side(parsing, lhs, it_context);
-            let rhs_path = rewrite_connection_side(parsing, rhs, it_context);
+            let lhs_path = lhs
+                .path()
+                .map(|p| resolve_it_path_to_owned(parsing.string(p), it_context));
+            let rhs_path = rhs
+                .path()
+                .map(|p| resolve_it_path_to_owned(parsing.string(p), it_context));
             if let (Some(lhs_path), Some(rhs_path)) = (lhs_path, rhs_path) {
                 let component_analysis = builder.get_component_analysis(item);
                 let lhs_component = component_analysis.resolve(lhs_path.as_bstr());
@@ -1023,31 +1028,6 @@ fn check_connection_nodes(
 
     for child in node.children() {
         check_connection_nodes(builder, item, &child, it_context, diagnostics);
-    }
-}
-
-/// Rewrite a `:=:` side path, resolving `it` / `it.*` against the
-/// enclosing it-context (mirroring the driver-analysis rewrite).
-fn rewrite_connection_side(
-    parsing: &crate::syntax::parsing::Parsing,
-    side_node: crate::syntax::ast::AstNode<'_>,
-    it_context: Option<&bstr::BStr>,
-) -> Option<bstr::BString> {
-    let path_interned = side_node.path()?;
-    let path = parsing.string(path_interned).to_owned();
-    let Some(ctx) = it_context else {
-        return Some(path);
-    };
-    if path == b"it" {
-        Some(ctx.to_owned())
-    } else if path.starts_with(b"it.") {
-        let suffix: bstr::BString = path[3..].to_owned().into();
-        let mut joined = ctx.to_owned();
-        joined.push(b'.');
-        joined.extend_from_slice(&suffix);
-        Some(joined)
-    } else {
-        Some(path)
     }
 }
 
