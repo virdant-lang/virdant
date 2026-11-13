@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide hello example: a minimal Top module for the Virt harness."
+expect = "ok"

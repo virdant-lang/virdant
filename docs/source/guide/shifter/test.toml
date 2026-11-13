@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide shifter example: a barrel shifter shifting left or right."
+expect = "ok"

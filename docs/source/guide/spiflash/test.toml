@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide spiflash example: an SPI flash controller wired to a UART Top."
+expect = "ok"
