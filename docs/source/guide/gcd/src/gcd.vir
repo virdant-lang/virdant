@@ -4,25 +4,34 @@ union type GcdState {
     Done(result : Word[8])
 }
 
+struct type GcdRequest {
+    x : Word[8]
+    y : Word[8]
+}
+
 pub mod Gcd {
     incoming clock : Clock
-    incoming reset : Bit
-    incoming x : Word[8]
-    incoming y : Word[8]
-    incoming fire : Bit
-    outgoing result : Valid[Word[8]]
 
-    reg state : GcdState
+    server socket inp of Pipe[GcdRequest]
+    client socket out of Pipe[Word[8]]
 
-    if {
-        when reset {
-            state <= @Idle()
-        }
-        else match state {
-            with @Idle() {
-                state <= mux(fire, @Running(x, y), @Idle())
+    reg state : GcdState {
+        initial it <= @Idle()
+    }
+
+    match state {
+        with @Idle() {
+            match inp.data {
+                with @Valid(request) {
+                    state <= @Running(request->x, request->y)
+                }
+                with @Invalid() { }
             }
-            with @Running(x, y) if {
+            inp.ready := true
+            out.data := @Invalid()
+        }
+        with @Running(x, y) {
+            if {
                 when y == 0 {
                     state <= @Done(x)
                 }
@@ -36,10 +45,17 @@ pub mod Gcd {
                     state <= @Running(x - y, y)
                 }
             }
-            with @Done(r) {
-                state <= @Idle()
-                result := @Valid(r)
+            inp.ready := false
+            out.data := @Invalid()
+        }
+        with @Done(result) {
+            if {
+                when out.ready {
+                    state <= @Idle()
+                }
             }
+            inp.ready := false
+            out.data := @Valid(result)
         }
     }
 }

@@ -1,29 +1,18 @@
 vcd trace.vcd
 
-# Hold the design in reset so it starts in a known state.
-poke reset true
-tick
-poke reset false
+// // Compute gcd(48, 18) = 6.
+// // Pulse the request pipe for one cycle: the operands are loaded
+// // and the state machine starts subtracting.
+// poke inp.data @Valid(${x = 48w8, y = 18w8})
+// tick
+// poke inp.data @Invalid()
+// tick 7
 
-# Compute gcd(48, 18) = 6.
-# Pulse `fire` for one cycle: the operands on `x` and `y` are loaded
-# and the state machine starts subtracting.
-poke x 48
-poke y 18
-poke fire true
+// Compute gcd(21, 14) = 7
+// a new request reloads the operands straight from `Done`.
+poke inp.data @Valid(${x = 21w8, y = 14w8})
 tick
-poke fire false
-tick 7
-
-# `valid` is high now: `result` holds 6 until the next `fire`.
-
-# Compute gcd(21, 14) = 7 without touching `reset`:
-# a new `fire` reloads the operands straight from `Done`.
-poke x 21
-poke y 14
-poke fire true
-tick
-poke fire false
+poke inp.data @Invalid()
 tick 5
 
 exit
