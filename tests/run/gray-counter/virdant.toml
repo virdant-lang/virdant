@@ -1,5 +1,0 @@
-[project]
-name = "gray-counter"
-
-[prog]
-top = "gray_counter::GrayCounterTest"

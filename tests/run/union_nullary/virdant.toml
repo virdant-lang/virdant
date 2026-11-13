@@ -1,0 +1,5 @@
+[project]
+name = "union_nullary"
+
+[prog]
+top = "union_nullary::UnionNullaryTest"

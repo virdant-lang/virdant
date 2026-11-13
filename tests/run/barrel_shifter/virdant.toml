@@ -1,0 +1,5 @@
+[project]
+name = "barrel_shifter"
+
+[prog]
+top = "barrel_shifter::BarrelShifterTest"

@@ -1,5 +1,0 @@
-[project]
-name = "mem-sliced-regs"
-
-[prog]
-top = "mem_sliced_regs::MemSlicedRegsTest"

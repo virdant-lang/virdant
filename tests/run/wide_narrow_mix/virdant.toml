@@ -1,0 +1,5 @@
+[project]
+name = "wide_narrow_mix"
+
+[prog]
+top = "wide_narrow_mix::WideNarrowMixTest"

@@ -1,5 +1,0 @@
-[project]
-name = "multi-file-src"
-
-[prog]
-top = "multi_file_src::Top"

@@ -1,0 +1,5 @@
+[project]
+name = "sine_lut_mini"
+
+[prog]
+top = "sine_lut_mini::SineLutTest"

@@ -1,5 +1,0 @@
-[project]
-name = "enum-one-variant"
-
-[prog]
-top = "enum_one_variant::EnumOneVariantTest"

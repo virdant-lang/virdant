@@ -1,5 +1,0 @@
-[project]
-name = "literal-underscores"
-
-[prog]
-top = "literal_underscores::LiteralUnderscores"

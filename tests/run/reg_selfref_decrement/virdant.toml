@@ -1,0 +1,5 @@
+[project]
+name = "reg_selfref_decrement"
+
+[prog]
+top = "reg_selfref_decrement::RegSelfrefDecrementTest"

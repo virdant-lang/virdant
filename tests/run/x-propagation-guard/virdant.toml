@@ -1,5 +1,0 @@
-[project]
-name = "x-propagation-guard"
-
-[prog]
-top = "x_propagation_guard::XPropGuardTest"

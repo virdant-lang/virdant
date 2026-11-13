@@ -1,0 +1,5 @@
+[project]
+name = "reg_initialized_then_driven"
+
+[prog]
+top = "reg_initialized_then_driven::RegInitThenDriveTest"

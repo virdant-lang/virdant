@@ -1,5 +1,0 @@
-[project]
-name = "onehot-encoder"
-
-[prog]
-top = "onehot_encoder::OnehotEncoderTest"

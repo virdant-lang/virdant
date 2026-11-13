@@ -1,5 +1,0 @@
-[project]
-name = "when-nested-expr"
-
-[prog]
-top = "when_nested_expr::WhenNestedTest"

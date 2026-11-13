@@ -1,5 +1,0 @@
-[project]
-name = "multi-file-import"
-
-[prog]
-top = "multi_file_import::MultiFileImportTest"

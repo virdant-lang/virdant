@@ -1,0 +1,5 @@
+[project]
+name = "match_subpattern_mixed"
+
+[prog]
+top = "match_subpattern_mixed::MatchSubpatternMixedTest"

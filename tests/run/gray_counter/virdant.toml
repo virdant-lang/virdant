@@ -1,0 +1,5 @@
+[project]
+name = "gray_counter"
+
+[prog]
+top = "gray_counter::GrayCounterTest"

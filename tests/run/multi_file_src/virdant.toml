@@ -1,0 +1,5 @@
+[project]
+name = "multi_file_src"
+
+[prog]
+top = "multi_file_src::Top"

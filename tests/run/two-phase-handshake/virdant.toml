@@ -1,5 +1,0 @@
-[project]
-name = "two-phase-handshake"
-
-[prog]
-top = "two_phase_handshake::TwoPhaseTest"

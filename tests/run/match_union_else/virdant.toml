@@ -1,0 +1,5 @@
+[project]
+name = "match_union_else"
+
+[prog]
+top = "match_union_else::MatchUnionElseTest"

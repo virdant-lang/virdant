@@ -1,5 +1,0 @@
-[project]
-name = "reg-of-struct"
-
-[prog]
-top = "reg_of_struct::Top"

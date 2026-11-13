@@ -1,5 +1,0 @@
-[project]
-name = "mux-words"
-
-[prog]
-top = "mux_words::MuxWordsTest"

@@ -1,5 +1,0 @@
-[project]
-name = "rotate-left"
-
-[prog]
-top = "rotate_left::RotateLeftTest"

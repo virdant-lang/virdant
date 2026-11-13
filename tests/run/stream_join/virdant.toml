@@ -1,0 +1,5 @@
+[project]
+name = "stream_join"
+
+[prog]
+top = "stream_join::StreamJoinTest"

@@ -1,0 +1,5 @@
+[project]
+name = "match_subpattern_word"
+
+[prog]
+top = "match_subpattern_word::MatchSubpatternWord"

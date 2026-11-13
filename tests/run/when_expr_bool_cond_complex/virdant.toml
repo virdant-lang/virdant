@@ -1,0 +1,5 @@
+[project]
+name = "when_expr_bool_cond_complex"
+
+[prog]
+top = "when_expr_bool_cond_complex::WhenBoolCondTest"

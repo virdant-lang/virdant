@@ -1,0 +1,5 @@
+[project]
+name = "stmt_when_else_only"
+
+[prog]
+top = "stmt_when_else_only::StmtWhenElseOnlyTest"

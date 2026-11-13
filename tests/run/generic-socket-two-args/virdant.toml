@@ -1,5 +1,0 @@
-[project]
-name = "generic-socket-two-args"
-
-[prog]
-top = "generic_socket_two_args::Top"

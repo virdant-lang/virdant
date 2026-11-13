@@ -1,5 +1,0 @@
-[project]
-name = "immediate-tx"
-
-[prog]
-top = "immediate_tx::ImmediateTx"

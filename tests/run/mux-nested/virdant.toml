@@ -1,5 +1,0 @@
-[project]
-name = "mux-nested"
-
-[prog]
-top = "mux_nested::MuxNestedTest"

@@ -1,5 +1,0 @@
-[project]
-name = "many-regs"
-
-[prog]
-top = "many_regs::ManyRegsTest"

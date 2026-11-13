@@ -1,0 +1,5 @@
+[project]
+name = "shift_arithmetic_right"
+
+[prog]
+top = "shift_arithmetic_right::ShiftArithRightTest"

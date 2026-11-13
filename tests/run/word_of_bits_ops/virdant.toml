@@ -1,0 +1,5 @@
+[project]
+name = "word_of_bits_ops"
+
+[prog]
+top = "word_of_bits_ops::WordOfBitsOpsTest"

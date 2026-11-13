@@ -1,5 +1,0 @@
-[project]
-name = "valid-nested"
-
-[prog]
-top = "valid_nested::ValidNestedTest"

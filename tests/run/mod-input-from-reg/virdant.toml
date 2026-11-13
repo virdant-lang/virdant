@@ -1,5 +1,0 @@
-[project]
-name = "mod-input-from-reg"
-
-[prog]
-top = "mod_input_from_reg::ModInputFromRegTest"

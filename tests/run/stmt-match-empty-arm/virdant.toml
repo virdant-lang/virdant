@@ -1,5 +1,0 @@
-[project]
-name = "stmt-match-empty-arm"
-
-[prog]
-top = "stmt_match_empty_arm::StmtMatchEmptyArmTest"

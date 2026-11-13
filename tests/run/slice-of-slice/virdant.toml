@@ -1,5 +1,0 @@
-[project]
-name = "slice-of-slice"
-
-[prog]
-top = "slice_of_slice::SliceOfSliceTest"

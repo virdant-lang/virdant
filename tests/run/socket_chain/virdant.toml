@@ -1,0 +1,5 @@
+[project]
+name = "socket_chain"
+
+[prog]
+top = "socket_chain::SocketChainTest"

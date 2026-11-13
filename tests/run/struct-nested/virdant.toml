@@ -1,9 +1,0 @@
-[project]
-name = "struct-nested"
-
-[prog]
-top = "struct_nested::StructNestedTest"
-kind = "run"
-description = "Struct containing a struct; chained projection `outer->inner->field`; assert the value"
-cycle_limit = 6
-trace = false

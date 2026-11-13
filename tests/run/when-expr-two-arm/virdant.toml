@@ -1,5 +1,0 @@
-[project]
-name = "when-expr-two-arm"
-
-[prog]
-top = "when_expr_two_arm::WhenTwoArmTest"

@@ -1,5 +1,0 @@
-[project]
-name = "type-ascription"
-
-[prog]
-top = "type_ascription::TypeAscriptionTest"

@@ -1,0 +1,5 @@
+[project]
+name = "valid_to_word"
+
+[prog]
+top = "valid_to_word::ValidToWordTest"

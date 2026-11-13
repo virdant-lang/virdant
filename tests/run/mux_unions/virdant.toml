@@ -1,0 +1,5 @@
+[project]
+name = "mux_unions"
+
+[prog]
+top = "mux_unions::MuxUnionsTest"

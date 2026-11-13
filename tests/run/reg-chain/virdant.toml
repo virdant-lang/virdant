@@ -1,5 +1,0 @@
-[project]
-name = "reg-chain"
-
-[prog]
-top = "reg_chain::RegChainTest"

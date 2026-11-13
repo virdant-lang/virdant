@@ -1,5 +1,0 @@
-[project]
-name = "generic-union-payload-match"
-
-[prog]
-top = "generic_union_payload_match::GenericUnionMatchTest"

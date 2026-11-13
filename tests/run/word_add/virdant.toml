@@ -1,0 +1,5 @@
+[project]
+name = "word_add"
+
+[prog]
+top = "word_add::WordAddTest"

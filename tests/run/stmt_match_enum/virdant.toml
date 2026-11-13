@@ -1,0 +1,5 @@
+[project]
+name = "stmt_match_enum"
+
+[prog]
+top = "stmt_match_enum::StmtMatchEnumTest"

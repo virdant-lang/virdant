@@ -1,0 +1,5 @@
+[project]
+name = "shift_in_reg"
+
+[prog]
+top = "shift_in_reg::ShiftInRegTest"

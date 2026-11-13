@@ -1,0 +1,5 @@
+[project]
+name = "mod_fanout_forwarding"
+
+[prog]
+top = "mod_fanout_forwarding::ModFanoutTest"

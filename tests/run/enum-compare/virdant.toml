@@ -1,5 +1,0 @@
-[project]
-name = "enum-compare"
-
-[prog]
-top = "enum_compare::EnumCompareTest"

@@ -1,0 +1,5 @@
+[project]
+name = "ring_counter"
+
+[prog]
+top = "ring_counter::RingCounterTest"

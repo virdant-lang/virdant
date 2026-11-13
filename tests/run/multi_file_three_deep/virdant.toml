@@ -1,0 +1,5 @@
+[project]
+name = "multi_file_three_deep"
+
+[prog]
+top = "a::MultiFileThreeDeepTest"

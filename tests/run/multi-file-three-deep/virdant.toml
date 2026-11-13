@@ -1,5 +1,0 @@
-[project]
-name = "multi-file-three-deep"
-
-[prog]
-top = "a::MultiFileThreeDeepTest"

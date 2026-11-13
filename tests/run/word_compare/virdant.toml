@@ -1,0 +1,5 @@
+[project]
+name = "word_compare"
+
+[prog]
+top = "word_compare::WordCompareTest"

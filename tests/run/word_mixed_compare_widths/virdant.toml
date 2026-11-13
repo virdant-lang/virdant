@@ -1,0 +1,5 @@
+[project]
+name = "word_mixed_compare_widths"
+
+[prog]
+top = "word_mixed_compare_widths::WordMixedCompareTest"

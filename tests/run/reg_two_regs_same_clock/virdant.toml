@@ -1,0 +1,5 @@
+[project]
+name = "reg_two_regs_same_clock"
+
+[prog]
+top = "reg_two_regs_same_clock::RegTwoRegsTest"

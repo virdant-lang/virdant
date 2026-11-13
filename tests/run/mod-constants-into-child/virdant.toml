@@ -1,5 +1,0 @@
-[project]
-name = "mod-constants-into-child"
-
-[prog]
-top = "mod_constants_into_child::ModConstantsTest"

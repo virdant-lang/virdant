@@ -1,5 +1,0 @@
-[project]
-name = "word-concat-mixed"
-
-[prog]
-top = "word_concat_mixed::WordConcatMixedTest"

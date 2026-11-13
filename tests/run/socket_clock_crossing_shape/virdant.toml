@@ -1,0 +1,5 @@
+[project]
+name = "socket_clock_crossing_shape"
+
+[prog]
+top = "socket_clock_crossing_shape::SocketClockTest"

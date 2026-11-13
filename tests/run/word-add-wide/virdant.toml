@@ -1,5 +1,0 @@
-[project]
-name = "word-add-wide"
-
-[prog]
-top = "word_add_wide::WordAddWideTest"

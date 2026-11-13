@@ -1,5 +1,0 @@
-[project]
-name = "socket-multi-channel"
-
-[prog]
-top = "socket_multi_channel::SocketMultiChannelTest"

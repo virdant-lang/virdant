@@ -1,5 +1,0 @@
-[project]
-name = "reg-outgoing"
-
-[prog]
-top = "reg_outgoing::RegOutgoingTest"

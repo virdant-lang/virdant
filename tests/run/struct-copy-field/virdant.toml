@@ -1,5 +1,0 @@
-[project]
-name = "struct-copy-field"
-
-[prog]
-top = "struct_copy_field::StructCopyFieldTest"

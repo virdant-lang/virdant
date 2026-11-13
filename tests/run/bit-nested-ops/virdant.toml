@@ -1,5 +1,0 @@
-[project]
-name = "bit-nested-ops"
-
-[prog]
-top = "bit_nested_ops::BitNestedOpsTest"

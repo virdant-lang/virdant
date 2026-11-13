@@ -1,5 +1,0 @@
-[project]
-name = "reg-read-old-value"
-
-[prog]
-top = "reg_read_old_value::RegReadOldValueTest"

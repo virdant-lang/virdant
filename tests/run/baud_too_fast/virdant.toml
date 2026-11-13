@@ -1,0 +1,8 @@
+[project]
+name = "baud_too_fast"
+
+[prog]
+top = "baud_too_fast::BaudTooFast"
+
+[virt]
+baud = 600000

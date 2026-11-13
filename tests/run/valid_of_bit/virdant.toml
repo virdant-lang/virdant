@@ -1,0 +1,5 @@
+[project]
+name = "valid_of_bit"
+
+[prog]
+top = "valid_of_bit::ValidOfBitTest"

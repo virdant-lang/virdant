@@ -1,5 +1,0 @@
-[project]
-name = "enum-implicit-values"
-
-[prog]
-top = "enum_implicit_values::EnumImplicitValuesTest"

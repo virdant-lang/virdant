@@ -1,5 +1,0 @@
-[project]
-name = "counter-modulo"
-
-[prog]
-top = "counter_modulo::CounterModuloTest"

@@ -1,5 +1,0 @@
-[project]
-name = "stmt-when-arm-order"
-
-[prog]
-top = "stmt_when_arm_order::StmtWhenOrderTest"

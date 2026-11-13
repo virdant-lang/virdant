@@ -1,5 +1,0 @@
-[project]
-name = "valid-to-word"
-
-[prog]
-top = "valid_to_word::ValidToWordTest"

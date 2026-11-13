@@ -1,5 +1,0 @@
-[project]
-name = "slice-basic"
-
-[prog]
-top = "slice_basic::SliceBasicTest"

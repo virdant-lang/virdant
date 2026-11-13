@@ -1,0 +1,5 @@
+[project]
+name = "ascription_nested"
+
+[prog]
+top = "ascription_nested::AscriptionNested"

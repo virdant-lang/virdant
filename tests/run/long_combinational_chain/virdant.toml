@@ -1,0 +1,5 @@
+[project]
+name = "long_combinational_chain"
+
+[prog]
+top = "long_combinational_chain::LongChainTest"

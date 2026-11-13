@@ -1,0 +1,5 @@
+[project]
+name = "literal_underscores"
+
+[prog]
+top = "literal_underscores::LiteralUnderscores"

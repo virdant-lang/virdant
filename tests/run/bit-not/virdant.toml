@@ -1,5 +1,0 @@
-[project]
-name = "bit-not"
-
-[prog]
-top = "bit_not::BitNot"

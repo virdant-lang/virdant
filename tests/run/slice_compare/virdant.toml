@@ -1,0 +1,5 @@
+[project]
+name = "slice_compare"
+
+[prog]
+top = "slice_compare::SliceCompareTest"

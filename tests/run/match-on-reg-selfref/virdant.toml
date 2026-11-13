@@ -1,5 +1,0 @@
-[project]
-name = "match-on-reg-selfref"
-
-[prog]
-top = "match_on_reg_selfref::MatchOnRegSelfrefTest"

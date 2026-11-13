@@ -1,0 +1,5 @@
+[project]
+name = "valid_passthrough_module"
+
+[prog]
+top = "valid_passthrough_module::ValidPassthroughTest"

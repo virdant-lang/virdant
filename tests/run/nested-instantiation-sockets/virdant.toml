@@ -1,5 +1,0 @@
-[project]
-name = "nested-instantiation-sockets"
-
-[prog]
-top = "nested_instantiation_sockets::NestedSocketsTest"

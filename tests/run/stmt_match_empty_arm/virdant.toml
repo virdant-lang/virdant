@@ -1,0 +1,5 @@
+[project]
+name = "stmt_match_empty_arm"
+
+[prog]
+top = "stmt_match_empty_arm::StmtMatchEmptyArmTest"

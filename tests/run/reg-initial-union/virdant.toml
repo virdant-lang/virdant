@@ -1,5 +1,0 @@
-[project]
-name = "reg-initial-union"
-
-[prog]
-top = "reg_initial_union::RegInitialUnionTest"

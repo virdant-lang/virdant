@@ -1,5 +1,0 @@
-[project]
-name = "serial-crc"
-
-[prog]
-top = "serial_crc::SerialCrcTest"

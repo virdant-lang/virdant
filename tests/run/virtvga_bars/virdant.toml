@@ -1,0 +1,5 @@
+[project]
+name = "virtvga_bars"
+
+[prog]
+top = "virtvgabars::VgaBars"

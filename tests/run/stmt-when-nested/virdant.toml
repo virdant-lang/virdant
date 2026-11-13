@@ -1,5 +1,0 @@
-[project]
-name = "stmt-when-nested"
-
-[prog]
-top = "stmt_when_nested::StmtWhenNestedTest"

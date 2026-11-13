@@ -1,5 +1,0 @@
-[project]
-name = "abs-diff"
-
-[prog]
-top = "abs_diff::AbsDiffTest"

@@ -1,0 +1,5 @@
+[project]
+name = "reg_of_valid"
+
+[prog]
+top = "reg_of_valid::RegOfValidTest"

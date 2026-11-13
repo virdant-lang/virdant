@@ -1,5 +1,0 @@
-[project]
-name = "valid-of-struct"
-
-[prog]
-top = "valid_of_struct::ValidOfStructTest"

@@ -1,0 +1,5 @@
+[project]
+name = "handshake_skid_buffer"
+
+[prog]
+top = "handshake_skid_buffer::Top"

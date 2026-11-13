@@ -1,5 +1,0 @@
-[project]
-name = "let-heavy-use"
-
-[prog]
-top = "let_heavy_use::Top"

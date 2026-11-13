@@ -1,5 +1,0 @@
-[project]
-name = "two-drivers-disjoint-bits"
-
-[prog]
-top = "two_drivers_disjoint_bits::TwoDriversTest"

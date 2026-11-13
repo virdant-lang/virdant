@@ -1,5 +1,0 @@
-[project]
-name = "union-nested-construct"
-
-[prog]
-top = "union_nested_construct::UnionNestedTest"

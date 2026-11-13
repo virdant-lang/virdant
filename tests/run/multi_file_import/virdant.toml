@@ -1,0 +1,5 @@
+[project]
+name = "multi_file_import"
+
+[prog]
+top = "multi_file_import::MultiFileImportTest"

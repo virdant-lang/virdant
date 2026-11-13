@@ -1,5 +1,0 @@
-[project]
-name = "mod-output-split"
-
-[prog]
-top = "mod_output_split::ModOutputSplitTest"

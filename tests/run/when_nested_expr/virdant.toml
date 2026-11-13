@@ -1,0 +1,5 @@
+[project]
+name = "when_nested_expr"
+
+[prog]
+top = "when_nested_expr::WhenNestedTest"

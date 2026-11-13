@@ -1,8 +1,0 @@
-[project]
-name = "explicit-baud-config"
-
-[prog]
-top = "explicit_baud::ExplicitBaud"
-
-[virt]
-baud = 100000

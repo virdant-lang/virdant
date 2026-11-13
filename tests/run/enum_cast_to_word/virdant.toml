@@ -1,0 +1,5 @@
+[project]
+name = "enum_cast_to_word"
+
+[prog]
+top = "enum_cast_to_word::EnumCastToWordTest"

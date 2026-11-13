@@ -1,0 +1,5 @@
+[project]
+name = "any_builtin"
+
+[prog]
+top = "any_builtin::AnyBuiltinTest"

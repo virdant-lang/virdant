@@ -1,0 +1,5 @@
+[project]
+name = "slice_zero_width"
+
+[prog]
+top = "slice_zero_width::SliceZeroWidthTest"

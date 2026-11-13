@@ -1,5 +1,0 @@
-[project]
-name = "reg-explicit-clock"
-
-[prog]
-top = "reg_explicit_clock::RegExplicitClockTest"

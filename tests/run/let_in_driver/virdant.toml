@@ -1,0 +1,5 @@
+[project]
+name = "let_in_driver"
+
+[prog]
+top = "let_in_driver::Top"

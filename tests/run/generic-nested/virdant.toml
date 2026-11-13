@@ -1,5 +1,0 @@
-[project]
-name = "generic-nested"
-
-[prog]
-top = "generic_nested::GenericNested"

@@ -1,5 +1,0 @@
-[project]
-name = "wire-multi-driver-when"
-
-[prog]
-top = "wire_multi_driver_when::WireMultiDriverTest"

@@ -1,5 +1,0 @@
-[project]
-name = "mod-fanout-forwarding"
-
-[prog]
-top = "mod_fanout_forwarding::ModFanoutTest"

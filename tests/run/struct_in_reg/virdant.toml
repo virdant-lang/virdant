@@ -1,0 +1,5 @@
+[project]
+name = "struct_in_reg"
+
+[prog]
+top = "struct_in_reg::StructInRegTest"

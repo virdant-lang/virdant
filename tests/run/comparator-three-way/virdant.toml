@@ -1,5 +1,0 @@
-[project]
-name = "comparator-three-way"
-
-[prog]
-top = "comparator_three_way::ThreeWayComparatorTest"

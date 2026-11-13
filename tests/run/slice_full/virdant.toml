@@ -1,0 +1,5 @@
+[project]
+name = "slice_full"
+
+[prog]
+top = "slice_full::SliceFullTest"

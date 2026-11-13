@@ -1,5 +1,0 @@
-[project]
-name = "struct-of-valid"
-
-[prog]
-top = "struct_of_valid::StructOfValidTest"

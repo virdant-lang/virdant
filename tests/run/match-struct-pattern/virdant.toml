@@ -1,5 +1,0 @@
-[project]
-name = "match-struct-pattern"
-
-[prog]
-top = "match_struct_pattern::MatchStructPatternTest"

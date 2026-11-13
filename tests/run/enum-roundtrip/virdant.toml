@@ -1,5 +1,0 @@
-[project]
-name = "enum-roundtrip"
-
-[prog]
-top = "enum_roundtrip::EnumRoundtripTest"

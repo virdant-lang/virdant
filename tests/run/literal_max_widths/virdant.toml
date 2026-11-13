@@ -1,0 +1,9 @@
+[project]
+name = "literal_max_widths"
+
+[prog]
+top = "literal_max_widths::LiteralMaxWidths"
+kind = "run"
+description = "Word literals at boundary widths: Word[1], Word[2], Word[32], Word[64], e.g. 0xffffffffffffffffw64"
+cycle_limit = 3
+trace = false

@@ -1,6 +1,0 @@
-[project]
-name = "socket-unused-member"
-
-[prog]
-top = "socket_unused_member::SocketUnusedMemberTest"
-kind = "run"

@@ -1,5 +1,0 @@
-[project]
-name = "reg-initial-nonzero-wide"
-
-[prog]
-top = "reg_initial_nonzero_wide::RegInitialWideTest"

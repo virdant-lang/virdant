@@ -1,5 +1,0 @@
-[project]
-name = "reg-two-regs-same-clock"
-
-[prog]
-top = "reg_two_regs_same_clock::RegTwoRegsTest"

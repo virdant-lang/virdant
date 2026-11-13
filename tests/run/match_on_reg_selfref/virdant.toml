@@ -1,0 +1,5 @@
+[project]
+name = "match_on_reg_selfref"
+
+[prog]
+top = "match_on_reg_selfref::MatchOnRegSelfrefTest"

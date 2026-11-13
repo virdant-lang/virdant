@@ -1,5 +1,0 @@
-[project]
-name = "bit-shortcircuit-shape"
-
-[prog]
-top = "bit_shortcircuit_shape::BitShortcircuitShape"

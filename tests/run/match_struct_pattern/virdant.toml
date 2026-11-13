@@ -1,0 +1,5 @@
+[project]
+name = "match_struct_pattern"
+
+[prog]
+top = "match_struct_pattern::MatchStructPatternTest"

@@ -1,0 +1,5 @@
+[project]
+name = "rotate_left"
+
+[prog]
+top = "rotate_left::RotateLeftTest"

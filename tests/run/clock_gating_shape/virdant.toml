@@ -1,0 +1,5 @@
+[project]
+name = "clock_gating_shape"
+
+[prog]
+top = "clock_gating_shape::ClockGatingShapeTest"

@@ -1,5 +1,0 @@
-[project]
-name = "toggle-flop"
-
-[prog]
-top = "toggle_flop::ToggleFlopTest"

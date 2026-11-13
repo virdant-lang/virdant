@@ -1,5 +1,0 @@
-[project]
-name = "match-single-case-else"
-
-[prog]
-top = "match_single_case_else::Top"

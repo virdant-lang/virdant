@@ -1,0 +1,5 @@
+[project]
+name = "let_heavy_use"
+
+[prog]
+top = "let_heavy_use::Top"

@@ -1,0 +1,5 @@
+[project]
+name = "reg_explicit_clock"
+
+[prog]
+top = "reg_explicit_clock::RegExplicitClockTest"

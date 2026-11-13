@@ -1,0 +1,5 @@
+[project]
+name = "mod_input_from_reg"
+
+[prog]
+top = "mod_input_from_reg::ModInputFromRegTest"

@@ -1,5 +1,0 @@
-[project]
-name = "valid-reg"
-
-[prog]
-top = "valid_reg::ValidRegTest"

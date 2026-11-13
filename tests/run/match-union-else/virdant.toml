@@ -1,5 +1,0 @@
-[project]
-name = "match-union-else"
-
-[prog]
-top = "match_union_else::MatchUnionElseTest"

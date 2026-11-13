@@ -1,5 +1,0 @@
-[project]
-name = "vending-machine"
-
-[prog]
-top = "vending_machine::VendingMachineTest"

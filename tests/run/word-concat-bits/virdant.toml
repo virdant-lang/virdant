@@ -1,5 +1,0 @@
-[project]
-name = "word-concat-bits"
-
-[prog]
-top = "word_concat_bits::WordConcatBitsTest"

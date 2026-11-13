@@ -1,5 +1,0 @@
-[project]
-name = "slice-single-bit"
-
-[prog]
-top = "slice_single_bit::SliceSingleBitTest"

@@ -1,5 +1,0 @@
-[project]
-name = "mux-bit"
-
-[prog]
-top = "mux_bit::MuxBitTest"

@@ -1,0 +1,5 @@
+[project]
+name = "reg_outgoing"
+
+[prog]
+top = "reg_outgoing::RegOutgoingTest"

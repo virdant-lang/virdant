@@ -1,0 +1,5 @@
+[project]
+name = "mod_output_split"
+
+[prog]
+top = "mod_output_split::ModOutputSplitTest"

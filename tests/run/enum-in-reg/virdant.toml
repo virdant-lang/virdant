@@ -1,5 +1,0 @@
-[project]
-name = "enum-in-reg"
-
-[prog]
-top = "enum_in_reg::EnumInRegTest"

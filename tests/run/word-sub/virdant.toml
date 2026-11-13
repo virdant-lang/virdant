@@ -1,5 +1,0 @@
-[project]
-name = "word-sub"
-
-[prog]
-top = "word_sub::WordSubTest"

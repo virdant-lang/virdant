@@ -1,5 +1,0 @@
-[project]
-name = "word-prepend"
-
-[prog]
-top = "word_prepend::WordPrependTest"

@@ -1,5 +1,0 @@
-[project]
-name = "sine-lut-mini"
-
-[prog]
-top = "sine_lut_mini::SineLutTest"

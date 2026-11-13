@@ -1,0 +1,5 @@
+[project]
+name = "johnson_counter"
+
+[prog]
+top = "johnson_counter::JohnsonCounterTest"

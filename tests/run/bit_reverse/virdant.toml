@@ -1,0 +1,5 @@
+[project]
+name = "bit_reverse"
+
+[prog]
+top = "bit_reverse::BitReverseTest"

@@ -1,0 +1,5 @@
+[project]
+name = "wire_consumed_by_two"
+
+[prog]
+top = "wire_consumed_by_two::WireConsumedTest"

@@ -1,0 +1,5 @@
+[project]
+name = "stmt_when_arm_order"
+
+[prog]
+top = "stmt_when_arm_order::StmtWhenOrderTest"

@@ -1,0 +1,5 @@
+[project]
+name = "enum_non_power_of_two"
+
+[prog]
+top = "enum_non_power_of_two::EnumNonPowerOfTwoTest"

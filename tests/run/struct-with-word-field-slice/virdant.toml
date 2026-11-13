@@ -1,5 +1,0 @@
-[project]
-name = "struct-with-word-field-slice"
-
-[prog]
-top = "struct_with_word_field_slice::StructFieldSliceTest"

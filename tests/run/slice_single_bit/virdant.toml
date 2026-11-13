@@ -1,0 +1,5 @@
+[project]
+name = "slice_single_bit"
+
+[prog]
+top = "slice_single_bit::SliceSingleBitTest"

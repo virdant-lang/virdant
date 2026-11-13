@@ -1,0 +1,5 @@
+[project]
+name = "extmod_into_virdant_child"
+
+[prog]
+top = "extmod_into_virdant_child::Top"

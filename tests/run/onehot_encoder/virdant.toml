@@ -1,0 +1,5 @@
+[project]
+name = "onehot_encoder"
+
+[prog]
+top = "onehot_encoder::OnehotEncoderTest"

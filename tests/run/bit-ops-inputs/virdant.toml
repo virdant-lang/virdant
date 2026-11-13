@@ -1,5 +1,0 @@
-[project]
-name = "bit-ops-inputs"
-
-[prog]
-top = "bit_ops_inputs::BitOpsInputsTest"

@@ -1,5 +1,0 @@
-[project]
-name = "reg-wide64"
-
-[prog]
-top = "reg_wide64::RegWide64Test"

@@ -1,0 +1,5 @@
+[project]
+name = "mux_bit"
+
+[prog]
+top = "mux_bit::MuxBitTest"

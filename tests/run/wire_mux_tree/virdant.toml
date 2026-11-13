@@ -1,0 +1,5 @@
+[project]
+name = "wire_mux_tree"
+
+[prog]
+top = "wire_mux_tree::WireMuxTreeTest"

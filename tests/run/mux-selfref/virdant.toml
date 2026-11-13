@@ -1,5 +1,0 @@
-[project]
-name = "mux-selfref"
-
-[prog]
-top = "mux_selfref::MuxSelfrefTest"

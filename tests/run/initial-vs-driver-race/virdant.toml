@@ -1,5 +1,0 @@
-[project]
-name = "initial-vs-driver-race"
-
-[prog]
-top = "initial_vs_driver_race::Top"

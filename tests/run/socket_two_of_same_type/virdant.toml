@@ -1,0 +1,5 @@
+[project]
+name = "socket_two_of_same_type"
+
+[prog]
+top = "socket_two_of_same_type::SocketTwoSameTest"

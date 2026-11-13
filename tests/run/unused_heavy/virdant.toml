@@ -1,0 +1,5 @@
+[project]
+name = "unused_heavy"
+
+[prog]
+top = "unused_heavy::UnusedHeavyTest"

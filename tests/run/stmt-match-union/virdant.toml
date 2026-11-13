@@ -1,5 +1,0 @@
-[project]
-name = "stmt-match-union"
-
-[prog]
-top = "stmt_match_union::StmtMatchUnionTest"

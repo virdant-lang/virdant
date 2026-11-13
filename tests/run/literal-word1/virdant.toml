@@ -1,5 +1,0 @@
-[project]
-name = "literal-word1"
-
-[prog]
-top = "literal_word1::LiteralWord1Test"

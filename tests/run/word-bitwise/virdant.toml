@@ -1,5 +1,0 @@
-[project]
-name = "word-bitwise"
-
-[prog]
-top = "word_bitwise::WordBitwiseTest"

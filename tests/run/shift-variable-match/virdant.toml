@@ -1,5 +1,0 @@
-[project]
-name = "shift-variable-match"
-
-[prog]
-top = "shift_variable_match::ShiftVarMatchTest"

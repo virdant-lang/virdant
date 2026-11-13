@@ -1,5 +1,0 @@
-[project]
-name = "union-nullary"
-
-[prog]
-top = "union_nullary::UnionNullaryTest"

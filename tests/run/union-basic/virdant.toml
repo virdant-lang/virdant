@@ -1,5 +1,0 @@
-[project]
-name = "union-basic"
-
-[prog]
-top = "union_basic::UnionBasicTest"

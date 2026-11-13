@@ -1,5 +1,0 @@
-[project]
-name = "handshake-skid-buffer"
-
-[prog]
-top = "handshake_skid_buffer::Top"

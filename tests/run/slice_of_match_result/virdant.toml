@@ -1,0 +1,5 @@
+[project]
+name = "slice_of_match_result"
+
+[prog]
+top = "slice_of_match_result::SliceOfMatchTest"

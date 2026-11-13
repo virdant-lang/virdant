@@ -1,5 +1,0 @@
-[project]
-name = "reg-initial-enum"
-
-[prog]
-top = "reg_initial_enum::RegInitialEnumTest"

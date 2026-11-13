@@ -1,0 +1,5 @@
+[project]
+name = "dontcare_outgoing"
+
+[prog]
+top = "dontcare_outgoing::DontcareOutgoingTest"

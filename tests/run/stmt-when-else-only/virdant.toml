@@ -1,5 +1,0 @@
-[project]
-name = "stmt-when-else-only"
-
-[prog]
-top = "stmt_when_else_only::StmtWhenElseOnlyTest"

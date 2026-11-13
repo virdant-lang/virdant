@@ -1,5 +1,0 @@
-[project]
-name = "dontcare-outgoing"
-
-[prog]
-top = "dontcare_outgoing::DontcareOutgoingTest"

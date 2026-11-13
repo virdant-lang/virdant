@@ -1,5 +1,0 @@
-[project]
-name = "match-subpattern-word"
-
-[prog]
-top = "match_subpattern_word::MatchSubpatternWord"

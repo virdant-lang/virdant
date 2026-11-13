@@ -1,5 +1,0 @@
-[project]
-name = "socket-of-union"
-
-[prog]
-top = "socket_of_union::SocketOfUnionTest"

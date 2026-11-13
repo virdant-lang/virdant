@@ -1,5 +1,0 @@
-[project]
-name = "stmt-when-priority-encoder"
-
-[prog]
-top = "stmt_when_priority_encoder::StmtWhenPrioEncTest"

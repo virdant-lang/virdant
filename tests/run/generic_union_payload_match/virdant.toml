@@ -1,0 +1,5 @@
+[project]
+name = "generic_union_payload_match"
+
+[prog]
+top = "generic_union_payload_match::GenericUnionMatchTest"

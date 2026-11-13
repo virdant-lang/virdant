@@ -1,5 +1,0 @@
-[project]
-name = "stmt-match-enum"
-
-[prog]
-top = "stmt_match_enum::StmtMatchEnumTest"

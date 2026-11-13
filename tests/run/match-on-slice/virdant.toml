@@ -1,5 +1,0 @@
-[project]
-name = "match-on-slice"
-
-[prog]
-top = "match_on_slice::MatchOnSliceTest"

@@ -1,5 +1,0 @@
-[project]
-name = "reg-selfref-decrement"
-
-[prog]
-top = "reg_selfref_decrement::RegSelfrefDecrementTest"

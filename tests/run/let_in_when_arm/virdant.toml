@@ -1,0 +1,5 @@
+[project]
+name = "let_in_when_arm"
+
+[prog]
+top = "let_in_when_arm::LetInWhenArmTest"

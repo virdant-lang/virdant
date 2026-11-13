@@ -1,5 +1,0 @@
-[project]
-name = "rate-limiter"
-
-[prog]
-top = "rate_limiter::RateLimiterTest"

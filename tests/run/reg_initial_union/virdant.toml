@@ -1,0 +1,5 @@
+[project]
+name = "reg_initial_union"
+
+[prog]
+top = "reg_initial_union::RegInitialUnionTest"

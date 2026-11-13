@@ -1,5 +1,0 @@
-[project]
-name = "literal-truncate-decimal"
-
-[prog]
-top = "literal_truncate_decimal::LiteralTruncateDecimal"

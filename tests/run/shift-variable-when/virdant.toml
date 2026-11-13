@@ -1,5 +1,0 @@
-[project]
-name = "shift-variable-when"
-
-[prog]
-top = "shift_variable_when::ShiftVarWhenTest"

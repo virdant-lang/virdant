@@ -1,5 +1,0 @@
-[project]
-name = "when-expr-multi-case"
-
-[prog]
-top = "when_expr_multi_case::WhenMultiCaseTest"

@@ -1,5 +1,0 @@
-[project]
-name = "let-in-when-arm"
-
-[prog]
-top = "let_in_when_arm::LetInWhenArmTest"

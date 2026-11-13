@@ -1,5 +1,0 @@
-[project]
-name = "slice-of-incoming"
-
-[prog]
-top = "slice_of_incoming::SliceOfIncomingTest"

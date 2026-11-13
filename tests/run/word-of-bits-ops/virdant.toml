@@ -1,5 +1,0 @@
-[project]
-name = "word-of-bits-ops"
-
-[prog]
-top = "word_of_bits_ops::WordOfBitsOpsTest"

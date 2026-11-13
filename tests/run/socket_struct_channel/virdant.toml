@@ -1,0 +1,5 @@
+[project]
+name = "socket_struct_channel"
+
+[prog]
+top = "socket_struct_channel::SocketStructTest"
