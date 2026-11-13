@@ -19,11 +19,6 @@ pub platform Virt {
     @period_ns("1000.000")
     incoming clock : Clock
 
-    //> UART transmit data to the host (stdout).
-    outgoing tx : Bit default true
-    //> UART receive data from the host (stdin).
-    incoming rx : Bit
-
     //> Program exit request.
     //>
     //> While `@Invalid()`, the simulator runs.
@@ -36,6 +31,11 @@ pub platform Virt {
     //> Each cycle, if debug is `@Valid(ch)`,
     //> Virt will print `ch` as an ASCII character to stderr.
     outgoing debug : Valid[Word[8]] default @Invalid()
+
+    //> UART transmit data to the host (stdout).
+    outgoing tx : Bit default true
+    //> UART receive data from the host (stdin).
+    incoming rx : Bit
 
     //> SPI flash clock.
     outgoing spi_ck : Bit default true
