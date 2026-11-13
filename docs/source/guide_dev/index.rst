@@ -6,7 +6,6 @@ This guide will introduce Virdant through a series of examples.
     :maxdepth: 1
 
     passthrough/index
-    logic_gates/index
 
     buffer/index
 

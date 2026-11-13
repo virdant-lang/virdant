@@ -1,11 +1,11 @@
-vcd trace.vcd
-
 # Add: 12 + 5 = 17
 poke funct3 #Add
 poke funct7 0b0000000
 poke operand_a 0x0c
 poke operand_b 0x05
 assert result == 0x11
+
+vcd trace.vcd
 
 advance 1
 

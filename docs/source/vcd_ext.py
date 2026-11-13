@@ -393,16 +393,36 @@ def render_svg(wavejson, target_width, variant='desktop'):
         # digits) -- the full text is never lost, because the hover popup
         # (vcd.js) shows the full value of the run under the cursor.
         # The cap only applies to traces that actually span that many
-        # periods: a short trace shows every cycle it has regardless of
-        # zoom, so capping there cannot buy any readability -- it would
-        # only clamp away the stretch a label needs to stay whole (e.g.
-        # @Valid(11) on a 6-period trace would ellipsize to @Valid(1...)).
+        # periods: for those it is strictly tighter than the squeeze bound
+        # below (it is <= 1.0 whenever n_ticks >= VIS_CLK_PERIODS *
+        # period_ticks), so capping there cannot buy any readability -- it
+        # would only clamp away the stretch a label needs to stay whole
+        # (e.g. @Valid(11) on a 6-period trace would ellipsize to
+        # @Valid(1...)).
         period_ticks = clock_period_ticks(signals)
         if (period_ticks is not None
                 and n_ticks >= VIS_CLK_PERIODS * period_ticks):
             wave_area = target_width - label_w - pad_r
             factor = min(factor, wave_area / (VIS_CLK_PERIODS * period_ticks
                                                * tick_w))
+        else:
+            # No clock (or too few periods for the visibility cap to make
+            # sense): the whole trace is what there is to see, so zooming
+            # past the squeeze bound -- the widest the CSS fit-to-column
+            # scaling can shrink the figure while its text stays legible
+            # (width * FONT_PX / MIN_SQUEEZE_FONT_PX) -- buys nothing but a
+            # scrollbar.  Cap there: the figure lands in the squeeze regime
+            # instead of overflowing, and any label still wider than its
+            # run at that zoom abbreviates with an ellipsis (the hover
+            # popup keeps the full text), exactly as the clock cap does.
+            # This is what keeps a clockless figure with a long decoded
+            # label on a short run -- or a figure whose clock was never
+            # marked with the :clk format -- from stretching to an absurd
+            # width: the factor has a backstop, and the label, not the
+            # layout, absorbs the difference.
+            wave_area = (target_width * FONT_PX / MIN_SQUEEZE_FONT_PX
+                         - label_w - pad_r)
+            factor = min(factor, wave_area / (n_ticks * tick_w))
         if factor > 1.0:
             xs = [t * tick_w * factor for t in range(n_ticks + 1)]
 
