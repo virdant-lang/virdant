@@ -225,6 +225,57 @@ fn vir_value_companion_discovery() {
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "0b0000000010");
 }
 
+#[test]
+fn runs_outside_a_project() {
+    // No `-F`, no `-C`, no manifest: the standard library is still
+    // loaded, so builtin types encode/decode as usual.
+    let dir = tempdir::new();
+    let out = Command::new(env!("CARGO_BIN_EXE_vir-value"))
+        .args(["encode", "@Valid(0)", ":", "Valid[Word[8]]"])
+        .current_dir(dir.path())
+        .output()
+        .expect("run vir-value outside a project");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "0b0000000010");
+
+    // Project-local types are unavailable, of course.
+    let out = Command::new(env!("CARGO_BIN_EXE_vir-value"))
+        .args(["decode", "0b01", "scratch::Mode"])
+        .current_dir(dir.path())
+        .output()
+        .expect("run vir-value outside a project");
+    assert_eq!(out.status.code(), Some(1));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("scratch"),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn discovers_project_from_subdirectory() {
+    // Running from inside `src/` (no `-F`/`-C`) still finds the
+    // enclosing project via the manifest in its parent.
+    let dir = project_dir_with_manifest();
+    let out = Command::new(env!("CARGO_BIN_EXE_vir-value"))
+        .args(["decode", "0b01", "scratch::Mode"])
+        .current_dir(dir.path().join("src"))
+        .output()
+        .expect("run vir-value from src/");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "#Idle");
+}
+
 /// A project-shaped temp dir: `virdant.toml` + `src/scratch.vir` (the
 /// builtin library is loaded automatically from the standard library
 /// directory).

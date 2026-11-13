@@ -9,6 +9,12 @@
 //! vir value decode 0b0000000010 Valid[Word[8]]  # bit pattern -> value
 //! ```
 //!
+//! Outside a project (no `-F`, no `-C`, no manifest in or above the
+//! working directory), the binary still runs, with only the standard
+//! library loaded: builtin types (`Bit`, `Word[8]`, `Valid[...]`, ...)
+//! work, project-local types do not.  From a project subdirectory
+//! (eg, `src/`), the enclosing project is discovered and used.
+//!
 //! Types are fully-qualified (`pkg::Name[...]`) except names from the
 //! `builtin` package, which are bare (`Bit`, `Word[8]`,
 //! `Valid[Word[8]]`).  Non-pub types resolve the same way: lookup is
@@ -98,7 +104,7 @@ fn main() {
     // `encode '@Valid(0):Valid[Word[8]]'` work.
     let input = parts.join(" ");
 
-    let db = location.project_db();
+    let db = location.project_db_or_builtin();
 
     match run(&db, subcommand, &input) {
         Ok(output) => println!("{output}"),

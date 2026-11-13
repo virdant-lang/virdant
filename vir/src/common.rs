@@ -67,6 +67,20 @@ pub fn project_manifest_or_exit(dir: &Path) -> PathBuf {
     }
 }
 
+/// The nearest ancestor of `dir` (including `dir` itself) holding a
+/// project manifest, so tools work from project subdirectories (eg,
+/// from `src/`).  `None` when no ancestor holds one.
+pub fn discover_project_dir(dir: &Path) -> Option<PathBuf> {
+    let mut current = Some(dir.to_path_buf());
+    while let Some(dir) = current {
+        if project_manifest(&dir).is_some() {
+            return Some(dir);
+        }
+        current = dir.parent().map(Path::to_path_buf);
+    }
+    None
+}
+
 // ---------------------------------------------------------------------------
 // Project location (`-C` / `-F`)
 // ---------------------------------------------------------------------------
@@ -174,6 +188,31 @@ impl ProjectLocation {
                 std::process::exit(1);
             }
         }
+    }
+
+    /// Like [`project_db`], but when neither `-F` nor `-C` was given:
+    /// discover the nearest ancestor of the working directory holding a
+    /// project manifest and run the manifest-project flow against it
+    /// (so tools work from subdirectories like `src/`); when no
+    /// ancestor holds a manifest, fall back to a `Db` holding just the
+    /// standard library (builtin.vir, ice40.vir, ...) instead of
+    /// exiting.  For tools that still make sense outside a project
+    /// (eg, `vir value`).
+    pub fn project_db_or_builtin(&self) -> Db {
+        if self.virfile.is_none() && self.cwd.is_none() {
+            let cwd = self.resolve_cwd();
+            if let Some(projectdir) = discover_project_dir(&cwd) {
+                return ProjectLocation {
+                    cwd: Some(projectdir),
+                    virfile: None,
+                }
+                .project_db();
+            }
+            let mut db = db_from_lib_dir();
+            db.set_project_root(cwd);
+            return db;
+        }
+        self.project_db()
     }
 }
 
