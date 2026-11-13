@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "A `{ ... }` block used where an expression must produce a value: in match arms, if arms, and `let` bodies in expression position."
+filecheck = "src/block_as_expression.vir"

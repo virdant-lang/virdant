@@ -1,0 +1,75 @@
+// A `{ ... }` block used where an expression must produce a value.
+//
+// Blocks drive signals; only `=>` arms produce values.  Each mod below
+// uses a block in a position that requires an expression, which the
+// typechecker flags at the innermost scope that fails to produce.
+//
+// (A braced chained `if`/`match` whose arms produce values is legal:
+// the chained scope form inherits the enclosing construct's position.)
+
+// A match arm whose `{ ... }` body wraps a chained `let` whose block
+// body produces no value for the `let`.
+
+mod MatchArmBlock {
+    incoming sel : Bit
+    outgoing out : Word[4] dependson sel {
+        it := match sel {
+            // CHECK: A block cannot be used as an expression: `{ ... }` produces no value. Use `=>` to produce a value here.
+            with true {
+                let x = 0w4 + 0w4 {
+                if {
+                    when sel => x
+                    else => 0w4
+                }
+                }
+            }
+            else => 0w4
+        }
+    }
+}
+
+// An `if` arm whose `{ ... }` body wraps a chained `let` whose block
+// body produces no value for the `let`.
+
+mod IfArmBlock {
+    incoming sel : Bit
+    outgoing out : Word[4] dependson sel {
+        it := if {
+            // CHECK: A block cannot be used as an expression: `{ ... }` produces no value. Use `=>` to produce a value here.
+            when sel {
+                let x = 0w4 + 0w4 {
+                if {
+                    when sel {
+                        it := x
+                    }
+                }
+                }
+            }
+            else => 0w4
+        }
+    }
+}
+
+// A match arm whose `{ ... }` body wraps a chained `let` whose inner
+// `let` body is a bare expression: the inner `let` is reported by the
+// terminator-style pass, the outer one by the typechecker.
+
+mod LetInLet {
+    incoming a : Word[4]
+    outgoing out : Word[4] dependson a {
+        it := match a[0] {
+            // CHECK: A block cannot be used as an expression: `{ ... }` produces no value. Use `=>` to produce a value here.
+            with true {
+                let x = a + a {
+                // CHECK: For a `let` used as an expression, use `=>` instead of `{ ... }`
+                let y = x + x {
+                y
+                }
+                }
+            }
+            else => 0w4
+        }
+    }
+}
+
+// CHECK: Check failed

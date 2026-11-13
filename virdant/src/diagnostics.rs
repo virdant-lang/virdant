@@ -230,6 +230,11 @@ pub enum DiagnosticPayload {
     /// `let` is used in a statement position, where the binding's scope
     /// must perform driver statements (`{ <stmts> }`).
     LetArrowNeedsBlock,
+    /// A `{ ... }` block is used in a position that requires an
+    /// expression producing a value (e.g. a match arm on the
+    /// right-hand side of a driver).  Blocks drive signals; only
+    /// `=>` arms produce values.
+    BlockAsExpression,
     /// A module's `for` clause names an item which is not a platform.
     ExpectedPlatform(ExpectedPlatform),
     /// A module's port set is missing a port required by its platform.
@@ -1085,6 +1090,9 @@ impl Diagnostic {
             }
             DiagnosticPayload::LetArrowNeedsBlock => {
                 "For a `let` used as a statement, use `{ ... }` instead of `=>`".into()
+            }
+            DiagnosticPayload::BlockAsExpression => {
+                "A block cannot be used as an expression: `{ ... }` produces no value. Use `=>` to produce a value here.".into()
             }
             DiagnosticPayload::RedundantUnused(d) => format!("Redundant `unused`: {}", d.path).into(),
             DiagnosticPayload::UnusedButUsed(d) => format!("Marked `unused` but used: {}", d.path).into(),

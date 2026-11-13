@@ -259,6 +259,15 @@ The `memory` statement: shape, indexing, write-site, and image rules.  See
     ``For expression-based conditionals, use `=>` instead of `{ ... }` ``
   * Statement position must use `{ ... }` driver blocks:
     ``For statement-based conditionals, use `{ ... }` instead of `=>` ``
+* A block in expression position produces no value (reported by the
+  typechecker; often when a `{ ... }` arm wraps a chained `let`, which
+  the arm-style rule above exempts):
+  ``A block cannot be used as an expression: `{ ... }` produces no value. Use `=>` to produce a value here. ``
+  Rewrite the arm (or `let` body) to produce a value with `=>`.
+* A braced chained scope producing a value is legal: an `if`/`match`/
+  `let` that is the sole child of a `{ ... }` block which is itself an
+  arm body or `let` body inherits that construct's position, so
+  `with #Slt { if { when c => x else => y } }` checks as an expression.
 * See ./control-flow.md for when to use which form.
 
 ### syntax

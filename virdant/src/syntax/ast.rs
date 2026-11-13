@@ -584,6 +584,13 @@ impl<'p> AstNode<'p> {
     ///
     /// A bare `If`/`Match` arm body (written without `=>` and without
     /// braces) inherits the position of its enclosing `If`/`Match`.
+    ///
+    /// The chained scope form also inherits: an `If`/`Match`/`Let` that
+    /// is the sole child of a `{ ... }` block which is itself an arm
+    /// body or a `let` body takes that construct's position.  (The
+    /// typechecker treats the chained form the same way, so the style
+    /// pass must not judge it as a statement.)  A scope among other
+    /// statements of a block is a statement.
     pub fn is_expression_position(&self) -> bool {
         let parsing = self.parsing;
         let mut node_id = self.id;
@@ -595,8 +602,26 @@ impl<'p> AstNode<'p> {
                 AstNodePayload::ModDef(_)
                 | AstNodePayload::Platform(_)
                 | AstNodePayload::ModDefStmtBlock
-                | AstNodePayload::It
-                | AstNodePayload::ArmBlock => return false,
+                | AstNodePayload::It => return false,
+                AstNodePayload::ArmBlock => {
+                    // The chained scope form: see the doc comment.  The
+                    // block must itself be an arm body or a `let` body,
+                    // not a driver block or a module statement list.
+                    let is_chain_form = parent.children().len() == 1
+                        && parent.parent.is_some_and(|grandparent_id| {
+                            matches!(
+                                parsing.ast_node(grandparent_id).payload(),
+                                AstNodePayload::If
+                                    | AstNodePayload::Match
+                                    | AstNodePayload::Let
+                            )
+                        });
+                    if is_chain_form {
+                        node_id = parent_id;
+                    } else {
+                        return false;
+                    }
+                }
                 AstNodePayload::If => {
                     // A guard is in expression position; a bare arm body
                     // inherits the enclosing if's position.
@@ -616,6 +641,16 @@ impl<'p> AstNode<'p> {
                         return true;
                     }
                     node_id = parent_id;
+                }
+                AstNodePayload::Let => {
+                    // A binding's right-hand side is always an
+                    // expression; a `let`'s body inherits the `let`'s
+                    // own position.
+                    if parent.let_body().is_some_and(|body| body.id() == node_id) {
+                        node_id = parent_id;
+                    } else {
+                        return true;
+                    }
                 }
                 _ => return true,
             }

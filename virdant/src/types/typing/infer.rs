@@ -316,8 +316,12 @@ impl Typing {
             return Err(());
         };
         if matches!(body.payload(), AstNodePayload::ArmBlock) {
-            // A `{`-performs body produces no value to infer.
-            self.flag_unknown(node, "let block performs; it produces no value to infer");
+            // A `{ ... }` body drives signals but produces no value;
+            // the `let` sits in a position that requires an expression.
+            self.diagnostics.push(Diagnostic::new(
+                node.region(),
+                diagnostics::DiagnosticPayload::BlockAsExpression,
+            ));
             return Err(());
         }
         match self.infer(builder, context, &body)? {
