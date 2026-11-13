@@ -489,6 +489,17 @@ impl LanguageServer for Backend {
 
         let mut actions = vec![];
 
+        // Quickfixes derived from the compiler's own diagnostics at
+        // the cursor's line come first (see `diagnostic_quickfixes`):
+        // they are targeted at a concrete reported problem — e.g.
+        // "Declare port `led` required by platform `Ice`" — so they
+        // outrank the scaffold-style syntax-derived actions below
+        // when both apply ("Add missing ports required by platform
+        // ..." adds stub bodies for *every* missing port).
+        for action in diagnostic_quickfixes(db, &parsing, package, linecol, &uri) {
+            actions.push(CodeActionOrCommand::CodeAction(action));
+        }
+
         // The two syntax-derived actions below trigger on the node
         // under the cursor (no diagnostics involved).
         if let Some(node_id) = parsing.at(linecol) {
@@ -499,12 +510,6 @@ impl LanguageServer for Backend {
             if let Some(action) = missing_platform_ports_action(db, &parsing, package, node_id, &uri) {
                 actions.push(CodeActionOrCommand::CodeAction(action));
             }
-        }
-
-        // Quickfixes derived from the compiler's own diagnostics at
-        // the cursor's line (see `diagnostic_quickfixes`).
-        for action in diagnostic_quickfixes(db, &parsing, package, linecol, &uri) {
-            actions.push(CodeActionOrCommand::CodeAction(action));
         }
 
         if actions.is_empty() {
@@ -1132,6 +1137,24 @@ fn diagnostic_quickfixes(
                 ),
                 uri,
             ),
+            // Reading a synthesized platform port (an expression
+            // reference, including a reg's `on <CLOCK>` clock) requires
+            // declaring it — the same single-port declaration the drive
+            // fix inserts; the reference becomes a legal read once the
+            // port is declared.
+            DiagnosticPayload::UseUndeclaredPlatformPort(d) => declare_platform_port_action(
+                db,
+                parsing,
+                package,
+                region,
+                &d.port,
+                format!(
+                    "Declare port `{}` required by platform `{}`",
+                    d.port.to_str_lossy(),
+                    d.platform.to_str_lossy(),
+                ),
+                uri,
+            ),
             DiagnosticPayload::PackageNotImported(d) => add_import_action(
                 db,
                 parsing,
@@ -1316,13 +1339,14 @@ fn fix_memory_write_action(
     Some(quickfix_action(title, uri, vec![edit]))
 }
 
-/// The quickfix for `DriveUndeclaredPlatformPort`: declare the missing
-/// port in the module, dir keyword and type copied from the platform
-/// port.  The offending driver statement stays where it is and becomes
-/// the port's legal driver once the declaration exists, so — unlike
-/// `missing_platform_ports_action`'s stubs — the declaration carries no
-/// it-block: a `?` stub would double-drive the port, and an empty block
-/// would warn `EmptyDriverBlock`.
+/// The quickfix for `DriveUndeclaredPlatformPort` and
+/// `UseUndeclaredPlatformPort`: declare the missing port in the
+/// module — just that one — dir keyword and type copied from the
+/// platform port.  The offending statement stays where it is and
+/// becomes the port's legal driver (resp. read) once the declaration
+/// exists, so — unlike `missing_platform_ports_action`'s stubs — the
+/// declaration carries no it-block: a `?` stub would double-drive the
+/// port, and an empty block would warn `EmptyDriverBlock`.
 fn declare_platform_port_action(
     db: &Db,
     parsing: &Parsing,
