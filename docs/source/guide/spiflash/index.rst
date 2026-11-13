@@ -20,6 +20,8 @@ using `--flash`:
 The project is a `Top` module on the `virt` board which wires together
 two submodules: a `SpiFlash` controller and the `UartSender` we built in
 the previous chapter.
+The flash controller itself lives in `src/spiflash.vir`,
+which we will look at piece by piece below.
 
 .. literalinclude:: src/top.vir
     :caption: top.vir
@@ -31,6 +33,11 @@ The Top module
 `Top` declares the UART's `tx` line and the four SPI flash pins:
 `spi_ck` (serial clock), `spi_cs` (chip select, active low),
 `spi_mosi` (controller-out data), and `spi_miso` (controller-in data).
+
+.. literalinclude:: src/top.vir
+    :language: virdant
+    :dedent:
+    :lines: 16-46
 
 The two submodules are connected almost trivially:
 
@@ -68,7 +75,7 @@ The SPI bus itself is described by a socket, `Spi`:
 .. literalinclude:: src/spiflash.vir
     :language: virdant
     :dedent:
-    :lines: 1-7
+    :lines: 1-6
 
 Like `Pipe`, this is a socket with two sides.
 The `cosi` and `soci` prefixes say which way each wire flows:
@@ -83,12 +90,17 @@ The flash controller
 --------------------
 `SpiFlash` is the interesting part.
 It speaks the flash chip's protocol over its `spi` client socket
-and offers each byte it reads on an `out` pipe:
+and offers each byte it reads on an `out` pipe.
+Here is the whole file:
+
+.. literalinclude:: src/spiflash.vir
+    :caption: spiflash.vir
+    :language: virdant
 
 .. literalinclude:: src/spiflash.vir
     :language: virdant
     :dedent:
-    :lines: 9-24
+    :lines: 8-22
 
 The whole controller runs on a single 32-bit shift register,
 which does double duty.
@@ -101,12 +113,26 @@ while `running`, `is_offbeat` toggles every cycle,
 so a bit is transferred on every other cycle,
 and `spi.clock` toggles at half the main clock rate.
 
+The state registers are declared up front:
+
+.. literalinclude:: src/spiflash.vir
+    :language: virdant
+    :dedent:
+    :lines: 24-47
+
 A counter `tx_remaining` starts at `32` and counts the command bits down.
 Once it reaches zero, the controller flips around and starts *receiving*:
 `miso` is shifted into the bottom of the same register,
 counted by `rx_bits`.
 When a full byte has arrived, `running` drops,
 and the byte sitting in the low bits of `shift` becomes `@Valid` on `out`.
+
+All of the transitions happen in a single `if` statement:
+
+.. literalinclude:: src/spiflash.vir
+    :language: virdant
+    :dedent:
+    :lines: 49-70
 
 The caller (here, `Top`'s `sender`) accepts the byte,
 and `running` comes back up for the next one.

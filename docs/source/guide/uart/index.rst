@@ -20,6 +20,8 @@ one character at a time.
 This module is larger than the previous examples,
 but it is built out of the same pieces we have already seen:
 ports, drivers, registers, submodules, and `match`.
+The UART transmitter itself lives in a separate file, `src/uart.vir`,
+which we will look at piece by piece below.
 
 
 The Top module
@@ -30,7 +32,7 @@ and `exit`, which tells the test harness when we are done.
 .. literalinclude:: src/top.vir
     :language: virdant
     :dedent:
-    :lines: 8-13
+    :lines: 7-8
 
 When the character rom produces a `0` (the terminator of our message)
 and the sender is ready for another byte,
@@ -42,7 +44,7 @@ Instead, it instantiates two submodules and wires them together:
 .. literalinclude:: src/top.vir
     :language: virdant
     :dedent:
-    :lines: 15-28
+    :lines: 10-18
 
 The `sender` is the actual UART transmitter,
 and `char_rom` is a small lookup table holding the message.
@@ -53,7 +55,7 @@ A register `char_index` walks through the message:
 .. literalinclude:: src/top.vir
     :language: virdant
     :dedent:
-    :lines: 34-45
+    :lines: 20-27
 
 Each time a character is handed to the sender (`inp_fires`),
 `char_index` increments.
@@ -62,24 +64,30 @@ When it reaches the `0` terminator, `sending` drops and the message is done.
 
 The state machine
 -----------------
-The interesting part is `UartSender`.
-Like our FIFO, it is a `server` behind a `Pipe` socket:
+The interesting part is `UartSender`,
+which lives in its own file, `uart.vir`.
+Like our FIFO, it is a `server` behind a `Pipe` socket.
+Here is the whole file:
 
-.. literalinclude:: src/top.vir
+.. literalinclude:: src/uart.vir
+    :caption: uart.vir
     :language: virdant
-    :dedent:
-    :lines: 48-60
 
 The state of the transmitter is described by a union type, `UartState`:
 `Idle`, `Start`, `Data`, or `Stop`.
 The `Data` state carries its own payload, the index of the bit currently being sent.
 
-The `tx` line is driven by a `match` on that state:
-
-.. literalinclude:: src/top.vir
+.. literalinclude:: src/uart.vir
     :language: virdant
     :dedent:
-    :lines: 62-69
+    :lines: 1-6
+
+The `tx` line is driven by a `match` on that state:
+
+.. literalinclude:: src/uart.vir
+    :language: virdant
+    :dedent:
+    :lines: 15-22
 
 While `Idle` or `Stop`, the line idles high.
 During `Start`, it is pulled low.
@@ -88,10 +96,10 @@ selected with `buffer[dyn index]`.
 
 The timing comes from a baud timer, a simple countdown register:
 
-.. literalinclude:: src/top.vir
+.. literalinclude:: src/uart.vir
     :language: virdant
     :dedent:
-    :lines: 77-91
+    :lines: 30-44
 
 Each bit lasts `baud_limit` + 1 cycles.
 Here it is `8`, so every bit is held for nine cycles:
@@ -100,10 +108,10 @@ and exactly the shape of a real UART at any baud rate.
 
 The transitions between states are the last statement in `UartSender`:
 
-.. literalinclude:: src/top.vir
+.. literalinclude:: src/uart.vir
     :language: virdant
     :dedent:
-    :lines: 93-118
+    :lines: 46-71
 
 Whenever the baud timer has run out, we advance:
 `Idle` latches a byte into `buffer` and moves to `Start`,
@@ -120,7 +128,7 @@ The character rom
 .. literalinclude:: src/top.vir
     :language: virdant
     :dedent:
-    :lines: 121-131
+    :lines: 43-53
 
 The `@image_inline` attribute embeds the string directly in the design:
 `"Hello, world!\r\n"` followed by a `0` terminator.
