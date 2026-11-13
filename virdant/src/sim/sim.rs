@@ -21,7 +21,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use bstr::{BStr, BString};
+use bstr::{BStr, BString, ByteSlice};
 
 /// Strategy for choosing the value of uninitialized registers and
 /// top-level incoming ports.  There are no X or Z values: every cell
@@ -262,6 +262,45 @@ impl Sim {
             arg_pats.push(arg.with_typ(self.layouts().type_id(param_typ)).bitpat());
         }
         let bits = self.layouts().encode_ctor(typ_id, ctor_sym, &arg_pats)?;
+        Some(Value::new(typ_id, bits))
+    }
+
+    /// Encode a struct literal as a [`Value`] of `typ`: `fields` gives
+    /// `(field name, field value)` pairs, which may come in any order —
+    /// they are matched to the struct's declared slots by name.  Every
+    /// declared field must be present exactly once (duplicates leave a
+    /// slot unfilled), and each value must match its field's width.
+    /// Returns `None` when `typ` is not a struct, a name is unknown or
+    /// duplicated, or a value has the wrong width.
+    ///
+    /// The counterpart of [`Sim::decode_struct_fields`] — the public
+    /// face of [`TypeLayoutIndex::encode_struct`].
+    pub fn encode_struct_by_name(
+        &self,
+        typ: &Type,
+        fields: &[(String, Value)],
+    ) -> Option<Value> {
+        let typ_id = self.layouts().type_id(typ);
+        let slots = self.layouts().fields(typ)?;
+        if slots.len() != fields.len() {
+            return None;
+        }
+        let mut pats = vec![None; slots.len()];
+        for (name, value) in fields {
+            let index = slots
+                .iter()
+                .position(|slot| slot.name.as_bstr() == name.as_bytes())?;
+            if pats[index].is_some() {
+                return None;
+            }
+            let field_typ = &slots[index].param_types[0];
+            if value.width() != self.layouts().type_width(field_typ) {
+                return None;
+            }
+            pats[index] = Some(value.with_typ(self.layouts().type_id(field_typ)).bitpat());
+        }
+        let pats: Vec<BitPat> = pats.into_iter().collect::<Option<Vec<_>>>()?;
+        let bits = self.layouts().encode_struct(typ, &pats)?;
         Some(Value::new(typ_id, bits))
     }
 

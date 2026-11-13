@@ -401,6 +401,33 @@ impl TypeLayoutIndex {
         Some(out)
     }
 
+    /// Encode a struct literal as a bit pattern of `typ`: the fields
+    /// given in declaration order (first field at the MSB end), zero
+    /// padding below the lowest field if the declared field widths do
+    /// not fill the type width.  `field_bits` must be in declaration
+    /// order with each pattern matching its field's width.
+    pub fn encode_struct(&self, typ: &Type, field_bits: &[BitPat]) -> Option<BitPat> {
+        let fields = self.fields(typ)?;
+        if fields.len() != field_bits.len() {
+            return None;
+        }
+        let total = self.type_width(typ);
+        let mut out = BitPat::zeros(total);
+        let mut hi = total;
+        for (field, bits) in fields.iter().zip(field_bits.iter()) {
+            let w = self.type_width(&field.param_types[0]);
+            if bits.width() != w {
+                return None;
+            }
+            let lo = hi - w;
+            for i in 0..w as usize {
+                out.set_bit(lo as usize + i, bits.get_bit(i));
+            }
+            hi = lo;
+        }
+        Some(out)
+    }
+
     /// True when `bits` is a valid inhabitant of `typ`.
     pub fn valid(&self, typ: TypeId, bits: &BitPat) -> bool {
         match self.type_of(typ) {

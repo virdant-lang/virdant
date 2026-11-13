@@ -371,10 +371,20 @@ fn render_expr(expr: &Expr) -> String {
         Expr::BitLit(b) => format!("{}", b),
         Expr::Ctor { name, args } => {
             if args.is_empty() {
-                format!("#{}", name)
+                format!("@{}", name)
             } else {
                 let rendered: Vec<String> = args.iter().map(render_expr).collect();
-                format!("#{}({})", name, rendered.join(", "))
+                format!("@{}({})", name, rendered.join(", "))
+            }
+        }
+        Expr::StructLit { name, fields } => {
+            let rendered: Vec<String> = fields
+                .iter()
+                .map(|(field, expr)| format!("{} = {}", field, render_expr(expr)))
+                .collect();
+            match name {
+                Some(name) => format!("${{{}({})}}", name, rendered.join(", ")),
+                None => format!("${{{}}}", rendered.join(", ")),
             }
         }
         Expr::Neg(e) => format!("-{}", render_expr(e)),

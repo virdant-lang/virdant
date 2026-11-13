@@ -203,7 +203,7 @@ fn interactive_tty(session: Rc<RefCell<Session>>) -> i32 {
                     }
                 }
             }
-            // Ctrl+D (EOF) and Ctrl+C both leave the session (concept §2).
+            // Ctrl+D (EOF) and Ctrl+C both leave the session.
             Err(ReadlineError::Eof) | Err(ReadlineError::Interrupted) => {
                 println!();
                 return 0;
@@ -327,6 +327,6 @@ TAB completes command and signal-path names; up/down walk the history.
 
 paths are relative to the current module; `top.` prefixes are absolute;
 expressions use Virdant syntax (literals, + - & | ^, comparisons,
-&& || ^^, ~ ! -, x[i], x[hi..lo], @Ctor)."
+&& || ^^, ~ ! -, x[i], x[hi..lo], @Ctor, ${{Struct}})."
     );
 }

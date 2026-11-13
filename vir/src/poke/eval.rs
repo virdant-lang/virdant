@@ -11,6 +11,7 @@
 //! takes its type from context the same way.  Where no context exists,
 //! a `Nat` literal materializes as a `Word` of its minimal width.
 
+use bstr::ByteSlice;
 use virdant::sim::{BitPat, Value};
 use virdant::types::Type;
 
@@ -18,13 +19,18 @@ use super::ast::{BinKind, Expr, PathStart};
 use super::Session;
 
 /// An in-flight evaluation result: a fully-typed simulation value, an
-/// unwidthed literal, a widthed word literal, or a constructor
-/// application still waiting for its expected type.
+/// unwidthed literal, a widthed word literal, or an aggregate literal
+/// (constructor or struct) still waiting for its expected type.
+#[derive(Clone)]
 enum EVal {
     V(Value),
     Nat(u128),
     Word(u128, u16),
     Ctor(String, Vec<EVal>),
+    StructLit {
+        name: Option<String>,
+        fields: Vec<(String, EVal)>,
+    },
 }
 
 /// Evaluate `expr` with no expected type (e.g. for `print`).
@@ -69,6 +75,19 @@ fn eval_ev(session: &Session, expr: &Expr, expected: Option<&Type>) -> Result<EV
                 .map(|arg| eval_ev(session, arg, None))
                 .collect::<Result<_, _>>()?;
             let ev = EVal::Ctor(name.clone(), args);
+            match expected {
+                Some(typ) => Ok(EVal::V(materialize(session, ev, Some(typ))?)),
+                None => Ok(ev),
+            }
+        }
+        Expr::StructLit { name, fields } => {
+            let fields: Vec<(String, EVal)> = fields
+                .iter()
+                .map(|(field, expr)| {
+                    Ok::<(String, EVal), String>((field.clone(), eval_ev(session, expr, None)?))
+                })
+                .collect::<Result<_, _>>()?;
+            let ev = EVal::StructLit { name: name.clone(), fields };
             match expected {
                 Some(typ) => Ok(EVal::V(materialize(session, ev, Some(typ))?)),
                 None => Ok(ev),
@@ -197,25 +216,33 @@ fn truthy(ev: &EVal) -> Result<bool, String> {
         }),
         EVal::Nat(v) | EVal::Word(v, _) => Ok(*v != 0),
         EVal::Ctor(name, _) => Err(format!(
-            "constructor #{} cannot be used as a condition",
+            "constructor @{} cannot be used as a condition",
             name
+        )),
+        EVal::StructLit { name, .. } => Err(format!(
+            "struct literal {} cannot be used as a condition",
+            struct_lit_name(&name)
         )),
     }
 }
 
 /// Coerce the two sides of a comparison to a common representation.
 ///
-/// A constructor literal adopts the other side's full type (so the
-/// payloads of `#Valid(x)` coerce to the enum's parameter types); two
-/// plain literals land on a common word width; anything else must
-/// already agree (checked by `materialize`).
+/// An aggregate literal (constructor or struct) adopts the other
+/// side's full type (so the payloads of `@Valid(x)` coerce to the
+/// union's parameter types, and the fields of `${Point(...)}` to the
+/// struct's field types); two plain literals land on a common word
+/// width; anything else must already agree (checked by `materialize`).
 fn coerce_comparison(
     session: &Session,
     lhs: EVal,
     rhs: EVal,
 ) -> Result<(Value, Value), String> {
     let expected: Option<Type> = match (&lhs, &rhs) {
-        (EVal::V(v), EVal::Ctor(..)) | (EVal::Ctor(..), EVal::V(v)) => {
+        (EVal::V(v), EVal::Ctor(..))
+        | (EVal::Ctor(..), EVal::V(v))
+        | (EVal::V(v), EVal::StructLit { .. })
+        | (EVal::StructLit { .. }, EVal::V(v)) => {
             Some(session.sim.layouts().type_of(v.typ_id()).clone())
         }
         _ => None,
@@ -256,7 +283,7 @@ fn intrinsic_width(ev: &EVal) -> Option<u16> {
         EVal::V(value) => Some(value.width()),
         EVal::Nat(v) => Some(min_width(*v)),
         EVal::Word(_, w) => Some(*w),
-        EVal::Ctor(..) => None,
+        EVal::Ctor(..) | EVal::StructLit { .. } => None,
     }
 }
 
@@ -278,7 +305,11 @@ fn materialize(session: &Session, ev: EVal, expected: Option<&Type>) -> Result<V
             EVal::Nat(v) => Ok(word_value(session, min_width(v), v)),
             EVal::Word(v, w) => Ok(word_value(session, w, v)),
             EVal::Ctor(name, _) => Err(format!(
-                "constructor #{name} needs a typed context: compare it against a signal or poke it into one"
+                "constructor @{name} needs a typed context: compare it against a signal or poke it into one"
+            )),
+            EVal::StructLit { name, .. } => Err(format!(
+                "struct literal {} needs a typed context: compare it against a signal or poke it into one",
+                struct_lit_name(&name)
             )),
         },
         Some(typ) => match typ {
@@ -318,7 +349,11 @@ fn materialize(session: &Session, ev: EVal, expected: Option<&Type>) -> Result<V
                     }
                 }
                 EVal::Ctor(name, _) => Err(format!(
-                    "type mismatch: #{name} is a constructor, but a Word[{width}] was expected"
+                    "type mismatch: @{name} is a constructor, but a Word[{width}] was expected"
+                )),
+                EVal::StructLit { name, .. } => Err(format!(
+                    "type mismatch: {} is a struct literal, but a Word[{width}] was expected",
+                    struct_lit_name(&name)
                 )),
             },
             Type::Bit | Type::Clock | Type::Reset => match ev {
@@ -347,7 +382,12 @@ fn materialize(session: &Session, ev: EVal, expected: Option<&Type>) -> Result<V
                     "literal {v} does not fit a 1-bit type"
                 )),
                 EVal::Ctor(name, _) => Err(format!(
-                    "type mismatch: #{name} is a constructor, but {} was expected",
+                    "type mismatch: @{name} is a constructor, but {} was expected",
+                    type_name(session, typ)
+                )),
+                EVal::StructLit { name, .. } => Err(format!(
+                    "type mismatch: {} is a struct literal, but {} was expected",
+                    struct_lit_name(&name),
                     type_name(session, typ)
                 )),
             },
@@ -367,13 +407,13 @@ fn materialize(session: &Session, ev: EVal, expected: Option<&Type>) -> Result<V
                     let typ_id = layouts.type_id(typ);
                     let Some((_, param_types)) = layouts.ctor_slot_by_name(typ_id, &name) else {
                         return Err(format!(
-                            "unknown constructor #{name} for type {}",
+                            "unknown constructor @{name} for type {}",
                             type_name(session, typ)
                         ));
                     };
                     if param_types.len() != args.len() {
                         return Err(format!(
-                            "constructor #{name} expects {} argument(s), got {}",
+                            "constructor @{name} expects {} argument(s), got {}",
                             param_types.len(),
                             args.len()
                         ));
@@ -386,8 +426,11 @@ fn materialize(session: &Session, ev: EVal, expected: Option<&Type>) -> Result<V
                         .sim
                         .encode_ctor_by_name(typ, &name, &values)
                         .ok_or_else(|| {
-                            format!("cannot encode #{name} as {}", type_name(session, typ))
+                            format!("cannot encode @{name} as {}", type_name(session, typ))
                         })
+                }
+                EVal::StructLit { name, fields } => {
+                    materialize_struct(session, typ, name, fields)
                 }
                 EVal::Nat(_) | EVal::Word(..) => Err(format!(
                     "type mismatch: a plain literal cannot be used where {} was expected",
@@ -397,6 +440,74 @@ fn materialize(session: &Session, ev: EVal, expected: Option<&Type>) -> Result<V
             Type::Param(_) => Err("cannot coerce to a generic parameter type".to_string()),
         },
     }
+}
+
+/// The display name of a struct literal in error messages: the
+/// literal's declared name when given, else a placeholder.
+fn struct_lit_name(name: &Option<String>) -> &str {
+    name.as_deref().unwrap_or("<struct literal>")
+}
+
+/// Materialize a struct literal (`${Name(...)}` or the source-style
+/// anonymous form) against the struct type `typ`: when a name is
+/// given it must be the struct type's declared name, and every
+/// declared field must be given exactly once (in any order); each
+/// field expression is materialized against its declared type.
+fn materialize_struct(
+    session: &Session,
+    typ: &Type,
+    name: Option<String>,
+    fields: Vec<(String, EVal)>,
+) -> Result<Value, String> {
+    let layouts = session.sim.layouts();
+    let declared = layouts.fields(typ).ok_or_else(|| {
+        format!(
+            "type mismatch: {} is not a struct, but a struct literal was given",
+            type_name(session, typ)
+        )
+    })?;
+    let declared_name = layouts
+        .type_name(typ)
+        .map(|n| String::from_utf8_lossy(n).into_owned());
+    if let Some(name) = &name {
+        if declared_name.as_deref() != Some(name.as_str()) {
+            return Err(format!(
+                "unknown struct {name} for type {}",
+                type_name(session, typ)
+            ));
+        }
+    }
+    let literal = struct_lit_name(&name);
+    let mut values = Vec::with_capacity(declared.len());
+    for slot in declared {
+        let field_name = String::from_utf8_lossy(slot.name.as_bstr()).into_owned();
+        let given: Vec<&EVal> = fields
+            .iter()
+            .filter(|(given, _)| *given == field_name)
+            .map(|(_, ev)| ev)
+            .collect();
+        match given[..] {
+            [] => {
+                return Err(format!(
+                    "struct literal {literal} is missing field {field_name}"
+                ))
+            }
+            [field] => {
+                let value =
+                    materialize(session, field.clone(), Some(&slot.param_types[0]))?;
+                values.push((field_name, value));
+            }
+            _ => {
+                return Err(format!(
+                    "struct literal {literal} gives field {field_name} more than once"
+                ))
+            }
+        }
+    }
+    session
+        .sim
+        .encode_struct_by_name(typ, &values)
+        .ok_or_else(|| format!("cannot encode {literal} as {}", type_name(session, typ)))
 }
 
 /// Re-tag `value` with `typ` (allowed when the widths already match

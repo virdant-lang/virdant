@@ -26,6 +26,14 @@ pub enum Tok {
     /// `/` — only legal inside a bare `vcd` file name; the expression
     /// grammar never produces it.
     Slash,
+    /// `$` — the struct-literal prefix (`${Point(x = 1, y = 2)}`).
+    Dollar,
+    /// `{` / `}` — struct-literal braces.
+    LBrace,
+    RBrace,
+    /// `=` — struct-field assignment inside `${...}` (never `==`,
+    /// which lexes as [`Tok::EqEq`]).
+    Eq,
     // Keywords
     Cd,
     Peek,
@@ -99,6 +107,10 @@ impl std::fmt::Display for Tok {
             Tok::Word(v, w) => write!(f, "`{v}w{w}`"),
             Tok::Str(s) => write!(f, "`\"{s}\"`"),
             Tok::Slash => write!(f, "`/`"),
+            Tok::Dollar => write!(f, "`$`"),
+            Tok::LBrace => write!(f, "`{{`"),
+            Tok::RBrace => write!(f, "`}}`"),
+            Tok::Eq => write!(f, "`=`"),
             Tok::Cd => write!(f, "`cd`"),
             Tok::Peek => write!(f, "`peek`"),
             Tok::Poke => write!(f, "`poke`"),
@@ -260,6 +272,10 @@ pub fn lex(line: &str) -> Result<Vec<(usize, Tok, usize)>, LexError> {
                 b'~' => (Tok::Tilde, 1),
                 b'!' => (Tok::Bang, 1),
                 b'/' => (Tok::Slash, 1),
+                b'$' => (Tok::Dollar, 1),
+                b'{' => (Tok::LBrace, 1),
+                b'}' => (Tok::RBrace, 1),
+                b'=' => (Tok::Eq, 1),
                 b'<' => (Tok::Lt, 1),
                 b'>' => (Tok::Gt, 1),
                 _ => {
@@ -464,7 +480,7 @@ mod tests {
 
     #[test]
     fn test_errors() {
-        assert!(lex("peek x$").is_err());
+        assert!(lex("peek x%").is_err());
         assert!(lex("42w").is_err());
     }
 }

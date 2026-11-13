@@ -1,16 +1,16 @@
 //! The `vir poke` scripting language's AST.
 //!
-//! Deliberately separate from the parser's token stream (see the
-//! concept notes, §3): the AST is where struct/union/enum literal
-//! constructors will land without rework when they are added.
+//! Deliberately separate from the parser's token stream: the AST
+//! carries the aggregate literal syntax (struct/union/enum) without
+//! reworking the command layer.
 
 /// A path as written in a script.  Three starting forms:
 ///
 /// - `top.foo.bar` — absolute, from the top of the elaborated design;
 /// - `foo.bar`     — relative to the current module (`cd` location);
 /// - `it.foo`      — the previously peeked value (expressions only;
-///   field access on `it` is future work, so only bare `it` is
-///   meaningful in v1).
+///   only bare `it` is meaningful — field access on `it` is not
+///   part of the grammar).
 #[derive(Clone, Debug, PartialEq)]
 pub struct SPath {
     pub start: PathStart,
@@ -51,10 +51,16 @@ pub enum Expr {
     /// A `Word` literal with explicit width (`0b1010w4`, `42w8`).
     WordLit(u128, u16),
     BitLit(bool),
-    /// An enum constructor: `#Foo` or `#Foo(arg, ...)`.  Its type comes
-    /// from context (the other side of a comparison, or the `poke`
-    /// target), resolved at evaluation time.
+    /// An enum constructor: `@Foo`, `@Foo(arg, ...)`, or the older
+    /// `#Foo` spelling.  Its type comes from context (the other side
+    /// of a comparison, or the `poke` target), resolved at evaluation
+    /// time.
     Ctor { name: String, args: Vec<Expr> },
+    /// A struct literal: the named `${Name(f = expr, ...)}` form or
+    /// the source-style `${f = expr, ...}` (fields may come in any
+    /// order; every declared field must be given exactly once).  Its
+    /// type comes from context, like [`Expr::Ctor`].
+    StructLit { name: Option<String>, fields: Vec<(String, Expr)> },
     Neg(Box<Expr>),
     Inv(Box<Expr>),
     Not(Box<Expr>),

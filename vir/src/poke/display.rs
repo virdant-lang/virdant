@@ -2,7 +2,7 @@
 //!
 //! Every value prints in the literal syntax the script language
 //! accepts, so a printed value can be pasted into a `poke` or an
-//! `assert` unchanged (concept §4):
+//! `assert` unchanged:
 //!
 //! - `Word[N]` renders as a full-width binary literal, `0b00000101`
 //!   (leading zeros included, so the width is recoverable);
@@ -11,9 +11,8 @@
 //!   `tick`, not by values); `Reset` renders as `0b0` / `0b1`;
 //! - enums and unions render as their constructor syntax, recursively:
 //!   `@Valid(0b00000000)`, `@Invalid`;
-//! - structs render as `${Name(f = value, ...)}` (struct literals are
-//!   not yet in the script grammar, so this form is display-only for
-//!   now);
+//! - structs render as their source-style literal syntax, recursively:
+//!   `${f = value, ...}`;
 //! - a bit pattern that is not a valid inhabitant of its type prints
 //!   as `<invalid>`.
 
