@@ -452,17 +452,23 @@ fn collect_unused(
             }
 
             if resolved_path.starts_with(b"it.") || resolved_path == b"it" {
+                // `it` outside an it block is an error.
+                let Some(ctx) = &ctx_name else {
+                    diagnostics.push(Diagnostic::new(
+                        path_node.region(),
+                        diagnostics::DiagnosticPayload::ItNotInItBlock,
+                    ));
+                    return;
+                };
                 // Rewrite `it` / `it.foo` to the enclosing context name.
-                if let Some(ctx) = &ctx_name {
-                    if resolved_path.starts_with(b"it.") {
-                        let suffix = resolved_path[3..].to_owned();
-                        resolved_path.clear();
-                        resolved_path.extend_from_slice(ctx);
-                        resolved_path.push(b'.');
-                        resolved_path.extend_from_slice(&suffix);
-                    } else {
-                        resolved_path = ctx.to_owned();
-                    }
+                if resolved_path.starts_with(b"it.") {
+                    let suffix = resolved_path[3..].to_owned();
+                    resolved_path.clear();
+                    resolved_path.extend_from_slice(ctx);
+                    resolved_path.push(b'.');
+                    resolved_path.extend_from_slice(&suffix);
+                } else {
+                    resolved_path = ctx.to_owned();
                 }
             } else if let Some(ctx) = &ctx_name {
                 // Inside an it-block: flag paths that use the component name

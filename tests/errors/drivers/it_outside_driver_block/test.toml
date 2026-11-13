@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "`it` is only bound inside a driver block (it-block). Any use of `it` outside of one -- including in an `unused` statement at moddef level -- is an error."
+filecheck = "src/it_outside_driver_block.vir"

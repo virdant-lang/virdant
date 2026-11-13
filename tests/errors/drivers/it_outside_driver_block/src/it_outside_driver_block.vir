@@ -1,0 +1,26 @@
+// ItNotInItBlock: `it` refers to the component being driven by an
+// enclosing driver block (it-block).  Outside of any driver block
+// there is no such component, so any use of `it` -- including in an
+// `unused` statement at moddef level -- is an error.
+
+// Bare `it` in an `unused` statement at moddef level.
+pub mod UnusedIt {
+    incoming a : Bit
+    outgoing out : Bit dependson a
+
+    // CHECK: 'it' used outside of an it block
+    unused it
+
+    out := a
+}
+
+// `it.`-prefixed path in an `unused` statement at moddef level.
+pub mod UnusedItPath {
+    incoming a : Bit
+    outgoing out : Bit dependson a
+
+    // CHECK: 'it' used outside of an it block
+    unused it.ready
+
+    out := a
+}
