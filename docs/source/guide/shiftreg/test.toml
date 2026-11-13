@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide shiftreg example: a serial shift register."
+expect = "ok"

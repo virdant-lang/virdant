@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide pwm example: pulse-width modulation across eight duty-cycle settings."
+expect = "ok"

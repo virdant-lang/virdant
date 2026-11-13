@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide fulladder example: a full adder built from two half adders."
+expect = "ok"

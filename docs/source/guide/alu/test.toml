@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide alu example: an ALU dispatching on Funct3 to add, subtract, shift, and compare."
+expect = "ok"

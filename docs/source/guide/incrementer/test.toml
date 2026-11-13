@@ -1,0 +1,3 @@
+kind = "check"
+description = "Guide incrementer example: a clocked register that increments on request."
+expect = "ok"
