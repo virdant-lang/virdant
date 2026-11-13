@@ -7,8 +7,6 @@ pub mod ShiftReg {
     incoming load_value : Valid[Word[4]]
 
     outgoing reg value : Word[4] {
-        shift_out := it[0]
-
         match load_value {
             with @Valid(new_value) {
                 it <= new_value
@@ -19,5 +17,7 @@ pub mod ShiftReg {
                 }
             }
         }
+
+        shift_out := it[0]
     }
 }

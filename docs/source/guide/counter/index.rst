@@ -39,8 +39,7 @@ Outgoing Registers
 The `counter` port is declared as `outgoing reg`.
 This means that it acts *both* as an `outgoing` port and as a `reg`.
 
-.. code-block::
-    :language: virdant
+.. code-block:: virdant
 
     outgoing reg counter : Word[10]
 
@@ -124,9 +123,9 @@ The extra typing is to remind you of this extra latency in the circuit.
 
 `if` vs `match`
 ---------------
-We used a `match` expression in :doc:`Pop Count example <../popcount>`:
+We used a `match` expression in :doc:`Pop Count example <../popcount/index>`:
 
-.. literalinclude:: ../popcount/src/popcount.vir
+.. literalinclude:: src/counter.vir
     :language: virdant
     :lines: 5-10
     :dedent:

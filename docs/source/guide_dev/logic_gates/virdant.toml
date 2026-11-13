@@ -1,5 +1,0 @@
-[project]
-name = "operators"
-
-[prog]
-top = "operators::Operators"

@@ -1,58 +1,78 @@
 ALU
 ===
-In this example, we'll build an ALU --
-an **arithmetic logic unit**, the part of a processor which
-performs addition, comparison, and bitwise logic.
+In this example, we'll build an Arithmetic Logic Unit or ALU.
 
-Ours will be modeled after the classic RISC-V ALU:
-instead of a single opaque opcode, the caller supplies the `funct3` and
-`funct7` fields straight out of a RISC-V instruction,
-and the ALU answers with a 32-bit `result`.
+`Alu` is a minimal, authentic, and slightly incomplete implementation of a RISC-V ALU.
 
-In the :doc:`previous chapter <../shifter/index>` we built a barrel
-shifter, met our first **enum type**, and caught a glimpse of
-**match expressions**.
-Now both come into their own:
-an ALU turns out to be the perfect excuse for them.
+Again, our example is a bit long,
+so we'll first look at the pieces and present the full thing at the end.
 
+Packages and Imports
+--------------------
+A common operation most computers provide is bit shifting.
+But we already did that in the last example!
+
+Rather than copy it into our ALU example, we will keep it in its own file, `shifter.vir`.
+Each `.vir` file is its own package.
+You can import it like this:
+
+.. literalinclude:: src/alu.vir
+    :language: virdant
+    :lines: 1
+
+When you import a package, you can refer to its modules, type definitions, and other things inside.
+
+You've probably noticed that
+nearly everything we've defined so far in the guide has been marked as `pub`.
+`pub` says "You can import me and use me!"
+
+In :doc:`shifter <../shifter/index>`, `Shifter` was marked `pub`, so we can use it in our ALU.
+`ShiftDirection` was also `pub`, so we can use it too.
+
+However, not every module really wants to be `pub`.
+If you were paying really close attention,
+you might have noticed that
+`ShiftLeft` `ShiftLogicalRight` and `ShiftArithmeticRight` were *not* marked as `pub`.
+These modules are meant to be helpers,
+so we don't really want anyone outside using them.
+
+When learning a Virdant codebase,
+you should pay attention to modules and types that are `pub`.
+
+Enums with Values
+-----------------
+RISC-V supports many arithmetic operations.
+Let's look at all the opcodes we will support in our ALU:
+
+.. literalinclude:: src/alu.vir
+    :language: virdant
+    :lines: 3-12
+
+Just like `ShiftDirection` in the previous example,
+`Funct3` (which means the 3-bit function opcode) is an `enum type`.
+But unlike `ShiftDirection`, each enumerant of `Funct3` is given a numeric value.
+
+.. note::
+
+    The values of `Funct3` are pulled directly from Chapter 36 of
+    the `RISC-V specification <https://docs.riscv.org/reference/isa/_attachments/riscv-unprivileged.pdf>`_.
+
+We've chosen to give the numeric values in binary here
+because then it's easy to match it up with the spec.
+
+When giving numeric values to an enum type,
+at least one of the fields must have an explicit width.
+Here, the first enumerant, `#Add` is given the value `0b000w3`
+(remember this means `0` with width `3`).
+
+The ALU
+-------
 .. literalinclude:: src/alu.vir
     :caption: alu.vir
     :language: virdant
+    :lines: 14-56
 
 
-Enum Types
-----------
-A RISC-V instruction spends a 3-bit field, `funct3`, saying *what kind*
-of register-register operation it is.
-Every one of the eight possible values has a name,
-so this is a natural job for an **enum type**:
-
-.. literalinclude:: src/alu.vir
-    :caption: alu.vir
-    :language: virdant
-    :dedent:
-    :lines: 3-13
-
-An enum type maps named values onto concrete bit patterns.
-Here, `#Add` *is* `0b000`, `#Xor` *is* `0b100`, and so on.
-(Normally the ``#`` prefix looks odd, but think of it as
-"give me the variant, not the variable".)
-
-This is the other flavor of enum declaration.
-The shifter's `ShiftDirection` wrote out **no** values,
-and Virdant one-hot encoded them for us.
-Here we write out **all** of them,
-because the bit patterns are not ours to choose --
-they come straight from the RISC-V encoding,
-and the first literal, `0b000w3`, carries an explicit width
-that pins the entire enum type at exactly 3 bits wide.
-Either way, Virdant insists you pick a lane:
-all the values, or none of them.
-
-Notice also that the enum type covers **all eight** `funct3` codepoints --
-including `#Sltu`, an operation our ALU is not going to implement.
-Keeping the full RISC-V field in the type, holes and all,
-turns out to pay off later.
 
 
 Funct7
@@ -69,7 +89,7 @@ Rather than invent our own merged opcode, we accept the fields as they are:
     :caption: alu.vir
     :language: virdant
     :dedent:
-    :lines: 15-19
+    :lines: 15-18
 
 Two operands, a `funct3` enum type, and a raw 7-bit `funct7`.
 Clarity beats cleverness.
@@ -90,7 +110,7 @@ Virdant's tool for this is the **match expression**:
     :caption: alu.vir
     :language: virdant
     :dedent:
-    :lines: 35-53
+    :lines: 39-54
 
 A match expression inspects a value (here, `funct3`) and picks an arm.
 Each arm begins with the `with` keyword, a pattern to compare against,
@@ -126,7 +146,7 @@ Most arms are one-liners, but the `#Add` arm has a surprise inside:
     :caption: alu.vir
     :language: virdant
     :dedent:
-    :lines: 41-44
+    :lines: 43-46
 
 `funct3` said "add", but `funct7` gets the final word:
 if it reads `0b0100000`, this is really a subtraction.
@@ -156,7 +176,7 @@ so we do a little two's-complement reasoning ourselves:
     :caption: alu.vir
     :language: virdant
     :dedent:
-    :lines: 45-48
+    :lines: 47-50
 
 Recall that a 32-bit two's-complement number is negative exactly when
 bit 31 is set.
@@ -191,7 +211,7 @@ and wire it up:
     :caption: alu.vir
     :language: virdant
     :dedent:
-    :lines: 21-33
+    :lines: 20-31
 
 `mod shifter of Shifter` creates an instance of the `Shifter` module,
 and the driver block drives its incoming ports by name:
@@ -214,7 +234,7 @@ Finally, both shift arms of the big `match` forward the shifter's answer:
     :caption: alu.vir
     :language: virdant
     :dedent:
-    :lines: 50-51
+    :lines: 52-53
 
 Notice that the ALU's `match` never mentions arithmetic at all.
 Whether SRL means *logical* or *arithmetic* was already folded into
@@ -232,7 +252,7 @@ One enumerant remains, and we handle it dishonestly, on purpose:
     :caption: alu.vir
     :language: virdant
     :dedent:
-    :lines: 49
+    :lines: 27
 
 `dontcare` means *this value is genuinely unspecified*.
 Maybe nobody downstream will ever read it; maybe any answer will do.

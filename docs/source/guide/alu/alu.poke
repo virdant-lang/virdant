@@ -28,7 +28,13 @@ poke operand_b 0x00000007
 assert result == 0x00000001
 
 poke funct3 #Sltu
-peek result
+poke operand_a 0x00000007
+poke operand_b 0xfffffffa
+assert result == 0x00000001
+
+poke operand_a 0xfffffffa
+poke operand_b 0x00000007
+assert result == 0x00000000
 
 poke funct3 #Sll
 poke funct7 0b0000000
