@@ -253,6 +253,8 @@ pub enum DiagnosticPayload {
     /// A mod definition (not a platform) declares an `outgoing` port
     /// with a `default` clause.
     DefaultOutsidePlatformPort(DefaultOutsidePlatformPort),
+    /// A `@name` annotation whose name Virdant does not know.
+    UnknownAnnotation(UnknownAnnotation),
     /// A parsed feature whose semantics are not implemented yet
     /// (e.g. generic socket/mod defs in the types-only generics slice).
     NotYetImplemented(NotYetImplemented),
@@ -725,6 +727,14 @@ pub struct DefaultOutsidePlatformPort {
     pub port: BString,
 }
 
+/// An annotation whose name Virdant does not know.  Kept as a dedicated
+/// variant (rather than the generic `Unknown`) so later plans can attach
+/// "did you mean" suggestions or per-slot refinements to a stable variant.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownAnnotation {
+    pub name: BString,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlatformPortDirMismatch {
     pub port: BString,
@@ -1174,6 +1184,7 @@ impl Diagnostic {
             DiagnosticPayload::DriveUndeclaredPlatformPort(d) => format!("`{}` is declared in platform `{}`, but not declared in this module; declare it explicitly to drive it", d.port, d.platform).into(),
             DiagnosticPayload::PlatformExtraPort(d) => format!("Module has port {} which platform {} does not declare", d.port, d.platform).into(),
             DiagnosticPayload::DefaultOutsidePlatformPort(d) => format!("`default` on outgoing port {} is only allowed in a platform definition", d.port).into(),
+            DiagnosticPayload::UnknownAnnotation(d) => format!("Unknown annotation '@{}'", d.name.to_str_lossy()).into(),
             DiagnosticPayload::PlatformPortDirMismatch(d) => {
                 format!(
                     "Port {} has direction {:?} but platform expects {:?}",
@@ -1338,7 +1349,7 @@ from_diagnostic! {
     InitialForNonReg, InitialMultiple, InitialInsideIfMatch, InitialNoinitialPlatform,
     ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,
     DriveUndeclaredPlatformPort,
-    PlatformPortTypeMismatch, DefaultOutsidePlatformPort, NotYetImplemented, TypeArgCount,
+    PlatformPortTypeMismatch, DefaultOutsidePlatformPort, UnknownAnnotation, NotYetImplemented, TypeArgCount,
     TypeArgKind, UnknownKind,
     CtorRequiresArgs, ExtModGenerics, NotPub, ReferencedWhileNotPub, UnusedNonPub, TypeNotPub, TopNotPub, TopGenerics, SocketConnectMismatch,
 }

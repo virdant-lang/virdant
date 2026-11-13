@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "Unknown annotation names are errors, not silent no-ops; unknown names keep parsing in every annotatable slot"
+filecheck = "src/unknown.vir"

@@ -76,12 +76,45 @@ fn check_package_names(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>)
     }
 }
 
+/// Check that every `@name` annotation in every package uses a name
+/// Virdant knows.  Name-level only: a known name in the wrong place is a
+/// separate, future misplaced-annotation check.
+fn check_annotations(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let packages = builder.get_packages();
+    for package in packages.ids() {
+        let parsing = builder.get_parsing(package);
+        check_annotations_in(&parsing.root(), &parsing, diagnostics);
+    }
+}
+
+fn check_annotations_in(
+    node: &crate::syntax::ast::AstNode<'_>,
+    parsing: &crate::syntax::parsing::Parsing,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if let AstNodePayload::Annotation(annotation) = node.payload() {
+        let name = parsing.string(annotation.name).to_str_lossy().into_owned();
+        if !crate::analysis::annotations::is_known_annotation(&name) {
+            diagnostics.push(Diagnostic::new(
+                node.region(),
+                diagnostics::UnknownAnnotation {
+                    name: name.into(),
+                },
+            ));
+        }
+    }
+    for child in node.children() {
+        check_annotations_in(&child, parsing, diagnostics);
+    }
+}
+
 pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     let mut diagnostics = vec![];
 
     diagnostics.extend(builder.get_syntax_errors().iter().cloned());
 
     check_package_names(builder, &mut diagnostics);
+    check_annotations(builder, &mut diagnostics);
 
     let symboltable = builder.get_symboltable();
     diagnostics.extend(symboltable.diagnostics.clone());

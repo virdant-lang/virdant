@@ -1,6 +1,7 @@
 //! Hub module re-exporting the static-analysis submodules
 //! and their key result types
 
+pub mod annotations;
 pub mod component;
 pub mod location;
 pub mod package;

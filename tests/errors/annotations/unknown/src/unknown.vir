@@ -1,0 +1,43 @@
+// Regression test: every `@name` annotation must use a name Virdant
+// knows.  Unknown names are errors, not silent no-ops: a misspelled
+// `@image_hex` (here `@imagehex`) would silently turn an image ROM
+// into a writable RAM demanding an `on` clock clause, and the image
+// file would never be loaded.
+//
+// The unknown names keep *parsing* in every annotatable slot (platform,
+// platform member, moddef, memory declaration); the only failures are
+// the Unknown annotation errors themselves.
+
+// CHECK: Unknown annotation '@foreign'
+@foreign
+platform Dev {
+    // CHECK: Unknown annotation '@periodns'
+    @pin(1)
+    @periodns("83.33")
+    incoming clock : Clock
+}
+
+// CHECK: Unknown annotation '@typo'
+// CHECK: Unknown annotation '@multiarg'
+@typo
+@multiarg(1, 2, 3,)
+pub mod Top {
+    incoming clock : Clock
+    incoming data : Bit
+    outgoing result : Bit dependson data
+    result := data
+}
+
+mod Rom {
+    incoming clock : Clock
+    incoming addr : Word[2]
+    outgoing read_data : Word[8] dependson addr {
+        it := rom[dyn addr]
+    }
+
+    // CHECK: Unknown annotation '@imagehex'
+    @imagehex("rom.hex")
+    memory rom[4] : Word[8] on clock
+}
+
+// CHECK: Check failed

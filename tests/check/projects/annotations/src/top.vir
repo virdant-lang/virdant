@@ -1,8 +1,12 @@
 // CHECK: Check OK
 
-//> Test that annotations can be parsed on various items and slots
-@fpga("ice40")
-@part("up5k-sg48")
+//> Test that annotations can be parsed on various items and slots.
+//> Only names Virdant knows may be used here — unknown annotation
+//> names are errors (see tests/errors/annotations/unknown).  Exotic
+//> arg syntax (multi-arg with trailing commas, empty parens, bare
+//> flags, boolean literals) is exercised on known names.
+@parameter("fpga", "ice40")
+@parameter("part", "up5k-sg48")
 pub mod Top {
     @pin(35)
     @period_ns("83.33")
@@ -13,70 +17,71 @@ pub mod Top {
     @pin("E3")
     incoming data : Bit
 
-    @keep
+    @parameter("keep")
     outgoing result : Bit dependson data
 
     result := data
 }
 
 //> Struct with annotations
-@author("Alice")
+@parameter("author", "Alice")
 pub struct type Point {
-    @range(0)
+    @parameter("range", 0)
     x : Word[16]
 
-    @range(1)
+    @parameter("range", 1)
     y : Word[16]
 }
 
-@deprecated
+@parameter("deprecated")
 pub union type Result {
-    @success
+    @parameter("success")
     Ok(value : Word[32])
 
-    @error
+    @parameter("error")
     Err(code : Word[8])
 }
 
-@experimental
+@parameter("experimental")
 pub enum type State {
-    @init
+    @parameter("init")
     Idle = 0w2
 
-    @active(true, false)
+    // Multi-arg with boolean literal arguments
+    @parameter("active", true, false)
     Running = 1w2
 
-    @done
+    @parameter("done")
     Complete = 2w2
 }
 
-@chip("ice40")
+@parameter("chip", "ice40")
 pub socket SpiSocket {
-    @master
+    @parameter("master")
     cosi data_out : Bit
 
-    @slave
+    @parameter("slave")
     soci data_in : Bit
 }
 
 // Multi-arg annotation with trailing comma
 
-//> Module exercising new annotation arg syntax
-@multi_arg(1, 2, 3,)
+//> Module exercising annotation arg syntax
+@parameter("multi_arg", 1, 2, 3,)
 // Empty parens
-@empty()
+@parameter()
 // Bare annotation (no parens)
-@bare
+@parameter
 pub mod AnnotationsTest {
     // Multi-arg on a port
-    @attr("a", "b", 42,)
+    @parameter("attr", "a", "b", 42,)
     // Empty parens on a port
-    @flag()
+    @parameter()
     // Bare on a port
-    @simple
+    @parameter
     // Boolean literals as annotation arguments
-    @active(true)
-    @active(false)
+    @parameter("active", true)
+    @parameter("active", false)
     incoming test_port : Bit
 
     unused test_port
