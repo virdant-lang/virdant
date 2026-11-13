@@ -24,6 +24,7 @@
       <th>Direction</th>
       <th>Name</th>
       <th>Type</th>
+      <th>Dependson</th>
     </tr>
   </thead>
   <tbody>
@@ -36,8 +37,24 @@
           <span class="port-direction port-direction-outgoing">outgoing</span>
         {% endif %}
       </td>
-      <td><code>{{ port.name }}</code></td>
+      <td>
+        <code>{{ port.name }}</code>
+        {% if port.doc_body %}
+          <div class="port-doc">{{ port.doc_body }}</div>
+        {% endif %}
+      </td>
       <td><code>{{ port.type_str }}</code></td>
+      <td>
+        {% if port.dependson %}
+          <span class="dependson-chips">
+            {%- for dep in port.dependson -%}
+              <code class="dependson-chip">{{ dep }}</code>
+            {%- endfor -%}
+          </span>
+        {% elif port.direction == "outgoing" %}
+          <span class="dependson-empty">&mdash;</span>
+        {% endif %}
+      </td>
     </tr>
     {% endfor %}
   </tbody>

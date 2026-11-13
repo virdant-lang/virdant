@@ -2,6 +2,7 @@
 //! `Db`, extracts docstrings, and renders project/package/item pages
 //! using embedded Tera templates with a shared sidebar and stylesheet.
 
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
 
@@ -147,6 +148,11 @@ struct PortCtx {
     direction: String,
     name: String,
     type_str: String,
+    /// The declared `dependson` list (outgoing ports only; always
+    /// empty for incoming and bus ports).
+    dependson: Vec<String>,
+    /// The port's docstring, if any.
+    doc_body: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -1092,6 +1098,29 @@ fn render_moddef_page_with_sidebar(
     // Get ports via the ports query
     let ports = db.get_ports_of(symbol.id());
 
+    // Collect each outgoing port's declared `dependson` list from the
+    // module's dependson analysis: `declared_edges` yields
+    // `(port, dependee)` pairs for every validated declaration.
+    let mut dependson_by_port: HashMap<BString, Vec<String>> = HashMap::new();
+    for (source, dependee) in db.get_dependson_analysis(symbol.id()).declared_edges() {
+        dependson_by_port
+            .entry(source.clone())
+            .or_default()
+            .push(dependee.to_str_lossy().into_owned());
+    }
+
+    // Collect each component's docstring, keyed by component name.
+    let mut doc_by_component: HashMap<BString, BString> = HashMap::new();
+    for child in node.children() {
+        if let AstNodePayload::Component(component) = child.payload() {
+            let doc = child
+                .doc_string()
+                .map(|doc| docstring_body(doc.clone(), &parsing))
+                .unwrap_or_default();
+            doc_by_component.insert(parsing.string(component.name).to_owned(), doc);
+        }
+    }
+
     // Get sockets by walking the AST
     let mut sockets: Vec<SocketCtx> = Vec::new();
     for child in node.children() {
@@ -1211,6 +1240,14 @@ fn render_moddef_page_with_sidebar(
                         .as_ref()
                         .map(|t| virdant::types::render::render_type(db, t))
                         .unwrap_or_else(|| "?".to_owned()),
+                    dependson: dependson_by_port
+                        .get(&port.path)
+                        .cloned()
+                        .unwrap_or_default(),
+                    doc_body: doc_by_component
+                        .get(&port.path)
+                        .map(|doc| doc.to_str_lossy().into_owned())
+                        .unwrap_or_default(),
                 }
             })
             .collect(),

@@ -720,6 +720,40 @@ pre.definition {
     color: #FFFFFF;
 }
 
+/* Dependson chips (outgoing ports) */
+
+.dependson-chips {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.dependson-chip {
+    display: inline-block;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    padding: 0.05em 0.55em;
+    border-radius: 6px;
+    background: var(--color-brand-light);
+    border: 1px solid var(--color-brand);
+    color: var(--color-text);
+    white-space: nowrap;
+}
+
+.dependson-empty {
+    color: var(--color-text-muted);
+}
+
+/* Port docstrings (under the port name in tables) */
+
+.port-doc {
+    margin-top: 0.2rem;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--color-text-muted);
+    white-space: pre-line;
+}
+
 /* ---------- Kind badges (inline) ---------- */
 
 span.kind {
