@@ -1,0 +1,5 @@
+[project]
+name = "use_undeclared_port"
+
+[prog]
+top = "top::Top"

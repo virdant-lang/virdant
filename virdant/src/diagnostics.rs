@@ -255,6 +255,11 @@ pub enum DiagnosticPayload {
     /// platform `default` drives them), but driving one requires an
     /// explicit declaration in the mod def.
     DriveUndeclaredPlatformPort(DriveUndeclaredPlatformPort),
+    /// A module uses (reads) a platform port which it does not declare.
+    /// Synthesized platform ports may be left untouched, but any use of
+    /// one — including as a reg's `on <CLOCK>` clock — requires an
+    /// explicit declaration in the mod def.
+    UseUndeclaredPlatformPort(UseUndeclaredPlatformPort),
     /// A module declares a port which its platform does not have.
     PlatformExtraPort(PlatformExtraPort),
     /// A module port's direction does not match its platform's port direction.
@@ -750,6 +755,12 @@ pub struct DriveUndeclaredPlatformPort {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UseUndeclaredPlatformPort {
+    pub platform: BString,
+    pub port: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlatformExtraPort {
     pub platform: BString,
     pub port: BString,
@@ -1229,6 +1240,7 @@ impl Diagnostic {
             DiagnosticPayload::ExpectedPlatform(d) => format!("Expected a platform: {} is not a platform", d.item).into(),
             DiagnosticPayload::PlatformMissingPort(d) => format!("Module is missing port {} required by platform {}", d.port, d.platform).into(),
             DiagnosticPayload::DriveUndeclaredPlatformPort(d) => format!("`{}` is declared in platform `{}`, but not declared in this module; declare it explicitly to drive it", d.port, d.platform).into(),
+            DiagnosticPayload::UseUndeclaredPlatformPort(d) => format!("`{}` is declared in platform `{}`, but not declared in this module; declare it explicitly to use it", d.port, d.platform).into(),
             DiagnosticPayload::PlatformExtraPort(d) => format!("Module has port {} which platform {} does not declare", d.port, d.platform).into(),
             DiagnosticPayload::DefaultOutsidePlatformPort(d) => format!("`default` on outgoing port {} is only allowed in a platform definition", d.port).into(),
             DiagnosticPayload::UnknownAnnotation(d) => format!("Unknown annotation '@{}'", d.name.to_str_lossy()).into(),
@@ -1433,6 +1445,7 @@ impl Diagnostic {
             DiagnosticPayload::ExpectedPlatform(_) => "ExpectedPlatform",
             DiagnosticPayload::PlatformMissingPort(_) => "PlatformMissingPort",
             DiagnosticPayload::DriveUndeclaredPlatformPort(_) => "DriveUndeclaredPlatformPort",
+            DiagnosticPayload::UseUndeclaredPlatformPort(_) => "UseUndeclaredPlatformPort",
             DiagnosticPayload::PlatformExtraPort(_) => "PlatformExtraPort",
             DiagnosticPayload::PlatformPortDirMismatch(_) => "PlatformPortDirMismatch",
             DiagnosticPayload::PlatformPortTypeMismatch(_) => "PlatformPortTypeMismatch",
@@ -1522,7 +1535,7 @@ from_diagnostic! {
     DependsonUndeclared, DependsonUnused,
     InitialForNonReg, InitialMultiple, InitialInsideIfMatch, InitialNoinitialPlatform,
     ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,
-    DriveUndeclaredPlatformPort,
+    DriveUndeclaredPlatformPort, UseUndeclaredPlatformPort,
     PlatformPortTypeMismatch, DefaultOutsidePlatformPort, UnknownAnnotation, NotYetImplemented, TypeArgCount,
     TypeArgKind, UnknownKind,
     CtorRequiresArgs, ExtModGenerics, NotPub, ReferencedWhileNotPub, UnusedNonPub, TypeNotPub, TopNotPub, TopGenerics, SocketConnectMismatch,

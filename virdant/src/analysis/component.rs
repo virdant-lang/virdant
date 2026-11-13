@@ -931,11 +931,15 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     // `check_platform_ports_for` still reports `PlatformMissingPort`
     // for them.
     //
-    // Synthesized ports are otherwise left alone: a module may read
-    // them freely, but an *explicit driver* on a synthesized port is an
-    // error (`DriveUndeclaredPlatformPort`, reported by driver
-    // analysis): driving an `outgoing` requires declaring it in the
-    // mod def.
+    // Synthesized ports may otherwise only be left untouched: *using*
+    // one — any expression reference, including a reg's `on <CLOCK>`
+    // clock — is an error (`UseUndeclaredPlatformPort`, reported below
+    // from the collected references), and an *explicit driver* on a
+    // synthesized port is an error (`DriveUndeclaredPlatformPort`,
+    // reported by driver analysis).  Both require declaring the port in
+    // the mod def: synthesis exists so a module may ignore platform
+    // ports, not so module code may reach through the `for` clause and
+    // read undeclared names.
     if matches!(symboltable.symbol(moddef).kind(), SymbolKind::ModDef) {
         match crate::analysis::platform::resolve_platform_for(builder, moddef) {
             Ok(Some(platform_id)) => {
@@ -988,6 +992,34 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
 
     // Collect references after all components are registered.
     collect_references(&item_ast.children(), &mut component_analysis, None);
+
+    // Flag every expression reference to a platform port synthesized
+    // into this module (`UseUndeclaredPlatformPort`).  Synthesis makes
+    // the port exist so the module may ignore it; actually reading it
+    // (as a value or as a reg's clock) requires declaring it in the mod
+    // def.  Driving a synthesized port is reported separately as
+    // `DriveUndeclaredPlatformPort` by driver analysis, which does not
+    // record the driver, so the two checks do not cascade.
+    if let Some(platform_id) = component_analysis.platform {
+        let platform_name: BString =
+            symboltable.symbol(platform_id).name().to_owned().into();
+        for (location, (component_id, kind)) in component_analysis.references.iter() {
+            if !matches!(kind, ReferenceKind::Expr) {
+                continue;
+            }
+            let component = component_analysis.component(*component_id).unwrap();
+            if !component.synthetic() {
+                continue;
+            }
+            component_analysis.diagnostics.push(Diagnostic::new(
+                builder.get_location_region(location.clone()),
+                diagnostics::UseUndeclaredPlatformPort {
+                    platform: platform_name.clone(),
+                    port: component.path(),
+                },
+            ));
+        }
+    }
 
     Arc::new(component_analysis)
 }

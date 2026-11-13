@@ -1,0 +1,32 @@
+// Tests the declaration rule for platform ports *used* by a module:
+//
+// 1. A module may not read a platform port it does not declare:
+//    using one -- as a value or as a reg's `on <CLOCK>` clock --
+//    requires declaring it explicitly in the mod def
+//    (`UseUndeclaredPlatformPort`).
+// 2. Declaring the port makes using it legal.
+
+import virt
+
+// `clock` is an `incoming` port of `virt::Virt`. This module never
+// declares it, so clocking `foo` off it is an error, reported at the
+// `clock` reference in the `on` clause.
+pub mod Top for virt::Virt {
+    reg foo : Bit on clock {
+        initial it <= false
+        it <= !it
+    }
+}
+
+// Declaring the port makes using it legal.
+pub mod Declared for virt::Virt {
+    incoming clock : Clock
+
+    reg foo : Bit on clock {
+        initial it <= false
+        it <= !it
+    }
+}
+
+// CHECK: `clock` is declared in platform `Virt`, but not declared in this module; declare it explicitly to use it
+// CHECK: FAILED with:

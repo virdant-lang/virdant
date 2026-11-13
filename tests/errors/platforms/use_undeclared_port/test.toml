@@ -1,0 +1,4 @@
+kind = "check"
+description = "Tests the declaration rule for platform ports used by a module:"
+expect = "error"
+filecheck = "src/top.vir"
