@@ -1,0 +1,41 @@
+// `outgoing wire` and `outgoing reg` are errors in a platform
+// definition: a platform describes the board's pins, not the
+// implementing module's internal realization.  Platform ports must be
+// declared plain `outgoing`; a module bound by `for` may still realize
+// them as `outgoing wire` or `outgoing reg` (the port match compares
+// directions only).
+//
+// The module below mirrors the platform's wire/reg declarations to
+// show that mirroring them does NOT add port-match errors on top: the
+// platform's own `PlatformWireRegPort` errors are the only report.
+
+platform P {
+    incoming clock : Clock
+    incoming d : Bit
+    outgoing wire w : Bit
+    outgoing reg r : Bit {
+        initial it <= false
+    }
+    outgoing plain : Bit
+}
+
+pub mod Top for P {
+    incoming clock : Clock
+    incoming d : Bit
+    outgoing wire w : Bit dependson d {
+        it := d
+    }
+    outgoing reg r : Bit {
+        initial it <= false
+        it <= d
+    }
+    outgoing plain : Bit dependson d {
+        it := d
+    }
+}
+
+// CHECK: Platform port w is declared `outgoing wire`; platform ports must be declared plain `outgoing`
+// CHECK: Platform port r is declared `outgoing reg`; platform ports must be declared plain `outgoing`
+// CHECK-NOT: Module has port
+// CHECK-NOT: missing port
+// CHECK: FAILED with:

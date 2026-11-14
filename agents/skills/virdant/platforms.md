@@ -43,6 +43,9 @@ A module with `for` must have EXACTLY the platform's port set:
 
 - Same names verbatim, same directions (`incoming`↔`incoming`,
   `outgoing`↔`outgoing`), same types.
+- A platform's plain `outgoing` port may be realized by the module as
+  `outgoing wire` or `outgoing reg`: the match compares directions
+  only, not the internal realization.
 - Extra module port => error
   (`Module has port extra which platform IceSugar does not declare`).
 - Missing module port => error (`Module is missing port no_default
@@ -56,6 +59,10 @@ A module with `for` must have EXACTLY the platform's port set:
 
 ## Platform defaults
 
+- Platform ports themselves must be declared plain `outgoing`:
+  `outgoing wire` or `outgoing reg` in a platform definition is an
+  error (`PlatformWireRegPort`).  A platform describes the board's
+  pins, not the implementing module's internal realization.
 - `default <EXPR>` is legal ONLY on `outgoing` ports of a `platform`
   definition. On a module's own ports it is a semantic error
   (`DefaultOutsidePlatformPort`: "`default` on outgoing port oops is

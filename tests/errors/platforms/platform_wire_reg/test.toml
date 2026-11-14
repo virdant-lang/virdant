@@ -1,0 +1,4 @@
+kind = "check"
+description = "Tests that `outgoing wire` and `outgoing reg` are errors in a platform definition."
+expect = "error"
+filecheck = "src/top.vir"

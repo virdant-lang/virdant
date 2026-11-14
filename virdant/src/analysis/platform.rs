@@ -57,7 +57,11 @@ pub fn platform_ports_detailed(
             ComponentKind::Incoming => PortDir::Input,
             ComponentKind::Outgoing => PortDir::Output,
             // `outgoing wire`/`outgoing reg` are not allowed in
-            // platform definitions; they are not ports.
+            // platform definitions (`PlatformWireRegPort`, checked in
+            // `queries/check.rs`); such declarations are skipped here.
+            // A module's `outgoing wire`/`outgoing reg` port still
+            // satisfies a platform's plain `outgoing` port: the port
+            // match compares directions only.
             _ => continue,
         };
         let typ_node = match child.typ() {

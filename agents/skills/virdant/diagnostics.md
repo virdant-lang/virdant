@@ -237,6 +237,12 @@ The `memory` statement: shape, indexing, write-site, and image rules.  See
     `outgoing` ports that have no `default`).
 * `default` clauses:
   * ``` `default` on outgoing port X is only allowed in a platform definition ```
+* Platform ports must be declared plain `outgoing` in the platform
+  definition: `outgoing wire` or `outgoing reg` there is an error
+  (``` Platform port X is declared `outgoing wire`; platform ports must
+  be declared plain `outgoing` ```). A module bound by `for` may still
+  realize a platform's plain `outgoing` port as `outgoing wire` or
+  `outgoing reg` — the port match compares directions only.
   * A platform default whose type does not match the port is reported at the
     platform's expression (`Wrong type: Expected Word[4] but found Bit`).
   * A module may omit a defaulted platform port entirely, or declare and

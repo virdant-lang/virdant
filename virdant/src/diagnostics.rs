@@ -274,6 +274,11 @@ pub enum DiagnosticPayload {
     PlatformPortDirMismatch(PlatformPortDirMismatch),
     /// A module port's type does not match its platform's port type.
     PlatformPortTypeMismatch(PlatformPortTypeMismatch),
+    /// A platform definition declares a port as `outgoing wire` or
+    /// `outgoing reg`.  Platform ports must be declared plain
+    /// `outgoing`: a platform describes the board's pins, not the
+    /// implementing module's internal realization.
+    PlatformWireRegPort(PlatformWireRegPort),
     /// A mod definition (not a platform) declares an `outgoing` port
     /// with a `default` clause.
     DefaultOutsidePlatformPort(DefaultOutsidePlatformPort),
@@ -814,6 +819,13 @@ pub struct PlatformPortTypeMismatch {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlatformWireRegPort {
+    pub port: BString,
+    /// The form used in the platform: `"wire"` or `"reg"`.
+    pub declared: BString,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NotYetImplemented {
     pub feature: BString,
 }
@@ -1284,6 +1296,12 @@ impl Diagnostic {
                     d.port, d.actual, d.expected,
                 ).into()
             }
+            DiagnosticPayload::PlatformWireRegPort(d) => {
+                format!(
+                    "Platform port {} is declared `outgoing {}`; platform ports must be declared plain `outgoing`",
+                    d.port, d.declared.to_str_lossy(),
+                ).into()
+            }
             DiagnosticPayload::NotYetImplemented(d) => {
                 format!("Not yet implemented: {}", d.feature).into()
             }
@@ -1479,6 +1497,7 @@ impl Diagnostic {
             DiagnosticPayload::PlatformExtraPort(_) => "PlatformExtraPort",
             DiagnosticPayload::PlatformPortDirMismatch(_) => "PlatformPortDirMismatch",
             DiagnosticPayload::PlatformPortTypeMismatch(_) => "PlatformPortTypeMismatch",
+            DiagnosticPayload::PlatformWireRegPort(_) => "PlatformWireRegPort",
             DiagnosticPayload::DefaultOutsidePlatformPort(_) => "DefaultOutsidePlatformPort",
             DiagnosticPayload::UnknownAnnotation(_) => "UnknownAnnotation",
             DiagnosticPayload::NotYetImplemented(_) => "NotYetImplemented",
@@ -1567,7 +1586,7 @@ from_diagnostic! {
     InitialForNonReg, InitialMultiple, InitialInsideIfMatch, InitialNoinitialPlatform,
     ExpectedPlatform, PlatformMissingPort, PlatformExtraPort, PlatformPortDirMismatch,
     DriveUndeclaredPlatformPort, UseUndeclaredPlatformPort,
-    PlatformPortTypeMismatch, DefaultOutsidePlatformPort, UnknownAnnotation, NotYetImplemented, TypeArgCount,
+    PlatformPortTypeMismatch, PlatformWireRegPort, DefaultOutsidePlatformPort, UnknownAnnotation, NotYetImplemented, TypeArgCount,
     TypeArgKind, UnknownKind,
     CtorRequiresArgs, ExtModGenerics, NotPub, ReferencedWhileNotPub, UnusedNonPub, TypeNotPub, TopNotPub, TopGenerics, SocketConnectMismatch,
     UnusedImport,

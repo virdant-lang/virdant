@@ -1,0 +1,30 @@
+// Tests that a module bound with `for` may satisfy a platform's plain
+// `outgoing` ports with `outgoing wire` or `outgoing reg`: the port
+// match compares port directions only, not the internal realization.
+
+// CHECK: Check OK
+
+platform P {
+    incoming clock : Clock
+    incoming d : Bit
+
+    outgoing o : Bit
+    outgoing defaulted : Bit default true
+}
+
+pub mod Top for P {
+    incoming clock : Clock
+    incoming d : Bit
+
+    // Realizes the platform's plain `outgoing o` as `outgoing wire`.
+    outgoing wire o : Bit dependson d {
+        it := d
+    }
+
+    // Realizes the platform's `outgoing defaulted default true` as an
+    // `outgoing reg`; the explicit declaration overrides the default.
+    outgoing reg defaulted : Bit {
+        initial it <= false
+        it <= d && o
+    }
+}

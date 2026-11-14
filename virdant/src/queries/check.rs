@@ -23,6 +23,7 @@ use crate::db::Builder;
 use crate::diagnostics::{self, Diagnostic, DiagnosticPayload};
 use crate::diagnostics::EnumPartiallySpecified;
 use crate::package::PackageId;
+use crate::syntax::ast::item_children;
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::token::KEYWORDS;
 
@@ -382,6 +383,11 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     // contain `initial` statements.
     check_platform_noinitial(builder, &mut diagnostics);
 
+    // Platform ports describe the board's pins, not a module's internal
+    // realization: a platform's `outgoing` ports must be declared plain
+    // `outgoing`, never `outgoing wire` or `outgoing reg`.
+    check_platform_outgoing_kinds(builder, &mut diagnostics);
+
     // Memory image validation: the image file must be
     // readable, well-formed, and no longer than the declared depth.
     check_memory_images(builder, &mut diagnostics);
@@ -644,6 +650,38 @@ fn check_default_clauses_in(
             }
         }
         check_default_clauses_in(&child, parsing, diagnostics);
+    }
+}
+
+/// Platform ports must be declared plain `outgoing` (`PlatformWireRegPort`).
+/// A module bound by `for` may still realize a platform `outgoing` port as
+/// `outgoing wire` or `outgoing reg` — the port match compares directions
+/// only — but a platform definition itself may not: a platform describes
+/// the board's pins, not the implementing module's internal realization.
+fn check_platform_outgoing_kinds(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        if item.kind != SymbolKind::Platform {
+            continue;
+        }
+        let location = item.location();
+        let parsing = builder.get_parsing(location.package());
+        let node = parsing.ast_node(location.ast_node_id());
+        for child in item_children(&node) {
+            let AstNodePayload::Component(component) = child.payload() else { continue };
+            let declared = match component.kind {
+                crate::common::ComponentKind::OutgoingWire => "wire",
+                crate::common::ComponentKind::OutgoingReg => "reg",
+                _ => continue,
+            };
+            diagnostics.push(Diagnostic::new(
+                child.region(),
+                diagnostics::PlatformWireRegPort {
+                    port: parsing.string(component.name).to_owned(),
+                    declared: BString::from(declared),
+                },
+            ));
+        }
     }
 }
 
