@@ -1,0 +1,4 @@
+kind = "check"
+description = "A non-`builtin` item must not be named the same as a `builtin` item of the `builtin` package."
+expect = "error"
+filecheck = "src/builtin_name_collision.vir"

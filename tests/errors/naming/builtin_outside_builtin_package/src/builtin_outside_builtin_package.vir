@@ -1,0 +1,43 @@
+// The `builtin` modifier marks items provided by the `builtin`
+// package itself (`lib/builtin.vir`), so it may only be used there.
+// Using it in any other package is a hard error, for every item kind.
+
+// CHECK: The `builtin` modifier may only be used in the `builtin` package: item `Foo`
+builtin mod Foo {
+}
+
+// CHECK: The `builtin` modifier may only be used in the `builtin` package: item `Bar`
+builtin socket Bar {
+}
+
+// CHECK: The `builtin` modifier may only be used in the `builtin` package: item `Plat`
+builtin platform Plat {
+}
+
+// CHECK: The `builtin` modifier may only be used in the `builtin` package: item `S`
+builtin struct type S {
+    x : Bit
+}
+
+// CHECK: The `builtin` modifier may only be used in the `builtin` package: item `U`
+builtin union type U {
+    A
+}
+
+// CHECK: The `builtin` modifier may only be used in the `builtin` package: item `E`
+builtin enum type E {
+    B = 0w2
+}
+
+// Plain (unmarked) declarations are fine.
+// CHECK-NOT: The `builtin` modifier
+mod Plain {
+}
+
+// A `builtin type` declaration is its own item kind, not a
+// `builtin`-modified item, so it stays legal here too.
+// CHECK-NOT: The `builtin` modifier
+builtin type T {
+}
+
+// CHECK: Check failed

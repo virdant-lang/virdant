@@ -33,6 +33,10 @@ fn pub_prefix(is_pub: bool) -> &'static str {
     if is_pub { "pub " } else { "" }
 }
 
+fn builtin_prefix(is_builtin: bool) -> &'static str {
+    if is_builtin { "builtin " } else { "" }
+}
+
 impl<'p> AstNode<'p> {
     pub fn id(&self) -> AstNodeId {
         self.id
@@ -198,20 +202,25 @@ impl<'p> AstNode<'p> {
                 } else {
                     ""
                 };
+                let builtin = if mod_def.is_builtin {
+                    "builtin "
+                } else {
+                    ""
+                };
                 let pub_ = if mod_def.is_pub {
                     "pub "
                 } else {
                     ""
                 };
-                format!("ModDef {pub_}{ext}{}", parsing.string(mod_def.name.clone()))
+                format!("ModDef {pub_}{ext}{builtin}{}", parsing.string(mod_def.name.clone()))
             }
-            AstNodePayload::StructDef(struct_def) => format!("StructDef{}{}", pub_prefix(struct_def.is_pub), parsing.string(struct_def.name.clone())),
-            AstNodePayload::UnionDef(union_def) => format!("UnionDef{}{}", pub_prefix(union_def.is_pub), parsing.string(union_def.name.clone())),
-            AstNodePayload::EnumDef(enum_def) => format!("EnumDef{}{}", pub_prefix(enum_def.is_pub), parsing.string(enum_def.name.clone())),
+            AstNodePayload::StructDef(struct_def) => format!("StructDef{}{}{}", pub_prefix(struct_def.is_pub), builtin_prefix(struct_def.is_builtin), parsing.string(struct_def.name.clone())),
+            AstNodePayload::UnionDef(union_def) => format!("UnionDef{}{}{}", pub_prefix(union_def.is_pub), builtin_prefix(union_def.is_builtin), parsing.string(union_def.name.clone())),
+            AstNodePayload::EnumDef(enum_def) => format!("EnumDef{}{}{}", pub_prefix(enum_def.is_pub), builtin_prefix(enum_def.is_builtin), parsing.string(enum_def.name.clone())),
             AstNodePayload::BuiltinDef(builtin_def) => format!("BuiltinDef{}{}", pub_prefix(builtin_def.is_pub), parsing.string(builtin_def.name.clone())),
             AstNodePayload::FnDef(_fn_def) => format!("FnDef"),
-            AstNodePayload::SocketDef(socket_def) => format!("SocketDef{}{}", pub_prefix(socket_def.is_pub), parsing.string(socket_def.name.clone())),
-            AstNodePayload::Platform(platform) => format!("Platform {}{}", pub_prefix(platform.is_pub), parsing.string(platform.name.clone())),
+            AstNodePayload::SocketDef(socket_def) => format!("SocketDef{}{}{}", pub_prefix(socket_def.is_pub), builtin_prefix(socket_def.is_builtin), parsing.string(socket_def.name.clone())),
+            AstNodePayload::Platform(platform) => format!("Platform {}{}{}", pub_prefix(platform.is_pub), builtin_prefix(platform.is_builtin), parsing.string(platform.name.clone())),
             AstNodePayload::Component(component) => format!("Component {:?} {}", component.kind, parsing.string(component.name.clone())),
             AstNodePayload::DefaultClause => format!("DefaultClause"),
             AstNodePayload::Driver(_driver) => format!("Driver"),

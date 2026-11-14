@@ -25,19 +25,19 @@ Item :=
     | SocketDef
     | PlatformDef
 
-ModDef := DocString? Annotations "pub"? "ext"? "mod" Ident ForClause? Generics? "{" ModDefStmt* "}"
+ModDef := DocString? Annotations "pub"? "ext"? "builtin"? "mod" Ident ForClause? Generics? "{" ModDefStmt* "}"
 
 ForClause := "for" Ofness
 
-StructDef := DocString? Annotations "pub"? "struct" "type" Ident Generics? "{" StructDefStmt* "}"
+StructDef := DocString? Annotations "pub"? "builtin"? "struct" "type" Ident Generics? "{" StructDefStmt* "}"
 
-PlatformDef := DocString? Annotations "pub"? "platform" Ident "{" PlatformStmt* "}"
+PlatformDef := DocString? Annotations "pub"? "builtin"? "platform" Ident "{" PlatformStmt* "}"
 
 PlatformStmt := ModDefStmtComponent
 
 StructDefStmt := DocString? Annotations Ident ":" Type
 
-UnionDef := DocString? Annotations "pub"? "union" "type" Ident Generics? "{" UnionDefStmt* "}"
+UnionDef := DocString? Annotations "pub"? "builtin"? "union" "type" Ident Generics? "{" UnionDefStmt* "}"
 
 UnionDefStmt := DocString? Annotations Ident ParamList?
 
@@ -63,7 +63,7 @@ KindParamList := (KindParam ",")* KindParam
 
 KindParam := Ident ":" Kind
 
-EnumDef := DocString? Annotations "pub"? "enum" "type" Ident Generics? "{" EnumDefStmt* "}"
+EnumDef := DocString? Annotations "pub"? "builtin"? "enum" "type" Ident Generics? "{" EnumDefStmt* "}"
 
 EnumDefStmt :=
       DocString? Annotations Ident "=" Expr
@@ -72,7 +72,7 @@ EnumDefStmt :=
 
 BuiltinDef := DocString? Annotations "pub"? "builtin" "type" Ident Generics? "{" "}"
 
-SocketDef := DocString? Annotations "pub"? "socket" Ident Generics? "{" SocketDefStmt* "}"
+SocketDef := DocString? Annotations "pub"? "builtin"? "socket" Ident Generics? "{" SocketDefStmt* "}"
 
 SocketDefStmt :=
       DocString? Annotations "cosi" Ident ":" Type DependsonList?

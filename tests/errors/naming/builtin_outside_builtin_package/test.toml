@@ -1,0 +1,4 @@
+kind = "check"
+description = "The `builtin` modifier may only be used in the `builtin` package; using it on any item declaration elsewhere is a hard error."
+expect = "error"
+filecheck = "src/builtin_outside_builtin_package.vir"

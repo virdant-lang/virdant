@@ -192,6 +192,76 @@ fn check_qualified_references(builder: &mut Builder, diagnostics: &mut Vec<Diagn
     }
 }
 
+/// Whether an item declaration carries the `builtin` modifier.  A
+/// `builtin type` declaration (`BuiltinDef`) is its own item kind, not
+/// a modified item, so it does not count here.
+fn item_is_builtin_marked(node: &crate::syntax::ast::AstNode<'_>) -> bool {
+    match node.payload() {
+        AstNodePayload::ModDef(m) => m.is_builtin,
+        AstNodePayload::StructDef(s) => s.is_builtin,
+        AstNodePayload::UnionDef(u) => u.is_builtin,
+        AstNodePayload::EnumDef(e) => e.is_builtin,
+        AstNodePayload::SocketDef(s) => s.is_builtin,
+        AstNodePayload::Platform(p) => p.is_builtin,
+        _ => false,
+    }
+}
+
+/// The `builtin` modifier marks items provided by the `builtin`
+/// package itself (`lib/builtin.vir`), so it may only appear there.
+/// Anywhere else it is a hard error.
+fn check_builtin_modifier(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let packages = builder.get_packages();
+    let builtin_package = packages.builtin();
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        if item.location().package() == builtin_package {
+            continue;
+        }
+        let location = item.location();
+        let parsing = builder.get_parsing(location.package());
+        let node = parsing.ast_node(location.ast_node_id());
+        if item_is_builtin_marked(&node) {
+            diagnostics.push(Diagnostic::new(
+                node.region(),
+                diagnostics::BuiltinOutsideBuiltinPackage {
+                    item: item.name().to_owned(),
+                },
+            ));
+        }
+    }
+}
+
+/// A non-`builtin` item must not share its name with an item of the
+/// `builtin` package: the builtin package is implicitly in scope, so
+/// such a name collides with a builtin item (`Bit`, `Word`, `Sync`,
+/// ...).
+fn check_builtin_name_shadowing(builder: &mut Builder, diagnostics: &mut Vec<Diagnostic>) {
+    let packages = builder.get_packages();
+    let builtin_package = packages.builtin();
+    let symboltable = builder.get_symboltable();
+    for item in symboltable.items() {
+        if item.location().package() == builtin_package {
+            continue;
+        }
+        if !symboltable.builtin_names.contains(item.name()) {
+            continue;
+        }
+        let location = item.location();
+        let parsing = builder.get_parsing(location.package());
+        let node = parsing.ast_node(location.ast_node_id());
+        if item_is_builtin_marked(&node) || item.kind == SymbolKind::BuiltinDef {
+            continue;
+        }
+        diagnostics.push(Diagnostic::new(
+            node.region(),
+            diagnostics::BuiltinNameShadow {
+                item: item.name().to_owned(),
+            },
+        ));
+    }
+}
+
 fn check_annotations_in(
     node: &crate::syntax::ast::AstNode<'_>,
     parsing: &crate::syntax::parsing::Parsing,
@@ -222,6 +292,8 @@ pub(crate) fn check(builder: &mut Builder) -> Arc<Vec<Diagnostic>> {
     check_annotations(builder, &mut diagnostics);
     check_unused_imports(builder, &mut diagnostics);
     check_qualified_references(builder, &mut diagnostics);
+    check_builtin_modifier(builder, &mut diagnostics);
+    check_builtin_name_shadowing(builder, &mut diagnostics);
 
     let symboltable = builder.get_symboltable();
     diagnostics.extend(symboltable.diagnostics.clone());

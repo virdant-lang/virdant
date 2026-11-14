@@ -23,14 +23,6 @@
 
 import virt
 
-//> Local valid/ready handshake socket, structurally identical to the
-//> builtin `Pipe`: the producer drives `data`, the consumer drives
-//> `ready`.
-socket Pipe[T : Type] {
-    cosi data  : Valid[T]
-    soci ready : Bit dependson data
-}
-
 //> Joined pair: the payload carried by the output stream.
 //>
 //> `Pair(a, b)` - carries the value from stream A and the value from

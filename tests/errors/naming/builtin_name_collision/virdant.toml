@@ -1,0 +1,3 @@
+[package]
+name = "builtin_name_collision"
+version = "1.0.0"

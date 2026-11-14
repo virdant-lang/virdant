@@ -13,15 +13,9 @@
 
 import virt
 
-//> Local valid/ready handshake socket, structurally identical to the
-//> builtin `Pipe`: the producer drives `data`, the consumer drives
-//> `ready`.
-socket Pipe[T : Type] {
-    cosi data  : Valid[T]
-    soci ready : Bit
-}
-
-//> Passes one item every `N = 4` cycles.
+//> Passes one item every `N = 4` cycles.  Uses the builtin
+//> `Pipe` handshake socket: the producer drives `data`, the
+//> consumer drives `ready`.
 //>
 //> A window counter divides time into 4-cycle windows; `out.data` is
 //> valid during the first cycle of each window.  While `enable` is

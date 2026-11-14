@@ -216,6 +216,7 @@ pub struct Import {
 pub struct ModDef {
     pub name: InternedString,
     pub is_ext: bool,
+    pub is_builtin: bool,
     pub is_pub: bool,
     pub doc_string: Option<InternedString>,
 }
@@ -223,6 +224,7 @@ pub struct ModDef {
 #[derive(Clone, Debug)]
 pub struct StructDef {
     pub name: InternedString,
+    pub is_builtin: bool,
     pub is_pub: bool,
     pub doc_string: Option<InternedString>,
 }
@@ -230,6 +232,7 @@ pub struct StructDef {
 #[derive(Clone, Debug)]
 pub struct UnionDef {
     pub name: InternedString,
+    pub is_builtin: bool,
     pub is_pub: bool,
     pub doc_string: Option<InternedString>,
 }
@@ -237,6 +240,7 @@ pub struct UnionDef {
 #[derive(Clone, Debug)]
 pub struct EnumDef {
     pub name: InternedString,
+    pub is_builtin: bool,
     pub is_pub: bool,
     pub doc_string: Option<InternedString>,
 }
@@ -251,6 +255,7 @@ pub struct BuiltinDef {
 #[derive(Clone, Debug)]
 pub struct SocketDef {
     pub name: InternedString,
+    pub is_builtin: bool,
     pub is_pub: bool,
     pub doc_string: Option<InternedString>,
 }
@@ -258,6 +263,7 @@ pub struct SocketDef {
 #[derive(Clone, Debug)]
 pub struct Platform {
     pub name: InternedString,
+    pub is_builtin: bool,
     pub is_pub: bool,
     pub doc_string: Option<InternedString>,
 }

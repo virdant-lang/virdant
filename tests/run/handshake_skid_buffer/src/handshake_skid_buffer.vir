@@ -18,16 +18,9 @@
 
 import virt
 
-//> Local valid/ready handshake socket, structurally identical to the
-//> builtin `Pipe`: the producer drives `data`, the consumer drives
-//> `ready`.
-socket Pipe[T : Type] {
-    cosi data  : Valid[T]
-    soci ready : Bit
-}
-
 //> Two-deep, register-based skid buffer with `Pipe` handshakes on
-//> both sides.
+//> both sides.  Uses the builtin `Pipe` handshake socket: the
+//> producer drives `data`, the consumer drives `ready`.
 //>
 //> `slot0` is the head (the value currently presented on `out.data`);
 //> `slot1` is the skid register, which catches an incoming transfer

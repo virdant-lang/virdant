@@ -1,0 +1,37 @@
+// A non-`builtin` item must not share its name with an item of the
+// `builtin` package (`Bit`, `Word`, `Clock`, `Reset`, `Valid`, `Sync`,
+// `Pipe`): the builtin package is implicitly in scope, so such a name
+// collides with a builtin item.  This holds for every item kind.
+
+// CHECK: Item `Sync` has the same name as a `builtin` item in the `builtin` package; rename it
+mod Sync {
+}
+
+// CHECK: Item `Pipe` has the same name as a `builtin` item in the `builtin` package; rename it
+socket Pipe {
+}
+
+// CHECK: Item `Bit` has the same name as a `builtin` item in the `builtin` package; rename it
+struct type Bit {
+}
+
+// CHECK: Item `Valid` has the same name as a `builtin` item in the `builtin` package; rename it
+union type Valid {
+    Some
+}
+
+// CHECK: Item `Word` has the same name as a `builtin` item in the `builtin` package; rename it
+enum type Word {
+    Zero = 0w2
+}
+
+// CHECK: Item `Clock` has the same name as a `builtin` item in the `builtin` package; rename it
+platform Clock {
+}
+
+// A name that no builtin item uses is fine.
+// CHECK-NOT: Item `NotBuiltin` has the same name
+mod NotBuiltin {
+}
+
+// CHECK: Check failed

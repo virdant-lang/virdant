@@ -13,14 +13,14 @@ pub builtin type Reset {}
 //> `Valid[T]` represents a value which can either be:
 //> * `@Invalid(), or
 //> * `@Valid(t)` for `t` of type `T`
-pub enum type Valid[T : Type] {
+pub builtin enum type Valid[T : Type] {
     Invalid
     Valid(value : T)
 }
 
 //> `Sync` synchronizes a `Bit` input on one clock domain
 //> on another clock domain `clock`
-pub mod Sync {
+pub builtin mod Sync {
     //> An input `Bit` on another clock domain
     incoming inp : Bit
 
@@ -37,7 +37,7 @@ pub mod Sync {
     }
 }
 
-pub socket Pipe[T : Type] {
+pub builtin socket Pipe[T : Type] {
     cosi data : Valid[T]
     soci ready : Bit dependson data
 }

@@ -43,6 +43,14 @@ pub enum DiagnosticPayload {
     /// Two items share the same name in the same package.
     /// Lists regions to all such item declarations.
     DuplicateItem(DuplicateItem),
+    /// An item declaration used the `builtin` modifier outside the
+    /// `builtin` package.  The `builtin` modifier marks items provided
+    /// by the builtin package itself, so it may only appear in
+    /// `lib/builtin.vir`.
+    BuiltinOutsideBuiltinPackage(BuiltinOutsideBuiltinPackage),
+    /// A non-`builtin` item has the same name as an item of the
+    /// `builtin` package, so the two names collide.
+    BuiltinNameShadow(BuiltinNameShadow),
     /// Two items share the same name in the same package.
     /// Lists regions to all such item declarations.
     DuplicateSlot(DuplicateSlot),
@@ -348,6 +356,18 @@ pub struct PackageNotImported {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuplicateItem {
+    pub item: BString,
+}
+
+/// The `builtin`-modified item that lives outside the `builtin` package.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BuiltinOutsideBuiltinPackage {
+    pub item: BString,
+}
+
+/// The non-`builtin` item whose name collides with a `builtin` item.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BuiltinNameShadow {
     pub item: BString,
 }
 
@@ -924,6 +944,14 @@ impl Diagnostic {
                 d.package, d.package,
             ).into(),
             DiagnosticPayload::DuplicateItem(_) => "Duplicate Item".to_owned().into(),
+            DiagnosticPayload::BuiltinOutsideBuiltinPackage(d) => format!(
+                "The `builtin` modifier may only be used in the `builtin` package: item `{}`",
+                d.item,
+            ).into(),
+            DiagnosticPayload::BuiltinNameShadow(d) => format!(
+                "Item `{}` has the same name as a `builtin` item in the `builtin` package; rename it",
+                d.item,
+            ).into(),
             DiagnosticPayload::DuplicateSlot(_) => "Duplicate slot".into(),
             DiagnosticPayload::UnresolvedPackage(d) => format!("Unresolved package {}", d.package).into(),
             DiagnosticPayload::InvalidPackageName(d) => {
@@ -1358,6 +1386,8 @@ impl Diagnostic {
             DiagnosticPayload::UnusedImport(_) => "UnusedImport",
             DiagnosticPayload::PackageNotImported(_) => "PackageNotImported",
             DiagnosticPayload::DuplicateItem(_) => "DuplicateItem",
+            DiagnosticPayload::BuiltinOutsideBuiltinPackage(_) => "BuiltinOutsideBuiltinPackage",
+            DiagnosticPayload::BuiltinNameShadow(_) => "BuiltinNameShadow",
             DiagnosticPayload::DuplicateSlot(_) => "DuplicateSlot",
             DiagnosticPayload::UnresolvedPackage(_) => "UnresolvedPackage",
             DiagnosticPayload::InvalidPackageName(_) => "InvalidPackageName",
@@ -1515,6 +1545,7 @@ macro_rules! from_diagnostic {
 
 from_diagnostic! {
     SyntaxError, FormattingError, ImportCycle, UnresolvedImportError, DuplicateImport, DuplicateItem,
+    BuiltinOutsideBuiltinPackage, BuiltinNameShadow,
     DuplicateSlot, UnresolvedPackage, InvalidPackageName, UnresolvedItem, UnresolvedType, MissingOnClause,
     PackageNotImported,
     RedundantOnClause, WrongDriverType, NoRegDrivers, NoDrivers, MultipleDrivers,
