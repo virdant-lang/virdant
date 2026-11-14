@@ -24,7 +24,7 @@ use virdant::diagnostics::DiagnosticPayload;
 use virdant::analysis::platform::resolve_platform_for;
 use virdant::analysis::ports::Port;
 use virdant::analysis::symbols::{SymbolId, SymbolKind, SymbolTable};
-use virdant::types::{ExprRoot, Type};
+use virdant::types::Type;
 use virdant::common::{ComponentKind, DriverType, PortDir};
 use virdant::db::{Builder, Db};
 
@@ -51,13 +51,6 @@ struct Backend {
 struct ServerState {
     db: Db,
     uris: IndexSet<Url>,
-    hover_mode: HoverMode,
-}
-
-#[derive(Clone, Copy)]
-enum HoverMode {
-    Normal,
-    Debug,
 }
 
 fn new_db() -> Db {
@@ -135,7 +128,6 @@ impl Backend {
             client,
             state: Arc::new(Mutex::new(ServerState {
                 db: new_db(),
-                hover_mode: HoverMode::Debug,
                 uris: IndexSet::new(),
             })),
         }
@@ -156,7 +148,6 @@ impl LanguageServer for Backend {
             execute_command_provider: Some(ExecuteCommandOptions {
                 commands: vec![
                     "virdant.panic".into(),
-                    "virdant.debug".into(),
                 ],
                 ..Default::default()
             }),
@@ -274,10 +265,7 @@ impl LanguageServer for Backend {
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
-        match self.hover_mode().await {
-            HoverMode::Normal => self.hover_normal(params).await,
-            HoverMode::Debug => self.hover_debug(params).await,
-        }
+        self.hover_normal(params).await
     }
 
     async fn goto_definition(
@@ -452,14 +440,6 @@ impl LanguageServer for Backend {
             "virdant.panic" => {
                 panic!("virdant.panic: {:?}", params.arguments)
             }
-            "virdant.debug" => {
-                let mut state = self.state.lock().await;
-                    if params.arguments.get(0) == Some(&json!("true")) {
-                    state.hover_mode = HoverMode::Debug;
-                } else {
-                    state.hover_mode = HoverMode::Normal;
-                }
-            }
             _ => {}
         }
 
@@ -585,20 +565,15 @@ impl Backend {
             .await;
     }
 
-    async fn hover_mode(&self) -> HoverMode {
-        let state = self.state.lock().await;
-        state.hover_mode
-    }
-
     async fn hover_normal(&self, params: HoverParams) -> Result<Option<Hover>> {
         let position: Position = params.text_document_position_params.position;
         let linecol = LineCol::new((position.line + 1) as usize, (position.character + 1) as usize);
 
         let uri = params.text_document_position_params.text_document.uri;
-        let (parsing, _hover_mode) = {
+        let parsing = {
             let state = self.state.lock().await;
             let package = uri_to_package(&state.db, &uri);
-            (state.db.get_parsing(package), state.hover_mode)
+            state.db.get_parsing(package)
         };
 
         if let Some(node_id) = parsing.at(linecol) {
@@ -617,86 +592,6 @@ impl Backend {
 
     }
 
-    async fn hover_debug(&self, params: HoverParams) -> Result<Option<Hover>> {
-        let position: Position = params.text_document_position_params.position;
-        let linecol = LineCol::new((position.line + 1) as usize, (position.character + 1) as usize);
-
-        let uri = params.text_document_position_params.text_document.uri;
-        let state = self.state.lock().await;
-        let db = &state.db;
-        let package = uri_to_package(db, &uri);
-        let parsing = db.get_parsing(package);
-
-        if let Some(node_id) = parsing.at(linecol) {
-            let node = parsing.ast_node(node_id);
-
-            let typof = if node.is_expr() {
-                if let Some(exprroot) = get_expr_root(&self.client, db, &parsing, node.clone()).await {
-                    let _typing = db.get_typing(ExprRoot { location: exprroot.location() });
-                    db.get_typeof(node.location()).ok() // TODO is this .ok() OK?
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-            let contents = HoverContents::Markup(MarkupContent {
-                kind: MarkupKind::Markdown,
-                value: format!("# DEBUG NODE
-## Spelling
-```virdant
-{}
-```
-
-## Summary
-{}
-
-## Package
-{}
-
-## Location
-{:?}
-
-## Typeof
-{:?}
-",
-                    node.spelling(),
-                    node.summary(),
-                    db.get_packages().name(package).to_str_lossy(),
-                    node.id(),
-                    typof,
-                ),
-
-            });
-
-            Ok(Some(Hover {
-                contents,
-                range: Some(span_to_range(node.span())),
-            }))
-        } else {
-            Ok(None)
-        }
-
-    }
-}
-
-async fn get_expr_root<'a>(client: &Client, db: &'a Db, parsing: &'a Parsing, node: AstNode<'a>) -> Option<AstNode<'a>> {
-    let exprroots: Vec<AstNodeId> = db.get_exprroots().iter().map(|exprroot| exprroot.location().ast_node_id()).collect();
-
-        client
-            .log_message(MessageType::ERROR, format!("get_expr_root({:?})", node.id()))
-            .await;
-
-        client
-            .log_message(MessageType::ERROR, format!("exprroots = ({exprroots:?})"))
-            .await;
-
-    let mut current = node;
-    while !exprroots.contains(&current.id()) {
-        let parent_id = current.parent()?.id();
-        current = parsing.ast_node(parent_id);
-    }
-    Some(current)
 }
 
 /// Builds the "Add missing match cases" quickfix for a `match` expression
