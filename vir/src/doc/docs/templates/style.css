@@ -76,6 +76,14 @@ code, pre, kbd, samp {
     --color-table-header:   #E8E8E8;
     --color-table-hover:    #F0F0F0;
 
+    --color-pub-bg:         #F5D90A;
+    --color-pub-border:     #B8860B;
+    --color-pub-text:       #4A3B00;
+
+    --color-ext-bg:         #E6C9A8;
+    --color-ext-border:     #A0522D;
+    --color-ext-text:       #5C3A21;
+
     /* Kind-dot colors */
     --color-kind-mod:       #4A9EFF;
     --color-kind-struct:    #28A745;
@@ -84,6 +92,7 @@ code, pre, kbd, samp {
     --color-kind-builtin:   #6C757D;
     --color-kind-fn:        #6610F2;
     --color-kind-socket:    #DC3545;
+    --color-kind-platform:  #17A2B8;
 
     /* Layout */
     --sidebar-width:        300px;
@@ -125,6 +134,14 @@ code, pre, kbd, samp {
     --color-table-header:   #21262D;
     --color-table-hover:    #1C2128;
 
+    --color-pub-bg:         #665204;
+    --color-pub-border:     #D29922;
+    --color-pub-text:       #F5D90A;
+
+    --color-ext-bg:         #4A3220;
+    --color-ext-border:     #C08552;
+    --color-ext-text:       #E6C9A8;
+
     --color-kind-mod:       #58A6FF;
     --color-kind-struct:    #3FB950;
     --color-kind-union:     #F778BA;
@@ -132,6 +149,7 @@ code, pre, kbd, samp {
     --color-kind-builtin:   #8B949E;
     --color-kind-fn:        #BC8CFF;
     --color-kind-socket:    #FF7B72;
+    --color-kind-platform:  #39C5CF;
 }
 
 /* ---------- Links ---------- */
@@ -349,6 +367,40 @@ main.content a:hover {
     font-weight: 600;
 }
 
+/* `pub` badge in sidebar */
+
+.package-items .pub-badge {
+    font-size: 0.65rem;
+    padding: 0.05em 0.45em;
+    margin-left: 0.15rem;
+    flex-shrink: 0;
+}
+
+.package-items .ext-badge {
+    font-size: 0.65rem;
+    padding: 0.05em 0.45em;
+    margin-left: 0.15rem;
+    flex-shrink: 0;
+}
+
+/* Kind badges in sidebar (compact variant of `span.kind`) */
+
+.package-items .sidebar-kind {
+    font-size: 0.65rem;
+    padding: 0.05em 0.45em;
+    border-radius: 6px;
+    margin-right: 0;
+    flex-shrink: 0;
+    line-height: 1.4;
+}
+
+.package-items .item-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Kind dots in sidebar */
 
 .kind-dot {
@@ -366,6 +418,7 @@ main.content a:hover {
 .kind-dot-builtin   { background: var(--color-kind-builtin); }
 .kind-dot-fn        { background: var(--color-kind-fn); }
 .kind-dot-socket    { background: var(--color-kind-socket); }
+.kind-dot-platform { background: var(--color-kind-platform); }
 
 /* Sidebar toggle (mobile) */
 
@@ -697,6 +750,52 @@ pre.definition {
     background: var(--color-table-hover);
 }
 
+/* `pub` badge (public modules) */
+
+.pub-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.15em 0.6em;
+    border-radius: 6px;
+    border: 1px solid var(--color-pub-border);
+    background: var(--color-pub-bg);
+    color: var(--color-pub-text);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    line-height: 1.4;
+    vertical-align: middle;
+}
+
+h1 .pub-badge {
+    font-size: 0.8rem;
+    vertical-align: baseline;
+}
+
+/* `ext` badge (external modules) */
+
+.ext-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.15em 0.6em;
+    border-radius: 6px;
+    border: 1px solid var(--color-ext-border);
+    background: var(--color-ext-bg);
+    color: var(--color-ext-text);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    line-height: 1.4;
+    vertical-align: middle;
+}
+
+h1 .ext-badge {
+    font-size: 0.8rem;
+    vertical-align: baseline;
+}
+
 /* Port direction badges */
 
 .port-direction {
@@ -754,30 +853,67 @@ pre.definition {
     white-space: pre-line;
 }
 
+/* ---------- Item names (monospace) ---------- */
+
+/* Sidebar item names and page-title item names render in the mono
+   face (Fira Mono, already loaded for code) to echo how the names
+   are written in source. */
+
+.item-name {
+    font-family: "Fira Mono", "Cascadia Code", "JetBrains Mono", Consolas,
+                 monospace;
+}
+
+h1 .item-name {
+    font-size: 0.88em;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+}
+
+.package-items .item-name {
+    font-size: 0.95em;
+}
+
 /* ---------- Kind badges (inline) ---------- */
+
+/* Chip-style kind badges: a light tint of the kind color as the
+   background, a stronger tint as the border, and text darkened (light
+   theme) or lightened (dark theme) from the kind color -- the same
+   idiom as the `pub` badge, giving strong contrast in both themes.
+   The plain declarations before each `color-mix` line are fallbacks
+   for browsers without `color-mix` support. */
 
 span.kind {
     display: inline-block;
     font-size: 0.75rem;
     font-weight: 700;
     padding: 0.15em 0.55em;
-    border-radius: 4px;
+    border-radius: 6px;
     margin-right: 0.5em;
     text-transform: uppercase;
     letter-spacing: 0.03em;
+    white-space: nowrap;
+    line-height: 1.4;
+    border: 1px solid var(--color-table-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-color: color-mix(in srgb, var(--kind-color) 60%, var(--color-surface));
+    background: color-mix(in srgb, var(--kind-color) 18%, var(--color-surface));
+    color: color-mix(in srgb, var(--kind-color) 60%, var(--color-text-heading));
 }
 
-span.kind-mod    { background: var(--color-kind-mod);    color: #FFFFFF; }
-span.kind-struct { background: var(--color-kind-struct); color: #FFFFFF; }
-span.kind-union  { background: var(--color-kind-union);  color: #FFFFFF; }
-span.kind-enum   { background: var(--color-kind-enum);   color: #FFFFFF; }
-span.kind-builtin{ background: var(--color-kind-builtin);color: #FFFFFF; }
-span.kind-fn     { background: var(--color-kind-fn);     color: #FFFFFF; }
-span.kind-socket { background: var(--color-kind-socket); color: #FFFFFF; }
-span.kind-slot   { background: #6B7280;                 color: #FFFFFF; }
-span.kind-field  { background: var(--color-kind-struct); color: #FFFFFF; }
-span.kind-ctor   { background: var(--color-kind-union);  color: #FFFFFF; }
-span.kind-enumerant { background: var(--color-kind-enum); color: #FFFFFF; }
+span.kind-mod       { --kind-color: var(--color-kind-mod); }
+span.kind-struct    { --kind-color: var(--color-kind-struct); }
+span.kind-union     { --kind-color: var(--color-kind-union); }
+span.kind-enum      { --kind-color: var(--color-kind-enum); }
+span.kind-builtin   { --kind-color: var(--color-kind-builtin); }
+span.kind-fn        { --kind-color: var(--color-kind-fn); }
+span.kind-socket    { --kind-color: var(--color-kind-socket); }
+span.kind-platform  { --kind-color: var(--color-kind-platform); }
+span.kind-slot      { --kind-color: #6B7280; }
+span.kind-field     { --kind-color: var(--color-kind-struct); }
+span.kind-ctor      { --kind-color: var(--color-kind-union); }
+span.kind-enumerant { --kind-color: var(--color-kind-enum); }
 
 /* ---------- Lists ---------- */
 

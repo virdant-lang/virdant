@@ -35,6 +35,8 @@ struct SidebarItemCtx {
     name: String,
     filename: String,
     kind_label: String,
+    is_pub: bool,
+    is_ext: bool,
     is_current: bool,
 }
 
@@ -86,6 +88,8 @@ struct ModdefPageCtx {
     all_packages: Vec<SidebarPkgCtx>,
     package_name: String,
     name: String,
+    is_pub: bool,
+    is_ext: bool,
     doc_body: String,
     ports: Vec<PortCtx>,
     sockets: Vec<SocketCtx>,
@@ -175,6 +179,7 @@ struct TypePageCtx {
     package_name: String,
     kind_label: String,
     name: String,
+    is_pub: bool,
     doc_body: String,
     definition_text: String,
     slots: Vec<SlotCtx>,
@@ -208,6 +213,7 @@ struct SimplePageCtx {
     all_packages: Vec<SidebarPkgCtx>,
     package_name: String,
     name: String,
+    is_pub: bool,
     doc_body: String,
     definition_text: String,
     hierarchy: Option<HierarchyLinkCtx>,
@@ -248,6 +254,10 @@ fn make_tera() -> Result<Tera, tera::Error> {
         include_str!("docs/templates/fn_page.html.tera"),
     )?;
     tera.add_raw_template(
+        "platform_page.html.tera",
+        include_str!("docs/templates/platform_page.html.tera"),
+    )?;
+    tera.add_raw_template(
         "hierarchy_page.html.tera",
         include_str!("docs/templates/hierarchy_page.html.tera"),
     )?;
@@ -275,6 +285,8 @@ struct ItemEntry {
     package: PackageId,
     name: BString,
     kind: SymbolKind,
+    is_pub: bool,
+    is_ext: bool,
     doc_body: BString,
 }
 
@@ -311,9 +323,14 @@ fn build_sidebar_tree(
                 name: entry_name,
                 filename: format!("{}.html", entry.name.to_str_lossy()),
                 kind_label: kind_label(&entry.kind).to_owned(),
+                is_pub: entry.is_pub,
+                is_ext: entry.is_ext,
                 is_current,
             });
         }
+        // Sort `pub` items to the top of each package's list (stable,
+        // so the original order is preserved within each group).
+        items.sort_by_key(|item| std::cmp::Reverse(item.is_pub));
         result.push(SidebarPkgCtx {
             name: pkg_name,
             is_active,
@@ -368,6 +385,8 @@ pub fn generate_docs(
             let ast_node_id = analysis.item_ast_node_id(item_name.as_ref());
             let node = parsing.ast_node(ast_node_id);
             let kind = node_kind(&node);
+            let is_pub = node.payload().is_pub();
+            let is_ext = matches!(node.payload(), AstNodePayload::ModDef(m) if m.is_ext);
             let doc_body = extract_doc_body(&node, &parsing);
 
             // Render to HTML string (without sidebar -- we fill that later)
@@ -407,6 +426,13 @@ pub fn generate_docs(
                     item_name.as_bstr(),
                     doc_body.as_bstr(),
                 )?,
+                SymbolKind::Platform => render_platform_page(
+                    &tera,
+                    &node,
+                    &parsing,
+                    item_name.as_bstr(),
+                    doc_body.as_bstr(),
+                )?,
                 _ => continue,
             };
 
@@ -414,6 +440,8 @@ pub fn generate_docs(
                 package: pkg.clone(),
                 name: item_name.clone(),
                 kind: kind.clone(),
+                is_pub,
+                is_ext,
                 doc_body: doc_body.clone(),
             });
 
@@ -593,6 +621,16 @@ pub fn generate_docs(
                     HierarchyLinkCtx::link(&hierarchy, false),
                 )?,
                 SymbolKind::FnDef => render_fn_page_with_sidebar(
+                    &tera,
+                    &node,
+                    &parsing,
+                    entry.name.as_bstr(),
+                    entry.doc_body.as_bstr(),
+                    &item_sidebar,
+                    &pkg_str,
+                    HierarchyLinkCtx::link(&hierarchy, false),
+                )?,
+                SymbolKind::Platform => render_platform_page_with_sidebar(
                     &tera,
                     &node,
                     &parsing,
@@ -1056,6 +1094,7 @@ fn kind_label(kind: &SymbolKind) -> &'static str {
         SymbolKind::BuiltinDef => "builtin",
         SymbolKind::FnDef => "fn",
         SymbolKind::SocketDef => "socket",
+        SymbolKind::Platform => "platform",
         _ => "?",
     }
 }
@@ -1222,6 +1261,8 @@ fn render_moddef_page_with_sidebar(
         all_packages: all_packages.to_vec(),
         package_name: pkg_str.clone(),
         name: name_str,
+        is_pub: node.payload().is_pub(),
+        is_ext: matches!(node.payload(), AstNodePayload::ModDef(m) if m.is_ext),
         doc_body: doc_body.to_str_lossy().into_owned(),
         submodules,
         ports: ports
@@ -1281,6 +1322,7 @@ fn render_type_page_with_sidebar(
         package_name: package_name.to_owned(),
         kind_label: kind_label(kind).to_owned(),
         name: name_str,
+        is_pub: node.payload().is_pub(),
         doc_body: doc_body.to_str_lossy().into_owned(),
         definition_text: definition_text.to_str_lossy().into_owned(),
         slots,
@@ -1310,6 +1352,7 @@ fn render_socket_page_with_sidebar(
         all_packages: all_packages.to_vec(),
         package_name: package_name.to_owned(),
         name: name_str,
+        is_pub: node.payload().is_pub(),
         doc_body: doc_body.to_str_lossy().into_owned(),
         definition_text: definition_text.to_str_lossy().into_owned(),
         hierarchy,
@@ -1338,6 +1381,7 @@ fn render_fn_page_with_sidebar(
         all_packages: all_packages.to_vec(),
         package_name: package_name.to_owned(),
         name: name_str,
+        is_pub: node.payload().is_pub(),
         doc_body: doc_body.to_str_lossy().into_owned(),
         definition_text: definition_text.to_str_lossy().into_owned(),
         hierarchy,
@@ -1398,6 +1442,47 @@ fn render_fn_page(
     doc_body: &BStr,
 ) -> Result<String, Box<dyn std::error::Error>> {
     render_fn_page_with_sidebar(
+        tera, node, parsing, item_name, doc_body, &[], "", None,
+    )
+}
+
+fn render_platform_page_with_sidebar(
+    tera: &Tera,
+    node: &AstNode<'_>,
+    parsing: &Parsing,
+    item_name: &BStr,
+    doc_body: &BStr,
+    all_packages: &[SidebarPkgCtx],
+    package_name: &str,
+    hierarchy: Option<HierarchyLinkCtx>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let name_str: String = item_name.to_str_lossy().into_owned();
+
+    let definition_span = node.span();
+    let definition_text = parsing.text(definition_span);
+
+    let ctx = SimplePageCtx {
+        style_href: style_href(1),
+        all_packages: all_packages.to_vec(),
+        package_name: package_name.to_owned(),
+        name: name_str,
+        is_pub: node.payload().is_pub(),
+        doc_body: doc_body.to_str_lossy().into_owned(),
+        definition_text: definition_text.to_str_lossy().into_owned(),
+        hierarchy,
+    };
+
+    Ok(tera.render("platform_page.html.tera", &tera::Context::from_serialize(&ctx)?)?)
+}
+
+fn render_platform_page(
+    tera: &Tera,
+    node: &AstNode<'_>,
+    parsing: &Parsing,
+    item_name: &BStr,
+    doc_body: &BStr,
+) -> Result<String, Box<dyn std::error::Error>> {
+    render_platform_page_with_sidebar(
         tera, node, parsing, item_name, doc_body, &[], "", None,
     )
 }

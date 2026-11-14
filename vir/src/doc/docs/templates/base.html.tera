@@ -51,8 +51,10 @@
           <li>
             <a href="{{ style_href }}{{ pkg.name }}/{{ item.filename }}"
                class="{% if item.is_current %}current{% endif %}">
-              <span class="kind-dot kind-dot-{{ item.kind_label }}"></span>
-              {{ item.name }}
+              {% if item.is_pub %}<span class="pub-badge">pub</span>{% endif %}
+              {% if item.is_ext %}<span class="ext-badge">ext</span>{% endif %}
+              <span class="kind kind-{{ item.kind_label }} sidebar-kind">{{ item.kind_label }}</span>
+              <span class="item-name">{{ item.name }}</span>
             </a>
           </li>
           {% endfor %}

@@ -11,7 +11,20 @@ use crate::db::Db;
 use crate::types::typ::{ParamId, Type};
 use crate::types::typedef::TypeParam;
 
-/// Render `def_symbol`'s fully-qualified name with its type arguments,
+/// Render a `Usual` type's item name: the fully-qualified name,
+/// except that the `builtin` package's implicit scope is elided
+/// (`Bit`, not `builtin::Bit`), matching how the source writes it.
+fn render_item_name(db: &Db, symbol_id: SymbolId) -> String {
+    let symbol = db.get_symboltable().symbol(symbol_id);
+    let packages = db.get_packages();
+    if symbol.location.package() == packages.builtin() {
+        symbol.name().to_str_lossy().into_owned()
+    } else {
+        symbol.fqn().to_str_lossy().into_owned()
+    }
+}
+
+/// Render `def_symbol`'s name with its type arguments,
 /// e.g. `Pipe[Word[8]]` or `Fifo`.  `params` (the def's declared
 /// generic parameters) give `Param` arguments their source names.
 pub fn render_mono_item(
@@ -20,8 +33,7 @@ pub fn render_mono_item(
     params: &[TypeParam],
     args: &[Type],
 ) -> String {
-    let symbol = db.get_symboltable().symbol(def_symbol);
-    let name = symbol.fqn().to_str_lossy().into_owned();
+    let name = render_item_name(db, def_symbol);
     if args.is_empty() {
         name
     } else {
@@ -50,8 +62,7 @@ pub fn render_type_with(db: &Db, typ: &Type, params: &[TypeParam]) -> String {
         Type::Word(width) => format!("Word[{width}]"),
         Type::Param(param_id) => render_param(*param_id, params),
         Type::Usual(symbol_id, args) => {
-            let symbol = db.get_symboltable().symbol(*symbol_id);
-            let name = symbol.fqn().to_str_lossy().into_owned();
+            let name = render_item_name(db, *symbol_id);
             if args.is_empty() {
                 name
             } else {

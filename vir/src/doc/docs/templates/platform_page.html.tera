@@ -1,0 +1,23 @@
+{% extends "base.html.tera" %}
+{% block title %}platform {{ name }}{% endblock %}
+{% block breadcrumbs %}
+<a href="{{ style_href }}index.html">Project</a>
+<span class="sep">/</span>
+<a href="index.html">{{ package_name }}</a>
+<span class="sep">/</span>
+<span class="current">{{ name }}</span>
+{% endblock %}
+{% block content %}
+<h1>{% if is_pub %}<span class="pub-badge">pub</span> {% endif %}<span class="kind kind-platform">platform</span> <span class="item-name">{{ name }}</span></h1>
+
+{% if doc_body %}
+<pre class="doc">{{ doc_body }}</pre>
+{% endif %}
+
+<h2>Definition</h2>
+<div class="definition-wrapper">
+<button class="copy-btn" onclick="copyDefinition(this)">&#x1F4CB;</button>
+<pre class="definition">{{ definition_text }}</pre>
+</div>
+
+{% endblock %}
