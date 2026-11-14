@@ -55,10 +55,14 @@ pub(crate) fn build_ctor_signature(
         let AstNodePayload::Param(param) = param_node.payload() else { continue };
         let name = parsing.string(param.name).to_owned();
         let type_node = param_node.child(1);
-        let typ = type_index
-            .type_at(type_node.location())
-            .cloned()
-            .expect("type of ctor param must be in TypeIndex");
+        // A param type which failed to resolve (a typo, or a parse error
+        // mid-edit) has no TypeIndex entry: `gather_type_root` reports
+        // the `UnresolvedType` diagnostic and skips the insertion.  Skip
+        // the parameter here too, rather than panicking — a half-written
+        // file must yield diagnostics, not a crashed server.
+        let Some(typ) = type_index.type_at(type_node.location()).cloned() else {
+            continue;
+        };
         arguments.push((name, typ));
     }
 
