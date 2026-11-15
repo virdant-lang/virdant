@@ -51,6 +51,18 @@
     font-weight: 500;
 }
 
+/* String literals .s1, .s2 */
+.highlight-virdant .s1,
+.highlight-virdant .s2 {
+    color: #BA2121;
+}
+
+/* String escapes: \n, \x41, ... .se */
+.highlight-virdant .se {
+    color: #AA5D1F;
+    font-weight: bold;
+}
+
 /* ========================================== */
 /* Inline Virdant Code Syntax Highlighting   */
 /* ========================================== */
@@ -103,6 +115,18 @@
 .vir-inline .nb {
     color: #B8851A;
     font-weight: 500;
+}
+
+/* String literals .s1, .s2 */
+.vir-inline .s1,
+.vir-inline .s2 {
+    color: #BA2121;
+}
+
+/* String escapes: \n, \x41, ... .se */
+.vir-inline .se {
+    color: #AA5D1F;
+    font-weight: bold;
 }
 
 /* ----- Dark mode overrides ----- */
@@ -164,4 +188,16 @@
 [data-theme="dark"] .vir-inline .nc,
 [data-theme="dark"] .vir-inline .nb {
     color: #b8a060;
+}
+
+/* Dark mode string colors match [data-theme="dark"] .highlight .s2/.se
+   in custom.css, which styles code blocks. */
+[data-theme="dark"] .vir-inline .s1,
+[data-theme="dark"] .vir-inline .s2,
+[data-theme="dark"] .vir-inline .se {
+    color: #a8c08a;
+}
+
+[data-theme="dark"] .vir-inline .se {
+    font-weight: bold;
 }

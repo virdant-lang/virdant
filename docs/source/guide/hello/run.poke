@@ -1,0 +1,6 @@
+vcd trace.vcd
+
+tick 15
+advance
+
+exit

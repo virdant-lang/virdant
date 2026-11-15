@@ -3,14 +3,7 @@ import virt
 pub mod Top for virt::Virt {
     incoming clock : Clock
 
-    outgoing exit : Valid[Word[8]] {
-        it := if {
-            when mem[dyn index] == 0 => @Valid(0)
-            else => @Invalid()
-        }
-    }
-
-    @image_inline("Hello, Virdant!\n\r\0")
+    @image_inline("Hello, world!\n\r\0")
     memory mem[64] : Word[8]
 
     reg index : Word[6] {
@@ -18,7 +11,18 @@ pub mod Top for virt::Virt {
         it <= it + 1
     }
 
+    wire char : Word[8] {
+        it := mem[dyn index]
+    }
+
     outgoing debug : Valid[Word[8]] {
-        it := @Valid(mem[dyn index])
+        it := @Valid(char)
+    }
+
+    outgoing exit : Valid[Word[8]] {
+        it := if {
+            when char == 0 => @Valid(0)
+            else => @Invalid()
+        }
     }
 }

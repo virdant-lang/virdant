@@ -59,9 +59,8 @@ class VirdantLexer(RegexLexer):
             # Annotations (@name, @name(...)) must come before plain @
             (r'@[a-zA-Z_][_a-zA-Z_0-9]*', Name.Decorator),
             (r'@', Punctuation),
-            # String literals
-            (r'"[^"]*"', String.Double),
-            (r"'[^']*'", String.Single),
+            # String literals (only double-quoted; see syntax/token.rs)
+            (r'"', String.Double, 'string'),
             # Number literals with width suffix (must come before plain versions)
             (r'0b[0-1][0-1_]*w[0-9][0-9_]*', Number.Integer),
             (r'0x[0-9a-fA-F][0-9a-fA-F_]*w[0-9][0-9_]*', Number.Integer),
@@ -91,6 +90,19 @@ class VirdantLexer(RegexLexer):
             (words(BUILTINS, suffix=r'\b'), Name.Builtin),
             # Regular identifiers
             (r'\b([a-zA-Z_][_a-zA-Z_0-9]*)\b', Name.Variable),
+        ],
+        'string': [
+            (r'"', String.Double, '#pop'),
+            # Single-character escapes: \a \b \e \f \n \r \t \v \\ \' \" \?
+            (r'\\[abefnrtv\\\'"?]', String.Escape),
+            # Hex escapes: \xNN (exactly two hex digits)
+            (r'\\x[0-9a-fA-F]{2}', String.Escape),
+            # Octal escapes: \0 through \777
+            (r'\\[0-7]{1,3}', String.Escape),
+            # Fallback for invalid escapes (still highlight, don't break the string)
+            (r'\\.', String.Escape),
+            # Any bytes except quote and backslash, verbatim
+            (r'[^"\\]+', String.Double),
         ],
     }
 
