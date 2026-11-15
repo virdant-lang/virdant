@@ -17,6 +17,7 @@
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-header">
     <a href="{{ style_href }}index.html" class="sidebar-logo">
+      <img src="{{ style_href }}virdant-logo.svg" class="sidebar-logo-mark" alt="Virdant logo"/>
       <span class="sidebar-logo-text">Virdant</span>
     </a>
   </div>

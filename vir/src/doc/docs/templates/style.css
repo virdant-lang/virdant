@@ -199,7 +199,7 @@ main.content a:hover {
     background: var(--color-brand);
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     flex-shrink: 0;
 }
 
@@ -214,6 +214,13 @@ main.content a:hover {
     text-decoration: none;
 }
 
+.sidebar-logo-mark {
+    width: 2rem;
+    height: 2rem;
+    display: block;
+    flex-shrink: 0;
+}
+
 .sidebar-logo-text {
     font-family: "Nunito", sans-serif;
     font-weight: 800;
@@ -222,26 +229,48 @@ main.content a:hover {
     letter-spacing: 0.02em;
 }
 
+/* The "Module hierarchy" entry sits right under the header in the
+   sidebar's upper-left.  Styled as a small button-card rather than a
+   bare text link: rounded, bordered, with a hover/active state keyed
+   to the brand green.  The plain `background`/`color` declarations
+   before each `color-mix` line are fallbacks for browsers without
+   `color-mix` support. */
+
 .sidebar-hierarchy {
-    padding: 0.4rem 1rem 0.2rem;
+    padding: 0.6rem 0.75rem 0.3rem;
 }
 
 .sidebar-hierarchy a {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--color-link);
+    gap: 0.6rem;
+    padding: 0.5rem 0.8rem;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--color-sidebar-text);
     text-decoration: none;
+    background: var(--color-sidebar-hover);
+    border: 1px solid var(--color-sidebar-border);
+    border-radius: 8px;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .sidebar-hierarchy a:hover {
-    text-decoration: underline;
+    color: #FFFFFF;
+    border-color: var(--color-brand);
+    text-decoration: none;
 }
 
 .sidebar-hierarchy a.current {
-    color: var(--color-text);
+    color: var(--color-brand);
+    border-color: var(--color-brand);
+    background: color-mix(in srgb, var(--color-brand) 14%, var(--color-sidebar-bg));
+}
+
+.sidebar-hierarchy .kind-dot {
+    width: 9px;
+    height: 9px;
+    box-shadow: 0 0 5px color-mix(in srgb, var(--color-kind-mod) 70%, transparent);
 }
 
 .sidebar-search {
