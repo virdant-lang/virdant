@@ -78,6 +78,11 @@ pub enum DiagnosticPayload {
     /// A clocked component (`reg`, `outgoing reg`, `memory`) was
     /// declared `async`.
     AsyncRegister(AsyncRegister),
+    /// A driver's expression (or an enclosing `when` guard, or an
+    /// indexed write's index) sits on a clock domain the driven
+    /// component cannot accept: the driving domain must upcast to the
+    /// target's declared domain (`Constant <= Sync(c) <= Async`).
+    DriverDomainMismatch(DriverDomainMismatch),
     /// A `driver` statement used the wrong driver type.
     /// Eg, a `reg` used `:=` or a `wire` used `<=`.
     WrongDriverType(WrongDriverType),
@@ -455,6 +460,17 @@ pub struct MissingDomainClause {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AsyncRegister {
     pub component: BString,
+}
+
+/// A driver drives a component from an incompatible clock domain: the
+/// driving expression's domain must upcast to the target's declared
+/// domain, and downcasting is never allowed.  Both domains are
+/// rendered ("clocked by `clk`", "async", "constant").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DriverDomainMismatch {
+    pub target: BString,
+    pub target_domain: BString,
+    pub expr_domain: BString,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1052,6 +1068,12 @@ impl Diagnostic {
                     d.component,
                 ).into()
             }
+            DiagnosticPayload::DriverDomainMismatch(d) => {
+                format!(
+                    "Domain mismatch: cannot drive `{}` ({}) with {}",
+                    d.target, d.target_domain, d.expr_domain,
+                ).into()
+            }
             DiagnosticPayload::RedundantOnClause(d) => {
                 format!(
                     "Redundant `on` clause: `{}`",
@@ -1506,6 +1528,7 @@ impl Diagnostic {
             DiagnosticPayload::DomainMismatch(_) => "DomainMismatch",
             DiagnosticPayload::MissingDomainClause(_) => "MissingDomainClause",
             DiagnosticPayload::AsyncRegister(_) => "AsyncRegister",
+            DiagnosticPayload::DriverDomainMismatch(_) => "DriverDomainMismatch",
             DiagnosticPayload::WrongDriverType(_) => "WrongDriverType",
             DiagnosticPayload::NoRegDrivers(_) => "NoRegDrivers",
             DiagnosticPayload::NoDrivers(_) => "NoDrivers",
@@ -1686,5 +1709,5 @@ from_diagnostic! {
     TypeArgKind, UnknownKind,
     CtorRequiresArgs, ExtModGenerics, NotPub, ReferencedWhileNotPub, PlatformNotPub, UnusedNonPub, TypeNotPub, TopNotPub, TopGenerics, SocketConnectMismatch,
     UnusedImport,
-    DomainMismatch, MissingDomainClause, AsyncRegister,
+    DomainMismatch, MissingDomainClause, AsyncRegister, DriverDomainMismatch,
 }

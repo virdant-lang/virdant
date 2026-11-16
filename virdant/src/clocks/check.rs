@@ -5,13 +5,14 @@
 //! expression roots handed to the `infer` pass.
 
 use super::*;
-use bstr::ByteSlice;
-use crate::analysis::component::incoming_clock_ports;
+use bstr::{BString, ByteSlice};
+use crate::analysis::component::{Component, ComponentId, incoming_clock_ports};
+use crate::analysis::dependency::resolve_it_path_to_owned;
 use crate::common::source::Region;
 use crate::common::ComponentKind;
 use crate::db::Builder;
 use crate::diagnostics::{self, DiagnosticPayload};
-use crate::syntax::ast::AstNode;
+use crate::syntax::ast::{AstNode, if_arm_children, match_arm_children};
 use crate::syntax::payload::AstNodePayload;
 use crate::syntax::parsing::Parsing;
 use crate::types::Type;
@@ -92,9 +93,10 @@ impl Clocking {
                     self.flag_unclad_components(node, "the module has multiple clocks");
                 }
 
-                // Color every subexpression of the module.
+                // Color every subexpression of the module and check
+                // the module's drivers and connections.
                 self.skipped = false;
-                self.walk(node);
+                self.walk(builder, node, None, &[]);
             }
         }
     }
@@ -142,20 +144,58 @@ impl Clocking {
     /// Visits every expression-bearing node of the module.  Domains of
     /// plain subexpressions are filled in by the recursion inside
     /// `infer`; this walk establishes the roots (driver RHSes, guards,
-    /// arm bodies, `let` bindings, `on` clauses) and applies the
+    /// arm bodies, `let` bindings, `on` clauses), applies the
     /// `if`/`match` join rules in both expression and statement
-    /// position.
-    fn walk(&mut self, node: &AstNode<'_>) {
+    /// position, and checks the module's drivers and connections
+    /// against the domains the checker established.
+    ///
+    /// `context` is the component whose it-block (or memory body)
+    /// encodes the walk's current position — the component an `it`
+    /// driver target names (`initial` targets are not registered as
+    /// references, so their `it` needs this context to resolve).
+    /// `guards` stacks the enclosing statement-position `when` guards
+    /// and `match` subjects — each as its domain and canonical
+    /// [`Location`]: a driver gated by a guard is partly driven by it,
+    /// so the guard's domain must also upcast to the driven
+    /// component's declared domain.
+    fn walk(
+        &mut self,
+        builder: &mut Builder,
+        node: &AstNode<'_>,
+        context: Option<ComponentId>,
+        guards: &[(Domain, Location)],
+    ) {
         match node.payload() {
-            AstNodePayload::Component(_) => {
+            AstNodePayload::Component(payload) => {
                 if let Some(clause) = node.on_clause() {
                     self.infer(&clause);
+                }
+                let name = node.parsing().string(payload.name);
+                let context = self
+                    .component_analysis()
+                    .resolve(name.as_bstr())
+                    .map(|component| component.id());
+                for child in node.children() {
+                    self.walk(builder, &child, context, guards);
+                }
+            }
+            AstNodePayload::Socket(payload) => {
+                // Drivers inside a socket instance's it-block target
+                // its channels (`it.ack := it.req`).
+                let name = node.parsing().string(payload.name);
+                let context = self
+                    .component_analysis()
+                    .resolve(name.as_bstr())
+                    .map(|component| component.id());
+                for child in node.children() {
+                    self.walk(builder, &child, context, guards);
                 }
             }
             AstNodePayload::Driver(_) | AstNodePayload::InitialDriver => {
                 if let Some(rhs) = node.driver() {
                     self.infer(&rhs);
                 }
+                self.check_driver(builder, node, context, guards);
             }
             AstNodePayload::IndexedDriver(_) => {
                 if let Some(index) = node.driver_index() {
@@ -164,20 +204,206 @@ impl Clocking {
                 if let Some(rhs) = node.driver() {
                     self.infer(&rhs);
                 }
+                self.check_driver(builder, node, context, guards);
+            }
+            AstNodePayload::BidirectionalDriver => {
+                self.check_connection(node);
             }
             AstNodePayload::OnRegion => {
+                // The region's clock is checked against the memory's
+                // domain by the memory-write checks (the clock itself
+                // is always `Async`, so it must not join here).
                 let children = node.children();
                 if let Some(clock) = children.first() {
                     self.infer(clock);
                 }
+                for child in node.children() {
+                    self.walk(builder, &child, context, guards);
+                }
             }
-            AstNodePayload::If | AstNodePayload::Match | AstNodePayload::Let => {
+            AstNodePayload::If => {
+                // When the guards conflict among themselves, the `if`
+                // is already diagnosed (`DomainMismatch`); its guards
+                // then do not constrain the drivers beneath it, or
+                // every driver would cascade the same error.
+                let joined = self.infer(node);
+                let children = node.children();
+                for (guard, body) in if_arm_children(&children) {
+                    let mut arm_guards = guards.to_vec();
+                    if joined.is_some()
+                        && let Some(guard) = guard
+                        && let Some(domain) = self.infer(guard)
+                    {
+                        arm_guards.push((domain, guard.location()));
+                    }
+                    self.walk(builder, &body, context, &arm_guards);
+                }
+            }
+            AstNodePayload::Match => {
                 self.infer(node);
+                let children = node.children();
+                // A statement-position `match` selects the driven
+                // value with its subject, so the subject constrains
+                // the drivers in its arms exactly like a guard.
+                let mut arm_guards = guards.to_vec();
+                if let Some(subject) = node.subject()
+                    && let Some(domain) = self.infer(&subject)
+                {
+                    arm_guards.push((domain, subject.location()));
+                }
+                for (_pat, body) in match_arm_children(&children) {
+                    self.walk(builder, &body, context, &arm_guards);
+                }
             }
-            _ => {}
+            AstNodePayload::Let => {
+                self.infer(node);
+                for child in node.children() {
+                    self.walk(builder, &child, context, guards);
+                }
+            }
+            _ => {
+                for child in node.children() {
+                    self.walk(builder, &child, context, guards);
+                }
+            }
         }
-        for child in node.children() {
-            self.walk(&child);
+    }
+
+    /// Checks one driver statement against the component it drives:
+    /// every contributor to the driven value — the driving expression,
+    /// an indexed write's index, and each enclosing `when` guard or
+    /// `match` subject — must upcast to the target's declared domain.
+    /// Downcasting is never allowed, so in particular a `reg` (whose
+    /// declared domain is always `Sync(<its clock>)`) can only be
+    /// driven from its own clock's domain (or by constants).
+    fn check_driver(
+        &mut self,
+        builder: &mut Builder,
+        node: &AstNode<'_>,
+        context: Option<ComponentId>,
+        guards: &[(Domain, Location)],
+    ) {
+        let Some(target) = self.driver_target(node, context) else {
+            return;
+        };
+        // Submodule-owned components are bound inside their owning
+        // submodule, not by this module's coloring.
+        if target.submodule_owned() {
+            return;
+        }
+        // An undetermined declared domain was already diagnosed
+        // (`MissingOnClause` / `MissingDomainClause`); do not cascade.
+        let Some(target_domain) = target.domain().copied() else {
+            return;
+        };
+        let target_name = target.path();
+
+        // The driving expression (and an indexed write's index) is
+        // this driver's own; each is checked here.
+        let mut contributors: Vec<(Region, Domain)> = vec![];
+        if let Some(index) = node.driver_index()
+            && let Some(domain) = self.infer(&index)
+        {
+            contributors.push((index.region(), domain));
+        }
+        if let Some(rhs) = node.driver()
+            && let Some(domain) = self.infer(&rhs)
+        {
+            contributors.push((rhs.region(), domain));
+        }
+        for (region, domain) in contributors {
+            if !domain.upcasts_to(&target_domain) {
+                self.diagnostics.push(Diagnostic::new(
+                    region,
+                    diagnostics::DriverDomainMismatch {
+                        target: target_name.clone(),
+                        target_domain: self.render_domain(&target_domain),
+                        expr_domain: self.render_domain(&domain),
+                    },
+                ));
+            }
+        }
+
+        // The enclosing guards are shared by every driver they gate:
+        // each (guard, target) pair is judged once, so one bad guard
+        // is reported once per component it wrongly gates, not once
+        // per driver beneath it.
+        for (domain, guard) in guards {
+            if !self.guard_checks.insert((*guard, target.id())) {
+                continue;
+            }
+            if !domain.upcasts_to(&target_domain) {
+                self.diagnostics.push(Diagnostic::new(
+                    builder.get_location_region(*guard),
+                    diagnostics::DriverDomainMismatch {
+                        target: target_name.clone(),
+                        target_domain: self.render_domain(&target_domain),
+                        expr_domain: self.render_domain(domain),
+                    },
+                ));
+            }
+        }
+    }
+
+    /// Resolves the component a driver statement drives.  Regular
+    /// driver targets are registered as references by the component
+    /// analysis (including `it`-context rewrites); `initial` targets
+    /// are not, so their written path is resolved here, rewriting
+    /// `it`/`it.` through the enclosing component.
+    fn driver_target(
+        &self,
+        node: &AstNode<'_>,
+        context: Option<ComponentId>,
+    ) -> Option<Component> {
+        let target_node = node.driver_target_node()?;
+        if let Some(component) = self
+            .component_analysis()
+            .component_at(target_node.location())
+        {
+            return Some(component.clone());
+        }
+        let path = node.target()?;
+        let context_path = context
+            .and_then(|context| self.component_analysis().component(context))
+            .map(|component| component.path());
+        let name = resolve_it_path_to_owned(
+            node.parsing().string(path),
+            context_path.as_ref().map(|path| path.as_bstr()),
+        );
+        self.component_analysis().resolve(name.as_bstr())
+    }
+
+    /// Checks one `:=:` / `#=#` connection: both operands join to one
+    /// domain.  A connection is bidirectional, so neither side is
+    /// "expected"; the operands join exactly as the operands of a
+    /// combinational expression do — in particular, two distinct
+    /// clock domains can never be connected.
+    fn check_connection(&mut self, node: &AstNode<'_>) {
+        let Some(lhs) = node.connection_lhs() else {
+            return;
+        };
+        let Some(rhs) = node.connection_rhs() else {
+            return;
+        };
+        let lhs_domain = self
+            .component_analysis()
+            .component_at(lhs.location())
+            .and_then(|component| component.domain().copied());
+        let rhs_domain = self
+            .component_analysis()
+            .component_at(rhs.location())
+            .and_then(|component| component.domain().copied());
+        if let (Some(Domain::Sync(lhs_clock)), Some(Domain::Sync(rhs_clock))) =
+            (lhs_domain, rhs_domain)
+            && lhs_clock != rhs_clock
+        {
+            self.diagnostics.push(Diagnostic::new(
+                node.region(),
+                diagnostics::DomainMismatch {
+                    left: self.render_domain(&Domain::Sync(lhs_clock)),
+                    right: self.render_domain(&Domain::Sync(rhs_clock)),
+                },
+            ));
         }
     }
 }

@@ -12,9 +12,10 @@ use std::sync::Arc;
 use bstr::BString;
 use indexmap::{IndexMap, IndexSet};
 
-use crate::analysis::component::ComponentAnalysis;
+use crate::analysis::component::{ComponentAnalysis, ComponentId};
 use crate::analysis::domain::Domain;
 use crate::analysis::symbols::Symbol;
+use crate::analysis::Location;
 use crate::diagnostics::Diagnostic;
 use crate::syntax::ast::AstNodeId;
 
@@ -32,6 +33,12 @@ pub struct Clocking {
     /// expr root) is inferred — and diagnosed — exactly once.
     domains: IndexMap<AstNodeId, Option<Domain>>,
     in_progress: IndexSet<AstNodeId>,
+    /// Guard domains already checked against a driven component: a
+    /// statement-position guard gates every driver in its arms, so
+    /// without this memo one bad guard would be reported once per
+    /// driver beneath it.  Keyed by (guard, driven component), the
+    /// guard named by its canonical [`Location`].
+    guard_checks: IndexSet<(Location, ComponentId)>,
     diagnostics: Vec<Diagnostic>,
     /// Whether checking was skipped for this module (submodules,
     /// `@unsafe_clocks`, or one of the single-domain fast paths).
@@ -45,6 +52,7 @@ impl Clocking {
             component_analysis,
             domains: IndexMap::new(),
             in_progress: IndexSet::new(),
+            guard_checks: IndexSet::new(),
             diagnostics: vec![],
             skipped: true,
         }

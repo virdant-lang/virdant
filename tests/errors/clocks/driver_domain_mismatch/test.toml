@@ -1,0 +1,4 @@
+kind = "check"
+expect = "error"
+description = "The clock checker: a driver's domain must upcast to the driven component's declared domain. A clocked component can only be driven from its own clock's domain (or by constants) — including through `when` guards and memory-write indices — while an `async` component accepts any domain (DriverDomainMismatch)."
+filecheck = "src/driver_domain_mismatch.vir"
