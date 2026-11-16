@@ -20,6 +20,7 @@ use crate::syntax::parsing::Parsing;
 use crate::syntax::payload::AstNodePayload;
 use crate::types::substitute::substitute;
 use crate::types::Type;
+use crate::analysis::domain::Domain;
 use crate::common::{ChannelDir, ComponentKind, Flow, PortDir, SocketRole};
 use crate::diagnostics::{self, Diagnostic};
 
@@ -102,6 +103,11 @@ pub struct Component {
     /// in this module, and its exhaustiveness is checked against
     /// receiving *channels* rather than plain `incoming` ports.
     socket_channel: bool,
+
+    /// The component's clock domain, when the declaration alone
+    /// determines it; `None` when it does not (the clock checker
+    /// assigns those).  See the clock checker for the full rules.
+    domain: Option<Domain>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -156,6 +162,11 @@ impl Component {
     /// for any other kind (and for an unresolved memory clock slot).
     pub fn clock(&self) -> Option<BString> {
         self.clock.clone()
+    }
+
+    /// The component's clock domain; see the `domain` field docs.
+    pub fn domain(&self) -> Option<&Domain> {
+        self.domain.as_ref()
     }
 
     pub fn location(&self) -> Location {
@@ -432,6 +443,10 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
     let mut clock_ids: Vec<ComponentId> = vec![];
     let mut regs_without_on: Vec<(BString, Region)> = vec![];
     let mut written_ons: Vec<(BString, Region, BString)> = vec![];
+    // Domains not fixed by the declaration itself (`on` clauses and
+    // unique-clock inference) are resolved in the post-pass below.
+    let mut implicit_domain_candidates: Vec<ComponentId> = vec![];
+    let mut ons_to_resolve: Vec<ComponentId> = vec![];
 
     let symboltable = builder.get_symboltable();
     let location = symboltable.symbol(moddef).location();
@@ -484,6 +499,16 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     ComponentKind::Bus | ComponentKind::Net => Flow::Duplex,
                 };
                 let component_kind = component.kind;
+                // Only the clock and `async` components get a
+                // declaration-fixed domain; see the post-pass below.
+                let mut domain = None;
+                if typ.as_ref() == Some(&Type::Clock) || component.is_async {
+                    domain = Some(Domain::Async);
+                } else if stmt.on_clause().is_some() {
+                    ons_to_resolve.push(id);
+                } else {
+                    implicit_domain_candidates.push(id);
+                }
                 let component = Component {
                     id,
                     path: path.clone(),
@@ -495,6 +520,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                     default_expr: None,
                     socket_channel: false,
                     depth,
+                    domain,
                     // The resolved clock slot is filled in below, once
                     // the module's implicit clock is known.
                     clock: None,
@@ -650,6 +676,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                 default_expr: None,
                                 depth: None,
                                 clock: None,
+                                domain: None,
                             };
                             if !components_seen.contains(&path) {
                                 components_seen.insert(path.clone());
@@ -752,6 +779,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                                     default_expr: None,
                                     depth: None,
                                     clock: None,
+                                    domain: None,
                                 };
                                 if !components_seen.contains(&path) {
                                     components_seen.insert(path.clone());
@@ -852,6 +880,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         default_expr: None,
                         depth: None,
                         clock: None,
+                        domain: None,
                     };
                     if !components_seen.contains(&path) {
                         components_seen.insert(path.clone());
@@ -919,6 +948,48 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
             };
             component.clock = clock;
         }
+        // Resolve each `on <CLOCK>` clause to the clock component's
+        // id, re-reading the path from the declaration's AST node.
+        for owner_id in ons_to_resolve.drain(..) {
+            let clock_id = component_analysis
+                .component(owner_id)
+                .map(|component| component.location.ast_node_id())
+                .and_then(|ast_node_id| {
+                    let decl = parsing.ast_node(ast_node_id);
+                    decl.on_clause()
+                        .and_then(|clock_node| clock_node.path())
+                })
+                .and_then(|interned| {
+                    component_analysis.resolve(parsing.string(interned))
+                })
+                .map(|clock| clock.id());
+            if let Some(clock_id) = clock_id {
+                if let Some((_, component)) = component_analysis
+                    .components
+                    .iter_mut()
+                    .find(|(_, component)| component.id == owner_id)
+                {
+                    component.domain = Some(Domain::sync(clock_id));
+                }
+            }
+        }
+        // Unique-clock inference: the module's own components whose
+        // declaration did not fix a domain (no `async`, no `on`
+        // clause, not the clock itself) are clocked by the module's
+        // unique clock.  Domains left as `None` here — modules with
+        // zero or multiple clocks — are diagnosed by the clock
+        // checker.
+        if let Some(implicit_clock_id) = component_analysis.implicit_clock() {
+            for candidate in implicit_domain_candidates.drain(..) {
+                if let Some((_, component)) = component_analysis
+                    .components
+                    .iter_mut()
+                    .find(|(_, component)| component.id == candidate)
+                {
+                    component.domain = Some(Domain::sync(implicit_clock_id));
+                }
+            }
+        }
     }
 
     // Platform-default synthesis: a module bound to a platform via a
@@ -977,6 +1048,7 @@ pub(crate) fn build_component_analysis(builder: &mut Builder, moddef: SymbolId) 
                         default_expr,
                         depth: None,
                         clock: None,
+                        domain: None,
                     };
                     components_seen.insert(platform_port.name.clone());
                     component_analysis.components.push((platform_port.name, component));
